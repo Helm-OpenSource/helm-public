@@ -1,0 +1,464 @@
+{
+  "version": "implementation-health-p0-v1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "alias_only_no_real_tenant_person_or_customer_identity",
+  "boundary": "p0_offline_only_no_schema_no_migration_no_runtime_no_api_no_ui_no_auto_execution_no_customer_visible_claim",
+  "sourceDoc": "docs/product/HELM_IMPLEMENTATION_HEALTH_AND_VALUE_REALIZATION_REQUIREMENTS_2026-05-13.md",
+  "scope": "P0-REQ-06",
+  "notes": [
+    "All tenant, actor, reviewer, customer, and evidence identifiers are synthetic aliases.",
+    "Fixtures do not contain raw meeting text, CRM content, email, phone, names, prompts, outputs, private paths, or production credentials.",
+    "Negative cases are rejected by default; incident counters only increment if an unsafe case is mutated to accepted.",
+    "P0 only proves the offline contract and boundary gate; runtime, schema, API, UI, production query, auto execution, and customer-facing claims stay out of scope."
+  ],
+  "targets": {
+    "minimumTotalCases": 15,
+    "minimumHealthyCaseCount": 1,
+    "minimumBlockedCaseCount": 3,
+    "minimumWatchCaseCount": 2,
+    "minimumDegradedCaseCount": 1,
+    "minimumNotApplicableCaseCount": 1,
+    "maximumRawDataLeakCount": 0,
+    "maximumRealPersonNameLeakCount": 0,
+    "maximumHrPerformanceClaimCount": 0,
+    "maximumAutoExecutionAttemptCount": 0,
+    "maximumAutoNotificationAttemptCount": 0,
+    "maximumCausalClaimCount": 0,
+    "maximumCrossTenantOriginalTextAccessCount": 0,
+    "maximumActorAggregationAttemptCount": 0,
+    "maximumDynamicReasonCodeCount": 0,
+    "maximumTenantConfigWriteAttemptCount": 0,
+    "maximumDefaultFallbackOwnerAssignmentCount": 0,
+    "maximumReasonCodeUnknownCount": 0
+  },
+  "cases": [
+    {
+      "id": "IH-001-HEALTHY-TENANT",
+      "scenario": "healthy_tenant",
+      "description": "Active pilot tenant has active users, owner mapping, readable notification targets, review flow, and follow-through evidence receipt.",
+      "snapshot": {
+        "tenantAlias": "tenant-alpha",
+        "windowStart": "2026-05-12T00:00:00+08:00",
+        "windowEnd": "2026-05-13T00:00:00+08:00",
+        "overallState": "healthy",
+        "nodeStates": [
+          { "node": "tenant_activation", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time", "evidenceRefs": ["ev-tenant-alpha-activation"] },
+          { "node": "active_helm_users", "state": "healthy", "reasonCodes": [], "windowKey": "last_7d", "evidenceRefs": ["ev-tenant-alpha-user-active"] },
+          { "node": "owner_and_supervisor_mapping", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time_plus_last_7d", "evidenceRefs": ["ev-tenant-alpha-mapping"] },
+          { "node": "notification_targeting", "state": "healthy", "reasonCodes": [], "windowKey": "last_3d", "evidenceRefs": ["ev-tenant-alpha-notification"] },
+          { "node": "signal_to_review_flow", "state": "healthy", "reasonCodes": [], "windowKey": "last_2d_plus_backlog", "evidenceRefs": ["ev-tenant-alpha-review"] },
+          { "node": "execution_to_follow_through_evidence", "state": "healthy", "reasonCodes": [], "windowKey": "d_plus_1_to_d_plus_2", "evidenceRefs": ["ev-tenant-alpha-follow-through"] }
+        ],
+        "topBlockerReasonCodes": [],
+        "recommendedReviewOwnerRole": null,
+        "lastReviewDecisionRef": "decision-alpha-001",
+        "boundaryNote": "Read-only implementation-health snapshot; no customer-visible claim or automatic action."
+      },
+      "actionTrail": {
+        "actionTrailId": "trail-alpha-001",
+        "tenantAlias": "tenant-alpha",
+        "sourceWindowKey": "2026-05-12",
+        "entries": [
+          {
+            "actorRole": "implementation_lead",
+            "actionType": "follow_through_evidence_review",
+            "workItemRef": "work-alpha-001",
+            "reviewDecisionRef": "decision-alpha-001",
+            "evidenceRef": "ev-tenant-alpha-follow-through",
+            "createdAt": "2026-05-12T18:00:00+08:00",
+            "boundaryNote": "Role alias only; no actor aggregation."
+          }
+        ]
+      },
+      "reviewItem": {
+        "reviewItemId": "review-alpha-001",
+        "reviewOwnerRole": "implementation_lead",
+        "posture": "no_review_required",
+        "reasonCodes": [],
+        "noAutoExecution": true,
+        "boundaryNote": "No automatic notification or tenant configuration write."
+      },
+      "followThroughLedger": {
+        "sourceReviewDecisionRef": "decision-alpha-001",
+        "executionReceiptState": "present",
+        "comparisonWindow": "D+1_TO_D+2",
+        "nextDaySignalState": "present",
+        "direction": "positive_follow_through",
+        "confidencePosture": "evidence_sufficient",
+        "humanReviewRequired": false,
+        "causalClaimAllowed": false,
+        "boundaryNote": "Temporal follow-through evidence only; no causal claim."
+      },
+      "expect": { "outcome": "accepted", "reasonCodes": [], "flags": {}, "coverage": { "snapshot": true, "actionTrail": true, "reviewItem": true, "followThroughLedger": true } }
+    },
+    {
+      "id": "IH-002-NO-ACTIVE-USER",
+      "scenario": "no_active_user",
+      "description": "Tenant is enabled but no target-role active Helm user is observed in the last seven days.",
+      "snapshot": {
+        "tenantAlias": "tenant-beta",
+        "windowStart": "2026-05-06T00:00:00+08:00",
+        "windowEnd": "2026-05-13T00:00:00+08:00",
+        "overallState": "blocked",
+        "nodeStates": [
+          { "node": "tenant_activation", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time", "evidenceRefs": ["ev-tenant-beta-activation"] },
+          { "node": "active_helm_users", "state": "blocked", "reasonCodes": ["no_active_user"], "windowKey": "last_7d", "evidenceRefs": ["ev-tenant-beta-user-window"] },
+          { "node": "owner_and_supervisor_mapping", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time_plus_last_7d", "evidenceRefs": ["ev-tenant-beta-mapping"] },
+          { "node": "notification_targeting", "state": "healthy", "reasonCodes": [], "windowKey": "last_3d", "evidenceRefs": ["ev-tenant-beta-notification"] },
+          { "node": "signal_to_review_flow", "state": "healthy", "reasonCodes": [], "windowKey": "last_2d_plus_backlog", "evidenceRefs": ["ev-tenant-beta-review"] },
+          { "node": "execution_to_follow_through_evidence", "state": "healthy", "reasonCodes": [], "windowKey": "d_plus_1_to_d_plus_2", "evidenceRefs": ["ev-tenant-beta-follow-through"] }
+        ],
+        "topBlockerReasonCodes": ["no_active_user"],
+        "recommendedReviewOwnerRole": "customer_success_lead",
+        "lastReviewDecisionRef": "decision-beta-001",
+        "boundaryNote": "Blocked enters internal review only; no automatic dispatch."
+      },
+      "reviewItem": {
+        "reviewItemId": "review-beta-001",
+        "reviewOwnerRole": "customer_success_lead",
+        "posture": "review_required",
+        "reasonCodes": ["no_active_user"],
+        "noAutoExecution": true,
+        "boundaryNote": "Review owner role is a review entrypoint, not task assignment."
+      },
+      "followThroughLedger": {
+        "sourceReviewDecisionRef": "decision-beta-001",
+        "executionReceiptState": "not_applicable",
+        "comparisonWindow": "D+1_TO_D+2",
+        "nextDaySignalState": "insufficient_window",
+        "direction": "unknown",
+        "confidencePosture": "evidence_missing",
+        "humanReviewRequired": true,
+        "causalClaimAllowed": false,
+        "boundaryNote": "No execution receipt; no positive follow-through conclusion and no causal claim."
+      },
+      "expect": { "outcome": "accepted", "reasonCodes": ["no_active_user"], "flags": {}, "coverage": { "snapshot": true, "reviewItem": true } }
+    },
+    {
+      "id": "IH-003-OWNER-SUPERVISOR-UNMAPPED",
+      "scenario": "owner_supervisor_unmapped",
+      "description": "Signals exist, but owner and supervisor mapping cannot resolve to active members.",
+      "snapshot": {
+        "tenantAlias": "tenant-gamma",
+        "windowStart": "2026-05-12T00:00:00+08:00",
+        "windowEnd": "2026-05-13T00:00:00+08:00",
+        "overallState": "blocked",
+        "nodeStates": [
+          { "node": "tenant_activation", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time", "evidenceRefs": ["ev-tenant-gamma-activation"] },
+          { "node": "active_helm_users", "state": "healthy", "reasonCodes": [], "windowKey": "last_7d", "evidenceRefs": ["ev-tenant-gamma-user-active"] },
+          { "node": "owner_and_supervisor_mapping", "state": "blocked", "reasonCodes": ["owner_unmapped", "supervisor_unmapped"], "windowKey": "point_in_time_plus_last_7d", "evidenceRefs": ["ev-tenant-gamma-mapping"] },
+          { "node": "notification_targeting", "state": "degraded", "reasonCodes": ["notification_target_missing"], "windowKey": "last_3d", "evidenceRefs": ["ev-tenant-gamma-notification"] },
+          { "node": "signal_to_review_flow", "state": "healthy", "reasonCodes": [], "windowKey": "last_2d_plus_backlog", "evidenceRefs": ["ev-tenant-gamma-review"] },
+          { "node": "execution_to_follow_through_evidence", "state": "healthy", "reasonCodes": [], "windowKey": "d_plus_1_to_d_plus_2", "evidenceRefs": ["ev-tenant-gamma-follow-through"] }
+        ],
+        "topBlockerReasonCodes": ["owner_unmapped", "supervisor_unmapped", "notification_target_missing"],
+        "recommendedReviewOwnerRole": "implementation_lead",
+        "lastReviewDecisionRef": "decision-gamma-001",
+        "boundaryNote": "Mapping defect is reported as role-level review posture only."
+      },
+      "reviewItem": {
+        "reviewItemId": "review-gamma-001",
+        "reviewOwnerRole": "implementation_lead",
+        "posture": "review_required",
+        "reasonCodes": ["owner_unmapped", "supervisor_unmapped"],
+        "noAutoExecution": true,
+        "boundaryNote": "No automatic tenant configuration update."
+      },
+      "expect": { "outcome": "accepted", "reasonCodes": ["owner_unmapped", "supervisor_unmapped"], "flags": {}, "coverage": { "snapshot": true, "reviewItem": true } }
+    },
+    {
+      "id": "IH-004-NOTIFICATION-UNREAD",
+      "scenario": "notification_unread",
+      "description": "Notifications resolve to a target but remain unread long enough to require internal review.",
+      "snapshot": {
+        "tenantAlias": "tenant-delta",
+        "windowStart": "2026-05-10T00:00:00+08:00",
+        "windowEnd": "2026-05-13T00:00:00+08:00",
+        "overallState": "watch",
+        "nodeStates": [
+          { "node": "tenant_activation", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time", "evidenceRefs": ["ev-tenant-delta-activation"] },
+          { "node": "active_helm_users", "state": "healthy", "reasonCodes": [], "windowKey": "last_7d", "evidenceRefs": ["ev-tenant-delta-user-active"] },
+          { "node": "owner_and_supervisor_mapping", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time_plus_last_7d", "evidenceRefs": ["ev-tenant-delta-mapping"] },
+          { "node": "notification_targeting", "state": "degraded", "reasonCodes": ["notification_unread_streak"], "windowKey": "last_3d", "evidenceRefs": ["ev-tenant-delta-notification"] },
+          { "node": "signal_to_review_flow", "state": "healthy", "reasonCodes": [], "windowKey": "last_2d_plus_backlog", "evidenceRefs": ["ev-tenant-delta-review"] },
+          { "node": "execution_to_follow_through_evidence", "state": "healthy", "reasonCodes": [], "windowKey": "d_plus_1_to_d_plus_2", "evidenceRefs": ["ev-tenant-delta-follow-through"] }
+        ],
+        "topBlockerReasonCodes": ["notification_unread_streak"],
+        "recommendedReviewOwnerRole": "implementation_lead",
+        "lastReviewDecisionRef": "decision-delta-001",
+        "boundaryNote": "Unread streak produces review posture only; no automatic notification resend."
+      },
+      "reviewItem": {
+        "reviewItemId": "review-delta-001",
+        "reviewOwnerRole": "implementation_lead",
+        "posture": "review_required",
+        "reasonCodes": ["notification_unread_streak"],
+        "noAutoExecution": true,
+        "boundaryNote": "No automatic customer supervisor notification."
+      },
+      "expect": { "outcome": "accepted", "reasonCodes": ["notification_unread_streak"], "flags": {}, "coverage": { "snapshot": true, "reviewItem": true } }
+    },
+    {
+      "id": "IH-005-REVIEW-BACKLOG",
+      "scenario": "review_backlog",
+      "description": "Review queue has aged backlog and missing evidence, requiring degraded posture.",
+      "snapshot": {
+        "tenantAlias": "tenant-epsilon",
+        "windowStart": "2026-05-11T00:00:00+08:00",
+        "windowEnd": "2026-05-13T00:00:00+08:00",
+        "overallState": "degraded",
+        "nodeStates": [
+          { "node": "tenant_activation", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time", "evidenceRefs": ["ev-tenant-epsilon-activation"] },
+          { "node": "active_helm_users", "state": "healthy", "reasonCodes": [], "windowKey": "last_7d", "evidenceRefs": ["ev-tenant-epsilon-user-active"] },
+          { "node": "owner_and_supervisor_mapping", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time_plus_last_7d", "evidenceRefs": ["ev-tenant-epsilon-mapping"] },
+          { "node": "notification_targeting", "state": "healthy", "reasonCodes": [], "windowKey": "last_3d", "evidenceRefs": ["ev-tenant-epsilon-notification"] },
+          { "node": "signal_to_review_flow", "state": "degraded", "reasonCodes": ["review_queue_backlog", "missing_evidence"], "windowKey": "last_2d_plus_backlog", "evidenceRefs": ["ev-tenant-epsilon-review"] },
+          { "node": "execution_to_follow_through_evidence", "state": "degraded", "reasonCodes": ["follow_through_evidence_unknown"], "windowKey": "d_plus_1_to_d_plus_2", "evidenceRefs": ["ev-tenant-epsilon-follow-through"] }
+        ],
+        "topBlockerReasonCodes": ["review_queue_backlog", "missing_evidence", "follow_through_evidence_unknown"],
+        "recommendedReviewOwnerRole": "review_lead",
+        "lastReviewDecisionRef": "decision-epsilon-001",
+        "boundaryNote": "Backlog readout is internal-only and review-first."
+      },
+      "reviewItem": {
+        "reviewItemId": "review-epsilon-001",
+        "reviewOwnerRole": "review_lead",
+        "posture": "review_required",
+        "reasonCodes": ["review_queue_backlog", "missing_evidence"],
+        "noAutoExecution": true,
+        "boundaryNote": "Review outcome creates decision record only."
+      },
+      "expect": { "outcome": "accepted", "reasonCodes": ["review_queue_backlog", "missing_evidence"], "flags": {}, "coverage": { "snapshot": true, "reviewItem": true } }
+    },
+    {
+      "id": "IH-006-EXECUTION-RECEIPT-MISSING",
+      "scenario": "execution_receipt_missing",
+      "description": "A reviewed action exists, but no redacted execution receipt is available.",
+      "snapshot": {
+        "tenantAlias": "tenant-zeta",
+        "windowStart": "2026-05-12T00:00:00+08:00",
+        "windowEnd": "2026-05-13T00:00:00+08:00",
+        "overallState": "blocked",
+        "nodeStates": [
+          { "node": "tenant_activation", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time", "evidenceRefs": ["ev-tenant-zeta-activation"] },
+          { "node": "active_helm_users", "state": "healthy", "reasonCodes": [], "windowKey": "last_7d", "evidenceRefs": ["ev-tenant-zeta-user-active"] },
+          { "node": "owner_and_supervisor_mapping", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time_plus_last_7d", "evidenceRefs": ["ev-tenant-zeta-mapping"] },
+          { "node": "notification_targeting", "state": "healthy", "reasonCodes": [], "windowKey": "last_3d", "evidenceRefs": ["ev-tenant-zeta-notification"] },
+          { "node": "signal_to_review_flow", "state": "healthy", "reasonCodes": [], "windowKey": "last_2d_plus_backlog", "evidenceRefs": ["ev-tenant-zeta-review"] },
+          { "node": "execution_to_follow_through_evidence", "state": "blocked", "reasonCodes": ["execution_receipt_missing"], "windowKey": "d_plus_1_to_d_plus_2", "evidenceRefs": ["ev-tenant-zeta-follow-through"] }
+        ],
+        "topBlockerReasonCodes": ["execution_receipt_missing"],
+        "recommendedReviewOwnerRole": "implementation_lead",
+        "lastReviewDecisionRef": "decision-zeta-001",
+        "boundaryNote": "Read-only review posture: no execution receipt means no positive follow-through conclusion."
+      },
+      "followThroughLedger": {
+        "sourceReviewDecisionRef": "decision-zeta-001",
+        "executionReceiptState": "missing",
+        "comparisonWindow": "D+1_TO_D+2",
+        "nextDaySignalState": "present",
+        "direction": "unknown",
+        "confidencePosture": "evidence_missing",
+        "humanReviewRequired": true,
+        "causalClaimAllowed": false,
+        "boundaryNote": "Missing receipt blocks positive follow-through and no causal claim is allowed."
+      },
+      "expect": { "outcome": "accepted", "reasonCodes": ["execution_receipt_missing"], "flags": {}, "coverage": { "snapshot": true, "followThroughLedger": true } }
+    },
+    {
+      "id": "IH-007-FOLLOW-THROUGH-EVIDENCE-MISSING",
+      "scenario": "follow_through_evidence_missing",
+      "description": "Execution receipt exists, but next-day follow-through evidence is missing.",
+      "snapshot": {
+        "tenantAlias": "tenant-eta",
+        "windowStart": "2026-05-12T00:00:00+08:00",
+        "windowEnd": "2026-05-13T00:00:00+08:00",
+        "overallState": "watch",
+        "nodeStates": [
+          { "node": "tenant_activation", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time", "evidenceRefs": ["ev-tenant-eta-activation"] },
+          { "node": "active_helm_users", "state": "healthy", "reasonCodes": [], "windowKey": "last_7d", "evidenceRefs": ["ev-tenant-eta-user-active"] },
+          { "node": "owner_and_supervisor_mapping", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time_plus_last_7d", "evidenceRefs": ["ev-tenant-eta-mapping"] },
+          { "node": "notification_targeting", "state": "healthy", "reasonCodes": [], "windowKey": "last_3d", "evidenceRefs": ["ev-tenant-eta-notification"] },
+          { "node": "signal_to_review_flow", "state": "healthy", "reasonCodes": [], "windowKey": "last_2d_plus_backlog", "evidenceRefs": ["ev-tenant-eta-review"] },
+          { "node": "execution_to_follow_through_evidence", "state": "degraded", "reasonCodes": ["follow_through_evidence_missing"], "windowKey": "d_plus_1_to_d_plus_2", "evidenceRefs": ["ev-tenant-eta-follow-through"] }
+        ],
+        "topBlockerReasonCodes": ["follow_through_evidence_missing"],
+        "recommendedReviewOwnerRole": "implementation_lead",
+        "lastReviewDecisionRef": "decision-eta-001",
+        "boundaryNote": "Missing next-day evidence requires human review and no causal conclusion."
+      },
+      "followThroughLedger": {
+        "sourceReviewDecisionRef": "decision-eta-001",
+        "executionReceiptState": "present",
+        "comparisonWindow": "D+1_TO_D+2",
+        "nextDaySignalState": "missing",
+        "direction": "unknown",
+        "confidencePosture": "evidence_missing",
+        "humanReviewRequired": true,
+        "causalClaimAllowed": false,
+        "boundaryNote": "No next-day signal evidence; no improvement claim."
+      },
+      "expect": { "outcome": "accepted", "reasonCodes": ["follow_through_evidence_missing"], "flags": {}, "coverage": { "snapshot": true, "followThroughLedger": true } }
+    },
+    {
+      "id": "IH-008-CONNECTOR-NOT-APPLICABLE",
+      "scenario": "legitimate_not_applicable",
+      "description": "Execution follow-through is not in tenant scope because the relevant connector is disabled.",
+      "snapshot": {
+        "tenantAlias": "tenant-theta",
+        "windowStart": "2026-05-12T00:00:00+08:00",
+        "windowEnd": "2026-05-13T00:00:00+08:00",
+        "overallState": "healthy",
+        "nodeStates": [
+          { "node": "tenant_activation", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time", "evidenceRefs": ["ev-tenant-theta-activation"] },
+          { "node": "active_helm_users", "state": "healthy", "reasonCodes": [], "windowKey": "last_7d", "evidenceRefs": ["ev-tenant-theta-user-active"] },
+          { "node": "owner_and_supervisor_mapping", "state": "healthy", "reasonCodes": [], "windowKey": "point_in_time_plus_last_7d", "evidenceRefs": ["ev-tenant-theta-mapping"] },
+          { "node": "notification_targeting", "state": "healthy", "reasonCodes": [], "windowKey": "last_3d", "evidenceRefs": ["ev-tenant-theta-notification"] },
+          { "node": "signal_to_review_flow", "state": "healthy", "reasonCodes": [], "windowKey": "last_2d_plus_backlog", "evidenceRefs": ["ev-tenant-theta-review"] },
+          { "node": "execution_to_follow_through_evidence", "state": "not_applicable", "reasonCodes": ["connector_not_enabled"], "windowKey": "d_plus_1_to_d_plus_2", "evidenceRefs": ["ev-tenant-theta-scope"] }
+        ],
+        "topBlockerReasonCodes": [],
+        "recommendedReviewOwnerRole": null,
+        "lastReviewDecisionRef": "decision-theta-001",
+        "boundaryNote": "Read-only review posture: not applicable is scope-bound and cannot hide degraded evidence."
+      },
+      "followThroughLedger": {
+        "sourceReviewDecisionRef": "decision-theta-001",
+        "executionReceiptState": "not_applicable",
+        "comparisonWindow": "D+1_TO_D+2",
+        "nextDaySignalState": "source_unavailable",
+        "direction": "unknown",
+        "confidencePosture": "evidence_missing",
+        "humanReviewRequired": false,
+        "causalClaimAllowed": false,
+        "boundaryNote": "Connector disabled; no claim and no inferred failure."
+      },
+      "expect": { "outcome": "accepted", "reasonCodes": ["connector_not_enabled"], "flags": {}, "coverage": { "snapshot": true, "followThroughLedger": true } }
+    },
+    {
+      "id": "IH-009-HR-SCORING-REJECT",
+      "scenario": "hr_scoring_overreach_negative",
+      "description": "Attempt to convert implementation trail into individual scoring must be rejected.",
+      "snapshotRef": "IH-001-HEALTHY-TENANT",
+      "request": "rank_implementer_performance",
+      "reviewItem": {
+        "reviewItemId": "review-iota-001",
+        "reviewOwnerRole": "implementation_lead",
+        "posture": "rejected_boundary_overreach",
+        "reasonCodes": ["actor_aggregation_forbidden"],
+        "noAutoExecution": true,
+        "boundaryNote": "Implementation trail is not an HR scoring or ranking source."
+      },
+      "expect": { "outcome": "rejected", "reasonCodes": ["actor_aggregation_forbidden"], "flags": { "hrPerformanceClaim": true }, "coverage": { "reviewItem": true } }
+    },
+    {
+      "id": "IH-010-RAW-CUSTOMER-DATA-REJECT",
+      "scenario": "raw_customer_data_leak_negative",
+      "description": "Attempt to include customer original text or raw source content in implementation health must be rejected.",
+      "snapshotRef": "IH-001-HEALTHY-TENANT",
+      "request": "include_raw_customer_text",
+      "reviewItem": {
+        "reviewItemId": "review-kappa-001",
+        "reviewOwnerRole": "data_protection_reviewer",
+        "posture": "rejected_boundary_overreach",
+        "reasonCodes": ["raw_data_forbidden"],
+        "noAutoExecution": true,
+        "boundaryNote": "Only alias, bucket, count, state, reason code, and redacted evidence refs are allowed."
+      },
+      "expect": { "outcome": "rejected", "reasonCodes": ["raw_data_forbidden"], "flags": { "rawDataLeak": true, "crossTenantOriginalTextAccess": true }, "coverage": { "reviewItem": true } }
+    },
+    {
+      "id": "IH-011-CAUSAL-ROI-CLAIM-REJECT",
+      "scenario": "causal_roi_claim_negative",
+      "description": "Attempt to publish a causal improvement claim from next-day evidence must be rejected.",
+      "snapshotRef": "IH-001-HEALTHY-TENANT",
+      "request": "publish_causal_roi_claim",
+      "reviewItem": {
+        "reviewItemId": "review-lambda-001",
+        "reviewOwnerRole": "required_reviewer",
+        "posture": "rejected_boundary_overreach",
+        "reasonCodes": ["causal_claim_forbidden"],
+        "noAutoExecution": true,
+        "boundaryNote": "Follow-through ledger records temporal evidence only and cannot claim causality."
+      },
+      "followThroughLedger": {
+        "sourceReviewDecisionRef": "decision-lambda-001",
+        "executionReceiptState": "present",
+        "comparisonWindow": "D+1_TO_D+2",
+        "nextDaySignalState": "present",
+        "direction": "positive_follow_through",
+        "confidencePosture": "evidence_partial",
+        "humanReviewRequired": true,
+        "causalClaimAllowed": false,
+        "boundaryNote": "Temporal observation only; no ROI attribution."
+      },
+      "expect": { "outcome": "rejected", "reasonCodes": ["causal_claim_forbidden"], "flags": { "causalClaim": true }, "coverage": { "reviewItem": true, "followThroughLedger": true } }
+    },
+    {
+      "id": "IH-012-ACTOR-AGGREGATION-REJECT",
+      "scenario": "per_actor_aggregation_overreach_negative",
+      "description": "Attempt to aggregate implementation actions by individual actor must be rejected.",
+      "snapshotRef": "IH-001-HEALTHY-TENANT",
+      "request": "aggregate_by_actor",
+      "actorAggregationRequest": { "requested": true, "scope": "individual_actor_alias", "outcome": "rejected" },
+      "reviewItem": {
+        "reviewItemId": "review-mu-001",
+        "reviewOwnerRole": "implementation_lead",
+        "posture": "rejected_boundary_overreach",
+        "reasonCodes": ["actor_aggregation_forbidden"],
+        "noAutoExecution": true,
+        "boundaryNote": "P0 forbids actor-level aggregation, trend, ranking, and score output."
+      },
+      "expect": { "outcome": "rejected", "reasonCodes": ["actor_aggregation_forbidden"], "flags": { "actorAggregationAttempt": true }, "coverage": { "reviewItem": true } }
+    },
+    {
+      "id": "IH-013-DYNAMIC-REASON-CODE-REJECT",
+      "scenario": "dynamic_reason_code_negative",
+      "description": "Attempt to create a runtime reason code outside the sealed enum must be rejected.",
+      "snapshotRef": "IH-001-HEALTHY-TENANT",
+      "request": "create_dynamic_reason_code",
+      "requestedReasonCodeAlias": "runtime_reason_alias",
+      "reviewItem": {
+        "reviewItemId": "review-nu-001",
+        "reviewOwnerRole": "required_reviewer",
+        "posture": "rejected_boundary_overreach",
+        "reasonCodes": ["dynamic_reason_code_forbidden"],
+        "noAutoExecution": true,
+        "boundaryNote": "Reason codes are sealed and require reviewed code or requirements change."
+      },
+      "expect": { "outcome": "rejected", "reasonCodes": ["dynamic_reason_code_forbidden"], "flags": { "dynamicReasonCode": true }, "coverage": { "reviewItem": true } }
+    },
+    {
+      "id": "IH-014-REVIEW-QUEUE-AUTO-WRITE-REJECT",
+      "scenario": "review_queue_auto_write_negative",
+      "description": "Attempt to write tenant config or close the issue automatically from a review queue item must be rejected.",
+      "snapshotRef": "IH-003-OWNER-SUPERVISOR-UNMAPPED",
+      "request": "auto_write_tenant_config_from_review_item",
+      "reviewItem": {
+        "reviewItemId": "review-xi-001",
+        "reviewOwnerRole": "implementation_lead",
+        "posture": "rejected_boundary_overreach",
+        "reasonCodes": ["auto_execution_forbidden"],
+        "noAutoExecution": true,
+        "boundaryNote": "Review queue is a derived projection; it cannot write tenant config."
+      },
+      "expect": { "outcome": "rejected", "reasonCodes": ["auto_execution_forbidden"], "flags": { "autoExecutionAttempt": true, "tenantConfigWriteAttempt": true }, "coverage": { "reviewItem": true } }
+    },
+    {
+      "id": "IH-015-NOTIFICATION-FALLBACK-OWNER-REJECT",
+      "scenario": "notification_default_fallback_owner_negative",
+      "description": "Attempt to assign a default fallback owner and notify them automatically must be rejected.",
+      "snapshotRef": "IH-003-OWNER-SUPERVISOR-UNMAPPED",
+      "request": "assign_default_owner_and_auto_notify",
+      "reviewItem": {
+        "reviewItemId": "review-omicron-001",
+        "reviewOwnerRole": "implementation_lead",
+        "posture": "rejected_boundary_overreach",
+        "reasonCodes": ["default_target_fallback_forbidden", "auto_execution_forbidden"],
+        "noAutoExecution": true,
+        "boundaryNote": "Missing target routes to review queue; no default owner fallback or automatic customer notification."
+      },
+      "expect": { "outcome": "rejected", "reasonCodes": ["default_target_fallback_forbidden", "auto_execution_forbidden"], "flags": { "autoNotificationAttempt": true, "defaultFallbackOwnerAssignment": true }, "coverage": { "reviewItem": true } }
+    }
+  ]
+}

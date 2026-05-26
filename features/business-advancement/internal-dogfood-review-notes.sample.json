@@ -1,0 +1,64 @@
+{
+  "reviewContext": {
+    "reviewId": "ba-internal-dogfood-review-sample",
+    "preparedBy": "internal-operator",
+    "preparedAtIso": "2026-04-30T00:00:00.000Z"
+  },
+  "notes": [
+    {
+      "noteId": "ba-dogfood-sample-note-001",
+      "reviewerLens": "engineering",
+      "reviewerId": "engineering-reviewer",
+      "reviewedAtIso": "2026-04-30T00:00:00.000Z",
+      "familyId": "TPQR-001",
+      "verdict": "accept_for_internal_dogfood",
+      "evidenceRefs": ["internal-dogfood-packet:TPQR-001"],
+      "notes": "Candidate group is acceptable for disabled internal dogfooding review only.",
+      "recommendedNextStep": "continue_disabled_internal_dogfood"
+    },
+    {
+      "noteId": "ba-dogfood-sample-note-002",
+      "reviewerLens": "product",
+      "reviewerId": "product-reviewer",
+      "reviewedAtIso": "2026-04-30T00:00:00.000Z",
+      "familyId": "TPQR-003",
+      "verdict": "accept_for_internal_dogfood",
+      "evidenceRefs": ["internal-dogfood-packet:TPQR-003"],
+      "notes": "Overdue commitment group is acceptable for disabled internal dogfooding review only.",
+      "recommendedNextStep": "continue_disabled_internal_dogfood"
+    },
+    {
+      "noteId": "ba-dogfood-sample-note-003",
+      "reviewerLens": "security",
+      "reviewerId": "security-reviewer",
+      "reviewedAtIso": "2026-04-30T00:00:00.000Z",
+      "familyId": "TPQR-004",
+      "verdict": "accept_for_internal_dogfood",
+      "evidenceRefs": ["internal-dogfood-packet:TPQR-004"],
+      "notes": "Customer-waiting group remains review-only and does not imply customer-facing send.",
+      "recommendedNextStep": "continue_disabled_internal_dogfood"
+    },
+    {
+      "noteId": "ba-dogfood-sample-note-004",
+      "reviewerLens": "operations",
+      "reviewerId": "operations-reviewer",
+      "reviewedAtIso": "2026-04-30T00:00:00.000Z",
+      "familyId": "TPQR-004",
+      "verdict": "accept_for_internal_dogfood",
+      "evidenceRefs": ["internal-dogfood-packet:TPQR-004"],
+      "notes": "Operator workload is acceptable for a disabled internal dogfood review pass.",
+      "recommendedNextStep": "continue_disabled_internal_dogfood"
+    },
+    {
+      "noteId": "ba-dogfood-sample-note-005",
+      "reviewerLens": "data_protection",
+      "reviewerId": "data-protection-reviewer",
+      "reviewedAtIso": "2026-04-30T00:00:00.000Z",
+      "familyId": "TPQR-001",
+      "verdict": "accept_for_internal_dogfood",
+      "evidenceRefs": ["internal-dogfood-packet:TPQR-001"],
+      "notes": "Sample review uses redacted packet references only and does not request production data.",
+      "recommendedNextStep": "continue_disabled_internal_dogfood"
+    }
+  ]
+}

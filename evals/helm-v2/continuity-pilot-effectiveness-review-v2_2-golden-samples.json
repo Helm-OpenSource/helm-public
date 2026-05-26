@@ -1,0 +1,191 @@
+[
+  {
+    "id": "anchor_gap_distribution",
+    "label": "Anchor-gap pilot cases trigger early escalation guidance",
+    "queueEntries": [
+      {
+        "id": "anchor_case_1",
+        "title": "Anchor gap 1",
+        "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "recoveryState": "BLOCKED",
+        "posture": "WATCH",
+        "replayStatus": "NONE",
+        "payloadStateSource": "all_persisted",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_BLOCKED_ACTION",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T09:00:00.000Z"
+      },
+      {
+        "id": "anchor_case_2",
+        "title": "Anchor gap 2",
+        "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "recoveryState": "BLOCKED",
+        "posture": "WATCH",
+        "replayStatus": "NONE",
+        "payloadStateSource": "all_persisted",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T08:00:00.000Z"
+      },
+      {
+        "id": "budget_case_1",
+        "title": "Budget watch 1",
+        "failureTaxonomy": "BUDGET_PRESSURE",
+        "recoveryState": "RECOVERABLE",
+        "posture": "PRUNE",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "checkpoint_plus_edits",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "PARTIAL",
+        "updatedAt": "2026-04-04T07:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "NO_RECOVERY_ANCHOR",
+    "expected": {
+      "totalPilotCases": 3,
+      "topFailureClass": "NO_RECOVERY_ANCHOR",
+      "confidenceBand": "LOW",
+      "recommendedIneffectiveThreshold": 1,
+      "driftSummaryIncludes": ["drifting"],
+      "calibrationProfileIncludes": ["earlier escalation", "low-band"],
+      "sessionAdjustmentIncludes": ["2 pilot case", "low-band failure class"],
+      "sopTitle": "Anchor-first recovery SOP",
+      "sopIncludes": ["trustworthy checkpoint anchor", "same blocked action repeats", "Operator workflow only"]
+    }
+  },
+  {
+    "id": "replay_gap_mixed_drift",
+    "label": "Replay-drift pilot cases keep mixed drift visible",
+    "queueEntries": [
+      {
+        "id": "replay_case_1",
+        "title": "Replay drift 1",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "RECOVERABLE",
+        "posture": "WATCH",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "PARTIAL",
+        "updatedAt": "2026-04-04T06:00:00.000Z"
+      },
+      {
+        "id": "replay_case_2",
+        "title": "Replay drift 2",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "WATCH",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_INEFFECTIVE_ACTION",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "INEFFECTIVE",
+        "updatedAt": "2026-04-04T05:00:00.000Z"
+      },
+      {
+        "id": "payload_case_1",
+        "title": "Payload drift 1",
+        "failureTaxonomy": "PAYLOAD_STATE_DRIFT",
+        "recoveryState": "RECOVERABLE",
+        "posture": "WATCH",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "latest_prune_edit",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T04:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "REPLAY_DRIFT",
+    "expected": {
+      "totalPilotCases": 3,
+      "topFailureClass": "REPLAY_DRIFT",
+      "confidenceBand": "LOW",
+      "recommendedIneffectiveThreshold": 1,
+      "driftSummaryIncludes": ["easing", "drift"],
+      "calibrationProfileIncludes": ["earlier escalation", "REPLAY_DRIFT"],
+      "sessionAdjustmentIncludes": ["2 pilot case", "low-band failure class"],
+      "sopTitle": "Replay-fidelity recovery SOP",
+      "sopIncludes": ["missing fields", "same replay gap open", "Operator workflow only"]
+    }
+  },
+  {
+    "id": "protected_field_review_cluster",
+    "label": "Protected-state pilot cases refine review-first SOP",
+    "queueEntries": [
+      {
+        "id": "protected_case_1",
+        "title": "Protected field 1",
+        "failureTaxonomy": "PROTECTED_STATE_GAP",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "WATCH",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_REVIEW_REQUIRED",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T03:00:00.000Z"
+      },
+      {
+        "id": "protected_case_2",
+        "title": "Protected field 2",
+        "failureTaxonomy": "PROTECTED_STATE_GAP",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "WATCH",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T02:00:00.000Z"
+      },
+      {
+        "id": "budget_case_2",
+        "title": "Budget watch 2",
+        "failureTaxonomy": "BUDGET_PRESSURE",
+        "recoveryState": "RECOVERABLE",
+        "posture": "PRUNE",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "checkpoint_plus_edits",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "PARTIAL",
+        "updatedAt": "2026-04-04T01:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "PROTECTED_STATE_GAP",
+    "expected": {
+      "totalPilotCases": 3,
+      "topFailureClass": "PROTECTED_STATE_GAP",
+      "confidenceBand": "LOW",
+      "recommendedIneffectiveThreshold": 1,
+      "driftSummaryIncludes": ["drifting"],
+      "calibrationProfileIncludes": ["earlier escalation", "PROTECTED_STATE_GAP"],
+      "sessionAdjustmentIncludes": ["2 pilot case", "low-band failure class"],
+      "sopTitle": "Protected-field review SOP",
+      "sopIncludes": ["protected fields", "do not use remediation as a shortcut", "Operator workflow only"]
+    }
+  }
+]

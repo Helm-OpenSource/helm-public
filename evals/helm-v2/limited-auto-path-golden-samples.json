@@ -1,0 +1,142 @@
+[
+  {
+    "id": "limited-auto-note-eligible",
+    "label": "approved manual follow-up proof can enter limited auto for crm.attach_note only",
+    "executionProofSources": [
+      {
+        "id": "exec_note_auto_1",
+        "meetingId": "mtg_auto_note_1",
+        "opportunityId": "opp_auto_note_1",
+        "companyId": "company_auto_note_1",
+        "actionType": "MANUAL_EMAIL_SEND",
+        "sourceArtifactBundleId": "draft_bundle_auto_1",
+        "sourceArtifactTitle": "ROI follow-up email draft",
+        "sourceArtifactSummary": "会后 ROI follow-up 已经由 owner 人工发送。",
+        "audience": "customer",
+        "executionIntent": "人工把 reviewed email 发送给客户。",
+        "executionBoundary": "approved 只表示允许人工执行下一步，不代表系统已发送。",
+        "executionRiskLevel": "MEDIUM",
+        "riskReviewSummary": "The wording stayed non-commitment and review-before-send.",
+        "proofNote": "Owner sent the email manually outside Helm.",
+        "externalReference": "gmail-thread-auto-1",
+        "followThroughStatus": "waiting_for_customer_reply",
+        "whatWasNotDone": "没有自动创建外部日程。",
+        "evidenceRefs": ["meeting:mtg_auto_note_1", "artifact:email_draft_auto_1"],
+        "sourceProvenance": [
+          { "type": "human_execution", "id": "exec_note_auto_1", "trust": "HUMAN_CONFIRMED" }
+        ],
+        "boundaryTrace": [
+          "approved 不等于 executed",
+          "official CRM writeback 仍然没有默认自动执行"
+        ]
+      }
+    ],
+    "expected": {
+      "requiredEligibleActionTypes": ["crm.attach_note"],
+      "requiredManualOnlyActionTypes": []
+    }
+  },
+  {
+    "id": "limited-auto-handoff-manual-only",
+    "label": "delivery handoff summary stays manual-only even when visible in limited auto whitelist",
+    "executionProofSources": [
+      {
+        "id": "exec_handoff_auto_1",
+        "meetingId": "mtg_auto_handoff_1",
+        "opportunityId": "opp_auto_handoff_1",
+        "companyId": "company_auto_handoff_1",
+        "actionType": "MANUAL_HANDOFF_DELIVERY",
+        "sourceArtifactBundleId": "handoff_bundle_auto_1",
+        "sourceArtifactTitle": "delivery handoff pack",
+        "sourceArtifactSummary": "交付 handoff 已经由 owner 人工共享给 delivery lead。",
+        "audience": "delivery",
+        "executionIntent": "人工把 handoff pack 共享给 delivery 团队。",
+        "executionBoundary": "这是人工执行入口，不是自动执行入口。",
+        "executionRiskLevel": "HIGH",
+        "riskReviewSummary": "handoff 仍然需要 explicit approval 和 audit trail。",
+        "proofNote": "Delivery lead acknowledged receipt manually.",
+        "externalReference": "delivery-share-auto-1",
+        "followThroughStatus": "delivery_ready",
+        "whatWasNotDone": "没有自动写任何外部系统。",
+        "evidenceRefs": ["meeting:mtg_auto_handoff_1", "artifact:handoff_pack_auto_1"],
+        "sourceProvenance": [
+          { "type": "handoff_pack", "id": "handoff_pack_auto_1", "trust": "HUMAN_CONFIRMED" }
+        ],
+        "boundaryTrace": [
+          "execution proof 不等于 external outcome truth",
+          "official CRM writeback 仍然没有默认自动执行"
+        ]
+      }
+    ],
+    "expected": {
+      "requiredEligibleActionTypes": [],
+      "requiredManualOnlyActionTypes": ["crm.attach_handoff_summary"]
+    }
+  },
+  {
+    "id": "limited-auto-shadow-blocked",
+    "label": "approved shadow recommendation writes stay blocked outside the limited auto whitelist",
+    "shadowSource": {
+      "meetingId": "mtg_auto_shadow_1",
+      "opportunityId": "opp_auto_shadow_1",
+      "companyId": "company_auto_shadow_1",
+      "bundleId": "bundle_auto_shadow_1",
+      "currentStage": "CONTACTED",
+      "currentNextAction": "确认 ROI follow-up 和预算 owner",
+      "sourceTitle": "Contoso Expansion",
+      "delta": {
+        "artifactId": "opportunity_delta.json",
+        "stageShadowFrom": "CONTACTED",
+        "stageShadowTo": "ADVANCING",
+        "probabilityDelta": 12,
+        "decisionCriteria": [
+          {
+            "label": "ROI follow-up accepted",
+            "status": "confirmed",
+            "source": "fact_derived",
+            "evidenceRefs": ["meeting:mtg_auto_shadow_1"]
+          }
+        ],
+        "championStatus": "emerging",
+        "blockers": [
+          {
+            "label": "预算 owner 仍未明确",
+            "severity": "medium",
+            "source": "fact_derived",
+            "evidenceRefs": ["meeting-note:note_auto_shadow_1"]
+          }
+        ],
+        "riskFlags": [
+          {
+            "label": "budget uncertainty",
+            "severity": "medium",
+            "reason": "预算 owner 还未确认。",
+            "evidenceRefs": ["meeting-note:note_auto_shadow_1"]
+          }
+        ],
+        "nextBestAction": "先发 ROI follow-up，并锁定联合评审时间建议。",
+        "managerAttentionRequired": true,
+        "factDerived": ["客户接受先发 ROI follow-up。"],
+        "inferredAssumptions": ["预算 owner 会在本周内补齐。"],
+        "suggestionFields": ["stageShadowTo", "nextBestAction", "blockers"],
+        "stageRationale": "ROI follow-up 和联合评审窗口都已进入明确推进态。",
+        "evidenceRefs": ["meeting:mtg_auto_shadow_1", "meeting-note:note_auto_shadow_1", "opportunity:opp_auto_shadow_1"],
+        "sourceProvenance": [
+          { "type": "meeting_note", "id": "note_auto_shadow_1", "trust": "TRUSTED" },
+          { "type": "opportunity", "id": "opp_auto_shadow_1", "trust": "SYSTEM_OF_RECORD" }
+        ],
+        "confidence": 86,
+        "openQuestions": ["预算 owner 的最终姓名仍未确认。"],
+        "boundaryNotes": [
+          "This layer only updates shadow opportunity posture after explicit review. Official CRM state stays unchanged."
+        ],
+        "recommendedNextAction": "锁定联合评审窗口",
+        "noOfficialWriteback": true
+      }
+    },
+    "expected": {
+      "requiredEligibleActionTypes": [],
+      "requiredManualOnlyActionTypes": []
+    }
+  }
+]

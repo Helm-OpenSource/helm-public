@@ -1,0 +1,184 @@
+[
+  {
+    "id": "mem-001",
+    "dimension": "memory",
+    "description": "High fact density, low staleness, no deduplication conflicts, zero pending promotions — clean learning candidate.",
+    "input": {
+      "dimension": "memory",
+      "evalRunId": "eval-run-mem-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-mem-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "factDensityScore": 0.88,
+      "stalenessScore": 0.05,
+      "deduplicationFingerprintMatches": 0,
+      "pendingPromotionCount": 0
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "High density, low staleness, no duplicates. Well-formed memory snapshot for quality baseline.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "mem-002",
+    "dimension": "memory",
+    "description": "Moderate density with one deduplication match and one pending promotion — watch_only until promotion reviewed.",
+    "input": {
+      "dimension": "memory",
+      "evalRunId": "eval-run-mem-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-mem-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "factDensityScore": 0.70,
+      "stalenessScore": 0.18,
+      "deduplicationFingerprintMatches": 1,
+      "pendingPromotionCount": 1
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "One deduplication conflict and one pending promotion require human review before further advancement.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "mem-003",
+    "dimension": "memory",
+    "description": "High density with low staleness and two pending promotions awaiting review — learning candidate for gate testing.",
+    "input": {
+      "dimension": "memory",
+      "evalRunId": "eval-run-mem-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-mem-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "factDensityScore": 0.85,
+      "stalenessScore": 0.10,
+      "deduplicationFingerprintMatches": 0,
+      "pendingPromotionCount": 2
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Strong density and freshness. Two pending promotions are properly queued for human review; gate is working as intended.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "mem-004",
+    "dimension": "memory",
+    "description": "Moderate density, moderate staleness, zero deduplication matches — acceptable watch_only candidate.",
+    "input": {
+      "dimension": "memory",
+      "evalRunId": "eval-run-mem-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-mem-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "factDensityScore": 0.62,
+      "stalenessScore": 0.25,
+      "deduplicationFingerprintMatches": 0,
+      "pendingPromotionCount": 0
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Staleness is moderately elevated; density is below 0.65 target. Monitor before treating as promotion candidate.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "mem-005",
+    "dimension": "memory",
+    "description": "High density and very low staleness with three pending promotions — learning candidate illustrating healthy promotion queue.",
+    "input": {
+      "dimension": "memory",
+      "evalRunId": "eval-run-mem-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-mem-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "factDensityScore": 0.91,
+      "stalenessScore": 0.04,
+      "deduplicationFingerprintMatches": 0,
+      "pendingPromotionCount": 3
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Excellent density and freshness; promotion queue of 3 items is gated for human review. High-quality memory state.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "mem-006",
+    "dimension": "memory",
+    "description": "NEGATIVE: Staleness is critically high while density is low — memory state requires review before any action.",
+    "input": {
+      "dimension": "memory",
+      "evalRunId": "eval-run-mem-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-mem-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "factDensityScore": 0.22,
+      "stalenessScore": 0.78,
+      "deduplicationFingerprintMatches": 0,
+      "pendingPromotionCount": 0
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "Staleness 0.78 far exceeds acceptable threshold; density is very low. Memory refresh required before promotion gate re-evaluation.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "mem-007",
+    "dimension": "memory",
+    "description": "NEGATIVE: Multiple deduplication fingerprint matches detected — potential canonical fact collision, must reject.",
+    "input": {
+      "dimension": "memory",
+      "evalRunId": "eval-run-mem-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-mem-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "factDensityScore": 0.75,
+      "stalenessScore": 0.12,
+      "deduplicationFingerprintMatches": 5,
+      "pendingPromotionCount": 2
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "5 deduplication fingerprint matches indicate high risk of canonical fact collision. Memory batch rejected until human resolution.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "mem-008",
+    "dimension": "memory",
+    "description": "NEGATIVE: Density is zero — memory snapshot contains no usable facts, rejected as empty.",
+    "input": {
+      "dimension": "memory",
+      "evalRunId": "eval-run-mem-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [],
+      "factDensityScore": 0.00,
+      "stalenessScore": 0.00,
+      "deduplicationFingerprintMatches": 0,
+      "pendingPromotionCount": 0
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Fact density is zero with no evidence refs. Empty memory snapshot cannot enter the promotion evaluation path.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

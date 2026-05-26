@@ -1,0 +1,148 @@
+[
+  {
+    "id": "v21-rich-context-pass",
+    "label": "Expansion review with selective transcript loading",
+    "payloads": [
+      {
+        "payloadKey": "case1-agenda",
+        "sourceType": "meeting_note",
+        "sourceId": "note_case1",
+        "label": "Agenda",
+        "loadPolicy": "always_on",
+        "text": "Review expansion timeline and confirm the next executive checkpoint.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "case1-summary",
+        "sourceType": "meeting_note",
+        "sourceId": "note_case1",
+        "label": "Summary",
+        "loadPolicy": "always_on",
+        "text": "Customer agreed that procurement can start next week if the commercial note stays inside the reviewed package and no delivery promise is added early.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "case1-transcript",
+        "sourceType": "meeting_transcript",
+        "sourceId": "note_case1",
+        "label": "Transcript",
+        "loadPolicy": "on_demand",
+        "text": "Long transcript line 1. Long transcript line 2. Long transcript line 3. Long transcript line 4. Long transcript line 5. Long transcript line 6.",
+        "loadedByDefault": false
+      }
+    ],
+    "tokenBudgetLimit": 60,
+    "verification": {
+      "facts": [
+        { "content": "Procurement can start next week.", "evidence": ["meeting:1", "note:1"] },
+        { "content": "Commercial note must stay reviewed before external share.", "evidence": ["meeting:1"] }
+      ],
+      "inferredCount": 0,
+      "riskFlags": [],
+      "promotedMemoryCount": 2
+    },
+    "recommendedNextAction": "Prepare the reviewed commercial note and assign the procurement follow-up owner.",
+    "blockers": [],
+    "expected": {
+      "minLoadedHandles": 2,
+      "minPrunedHandles": 1,
+      "verificationStatus": "passed",
+      "minTruthScore": 90,
+      "problemSpaceTitles": ["Next-step alignment"],
+      "edgeBriefIncludes": ["Next step", "operating guidance only", "Prepare the reviewed commercial note"],
+      "expectedFailureClass": "CONTEXT_MISS"
+    }
+  },
+  {
+    "id": "v21-promise-boundary-blocked",
+    "label": "Delivery promise risk still needs explicit boundary handling",
+    "payloads": [
+      {
+        "payloadKey": "case2-summary",
+        "sourceType": "meeting_note",
+        "sourceId": "note_case2",
+        "label": "Summary",
+        "loadPolicy": "always_on",
+        "text": "The customer asked for a launch date, and the team discussed several delivery windows without final approval.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "case2-decisions",
+        "sourceType": "meeting_note",
+        "sourceId": "note_case2",
+        "label": "Decisions",
+        "loadPolicy": "stage_triggered",
+        "text": "No formal delivery date was approved, and any date discussion must stay non-commitment until contract review.",
+        "loadedByDefault": true
+      }
+    ],
+    "tokenBudgetLimit": 120,
+    "verification": {
+      "facts": [
+        { "content": "Customer requested a launch date.", "evidence": ["meeting:2"] },
+        { "content": "No formal delivery date was approved.", "evidence": ["meeting:2", "note:2"] }
+      ],
+      "inferredCount": 1,
+      "riskFlags": [
+        { "severity": "high", "promiseRisk": true, "reason": "Delivery date discussion could be misunderstood as commitment." }
+      ],
+      "promotedMemoryCount": 1
+    },
+    "recommendedNextAction": "Review the delivery-date boundary note with legal and send only a non-commitment follow-up.",
+    "blockers": ["Delivery date request must stay boundary-noted until contract review."],
+    "expected": {
+      "minLoadedHandles": 2,
+      "minPrunedHandles": 0,
+      "verificationStatus": "blocked",
+      "minTruthScore": 50,
+      "problemSpaceTitles": ["Truth boundary review"],
+      "edgeBriefIncludes": ["Lens", "Boundary", "Review the blocked reasons"],
+      "expectedFailureClass": "VERIFICATION_FAIL"
+    }
+  },
+  {
+    "id": "v21-blocker-review",
+    "label": "Blocker needs operator review before silent promotion",
+    "payloads": [
+      {
+        "payloadKey": "case3-agenda",
+        "sourceType": "meeting_note",
+        "sourceId": "note_case3",
+        "label": "Agenda",
+        "loadPolicy": "always_on",
+        "text": "Clarify security blocker and align the pilot owner.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "case3-summary",
+        "sourceType": "meeting_note",
+        "sourceId": "note_case3",
+        "label": "Summary",
+        "loadPolicy": "always_on",
+        "text": "A security questionnaire blocks procurement, but only one of the sub-points has a confirmed owner.",
+        "loadedByDefault": true
+      }
+    ],
+    "tokenBudgetLimit": 120,
+    "verification": {
+      "facts": [
+        { "content": "Security questionnaire blocks procurement.", "evidence": ["meeting:3"] },
+        { "content": "Only one sub-point has a confirmed owner.", "evidence": [] }
+      ],
+      "inferredCount": 1,
+      "riskFlags": [],
+      "promotedMemoryCount": 1
+    },
+    "recommendedNextAction": "Assign the security questionnaire owner and confirm the missing sub-point evidence.",
+    "blockers": ["Security questionnaire ownership is incomplete."],
+    "expected": {
+      "minLoadedHandles": 2,
+      "minPrunedHandles": 0,
+      "verificationStatus": "needs_review",
+      "minTruthScore": 40,
+      "problemSpaceTitles": ["Truth boundary review"],
+      "edgeBriefIncludes": ["Owner hint", "Boundary", "Review the blocked reasons"],
+      "expectedFailureClass": "VERIFICATION_FAIL"
+    }
+  }
+]

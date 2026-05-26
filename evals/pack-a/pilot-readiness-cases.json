@@ -1,0 +1,195 @@
+{
+  "version": "pack-a-pilot-readiness-v1",
+  "status": "offline_alias_fixture",
+  "boundary": "alias_only_pack_a_market_gate_no_real_customer_data_no_external_side_effects",
+  "targets": {
+    "scopeCallScore": 80,
+    "minimumPilotScore": 75,
+    "candidatePoolScore": 70,
+    "nurtureScore": 60,
+    "minimumFailureEvents": 3,
+    "requiredSkills": [
+      "A1-meeting-followup",
+      "A2-priority-customers",
+      "A3-manager-attention",
+      "A4-cs-handoff-pack"
+    ]
+  },
+  "cases": [
+    {
+      "id": "PACKA-SCOPE-READY-001",
+      "alias": "SaaS-A",
+      "segment": "b2b_saas",
+      "expectedGate": "scope_call_ready",
+      "scorecard": {
+        "pain": 23,
+        "businessOwner": 19,
+        "dataAvailability": 18,
+        "proofValue": 13,
+        "paidPilotWillingness": 14,
+        "boundaryFit": 5
+      },
+      "signals": {
+        "failureEventCount": 4,
+        "budgetOwnerKnown": true,
+        "ownerLevel": "sales_vp",
+        "dataAccessTier": "one_week_redacted_samples",
+        "proofPosture": "anonymized_public",
+        "paidPilotAnchor": "50000",
+        "boundaryPosture": "review_first",
+        "phase3RuntimeAdoptionClaimed": false
+      },
+      "week0": {
+        "contractSigned": false,
+        "dpaSigned": false,
+        "dataChecklistConfirmed": true,
+        "workspaceReady": false,
+        "weeklyReviewScheduled": true,
+        "customerOwnerAssigned": true,
+        "founderDay1Available": true,
+        "gtmOperatorAssigned": true,
+        "implementationLeadAssigned": true
+      }
+    },
+    {
+      "id": "PACKA-WEEK0-READY-001",
+      "alias": "SaaS-B",
+      "segment": "b2b_saas",
+      "expectedGate": "week0_ready",
+      "scorecard": {
+        "pain": 22,
+        "businessOwner": 18,
+        "dataAvailability": 18,
+        "proofValue": 12,
+        "paidPilotWillingness": 13,
+        "boundaryFit": 5
+      },
+      "signals": {
+        "failureEventCount": 5,
+        "budgetOwnerKnown": true,
+        "ownerLevel": "founder_or_coo",
+        "dataAccessTier": "standard_crm_plus_meeting_samples",
+        "proofPosture": "semi_public_reference",
+        "paidPilotAnchor": "30000",
+        "boundaryPosture": "review_first",
+        "phase3RuntimeAdoptionClaimed": false
+      },
+      "week0": {
+        "contractSigned": true,
+        "dpaSigned": true,
+        "dataChecklistConfirmed": true,
+        "workspaceReady": true,
+        "weeklyReviewScheduled": true,
+        "customerOwnerAssigned": true,
+        "founderDay1Available": true,
+        "gtmOperatorAssigned": true,
+        "implementationLeadAssigned": true
+      }
+    },
+    {
+      "id": "PACKA-CANDIDATE-001",
+      "alias": "AI-SI-C",
+      "segment": "ai_service_provider",
+      "expectedGate": "candidate_pool",
+      "scorecard": {
+        "pain": 19,
+        "businessOwner": 16,
+        "dataAvailability": 15,
+        "proofValue": 10,
+        "paidPilotWillingness": 10,
+        "boundaryFit": 5
+      },
+      "signals": {
+        "failureEventCount": 3,
+        "budgetOwnerKnown": true,
+        "ownerLevel": "sales_director",
+        "dataAccessTier": "self_built_exportable",
+        "proofPosture": "internal_only_proof",
+        "paidPilotAnchor": "30000",
+        "boundaryPosture": "review_first",
+        "phase3RuntimeAdoptionClaimed": false
+      },
+      "week0": {
+        "contractSigned": false,
+        "dpaSigned": false,
+        "dataChecklistConfirmed": false,
+        "workspaceReady": false,
+        "weeklyReviewScheduled": true,
+        "customerOwnerAssigned": true,
+        "founderDay1Available": true,
+        "gtmOperatorAssigned": false,
+        "implementationLeadAssigned": true
+      }
+    },
+    {
+      "id": "PACKA-NOGO-AUTO-001",
+      "alias": "SaaS-D",
+      "segment": "b2b_saas",
+      "expectedGate": "no_go",
+      "scorecard": {
+        "pain": 24,
+        "businessOwner": 18,
+        "dataAvailability": 16,
+        "proofValue": 10,
+        "paidPilotWillingness": 5,
+        "boundaryFit": 0
+      },
+      "signals": {
+        "failureEventCount": 4,
+        "budgetOwnerKnown": false,
+        "ownerLevel": "sales_vp",
+        "dataAccessTier": "standard_crm_plus_meeting_samples",
+        "proofPosture": "anonymized_public",
+        "paidPilotAnchor": "free_only",
+        "boundaryPosture": "demands_auto_send_or_crm_write",
+        "phase3RuntimeAdoptionClaimed": false
+      },
+      "week0": {
+        "contractSigned": false,
+        "dpaSigned": false,
+        "dataChecklistConfirmed": true,
+        "workspaceReady": false,
+        "weeklyReviewScheduled": false,
+        "customerOwnerAssigned": true,
+        "founderDay1Available": true,
+        "gtmOperatorAssigned": true,
+        "implementationLeadAssigned": true
+      }
+    },
+    {
+      "id": "PACKA-NOGO-OVERCLAIM-001",
+      "alias": "SaaS-E",
+      "segment": "b2b_saas",
+      "expectedGate": "no_go",
+      "scorecard": {
+        "pain": 21,
+        "businessOwner": 17,
+        "dataAvailability": 17,
+        "proofValue": 11,
+        "paidPilotWillingness": 12,
+        "boundaryFit": 4
+      },
+      "signals": {
+        "failureEventCount": 3,
+        "budgetOwnerKnown": true,
+        "ownerLevel": "sales_director",
+        "dataAccessTier": "one_week_redacted_samples",
+        "proofPosture": "semi_public_reference",
+        "paidPilotAnchor": "50000",
+        "boundaryPosture": "review_first",
+        "phase3RuntimeAdoptionClaimed": true
+      },
+      "week0": {
+        "contractSigned": true,
+        "dpaSigned": true,
+        "dataChecklistConfirmed": true,
+        "workspaceReady": true,
+        "weeklyReviewScheduled": true,
+        "customerOwnerAssigned": true,
+        "founderDay1Available": true,
+        "gtmOperatorAssigned": true,
+        "implementationLeadAssigned": true
+      }
+    }
+  ]
+}

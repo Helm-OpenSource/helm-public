@@ -1,0 +1,47 @@
+{
+  "_template": "source-contract",
+  "_method": "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md#5.2",
+  "_phase": "Phase 1 Contract (synthetic demo — no real provider, no tenant data)",
+
+  "sourceKey": "synthetic-demo-management-report",
+  "sourceCategory": "management_report",
+
+  "sourceOfTruthFor": [
+    "synthetic.metric.daily_repayment_rate",
+    "synthetic.metric.daily_active_seats"
+  ],
+
+  "readScope": "synthetic dataset only; no production data, no tenant data",
+  "writeBackAllowed": false,
+
+  "freshnessSla": {
+    "expectedUpdateInterval": "P1D",
+    "maxAcceptableDelay": "PT36H",
+    "stalenessPolicy": "rows older than 36h are rejected with stale_source"
+  },
+
+  "retention": {
+    "rawPayload": "no raw payload — synthetic only",
+    "projection": "in-memory; not persisted",
+    "evidence": "synthetic evidence ids only"
+  },
+
+  "auditEvents": [],
+
+  "redactionRules": [],
+
+  "failureModes": [
+    {
+      "mode": "missing metric value",
+      "detection": "field absent or non-numeric",
+      "fallback": "rejected with missing_evidence",
+      "ownerNotification": "synthetic — none"
+    }
+  ],
+
+  "reportSkillRef": {
+    "reportSkillKey": null,
+    "reportSkillVersion": null,
+    "_note": "Synthetic demo does not consume a report-skills/ asset."
+  }
+}

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "large_budget_subgroup_drift_impact_aging_refinement",
+    "label": "Large budget-pressure cohort keeps long-term subgroup drift refinement and impact aging conservative",
+    "sourceCaseId": "large_budget_subgroup_drift_aging_audit",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetRegressionAuditRate": 22,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftRefinementIncludes": [
+        "Subgroup drift long-term cohort aging review",
+        "aging-drift cohorts",
+        "BUDGET_PRESSURE"
+      ],
+      "intervalWordingRegressionAuditIncludes": [
+        "Cross-surface interval wording regression audit",
+        "22% regression or coverage gap",
+        "canonical interval wording coverage"
+      ],
+      "materialImpactAgingRefinementIncludes": [
+        "Material impact sampling aging refinement",
+        "Prune trace review",
+        "evidence-first"
+      ],
+      "sessionReviewIncludes": [
+        "longer-horizon cohort aging review",
+        "cross-surface interval wording regression audit",
+        "Material impact sampling aging refinement"
+      ]
+    }
+  },
+  {
+    "id": "large_replay_subgroup_drift_impact_aging_refinement",
+    "label": "Large replay-drift cohort keeps wording regression audit and impact aging refinement operator-visible",
+    "sourceCaseId": "large_replay_subgroup_drift_aging_audit",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetRiskBand": "LOW",
+      "targetStabilityBand": "STABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "SETTLED",
+      "targetRegressionAuditRate": 13,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftRefinementIncludes": [
+        "Subgroup drift long-term cohort aging review",
+        "broader holding cohorts",
+        "REPLAY_DRIFT"
+      ],
+      "intervalWordingRegressionAuditIncludes": [
+        "Cross-surface interval wording regression audit",
+        "13% regression or coverage gap",
+        "canonical interval wording coverage"
+      ],
+      "materialImpactAgingRefinementIncludes": [
+        "Material impact sampling aging refinement",
+        "Replay gap review",
+        "persistent signals from watch signals and unstable hints"
+      ],
+      "sessionReviewIncludes": [
+        "longer-horizon cohort aging review",
+        "cross-surface interval wording regression audit",
+        "Material impact sampling aging refinement"
+      ]
+    }
+  },
+  {
+    "id": "growing_protected_subgroup_drift_impact_aging_refinement",
+    "label": "Growing protected-state cohort keeps long-term subgroup drift refinement and impact aging conservative",
+    "sourceCaseId": "growing_protected_subgroup_drift_aging_audit",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetRegressionAuditRate": 21,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftRefinementIncludes": [
+        "Subgroup drift long-term cohort aging review",
+        "aging-drift cohorts",
+        "PROTECTED_STATE_GAP"
+      ],
+      "intervalWordingRegressionAuditIncludes": [
+        "Cross-surface interval wording regression audit",
+        "21% regression or coverage gap",
+        "canonical interval wording coverage"
+      ],
+      "materialImpactAgingRefinementIncludes": [
+        "Material impact sampling aging refinement",
+        "Protected field review",
+        "evidence-first"
+      ],
+      "sessionReviewIncludes": [
+        "longer-horizon cohort aging review",
+        "cross-surface interval wording regression audit",
+        "Material impact sampling aging refinement"
+      ]
+    }
+  }
+]

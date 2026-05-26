@@ -1,0 +1,122 @@
+[
+  {
+    "id": "huadong_procurement_followup_drafts",
+    "label": "华东智造 procurement follow-up drafts",
+    "workspaceSummary": "销售团队围绕采购推进、正式复核和会后跟进保持同一条经营节奏。",
+    "meeting": {
+      "title": "华东智造采购推进同步会",
+      "agenda": "确认采购窗口、ROI 资料和联合评审节奏",
+      "startsAt": "2026-04-02T10:00:00.000Z",
+      "endsAt": "2026-04-02T11:00:00.000Z",
+      "companyName": "华东智造",
+      "ownerName": "周玥",
+      "contacts": ["赵敏", "陈嘉伟"],
+      "opportunity": {
+        "title": "华东智造经营推进试点",
+        "type": "CLIENT",
+        "stage": "CONTACTED",
+        "riskLevel": "MEDIUM",
+        "nextAction": "确认采购窗口"
+      },
+      "note": {
+        "meetingGoal": "确认采购推进窗口，并决定会后 follow-up 的唯一 owner。",
+        "riskAlerts": "如果会后 24 小时内没有结构化 follow-up，这个采购窗口会迅速冷下来。\n客户还没有确认预算 owner。",
+        "summary": "客户已经进入采购推进窗口，关键动作是 24 小时内发出 ROI + 联合评审 follow-up。",
+        "keyDecisions": "先由我们起草 ROI follow-up，再安排下周联合评审。\n当前不形成任何正式价格承诺。",
+        "confirmations": "会后先发一封结构化 follow-up 邮件。\n下周安排联合评审时间建议。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "华东智造过去两周多次要求更结构化的 ROI 资料。",
+      "华东智造机会仍处于采购推进窗口。"
+    ],
+    "expected": {
+      "customerFollowupIncludes": ["建议先围绕以下一步继续推进", "follow-up"],
+      "emailIncludes": ["会后下一步建议", "review-before-send handoff"],
+      "execBriefIncludes": ["What matters now", "Why now"],
+      "expectedAudienceOrder": ["customer", "internal", "executive"],
+      "fallbackRequired": false,
+      "requiredBoundaryNotes": ["review-before-send", "不会自动发送"]
+    }
+  },
+  {
+    "id": "greenpeak_recruiting_drafts",
+    "label": "GreenPeak recruiting drafts",
+    "workspaceSummary": "招聘推进强调候选人窗口、面试节奏和不越权承诺。",
+    "meeting": {
+      "title": "GreenPeak 职位推进同步",
+      "agenda": "确认候选人意向、面试安排和 hiring manager 对齐",
+      "startsAt": "2026-04-02T12:00:00.000Z",
+      "endsAt": "2026-04-02T13:00:00.000Z",
+      "companyName": "GreenPeak",
+      "ownerName": "Nina Hu",
+      "contacts": ["Ben Carter"],
+      "opportunity": {
+        "title": "GreenPeak 招聘推进",
+        "type": "RECRUITING",
+        "stage": "ADVANCING",
+        "riskLevel": "MEDIUM",
+        "nextAction": "安排终面窗口"
+      },
+      "note": {
+        "meetingGoal": "确认候选人窗口并推进终面安排。",
+        "riskAlerts": "如果本周没有明确终面窗口，候选人热度会继续下降。",
+        "summary": "候选人意向仍在，但需要尽快给出终面安排和内部 briefing。",
+        "keyDecisions": "先起草终面安排建议，再同步内部面试官 briefing。",
+        "confirmations": "今天内确认终面时间范围。\n同步面试 panel briefing。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "GreenPeak 招聘机会的关键风险是时间窗口降温。"
+    ],
+    "expected": {
+      "customerFollowupIncludes": ["今天已经确认的信息", "终面"],
+      "emailIncludes": ["终面", "不会自动发送"],
+      "execBriefIncludes": ["Boundary / review posture", "What matters now"],
+      "expectedAudienceOrder": ["customer", "internal", "executive"],
+      "fallbackRequired": false,
+      "requiredBoundaryNotes": ["review-before-send", "不会自动创建外部日程"]
+    }
+  },
+  {
+    "id": "delivery_commitment_risk_fallback",
+    "label": "Delivery commitment fallback",
+    "workspaceSummary": "经营负责人需要把客户推进和交付承诺严格分开，不允许草稿越过 commitment 边界。",
+    "meeting": {
+      "title": "交付范围与上线窗口对齐会",
+      "agenda": "确认客户期望、交付风险和会后澄清路径",
+      "startsAt": "2026-04-02T15:00:00.000Z",
+      "endsAt": "2026-04-02T16:00:00.000Z",
+      "companyName": "BlueHarbor",
+      "ownerName": "Iris Zhang",
+      "contacts": ["Helen Xu"],
+      "opportunity": {
+        "title": "BlueHarbor 交付对齐",
+        "type": "CLIENT",
+        "stage": "ADVANCING",
+        "riskLevel": "HIGH",
+        "nextAction": "澄清交付前提和评审窗口"
+      },
+      "note": {
+        "meetingGoal": "澄清上线前提，不直接形成正式交付承诺。",
+        "riskAlerts": "客户对上线时点比较敏感。\n任何交付日期都必须先经过内部复核。",
+        "summary": "当前重点是澄清交付前提和内部评审窗口，不是直接承诺 go-live 日期。",
+        "keyDecisions": "先整理澄清问题，再决定是否进入更正式的商业 / 交付讨论。",
+        "confirmations": "会后先发澄清问题列表。\n交付日期不能直接在草稿里承诺。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "BlueHarbor 当前对上线时点高度敏感，交付日期必须内部复核。",
+      "任何折扣或范围承诺都不能直接在 customer draft 中给出。"
+    ],
+    "expected": {
+      "customerFollowupIncludes": ["澄清", "下一步"],
+      "emailIncludes": ["会后下一步建议", "如果你们方便"],
+      "execBriefIncludes": ["Boundary / review posture", "What matters now"],
+      "expectedAudienceOrder": ["customer", "internal", "executive"],
+      "fallbackRequired": true,
+      "editedRiskyDraftMarkdown": "我们保证 5 月 12 日可以上线，并直接给到 15% 折扣。",
+      "requiredBoundaryNotes": ["review-before-send", "正式承诺"]
+    }
+  }
+]

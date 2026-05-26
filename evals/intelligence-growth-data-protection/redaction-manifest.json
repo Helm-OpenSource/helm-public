@@ -1,0 +1,175 @@
+{
+  "manifestVersion": "intelligence-growth-data-protection-manifest-v1",
+  "expectedDimensionCount": 10,
+  "expectedScannedFixtureFileCount": 18,
+  "allowedTenantKeys": [
+    "helm-business-development",
+    "workspace_helm_business_development",
+    "tenant-alpha",
+    "tenant-beta",
+    "tenant-gamma",
+    "tenant-delta",
+    "tenant-epsilon",
+    "tenant-zeta",
+    "tenant-eta",
+    "tenant-theta",
+    "tenant-iota",
+    "tenant-kappa",
+    "tenant-lambda",
+    "tenant-mu",
+    "tenant-nu",
+    "tenant-xi",
+    "tenant-omicron",
+    "tenant-pi",
+    "tenant-rho",
+    "tenant-sigma",
+    "tenant-tau",
+    "tenant-upsilon",
+    "tenant-phi",
+    "tenant-chi",
+    "tenant-psi",
+    "tenant-omega"
+  ],
+  "fieldRules": [
+    {
+      "id": "fixture_metadata",
+      "pathPattern": "^\\$\\.(version|status|boundary|redactionPosture|sourceWindowKey|nextWindowKey|cycleWindowKey|expectedSnapshotCount|expectedDimensionCount|expectedNegativeFixtureCount|expectedTaxonomyRowsPerDimension|expectedScannedFixtureFileCount|expectedSnapshotFixtureVersion|manifestVersion)$|^\\$\\.(records|candidates)\\[\\]\\.(sourceWindowKey|nextWindowKey)$",
+      "dataClass": "structural",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "engineering_reviewer"]
+    },
+    {
+      "id": "core_fixture_case_metadata",
+      "pathPattern": "^\\$\\[\\]\\.(id|dimension|description|isNegativeBoundary)$",
+      "dataClass": "structural",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "product_owner"]
+    },
+    {
+      "id": "core_fixture_input_metadata",
+      "pathPattern": "^\\$\\[\\]\\.input\\.(dimension|evalRunId|callType|currentGate|routingChannel|actionCategory|templateId|modelId|candidateChangeDescription)$",
+      "dataClass": "structural",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "engineering_reviewer"]
+    },
+    {
+      "id": "workspace_and_tenant_aliases",
+      "pathPattern": "^(.*\\.)?(workspaceId|tenantKey|tenantAlias|ownerAlias|decisionOwnerAlias|reviewerAliases\\[\\])$",
+      "dataClass": "tenant_alias",
+      "redactionMethod": "alias",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "controlled_trial_operations",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "product_owner"]
+    },
+    {
+      "id": "evidence_aliases",
+      "pathPattern": "^(.*\\.)?(evidenceRefs\\[\\]|contradictoryEvidenceRefs\\[\\]|evidenceRefs\\[\\]\\.(id|type|timestamp))$",
+      "dataClass": "evidence_alias",
+      "redactionMethod": "alias",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "engineering_reviewer"]
+    },
+    {
+      "id": "object_worker_and_packet_aliases",
+      "pathPattern": "^(.*\\.)?(objectRef|workerRef)\\.(id|kind|workspaceId)$|^(.*\\.)?(packetId|candidateId|sourceDecisionPacketId|nextLearningCandidateId|sourcePacketMismatchCount|sourceCandidateMismatchCount)$",
+      "dataClass": "system_alias",
+      "redactionMethod": "alias",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "engineering_reviewer"]
+    },
+    {
+      "id": "decision_and_expected_fields",
+      "pathPattern": "^(.*\\.)?expected\\.(decision|reason|boundaryViolations\\[\\])$|^\\$\\.records\\[\\]\\.(decision|boundaryNote|outcomeMetric|status)$|^\\$\\.candidates\\[\\]\\.(status|boundaryNote)$",
+      "dataClass": "judgement_metadata",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "product_owner"]
+    },
+    {
+      "id": "score_count_and_budget_fields",
+      "pathPattern": "^(.*\\.)?(coverageScore|redundancyScore|relevanceScore|tokenCount|tokenBudget|signalCount|staleSignalCount|deduplicationFingerprintMatches|factDensityScore|pendingPromotionCount|stalenessScore|conflictingSignalCount|signalAliasCount|feedbackCycleCount|artifactQualityScore|boundaryHitCount|skillInvocationFailureCount|policyRuleCount|coveredProductionPathCount|failureCasesReplayed|fixtureCount|totalKnownProductionPathCount|crossWorkspaceAggregationAttempted|usagePatternSchemaVersion|modelDowngradeCandidateEvaluated|tokenUsagePerCall|toolBoundaryHitCount)$|^\\$\\.records\\[\\]\\.(dimension)$|^\\$\\.records\\[\\]\\.budgetEnvelope\\.(inputTokenMax|outputTokenMax|modelCallMax|toolCallMax|wallclockMsMax|replayAttemptMax|modelTierAllowed|toolAllowlist\\[\\]|justification)$|^\\$\\.records\\[\\]\\.observedUsage\\.(inputTokens|outputTokens|modelCalls|toolCalls\\[\\]|wallclockMs|replayAttempts|modelTierUsed)$|^\\$\\.targets\\..*$",
+      "dataClass": "aggregate_metric",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "operations_reviewer"]
+    },
+    {
+      "id": "authority_and_safety_flags",
+      "pathPattern": "^(.*\\.)?(outcomeAnnotated|regressionGatePass|learningCandidate|mustPushItem|remediationContainment|reviewRequiredAction|workerInstruction|autoExecutionRequested|canonicalMemoryWriteRequested|officialWriteRequested|productionChangeRequested|promptOrPolicyUpdateRequested|rawCustomerDataIncluded|skillAutoPromotionRequested|autoExecutionAllowed|candidateOnly|canonicalMemoryWriteAllowed|officialWriteAllowed|promptOrPolicyUpdateAllowed|rawCustomerDataIncluded|runtimeAllowed|skillAutoPromotionAllowed)$",
+      "dataClass": "safety_flag",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "security_reviewer"]
+    },
+    {
+      "id": "tenant_signal_case_fields",
+      "pathPattern": "^\\$\\.cases\\[\\]\\.(id|dimension|description|findingType|severity|sourceCount|evidenceFreshnessHours|reviewPosture|expectedValidityDisposition|expectedAudienceDecision|expectedFinalDisposition|nextAction|outcomeMetric|ownerAlias|boundaryNote|evidenceRefs\\[\\]|contradictoryEvidenceRefs\\[\\]|safeActionRequests\\[\\]|unsafeActionRequests\\[\\])$|^\\$\\.cases\\[\\]\\.expectedOutputs\\.(learningCandidate|mustPushItem|remediationContainment|reviewRequiredAction|workerInstruction)$",
+      "dataClass": "business_signal_alias",
+      "redactionMethod": "alias",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "controlled_trial_operations",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "product_owner"]
+    },
+    {
+      "id": "snapshot_summary_fields",
+      "pathPattern": "^\\$\\.snapshots\\[\\]\\.(producerId)$|^\\$\\.snapshots\\[\\]\\.expected(\\.[A-Za-z0-9_]+)+$",
+      "dataClass": "aggregate_metric",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "engineering_reviewer"]
+    },
+    {
+      "id": "schema_drift_baseline_fields",
+      "pathPattern": "^\\$\\.(dimensions|decisions|noGoBoundaries|coreFixtureTopLevelKeys|coreFixtureExpectedKeys)\\[\\]$|^\\$\\.summaryKeySets\\[\\]\\.(producerId|keys\\[\\])$",
+      "dataClass": "schema_metadata",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "engineering_reviewer"]
+    },
+    {
+      "id": "failure_taxonomy_mapping_fields",
+      "pathPattern": "^\\$\\.dimensionTaxonomyDocs\\[\\]\\.(dimension|path)$|^\\$\\.mappings\\[\\]\\.(fixtureId|dimension|failureType)$",
+      "dataClass": "taxonomy_metadata",
+      "redactionMethod": "none",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "engineering_reviewer"]
+    },
+    {
+      "id": "live_calibration_preflight_fields",
+      "pathPattern": "^\\$\\.(evaluatedAt|evidenceFreshnessWindowDays|calibrationWindowMaxDays|expectedPackageCount|minSourceRefs|minEvidenceRefs|minDataProtectionRefs|minReviewerAliases|redactionManifestVersion)$|^\\$\\.packages\\[\\]\\.(packageId|dimension|sourceRefs\\[\\]|dataProtectionRefs\\[\\]|ownerReviewerLinkRef|evidenceCapturedAt|boundaryNote|liveCalibrationAuthorityAllowed)$|^\\$\\.packages\\[\\]\\.redactionProof\\.(manifestVersion|redactionMethod|redactedFieldCount|proofRef|rawDataIncluded)$|^\\$\\.packages\\[\\]\\.calibrationWindow\\.(startsAt|endsAt)$",
+      "dataClass": "evidence_alias",
+      "redactionMethod": "alias",
+      "retentionWindowDays": 90,
+      "lawfulBasis": "product_safety_evaluation",
+      "dpReviewStatus": "pending",
+      "requiredReviewerRoles": ["data_protection_reviewer", "engineering_reviewer"]
+    }
+  ]
+}

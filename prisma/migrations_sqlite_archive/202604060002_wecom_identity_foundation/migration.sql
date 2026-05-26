@@ -1,0 +1,3 @@
+-- PR74 foundation-only truth update.
+-- ConnectorProvider.WECOM and ImportSourceType.WECOM are Prisma enum/type-level additions.
+-- Current SQLite runtime stores these enum-backed columns as TEXT, so no physical schema change is required here.

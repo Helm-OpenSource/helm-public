@@ -1,0 +1,146 @@
+{
+  "version": "object-signal-remediation-phase1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "synthetic_and_alias_only",
+  "boundary": "post_admission_remediation_no_runtime_adoption",
+  "targets": {
+    "maximumUncontainedCount": 0,
+    "maximumCanonicalMemoryWrites": 0,
+    "maximumOfficialWrites": 0,
+    "minimumBlastRadiusCoveragePercent": 100,
+    "minimumLearningCandidateCount": 1
+  },
+  "cases": [
+    {
+      "id": "OBJ-SIG-REVOKE-STALE-MUST-PUSH-001",
+      "initialDisposition": "must_push_ready",
+      "expectedFinalDisposition": "watch_only",
+      "expectedContainment": "revoked",
+      "currentExposures": {
+        "mustPushItemIds": ["must-push:alias-a-renewal"],
+        "reviewPacketIds": [],
+        "draftIds": ["draft:alias-a-renewal-followup"],
+        "memoryCandidateIds": ["memory-candidate:alias-a-renewal"],
+        "canonicalMemoryIds": [],
+        "skillSuggestionIds": [],
+        "officialWriteIds": []
+      },
+      "postAdmissionFindings": {
+        "staleEvidence": true,
+        "contradictoryEvidence": false,
+        "duplicateSignal": false,
+        "wrongObjectBinding": false,
+        "tenantMismatch": false,
+        "unsafeBoundary": false,
+        "officialWriteIntent": false,
+        "canonicalMemoryWrite": false
+      },
+      "operatorCorrection": "outdated",
+      "expectedActions": [
+        "remove_must_push",
+        "quarantine_draft",
+        "quarantine_memory_candidate",
+        "create_learning_candidate"
+      ]
+    },
+    {
+      "id": "OBJ-SIG-REVIEW-CONTRADICTION-001",
+      "initialDisposition": "must_push_ready",
+      "expectedFinalDisposition": "review_required",
+      "expectedContainment": "downgraded",
+      "currentExposures": {
+        "mustPushItemIds": ["must-push:alias-b-security"],
+        "reviewPacketIds": ["review:alias-b-security"],
+        "draftIds": ["draft:alias-b-security-note"],
+        "memoryCandidateIds": [],
+        "canonicalMemoryIds": [],
+        "skillSuggestionIds": [],
+        "officialWriteIds": []
+      },
+      "postAdmissionFindings": {
+        "staleEvidence": false,
+        "contradictoryEvidence": true,
+        "duplicateSignal": false,
+        "wrongObjectBinding": false,
+        "tenantMismatch": false,
+        "unsafeBoundary": false,
+        "officialWriteIntent": false,
+        "canonicalMemoryWrite": false
+      },
+      "operatorCorrection": "contradictory_evidence",
+      "expectedActions": [
+        "downgrade_to_review_required",
+        "freeze_draft",
+        "attach_blast_radius_report",
+        "create_learning_candidate"
+      ]
+    },
+    {
+      "id": "OBJ-SIG-REJECT-CROSS-WORKSPACE-001",
+      "initialDisposition": "must_push_ready",
+      "expectedFinalDisposition": "rejected",
+      "expectedContainment": "quarantined",
+      "currentExposures": {
+        "mustPushItemIds": ["must-push:alias-c-proof"],
+        "reviewPacketIds": ["review:alias-c-proof"],
+        "draftIds": [],
+        "memoryCandidateIds": ["memory-candidate:alias-c-proof"],
+        "canonicalMemoryIds": ["memory:alias-c-proof"],
+        "skillSuggestionIds": ["skill-suggestion:alias-c-proof"],
+        "officialWriteIds": []
+      },
+      "postAdmissionFindings": {
+        "staleEvidence": false,
+        "contradictoryEvidence": false,
+        "duplicateSignal": false,
+        "wrongObjectBinding": true,
+        "tenantMismatch": true,
+        "unsafeBoundary": false,
+        "officialWriteIntent": false,
+        "canonicalMemoryWrite": true
+      },
+      "operatorCorrection": "wrong_object",
+      "expectedActions": [
+        "remove_must_push",
+        "quarantine_review_packet",
+        "quarantine_memory_candidate",
+        "tombstone_canonical_memory",
+        "quarantine_skill_suggestion",
+        "create_learning_candidate"
+      ]
+    },
+    {
+      "id": "OBJ-SIG-REJECT-AUTHORITY-001",
+      "initialDisposition": "must_push_ready",
+      "expectedFinalDisposition": "rejected",
+      "expectedContainment": "quarantined",
+      "currentExposures": {
+        "mustPushItemIds": ["must-push:alias-d-send"],
+        "reviewPacketIds": [],
+        "draftIds": ["draft:alias-d-send"],
+        "memoryCandidateIds": [],
+        "canonicalMemoryIds": [],
+        "skillSuggestionIds": ["skill-suggestion:alias-d-send"],
+        "officialWriteIds": ["official-write:alias-d-send"]
+      },
+      "postAdmissionFindings": {
+        "staleEvidence": false,
+        "contradictoryEvidence": false,
+        "duplicateSignal": false,
+        "wrongObjectBinding": false,
+        "tenantMismatch": false,
+        "unsafeBoundary": true,
+        "officialWriteIntent": true,
+        "canonicalMemoryWrite": false
+      },
+      "operatorCorrection": "unsafe_boundary",
+      "expectedActions": [
+        "remove_must_push",
+        "block_official_write",
+        "quarantine_draft",
+        "quarantine_skill_suggestion",
+        "create_learning_candidate"
+      ]
+    }
+  ]
+}

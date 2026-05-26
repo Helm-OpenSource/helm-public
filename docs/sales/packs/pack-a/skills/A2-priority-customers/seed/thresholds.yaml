@@ -1,0 +1,21 @@
+priority:
+  display_count: 5
+  refresh_schedule: "0 9 * * *"
+  weights:
+    commitment_due_days: 30
+    silence_hours: 25
+    health_score: 20
+    deal_value_x_probability: 15
+    manager_flag: 10
+
+risk_tags:
+  commitment_due_threshold: 80
+  silence_min_hours: 48
+  silence_max_hours: 168
+  health_drop_pct: 20
+
+acceptance:
+  pilot_overlap_target: 0.60
+  steady_overlap_target: 0.80
+  miss_rate_pilot_max: 0.20
+  miss_rate_steady_max: 0.10

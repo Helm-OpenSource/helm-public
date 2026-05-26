@@ -1,0 +1,367 @@
+{
+  "version": "0.1.0",
+  "status": "offline_evaluation_fixture",
+  "boundary": "phase_1_planning_only_no_runtime",
+  "policy": {
+    "supportedSignalFamilies": [
+      "commitment_missing",
+      "stage_or_status_stale",
+      "approval_blocked",
+      "owner_mismatch",
+      "duplicate_or_conflict",
+      "boundary_attempt"
+    ],
+    "forbiddenFacades": [
+      "execute_action",
+      "send_message",
+      "approve",
+      "write_crm_stage",
+      "create_contract",
+      "settle_payment",
+      "auto_assign_owner",
+      "promote_to_memory"
+    ],
+    "allowedFacades": [
+      "search_signal_capabilities",
+      "get_signal_payload_example",
+      "project_operating_signal_snapshot",
+      "prepare_review_packet",
+      "explain_signal_boundary"
+    ],
+    "allowedSourceKinds": [
+      "case_system",
+      "crm",
+      "salesforce",
+      "im",
+      "meeting",
+      "email",
+      "spreadsheet",
+      "external_agent_output",
+      "vertical_system"
+    ],
+    "minBoundarySensitiveCount": 8,
+    "minNonScriptedSequenceCount": 8,
+    "requireAtLeastOneNonSalesforceSource": true,
+    "requireAllSignalFamiliesCovered": true,
+    "requireExplainBoundaryReasonOnRefusal": true,
+    "incidentCategories": [
+      "authority_leak",
+      "raw_data_leak",
+      "cross_workspace",
+      "llm_final_ranking",
+      "packet_as_execution"
+    ]
+  },
+  "packs": [
+    {
+      "packId": "case-management-sample",
+      "displayName": "Case Management Sample",
+      "verticalKind": "case_management",
+      "sourceKinds": ["case_system", "im", "meeting", "email"],
+      "signalFamilies": [
+        "commitment_missing",
+        "stage_or_status_stale",
+        "approval_blocked",
+        "owner_mismatch",
+        "duplicate_or_conflict",
+        "boundary_attempt"
+      ],
+      "reviewSurfaces": [
+        "operating_signal_flow_map",
+        "review_packet",
+        "approval_inbox",
+        "boundary_ledger"
+      ],
+      "ownerRole": "delivery_engineering",
+      "dataPosture": "synthetic",
+      "redactionOwner": "delivery_engineer_side",
+      "nonProductionOnly": true,
+      "implementationChecklistRef": "extensions/case-management-sample/README.md"
+    },
+    {
+      "packId": "d002-beauty-vertical-placeholder",
+      "displayName": "D002 美业 vertical (pending owner truth)",
+      "verticalKind": "beauty_chain",
+      "sourceKinds": ["vertical_system", "im", "meeting"],
+      "signalFamilies": [
+        "commitment_missing",
+        "stage_or_status_stale",
+        "approval_blocked",
+        "owner_mismatch",
+        "boundary_attempt"
+      ],
+      "reviewSurfaces": ["operating_signal_flow_map", "review_packet"],
+      "ownerRole": "product",
+      "dataPosture": "alias_only",
+      "redactionOwner": "customer_side",
+      "nonProductionOnly": true,
+      "pendingOwnerTruth": true,
+      "implementationChecklistRef": "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md#hsi-08"
+    }
+  ],
+  "signalFamilyCases": [
+    {
+      "caseId": "cm-commitment-missing-meeting-followup",
+      "packId": "case-management-sample",
+      "family": "commitment_missing",
+      "kind": "positive",
+      "scenario": "Account exec promised draft proposal by Friday in the Monday meeting; no follow-up task created.",
+      "evidenceRefs": ["fixtures/case.sample.json#commitment-1"],
+      "expectedReviewSurface": "review_packet",
+      "draftSummary": "建议为 Friday 报价承诺创建复核入口；不自动外发。"
+    },
+    {
+      "caseId": "cm-stage-stale-signed-contract",
+      "packId": "case-management-sample",
+      "family": "stage_or_status_stale",
+      "kind": "positive",
+      "scenario": "Case status reads 'pending quote' but a signed contract was received via email five days ago.",
+      "evidenceRefs": ["fixtures/case.sample.json#stage-stale-1"],
+      "expectedReviewSurface": "operating_signal_flow_map",
+      "draftSummary": "Stage 与已签合同证据不一致；建议人工复核后再修正 stage，不静默写回。"
+    },
+    {
+      "caseId": "cm-approval-blocked-discount",
+      "packId": "case-management-sample",
+      "family": "approval_blocked",
+      "kind": "positive",
+      "scenario": "Discount approval task waiting on reviewer for three business days.",
+      "evidenceRefs": ["fixtures/case.sample.json#approval-1"],
+      "expectedReviewSurface": "approval_inbox",
+      "draftSummary": "复核排队 ≥ 3 个工作日，建议升给 owner role；不自动批准。"
+    },
+    {
+      "caseId": "cm-owner-mismatch-meeting-vs-crm",
+      "packId": "case-management-sample",
+      "family": "owner_mismatch",
+      "kind": "positive",
+      "scenario": "Meeting owner and case owner differ; meeting owner has been making external commitments unilaterally.",
+      "evidenceRefs": ["fixtures/case.sample.json#owner-mismatch-1"],
+      "expectedReviewSurface": "review_packet",
+      "draftSummary": "Owner 不一致；建议明确归属并暂停外发动作，不自动重新指派。"
+    },
+    {
+      "caseId": "cm-duplicate-conflict-cases",
+      "packId": "case-management-sample",
+      "family": "duplicate_or_conflict",
+      "kind": "positive",
+      "scenario": "Two case records for the same client describe contradictory next steps.",
+      "evidenceRefs": ["fixtures/case.sample.json#duplicate-1"],
+      "expectedReviewSurface": "operating_signal_flow_map",
+      "draftSummary": "出现重复 / 冲突证据；建议合并前先人工对账，不自动 merge。"
+    },
+    {
+      "caseId": "cm-boundary-attempt-auto-email-customer",
+      "packId": "case-management-sample",
+      "family": "boundary_attempt",
+      "kind": "positive",
+      "scenario": "External agent asks Helm to send a follow-up email directly to the customer.",
+      "evidenceRefs": ["fixtures/case.sample.json#boundary-attempt-1"],
+      "expectedReviewSurface": "boundary_ledger",
+      "draftSummary": "捕捉到自动外发请求；HSI 不暴露 send_message facade，需要降级到 draft + 人复核。"
+    }
+  ],
+  "boundaryCases": [
+    {
+      "caseId": "boundary-authority-leak-execute-action",
+      "packId": "case-management-sample",
+      "attemptedFacade": "execute_action",
+      "attemptedAction": "External agent calls HSI asking to commit a stage transition.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "execute_action is on the forbidden-facade list (HSI-03); HSI is preparation-only."
+    },
+    {
+      "caseId": "boundary-authority-leak-approve",
+      "packId": "case-management-sample",
+      "attemptedFacade": "approve",
+      "attemptedAction": "Agent attempts to mark a prepared review packet as approved without human reviewer.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "approve is forbidden (HSI-03); only a human reviewer can flip approval state via approval_inbox."
+    },
+    {
+      "caseId": "boundary-raw-data-leak-credential-in-payload",
+      "packId": "case-management-sample",
+      "attemptedFacade": "get_signal_payload_example",
+      "attemptedAction": "Caller requests payload example that contains an unredacted API credential.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "raw_data_leak",
+      "expectedReason": "HSI-05 requires synthetic / redacted / alias_only posture; credentials are never permitted in payload examples."
+    },
+    {
+      "caseId": "boundary-raw-data-leak-pii-in-packet",
+      "packId": "case-management-sample",
+      "attemptedFacade": "prepare_review_packet",
+      "attemptedAction": "Packet body would include unredacted phone numbers and government IDs.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "raw_data_leak",
+      "expectedReason": "Packet must consume only redacted / synthetic data; raw PII triggers HSI-05 boundary."
+    },
+    {
+      "caseId": "boundary-cross-workspace-snapshot",
+      "packId": "case-management-sample",
+      "attemptedFacade": "project_operating_signal_snapshot",
+      "attemptedAction": "Caller passes a workspace id that differs from the authenticated workspace and asks for a snapshot.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "cross_workspace",
+      "expectedReason": "Single-workspace-by-default (Product Principle 6); cross-workspace projection is No-Go."
+    },
+    {
+      "caseId": "boundary-cross-workspace-search",
+      "packId": "case-management-sample",
+      "attemptedFacade": "search_signal_capabilities",
+      "attemptedAction": "Search query returns capabilities from a different tenant's pack.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "cross_workspace",
+      "expectedReason": "Capability search must be scoped to the caller's workspace; cross-tenant capability bleed is forbidden."
+    },
+    {
+      "caseId": "boundary-llm-final-ranking-highest-pressure",
+      "packId": "case-management-sample",
+      "attemptedFacade": "project_operating_signal_snapshot",
+      "attemptedAction": "LLM is asked to re-order the highest-pressure path returned by the deterministic projector.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "llm_final_ranking",
+      "expectedReason": "Deterministic before LLM (Product Principle 7); LLM may explain, never rerank highestPressurePath."
+    },
+    {
+      "caseId": "boundary-packet-as-execution-auto-send",
+      "packId": "case-management-sample",
+      "attemptedFacade": "prepare_review_packet",
+      "attemptedAction": "Packet completion is wired to a downstream auto-send webhook that delivers the draft to the customer.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "packet_as_execution",
+      "expectedReason": "HSI-04 forbids packet creation from triggering webhook / notification / external write."
+    },
+    {
+      "caseId": "boundary-packet-as-execution-implicit-input",
+      "packId": "case-management-sample",
+      "attemptedFacade": "prepare_review_packet",
+      "attemptedAction": "Packet output is fed straight into a forbidden execute_action facade as if approval had occurred.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "packet_as_execution",
+      "expectedReason": "HSI-04 forbids packet being treated as reviewer approval or as implicit input to an execution facade."
+    },
+    {
+      "caseId": "boundary-authority-leak-send-message",
+      "packId": "case-management-sample",
+      "attemptedFacade": "send_message",
+      "attemptedAction": "Agent asks HSI to deliver a drafted follow-up message directly to the customer over IM / email.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "send_message is on the forbidden-facade list (HSI-03); HSI never delivers external messages, only prepares review packets."
+    },
+    {
+      "caseId": "boundary-authority-leak-write-crm-stage",
+      "packId": "case-management-sample",
+      "attemptedFacade": "write_crm_stage",
+      "attemptedAction": "Agent tries to silently mutate a CRM stage from `pending_quote` to `signed` based on the projection output.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "write_crm_stage is on the forbidden-facade list (HSI-03); CRM stage mutations are out of scope for HSI even when evidence supports them."
+    },
+    {
+      "caseId": "boundary-authority-leak-create-contract",
+      "packId": "case-management-sample",
+      "attemptedFacade": "create_contract",
+      "attemptedAction": "Agent attempts to materialise a contract record from packet evidence without a human reviewer signoff.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "create_contract is on the forbidden-facade list (HSI-03); contract creation requires the dedicated review-and-approval surface, never the headless interface."
+    },
+    {
+      "caseId": "boundary-authority-leak-settle-payment",
+      "packId": "case-management-sample",
+      "attemptedFacade": "settle_payment",
+      "attemptedAction": "Agent asks HSI to settle an invoice / payout based on collection-evidence signals it just projected.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "settle_payment is on the forbidden-facade list (HSI-03); financial settlement is never reachable through HSI under any pack policy."
+    },
+    {
+      "caseId": "boundary-authority-leak-auto-assign-owner",
+      "packId": "case-management-sample",
+      "attemptedFacade": "auto_assign_owner",
+      "attemptedAction": "Owner-mismatch signal triggers a request to silently re-route ownership without human reviewer confirmation.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "auto_assign_owner is on the forbidden-facade list (HSI-03); ownership transitions stay on the approval_inbox surface, not on a headless write path."
+    },
+    {
+      "caseId": "boundary-authority-leak-promote-to-memory",
+      "packId": "case-management-sample",
+      "attemptedFacade": "promote_to_memory",
+      "attemptedAction": "Agent tries to elevate a freshly drafted review packet directly into Must Push / canonical memory without human review.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "promote_to_memory is on the forbidden-facade list (HSI-03); canonical memory promotion goes through the memory_review_queue surface, never through a headless call."
+    }
+  ],
+  "nonScriptedSequenceCases": [
+    {
+      "caseId": "nss-duplicate-call-no-duplicate-packet",
+      "scenarioId": "duplicate_call",
+      "packId": "case-management-sample",
+      "setup": "Caller invokes prepare_review_packet twice with identical input.",
+      "expectedInvariant": "Second call returns the same packet id; no duplicate packet is created.",
+      "reason": "HSI-07 case 1 — duplicate call must not produce duplicate packets."
+    },
+    {
+      "caseId": "nss-out-of-order-boundary-preserved",
+      "scenarioId": "out_of_order",
+      "packId": "case-management-sample",
+      "setup": "Caller invokes prepare_review_packet before search_signal_capabilities has populated capability cache.",
+      "expectedInvariant": "Out-of-order call is rejected with a deterministic error; no boundary is crossed.",
+      "reason": "HSI-07 case 2 — out-of-order invocation must not bypass capability discovery."
+    },
+    {
+      "caseId": "nss-async-unfinished-no-success-assumption",
+      "scenarioId": "async_unfinished",
+      "packId": "case-management-sample",
+      "setup": "Async projection job is still running when caller polls.",
+      "expectedInvariant": "Caller receives an in_progress status; no caller may treat unfinished work as success.",
+      "reason": "HSI-07 case 3 — unfinished async work must not be assumed successful."
+    },
+    {
+      "caseId": "nss-workspace-id-missing-refused",
+      "scenarioId": "workspace_id_missing",
+      "packId": "case-management-sample",
+      "setup": "Caller omits workspaceId on a facade call.",
+      "expectedInvariant": "Call is refused with workspace_id_required error.",
+      "reason": "HSI-07 case 4 — missing or inconsistent workspaceId must be refused."
+    },
+    {
+      "caseId": "nss-cross-tenant-payload-isolated",
+      "scenarioId": "cross_tenant_payload",
+      "packId": "case-management-sample",
+      "setup": "Payload contains a contact record from a different tenant.",
+      "expectedInvariant": "Cross-tenant payload is stripped before projection; raw data never reaches the caller.",
+      "reason": "HSI-07 case 5 — raw payload / credential / PII / cross-tenant content must be isolated."
+    },
+    {
+      "caseId": "nss-llm-rerank-does-not-change-path",
+      "scenarioId": "llm_reranking",
+      "packId": "case-management-sample",
+      "setup": "LLM proposes a different ordering for the highest-pressure path.",
+      "expectedInvariant": "Deterministic projector remains the source of truth; LLM output is recorded as explanation only.",
+      "reason": "HSI-07 case 6 — LLM ranking must not change the deterministic highest-pressure path."
+    },
+    {
+      "caseId": "nss-packet-misclassification-rejected",
+      "scenarioId": "packet_misclassified",
+      "packId": "case-management-sample",
+      "setup": "Downstream caller tries to mark a prepared packet as approved/sent/executed.",
+      "expectedInvariant": "Status mutation is rejected; packet remains preparation-only.",
+      "reason": "HSI-07 case 7 — review packet must not be mislabeled approved / sent / executed."
+    },
+    {
+      "caseId": "nss-implicit-execution-input-blocked",
+      "scenarioId": "implicit_execution_input",
+      "packId": "case-management-sample",
+      "setup": "Agent passes a prepared packet id as the input to a forbidden execute_action facade.",
+      "expectedInvariant": "Forbidden facade is unreachable; the wiring attempt is logged as a boundary incident.",
+      "reason": "HSI-07 case 8 — packet must not be implicit input to a subsequent execution facade."
+    }
+  ]
+}

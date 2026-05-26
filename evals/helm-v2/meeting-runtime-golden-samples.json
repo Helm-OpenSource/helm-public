@@ -1,0 +1,121 @@
+[
+  {
+    "id": "huadong_procurement_followup",
+    "label": "华东智造 procurement follow-up",
+    "workspaceSummary": "销售团队围绕采购推进、正式复核和会后跟进保持同一条经营节奏。",
+    "meeting": {
+      "title": "华东智造采购推进同步会",
+      "agenda": "确认采购窗口、ROI 资料和联合评审节奏",
+      "startsAt": "2026-04-02T10:00:00.000Z",
+      "endsAt": "2026-04-02T11:00:00.000Z",
+      "companyName": "华东智造",
+      "ownerName": "周玥",
+      "contacts": ["赵敏", "陈嘉伟"],
+      "opportunity": {
+        "title": "华东智造经营推进试点",
+        "type": "CLIENT",
+        "stage": "CONTACTED",
+        "riskLevel": "MEDIUM",
+        "nextAction": "确认采购窗口"
+      },
+      "note": {
+        "meetingGoal": "确认采购推进窗口，并决定会后 follow-up 的唯一 owner。",
+        "riskAlerts": "如果会后 24 小时内没有结构化 follow-up，这个采购窗口会迅速冷下来。\n客户还没有确认预算 owner。",
+        "summary": "客户已经进入采购推进窗口，关键动作是 24 小时内发出 ROI + 联合评审 follow-up。",
+        "keyDecisions": "先由我们起草 ROI follow-up，再安排下周联合评审。\n当前不形成任何正式价格承诺。",
+        "confirmations": "会后先发一封结构化 follow-up 邮件。\n下周安排联合评审时间建议。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "华东智造过去两周多次要求更结构化的 ROI 资料。",
+      "华东智造机会仍处于采购推进窗口。"
+    ],
+    "expected": {
+      "factsIncludes": ["采购推进窗口", "正式价格承诺"],
+      "nextActionIncludes": ["发送会后跟进邮件"],
+      "expectedShadowStage": "ADVANCING",
+      "expectedShadowNextActionIncludes": "会后先发一封结构化 follow-up 邮件",
+      "expectedContextIncludes": ["华东智造", "采购推进窗口"],
+      "promiseBoundaryRequired": true
+    }
+  },
+  {
+    "id": "greenpeak_recruiting_loop",
+    "label": "GreenPeak recruiting loop",
+    "workspaceSummary": "招聘推进强调候选人窗口、面试节奏和不越权承诺。",
+    "meeting": {
+      "title": "GreenPeak 职位推进同步",
+      "agenda": "确认候选人意向、面试安排和 hiring manager 对齐",
+      "startsAt": "2026-04-02T12:00:00.000Z",
+      "endsAt": "2026-04-02T13:00:00.000Z",
+      "companyName": "GreenPeak",
+      "ownerName": "Nina Hu",
+      "contacts": ["Ben Carter"],
+      "opportunity": {
+        "title": "GreenPeak 招聘推进",
+        "type": "RECRUITING",
+        "stage": "ADVANCING",
+        "riskLevel": "MEDIUM",
+        "nextAction": "安排终面窗口"
+      },
+      "note": {
+        "meetingGoal": "确认候选人窗口并推进终面安排。",
+        "riskAlerts": "如果本周没有明确终面窗口，候选人热度会继续下降。",
+        "summary": "候选人意向仍在，但需要尽快给出终面安排和内部 briefing。",
+        "keyDecisions": "先起草终面安排建议，再同步内部面试官 briefing。",
+        "confirmations": "今天内确认终面时间范围。\n同步面试 panel briefing。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "GreenPeak 招聘机会的关键风险是时间窗口降温。"
+    ],
+    "expected": {
+      "factsIncludes": ["候选人意向仍在", "终面安排建议"],
+      "nextActionIncludes": ["生成后续面试安排动作"],
+      "expectedShadowStage": "ADVANCING",
+      "expectedShadowNextActionIncludes": "今天内确认终面时间范围",
+      "expectedContextIncludes": ["GreenPeak", "时间窗口降温"],
+      "promiseBoundaryRequired": true
+    }
+  },
+  {
+    "id": "internal_sync_requires_manager_attention",
+    "label": "Internal sync attention",
+    "workspaceSummary": "经营负责人需要从内部对齐会里尽快识别阻塞和唯一 owner。",
+    "meeting": {
+      "title": "经营优先级冲突复盘",
+      "agenda": "确认内部冲突、资源优先级和唯一 owner",
+      "startsAt": "2026-04-02T15:00:00.000Z",
+      "endsAt": "2026-04-02T16:00:00.000Z",
+      "companyName": "Helm",
+      "ownerName": "Tommy Qian",
+      "contacts": ["运营负责人"],
+      "opportunity": {
+        "title": "内部经营优先级同步",
+        "type": "INTERNAL",
+        "stage": "CONTACTED",
+        "riskLevel": "HIGH",
+        "nextAction": "明确唯一 owner"
+      },
+      "note": {
+        "meetingGoal": "确认当前冲突项并决定唯一 owner。",
+        "riskAlerts": "内部资源冲突仍未解决。\n没有唯一 owner 会继续拖慢推进。",
+        "summary": "当前最需要处理的是内部优先级冲突，而不是继续扩新动作。",
+        "keyDecisions": "先收口唯一 owner，再处理依赖和排序。",
+        "confirmations": "今天内补齐 owner 和截止时间。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "内部优先级冲突需要明确唯一 owner。",
+      "当前高风险来自内部资源冲突。"
+    ],
+    "expected": {
+      "factsIncludes": ["内部优先级冲突", "唯一 owner"],
+      "nextActionIncludes": ["同步内部纪要"],
+      "expectedShadowStage": "INTERNAL_SYNC",
+      "expectedShadowNextActionIncludes": "今天内补齐 owner 和截止时间",
+      "expectedContextIncludes": ["内部优先级冲突", "唯一 owner"],
+      "promiseBoundaryRequired": true
+    }
+  }
+]

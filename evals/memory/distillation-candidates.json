@@ -1,0 +1,206 @@
+[
+  {
+    "id": "repeated-facts-candidate",
+    "description": "Two facts with the same normalized key produce one review_required candidate with expected sourceFactIds and boundary snippets.",
+    "facts": [
+      {
+        "id": "fact-repeat-1",
+        "objectType": "OPPORTUNITY",
+        "objectId": "opp-fixture-1",
+        "factType": "RISK_SIGNAL",
+        "title": "Payment cycle risk",
+        "content": "Customer payment cycle is at risk.",
+        "normalizedValue": { "factKey": "payment-cycle-risk" },
+        "sourceType": "MEETING_NOTE",
+        "sourceId": "meeting-fixture-1",
+        "status": "ACTIVE",
+        "confidence": 70,
+        "importance": 70,
+        "confirmedByUser": false,
+        "createdAt": "2026-01-10T00:00:00Z",
+        "updatedAt": "2026-01-10T00:00:00Z",
+        "evidenceRefs": ["ref-a"],
+        "priorReviewDecisions": []
+      },
+      {
+        "id": "fact-repeat-2",
+        "objectType": "OPPORTUNITY",
+        "objectId": "opp-fixture-1",
+        "factType": "RISK_SIGNAL",
+        "title": "Payment cycle risk",
+        "content": "Customer payment cycle is at risk.",
+        "normalizedValue": { "factKey": "payment-cycle-risk" },
+        "sourceType": "MEETING_NOTE",
+        "sourceId": "meeting-fixture-2",
+        "status": "ACTIVE",
+        "confidence": 75,
+        "importance": 70,
+        "confirmedByUser": false,
+        "createdAt": "2026-01-12T00:00:00Z",
+        "updatedAt": "2026-01-12T00:00:00Z",
+        "evidenceRefs": ["ref-b"],
+        "priorReviewDecisions": []
+      }
+    ],
+    "expectedCandidateCount": 1,
+    "expectedOmittedCount": 0,
+    "expectedSourceFactIds": [["fact-repeat-1", "fact-repeat-2"]],
+    "expectedBoundarySnippets": [
+      "cannot write canonical facts",
+      "cannot change recommendation ranking"
+    ],
+    "expectedOmittedReasons": []
+  },
+  {
+    "id": "unique-fact-no-candidate",
+    "description": "A single unique fact produces zero distillation candidates.",
+    "facts": [
+      {
+        "id": "fact-unique-1",
+        "objectType": "OPPORTUNITY",
+        "objectId": "opp-fixture-2",
+        "factType": "NEXT_STEP",
+        "title": "Send proposal draft",
+        "content": "Send the proposal draft by Friday.",
+        "normalizedValue": { "factKey": "send-proposal-draft" },
+        "sourceType": "MEETING_NOTE",
+        "sourceId": "meeting-fixture-3",
+        "status": "ACTIVE",
+        "confidence": 80,
+        "importance": 80,
+        "confirmedByUser": false,
+        "createdAt": "2026-01-15T00:00:00Z",
+        "updatedAt": "2026-01-15T00:00:00Z",
+        "evidenceRefs": [],
+        "priorReviewDecisions": []
+      }
+    ],
+    "expectedCandidateCount": 0,
+    "expectedOmittedCount": 0,
+    "expectedSourceFactIds": [],
+    "expectedBoundarySnippets": [],
+    "expectedOmittedReasons": []
+  },
+  {
+    "id": "prior-reject-omits-candidate",
+    "description": "Prior reject decision on the group key blocks regeneration and returns rejected_by_review in omitted.",
+    "facts": [
+      {
+        "id": "fact-reject-1",
+        "objectType": "OPPORTUNITY",
+        "objectId": "opp-reject-1",
+        "factType": "RISK_SIGNAL",
+        "title": "Payment overdue",
+        "content": "Payment is overdue.",
+        "normalizedValue": { "factKey": "payment-overdue" },
+        "sourceType": "MEETING_NOTE",
+        "sourceId": "meeting-fixture-4",
+        "status": "ACTIVE",
+        "confidence": 65,
+        "importance": 65,
+        "confirmedByUser": false,
+        "createdAt": "2026-01-18T00:00:00Z",
+        "updatedAt": "2026-01-18T00:00:00Z",
+        "evidenceRefs": [],
+        "priorReviewDecisions": [
+          {
+            "decision": "reject",
+            "groupKey": "OPPORTUNITY|opp-reject-1|RISK_SIGNAL|payment overdue",
+            "decidedAt": "2026-01-20T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "id": "fact-reject-2",
+        "objectType": "OPPORTUNITY",
+        "objectId": "opp-reject-1",
+        "factType": "RISK_SIGNAL",
+        "title": "Payment overdue",
+        "content": "Payment is overdue.",
+        "normalizedValue": { "factKey": "payment-overdue" },
+        "sourceType": "MEETING_NOTE",
+        "sourceId": "meeting-fixture-5",
+        "status": "ACTIVE",
+        "confidence": 65,
+        "importance": 65,
+        "confirmedByUser": false,
+        "createdAt": "2026-01-19T00:00:00Z",
+        "updatedAt": "2026-01-19T00:00:00Z",
+        "evidenceRefs": [],
+        "priorReviewDecisions": [
+          {
+            "decision": "reject",
+            "groupKey": "OPPORTUNITY|opp-reject-1|RISK_SIGNAL|payment overdue",
+            "decidedAt": "2026-01-20T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "expectedCandidateCount": 0,
+    "expectedOmittedCount": 1,
+    "expectedSourceFactIds": [],
+    "expectedBoundarySnippets": [],
+    "expectedOmittedReasons": ["rejected_by_review"]
+  },
+  {
+    "id": "prior-defer-omits-candidate",
+    "description": "Prior defer decision on the group key blocks regeneration and returns deferred_by_review in omitted.",
+    "facts": [
+      {
+        "id": "fact-defer-1",
+        "objectType": "OPPORTUNITY",
+        "objectId": "opp-defer-1",
+        "factType": "RISK_SIGNAL",
+        "title": "Budget overrun",
+        "content": "Budget is overrun.",
+        "normalizedValue": { "factKey": "budget-overrun" },
+        "sourceType": "MEETING_NOTE",
+        "sourceId": "meeting-fixture-6",
+        "status": "ACTIVE",
+        "confidence": 60,
+        "importance": 60,
+        "confirmedByUser": false,
+        "createdAt": "2026-01-22T00:00:00Z",
+        "updatedAt": "2026-01-22T00:00:00Z",
+        "evidenceRefs": [],
+        "priorReviewDecisions": [
+          {
+            "decision": "defer",
+            "groupKey": "OPPORTUNITY|opp-defer-1|RISK_SIGNAL|budget overrun",
+            "decidedAt": "2026-01-24T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "id": "fact-defer-2",
+        "objectType": "OPPORTUNITY",
+        "objectId": "opp-defer-1",
+        "factType": "RISK_SIGNAL",
+        "title": "Budget overrun",
+        "content": "Budget is overrun.",
+        "normalizedValue": { "factKey": "budget-overrun" },
+        "sourceType": "MEETING_NOTE",
+        "sourceId": "meeting-fixture-7",
+        "status": "ACTIVE",
+        "confidence": 60,
+        "importance": 60,
+        "confirmedByUser": false,
+        "createdAt": "2026-01-23T00:00:00Z",
+        "updatedAt": "2026-01-23T00:00:00Z",
+        "evidenceRefs": [],
+        "priorReviewDecisions": [
+          {
+            "decision": "defer",
+            "groupKey": "OPPORTUNITY|opp-defer-1|RISK_SIGNAL|budget overrun",
+            "decidedAt": "2026-01-24T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "expectedCandidateCount": 0,
+    "expectedOmittedCount": 1,
+    "expectedSourceFactIds": [],
+    "expectedBoundarySnippets": [],
+    "expectedOmittedReasons": ["deferred_by_review"]
+  }
+]

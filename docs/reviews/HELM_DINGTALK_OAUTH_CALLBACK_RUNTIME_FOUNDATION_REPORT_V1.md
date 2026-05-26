@@ -1,0 +1,71 @@
+---
+status: archived
+owner: helm-core
+created: 2026-04-07
+review_after: 2026-10-04
+# frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-19
+# rationale: filename matches closeout/freeze/report/audit/sprint/run pattern
+---
+# Helm DingTalk OAuth Callback Runtime Foundation Report V1
+
+更新时间：2026-04-07
+结论：Completed
+
+## 本轮落地
+
+- 新增 DingTalk OAuth callback runtime：
+  - `/api/auth/dingtalk/start`
+  - `/api/auth/dingtalk/callback`
+- 新增 DingTalk callback helper：
+  - auth URL build
+  - token exchange
+  - user profile fetch
+  - callback result metadata
+  - connector callback result persistence
+- 新增 `DINGTALK_OAUTH` callback-compatible session governance source page
+- settings/operator surface 已补：
+  - callback readiness
+  - last callback status
+  - failure posture
+  - resolved provider email
+  - matched workspace user
+- connector governance audit 已补 DingTalk callback action types
+
+## 本轮没有扩张
+
+- 没有把 native DingTalk SCIM 写成已成立
+- 没有实现 DingTalk read-only ingestion runtime
+- 没有实现 send/write-back
+- 没有做 connector platformization
+- 没有扩 execution authority
+
+## 诚实边界
+
+- current DingTalk line is runtime OAuth callback foundation
+- current repo truth still does not claim native DingTalk SCIM
+- current repo truth still does not claim read-only ingestion runtime
+- current connector flow remains workspace-scoped and current-user initiated
+
+## 验证
+
+- `DATABASE_URL="file:./prisma/dev.db" npm run db:reset`
+- `DATABASE_URL="file:./prisma/dev.db" npm run self-check`
+- `DATABASE_URL="file:./prisma/dev.db" npm run check:boundaries`
+- `npm run typecheck`
+- `npm run lint`
+- `DATABASE_URL="file:./prisma/dev.db" npm run test`
+- `DATABASE_URL="file:./prisma/dev.db" npm run build`
+- `DATABASE_URL="file:./prisma/dev.db" npm run e2e`
+- `DATABASE_URL="file:./prisma/dev.db" npm run quality:regression`
+
+结果：
+
+- `db:reset` passed
+- `self-check` passed
+- `check:boundaries` passed
+- `typecheck` passed
+- `lint` passed
+- `test` passed: `140 files / 570 tests`
+- `build` passed
+- `e2e` passed: `21 tests`
+- `quality:regression` passed: `51 files / 180 tests`

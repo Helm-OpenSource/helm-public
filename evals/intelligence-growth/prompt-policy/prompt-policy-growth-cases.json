@@ -1,0 +1,184 @@
+[
+  {
+    "id": "ppo-001",
+    "dimension": "prompt_policy",
+    "description": "Template passes regression gate with 5 policy rules and a minor wording improvement candidate — learning candidate.",
+    "input": {
+      "dimension": "prompt_policy",
+      "evalRunId": "eval-run-ppo-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ppo-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "templateId": "tpl-alias-001",
+      "regressionGatePass": true,
+      "policyRuleCount": 5,
+      "candidateChangeDescription": "Minor clarification of boundary note wording; no semantic change."
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Regression gate passed; candidate change is minor and non-semantic. Suitable for quality baseline tracking.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ppo-002",
+    "dimension": "prompt_policy",
+    "description": "Template passes regression gate with 8 policy rules and no proposed change — watch_only for ongoing quality monitoring.",
+    "input": {
+      "dimension": "prompt_policy",
+      "evalRunId": "eval-run-ppo-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-ppo-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "templateId": "tpl-alias-002",
+      "regressionGatePass": true,
+      "policyRuleCount": 8,
+      "candidateChangeDescription": "No change proposed; monitoring only."
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "No change proposed; regression passed. Template is in stable monitoring state.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ppo-003",
+    "dimension": "prompt_policy",
+    "description": "Template passes regression gate with 3 rules and a structural clarification candidate — learning candidate.",
+    "input": {
+      "dimension": "prompt_policy",
+      "evalRunId": "eval-run-ppo-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ppo-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "templateId": "tpl-alias-003",
+      "regressionGatePass": true,
+      "policyRuleCount": 3,
+      "candidateChangeDescription": "Reorder two boundary notes for improved readability; no behavior change."
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Regression gate passed; change is structural and non-behavioral. Good candidate for template quality improvement tracking.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ppo-004",
+    "dimension": "prompt_policy",
+    "description": "High policy rule count template passes regression gate — watch_only given complexity of rule set.",
+    "input": {
+      "dimension": "prompt_policy",
+      "evalRunId": "eval-run-ppo-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-ppo-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "templateId": "tpl-alias-004",
+      "regressionGatePass": true,
+      "policyRuleCount": 20,
+      "candidateChangeDescription": "Add one additional non-commitment note to the bottom of the template."
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "20 policy rules introduce complexity; even with a regression pass, additional monitoring is prudent before advancement.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ppo-005",
+    "dimension": "prompt_policy",
+    "description": "Simple template with 2 rules passes regression gate and no change — clean learning candidate for minimal template study.",
+    "input": {
+      "dimension": "prompt_policy",
+      "evalRunId": "eval-run-ppo-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ppo-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "templateId": "tpl-alias-005",
+      "regressionGatePass": true,
+      "policyRuleCount": 2,
+      "candidateChangeDescription": "No change; verifying gate coverage for minimal template type."
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Minimal rule set with regression pass and no change. Clean coverage case for simple template type.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ppo-006",
+    "dimension": "prompt_policy",
+    "description": "NEGATIVE: Regression gate failed — template change cannot proceed without human review.",
+    "input": {
+      "dimension": "prompt_policy",
+      "evalRunId": "eval-run-ppo-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ppo-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "templateId": "tpl-alias-006",
+      "regressionGatePass": false,
+      "policyRuleCount": 6,
+      "candidateChangeDescription": "Modify commitment boundary wording to be less restrictive."
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "Regression gate failed on a commitment boundary wording change. Human review mandatory before any template change proceeds.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "ppo-007",
+    "dimension": "prompt_policy",
+    "description": "NEGATIVE: Candidate change description indicates production prompt modification — rejected as boundary violation.",
+    "input": {
+      "dimension": "prompt_policy",
+      "evalRunId": "eval-run-ppo-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ppo-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "templateId": "tpl-alias-007",
+      "regressionGatePass": false,
+      "policyRuleCount": 4,
+      "candidateChangeDescription": "Directly update the production prompt template with new instruction set."
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Candidate description implies direct production prompt modification, which violates the no-production-prompt-change boundary. Rejected unconditionally.",
+      "boundaryViolations": ["no_production_prompt_change"]
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "ppo-008",
+    "dimension": "prompt_policy",
+    "description": "NEGATIVE: Zero policy rules with regression failure and no change description — rejected as malformed fixture.",
+    "input": {
+      "dimension": "prompt_policy",
+      "evalRunId": "eval-run-ppo-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [],
+      "templateId": "tpl-alias-008",
+      "regressionGatePass": false,
+      "policyRuleCount": 0,
+      "candidateChangeDescription": ""
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Zero policy rules, empty change description, no evidence refs, and regression failure. Malformed input rejected.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

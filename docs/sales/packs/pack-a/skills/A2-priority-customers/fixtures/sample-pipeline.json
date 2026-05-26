@@ -1,0 +1,12 @@
+{
+  "_comment": "Day-1 看板示例：23 个活跃商机的销售管线 + 排序示例",
+  "sales_rep": "张某",
+  "active_deals_count": 23,
+  "top_5_today": [
+    {"client": "客户 A", "stage": "续约", "tags": ["承诺即将到期"], "action": "发确认邮件"},
+    {"client": "客户 B", "stage": "方案洽谈", "tags": ["48h 未响应"], "action": "电话跟进"},
+    {"client": "客户 C", "stage": "进行中", "tags": ["客户健康度 ↓"], "action": "CS 协同"},
+    {"client": "客户 D", "stage": "成单", "tags": ["Handoff 待处理"], "action": "启动 A4"},
+    {"client": "客户 E", "stage": "首次接触", "tags": ["主管标记"], "action": "与主管同步"}
+  ]
+}

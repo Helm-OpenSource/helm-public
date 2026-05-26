@@ -1,0 +1,224 @@
+[
+  {
+    "id": "ctx-001",
+    "dimension": "context",
+    "description": "Recommendation call with balanced coverage, low redundancy, well within token budget — qualifies as learning candidate.",
+    "input": {
+      "dimension": "context",
+      "evalRunId": "eval-run-ctx-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ctx-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "contextSnapshot": {
+        "tokenCount": 1800,
+        "coverageScore": 0.87,
+        "redundancyScore": 0.12,
+        "relevanceScore": 0.91,
+        "workspaceId": "tenant-alpha"
+      },
+      "callType": "recommendation",
+      "tokenBudget": 4000
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Coverage and relevance are high; redundancy is low; token usage is comfortably within budget.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ctx-002",
+    "dimension": "context",
+    "description": "Routing call with high relevance, moderate token usage — watch_only because coverage is slightly under threshold.",
+    "input": {
+      "dimension": "context",
+      "evalRunId": "eval-run-ctx-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-ctx-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "contextSnapshot": {
+        "tokenCount": 2100,
+        "coverageScore": 0.61,
+        "redundancyScore": 0.18,
+        "relevanceScore": 0.83,
+        "workspaceId": "tenant-beta"
+      },
+      "callType": "routing",
+      "tokenBudget": 4000
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Relevance is acceptable but coverage score is below 0.65 threshold; needs monitoring before promotion.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ctx-003",
+    "dimension": "context",
+    "description": "Briefing call with high coverage, low redundancy, and moderate token usage — qualifies as learning candidate.",
+    "input": {
+      "dimension": "context",
+      "evalRunId": "eval-run-ctx-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ctx-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "contextSnapshot": {
+        "tokenCount": 1500,
+        "coverageScore": 0.92,
+        "redundancyScore": 0.08,
+        "relevanceScore": 0.88,
+        "workspaceId": "tenant-gamma"
+      },
+      "callType": "briefing",
+      "tokenBudget": 3000
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "High coverage with low redundancy; token count well within budget. Strong briefing context candidate.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ctx-004",
+    "dimension": "context",
+    "description": "Recommendation call with slightly elevated redundancy but still within tolerable range — watch_only.",
+    "input": {
+      "dimension": "context",
+      "evalRunId": "eval-run-ctx-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ctx-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "contextSnapshot": {
+        "tokenCount": 2400,
+        "coverageScore": 0.78,
+        "redundancyScore": 0.31,
+        "relevanceScore": 0.74,
+        "workspaceId": "tenant-alpha"
+      },
+      "callType": "recommendation",
+      "tokenBudget": 4000
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Redundancy is elevated at 0.31; coverage and relevance are moderate. Flagged for monitoring.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ctx-005",
+    "dimension": "context",
+    "description": "Other-type call with balanced metrics and low token count — learning candidate for cost efficiency tracking.",
+    "input": {
+      "dimension": "context",
+      "evalRunId": "eval-run-ctx-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-ctx-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "contextSnapshot": {
+        "tokenCount": 900,
+        "coverageScore": 0.81,
+        "redundancyScore": 0.10,
+        "relevanceScore": 0.85,
+        "workspaceId": "tenant-beta"
+      },
+      "callType": "other",
+      "tokenBudget": 2000
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Efficient token use with strong relevance; suitable as cost-model reference candidate.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ctx-006",
+    "dimension": "context",
+    "description": "NEGATIVE: Context packet exceeds token budget — triggers review_required due to budget violation.",
+    "input": {
+      "dimension": "context",
+      "evalRunId": "eval-run-ctx-006",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ctx-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "contextSnapshot": {
+        "tokenCount": 5200,
+        "coverageScore": 0.90,
+        "redundancyScore": 0.15,
+        "relevanceScore": 0.88,
+        "workspaceId": "tenant-alpha"
+      },
+      "callType": "recommendation",
+      "tokenBudget": 4000
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "Token count 5200 exceeds budget of 4000. Human review required before this context shape can be promoted.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "ctx-007",
+    "dimension": "context",
+    "description": "NEGATIVE: Extremely high redundancy score indicates context contamination — rejected.",
+    "input": {
+      "dimension": "context",
+      "evalRunId": "eval-run-ctx-007",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ctx-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "contextSnapshot": {
+        "tokenCount": 3100,
+        "coverageScore": 0.55,
+        "redundancyScore": 0.82,
+        "relevanceScore": 0.42,
+        "workspaceId": "tenant-beta"
+      },
+      "callType": "routing",
+      "tokenBudget": 4000
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Redundancy 0.82 and relevance 0.42 are both critically poor. Context quality is below minimum threshold.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "ctx-008",
+    "dimension": "context",
+    "description": "NEGATIVE: Zero coverage score with no evidence refs — rejected as unusable context.",
+    "input": {
+      "dimension": "context",
+      "evalRunId": "eval-run-ctx-008",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [],
+      "contextSnapshot": {
+        "tokenCount": 200,
+        "coverageScore": 0.00,
+        "redundancyScore": 0.00,
+        "relevanceScore": 0.00,
+        "workspaceId": "tenant-gamma"
+      },
+      "callType": "briefing",
+      "tokenBudget": 4000
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "All context scores are zero and no evidence refs are present. Context packet is empty and cannot be evaluated.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

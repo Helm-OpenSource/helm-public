@@ -1,0 +1,44 @@
+{
+  "_template": "source-contract",
+  "_method": "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md#5.2",
+  "_phase": "Phase 1 Contract",
+  "_instructions": "Copy this file to examples/<resource-key>/source-contract.json. Every field below must be answered before Phase 1 sign-off; null values block Phase 2 dry-run.",
+
+  "sourceKey": null,
+  "sourceCategory": null,
+  "_sourceCategoryEnum": ["business_system", "management_report", "collaboration_system", "document_knowledge"],
+
+  "sourceOfTruthFor": [],
+  "_sourceOfTruthForNote": "List the canonical fields/objects this source is authoritative for. External fields not listed here cannot be promoted to Helm canonical truth.",
+
+  "readScope": null,
+  "writeBackAllowed": false,
+  "_writeBackAllowedNote": "Default false. Setting true requires independent official-write review per Phase 5.",
+
+  "freshnessSla": {
+    "expectedUpdateInterval": null,
+    "maxAcceptableDelay": null,
+    "stalenessPolicy": null
+  },
+
+  "retention": {
+    "rawPayload": null,
+    "projection": null,
+    "evidence": null
+  },
+
+  "auditEvents": [],
+  "_auditEventsNote": "Each entry: {phase: ingestion|parsing|mapping|drop|review|writeback, eventName, payloadShape}",
+
+  "redactionRules": [],
+  "_redactionRulesNote": "Each entry: {field, redactionMethod, reason}",
+
+  "failureModes": [],
+  "_failureModesNote": "Each entry: {mode, detection, fallback, ownerNotification}",
+
+  "reportSkillRef": {
+    "reportSkillKey": null,
+    "reportSkillVersion": null,
+    "_note": "If this source is a BI report consumed via report-skills/, reference key/version here. Do NOT inline query.sql / prompt / criteria — those live in report-skills/."
+  }
+}

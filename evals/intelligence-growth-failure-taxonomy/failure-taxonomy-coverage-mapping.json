@@ -1,0 +1,200 @@
+{
+  "version": "intelligence-growth-failure-taxonomy-coverage-v1",
+  "expectedDimensionCount": 10,
+  "expectedTaxonomyRowsPerDimension": 8,
+  "expectedNegativeFixtureCount": 30,
+  "dimensionTaxonomyDocs": [
+    {
+      "dimension": "context",
+      "path": "evals/intelligence-growth/context/context-failure-taxonomy.md"
+    },
+    {
+      "dimension": "object_signal",
+      "path": "evals/intelligence-growth/object-signal/object-signal-failure-taxonomy.md"
+    },
+    {
+      "dimension": "memory",
+      "path": "evals/intelligence-growth/memory/memory-failure-taxonomy.md"
+    },
+    {
+      "dimension": "routing",
+      "path": "evals/intelligence-growth/routing/routing-failure-taxonomy.md"
+    },
+    {
+      "dimension": "action_outcome",
+      "path": "evals/intelligence-growth/action-outcome/action-outcome-failure-taxonomy.md"
+    },
+    {
+      "dimension": "worker_skill",
+      "path": "evals/intelligence-growth/worker-skill/worker-skill-failure-taxonomy.md"
+    },
+    {
+      "dimension": "prompt_policy",
+      "path": "evals/intelligence-growth/prompt-policy/prompt-policy-failure-taxonomy.md"
+    },
+    {
+      "dimension": "eval_replay",
+      "path": "evals/intelligence-growth/eval-replay/eval-replay-failure-taxonomy.md"
+    },
+    {
+      "dimension": "tenant_personalization",
+      "path": "evals/intelligence-growth/tenant-personalization/tenant-personalization-failure-taxonomy.md"
+    },
+    {
+      "dimension": "cost_model_tool",
+      "path": "evals/intelligence-growth/cost-model-tool/cost-model-tool-failure-taxonomy.md"
+    }
+  ],
+  "mappings": [
+    {
+      "fixtureId": "ctx-006",
+      "dimension": "context",
+      "failureType": "token_budget_exceeded"
+    },
+    {
+      "fixtureId": "ctx-007",
+      "dimension": "context",
+      "failureType": "redundancy_critical"
+    },
+    {
+      "fixtureId": "ctx-008",
+      "dimension": "context",
+      "failureType": "empty_context_packet"
+    },
+    {
+      "fixtureId": "obj-006",
+      "dimension": "object_signal",
+      "failureType": "stale_signal_majority"
+    },
+    {
+      "fixtureId": "obj-007",
+      "dimension": "object_signal",
+      "failureType": "zero_signal_gate_claim"
+    },
+    {
+      "fixtureId": "obj-008",
+      "dimension": "object_signal",
+      "failureType": "all_signals_stale"
+    },
+    {
+      "fixtureId": "mem-006",
+      "dimension": "memory",
+      "failureType": "staleness_critical"
+    },
+    {
+      "fixtureId": "mem-007",
+      "dimension": "memory",
+      "failureType": "deduplication_collision_high"
+    },
+    {
+      "fixtureId": "mem-008",
+      "dimension": "memory",
+      "failureType": "empty_memory_snapshot"
+    },
+    {
+      "fixtureId": "rte-006",
+      "dimension": "routing",
+      "failureType": "conflict_majority"
+    },
+    {
+      "fixtureId": "rte-007",
+      "dimension": "routing",
+      "failureType": "zero_signal_routing"
+    },
+    {
+      "fixtureId": "rte-008",
+      "dimension": "routing",
+      "failureType": "full_conflict"
+    },
+    {
+      "fixtureId": "act-006",
+      "dimension": "action_outcome",
+      "failureType": "must_push_missing_evidence"
+    },
+    {
+      "fixtureId": "act-007",
+      "dimension": "action_outcome",
+      "failureType": "runaway_feedback_loop"
+    },
+    {
+      "fixtureId": "act-008",
+      "dimension": "action_outcome",
+      "failureType": "empty_evidence_refs"
+    },
+    {
+      "fixtureId": "wsk-006",
+      "dimension": "worker_skill",
+      "failureType": "high_invocation_failure_count"
+    },
+    {
+      "fixtureId": "wsk-007",
+      "dimension": "worker_skill",
+      "failureType": "zero_artifact_quality"
+    },
+    {
+      "fixtureId": "wsk-008",
+      "dimension": "worker_skill",
+      "failureType": "excessive_boundary_hits"
+    },
+    {
+      "fixtureId": "ppo-006",
+      "dimension": "prompt_policy",
+      "failureType": "regression_gate_failure"
+    },
+    {
+      "fixtureId": "ppo-007",
+      "dimension": "prompt_policy",
+      "failureType": "production_prompt_modification"
+    },
+    {
+      "fixtureId": "ppo-008",
+      "dimension": "prompt_policy",
+      "failureType": "zero_policy_rules"
+    },
+    {
+      "fixtureId": "evr-006",
+      "dimension": "eval_replay",
+      "failureType": "zero_fixture_count"
+    },
+    {
+      "fixtureId": "evr-007",
+      "dimension": "eval_replay",
+      "failureType": "covered_exceeds_total"
+    },
+    {
+      "fixtureId": "evr-008",
+      "dimension": "eval_replay",
+      "failureType": "no_evidence_refs"
+    },
+    {
+      "fixtureId": "ten-006",
+      "dimension": "tenant_personalization",
+      "failureType": "cross_workspace_aggregation_attempted"
+    },
+    {
+      "fixtureId": "ten-007",
+      "dimension": "tenant_personalization",
+      "failureType": "schema_version_unsupported"
+    },
+    {
+      "fixtureId": "ten-008",
+      "dimension": "tenant_personalization",
+      "failureType": "empty_schema_version"
+    },
+    {
+      "fixtureId": "cmt-006",
+      "dimension": "cost_model_tool",
+      "failureType": "token_usage_runaway"
+    },
+    {
+      "fixtureId": "cmt-007",
+      "dimension": "cost_model_tool",
+      "failureType": "excessive_tool_boundary_hits"
+    },
+    {
+      "fixtureId": "cmt-008",
+      "dimension": "cost_model_tool",
+      "failureType": "no_evidence_refs_zero_tokens"
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+ALTER TABLE `AuditLog`
+  MODIFY `summary` LONGTEXT NOT NULL,
+  MODIFY `payload` LONGTEXT NULL;

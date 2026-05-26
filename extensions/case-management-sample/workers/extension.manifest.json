@@ -1,0 +1,72 @@
+{
+  "manifestVersion": "1",
+  "bundleVersion": "2026.05.18-worker-cookbook",
+  "extensionKey": "case-management-sample-workers",
+  "tenantKey": "case-management-sample",
+  "extensionSlug": "workers",
+  "owner": "case-management-sample",
+  "nonCoreDeclaration": true,
+  "compatibility": {
+    "minRuntimeContractVersion": "2026.04.22-harness-phase3",
+    "supportedWorkspaceClasses": ["CUSTOMER"],
+    "requiredFeatures": ["WorkspaceSolutionExtension"]
+  },
+  "migrationHints": [
+    "public_sample_worker_cookbook_read_only_validation"
+  ],
+  "runtimeDeclarations": {
+    "workers": [],
+    "skills": [],
+    "resources": [],
+    "hooks": [],
+    "monitors": [],
+    "surfaces": []
+  },
+  "capabilityManifest": {
+    "capabilityDeclarations": [
+      "case-allocation-driver",
+      "case-stewardship-driver"
+    ],
+    "maxEffectMode": "read_only",
+    "customerFacingAllowed": false,
+    "requiresReviewByDefault": true,
+    "nonCommitmentOnly": true
+  },
+  "dependencyDeclarations": {
+    "connectors": [],
+    "workspaceTruths": ["WorkspaceSolutionExtension", "tenant workspace"],
+    "policyTruths": ["observer-first", "review-first", "non-commitment"]
+  },
+  "documentationPointers": {
+    "readme": "README.md",
+    "docs": ["../README.md"]
+  },
+  "evalContract": {
+    "fixtures": [
+      "../fixtures/case.sample.json",
+      "../fixtures/employee.sample.json"
+    ],
+    "checks": [
+      "manifest.test.ts",
+      "worker-modes.test.ts",
+      "lifecycle-objectives.test.ts",
+      "case-allocation-driver/decide.test.ts",
+      "case-stewardship-driver/decide.test.ts"
+    ]
+  },
+  "summary": "Case management sample worker cookbook: allocation and stewardship pure decision functions.",
+  "surfaces": [],
+  "apiPrefixes": [],
+  "kind": "TENANT_CUSTOM",
+  "displayName": "Case Management Sample - Workers",
+  "status": "ACTIVE",
+  "ownedAssets": [
+    "case-allocation-driver",
+    "case-stewardship-driver"
+  ],
+  "capabilities": ["case-allocation-driver", "case-stewardship-driver"],
+  "notes": [
+    "Cookbook-only worker functions. They are not runtime-registered.",
+    "All outputs stay read-only, observer-first, review-first, and suggestion-only."
+  ]
+}

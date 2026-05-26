@@ -1,0 +1,134 @@
+{
+  "version": "company-memory-product-adoption-calibration-v1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "synthetic_redacted_adoption_proxy_only",
+  "boundary": "No production analytics, user telemetry, PII, secrets, tenant-private content, runtime query, schema migration, LLM call, auto-promotion, official write, or execution authority is included.",
+  "targets": {
+    "minimumAcceptanceLiftPercent": 20,
+    "minimumTimeToTrustReductionPercent": 20,
+    "minimumReviewCoveragePercent": 100,
+    "maximumBoundaryIncidentCount": 0
+  },
+  "cases": [
+    {
+      "id": "CM-ADOPT-ASK-001",
+      "surface": "ask_helm",
+      "linkedBenchmarkCaseId": "CM-ASK-002",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 45, "timeToTrustSeconds": 90 },
+      "withMemory": { "acceptanceScore": 72, "timeToTrustSeconds": 52 }
+    },
+    {
+      "id": "CM-ADOPT-ASK-002",
+      "surface": "ask_helm",
+      "linkedBenchmarkCaseId": "CM-ASK-003",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 42, "timeToTrustSeconds": 95 },
+      "withMemory": { "acceptanceScore": 70, "timeToTrustSeconds": 55 }
+    },
+    {
+      "id": "CM-ADOPT-ASK-003",
+      "surface": "ask_helm",
+      "linkedBenchmarkCaseId": "CM-ASK-004",
+      "reviewRequired": false,
+      "reviewCompleted": false,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 50, "timeToTrustSeconds": 80 },
+      "withMemory": { "acceptanceScore": 76, "timeToTrustSeconds": 48 }
+    },
+    {
+      "id": "CM-ADOPT-ASK-004",
+      "surface": "ask_helm",
+      "linkedBenchmarkCaseId": "CM-ASK-008",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 40, "timeToTrustSeconds": 100 },
+      "withMemory": { "acceptanceScore": 68, "timeToTrustSeconds": 58 }
+    },
+    {
+      "id": "CM-ADOPT-MP-001",
+      "surface": "must_push",
+      "linkedBenchmarkCaseId": "CM-MTG-001",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 48, "timeToTrustSeconds": 105 },
+      "withMemory": { "acceptanceScore": 80, "timeToTrustSeconds": 60 }
+    },
+    {
+      "id": "CM-ADOPT-MP-002",
+      "surface": "must_push",
+      "linkedBenchmarkCaseId": "CM-EMAIL-001",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 46, "timeToTrustSeconds": 98 },
+      "withMemory": { "acceptanceScore": 78, "timeToTrustSeconds": 56 }
+    },
+    {
+      "id": "CM-ADOPT-MP-003",
+      "surface": "must_push",
+      "linkedBenchmarkCaseId": "CM-CRM-003",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 44, "timeToTrustSeconds": 110 },
+      "withMemory": { "acceptanceScore": 74, "timeToTrustSeconds": 64 }
+    },
+    {
+      "id": "CM-ADOPT-MP-004",
+      "surface": "must_push",
+      "linkedBenchmarkCaseId": "CM-MIXED-001",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 43, "timeToTrustSeconds": 115 },
+      "withMemory": { "acceptanceScore": 77, "timeToTrustSeconds": 66 }
+    },
+    {
+      "id": "CM-ADOPT-BRIEF-001",
+      "surface": "briefing",
+      "linkedBenchmarkCaseId": "CM-MTG-002",
+      "reviewRequired": false,
+      "reviewCompleted": false,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 55, "timeToTrustSeconds": 70 },
+      "withMemory": { "acceptanceScore": 78, "timeToTrustSeconds": 42 }
+    },
+    {
+      "id": "CM-ADOPT-BRIEF-002",
+      "surface": "briefing",
+      "linkedBenchmarkCaseId": "CM-EMAIL-006",
+      "reviewRequired": false,
+      "reviewCompleted": false,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 54, "timeToTrustSeconds": 72 },
+      "withMemory": { "acceptanceScore": 76, "timeToTrustSeconds": 44 }
+    },
+    {
+      "id": "CM-ADOPT-BRIEF-003",
+      "surface": "briefing",
+      "linkedBenchmarkCaseId": "CM-REPORT-002",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 52, "timeToTrustSeconds": 78 },
+      "withMemory": { "acceptanceScore": 75, "timeToTrustSeconds": 47 }
+    },
+    {
+      "id": "CM-ADOPT-BRIEF-004",
+      "surface": "briefing",
+      "linkedBenchmarkCaseId": "CM-MIXED-003",
+      "reviewRequired": true,
+      "reviewCompleted": true,
+      "boundaryIncidentCount": 0,
+      "noMemory": { "acceptanceScore": 51, "timeToTrustSeconds": 82 },
+      "withMemory": { "acceptanceScore": 77, "timeToTrustSeconds": 49 }
+    }
+  ]
+}

@@ -1,0 +1,470 @@
+{
+  "version": "intelligence-growth-live-calibration-preflight-v1",
+  "status": "offline_only_candidate_only",
+  "boundary": "candidate_only_no_runtime_no_writes_no_live_calibration_authority_no_skill_promotion",
+  "tenantKey": "helm-business-development",
+  "workspaceId": "workspace_helm_business_development",
+  "cycleWindowKey": "2026-W19",
+  "evaluatedAt": "2026-05-03T00:00:00.000Z",
+  "evidenceFreshnessWindowDays": 14,
+  "calibrationWindowMaxDays": 30,
+  "expectedPackageCount": 10,
+  "expectedDimensionCount": 10,
+  "minSourceRefs": 1,
+  "minEvidenceRefs": 2,
+  "minDataProtectionRefs": 1,
+  "minReviewerAliases": 1,
+  "redactionManifestVersion": "intelligence-growth-data-protection-v1",
+  "packages": [
+    {
+      "packageId": "igs-live-calibration-preflight:context:IGS-CONTEXT-001",
+      "candidateId": "IGS-CONTEXT-001-v2",
+      "dimension": "context",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 6,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/context/context-growth-cases.json#IGS-TENANT-CONTEXT-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/context/context-growth-cases.json#IGS-TENANT-CONTEXT-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-context-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#context",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:object_signal:IGS-OBJECT-SIGNAL-001",
+      "candidateId": "IGS-OBJECT-SIGNAL-001-v2",
+      "dimension": "object_signal",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 5,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/object-signal/object-signal-growth-cases.json#IGS-OBJECT-SIGNAL-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/object-signal/object-signal-growth-cases.json#IGS-OBJECT-SIGNAL-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-object-signal-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#object_signal",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:memory:IGS-MEMORY-001",
+      "candidateId": "IGS-MEMORY-001-v2",
+      "dimension": "memory",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 7,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/memory/memory-growth-cases.json#IGS-MEMORY-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/memory/memory-growth-cases.json#IGS-MEMORY-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-memory-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#memory",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:routing:IGS-ROUTING-001",
+      "candidateId": "IGS-ROUTING-001-v2",
+      "dimension": "routing",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 4,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/routing/routing-growth-cases.json#IGS-ROUTING-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/routing/routing-growth-cases.json#IGS-ROUTING-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-routing-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#routing",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:action_outcome:IGS-ACTION-OUTCOME-001",
+      "candidateId": "IGS-ACTION-OUTCOME-001-v2",
+      "dimension": "action_outcome",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 6,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/action-outcome/action-outcome-cases.json#IGS-ACTION-OUTCOME-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/action-outcome/action-outcome-cases.json#IGS-ACTION-OUTCOME-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-action-outcome-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#action_outcome",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:worker_skill:IGS-WORKER-SKILL-001",
+      "candidateId": "IGS-WORKER-SKILL-001-v2",
+      "dimension": "worker_skill",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 5,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/worker-skill/worker-skill-growth-cases.json#IGS-WORKER-SKILL-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/worker-skill/worker-skill-growth-cases.json#IGS-WORKER-SKILL-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-worker-skill-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#worker_skill",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:prompt_policy:IGS-PROMPT-POLICY-001",
+      "candidateId": "IGS-PROMPT-POLICY-001-v2",
+      "dimension": "prompt_policy",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 4,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/prompt-policy/prompt-policy-growth-cases.json#IGS-PROMPT-POLICY-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/prompt-policy/prompt-policy-growth-cases.json#IGS-PROMPT-POLICY-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-prompt-policy-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#prompt_policy",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:eval_replay:IGS-EVAL-REPLAY-001",
+      "candidateId": "IGS-EVAL-REPLAY-001-v2",
+      "dimension": "eval_replay",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 5,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/eval-replay/eval-replay-growth-cases.json#IGS-EVAL-REPLAY-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/eval-replay/eval-replay-growth-cases.json#IGS-EVAL-REPLAY-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-eval-replay-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#eval_replay",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:tenant_personalization:IGS-TENANT-PERSONALIZATION-001",
+      "candidateId": "IGS-TENANT-PERSONALIZATION-001-v2",
+      "dimension": "tenant_personalization",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 6,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/tenant-personalization/tenant-personalization-cases.json#IGS-TENANT-PERSONALIZATION-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/tenant-personalization/tenant-personalization-cases.json#IGS-TENANT-PERSONALIZATION-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-tenant-personalization-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#tenant_personalization",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    },
+    {
+      "packageId": "igs-live-calibration-preflight:cost_model_tool:IGS-COST-MODEL-TOOL-001",
+      "candidateId": "IGS-COST-MODEL-TOOL-001-v2",
+      "dimension": "cost_model_tool",
+      "tenantKey": "helm-business-development",
+      "workspaceId": "workspace_helm_business_development",
+      "redactionProof": {
+        "manifestVersion": "intelligence-growth-data-protection-v1",
+        "redactionMethod": "alias",
+        "redactedFieldCount": 4,
+        "proofRef": "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "rawDataIncluded": false
+      },
+      "sourceRefs": [
+        "evals/intelligence-growth/cost-model-tool/cost-model-tool-cases.json#IGS-COST-MODEL-TOOL-001"
+      ],
+      "evidenceRefs": [
+        "evals/intelligence-growth/cost-model-tool/cost-model-tool-cases.json#IGS-COST-MODEL-TOOL-001",
+        "docs/product/HELM_INTELLIGENCE_GROWTH_SYSTEM_PRD.md"
+      ],
+      "dataProtectionRefs": [
+        "evals/intelligence-growth-data-protection/redaction-manifest.json",
+        "evals/intelligence-growth-data-protection/data-protection-pre-review-checklist.md"
+      ],
+      "calibrationWindow": {
+        "startsAt": "2026-04-22T00:00:00.000Z",
+        "endsAt": "2026-05-02T00:00:00.000Z"
+      },
+      "ownerAlias": "owner-cost-model-tool-alias",
+      "reviewerAliases": [
+        "engineering-reviewer-alias",
+        "data-protection-reviewer-alias"
+      ],
+      "ownerReviewerLinkRef": "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json#cost_model_tool",
+      "evidenceCapturedAt": "2026-04-22T00:00:00.000Z",
+      "boundaryNote": "Preflight readiness signal only; gate green does not imply live calibration approval or runtime adoption.",
+      "candidateOnly": true,
+      "runtimeAllowed": false,
+      "officialWriteAllowed": false,
+      "autoExecutionAllowed": false,
+      "canonicalMemoryWriteAllowed": false,
+      "promptOrPolicyUpdateAllowed": false,
+      "skillAutoPromotionAllowed": false,
+      "liveCalibrationAuthorityAllowed": false
+    }
+  ]
+}

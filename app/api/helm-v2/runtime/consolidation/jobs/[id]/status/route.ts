@@ -1,0 +1,51 @@
+import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import { z } from "zod";
+import {
+  canManageWorkspaceRuntime,
+  getRuntimeManagementDeniedMessage,
+} from "@/lib/auth/capture-runtime-governance";
+import { assertWorkspaceConsolidationJobOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
+import { updateConsolidationJobStatus } from "@/lib/helm-v2/runtime-upgrade";
+
+const updateJobStatusSchema = z.object({
+  mode: z.enum(["pause", "resume"]).optional(),
+  sourcePage: z.string().min(1).optional(),
+});
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { membership, workspace, user } = await getCurrentWorkspaceSession();
+  const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
+  const { id } = await params;
+
+  if (!canManageWorkspaceRuntime(membership.role)) {
+    return Response.json({ success: false, message: getRuntimeManagementDeniedMessage(english) }, { status: 403 });
+  }
+
+  try {
+    await assertWorkspaceConsolidationJobOwnership(workspace.id, id);
+
+    const body = updateJobStatusSchema.safeParse(await request.json().catch(() => ({})));
+    if (!body.success) {
+      return Response.json(
+        { success: false, message: body.error.issues[0]?.message ?? "参数不完整" },
+        { status: 400 },
+      );
+    }
+    const result = await updateConsolidationJobStatus({
+      workspaceId: workspace.id,
+      jobId: id,
+      mode: body.data.mode === "pause" ? "pause" : "resume",
+      actorUserId: user.id,
+      actorName: user.name,
+      sourcePage: body.data.sourcePage ?? "/operating",
+    });
+
+    return Response.json({ success: true, data: result });
+  } catch (error) {
+    return Response.json(
+      { success: false, message: error instanceof Error ? error.message : "Consolidation job update failed" },
+      { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
+    );
+  }
+}

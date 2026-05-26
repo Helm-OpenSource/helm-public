@@ -1,0 +1,183 @@
+name: Docs Lifecycle — Auto-Apply
+
+# Step 3 of HELM_DOC_LIFECYCLE_POLICY_V1 §1.4.
+#
+# Looks for the most-recent docs-owner-review-packet-<YYYY-MM>.json that
+# is >= 30 days old. If found, runs scripts/docs-lifecycle-auto-apply.ts
+# in --apply mode and opens a PR with the resulting status promotions.
+#
+# Trigger: 03:00 UTC on day-2 of every month. Picks up whichever packet
+# is eligible (typically last month's). Also manually dispatchable.
+#
+# If no eligible packet exists (grace window not yet expired), the job
+# exits successfully without opening a PR.
+
+on:
+  schedule:
+    - cron: '0 3 2 * *'
+  workflow_dispatch:
+    inputs:
+      packet:
+        description: 'Packet path (default: auto-find most recent eligible)'
+        required: false
+      grace_days:
+        description: 'Grace window in days'
+        required: false
+        default: '30'
+      max_promotions:
+        description: 'Cap on promotions per run'
+        required: false
+        default: '50'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-apply:
+    name: Apply lifecycle promotions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve target packet
+        id: packet
+        env:
+          INPUT_PACKET: ${{ github.event.inputs.packet }}
+          GRACE_DAYS: ${{ github.event.inputs.grace_days || '30' }}
+        run: |
+          set -e
+          if [ -n "$INPUT_PACKET" ]; then
+            echo "path=$INPUT_PACKET" >> "$GITHUB_OUTPUT"
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          set +e
+          RESOLVED=$(npx tsx scripts/docs-lifecycle-find-eligible-packet.ts --grace-days "$GRACE_DAYS")
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -eq 0 ]; then
+            echo "path=$RESOLVED" >> "$GITHUB_OUTPUT"
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          elif [ "$STATUS" -eq 3 ]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "No eligible packet; this is a no-op run."
+          else
+            echo "find-eligible-packet failed unexpectedly with exit $STATUS" >&2
+            exit "$STATUS"
+          fi
+
+      - name: Dry-run preview
+        if: steps.packet.outputs.eligible == 'true'
+        env:
+          GRACE_DAYS: ${{ github.event.inputs.grace_days || '30' }}
+          MAX_PROMOTIONS: ${{ github.event.inputs.max_promotions || '50' }}
+        run: |
+          npx tsx scripts/docs-lifecycle-auto-apply.ts \
+            --packet "${{ steps.packet.outputs.path }}" \
+            --grace-days "$GRACE_DAYS" \
+            --max-promotions "$MAX_PROMOTIONS"
+
+      - name: Apply
+        if: steps.packet.outputs.eligible == 'true'
+        env:
+          GRACE_DAYS: ${{ github.event.inputs.grace_days || '30' }}
+          MAX_PROMOTIONS: ${{ github.event.inputs.max_promotions || '50' }}
+        run: |
+          npx tsx scripts/docs-lifecycle-auto-apply.ts \
+            --packet "${{ steps.packet.outputs.path }}" \
+            --grace-days "$GRACE_DAYS" \
+            --max-promotions "$MAX_PROMOTIONS" \
+            --apply
+
+      - name: Compute run key
+        if: steps.packet.outputs.eligible == 'true'
+        id: run
+        run: |
+          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          PACKET_MONTH=$(basename "${{ steps.packet.outputs.path }}" .json | sed 's/^docs-owner-review-packet-//')
+          echo "packet_month=$PACKET_MONTH" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether anything was promoted
+        if: steps.packet.outputs.eligible == 'true'
+        id: changes
+        run: |
+          AUDIT_LOG=$(ls -t docs/internal/docs-lifecycle-auto-apply-*.json 2>/dev/null | head -1)
+          if [ -z "$AUDIT_LOG" ]; then
+            echo "No audit log written; something went wrong." >&2
+            exit 1
+          fi
+          APPLIED=$(jq -r '.counts.promotionsAppliedThisRun' "$AUDIT_LOG")
+          if [ "$APPLIED" -eq 0 ]; then
+            echo "No promotions applied (all candidates skipped). Discarding audit log; no PR needed."
+            rm "$AUDIT_LOG"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$APPLIED promotion(s) applied. Will open PR including audit log."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create pull request
+        if: steps.packet.outputs.eligible == 'true' && steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: docs-lifecycle/auto-apply-${{ steps.run.outputs.date }}
+          base: main
+          commit-message: |
+            chore(docs): auto-apply lifecycle promotions for packet ${{ steps.run.outputs.packet_month }}
+
+            Auto-generated by .github/workflows/docs-lifecycle-auto-apply.yml
+            (HELM_DOC_LIFECYCLE_POLICY_V1 §1.4 Step 3).
+
+            Owner review window (30 days from packet generation) has elapsed.
+            Candidates untouched in that window are now promoted to the next
+            lifecycle status. See the audit log in docs/internal/ for the
+            full decision record.
+          title: '[docs-lifecycle] auto-apply for packet ${{ steps.run.outputs.packet_month }}'
+          body: |
+            ## Docs lifecycle — auto-apply (packet ${{ steps.run.outputs.packet_month }})
+
+            The 30-day owner review window for packet
+            `docs-owner-review-packet-${{ steps.run.outputs.packet_month }}.json`
+            has elapsed. This PR contains the resulting status promotions
+            (`active → dormant`, `dormant → archived`).
+
+            ### What this PR does NOT do
+
+            - Does not move files physically. Run `scripts/docs-archive-mover.ts --apply`
+              separately for files whose status is now `archived`.
+            - Does not promote stale-frontmatter or suspicious-pattern candidates
+              (those require manual review per policy §1.4).
+
+            ### Audit trail
+
+            See `docs/internal/docs-lifecycle-auto-apply-${{ steps.run.outputs.date }}.json`
+            in this PR for the full decision record including skip reasons.
+
+            ### Safety nets that fired
+
+            - Files touched by any commit since packet generation: SKIPPED
+            - Files whose current `status:` no longer matches packet record: SKIPPED
+            - Files with missing git history: SKIPPED
+            - `--max-promotions` cap: ${{ github.event.inputs.max_promotions || '50' }}
+              (deferred candidates roll into next run)
+
+            ### Reference
+
+            Policy: `docs/internal/HELM_DOC_LIFECYCLE_POLICY_V1.md` §1.4
+            Engine: `scripts/docs-lifecycle-auto-apply.ts`
+          labels: |
+            docs-lifecycle
+            automated
+          delete-branch: true

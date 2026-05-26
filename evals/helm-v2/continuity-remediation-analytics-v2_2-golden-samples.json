@@ -1,0 +1,275 @@
+[
+  {
+    "id": "continuity-remediation-stable",
+    "label": "Stable continuity keeps analytics quiet and runbook diagnostic-only",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 42,
+      "prunedTokenCount": 0,
+      "latestCheckpointStatus": "READY",
+      "resumedFromKey": null
+    },
+    "replay": {
+      "fidelityStatus": "STRONG",
+      "fidelityScore": 100,
+      "missing": []
+    },
+    "payloadState": {
+      "source": "checkpoint_snapshot",
+      "stateSummary": "Current active-context view is derived from the latest continuity checkpoint snapshot."
+    },
+    "substrate": {
+      "latestCheckpoint": {
+        "id": "checkpoint_stable",
+        "label": "meeting_review",
+        "status": "READY"
+      },
+      "persistedPayloadCount": 3,
+      "pruneTraceCount": 0
+    },
+    "notebook": {
+      "sessionSummary": "Continuity posture is stable.",
+      "decisionSummary": "Keep the response internal until review closes.",
+      "blockerSummary": null,
+      "pendingQuestions": [],
+      "openLoopSummary": "Continue normal review cadence.",
+      "evidenceRefs": ["meeting:stable"]
+    },
+    "remediationTrace": [],
+    "expected": {
+      "repeatPatternStatus": "NONE",
+      "totalAttempts": 0,
+      "evidenceIncludes": ["stable"],
+      "runbookTitle": "Monitor continuity posture",
+      "runbookIncludes": ["No remediation is needed", "operator guidance only"]
+    }
+  },
+  {
+    "id": "continuity-remediation-repeat-blocked",
+    "label": "Repeated blocked remediation stays explicit",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 54,
+      "prunedTokenCount": 0,
+      "latestCheckpointStatus": null,
+      "resumedFromKey": null
+    },
+    "replay": null,
+    "payloadState": {
+      "source": "all_persisted",
+      "stateSummary": "No checkpoint anchor exists, so all persisted payloads remain active."
+    },
+    "substrate": {
+      "latestCheckpoint": null,
+      "persistedPayloadCount": 0,
+      "pruneTraceCount": 0
+    },
+    "notebook": {
+      "sessionSummary": "Continuity cannot recover safely from this surface.",
+      "decisionSummary": "Do not send anything externally.",
+      "blockerSummary": "No recovery anchor exists for this session.",
+      "pendingQuestions": ["How do we rebuild the session substrate?"],
+      "openLoopSummary": "Rebuild continuity substrate before downstream use.",
+      "evidenceRefs": ["meeting:blocked"]
+    },
+    "remediationTrace": [
+      {
+        "action": "SAVE_RECOVERY_CHECKPOINT",
+        "executionStatus": "BLOCKED",
+        "summary": "save recovery checkpoint was blocked",
+        "beforeSummary": "Budget posture: WATCH. Replay: NONE. Payload state: all_persisted. Risk: WATCH. Recovery: BLOCKED.",
+        "afterSummary": "Budget posture: WATCH. Replay: NONE. Payload state: all_persisted. Risk: WATCH. Recovery: BLOCKED.",
+        "beforeRiskLevel": "WATCH",
+        "afterRiskLevel": "WATCH",
+        "beforeRecoveryState": "BLOCKED",
+        "afterRecoveryState": "BLOCKED",
+        "beforeFailureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "afterFailureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "rollbackAnchorSummary": null,
+        "createdAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "action": "SAVE_RECOVERY_CHECKPOINT",
+        "executionStatus": "BLOCKED",
+        "summary": "save recovery checkpoint was blocked again",
+        "beforeSummary": "Budget posture: WATCH. Replay: NONE. Payload state: all_persisted. Risk: WATCH. Recovery: BLOCKED.",
+        "afterSummary": "Budget posture: WATCH. Replay: NONE. Payload state: all_persisted. Risk: WATCH. Recovery: BLOCKED.",
+        "beforeRiskLevel": "WATCH",
+        "afterRiskLevel": "WATCH",
+        "beforeRecoveryState": "BLOCKED",
+        "afterRecoveryState": "BLOCKED",
+        "beforeFailureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "afterFailureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "rollbackAnchorSummary": null,
+        "createdAt": "2026-04-04T09:00:00.000Z"
+      }
+    ],
+    "expected": {
+      "repeatPatternStatus": "REPEATED_BLOCKED_ACTION",
+      "totalAttempts": 2,
+      "evidenceIncludes": ["Repeat pattern", "Blocked because", "Repeated remediation behavior"],
+      "runbookTitle": "Stop repeat remediation loop",
+      "runbookIncludes": ["Stop retrying the same blocked remediation action", "does not grant send authority"]
+    }
+  },
+  {
+    "id": "continuity-remediation-repeat-review-required",
+    "label": "Repeated review-required remediation keeps protected-state gap visible",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 67,
+      "prunedTokenCount": 0,
+      "latestCheckpointStatus": "READY",
+      "resumedFromKey": null
+    },
+    "replay": {
+      "fidelityStatus": "WEAK",
+      "fidelityScore": 71,
+      "missing": ["confirmed facts", "boundary note"]
+    },
+    "payloadState": {
+      "source": "checkpoint_snapshot",
+      "stateSummary": "Current active-context view is derived from the latest continuity checkpoint snapshot."
+    },
+    "substrate": {
+      "latestCheckpoint": {
+        "id": "checkpoint_review",
+        "label": "meeting_review",
+        "status": "READY"
+      },
+      "persistedPayloadCount": 3,
+      "pruneTraceCount": 0
+    },
+    "notebook": {
+      "sessionSummary": "Protected continuity facts still need human confirmation.",
+      "decisionSummary": "Keep the message internal.",
+      "blockerSummary": "Confirmed facts and boundary note still need verification.",
+      "pendingQuestions": ["Which reviewer closes the final answer?"],
+      "openLoopSummary": "Close the protected-state gap before any remediation.",
+      "evidenceRefs": ["meeting:review"]
+    },
+    "remediationTrace": [
+      {
+        "action": "SAVE_RECOVERY_CHECKPOINT",
+        "executionStatus": "REVIEW_REQUIRED",
+        "summary": "save recovery checkpoint stayed review-required",
+        "beforeSummary": "Budget posture: WATCH. Replay: WEAK. Payload state: checkpoint_snapshot. Risk: HIGH. Recovery: REVIEW_REQUIRED.",
+        "afterSummary": "Budget posture: WATCH. Replay: WEAK. Payload state: checkpoint_snapshot. Risk: HIGH. Recovery: REVIEW_REQUIRED.",
+        "beforeRiskLevel": "HIGH",
+        "afterRiskLevel": "HIGH",
+        "beforeRecoveryState": "REVIEW_REQUIRED",
+        "afterRecoveryState": "REVIEW_REQUIRED",
+        "beforeFailureTaxonomy": "PROTECTED_STATE_GAP",
+        "afterFailureTaxonomy": "PROTECTED_STATE_GAP",
+        "rollbackAnchorSummary": "meeting_review · READY",
+        "createdAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "action": "SAVE_RECOVERY_CHECKPOINT",
+        "executionStatus": "REVIEW_REQUIRED",
+        "summary": "save recovery checkpoint stayed review-required again",
+        "beforeSummary": "Budget posture: WATCH. Replay: WEAK. Payload state: checkpoint_snapshot. Risk: HIGH. Recovery: REVIEW_REQUIRED.",
+        "afterSummary": "Budget posture: WATCH. Replay: WEAK. Payload state: checkpoint_snapshot. Risk: HIGH. Recovery: REVIEW_REQUIRED.",
+        "beforeRiskLevel": "HIGH",
+        "afterRiskLevel": "HIGH",
+        "beforeRecoveryState": "REVIEW_REQUIRED",
+        "afterRecoveryState": "REVIEW_REQUIRED",
+        "beforeFailureTaxonomy": "PROTECTED_STATE_GAP",
+        "afterFailureTaxonomy": "PROTECTED_STATE_GAP",
+        "rollbackAnchorSummary": "meeting_review · READY",
+        "createdAt": "2026-04-04T09:00:00.000Z"
+      }
+    ],
+    "expected": {
+      "repeatPatternStatus": "REPEATED_REVIEW_REQUIRED",
+      "totalAttempts": 2,
+      "evidenceIncludes": ["Review-required because", "Replay gaps", "Repeat pattern"],
+      "runbookTitle": "Stop repeat remediation loop",
+      "runbookIncludes": ["Do not bypass review-required posture", "Resolve protected-field review first"]
+    }
+  },
+  {
+    "id": "continuity-remediation-repeat-reprune-loop",
+    "label": "Repeated reprune loops stay explicit instead of silently overwriting continuity posture",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 82,
+      "prunedTokenCount": 26,
+      "latestCheckpointStatus": "READY",
+      "resumedFromKey": null
+    },
+    "replay": {
+      "fidelityStatus": "STRONG",
+      "fidelityScore": 95,
+      "missing": []
+    },
+    "payloadState": {
+      "source": "latest_prune_edit",
+      "stateSummary": "Current active-context view is derived from prune edit history (2 edits) without a checkpoint snapshot override."
+    },
+    "substrate": {
+      "latestCheckpoint": {
+        "id": "checkpoint_prune",
+        "label": "meeting_ingest",
+        "status": "READY"
+      },
+      "persistedPayloadCount": 5,
+      "pruneTraceCount": 2
+    },
+    "notebook": {
+      "sessionSummary": "Continuity remains budget-sensitive after repeated reprune attempts.",
+      "decisionSummary": "Keep the payload set narrow until review closes.",
+      "blockerSummary": "Still need a safer rollback anchor after reprune.",
+      "pendingQuestions": ["Should we restore the previous checkpoint instead?"],
+      "openLoopSummary": "Decide between restore and escalation before another reprune.",
+      "evidenceRefs": ["meeting:reprune"]
+    },
+    "pruneTrace": [
+      {
+        "id": "prune_1",
+        "reason": "Budget pressure required selective context pruning.",
+        "posture": "PRUNE",
+        "tokensSaved": 26
+      }
+    ],
+    "remediationTrace": [
+      {
+        "action": "REPRUNE_CONTEXT",
+        "executionStatus": "APPLIED",
+        "summary": "re-prune context applied",
+        "beforeSummary": "Budget posture: PRUNE. Replay: STRONG. Payload state: latest_prune_edit. Risk: WATCH. Recovery: RECOVERABLE.",
+        "afterSummary": "Budget posture: PRUNE. Replay: STRONG. Payload state: latest_prune_edit. Risk: WATCH. Recovery: RECOVERABLE.",
+        "beforeRiskLevel": "WATCH",
+        "afterRiskLevel": "WATCH",
+        "beforeRecoveryState": "RECOVERABLE",
+        "afterRecoveryState": "RECOVERABLE",
+        "beforeFailureTaxonomy": "PAYLOAD_STATE_DRIFT",
+        "afterFailureTaxonomy": "PAYLOAD_STATE_DRIFT",
+        "rollbackAnchorSummary": "operator_pre_reprune_context · READY",
+        "createdAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "action": "REPRUNE_CONTEXT",
+        "executionStatus": "APPLIED",
+        "summary": "re-prune context applied again",
+        "beforeSummary": "Budget posture: PRUNE. Replay: STRONG. Payload state: latest_prune_edit. Risk: WATCH. Recovery: RECOVERABLE.",
+        "afterSummary": "Budget posture: PRUNE. Replay: STRONG. Payload state: latest_prune_edit. Risk: WATCH. Recovery: RECOVERABLE.",
+        "beforeRiskLevel": "WATCH",
+        "afterRiskLevel": "WATCH",
+        "beforeRecoveryState": "RECOVERABLE",
+        "afterRecoveryState": "RECOVERABLE",
+        "beforeFailureTaxonomy": "PAYLOAD_STATE_DRIFT",
+        "afterFailureTaxonomy": "PAYLOAD_STATE_DRIFT",
+        "rollbackAnchorSummary": "operator_pre_reprune_context · READY",
+        "createdAt": "2026-04-04T09:00:00.000Z"
+      }
+    ],
+    "expected": {
+      "repeatPatternStatus": "REPEATED_REPRUNE_LOOP",
+      "totalAttempts": 2,
+      "evidenceIncludes": ["Pilot calibration tightened", "Latest prune", "Payload state"],
+      "runbookTitle": "Escalate ineffective recovery",
+      "runbookIncludes": ["Stop repeated reprune loops", "Save a new recovery checkpoint only after the current continuity state is confirmed"]
+    }
+  }
+]

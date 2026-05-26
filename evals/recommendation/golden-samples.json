@@ -1,0 +1,58 @@
+[
+  {
+    "id": "acme-opportunity-primary-stage-sync",
+    "objectType": "OPPORTUNITY",
+    "objectLabel": "Acme 年度经营动作控制台试点",
+    "actionType": "UPDATE_OPPORTUNITY_STAGE",
+    "expectedTitleIncludes": ["同步 Acme 年度经营动作控制台试点 当前阶段"],
+    "expectedDecisionRole": "primary",
+    "expectedDecisionLabel": "首选动作",
+    "expectedPolicyResult": "AUTO_WITHIN_THRESHOLD",
+    "expectedBlockerIncludes": ["Acme 付款节奏未明确"],
+    "expectedCommitmentIncludes": ["09:41 Daniel", "待兑现"],
+    "expectedEvidenceIncludes": ["Acme 当前更关心付款周期和采购节奏", "Vivian 希望在下周三前收到结构化方案初稿"],
+    "expectedLearnedPatterns": ["预算相关阻塞最近在你的工作区里出现得更频繁"]
+  },
+  {
+    "id": "vivian-contact-primary-meeting",
+    "objectType": "CONTACT",
+    "objectLabel": "Vivian Chen",
+    "actionType": "CREATE_MEETING",
+    "expectedTitleIncludes": ["安排与 Vivian Chen 的下一轮同步"],
+    "expectedDecisionRole": "primary",
+    "expectedDecisionLabel": "首选动作",
+    "expectedPolicyResult": "REQUIRES_APPROVAL",
+    "expectedBlockerIncludes": ["Acme 付款节奏未明确"],
+    "expectedCommitmentIncludes": ["09:41 Daniel"],
+    "expectedEvidenceIncludes": ["Acme 当前更关心付款周期和采购节奏", "确认下周需要一次内部 + 客户联合会"],
+    "expectedLearnedPatterns": ["预算相关阻塞最近在你的工作区里出现得更频繁"]
+  },
+  {
+    "id": "aya-contact-primary-task",
+    "objectType": "CONTACT",
+    "objectLabel": "Aya Nakamura",
+    "actionType": "CREATE_TASK",
+    "expectedTitleIncludes": ["为 Aya Nakamura 创建内部跟进提醒"],
+    "expectedDecisionRole": "primary",
+    "expectedDecisionLabel": "首选动作",
+    "expectedPolicyResult": "AUTO_WITHIN_THRESHOLD",
+    "expectedBlockerIncludes": ["Aya 需要更稳定的面试预期"],
+    "expectedCommitmentIncludes": ["安排 Aya 终面并同步说明"],
+    "expectedEvidenceIncludes": ["Aya 更愿意先看到 panel 介绍和面试边界"],
+    "expectedLearnedPatterns": []
+  },
+  {
+    "id": "delta-opportunity-primary-stage-sync",
+    "objectType": "OPPORTUNITY",
+    "objectLabel": "Delta Capital 闭门沙龙共办",
+    "actionType": "UPDATE_OPPORTUNITY_STAGE",
+    "expectedTitleIncludes": ["同步 Delta Capital 闭门沙龙共办 当前阶段"],
+    "expectedDecisionRole": "primary",
+    "expectedDecisionLabel": "首选动作",
+    "expectedPolicyResult": "REQUIRES_APPROVAL",
+    "expectedBlockerIncludes": ["Delta 嘉宾标准未明确"],
+    "expectedCommitmentIncludes": [],
+    "expectedEvidenceIncludes": ["先稳住 Atlas AI 的合作窗口"],
+    "expectedLearnedPatterns": []
+  }
+]

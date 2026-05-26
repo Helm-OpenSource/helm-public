@@ -1,0 +1,143 @@
+{
+  "$schema": "../../lib/headless-signal-interface/pack-artifacts.ts",
+  "_note": "HSI-01 payload_examples for case-management-sample. Phase 1 OFFLINE only. Every example is 100% synthetic; no real customer data, no live credentials. Each entry is tagged synthetic | redacted | alias_only and used by lib/headless-signal-interface/pack-artifacts.test.ts to verify HSI-01 compliance.",
+  "packId": "case-management-sample",
+  "version": "0.1.0",
+  "examples": [
+    {
+      "exampleId": "case_system-input-1",
+      "sourceKind": "case_system",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "Case row with stale stage despite recent contract evidence",
+      "data": {
+        "caseId": "CASE-SYN-00012",
+        "stage": "pending_quote",
+        "lastUpdatedAt": "2026-05-15T09:00:00+08:00",
+        "owner": "synthetic.user.alpha",
+        "linkedEvidence": [
+          {
+            "kind": "email",
+            "id": "email-syn-00031",
+            "summary": "客户上周已确认签约，附签字版合同 PDF",
+            "receivedAt": "2026-05-13T18:42:00+08:00"
+          }
+        ]
+      }
+    },
+    {
+      "exampleId": "case_system-output-1",
+      "sourceKind": "case_system",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "Helm projection — stage_or_status_stale signal draft",
+      "data": {
+        "signalFamily": "stage_or_status_stale",
+        "evidenceRefs": [
+          "case_system:CASE-SYN-00012",
+          "email:email-syn-00031"
+        ],
+        "draftSummary": "Case 显示 pending_quote 但已有 5 天前的签约证据；建议人工复核后再修正 stage，不静默写回。",
+        "allowedNextSurface": "operating_signal_flow_map",
+        "forbiddenActions": ["write_crm_stage", "auto_assign_owner"]
+      }
+    },
+    {
+      "exampleId": "im-input-1",
+      "sourceKind": "im",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "DingTalk-style customer chat with a pending commitment",
+      "data": {
+        "channelId": "syn-customer-group-7",
+        "channelKind": "dingtalk_group",
+        "messages": [
+          {
+            "messageId": "im-syn-00081",
+            "senderAlias": "delivery_lead_a",
+            "sentAt": "2026-05-18T10:32:00+08:00",
+            "text": "我周五前会把更新版方案发到这个群里，请大家届时复核。"
+          },
+          {
+            "messageId": "im-syn-00082",
+            "senderAlias": "customer_pm",
+            "sentAt": "2026-05-18T10:34:00+08:00",
+            "text": "好的，那就周五等方案。"
+          }
+        ]
+      }
+    },
+    {
+      "exampleId": "im-output-1",
+      "sourceKind": "im",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "Helm projection — commitment_missing signal draft",
+      "data": {
+        "signalFamily": "commitment_missing",
+        "evidenceRefs": ["im:syn-customer-group-7:im-syn-00081"],
+        "draftSummary": "delivery_lead_a 在客户群中承诺周五前发方案，未在 case 系统中创建跟进任务。建议生成复核入口，不自动外发。",
+        "allowedNextSurface": "review_packet",
+        "forbiddenActions": ["send_message", "execute_action"]
+      }
+    },
+    {
+      "exampleId": "meeting-input-1",
+      "sourceKind": "meeting",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "Synthetic meeting transcript with approval blocked on discount",
+      "data": {
+        "meetingId": "syn-meeting-00045",
+        "participants": ["synthetic.user.alpha", "synthetic.user.beta", "customer_proc_lead"],
+        "scheduledAt": "2026-05-17T15:00:00+08:00",
+        "transcriptExcerpt": "客户采购负责人提出，需要额外 8% 折扣才能签约。我们答应回去内部评审后给出决定，预计周三前回复。",
+        "owner": "synthetic.user.alpha"
+      }
+    },
+    {
+      "exampleId": "meeting-output-1",
+      "sourceKind": "meeting",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "Helm projection — approval_blocked signal draft",
+      "data": {
+        "signalFamily": "approval_blocked",
+        "evidenceRefs": ["meeting:syn-meeting-00045"],
+        "draftSummary": "客户已提出 8% 折扣要求，内部 reviewer 需要在周三前给出决定；当前未见折扣 approval task。",
+        "allowedNextSurface": "approval_inbox",
+        "forbiddenActions": ["approve", "create_contract"]
+      }
+    },
+    {
+      "exampleId": "email-input-1",
+      "sourceKind": "email",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "Synthetic customer email signaling owner mismatch",
+      "data": {
+        "emailId": "email-syn-00104",
+        "fromAlias": "customer_proc_lead",
+        "toAliases": ["synthetic.user.gamma"],
+        "ccAliases": ["synthetic.user.alpha"],
+        "sentAt": "2026-05-18T20:11:00+08:00",
+        "subject": "关于交付负责人变更的确认",
+        "body": "我们这边内部确认，希望由 gamma 同事接替项目对接。请贵司确认是否同步调整 owner。"
+      }
+    },
+    {
+      "exampleId": "email-output-1",
+      "sourceKind": "email",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "Helm projection — owner_mismatch signal draft",
+      "data": {
+        "signalFamily": "owner_mismatch",
+        "evidenceRefs": ["email:email-syn-00104"],
+        "draftSummary": "客户已请求把交付对接换成 gamma；case 系统当前 owner 仍是 alpha。建议人工复核后调整，不自动重新指派。",
+        "allowedNextSurface": "review_packet",
+        "forbiddenActions": ["auto_assign_owner", "send_message"]
+      }
+    }
+  ]
+}

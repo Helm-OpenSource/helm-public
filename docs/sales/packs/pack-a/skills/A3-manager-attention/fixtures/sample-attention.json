@@ -1,0 +1,27 @@
+{
+  "_comment": "Day-1 看板示例：主管面板 2 个介入建议",
+  "manager": "李某（销售总监）",
+  "team_size": 8,
+  "meetings_today": 24,
+  "interventions_suggested": [
+    {
+      "meeting_id": "m-001",
+      "time": "11:00",
+      "sales_rep": "张某",
+      "client": "客户 A",
+      "reason": "A1 识别越界承诺 1 处",
+      "suggested_timing": "会前",
+      "suggested_method": "1:1 与张某澄清边界"
+    },
+    {
+      "meeting_id": "m-007",
+      "time": "15:30",
+      "sales_rep": "王某",
+      "client": "客户 F",
+      "reason": "客户健康度近 7 天降 30%",
+      "suggested_timing": "同会旁听",
+      "suggested_method": "默听 + 会后复盘"
+    }
+  ],
+  "private_meetings_today": 1
+}

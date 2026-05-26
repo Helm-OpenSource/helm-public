@@ -1,0 +1,13 @@
+# Skill <PACK_ID><N> 默认阈值（强约束 A，开箱即用）
+
+<feature>:
+  <param_1>: <default>
+  <param_2>: <default>
+
+acceptance:
+  pilot_<metric>: <target>
+  steady_<metric>: <target>
+
+privacy:
+  audit_chain_required: true
+  client_facing_action_default: draft

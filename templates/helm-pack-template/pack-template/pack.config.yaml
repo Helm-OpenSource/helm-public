@@ -1,0 +1,34 @@
+# Pack <PACK_ID> 默认配置（开箱即用，强约束 A）
+
+pack:
+  id: <pack-id>
+  name: <Pack 中文名>
+  version: 0.1.0
+  level: certified | community
+  industry: <ICP id>
+
+skills:
+  - example-skill
+  # - <PACK_ID>1-skill-id
+  # - <PACK_ID>2-skill-id
+
+defaults:
+  recommendation_only: true   # 建议默认值（不锁死）
+  audit_required: true
+  invariant: case-no-drop
+  multi_tenant: true
+
+models:
+  preferred: [anthropic, openai, qwen, deepseek]
+  fallback: <fallback-model>
+
+connectors:
+  required: []                # 按 Pack 实际填
+
+privacy:
+  audit_export: 90_days_retention
+
+day_1:
+  load_fixtures: true
+  default_dashboard: workspace.<pack-id>.day-1
+  setup_estimate_minutes: 30

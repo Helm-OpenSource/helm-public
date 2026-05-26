@@ -1,0 +1,378 @@
+{
+  "version": "gate-consolidation-phase1.1",
+  "status": "offline_evaluation_fixture",
+  "boundary": "planning_only_no_runtime_adoption",
+  "policy": {
+    "activeStatuses": ["keep"],
+    "nonBlockingStatuses": ["freeze", "research", "archive"],
+    "requiredCustomerVisibleRiskForKeep": true
+  },
+  "gates": [
+    {
+      "id": "boundary-static-gate",
+      "displayName": "Boundary Static Gate",
+      "klass": "boundary_static_gate",
+      "status": "keep",
+      "customerVisibleRisk": "Helm 把建议误执行成对外承诺、官方写入或自动发送，导致客户收到未经审批的承诺",
+      "evidence": [
+        "lib/evals/agentic-governance-boundary-static-evals.ts",
+        "scripts/agentic-governance-boundary-static-evals.ts"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "拦截 auto_execute / auto_send / official_write 等授权动词，直接对应 P0-REQ-04 wrong commitment 边界"
+    },
+    {
+      "id": "external-agent-intake-p0-req-07-strict-boundary",
+      "displayName": "External Agent Intake P0-REQ-07 Strict Boundary",
+      "klass": "boundary_static_gate",
+      "status": "keep",
+      "customerVisibleRisk": "外部 agent artifact（cross-tenant / unredacted / no-trace / stale / 缺必备元数据）进入 Helm Must Push、记忆或对外写入，导致跨租户污染或对客户讲虚假来源",
+      "evidence": [
+        "features/external-agent-intake/p0-req-07-boundary.ts",
+        "lib/evals/external-agent-intake-p0-req-07-boundary-evals.ts",
+        "evals/external-agent-intake-p0-req-07/strict-boundary-cases.json"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "对应 P0-REQ-07，是 external agent intake 严格 quarantine 边界；在 release:check FAST preflight 自动跑"
+    },
+    {
+      "id": "object-signal-validity-gate",
+      "displayName": "Object/Signal Validity Gate",
+      "klass": "object_signal_validity_eval",
+      "status": "keep",
+      "customerVisibleRisk": "坏对象 / 坏信号（过期、跨租户、伪造证据、权限不足）直接进入 Must Push，让客户收到错误推动",
+      "evidence": [
+        "lib/evals/object-signal-validity-evals.ts",
+        "evals/object-signal-validity/object-signal-cases.json"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "直接对应 P0-REQ-03，是 Must Push admission 前置 gate"
+    },
+    {
+      "id": "object-signal-remediation-gate",
+      "displayName": "Object/Signal Post-admission Remediation Gate",
+      "klass": "object_signal_validity_eval",
+      "status": "keep",
+      "customerVisibleRisk": "前置 gate 失守后无效 Must Push 没被撤销 / 降级 / 隔离，错误信号继续推到客户与记忆",
+      "evidence": [
+        "lib/evals/object-signal-remediation-evals.ts",
+        "evals/object-signal-validity/object-signal-remediation-cases.json"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "对应 P0-REQ-03 第二段：post-admission 撤销 / 降级 / 隔离"
+    },
+    {
+      "id": "audience-signal-projection-gate",
+      "displayName": "Audience-aware Signal Projection Gate",
+      "klass": "object_signal_validity_eval",
+      "status": "keep",
+      "customerVisibleRisk": "已校验信号被错误投影到 worker / reviewer / learning loop（如 raw payload 直回客户、worker 越权动作、auto execution、canonical memory write），让客户看到不应当看到的内容或被自动执行",
+      "evidence": [
+        "lib/evals/audience-signal-evals.ts",
+        "evals/audience-signal/audience-signal-cases.json"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "对应 audience-aware projection contract；保护 reviewer-first 与 worker forbidden action 边界"
+    },
+    {
+      "id": "business-advancement-signal-pipeline-gate",
+      "displayName": "Business Advancement Signal Pipeline Gate",
+      "klass": "object_signal_validity_eval",
+      "status": "keep",
+      "customerVisibleRisk": "raw business input 越过 validity / remediation / projection 主链直达 Must Push，把未经审计的客户信号当作 Helm 推动",
+      "evidence": [
+        "lib/evals/business-advancement-signal-pipeline-evals.ts",
+        "evals/business-advancement-signal-pipeline/pipeline-cases.json"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "把 validity + remediation + audience projection 串成 20 条 alias-only 离线主链；customer-visible risk = 跨链失守"
+    },
+    {
+      "id": "context-packet-audit",
+      "displayName": "Ask Helm Context Packet Audit",
+      "klass": "context_packet_audit",
+      "status": "keep",
+      "customerVisibleRisk": "Ask Helm 输出未声明上下文 / 记忆 / 边界，让客户无法识别推荐的来源与风险",
+      "evidence": [
+        "lib/evals/ask-helm-context-packet-evals.ts"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "对应 P1-REQ-08，但 P0 客户可见风险已成立（无来源解释）"
+    },
+    {
+      "id": "ask-helm-knowledge-pack-gate",
+      "displayName": "Ask Helm Knowledge Pack Validation",
+      "klass": "context_packet_audit",
+      "status": "keep",
+      "customerVisibleRisk": "Ask Helm 引用错误的 knowledge pack / 路由到错误意图，让客户收到与其租户上下文不匹配的回答",
+      "evidence": [
+        "scripts/ask-helm-knowledge-pack-validate.ts",
+        "scripts/ask-helm-interpreter-validate.ts"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "validate Ask Helm 路由与解释器契约，是客户可见 Q&A 链的来源完整性"
+    },
+    {
+      "id": "memory-quality-impact-eval",
+      "displayName": "Memory Quality and Impact Eval",
+      "klass": "memory_quality_impact_eval",
+      "status": "keep",
+      "customerVisibleRisk": "客户租户使用情况自动升级 Helm 核心记忆，导致跨租户污染或错误事实被放大",
+      "evidence": [
+        "lib/evals/intelligence-growth-learning-requeue-evals.ts",
+        "lib/evals/intelligence-growth-tenant-signal-evals.ts"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "对应 P1-REQ-10 和 framework：candidate -> reviewed -> active 生命周期"
+    },
+    {
+      "id": "intelligence-growth-core-eval",
+      "displayName": "Intelligence Growth Core 10-dimension Eval",
+      "klass": "memory_quality_impact_eval",
+      "status": "keep",
+      "customerVisibleRisk": "10 个智能维度（context / object-signal / memory / routing / action-outcome / worker-skill / prompt-policy / eval-replay / tenant / cost）失守，让 Helm 在客户端给出低质量或越界推动",
+      "evidence": [
+        "lib/evals/intelligence-growth-evals.ts",
+        "evals/intelligence-growth/"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "IGS P0 离线 gate 主体，10 维度 80 fixture coverage"
+    },
+    {
+      "id": "trace-roi-pilot-proof-gate",
+      "displayName": "Trace + ROI Pilot Proof Gate",
+      "klass": "trace_roi_pilot_proof_gate",
+      "status": "keep",
+      "customerVisibleRisk": "无法回答 source / reviewer / decision / boundary / final posture，客户无法审计 Helm 的推动",
+      "evidence": [
+        "lib/evals/business-advancement-trace-roi-evals.ts",
+        "evals/business-advancement-trace-roi/trace-roi-cases.json"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": true,
+      "rationale": "对应 P0-REQ-05，是 pilot 证据收口"
+    },
+    {
+      "id": "self-check-consolidation-meta-audit",
+      "displayName": "Self-check consolidation meta audit",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/self-check-consolidation-audit.test.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "只检查其他 gate 自身收敛，不直接拦截客户可见风险；保留为内部 hygiene，不进入 P0 active 列表"
+    },
+    {
+      "id": "internal-dogfood-multi-stage-opc",
+      "displayName": "Internal dogfood / OPC multi-stage gate",
+      "klass": "dogfood_opc_artifact",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "features/business-advancement/internal-dogfood-packet.ts",
+        "features/business-advancement/founder-internal-gate.ts"
+      ],
+      "metaOnly": false,
+      "feedsPilotDecision": false,
+      "rationale": "Multi-stage 内部 dogfood 工件不喂 pilot 决策；保留为内部审议，不阻塞 pilot 主链"
+    },
+    {
+      "id": "intelligence-growth-boundary-static",
+      "displayName": "IGS Boundary Static No-Go Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-boundary-static-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "扫描 IGS core/evals/scripts/fixtures，机械拒绝 DB / API / runtime / provider / network 进入 offline gate；属于 IGS 自身完整性保护，不直接对应客户可见风险"
+    },
+    {
+      "id": "intelligence-growth-determinism",
+      "displayName": "IGS Determinism Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-determinism-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "core eval + 18 derived gate 连跑 3 次结果一致；IGS 自身 hygiene，不直接对应客户可见风险"
+    },
+    {
+      "id": "intelligence-growth-schema-drift",
+      "displayName": "IGS Schema Drift Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-schema-drift-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "锁定 TS union / contracts registry / fixture-lint sentinel / snapshot keyset / snapshot version；属于 IGS schema 完整性保护"
+    },
+    {
+      "id": "intelligence-growth-eval-replay-snapshot",
+      "displayName": "IGS Eval Replay Snapshot Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-eval-replay-snapshot-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "固定 18 个 IGS gate 的 contract-level canonical summary；IGS 输出形状保护"
+    },
+    {
+      "id": "intelligence-growth-fixture-lint",
+      "displayName": "IGS Fixture Lint Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-fixture-lint-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "校验 80 维 fixture / 10 tenant signal / 10 decision outcome / 10 requeue 的 id / dimension / decision / reference 完整性；IGS fixture 完整性保护"
+    },
+    {
+      "id": "intelligence-growth-dimension-saturation",
+      "displayName": "IGS Dimension Saturation Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-dimension-saturation-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "确保下一周期 intake 覆盖 10 个维度；IGS 周期完整性保护"
+    },
+    {
+      "id": "intelligence-growth-cycle-advance",
+      "displayName": "IGS Cycle Advance Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-cycle-advance-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "把 W18 learning requeue 物化为 W19 next-cycle intake；IGS 反馈环完整性"
+    },
+    {
+      "id": "intelligence-growth-remediation-roundtrip",
+      "displayName": "IGS Remediation Roundtrip Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-remediation-roundtrip-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "continue / revise / blocked / stop 在下一轮不被错误复活；IGS remediation 反馈环完整性"
+    },
+    {
+      "id": "intelligence-growth-budget-gate",
+      "displayName": "IGS Budget Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-budget-gate-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "model / token / tool / wallclock budget envelope；IGS 成本边界保护"
+    },
+    {
+      "id": "intelligence-growth-failure-taxonomy-coverage",
+      "displayName": "IGS Failure Taxonomy Coverage Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-failure-taxonomy-coverage-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "10 个 taxonomy 文档与 30 条负例 fixture 的 failure type 映射；IGS 失败路径覆盖保护"
+    },
+    {
+      "id": "intelligence-growth-data-protection-manifest",
+      "displayName": "IGS Data Protection Pre-Review Manifest Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-data-protection-manifest-evals.ts",
+        "evals/intelligence-growth-data-protection/redaction-manifest.json"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "18 个 IGS fixture JSON 字段级 pending redaction manifest；gate green 不代表 DPO approval；保留为预审计材料"
+    },
+    {
+      "id": "intelligence-growth-approval-readiness",
+      "displayName": "IGS Required Reviewer Approval Readiness Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-approval-readiness-evals.ts",
+        "evals/intelligence-growth-approval-readiness/approval-readiness-cases.json"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "10 个 P1+ approval readiness packet；gate green 不代表 founder / reviewer approval"
+    },
+    {
+      "id": "intelligence-growth-live-calibration-preflight",
+      "displayName": "IGS Redacted Live Calibration Evidence Preflight Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-live-calibration-preflight-evals.ts",
+        "evals/intelligence-growth-live-calibration-preflight/live-calibration-preflight-cases.json"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "10 维 redacted evidence package；gate green 不代表 live calibration approval 或 runtime adoption"
+    },
+    {
+      "id": "intelligence-growth-chain-integrity",
+      "displayName": "IGS Chain Integrity Gate",
+      "klass": "meta_gate",
+      "status": "freeze",
+      "customerVisibleRisk": null,
+      "evidence": [
+        "lib/evals/intelligence-growth-chain-integrity-evals.ts"
+      ],
+      "metaOnly": true,
+      "feedsPilotDecision": false,
+      "rationale": "tenant signal → review packet → weekly scorecard → decision outcome → learning requeue 五段连续性；IGS 反馈链 hygiene"
+    }
+  ]
+}

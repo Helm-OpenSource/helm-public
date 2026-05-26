@@ -1,0 +1,583 @@
+[
+  {
+    "id": "v21-continuity-safe",
+    "label": "Safe budget posture with intact notebook continuity",
+    "payloads": [
+      {
+        "payloadKey": "safe-agenda",
+        "sourceType": "meeting_note",
+        "sourceId": "safe-note",
+        "label": "Meeting agenda and goal",
+        "loadPolicy": "always_on",
+        "text": "Review the internal security checklist and confirm the next internal follow-up owner.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "safe-summary",
+        "sourceType": "meeting_note",
+        "sourceId": "safe-note",
+        "label": "Meeting summary",
+        "loadPolicy": "always_on",
+        "text": "The checklist stays internal, the owner is Alice, and the follow-up needs to happen by Friday without external commitment wording.",
+        "loadedByDefault": true
+      }
+    ],
+    "tokenBudgetLimit": 120,
+    "continuitySource": {
+      "sessionLabel": "Acme security session",
+      "sessionStatus": "AWAITING_REVIEW",
+      "boundaryNote": "No auto-send.",
+      "meetingLabel": "Security review sync",
+      "opportunityLabel": "Acme expansion",
+      "companyLabel": "Acme",
+      "notebook": {
+        "sessionSummary": "Runtime is active.",
+        "decisionSummary": "Checklist stays internal; Alice owns the next step.",
+        "blockerSummary": "Security owner still needs one final answer.",
+        "pendingQuestions": "[\"Which reviewer closes the final answer?\"]",
+        "openLoopSummary": "Assign Alice to send the internal checklist by Friday.",
+        "boundaryNote": "No auto-send."
+      },
+      "verification": {
+        "status": "needs_review",
+        "blockedReasons": [
+          "One reviewer answer still needs confirmation."
+        ]
+      },
+      "problemSpaces": [
+        {
+          "title": "Security blocker",
+          "nextStep": "Assign Alice to send the internal checklist by Friday.",
+          "status": "WAITING_ON_SIGNAL",
+          "ownerHint": "Alice",
+          "evidenceRefs": [
+            "meeting:1",
+            "memory:1"
+          ]
+        }
+      ],
+      "promotedFacts": [
+        {
+          "summary": "Checklist stays internal until review closes.",
+          "evidenceRefs": [
+            "meeting:1"
+          ]
+        }
+      ],
+      "truthConflicts": []
+    },
+    "expected": {
+      "budgetState": "SAFE",
+      "requiredExternalizedLabels": [],
+      "notebookIncludes": [
+        "Security review sync",
+        "Checklist stays internal",
+        "Friday"
+      ],
+      "replayFidelity": "STRONG",
+      "protectedItems": [
+        "No auto-send",
+        "Security owner",
+        "Friday"
+      ],
+      "minTokensSaved": 0
+    }
+  },
+  {
+    "id": "v21-continuity-watch",
+    "label": "Watch posture before prune is triggered",
+    "payloads": [
+      {
+        "payloadKey": "watch-summary",
+        "sourceType": "meeting_note",
+        "sourceId": "watch-note",
+        "label": "Meeting summary",
+        "loadPolicy": "always_on",
+        "text": "The commercial note must stay reviewed, the legal boundary remains internal, and the team needs one owner for the procurement follow-up before Friday close.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "watch-decisions",
+        "sourceType": "meeting_note",
+        "sourceId": "watch-note",
+        "label": "Decisions and confirmations",
+        "loadPolicy": "stage_triggered",
+        "text": "No external promise was approved. Alice owns the procurement follow-up. Friday is the internal due date.",
+        "loadedByDefault": true
+      }
+    ],
+    "tokenBudgetLimit": 70,
+    "continuitySource": {
+      "sessionLabel": "Procurement watch session",
+      "sessionStatus": "AWAITING_REVIEW",
+      "boundaryNote": "No auto-send.",
+      "meetingLabel": "Procurement timing review",
+      "opportunityLabel": "Northstar expansion",
+      "companyLabel": "Northstar",
+      "notebook": {
+        "sessionSummary": "Runtime is active.",
+        "decisionSummary": "Alice owns procurement follow-up.",
+        "blockerSummary": "Legal wording still needs one review.",
+        "pendingQuestions": "[\"Can Friday stay internal-only?\"]",
+        "openLoopSummary": "Keep the reviewed procurement note internal by Friday.",
+        "boundaryNote": "No auto-send."
+      },
+      "verification": {
+        "status": "needs_review",
+        "blockedReasons": [
+          "Legal wording still needs one final review."
+        ]
+      },
+      "problemSpaces": [
+        {
+          "title": "Procurement boundary",
+          "nextStep": "Keep the reviewed procurement note internal by Friday.",
+          "status": "WATCHING",
+          "ownerHint": "Alice",
+          "evidenceRefs": [
+            "meeting:2"
+          ]
+        }
+      ],
+      "promotedFacts": [
+        {
+          "summary": "No external promise was approved.",
+          "evidenceRefs": [
+            "meeting:2"
+          ]
+        }
+      ],
+      "truthConflicts": []
+    },
+    "expected": {
+      "budgetState": "WATCH",
+      "requiredExternalizedLabels": [],
+      "notebookIncludes": [
+        "Northstar expansion",
+        "No external promise was approved",
+        "Friday"
+      ],
+      "replayFidelity": "STRONG",
+      "protectedItems": [
+        "No auto-send",
+        "Legal wording",
+        "Friday"
+      ],
+      "minTokensSaved": 0
+    }
+  },
+  {
+    "id": "v21-continuity-prune",
+    "label": "Prune posture externalizes transcript, email thread, and doc packet",
+    "payloads": [
+      {
+        "payloadKey": "prune-agenda",
+        "sourceType": "meeting_note",
+        "sourceId": "prune-note",
+        "label": "Meeting agenda and goal",
+        "loadPolicy": "always_on",
+        "text": "Review the checklist blocker and confirm the internal next step owner.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "prune-summary",
+        "sourceType": "meeting_note",
+        "sourceId": "prune-note",
+        "label": "Meeting summary",
+        "loadPolicy": "always_on",
+        "text": "The blocker is still open, Alice is the owner, and Friday remains the internal due date.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "prune-transcript",
+        "sourceType": "meeting_transcript",
+        "sourceId": "prune-note",
+        "label": "Live transcript",
+        "loadPolicy": "on_demand",
+        "text": "Long transcript line 1. Long transcript line 2. Long transcript line 3. Long transcript line 4. Long transcript line 5. Long transcript line 6. Long transcript line 7. Long transcript line 8.",
+        "loadedByDefault": false
+      },
+      {
+        "payloadKey": "prune-email",
+        "sourceType": "email_thread",
+        "sourceId": "thread-prune",
+        "label": "Email thread · Security checklist follow-up",
+        "loadPolicy": "on_demand",
+        "text": "Subject: Security checklist follow-up. Summary: The thread confirms the checklist stays internal, Friday is the due date, and Alice must close the loop. Recent messages: Inbound summary line. Outbound summary line.",
+        "loadedByDefault": false
+      },
+      {
+        "payloadKey": "prune-doc",
+        "sourceType": "artifact",
+        "sourceId": "artifact-prune",
+        "label": "action_pack.md reference",
+        "loadPolicy": "on_demand",
+        "text": "Action pack reference: Keep the checklist internal, assign Alice, and close the blocker by Friday without promising external delivery.",
+        "loadedByDefault": false
+      }
+    ],
+    "tokenBudgetLimit": 45,
+    "continuitySource": {
+      "sessionLabel": "Acme security session",
+      "sessionStatus": "ACTIVE",
+      "boundaryNote": "No auto-send.",
+      "meetingLabel": "Security review sync",
+      "opportunityLabel": "Acme expansion",
+      "companyLabel": "Acme",
+      "notebook": {
+        "sessionSummary": "Runtime is active.",
+        "decisionSummary": "Checklist stays internal; Alice owns the blocker.",
+        "blockerSummary": "Security owner still needs one final answer.",
+        "pendingQuestions": "[\"Which reviewer closes the final answer?\"]",
+        "openLoopSummary": "Assign Alice to close the blocker by Friday.",
+        "boundaryNote": "No auto-send."
+      },
+      "verification": {
+        "status": "needs_review",
+        "blockedReasons": [
+          "One reviewer answer still needs confirmation."
+        ]
+      },
+      "problemSpaces": [
+        {
+          "title": "Security blocker",
+          "nextStep": "Assign Alice to close the blocker by Friday.",
+          "status": "WAITING_ON_SIGNAL",
+          "ownerHint": "Alice",
+          "evidenceRefs": [
+            "meeting:3",
+            "email:3"
+          ]
+        }
+      ],
+      "promotedFacts": [
+        {
+          "summary": "Checklist stays internal until review closes.",
+          "evidenceRefs": [
+            "meeting:3"
+          ]
+        }
+      ],
+      "truthConflicts": []
+    },
+    "expected": {
+      "budgetState": "PRUNE",
+      "requiredExternalizedLabels": [
+        "Live transcript",
+        "Email thread",
+        "action_pack.md reference"
+      ],
+      "notebookIncludes": [
+        "Acme expansion",
+        "Checklist stays internal",
+        "Friday"
+      ],
+      "replayFidelity": "STRONG",
+      "protectedItems": [
+        "No auto-send",
+        "Security owner",
+        "Friday"
+      ],
+      "minTokensSaved": 50
+    }
+  },
+  {
+    "id": "v21-continuity-compact-watch",
+    "label": "Compact posture can stay watch-level when only non-critical replay fields drift",
+    "payloads": [
+      {
+        "payloadKey": "compact-watch-summary",
+        "sourceType": "meeting_note",
+        "sourceId": "compact-watch-note",
+        "label": "Meeting summary",
+        "loadPolicy": "always_on",
+        "text": "The blocker remains open, Alice owns the internal loop, and Friday stays the due date.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "compact-watch-transcript",
+        "sourceType": "meeting_transcript",
+        "sourceId": "compact-watch-note",
+        "label": "Live transcript",
+        "loadPolicy": "on_demand",
+        "text": "Long transcript line 1. Long transcript line 2. Long transcript line 3. Long transcript line 4. Long transcript line 5.",
+        "loadedByDefault": false
+      }
+    ],
+    "tokenBudgetLimit": 30,
+    "continuitySource": {
+      "sessionLabel": "Compact watch replay session",
+      "sessionStatus": "ACTIVE",
+      "boundaryNote": "No auto-send.",
+      "meetingLabel": "Compact watch review",
+      "opportunityLabel": "Acme expansion",
+      "companyLabel": "Acme",
+      "notebook": {
+        "sessionSummary": "Runtime is active.",
+        "decisionSummary": "Alice owns the blocker.",
+        "blockerSummary": "Security owner still needs one final answer.",
+        "pendingQuestions": "[\"Which reviewer closes the final answer?\"]",
+        "openLoopSummary": "Assign Alice to close the blocker by Friday.",
+        "boundaryNote": "No auto-send."
+      },
+      "verification": {
+        "status": "needs_review",
+        "blockedReasons": [
+          "One reviewer answer still needs confirmation."
+        ]
+      },
+      "problemSpaces": [
+        {
+          "title": "Security blocker",
+          "nextStep": "Assign Alice to close the blocker by Friday.",
+          "status": "WAITING_ON_SIGNAL",
+          "ownerHint": "Alice",
+          "evidenceRefs": [
+            "meeting:5"
+          ]
+        }
+      ],
+      "promotedFacts": [
+        {
+          "summary": "Checklist stays internal until review closes.",
+          "evidenceRefs": [
+            "meeting:5"
+          ]
+        }
+      ],
+      "truthConflicts": []
+    },
+    "latestCheckpointStatus": "RESUMED",
+    "resumedFromKey": "workspace:checkpoint:compact-watch",
+    "savedSnapshot": {
+      "objective": "Assign Alice to close the blocker by Friday.",
+      "relevantObjects": [
+        "Meeting: Compact watch review",
+        "Opportunity: Acme expansion"
+      ],
+      "confirmedFacts": [
+        "Checklist stays internal until review closes."
+      ],
+      "blockers": [
+        "Security owner still needs one final answer."
+      ],
+      "decisions": [
+        "Alice owns the blocker."
+      ],
+      "nextActions": [
+        "Assign Alice to close the blocker by Friday."
+      ],
+      "openQuestions": [
+        "Which reviewer closes the final answer?"
+      ],
+      "evidenceRefs": [
+        "meeting:5"
+      ],
+      "reviewState": "needs_review",
+      "boundaryNote": "No auto-send.",
+      "budgetState": "COMPACT",
+      "loadedHandles": [
+        "payload://meeting_note/compact-watch-note/compact-watch-summary"
+      ],
+      "prunedHandles": [
+        "payload://meeting_transcript/compact-watch-note/compact-watch-transcript"
+      ]
+    },
+    "liveStateOverride": {
+      "objective": "Assign Alice to close the blocker by Friday.",
+      "relevantObjects": [
+        "Meeting: Compact watch review",
+        "Opportunity: Acme expansion"
+      ],
+      "confirmedFacts": [
+        "Checklist stays internal until review closes."
+      ],
+      "blockers": [
+        "Security owner still needs one final answer."
+      ],
+      "decisions": [
+        "Alice owns the blocker."
+      ],
+      "nextActions": [
+        "Assign Alice to close the blocker by Friday."
+      ],
+      "openQuestions": [
+        "Which reviewer closes the final answer?"
+      ],
+      "evidenceRefs": [],
+      "reviewState": "needs_review",
+      "boundaryNote": "No auto-send."
+    },
+    "expected": {
+      "budgetState": "COMPACT",
+      "requiredExternalizedLabels": [
+        "Live transcript"
+      ],
+      "notebookIncludes": [
+        "Compact watch review",
+        "Alice owns the blocker",
+        "Friday"
+      ],
+      "replayFidelity": "WATCH",
+      "replayMissing": [
+        "evidence refs",
+        "confirmed fact evidence"
+      ],
+      "protectedItems": [
+        "No auto-send",
+        "Security owner",
+        "Friday"
+      ],
+      "minTokensSaved": 15
+    }
+  },
+  {
+    "id": "v21-continuity-compact-weak",
+    "label": "Compact posture exposes weak replay fidelity",
+    "payloads": [
+      {
+        "payloadKey": "compact-summary",
+        "sourceType": "meeting_note",
+        "sourceId": "compact-note",
+        "label": "Meeting summary",
+        "loadPolicy": "always_on",
+        "text": "The blocker is still open, the owner is Alice, and Friday is still the due date.",
+        "loadedByDefault": true
+      },
+      {
+        "payloadKey": "compact-transcript",
+        "sourceType": "meeting_transcript",
+        "sourceId": "compact-note",
+        "label": "Live transcript",
+        "loadPolicy": "on_demand",
+        "text": "Long transcript line 1. Long transcript line 2. Long transcript line 3. Long transcript line 4. Long transcript line 5. Long transcript line 6.",
+        "loadedByDefault": false
+      }
+    ],
+    "tokenBudgetLimit": 30,
+    "continuitySource": {
+      "sessionLabel": "Compact replay session",
+      "sessionStatus": "ACTIVE",
+      "boundaryNote": "No auto-send.",
+      "meetingLabel": "Compact replay review",
+      "opportunityLabel": "Acme expansion",
+      "companyLabel": "Acme",
+      "notebook": {
+        "sessionSummary": "Runtime is active.",
+        "decisionSummary": "Alice owns the blocker.",
+        "blockerSummary": "Security owner still needs one final answer.",
+        "pendingQuestions": "[\"Which reviewer closes the final answer?\"]",
+        "openLoopSummary": "Assign Alice to close the blocker by Friday.",
+        "boundaryNote": "No auto-send."
+      },
+      "verification": {
+        "status": "needs_review",
+        "blockedReasons": [
+          "One reviewer answer still needs confirmation."
+        ]
+      },
+      "problemSpaces": [
+        {
+          "title": "Security blocker",
+          "nextStep": "Assign Alice to close the blocker by Friday.",
+          "status": "WAITING_ON_SIGNAL",
+          "ownerHint": "Alice",
+          "evidenceRefs": [
+            "meeting:4"
+          ]
+        }
+      ],
+      "promotedFacts": [
+        {
+          "summary": "Checklist stays internal until review closes.",
+          "evidenceRefs": [
+            "meeting:4"
+          ]
+        }
+      ],
+      "truthConflicts": []
+    },
+    "latestCheckpointStatus": "RESUMED",
+    "resumedFromKey": "workspace:checkpoint:compact",
+    "savedSnapshot": {
+      "objective": "Assign Alice to close the blocker by Friday.",
+      "relevantObjects": [
+        "Meeting: Compact replay review",
+        "Opportunity: Acme expansion"
+      ],
+      "confirmedFacts": [
+        "Checklist stays internal until review closes."
+      ],
+      "blockers": [
+        "Security owner still needs one final answer."
+      ],
+      "decisions": [
+        "Alice owns the blocker."
+      ],
+      "nextActions": [
+        "Assign Alice to close the blocker by Friday."
+      ],
+      "openQuestions": [
+        "Which reviewer closes the final answer?"
+      ],
+      "evidenceRefs": [
+        "meeting:4"
+      ],
+      "reviewState": "needs_review",
+      "boundaryNote": "No auto-send.",
+      "budgetState": "COMPACT",
+      "loadedHandles": [
+        "payload://meeting_note/compact-note/compact-summary"
+      ],
+      "prunedHandles": [
+        "payload://meeting_transcript/compact-note/compact-transcript"
+      ]
+    },
+    "liveStateOverride": {
+      "objective": "Assign Alice to close the blocker by Friday.",
+      "relevantObjects": [
+        "Meeting: Compact replay review"
+      ],
+      "confirmedFacts": [
+        "Checklist stays internal until review closes."
+      ],
+      "blockers": [],
+      "decisions": [
+        "Alice owns the blocker."
+      ],
+      "nextActions": [],
+      "openQuestions": [
+        "Which reviewer closes the final answer?"
+      ],
+      "evidenceRefs": [
+        "meeting:4"
+      ],
+      "reviewState": "blocked_for_review",
+      "boundaryNote": "No auto-send."
+    },
+    "expected": {
+      "budgetState": "COMPACT",
+      "requiredExternalizedLabels": [
+        "Live transcript"
+      ],
+      "notebookIncludes": [
+        "Compact replay review",
+        "Alice owns the blocker",
+        "Friday"
+      ],
+      "replayFidelity": "WEAK",
+      "replayMissing": [
+        "active objects",
+        "confirmed blockers",
+        "next actions",
+        "review posture"
+      ],
+      "protectedItems": [
+        "No auto-send",
+        "Security owner",
+        "Friday"
+      ],
+      "minTokensSaved": 20
+    }
+  }
+]

@@ -1,0 +1,169 @@
+[
+  {
+    "id": "human_action_exec_customer_followup",
+    "label": "approved draft handoff becomes manual email and scheduling execution",
+    "workspaceSummary": "当前 workspace 以 judgement-first 方式把 meeting、shadow recommendation 和 draft handoff 收成同一条 follow-through 链。",
+    "meeting": {
+      "title": "Northwind ROI 跟进会",
+      "agenda": "确认 ROI 资料、下周联合评审，以及会后唯一 owner。",
+      "startsAt": "2026-04-06T02:00:00.000Z",
+      "endsAt": "2026-04-06T03:00:00.000Z",
+      "companyName": "Northwind",
+      "ownerName": "Alex",
+      "contacts": ["Jill", "Procurement owner"],
+      "opportunity": {
+        "title": "Northwind expansion",
+        "type": "CLIENT",
+        "stage": "CONTACTED",
+        "riskLevel": "MEDIUM",
+        "nextAction": "24 小时内发 ROI follow-up，并推进联合评审时间建议"
+      },
+      "note": {
+        "meetingGoal": "把 follow-up 收成一个清楚的人工作用链，不形成正式价格承诺。",
+        "riskAlerts": "客户预算 owner 仍未明确；如果会后不跟进，这个窗口会变冷。",
+        "summary": "客户接受我们先发 ROI follow-up，下周再定联合评审。",
+        "keyDecisions": "先发 follow-up，再发时间建议；当前不形成正式价格承诺。",
+        "confirmations": "owner 在 24 小时内人工发 follow-up，manager 看边界。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "这类采购推进窗口最怕会后 24 小时内没有人工 follow-up。",
+      "客户当前还没有确认预算 owner。"
+    ],
+    "historicalTimeline": [
+      "上一轮 meeting 已确认 ROI 资料最值得先发。",
+      "manager 要求任何 customer-facing wording 都保留 non-commitment 边界。"
+    ],
+    "expected": {
+      "requiredActionTypes": [
+        "manual_email_send",
+        "manual_calendar_send",
+        "manual_internal_collab",
+        "manual_exec_brief_share",
+        "manual_crm_step"
+      ],
+      "primaryActionType": "manual_email_send",
+      "acknowledgementMode": "mark_sent_manually",
+      "requiredBoundaryNotes": [
+        "send authority",
+        "official CRM",
+        "人工"
+      ],
+      "requiresRoleHandoff": false
+    }
+  },
+  {
+    "id": "human_action_exec_shadow_only",
+    "label": "approved shadow recommendation becomes manual crm step only",
+    "workspaceSummary": "当前 workspace 把 opportunity judgement consume 到 shadow summary，但 official CRM 仍由人工决定是否同步。",
+    "meeting": {
+      "title": "Contoso pipeline sync",
+      "agenda": "确认 champion、budget owner 和 pipeline next step。",
+      "startsAt": "2026-04-07T02:00:00.000Z",
+      "endsAt": "2026-04-07T03:00:00.000Z",
+      "companyName": "Contoso",
+      "ownerName": "Mia",
+      "contacts": ["Budget owner", "Champion"],
+      "opportunity": {
+        "title": "Contoso expansion",
+        "type": "CLIENT",
+        "stage": "CONTACTED",
+        "riskLevel": "MEDIUM",
+        "nextAction": "确认 budget owner 并安排联合评审"
+      },
+      "note": {
+        "meetingGoal": "明确当前最该推进的 pipeline step。",
+        "riskAlerts": "budget owner 仍未明确；manager 需要盯价格敏感度。",
+        "summary": "客户接受继续推进，但仍未确认预算 owner。",
+        "keyDecisions": "shadow judgement 可以推进到 advancing，但 official CRM 不自动写回。",
+        "confirmations": "owner 人工完成 pipeline / CRM step，并保留 boundary trace。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "manager attention 只是 attention，不是 final decision。",
+      "confirmed shadow delta 只表示允许 consume 到 shadow layer。"
+    ],
+    "historicalTimeline": [
+      "上次判断显示 pipeline 已接近 advancing。",
+      "价格敏感度正在升高。"
+    ],
+    "expected": {
+      "requiredActionTypes": [
+        "manual_email_send",
+        "manual_calendar_send",
+        "manual_internal_collab",
+        "manual_exec_brief_share",
+        "manual_crm_step"
+      ],
+      "primaryActionType": "manual_crm_step",
+      "acknowledgementMode": "mark_crm_step_done",
+      "requiredBoundaryNotes": [
+        "official CRM",
+        "shadow",
+        "人工"
+      ],
+      "requiresRoleHandoff": false
+    }
+  },
+  {
+    "id": "human_action_exec_handoff",
+    "label": "approved handoff artifact becomes manual delivery handoff execution",
+    "workspaceSummary": "当前 workspace 已把 sales->delivery handoff pack 做成 artifact-first 交接输入，但交接动作仍由人工完成。",
+    "meeting": {
+      "title": "Won deal handoff",
+      "agenda": "确认交付 handoff 和前 14 天计划。",
+      "startsAt": "2026-04-08T02:00:00.000Z",
+      "endsAt": "2026-04-08T03:00:00.000Z",
+      "companyName": "Fabrikam",
+      "ownerName": "Leo",
+      "contacts": ["Delivery lead", "Customer success lead"],
+      "opportunity": {
+        "title": "Fabrikam rollout",
+        "type": "CLIENT",
+        "stage": "ADVANCING",
+        "riskLevel": "LOW",
+        "nextAction": "交付 handoff 与前 14 天计划交接"
+      },
+      "note": {
+        "meetingGoal": "把成交后 handoff 做成稳定交接动作。",
+        "riskAlerts": "如果 handoff owner 不明确，下游会断裂。",
+        "summary": "handoff pack 与 first-14-day plan 已 ready。",
+        "keyDecisions": "人工完成 delivery handoff；系统不自动完成交接。",
+        "confirmations": "handoff done 后要留下 role handoff summary。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "handoff done 只表示人工交接已记录，不代表下游 fully accepted。"
+    ],
+    "historicalTimeline": [
+      "成交后 handoff 必须保留 boundary trace。",
+      "交付 owner 需要显式 acknowledgement。"
+    ],
+    "handoffSources": [
+      {
+        "artifactType": "handoff_pack.md",
+        "title": "Delivery handoff pack",
+        "summary": "交付目标、开放风险、promised scope 和前 14 天计划摘要。",
+        "targetAudience": "delivery"
+      }
+    ],
+    "expected": {
+      "requiredActionTypes": [
+        "manual_email_send",
+        "manual_calendar_send",
+        "manual_internal_collab",
+        "manual_exec_brief_share",
+        "manual_crm_step",
+        "manual_handoff_delivery"
+      ],
+      "primaryActionType": "manual_handoff_delivery",
+      "acknowledgementMode": "mark_handoff_done",
+      "requiredBoundaryNotes": [
+        "handoff done",
+        "人工",
+        "official CRM"
+      ],
+      "requiresRoleHandoff": true
+    }
+  }
+]

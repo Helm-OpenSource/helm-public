@@ -1,0 +1,37 @@
+-- CreateTable
+CREATE TABLE `MemoryDistillationCandidate` (
+    `id` VARCHAR(191) NOT NULL,
+    `workspaceId` VARCHAR(191) NOT NULL,
+    `groupKey` VARCHAR(191) NOT NULL,
+    `objectType` ENUM('CONTACT', 'COMPANY', 'OPPORTUNITY', 'MEETING', 'ACTION_ITEM', 'APPROVAL_TASK', 'POLICY_RULE', 'EMAIL_THREAD') NOT NULL,
+    `objectId` VARCHAR(191) NOT NULL,
+    `factType` ENUM('RELATIONSHIP', 'PREFERENCE', 'OBJECTION', 'BLOCKER', 'COMMITMENT', 'NEXT_STEP', 'STAGE_SIGNAL', 'RISK_SIGNAL', 'SUMMARY', 'POLICY_PATTERN', 'ACTION_PATTERN') NOT NULL,
+    `title` VARCHAR(191) NOT NULL,
+    `summary` LONGTEXT NOT NULL,
+    `sourceFactIds` LONGTEXT NOT NULL,
+    `evidenceRefs` LONGTEXT NOT NULL,
+    `sourceRefs` LONGTEXT NOT NULL,
+    `repeatCount` INTEGER NOT NULL,
+    `confidence` INTEGER NOT NULL,
+    `reviewPosture` VARCHAR(191) NOT NULL DEFAULT 'review_required',
+    `status` ENUM('PENDING_REVIEW', 'APPROVED', 'REJECTED', 'DEFERRED', 'ARCHIVED') NOT NULL DEFAULT 'PENDING_REVIEW',
+    `boundaryNote` LONGTEXT NOT NULL,
+    `createdFrom` VARCHAR(191) NOT NULL DEFAULT 'repeated_normalized_fact',
+    `latestSourceAt` DATETIME(3) NOT NULL,
+    `decisionReason` LONGTEXT NULL,
+    `decidedAt` DATETIME(3) NULL,
+    `decidedByUserId` VARCHAR(191) NULL,
+    `auditPayload` LONGTEXT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `MemoryDistill_workspace_group_key`(`workspaceId`, `groupKey`),
+    INDEX `MemoryDistill_workspace_status_updated_idx`(`workspaceId`, `status`, `updatedAt`),
+    INDEX `MemoryDistill_workspace_object_status_idx`(`workspaceId`, `objectType`, `objectId`, `status`),
+    INDEX `MemoryDistill_workspace_latest_source_idx`(`workspaceId`, `latestSourceAt`),
+    INDEX `MemoryDistill_workspace_decided_idx`(`workspaceId`, `decidedAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey
+ALTER TABLE `MemoryDistillationCandidate` ADD CONSTRAINT `MemoryDistillationCandidate_workspaceId_fkey` FOREIGN KEY (`workspaceId`) REFERENCES `Workspace`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

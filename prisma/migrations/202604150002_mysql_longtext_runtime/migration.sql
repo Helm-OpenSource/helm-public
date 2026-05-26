@@ -1,0 +1,216 @@
+-- Runtime long text hardening for MySQL
+
+ALTER TABLE `RuntimeEvent`
+  MODIFY COLUMN `trustedContext` LONGTEXT NULL,
+  MODIFY COLUMN `untrustedContext` LONGTEXT NULL,
+  MODIFY COLUMN `payload` LONGTEXT NULL,
+  MODIFY COLUMN `sourceProvenance` LONGTEXT NULL,
+  MODIFY COLUMN `errorMessage` LONGTEXT NULL;
+
+ALTER TABLE `WorkerRun`
+  MODIFY COLUMN `inputSummary` LONGTEXT NULL,
+  MODIFY COLUMN `outputSummary` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL,
+  MODIFY COLUMN `sourceProvenance` LONGTEXT NULL,
+  MODIFY COLUMN `openQuestions` LONGTEXT NULL,
+  MODIFY COLUMN `errorMessage` LONGTEXT NULL;
+
+ALTER TABLE `ArtifactBundle`
+  MODIFY COLUMN `summary` LONGTEXT NULL,
+  MODIFY COLUMN `artifactsJson` LONGTEXT NOT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL,
+  MODIFY COLUMN `sourceProvenance` LONGTEXT NULL,
+  MODIFY COLUMN `openQuestions` LONGTEXT NULL,
+  MODIFY COLUMN `reviewPosture` LONGTEXT NULL;
+
+ALTER TABLE `MemoryItem`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `payload` LONGTEXT NOT NULL,
+  MODIFY COLUMN `sourceProvenance` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL;
+
+ALTER TABLE `ArtifactReview`
+  MODIFY COLUMN `reviewNotes` LONGTEXT NULL,
+  MODIFY COLUMN `editedPayload` LONGTEXT NULL,
+  MODIFY COLUMN `decisionSummary` LONGTEXT NULL;
+
+ALTER TABLE `RuntimeSession`
+  MODIFY COLUMN `boundaryNote` LONGTEXT NOT NULL,
+  MODIFY COLUMN `replayableEventLog` LONGTEXT NULL,
+  MODIFY COLUMN `controlPlaneLifecycleJson` LONGTEXT NULL;
+
+ALTER TABLE `PersistedPayload`
+  MODIFY COLUMN `preview` LONGTEXT NOT NULL,
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `payloadText` LONGTEXT NULL;
+
+ALTER TABLE `ContextEditEvent`
+  MODIFY COLUMN `removedHandles` LONGTEXT NULL,
+  MODIFY COLUMN `removedSummary` LONGTEXT NULL,
+  MODIFY COLUMN `boundaryNote` LONGTEXT NOT NULL;
+
+ALTER TABLE `SessionNotebook`
+  MODIFY COLUMN `sessionSummary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `decisionSummary` LONGTEXT NULL,
+  MODIFY COLUMN `blockerSummary` LONGTEXT NULL,
+  MODIFY COLUMN `pendingQuestions` LONGTEXT NULL,
+  MODIFY COLUMN `openLoopSummary` LONGTEXT NULL,
+  MODIFY COLUMN `boundaryNote` LONGTEXT NOT NULL;
+
+ALTER TABLE `SessionCheckpoint`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `snapshotJson` LONGTEXT NOT NULL;
+
+ALTER TABLE `MemoryCandidate`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `sourceVerification` LONGTEXT NOT NULL,
+  MODIFY COLUMN `sourceStatus` LONGTEXT NOT NULL,
+  MODIFY COLUMN `reviewerNote` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL;
+
+ALTER TABLE `MemoryPromotion`
+  MODIFY COLUMN `rationale` LONGTEXT NOT NULL;
+
+ALTER TABLE `VerificationReport`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `blockedReasons` LONGTEXT NULL,
+  MODIFY COLUMN `boundaryNotes` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL;
+
+ALTER TABLE `SignalEvent`
+  MODIFY COLUMN `signalSummary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `normalizedPayload` LONGTEXT NULL;
+
+ALTER TABLE `TruthConflict`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `resolutionNote` LONGTEXT NULL;
+
+ALTER TABLE `WorldModelSnapshot`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `snapshotJson` LONGTEXT NOT NULL;
+
+ALTER TABLE `ProblemSpace`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `nextStep` LONGTEXT NOT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL;
+
+ALTER TABLE `EdgeBrief`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `markdown` LONGTEXT NOT NULL;
+
+ALTER TABLE `CompositionFailure`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `detailsJson` LONGTEXT NULL;
+
+ALTER TABLE `CapabilityCatalogEntry`
+  MODIFY COLUMN `description` LONGTEXT NOT NULL,
+  MODIFY COLUMN `boundaryNote` LONGTEXT NOT NULL;
+
+ALTER TABLE `ArtifactVersion`
+  MODIFY COLUMN `reviewPosture` LONGTEXT NULL,
+  MODIFY COLUMN `snapshotJson` LONGTEXT NOT NULL;
+
+ALTER TABLE `ConsolidationJob`
+  MODIFY COLUMN `inputSummary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `outputSummary` LONGTEXT NULL,
+  MODIFY COLUMN `reviewPosture` LONGTEXT NOT NULL;
+
+ALTER TABLE `HandoffPacket`
+  MODIFY COLUMN `goal` LONGTEXT NOT NULL,
+  MODIFY COLUMN `constraintsJson` LONGTEXT NULL,
+  MODIFY COLUMN `trustedRefs` LONGTEXT NULL,
+  MODIFY COLUMN `untrustedRefs` LONGTEXT NULL,
+  MODIFY COLUMN `requiredOutputs` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL,
+  MODIFY COLUMN `notebookRef` LONGTEXT NULL,
+  MODIFY COLUMN `checkpointRef` LONGTEXT NULL;
+
+ALTER TABLE `InitiativeRun`
+  MODIFY COLUMN `summary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `targetOutcome` LONGTEXT NOT NULL,
+  MODIFY COLUMN `boundaryNote` LONGTEXT NOT NULL;
+
+ALTER TABLE `ConnectorIngestionRecord`
+  MODIFY COLUMN `objectRefs` LONGTEXT NOT NULL,
+  MODIFY COLUMN `evidenceRef` LONGTEXT NOT NULL,
+  MODIFY COLUMN `extractedFacts` LONGTEXT NULL,
+  MODIFY COLUMN `draftPayload` LONGTEXT NULL,
+  MODIFY COLUMN `sourceSummary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `boundaryNote` LONGTEXT NOT NULL;
+
+ALTER TABLE `RetrievalTrace`
+  MODIFY COLUMN `rationale` LONGTEXT NOT NULL,
+  MODIFY COLUMN `loadedRefs` LONGTEXT NULL,
+  MODIFY COLUMN `skippedRefs` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL,
+  MODIFY COLUMN `sourceProvenance` LONGTEXT NULL;
+
+ALTER TABLE `HumanActionExecution`
+  MODIFY COLUMN `sourceArtifactSummary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `executionIntent` LONGTEXT NOT NULL,
+  MODIFY COLUMN `executionBoundary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `executionPrerequisite` LONGTEXT NULL,
+  MODIFY COLUMN `executionDependency` LONGTEXT NULL,
+  MODIFY COLUMN `approvalContext` LONGTEXT NOT NULL,
+  MODIFY COLUMN `riskReviewSummary` LONGTEXT NULL,
+  MODIFY COLUMN `executionProofPayload` LONGTEXT NULL,
+  MODIFY COLUMN `proofNote` LONGTEXT NULL,
+  MODIFY COLUMN `whatWasNotDone` LONGTEXT NULL,
+  MODIFY COLUMN `followThroughStatus` LONGTEXT NULL,
+  MODIFY COLUMN `writebackSummary` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL,
+  MODIFY COLUMN `sourceProvenance` LONGTEXT NULL,
+  MODIFY COLUMN `boundaryTrace` LONGTEXT NULL;
+
+ALTER TABLE `OfficialWriteIntent`
+  MODIFY COLUMN `sourceSummary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `writePayloadDraft` LONGTEXT NOT NULL,
+  MODIFY COLUMN `writeBoundary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `writeApprovalTier` LONGTEXT NOT NULL,
+  MODIFY COLUMN `sourceShadowRef` LONGTEXT NULL,
+  MODIFY COLUMN `sourceExecutionProofRef` LONGTEXT NULL,
+  MODIFY COLUMN `approvalRequirements` LONGTEXT NULL,
+  MODIFY COLUMN `riskReviewSummary` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL,
+  MODIFY COLUMN `sourceProvenance` LONGTEXT NULL,
+  MODIFY COLUMN `boundaryTrace` LONGTEXT NULL,
+  MODIFY COLUMN `openQuestions` LONGTEXT NULL,
+  MODIFY COLUMN `whatThisChanges` LONGTEXT NULL,
+  MODIFY COLUMN `whatThisDoesNotMean` LONGTEXT NULL,
+  MODIFY COLUMN `reviewNotes` LONGTEXT NULL,
+  MODIFY COLUMN `writeAcknowledgementPayload` LONGTEXT NULL,
+  MODIFY COLUMN `writeFailureReason` LONGTEXT NULL,
+  MODIFY COLUMN `manualReconciliationNote` LONGTEXT NULL,
+  MODIFY COLUMN `deferredRetryNote` LONGTEXT NULL;
+
+ALTER TABLE `LimitedAutoIntent`
+  MODIFY COLUMN `limitedAutoEligibilityReason` LONGTEXT NOT NULL,
+  MODIFY COLUMN `approvalRequirements` LONGTEXT NULL,
+  MODIFY COLUMN `proposedWritePayload` LONGTEXT NOT NULL,
+  MODIFY COLUMN `riskReviewSummary` LONGTEXT NULL,
+  MODIFY COLUMN `evidenceRefs` LONGTEXT NULL,
+  MODIFY COLUMN `sourceProvenance` LONGTEXT NULL,
+  MODIFY COLUMN `boundaryTrace` LONGTEXT NULL,
+  MODIFY COLUMN `openQuestions` LONGTEXT NULL,
+  MODIFY COLUMN `whatAutoPathWillDo` LONGTEXT NULL,
+  MODIFY COLUMN `whatAutoPathWillNotDo` LONGTEXT NULL,
+  MODIFY COLUMN `manualOnlyReason` LONGTEXT NULL,
+  MODIFY COLUMN `reviewNotes` LONGTEXT NULL,
+  MODIFY COLUMN `limitedAutoAckPayload` LONGTEXT NULL,
+  MODIFY COLUMN `limitedAutoFailureReason` LONGTEXT NULL,
+  MODIFY COLUMN `manualReconciliationNote` LONGTEXT NULL,
+  MODIFY COLUMN `deferredRetryNote` LONGTEXT NULL,
+  MODIFY COLUMN `rollbackNote` LONGTEXT NULL;
+
+ALTER TABLE `OfficialFollowThrough`
+  MODIFY COLUMN `followThroughNextAction` LONGTEXT NULL,
+  MODIFY COLUMN `followThroughBoundary` LONGTEXT NOT NULL,
+  MODIFY COLUMN `followThroughEvidenceRefs` LONGTEXT NULL,
+  MODIFY COLUMN `followThroughWritebackTargets` LONGTEXT NOT NULL,
+  MODIFY COLUMN `followThroughSummary` LONGTEXT NULL,
+  MODIFY COLUMN `resolutionNote` LONGTEXT NULL,
+  MODIFY COLUMN `reconciliationNote` LONGTEXT NULL,
+  MODIFY COLUMN `roleHandoffImpact` LONGTEXT NULL,
+  MODIFY COLUMN `summaryWritebackImpact` LONGTEXT NULL,
+  MODIFY COLUMN `blockerSummaryImpact` LONGTEXT NULL,
+  MODIFY COLUMN `escalationReason` LONGTEXT NULL;

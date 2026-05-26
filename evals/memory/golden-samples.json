@@ -1,0 +1,44 @@
+[
+  {
+    "id": "acme-meeting-memory",
+    "meetingTitle": "Acme 采购评估同步会",
+    "expectedFacts": [
+      "客户更关心付款周期",
+      "Daniel 愿意内部推动",
+      "希望下周三前收到初稿"
+    ],
+    "expectedCommitments": [
+      "发送 Acme 方案初稿",
+      "确认 Acme 交付节奏"
+    ],
+    "expectedBlockers": [
+      "Acme 付款节奏未明确"
+    ]
+  },
+  {
+    "id": "greenpeak-meeting-memory",
+    "meetingTitle": "GreenPeak 职位推进同步",
+    "expectedFacts": [
+      "Aya 希望提前收到 panel 信息",
+      "客户希望 48 小时内推进下一步"
+    ],
+    "expectedCommitments": [
+      "安排 Aya 终面并同步说明"
+    ],
+    "expectedBlockers": [
+      "Aya 需要更稳定的面试预期"
+    ]
+  },
+  {
+    "id": "atlas-meeting-memory",
+    "meetingTitle": "Atlas 联名合作讨论",
+    "expectedFacts": [
+      "Lena 对合作积极",
+      "48 小时内发合作 brief"
+    ],
+    "expectedCommitments": [
+      "两天内回复 Atlas 下一步方案"
+    ],
+    "expectedBlockers": []
+  }
+]

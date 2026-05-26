@@ -1,0 +1,48 @@
+{
+  "_template": "resource-intake",
+  "_method": "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md#5.1",
+  "_phase": "Phase 0 Inventory",
+  "_instructions": "Copy this file to examples/<resource-key>/resource-intake.json and replace null / placeholder values. Do not edit this template directly.",
+
+  "resourceName": null,
+  "resourceCategory": null,
+  "_resourceCategoryEnum": ["business_system", "management_report", "collaboration_system", "document_knowledge"],
+
+  "businessOwner": {
+    "name": null,
+    "role": null,
+    "signOffRecordedAt": null
+  },
+  "technicalOwner": {
+    "name": null,
+    "role": null
+  },
+
+  "targetWorkspace": null,
+  "_targetWorkspaceNote": "current-workspace-only by default; cross-workspace requires independent approval",
+
+  "businessLoop": null,
+  "decisionUse": null,
+
+  "authorityPosture": null,
+  "_authorityPostureEnum": ["read_only", "draft", "review_then_writeback", "no_writeback"],
+
+  "sensitivity": null,
+  "_sensitivityEnum": ["public", "internal", "sensitive", "restricted"],
+
+  "fallbackPath": null,
+
+  "tenantScope": null,
+  "_tenantScopeEnum": ["generic", "tenant_specific"],
+  "_tenantScopeNote": "tenant_specific resources must land in extensions/<tenant-key>/ or private tenant repo, not in external-resource-kit/examples/",
+
+  "samplingPlan": {
+    "sampleSource": null,
+    "redactionMethod": null,
+    "samplingDate": null,
+    "businessOwnerSignOffAt": null,
+    "forbiddenSensitiveFields": []
+  },
+
+  "nonGoals": []
+}

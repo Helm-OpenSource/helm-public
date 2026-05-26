@@ -1,0 +1,42 @@
+# Pack A 默认配置（开箱即用，强约束 A）
+# 客户安装后无需修改即可启动 Day-1 看板
+
+pack:
+  id: pack-a
+  name: B2B SaaS 销售推进
+  version: 1.0.0
+  level: certified
+  industry: ICP-1-b2b-saas
+
+skills:
+  - A1-meeting-followup
+  - A2-priority-customers
+  - A3-manager-attention
+  - A4-cs-handoff-pack
+
+defaults:
+  recommendation_only: true   # 强约束：所有 Skill 默认建议
+  audit_required: true
+  invariant: case-no-drop
+  multi_tenant: true
+
+models:
+  preferred: [anthropic, openai, qwen, deepseek]
+  fallback: qwen-72b
+
+connectors:
+  required:
+    - meeting: feishu | dingtalk | wechat-work | tencent-meeting
+    - crm: saleseasy | fenxiang | sfdc-cn
+    - im: feishu | dingtalk | wechat-work
+    - email: imap
+
+privacy:
+  meeting_recording_consent: required          # 客户告知 + 销售确认双门槛
+  crm_write_consent: required
+  audit_export: 90_days_retention
+
+day_1:
+  load_fixtures: true                          # Day-1 看板加载 fixture（强约束 A）
+  default_dashboard: workspace.A.day-1
+  setup_estimate_minutes: 30

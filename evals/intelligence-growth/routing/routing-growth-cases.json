@@ -1,0 +1,178 @@
+[
+  {
+    "id": "rte-001",
+    "dimension": "routing",
+    "description": "Must_push channel with 10 signal aliases and zero conflicts — clean learning candidate for routing accuracy.",
+    "input": {
+      "dimension": "routing",
+      "evalRunId": "eval-run-rte-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-rte-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "signalAliasCount": 10,
+      "routingChannel": "must_push",
+      "conflictingSignalCount": 0
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "10 unambiguous signals on must_push channel with zero conflicts. Ideal routing accuracy training case.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "rte-002",
+    "dimension": "routing",
+    "description": "Watch channel with 5 signal aliases and no conflicts — watch_only because channel strength is inherently monitoring.",
+    "input": {
+      "dimension": "routing",
+      "evalRunId": "eval-run-rte-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-rte-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "signalAliasCount": 5,
+      "routingChannel": "watch",
+      "conflictingSignalCount": 0
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Watch channel routing with five signals. Correct handling for low-urgency monitoring classification.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "rte-003",
+    "dimension": "routing",
+    "description": "Review channel with 8 signals and one conflict resolved — learning candidate for conflict resolution path.",
+    "input": {
+      "dimension": "routing",
+      "evalRunId": "eval-run-rte-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-rte-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "signalAliasCount": 8,
+      "routingChannel": "review",
+      "conflictingSignalCount": 1
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Single conflict on review channel with 8 total signals. Well-formed case for conflict resolution taxonomy.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "rte-004",
+    "dimension": "routing",
+    "description": "Must_push channel with 15 signals and zero conflicts — high-volume positive example for routing coverage.",
+    "input": {
+      "dimension": "routing",
+      "evalRunId": "eval-run-rte-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-rte-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "signalAliasCount": 15,
+      "routingChannel": "must_push",
+      "conflictingSignalCount": 0
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "15 fresh alias signals with no conflicts. Strong must_push routing example for benchmark coverage.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "rte-005",
+    "dimension": "routing",
+    "description": "Watch channel with 3 signals and one conflict — watch_only since channel is already in monitoring posture.",
+    "input": {
+      "dimension": "routing",
+      "evalRunId": "eval-run-rte-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-rte-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "signalAliasCount": 3,
+      "routingChannel": "watch",
+      "conflictingSignalCount": 1
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Watch channel with minimal signals and one conflict. Monitoring posture is appropriate; conflict is noted.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "rte-006",
+    "dimension": "routing",
+    "description": "NEGATIVE: Must_push channel but half of signals are conflicting — routing decision is unreliable, review required.",
+    "input": {
+      "dimension": "routing",
+      "evalRunId": "eval-run-rte-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-rte-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "signalAliasCount": 8,
+      "routingChannel": "must_push",
+      "conflictingSignalCount": 4
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "4 of 8 signals are conflicting on must_push channel. High false positive risk; human review needed before routing is trusted.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "rte-007",
+    "dimension": "routing",
+    "description": "NEGATIVE: Zero signal aliases on must_push channel — no basis for routing decision, rejected.",
+    "input": {
+      "dimension": "routing",
+      "evalRunId": "eval-run-rte-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-rte-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "signalAliasCount": 0,
+      "routingChannel": "must_push",
+      "conflictingSignalCount": 0
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Zero signals on must_push channel. No evidentiary basis for routing; decision is invalid and must be rejected.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "rte-008",
+    "dimension": "routing",
+    "description": "NEGATIVE: All signals are conflicting on review channel — routing is completely ambiguous, must be rejected.",
+    "input": {
+      "dimension": "routing",
+      "evalRunId": "eval-run-rte-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-rte-008", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "signalAliasCount": 6,
+      "routingChannel": "review",
+      "conflictingSignalCount": 6
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "All 6 signals are conflicting. Routing classification is fully ambiguous and cannot be used as a training case.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

@@ -1,0 +1,48 @@
+{
+  "_template": "mapping",
+  "_method": "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md#5.3",
+  "_phase": "Phase 1 Contract",
+  "_instructions": "Copy this file to examples/<resource-key>/mapping.json. Mapping defines projection only; it does not promote external fields to Helm canonical truth.",
+
+  "externalFields": [],
+  "_externalFieldsShape": {
+    "field": "<external-field-name>",
+    "type": "<string|number|boolean|date|json>",
+    "sample": "<example-value>",
+    "sensitivity": "<public|internal|sensitive|restricted>"
+  },
+
+  "normalizedFields": [],
+  "_normalizedFieldsShape": {
+    "field": "<projection-field-name>",
+    "fromExternalField": "<external-field-name>",
+    "transform": "<identity | parse_date | enum_map | redact | hash | other>",
+    "transformNote": null
+  },
+
+  "objectRefRules": [],
+  "_objectRefRulesShape": {
+    "helmObjectType": "<Lead|Customer|Opportunity|Workstream|Meeting|Commitment|TenantResource|...>",
+    "matchingStrategy": "<deterministic_key | fuzzy_with_review | none>",
+    "fallback": "<create_candidate | reject | watch_only>"
+  },
+
+  "evidenceRefRules": [],
+  "_evidenceRefRulesShape": {
+    "evidenceType": "<email|meeting|report-row|document|attachment>",
+    "linkVia": "<external-field-name>",
+    "retention": "<inherit-source-contract | shorter | longer>"
+  },
+
+  "conflictRules": [],
+  "_conflictRulesShape": {
+    "field": "<projection-field>",
+    "ifConflictsWith": "<helm-canonical-field>",
+    "disposition": "<flag_for_review | drop_external | drop_helm | manual_resolve>"
+  },
+
+  "missingFieldPolicy": null,
+  "_missingFieldPolicyEnum": ["reject_row", "projection_only", "flag_for_review"],
+
+  "reviewRequiredFields": []
+}

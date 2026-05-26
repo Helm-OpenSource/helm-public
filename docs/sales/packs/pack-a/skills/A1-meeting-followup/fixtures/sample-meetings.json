@@ -1,0 +1,46 @@
+{
+  "_comment": "Day-1 看板示例数据。客户安装 Pack A 后默认加载，让客户立刻看到 Skill 跑出来的产物。",
+  "meetings": [
+    {
+      "id": "m-001",
+      "client_company": "客户 A",
+      "topic": "续约洽谈",
+      "date": "2026-04-29 10:00",
+      "duration_minutes": 60,
+      "sales_rep": "张某",
+      "stage": "进行中",
+      "key_points": [
+        "客户提出 Q3 增加 10 个席位",
+        "客户咨询 X 集成支持（销售口头答\"应该可以\"——已识别为越界承诺）",
+        "续约价格未敲定"
+      ],
+      "follow_up_list": [
+        {
+          "owner": "张某",
+          "action": "24h 内发确认邮件",
+          "status": "draft_pending_review"
+        },
+        {
+          "owner": "张某 + 售前",
+          "action": "X 集成可行性确认（48h）",
+          "status": "pending_engineering"
+        }
+      ],
+      "boundary_commitments_flagged": 1
+    },
+    {
+      "id": "m-002",
+      "client_company": "客户 B",
+      "topic": "首次接触",
+      "date": "2026-04-29 14:30",
+      "stage": "早期",
+      "follow_up_list": [
+        {
+          "owner": "李某",
+          "action": "7 天内寄送方案",
+          "status": "draft_pending_review"
+        }
+      ]
+    }
+  ]
+}

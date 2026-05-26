@@ -1,0 +1,187 @@
+[
+  {
+    "id": "richer-official-next-action-eligible",
+    "label": "approved shadow next action can enter richer limited auto coverage",
+    "shadowSource": {
+      "meetingId": "mtg_richer_next_action_1",
+      "opportunityId": "opp_richer_next_action_1",
+      "companyId": "company_richer_next_action_1",
+      "bundleId": "bundle_richer_next_action_1",
+      "currentStage": "CONTACTED",
+      "currentNextAction": "确认 ROI follow-up 和预算 owner",
+      "sourceTitle": "Contoso Expansion",
+      "delta": {
+        "artifactId": "opportunity_delta.json",
+        "stageShadowFrom": "CONTACTED",
+        "stageShadowTo": "ADVANCING",
+        "probabilityDelta": 12,
+        "decisionCriteria": [
+          {
+            "label": "ROI follow-up accepted",
+            "status": "confirmed",
+            "source": "fact_derived",
+            "evidenceRefs": ["meeting:mtg_richer_next_action_1"]
+          }
+        ],
+        "championStatus": "emerging",
+        "blockers": [
+          {
+            "label": "预算 owner 仍未明确",
+            "severity": "medium",
+            "source": "fact_derived",
+            "evidenceRefs": ["meeting-note:note_richer_next_action_1"]
+          }
+        ],
+        "riskFlags": [
+          {
+            "label": "budget uncertainty",
+            "severity": "medium",
+            "reason": "预算 owner 还未确认。",
+            "evidenceRefs": ["meeting-note:note_richer_next_action_1"]
+          }
+        ],
+        "nextBestAction": "先发 ROI follow-up，并锁定联合评审时间建议。",
+        "managerAttentionRequired": true,
+        "factDerived": ["客户接受先发 ROI follow-up。"],
+        "inferredAssumptions": ["预算 owner 会在本周内补齐。"],
+        "suggestionFields": ["stageShadowTo", "nextBestAction", "blockers"],
+        "stageRationale": "ROI follow-up 和联合评审窗口都已进入明确推进态。",
+        "evidenceRefs": ["meeting:mtg_richer_next_action_1", "meeting-note:note_richer_next_action_1", "opportunity:opp_richer_next_action_1"],
+        "sourceProvenance": [
+          { "type": "meeting_note", "id": "note_richer_next_action_1", "trust": "TRUSTED" },
+          { "type": "opportunity", "id": "opp_richer_next_action_1", "trust": "SYSTEM_OF_RECORD" }
+        ],
+        "confidence": 87,
+        "openQuestions": ["预算 owner 的最终姓名仍未确认。"],
+        "boundaryNotes": [
+          "This layer only updates shadow opportunity posture after explicit review. Official CRM state stays unchanged."
+        ],
+        "recommendedNextAction": "锁定联合评审窗口",
+        "noOfficialWriteback": true
+      }
+    },
+    "expected": {
+      "requiredEligibleActionTypes": ["crm.update_next_action"],
+      "requiredManualOnlyActionTypes": ["crm.update_blockers"],
+      "requiredBlockedActionTypes": ["crm.update_official_stage", "crm.update_stage_shadow_mirror"]
+    }
+  },
+  {
+    "id": "richer-official-note-and-handoff",
+    "label": "note stays eligible while handoff summary remains manual-only",
+    "executionProofSources": [
+      {
+        "id": "exec_note_richer_1",
+        "meetingId": "mtg_exec_richer_1",
+        "opportunityId": "opp_exec_richer_1",
+        "companyId": "company_exec_richer_1",
+        "actionType": "MANUAL_EMAIL_SEND",
+        "sourceArtifactBundleId": "draft_bundle_richer_1",
+        "sourceArtifactTitle": "ROI follow-up email draft",
+        "sourceArtifactSummary": "会后 ROI follow-up 已经由 owner 人工发送。",
+        "audience": "customer",
+        "executionIntent": "人工把 reviewed email 发送给客户。",
+        "executionBoundary": "approved 只表示允许人工执行下一步，不代表系统已发送。",
+        "executionRiskLevel": "MEDIUM",
+        "riskReviewSummary": "The wording stayed non-commitment and review-before-send.",
+        "proofNote": "Owner sent the email manually outside Helm.",
+        "externalReference": "gmail-thread-richer-1",
+        "followThroughStatus": "waiting_for_customer_reply",
+        "whatWasNotDone": "没有自动创建外部日程。",
+        "evidenceRefs": ["meeting:mtg_exec_richer_1", "artifact:email_draft_richer_1"],
+        "sourceProvenance": [
+          { "type": "human_execution", "id": "exec_note_richer_1", "trust": "HUMAN_CONFIRMED" }
+        ],
+        "boundaryTrace": [
+          "approved 不等于 executed",
+          "official CRM writeback 仍然没有默认自动执行"
+        ]
+      },
+      {
+        "id": "exec_handoff_richer_1",
+        "meetingId": "mtg_exec_richer_1",
+        "opportunityId": "opp_exec_richer_1",
+        "companyId": "company_exec_richer_1",
+        "actionType": "MANUAL_HANDOFF_DELIVERY",
+        "sourceArtifactBundleId": "handoff_bundle_richer_1",
+        "sourceArtifactTitle": "delivery handoff pack",
+        "sourceArtifactSummary": "交付 handoff 已经由 owner 人工共享给 delivery lead。",
+        "audience": "delivery",
+        "executionIntent": "人工把 handoff pack 共享给 delivery 团队。",
+        "executionBoundary": "这是人工执行入口，不是自动执行入口。",
+        "executionRiskLevel": "HIGH",
+        "riskReviewSummary": "handoff 仍然需要 explicit approval 和 audit trail。",
+        "proofNote": "Delivery lead acknowledged receipt manually.",
+        "externalReference": "delivery-share-richer-1",
+        "followThroughStatus": "delivery_ready",
+        "whatWasNotDone": "没有自动写任何外部系统。",
+        "evidenceRefs": ["meeting:mtg_exec_richer_1", "artifact:handoff_pack_richer_1"],
+        "sourceProvenance": [
+          { "type": "handoff_pack", "id": "handoff_pack_richer_1", "trust": "HUMAN_CONFIRMED" }
+        ],
+        "boundaryTrace": [
+          "execution proof 不等于 external outcome truth",
+          "official CRM writeback 仍然没有默认自动执行"
+        ]
+      }
+    ],
+    "expected": {
+      "requiredEligibleActionTypes": ["crm.attach_note"],
+      "requiredManualOnlyActionTypes": ["crm.attach_handoff_summary"],
+      "requiredBlockedActionTypes": ["crm.update_official_stage", "crm.update_stage_shadow_mirror"]
+    }
+  },
+  {
+    "id": "richer-official-blocked-stage-adjacent",
+    "label": "stage-adjacent official writes remain blocked while richer coverage still expands narrow paths",
+    "shadowSource": {
+      "meetingId": "mtg_richer_blocked_1",
+      "opportunityId": "opp_richer_blocked_1",
+      "companyId": "company_richer_blocked_1",
+      "bundleId": "bundle_richer_blocked_1",
+      "currentStage": "DISCOVERY",
+      "currentNextAction": "安排 ROI 跟进",
+      "sourceTitle": "Northwind Expansion",
+      "delta": {
+        "artifactId": "opportunity_delta.json",
+        "stageShadowFrom": "DISCOVERY",
+        "stageShadowTo": "ADVANCING",
+        "probabilityDelta": 8,
+        "decisionCriteria": [
+          {
+            "label": "联合评审窗口已出现",
+            "status": "confirmed",
+            "source": "fact_derived",
+            "evidenceRefs": ["meeting:mtg_richer_blocked_1"]
+          }
+        ],
+        "championStatus": "emerging",
+        "blockers": [],
+        "riskFlags": [],
+        "nextBestAction": "更新 official next action，但不要自动更新 official stage。",
+        "managerAttentionRequired": false,
+        "factDerived": ["客户要求先看 ROI follow-up。"],
+        "inferredAssumptions": ["联合评审会继续推进。"],
+        "suggestionFields": ["nextBestAction"],
+        "stageRationale": "虽然推进更明确，但 stage 仍然需要更强人审。",
+        "evidenceRefs": ["meeting:mtg_richer_blocked_1", "opportunity:opp_richer_blocked_1"],
+        "sourceProvenance": [
+          { "type": "meeting_note", "id": "note_richer_blocked_1", "trust": "TRUSTED" },
+          { "type": "opportunity", "id": "opp_richer_blocked_1", "trust": "SYSTEM_OF_RECORD" }
+        ],
+        "confidence": 84,
+        "openQuestions": ["正式 stage 是否真的该变更仍需 manager judgement。"],
+        "boundaryNotes": [
+          "Stage-adjacent official updates remain outside limited auto."
+        ],
+        "recommendedNextAction": "安排联合评审 follow-up",
+        "noOfficialWriteback": true
+      }
+    },
+    "expected": {
+      "requiredEligibleActionTypes": ["crm.update_next_action"],
+      "requiredManualOnlyActionTypes": [],
+      "requiredBlockedActionTypes": ["crm.update_official_stage", "crm.update_stage_shadow_mirror"]
+    }
+  }
+]

@@ -1,0 +1,29 @@
+{
+  "_comment": "Day-1 看板示例：1 个客户的完整 Handoff Pack 数据",
+  "client": "客户 A",
+  "deal_closed_date": "2026-04-28",
+  "handoff_status": "pending_dual_confirmation",
+  "commitments": {
+    "confirmed": 10,
+    "pending_review": 2,
+    "examples_pending": [
+      {"text": "X 集成应该可以", "raised_in_meeting": "m-001", "type": "boundary_commitment"}
+    ]
+  },
+  "scope_in": ["10 个核心模块"],
+  "scope_out": ["3 个超出项"],
+  "customer_profile": {
+    "decision_pace": "稳，先小范围试用",
+    "communication_style": "直接，不喜欢被推销",
+    "key_concerns": ["稳定性", "可扩展性"]
+  },
+  "risks": [
+    "客户期望 3 周上线，方案标准 4-6 周"
+  ],
+  "contacts": {
+    "sales_lead": "张某",
+    "client_lead": "李某（IT 总监）",
+    "decision_maker": "王某（CEO）"
+  },
+  "completeness_score_estimated": 3.6
+}

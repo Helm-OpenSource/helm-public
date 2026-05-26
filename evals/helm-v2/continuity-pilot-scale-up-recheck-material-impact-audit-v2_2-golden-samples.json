@@ -1,0 +1,125 @@
+[
+  {
+    "id": "large_budget_scale_up_recheck",
+    "label": "Large budget-pressure cohort keeps scale-up recheck, wording drift tracking, and material impact audit explicit",
+    "sourceCaseId": "large_budget_stability_scale_up",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetWordingDriftRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "stabilityScaleUpRecheckIncludes": [
+        "Scale-up recheck",
+        "current scale-up recheck",
+        "BUDGET_PRESSURE"
+      ],
+      "wordingDriftTrackingIncludes": [
+        "Wording drift tracking",
+        "0% drift",
+        "canonical wide interval wording"
+      ],
+      "intervalConsistencyGuidanceIncludes": [
+        "Interval consistency guidance",
+        "WIDE:",
+        "GUARDED:"
+      ],
+      "longTermMaterialImpactAuditIncludes": [
+        "Long-term material impact audit",
+        "Prune trace review",
+        "optimization guidance must remain evidence-first"
+      ],
+      "sessionReviewIncludes": [
+        "scale-up recheck",
+        "Wording drift tracking",
+        "Interval consistency guidance",
+        "material impact audit"
+      ]
+    }
+  },
+  {
+    "id": "large_replay_scale_up_recheck",
+    "label": "Large replay-drift cohort keeps stable scale-up recheck and settled wording consistency visible",
+    "sourceCaseId": "large_replay_stability_scale_up",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetRiskBand": "LOW",
+      "targetStabilityBand": "STABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "SETTLED",
+      "targetWordingDriftRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "stabilityScaleUpRecheckIncludes": [
+        "Scale-up recheck",
+        "current scale-up recheck",
+        "RESUMED_MEETING"
+      ],
+      "wordingDriftTrackingIncludes": [
+        "Wording drift tracking",
+        "0% drift",
+        "settled interval"
+      ],
+      "intervalConsistencyGuidanceIncludes": [
+        "Interval consistency guidance",
+        "SETTLED:",
+        "comparatively stable review readout"
+      ],
+      "longTermMaterialImpactAuditIncludes": [
+        "Long-term material impact audit",
+        "Replay gap review",
+        "broader-sample material steps visible"
+      ],
+      "sessionReviewIncludes": [
+        "scale-up recheck",
+        "Wording drift tracking",
+        "Interval consistency guidance",
+        "material impact audit"
+      ]
+    }
+  },
+  {
+    "id": "growing_protected_scale_up_recheck",
+    "label": "Growing protected-state cohort keeps narrow-sample recheck and impact audit conservative",
+    "sourceCaseId": "growing_protected_stability_scale_up",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetWordingDriftRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "stabilityScaleUpRecheckIncludes": [
+        "Scale-up recheck",
+        "current scale-up recheck",
+        "PROTECTED_STATE_GAP"
+      ],
+      "wordingDriftTrackingIncludes": [
+        "Wording drift tracking",
+        "0% drift",
+        "canonical wide interval wording"
+      ],
+      "intervalConsistencyGuidanceIncludes": [
+        "Interval consistency guidance",
+        "WIDE:",
+        "advisory-only readout"
+      ],
+      "longTermMaterialImpactAuditIncludes": [
+        "Long-term material impact audit",
+        "Protected field review",
+        "optimization guidance must remain evidence-first"
+      ],
+      "sessionReviewIncludes": [
+        "scale-up recheck",
+        "Wording drift tracking",
+        "Interval consistency guidance",
+        "material impact audit"
+      ]
+    }
+  }
+]

@@ -1,0 +1,327 @@
+[
+  {
+    "id": "growing_heavy_budget_subgroup",
+    "label": "Growing heavy budget-pressure subgroup keeps density, cadence, and failure history visible",
+    "workspaceSessionCount": 7,
+    "queueEntries": [
+      {
+        "id": "budget_dense_high",
+        "title": "Budget dense high",
+        "failureTaxonomy": "BUDGET_PRESSURE",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "PRUNE",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "latest_prune_edit",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 3,
+        "repeatPatternStatus": "REPEATED_REPRUNE_LOOP",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "INEFFECTIVE",
+        "sessionDensityBand": "HEAVY",
+        "meetingFrequencyBand": "HIGH_CADENCE",
+        "failureHistoryBand": "CHRONIC_REPEAT",
+        "participantRolePosture": "OPERATOR_LED",
+        "updatedAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "id": "budget_dense_watch",
+        "title": "Budget dense watch",
+        "failureTaxonomy": "BUDGET_PRESSURE",
+        "recoveryState": "RECOVERABLE",
+        "posture": "PRUNE",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "latest_prune_edit",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "PARTIAL",
+        "sessionDensityBand": "HEAVY",
+        "meetingFrequencyBand": "HIGH_CADENCE",
+        "failureHistoryBand": "REPEATED_FAILURE",
+        "participantRolePosture": "OPERATOR_LED",
+        "updatedAt": "2026-04-04T09:00:00.000Z"
+      },
+      {
+        "id": "payload_operator_watch",
+        "title": "Payload operator watch",
+        "failureTaxonomy": "PAYLOAD_STATE_DRIFT",
+        "recoveryState": "RECOVERABLE",
+        "posture": "WATCH",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "latest_prune_edit",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "NO_SIGNAL",
+        "sessionDensityBand": "STEADY",
+        "meetingFrequencyBand": "RECURRING",
+        "failureHistoryBand": "REPEATED_FAILURE",
+        "participantRolePosture": "MIXED_STAKEHOLDERS",
+        "updatedAt": "2026-04-04T08:00:00.000Z"
+      },
+      {
+        "id": "anchor_sparse_blocked",
+        "title": "Anchor sparse blocked",
+        "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "recoveryState": "BLOCKED",
+        "posture": "WATCH",
+        "replayStatus": "NONE",
+        "payloadStateSource": "all_persisted",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "sessionDensityBand": "LIGHT",
+        "meetingFrequencyBand": "SPORADIC",
+        "failureHistoryBand": "REPEATED_FAILURE",
+        "participantRolePosture": "UNKNOWN",
+        "updatedAt": "2026-04-04T07:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "BUDGET_PRESSURE",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetSessionDensityBand": "HEAVY",
+      "targetMeetingFrequencyBand": "HIGH_CADENCE",
+      "targetFailureHistoryBand": "CHRONIC_REPEAT",
+      "targetParticipantRolePosture": "OPERATOR_LED",
+      "targetRiskBand": "HIGH",
+      "subgroupIncludes": [
+        "HEAVY session density",
+        "HIGH_CADENCE meeting cadence",
+        "CHRONIC_REPEAT failure history",
+        "OPERATOR_LED participant posture"
+      ],
+      "refinementIncludes": [
+        "operator-visible calibration guidance",
+        "session_density HEAVY",
+        "meeting_frequency HIGH_CADENCE",
+        "failure history CHRONIC_REPEAT"
+      ],
+      "driftSynthesisIncludes": [
+        "Long-horizon drift remains concentrated enough",
+        "session density HEAVY",
+        "meeting cadence HIGH_CADENCE"
+      ],
+      "sopSynthesisIncludes": [
+        "SOP effectiveness synthesis",
+        "Prune trace review",
+        "CHRONIC_REPEAT"
+      ],
+      "targetStepLabel": "Prune trace review"
+    }
+  },
+  {
+    "id": "large_resumed_replay_exec_subgroup",
+    "label": "Large resumed replay subgroup keeps executive-backed replay drift in conservative calibration",
+    "workspaceSessionCount": 12,
+    "queueEntries": [
+      {
+        "id": "replay_exec_high_1",
+        "title": "Replay exec high 1",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "COMPACT",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_plus_edits",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 3,
+        "repeatPatternStatus": "REPEATED_INEFFECTIVE_ACTION",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "INEFFECTIVE",
+        "sessionDensityBand": "HEAVY",
+        "meetingFrequencyBand": "RECURRING",
+        "failureHistoryBand": "CHRONIC_REPEAT",
+        "participantRolePosture": "EXEC_SPONSORED",
+        "updatedAt": "2026-04-04T11:00:00.000Z"
+      },
+      {
+        "id": "replay_exec_high_2",
+        "title": "Replay exec high 2",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "COMPACT",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_INEFFECTIVE_ACTION",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "INEFFECTIVE",
+        "sessionDensityBand": "HEAVY",
+        "meetingFrequencyBand": "RECURRING",
+        "failureHistoryBand": "CHRONIC_REPEAT",
+        "participantRolePosture": "EXEC_SPONSORED",
+        "updatedAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "id": "replay_exec_watch",
+        "title": "Replay exec watch",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "RECOVERABLE",
+        "posture": "COMPACT",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "checkpoint_plus_edits",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "PARTIAL",
+        "sessionDensityBand": "HEAVY",
+        "meetingFrequencyBand": "RECURRING",
+        "failureHistoryBand": "REPEATED_FAILURE",
+        "participantRolePosture": "EXEC_SPONSORED",
+        "updatedAt": "2026-04-04T09:00:00.000Z"
+      },
+      {
+        "id": "protected_mixed_review",
+        "title": "Protected mixed review",
+        "failureTaxonomy": "PROTECTED_STATE_GAP",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "WATCH",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_REVIEW_REQUIRED",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "sessionDensityBand": "STEADY",
+        "meetingFrequencyBand": "HIGH_CADENCE",
+        "failureHistoryBand": "CHRONIC_REPEAT",
+        "participantRolePosture": "MIXED_STAKEHOLDERS",
+        "updatedAt": "2026-04-04T08:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "REPLAY_DRIFT",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetSessionDensityBand": "HEAVY",
+      "targetMeetingFrequencyBand": "RECURRING",
+      "targetFailureHistoryBand": "CHRONIC_REPEAT",
+      "targetParticipantRolePosture": "EXEC_SPONSORED",
+      "targetRiskBand": "HIGH",
+      "subgroupIncludes": [
+        "HEAVY session density",
+        "RECURRING meeting cadence",
+        "EXEC_SPONSORED participant posture"
+      ],
+      "refinementIncludes": [
+        "operator-visible calibration guidance",
+        "cohort_family LARGE · RESUMED_MEETING · REPLAY_DRIFT",
+        "participant_role EXEC_SPONSORED"
+      ],
+      "driftSynthesisIncludes": [
+        "Long-horizon drift remains concentrated enough",
+        "participant posture EXEC_SPONSORED",
+        "longer pilot horizon"
+      ],
+      "sopSynthesisIncludes": [
+        "SOP effectiveness synthesis",
+        "Replay gap review",
+        "CHRONIC_REPEAT"
+      ],
+      "targetStepLabel": "Replay gap review"
+    }
+  },
+  {
+    "id": "small_anchor_sparse_unknown_subgroup",
+    "label": "Small anchor subgroup keeps sparse cadence and unknown participant posture explicit",
+    "workspaceSessionCount": 3,
+    "queueEntries": [
+      {
+        "id": "anchor_sparse_repeat",
+        "title": "Anchor sparse repeat",
+        "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "recoveryState": "BLOCKED",
+        "posture": "WATCH",
+        "replayStatus": "NONE",
+        "payloadStateSource": "all_persisted",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_BLOCKED_ACTION",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "sessionDensityBand": "LIGHT",
+        "meetingFrequencyBand": "SPORADIC",
+        "failureHistoryBand": "CHRONIC_REPEAT",
+        "participantRolePosture": "UNKNOWN",
+        "updatedAt": "2026-04-04T11:00:00.000Z"
+      },
+      {
+        "id": "anchor_sparse_match",
+        "title": "Anchor sparse match",
+        "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "recoveryState": "BLOCKED",
+        "posture": "WATCH",
+        "replayStatus": "NONE",
+        "payloadStateSource": "all_persisted",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "sessionDensityBand": "LIGHT",
+        "meetingFrequencyBand": "SPORADIC",
+        "failureHistoryBand": "REPEATED_FAILURE",
+        "participantRolePosture": "UNKNOWN",
+        "updatedAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "id": "protected_sparse_review",
+        "title": "Protected sparse review",
+        "failureTaxonomy": "PROTECTED_STATE_GAP",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "WATCH",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_REVIEW_REQUIRED",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "sessionDensityBand": "STEADY",
+        "meetingFrequencyBand": "SPORADIC",
+        "failureHistoryBand": "CHRONIC_REPEAT",
+        "participantRolePosture": "UNKNOWN",
+        "updatedAt": "2026-04-04T09:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "NO_RECOVERY_ANCHOR",
+    "expected": {
+      "workspaceSizeBand": "SMALL",
+      "targetMeetingShape": "LEAN_MEETING",
+      "targetSessionDensityBand": "LIGHT",
+      "targetMeetingFrequencyBand": "SPORADIC",
+      "targetFailureHistoryBand": "CHRONIC_REPEAT",
+      "targetParticipantRolePosture": "UNKNOWN",
+      "targetRiskBand": "HIGH",
+      "subgroupIncludes": [
+        "LIGHT session density",
+        "SPORADIC meeting cadence",
+        "UNKNOWN participant posture"
+      ],
+      "refinementIncludes": [
+        "operator-visible calibration guidance",
+        "failure_history CHRONIC_REPEAT",
+        "session_density LIGHT"
+      ],
+      "driftSynthesisIncludes": [
+        "Long-horizon drift remains concentrated enough",
+        "session density LIGHT",
+        "meeting cadence SPORADIC"
+      ],
+      "sopSynthesisIncludes": [
+        "SOP effectiveness synthesis",
+        "Anchor check",
+        "CHRONIC_REPEAT"
+      ],
+      "targetStepLabel": "Anchor check"
+    }
+  }
+]

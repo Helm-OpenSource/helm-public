@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "operating-signal-flow-runtime-readiness-bundle.v1",
+  "caseId": "OSF-RRG-INTAKE-GO-001",
+  "evaluatedAt": "2026-05-17T16:00:00+08:00",
+  "casePurpose": "Synthetic alias-only review bundle for the offline intake screen sample.",
+  "reviewBundle": {
+    "adoptionMode": "review_bundle",
+    "issuedAt": "2026-05-17T14:00:00+08:00",
+    "expiresAt": "2026-06-16T14:00:00+08:00",
+    "revokedBy": null,
+    "revokedReason": null,
+    "redactedCalibrationSample": {
+      "present": true,
+      "createdAt": "2026-05-17T13:00:00+08:00",
+      "sampleWindow": "24h",
+      "windowStart": "2026-05-16T13:00:00+08:00",
+      "windowEnd": "2026-05-17T13:00:00+08:00",
+      "workspaceScope": "single_workspace",
+      "redactionStatus": "redacted",
+      "evidenceRefCount": 4,
+      "rawPayloadIncluded": false,
+      "calibrationDeltaDocumented": true,
+      "fixtureParityChecked": true
+    },
+    "redactedSnapshotProjection": {
+      "present": true,
+      "generatedAt": "2026-05-17T12:30:00+08:00",
+      "workspaceIds": ["workspace_alias_primary"],
+      "shapeChecked": true,
+      "fieldSamples": {
+        "workspaceId": "workspace_alias_primary",
+        "accountRef": "account_alias_17",
+        "signalKey": "signal_alias_commitment_42",
+        "sourceRef": "source_alias_crm_3"
+      }
+    },
+    "reviews": {
+      "dataProtectionReview": {
+        "status": "approved",
+        "reviewedAt": "2026-05-17T13:20:00+08:00",
+        "reviewerRole": "data_protection"
+      },
+      "requiredReviewerApproval": {
+        "status": "approved",
+        "approvedAt": "2026-05-17T13:40:00+08:00",
+        "reviewerRoles": [
+          "engineering_reviewer",
+          "product_owner",
+          "security_reviewer",
+          "operations_reviewer",
+          "data_protection_reviewer"
+        ],
+        "minimumRoleCount": 5
+      },
+      "executiveSponsorApproval": {
+        "status": "approved",
+        "approvedAt": "2026-05-17T13:55:00+08:00",
+        "sponsorRole": "executive_sponsor"
+      }
+    },
+    "productionQueryRolloutPlan": {
+      "present": true,
+      "status": "planned",
+      "queryName": "operating_signal_flow_snapshot_candidate",
+      "sourceTableRefs": [
+        "existing_signal_read_model",
+        "existing_review_packet_read_model"
+      ],
+      "volumeEstimateRowsPerHour": 120,
+      "indexPlan": "Reuse existing workspaceId and occurredAt indexes; no new schema in this gate.",
+      "performanceBudgetMs": 300,
+      "observabilityPlan": "Shadow metrics for rows, latency, rejected raw patterns and boundary-stopped count.",
+      "rolloutStages": ["shadow", "canary", "general_review"],
+      "usesExistingSourcesOnly": true,
+      "singleWorkspaceSnapshotProjection": true,
+      "schemaChangeProposed": false,
+      "apiRouteProposed": false,
+      "runtimeQueryImplemented": false,
+      "rollbackPlanPresent": true,
+      "blastRadius": "single_workspace"
+    },
+    "llmPosture": {
+      "explanationOnly": true,
+      "finalRanking": "disabled",
+      "stateTransitionByLlm": false
+    },
+    "authority": {
+      "officialWriteAllowed": false,
+      "autoSendAllowed": false,
+      "autoApproveAllowed": false,
+      "silentWriteAllowed": false,
+      "autoExecuteAllowed": false
+    },
+    "artifacts": {
+      "docsUpdated": true,
+      "evalUpdated": true,
+      "boundaryGuardUpdated": true
+    },
+    "evidenceRefs": [
+      "calibration:osf-redacted-sample-001",
+      "data-protection:review-001",
+      "required-reviewer:approval-001",
+      "executive-sponsor:approval-001"
+    ]
+  }
+}

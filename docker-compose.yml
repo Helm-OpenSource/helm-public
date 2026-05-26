@@ -1,0 +1,78 @@
+# =============================================================================
+# Helm — Local demo orchestration
+# =============================================================================
+# Goal:
+#   git clone && docker compose up && open http://localhost:3000/mobile
+#
+# Scope: minimal local demo. NOT a production deployment.
+#
+# Services:
+#   mysql  — MySQL 8.4 on :3306 (named volume mysql-data)
+#   app    — Helm Next.js app on :3000 (depends on mysql healthcheck)
+#   redis  — optional cache (commented out by default)
+# =============================================================================
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: helm-mysql
+    restart: unless-stopped
+    environment:
+      # MYSQL_ROOT_PASSWORD / MYSQL_DATABASE are the only env vars the
+      # official mysql:8.4 image consumes for first-time initialization.
+      # Charset / collation must be passed via `command` below.
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: helm2026
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=caching_sha2_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: helm-app:dev
+    container_name: helm-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # MUST tier
+      DATABASE_URL: "mysql://root:root@mysql:3306/helm2026?charset=utf8mb4"
+      APP_URL: "http://localhost:3000"
+      CONNECTOR_TOKEN_SECRET: "helm-docker-demo-secret-change-me-please-32+"
+      NODE_ENV: "production"
+
+      # OPTIONAL_AI tier (Ask Helm renders deterministic placeholder + banner
+      # when OPENAI_API_KEY is empty; rest of the app still works).
+      OPENAI_API_KEY: ""
+      LLM_ENABLED: "false"
+
+      # OPTIONAL_CONNECTORS — leave empty for the demo path.
+    ports:
+      - "3000:3000"
+
+  # Optional cache. Uncomment to enable.
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: helm-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+
+volumes:
+  mysql-data:
+    name: helm-mysql-data

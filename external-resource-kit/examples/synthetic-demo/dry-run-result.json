@@ -1,0 +1,98 @@
+{
+  "rulePack": {
+    "signalType": "metric_anomaly",
+    "sourceTypes": [
+      "management_report"
+    ],
+    "rulePackVersion": "synthetic-demo-v0"
+  },
+  "rowCount": 10,
+  "counts": {
+    "candidate": 3,
+    "rejected": 5,
+    "watch_only": 1,
+    "skip": 1
+  },
+  "verdicts": [
+    {
+      "rowId": "row-001-positive-high",
+      "verdict": {
+        "disposition": "candidate",
+        "severity": 3
+      }
+    },
+    {
+      "rowId": "row-002-positive-medium",
+      "verdict": {
+        "disposition": "candidate",
+        "severity": 2
+      }
+    },
+    {
+      "rowId": "row-003-positive-edge",
+      "verdict": {
+        "disposition": "candidate",
+        "severity": 2
+      }
+    },
+    {
+      "rowId": "row-004-watch-only",
+      "verdict": {
+        "disposition": "watch_only",
+        "reason": "softer drift; track but no review packet escalation"
+      }
+    },
+    {
+      "rowId": "row-005-skip-non-aggregate",
+      "verdict": {
+        "disposition": "skip",
+        "reason": "eligibility miss: row must be a daily aggregate, not raw transactions"
+      }
+    },
+    {
+      "rowId": "row-006-rejected-stale",
+      "verdict": {
+        "disposition": "rejected",
+        "rejectionCategory": "stale_source",
+        "reviewNote": "row exceeds 36h freshness SLA"
+      }
+    },
+    {
+      "rowId": "row-007-rejected-pii",
+      "verdict": {
+        "disposition": "rejected",
+        "rejectionCategory": "sensitivity",
+        "reviewNote": "synthetic demo refuses any row marked PII"
+      }
+    },
+    {
+      "rowId": "row-008-rejected-foreign-workspace",
+      "verdict": {
+        "disposition": "rejected",
+        "rejectionCategory": "workspace_boundary",
+        "reviewNote": "synthetic demo only accepts the demo workspace"
+      }
+    },
+    {
+      "rowId": "row-009-rejected-write-intent",
+      "verdict": {
+        "disposition": "rejected",
+        "rejectionCategory": "write_authority",
+        "reviewNote": "synthetic demo is read-only; reject any row carrying a write intent"
+      }
+    },
+    {
+      "rowId": "row-010-rejected-missing-score",
+      "verdict": {
+        "disposition": "rejected",
+        "rejectionCategory": "missing_evidence",
+        "reviewNote": "anomaly score absent; cannot evaluate"
+      }
+    }
+  ],
+  "boundaries": {
+    "llmConsulted": false,
+    "dbWritten": false,
+    "providerCalled": false
+  }
+}

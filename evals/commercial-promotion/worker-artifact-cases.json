@@ -1,0 +1,315 @@
+{
+  "version": "commercial-promotion-pack-phase1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "alias_only_public_and_redacted_inputs",
+  "boundary": "internal_founder_led_gtm_pack_no_external_side_effects",
+  "targets": {
+    "minimumReadyScore": 85,
+    "minimumRequiredFieldCoveragePercent": 90,
+    "minimumEvidenceRefCount": 2,
+    "maximumBoundaryIncidentCount": 0,
+    "maximumExternalSideEffectCount": 0,
+    "maximumForbiddenInputCount": 0,
+    "requiredScorecardDimensions": [
+      "pain",
+      "business_owner",
+      "data_availability",
+      "proof_value",
+      "paid_pilot_willingness",
+      "boundary_fit"
+    ]
+  },
+  "cases": [
+    {
+      "id": "COMM-PROMO-ICP-001",
+      "workerId": "commercial.icp_desk_research",
+      "expectedReady": true,
+      "artifact": {
+        "requiredFields": [
+          "alias",
+          "website",
+          "icpCategory",
+          "companySizeEstimate",
+          "productHypothesis",
+          "buyerHypothesis",
+          "salesComplexitySignal",
+          "toolStackEvidence",
+          "proofPotential",
+          "dataAccessFriction",
+          "sourceUrls",
+          "openQuestions"
+        ],
+        "presentFields": [
+          "alias",
+          "website",
+          "icpCategory",
+          "companySizeEstimate",
+          "productHypothesis",
+          "buyerHypothesis",
+          "salesComplexitySignal",
+          "toolStackEvidence",
+          "proofPotential",
+          "dataAccessFriction",
+          "sourceUrls",
+          "openQuestions"
+        ],
+        "evidenceRefs": [
+          "public:web:alias-a-home",
+          "public:web:alias-a-careers",
+          "public:web:alias-a-product"
+        ],
+        "boundaryNote": "Only public fields and alias are retained; no contact PII or private customer data.",
+        "outcomeMetric": "public_field_completeness_percent",
+        "reviewPosture": "review_required",
+        "requiredReviewers": ["founder"],
+        "externalSideEffects": [],
+        "forbiddenInputMarkers": [],
+        "blockedOutputMarkers": [],
+        "scoreDimensions": [],
+        "llmFinalRanking": false
+      }
+    },
+    {
+      "id": "COMM-PROMO-SCORE-001",
+      "workerId": "commercial.design_partner_scorecard",
+      "expectedReady": true,
+      "artifact": {
+        "requiredFields": [
+          "painScore",
+          "businessOwnerScore",
+          "dataAvailabilityScore",
+          "proofValueScore",
+          "paidPilotWillingnessScore",
+          "boundaryFitScore",
+          "totalScore",
+          "recommendationTier",
+          "risks",
+          "nextAction"
+        ],
+        "presentFields": [
+          "painScore",
+          "businessOwnerScore",
+          "dataAvailabilityScore",
+          "proofValueScore",
+          "paidPilotWillingnessScore",
+          "boundaryFitScore",
+          "totalScore",
+          "recommendationTier",
+          "risks",
+          "nextAction"
+        ],
+        "evidenceRefs": [
+          "candidate:alias-a:public-brief",
+          "private-note:alias-a:redacted-summary",
+          "scorecard-rule:pack-a-opc"
+        ],
+        "boundaryNote": "Score is advisory; founder chooses Top 2-3 and can override only with recorded reason.",
+        "outcomeMetric": "top_candidate_to_scope_call_conversion",
+        "reviewPosture": "ready_for_founder_decision",
+        "requiredReviewers": ["founder"],
+        "externalSideEffects": [],
+        "forbiddenInputMarkers": [],
+        "blockedOutputMarkers": [],
+        "scoreDimensions": [
+          "pain",
+          "business_owner",
+          "data_availability",
+          "proof_value",
+          "paid_pilot_willingness",
+          "boundary_fit"
+        ],
+        "llmFinalRanking": false
+      }
+    },
+    {
+      "id": "COMM-PROMO-CALL-001",
+      "workerId": "commercial.validation_call_brief",
+      "expectedReady": true,
+      "artifact": {
+        "requiredFields": [
+          "failureEventQuestions",
+          "ownerQuestions",
+          "dataAccessQuestions",
+          "proofQuestions",
+          "boundaryQuestions",
+          "noGoSignals",
+          "falsificationQuestions"
+        ],
+        "presentFields": [
+          "failureEventQuestions",
+          "ownerQuestions",
+          "dataAccessQuestions",
+          "proofQuestions",
+          "boundaryQuestions",
+          "noGoSignals",
+          "falsificationQuestions"
+        ],
+        "evidenceRefs": [
+          "candidate:alias-a:scorecard",
+          "script:pack-a-candidate-call",
+          "research:opc-market-validation"
+        ],
+        "boundaryNote": "The call brief validates fit; it does not promise demo, pricing, custom work, or pilot acceptance.",
+        "outcomeMetric": "verified_failure_event_count",
+        "reviewPosture": "review_required",
+        "requiredReviewers": ["founder"],
+        "externalSideEffects": [],
+        "forbiddenInputMarkers": [],
+        "blockedOutputMarkers": [],
+        "scoreDimensions": [],
+        "llmFinalRanking": false
+      }
+    },
+    {
+      "id": "COMM-PROMO-SIGNAL-001",
+      "workerId": "commercial.meeting_to_proof_signal",
+      "expectedReady": true,
+      "artifact": {
+        "requiredFields": [
+          "painSignal",
+          "ownerSignal",
+          "dataSignal",
+          "proofSignal",
+          "budgetSignal",
+          "boundarySignal",
+          "nextReviewAction"
+        ],
+        "presentFields": [
+          "painSignal",
+          "ownerSignal",
+          "dataSignal",
+          "proofSignal",
+          "budgetSignal",
+          "boundarySignal",
+          "nextReviewAction"
+        ],
+        "evidenceRefs": [
+          "call-note:alias-a:redacted",
+          "scorecard:alias-a",
+          "scope-risk:proof-authorization"
+        ],
+        "boundaryNote": "Signals are confirmed, likely, or unconfirmed; unconfirmed signals cannot enter public proof or contract scope.",
+        "outcomeMetric": "confirmed_signal_ratio",
+        "reviewPosture": "review_required",
+        "requiredReviewers": ["founder", "product"],
+        "externalSideEffects": [],
+        "forbiddenInputMarkers": [],
+        "blockedOutputMarkers": [],
+        "scoreDimensions": [],
+        "llmFinalRanking": false
+      }
+    },
+    {
+      "id": "COMM-PROMO-SCOPE-001",
+      "workerId": "commercial.pilot_scope_packet",
+      "expectedReady": true,
+      "artifact": {
+        "requiredFields": [
+          "dataChecklist",
+          "ownerReviewerMap",
+          "reviewCadence",
+          "successMetrics",
+          "stopConditions",
+          "dpaReadiness",
+          "implementationEngineerCoverage",
+          "founderAttendanceRequirements"
+        ],
+        "presentFields": [
+          "dataChecklist",
+          "ownerReviewerMap",
+          "reviewCadence",
+          "successMetrics",
+          "stopConditions",
+          "dpaReadiness",
+          "implementationEngineerCoverage",
+          "founderAttendanceRequirements"
+        ],
+        "evidenceRefs": [
+          "scope-call:alias-a:redacted",
+          "runbook:pack-a-pilot",
+          "legal:dpa-template"
+        ],
+        "boundaryNote": "Scope packet is review-required preparation; DPA/legal fields are not approved until legal review completes.",
+        "outcomeMetric": "week0_readiness_completeness_percent",
+        "reviewPosture": "ready_for_founder_decision",
+        "requiredReviewers": ["founder", "legal", "data_protection"],
+        "externalSideEffects": [],
+        "forbiddenInputMarkers": [],
+        "blockedOutputMarkers": [],
+        "scoreDimensions": [],
+        "llmFinalRanking": false
+      }
+    },
+    {
+      "id": "COMM-PROMO-PROOF-001",
+      "workerId": "commercial.proof_pack_assembly",
+      "expectedReady": true,
+      "artifact": {
+        "requiredFields": [
+          "metricSummary",
+          "beforeAfterNarrative",
+          "anonymizedWorkflowDiagram",
+          "quoteCandidates",
+          "claimAllowlist",
+          "claimDenylist",
+          "publicSemiPublicPrivateTiers"
+        ],
+        "presentFields": [
+          "metricSummary",
+          "beforeAfterNarrative",
+          "anonymizedWorkflowDiagram",
+          "quoteCandidates",
+          "claimAllowlist",
+          "claimDenylist",
+          "publicSemiPublicPrivateTiers"
+        ],
+        "evidenceRefs": [
+          "pilot-scorecard:alias-a",
+          "review-note:week4",
+          "authorization:case-publication-status"
+        ],
+        "boundaryNote": "Proof pack is a candidate; public claim requires founder plus legal/data-protection review.",
+        "outcomeMetric": "public_safe_proof_asset_count",
+        "reviewPosture": "review_required",
+        "requiredReviewers": ["founder", "legal", "data_protection"],
+        "externalSideEffects": [],
+        "forbiddenInputMarkers": [],
+        "blockedOutputMarkers": [],
+        "scoreDimensions": [],
+        "llmFinalRanking": false
+      }
+    },
+    {
+      "id": "COMM-PROMO-BROKEN-AUTO-SEND-001",
+      "workerId": "commercial.validation_call_brief",
+      "expectedReady": false,
+      "artifact": {
+        "requiredFields": [
+          "failureEventQuestions",
+          "ownerQuestions",
+          "dataAccessQuestions",
+          "proofQuestions",
+          "boundaryQuestions",
+          "noGoSignals",
+          "falsificationQuestions"
+        ],
+        "presentFields": [
+          "failureEventQuestions",
+          "ownerQuestions",
+          "dataAccessQuestions",
+          "proofQuestions"
+        ],
+        "evidenceRefs": ["candidate:alias-b:thin-public-brief"],
+        "boundaryNote": "",
+        "outcomeMetric": "",
+        "reviewPosture": "watch_only",
+        "requiredReviewers": [],
+        "externalSideEffects": ["email_send"],
+        "forbiddenInputMarkers": ["raw_contact_email"],
+        "blockedOutputMarkers": ["auto_send", "price_commitment"],
+        "scoreDimensions": [],
+        "llmFinalRanking": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,243 @@
+[
+  {
+    "id": "followthrough-ack-success-next-action",
+    "label": "acknowledged success still enters follow-through and closes with explicit resolution",
+    "shadowSource": {
+      "meetingId": "mtg_followthrough_success_1",
+      "opportunityId": "opp_followthrough_success_1",
+      "companyId": "company_followthrough_success_1",
+      "bundleId": "bundle_followthrough_success_1",
+      "currentStage": "CONTACTED",
+      "currentNextAction": "确认 ROI follow-up 和预算 owner",
+      "sourceTitle": "Contoso Expansion",
+      "delta": {
+        "artifactId": "opportunity_delta.json",
+        "stageShadowFrom": "CONTACTED",
+        "stageShadowTo": "ADVANCING",
+        "probabilityDelta": 10,
+        "decisionCriteria": [
+          {
+            "label": "客户接受 ROI follow-up",
+            "status": "confirmed",
+            "source": "fact_derived",
+            "evidenceRefs": ["meeting:mtg_followthrough_success_1"]
+          }
+        ],
+        "championStatus": "emerging",
+        "blockers": [],
+        "riskFlags": [],
+        "nextBestAction": "先发 ROI follow-up，并锁定联合评审窗口。",
+        "managerAttentionRequired": false,
+        "factDerived": ["客户接受先发 ROI follow-up。"],
+        "inferredAssumptions": ["联合评审将在本周继续推进。"],
+        "suggestionFields": ["nextBestAction"],
+        "stageRationale": "下一步已经从模糊建议进入清楚推进态。",
+        "evidenceRefs": ["meeting:mtg_followthrough_success_1", "opportunity:opp_followthrough_success_1"],
+        "sourceProvenance": [
+          { "type": "meeting_note", "id": "note_followthrough_success_1", "trust": "TRUSTED" },
+          { "type": "opportunity", "id": "opp_followthrough_success_1", "trust": "SYSTEM_OF_RECORD" }
+        ],
+        "confidence": 88,
+        "openQuestions": [],
+        "boundaryNotes": [
+          "Official write still requires explicit approval and acknowledgment."
+        ],
+        "recommendedNextAction": "锁定联合评审窗口",
+        "noOfficialWriteback": true
+      }
+    },
+    "targetActionType": "crm.update_next_action",
+    "sourcePath": "guarded_ack",
+    "outcome": "ack_success",
+    "expected": {
+      "requiredFollowThroughTypes": ["ack_success_followthrough"],
+      "transitionChecks": [
+        {
+          "followThroughType": "ack_success_followthrough",
+          "updateMode": "resolve",
+          "expectedStatus": "resolved",
+          "expectedResolutionStatus": "resolved",
+          "expectedReconciliationStatus": "not_required"
+        }
+      ],
+      "requiredWritebackTargets": ["audit", "meeting_summary", "opportunity_summary", "checkpoint_memory"]
+    }
+  },
+  {
+    "id": "followthrough-ack-failure-note",
+    "label": "ack failure creates failure follow-through and needs manual resolution",
+    "executionProofSources": [
+      {
+        "id": "exec_followthrough_failure_1",
+        "meetingId": "mtg_followthrough_failure_1",
+        "opportunityId": "opp_followthrough_failure_1",
+        "companyId": "company_followthrough_failure_1",
+        "actionType": "MANUAL_EMAIL_SEND",
+        "sourceArtifactBundleId": "draft_bundle_followthrough_failure_1",
+        "sourceArtifactTitle": "ROI follow-up email draft",
+        "sourceArtifactSummary": "会后 ROI follow-up 已经由 owner 人工发送。",
+        "audience": "customer",
+        "executionIntent": "人工把 reviewed email 发送给客户。",
+        "executionBoundary": "approved 只表示允许人工执行下一步，不代表系统已发送。",
+        "executionRiskLevel": "MEDIUM",
+        "riskReviewSummary": "The wording stayed non-commitment and review-before-send.",
+        "proofNote": "Owner sent the email manually outside Helm.",
+        "externalReference": "gmail-thread-followthrough-failure-1",
+        "followThroughStatus": "waiting_for_customer_reply",
+        "whatWasNotDone": "没有自动创建外部日程。",
+        "evidenceRefs": ["meeting:mtg_followthrough_failure_1", "artifact:email_draft_followthrough_failure_1"],
+        "sourceProvenance": [
+          { "type": "human_execution", "id": "exec_followthrough_failure_1", "trust": "HUMAN_CONFIRMED" }
+        ],
+        "boundaryTrace": [
+          "approved 不等于 executed",
+          "official CRM writeback 仍然没有默认自动执行"
+        ]
+      }
+    ],
+    "targetActionType": "crm.attach_note",
+    "sourcePath": "guarded_ack",
+    "outcome": "ack_failure",
+    "expected": {
+      "requiredFollowThroughTypes": ["failure_followthrough"],
+      "transitionChecks": [
+        {
+          "followThroughType": "failure_followthrough",
+          "updateMode": "resolve",
+          "expectedStatus": "resolved",
+          "expectedResolutionStatus": "resolved",
+          "expectedReconciliationStatus": "resolved"
+        }
+      ],
+      "requiredWritebackTargets": ["audit", "meeting_summary", "opportunity_summary", "checkpoint_memory", "manager_attention_summary"]
+    }
+  },
+  {
+    "id": "followthrough-stale-receipt-next-action",
+    "label": "stale receipt stays in reconciliation and keeps blocker summary impact visible",
+    "shadowSource": {
+      "meetingId": "mtg_followthrough_stale_1",
+      "opportunityId": "opp_followthrough_stale_1",
+      "companyId": "company_followthrough_stale_1",
+      "bundleId": "bundle_followthrough_stale_1",
+      "currentStage": "DISCOVERY",
+      "currentNextAction": "安排 ROI 跟进",
+      "sourceTitle": "Northwind Expansion",
+      "delta": {
+        "artifactId": "opportunity_delta.json",
+        "stageShadowFrom": "DISCOVERY",
+        "stageShadowTo": "ADVANCING",
+        "probabilityDelta": 8,
+        "decisionCriteria": [
+          {
+            "label": "联合评审窗口已出现",
+            "status": "confirmed",
+            "source": "fact_derived",
+            "evidenceRefs": ["meeting:mtg_followthrough_stale_1"]
+          }
+        ],
+        "championStatus": "emerging",
+        "blockers": [],
+        "riskFlags": [],
+        "nextBestAction": "更新 official next action，但不要自动更新 official stage。",
+        "managerAttentionRequired": false,
+        "factDerived": ["客户要求先看 ROI follow-up。"],
+        "inferredAssumptions": ["联合评审会继续推进。"],
+        "suggestionFields": ["nextBestAction"],
+        "stageRationale": "虽然推进更明确，但 official outcome 仍需 receipt 验证。",
+        "evidenceRefs": ["meeting:mtg_followthrough_stale_1", "opportunity:opp_followthrough_stale_1"],
+        "sourceProvenance": [
+          { "type": "meeting_note", "id": "note_followthrough_stale_1", "trust": "TRUSTED" },
+          { "type": "opportunity", "id": "opp_followthrough_stale_1", "trust": "SYSTEM_OF_RECORD" }
+        ],
+        "confidence": 84,
+        "openQuestions": ["receipt 归属仍需要人工确认。"],
+        "boundaryNotes": [
+          "Stage-adjacent official updates remain outside limited auto."
+        ],
+        "recommendedNextAction": "安排联合评审 follow-up",
+        "noOfficialWriteback": true
+      }
+    },
+    "targetActionType": "crm.update_next_action",
+    "sourcePath": "guarded_ack",
+    "outcome": "receipt_stale",
+    "expected": {
+      "requiredFollowThroughTypes": ["stale_receipt_followthrough"],
+      "transitionChecks": [
+        {
+          "followThroughType": "stale_receipt_followthrough",
+          "updateMode": "mark_awaiting_external_receipt",
+          "expectedStatus": "awaiting_external_receipt",
+          "expectedResolutionStatus": "open",
+          "expectedReconciliationStatus": "required"
+        }
+      ],
+      "requiredWritebackTargets": ["audit", "meeting_summary", "opportunity_summary", "checkpoint_memory", "blocker_summary", "manager_attention_summary"]
+    }
+  },
+  {
+    "id": "followthrough-manual-override-next-action",
+    "label": "manual override creates escalation follow-through with force manual path still available",
+    "shadowSource": {
+      "meetingId": "mtg_followthrough_override_1",
+      "opportunityId": "opp_followthrough_override_1",
+      "companyId": "company_followthrough_override_1",
+      "bundleId": "bundle_followthrough_override_1",
+      "currentStage": "CONTACTED",
+      "currentNextAction": "确认 ROI follow-up 和预算 owner",
+      "sourceTitle": "Fabrikam Expansion",
+      "delta": {
+        "artifactId": "opportunity_delta.json",
+        "stageShadowFrom": "CONTACTED",
+        "stageShadowTo": "ADVANCING",
+        "probabilityDelta": 9,
+        "decisionCriteria": [
+          {
+            "label": "客户接受先发 ROI summary",
+            "status": "confirmed",
+            "source": "fact_derived",
+            "evidenceRefs": ["meeting:mtg_followthrough_override_1"]
+          }
+        ],
+        "championStatus": "emerging",
+        "blockers": [],
+        "riskFlags": [],
+        "nextBestAction": "更新 official next action，但保留 force manual path。",
+        "managerAttentionRequired": false,
+        "factDerived": ["客户接受先发 ROI summary。"],
+        "inferredAssumptions": ["下轮联合评审仍需 seller 亲自推进。"],
+        "suggestionFields": ["nextBestAction"],
+        "stageRationale": "可以推进 next action，但仍可随时切回 manual path。",
+        "evidenceRefs": ["meeting:mtg_followthrough_override_1", "opportunity:opp_followthrough_override_1"],
+        "sourceProvenance": [
+          { "type": "meeting_note", "id": "note_followthrough_override_1", "trust": "TRUSTED" },
+          { "type": "opportunity", "id": "opp_followthrough_override_1", "trust": "SYSTEM_OF_RECORD" }
+        ],
+        "confidence": 86,
+        "openQuestions": [],
+        "boundaryNotes": [
+          "Force manual path remains available."
+        ],
+        "recommendedNextAction": "安排联合评审 follow-up",
+        "noOfficialWriteback": true
+      }
+    },
+    "targetActionType": "crm.update_next_action",
+    "sourcePath": "limited_auto_manual_override",
+    "outcome": "manual_override",
+    "expected": {
+      "requiredFollowThroughTypes": ["escalation_followthrough"],
+      "transitionChecks": [
+        {
+          "followThroughType": "escalation_followthrough",
+          "updateMode": "force_manual_fallback",
+          "expectedStatus": "awaiting_manual_action",
+          "expectedResolutionStatus": "open",
+          "expectedReconciliationStatus": "not_required"
+        }
+      ],
+      "requiredWritebackTargets": ["audit", "meeting_summary", "opportunity_summary", "checkpoint_memory"]
+    }
+  }
+]

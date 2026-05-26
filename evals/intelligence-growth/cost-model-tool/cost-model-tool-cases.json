@@ -1,0 +1,184 @@
+[
+  {
+    "id": "cmt-001",
+    "dimension": "cost_model_tool",
+    "description": "Efficient token usage with zero tool boundary hits and no model downgrade evaluated — learning candidate for cost baseline.",
+    "input": {
+      "dimension": "cost_model_tool",
+      "evalRunId": "eval-run-cmt-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-cmt-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tokenUsagePerCall": 1200,
+      "modelId": "model-alias-standard",
+      "toolBoundaryHitCount": 0,
+      "modelDowngradeCandidateEvaluated": false
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Efficient token usage at 1200 with no boundary hits. Clean cost efficiency baseline case.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "cmt-002",
+    "dimension": "cost_model_tool",
+    "description": "Moderate token usage with model downgrade candidate evaluated — learning candidate for downgrade path study.",
+    "input": {
+      "dimension": "cost_model_tool",
+      "evalRunId": "eval-run-cmt-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-cmt-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tokenUsagePerCall": 2800,
+      "modelId": "model-alias-premium",
+      "toolBoundaryHitCount": 0,
+      "modelDowngradeCandidateEvaluated": true
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Model downgrade candidate was evaluated offline (not applied). 2800 tokens is moderate. Good case for cost optimization study.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "cmt-003",
+    "dimension": "cost_model_tool",
+    "description": "Low token usage with one tool boundary hit — watch_only given the boundary contact.",
+    "input": {
+      "dimension": "cost_model_tool",
+      "evalRunId": "eval-run-cmt-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-cmt-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tokenUsagePerCall": 800,
+      "modelId": "model-alias-standard",
+      "toolBoundaryHitCount": 1,
+      "modelDowngradeCandidateEvaluated": false
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "One tool boundary hit on an otherwise efficient call. Monitoring the boundary hit pattern before advancement.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "cmt-004",
+    "dimension": "cost_model_tool",
+    "description": "High token usage with model downgrade evaluated and no boundary hits — learning candidate for premium call pattern.",
+    "input": {
+      "dimension": "cost_model_tool",
+      "evalRunId": "eval-run-cmt-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-cmt-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tokenUsagePerCall": 3800,
+      "modelId": "model-alias-premium",
+      "toolBoundaryHitCount": 0,
+      "modelDowngradeCandidateEvaluated": true
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "High token use on premium model with downgrade candidate evaluated offline. Useful training case for premium-to-standard optimization.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "cmt-005",
+    "dimension": "cost_model_tool",
+    "description": "Very low token usage with standard model and no boundary hits — learning candidate for minimal cost call tracking.",
+    "input": {
+      "dimension": "cost_model_tool",
+      "evalRunId": "eval-run-cmt-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-cmt-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tokenUsagePerCall": 350,
+      "modelId": "model-alias-standard",
+      "toolBoundaryHitCount": 0,
+      "modelDowngradeCandidateEvaluated": false
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Very low token usage with no boundary hits. Excellent minimal cost call baseline case.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "cmt-006",
+    "dimension": "cost_model_tool",
+    "description": "NEGATIVE: Token usage extremely high, far exceeding any known budget — review required.",
+    "input": {
+      "dimension": "cost_model_tool",
+      "evalRunId": "eval-run-cmt-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-cmt-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tokenUsagePerCall": 32000,
+      "modelId": "model-alias-premium",
+      "toolBoundaryHitCount": 0,
+      "modelDowngradeCandidateEvaluated": false
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "32000 tokens per call far exceeds any expected budget ceiling. Human review required to diagnose runaway consumption.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "cmt-007",
+    "dimension": "cost_model_tool",
+    "description": "NEGATIVE: Multiple tool boundary hits indicating repeated constraint violations — rejected.",
+    "input": {
+      "dimension": "cost_model_tool",
+      "evalRunId": "eval-run-cmt-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-cmt-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tokenUsagePerCall": 2100,
+      "modelId": "model-alias-standard",
+      "toolBoundaryHitCount": 9,
+      "modelDowngradeCandidateEvaluated": false
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "9 tool boundary hits indicate a pattern of constraint violations. Call type rejected until tool boundary adherence is verified.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "cmt-008",
+    "dimension": "cost_model_tool",
+    "description": "NEGATIVE: Zero token usage with no evidence refs — invalid call record, rejected.",
+    "input": {
+      "dimension": "cost_model_tool",
+      "evalRunId": "eval-run-cmt-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [],
+      "tokenUsagePerCall": 0,
+      "modelId": "model-alias-standard",
+      "toolBoundaryHitCount": 0,
+      "modelDowngradeCandidateEvaluated": false
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Zero token usage and no evidence refs. Invalid call record that cannot be used for cost model training.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]
