@@ -54,7 +54,7 @@ review_after: 2026-10-10
 
 ## 风险项
 
-- [`next.config.ts`](/Users/tommyqian/Documents/GitHub/helm2026-operator-debugger-phase2-verify/next.config.ts) 仍有既有的 Turbopack/NFT tracing warning；这不是本阶段引入的新失败
+- [`next.config.ts`](../../next.config.ts) 仍有既有的 Turbopack/NFT tracing warning；这不是本阶段引入的新失败
 - 原始工作区仍保留一批与你这轮无关的独立改动和本地垃圾文件，如果不分流，后续任何分支都还会继续受到污染
 - 当前 recovery guard 统一的是 8 条 bounded write path，还不是所有未来 recovery move 的完整 execution policy
 

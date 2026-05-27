@@ -29,20 +29,20 @@ review_after: 2026-10-21
 ## 2. 已交付
 
 - read-only validator helper：
-  - [lib/solution-extension-manifests.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/solution-extension-manifests.ts)
+  - [lib/solution-extension-manifests.ts](../../lib/solution-extension-manifests.ts)
 - validator regression tests：
-  - [lib/solution-extension-manifests.test.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/solution-extension-manifests.test.ts)
+  - [lib/solution-extension-manifests.test.ts](../../lib/solution-extension-manifests.test.ts)
 - Guangpu sample bundle manifest upgrade：
-  - [extensions/guangpu/seat-profile/extension.manifest.json](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/seat-profile/extension.manifest.json)
-  - [extensions/guangpu/bi-report/extension.manifest.json](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/bi-report/extension.manifest.json)
-  - [extensions/guangpu/midun-integrate/extension.manifest.json](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/midun-integrate/extension.manifest.json)
+  - [extensions/guangpu/seat-profile/extension.manifest.json](../../extensions/guangpu/seat-profile/extension.manifest.json)
+  - [extensions/guangpu/bi-report/extension.manifest.json](../../extensions/guangpu/bi-report/extension.manifest.json)
+  - [extensions/guangpu/midun-integrate/extension.manifest.json](../../extensions/guangpu/midun-integrate/extension.manifest.json)
 - self-check / boundary wiring：
-  - [scripts/helm-self-check.ts](/Users/tommyqian/Documents/GitHub/helm2026/scripts/helm-self-check.ts)
-  - [scripts/decision-first-boundary-check.ts](/Users/tommyqian/Documents/GitHub/helm2026/scripts/decision-first-boundary-check.ts)
+  - [scripts/helm-self-check.ts](../../scripts/helm-self-check.ts)
+  - [scripts/decision-first-boundary-check.ts](../../scripts/decision-first-boundary-check.ts)
 - plan / index sync：
-  - [PLANS.md](/Users/tommyqian/Documents/GitHub/helm2026/PLANS.md)
-  - [docs/README.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/README.md)
-  - [HELM_EXTENSION_BUNDLE_READ_ONLY_VALIDATION_ADOPTION_PLAN_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_EXTENSION_BUNDLE_READ_ONLY_VALIDATION_ADOPTION_PLAN_V1.md)
+  - [PLANS.md](../../PLANS.md)
+  - [docs/README.md](../README.md)
+  - [HELM_EXTENSION_BUNDLE_READ_ONLY_VALIDATION_ADOPTION_PLAN_V1.md](./HELM_EXTENSION_BUNDLE_READ_ONLY_VALIDATION_ADOPTION_PLAN_V1.md)
 
 ## 3. 当前结论
 

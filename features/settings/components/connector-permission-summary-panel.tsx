@@ -117,8 +117,8 @@ export function ConnectorPermissionSummaryPanel({
           </p>
           <p className="mt-2">
             {english
-              ? "The auto lane only permits source reads and review packet preparation. Customer-visible send, CRM stage write, approval, payment, pricing commitment and external write remain review-required or never allowed."
-              : "自动允许项只覆盖来源读取和复核材料准备。客户可见发送、CRM 阶段写回、审批、付款、报价承诺和外部写回都继续保持需复核或永不允许。"}
+              ? "This is not a connector control plane. The auto lane only permits source reads and review packet preparation. Customer-visible send, CRM stage write, approval, payment, pricing commitment and external write remain review-required or never allowed."
+              : "这里不是连接器控制面。自动允许项只覆盖来源读取和复核材料准备。客户可见发送、CRM 阶段写回、审批、付款、报价承诺和外部写回都继续保持需复核或永不允许。"}
           </p>
         </div>
 

@@ -44,10 +44,10 @@ review_after: 2026-07-11
 
 首轮建议只覆盖：
 
-- [app/page.tsx](/Users/tommyqian/Documents/GitHub/helm2026/app/page.tsx)
-- [features/auth/login-panel.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/auth/login-panel.tsx)
-- [features/dashboard/goal-driven-home-surface.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/goal-driven-home-surface.tsx)
-- [lib/operating-system/goal-driven-home.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/operating-system/goal-driven-home.ts)
+- [app/page.tsx](../../app/page.tsx)
+- [features/auth/login-panel.tsx](../../features/auth/login-panel.tsx)
+- [features/dashboard/goal-driven-home-surface.tsx](../../features/dashboard/goal-driven-home-surface.tsx)
+- [lib/operating-system/goal-driven-home.ts](../../lib/operating-system/goal-driven-home.ts)
 
 首轮不强制覆盖，但需要保持兼容的面：
 
@@ -339,7 +339,7 @@ npm run quality:regression
 
 如果后续进入实现并完成页面改稿，应同步检查：
 
-- [HELM_CHINA_MARKET_MESSAGING_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/brand/HELM_CHINA_MARKET_MESSAGING_V1.md)
-- [README.md](/Users/tommyqian/Documents/GitHub/helm2026/README.md)
-- [docs/README.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/README.md)
+- [HELM_CHINA_MARKET_MESSAGING_V1.md](../brand/HELM_CHINA_MARKET_MESSAGING_V1.md)
+- [README.md](../../README.md)
+- [docs/README.md](../README.md)
 - 相关 page/report docs

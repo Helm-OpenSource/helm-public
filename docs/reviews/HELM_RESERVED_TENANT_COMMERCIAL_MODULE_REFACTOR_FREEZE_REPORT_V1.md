@@ -110,7 +110,7 @@ review_after: 2026-10-17
 
 ```bash
 npx vitest run lib/billing/settlement-evidence.test.ts lib/billing/settlement-exceptions.test.ts lib/billing/settlement-ops-proof-pack.test.ts lib/billing/payout-rail-readiness.test.ts lib/billing/payout-rail-pilot-cohort.test.ts features/settings/formatters/billing-readout-narratives.test.ts
-set -a && source /Users/tommyqian/Documents/GitHub/helm2026/.env.local && set +a && npm run self-check
+set -a && source <repo-root>/.env.local && set +a && npm run self-check
 npm run check:boundaries
 npm run typecheck
 git diff --check

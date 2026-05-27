@@ -27,11 +27,11 @@ review_after: 2026-10-13
 ## 2. 已交付
 
 - backfill helper：
-  - [lib/guangpu-seat-profile-extension-key-backfill.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/guangpu-seat-profile-extension-key-backfill.ts)
+  - [lib/guangpu-seat-profile-extension-key-backfill.ts](../../lib/guangpu-seat-profile-extension-key-backfill.ts)
 - operator command：
-  - [scripts/backfill-guangpu-seat-profile-extension-key.ts](/Users/tommyqian/Documents/GitHub/helm2026/scripts/backfill-guangpu-seat-profile-extension-key.ts)
+  - [scripts/backfill-guangpu-seat-profile-extension-key.ts](../../scripts/backfill-guangpu-seat-profile-extension-key.ts)
 - regression：
-  - [lib/guangpu-seat-profile-extension-key-backfill.test.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/guangpu-seat-profile-extension-key-backfill.test.ts)
+  - [lib/guangpu-seat-profile-extension-key-backfill.test.ts](../../lib/guangpu-seat-profile-extension-key-backfill.test.ts)
 - 命令面：
   - `npm run backfill:guangpu-seat-profile:inventory`
   - `npm run backfill:guangpu-seat-profile:apply -- --workspace-id=<workspaceId>`

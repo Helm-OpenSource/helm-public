@@ -51,7 +51,7 @@ review_after: 2026-10-10
 
 - 如果未来继续扩 write path 但漏接 refresh reason 或 write-side anchor，persisted snapshot 仍可能进入 `drifted`
 - 当前 persisted lifecycle 仍依赖 event-derived canonical truth；一旦 event truth 自身出现缺口，persisted snapshot 只能 fallback，不能自行修复为完整 engine
-- [`next.config.ts`](/Users/tommyqian/Documents/GitHub/helm2026/next.config.ts) 仍有既有的 Turbopack/NFT tracing warning；这不是本阶段引入的新失败
+- [`next.config.ts`](../../next.config.ts) 仍有既有的 Turbopack/NFT tracing warning；这不是本阶段引入的新失败
 
 ## 必须继续诚实保留的边界
 

@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { OpportunityStage, OpportunityType, RiskLevel, WorkspaceStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { confirmMeetingFactsRuntime, ingestMeetingEndedRuntime } from "@/lib/helm-v2/meeting-action-pack-runtime";
 import { getMeetingOpportunityJudgeRuntimeSummary, reviewOpportunityJudgeRuntime } from "@/lib/helm-v2/opportunity-judge-runtime";
+import { describeMySqlRuntime } from "@/lib/test/mysql-runtime-suite";
 
 const cleanupWorkspaceIds: string[] = [];
 
@@ -89,7 +90,7 @@ afterEach(async () => {
   }
 });
 
-describe("Helm v2 opportunity judge runtime", () => {
+describeMySqlRuntime("Helm v2 opportunity judge runtime", () => {
   it("requires separate review before shadow consume and still keeps official stage unchanged", async () => {
     const fixture = await createOpportunityJudgeFixture();
 

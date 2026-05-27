@@ -8,8 +8,8 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
   const scripts = {
     "delivery:doctor": "tsx scripts/delivery-engineer-doctor.ts",
     "pack:fixture-check": "tsx scripts/pack-fixture-check.ts",
-    "eval:headless-signal-interface": "tsx scripts/headless-signal-interface-evals.ts",
-    "eval:operating-signal-flow": "tsx scripts/operating-signal-flow-evals.ts",
+    "eval:headless-signal-interface": "node --import tsx scripts/headless-signal-interface-evals.ts",
+    "eval:operating-signal-flow": "node --import tsx scripts/operating-signal-flow-evals.ts",
     "check:public-release": "tsx scripts/public-release-guard.ts",
     "check:boundaries": "tsx scripts/decision-first-boundary-check.ts",
     "self-check": "tsx scripts/helm-self-check-refactored.ts",

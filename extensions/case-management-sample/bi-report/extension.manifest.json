@@ -1,0 +1,73 @@
+{
+  "manifestVersion": "1",
+  "bundleVersion": "2026.05.26",
+  "extensionKey": "case-management-sample-bi-report",
+  "tenantKey": "case-management-sample",
+  "extensionSlug": "bi-report",
+  "displayName": "Case Management Sample BI Report",
+  "kind": "TENANT_CUSTOM",
+  "status": "ACTIVE",
+  "owner": "helm-open-source",
+  "nonCoreDeclaration": true,
+  "compatibility": {
+    "minRuntimeContractVersion": "2026.05.26-public-sample",
+    "supportedWorkspaceClasses": [
+      "CUSTOMER"
+    ],
+    "requiredFeatures": [
+      "WorkspaceSolutionExtension",
+      "BiReportSkill"
+    ]
+  },
+  "migrationHints": [
+    "bundle_manifest_read_only_validation_phase4"
+  ],
+  "runtimeDeclarations": {
+    "workers": [],
+    "skills": [
+      "bi-report-p0-process"
+    ],
+    "resources": [],
+    "hooks": [],
+    "monitors": [],
+    "surfaces": [
+      "/reports"
+    ]
+  },
+  "capabilityManifest": {
+    "capabilityDeclarations": [
+      "case_report_preview"
+    ],
+    "maxEffectMode": "read_only",
+    "customerFacingAllowed": false,
+    "requiresReviewByDefault": true,
+    "nonCommitmentOnly": true
+  },
+  "dependencyDeclarations": {
+    "connectors": [
+      "case-report-source"
+    ],
+    "workspaceTruths": [
+      "WorkspaceSolutionExtension"
+    ],
+    "policyTruths": [
+      "review-first"
+    ]
+  },
+  "documentationPointers": {
+    "readme": "../README.md",
+    "docs": [
+      "../hsi-implementation-checklist.md"
+    ]
+  },
+  "evalContract": {
+    "fixtures": [],
+    "checks": [
+      "manifest.test.ts"
+    ]
+  },
+  "summary": "Public sample BI report bundle for read-only process reporting.",
+  "surfaces": [
+    "/reports"
+  ]
+}

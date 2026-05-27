@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { OpportunityStage, OpportunityType, RiskLevel, WorkspaceStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
@@ -8,6 +8,7 @@ import {
   reviewDraftCommsRuntime,
   runDraftCommsHandoffRuntime,
 } from "@/lib/helm-v2/draft-comms-handoff-runtime";
+import { describeMySqlRuntime } from "@/lib/test/mysql-runtime-suite";
 
 const cleanupWorkspaceIds: string[] = [];
 
@@ -114,7 +115,7 @@ async function confirmFixtureMeeting(input: Awaited<ReturnType<typeof createSpri
   });
 }
 
-describe("Helm v2 draft-only comms runtime", () => {
+describeMySqlRuntime("Helm v2 draft-only comms runtime", () => {
   it("persists proposal composer, comms scheduler, risk guard, and review-before-send bundles", async () => {
     const fixture = await createSprint3Fixture();
     await confirmFixtureMeeting(fixture);

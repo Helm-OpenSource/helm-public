@@ -7,9 +7,6 @@ const scanRoot = "app/api";
 const inventoryDocumentPath =
   "docs/product/HELM_API_WORKSPACE_DEFAULT_LOCALE_INVENTORY.md";
 const sourceExtensions = new Set([".ts", ".tsx"]);
-const tenantPrivateExtensionKey = ["guang", "pu"].join("");
-const tenantPrivateIntegrationKey = `${["mi", "dun"].join("")}-integrate`;
-const tenantPrivateAccountBindingBase = `app/api/extensions/${tenantPrivateExtensionKey}/${tenantPrivateIntegrationKey}/accountBinding`;
 
 const reviewedApiWorkspaceDefaultLocaleEntries = [
   {
@@ -19,6 +16,14 @@ const reviewedApiWorkspaceDefaultLocaleEntries = [
   {
     path: "app/api/auth/dingtalk/start/route.ts",
     documentToken: "app/api/auth/dingtalk/start/route.ts",
+  },
+  {
+    path: "app/api/auth/feishu/callback/route.ts",
+    documentToken: "app/api/auth/feishu/callback/route.ts",
+  },
+  {
+    path: "app/api/auth/feishu/start/route.ts",
+    documentToken: "app/api/auth/feishu/start/route.ts",
   },
   {
     path: "app/api/auth/wecom/callback/route.ts",
@@ -147,16 +152,6 @@ const reviewedApiWorkspaceDefaultLocaleEntries = [
   {
     path: "app/api/evolution/strategy-suggestions/route.ts",
     documentToken: "app/api/evolution/strategy-suggestions/route.ts",
-  },
-  {
-    path: `${tenantPrivateAccountBindingBase}/callback/route.ts`,
-    documentToken:
-      "app/api/extensions/<tenant-private>/<tenant-private-integration>/accountBinding/callback/route.ts",
-  },
-  {
-    path: `${tenantPrivateAccountBindingBase}/start/route.ts`,
-    documentToken:
-      "app/api/extensions/<tenant-private>/<tenant-private-integration>/accountBinding/start/route.ts",
   },
   {
     path: "app/api/helm-v2/runtime/artifacts/[id]/confirm/route.ts",
@@ -382,14 +377,13 @@ const apiMessageOwnerRules = [
 ] as const;
 
 const expectedApiMessageOwnerCounts: Record<string, number> = {
-  auth: 4,
+  auth: 6,
   blockers: 3,
   briefings: 1,
   commitments: 2,
   connectors: 3,
   "conversation-capture": 5,
   evolution: 14,
-  "tenant-private-extension": 2,
   "helm-v2-runtime": 17,
   imports: 5,
   "internal-commercialization": 2,

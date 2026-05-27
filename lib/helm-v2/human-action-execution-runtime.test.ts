@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { ArtifactBundleStatus, OpportunityStage, OpportunityType, RiskLevel, WorkspaceStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
@@ -10,6 +10,7 @@ import {
 } from "@/lib/helm-v2/human-action-execution-runtime";
 import { confirmMeetingFactsRuntime, ingestMeetingEndedRuntime } from "@/lib/helm-v2/meeting-action-pack-runtime";
 import { reviewOpportunityJudgeRuntime, runOpportunityJudgeRuntime } from "@/lib/helm-v2/opportunity-judge-runtime";
+import { describeMySqlRuntime } from "@/lib/test/mysql-runtime-suite";
 
 const cleanupWorkspaceIds: string[] = [];
 
@@ -155,7 +156,7 @@ afterEach(async () => {
   }
 });
 
-describe("Helm v2 human action execution runtime", () => {
+describeMySqlRuntime("Helm v2 human action execution runtime", () => {
   it("creates manual execution actions from approved draft comms and approved shadow judgement, then records proof write-back", async () => {
     const fixture = await createSprint5Fixture();
     await runApprovedSprint5Sources(fixture);

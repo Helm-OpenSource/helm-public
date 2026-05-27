@@ -282,7 +282,7 @@ Owner：Helm Core
 如果继续沿这条线推进，下一步只应该是二选一：
 
 1. 继续停在 planning-only，等待主线 batch 收口
-2. 如果必须前移验证，只按 [HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_BATCH_A_EXECUTION_CHECKLIST_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_BATCH_A_EXECUTION_CHECKLIST_V1.md) 的 preflight、顺序和 targeted validation 开 `Batch A`
+2. 如果必须前移验证，只按 [HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_BATCH_A_EXECUTION_CHECKLIST_V1.md](./HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_BATCH_A_EXECUTION_CHECKLIST_V1.md) 的 preflight、顺序和 targeted validation 开 `Batch A`
 
 当前不建议直接做：
 

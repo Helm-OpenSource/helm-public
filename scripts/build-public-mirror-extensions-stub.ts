@@ -114,6 +114,8 @@ export type BiBoardContribution = {
   ctaLabelChinese: string;
 };
 
+const PUBLIC_OPTIONAL_BI_BOARD_QUERY = "&optional=1";
+
 export type ResolvedApprovalsExtensions = {
   biBoard: BiBoardContribution | null;
 };
@@ -290,7 +292,7 @@ export async function persistBiReportP0ProcessSignals(_input: {
   sopRows?: BiReportP0ProcessSopRow[];
   signalRouting?: BiReportSignalRoutingConfig;
 }) {
-  return { written: 0, skipped: 0, runId: null };
+  return { written: 0, skipped: 0, runId: null, persistedSignals: [] };
 }
 
 export function listRegisteredSignalCollectionJobs(): SignalCollectionJob[] {

@@ -51,7 +51,7 @@ Phase 3T **不是**：
 | 当前工作树 `DATABASE_URL` | 不存在 |
 | 当前工作树 `WORKSPACE_ID` | 不存在 |
 | 当前工作树 `HELM_PHASE3P_WORKSPACE_ID` | 不存在 |
-| 主仓库 `/Users/tommyqian/Documents/GitHub/helm2026/.env.local` | 存在 |
+| 主仓库 `<repo-root>/.env.local` | 存在 |
 | 主仓库 `DATABASE_URL` 协议 | `mysql` |
 | 主仓库 `DATABASE_URL` host | `rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306` |
 | 主仓库 `DATABASE_URL` 数据库名 | `helm2026` |

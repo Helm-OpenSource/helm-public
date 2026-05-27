@@ -53,7 +53,7 @@ export default async function GettingStartedPage({
         <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-6 py-16 lg:px-10">
           <section className="space-y-3" data-testid="first-login-identity-completion">
             <h1 className="text-balance text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
-              {english ? "Finish setting up your identity." : "完成身份初始化。"}
+              {english ? "Finish setting up your identity." : "首次登录初始化"}
             </h1>
             <p className="text-sm leading-6 text-[color:var(--muted)]">
               {english

@@ -169,6 +169,15 @@ npm run lint
 npm run test
 ```
 
+说明：
+
+- 默认 `npm run test` 会跳过 6 个 Helm v2 MySQL runtime integration suites，避免 fresh clone 被本机 MySQL 前置直接卡死。
+- 需要显式验证这批 runtime integration 时，再单独开启：
+
+```bash
+HELM_RUN_MYSQL_RUNTIME_TESTS=1 npx vitest run lib/helm-v2/*runtime.test.ts
+```
+
 如果你打算改东西并提 PR，建议在提交前跑完整链：
 
 ```bash

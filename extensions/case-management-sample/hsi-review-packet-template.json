@@ -1,0 +1,25 @@
+{
+  "packId": "case-management-sample",
+  "templateVersion": "1.0.0",
+  "defaults": {
+    "humanReviewerRequired": true,
+    "notForAutoSend": true,
+    "sent": false,
+    "approved": false,
+    "executed": false,
+    "committed": false,
+    "officialWritePerformed": false,
+    "allowedNextSurface": "review_packet",
+    "requiredReviewSurface": "review_packet",
+    "forbiddenActions": [
+      "execute_action",
+      "send_message",
+      "approve",
+      "write_crm_stage",
+      "create_contract",
+      "settle_payment",
+      "auto_assign_owner",
+      "promote_to_memory"
+    ]
+  }
+}

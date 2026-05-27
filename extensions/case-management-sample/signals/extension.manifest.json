@@ -1,0 +1,74 @@
+{
+  "manifestVersion": "1",
+  "bundleVersion": "2026.05.26",
+  "extensionKey": "case-management-sample-signals",
+  "tenantKey": "case-management-sample",
+  "extensionSlug": "signals",
+  "displayName": "Case Management Sample Signals",
+  "kind": "TENANT_CUSTOM",
+  "status": "ACTIVE",
+  "owner": "helm-open-source",
+  "nonCoreDeclaration": true,
+  "compatibility": {
+    "minRuntimeContractVersion": "2026.05.26-public-sample",
+    "supportedWorkspaceClasses": [
+      "CUSTOMER"
+    ],
+    "requiredFeatures": [
+      "WorkspaceSolutionExtension",
+      "HeadlessSignalInterface"
+    ]
+  },
+  "migrationHints": [
+    "bundle_manifest_read_only_validation_phase4"
+  ],
+  "runtimeDeclarations": {
+    "workers": [],
+    "skills": [],
+    "resources": [],
+    "hooks": [],
+    "monitors": [],
+    "surfaces": [
+      "/imports",
+      "/memory"
+    ]
+  },
+  "capabilityManifest": {
+    "capabilityDeclarations": [
+      "case_signal_mapping"
+    ],
+    "maxEffectMode": "read_only",
+    "customerFacingAllowed": false,
+    "requiresReviewByDefault": true,
+    "nonCommitmentOnly": true
+  },
+  "dependencyDeclarations": {
+    "connectors": [
+      "case-import-source"
+    ],
+    "workspaceTruths": [
+      "WorkspaceSolutionExtension"
+    ],
+    "policyTruths": [
+      "review-first"
+    ]
+  },
+  "documentationPointers": {
+    "readme": "../README.md",
+    "docs": [
+      "../hsi-implementation-checklist.md"
+    ]
+  },
+  "evalContract": {
+    "fixtures": [],
+    "checks": [
+      "types.test.ts",
+      "case/case-mapper.test.ts"
+    ]
+  },
+  "summary": "Public sample signal mapping bundle for read-only validation.",
+  "surfaces": [
+    "/imports",
+    "/memory"
+  ]
+}

@@ -32,8 +32,8 @@ review_after: 2026-07-15
 
 这份协议建立在以下 current-main truth 上：
 
-- `Worker / Skill / Resource / Solution Extension / Commercial` 分类已冻结在 [HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)
-- `WorkspaceSolutionExtension` 已作为 workspace-level enablement seam 存在于 [prisma/schema.prisma](/Users/tommyqian/Documents/GitHub/helm2026/prisma/schema.prisma)
+- `Worker / Skill / Resource / Solution Extension / Commercial` 分类已冻结在 [HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md](./HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)
+- `WorkspaceSolutionExtension` 已作为 workspace-level enablement seam 存在于 [prisma/schema.prisma](../../prisma/schema.prisma)
 - shared runtime substrate 仍可保留在 `lib/`、`app/`、`features/` 等 current-main shared namespace
 - tenant custom code 现在已经开始迁入 `extensions/guangpu/*`
 

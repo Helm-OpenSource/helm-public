@@ -35,7 +35,7 @@ review_after: 2026-10-13
 
 ## 3. 迁移脚本与产物
 
-- 脚本：[`scripts/sqlite-to-mysql-migration.ts`](/Users/chm/CodexWorkSpace/helm2026-main/scripts/sqlite-to-mysql-migration.ts)
+- 脚本：[`scripts/sqlite-to-mysql-migration.ts`](../../scripts/sqlite-to-mysql-migration.ts)
 - 产物目录：`.tmp/sqlite-mysql-migration/latest`
   - `export/manifest.json`
   - `reports/import-summary.json`

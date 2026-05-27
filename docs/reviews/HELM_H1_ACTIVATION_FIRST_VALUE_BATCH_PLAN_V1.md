@@ -33,15 +33,15 @@ Owner：Helm Core
 current-main 已经具备以下基础：
 
 - dashboard 首屏已有 `Home work entry` block  
-  见 [features/dashboard/home-work-entry.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/home-work-entry.ts:1)
+  见 [features/dashboard/home-work-entry.ts](../../features/dashboard/home-work-entry.ts:1)
 - setup 完成后已有 `setup-first-loop` handoff  
-  见 [features/dashboard/setup-first-loop-handoff.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/setup-first-loop-handoff.ts:1) 与 [features/settings/setup-wizard.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/settings/setup-wizard.tsx:246)
+  见 [features/dashboard/setup-first-loop-handoff.ts](../../features/dashboard/setup-first-loop-handoff.ts:1) 与 [features/settings/setup-wizard.tsx](../../features/settings/setup-wizard.tsx:246)
 - shared first-loop read model 已成立  
-  见 [lib/operating-system/first-loop.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/operating-system/first-loop.ts:1)
+  见 [lib/operating-system/first-loop.ts](../../lib/operating-system/first-loop.ts:1)
 - diagnostics 已有按用户聚合的 first-loop adoption readout  
-  见 [features/diagnostics/first-loop-adoption.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/diagnostics/first-loop-adoption.ts:1)
+  见 [features/diagnostics/first-loop-adoption.ts](../../features/diagnostics/first-loop-adoption.ts:1)
 - 首页和 first-loop 的现有 freeze 结论已成立  
-  见 [HELM_FIRST_LOOP_AND_HOME_SURFACE_FREEZE_REPORT_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_FIRST_LOOP_AND_HOME_SURFACE_FREEZE_REPORT_V1.md:1)
+  见 [HELM_FIRST_LOOP_AND_HOME_SURFACE_FREEZE_REPORT_V1.md](./HELM_FIRST_LOOP_AND_HOME_SURFACE_FREEZE_REPORT_V1.md:1)
 
 当前不成立的仍然是：
 
@@ -96,11 +96,11 @@ H1 实施时继续保持：
 
 **范围**
 
-- [features/dashboard/home-work-entry.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/home-work-entry.ts:1)
-- [features/dashboard/home-work-entry-surface.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/home-work-entry-surface.tsx:1)
-- [features/dashboard/page-loader.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/page-loader.ts:1)
-- [features/dashboard/home-work-entry.test.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/home-work-entry.test.ts:1)
-- 视需要薄改 [features/dashboard/goal-driven-home-surface.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/goal-driven-home-surface.tsx:1)
+- [features/dashboard/home-work-entry.ts](../../features/dashboard/home-work-entry.ts:1)
+- [features/dashboard/home-work-entry-surface.tsx](../../features/dashboard/home-work-entry-surface.tsx:1)
+- [features/dashboard/page-loader.ts](../../features/dashboard/page-loader.ts:1)
+- [features/dashboard/home-work-entry.test.ts](../../features/dashboard/home-work-entry.test.ts:1)
+- 视需要薄改 [features/dashboard/goal-driven-home-surface.tsx](../../features/dashboard/goal-driven-home-surface.tsx:1)
 
 **Acceptance criteria**
 
@@ -129,11 +129,11 @@ H1 实施时继续保持：
 
 **范围**
 
-- [features/dashboard/setup-first-loop-handoff.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/setup-first-loop-handoff.ts:1)
-- [features/dashboard/setup-first-loop-handoff.test.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/setup-first-loop-handoff.test.ts:1)
-- [features/settings/setup-wizard.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/settings/setup-wizard.tsx:1)
-- [app/setup/page.tsx](/Users/tommyqian/Documents/GitHub/helm2026/app/setup/page.tsx:1)
-- 视需要薄改 [lib/operating-system/first-loop-query.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/operating-system/first-loop-query.ts:1)
+- [features/dashboard/setup-first-loop-handoff.ts](../../features/dashboard/setup-first-loop-handoff.ts:1)
+- [features/dashboard/setup-first-loop-handoff.test.ts](../../features/dashboard/setup-first-loop-handoff.test.ts:1)
+- [features/settings/setup-wizard.tsx](../../features/settings/setup-wizard.tsx:1)
+- [app/setup/page.tsx](../../app/setup/page.tsx:1)
+- 视需要薄改 [lib/operating-system/first-loop-query.ts](../../lib/operating-system/first-loop-query.ts:1)
 
 **Acceptance criteria**
 
@@ -162,12 +162,12 @@ H1 实施时继续保持：
 
 **范围**
 
-- [features/diagnostics/first-loop-adoption.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/diagnostics/first-loop-adoption.ts:1)
-- [features/diagnostics/first-loop-adoption.test.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/diagnostics/first-loop-adoption.test.ts:1)
-- [features/diagnostics/diagnostics-client.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/diagnostics/diagnostics-client.tsx:1)
-- [features/analytics/queries.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/analytics/queries.ts:1)
-- [features/analytics/analytics-client.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/analytics/analytics-client.tsx:1)
-- 视需要薄改 [features/reports/reports-client.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/reports/reports-client.tsx:1)
+- [features/diagnostics/first-loop-adoption.ts](../../features/diagnostics/first-loop-adoption.ts:1)
+- [features/diagnostics/first-loop-adoption.test.ts](../../features/diagnostics/first-loop-adoption.test.ts:1)
+- [features/diagnostics/diagnostics-client.tsx](../../features/diagnostics/diagnostics-client.tsx:1)
+- [features/analytics/queries.ts](../../features/analytics/queries.ts:1)
+- [features/analytics/analytics-client.tsx](../../features/analytics/analytics-client.tsx:1)
+- 视需要薄改 [features/reports/reports-client.tsx](../../features/reports/reports-client.tsx:1)
 
 **Acceptance criteria**
 
@@ -201,29 +201,29 @@ H1 实施时继续保持：
 
 ### 直接实现面
 
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/home-work-entry.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/home-work-entry-surface.tsx`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/page-loader.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/setup-first-loop-handoff.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/settings/setup-wizard.tsx`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/diagnostics/first-loop-adoption.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/diagnostics/diagnostics-client.tsx`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/analytics/queries.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/analytics/analytics-client.tsx`
+- `features/dashboard/home-work-entry.ts`
+- `features/dashboard/home-work-entry-surface.tsx`
+- `features/dashboard/page-loader.ts`
+- `features/dashboard/setup-first-loop-handoff.ts`
+- `features/settings/setup-wizard.tsx`
+- `features/diagnostics/first-loop-adoption.ts`
+- `features/diagnostics/diagnostics-client.tsx`
+- `features/analytics/queries.ts`
+- `features/analytics/analytics-client.tsx`
 
 ### 直接测试面
 
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/home-work-entry.test.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/setup-first-loop-handoff.test.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/features/diagnostics/first-loop-adoption.test.ts`
+- `features/dashboard/home-work-entry.test.ts`
+- `features/dashboard/setup-first-loop-handoff.test.ts`
+- `features/diagnostics/first-loop-adoption.test.ts`
 
 ### 只读依赖面
 
-- `/Users/tommyqian/Documents/GitHub/helm2026/lib/operating-system/first-loop.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/lib/operating-system/first-loop-query.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/lib/operating-system/goal-driven-home.ts`
-- `/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_FIRST_LOOP_PRD_V1.md`
-- `/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_HOME_SURFACE_RULES_V1.md`
+- `lib/operating-system/first-loop.ts`
+- `lib/operating-system/first-loop-query.ts`
+- `lib/operating-system/goal-driven-home.ts`
+- `docs/product/HELM_FIRST_LOOP_PRD_V1.md`
+- `docs/product/HELM_HOME_SURFACE_RULES_V1.md`
 
 ## 6. 风险与缓解
 

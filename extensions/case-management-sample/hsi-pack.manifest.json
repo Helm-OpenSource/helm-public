@@ -1,0 +1,25 @@
+{
+  "packId": "case-management-sample",
+  "displayName": "Case Management Sample",
+  "verticalKind": "case_management",
+  "sourceKinds": ["case_system", "im", "meeting", "email"],
+  "signalFamilies": [
+    "commitment_missing",
+    "stage_or_status_stale",
+    "approval_blocked",
+    "owner_mismatch",
+    "duplicate_or_conflict",
+    "boundary_attempt"
+  ],
+  "reviewSurfaces": [
+    "operating_signal_flow_map",
+    "review_packet",
+    "approval_inbox",
+    "boundary_ledger"
+  ],
+  "ownerRole": "delivery_engineering",
+  "dataPosture": "synthetic",
+  "redactionOwner": "delivery_engineer_side",
+  "nonProductionOnly": true,
+  "implementationChecklistRef": "extensions/case-management-sample/hsi-implementation-checklist.md"
+}

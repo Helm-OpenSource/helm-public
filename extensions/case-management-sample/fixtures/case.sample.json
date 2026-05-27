@@ -1,0 +1,7 @@
+{
+  "caseId": "case-1001",
+  "customerAlias": "sample-customer-a",
+  "status": "pending_review",
+  "nextAction": "prepare_review_packet",
+  "dataPosture": "synthetic"
+}

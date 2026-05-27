@@ -28,18 +28,18 @@ review_after: 2026-10-13
 ## 2. 已交付
 
 - 新协议：
-  - [HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md)
+  - [HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md](../product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md)
 - `guangpu` 问题清单：
-  - [GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md)
+  - [GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md](../../extensions/guangpu/GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md)
 - 规范入口同步：
-  - [AGENTS.md](/Users/tommyqian/Documents/GitHub/helm2026/AGENTS.md)
-  - [README.md](/Users/tommyqian/Documents/GitHub/helm2026/README.md)
-  - [docs/README.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/README.md)
-  - [PLANS.md](/Users/tommyqian/Documents/GitHub/helm2026/PLANS.md)
+  - [AGENTS.md](../../AGENTS.md)
+  - [README.md](../../README.md)
+  - [docs/README.md](../README.md)
+  - [PLANS.md](../../PLANS.md)
 - 最小 harness：
-  - [scripts/helm-self-check-refactored.ts](/Users/tommyqian/Documents/GitHub/helm2026/scripts/helm-self-check-refactored.ts)
-  - [scripts/decision-first-boundary-check.ts](/Users/tommyqian/Documents/GitHub/helm2026/scripts/decision-first-boundary-check.ts)
-  - [scripts/self-check/config.ts](/Users/tommyqian/Documents/GitHub/helm2026/scripts/self-check/config.ts)
+  - [scripts/helm-self-check-refactored.ts](../../scripts/helm-self-check-refactored.ts)
+  - [scripts/decision-first-boundary-check.ts](../../scripts/decision-first-boundary-check.ts)
+  - [scripts/self-check/config.ts](../../scripts/self-check/config.ts)
 
 ## 3. 当前结论
 
@@ -54,7 +54,7 @@ review_after: 2026-10-13
 
 `guangpu` 当前已经是正确方向的第一批参考实现，但还没有完全对齐新协议。剩余动作已单独列在：
 
-- [GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md)
+- [GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md](../../extensions/guangpu/GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md)
 
 ## 5. 风险项
 
