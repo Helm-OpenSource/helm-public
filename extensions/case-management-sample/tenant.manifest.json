@@ -1,0 +1,25 @@
+{
+  "tenantKey": "case-management-sample",
+  "status": "ACTIVE",
+  "displayName": "Case Management Sample",
+  "ownedExtensions": [
+    {
+      "extensionSlug": "signals",
+      "extensionKey": "case-management-sample-signals",
+      "displayName": "Case Management Sample Signals",
+      "rootPath": "extensions/case-management-sample/signals"
+    },
+    {
+      "extensionSlug": "workers",
+      "extensionKey": "case-management-sample-workers",
+      "displayName": "Case Management Sample Workers",
+      "rootPath": "extensions/case-management-sample/workers"
+    },
+    {
+      "extensionSlug": "bi-report",
+      "extensionKey": "case-management-sample-bi-report",
+      "displayName": "Case Management Sample BI Report",
+      "rootPath": "extensions/case-management-sample/bi-report"
+    }
+  ]
+}

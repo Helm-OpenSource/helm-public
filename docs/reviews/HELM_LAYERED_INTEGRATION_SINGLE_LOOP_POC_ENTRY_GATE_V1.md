@@ -284,7 +284,7 @@ POC 是否能在外部系统缺失、token 缺失或 provider 不可用时继续
 
 当前下一步不该是外部集成实现，而是：
 
-1. 以 [HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_ACCEPTANCE_PACK_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_ACCEPTANCE_PACK_V1.md) 作为后续窄实现前的 acceptance contract
+1. 以 [HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_ACCEPTANCE_PACK_V1.md](./HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_ACCEPTANCE_PACK_V1.md) 作为后续窄实现前的 acceptance contract
 2. 如果主线优先级允许，再起一份 implementation-freeze 文档
 3. 继续维持 `planning-only`
 

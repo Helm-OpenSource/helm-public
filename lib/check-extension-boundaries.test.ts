@@ -323,8 +323,12 @@ describe("extension boundary check", () => {
 
     try {
       execFileSync(
-        path.join(repoRoot, "node_modules/.bin/tsx"),
-        [path.join(repoRoot, "scripts/check-extension-boundaries.ts")],
+        process.execPath,
+        [
+          "--import",
+          path.join(repoRoot, "node_modules/tsx/dist/loader.mjs"),
+          path.join(repoRoot, "scripts/check-extension-boundaries.ts"),
+        ],
         {
           cwd: fixtureRoot,
           encoding: "utf8",

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import {
   HumanActionExecutionType,
   HumanActionExecutionStatus,
@@ -27,6 +27,7 @@ import {
   updateOfficialFollowThrough,
 } from "@/lib/helm-v2/official-system-integration-runtime";
 import { reviewOpportunityJudgeRuntime } from "@/lib/helm-v2/opportunity-judge-runtime";
+import { describeMySqlRuntime } from "@/lib/test/mysql-runtime-suite";
 
 const cleanupWorkspaceIds: string[] = [];
 
@@ -142,7 +143,7 @@ afterEach(async () => {
   }
 });
 
-describe("Helm v2 official system integration guarded path", () => {
+describeMySqlRuntime("Helm v2 official system integration guarded path", () => {
   it("creates guarded write intents from approved shadow recommendation and only updates official stage after explicit approve + ack success", async () => {
     const fixture = await createOfficialWriteFixture();
     await confirmMeetingAndRunShadow(fixture);

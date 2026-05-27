@@ -1,0 +1,70 @@
+{
+  "packId": "case-management-sample",
+  "version": "1.0.0",
+  "examples": [
+    {
+      "exampleId": "case-system-input-1",
+      "sourceKind": "case_system",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "case system input",
+      "data": { "caseId": "case-1001", "stage": "pending_review" }
+    },
+    {
+      "exampleId": "case-system-output-1",
+      "sourceKind": "case_system",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "case system output",
+      "data": { "signalFamily": "stage_or_status_stale", "decisionHint": "review" }
+    },
+    {
+      "exampleId": "im-input-1",
+      "sourceKind": "im",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "im input",
+      "data": { "threadId": "thread-2001", "summary": "customer asked for update" }
+    },
+    {
+      "exampleId": "im-output-1",
+      "sourceKind": "im",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "im output",
+      "data": { "signalFamily": "boundary_attempt", "nextSurface": "review_packet" }
+    },
+    {
+      "exampleId": "meeting-input-1",
+      "sourceKind": "meeting",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "meeting input",
+      "data": { "meetingId": "mtg-3001", "topic": "handoff review" }
+    },
+    {
+      "exampleId": "meeting-output-1",
+      "sourceKind": "meeting",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "meeting output",
+      "data": { "signalFamily": "owner_mismatch", "ownerRole": "delivery_engineering" }
+    },
+    {
+      "exampleId": "email-input-1",
+      "sourceKind": "email",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "email input",
+      "data": { "messageId": "mail-4001", "subject": "Need approval receipt" }
+    },
+    {
+      "exampleId": "email-output-1",
+      "sourceKind": "email",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "email output",
+      "data": { "signalFamily": "approval_blocked", "status": "review_required" }
+    }
+  ]
+}

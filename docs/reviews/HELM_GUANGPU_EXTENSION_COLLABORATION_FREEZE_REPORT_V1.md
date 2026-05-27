@@ -26,18 +26,18 @@ review_after: 2026-10-13
 ## 2. 已交付
 
 - tenant root inventory:
-  - [extensions/guangpu/README.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/README.md)
-  - [extensions/guangpu/tenant.manifest.json](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/tenant.manifest.json)
+  - [extensions/guangpu/README.md](../../extensions/guangpu/README.md)
+  - [extensions/guangpu/tenant.manifest.json](../../extensions/guangpu/tenant.manifest.json)
 - cross-extension contract:
-  - [GUANGPU_EXTENSION_IDENTITY_CONTRACT_FREEZE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/docs/GUANGPU_EXTENSION_IDENTITY_CONTRACT_FREEZE_V1.md)
-  - [GUANGPU_WORKSPACE_SOLUTION_EXTENSION_TRUTH_UNIFICATION_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/docs/GUANGPU_WORKSPACE_SOLUTION_EXTENSION_TRUTH_UNIFICATION_V1.md)
-  - [GUANGPU_REPORTS_EXTENSION_MOUNT_CONTRACT_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/docs/GUANGPU_REPORTS_EXTENSION_MOUNT_CONTRACT_V1.md)
+  - [GUANGPU_EXTENSION_IDENTITY_CONTRACT_FREEZE_V1.md](../../extensions/guangpu/docs/GUANGPU_EXTENSION_IDENTITY_CONTRACT_FREEZE_V1.md)
+  - [GUANGPU_WORKSPACE_SOLUTION_EXTENSION_TRUTH_UNIFICATION_V1.md](../../extensions/guangpu/docs/GUANGPU_WORKSPACE_SOLUTION_EXTENSION_TRUTH_UNIFICATION_V1.md)
+  - [GUANGPU_REPORTS_EXTENSION_MOUNT_CONTRACT_V1.md](../../extensions/guangpu/docs/GUANGPU_REPORTS_EXTENSION_MOUNT_CONTRACT_V1.md)
 - operator backfill:
-  - [HELM_GUANGPU_SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_GUANGPU_SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md)
+  - [HELM_GUANGPU_SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md](./HELM_GUANGPU_SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md)
 - extension-specific contract:
-  - [SEAT_PROFILE_ACCEPTANCE_GATE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/seat-profile/docs/SEAT_PROFILE_ACCEPTANCE_GATE_V1.md)
-  - [BI_REPORT_RUNTIME_REGISTRY_CONTRACT_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/bi-report/docs/BI_REPORT_RUNTIME_REGISTRY_CONTRACT_V1.md)
-  - [BI_REPORT_ACCEPTANCE_GATE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/extensions/guangpu/bi-report/docs/BI_REPORT_ACCEPTANCE_GATE_V1.md)
+  - [SEAT_PROFILE_ACCEPTANCE_GATE_V1.md](../../extensions/guangpu/seat-profile/docs/SEAT_PROFILE_ACCEPTANCE_GATE_V1.md)
+  - [BI_REPORT_RUNTIME_REGISTRY_CONTRACT_V1.md](../../extensions/guangpu/bi-report/docs/BI_REPORT_RUNTIME_REGISTRY_CONTRACT_V1.md)
+  - [BI_REPORT_ACCEPTANCE_GATE_V1.md](../../extensions/guangpu/bi-report/docs/BI_REPORT_ACCEPTANCE_GATE_V1.md)
 
 ## 3. 已经完整成立
 

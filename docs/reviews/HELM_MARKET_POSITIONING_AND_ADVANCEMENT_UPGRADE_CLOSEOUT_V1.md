@@ -11,7 +11,7 @@ review_after: 2026-10-23
 更新时间：2026-04-26
 状态：Phase A documentation slice 关闭（仅文档与上下文层；未触发 runtime / scripts / schema / API / page 改造）
 基线提交：`origin/main@208ed1b5c fix: restore continuity runtime review surfaces`
-实施工作树 / 分支：`/Users/tommyqian/Documents/GitHub/helm2026-market-positioning-upgrade`（branch `codex/market-positioning-upgrade`）
+实施工作树 / 分支：`<repo-worktree>/helm2026-market-positioning-upgrade`（branch `codex/market-positioning-upgrade`）
 
 本报告对本轮 Helm 市场定位收口与 Business Advancement 下一阶段队列固定切片做关闭说明。本切片定位为 documentation/context-only，不批准 runtime/schema/API/page 改造，关闭以本文件为准。
 

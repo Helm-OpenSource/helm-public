@@ -169,6 +169,15 @@ npm run lint
 npm run test
 ```
 
+Notes:
+
+- Default `npm run test` skips the 6 Helm v2 MySQL runtime integration suites so a fresh clone is not blocked on a host-local MySQL runtime.
+- When you explicitly want that coverage, run it separately:
+
+```bash
+HELM_RUN_MYSQL_RUNTIME_TESTS=1 npx vitest run lib/helm-v2/*runtime.test.ts
+```
+
 If you intend to submit a PR, run the full chain before committing:
 
 ```bash

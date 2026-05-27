@@ -78,9 +78,9 @@ review_after: 2026-09-23
 
 这一轮不只治理 legacy detail 页，也把同一套层级合同继续扩到了共享组件和经营队列：
 
-- [`reporting-protocol-panel.tsx`](/Users/qianzhilong/Documents/helm/components/shared/reporting-protocol-panel.tsx)
-- [`proactive-mechanism-panel.tsx`](/Users/qianzhilong/Documents/helm/components/shared/proactive-mechanism-panel.tsx)
-- [`queue-view.tsx`](/Users/qianzhilong/Documents/helm/features/customer-success-handoff/queue-view.tsx)
+- [`reporting-protocol-panel.tsx`](../../components/shared/reporting-protocol-panel.tsx)
+- [`proactive-mechanism-panel.tsx`](../../components/shared/proactive-mechanism-panel.tsx)
+- [`queue-view.tsx`](../../features/customer-success-handoff/queue-view.tsx)
 
 这三类页面现在也要求：
 

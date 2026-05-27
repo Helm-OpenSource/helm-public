@@ -289,6 +289,8 @@ npm run e2e
 npm run quality:regression
 ```
 
+补充说明：默认 `npm run test` 不再隐式要求本机 MySQL runtime；6 个 Helm v2 MySQL runtime integration suites 需要显式用 `HELM_RUN_MYSQL_RUNTIME_TESTS=1 npx vitest run lib/helm-v2/*runtime.test.ts` 单独开启。
+
 公开发布前额外跑：
 
 ```bash

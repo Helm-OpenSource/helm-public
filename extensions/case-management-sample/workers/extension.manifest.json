@@ -1,0 +1,81 @@
+{
+  "manifestVersion": "1",
+  "bundleVersion": "2026.05.26",
+  "extensionKey": "case-management-sample-workers",
+  "tenantKey": "case-management-sample",
+  "extensionSlug": "workers",
+  "displayName": "Case Management Sample Workers",
+  "kind": "TENANT_CUSTOM",
+  "status": "ACTIVE",
+  "owner": "helm-open-source",
+  "nonCoreDeclaration": true,
+  "compatibility": {
+    "minRuntimeContractVersion": "2026.05.26-public-sample",
+    "supportedWorkspaceClasses": [
+      "CUSTOMER"
+    ],
+    "requiredFeatures": [
+      "WorkspaceSolutionExtension"
+    ]
+  },
+  "migrationHints": [
+    "bundle_manifest_read_only_validation_phase4"
+  ],
+  "runtimeDeclarations": {
+    "workers": [
+      "case-allocation-driver",
+      "case-stewardship-driver"
+    ],
+    "skills": [],
+    "resources": [],
+    "hooks": [],
+    "monitors": [],
+    "surfaces": [
+      "/operating",
+      "/approvals"
+    ]
+  },
+  "capabilityManifest": {
+    "capabilityDeclarations": [
+      "case_allocation_review",
+      "case_stewardship_review"
+    ],
+    "maxEffectMode": "read_only",
+    "customerFacingAllowed": false,
+    "requiresReviewByDefault": true,
+    "nonCommitmentOnly": true
+  },
+  "dependencyDeclarations": {
+    "connectors": [
+      "case-import-source"
+    ],
+    "workspaceTruths": [
+      "WorkspaceSolutionExtension"
+    ],
+    "policyTruths": [
+      "review-first",
+      "observer-first"
+    ]
+  },
+  "documentationPointers": {
+    "readme": "../README.md",
+    "docs": [
+      "../hsi-implementation-checklist.md"
+    ]
+  },
+  "evalContract": {
+    "fixtures": [],
+    "checks": [
+      "manifest.test.ts",
+      "worker-modes.test.ts",
+      "lifecycle-objectives.test.ts",
+      "case-allocation-driver/decide.test.ts",
+      "case-stewardship-driver/decide.test.ts"
+    ]
+  },
+  "summary": "Public sample worker bundle for review-first case allocation and stewardship.",
+  "surfaces": [
+    "/operating",
+    "/approvals"
+  ]
+}

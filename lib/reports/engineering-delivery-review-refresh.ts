@@ -379,13 +379,31 @@ async function resolveRefreshRevision(revision: string, cwd: string) {
     return normalized;
   }
 
-  const repoRoot = await resolveRepoRoot(cwd);
-  await execFileAsync("git", ["-C", repoRoot, "fetch", "origin", "main", "--prune"], {
-    cwd,
-    maxBuffer: GIT_BUFFER_BYTES,
-  });
+  try {
+    const repoRoot = await resolveRepoRoot(cwd);
 
-  return "origin/main";
+    try {
+      await execFileAsync("git", ["-C", repoRoot, "fetch", "origin", "main", "--prune"], {
+        cwd,
+        maxBuffer: GIT_BUFFER_BYTES,
+      });
+    } catch {
+      // Public/sandboxed environments may block FETCH_HEAD writes or network access.
+      // Refresh should still proceed against the best locally available revision.
+    }
+
+    if (await canResolveRevision("origin/main", repoRoot, cwd)) {
+      return "origin/main";
+    }
+
+    if (await canResolveRevision("main", repoRoot, cwd)) {
+      return "main";
+    }
+  } catch {
+    // Fall through to HEAD when git root resolution is unavailable.
+  }
+
+  return "HEAD";
 }
 
 async function resolveRepoRoot(cwd: string) {
@@ -394,6 +412,18 @@ async function resolveRepoRoot(cwd: string) {
     maxBuffer: GIT_BUFFER_BYTES,
   });
   return stdout.trim();
+}
+
+async function canResolveRevision(revision: string, repoRoot: string, cwd: string) {
+  try {
+    await execFileAsync("git", ["-C", repoRoot, "rev-parse", "--verify", revision], {
+      cwd,
+      maxBuffer: GIT_BUFFER_BYTES,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function parseSnapshotPayload(payloadJson: string): SnapshotPayload | null {
@@ -487,7 +517,10 @@ async function buildSchemaFallbackLiveReview(input: {
   english: boolean;
   days: number;
 }): Promise<EngineeringDeliveryReview> {
-  const revision = process.env.ENGINEERING_REVIEW_GIT_REVISION?.trim() || ENGINEERING_REVIEW_GIT_REVISION_FALLBACK;
+  const revision = await resolveRefreshRevision(
+    process.env.ENGINEERING_REVIEW_GIT_REVISION?.trim() || ENGINEERING_REVIEW_GIT_REVISION_FALLBACK,
+    process.cwd(),
+  );
   const live = await getEngineeringDeliveryReview({
     days: input.days,
     english: input.english,

@@ -39,14 +39,13 @@ review_after: 2026-08-15
 
 | Area | Count |
 | --- | ---: |
-| `app/api/auth` | 4 |
+| `app/api/auth` | 6 |
 | `app/api/blockers` | 3 |
 | `app/api/briefings` | 1 |
 | `app/api/commitments` | 2 |
 | `app/api/connectors` | 3 |
 | `app/api/conversation-capture` | 5 |
 | `app/api/evolution` | 14 |
-| `app/api/extensions` | 2 |
 | `app/api/helm-v2` | 17 |
 | `app/api/imports` | 5 |
 | `app/api/internal-commercialization` | 2 |
@@ -61,6 +60,8 @@ review_after: 2026-08-15
 
 - `app/api/auth/dingtalk/callback/route.ts`
 - `app/api/auth/dingtalk/start/route.ts`
+- `app/api/auth/feishu/callback/route.ts`
+- `app/api/auth/feishu/start/route.ts`
 - `app/api/auth/wecom/callback/route.ts`
 - `app/api/auth/wecom/start/route.ts`
 - `app/api/blockers/[id]/resolve/route.ts`
@@ -91,8 +92,6 @@ review_after: 2026-08-15
 - `app/api/evolution/strategy-suggestions/[id]/accept/route.ts`
 - `app/api/evolution/strategy-suggestions/[id]/dismiss/route.ts`
 - `app/api/evolution/strategy-suggestions/route.ts`
-- `app/api/extensions/<tenant-private>/<tenant-private-integration>/accountBinding/callback/route.ts`
-- `app/api/extensions/<tenant-private>/<tenant-private-integration>/accountBinding/start/route.ts`
 - `app/api/helm-v2/runtime/artifacts/[id]/confirm/route.ts`
 - `app/api/helm-v2/runtime/checkpoints/[id]/resume/route.ts`
 - `app/api/helm-v2/runtime/consolidation/jobs/[id]/status/route.ts`
@@ -144,14 +143,13 @@ review_after: 2026-08-15
 
 | Owner key | Count | 负责范围 | 下一层收口方向 |
 | --- | ---: | --- | --- |
-| `owner:auth` | 4 | 企业认证 callback / start route 文案 | 收到 auth callback message helper |
+| `owner:auth` | 6 | 企业认证 callback / start route 文案 | 收到 auth callback message helper |
 | `owner:blockers` | 3 | blocker create / resolve / status 文案 | 收到 memory-governance message helper |
 | `owner:briefings` | 1 | meeting briefing 文案 | 收到 briefing message helper |
 | `owner:commitments` | 2 | commitment create / status 文案 | 收到 commitment message helper |
 | `owner:connectors` | 3 | Google / HubSpot / Salesforce connector start 权限文案 | 收到 connector message helper |
 | `owner:conversation-capture` | 5 | capture start / ingest / stop / result 文案 | 收到 capture message helper |
 | `owner:evolution` | 14 | evolution insight / pattern / skill / strategy suggestion 文案 | 收到 evolution message helper |
-| `owner:tenant-private-extension` | 2 | tenant-private extension account binding 文案 | 保留 private owner；public docs 只用 redacted descriptor |
 | `owner:helm-v2-runtime` | 17 | Helm v2 runtime / reflection / consolidation / verification 文案 | 收到 helm-v2 runtime message helper |
 | `owner:imports` | 5 | CRM import / sync / conflict / warmup 文案 | 收到 imports message helper |
 | `owner:internal-commercialization` | 2 | internal commercialization fixture connector / run 文案 | 收到 internal commercialization message helper |
@@ -176,7 +174,7 @@ review_after: 2026-08-15
 
 | Owner key | Files | 状态 |
 | --- | ---: | --- |
-| `owner:auth` | 4 | 已接入 API-local helper |
+| `owner:auth` | 6 | 已接入 API-local helper |
 | `owner:briefings` | 1 | 已接入 API-local helper |
 | `owner:blockers` | 3 | 已接入 API-local helper；create fallback 已接入 owner-level helper |
 | `owner:commitments` | 2 | 已接入 API-local helper；status fallback 已接入 owner-level helper |
@@ -192,7 +190,6 @@ review_after: 2026-08-15
 | `owner:recommendations` | 2 | 已接入 API-local helper |
 | `owner:runtime` | 3 | 已接入 API-local helper |
 | `owner:settings` | 1 | 已接入 API-local helper；audit summary 已接入 owner-level helper |
-| `owner:tenant-private-extension` | 2 | 已接入 API-local helper；public docs 只保留 redacted descriptor |
 
 ## 6. Migration Order
 
