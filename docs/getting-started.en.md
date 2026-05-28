@@ -13,12 +13,22 @@ review_after: 2026-07-28
 This guide is for developers running Helm locally **for the first time**. By the end you should be able, in about 15 minutes, to:
 
 1. Install dependencies
-2. Bring up MySQL
+2. Bring up MySQL or the Docker demo stack
 3. Run migrations + seed
 4. Start the dev server and see "today's 3 must-decide calls" at `/dashboard`
 5. Know which doc to read next
 
-If you only want a 90-second demo, go back to [README.en.md](../README.en.md#90-seconds-to-see-helm) and use `docker compose up`.
+If you only want a 90-second demo, go back to [README.en.md](../README.en.md#90-seconds-to-see-helm) and use `npm run quickstart`.
+
+If you do not have a host-local MySQL and just want Helm running end-to-end, use the Docker-first quickstart:
+
+```bash
+npm install
+npm run quickstart:doctor
+npm run quickstart
+```
+
+This path does not mutate `.env`, but it does check Docker / compose / port prerequisites and then starts the bundled `mysql:8.4 + app` stack.
 
 ---
 
@@ -42,8 +52,8 @@ Optional (as needed):
 ## 1. Clone
 
 ```bash
-git clone https://github.com/<org>/helm.git
-cd helm
+git clone https://github.com/Helm-OpenSource/helm-public.git
+cd helm-public
 ```
 
 ---
@@ -63,6 +73,8 @@ npm run db:generate
 ---
 
 ## 3. Bring up MySQL
+
+If you already used `npm run quickstart`, you can skip this section.
 
 Easiest path — run a local instance with Docker:
 
@@ -129,7 +141,7 @@ npm run db:seed        # load development sample data
 If migration fails with an extension-SQL related error, run:
 
 ```bash
-npm run setup-db       # auto-applies extension SQL
+npm run db:prepare     # prepares schema / extension SQL
 ```
 
 To reset (**this destroys local data**):

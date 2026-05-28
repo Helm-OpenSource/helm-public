@@ -145,6 +145,14 @@ describe("public release guard fixture coverage", () => {
     ]);
   });
 
+  it("still blocks concrete internal hosts in policy descriptor files", () => {
+    writeFixture("README.md", `Public docs must not mention ${rmShuyaoHost}.`);
+
+    const result = runGuard();
+
+    expect(result.violations.map((violation) => violation.rule)).toEqual([rmShuyaoRule]);
+  });
+
   it("does not scan private roots that are excluded from the public mirror", () => {
     writeFixture(
       path.posix.join(tenantPrivateRoot, "private.md"),

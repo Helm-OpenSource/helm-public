@@ -45,7 +45,7 @@ Helm **encodes these three answers into an open-source reference implementation*
 | Multi-tenant isolation | Platform layer (black box) | DIY | **Deployment Profile + Tenant Overlay 4-layer cut already designed** |
 | Chinese-locale connector | Partial | DIY | **DingTalk / IMAP / Aliyun Mail / Qwen built-in working samples** |
 | Fully forkable? | Varies (Dify is self-hostable; hosted platforms usually lock you in) | Yes (no vertical) | **Yes (Apache-2.0 + vertical pack)** |
-| 30-minute full loop? | No | No | **`docker compose up`** |
+| 30-minute full loop? | No | No | **`npm run quickstart`** |
 | Commercial model (for you) | Platform takes a cut / their channel | You set your price | **open-core**: fork it, sell it commercially. Helm Inc. doesn't take a cut |
 
 > This table compares **types**, not specific products' current feature checklists; platforms keep evolving. The contrast is in abstraction level and product shape. [Dify's official docs](https://docs.dify.ai/) emphasize its open-source / self-hostable posture; this table compares Dify as a visual AI application platform, not as a closed-source locked platform.
@@ -55,11 +55,16 @@ Helm **encodes these three answers into an open-source reference implementation*
 ## 90 seconds to see Helm
 
 ```bash
-git clone https://github.com/<org>/helm.git
-cd helm
-cp .env.example .env       # Local MySQL by default
-docker compose up          # mysql:8.4 + app
+git clone https://github.com/Helm-OpenSource/helm-public.git
+cd helm-public
+npm run quickstart         # docker compose up --build
 open http://localhost:3000
+```
+
+If you want to verify Docker / compose / port prerequisites before starting:
+
+```bash
+npm run quickstart:doctor
 ```
 
 First screen: `/operating` (operating signal flow map), `/approvals` (review gate), `/memory` (operating memory) — three already-working surfaces.
@@ -71,6 +76,22 @@ First screen: `/operating` (operating signal flow map), `/approvals` (review gat
 Full 30-minute onboarding: see [HELM_FOR_DELIVERY_ENGINEERS_V1.en.md §30-minute onboarding anchor](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md#30-minute-onboarding-anchor); `extensions/case-management-sample/` now provides a readable / editable minimum public vertical reference plus a worker / BI cookbook minimum slice. Docker / fresh-clone onboarding still needs v0.1 release-track verification.
 
 ---
+
+## Docker-first quickstart
+
+```bash
+npm install
+npm run quickstart:doctor
+npm run quickstart
+```
+
+This is the default path for developers who do not have a host-local MySQL and just want Helm running end-to-end fast. It checks Docker daemon, compose, and ports `3000` / `3306`, then starts the bundled `mysql:8.4 + app` stack.
+
+Stop the stack with:
+
+```bash
+docker compose down
+```
 
 ## 5 steps to local dev
 
@@ -190,8 +211,9 @@ Pipedrive, Zoho, Dynamics, Notion, Coda, Tencent Meeting, Webex, Yonyou, Kingdee
 | Channel | Purpose |
 |---|---|
 | GitHub Issues `integration:` label | Public call / roadmap discussion |
-| [GitHub Discussions](https://github.com/<org>/helm/discussions) | Community Q&A, blockers, vertical co-building |
-| `partners@helm.<domain>` | Commercial partnerships / co-launch (not the default entry; go through Discussions or issue first) |
+| [GitHub Discussions](https://github.com/Helm-OpenSource/helm-public/discussions) | Community Q&A, blockers, vertical co-building |
+| [SUPPORT.md](SUPPORT.md) | Support path, troubleshooting checklist, and where to ask questions if Discussions is disabled |
+| GitHub Discussions / `integration:` issue | Commercial partnerships / co-launch start in public discussion first; a formal channel will be announced separately |
 | [docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md](docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) | Open source / commercial boundary |
 
 ---
@@ -348,7 +370,8 @@ Please do not disclose undisclosed security issues in public channels. See [SECU
 | Entry | Purpose |
 |---|---|
 | **🚀 `git clone` + `docker compose up`** | Core surfaces running locally; fork your customer vertical from `extensions/case-management-sample/` |
-| **💬 [GitHub Discussions](https://github.com/<org>/helm/discussions)** | Community Q&A, vertical co-building, blocker support |
+| **🆘 [SUPPORT.md](SUPPORT.md)** | Troubleshooting, support paths, and what to include before opening a thread |
+| **💬 [GitHub Discussions](https://github.com/Helm-OpenSource/helm-public/discussions)** | Community Q&A, vertical co-building, blocker support |
 | **🎯 [Certified Delivery Partner](docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md)** | Delivery certification, brand endorsement, case-study co-building |
 | **☁️ Helm Cloud (hosted)** | Optional; does not replace open source; for delivery engineers / customers who don't want to self-host |
 

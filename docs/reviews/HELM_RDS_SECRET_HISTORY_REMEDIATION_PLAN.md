@@ -63,7 +63,7 @@ WORK=/tmp/helm-rds-secret-remediation-20260430
 python3 -m venv "$WORK/venv"
 "$WORK/venv/bin/python" -m pip install git-filter-repo
 cd "$WORK"
-git clone --mirror https://github.com/Helm-Developers/helm2026.git helm2026.git
+git clone --mirror https://github.com/Helm-OpenSource/helm-public.git helm-public.git
 cd helm2026.git
 "$WORK/venv/bin/git-filter-repo" --force --replace-text <replacement-spec>
 ```
@@ -115,7 +115,7 @@ WORK=/tmp/helm-rds-secret-remediation-$(date +%Y%m%d%H%M%S)
 python3 -m venv "$WORK/venv"
 "$WORK/venv/bin/python" -m pip install git-filter-repo
 cd "$WORK"
-git clone --mirror https://github.com/Helm-Developers/helm2026.git helm2026.git
+git clone --mirror https://github.com/Helm-OpenSource/helm-public.git helm-public.git
 cd helm2026.git
 "$WORK/venv/bin/git-filter-repo" --force --replace-text <private replacement spec>
 ```
@@ -143,7 +143,7 @@ Expected:
 Only after Step 1 and Step 4 pass:
 
 ```bash
-git remote add origin https://github.com/Helm-Developers/helm2026.git
+git remote add origin https://github.com/Helm-OpenSource/helm-public.git
 git push --force --mirror origin
 ```
 
@@ -270,7 +270,7 @@ Current branch: `codex/operating-signal-flow-automode`
 | Validation | Result |
 | --- | --- |
 | public GitHub surface review doc | READY — [HELM_PUBLIC_GITHUB_SURFACE_REVIEW_2026_05_26.md](HELM_PUBLIC_GITHUB_SURFACE_REVIEW_2026_05_26.md) |
-| README / runbook / launch draft placeholder cleanup | DONE — public GitHub URLs aligned to `Helm-Developers/helm2026` |
+| README / runbook / launch draft placeholder cleanup | DONE — public GitHub URLs aligned to `Helm-OpenSource/helm-public` |
 | public doc dead-link cleanup | DONE — `CONTRIBUTING.md` no longer points to internal-only docs |
 | `npm run check:public-release` | PASS — scanned `3823` files; no public-mirror blockers |
 | `HELM_SECRET_HISTORY_BASELINE_REF=origin/main npm run check:secret-history` | PASS — no new known compromised commits beyond `origin/main`; `108` baseline-known findings suppressed |

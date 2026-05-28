@@ -121,7 +121,7 @@ As the delivery partner base grows, Helm's reasoning quality itself improves, an
 
 Success = within 30 minutes you can complete this executable path. Steps 3 / 4 now have a minimum public reference to read and edit; step 5 still needs D2 onboarding verification in a fresh-clone environment before we claim the flow is fully verified.
 
-1. `git clone <repo> && cd helm && docker compose up` — local workspace running
+1. `git clone https://github.com/Helm-OpenSource/helm-public.git && cd helm-public && docker compose up` — local workspace running
 2. `open http://localhost:3000` — see `/operating` (operating signal flow map), `/approvals` (review gate), `/memory` (operating memory) — three already-working surfaces (⚠️ `/operating` is currently a **Phase 2 fixture demo**; connecting live tenant data requires Phase 2.3 runtime adoption)
 3. Read [`extensions/case-management-sample/README.md`](../../extensions/case-management-sample/README.md) — understand how a public-safe vertical starting point is organized
 4. Modify [`extensions/case-management-sample/tenant.manifest.json`](../../extensions/case-management-sample/tenant.manifest.json) slug + displayName — your customer's vertical starts taking shape

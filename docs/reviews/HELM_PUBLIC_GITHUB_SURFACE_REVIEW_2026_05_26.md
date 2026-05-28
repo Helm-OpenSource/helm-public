@@ -18,7 +18,7 @@ archive_trigger:
 
 截至 `2026-05-26`，公开仓首页与公开治理入口的 repo-side 人工审校已经完成，今天在仓库内能完成的收口项已经补齐：
 
-1. README / CONTRIBUTING / public trial runbook / launch post draft 中的 GitHub 仓库占位符已替换为真实仓库地址 `Helm-Developers/helm2026`。
+1. README / CONTRIBUTING / public trial runbook / launch post draft 中的 GitHub 仓库占位符已替换为真实仓库地址 `Helm-OpenSource/helm-public`。
 2. `CONTRIBUTING.md` 中对 internal-only docs 的直接引用已移除，避免公开镜像出现死链。
 3. 当前 repo-side public hygiene 仍然保持绿灯：
    - `npm run check:public-release`：PASS

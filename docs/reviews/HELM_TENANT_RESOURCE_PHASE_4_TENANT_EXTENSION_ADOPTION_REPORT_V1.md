@@ -66,7 +66,7 @@ Passed:
 npm run test -- lib/tenant-resources/readiness.test.ts lib/tenant-resources/evidence-detail.test.ts lib/tenant-resources/operating-impact.test.ts lib/tenant-resources/extension-adoption.test.ts lib/solution-extension-manifests.test.ts
 npm run typecheck
 npm run lint
-DATABASE_URL='mysql://root:***@rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306/helm2026_ci_verify?charset=utf8mb4' npm run self-check
+DATABASE_URL='mysql://root:***@${HELM_DB_HOST}/helm2026_ci_verify?charset=utf8mb4' npm run self-check
 npm run check:boundaries
 npm run build
 git diff --check

@@ -362,9 +362,9 @@ const SKIP_EXTENSIONS = new Set([
 // their purpose is to describe the policy itself.
 //
 // IMPORTANT: policy-descriptor allow-listing only suppresses
-//   tenant-slug:* / private-path-ref:* / internal-host:*
+//   tenant-slug:* / private-path-ref:*
 // rules. The credential:url-embedded rule continues to run on these files
-// — secrets can never be policy-described.
+// — secrets and concrete internal hosts can never be policy-described.
 const POLICY_DESCRIPTOR_ALLOW_LIST = new Set<string>([
   "scripts/public-release-guard.ts",
   "scripts/build-public-env-example.ts",
@@ -969,8 +969,9 @@ function scanFile(
     return;
   }
 
-  // Policy-descriptor files skip tenant-slug / private-path-ref / internal-host
-  // checks but STILL run the credential rule. We compute this once and gate
+  // Policy-descriptor files skip tenant-slug / private-path-ref checks but
+  // STILL run credential and concrete internal-host checks. We compute this
+  // once and gate the per-rule checks below.
   // the per-rule checks below.
   const isPolicyDescriptor =
     POLICY_DESCRIPTOR_ALLOW_LIST.has(relativePath) ||
@@ -998,6 +999,22 @@ function scanFile(
         line: lineNumber,
         excerpt: maskSecrets(line.trim()).slice(0, 240),
       });
+    }
+
+    let hasConcreteInternalHostViolation = false;
+    if (!releaseArtifactRulePrefix) {
+      for (const { name, pattern } of INTERNAL_HOST_PATTERNS) {
+        if (pattern.test(line)) {
+          violations.push({
+            rule: `internal-host:${name}`,
+            path: relativePath,
+            line: lineNumber,
+            excerpt: maskSecrets(line.trim()).slice(0, 240),
+          });
+          hasConcreteInternalHostViolation = true;
+          break;
+        }
+      }
     }
 
     // Credential leak detection — runs on every scanned file, even on
@@ -1116,7 +1133,7 @@ function scanFile(
     }
 
     for (const { name, pattern } of INTERNAL_HOST_PATTERNS) {
-      if (pattern.test(line)) {
+      if (!hasConcreteInternalHostViolation && pattern.test(line)) {
         violations.push({
           rule: `internal-host:${name}`,
           path: relativePath,

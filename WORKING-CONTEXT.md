@@ -86,7 +86,7 @@
 - 市场定位本轮已收口为「Helm 经营推进控制台 / 经营推进操作系统（受控试点）」；详细定位、竞争边界、四类短表与下一阶段队列见 [docs/product/HELM_MARKET_POSITIONING_AND_ADVANCEMENT_UPGRADE_V1.md](docs/product/HELM_MARKET_POSITIONING_AND_ADVANCEMENT_UPGRADE_V1.md)
 - `DESIGN.md` 现在已经是 homepage、dashboard、approvals、operating、detail、settings、setup 和 demo shell 的固定视觉基线
 - `Mobile Command Surface` 已实现：`/mobile` 第一屏把 Ask Helm mobile answer、Must Push 必须推进项与 Review / Memory / Operating 承接入口收在同一张窄手机端经营推进入口；本地完整验证已通过
-- 旧版本里关于 `DB-backed E2E blocked by rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306 不可达` 的描述按「历史 / 已 unblocked」处理，不再代表当前主干 blocker
+- 旧版本里关于 `DB-backed E2E blocked by ${HELM_DB_HOST} 不可达` 的描述按「历史 / 已 unblocked」处理，不再代表当前主干 blocker
 - 旧版本里的 `/Users/qianzhilong/Documents/helm` 路径与 `Mem 未提交切片` 描述按「历史」处理；当前主干已落地 005H/005I/005J + Phase 0–3 freeze 与 continuity runtime review surface 修复
 
 ## 3. 当前优先级
