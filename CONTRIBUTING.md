@@ -87,7 +87,11 @@ Helm 当前明确处于「受控试点」阶段。这意味着：
 # 安装依赖
 npm install
 
-# 复制环境变量模板（需要本地 MySQL）
+# 如果你没有本机 MySQL，先走 Docker-first quickstart
+npm run quickstart:doctor
+npm run quickstart
+
+# 如果你要本机开发，再复制环境变量模板
 cp .env.example .env
 
 # 准备数据库
@@ -98,6 +102,8 @@ npm run db:seed
 # 启动开发服务器
 npm run dev
 ```
+
+如果你只想先把 Helm 跑起来而不是本机开发，`npm run quickstart` 就是默认公开入口；更完整的说明见 [docs/getting-started.md](docs/getting-started.md)。
 
 `.env.example` 分三档：
 

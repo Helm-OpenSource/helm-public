@@ -148,7 +148,7 @@ OpenAI API 默认关闭。启用时：
 
 ### 5.1 普通反馈与功能讨论
 
-- **GitHub Issues**：[github.com/Helm-Developers/helm2026/issues](https://github.com/Helm-Developers/helm2026/issues) — 公开问题、功能讨论、文档勘误
+- **GitHub Issues**：[github.com/Helm-OpenSource/helm-public/issues](https://github.com/Helm-OpenSource/helm-public/issues) — 公开问题、功能讨论、文档勘误
 - 标签建议：`trial-feedback` / `bug` / `docs` / `discussion`
 
 ### 5.2 安全漏洞披露

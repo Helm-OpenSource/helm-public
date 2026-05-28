@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, RefreshCcw, ShieldAlert, Sparkles } from "lucide-react";
+import { RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import {
   acknowledgeMeetingRuntimeHumanInputCheckpointAction,
   acknowledgeMeetingRuntimeTakeoverAction,
@@ -47,7 +46,20 @@ import { buildCloseSettlementHandoffReadout } from "@/lib/helm-v2/close-settleme
 import { buildPersistedLifecycleTraceReadout } from "@/lib/helm-v2/persisted-lifecycle-trace-readout";
 import { buildTakeoverRemediationHandoffReadout } from "@/lib/helm-v2/takeover-remediation-handoff-readout";
 import { formatDateLabel } from "@/lib/utils";
+import { MeetingV2RuntimeActionPackPanel } from "@/features/meetings/meeting-v2-runtime-action-pack-panel";
+import { MeetingV2RuntimeContinuityReadout } from "@/features/meetings/meeting-v2-runtime-continuity-readout";
 import { formatMeetingDisplayText } from "@/features/meetings/display-copy";
+import { MeetingV2RuntimePromotionPanel } from "@/features/meetings/meeting-v2-runtime-promotion-panel";
+import { MeetingV2RuntimeQueuesPanel } from "@/features/meetings/meeting-v2-runtime-queues-panel";
+import { MeetingV2RuntimeReviewPanel } from "@/features/meetings/meeting-v2-runtime-review-panel";
+import {
+  formatContinuityPostureToast,
+  renderRuntimeStatusLabel,
+  renderStatusVariant,
+  type MeetingV2RuntimeContinuityRemediationAction,
+  type MeetingV2RuntimeContinuityRemediationPreview,
+  type MeetingV2RuntimeReviewPayload,
+} from "@/features/meetings/meeting-v2-runtime-shared";
 
 type MeetingV2RuntimeCardProps = {
   meetingId: string;
@@ -55,212 +67,6 @@ type MeetingV2RuntimeCardProps = {
   canManageRuntime: boolean;
   canReviewRuntime: boolean;
 };
-
-type MeetingV2RuntimeReviewFormProps = {
-  english: boolean;
-  pending: boolean;
-  defaultFactsJson: string;
-  defaultActionPackMarkdown: string;
-  defaultReviewNotes: string;
-  onSubmit: (payload: {
-    mode: "confirm" | "edit_confirm" | "reject" | "keep_draft";
-    factsJson: string;
-    actionPackMarkdown: string;
-    reviewNotes: string;
-  }) => void;
-};
-
-function renderStatusVariant(status: string) {
-  if (status.includes("FAILED") || status.includes("REJECTED") || status.includes("BLOCKED")) return "danger" as const;
-  if (
-    status.includes("CONFIRMED") ||
-    status.includes("COMPLETED") ||
-    status.includes("PROMOTED") ||
-    status.includes("PASSED") ||
-    status.includes("RESOLVED") ||
-    status.includes("EXECUTED") ||
-    status.includes("SAFE")
-  ) {
-    return "success" as const;
-  }
-  if (
-    status.includes("PENDING") ||
-    status.includes("QUEUED") ||
-    status.includes("RUNNING") ||
-    status.includes("DEFERRED") ||
-    status.includes("REVIEW") ||
-    status.includes("WAITING") ||
-    status.includes("READY") ||
-    status.includes("OPEN") ||
-    status.includes("WATCH") ||
-    status.includes("PRUNE") ||
-    status.includes("COMPACT")
-  ) {
-    return "approval" as const;
-  }
-  return "neutral" as const;
-}
-
-function renderRuntimeStatusLabel(status: string, english: boolean) {
-  if (english) return status.replace(/_/g, " ").toLowerCase();
-
-  const labels: Record<string, string> = {
-    CONFIRMED: "已确认",
-    COMPLETED: "已完成",
-    PROMOTED: "已提升",
-    PASSED: "已通过",
-    RESOLVED: "已解决",
-    EXECUTED: "已执行",
-    SAFE: "正常",
-    PENDING: "待处理",
-    QUEUED: "已入队",
-    RUNNING: "运行中",
-    DEFERRED: "暂缓",
-    REVIEW_REQUIRED: "需要复核",
-    WAITING: "等待中",
-    READY: "就绪",
-    OPEN: "未完成",
-    WATCH: "观察中",
-    PRUNE: "已精简上下文",
-    COMPACT: "已压缩上下文",
-    AWAITING_REVIEW: "等待复核",
-    PROTECTED_STATE_GAP: "受保护状态缺口",
-    FAILED: "失败",
-    REJECTED: "已拒绝",
-    BLOCKED: "已阻断",
-  };
-
-  return labels[status] ?? status.replace(/_/g, " ");
-}
-
-function formatContinuityPostureToast(input: {
-  action: "SAVE_RECOVERY_CHECKPOINT" | "RESUME_CHECKPOINT" | "REPRUNE_CONTEXT";
-  posture?: {
-    interruptReason: {
-      code: string;
-    };
-    resumeAsk: {
-      mode: string;
-    };
-    handoffPayload: {
-      state: string;
-      toAgent: string | null;
-    };
-  } | null;
-  rollbackAnchorLabel?: string | null;
-  english: boolean;
-}) {
-  const actionLabel =
-    input.action === "SAVE_RECOVERY_CHECKPOINT"
-      ? input.english
-        ? "save recovery checkpoint"
-        : "保存恢复点"
-      : input.action === "RESUME_CHECKPOINT"
-        ? input.english
-          ? "resume checkpoint"
-          : "回到恢复点"
-        : input.english
-          ? "re-prune context"
-          : "重新整理上下文";
-  const posture = input.posture;
-  if (!posture) {
-    return input.rollbackAnchorLabel
-      ? `${actionLabel} · ${input.english ? "rollback" : "回退点"} ${input.rollbackAnchorLabel}`
-      : actionLabel;
-  }
-  if (!input.english) {
-    const interruptLabel =
-      posture.interruptReason.code === "none" ? "没有中断" : `中断原因 ${posture.interruptReason.code}`;
-    const handoffLabel =
-      posture.handoffPayload.state === "ready"
-        ? `交接给 ${posture.handoffPayload.toAgent ?? "待接手角色"}`
-        : "无需交接";
-
-    return [
-      actionLabel,
-      interruptLabel,
-      `恢复方式 ${posture.resumeAsk.mode}`,
-      handoffLabel,
-      input.rollbackAnchorLabel ? `回退点 ${input.rollbackAnchorLabel}` : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-  }
-  const parts = [
-    actionLabel,
-    posture.interruptReason.code === "none"
-      ? "interrupt clear"
-      : `interrupt ${posture.interruptReason.code}`,
-    `resume ${posture.resumeAsk.mode}`,
-    posture.handoffPayload.state === "ready"
-      ? `handoff ${posture.handoffPayload.toAgent ?? "ready"}`
-      : "handoff none",
-    input.rollbackAnchorLabel ? `rollback ${input.rollbackAnchorLabel}` : null,
-  ];
-
-  return parts.filter(Boolean).join(" · ");
-}
-
-function MeetingV2RuntimeReviewForm({
-  english,
-  pending,
-  defaultFactsJson,
-  defaultActionPackMarkdown,
-  defaultReviewNotes,
-  onSubmit,
-}: MeetingV2RuntimeReviewFormProps) {
-  const [factsJson, setFactsJson] = useState(defaultFactsJson);
-  const [actionPackMarkdown, setActionPackMarkdown] = useState(defaultActionPackMarkdown);
-  const [reviewNotes, setReviewNotes] = useState(defaultReviewNotes);
-
-  const submit = (mode: "confirm" | "edit_confirm" | "reject" | "keep_draft") => {
-    onSubmit({
-      mode,
-      factsJson,
-      actionPackMarkdown,
-      reviewNotes,
-    });
-  };
-
-  return (
-    <div className="mt-4 space-y-4">
-      <div>
-        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "confirmed facts json" : "confirmed facts json"}</p>
-        <Textarea value={factsJson} onChange={(event) => setFactsJson(event.target.value)} rows={12} className="mt-2 font-mono text-xs" />
-      </div>
-      <div>
-        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "action pack markdown" : "action pack markdown"}</p>
-        <Textarea
-          value={actionPackMarkdown}
-          onChange={(event) => setActionPackMarkdown(event.target.value)}
-          rows={14}
-          className="mt-2 font-mono text-xs"
-        />
-      </div>
-      <div>
-        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "review notes" : "review notes"}</p>
-        <Textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={4} className="mt-2 text-sm" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={() => submit("keep_draft")} disabled={pending}>
-          {english ? "Keep as draft" : "保留为 draft"}
-        </Button>
-        <Button variant="secondary" onClick={() => submit("reject")} disabled={pending}>
-          <ShieldAlert className="h-4 w-4" />
-          {english ? "Reject" : "驳回"}
-        </Button>
-        <Button variant="secondary" onClick={() => submit("edit_confirm")} disabled={pending}>
-          <Sparkles className="h-4 w-4" />
-          {english ? "Edit then confirm" : "编辑后确认"}
-        </Button>
-        <Button onClick={() => submit("confirm")} disabled={pending}>
-          <CheckCircle2 className="h-4 w-4" />
-          {english ? "Confirm" : "确认"}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 export function MeetingV2RuntimeCard({
   meetingId,
@@ -308,11 +114,8 @@ export function MeetingV2RuntimeCard({
   const [requestPostureSummaryOverride, setRequestPostureSummaryOverride] = useState<string | null>(null);
   const [requestPostureTakeoverStateOverride, setRequestPostureTakeoverStateOverride] = useState<string | null>(null);
   const [requestPostureHumanInputStateOverride, setRequestPostureHumanInputStateOverride] = useState<string | null>(null);
-  const [continuityRemediationPreview, setContinuityRemediationPreview] = useState<{
-    action: "SAVE_RECOVERY_CHECKPOINT" | "RESUME_CHECKPOINT" | "REPRUNE_CONTEXT";
-    executionStatus: "APPLIED" | "REVIEW_REQUIRED" | "BLOCKED";
-    rollbackAnchorLabel: string | null;
-  } | null>(null);
+  const [continuityRemediationPreview, setContinuityRemediationPreview] =
+    useState<MeetingV2RuntimeContinuityRemediationPreview | null>(null);
   const takeoverRequestState =
     takeoverRequestStateOverride ??
     (debuggerView?.takeoverRequest.state ?? runtime?.v21?.debugger.takeoverRequest.state ?? null);
@@ -352,12 +155,7 @@ export function MeetingV2RuntimeCard({
     factsJson,
     actionPackMarkdown,
     reviewNotes,
-  }: {
-    mode: "confirm" | "edit_confirm" | "reject" | "keep_draft";
-    factsJson: string;
-    actionPackMarkdown: string;
-    reviewNotes: string;
-  }) => {
+  }: MeetingV2RuntimeReviewPayload) => {
     startTransition(async () => {
       const result = await reviewMeetingActionPackRuntimeAction({
         meetingId,
@@ -476,9 +274,7 @@ export function MeetingV2RuntimeCard({
     });
   };
 
-  const runContinuityRemediation = (
-    action: "SAVE_RECOVERY_CHECKPOINT" | "RESUME_CHECKPOINT" | "REPRUNE_CONTEXT",
-  ) => {
+  const runContinuityRemediation = (action: MeetingV2RuntimeContinuityRemediationAction) => {
     const sessionId = runtime?.v21?.session.id;
     if (!sessionId) return;
 
@@ -1390,476 +1186,34 @@ export function MeetingV2RuntimeCard({
 
             <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
               <div className="min-w-0 space-y-4">
-                <div className="theme-surface-panel min-w-0 max-w-full overflow-hidden rounded-2xl px-4 py-4">
-                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                    <p className="min-w-0 text-sm font-semibold text-[color:var(--foreground)]">{english ? "Action pack preview" : "行动包预览"}</p>
-                    {runtime.latestMeetingEndedEvent ? (
-                      <p className="min-w-0 break-words text-xs text-[color:var(--muted-foreground)]">
-                        {english ? "latest run" : "最近运行"} · {formatDateLabel(runtime.latestMeetingEndedEvent.createdAt)}
-                      </p>
-                    ) : null}
-                  </div>
-                  <pre className="mt-3 max-w-full whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--foreground)]">
-                    {text(runtime.actionPack?.markdown ?? (english ? "No action pack yet." : "当前还没有行动包。"))}
-                  </pre>
-                </div>
-
-                <div className="theme-surface-panel min-w-0 max-w-full overflow-hidden rounded-2xl px-4 py-4">
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Evidence, open questions, and shadow write boundary" : "依据、待确认问题与影子写入边界"}</p>
-                  <div className="mt-3 grid min-w-0 gap-4 md:grid-cols-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "evidence refs" : "依据引用"}</p>
-                      <ul className="mt-2 space-y-1 text-sm text-[color:var(--muted)]">
-                        {(runtime.analystRun?.evidenceRefs ?? []).map((item) => (
-                          <li key={item} className="break-all">- {item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "open questions" : "待确认问题"}</p>
-                      <ul className="mt-2 space-y-1 text-sm text-[color:var(--muted)]">
-                        {(runtime.actionPack?.openQuestions ?? []).map((item) => (
-                          <li key={item} className="break-words">- {text(item)}</li>
-                        ))}
-                        {!runtime.actionPack?.openQuestions.length ? <li>- {english ? "No open questions." : "当前无额外待确认问题。"}</li> : null}
-                      </ul>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "shadow boundary" : "影子写入边界"}</p>
-                      <ul className="mt-2 space-y-1 text-sm text-[color:var(--muted)]">
-                        <li>- {english ? "Shadow stage / risk / next action only." : "只更新影子阶段、风险和下一步。"}</li>
-                        <li>- {english ? "No official CRM state writeback happens here." : "这里不会写入正式 CRM 状态。"}</li>
-                        <li>- {english ? "No external send or commitment is created." : "这里不会生成外发或正式承诺。"}</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                {runtime.opportunityShadow ? (
-                  <div className="theme-surface-panel min-w-0 max-w-full overflow-hidden rounded-2xl px-4 py-4">
-                    <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Latest shadow update" : "最近的影子更新"}</p>
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                      <div>
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "stage / risk" : "阶段 / 风险"}</p>
-                        <p className="mt-2 text-sm text-[color:var(--foreground)]">
-                          {runtime.opportunityShadow.stage ?? "-"} / {runtime.opportunityShadow.riskLevel ?? "-"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "manager attention" : "管理者关注"}</p>
-                        <p className="mt-2 text-sm text-[color:var(--foreground)]">{runtime.opportunityShadow.managerAttentionFlag ? (english ? "yes" : "是") : (english ? "no" : "否")}</p>
-                      </div>
-                      <div className="md:col-span-2">
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "next action / blockers" : "下一步 / 阻塞"}</p>
-                        <p className="mt-2 text-sm text-[color:var(--foreground)]">{runtime.opportunityShadow.nextAction ? text(runtime.opportunityShadow.nextAction) : "-"}</p>
-                        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{runtime.opportunityShadow.blockersSummary ? text(runtime.opportunityShadow.blockersSummary) : "-"}</p>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+                <MeetingV2RuntimeActionPackPanel runtime={runtime} english={english} text={text} />
 
                 {runtime.v21 ? (
-                  <details open className="theme-surface-panel rounded-2xl px-4 py-4">
-                    <summary className="cursor-pointer text-sm font-semibold text-[color:var(--foreground)]">
-                      {english ? "Background continuity readout" : "后台运行摘要"}
-                    </summary>
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
-                      <div>
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Current state" : "当前状态"}</p>
-                        {runtime.v21.continuity.notebookState ? (
-                          <>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{text(runtime.v21.continuity.notebookState.objective)}</p>
-                            <div className="mt-2 space-y-1 text-sm text-[color:var(--muted-foreground)]">
-                              <p>{english ? "Review state" : "复核状态"} · {renderRuntimeStatusLabel(runtime.v21.continuity.notebookState.reviewState.toUpperCase(), english)}</p>
-                              {runtime.v21.continuity.notebookState.confirmedFacts.length ? (
-                                <p>{english ? "Confirmed" : "已确认"} · {runtime.v21.continuity.notebookState.confirmedFacts.slice(0, 2).map(text).join(" / ")}</p>
-                              ) : null}
-                            </div>
-                          </>
-                        ) : (
-                          <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{english ? "No background note yet." : "当前还没有后台记录。"}</p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Saved state" : "保存状态"}</p>
-                        <p className="mt-2 text-sm text-[color:var(--muted)]">
-                          {runtime.v21.latestCheckpoint
-                            ? `${text(runtime.v21.latestCheckpoint.label)} · ${renderRuntimeStatusLabel(runtime.v21.latestCheckpoint.status.toUpperCase(), english)}`
-                            : english
-                              ? "No saved point yet."
-                              : "当前没有恢复点。"}
-                        </p>
-                        <div className="mt-2 space-y-1 text-sm text-[color:var(--muted-foreground)]">
-                          <p>{text(runtime.v21.continuity.budgetPosture.reason)}</p>
-                          <p>{text(runtime.v21.continuity.budgetPosture.savingsSummary)}</p>
-                          <p>
-                            {english
-                              ? `${runtime.v21.payloads.items.filter((item) => item.activeInContext).length} active / ${runtime.v21.payloads.total} saved context items`
-                              : `当前使用 ${runtime.v21.payloads.items.filter((item) => item.activeInContext).length} 条 / 已保存资料 ${runtime.v21.payloads.total} 条`}
-                          </p>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Evidence and blockers" : "依据与阻塞"}</p>
-                        <ul className="mt-2 space-y-1 text-sm text-[color:var(--muted)]">
-                          {runtime.v21.continuity.notebookState?.blockers.slice(0, 2).map((item, index) => (
-                            <li key={`blocker-${index}`}>- {text(item)}</li>
-                          ))}
-                          {runtime.v21.continuity.notebookState?.openQuestions.slice(0, 2).map((item, index) => (
-                            <li key={`question-${index}`}>- {text(item)}</li>
-                          ))}
-                          {runtime.v21.truthConflicts.slice(0, 2).map((item) => (
-                            <li key={item.id}>- {text(item.summary)}</li>
-                          ))}
-                          {!runtime.v21.continuity.notebookState?.blockers.length &&
-                          !runtime.v21.continuity.notebookState?.openQuestions.length &&
-                          !runtime.v21.truthConflicts.length ? (
-                            <li>- {english ? "No open blocker currently needs attention." : "当前没有需要处理的阻塞。"}</li>
-                          ) : null}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Next move" : "下一步动作"}</p>
-                        <ul className="mt-2 space-y-1 text-sm text-[color:var(--muted)]">
-                          {runtime.v21.continuity.notebookState?.nextActions.slice(0, 3).map((item, index) => (
-                            <li key={`next-${index}`}>- {text(item)}</li>
-                          ))}
-                          {!runtime.v21.continuity.notebookState?.nextActions.length ? (
-                            <li>- {english ? "Keep the meeting in review until a concrete next step appears." : "保持复核，等明确动作后再推进。"}</li>
-                          ) : null}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Recovery control" : "恢复控制"}</p>
-                        <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]" data-testid="continuity-recovery-state">
-                          {runtime.v21.continuity.recovery.state} · {runtime.v21.continuity.recovery.failureTaxonomy}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{runtime.v21.continuity.recovery.summary}</p>
-                        <div className="mt-2 space-y-1 text-sm text-[color:var(--muted-foreground)]">
-                          <p>{runtime.v21.continuity.recovery.operatorAction}</p>
-                          {runtime.v21.continuity.recovery.reviewReasons.length ? (
-                            <p>
-                              review reasons · {runtime.v21.continuity.recovery.reviewReasons.join(" / ")}
-                            </p>
-                          ) : null}
-                          {runtime.v21.continuity.recovery.blockedReasons.length ? (
-                            <p>
-                              blocked reasons · {runtime.v21.continuity.recovery.blockedReasons.join(" / ")}
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {runtime.v21.continuity.recovery.allowedActions.map((action) => (
-                            <Button
-                              key={action}
-                              variant="secondary"
-                              className="relative z-10 scroll-mt-32"
-                              data-testid={`continuity-remediation-${action.toLowerCase()}`}
-                              onClick={() => runContinuityRemediation(action)}
-                            >
-                              {action === "SAVE_RECOVERY_CHECKPOINT"
-                                ? english
-                                  ? "Save recovery point"
-                                  : "保存恢复点"
-                                : action === "RESUME_CHECKPOINT"
-                                  ? english
-                                    ? "Restore recovery point"
-                                    : "回到恢复点"
-                                  : english
-                                    ? "Refresh context"
-                                    : "重新整理上下文"}
-                            </Button>
-                          ))}
-                          {!runtime.v21.continuity.recovery.allowedActions.length ? (
-                            <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">
-                              No bounded remediation action is available here.
-                            </p>
-                          ) : null}
-                          {continuityRemediationPreview ? (
-                            <div className="w-full rounded-xl border border-[color:var(--border)]/80 bg-[color:var(--surface-subtle)]/70 px-3 py-2 text-xs leading-5 text-[color:var(--muted)]">
-                              <p>{`${continuityRemediationPreview.executionStatus} · ${continuityRemediationPreview.action}`}</p>
-                              {continuityRemediationPreview.rollbackAnchorLabel ? (
-                                <p>
-                                  {`rollback anchor · ${continuityRemediationPreview.rollbackAnchorLabel}${
-                                    continuityRemediationPreview.action === "RESUME_CHECKPOINT" ? " · RESUMED" : ""
-                                  }`}
-                                </p>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Operating guidance" : "操作指引"}</p>
-                        <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{text(runtime.v21.continuity.sop.title)}</p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{text(runtime.v21.continuity.sop.summary)}</p>
-                        <ul className="mt-2 space-y-1 text-sm text-[color:var(--muted-foreground)]">
-                          {runtime.v21.continuity.sop.evidenceChecklist.slice(0, 3).map((item, index) => (
-                            <li key={`${item}-${index}`}>- {text(item)}</li>
-                          ))}
-                          <li>- {text(runtime.v21.continuity.sop.escalationRule)}</li>
-                        </ul>
-                        <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">{text(runtime.v21.continuity.sop.boundaryNote)}</p>
-                      </div>
-                      <div data-testid="continuity-remediation-analytics">
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Remediation analytics" : "修复分析"}</p>
-                        <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{runtime.v21.continuity.analytics.repeatPattern.status}</p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{text(runtime.v21.continuity.analytics.repeatPattern.summary)}</p>
-                        <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
-                          attempts {runtime.v21.continuity.analytics.totalAttempts} · applied {runtime.v21.continuity.analytics.appliedCount} · review {runtime.v21.continuity.analytics.reviewRequiredCount} · blocked {runtime.v21.continuity.analytics.blockedCount}
-                        </p>
-                      </div>
-                      <div data-testid="continuity-remediation-effectiveness">
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Remediation effectiveness" : "修复有效性"}</p>
-                        <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{runtime.v21.continuity.effectiveness.latestOutcome}</p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{text(runtime.v21.continuity.effectiveness.latestSummary)}</p>
-                        <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
-                          effective {runtime.v21.continuity.effectiveness.effectiveCount} · partial {runtime.v21.continuity.effectiveness.partialCount} · ineffective {runtime.v21.continuity.effectiveness.ineffectiveCount} · no signal {runtime.v21.continuity.effectiveness.noSignalCount}
-                        </p>
-                      </div>
-                      <div data-testid="continuity-recovery-calibration">
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Recovery calibration" : "恢复校准"}</p>
-                        <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">
-                          {runtime.v21.continuity.calibration.rawState} -&gt; {runtime.v21.continuity.calibration.calibratedState} · {runtime.v21.continuity.calibration.confidence}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{text(runtime.v21.continuity.calibration.summary)}</p>
-                        <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">{runtime.v21.continuity.calibration.reasons.map(text).join(" / ")}</p>
-                      </div>
-                      <div data-testid="continuity-evidence-surface">
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Evidence surface" : "证据面"}</p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                          Repeat pattern · {runtime.v21.continuity.analytics.repeatPattern.summary}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                          Blocked because · {runtime.v21.continuity.recovery.blockedReasons.length ? runtime.v21.continuity.recovery.blockedReasons.join(" / ") : runtime.v21.continuity.recovery.operatorAction}
-                        </p>
-                        <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                          {runtime.v21.continuity.evidence.items.slice(0, 4).map((item, index) => (
-                            <li key={`continuity-evidence-${index}`}>- {item}</li>
-                          ))}
-                          {!runtime.v21.continuity.evidence.items.length ? (
-                            <li>- {runtime.v21.continuity.evidence.summary}</li>
-                          ) : null}
-                        </ul>
-                      </div>
-                      <div data-testid="continuity-sop">
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "SOP" : "SOP"}</p>
-                        <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{runtime.v21.continuity.sop.title}</p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{runtime.v21.continuity.sop.summary}</p>
-                        <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
-                          evidence collection · {runtime.v21.continuity.sop.evidenceChecklist.join(" / ")}
-                        </p>
-                      </div>
-                      <div data-testid="continuity-runbook">
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Runbook" : "运行手册"}</p>
-                        <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{runtime.v21.continuity.runbook.title}</p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{runtime.v21.continuity.runbook.summary}</p>
-                        <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                          {runtime.v21.continuity.runbook.steps.map((item, index) => (
-                            <li key={`continuity-runbook-${index}`}>- {item}</li>
-                          ))}
-                          <li>- {runtime.v21.continuity.runbook.boundaryNote}</li>
-                        </ul>
-                      </div>
-                      <div className="md:col-span-2" data-testid="continuity-pilot-review">
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Pilot review" : "试点复核"}</p>
-                        <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">
-                          {runtime.v21.continuity.pilotReview.failureTaxonomy} · threshold {runtime.v21.continuity.pilotReview.recommendedIneffectiveThreshold} · risk {runtime.v21.continuity.pilotReview.riskBand}
-                        </p>
-                        <div className="mt-2 grid gap-2 text-xs leading-5 text-[color:var(--muted-foreground)] md:grid-cols-2">
-                          <p>pilot workspace {runtime.v21.continuity.pilotReview.workspaceSizeBand} · session density {runtime.v21.continuity.pilotReview.sessionDensityBand}</p>
-                          <p>meeting cadence {runtime.v21.continuity.pilotReview.meetingFrequencyBand} · failure history {runtime.v21.continuity.pilotReview.failureHistoryBand}</p>
-                          <p>participants {runtime.v21.continuity.pilotReview.participantRolePosture} · sample {runtime.v21.continuity.pilotReview.sampleCoverageBand}</p>
-                          <p>stability {runtime.v21.continuity.pilotReview.stabilityBand} · stability confidence {runtime.v21.continuity.pilotReview.stabilityConfidenceBand}</p>
-                          <p>scale-up {text(runtime.v21.continuity.pilotReview.stabilityScaleUpSummary)}</p>
-                          <p>scale-up recheck {text(runtime.v21.continuity.pilotReview.stabilityScaleUpRecheckSummary)}</p>
-                          <p>subgroup stability drift review {text(runtime.v21.continuity.pilotReview.subgroupStabilityDriftSummary)}</p>
-                          <p>cohort aging comparison {text(runtime.v21.continuity.pilotReview.subgroupCohortAgingSummary)}</p>
-                          <p>cohort aging scale-up review {text(runtime.v21.continuity.pilotReview.subgroupDriftAgingScaleUpSummary)}</p>
-                          <p>subgroup drift long-term cohort aging review {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermCohortAgingSummary)}</p>
-                          <p>subgroup drift long-term sample expansion review {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermSampleExpansionSummary)}</p>
-                          <p>sample expansion refinement review {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermSampleExpansionRefinementSummary)}</p>
-                          <p>interval {runtime.v21.continuity.pilotReview.confidenceInterval} confidence interval · {text(runtime.v21.continuity.pilotReview.intervalWordingSummary)}</p>
-                          <p>wording drift audit {text(runtime.v21.continuity.pilotReview.intervalWordingDriftSummary)}</p>
-                          <p>wording drift tracking {text(runtime.v21.continuity.pilotReview.wordingDriftTrackingSummary)}</p>
-                          <p>interval consistency guidance {text(runtime.v21.continuity.pilotReview.intervalConsistencyGuidanceSummary)}</p>
-                          <p>interval wording aging audit {text(runtime.v21.continuity.pilotReview.intervalWordingAgingSummary)}</p>
-                          <p>cross-surface interval wording regression review {text(runtime.v21.continuity.pilotReview.intervalWordingRegressionSummary)}</p>
-                          <p>cross-surface interval wording consistency audit {text(runtime.v21.continuity.pilotReview.intervalWordingConsistencyAuditSummary)}</p>
-                          <p>cross-surface interval wording regression audit {text(runtime.v21.continuity.pilotReview.intervalWordingRegressionAuditSummary)}</p>
-                          <p>cross-readout interval wording regression audit {text(runtime.v21.continuity.pilotReview.intervalWordingCrossReadoutAuditSummary)}</p>
-                          <p>cross-readout interval wording regression refinement {text(runtime.v21.continuity.pilotReview.intervalWordingCrossReadoutRegressionRefinementSummary)}</p>
-                          <p>outcome {runtime.v21.continuity.pilotReview.outcomeCorrelationBand} · horizon drift {text(runtime.v21.continuity.pilotReview.longHorizonSummary)}</p>
-                          <p>long-term SOP {text(runtime.v21.continuity.pilotReview.longTermSopImpactSummary)}</p>
-                          <p>material impact {runtime.v21.continuity.pilotReview.longTermMaterialImpactBand} · material impact on long-term outcomes {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactSummary)}</p>
-                          <p>material impact review {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactReviewSummary)}</p>
-                          <p>material impact audit {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactAuditSummary)}</p>
-                          <p>material impact pattern aging review {text(runtime.v21.continuity.pilotReview.materialImpactPatternAgingSummary)}</p>
-                          <p>material impact sampling review {text(runtime.v21.continuity.pilotReview.materialImpactSamplingSummary)}</p>
-                          <p>material impact sampling aging review {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingSummary)}</p>
-                          <p>material impact sampling aging refinement {text(runtime.v21.continuity.pilotReview.materialImpactAgingRefinementSummary)}</p>
-                          <p>material impact sampling aging audit {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingAuditSummary)}</p>
-                          <p>material impact sampling aging refinement audit {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingRefinementAuditSummary)}</p>
-                          <p>guidance {text(runtime.v21.continuity.pilotReview.guidanceRefinementSummary)}</p>
-                          <p>operator handling {text(runtime.v21.continuity.pilotReview.operatorHandlingSummary)}</p>
-                          <p>variance {text(runtime.v21.continuity.pilotReview.varianceSummary)}</p>
-                          <p>runbook evidence collection {text(runtime.v21.continuity.runbook.summary)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </details>
+                  <MeetingV2RuntimeContinuityReadout
+                    runtime={runtime}
+                    english={english}
+                    text={text}
+                    continuityRemediationPreview={continuityRemediationPreview}
+                    onRunContinuityRemediation={runContinuityRemediation}
+                  />
                 ) : null}
               </div>
 
               <div className="min-w-0 space-y-4">
-                <div className="theme-surface-panel min-w-0 max-w-full overflow-hidden rounded-2xl px-4 py-4">
-                  <p className="break-words text-sm font-semibold text-[color:var(--foreground)]">{english ? "Current review posture" : "当前复核状态"}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {runtime.approvalRequest ? (
-                      <Badge variant={renderStatusVariant(runtime.approvalRequest.status)}>
-                        {runtime.approvalRequest.approvalTier} · {runtime.approvalRequest.status}
-                      </Badge>
-                    ) : null}
-                    {runtime.artifactReview ? (
-                      <Badge variant={renderStatusVariant(runtime.artifactReview.status)}>{runtime.artifactReview.status}</Badge>
-                    ) : null}
-                    {runtime.judgeRun ? (
-                      <Badge variant={renderStatusVariant(runtime.judgeRun.status)}>
-                        {english ? "judge" : "judge"} · {runtime.judgeRun.status}
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="mt-3 break-words text-sm leading-6 text-[color:var(--muted)]">
-                    {runtime.approvalRequest?.requestedReason
-                      ? text(runtime.approvalRequest.requestedReason)
-                      :
-                      (english
-                        ? "Meeting facts must stay draft until a human confirms them."
-                        : "会议事实在人工确认前必须保持草稿。")}
-                  </p>
-                  {runtime.artifactReview?.reviewNotes ? (
-                    <p className="mt-2 break-words text-sm leading-6 text-[color:var(--muted-foreground)]">{text(runtime.artifactReview.reviewNotes)}</p>
-                  ) : null}
-                </div>
+                <MeetingV2RuntimeReviewPanel
+                  meetingId={meetingId}
+                  runtime={runtime}
+                  english={english}
+                  pending={pending}
+                  canReview={Boolean(canReview)}
+                  text={text}
+                  onSubmit={submitReview}
+                />
 
-                {canReview ? (
-                  <div className="theme-surface-panel min-w-0 max-w-full overflow-hidden rounded-2xl px-4 py-4">
-                    <p className="break-words text-sm font-semibold text-[color:var(--foreground)]">{english ? "Human confirm" : "人工确认"}</p>
-                    <p className="mt-2 break-words text-sm leading-6 text-[color:var(--muted)]">
-                      {english
-                        ? "Confirm, edit-then-confirm, reject, or keep this draft. Only confirmed facts can promote memory and trigger downstream opportunity judgement."
-                        : "你可以确认、编辑后确认、驳回，或保留草稿。只有确认后的事实才能提升为记忆，并继续触发下游机会判断。"}
-                    </p>
-                    <MeetingV2RuntimeReviewForm
-                      key={runtime.artifactReview?.id ?? runtime.latestMeetingEndedEvent?.id ?? meetingId}
-                      english={english}
-                      pending={pending}
-                      defaultFactsJson={runtime.editorDraft?.factsJson ?? ""}
-                      defaultActionPackMarkdown={runtime.editorDraft?.actionPackMarkdown ?? ""}
-                      defaultReviewNotes={runtime.editorDraft?.reviewNotes ?? ""}
-                      onSubmit={submitReview}
-                    />
-                  </div>
-                ) : (
-                  <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                    <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Current outcome" : "当前结果"}</p>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                      {runtime.artifactReview?.status === "CONFIRMED"
-                        ? english
-                          ? "This meeting runtime has been confirmed. Promotable memory is visible below, and downstream judgement can now review any shadow consume separately."
-                            : "这条会议运行链已确认。可提升的记忆已在下方可见，后续影子消费需要再经过单独的下游判断复核。"
-                        : runtime.artifactReview?.status === "REJECTED"
-                          ? english
-                            ? "This runtime was rejected. Evidence is retained, but nothing was promoted or written into shadow state."
-                            : "这条运行时已被拒绝。evidence 仍然保留，但没有 晋升，也没有写入阴影状态。"
-                          : english
-                            ? "This runtime is not waiting on human confirmation right now."
-                            : "当前这条运行链暂时不在等待人工确认。"}
-                    </p>
-                  </div>
-                )}
-
-                <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Memory promotion posture" : "记忆提升状态"}</p>
-                  <ul className="mt-3 space-y-2 text-sm text-[color:var(--muted)]">
-                    {runtime.promotedMemory.map((item) => (
-                      <li key={item.id}>- {item.summary}</li>
-                    ))}
-                    {!runtime.promotedMemory.length ? <li>- {english ? "No promoted memory yet." : "当前还没有已提升记忆。"}</li> : null}
-                  </ul>
-                  <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {english
-                      ? "Promoted items are only human-confirmed object facts and checkpoint memory. Inferred items remain draft unless a human turns them into facts."
-                      : "当前只会提升人工确认的对象事实和检查点记忆。推断项仍保持草稿，除非人工把它改成事实。"}
-                  </p>
-                </div>
+                <MeetingV2RuntimePromotionPanel runtime={runtime} english={english} />
 
                 {runtime.v21 ? (
                   <>
-                    <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                      <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Verification and promotion queue" : "验证与提升队列"}</p>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                        {runtime.v21.verification?.summary ??
-                          (english
-                            ? "Verification has not run yet."
-                            : "当前验证还没有跑起来。")}
-                      </p>
-                      <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
-                        {english
-                          ? `${runtime.v21.promotionQueue.candidates} candidates, ${runtime.v21.promotionQueue.promoted} promoted, ${runtime.v21.promotionQueue.deferred} deferred, ${runtime.v21.promotionQueue.rejected} rejected`
-                          : `${runtime.v21.promotionQueue.candidates} 个候选，${runtime.v21.promotionQueue.promoted} 个 promoted，${runtime.v21.promotionQueue.deferred} 个 deferred，${runtime.v21.promotionQueue.rejected} 个 rejected`}
-                      </p>
-                      {runtime.v21.verification?.blockedReasons.length ? (
-                        <ul className="mt-3 space-y-1 text-sm text-[color:var(--muted)]">
-                          {runtime.v21.verification.blockedReasons.map((item) => (
-                            <li key={item}>- {item}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      {runtime.v21.promotionDecisions.length ? (
-                        <ul className="mt-4 space-y-3">
-                          {runtime.v21.promotionDecisions.map((item) => (
-                            <li key={item.id} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant={renderStatusVariant(item.disposition)}>{item.disposition}</Badge>
-                                {item.verificationStatus ? (
-                                  <Badge variant={renderStatusVariant(item.verificationStatus)}>{item.verificationStatus}</Badge>
-                                ) : null}
-                                {item.truthConflictStatus !== "NONE" ? (
-                                  <Badge variant={item.truthConflictStatus === "OPEN" ? "danger" : "neutral"}>
-                                    {item.truthConflictStatus}
-                                  </Badge>
-                                ) : null}
-                              </div>
-                              <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">{item.summary}</p>
-                              <p className="mt-1 text-sm leading-6 text-[color:var(--muted)]">{item.rationale}</p>
-                              <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                                {[
-                                  item.sourceClasses.length
-                                    ? `${english ? "sources" : "sources"}: ${item.sourceClasses.join(" / ")}`
-                                    : null,
-                                  item.confidence !== null ? `${english ? "confidence" : "confidence"}: ${item.confidence}` : null,
-                                  item.evidenceRefs.length ? `${english ? "evidence" : "evidence"}: ${item.evidenceRefs.join(" / ")}` : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </p>
-                              {item.truthConflictSummary ? (
-                                <p className="mt-2 text-xs leading-5 text-[color:var(--status-warning-text)]">
-                                  {english ? "Conflict" : "冲突"}: {item.truthConflictSummary}
-                                </p>
-                              ) : null}
-                              {item.blockedReasons.length ? (
-                                <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                                  {item.blockedReasons.join(" ")}
-                                </p>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-
                     <div className="theme-surface-panel rounded-2xl px-4 py-4">
                       <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Problem spaces and edge briefs" : "问题空间s 与 edge摘要s"}</p>
                       <div className="mt-3 space-y-3">
@@ -4672,201 +4026,18 @@ export function MeetingV2RuntimeCard({
                       </div>
                     </div>
 
-                    <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Reflection queue" : "reflection queue"}</p>
-                        {canManageRuntime ? (
-                          <Button variant="secondary" onClick={queueReflection} disabled={pending}>
-                            {english ? "Queue reflection" : "加入反思队列"}
-                          </Button>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                        {english
-                          ? "Reflection only compacts trusted runtime state into a reviewable 延续 summary. It does not auto-promote memory or rewrite canonical truth."
-                          : "反思只会把 可信运行时状态 收成可复核的 续传摘要，不会自动 晋升 经营记忆，也不会改写 权威事实。"}
-                      </p>
-                      <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
-                        {english
-                          ? `${runtime.v21.reflection.activeJobs} active reflection jobs in this session`
-                          : `当前 session 有 ${runtime.v21.reflection.activeJobs} 个 active 反思 jobs`}
-                      </p>
-                      <div className="mt-3 space-y-3">
-                        {runtime.v21.reflection.recentJobs.map((job) => (
-                          <div key={job.id} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant={renderStatusVariant(job.status)}>{job.status}</Badge>
-                                <span className="text-xs font-medium text-[color:var(--muted-foreground)]">{job.jobType}</span>
-                              </div>
-                              <span className="text-xs text-[color:var(--muted-foreground)]">{formatDateLabel(job.createdAt)}</span>
-                            </div>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{job.inputSummary}</p>
-                            {job.outputSummary ? (
-                              <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">{job.outputSummary}</p>
-                            ) : null}
-                            {canManageRuntime ? (
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {job.status !== "PAUSED" ? (
-                                  <Button
-                                    variant="secondary"
-                                    onClick={() => updateConsolidation(job.id, "pause")}
-                                    disabled={pending}
-                                  >
-                                    {english ? "Pause" : "暂停"}
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="secondary"
-                                    onClick={() => updateConsolidation(job.id, "resume")}
-                                    disabled={pending}
-                                  >
-                                    {english ? "Resume" : "恢复"}
-                                  </Button>
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                        {!runtime.v21.reflection.recentJobs.length ? (
-                          <p className="text-sm text-[color:var(--muted-foreground)]">
-                            {english ? "No reflection job yet." : "当前还没有反思 job。"}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="mt-4 space-y-3">
-                        <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                          {english ? "Reflection 延续" : "reflection 延续"}
-                        </p>
-                        {runtime.v21.reflection.recentCandidates.map((candidate) => (
-                          <div key={candidate.id} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="space-y-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant={renderStatusVariant(candidate.status)}>{candidate.status}</Badge>
-                                  <span className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                                    {candidate.sessionLabel}
-                                  </span>
-                                </div>
-                                <p className="text-sm leading-6 text-[color:var(--foreground)]">{candidate.summary}</p>
-                                <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">{candidate.reviewPosture}</p>
-                                <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">{candidate.evidenceSummary}</p>
-                              </div>
-                              {candidate.status === "VERIFIED" ? (
-                                <div className="flex flex-wrap gap-2">
-                                  {canReviewRuntime ? (
-                                    <Button
-                                      data-reflection-carry-forward-action="accept"
-                                      onClick={() => acceptReflectionCandidate(candidate.id)}
-                                      disabled={pending}
-                                    >
-                                      {english ? "Accept" : "接受"}
-                                    </Button>
-                                  ) : null}
-                                  {canManageRuntime ? (
-                                    <Button
-                                      data-reflection-carry-forward-action="dismiss"
-                                      variant="ghost"
-                                      onClick={() => dismissReflectionCandidate(candidate.id)}
-                                      disabled={pending}
-                                    >
-                                      {english ? "Dismiss" : "忽略"}
-                                    </Button>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              {candidate.sourceClasses.map((sourceClass) => (
-                                <Badge key={`${candidate.id}-${sourceClass}`} variant="neutral">
-                                  {sourceClass}
-                                </Badge>
-                              ))}
-                              <span className="text-xs text-[color:var(--muted-foreground)]">
-                                {formatDateLabel(candidate.createdAt)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                        {!runtime.v21.reflection.recentCandidates.length ? (
-                          <p className="text-sm text-[color:var(--muted-foreground)]">
-                            {english
-                              ? "No reflection 延续 candidate yet."
-                              : "当前还没有反思 延续 候选。"}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Consolidation queue" : "consolidation queue"}</p>
-                        {canManageRuntime ? (
-                          <Button variant="secondary" onClick={queueConsolidation} disabled={pending}>
-                            {english ? "Queue manual consolidation" : "加入人工整合队列"}
-                          </Button>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                        {runtime.v21.consolidation.auditSummary.summary}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                        {runtime.v21.consolidation.auditSummary.rollbackSummary}
-                      </p>
-                      <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
-                        {english
-                          ? `${runtime.v21.consolidation.activeJobs} active jobs in this session`
-                          : `当前 session 有 ${runtime.v21.consolidation.activeJobs} 个 active jobs`}
-                      </p>
-                      <div className="mt-3 space-y-3">
-                        {runtime.v21.consolidation.recentJobs.map((job) => (
-                          <div key={job.id} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant={renderStatusVariant(job.status)}>{job.status}</Badge>
-                                <span className="text-xs font-medium text-[color:var(--muted-foreground)]">{job.jobType}</span>
-                              </div>
-                              <span className="text-xs text-[color:var(--muted-foreground)]">{formatDateLabel(job.createdAt)}</span>
-                            </div>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{job.inputSummary}</p>
-                            {job.outputSummary ? (
-                              <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">{job.outputSummary}</p>
-                            ) : null}
-                            {runtime.v21 ? (
-                              <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
-                                {runtime.v21.consolidation.auditSummary.boundaryNote}
-                              </p>
-                            ) : null}
-                            {canManageRuntime ? (
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {job.status !== "PAUSED" ? (
-                                  <Button
-                                    variant="secondary"
-                                    onClick={() => updateConsolidation(job.id, "pause")}
-                                    disabled={pending}
-                                  >
-                                    {english ? "Pause" : "暂停"}
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="secondary"
-                                    onClick={() => updateConsolidation(job.id, "resume")}
-                                    disabled={pending}
-                                  >
-                                    {english ? "Resume" : "恢复"}
-                                  </Button>
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                        {!runtime.v21.consolidation.recentJobs.length ? (
-                          <p className="text-sm text-[color:var(--muted-foreground)]">
-                            {english ? "No consolidation job yet." : "当前还没有 整合 job。"}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
+                    <MeetingV2RuntimeQueuesPanel
+                      runtime={runtime}
+                      english={english}
+                      pending={pending}
+                      canManageRuntime={canManageRuntime}
+                      canReviewRuntime={canReviewRuntime}
+                      queueReflection={queueReflection}
+                      queueConsolidation={queueConsolidation}
+                      updateConsolidation={updateConsolidation}
+                      acceptReflectionCandidate={acceptReflectionCandidate}
+                      dismissReflectionCandidate={dismissReflectionCandidate}
+                    />
                   </>
                 ) : null}
               </div>

@@ -122,7 +122,7 @@ zh/en 在 contract 层（不只是翻译 README）；locale-aware projection 已
 
 成功 = 在 30 分钟内完成以下可执行路径。当前第 3 / 4 步已有最小公开参考可读 / 可改；第 5 步仍需 D2 onboarding verification 在 fresh-clone 环境实跑，不把它提前写成已完全验证。
 
-1. `git clone <repo> && cd helm && docker compose up` — 起本地工作区
+1. `git clone https://github.com/Helm-OpenSource/helm-public.git && cd helm-public && docker compose up` — 起本地工作区
 2. `open http://localhost:3000` — 看到 `/operating`（经营信号流图）、`/approvals`（复核闸）、`/memory`（经营记忆）三张已经可工作的面（⚠️ `/operating` 当前为 **Phase 2 fixture demo**；接入真实业务数据需 Phase 2.3 runtime adoption 解锁）
 3. 读 [`extensions/case-management-sample/README.md`](../../extensions/case-management-sample/README.md) — 看一个 public-safe vertical 起点怎么组织
 4. 改 [`extensions/case-management-sample/tenant.manifest.json`](../../extensions/case-management-sample/tenant.manifest.json) 的 slug + displayName — 你的客户 vertical 雏形开始成形

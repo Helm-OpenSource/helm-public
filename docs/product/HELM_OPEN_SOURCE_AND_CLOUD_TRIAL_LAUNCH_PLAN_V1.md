@@ -202,7 +202,7 @@ review_after: 2026-07-26
   - `npm run check:secret-history` → PASS
   - `git log -S '<known-leaked-secret-prefix>' --all` → 0 hits（针对 internal SECURITY-known leaked prefix list）
   - `git for-each-ref --format='%(refname)' | xargs -I {} git rev-list {} | git cat-file --batch-check='%(objectname) %(objecttype) %(objectsize)' --batch-all-objects | grep -c blob` 对比 rewrite 前后 object count 减少（rewrite happened）
-  - `curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/<org>/<repo>/commits/<old-pre-rewrite-sha>` → `404` 或 `422`
+  - `curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/Helm-OpenSource/helm-public/commits/<old-pre-rewrite-sha>` → `404` 或 `422`
 - **pass-criteria**：4 项检查全 ✓ → ✓
 - **artifact-location**：`docs/internal/release-runbook-logs/secret-history-rewrite-<receipt-id>.json` + script `scripts/secret-history-check.ts` stdout 归档
 

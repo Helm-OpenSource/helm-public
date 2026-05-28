@@ -7,6 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "quickstart": "node --import tsx scripts/quickstart.ts",
+    "quickstart:doctor": "node --import tsx scripts/quickstart.ts --doctor",
     "postinstall": "node scripts/fix-local-lightningcss-signature.mjs",
     "prepare": "husky",
     "lint": "eslint app components data features hooks lib prisma scripts tests eslint.config.mjs next.config.ts playwright.config.ts postcss.config.mjs vitest.config.ts",

@@ -358,10 +358,6 @@ const apiMessageOwnerRules = [
     prefix: "app/api/conversation-capture/",
   },
   { owner: "evolution", prefix: "app/api/evolution/" },
-  {
-    owner: "tenant-private-extension",
-    prefix: `app/api/extensions/${tenantPrivateExtensionKey}/`,
-  },
   { owner: "helm-v2-runtime", prefix: "app/api/helm-v2/" },
   { owner: "imports", prefix: "app/api/imports/" },
   {

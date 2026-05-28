@@ -13,6 +13,9 @@ on:
   push:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 # Cancel in-flight preflight runs when a new push lands; full ci.yml stays.
 concurrency:
   group: preflight-${{ github.workflow }}-${{ github.ref }}

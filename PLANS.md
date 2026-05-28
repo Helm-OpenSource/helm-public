@@ -772,7 +772,7 @@
 - `git diff --check`：passed
 - `npm run typecheck`：failed on existing unrelated Prisma client / trial schema drift and missing `pinyin-pro` / `yaml` type resolution; no failure points to this seed rebuild.
 - `npm run check:boundaries`：failed on existing unrelated dashboard/page marker, trial/formal auth, skill-suggestion and Guangpu shared-layer boundary drift; no failure points to the new sales demo seed.
-- DB seed not executed: current `DATABASE_URL` resolves to remote RDS `rm-shuyao-dev-pub.mysql.rds.aliyuncs.com/helm2026`, not a local dev database.
+- DB seed not executed: current `DATABASE_URL` resolves to remote RDS `${HELM_DB_HOST}/helm2026`, not a local dev database.
 
 # Helm Business Advancement Production Query Adoption + Reviewer Approval Gate v1
 
@@ -1224,7 +1224,7 @@
 ## 3. 关键假设
 
 1. 基线为 `origin/main@208ed1b5c`，分支 `codex/market-positioning-upgrade` 已与 origin/main 对齐
-2. Mobile Command Surface 已实现并完成本地完整验证；旧版本里关于 DB-backed E2E 被 `rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306` 阻断的描述按「历史 / 已 unblocked」处理
+2. Mobile Command Surface 已实现并完成本地完整验证；旧版本里关于 DB-backed E2E 被 `${HELM_DB_HOST}` 阻断的描述按「历史 / 已 unblocked」处理
 3. Business Advancement Phase 1A / 1B / 2 / 2B / 2C / 3 系列文档与 disabled-by-default seam prototype / Phase 3O / 3P 已存在，runtime adoption 维持 No-Go
 4. Phase A 不批准 runtime extractor、schema 扩张、official write、自动执行、自动发送、page 行为变更或 production query adoption
 5. 不引入 enterprise multi-org / 完整 workflow / agent platform / CRM / BI / chat 平台
@@ -1371,7 +1371,7 @@
 
 1. Mobile targeted tests、typecheck、lint、boundary、Ask Helm eval、build、quality regression 已通过。
 2. README、docs index、implementation plan、closeout report 已同步。
-3. `self-check` 只失败在 `DATABASE_URL` 未配置；mobile Playwright 只失败在 `/demo` login 前置数据库不可达：`rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306`。
+3. `self-check` 只失败在 `DATABASE_URL` 未配置；mobile Playwright 只失败在 `/demo` login 前置数据库不可达：`${HELM_DB_HOST}`。
 4. DB-backed Playwright 阻塞作为环境前提记录，不把本轮实现扩成数据库修复任务。
 
 # Helm GTM Capability Plan Requirements v1
