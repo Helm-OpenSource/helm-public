@@ -642,13 +642,13 @@ describe("public release guard fixture coverage", () => {
 
     expect(projection.manifest.private).toBe(false);
     expect(projection.removedScripts).toEqual([
-      "self-check",
-      "release:check",
       `seed:${tenantSlug}-workspace`,
       "proof-pack:build",
     ]);
     expect(projection.manifest.scripts).toMatchObject({
       dev: "next dev",
+      "self-check": "tsx scripts/helm-self-check-refactored.ts",
+      "release:check": "tsx scripts/release-readiness-check.ts",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
     });

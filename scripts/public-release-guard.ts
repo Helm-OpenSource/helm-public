@@ -721,10 +721,6 @@ export function projectPublicPackageManifest(
     const publicScripts: Record<string, string> = {};
     for (const [name, command] of Object.entries(manifest.scripts)) {
       const candidate = `${name}\n${command}`;
-      if (name === "self-check" || name === "release:check") {
-        removedScripts.push(name);
-        continue;
-      }
       if (hasForbiddenPublicPackageReference(candidate)) {
         removedScripts.push(name);
         continue;

@@ -251,7 +251,9 @@ export default async function Home({
             <Link href="/programs">{english ? "Partner programs" : "合作计划"}</Link>
           </Button>
           <Button asChild variant="ghost">
-            <Link href="/login">{english ? "Sign in" : "登录"}</Link>
+            <Link href="/login" data-testid="home-path-login">
+              {english ? "Sign in" : "登录"}
+            </Link>
           </Button>
           <Button asChild variant="default">
             <a

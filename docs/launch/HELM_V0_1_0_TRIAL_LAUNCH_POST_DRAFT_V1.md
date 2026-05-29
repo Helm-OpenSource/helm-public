@@ -168,21 +168,21 @@ Release: `v0.1.0-trial` · License: Apache-2.0 · Repository: github.com/Helm-Op
 
 中文：
 
-> 🚢 **Helm v0.1.0-trial 已开放**：面向受控试点的经营推进控制台 · Apache-2.0 开源 + 阿里云 cn-hangzhou 试用 · 30/7 天数据保留 · no-SLA · `docker compose up` 即可起服务 · 详见 [public roadmap](docs/roadmap/HELM_PUBLIC_ROADMAP.md)
+> 🚢 **Helm v0.1.0-trial 发布候选**：面向受控试点的经营推进控制台 · Apache-2.0 开源 + 阿里云 cn-hangzhou 试用 · 30/7 天数据保留目标 · no-SLA · `docker compose up` 本地路径待 final smoke · 详见 [public roadmap](../roadmap/HELM_PUBLIC_ROADMAP.md)
 
 English:
 
-> 🚢 **Helm v0.1.0-trial is live**: a controlled-trial advancement console · Apache-2.0 OSS + Aliyun cn-hangzhou trial · 30/7-day retention · no SLA · 5-step local boot with `docker compose up` · see [public roadmap](docs/roadmap/HELM_PUBLIC_ROADMAP.md)
+> 🚢 **Helm v0.1.0-trial release candidate**: a controlled-trial advancement console · Apache-2.0 OSS + Aliyun cn-hangzhou trial · 30/7-day retention target · no SLA · final local smoke still required · see [public roadmap](../roadmap/HELM_PUBLIC_ROADMAP.md)
 
 ### 5.2 X (Twitter) 推文（<= 280 字符）
 
 中文：
 
-> 今天发布 Helm v0.1.0-trial：受控试点的经营推进控制台。Apache-2.0 开源 + 阿里云试用。把会议、邮箱、CRM 收敛成必须推进项与复核入口。不自动发送 / 不自动审批 / 不承诺 SLA。`git clone && docker compose up`。github.com/Helm-OpenSource/helm-public
+> 发布候选文案：Helm v0.1.0-trial 是受控试点的经营推进控制台。Apache-2.0 开源 + 阿里云试用。把会议、邮箱、CRM 收敛成必须推进项与复核入口。不自动发送 / 不自动审批 / 不承诺 SLA。`git clone && docker compose up`。github.com/Helm-OpenSource/helm-public
 
 English:
 
-> Releasing Helm v0.1.0-trial today: a controlled-trial advancement console. Apache-2.0 + Aliyun cn-hangzhou trial. Collapses meetings, email, CRM into must-push items + formal-review handoffs. No auto-send. No SLA. `git clone && docker compose up`. github.com/Helm-OpenSource/helm-public
+> Release-candidate copy: Helm v0.1.0-trial is a controlled-trial advancement console. Apache-2.0 + Aliyun cn-hangzhou trial. Collapses meetings, email, CRM into must-push items + formal-review handoffs. No auto-send. No SLA. `git clone && docker compose up`. github.com/Helm-OpenSource/helm-public
 
 ### 5.3 LinkedIn 短版（中英 ≤ 600 字符）
 

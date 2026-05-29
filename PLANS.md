@@ -1,3 +1,93 @@
+# Helm Public Open-Source Readiness Repair Plan
+
+更新时间：2026-05-26
+状态：first repair batch complete; DB-backed runtime tests blocked by local MySQL availability
+分支：`codex/open-source-readiness-fixes`
+
+## 0. 当前追加切片：同步最新 main 后的公开仓门禁入口收口（2026-05-29）
+
+目标：
+
+- 在 `origin/main@bc0413f` 基线上继续修复公开仓 readiness，避免把 stash 中的旧样例与远端最新 sample pack 混合。
+- 去掉 `package.json` 合并后重复的 `self-check` / `check:boundaries` script key，确保 `npm run check:boundaries` 实际执行公开发布组合门禁和 decision-first boundary check。
+- 保留远端最新 `extensions/case-management-sample/` 作为唯一 public sample truth；移除过期的 `extensions/public-samples/` 本地样例。
+
+影响面：
+
+- `package.json` script contract
+- `lib/extensions/registry.tsx` 与 `scripts/build-public-mirror-extensions-stub.ts`
+- `lib/extensions/solution-extension-catalog.test.ts`
+
+关键假设：
+
+- 当前公开样例 truth 是远端最新的 `extensions/case-management-sample/`，不是早前本地 stash 的 `extensions/public-samples/`。
+- public registry stub 应继续返回空 catalog，让 `lib/extensions/solution-extension-catalog.ts` 使用 checked-in case-management default catalog。
+- 本轮只修 repo-local readiness gate，不声明最终 release-ready。
+
+不做：
+
+- 不修改远端、不开 GitHub release、不 tag。
+- 不用本地旧 sample 覆盖远端新增 sample pack。
+- 不处理 owner/manual release receipt。
+
+验证：
+
+- `git diff --check`
+- `npm run test -- lib/extensions/solution-extension-catalog.test.ts lib/public-package-manifest-builder.test.ts lib/public-release-guard.test.ts`
+- `npm run public-mirror:extensions-stub:check`
+- `npm run check:boundaries`
+- `npm run typecheck`
+- `npm run eval:headless-signal-interface`
+- `npm run eval:operating-signal-flow`
+- `npm run quickstart:doctor`
+
+本轮追加结果：
+
+- 已补 `docs/reviews/HELM_DELIVERY_ENGINEER_D2_PREFLIGHT_BLOCKED_2026_05_29.md`，明确它不是 `HELM_DELIVERY_ENGINEER_D2_SMOKE*.md` receipt。
+- `npm run eval:headless-signal-interface` 与 `npm run eval:operating-signal-flow` 已通过。
+- `npm run quickstart:doctor` fail closed：本机未检测到 `docker compose` 或 `docker-compose`，因此不能生成 D2 fresh-clone smoke receipt。
+
+## 0.1 历史切片：公开仓发布阻断修复第一批（2026-05-26）
+
+目标：
+
+- 把公开仓唯一 truth 固定为 `Helm-OpenSource/helm-public`。
+- 修复 fresh clone 后立即可见的断链：缺失 npm scripts、缺失 `extensions/case-management-sample/`、缺失 self-check / release runbook 模块、typecheck/build blocker。
+- 保持公开发布仍为 Go/No-Go gate 控制；本轮不 tag、不 push main、不声明 v0.1 已发布。
+
+影响面：
+
+- `package.json` / lockfile、CI / Husky 脚本入口
+- `scripts/helm-self-check*.ts`、`scripts/self-check/config.ts`、`scripts/release-maintenance-runbook.ts`
+- `extensions/case-management-sample/`
+- `lib/extensions/registry.tsx` 与 public mirror stub generator
+- README / docs public surface
+
+关键假设：
+
+- 当前公开仓就是发布候选仓，不再把 `Helm-Developers/helm2026` 写成用户 clone / discussion 入口。
+- `case-management-sample` 必须是 synthetic / read-only / non-production-only；不能带 tenant-private host、凭据、真实客户数据或自动执行语义。
+- `check:boundaries` 在 public repo 中先收敛成公开发布边界组合门禁；源仓 legacy wide self-check 只能作为迁移证据保留，不作为 public runtime truth。
+
+不做：
+
+- 不执行 history rewrite、force-push、GitHub release、Docker 主机 smoke 或外部云端 secret rotation。
+- 不新增完整 extension runtime、marketplace、sandbox、自动执行平面或生产 connector。
+- 不把 sample pack 写成客户承诺或生产-ready pack。
+
+风险与验证：
+
+- 风险：为让 public repo 编译而弱化边界；通过 public-release guard、secret-history guard、delivery doctor、pack fixture check 和 typecheck 组合验证。
+- 风险：旧 release 文档仍混合 source/private repo 和 public mirror 状态；本轮先改高可见入口与当前 review 真值，后续可继续做 docs 全量 dead-link gate。
+- 验证：`npm run self-check`、`npm run check:boundaries`、`npm run delivery:doctor`、`npm run pack:fixture-check`、`npm run typecheck`、`npm run build`、`npm audit --audit-level=high`、public smoke / targeted tests。
+
+本轮结果：
+
+- 已修复 public repo clone / docs 入口、self-check / release-check / boundary script 入口、public extension registry stub、sample pack fixture、public sample extension manifest、`.codex` public config stub、API locale inventory public mirror drift、demo / memory / connector boundary wording。
+- `npm run self-check`、`npm run check:boundaries`、`npm run typecheck`、`npm run lint:strict`、`npm run build`、`npm run pack:fixture-check`、`npm run delivery:doctor`、`npm run public-mirror:verify -- --mirror-root .`、`npm run public:smoke -- --skip-build`、`git diff --check` 已通过。
+- `npm test` 当前结果：574 test files passed / 580，4354 tests passed / 4369；剩余 6 个 test files / 15 个 tests 均因本机 `127.0.0.1:3306` MySQL 不可达触发 Prisma 初始化失败。
+- `npm run release:check` 的 automated steps 全部通过；仍按预期返回 NOT READY，因为 7 个 owner/manual 发布项未设置：credential rotation、secret history remediation receipt、Docker smoke、on-call policy、audit trace posture、reviewer approval record、calibration report。
+
 # Open Core / Enterprise / Cloud Architecture Boundary Plan
 
 更新时间：2026-05-18

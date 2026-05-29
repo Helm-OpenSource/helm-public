@@ -16,9 +16,9 @@ archive_trigger:
 
 ## 1. 结论
 
-截至 `2026-05-26`，公开仓首页与公开治理入口的 repo-side 人工审校已经完成，今天在仓库内能完成的收口项已经补齐：
+截至 `2026-05-26`，公开仓首页与公开治理入口的 repo-side 人工审校已重新校准到当前公开仓 `Helm-OpenSource/helm-public`。本文件记录的是公开仓 surface truth；源仓 history remediation 不能继续和当前 public mirror 状态混写。
 
-1. README / CONTRIBUTING / public trial runbook / launch post draft 中的 GitHub 仓库占位符已替换为真实仓库地址 `Helm-OpenSource/helm-public`。
+1. README / CONTRIBUTING / public trial runbook / launch post draft 中的 GitHub 仓库占位符已替换为真实公开仓地址 `Helm-OpenSource/helm-public`。
 2. `CONTRIBUTING.md` 中对 internal-only docs 的直接引用已移除，避免公开镜像出现死链。
 3. 当前 repo-side public hygiene 仍然保持绿灯：
    - `npm run check:public-release`：PASS
@@ -27,9 +27,8 @@ archive_trigger:
 但 release 级结论没有变化：**当前仍然是 No-Go**。原因不是公开文案，而是公开发布关键前置仍未满足：
 
 1. 没有 cloud-side secret rotation / revocation receipt。
-2. `npm run check:secret-history` 仍然 FAIL。
-3. 没有 post-rewrite validation evidence。
-4. 没有真实 `mirror-clean:<receipt-id>`。
+2. 源仓 history remediation / post-rewrite validation evidence 仍未在公开发布 packet 中闭合。
+3. 没有最终 `mirror-clean:<receipt-id>` 与 final Go / No-Go decision packet。
 
 ## 2. 本次审校范围
 
@@ -50,7 +49,7 @@ archive_trigger:
 
 ### 3.1 已修复项
 
-1. README 的 clone URL 从占位符改为真实仓库地址。
+1. README 的 clone URL 从占位符 / 源仓地址改为真实公开仓地址。
 2. README 两处 Discussions 链接从占位符改为真实仓库 Discussions。
 3. README 中 `partners@helm.<domain>` 占位符已移除，统一收敛到 Discussions / `integration:` issue 入口。
 4. public trial runbook 的 GitHub Issues 链接从占位符改为真实仓库 Issues。
@@ -68,10 +67,9 @@ archive_trigger:
 
 以下问题不是今天 repo-side 文档审校能解决的，因此必须继续保持 `No-Go` 口径：
 
-1. `npm run check:secret-history` 仍然 FAIL，当前已知 compromised commit reachability 仍可达。
-2. 云端旧 credential 是否已失效，当前仓库内没有可验证证据。
-3. 正式 history rewrite 尚未执行，post-rewrite validation 证据不存在。
-4. 真实 public mirror candidate 与真实 `mirror-clean:<receipt-id>` 仍不存在。
+1. 云端旧 credential 是否已失效，当前仓库内没有可验证证据。
+2. 源仓正式 history remediation / post-rewrite validation 证据不在当前公开仓内闭合。
+3. 最终 release packet 仍缺真实 `mirror-clean:<receipt-id>` 与 Go / No-Go decision record。
 
 ## 5. 验证结果
 
@@ -81,20 +79,17 @@ archive_trigger:
 npm run check:public-release
 # PASS — scanned 3824 files; no public-mirror blockers
 
-HELM_SECRET_HISTORY_BASELINE_REF=origin/main npm run check:secret-history
-# PASS — no new known compromised commits beyond baseline origin/main; 108 baseline-known findings suppressed
-
 npm run check:secret-history
-# FAIL — 108 known compromised commit reachability findings
+# PASS — current public mirror has no known compromised commits reachable
 ```
 
 ## 6. 结论口径
 
-截至今天，**可在仓库内完成的 public GitHub surface review 已完成**，并已修掉确认存在的 public-safe wording / dead-link / placeholder 问题。
+截至今天，**可在仓库内完成的 public GitHub surface review 已重新校准到 `Helm-OpenSource/helm-public`**，并已修掉确认存在的 public-safe wording / dead-link / placeholder 问题。
 
 但截至今天，**2026-05-31 公开发布目标仍应视为 No-Go in active status**，直到以下四项至少形成完整证据链：
 
 1. secret rotation / revocation receipt
-2. post-rewrite `check:secret-history` PASS
+2. source-history remediation / post-rewrite validation packet
 3. real `mirror-clean:<receipt-id>`
 4. final Go / No-Go decision packet

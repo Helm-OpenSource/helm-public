@@ -1028,8 +1028,8 @@ export function MemoryClient({
               {english ? "Decision scope" : "确认范围"}
             </summary>
             {english
-              ? "Approve/reject/defer only records the decision. This is not a chat surface, does not create canonical MemoryFact, does not promote memory, does not execute actions, and does not change recommendation ranking."
-              : "批准/拒绝/暂缓只记录决定。这里不是聊天面板，不会创建 canonical MemoryFact，不会晋升记忆，不会直接执行动作，也不会改变推荐排序。"}
+              ? "This is not a chat surface. Approve/reject/defer only records the decision; it does not create canonical MemoryFact, promote memory, execute actions, or change recommendation ranking."
+              : "这里不是聊天界面。批准/拒绝/暂缓只记录决定；不会创建 canonical MemoryFact、晋升记忆、执行动作或改变推荐排序。"}
           </details>
         </CardHeader>
         <CardContent className="space-y-4">
