@@ -1,5 +1,5 @@
 ---
-status: boundary brief / public descriptor
+status: active / boundary brief / public descriptor
 owner: Product / GTM / Delivery Engineering / Engineering
 created: 2026-05-21
 last_reviewed: 2026-05-21
