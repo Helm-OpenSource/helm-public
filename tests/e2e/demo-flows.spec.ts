@@ -349,10 +349,18 @@ test("可以载入本地阿里邮箱示例数据并在收件箱看到真实来�
   const mockButton = page.getByRole("button", { name: /载入本地.*示例数据|Load local demo data/i }).first();
   if (await mockButton.isVisible().catch(() => false)) {
     await mockButton.click();
+    await expect(
+      page
+        .getByText(/已同步 3 条示例阿里邮箱线程|已接入本地模拟阿里邮箱数据|Local mock Aliyun data connected/)
+        .first(),
+    ).toBeVisible();
   } else {
     const syncButton = page.getByRole("button", { name: /立即同步|Sync now/i }).first();
     await expect(syncButton).toBeVisible();
     await syncButton.click();
+    await expect(
+      page.getByText(/已同步 3 条示例阿里邮箱线程|已同步本地 mock 阿里邮箱数据|Aliyun Mail sync completed/).first(),
+    ).toBeVisible();
   }
 
   await page.goto("/inbox");
