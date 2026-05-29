@@ -20,13 +20,14 @@ services:
     environment:
       # MYSQL_ROOT_PASSWORD / MYSQL_DATABASE are the only env vars the
       # official mysql:8.4 image consumes for first-time initialization.
-      # Charset / collation must be passed via `command` below.
+      # Charset / collation must be passed via `command` below. MySQL 8.4
+      # already defaults to caching_sha2_password and no longer accepts the
+      # removed `default-authentication-plugin` server option.
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: helm2026
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      - --default-authentication-plugin=caching_sha2_password
     ports:
       - "3306:3306"
     volumes:
