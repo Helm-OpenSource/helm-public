@@ -7,6 +7,13 @@ Describe the goal of this PR in one sentence.
 - Main files or modules touched:
 - User-visible behavior change:
 
+## Core Sync / Backflow
+
+- [ ] Not a helm2026 -> helm-public backflow
+- [ ] Backflow from helm2026; source branch / PR / commit / mirror source ref:
+- Backflow scope:
+- Explicitly excluded private content:
+
 ## Validation
 
 - [ ] `npm run db:reset`

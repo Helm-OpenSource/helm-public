@@ -1,3 +1,11 @@
+---
+status: archived
+owner: helm-core
+created: 2026-05-26
+review_after: 2026-11-22
+# frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-29
+# rationale: filename matches closeout/freeze/report/audit/sprint/run pattern
+---
 # Helm Feishu Bitable Read-only Ingest Report
 
 更新日期：2026-05-21

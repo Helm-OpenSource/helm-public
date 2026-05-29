@@ -262,6 +262,11 @@ npm run quality:regression
 - Codex 模板目录：[docs/codex/README.md](docs/codex/README.md)
 - 首批 skills：`/.agents/skills/`
 
+涉及 `helm-public` / `helm2026` 上下游同步或私有回流时，默认同时先读：
+
+- 上下游关系：[docs/architecture/HELM_CORE_UPSTREAM_DOWNSTREAM_RELATIONSHIP.md](docs/architecture/HELM_CORE_UPSTREAM_DOWNSTREAM_RELATIONSHIP.md)
+- 同步与回流 runbook：[docs/operations/HELM_CORE_SYNC_RUNBOOK.md](docs/operations/HELM_CORE_SYNC_RUNBOOK.md)
+
 ## 15. 默认判断原则
 
 当不确定该选哪条路径时，优先选择更能提升以下四项的方案：
