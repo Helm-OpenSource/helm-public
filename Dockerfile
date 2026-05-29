@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
+COPY scripts/fix-local-lightningcss-signature.mjs ./scripts/fix-local-lightningcss-signature.mjs
 # `npm ci` runs `postinstall` which calls `prisma generate`.
 RUN npm ci --no-audit --no-fund
 
