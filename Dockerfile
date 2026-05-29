@@ -43,6 +43,7 @@ COPY . .
 # Local quality chain (`npm run typecheck && npm run lint && npm run test`)
 # remains the canonical correctness gate.
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run db:generate \
  && npm run build
 
