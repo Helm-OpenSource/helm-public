@@ -26,6 +26,8 @@ review_after: 2026-06-13
 
 0. **【五月窗口推进依据】** [HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md](product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md) — 五月开源 + 云端试用四项关键决策与五周分解；配套：
    - [HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md](product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) — Apache-2.0 open core + commercial runtime + partner delivery 商业边界：开源作为采用引擎 / 标准层 / 伙伴生态入口，商业版保留 Cloud / Enterprise / Certified workflow packs / official connectors / audit / custom / partner delivery
+   - [HELM_CORE_UPSTREAM_DOWNSTREAM_RELATIONSHIP.md](architecture/HELM_CORE_UPSTREAM_DOWNSTREAM_RELATIONSHIP.md) — `helm-public` 作为 Helm Core 唯一公开上游、`helm2026` 作为私有下游的长期关系定义；默认同步方向为 public -> private，private -> public 只允许 public-safe 通用能力显式回流 PR
+   - [HELM_CORE_SYNC_RUNBOOK.md](operations/HELM_CORE_SYNC_RUNBOOK.md) — Helm Core 同步与回流 runbook：当前固定为 public mirror / selective patch / PR 流程，`git subtree` 不作为默认工具
    - [GOVERNANCE.md](../GOVERNANCE.md) — 开源治理、maintainer scope、release gate、认证和品牌边界
    - [HELM_OPEN_CORE_COMMERCIAL_MATRIX.md](product/HELM_OPEN_CORE_COMMERCIAL_MATRIX.md) — open core / cloud / enterprise / custom / deferred 能力矩阵，避免把开源和商业版边界混写
    - [HELM_TRADEMARK_AND_BRAND_USAGE_GUIDE.md](product/HELM_TRADEMARK_AND_BRAND_USAGE_GUIDE.md) — Helm Core / Cloud / Enterprise / Official / Certified 的品牌使用边界；非法律意见
@@ -125,6 +127,17 @@ review_after: 2026-06-13
   - 当前仓库结构、route owner 现实、query compatibility seam 和后续迁移边界
 - [codebase-collaboration-summary.md](architecture/codebase-collaboration-summary.md)
   - 面向新协作者的 current-main 快速导览：项目定位、目录职责、主数据流、常见任务入口与长期边界
+- [HELM_CORE_UPSTREAM_DOWNSTREAM_RELATIONSHIP.md](architecture/HELM_CORE_UPSTREAM_DOWNSTREAM_RELATIONSHIP.md)
+  - 固定 `helm-public` / `helm2026` 的上下游角色、路径边界、回流准入规则和禁止事项；`scripts/public-release-guard.ts` 仍是 private-root / private-file denylist 的机器化真值
+
+### operations/
+
+- [HELM_CORE_SYNC_RUNBOOK.md](operations/HELM_CORE_SYNC_RUNBOOK.md)
+  - 固定 Helm Core 上游同步与私有回流流程：public -> private 走同步分支 + 最小验证，private -> public 走 public mirror candidate / selective patch / PR，不整体覆盖、不临时切 subtree
+- [RELEASE_READINESS_RECEIPT_CHECKLIST.md](operations/RELEASE_READINESS_RECEIPT_CHECKLIST.md)
+  - public release readiness receipt 清单：`release:check` manual acknowledgements、public mirror clean receipt 与 release 前 Go/No-Go 证据口径
+- [ON_CALL_AND_RESPONSE_SLA.md](operations/ON_CALL_AND_RESPONSE_SLA.md)
+  - public trial / launch on-call 与响应边界；当前不创建企业 SLA
 
 ### requirements/
 
