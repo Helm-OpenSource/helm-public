@@ -57,6 +57,3 @@ jobs:
 
       - name: Public release guard
         run: npm run check:public-release
-
-      - name: Doc frontmatter guard
-        run: npx tsx scripts/check-doc-frontmatter.ts

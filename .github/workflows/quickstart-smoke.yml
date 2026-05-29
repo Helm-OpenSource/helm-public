@@ -32,7 +32,11 @@ jobs:
         run: npm run quickstart:doctor
 
       - name: Start stack
-        run: npm run quickstart -- up --build -d
+        run: |
+          npm run quickstart -- up --build -d || {
+            docker compose logs app mysql
+            exit 1
+          }
 
       - name: Wait for health
         run: |

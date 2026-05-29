@@ -16,6 +16,9 @@ permissions:
 jobs:
   analyze:
     name: Analyze
+    # Private repositories require GitHub Advanced Security for SARIF uploads.
+    # Run automatically after the public flip, or opt in before that with HELM_ENABLE_PRIVATE_CODEQL=true.
+    if: ${{ !github.event.repository.private || vars.HELM_ENABLE_PRIVATE_CODEQL == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

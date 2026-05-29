@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": false,
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,11 +14,12 @@
     "quickstart:doctor": "node --import tsx scripts/quickstart.ts --doctor",
     "postinstall": "node scripts/fix-local-lightningcss-signature.mjs",
     "prepare": "husky",
+    "self-check": "tsx scripts/helm-self-check-refactored.ts",
+    "check:boundaries": "npm run check:public-release && npm run public-mirror:extensions-stub:check && npm run public-mirror:env-example:check && npm run public-mirror:dockerignore:check && npm run check:agentic-security && npm run check:spawn-env-supply-chain && tsx scripts/decision-first-boundary-check.ts",
+    "release:check": "tsx scripts/release-readiness-check.ts",
     "lint": "eslint app components data features hooks lib prisma scripts tests eslint.config.mjs next.config.ts playwright.config.ts postcss.config.mjs vitest.config.ts",
     "lint:strict": "eslint --max-warnings 0 app components data features hooks lib prisma scripts tests eslint.config.mjs next.config.ts playwright.config.ts postcss.config.mjs vitest.config.ts",
     "lint:teaching-copy": "node --import tsx scripts/lint-teaching-copy.ts",
-    "self-check": "tsx scripts/helm-self-check-refactored.ts",
-    "check:boundaries": "tsx scripts/decision-first-boundary-check.ts",
     "typecheck": "next typegen && npm run db:generate && tsc --noEmit",
     "validate:env": "node --import tsx scripts/validate-env.ts",
     "delivery:doctor": "node --import tsx scripts/delivery-engineer-doctor.ts",
@@ -232,7 +236,7 @@
     "imapflow": "^1.3.1",
     "lucide-react": "^0.577.0",
     "mailparser": "^3.9.8",
-    "next": "16.2.3",
+    "next": "16.2.6",
     "nodemailer": "^8.0.5",
     "pinyin-pro": "^3.28.1",
     "qrcode": "^1.5.4",

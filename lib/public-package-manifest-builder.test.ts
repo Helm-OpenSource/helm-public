@@ -53,7 +53,7 @@ describe("public package manifest builder", () => {
     expect(result).toMatchObject({
       status: "printed-projection",
       outputPath: null,
-      removedScripts: [`seed:${tenantSlug}`, "self-check"],
+      removedScripts: [`seed:${tenantSlug}`],
       exitCode: 0,
     });
     expect(JSON.parse(output)).toEqual({
@@ -62,6 +62,7 @@ describe("public package manifest builder", () => {
       license: "Apache-2.0",
       scripts: {
         dev: "next dev",
+        "self-check": "tsx scripts/helm-self-check-refactored.ts",
         "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
         "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
       },

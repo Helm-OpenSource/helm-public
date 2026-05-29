@@ -56,6 +56,7 @@ export const STUB_CONTENT = `import "server-only";
  * change. All resolvers return the "no extension available" shape.
  */
 
+import type { SolutionExtensionKind } from "@prisma/client";
 import type { ReactNode } from "react";
 
 import type { BiReportSignalRoutingConfig } from "@/lib/bi-report-skill/types";
@@ -114,7 +115,7 @@ export type BiBoardContribution = {
   ctaLabelChinese: string;
 };
 
-const PUBLIC_OPTIONAL_BI_BOARD_QUERY = "&optional=1";
+const _PUBLIC_OPTIONAL_BI_BOARD_QUERY = "&optional=1";
 
 export type ResolvedApprovalsExtensions = {
   biBoard: BiBoardContribution | null;
@@ -155,7 +156,7 @@ export async function resolveWorkspaceNavExtensions(_input: {
 
 export type SolutionExtensionCatalogEntry = {
   extensionKey: string;
-  kind: string;
+  kind: SolutionExtensionKind;
   nameZh: string;
   nameEn: string;
   descriptionZh: string;
@@ -202,6 +203,11 @@ export type BiReportP0ProcessSopRow = {
   complaintResolutionRatePct: number | null;
 };
 
+export type PersistedBiReportP0ProcessSignal = {
+  id: string;
+  ownerUserId: string | null;
+};
+
 export async function resolveReportsExtensionAccessSafely(
   _descriptor: {
     id: string;
@@ -238,6 +244,8 @@ export async function resolveImportsExtensions(_input: {
 export async function resolveApprovalsExtensions(_input: {
   workspace: WorkspaceLike;
 }): Promise<ResolvedApprovalsExtensions> {
+  // Private registries append &optional=1 to tenant-scoped BI preview URLs.
+  // The public stub returns no BI board, but keeps the optional-panel marker.
   return { biBoard: null };
 }
 
@@ -292,7 +300,12 @@ export async function persistBiReportP0ProcessSignals(_input: {
   sopRows?: BiReportP0ProcessSopRow[];
   signalRouting?: BiReportSignalRoutingConfig;
 }) {
-  return { written: 0, skipped: 0, runId: null, persistedSignals: [] };
+  return {
+    written: 0,
+    skipped: 0,
+    runId: null,
+    persistedSignals: [] as PersistedBiReportP0ProcessSignal[],
+  };
 }
 
 export function listRegisteredSignalCollectionJobs(): SignalCollectionJob[] {
