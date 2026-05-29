@@ -18,25 +18,45 @@ export function formatTenantResourceImpactSummary(
   item: TenantResourceOperatingImpactItem,
   english: boolean,
 ) {
+  const resourceName = formatTenantResourceDisplayName(item, english);
   if (item.followThroughStatus === "blocked") {
     return english
-      ? `${item.resourceName} is blocked by capability or boundary controls; clear the blocker before using it for operating guidance.`
-      : `${item.resourceName} 当前被权限或边界阻断，先处理阻断原因，再让它影响经营判断。`;
+      ? `${resourceName} is blocked by permission or boundary controls; clear the blocker before using it for operating guidance.`
+      : `${resourceName} 当前被权限或边界阻断，先处理阻断原因，再让它影响经营判断。`;
   }
   if (item.followThroughStatus === "stale_or_failed") {
     return english
-      ? `${item.resourceName} needs a freshness check before it can steer today's operating move.`
-      : `${item.resourceName} 的证据需要先刷新，复核通过后再用于今日判断。`;
+      ? `${resourceName} needs a freshness check before it can steer today's operating move.`
+      : `${resourceName} 的证据需要先刷新，复核通过后再用于今日判断。`;
   }
   if (item.followThroughStatus === "route_to_review") {
     return english
-      ? `${item.resourceName} should enter resource review before the next operating action uses it.`
-      : `${item.resourceName} 需要先进入资源复核，再进入下一步经营动作。`;
+      ? `${resourceName} should enter resource review before the next operating action uses it.`
+      : `${resourceName} 需要先进入资源复核，再进入下一步经营动作。`;
   }
 
   return english
-    ? `${item.resourceName} can support the current judgement; follow-through still needs manual proof and does not write back externally.`
-    : `${item.resourceName} 可用于当前判断；后续仍需补充人工凭证，不会外部写回。`;
+    ? `${resourceName} can support the current judgement; follow-through still needs manual proof and does not write back externally.`
+    : `${resourceName} 可用于当前判断；后续仍需补充人工凭证，不会外部写回。`;
+}
+
+export function formatTenantResourceDisplayName(
+  item: Pick<TenantResourceOperatingImpactItem, "provider" | "resourceName" | "sourceKind">,
+  english: boolean,
+) {
+  const sourceLabel = formatTenantResourceSourceKind(item.sourceKind, english);
+  const provider = item.provider?.trim();
+  const rawName = item.resourceName.trim();
+  const isInternalKey =
+    /^[a-z_]+:[A-Za-z0-9_-]+$/.test(rawName) ||
+    rawName.includes("cmn") ||
+    rawName.includes("resource:");
+
+  if (isInternalKey) {
+    return provider ? `${provider} ${sourceLabel}` : sourceLabel;
+  }
+
+  return rawName || sourceLabel;
 }
 
 export function formatTenantResourceImpactSeverity(
@@ -92,10 +112,10 @@ export function formatTenantResourceReason(
     allowed: { en: "Resource and permission checks passed", zh: "资源与权限检查通过" },
     workspace_missing: { en: "Workspace context is missing", zh: "缺少工作区上下文" },
     membership_missing: { en: "Membership is missing", zh: "缺少成员身份" },
-    capability_not_granted: { en: "Capability is not granted", zh: "权限尚未授予" },
+    capability_not_granted: { en: "Permission is not granted", zh: "权限尚未授予" },
     ownership_mismatch: { en: "Workspace ownership does not match", zh: "工作区归属不匹配" },
     reserved_only: { en: "Reserved workspace only", zh: "仅限保留工作区" },
-    capability_not_declared: { en: "Capability is not declared", zh: "能力尚未声明" },
+    capability_not_declared: { en: "Permission scope is not declared", zh: "权限范围尚未声明" },
     effect_mode_exceeded: { en: "Requested effect exceeds policy", zh: "请求动作超出策略范围" },
     customer_facing_review_required: {
       en: "Customer-facing action needs review",
@@ -137,7 +157,7 @@ export function formatTenantResourceNextActionMode(
 }
 
 export function formatTenantResourceSourceKind(
-  sourceKind: TenantResourceSourceKind | string,
+  sourceKind: TenantResourceSourceKind | string | null | undefined,
   english: boolean,
 ) {
   const labels: Record<TenantResourceSourceKind, { en: string; zh: string }> = {
@@ -148,6 +168,9 @@ export function formatTenantResourceSourceKind(
     connector_ingestion: { en: "Connector ingestion", zh: "连接器采集" },
     official_write_intent: { en: "Official write intent", zh: "正式写回意图" },
   };
+  if (!sourceKind) {
+    return english ? "Resource" : "资源";
+  }
   const label = labels[sourceKind as TenantResourceSourceKind];
   if (label) return english ? label.en : label.zh;
 
@@ -200,7 +223,7 @@ export function formatTenantResourceDecisionWhy(
     if (detail.status === "needs_review") {
       return "The resource needs review before it can steer the current action.";
     }
-    return "Resource posture and capability checks passed for read-only judgement.";
+    return "Resource posture and permission checks passed for read-only judgement.";
   }
 
   if (detail.status === "blocked") {

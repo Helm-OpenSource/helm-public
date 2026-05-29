@@ -1,6 +1,7 @@
 const WORKSPACE_PAGE_PREFIXES = [
   "/analytics",
   "/approvals",
+  "/admin",
   "/capture",
   "/commercial-strengthening",
   "/companies",
@@ -24,6 +25,7 @@ const WORKSPACE_PAGE_PREFIXES = [
   "/inbox",
   "/meetings",
   "/memory",
+  "/mobile",
   "/offers",
   "/operating",
   "/opportunities",
@@ -45,9 +47,40 @@ const WORKSPACE_PAGE_PREFIXES = [
   "/success-checks",
 ] as const;
 
+const PUBLIC_PAGE_PREFIXES = [
+  "/",
+  "/contrast-test",
+  "/dark-mode-test",
+  "/demo",
+  "/health",
+  "/login",
+  "/portal",
+  "/programs",
+  "/terms",
+  "/trial",
+] as const;
+
+function matchesPrefix(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+function isPublicPagePathname(pathname: string) {
+  return PUBLIC_PAGE_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix));
+}
+
+function isCustomerExtensionWorkspacePathname(pathname: string) {
+  if (isPublicPagePathname(pathname)) {
+    return false;
+  }
+
+  const parts = pathname.split("/").filter(Boolean);
+  return parts.length >= 2;
+}
+
 export function isWorkspacePagePathname(pathname: string) {
-  return WORKSPACE_PAGE_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  return (
+    WORKSPACE_PAGE_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix)) ||
+    isCustomerExtensionWorkspacePathname(pathname)
   );
 }
 

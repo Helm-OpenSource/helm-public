@@ -690,6 +690,32 @@ export function InternalOperatingHome({
         />
       ) : null}
 
+      <details
+        className="group rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
+        data-operating-secondary-work="true"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+              {english ? "Open ranked work lists" : "展开排序后的工作清单"}
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+              {english
+                ? "Priorities, immediate actions, DingTalk health and reusable templates stay secondary to the signal map."
+                : "优先事项、可推进动作、钉钉健康度和复用模板都放在总控图之后。"}
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
+            <span className="group-open:hidden">
+              {english ? "Open" : "展开"}
+            </span>
+            <span className="hidden group-open:inline">
+              {english ? "Hide" : "收起"}
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 transition group-open:rotate-90" />
+          </span>
+        </summary>
+        <div className="hidden space-y-4 px-3 pb-3 group-open:block">
       <Card className="workspace-panel-muted border-[color:var(--border)]">
         <CardContent className="grid gap-4 py-5 xl:grid-cols-3">
           <div className="space-y-3 rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-4 py-4">
@@ -939,11 +965,15 @@ export function InternalOperatingHome({
           </CardContent>
         </Card>
       </div>
+        </div>
+      </details>
 
       <details
-        open={shouldOpenRuntimeEvidence}
         className="group space-y-4"
         data-operating-runtime-evidence-disclosure="true"
+        data-operating-runtime-evidence-suggested-open={
+          shouldOpenRuntimeEvidence ? "true" : "false"
+        }
       >
         <summary
           aria-label={english ? "Backstage evidence summary" : "后台依据摘要"}
@@ -1050,81 +1080,111 @@ export function InternalOperatingHome({
         </div>
       </details>
 
-      <OperatingFoundationSummaryCard
-        label={operatingFoundationSummary.label}
-        title={operatingFoundationSummary.title}
-        summary={operatingFoundationSummary.summary}
-        items={operatingFoundationSummary.items}
-        connections={operatingFoundationSummary.connections}
-        note={operatingFoundationSummary.note}
-      />
+      <details
+        className="group rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
+        data-operating-supporting-context="true"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+              {english
+                ? "Open the lower operating context"
+                : "展开下层经营上下文"}
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+              {english
+                ? "Object lists, role handoff surfaces and foundation notes stay here so the first screen keeps one decision in focus."
+                : "对象清单、角色接手面和基础说明统一收在这里，首屏只保留一个判断。"}
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
+            <span className="group-open:hidden">
+              {english ? "Open" : "展开"}
+            </span>
+            <span className="hidden group-open:inline">
+              {english ? "Hide" : "收起"}
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 transition group-open:rotate-90" />
+          </span>
+        </summary>
+        <div className="hidden space-y-4 px-3 pb-3 group-open:block">
+          <OperatingFoundationSummaryCard
+            label={operatingFoundationSummary.label}
+            title={operatingFoundationSummary.title}
+            summary={operatingFoundationSummary.summary}
+            items={operatingFoundationSummary.items}
+            connections={operatingFoundationSummary.connections}
+            note={operatingFoundationSummary.note}
+          />
 
-      {model.sections.map((section) => (
-        <section key={section.id} className="space-y-4">
-          <Card className="workspace-shell-panel border-[color:var(--mode-card-border)]">
-            <CardContent className="flex flex-col gap-4 py-5 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
-                  <BriefcaseBusiness className="h-3.5 w-3.5" />
-                  {copy(section.title)}
-                </div>
-                <p className="max-w-3xl text-sm leading-7 text-[color:var(--foreground)]">
-                  {copy(section.summary)}
-                </p>
+          {model.sections.map((section) => (
+            <section key={section.id} className="space-y-4">
+              <Card className="workspace-shell-panel border-[color:var(--mode-card-border)]">
+                <CardContent className="flex flex-col gap-4 py-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
+                      <BriefcaseBusiness className="h-3.5 w-3.5" />
+                      {copy(section.title)}
+                    </div>
+                    <p className="max-w-3xl text-sm leading-7 text-[color:var(--foreground)]">
+                      {copy(section.summary)}
+                    </p>
+                  </div>
+                  <Button asChild variant="secondary">
+                    <Link href={section.actionHref}>
+                      {copy(section.actionLabel)}
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                {section.cards.map((card) => (
+                  <InternalOperatingObjectCardView
+                    key={card.id}
+                    card={card}
+                    english={english}
+                  />
+                ))}
               </div>
-              <Button asChild variant="secondary">
-                <Link href={section.actionHref}>
-                  {copy(section.actionLabel)}
+            </section>
+          ))}
+
+          <Card className="workspace-panel-muted border-[color:var(--border)]">
+            <CardHeader>
+              <CardTitle className="text-xl tracking-tight text-[color:var(--foreground)]">
+                {english ? "Role handoff surfaces" : "角色接手面"}
+              </CardTitle>
+              <CardDescription className="text-sm leading-7 text-[color:var(--muted-foreground)]">
+                {english
+                  ? "Each role's handoff in one place."
+                  : "每个角色的接手都在这里。"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {model.roleSurfaces.map((surface) => (
+                <Link
+                  key={surface.role}
+                  href={surface.href}
+                  aria-label={copy(surface.title)}
+                  className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+                >
+                  <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                    {copy(surface.title)}
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
+                    {copy(surface.summary)}
+                  </p>
+                  <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[color:var(--mode-link)]">
+                    {english ? "Open handoff surface" : "打开接手面"}
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
                 </Link>
-              </Button>
+              ))}
             </CardContent>
           </Card>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            {section.cards.map((card) => (
-              <InternalOperatingObjectCardView
-                key={card.id}
-                card={card}
-                english={english}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
-
-      <Card className="workspace-panel-muted border-[color:var(--border)]">
-        <CardHeader>
-          <CardTitle className="text-xl tracking-tight text-[color:var(--foreground)]">
-            {english ? "Role handoff surfaces" : "角色接手面"}
-          </CardTitle>
-          <CardDescription className="text-sm leading-7 text-[color:var(--muted-foreground)]">
-            {english
-              ? "Each role's handoff in one place."
-              : "每个角色的接手都在这里。"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {model.roleSurfaces.map((surface) => (
-            <Link
-              key={surface.role}
-              href={surface.href}
-              aria-label={copy(surface.title)}
-              className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-            >
-              <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                {copy(surface.title)}
-              </p>
-              <p className="mt-2 text-sm leading-7 text-[color:var(--muted-foreground)]">
-                {copy(surface.summary)}
-              </p>
-              <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[color:var(--mode-link)]">
-                {english ? "Open handoff surface" : "打开接手面"}
-                <ArrowRight className="h-4 w-4" />
-              </div>
-            </Link>
-          ))}
-        </CardContent>
-      </Card>
+        </div>
+      </details>
     </div>
   );
 }

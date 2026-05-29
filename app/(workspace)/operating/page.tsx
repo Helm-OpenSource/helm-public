@@ -1,3 +1,4 @@
+import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
 import { buildWorkspaceOperatingFoundationSummary } from "@/lib/operating-system";
 import {
   canAccessTenantHealthWorkspace,
@@ -36,19 +37,6 @@ export default async function InternalOperatingHomePage() {
 
   return (
     <div className="space-y-4">
-      <div
-        role="status"
-        aria-live="polite"
-        data-testid="operating-phase2-fixture-banner"
-        className="rounded-md border border-[color:color-mix(in_oklab,var(--accent-warm)_38%,var(--border)_62%)] bg-[color:color-mix(in_oklab,var(--accent-warm)_12%,var(--surface)_88%)] px-4 py-3 text-sm text-[color:var(--foreground)]"
-      >
-        <strong className="font-semibold">
-          {english ? "Phase 2 fixture demo" : "Phase 2 fixture 演示"}
-        </strong>
-        {english
-          ? ` · /operating currently shows synthetic fixture data. DPO review and founder-attested 5-role signoff are recorded, but route adoption is still locked until Engineering / Product / Security / Operations per-role receipts are attached. The current shadow probe is Phase 1.5 day-2 dogfood proxy only. See docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md.`
-          : ` · /operating 当前为合成 fixture 数据，不代表真实租户业务流。DPO 复核与 founder-attested 5 角色签字已有记录，但 route adoption 仍需补齐 Engineering / Product / Security / Operations 四个 per-role receipt；当前 shadow probe 只作为 Phase 1.5 day-2 dogfood proxy。详见 docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md。`}
-      </div>
       <InternalOperatingHome
         model={model}
         runtimeOverview={runtimeOverview}
@@ -63,6 +51,17 @@ export default async function InternalOperatingHomePage() {
         canAccessTenantHealth={canAccessTenantHealthWorkspace(workspace)}
         isHelmReserved={isHelmReservedWorkspace(workspace)}
       />
+      <LazyDisclosure
+        data-testid="operating-phase2-fixture-banner"
+        className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-4 py-3 text-sm text-[color:var(--muted-foreground)]"
+        title={english ? "Read-only data note" : "只读数据说明"}
+      >
+        <p className="mt-2 leading-6">
+          {english
+            ? `This board is a read-only demo of how business signals are collected, judged, and held before human review. It does not represent live customer data and will not trigger external action. Engineering evidence is tracked in docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md.`
+            : `这张总盘当前只用于演示经营信号怎样进入、判断、回收，并停在人工复核前；它不代表真实客户生产数据，也不会触发外部动作。工程验收依据记录在 docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md。`}
+        </p>
+      </LazyDisclosure>
     </div>
   );
 }

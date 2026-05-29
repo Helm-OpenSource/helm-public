@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   CalendarPlus,
   CheckCircle2,
   ChevronDown,
@@ -99,6 +100,10 @@ import type { MeetingRuntimeSummary } from "@/lib/helm-v2/meeting-action-pack-ru
 import type { MemoryRetrievalPackSurfaceTrace } from "@/lib/memory/retrieval-pack-adapter";
 import type { OfficialWriteRuntimeSummary } from "@/lib/helm-v2/official-system-integration-runtime";
 import type { OpportunityJudgeRuntimeSummary } from "@/lib/helm-v2/opportunity-judge-runtime";
+import {
+  buildCustomerAssetHref,
+  buildOpportunityAssetHref,
+} from "@/features/business-assets/hrefs";
 
 type ActionItemValue = {
   id: string;
@@ -1130,6 +1135,12 @@ export function MeetingDetailClient({
       router.refresh();
     });
   };
+  const linkedOpportunityAssetHref = meeting.opportunity
+    ? buildOpportunityAssetHref(meeting.opportunity.id, "meeting-detail")
+    : null;
+  const linkedCustomerAssetHref = meeting.company
+    ? buildCustomerAssetHref(meeting.company.id, "meeting-detail")
+    : null;
 
   return (
     <div className="workspace-surface-stack">
@@ -1151,6 +1162,22 @@ export function MeetingDetailClient({
                   : `${meeting.title} 现场记录`
               }
             />
+            {linkedOpportunityAssetHref || linkedCustomerAssetHref ? (
+              <Button variant="secondary" asChild>
+                <Link
+                  href={linkedOpportunityAssetHref ?? linkedCustomerAssetHref ?? "#"}
+                >
+                  {linkedOpportunityAssetHref
+                    ? english
+                      ? "Open opportunity asset"
+                      : "打开机会资产"
+                    : english
+                      ? "Open customer asset"
+                      : "打开客户资产"}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : null}
             <Button
               variant="secondary"
               disabled={governedActionDisabled}
@@ -1441,6 +1468,24 @@ export function MeetingDetailClient({
                     ? "Linked items keep updating the briefing and what's flagged after the meeting."
                     : "这些关联会继续更新简报和会后要追的事。"}
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {linkedOpportunityAssetHref ? (
+                    <Button asChild size="sm" variant="secondary">
+                      <Link href={linkedOpportunityAssetHref}>
+                        {english ? "Open opportunity asset" : "打开机会资产"}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {linkedCustomerAssetHref ? (
+                    <Button asChild size="sm" variant="ghost">
+                      <Link href={linkedCustomerAssetHref}>
+                        {english ? "Open customer asset" : "打开客户资产"}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
                 <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
@@ -2412,22 +2457,30 @@ export function MeetingDetailClient({
                 )}
               </p>
             </div>
-            <Button
-              variant="secondary"
-              disabled={governedActionDisabled}
-              onClick={() =>
-                runAction(
-                  () => updateOpportunityFromMeetingAction(meeting.id),
-                  english
-                    ? "Opportunity-sync action created"
-                    : "已生成机会状态同步动作",
-                  "/approvals",
-                )
-              }
-            >
-              <Zap className="h-4 w-4" />
-              {english ? "Update opportunity stage" : "更新机会阶段"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="secondary">
+                <Link href={linkedOpportunityAssetHref ?? "#"}>
+                  {english ? "Open opportunity asset" : "打开机会资产"}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={governedActionDisabled}
+                onClick={() =>
+                  runAction(
+                    () => updateOpportunityFromMeetingAction(meeting.id),
+                    english
+                      ? "Opportunity-sync action created"
+                      : "已生成机会状态同步动作",
+                    "/approvals",
+                  )
+                }
+              >
+                <Zap className="h-4 w-4" />
+                {english ? "Update opportunity stage" : "更新机会阶段"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}

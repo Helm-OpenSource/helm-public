@@ -303,6 +303,14 @@ const ZH_DISPLAY_REPLACEMENTS: Array<[RegExp, string]> = [
 ];
 
 const ZH_DISPLAY_CLEANUPS: Array<[RegExp, string]> = [
+  [/派生 成功 队列/g, "客户成功队列"],
+  [/派生 成功 收件箱/g, "客户消息"],
+  [/派生结果上下文/g, "后续反馈参考"],
+  [/派生运营面/g, "整理视图"],
+  [/派生运营层/g, "整理层"],
+  [/阶段模型 派生/g, "阶段判断整理"],
+  [/保持派生且很薄/g, "保持轻量整理"],
+  [/客户安全 发送评估/g, "客户可发送判断"],
   [/\bQueue trace\b/g, "队列依据"],
   [/\bHandoff trace\b/g, "交接依据"],
   [/发送前 复核/g, "发送前复核"],

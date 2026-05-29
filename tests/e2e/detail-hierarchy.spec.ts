@@ -157,6 +157,61 @@ test("imports 首屏只保留 business-first 四类信息", async ({ page }, tes
   });
 });
 
+test("reports/imports/settings/diagnostics/analytics 首屏先暴露用户资产读数", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await loginAs(page, "founder@demo.com");
+
+  const targets = [
+    {
+      route: "/reports",
+      labels: [/当前资产|Current asset/, /当前压力|Pressure/, /待决策|Decision/, /下一步动作|Next action/],
+      reference: /引用：洞察权限|Reference: insight permission|引用：交付评审|Reference: delivery review/,
+    },
+    {
+      route: "/imports",
+      labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /下一步动作|Next action/],
+      reference: /引用：接入判断|Reference: intake judgement/,
+    },
+    {
+      route: "/settings",
+      labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /下一步动作|Next action/],
+      reference: /引用：设置依据|Reference: settings basis/,
+    },
+    {
+      route: "/diagnostics",
+      labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /下一步动作|Next action/],
+      reference: /引用：会议回路就绪度|Reference: meeting loop readiness/,
+    },
+    {
+      route: "/analytics",
+      labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /AI 工作姿态|AI work posture/],
+      reference: null,
+    },
+  ] as const;
+
+  for (const target of targets) {
+    await page.goto(target.route);
+    await expect(page).toHaveURL(new RegExp(target.route));
+
+    const focusStrip = page.locator('[data-customer-asset-focus="true"]').first();
+    await expect(focusStrip).toBeVisible();
+    await expect(focusStrip.locator("a, button").first()).toBeVisible();
+
+    for (const label of target.labels) {
+      await expect(focusStrip).toContainText(label);
+    }
+
+    if (target.reference) {
+      await expect(page.locator("details").filter({ hasText: target.reference }).first()).toBeVisible();
+    }
+  }
+
+  await page.screenshot({
+    path: testInfo.outputPath("sitewide-customer-asset-focus.png"),
+    fullPage: false,
+  });
+});
+
 test("dashboard 把 explanation / review / memory replay 继续后置到 dedicated surfaces", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await loginAs(page, "founder@demo.com");

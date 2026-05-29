@@ -41,7 +41,7 @@ test("operating signal flow fixture map renders static fixture edges", async ({ 
   expect(animationName).toBe("none");
   await expect(map).toContainText(/客户经营资产|Customer asset/);
   await expect(map).toContainText(/只读复核|read-only review/);
-  await expect(map).toContainText(/下一步先判断这件事|The next customer call/);
+  await expect(map).toContainText(/先判断这条客户动作|Judge this customer move first/);
   const summaryNote = page.getByLabel(/摘要附注|Summary note/).first();
   await expect(summaryNote).toBeVisible();
   await expect(summaryNote).toHaveAttribute("aria-expanded", "false");
@@ -61,7 +61,7 @@ test("operating signal flow fixture map renders static fixture edges", async ({ 
     }),
   ).toBeVisible();
   await expect(page.getByTestId("signal-flow-business-summary")).toContainText(
-    /现在只判断一个问题|Only judgement now/,
+    /今天最高压力|Highest pressure today/,
   );
   await expect(page.getByTestId("signal-flow-business-summary")).toContainText(
     /Acme 试点承诺型外发草稿|Acme pilot commitment-sensitive send draft/,
@@ -102,6 +102,25 @@ test("operating signal flow fixture map renders static fixture edges", async ({ 
   await expect(page.getByTestId("signal-flow-lifecycle-graph")).not.toContainText(
     /第 1 步|Step 1/,
   );
-  await expect(map).toContainText(/只停在复核|review only/);
+  await expect(map).toContainText(/停在人工复核|human review/);
   await expect(map.locator("[data-testid='signal-flow-family-row']")).toHaveCount(7);
+
+  await page
+    .getByTestId("signal-flow-actions")
+    .getByRole("link", {
+      name: /查看信号全链路|Open signal lifecycle/,
+    })
+    .click();
+  await expect(page).toHaveURL(/\/operating\/signals\/boundary%3Aalias-f/u);
+  await waitForWorkspaceUiHydration(page);
+  await expect(page.getByTestId("operating-signal-detail")).toBeVisible();
+  await expect(page.getByTestId("operating-signal-detail")).toContainText(
+    /Acme 试点承诺型外发草稿|Acme pilot commitment-sensitive send draft/,
+  );
+  await expect(page.getByTestId("operating-signal-lifecycle").locator("> *")).toHaveCount(6);
+  await expect(page.getByTestId("operating-signal-primary-action")).toHaveAttribute(
+    "href",
+    "/approvals",
+  );
+  await expect(page.getByTestId("operating-signal-boundary")).toBeVisible();
 });

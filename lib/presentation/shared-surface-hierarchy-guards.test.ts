@@ -55,6 +55,14 @@ const broaderOperationalSurfaces = [
   "app/(workspace)/meetings/page.tsx",
 ] as const;
 
+const sitewideCustomerAssetFocusSurfaces = [
+  "features/reports/reports-client.tsx",
+  "features/imports/imports-client.tsx",
+  "features/settings/settings-client.tsx",
+  "features/diagnostics/diagnostics-client.tsx",
+  "features/analytics/analytics-client.tsx",
+] as const;
+
 const projectSystemspeakAuditSurfaces = [
   "app/programs/page.tsx",
   "components/shared/reporting-protocol-panel.tsx",
@@ -177,9 +185,8 @@ describe("shared surface hierarchy guards", () => {
       "features/meetings/meeting-detail-client.tsx",
     );
 
-    expect(sidebar).toContain(
-      "demoProfile ? demoProfile.title : messages.shell.shellHeadline",
-    );
+    expect(sidebar).toContain("demoShellCopy ?? messages.shell.shellHeadline");
+    expect(sidebar).toContain("客户推进样例");
     expect(sidebar.match(/<h2\b/g) ?? []).toHaveLength(0);
     expect(pageHeader).toContain('titleAs?: "h1" | "h2"');
     expect(contactDetailClient).toContain('titleAs="h2"');
@@ -462,6 +469,23 @@ describe("shared surface hierarchy guards", () => {
     }
   });
 
+  it("keeps secondary operating pages customer-asset first before reference layers", () => {
+    for (const relativePath of sitewideCustomerAssetFocusSurfaces) {
+      const surface = read(relativePath);
+
+      expect(surface).toContain("CustomerAssetFocusStrip");
+      expect(surface).toMatch(/Object state|Current asset/);
+      expect(surface).toContain("Blocker");
+      expect(surface).toMatch(/Pending decision|Decision/);
+    }
+
+    for (const relativePath of sitewideCustomerAssetFocusSurfaces.filter(
+      (pathName) => pathName !== "features/analytics/analytics-client.tsx",
+    )) {
+      expect(read(relativePath)).toContain("LazyDisclosure");
+    }
+  });
+
   it("keeps project-level operating and detail surfaces away from systemspeak self-narration copy", () => {
     for (const relativePath of projectSystemspeakAuditSurfaces) {
       expectNoSystemspeak(read(relativePath));
@@ -612,10 +636,10 @@ describe("shared surface hierarchy guards", () => {
       "Create opportunities, contacts and meetings from any page",
     );
     expect(topbar).toContain(
-      "Navigate core work views, secondary tools and the current workspace account controls.",
+      "Navigate today, customer work, reviews, memory and the workspace foundation.",
     );
     expect(topbar).toContain(
-      "进入主工作区、二级工具和当前工作区账号控制。",
+      "进入今天要处理的事、客户资产、复核记录和工作区设置。",
     );
     expect(topbar).not.toContain("Missing `Description`");
   });
@@ -630,11 +654,34 @@ describe("shared surface hierarchy guards", () => {
 
     expect(topbar).toContain('{ href: "/capture", label: messages.shell.nav.capture }');
     expect(topbar).toContain(
-      "Capture, inbox, connections, analytics and diagnostics",
+      "Data sources, field notes, outcome change and readiness checks",
     );
     expect(topbar).toContain(
-      "现场记录、收件箱、连接、分析和诊断统一收进一个更简单的设置层。",
+      "数据接入、现场记录、效果变化和就绪检查统一留在基础层。",
     );
+  });
+
+  it("keeps workspace navigation grouped by user workstream instead of flat product modules", () => {
+    const sidebar = read("components/layout/sidebar.tsx");
+    const topbar = read("components/layout/topbar.tsx");
+    const homeWorkEntry = read("features/dashboard/home-work-entry-surface.tsx");
+
+    expect(sidebar).toContain("今天要处理");
+    expect(sidebar).toContain("客户资产");
+    expect(sidebar).toContain("复核与记录");
+    expect(sidebar).toContain('href: "/inbox"');
+    expect(sidebar).toContain("messages.shell.nav.mobile");
+
+    expect(topbar).toContain("primaryNavSections");
+    expect(topbar).toContain("客户资产");
+    expect(topbar).toContain("复核与记录");
+    expect(topbar).toContain('href: "/inbox"');
+
+    expect(homeWorkEntry).toContain(
+      'data-dashboard-work-entry-supporting-context="true"',
+    );
+    expect(homeWorkEntry).toContain("展开候选项与依据");
+    expect(homeWorkEntry).not.toContain("Helm 已把本批分案汇总");
   });
 
   it("keeps capture result policy copy from reading as automatic external execution", () => {

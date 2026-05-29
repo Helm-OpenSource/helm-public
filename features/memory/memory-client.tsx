@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   ChevronDown,
   CircleDot,
   Download,
@@ -74,6 +75,11 @@ import {
   formatMemoryVisibleStatus,
   formatMemoryVisibleText,
 } from "@/features/memory/display-copy";
+import {
+  buildBusinessAssetHrefFromObject,
+  buildCommitmentAssetHref,
+  buildRiskAssetHref,
+} from "@/features/business-assets/hrefs";
 
 type TimelineCategory =
   | "ALL"
@@ -135,6 +141,8 @@ type TimelineItem =
       sourceLabel: string;
       correction: MemoryClientProps["corrections"][number];
     };
+
+const TIMELINE_PREVIEW_COUNT = 8;
 
 type MemoryClientProps = {
   query: string;
@@ -380,6 +388,7 @@ export function MemoryClient({
   const [sourceFilter, setSourceFilter] =
     useState<MemoryClientProps["source"]>(initialSource);
   const [category, setCategory] = useState<TimelineCategory>("ALL");
+  const [showFullTimeline, setShowFullTimeline] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [factEditingId, setFactEditingId] = useState<string | null>(null);
@@ -471,9 +480,9 @@ export function MemoryClient({
         entry.company?.name ??
         entry.opportunity?.title ??
         entry.meeting?.title ??
-        (english ? "Workspace" : "工作区"),
+        (english ? "General context" : "通用线索"),
       sourceLabel: formatMemoryVisibleText(
-        entry.source ?? (english ? "Workspace memory" : "工作域记忆"),
+        entry.source ?? (english ? "General signal" : "通用线索"),
         english,
       ),
       entry,
@@ -587,6 +596,13 @@ export function MemoryClient({
         (item) => category === "ALL" || item.category === category,
       ),
     [category, timelineItems],
+  );
+  const visibleTimeline = showFullTimeline
+    ? filteredTimeline
+    : filteredTimeline.slice(0, TIMELINE_PREVIEW_COUNT);
+  const hiddenTimelineCount = Math.max(
+    filteredTimeline.length - visibleTimeline.length,
+    0,
   );
 
   const summary = {
@@ -781,11 +797,11 @@ export function MemoryClient({
                 ? `${summary.meetings} meeting memories`
                 : `${summary.meetings} 条会议记忆`
               : english
-                ? `${visibleCount} memories on the timeline`
-                : `时间线上 ${visibleCount} 条记忆`,
+                ? `${visibleCount} reusable business records`
+                : `已沉淀 ${visibleCount} 条经营记录`,
     summary: english
-      ? "Notes, facts, commitments, blockers and corrections — all replayable."
-      : "纪要、事实、承诺、阻塞、修正——全部可回放。",
+      ? "Facts, commitments, blockers and corrections stay available when the next decision needs context."
+      : "事实、承诺、阻塞和修正会在下一次判断时继续可用。",
     takeaways: [
       reflectionCandidateCount > 0
         ? english
@@ -803,8 +819,8 @@ export function MemoryClient({
           : null,
     ].filter((item): item is string => Boolean(item)),
     operatorPrompt: english
-      ? "Read it, correct what's wrong, export what others need."
-      : "读一读、纠正错的、把别人要的导出去。",
+      ? "Read the facts, correct drift, export the handoff summary."
+      : "先读事实、修正偏差、导出交接摘要。",
   };
   const _memoryGuidanceRecommendations = [
     {
@@ -1024,12 +1040,15 @@ export function MemoryClient({
               : "重复记忆候选等待人工确认"}
           </CardTitle>
           <details className="text-xs leading-6 text-[color:var(--muted)]">
-            <summary className="cursor-pointer list-none font-semibold marker:content-none [&::-webkit-details-marker]:hidden">
+            <summary
+              aria-label={english ? "Decision scope" : "确认范围"}
+              className="cursor-pointer list-none font-semibold marker:content-none [&::-webkit-details-marker]:hidden"
+            >
               {english ? "Decision scope" : "确认范围"}
             </summary>
             {english
-              ? "This is not a chat surface. Approve/reject/defer only records the decision; it does not create canonical MemoryFact, promote memory, execute actions, or change recommendation ranking."
-              : "这里不是聊天界面。批准/拒绝/暂缓只记录决定；不会创建 canonical MemoryFact、晋升记忆、执行动作或改变推荐排序。"}
+              ? "Approve/reject/defer only records the decision. This is not a chat surface; it does not create canonical MemoryFact, does not promote memory, does not execute actions, and does not change recommendation ranking."
+              : "批准/拒绝/暂缓只记录决定。不晋升记忆，也不改排序。"}
           </details>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1226,7 +1245,10 @@ export function MemoryClient({
               : "可复用的信息资产"}
           </CardTitle>
           <details className="text-xs leading-6 text-[color:var(--muted)]">
-            <summary className="cursor-pointer list-none font-semibold marker:content-none [&::-webkit-details-marker]:hidden">
+            <summary
+              aria-label={english ? "Source" : "来源"}
+              className="cursor-pointer list-none font-semibold marker:content-none [&::-webkit-details-marker]:hidden"
+            >
               {english ? "Source" : "来源"}
             </summary>
             {english
@@ -1852,8 +1874,8 @@ export function MemoryClient({
         eyebrow={pageStory.eyebrow}
         title={
           english
-            ? "Read stable object state first, then the living timeline"
-            : "经营记忆"
+            ? "Customer asset timeline"
+            : "客户资产时间线"
         }
         description={
           english
@@ -1898,40 +1920,15 @@ export function MemoryClient({
         }}
       />
 
-      {memoryHomeArrival.isHomeSurfaceArrival ? (
-        <HomeSurfaceSecondaryDisclosure
-          kind="memory"
-          english={english}
-          title={
-            english
-              ? "Open memory guidance, correction boundary and reflection history only when needed"
-              : "只在需要时再打开记忆引导、修正边界和复盘历史"
-          }
-          summary={
-            english
-              ? "Keep presets, correction boundary notes and reflection history behind the next layer so the landing screen can stay focused on durable state and the live timeline."
-              : "把预设、修正边界说明和复盘历史后置到下一层，让首屏继续聚焦稳定状态和正在发生的时间线。"
-          }
-        >
-          <>
-            {memoryLandingDeferredContext}
-          </>
-        </HomeSurfaceSecondaryDisclosure>
-      ) : (
-        <>
-          {memoryLandingDeferredContext}
-        </>
-      )}
-
       <Card className="workspace-panel">
         <CardHeader>
           <CardTitle>
-            {english ? "Object-state substrate" : "经营状态底座"}
+            {english ? "Customer-state ledger" : "客户状态清单"}
           </CardTitle>
           <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
             {english
-              ? "These summaries explain what the system now treats as stable object state instead of scattered timeline notes."
-              : "这里保留已经稳定的经营状态，零散时间线放在下层。"}
+              ? "Stable customer facts stay here; raw timeline details stay one layer lower."
+              : "稳定客户事实留在这里，零散时间线放到下层。"}
           </p>
         </CardHeader>
         <CardContent className="grid gap-4 xl:grid-cols-2">
@@ -2005,6 +2002,62 @@ export function MemoryClient({
         </CardContent>
       </Card>
 
+      {memoryHomeArrival.isHomeSurfaceArrival ? (
+        <HomeSurfaceSecondaryDisclosure
+          kind="memory"
+          english={english}
+          title={
+            english
+              ? "Open memory guidance, correction boundary and reflection history only when needed"
+              : "只在需要时再打开记忆引导、修正边界和复盘历史"
+          }
+          summary={
+            english
+              ? "Keep presets, correction boundary notes and reflection history behind the next layer so the landing screen can stay focused on durable state and the live timeline."
+              : "把预设、修正边界说明和复盘历史后置到下一层，让首屏继续聚焦稳定状态和正在发生的时间线。"
+          }
+        >
+          <>
+            {memoryLandingDeferredContext}
+          </>
+        </HomeSurfaceSecondaryDisclosure>
+      ) : (
+        <ControlledDisclosure
+          className="workspace-panel-muted rounded-[24px] border border-[color:var(--border)]"
+          summaryClassName="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-4"
+          bodyClassName="space-y-4 border-t border-[color:var(--border)] px-4 py-4"
+          summaryLabel={
+            english
+              ? "Review candidates and correction boundary"
+              : "复核候选与修正边界"
+          }
+          summary={
+            <>
+              <div className="space-y-2">
+                <p className="workspace-eyebrow">
+                  {english ? "Review layer" : "复核层"}
+                </p>
+                <p className="text-lg font-semibold tracking-tight text-[color:var(--foreground)]">
+                  {english
+                    ? "Open candidates only when memory needs a decision"
+                    : "只有记忆需要判断时再打开候选区"}
+                </p>
+                <p className="text-sm leading-7 text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Duplicate candidates, correction limits and reflection history stay here so the main screen can lead with customer assets."
+                    : "重复候选、修正边界和复盘历史收在这里，主屏继续先露出客户经营资产。"}
+                </p>
+              </div>
+              <span className="mt-1 rounded-full border border-[color:var(--border)] bg-[color:var(--background-elevated)] p-2 text-[color:var(--muted-foreground)]">
+                <ChevronDown className="h-4 w-4" />
+              </span>
+            </>
+          }
+        >
+          {memoryLandingDeferredContext}
+        </ControlledDisclosure>
+      )}
+
       {memoryMeetingWorkspaceContext ? (
         memoryHomeArrival.isHomeSurfaceArrival ? (
           <ControlledDisclosure
@@ -2047,7 +2100,7 @@ export function MemoryClient({
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard
-          label={english ? "Workspace memory" : "工作区记忆"}
+          label={english ? "General signals" : "通用线索"}
           value={summary.workspace}
           active={dimension === "WORKSPACE"}
           onClick={() => {
@@ -2056,8 +2109,8 @@ export function MemoryClient({
           }}
           detail={
             english
-              ? "Imported or workspace-level operational memory"
-              : "导入或工作区级运营记忆"
+              ? "Imported context that is not tied to one customer yet"
+              : "尚未归到单一客户的上下文"
           }
         />
         <StatCard
@@ -2127,8 +2180,8 @@ export function MemoryClient({
               </Badge>
               <p className="text-lg font-semibold text-[color:var(--foreground)]">
                 {english
-                  ? "The workspace memory layer that keeps accumulating."
-                  : "不断积累的工作域记忆层。"}
+                  ? "The customer asset trail keeps accumulating."
+                  : "客户资产脉络会持续沉淀。"}
               </p>
               <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
                 {english
@@ -2413,11 +2466,50 @@ export function MemoryClient({
             </Card>
           ) : null}
           {filteredTimeline.length ? (
-            filteredTimeline.map((item) => (
-              <div
-                key={item.id}
-                className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-[116px_32px_minmax(0,1fr)] md:gap-4"
-              >
+            <>
+              <Card className="workspace-panel-muted">
+                <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                      {showFullTimeline
+                        ? english
+                          ? `Showing all ${filteredTimeline.length} timeline items`
+                          : `已展开全部 ${filteredTimeline.length} 条时间线`
+                        : english
+                          ? `Showing the latest ${visibleTimeline.length} of ${filteredTimeline.length}`
+                          : `先看最新 ${visibleTimeline.length} 条，共 ${filteredTimeline.length} 条`}
+                    </p>
+                    <p className="text-xs leading-5 text-[color:var(--muted-foreground)]">
+                      {english
+                        ? "Older records stay available, but the first read should start from the newest usable business facts."
+                        : "历史记录仍可查看，但首次阅读先从最新、可复用的经营事实开始。"}
+                    </p>
+                  </div>
+                  {hiddenTimelineCount > 0 || showFullTimeline ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setShowFullTimeline((current) => !current)}
+                    >
+                      {showFullTimeline
+                        ? english
+                          ? "Collapse"
+                          : "收起"
+                        : english
+                          ? `Show ${hiddenTimelineCount} older`
+                          : `展开余下 ${hiddenTimelineCount} 条`}
+                    </Button>
+                  ) : null}
+                </CardContent>
+              </Card>
+              {visibleTimeline.map((item) => {
+                const businessAssetHref = buildTimelineBusinessAssetHref(item);
+
+                return (
+                <div
+                  key={item.id}
+                  className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-[116px_32px_minmax(0,1fr)] md:gap-4"
+                >
                 <div className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface-subtle)_82%,var(--surface)_18%)] px-4 py-3 md:block md:border-0 md:bg-transparent md:px-0 md:py-0">
                   <div className="min-w-0 space-y-1 text-xs text-[color:var(--muted-foreground)] md:text-right">
                     <p className="break-words font-medium text-[color:var(--muted-foreground)]">
@@ -2457,6 +2549,14 @@ export function MemoryClient({
                           {item.summary}
                         </p>
                       </div>
+                      {businessAssetHref ? (
+                        <Button asChild size="sm" variant="secondary">
+                          <Link href={businessAssetHref}>
+                            {english ? "Open asset" : "打开经营资产"}
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      ) : null}
                     </div>
 
                     {item.category === "NOTE" ? (
@@ -2593,21 +2693,21 @@ export function MemoryClient({
                         <div className="theme-surface-panel-soft rounded-2xl px-4 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
                             {english
-                              ? "Why this memory matters"
-                              : "为什么这条记忆重要"}
+                              ? "Business impact"
+                              : "经营影响"}
                           </p>
                           <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
                             {item.fact.importance >= 75
                               ? english
-                                ? "This fact directly affects briefings, risk judgement or recommendation ranking, so it stays highly important."
-                                : "这条记忆会直接影响简报、风险判断或判断建议排序，因此被提升为高重要度。"
+                                ? "This fact changes the next customer readout, risk level, or recommended move."
+                                : "这条事实会改变下一次客户读板、风险级别或推荐动作。"
                               : item.fact.freshnessScore >= 70
                                 ? english
-                                  ? "This fact is relatively fresh, so the system will pull it into current object judgement first."
-                                  : "这条记忆比较新，会优先进入当前对象判断。"
+                                  ? "This is a fresh signal, so it should be read before older notes."
+                                  : "这是较新的信号，应优先于旧记录阅读。"
                                 : english
-                                  ? "This fact is still kept, but its importance is lower than the latest meeting conclusions and open commitments."
-                                  : "这条记忆目前仍被保留，但重要度低于最新会议结论和未完成承诺。"}
+                                  ? "Kept for context, but it sits below fresh meeting conclusions and open promises."
+                                  : "保留作上下文，但优先级低于最新会议结论和未完成承诺。"}
                           </p>
                         </div>
                         {permissions.canManageMemoryFacts ? (
@@ -2734,11 +2834,11 @@ export function MemoryClient({
                         <div className="theme-surface-panel-soft rounded-2xl px-4 py-3 text-sm text-[color:var(--muted)]">
                           {item.commitment.overdueFlag
                             ? english
-                              ? "This commitment is already affecting ranking and will be pulled upward on the dashboard and object pages."
-                              : "这条承诺已经开始影响系统排序，会被首页和对象页优先拉高。"
+                              ? "This overdue promise should be handled before lower-pressure work."
+                              : "这条逾期承诺应优先于低压力事项处理。"
                             : english
-                              ? "Open commitments continue to influence object-page recommendations and risk hints."
-                              : "未完成承诺会持续影响对象页判断建议和风险提示。"}
+                              ? "This open promise stays attached to the customer state until it is closed."
+                              : "这条未完成承诺会持续挂在客户状态上，直到关闭。"}
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {item.commitment.status !== "FULFILLED" ? (
@@ -2841,11 +2941,11 @@ export function MemoryClient({
                         <div className="theme-surface-panel-soft rounded-2xl px-4 py-3 text-sm text-[color:var(--muted)]">
                           {item.blocker.severity >= 75
                             ? english
-                              ? "This is a high-severity blocker, so it directly raises urgency in risk hints and recommendation ranking."
-                              : "这是高严重度阻塞，会直接抬高风险提示和判断建议的紧迫度。"
+                              ? "This blocker is the risk pressure that should decide the next move."
+                              : "这条阻塞就是当前风险压力，应直接决定下一步。"
                             : english
-                              ? "This blocker stays as active evidence for briefings and next-step recommendations."
-                              : "这条阻塞会作为当前对象的阻塞证据，参与简报和下一步推荐。"}
+                              ? "This blocker stays attached to the customer state until it is handled."
+                              : "这条阻塞会持续挂在客户状态上，直到被处理。"}
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {item.blocker.status !== "RESOLVED" ? (
@@ -2977,8 +3077,10 @@ export function MemoryClient({
                     ) : null}
                   </CardContent>
                 </Card>
-              </div>
-            ))
+                </div>
+                );
+              })}
+            </>
           ) : (
             <EmptyState
               title={
@@ -3164,10 +3266,36 @@ function buildObjectScopedMemoryHref(
   objectType: NonNullable<MemoryClientProps["objectType"]>,
   objectId: string,
 ) {
+  const businessAssetHref = buildBusinessAssetHrefFromObject(
+    { objectType, objectId, source: "memory-scope" },
+  );
+
+  if (businessAssetHref) return businessAssetHref;
   if (objectType === "CONTACT") return `/contacts/${objectId}`;
-  if (objectType === "COMPANY") return `/companies/${objectId}`;
   if (objectType === "MEETING") return `/meetings/${objectId}`;
-  return `/opportunities?opportunityId=${objectId}`;
+  return "/memory";
+}
+
+function buildTimelineBusinessAssetHref(item: TimelineItem) {
+  if (item.category === "FACT") {
+    return buildBusinessAssetHrefFromObject(
+      {
+        objectType: item.fact.objectType,
+        objectId: item.fact.objectId,
+        source: "memory-timeline",
+      },
+    );
+  }
+
+  if (item.category === "COMMITMENT") {
+    return buildCommitmentAssetHref(item.commitment.id, "memory-timeline");
+  }
+
+  if (item.category === "BLOCKER") {
+    return buildRiskAssetHref(item.blocker.id, "memory-timeline");
+  }
+
+  return null;
 }
 
 function buildApprovalEvidenceReturnHref(approvalId: string | null) {

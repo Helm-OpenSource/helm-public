@@ -46,8 +46,8 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
   const primaryEvidence = display.selectedPressure?.evidence ?? nextItem?.detail ?? display.windowLabel;
   const primaryHref = display.selectedPressure?.href ?? "/approvals";
   const primarySafetyLabels = english
-    ? ["Read-only projection", "Not sent", "Human review required"]
-    : ["只读投影", "未外发", "需人工复核"];
+    ? ["For judgement", "Not sent", "Human review required"]
+    : ["仅供判断", "未外发", "需人工复核"];
   const otherPressureSignals = display.pressureSignals.slice(1, 4);
 
   return (
@@ -76,7 +76,7 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
             </span>
           </div>
           <h2 className="mt-3 max-w-3xl text-2xl font-semibold leading-tight text-[color:var(--foreground)] md:text-3xl">
-            {english ? "The next customer call" : "下一步先判断这件事"}
+            {english ? "Judge this customer move first" : "先判断这条客户动作"}
             <QuoteNote label={english ? "Summary note" : "摘要附注"} note={display.summary} />
           </h2>
         </div>
@@ -99,7 +99,7 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
                     className={`signal-flow-node rounded-lg border px-3 py-2 ${statusClasses[phase.status]}`}
                     data-status={phase.status}
                   >
-                    <p className="truncate text-sm font-semibold text-[color:var(--foreground)]">
+                    <p className="text-sm font-semibold leading-5 text-[color:var(--foreground)]">
                       {phase.label}
                     </p>
                     <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
@@ -124,7 +124,7 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
           >
             <div className="min-w-0 rounded-lg border border-[color:color-mix(in_oklab,var(--accent)_24%,var(--border)_76%)] bg-[color:color-mix(in_oklab,var(--surface)_88%,var(--accent-soft)_12%)] p-4">
               <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                {english ? "Only judgement now" : "现在只判断一个问题"}
+                {english ? "Highest pressure today" : "今天最高压力"}
               </p>
               <h3 className="mt-2 text-2xl font-semibold leading-8 text-[color:var(--foreground)]">
                 {primaryTitle}
@@ -176,7 +176,7 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
                   href={primaryHref}
                   className="theme-primary-action inline-flex min-h-10 items-center rounded-lg px-4 text-sm font-semibold"
                 >
-                  {english ? "Open review path" : "打开复核路径"}
+                  {english ? "Open signal lifecycle" : "查看信号全链路"}
                 </Link>
               </div>
             </div>
@@ -187,7 +187,7 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
             >
               <p className="flex items-center text-sm font-semibold text-[color:var(--foreground)]">
                 <Bot className="mr-2 h-4 w-4 text-[color:var(--accent)]" />
-                {english ? "Processing state" : "处理状态"}
+                {english ? "AI work posture" : "AI 工作姿态"}
               </p>
               <div className="mt-3 grid gap-2 text-sm">
                 <p className="rounded-md border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,var(--surface-subtle)_12%)] px-3 py-2 font-semibold text-[color:var(--foreground)]">
@@ -198,7 +198,7 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
                   data-testid="signal-flow-boundary"
                 >
                   <LockKeyhole className="mr-1.5 inline h-3.5 w-3.5 text-[color:var(--accent-warm)]" />
-                  {english ? "Review only" : "只停在复核"}
+                  {english ? "Held for review" : "停在人工复核"}
                   <QuoteNote
                     label={english ? "Guardrail note" : "保护线附注"}
                     note={display.boundary}
@@ -258,7 +258,8 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
               </summary>
               <div className="mt-3 grid gap-2">
                 {otherPressureSignals.map((signal) => (
-                  <span
+                  <Link
+                    href={signal.href}
                     className="signal-flow-pressure-row rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-1 text-xs font-medium text-[color:var(--foreground)]"
                     data-status={signal.status}
                     key={signal.id}
@@ -268,7 +269,7 @@ export function OperatingSignalFlowMap({ locale }: { locale: UiLocale }) {
                       label={english ? `${signal.label} detail` : `${signal.label}明细`}
                       note={`${signal.blocker} · ${signal.source} · ${signal.evidence}`}
                     />
-                  </span>
+                  </Link>
                 ))}
               </div>
             </details>

@@ -19,11 +19,10 @@ export function QuoteNote({ label, note }: { label: string; note: string }) {
         aria-describedby={visible ? tooltipId : undefined}
         aria-expanded={visible}
         aria-label={label}
-        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-[11px] font-semibold leading-none text-[color:var(--muted-foreground)] transition hover:border-[color:var(--border-strong)] hover:text-[color:var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-sm font-semibold leading-none text-[color:var(--muted-foreground)] transition hover:border-[color:var(--border-strong)] hover:text-[color:var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
         onClick={() => setOpen((value) => !value)}
-        onBlur={() => setOpen(false)}
       >
-        注
+        &quot;
       </button>
       {visible ? (
         <span

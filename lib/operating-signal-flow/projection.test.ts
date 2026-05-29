@@ -3,11 +3,77 @@ import { describe, expect, it } from "vitest";
 import fixturePack from "@/evals/operating-signal-flow/signal-flow-cases.json";
 import type { OperatingSignalFlowFixturePack } from "@/lib/operating-signal-flow/contract";
 import {
+  buildOperatingSignalFlowDetailDisplayModel,
   buildOperatingSignalFlowDisplayModel,
+  buildOperatingSignalFlowSnapshotDetailDisplayModel,
   selectHighestPressurePath,
 } from "@/lib/operating-signal-flow/projection";
+import {
+  buildOperatingSignalFlowRuntimeShadowSnapshot,
+  type OperatingSignalFlowShadowActionRow,
+  type OperatingSignalFlowShadowApprovalRow,
+  type OperatingSignalFlowShadowAuditRow,
+} from "@/lib/operating-signal-flow/runtime-shadow-adapter";
 
 const PACK = fixturePack as OperatingSignalFlowFixturePack;
+const NOW = new Date("2026-05-29T02:00:00.000Z");
+
+function shadowActionRow(
+  overrides: Partial<OperatingSignalFlowShadowActionRow> = {},
+): OperatingSignalFlowShadowActionRow {
+  return {
+    id: "action-1",
+    workspaceId: "ws-1",
+    ownerId: "owner-1",
+    actionType: "CREATE_TASK",
+    sourceType: "SYSTEM_INFERENCE",
+    riskLevel: "HIGH",
+    suggestedAt: new Date("2026-05-29T01:10:00.000Z"),
+    dueDate: new Date("2026-05-30T01:10:00.000Z"),
+    executedAt: null,
+    status: "PENDING_APPROVAL",
+    executionStatus: "pending",
+    executionMode: "REQUIRES_APPROVAL",
+    requiresApproval: true,
+    createdAt: new Date("2026-05-29T01:10:00.000Z"),
+    updatedAt: new Date("2026-05-29T01:20:00.000Z"),
+    ...overrides,
+  };
+}
+
+function shadowApprovalRow(
+  overrides: Partial<OperatingSignalFlowShadowApprovalRow> = {},
+): OperatingSignalFlowShadowApprovalRow {
+  return {
+    id: "approval-1",
+    workspaceId: "ws-1",
+    status: "PENDING",
+    isHighRisk: true,
+    autoExecute: false,
+    reviewedAt: null,
+    createdAt: new Date("2026-05-29T01:30:00.000Z"),
+    updatedAt: new Date("2026-05-29T01:30:00.000Z"),
+    ...overrides,
+  };
+}
+
+function shadowAuditRow(
+  overrides: Partial<OperatingSignalFlowShadowAuditRow> = {},
+): OperatingSignalFlowShadowAuditRow {
+  return {
+    id: "audit-1",
+    workspaceId: "ws-1",
+    actorType: "SYSTEM",
+    actionType: "OPERATING_SIGNAL_FLOW_SHADOW_RECEIPT",
+    targetType: "ActionItem",
+    relatedObjectType: "ActionItem",
+    traceId: "trace-raw-secret",
+    requestId: "request-raw-secret",
+    parentEventId: "parent-raw-secret",
+    createdAt: new Date("2026-05-29T01:45:00.000Z"),
+    ...overrides,
+  };
+}
 
 describe("operating signal flow projection", () => {
   it("builds the shared display model from the checked-in contract fixture", () => {
@@ -77,6 +143,10 @@ describe("operating signal flow projection", () => {
     expect(display.aiPosture).toContainEqual({ label: "AI 排序权", value: "0" });
     expect(display.aiPosture).toContainEqual({ label: "跨客户动作", value: "0" });
     expect(display.pressureSignals).toHaveLength(4);
+    expect(display.selectedPressure?.href).toMatch(
+      /^\/operating\/signals\/boundary%3Aalias-f/u,
+    );
+    expect(display.selectedPressure?.handoffHref).toBe("/approvals");
     expect(display.dataPosture).toBe("fixture");
     expect(display.fixtureBannerVisible).toBe(true);
     expect(display.boundaryStatementVisible).toBe(true);
@@ -165,9 +235,95 @@ describe("operating signal flow projection", () => {
     };
 
     const display = buildOperatingSignalFlowDisplayModel(unsafePack, "en-US");
+    const detail = buildOperatingSignalFlowDetailDisplayModel(
+      unsafePack,
+      "en-US",
+      display.pressureSignals[0]?.signalKey ?? "",
+    );
 
     expect(display.pressureSignals).not.toHaveLength(0);
-    expect(display.pressureSignals.every((item) => item.href === "/approvals")).toBe(true);
-    expect(display.selectedPressure?.href).toBe("/approvals");
+    expect(display.pressureSignals.every((item) => item.href.startsWith("/operating/signals/"))).toBe(true);
+    expect(display.pressureSignals.every((item) => !item.href.includes("/api/"))).toBe(true);
+    expect(display.selectedPressure?.href).toMatch(/^\/operating\/signals\//u);
+    expect(display.selectedPressure?.handoffHref).toBe("/approvals");
+    expect(detail?.primaryAction.href).toBe("/approvals");
+  });
+
+  it("builds a single-signal lifecycle detail from customer-facing asset facts", () => {
+    const detail = buildOperatingSignalFlowDetailDisplayModel(
+      PACK,
+      "zh-CN",
+      "boundary:alias-f",
+    );
+
+    expect(detail).toBeDefined();
+    expect(detail?.title).toBe("Acme 试点承诺型外发草稿");
+    expect(detail?.family).toBe("谨慎动作");
+    expect(detail?.state).toBe("高风险动作停住");
+    expect(detail?.blocker).toBe("外部动作需拍板");
+    expect(detail?.primaryAction).toMatchObject({
+      label: "打开复核路径",
+      href: "/approvals",
+    });
+    expect(detail?.quickFacts.map((item) => item.label)).toEqual([
+      "客户材料",
+      "客户资产",
+      "当前停住点",
+      "证据",
+    ]);
+    expect(detail?.lifecycle.phases).toHaveLength(6);
+    expect(detail?.lifecycle.phases.map((phase) => phase.status)).toEqual([
+      "done",
+      "done",
+      "done",
+      "blocked",
+      "waiting",
+      "waiting",
+    ]);
+    expect(detail?.aiPosture).toContainEqual({
+      label: "外部权限",
+      value: "0",
+      detail: expect.stringContaining("external_send_not_allowed"),
+    });
+    expect(detail?.boundary).toContain("不外发");
+  });
+
+  it("builds route-disconnected detail models from current-window runtime shadow snapshots", () => {
+    const shadow = buildOperatingSignalFlowRuntimeShadowSnapshot({
+      workspaceId: "ws-1",
+      window: "24h",
+      generatedAt: NOW,
+      actions: [shadowActionRow()],
+      approvals: [shadowApprovalRow()],
+      audits: [shadowAuditRow()],
+    });
+
+    expect(shadow.state).toBe("shadow_ready");
+    if (shadow.state !== "shadow_ready") throw new Error("expected shadow_ready");
+
+    const detail = buildOperatingSignalFlowSnapshotDetailDisplayModel(
+      shadow.snapshot,
+      "zh-CN",
+      "osf-shadow-action-001",
+    );
+
+    expect(detail).toBeDefined();
+    expect(detail?.dataPosture).toBe("current_window");
+    expect(detail?.title).toBe("当前工作区经营闭环");
+    expect(detail?.source).toBe("行动候选（脱敏计数）");
+    expect(detail?.object).toBe("当前工作区经营闭环");
+    expect(detail?.family).toBe("经营风险");
+    expect(detail?.primaryAction).toMatchObject({
+      label: "打开复核路径",
+      href: "/approvals",
+    });
+    expect(detail?.fixtureBanner).toContain("不代表生产页面已接入");
+    expect(detail?.boundary).toContain("未接路由的投影");
+    expect(detail?.secondaryActions.map((item) => item.href)).toContain("/operating");
+
+    const serialized = JSON.stringify(detail);
+    expect(serialized).not.toContain("trace-raw-secret");
+    expect(serialized).not.toContain("request-raw-secret");
+    expect(serialized).not.toContain("parent-raw-secret");
   });
 });

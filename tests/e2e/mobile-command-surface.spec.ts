@@ -37,6 +37,7 @@ test.describe("Mobile Command Surface", () => {
     await expect(page.getByTestId("mobile-hero-card")).toBeVisible();
     await expect(page.getByTestId("mobile-hero-badge")).toBeVisible();
     await expect(page.getByRole("heading", { name: /Ask Helm|问 Helm/i })).toHaveCount(0);
+    await expect(page.getByTestId("mobile-secondary-work-toggle")).toBeVisible();
     await expect(page.locator("#ask-helm summary")).toContainText(
       /Ask or submit a signal|提问 \/ 上报信号/i,
     );
@@ -58,6 +59,7 @@ test.describe("Mobile Command Surface", () => {
     await page.goto("/mobile");
     await waitForWorkspaceUiHydration(page);
 
+    await page.getByTestId("mobile-secondary-work-toggle").click();
     await page.locator("#ask-helm summary").click();
     await page.getByRole("textbox", { name: /Ask Helm query|问 Helm 问题/ }).fill("今天先推进什么？");
     await page.getByRole("button", { name: /ask|提问/i }).click();

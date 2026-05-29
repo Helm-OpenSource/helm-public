@@ -64,7 +64,7 @@ const ZH_REPLACEMENTS: Array<[RegExp, string]> = [
   [/supporting facts/gi, "支撑事实"],
   [/facts/gi, "事实"],
   [/evidence bundle/gi, "证据包"],
-  [/evidence drawer/gi, "证据抽屉"],
+  [/evidence drawer/gi, "依据来源"],
   [/evidence signals/gi, "证据信号"],
   [/\bevidence\b/gi, "证据"],
   [/Replay payload/gi, "回放载荷"],

@@ -21,6 +21,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatShellAlertText } from "@/components/layout/alert-display-copy";
+import {
+  buildCustomerAssetHref,
+  buildOpportunityAssetHref,
+} from "@/features/business-assets/hrefs";
 import { buildAskHelmHref } from "@/features/search/ask-helm-entry-routing";
 import { formatDateLabel, trimText } from "@/lib/utils";
 
@@ -168,8 +172,8 @@ export function CommandPalette({
       .map((item) => ({
         id: `company-${item.id}`,
         title: item.name,
-        description: english ? "Company" : "公司",
-        href: `/companies/${item.id}`,
+        description: english ? "Customer asset" : "客户资产",
+        href: buildCustomerAssetHref(item.id, "command-palette"),
         icon: Orbit,
       }));
 
@@ -179,8 +183,8 @@ export function CommandPalette({
       .map((item) => ({
         id: `opportunity-${item.id}`,
         title: item.title,
-        description: english ? "Opportunity" : "机会",
-        href: `/opportunities?opportunityId=${item.id}`,
+        description: english ? "Opportunity asset" : "机会资产",
+        href: buildOpportunityAssetHref(item.id, "command-palette"),
         icon: Target,
       }));
 

@@ -22,7 +22,9 @@ import {
   PAYMENT_PROVIDER,
 } from "@/lib/billing/runtime-constants";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
+import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
+import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
 import { ObjectContextOperatingSummary } from "@/components/shared/object-context-operating-summary";
 import { PageHeader } from "@/components/shared/page-header";
 import { ActionModeBadge } from "@/components/shared/status-badges";
@@ -1206,7 +1208,7 @@ export function SettingsClient({
         : `${data.governanceSummary.pendingApprovals} 条待复核事项正在等规则、信息来源或负责人权限。`
       : english
         ? "Check sources, seats, assistive service and review rules before changing today's work."
-        : "先看入口、席位、辅助服务和复核规则是否支撑今天的工作。";
+        : "先看入口、席位、复核规则和负责人权限是否支撑今天的工作。";
   const settingsSummaryItems = [
     {
       label: english ? "Organization state" : "组织状态",
@@ -1232,7 +1234,7 @@ export function SettingsClient({
               !llmConfig.connectionProbe.reachable
             ? english
               ? "Confirm the assistive service is usable before widening workspace usage."
-              : "先确认辅助服务可用，再扩大工作区使用。"
+              : "先确认今天的关键入口可用，再扩大工作区使用。"
             : english
               ? "Review which action rules should stay strict before widening action coverage."
               : "先检查哪些动作规则仍应保持严格，再扩大动作覆盖。",
@@ -1244,6 +1246,107 @@ export function SettingsClient({
         : `${data.integrationSummary.connectedConnectorCount} 个已连接入口 · ${data.integrationSummary.importedSignalCount} 条导入信号 · ${data.governanceSummary.pendingApprovals} 条待复核`,
     },
   ];
+  const settingsAssetFocusItems = [
+    {
+      label: english ? "Object state" : "对象状态",
+      value: settingsSummaryItems[0]?.value ?? currentAccessStateLabel,
+      detail: english
+        ? "Seat and access state decide whether today's work can keep moving."
+        : "席位和访问状态决定今天的工作能不能继续推进。",
+      href: "/settings?tab=permissions",
+      tone: "info",
+    },
+    {
+      label: english ? "Blocker" : "阻塞",
+      value:
+        data.integrationSummary.connectorErrorCount > 0
+          ? english
+            ? `${data.integrationSummary.connectorErrorCount} source issue(s)`
+            : `${data.integrationSummary.connectorErrorCount} 个入口异常`
+          : data.governanceSummary.pendingApprovals > 0
+            ? english
+              ? `${data.governanceSummary.pendingApprovals} pending reviews`
+              : `${data.governanceSummary.pendingApprovals} 条待复核`
+            : english
+              ? "No dominant setting blocker"
+              : "没有明显设置阻塞",
+      detail:
+        data.integrationSummary.connectorErrorCount > 0
+          ? english
+            ? "A source issue can stop new operating signals from entering."
+            : "入口异常会阻断新的经营信号进入。"
+          : data.governanceSummary.pendingApprovals > 0
+            ? english
+              ? "Pending reviews are the first control pressure."
+              : "待复核事项是当前最直接的控制压力。"
+            : english
+              ? "Keep controls stable unless today's work is blocked."
+              : "没有卡点时，不要改动稳定控制。",
+      href:
+        data.integrationSummary.connectorErrorCount > 0
+          ? "/settings?tab=connectors"
+          : data.governanceSummary.pendingApprovals > 0
+            ? "/approvals"
+            : undefined,
+      tone:
+        data.integrationSummary.connectorErrorCount > 0
+          ? "danger"
+          : data.governanceSummary.pendingApprovals > 0
+            ? "warning"
+            : "success",
+    },
+    {
+      label: english ? "Pending decision" : "待决策",
+      value:
+        data.integrationSummary.connectorErrorCount > 0
+          ? english
+            ? "Which source to fix first"
+            : "先修哪条入口"
+          : !llmConfig.enabled ||
+              !llmConfig.providerReady ||
+              !llmConfig.connectionProbe.reachable
+            ? english
+              ? "Whether assistive service is usable"
+              : "辅助服务是否可用"
+            : english
+              ? "Which rule stays strict"
+              : "哪条规则继续收紧",
+      detail: english
+        ? "Decide which control affects today's work before opening deep settings."
+        : "打开深层设置前，先判断哪条控制影响今天的工作。",
+      href: "/diagnostics",
+      tone: "warning",
+    },
+    {
+      label: english ? "Next action" : "下一步动作",
+      value:
+        data.integrationSummary.connectorErrorCount > 0
+          ? english
+            ? "Fix the source entry"
+            : "修入口"
+          : !llmConfig.enabled ||
+              !llmConfig.providerReady ||
+              !llmConfig.connectionProbe.reachable
+            ? english
+              ? "Check assistive service"
+              : "检查辅助服务"
+            : english
+              ? "Review approval rules"
+              : "检查审批规则",
+      detail: english
+        ? "Only change controls that affect today's operating route."
+        : "只改影响今天推进路径的控制项。",
+      href:
+        data.integrationSummary.connectorErrorCount > 0
+          ? "/settings?tab=connectors"
+          : !llmConfig.enabled ||
+              !llmConfig.providerReady ||
+              !llmConfig.connectionProbe.reachable
+            ? "/settings?tab=account"
+            : "/settings?tab=policies",
+      tone: "info",
+    },
+  ] as const;
   const settingsSummaryConnectionCandidates: Array<
     SettingsSummaryConnection | undefined
   > = [
@@ -1270,13 +1373,13 @@ export function SettingsClient({
       href: "/imports/crm",
     },
     {
-      label: english ? "Movement readiness" : "推进准备度",
+      label: english ? "Today readiness" : "今天可推进度",
       value: english
-        ? `${data.governanceSummary.acceptedStrategyCount} accepted adjustments · ${data.governanceSummary.acceptedSkillSuggestionCount} capability adoptions · ${data.governanceSummary.formalReviewQueueCount} formal reviews`
-        : `${data.governanceSummary.acceptedStrategyCount} 条已采纳调整 · ${data.governanceSummary.acceptedSkillSuggestionCount} 条能力采纳 · ${data.governanceSummary.formalReviewQueueCount} 条正式评审`,
+        ? `${data.governanceSummary.acceptedStrategyCount} routing changes · ${data.governanceSummary.acceptedSkillSuggestionCount} reusable patterns · ${data.governanceSummary.formalReviewQueueCount} waiting for owner confirmation`
+        : `${data.governanceSummary.acceptedStrategyCount} 条路由调整 · ${data.governanceSummary.acceptedSkillSuggestionCount} 条可沿用经验 · ${data.governanceSummary.formalReviewQueueCount} 条待负责人确认`,
       description: english
-        ? "Use diagnostics to see which source, permission, or candidate capability is blocking the workflow."
-        : "去就绪度页看哪些入口、权限或候选能力正在卡住工作流。",
+        ? "Use diagnostics to see which source, permission, or reusable pattern is blocking today's push."
+        : "去就绪度页看哪些入口、权限或经验规则正在卡住今天的推进。",
       href: "/diagnostics",
     },
     {
@@ -1563,7 +1666,7 @@ export function SettingsClient({
       if (!result.ok) {
         toast.error(
           result.error ??
-            (english ? "Failed to update assistive service" : "更新辅助服务配置失败"),
+            (english ? "Failed to update judgement service" : "更新判断服务配置失败"),
         );
         return;
       }
@@ -1571,7 +1674,7 @@ export function SettingsClient({
       if ((result.warnings?.length ?? 0) > 0) {
         toast.warning(result.warnings.slice(0, 2).join(english ? " | " : "；"));
       } else {
-        toast.success(english ? "Assistive service updated" : "辅助服务配置已更新");
+        toast.success(english ? "Judgement service updated" : "判断服务配置已更新");
       }
 
       if (result.config) {
@@ -2488,7 +2591,7 @@ export function SettingsClient({
         description={
           english
             ? "Sources, seats, review rules and assistive service choices that affect today's work."
-            : "入口、席位、复核规则和辅助服务，会直接影响今天的工作。"
+            : "入口、席位、复核规则和负责人权限，会直接影响今天的工作。"
         }
         actions={
           <>
@@ -2512,14 +2615,49 @@ export function SettingsClient({
         }
       />
 
-      <ObjectContextOperatingSummary
-        label={english ? "Settings operating summary" : "设置操作摘要"}
-        title={settingsSummaryTitle}
-        summary={settingsSummaryText}
-        items={settingsSummaryItems}
-        connectionsLabel={english ? "Connected loop" : "关联对象与回路"}
-        connections={settingsSummaryConnections}
+      <CustomerAssetFocusStrip
+        eyebrow={english ? "Operating controls" : "经营控制"}
+        title={
+          english
+            ? "Change only the control that blocks today's work."
+            : "只改卡住今天工作的那条控制。"
+        }
+        summary={
+          english
+            ? "Settings are useful when they reveal source health, owner access, pending review, and the next safe control change."
+            : "设置页先告诉你入口是否正常、负责人是否有权限、哪些复核待处理，以及下一步该改哪条控制。"
+        }
+        items={[...settingsAssetFocusItems]}
+        primaryAction={{
+          label:
+            data.integrationSummary.connectorErrorCount > 0
+              ? english
+                ? "Fix sources"
+                : "修入口"
+              : english
+                ? "Review controls"
+                : "检查控制",
+          href:
+            data.integrationSummary.connectorErrorCount > 0
+              ? "/settings?tab=connectors"
+              : "/settings?tab=policies",
+        }}
+        secondaryAction={{
+          label: english ? "Open diagnostics" : "打开就绪度",
+          href: "/diagnostics",
+        }}
       />
+
+      <LazyDisclosure title={english ? "Reference: settings basis" : "引用：设置依据"}>
+        <ObjectContextOperatingSummary
+          label={english ? "Settings operating summary" : "设置操作摘要"}
+          title={settingsSummaryTitle}
+          summary={settingsSummaryText}
+          items={settingsSummaryItems}
+          connectionsLabel={english ? "Connected loop" : "关联对象与回路"}
+          connections={settingsSummaryConnections}
+        />
+      </LazyDisclosure>
 
       <SettingsOverviewPanels
         applyRecommendedPilotPreset={applyRecommendedPilotPreset}
@@ -5854,7 +5992,7 @@ export function SettingsClient({
             <Card className="workspace-panel-muted">
               <CardHeader>
                 <CardTitle>
-                  {english ? "Skill suggestions" : "系统最近建议沉淀的候选能力"}
+                  {english ? "Reusable work suggestions" : "系统最近建议沉淀的做法"}
                 </CardTitle>
                 <CardDescription>
                   {english
@@ -5935,12 +6073,12 @@ export function SettingsClient({
                                     id: suggestion.id,
                                   }),
                                 english
-                                  ? "Skill suggestion accepted"
-                                  : "已采纳候选能力建议",
+                                  ? "Work suggestion accepted"
+                                  : "已采纳可复用做法建议",
                               )
                             }
                           >
-                            {english ? "Accept as candidate" : "采纳为候选能力"}
+                            {english ? "Accept as reusable practice" : "采纳为可复用做法"}
                           </Button>
                           <Button
                             size="sm"
@@ -5953,8 +6091,8 @@ export function SettingsClient({
                                     id: suggestion.id,
                                   }),
                                 english
-                                  ? "Skill suggestion dismissed"
-                                  : "已忽略候选能力建议",
+                                  ? "Work suggestion dismissed"
+                                  : "已忽略可复用做法建议",
                               )
                             }
                           >
@@ -5968,13 +6106,13 @@ export function SettingsClient({
                   <EmptyState
                     title={
                       english
-                        ? "No new candidate capability recently"
-                        : "系统最近没有新的候选能力建议"
+                        ? "No new reusable practice recently"
+                        : "系统最近没有新的可复用做法建议"
                     }
                     description={
                       english
-                        ? "When stable operating patterns start looking reusable but still need review, they will appear here as skill suggestions."
-                        : "当稳定推进规律开始表现出可复用能力形态、但仍需要人工复核时，会在这里出现候选能力建议。"
+                        ? "When stable operating patterns become reusable but still need review, they will appear here."
+                        : "当稳定推进规律开始可复用、但仍需要人工复核时，会在这里出现。"
                     }
                   />
                 )}
@@ -5985,8 +6123,8 @@ export function SettingsClient({
               <CardHeader>
                 <CardTitle>
                   {english
-                    ? "Recently adopted candidate capabilities"
-                    : "最近已收敛的候选能力"}
+                    ? "Recently adopted reusable practices"
+                    : "最近已收敛的可复用做法"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -6046,8 +6184,8 @@ export function SettingsClient({
                         {suggestion.formalPromotionReady ? (
                           <Badge variant="warning">
                             {english
-                              ? "Formal review ready"
-                              : "已达正式评审条件"}
+                              ? "Ready for manual confirmation"
+                              : "已达人工确认条件"}
                           </Badge>
                         ) : null}
                       </div>
@@ -6055,8 +6193,8 @@ export function SettingsClient({
                         {formatSettingsSkillSuggestionText(
                           suggestion.appliedEffectSummary ??
                             (english
-                              ? "It has been adopted as a review-first capability and is still waiting for later evidence."
-                              : "已作为先复核的候选能力收敛，仍会继续等待后续证据。"),
+                              ? "It has been adopted as a review-first practice and is still waiting for later evidence."
+                              : "已作为先复核的可复用做法收敛，仍会继续等待后续证据。"),
                           english,
                         )}
                       </p>
@@ -6131,8 +6269,8 @@ export function SettingsClient({
                                     id: suggestion.id,
                                   }),
                                 english
-                                  ? "Queued for formal review"
-                                  : "已加入正式评审队列",
+                                  ? "Queued for manual confirmation"
+                                  : "已加入人工确认队列",
                               )
                             }
                           >
@@ -6144,8 +6282,8 @@ export function SettingsClient({
                                 ? "Queue again"
                                 : "重新入队"
                               : english
-                                ? "Queue for formal review"
-                                : "加入正式评审队列"}
+                                ? "Queue for manual confirmation"
+                                : "加入人工确认队列"}
                           </Button>
                         ) : null}
                         {reservedFormalSkillGovernanceReadable &&
@@ -6178,13 +6316,13 @@ export function SettingsClient({
                   <EmptyState
                     title={
                       english
-                        ? "No adopted candidate capability yet"
-                        : "还没有收敛完成的候选能力"
+                        ? "No adopted reusable practice yet"
+                        : "还没有收敛完成的可复用做法"
                     }
                     description={
                       english
-                        ? "Once you accept a skill suggestion, this section will show whether it is still candidate-only, has become probationary, or is ready for formal review."
-                        : "当你采纳候选能力建议后，这里会显示它目前仍是候选能力、已经进入试运行能力阶段，还是已经达到正式评审条件。"
+                        ? "Once you accept a work suggestion, this section will show whether it is still candidate-only, under trial, or ready for manual confirmation."
+                        : "当你采纳可复用做法后，这里会显示它仍在候选层、已经进入试运行，还是已经达到人工确认条件。"
                     }
                   />
                 )}
@@ -6197,8 +6335,8 @@ export function SettingsClient({
                   <CardHeader>
                     <CardTitle>
                       {english
-                        ? "Formal skill review queue"
-                        : "正式能力评审队列"}
+                        ? "Manual practice confirmation queue"
+                        : "可复用做法人工确认队列"}
                     </CardTitle>
                     <CardDescription>
                       {english
@@ -6249,8 +6387,8 @@ export function SettingsClient({
                               item.formalReviewSummary ??
                                 item.appliedEffectSummary ??
                                 (english
-                                  ? "This capability is waiting for manual formal review."
-                                  : "这条能力正在等待人工正式评审。"),
+                                  ? "This practice is waiting for manual confirmation."
+                                  : "这条做法正在等待人工确认。"),
                               english,
                             )}
                           </p>
@@ -6362,14 +6500,14 @@ export function SettingsClient({
                                         id: item.id,
                                       }),
                                     english
-                                      ? "Queued for formal review"
-                                      : "已加入正式评审队列",
+                                      ? "Queued for manual confirmation"
+                                      : "已加入人工确认队列",
                                   )
                                 }
                               >
                                 {english
-                                  ? "Queue for formal review"
-                                  : "加入正式评审队列"}
+                                  ? "Queue for manual confirmation"
+                                  : "加入人工确认队列"}
                               </Button>
                             ) : null}
                             {item.formalReviewStatus === "QUEUED" ? (
@@ -6381,8 +6519,8 @@ export function SettingsClient({
                                     item.id,
                                     approveSkillFormalReviewAction,
                                     english
-                                      ? "Formal review approved"
-                                      : "已通过正式评审",
+                                      ? "Manual confirmation approved"
+                                      : "已通过人工确认",
                                   )
                                 }
                               >
@@ -6399,8 +6537,8 @@ export function SettingsClient({
                                     item.id,
                                     deferSkillFormalReviewAction,
                                     english
-                                      ? "Formal review deferred"
-                                      : "已暂缓正式评审",
+                                      ? "Manual confirmation deferred"
+                                      : "已暂缓人工确认",
                                   )
                                 }
                               >
@@ -6417,8 +6555,8 @@ export function SettingsClient({
                                     item.id,
                                     rejectSkillFormalReviewAction,
                                     english
-                                      ? "Formal review rejected"
-                                      : "已拒绝正式评审",
+                                      ? "Manual confirmation rejected"
+                                      : "已拒绝人工确认",
                                   )
                                 }
                               >
@@ -6452,13 +6590,13 @@ export function SettingsClient({
                       <EmptyState
                         title={
                           english
-                            ? "No formal review item yet"
-                            : "还没有正式评审项"
+                            ? "No manual confirmation item yet"
+                            : "还没有人工确认项"
                         }
                         description={
                           english
-                            ? "Once a probationary capability becomes ready, it will appear here as a manual queue item instead of auto-promoting into a formal skill."
-                            : "当试运行能力达到正式评审条件后，它会作为人工队列项出现在这里，而不是自动晋级正式能力。"
+                            ? "Once a trial practice becomes ready, it will appear here as a manual queue item instead of auto-promoting."
+                            : "当试运行做法达到人工确认条件后，它会作为人工队列项出现在这里，而不是自动晋级。"
                         }
                       />
                     )}
@@ -6469,8 +6607,8 @@ export function SettingsClient({
                   <CardHeader>
                     <CardTitle>
                       {english
-                        ? "Recent formal review decisions"
-                        : "最近正式评审决定"}
+                        ? "Recent manual confirmation decisions"
+                        : "最近人工确认决定"}
                     </CardTitle>
                     <CardDescription>
                       {english
@@ -6522,8 +6660,8 @@ export function SettingsClient({
                               item.formalReviewSummary ??
                                 item.appliedEffectSummary ??
                                 (english
-                                  ? "A manual formal review decision was recorded for this capability."
-                                  : "这条能力已经记录了一次人工正式评审决定。"),
+                                  ? "A manual confirmation decision was recorded for this practice."
+                                  : "这条做法已经记录了一次人工确认决定。"),
                               english,
                             )}
                           </p>
@@ -6599,8 +6737,8 @@ export function SettingsClient({
                                         id: item.id,
                                       }),
                                     english
-                                      ? "Queued for formal review"
-                                      : "已加入正式评审队列",
+                                      ? "Queued for manual confirmation"
+                                      : "已加入人工确认队列",
                                   )
                                 }
                               >
@@ -6614,8 +6752,8 @@ export function SettingsClient({
                       <EmptyState
                         title={
                           english
-                            ? "No formal review decision yet"
-                            : "还没有正式评审决定"
+                            ? "No manual confirmation decision yet"
+                            : "还没有人工确认决定"
                         }
                         description={
                           english
@@ -6630,8 +6768,8 @@ export function SettingsClient({
             ) : (
               <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
                 {english
-                  ? "Formal skill review queue and decision ledger stay reserved for the Helm internal operating workspace. Customer workspaces can still review candidate capability suggestions and local policy posture here."
-                  : "正式能力评审队列和决定台账只保留给 Helm 自留经营工作区。客户工作区仍可在这里处理候选能力建议和本租户的策略姿态。"}
+                  ? "Manual confirmation queue and decision ledger stay reserved for the Helm internal operating workspace. Customer workspaces can still review reusable-practice suggestions and local policy posture here."
+                  : "人工确认队列和决定台账只保留给 Helm 自留经营工作区。客户工作区仍可在这里处理可复用做法建议和本租户的策略姿态。"}
               </div>
             )}
 

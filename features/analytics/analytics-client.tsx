@@ -2,7 +2,9 @@
 
 import { BarChart3, UserRound } from "lucide-react";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
+import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
+import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -265,6 +267,67 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
       approvedActionsLast7 +
       opportunityMovesLast7 >
     0;
+  const stoppedWorkCount =
+    data.recommendationOverview.rejected +
+    data.days.reduce((sum, item) => sum + item.approvalsRejected, 0);
+  const analyticsAssetFocusItems = [
+    {
+      label: english ? "Object state" : "对象状态",
+      value: hasVerifiedMovement
+        ? english
+          ? `${approvedActionsLast7 + opportunityMovesLast7} verified movement(s)`
+          : `${approvedActionsLast7 + opportunityMovesLast7} 次可验证推进`
+        : english
+          ? "No verified movement yet"
+          : "还没有可验证推进",
+      detail: english
+        ? "Accepted work and opportunity movement are the first signal, not raw activity volume."
+        : "先看已确认动作和机会推进，不看原始活跃量。",
+      href: "/reports",
+      tone: hasVerifiedMovement ? "success" : "warning",
+    },
+    {
+      label: english ? "Blocker" : "阻塞",
+      value: stoppedWorkCount > 0
+        ? english
+          ? `${stoppedWorkCount} stopped item(s)`
+          : `${stoppedWorkCount} 个被拦下事项`
+        : english
+          ? "No stopped work visible"
+          : "没有明显被拦事项",
+      detail: english
+        ? "Rejected items are pressure signals, not vanity analytics."
+        : "被拒绝事项是压力信号，不是装饰性指标。",
+      href: stoppedWorkCount > 0 ? "/approvals" : undefined,
+      tone: stoppedWorkCount > 0 ? "warning" : "success",
+    },
+    {
+      label: english ? "Pending decision" : "待决策",
+      value: hasVerifiedMovement
+        ? english
+          ? "Decide where to widen usage"
+          : "判断下一步扩大到哪里"
+        : english
+          ? "Decide why work did not move"
+          : "判断为什么没有推进",
+      detail: english
+        ? `${data.todayActiveUsers} active today · ${loginsLast7} logins / 7d`
+        : `今天 ${data.todayActiveUsers} 人活跃 · 近 7 天 ${loginsLast7} 次登录`,
+      href: "/diagnostics",
+      tone: "info",
+    },
+    {
+      label: english ? "AI work posture" : "AI 工作姿态",
+      value: english
+        ? `${data.llmOverview.successCount} completed · ${data.llmOverview.fallbackCount} held`
+        : `${data.llmOverview.successCount} 次顺利完成 · ${data.llmOverview.fallbackCount} 次安全停住`,
+      detail: english
+        ? "Show whether AI helped or stopped safely before exposing service logs."
+        : "先看 AI 是帮上忙还是安全停住，再展开服务日志。",
+      href: "/diagnostics",
+      tone: data.llmOverview.fallbackCount > 0 ? "warning" : "success",
+    },
+  ] as const;
 
   return (
     <div className="workspace-surface-stack">
@@ -280,6 +343,39 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
             ? "Start with accepted work, blocked work, active people and whether opportunities moved."
             : "先看哪些被采纳、哪些被拦下、谁在用、机会有没有动。"
         }
+      />
+
+      <CustomerAssetFocusStrip
+        eyebrow={english ? "Operating movement" : "经营推进"}
+        title={
+          hasVerifiedMovement
+            ? english
+              ? "Start with work that actually moved."
+              : "先看真正被推进的事。"
+            : english
+              ? "Start with why nothing crossed review."
+              : "先看为什么还没有事项过复核。"
+        }
+        summary={
+          english
+            ? "The useful readout is accepted work, stopped work, opportunity movement, active people, and AI's posture."
+            : "有效读数是已确认推进、被拦事项、机会移动、活跃人员和 AI 工作姿态。"
+        }
+        items={[...analyticsAssetFocusItems]}
+        primaryAction={{
+          label: hasVerifiedMovement
+            ? english
+              ? "Open reports"
+              : "打开复盘"
+            : english
+              ? "Open review queue"
+              : "打开复核队列",
+          href: hasVerifiedMovement ? "/reports" : "/approvals",
+        }}
+        secondaryAction={{
+          label: english ? "Open diagnostics" : "打开就绪度",
+          href: "/diagnostics",
+        }}
       />
 
       {hasVerifiedMovement ? (
@@ -347,7 +443,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
         </div>
       ) : (
         <section
-          className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]"
+          className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]"
           data-testid="judgement-performance-hero"
         >
           <Card className="workspace-panel">
@@ -368,7 +464,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
             </CardContent>
           </Card>
           <Card className="workspace-panel">
-            <CardContent className="grid gap-3 py-5 sm:grid-cols-3 lg:grid-cols-1">
+            <CardContent className="grid gap-3 py-5 sm:grid-cols-3">
               <UsageCell
                 label={english ? "People active today" : "今天有人在用"}
                 value={data.todayActiveUsers}
@@ -386,8 +482,9 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
         </section>
       )}
 
+      <div className="grid gap-2 md:grid-cols-2">
       {hasVerifiedMovement ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:col-span-2 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label={english ? "Active users today" : "今天活跃用户"}
             value={data.todayActiveUsers}
@@ -414,11 +511,11 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           />
         </div>
       ) : (
-        <details className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
-          <summary className="cursor-pointer list-none text-sm font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-            {english ? "Reference: base activity" : "引用：基础活动"}
-          </summary>
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <LazyDisclosure
+          className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+          title={english ? "Activity reference" : "引用：基础活动"}
+        >
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label={english ? "Active users today" : "今天活跃用户"}
               value={data.todayActiveUsers}
@@ -444,16 +541,16 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
               tone="warning"
             />
           </div>
-        </details>
+        </LazyDisclosure>
       )}
 
-      <details className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
-        <summary className="cursor-pointer list-none text-sm font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-          {english ? "Reference: AI assistance health" : "引用：AI 辅助运行情况"}
-        </summary>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+      <LazyDisclosure
+        className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+        title={english ? "AI work posture" : "引用：AI 工作姿态"}
+      >
+        <div className="grid gap-4 md:grid-cols-3">
           <MetricCard
-            label={english ? "AI assists in last 7 days" : "最近 7 天 AI 帮忙次数"}
+            label={english ? "AI assists in last 7 days" : "最近 7 天协助次数"}
             value={data.llmOverview.totalCalls}
             tone="info"
           />
@@ -463,7 +560,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
             tone="success"
           />
           <MetricCard
-            label={english ? "Handled by rules" : "按规则兜底"}
+            label={english ? "Held safely" : "安全停住"}
             value={data.llmOverview.fallbackCount}
             tone="warning"
           />
@@ -473,20 +570,20 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
             tone="info"
           />
           <MetricCard
-            label={english ? "Input budget used" : "输入预算"}
+            label={english ? "Context read" : "读取上下文"}
             value={data.llmOverview.totalPromptTokens}
             tone="approval"
           />
           <MetricCard
-            label={english ? "Output budget used" : "输出预算"}
+            label={english ? "Drafted output" : "生成内容"}
             value={data.llmOverview.totalCompletionTokens}
             tone="warning"
           />
         </div>
-      </details>
+      </LazyDisclosure>
 
       {hasCaptureActivity ? (
-        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-4 md:col-span-2 md:grid-cols-3 xl:grid-cols-5">
           <MetricCard
             label={english ? "Capture started" : "采集开始"}
             value={data.captureOverview.started}
@@ -514,13 +611,15 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           />
         </div>
       ) : (
-        <details className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
-          <summary className="cursor-pointer list-none text-sm font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-            {english
-              ? "Reference: capture path has no activity this week"
-              : "引用：本周采集链路暂无有效数据"}
-          </summary>
-          <div className="mt-4 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <LazyDisclosure
+          className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+          title={
+            english
+              ? "Meeting capture reference"
+              : "引用：本周会议采集暂无有效数据"
+          }
+        >
+          <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
             <MetricCard
               label={english ? "Capture started" : "采集开始"}
               value={data.captureOverview.started}
@@ -547,11 +646,11 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
               tone="danger"
             />
           </div>
-        </details>
+        </LazyDisclosure>
       )}
 
       {hasRecommendationActivity ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:col-span-2 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label={english ? "Judgements prepared" : "给出判断"}
             value={data.recommendationOverview.generated}
@@ -574,13 +673,15 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           />
         </div>
       ) : (
-        <details className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
-          <summary className="cursor-pointer list-none text-sm font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-            {english
-              ? "Reference: suggestion path has no feedback this week"
-              : "引用：本周建议链路暂无反馈"}
-          </summary>
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <LazyDisclosure
+          className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+          title={
+            english
+              ? "Judgement reference"
+              : "引用：本周判断暂无反馈"
+          }
+        >
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label={english ? "Judgements prepared" : "给出判断"}
               value={data.recommendationOverview.generated}
@@ -602,40 +703,43 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
               tone="approval"
             />
           </div>
-        </details>
+        </LazyDisclosure>
       )}
+      </div>
 
+      <LazyDisclosure title={english ? "7-day trend detail" : "查看 7 天趋势明细"}>
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "Which suggestions helped work move" : "哪些建议真的帮上忙"}
+              {english ? "Did judgement produce movement" : "本周判断有没有产生结果"}
             </CardTitle>
             <CardDescription>
               {english
-                ? "Check whether operators accepted the suggestion, turned it into work, or stopped it during review."
-                : "看负责人是否采纳、是否形成动作，或者在哪些地方被复核拦下。"}
+                ? "Start with what was confirmed, stopped, or turned into real work."
+                : "先看哪些被确认推进、哪些被拦下、哪些变成了实际动作。"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <UsageCell
-                label={english ? "Golden pass rate" : "黄金样本通过率"}
+                label={english ? "Sample check" : "样本校验"}
                 value={`${data.recommendationQuality.goldenSummary.passedCases}/${data.recommendationQuality.goldenSummary.totalCases}`}
               />
               <UsageCell
-                label={english ? "Acceptance rate" : "采纳率"}
+                label={english ? "Confirmed" : "确认推进"}
                 value={`${data.recommendationQuality.acceptanceRate}%`}
               />
               <UsageCell
-                label={english ? "Action creation rate" : "生成动作率"}
+                label={english ? "Turned into work" : "变成动作"}
                 value={`${data.recommendationQuality.actionCreationRate}%`}
               />
               <UsageCell
-                label={english ? "Edited approval rate" : "编辑后采纳率"}
+                label={english ? "Accepted after edit" : "改写后通过"}
                 value={`${data.recommendationQuality.editedApprovalRate}%`}
               />
             </div>
+            <LazyDisclosure title={english ? "Action-type detail" : "查看各类动作明细"}>
             <div className="space-y-3">
               {data.recommendationQuality.byActionType.length ? (
                 data.recommendationQuality.byActionType
@@ -656,24 +760,24 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
                         <Badge variant="info">
                           {english
                             ? `${item.generated} recommendations`
-                            : `${item.generated} 条判断建议`}
+                            : `${item.generated} 条候选判断`}
                         </Badge>
                       </div>
                       <div className="mt-3 grid gap-3 md:grid-cols-4">
                         <UsageCell
-                          label={english ? "Acceptance rate" : "采纳率"}
+                          label={english ? "Confirmed" : "确认推进"}
                           value={`${item.acceptanceRate}%`}
                         />
                         <UsageCell
-                          label={english ? "Rejection rate" : "拒绝率"}
+                          label={english ? "Stopped" : "被拦下"}
                           value={`${item.rejectionRate}%`}
                         />
                         <UsageCell
-                          label={english ? "Actions created" : "生成动作"}
+                          label={english ? "Turned into work" : "变成动作"}
                           value={item.actionCreated}
                         />
                         <UsageCell
-                          label={english ? "Edited approved" : "编辑后采纳"}
+                          label={english ? "Accepted after edit" : "改写后通过"}
                           value={item.editedApproved}
                         />
                       </div>
@@ -694,24 +798,25 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
                 />
               )}
             </div>
+            </LazyDisclosure>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "Which meeting facts became usable memory" : "哪些会议事实沉淀成了记忆"}
+              {english ? "Which meeting facts are usable" : "会议里哪些事实可继续使用"}
             </CardTitle>
             <CardDescription>
               {english
-                ? "Check whether facts, commitments and blockers from meetings are reliable enough for follow-through."
-                : "看会议里的事实、承诺和卡点是否足够可靠，能不能支撑后续推进。"}
+                ? "Check whether facts, commitments and blockers can support follow-through."
+                : "看事实、承诺和卡点是否可靠，能不能支撑后续推进。"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <UsageCell
-                label={english ? "Golden pass rate" : "黄金样本通过率"}
+                label={english ? "Sample check" : "样本校验"}
                 value={`${data.memoryQuality.goldenSummary.passedCases}/${data.memoryQuality.goldenSummary.totalCases}`}
               />
               <UsageCell
@@ -748,7 +853,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="space-y-3">
                 <p className="text-sm font-medium text-[color:var(--foreground)]">
-                  {english ? "Source breakdown" : "来源分布"}
+                  {english ? "Fact sources" : "事实来源"}
                 </p>
                 {data.memoryQuality.sourceBreakdown.map((item) => (
                   <div
@@ -781,7 +886,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
               </div>
               <div className="space-y-3">
                 <p className="text-sm font-medium text-[color:var(--foreground)]">
-                  {english ? "Frequent error modes" : "高频误差模式"}
+                  {english ? "Likely correction points" : "易错点"}
                 </p>
                 {data.memoryQuality.errorModes.length ? (
                   data.memoryQuality.errorModes.map((item) => (
@@ -819,7 +924,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "Conversation Capture funnel" : "现场采集漏斗"}
+              {english ? "Meeting record flow" : "会议记录流向"}
             </CardTitle>
             <CardDescription>
               {english
@@ -1039,11 +1144,13 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           </CardContent>
         </Card>
       </div>
+      </LazyDisclosure>
 
+      <LazyDisclosure title={english ? "Usage detail" : "查看使用明细"}>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <Card>
           <CardHeader>
-            <CardTitle>{english ? "Top 10 events" : "热门事件前十"}</CardTitle>
+            <CardTitle>{english ? "Top 10 actions" : "常用动作前十"}</CardTitle>
             <CardDescription>
               {english
                 ? "Use this to see which functions are truly being used instead of only looking at total opens."
@@ -1189,7 +1296,9 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           </CardContent>
         </Card>
       </div>
+      </LazyDisclosure>
 
+      <LazyDisclosure title={english ? "Recent activity stream" : "查看最近活动流"}>
       <Card>
         <CardHeader>
           <CardTitle>
@@ -1255,12 +1364,14 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           )}
         </CardContent>
       </Card>
+      </LazyDisclosure>
 
+      <LazyDisclosure title={english ? "AI work posture detail" : "查看 AI 工作姿态明细"}>
       <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "LLM task breakdown" : "智能任务分布"}
+              {english ? "AI task mix" : "AI 工作分布"}
             </CardTitle>
             <CardDescription>
               {english
@@ -1305,7 +1416,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "Recent LLM calls" : "最近智能调用"}
+              {english ? "Recent AI work records" : "最近 AI 工作记录"}
             </CardTitle>
             <CardDescription>
               {english
@@ -1397,12 +1508,14 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           </CardContent>
         </Card>
       </div>
+      </LazyDisclosure>
 
+      <LazyDisclosure title={english ? "AI service reference" : "查看 AI 服务引用"}>
       <div className="grid gap-6 xl:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "LLM prompt version breakdown" : "智能提示词版本分布"}
+              {english ? "Instruction set reference" : "指令版本引用"}
             </CardTitle>
             <CardDescription>
               {english
@@ -1440,7 +1553,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           <CardHeader>
             <CardTitle>
               {english
-                ? "LLM provider / model breakdown"
+                ? "AI service mix"
                 : "智能服务与来源分布"}
             </CardTitle>
             <CardDescription>
@@ -1480,7 +1593,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "LLM fallback reasons" : "智能回退原因"}
+              {english ? "Safe-stop reasons" : "安全停住原因"}
             </CardTitle>
             <CardDescription>
               {english
@@ -1517,6 +1630,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
           </CardContent>
         </Card>
       </div>
+      </LazyDisclosure>
     </div>
   );
 }

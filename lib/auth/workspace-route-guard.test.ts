@@ -11,6 +11,9 @@ describe("workspace route guard", () => {
     expect(isWorkspacePagePathname("/reports")).toBe(true);
     expect(isWorkspacePagePathname("/approvals/cm123")).toBe(true);
     expect(isWorkspacePagePathname("/settings")).toBe(true);
+    expect(isWorkspacePagePathname("/admin/trials")).toBe(true);
+    expect(isWorkspacePagePathname("/mobile")).toBe(true);
+    expect(isWorkspacePagePathname("/customer-workspace/business-system/readout")).toBe(true);
   });
 
   it("keeps public entry, demo, program and portal paths outside the workspace guard", () => {

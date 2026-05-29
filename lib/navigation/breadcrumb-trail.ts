@@ -18,6 +18,11 @@ export function buildBreadcrumbSegmentLabels(
 ): BreadcrumbSegmentMeta {
   return {
     dashboard: { label: english ? "Today" : "目标推进台" },
+    assets: { label: english ? "Business assets" : "经营资产" },
+    customer: { label: english ? "Customer asset" : "客户资产", isNavigable: false },
+    opportunity: { label: english ? "Opportunity asset" : "机会资产", isNavigable: false },
+    commitment: { label: english ? "Commitment asset" : "承诺资产", isNavigable: false },
+    risk: { label: english ? "Risk asset" : "风险资产", isNavigable: false },
     operating: { label: english ? "Operating" : "经营总盘" },
     opportunities: { label: english ? "Opportunities" : "机会" },
     contacts: { label: english ? "Contacts" : "联系人" },
@@ -64,9 +69,38 @@ export function buildBreadcrumbSegmentLabels(
     setup: { label: english ? "Setup" : "初始化" },
     capture: { label: english ? "Start capture" : "开始记录" },
     diagnostics: { label: english ? "Diagnostics" : "协同就绪度" },
+    readout: { label: english ? "Signal review" : "信号复核" },
     crm: { label: "CRM" },
     jobs: { label: english ? "Jobs" : "任务", isNavigable: false },
     conflicts: { label: english ? "Conflicts" : "冲突" },
+  };
+}
+
+function buildUnknownSegmentCrumb(input: {
+  pathnameParts: string[];
+  index: number;
+  english: boolean;
+}): Omit<BreadcrumbCrumb, "href"> {
+  if (input.index === 0) {
+    return {
+      label: input.english ? "Customer workspace" : "客户工作区",
+      isDynamic: false,
+      isNavigable: false,
+    };
+  }
+
+  if (input.index === 1 && input.pathnameParts.length >= 3) {
+    return {
+      label: input.english ? "Business system" : "业务系统",
+      isDynamic: false,
+      isNavigable: false,
+    };
+  }
+
+  return {
+    label: input.english ? "Detail" : "详情",
+    isDynamic: true,
+    isNavigable: false,
   };
 }
 
@@ -81,14 +115,20 @@ export function buildBreadcrumbCrumbs(pathname: string, english: boolean): Bread
 
     const previousPart = parts[index - 1];
     const isDynamic = !segmentLabels[part] && index > 0 && previousPart in segmentLabels;
-    const label = segmentLabels[part]?.label ?? (isDynamic ? (english ? "Detail" : "详情") : part);
     const href = `/${parts.slice(0, index + 1).join("/")}`;
+    const fallback = buildUnknownSegmentCrumb({
+      pathnameParts: parts,
+      index,
+      english,
+    });
 
     crumbs.push({
       href,
-      label,
-      isDynamic,
-      isNavigable: !isDynamic && (segmentLabels[part]?.isNavigable ?? true),
+      label: segmentLabels[part]?.label ?? fallback.label,
+      isDynamic: segmentLabels[part] ? false : isDynamic || fallback.isDynamic,
+      isNavigable: segmentLabels[part]
+        ? (segmentLabels[part].isNavigable ?? true)
+        : fallback.isNavigable,
     });
     return crumbs;
   }, []);

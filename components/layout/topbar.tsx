@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { FormEvent } from "react";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   BriefcaseBusiness,
@@ -12,6 +12,7 @@ import {
   CalendarPlus,
   Command,
   Compass,
+  Inbox,
   LogOut,
   Menu,
   Plus,
@@ -55,6 +56,7 @@ import {
 } from "@/lib/i18n/labels";
 import { StartRecordingButton } from "@/features/conversation-capture/start-recording-button";
 import { logoutAction } from "@/features/auth/actions";
+import { buildOpportunityAssetHref } from "@/features/business-assets/hrefs";
 import {
   markNotificationReadAction,
   quickCreateContactAction,
@@ -125,6 +127,7 @@ export function Topbar({
   quickCreateData,
 }: TopbarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const {
     locale,
     messages,
@@ -226,7 +229,7 @@ export function Topbar({
         nextAction: "",
         dueDate: "",
       });
-      router.push(`/opportunities?opportunityId=${result.id}`);
+      router.push(buildOpportunityAssetHref(result.id, "quick-create"));
       router.refresh();
     });
   };
@@ -344,75 +347,107 @@ export function Topbar({
     },
   ] as const;
 
-  const primaryNavItems = [
+  const primaryNavSections = [
     {
-      href: "/dashboard",
-      label: messages.shell.nav.dashboard,
-      icon: <Target className="h-4 w-4" />,
+      key: "today",
+      label: english ? "What needs attention" : "今天要处理",
+      items: [
+        {
+          href: "/dashboard",
+          label: messages.shell.nav.dashboard,
+          icon: <Target className="h-4 w-4" />,
+        },
+        {
+          href: "/operating",
+          label: messages.shell.nav.operating,
+          icon: <BriefcaseBusiness className="h-4 w-4" />,
+        },
+      ],
     },
     {
-      href: "/operating",
-      label: messages.shell.nav.operating,
-      icon: <BriefcaseBusiness className="h-4 w-4" />,
-    },
-    ...(canAccessTenantHealth
-      ? [
-          {
-            href: "/operating/tenant-health",
-            label: messages.shell.nav.tenantHealth,
-            icon: <Activity className="h-4 w-4" />,
-          },
-        ]
-      : []),
-    ...(isHelmReserved
-      ? [
-          {
-            href: "/operating/gtm-leads",
-            label: messages.shell.nav.gtmLeads,
-            icon: <Target className="h-4 w-4" />,
-          },
-        ]
-      : []),
-    {
-      href: "/opportunities",
-      label: messages.shell.nav.opportunities,
-      icon: <Compass className="h-4 w-4" />,
-    },
-    {
-      href: "/meetings",
-      label: messages.shell.nav.meetings,
-      icon: <CalendarDays className="h-4 w-4" />,
-    },
-    {
-      href: "/approvals",
-      label: messages.shell.nav.approvals,
-      icon: <Bell className="h-4 w-4" />,
-    },
-    {
-      href: "/memory",
-      label: messages.shell.nav.memory,
-      icon: <Command className="h-4 w-4" />,
+      key: "customer-work",
+      label: english ? "Customer assets" : "客户资产",
+      items: [
+        ...(isHelmReserved
+          ? [
+              {
+                href: "/operating/gtm-leads",
+                label: messages.shell.nav.gtmLeads,
+                icon: <Target className="h-4 w-4" />,
+              },
+            ]
+          : []),
+        {
+          href: "/opportunities",
+          label: messages.shell.nav.opportunities,
+          icon: <Compass className="h-4 w-4" />,
+        },
+        {
+          href: "/meetings",
+          label: messages.shell.nav.meetings,
+          icon: <CalendarDays className="h-4 w-4" />,
+        },
+        {
+          href: "/inbox",
+          label: messages.shell.nav.inbox,
+          icon: <Inbox className="h-4 w-4" />,
+        },
+        ...(canAccessTenantHealth
+          ? [
+              {
+                href: "/operating/tenant-health",
+                label: messages.shell.nav.tenantHealth,
+                icon: <Activity className="h-4 w-4" />,
+              },
+            ]
+          : []),
+      ],
     },
     {
-      href: "/reports",
-      label: messages.shell.nav.reports,
-      icon: <Rocket className="h-4 w-4" />,
+      key: "review-memory",
+      label: english ? "Review and records" : "复核与记录",
+      items: [
+        {
+          href: "/approvals",
+          label: messages.shell.nav.approvals,
+          icon: <Bell className="h-4 w-4" />,
+        },
+        {
+          href: "/memory",
+          label: messages.shell.nav.memory,
+          icon: <Command className="h-4 w-4" />,
+        },
+        {
+          href: "/reports",
+          label: messages.shell.nav.reports,
+          icon: <Rocket className="h-4 w-4" />,
+        },
+        {
+          href: "/mobile",
+          label: messages.shell.nav.mobile,
+          icon: <Smartphone className="h-4 w-4" />,
+        },
+      ],
     },
   ];
   const settingsNavItems = [
     { href: "/settings", label: messages.shell.nav.settings },
     { href: "/imports", label: messages.shell.nav.imports },
-    { href: "/inbox", label: messages.shell.nav.inbox },
     { href: "/capture", label: messages.shell.nav.capture },
     { href: "/analytics", label: messages.shell.nav.analytics },
     ...(featureFlags.diagnosticsCenter
       ? [{ href: "/diagnostics", label: messages.shell.nav.diagnostics }]
       : []),
   ];
+  const compactMobileSurface = pathname === "/mobile";
 
   return (
     <>
-      <div className="sticky top-0 z-20 min-w-0 max-w-full px-4 pt-4 backdrop-blur lg:px-8">
+      <div
+        className={`sticky top-0 z-20 min-w-0 max-w-full px-4 pt-4 backdrop-blur lg:px-8 ${
+          compactMobileSurface ? "hidden md:block" : ""
+        }`}
+      >
         <div className="workspace-shell-panel flex min-w-0 max-w-full flex-col gap-3 rounded-[30px] border px-4 py-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
           <div className="flex min-w-0 w-full items-center gap-3 xl:flex-1">
             <Button
@@ -466,8 +501,8 @@ export function Topbar({
             >
               <Link
                 href="/mobile"
-                aria-label={english ? "Mobile" : "移动端"}
-                title={english ? "Open mobile command surface" : "打开移动端"}
+                aria-label={messages.shell.nav.mobile}
+                title={english ? "Open mobile work surface" : "打开移动工作入口"}
               >
                 <Smartphone className="h-4 w-4" />
               </Link>
@@ -1031,8 +1066,8 @@ export function Topbar({
             <SheetTitle>{messages.shell.brand}</SheetTitle>
             <SheetDescription>
               {english
-                ? "Navigate core work views, secondary tools and the current workspace account controls."
-                : "进入主工作区、二级工具和当前工作区账号控制。"}
+                ? "Navigate today, customer work, reviews, memory and the workspace foundation."
+                : "进入今天要处理的事、客户资产、复核记录和工作区设置。"}
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-3 p-5">
@@ -1043,19 +1078,23 @@ export function Topbar({
               </p>
             </div>
             <div className="space-y-2">
-              <p className="px-1 text-xs font-medium text-[color:var(--muted-foreground)]">
-                {english ? "Core views" : "主工作区"}
-              </p>
-              {primaryNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center gap-3 rounded-2xl border border-[color:var(--border)] px-4 py-3 text-sm font-medium text-[color:var(--foreground)] transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  {item.icon}
-                  {item.label}
-                </Link>
+              {primaryNavSections.map((section) => (
+                <div key={section.key} className="space-y-2">
+                  <p className="px-1 text-xs font-medium text-[color:var(--muted-foreground)]">
+                    {section.label}
+                  </p>
+                  {section.items.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center gap-3 rounded-2xl border border-[color:var(--border)] px-4 py-3 text-sm font-medium text-[color:var(--foreground)] transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
               ))}
             </div>
             <div className="workspace-panel-muted space-y-2 rounded-2xl p-3">
@@ -1065,8 +1104,8 @@ export function Topbar({
                 </p>
                 <p className="text-sm text-[color:var(--muted-foreground)]">
                   {english
-                    ? "Capture, inbox, connections, analytics and diagnostics now live under one simpler settings layer."
-                    : "现场记录、收件箱、连接、分析和诊断统一收进一个更简单的设置层。"}
+                    ? "Data sources, field notes, outcome change and readiness checks stay here as the foundation."
+                    : "数据接入、现场记录、效果变化和就绪检查统一留在基础层。"}
                 </p>
               </div>
               {settingsNavItems.map((item) => (

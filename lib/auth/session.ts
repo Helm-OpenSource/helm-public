@@ -555,7 +555,7 @@ export async function requireCurrentUser() {
   const user = await getCurrentUser();
 
   if (!user) {
-    redirect("/");
+    redirect("/login");
   }
 
   return user;
@@ -721,10 +721,20 @@ export async function setActiveWorkspace(workspaceId: string) {
 }
 
 export async function getCurrentWorkspaceSession() {
+  const session = await getCurrentWorkspaceSessionOrNull();
+
+  if (!session) {
+    redirect("/login");
+  }
+
+  return session;
+}
+
+export async function getCurrentWorkspaceSessionOrNull() {
   const authSession = await getCurrentAuthSessionRecord();
 
   if (!authSession) {
-    redirect("/");
+    return null;
   }
 
   const cookieStore = await cookies();
@@ -735,7 +745,7 @@ export async function getCurrentWorkspaceSession() {
   );
 
   if (!membership) {
-    redirect("/");
+    return null;
   }
 
   await ensureWorkspaceCommercialFoundation(membership.workspaceId);
@@ -801,7 +811,7 @@ export async function getCurrentWorkspaceSession() {
   });
 
   if (!currentMembership) {
-    redirect("/");
+    return null;
   }
 
   const accessState =

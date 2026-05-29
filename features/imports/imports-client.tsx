@@ -5,7 +5,9 @@ import { useMemo, useState, useSyncExternalStore, useTransition, type ReactNode 
 import { Download, FileUp, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
+import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
+import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
 import { ObjectContextOperatingSummary } from "@/components/shared/object-context-operating-summary";
 import { PageHeader } from "@/components/shared/page-header";
 import { SupportSurfaceNote } from "@/components/shared/support-surface-note";
@@ -288,8 +290,8 @@ export function ImportsClient({
       : undefined,
     crmSummary.latestJobId
       ? {
-          label: english ? "Latest import job" : "最近导入任务",
-          value: crmSummary.latestJobId,
+          label: english ? "Latest import result" : "最近一次导入结果",
+          value: english ? "Review impact before widening" : "先看影响，再扩大接入",
           description: english
             ? "Inspect the latest run before widening CRM ingress coverage."
             : "扩大客户台账接入前，先检查最近一次导入结果。",
@@ -316,6 +318,47 @@ export function ImportsClient({
   ];
   const importsSummaryConnections =
     importsSummaryConnectionCandidates.filter(isDefined);
+  const importAssetFocusItems = [
+    {
+      label: english ? "Object state" : "对象状态",
+      value: importsSummarySnapshot.objectState,
+      detail: importsSummaryText,
+      href: crmSummary.connectedCount > 0 ? "/imports/crm" : undefined,
+      tone: crmSummary.connectedCount > 0 ? "success" : "warning",
+    },
+    {
+      label: english ? "Blocker" : "阻塞",
+      value: importsSummarySnapshot.blocker,
+      detail:
+        crmSummary.openConflicts > 0
+          ? english
+            ? "Identity debt is the first thing to clear."
+            : "身份债是第一优先级。"
+          : english
+            ? "No visible conflict queue pressure."
+            : "当前没有明显冲突队列压力。",
+      href: crmSummary.openConflicts > 0 ? "/imports/conflicts" : undefined,
+      tone: crmSummary.openConflicts > 0 ? "danger" : "success",
+    },
+    {
+      label: english ? "Pending decision" : "待决策",
+      value: importsSummarySnapshot.pendingDecision,
+      detail: english
+        ? "Choose CRM-first migration or a narrow CSV fallback."
+        : "判断继续走客户台账迁移，还是一次性 CSV 兜底。",
+      href: "/imports/crm",
+      tone: "info",
+    },
+    {
+      label: english ? "Next action" : "下一步动作",
+      value: importsSummarySnapshot.nextAction,
+      detail: english
+        ? "Keep relationship and activity context attached to customer objects."
+        : "让关系和活动信息继续归到客户对象上。",
+      href: crmSummary.latestJobId ? `/imports/jobs/${crmSummary.latestJobId}` : "/imports/crm",
+      tone: "info",
+    },
+  ] as const;
 
   const _importGuidanceRecommendations = [
     {
@@ -374,7 +417,7 @@ export function ImportsClient({
             ? "Failures, warnings and warmup output before the next upload."
             : "下次上传前，先看这一轮的失败项、警告和预热输出。",
           href: `/imports/jobs/${crmSummary.latestJobId}`,
-          meta: crmSummary.latestJobId,
+          meta: english ? "Latest result" : "最近一次结果",
         }
       : undefined,
   ].filter(isDefined);
@@ -416,17 +459,55 @@ export function ImportsClient({
         }
       />
 
-      <ObjectContextOperatingSummary
-        label={english ? "Ingress posture" : "接入态势"}
-        title={importsSummaryTitle}
-        summary={importsSummaryText}
-        items={buildBusinessFirstSummaryItems({
-          english,
-          snapshot: importsSummarySnapshot,
-        })}
-        connectionsLabel={english ? "Where to act next" : "下一步去哪里处理"}
-        connections={importsSummaryConnections}
+      <CustomerAssetFocusStrip
+        eyebrow={english ? "Customer asset intake" : "客户资产接入"}
+        title={
+          crmSummary.connectedCount > 0
+            ? english
+              ? "Start from the customer ledger already in motion."
+              : "先看已经进入流转的客户台账。"
+            : english
+              ? "Choose the first customer source before uploading more files."
+              : "先选第一条客户来源，再继续上传文件。"
+        }
+        summary={
+          english
+            ? "This page should expose customer objects, relationship debt, and the next clean ingress action before explaining import mechanics."
+            : "这页先暴露客户对象、关系债和下一步接入动作，再解释导入机制。"
+        }
+        items={[...importAssetFocusItems]}
+        primaryAction={{
+          label: english ? "Open CRM connection" : "打开客户台账连接",
+          href: "/imports/crm",
+        }}
+        secondaryAction={
+          crmSummary.openConflicts > 0
+            ? {
+                label: english ? "Resolve conflicts" : "处理冲突",
+                href: "/imports/conflicts",
+              }
+            : crmSummary.latestJobId
+              ? {
+                  label: english ? "Latest result" : "最近导入结果",
+                  href: `/imports/jobs/${crmSummary.latestJobId}`,
+                }
+              : null
+        }
       />
+
+      <LazyDisclosure title={english ? "Reference: intake judgement" : "引用：接入判断"}>
+        <ObjectContextOperatingSummary
+          label={english ? "Ingress posture" : "接入态势"}
+          title={importsSummaryTitle}
+          summary={importsSummaryText}
+          items={buildBusinessFirstSummaryItems({
+            english,
+            snapshot: importsSummarySnapshot,
+          })}
+          connectionsLabel={english ? "Where to act next" : "下一步去哪里处理"}
+          connections={importsSummaryConnections}
+        />
+      </LazyDisclosure>
 
       {!capability.canManageImports ? (
         <SupportSurfaceNote
@@ -466,25 +547,27 @@ export function ImportsClient({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{english ? "CRM connection" : "客户台账连接"}</CardTitle>
-          <CardDescription>{english ? "Pull accounts, contacts, deals and activity from HubSpot or Salesforce." : "从 HubSpot 或 Salesforce 拉客户、联系人、机会和活动记录。"}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <Button asChild>
-            <Link href="/imports/crm">{english ? "Open CRM connection wizard" : "打开客户台账连接向导"}</Link>
-          </Button>
-          <Button variant="secondary" asChild>
-            <Link href="/imports/conflicts">{english ? "Resolve conflicts" : "处理冲突"}</Link>
-          </Button>
-          {crmSummary.latestJobId ? (
-            <Button variant="secondary" asChild>
-              <Link href={`/imports/jobs/${crmSummary.latestJobId}`}>{english ? "Open latest import result" : "查看最近导入结果"}</Link>
+      <LazyDisclosure title={english ? "Reference: connection entries" : "引用：接入入口"}>
+        <Card>
+          <CardHeader>
+            <CardTitle>{english ? "CRM connection" : "客户台账连接"}</CardTitle>
+            <CardDescription>{english ? "Pull accounts, contacts, deals and activity from HubSpot or Salesforce." : "从 HubSpot 或 Salesforce 拉客户、联系人、机会和活动记录。"}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Button asChild>
+              <Link href="/imports/crm">{english ? "Open CRM connection wizard" : "打开客户台账连接向导"}</Link>
             </Button>
-          ) : null}
-        </CardContent>
-      </Card>
+            <Button variant="secondary" asChild>
+              <Link href="/imports/conflicts">{english ? "Resolve conflicts" : "处理冲突"}</Link>
+            </Button>
+            {crmSummary.latestJobId ? (
+              <Button variant="secondary" asChild>
+                <Link href={`/imports/jobs/${crmSummary.latestJobId}`}>{english ? "Open latest import result" : "查看最近导入结果"}</Link>
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      </LazyDisclosure>
 
       <Tabs value={activeType} onValueChange={(value) => {
         setActiveType(value as ImportType);
@@ -539,23 +622,25 @@ export function ImportsClient({
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>{english ? "Field guide" : "字段说明"}</CardTitle>
-                  <CardDescription>{english ? "What each column will become after import." : "每一列导入后会变成什么。"}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {configs[type].fields.map((field) => (
-                    <div key={field.key} className="theme-surface-panel rounded-2xl px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-[color:var(--foreground)]">{field.label}</p>
-                        {field.required ? <Badge variant="danger">{english ? "Required" : "必填"}</Badge> : <Badge variant="neutral">{english ? "Optional" : "可选"}</Badge>}
+              <LazyDisclosure title={english ? "Reference: field guide" : "引用：字段说明"}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{english ? "Field guide" : "字段说明"}</CardTitle>
+                    <CardDescription>{english ? "What each column will become after import." : "每一列导入后会变成什么。"}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {configs[type].fields.map((field) => (
+                      <div key={field.key} className="theme-surface-panel rounded-2xl px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-[color:var(--foreground)]">{field.label}</p>
+                          {field.required ? <Badge variant="danger">{english ? "Required" : "必填"}</Badge> : <Badge variant="neutral">{english ? "Optional" : "可选"}</Badge>}
+                        </div>
+                        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{field.description}</p>
                       </div>
-                      <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{field.description}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                    ))}
+                  </CardContent>
+                </Card>
+              </LazyDisclosure>
             </div>
 
             <Card>

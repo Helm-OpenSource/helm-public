@@ -85,8 +85,6 @@ export default async function DashboardPage({
         english={english}
       />
 
-      <DashboardHomeImplementationConsolePanel english={english} />
-
       {tenantResourceImpactReadout.totalResources > 0 ? (
         <TenantResourceOperatingImpactPanel
           readout={tenantResourceImpactReadout}
@@ -95,22 +93,38 @@ export default async function DashboardPage({
         />
       ) : null}
 
-      <OperatingFoundationSummaryCard
-        label={operatingFoundationSummary.label}
-        title={operatingFoundationSummary.title}
-        summary={operatingFoundationSummary.summary}
-        items={operatingFoundationSummary.items}
-        connections={operatingFoundationSummary.connections}
-        note={operatingFoundationSummary.note}
-      />
+      <details className="group rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
+          <span>
+            {english
+              ? "Open customer assets, evidence and coordination context"
+              : "展开客户资产变化、依据和协作背景"}
+          </span>
+          <span className="rounded-full border border-[color:var(--border)] px-2.5 py-1 text-xs text-[color:var(--muted-foreground)] transition group-open:bg-[color:var(--surface-subtle)]">
+            {english ? "Details" : "详情"}
+          </span>
+        </summary>
+        <div className="mt-5 space-y-5">
+          <DashboardHomeImplementationConsolePanel english={english} />
 
-      <ReportingProtocolPanel protocol={dashboardProtocol} english={english} />
+          <OperatingFoundationSummaryCard
+            label={operatingFoundationSummary.label}
+            title={operatingFoundationSummary.title}
+            summary={operatingFoundationSummary.summary}
+            items={operatingFoundationSummary.items}
+            connections={operatingFoundationSummary.connections}
+            note={operatingFoundationSummary.note}
+          />
 
-      <ProactiveMechanismPanel
-        title={english ? "Surfacing on its own" : "已自动浮出"}
-        flows={[founderProactiveFlow]}
-        english={english}
-      />
+          <ReportingProtocolPanel protocol={dashboardProtocol} english={english} />
+
+          <ProactiveMechanismPanel
+            title={english ? "Prepared context" : "已准备的背景"}
+            flows={[founderProactiveFlow]}
+            english={english}
+          />
+        </div>
+      </details>
     </div>
   );
 }

@@ -94,14 +94,14 @@ export function ReportingProtocolPanel({
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
           <div data-page-layer="midstage" className="space-y-4">
             <ReviewSnapshotBlock
-              label={english ? "Review snapshot" : "待复核结果快照"}
+              label={english ? "Prepared actions" : "待确认动作"}
               items={copyItems(protocol.pageActionSummary)}
               english={english}
               reviewState={protocol.pageReviewState}
             />
 
             <WorkerSummary
-              label={english ? "Coordination handoff" : "协作分工"}
+              label={english ? "Owners and support" : "负责人和配合"}
               items={copyItems(protocol.pageWorkerSummary)}
               assignments={protocol.pageWorkerAssignments?.map(
                 (assignment) => ({

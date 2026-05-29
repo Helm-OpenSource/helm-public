@@ -86,7 +86,7 @@ export default async function MeetingsPage() {
         <StatCard
           label={english ? "All meetings" : "全部会议"}
           value={meetings.summary.total}
-          detail={english ? "Current workspace replay" : "当前工作区可回放会议"}
+          detail={english ? "Meetings you can reopen" : "当前可回看的会议"}
         />
         <StatCard
           label={english ? "Today" : "今日会议"}
@@ -661,7 +661,7 @@ function describeMeetingBoundary(
   if (meeting.blockers.some((item) => item.severity >= 75)) {
     return english
       ? "High-severity blocker is visible, so review pressure should stay explicit before anything leaves the loop."
-      : "当前有高严重度阻塞，说明复核压力必须保持显性，不能让动作直接离开这条主回路。";
+      : "当前有高严重度阻塞，复核压力必须保持显性，不能让动作直接离开这条主回路。";
   }
 
   if (
@@ -673,7 +673,7 @@ function describeMeetingBoundary(
   ) {
     return english
       ? "This meeting already created actions that need review, so approval posture is part of the loop now."
-      : "这场会议已经长出了需要复核的动作，说明审批状态已经进入这条主回路。";
+      : "这场会议已经长出了需要复核的动作，审批状态已经进入这条主回路。";
   }
 
   if (meeting.commitments.some((item) => item.overdueFlag)) {

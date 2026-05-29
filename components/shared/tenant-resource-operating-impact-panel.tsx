@@ -17,6 +17,7 @@ import type {
 import {
   formatTenantResourceDecision,
   formatTenantResourceDecisionWhy,
+  formatTenantResourceDisplayName,
   formatTenantResourceEvidenceToken,
   formatTenantResourceImpactSeverity,
   formatTenantResourceImpactSummary,
@@ -57,8 +58,8 @@ export function TenantResourceOperatingImpactPanel({
         </div>
         <CardTitle className="text-lg tracking-tight text-[color:var(--foreground)]">
           {english
-            ? "Tenant resources that affect today’s judgement"
-            : "影响今日判断的租户资源"}
+            ? "Customer resources that affect today’s judgement"
+            : "影响今日判断的客户资源"}
         </CardTitle>
         <CardDescription className="text-sm leading-7 text-[color:var(--muted-foreground)]">
           {summary}
@@ -83,7 +84,7 @@ export function TenantResourceOperatingImpactPanel({
         <ResourceImpactStat
           label={english ? "Blocked" : "阻断"}
           value={readout.blockedResourceCount}
-          note={english ? "capability or boundary" : "权限或边界"}
+          note={english ? "permission or boundary" : "权限或边界"}
         />
       </CardContent>
       {readout.impactItems.length ? (
@@ -141,6 +142,7 @@ function TenantResourceImpactRow({
   item: TenantResourceOperatingImpactItem;
   english: boolean;
 }) {
+  const resourceName = formatTenantResourceDisplayName(item, english);
   return (
     <div className="rounded-[22px] border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-4 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -148,7 +150,7 @@ function TenantResourceImpactRow({
           <div className="flex flex-wrap items-center gap-2">
             <DatabaseZap className="h-4 w-4 text-[color:var(--mode-link)]" />
             <p className="text-sm font-semibold text-[color:var(--foreground)]">
-              {item.resourceName}
+              {resourceName}
             </p>
             <Badge variant={badgeVariantForSeverity(item.severity)}>
               {formatTenantResourceImpactSeverity(item.severity, english)}

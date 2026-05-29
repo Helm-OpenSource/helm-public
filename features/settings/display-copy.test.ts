@@ -29,7 +29,7 @@ describe("settings display copy", () => {
       formatSettingsModelSelection("gpt-4.1-mini", false),
     ].join(" / ");
 
-    expect(rendered).toBe("主辅助服务 / 已登记服务 / 辅助服务已启用 / 已指定");
+    expect(rendered).toBe("主判断服务 / 已登记服务 / 判断服务已启用 / 已指定");
     expect(rendered).not.toMatch(/OpenAI|GPT|LLM|openai|gpt/i);
   });
 
@@ -62,6 +62,7 @@ describe("settings display copy", () => {
     expect(rendered).toContain("预算阻塞澄清包");
     expect(rendered).toContain("仅草稿");
     expect(rendered).toContain("先复核");
+    expect(rendered).toContain("人工确认");
     expect(rendered).not.toMatch(
       /execution|draft-only|review-first|boundary incident|formal review|阻碍/i,
     );
