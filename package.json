@@ -268,7 +268,7 @@
     "tailwindcss": "^4.2.2",
     "tsx": "^4.21.0",
     "typescript": "^5",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.7"
   },
   "overrides": {
     "flatted": "^3.4.2",
