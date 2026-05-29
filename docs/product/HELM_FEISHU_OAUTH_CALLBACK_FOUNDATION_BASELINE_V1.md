@@ -1,3 +1,11 @@
+---
+status: active
+owner: helm-core
+created: 2026-05-26
+review_after: 2026-08-24
+# frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-29
+# rationale: default — no archive/dormant signal in path
+---
 # HELM_FEISHU_OAUTH_CALLBACK_FOUNDATION_BASELINE_V1
 
 日期：2026-05-20
