@@ -119,7 +119,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
           </Button>
           <Button asChild variant="default">
             <a
-              href="https://github.com/Helm-Developers/helm2026"
+              href="https://github.com/Helm-OpenSource/helm-public"
               data-testid="demo-cta-github"
               target="_blank"
               rel="noopener noreferrer"
@@ -293,7 +293,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="default">
               <a
-                href="https://github.com/Helm-Developers/helm2026"
+                href="https://github.com/Helm-OpenSource/helm-public"
                 target="_blank"
                 rel="noopener noreferrer"
               >

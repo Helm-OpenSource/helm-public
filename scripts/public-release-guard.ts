@@ -199,8 +199,8 @@ const PRIVATE_ROOTS: ReadonlyArray<string> = [
 export const PUBLIC_MIRROR_PRIVATE_ROOTS: ReadonlyArray<string> = PRIVATE_ROOTS;
 
 // Specific files that are internal-only by policy and excluded from the
-// public mirror. The file's own header should declare its internal status.
-// Examples: the relocated long-form README that carries historical context.
+// public mirror. Keep this list narrow: public repo guard / self-check /
+// release-contract scripts belong in the OSS tree and must stay scannable.
 const PRIVATE_FILES: ReadonlyArray<string> = [
   "docs/HELM_INTERNAL_FREEZE_REFERENCE.md",
   // Internal-only documentation maintenance / release orchestration
@@ -209,7 +209,6 @@ const PRIVATE_FILES: ReadonlyArray<string> = [
   // public mirror.
   "scripts/docs-reference-scan.ts",
   "scripts/docs-lifecycle-classify-orphans.ts",
-  "scripts/release-maintenance-runbook.ts",
   // Tenant-extension-specific tests that legitimately reference
   // guangpu / midun paths and extension keys. Target paths live in
   // TENANT_PRIVATE_ROOTS; these tests describe their loading / fail-open
@@ -218,10 +217,6 @@ const PRIVATE_FILES: ReadonlyArray<string> = [
   // blast radius. Added 2026-05-18.
   "lib/extensions/guangpu-midun-readout-degraded-mode.test.ts",
   "lib/extensions/reports-extension-fail-open.test.ts",
-  "scripts/decision-first-boundary-check.ts",
-  "scripts/helm-self-check.ts",
-  "scripts/helm-self-check-refactored.ts",
-  "scripts/self-check/config.ts",
 ];
 
 export const PUBLIC_MIRROR_PRIVATE_FILES: ReadonlyArray<string> = PRIVATE_FILES;

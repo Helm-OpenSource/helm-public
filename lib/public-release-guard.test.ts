@@ -212,6 +212,31 @@ describe("public release guard fixture coverage", () => {
     expect(result.violations).toEqual([]);
   });
 
+  it("strict public mirror mode still allows repo guard scripts that belong to the OSS tree", () => {
+    writeFixture("scripts/helm-self-check.ts", "export {};\n");
+    writeFixture("scripts/helm-self-check-refactored.ts", "export {};\n");
+    writeFixture("scripts/decision-first-boundary-check.ts", "export {};\n");
+    writeFixture("scripts/release-maintenance-runbook.ts", "export {};\n");
+    writeFixture("scripts/self-check/config.ts", "export const marker = true;\n");
+    writeFixture("docs/HELM_INTERNAL_FREEZE_REFERENCE.md", "internal-only\n");
+
+    const result = runPublicReleaseGuard({
+      repoRoot: fixtureRoot,
+      requirePrivateRootsAbsent: true,
+    });
+
+    expect(
+      result.violations.filter((violation) =>
+        violation.rule === "public-mirror-tree:private-file-present"
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        path: "docs/HELM_INTERNAL_FREEZE_REFERENCE.md",
+        rule: "public-mirror-tree:private-file-present",
+      }),
+    ]);
+  });
+
   it("does not scan local-only env files that can carry developer credentials", () => {
     writeFixture(".env.local", `DATABASE_URL="${urlCredential}"\nTENANT=${tenantSlug}`);
     writeFixture("nested/.env.test", `DATABASE_URL="${urlCredential}"`);

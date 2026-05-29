@@ -4,7 +4,9 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
+import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
+import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -71,7 +73,6 @@ export function ReportsClient({
     businessLoopGapSummary,
     fallbackHref: "/operating",
   });
-  void businessLoopGapReadout;
   const actionTypeLabels = getLocalizedActionTypeLabels(locale);
   const [pending, startTransition] = useTransition();
   const [selectedView, setSelectedView] = useState<ReportView>("CURRENT");
@@ -347,6 +348,90 @@ export function ReportsClient({
   const showAi = focus === "ALL" || focus === "AI";
   const showApproved = focus === "ALL" || focus === "APPROVED";
   const showRisk = focus === "ALL" || focus === "RISK";
+  const overdueCount =
+    payload.overdueItems?.length ?? selected?.overdueFollowupsCount ?? 0;
+  const highRiskCount =
+    payload.highRiskItems?.length ?? selected?.openHighRiskCount ?? 0;
+  const acceptedWorkCount =
+    payload.recommendationMetrics?.accepted ??
+    selected?.approvalsApprovedCount ??
+    0;
+  const reportWindowLabel = selected
+    ? `${formatShortDate(selected.weekStart)} - ${formatShortDate(selected.weekEnd)}`
+    : english
+      ? "No review asset yet"
+      : "还没有复盘资产";
+  const reportAssetFocusItems = [
+    {
+      label: english ? "Current asset" : "当前资产",
+      value: selected
+        ? selectedView === "NEXT_PLAN"
+          ? planningWindowLabel
+          : reportWindowLabel
+        : english
+          ? "No weekly review generated"
+          : "还没有生成周报",
+      detail: selected
+        ? reportText(selected.summaryText)
+        : english
+          ? "Generate one review before reading downstream judgement."
+          : "先生成一份复盘，再读下游判断。",
+      tone: selected ? "success" : "warning",
+    },
+    {
+      label: english ? "Pressure" : "当前压力",
+      value: english
+        ? `${overdueCount} overdue · ${highRiskCount} high-risk`
+        : `${overdueCount} 条逾期 · ${highRiskCount} 个高风险`,
+      detail:
+        overdueCount + highRiskCount > 0
+          ? english
+            ? "Clear these before widening new work."
+            : "先清这些，再扩大新动作。"
+          : english
+            ? "No visible overdue or high-risk pressure in this report."
+            : "这份复盘里没有明显逾期或高风险压力。",
+      href: highRiskCount > 0 || overdueCount > 0 ? "/approvals" : undefined,
+      tone: highRiskCount > 0 ? "danger" : overdueCount > 0 ? "warning" : "success",
+    },
+    {
+      label: english ? "Decision" : "待决策",
+      value: selected
+        ? english
+          ? `${acceptedWorkCount} accepted · owner focus`
+          : `${acceptedWorkCount} 条已采纳 · 定负责人优先级`
+        : english
+          ? "Generate the review first"
+          : "先生成本周复盘",
+      detail:
+        businessLoopGapReadout.pendingDecision ??
+        (english
+          ? "Pick the object that needs owner attention before reading archive metrics."
+          : "先定哪个对象需要负责人看，再读归档指标。"),
+      href: businessLoopGapReadout.connection?.href ?? "/operating",
+      tone: businessLoopGapReadout.pendingDecision ? "warning" : "info",
+    },
+    {
+      label: english ? "Next action" : "下一步动作",
+      value: selected
+        ? english
+          ? "Open the risky object"
+          : "打开风险对象"
+        : english
+          ? "Generate this week’s report"
+          : "生成本周周报",
+      detail: selected
+        ? businessLoopGapReadout.nextAction ??
+          (english
+            ? "Use the report as an operating draft, not a dashboard archive."
+            : "把周报当经营草案，不当看板归档。")
+        : english
+          ? "The generation action stays under the page controls."
+          : "生成动作仍在页面按钮里完成。",
+      href: selected ? "/dashboard" : undefined,
+      tone: "info",
+    },
+  ] as const;
 
   return (
     <div className="workspace-surface-stack">
@@ -379,26 +464,63 @@ export function ReportsClient({
         }
       />
 
+      <CustomerAssetFocusStrip
+        eyebrow={english ? "Operating asset" : "经营资产"}
+        title={
+          selected
+            ? english
+              ? "Start with the review asset, not report mechanics."
+              : "先看复盘资产，不看周报机制。"
+            : english
+              ? "Create the first review asset before reading signals."
+              : "先生成第一份复盘资产，再读经营信号。"
+        }
+        summary={
+          selected
+            ? english
+              ? "The first screen should tell a manager which customer or operating object needs attention now."
+              : "首屏只回答：当前哪类客户或经营对象需要负责人立刻看。"
+            : english
+              ? "No report asset exists yet, so the only useful action is to generate one."
+              : "还没有周报资产时，最有价值的动作就是先生成。"
+        }
+        items={[...reportAssetFocusItems]}
+        primaryAction={
+          selected
+            ? { label: english ? "Open work queue" : "打开待处理", href: "/approvals" }
+            : null
+        }
+        secondaryAction={
+          selected
+            ? { label: english ? "Open dashboard" : "回到今日推进", href: "/dashboard" }
+            : null
+        }
+      />
+
       {!insightGovernance.canManage ? (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>
-              {english
-                ? "Read-only insight governance posture"
-                : "当前洞察治理为只读"}
-            </CardTitle>
-            <CardDescription>
-              {insightGovernance.manageDeniedMessage}
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <LazyDisclosure title={english ? "Reference: insight permission" : "引用：洞察权限"}>
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle>
+                {english
+                  ? "Read-only insight governance posture"
+                  : "当前洞察治理为只读"}
+              </CardTitle>
+              <CardDescription>
+                {insightGovernance.manageDeniedMessage}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </LazyDisclosure>
       ) : null}
 
       {engineeringDeliveryReview ? (
-        <EngineeringDeliveryReviewPanel
-          review={engineeringDeliveryReview}
-          english={english}
-        />
+        <LazyDisclosure title={english ? "Reference: delivery review" : "引用：交付评审"}>
+          <EngineeringDeliveryReviewPanel
+            review={engineeringDeliveryReview}
+            english={english}
+          />
+        </LazyDisclosure>
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[320px_1fr]">

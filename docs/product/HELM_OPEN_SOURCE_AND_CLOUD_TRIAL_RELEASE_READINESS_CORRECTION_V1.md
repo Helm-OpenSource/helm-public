@@ -58,7 +58,7 @@ review_after: 2026-07-26
 | Failure | stale / missing evidence / 字段缺失 / 口径冲突 → rejected 或 watch-only；不产出行动建议 |
 | Sample | 真实样例必须脱敏；不得伪造 provenance；无脱敏样例前只能 synthetic / contract dry-run，不算 Phase 0 Go |
 
-详细 intake 计划与 8 类禁止保留字段见 [HELM_EXTERNAL_RESOURCE_KIT_GUANGPU_POC_INTAKE_PLAN_V1.md](../internal/HELM_EXTERNAL_RESOURCE_KIT_GUANGPU_POC_INTAKE_PLAN_V1.md)（internal-only）。
+详细 intake 计划与 8 类禁止保留字段由 internal-only intake plan 维护；公开仓库只保留当前 release boundary 与 dry-run contract。
 
 ---
 
@@ -113,6 +113,6 @@ review_after: 2026-07-26
 2. [HELM_BUSINESS_ADVANCEMENT_PHASE3_RUNTIME_ENABLEMENT_REVIEW_V1.md](../reviews/HELM_BUSINESS_ADVANCEMENT_PHASE3_RUNTIME_ENABLEMENT_REVIEW_V1.md)：决策 §一 #2 选 A 后，§1.2 #3 schema 扩张禁令 100% 生效；§2.6 #6 boundary regression test 由本文件 §一 #5 在 Step 5 落地
 3. [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)：Step 3 由 90/30/7 改 30/7、§五 sub-processor 填实名；2026-05-02 起该文档保持 target draft，法务最终签署前不进入 public-eligible commitment 状态
 4. [HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md](./HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md)：§4.7 概念合约表与决策 §一 #2 命名路径 A 一致；进入 Phase 1 时按本文件 Step 4 命名收口为准
-5. [HELM_EXTERNAL_RESOURCE_KIT_GUANGPU_POC_INTAKE_PLAN_V1.md](../internal/HELM_EXTERNAL_RESOURCE_KIT_GUANGPU_POC_INTAKE_PLAN_V1.md)：本文件 §一.2 与该 intake plan 的解冻条件协同；owner sign-off + 脱敏样例齐备前不创建 `extensions/guangpu/management-report-metric-anomaly/`
-6. [HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md](../internal/HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md)：决策 §一 #4 + #5 的执行细节继承该计划
+5. internal-only intake plan（不随 OSS 仓库分发）：本文件 §一.2 的解冻条件仍要求 owner sign-off + 脱敏样例齐备前不创建 tenant-private extension
+6. [CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md](../_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md)：决策 §一 #4 + #5 的公开侧执行承接说明
 7. [AGENTS.md](../../AGENTS.md) §10：`check:public-release` 暂不并入 §10 主链；六月窗口再视情况合并

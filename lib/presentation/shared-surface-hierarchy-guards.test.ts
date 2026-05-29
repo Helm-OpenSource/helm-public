@@ -55,6 +55,14 @@ const broaderOperationalSurfaces = [
   "app/(workspace)/meetings/page.tsx",
 ] as const;
 
+const sitewideCustomerAssetFocusSurfaces = [
+  "features/reports/reports-client.tsx",
+  "features/imports/imports-client.tsx",
+  "features/settings/settings-client.tsx",
+  "features/diagnostics/diagnostics-client.tsx",
+  "features/analytics/analytics-client.tsx",
+] as const;
+
 const projectSystemspeakAuditSurfaces = [
   "app/programs/page.tsx",
   "components/shared/reporting-protocol-panel.tsx",
@@ -180,6 +188,8 @@ describe("shared surface hierarchy guards", () => {
     expect(sidebar).toContain(
       "demoProfile ? demoProfile.title : messages.shell.shellHeadline",
     );
+    expect(sidebar).toContain('? "Operating layer"');
+    expect(sidebar).toContain(': "经营控制层"');
     expect(sidebar.match(/<h2\b/g) ?? []).toHaveLength(0);
     expect(pageHeader).toContain('titleAs?: "h1" | "h2"');
     expect(contactDetailClient).toContain('titleAs="h2"');
@@ -462,6 +472,23 @@ describe("shared surface hierarchy guards", () => {
     }
   });
 
+  it("keeps secondary operating pages customer-asset first before reference layers", () => {
+    for (const relativePath of sitewideCustomerAssetFocusSurfaces) {
+      const surface = read(relativePath);
+
+      expect(surface).toContain("CustomerAssetFocusStrip");
+      expect(surface).toMatch(/Object state|Current asset/);
+      expect(surface).toContain("Blocker");
+      expect(surface).toMatch(/Pending decision|Decision/);
+    }
+
+    for (const relativePath of sitewideCustomerAssetFocusSurfaces.filter(
+      (pathName) => pathName !== "features/analytics/analytics-client.tsx",
+    )) {
+      expect(read(relativePath)).toContain("LazyDisclosure");
+    }
+  });
+
   it("keeps project-level operating and detail surfaces away from systemspeak self-narration copy", () => {
     for (const relativePath of projectSystemspeakAuditSurfaces) {
       expectNoSystemspeak(read(relativePath));
@@ -630,11 +657,31 @@ describe("shared surface hierarchy guards", () => {
 
     expect(topbar).toContain('{ href: "/capture", label: messages.shell.nav.capture }');
     expect(topbar).toContain(
-      "Capture, inbox, connections, analytics and diagnostics",
+      "Capture, inbox, connections, analytics and diagnostics now live under one simpler settings layer.",
     );
     expect(topbar).toContain(
       "现场记录、收件箱、连接、分析和诊断统一收进一个更简单的设置层。",
     );
+  });
+
+  it("keeps workspace navigation grouped by user workstream instead of flat product modules", () => {
+    const sidebar = read("components/layout/sidebar.tsx");
+    const topbar = read("components/layout/topbar.tsx");
+    const homeWorkEntry = read("features/dashboard/home-work-entry-surface.tsx");
+
+    expect(sidebar).toContain('? "Decision loop"');
+    expect(sidebar).toContain(': "经营循环"');
+    expect(sidebar).toContain('href: "/inbox"');
+    expect(sidebar).toContain('href="/mobile"');
+    expect(sidebar).toContain('? "Mobile" : "移动端"');
+
+    expect(topbar).toContain("primaryNavItems");
+    expect(topbar).toContain('? "Core views" : "主工作区"');
+    expect(topbar).toContain('href: "/inbox"');
+
+    expect(homeWorkEntry).toContain('data-dashboard-work-entry-action-rail="true"');
+    expect(homeWorkEntry).toContain("Current work quick actions");
+    expect(homeWorkEntry).toContain("Helm 已把本批分案汇总先转成你自己的下一步建议。");
   });
 
   it("keeps capture result policy copy from reading as automatic external execution", () => {

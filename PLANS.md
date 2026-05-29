@@ -215,9 +215,9 @@
 - `npm run build`
 - `npm run typecheck`
 - `test -f docs/codex/CODEX_CLAUDE_COLLABORATION_PROTOCOL.md`
-- `test -f docs/internal/HELM_OPEN_CORE_ARCHITECTURE_ADR_V1.md`
+- `test -f <internal-open-core-architecture-adr>`
 - `test -f docs/reviews/HELM_OPEN_CORE_ENTERPRISE_CLOUD_ARCHITECTURE_CLOSEOUT.md`
-- `rg -n "HELM_DEPLOYMENT_PROFILE=|光谱租户|Deployment Profile 是构建|Tenant Manifest loader|license 服务由 Helm 运营|30/60/90" docs/internal/HELM_OPEN_CORE_ARCHITECTURE_ADR_V1.md`
+- `rg -n "HELM_DEPLOYMENT_PROFILE=|tenant-private|Deployment Profile 是构建|Tenant Manifest loader|license 服务由 Helm 运营|30/60/90" <internal-open-core-architecture-adr>`
 
 当前验证结果：
 
@@ -396,9 +396,9 @@
 - `test ! -d .next`：PASS（最终状态无 private `.next` artifact）
 - `npm run typecheck`：PASS
 - `test -f docs/codex/CODEX_CLAUDE_COLLABORATION_PROTOCOL.md`：PASS（Codex / Claude 协作协议已落地并进入 docs/codex index）
-- `test -f docs/internal/HELM_OPEN_CORE_ARCHITECTURE_ADR_V1.md`：PASS（internal-only；不进入 public docs index）
+- `test -f <internal-open-core-architecture-adr>`：PASS（internal-only；不进入 public docs index）
 - `test -f docs/reviews/HELM_OPEN_CORE_ENTERPRISE_CLOUD_ARCHITECTURE_CLOSEOUT.md`：PASS（本轮 closeout 已落地并进入 docs index / STATUS）
-- `rg -n "HELM_DEPLOYMENT_PROFILE=|光谱租户|Deployment Profile 是构建|Tenant Manifest loader|license 服务由 Helm 运营|30/60/90" docs/internal/HELM_OPEN_CORE_ARCHITECTURE_ADR_V1.md`：PASS（无命中；退出码 1 为 rg no-match 语义）
+- `rg -n "HELM_DEPLOYMENT_PROFILE=|tenant-private|Deployment Profile 是构建|Tenant Manifest loader|license 服务由 Helm 运营|30/60/90" <internal-open-core-architecture-adr>`：PASS（无命中；退出码 1 为 rg no-match 语义）
 - `npm run public-mirror:extensions-stub:check`：预期失败于 private worktree registry `not-stub`；本分支不替换 `lib/extensions/registry.tsx`
 
 ---

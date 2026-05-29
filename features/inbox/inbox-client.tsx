@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { RecordSource } from "@prisma/client";
 import {
   AlarmClock,
+  ArrowRight,
   CalendarPlus,
   ClipboardList,
   MailPlus,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
+import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { RiskBadge } from "@/components/shared/risk-badge";
@@ -50,6 +52,10 @@ import {
   setReminderFromThreadAction,
   upgradeThreadToOpportunityAction,
 } from "@/features/inbox/actions";
+import {
+  buildCustomerAssetHref,
+  buildOpportunityAssetHref,
+} from "@/features/business-assets/hrefs";
 
 type InboxOperatingConnection = {
   label: string;
@@ -226,11 +232,11 @@ export function InboxClient({
           : `真实阿里邮箱已接入。优先处理 ${replyCriticalThreads.length} 条待我方动作线程，再把 ${unboundConnectedThreads.length} 条未绑定线索归到联系人、公司或机会。`
       : connectedThreads.length
         ? english
-          ? `${connectedThreads.length} imported or sample real threads are already here. Clean up object binding first and the recommendation panel on the right will become useful much faster.`
-          : `当前已有 ${connectedThreads.length} 条导入或示例真实线程。先把未绑定对象归属清楚，收件箱右侧建议区会更快变准。`
+          ? `${connectedThreads.length} customer threads are ready. Clean up object binding first and the recommendation panel on the right will become useful much faster.`
+          : `当前已有 ${connectedThreads.length} 条客户线程。先把未绑定对象归属清楚，右侧判断会更快变准。`
         : english
-          ? "The inbox still relies mostly on demo threads. Once Aliyun Mail or imported history is connected, this area will be the first place where real reply, upgrade and binding decisions appear."
-          : "当前仍主要依赖演示线程；接入阿里邮箱或导入历史线程后，这里会最先长出真实的待回复、待升级和待绑定判断。";
+          ? "Once Aliyun Mail or imported history is connected, this area will be the first place where reply, upgrade and binding decisions appear."
+          : "接入阿里邮箱或导入历史线程后，这里会最先长出待回复、待升级和待绑定判断。";
   const priorityThread =
     activeThread ??
     replyCriticalThreads[0] ??
@@ -242,7 +248,7 @@ export function InboxClient({
     english,
     businessLoopGapSummary,
   });
-  const _inboxOperatingTitle = priorityThread
+  const inboxOperatingTitle = priorityThread
     ? english
       ? `"${priorityThread.subject}" is the clearest thread to judge first right now`
       : `“${displayText(priorityThread.subject)}”是当前最值得先判断的线程`
@@ -264,7 +270,7 @@ export function InboxClient({
           ? "The thread is already connected to a real business object, so the inbox should now explain whether it should feed follow-through or formal review."
           : "这条线程已经挂到真实业务对象上，所以收件箱现在要说明它该进入后续跟进还是正式复核。"
     : coldStartLine;
-  const _inboxOperatingSnapshot = {
+  const inboxOperatingSnapshot = {
     objectState: priorityThread
       ? `${formatThreadStatus(priorityThread.status, english)} · ${
           priorityThread.opportunity?.title
@@ -361,7 +367,10 @@ export function InboxClient({
                 description: english
                   ? "Open the account page to confirm whether the thread fits the wider account push."
                   : "打开公司页，确认这条线程是否还符合更大的账户推进方向。",
-                href: `/companies/${priorityThread.company.id}`,
+                href: buildCustomerAssetHref(
+                  priorityThread.company.id,
+                  "inbox-priority",
+                ),
               }
             : {
                 label: english ? "Account binding" : "公司绑定",
@@ -377,7 +386,10 @@ export function InboxClient({
                 description: english
                   ? "Use the thread together with the linked opportunity before deciding whether to escalate or hold."
                   : "把线程和这条机会放在一起看，再决定是升级处理还是继续按住。",
-                href: `/opportunities?opportunityId=${priorityThread.opportunity.id}`,
+                href: buildOpportunityAssetHref(
+                  priorityThread.opportunity.id,
+                  "inbox-priority",
+                ),
               }
             : {
                 label: english ? "Opportunity binding" : "机会绑定",
@@ -509,19 +521,72 @@ export function InboxClient({
         }
       />
 
+      <CustomerAssetFocusStrip
+        eyebrow={english ? "Customer thread" : "客户线程"}
+        title={inboxOperatingTitle}
+        summary={inboxOperatingSummary}
+        primaryAction={
+          priorityThread
+            ? {
+                label: english ? "Open thread" : "打开线程",
+                href: `/inbox?threadId=${priorityThread.id}`,
+              }
+            : {
+                label: english ? "Connect source" : "接入来源",
+                href: "/settings?tab=connectors",
+              }
+        }
+        secondaryAction={
+          priorityThread?.opportunity
+            ? {
+                label: english ? "Open opportunity" : "打开机会",
+                href: buildOpportunityAssetHref(priorityThread.opportunity.id),
+              }
+            : {
+                label: english ? "Unbound only" : "只看待绑定",
+                href: "/inbox?relationship=unattached",
+              }
+        }
+        items={[
+          {
+            label: english ? "Thread state" : "线程状态",
+            value: inboxOperatingSnapshot.objectState,
+            tone: "info",
+          },
+          {
+            label: english ? "Pressure" : "当前压力",
+            value: inboxOperatingSnapshot.blocker,
+            tone:
+              priorityThread?.shouldReply ||
+              priorityThread?.status === "WAITING_US"
+                ? "warning"
+                : "default",
+          },
+          {
+            label: english ? "Next decision" : "下一步判断",
+            value: inboxOperatingSnapshot.pendingDecision,
+            detail: inboxOperatingSnapshot.nextAction,
+            href: priorityThread ? `/inbox?threadId=${priorityThread.id}` : null,
+            tone: "success",
+          },
+        ]}
+      />
+
       <Card className="workspace-panel-muted">
         <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.2fr_repeat(3,minmax(0,0.9fr))]">
           <div className="space-y-2">
+            <Badge variant="info">
+              {english ? "Source state" : "来源状态"}
+            </Badge>
             <p className="text-sm text-[color:var(--muted-foreground)]">
               {connector?.status === "CONNECTED"
                 ? english
                   ? `Connected: ${connector.externalAccountEmail ?? "Aliyun Mail account"} · synced ${formatDateLabel(connector.lastSyncedAt)}.`
                   : `已接入：${connector.externalAccountEmail ?? "阿里邮箱"} · 最近同步 ${formatDateLabel(connector.lastSyncedAt)}。`
                 : english
-                  ? "No mail account connected yet. The sample threads below show what you'll see once Aliyun Mail is linked."
-                  : "还没接入邮箱。下面这些演示线程展示了接入阿里邮箱后会看到的内容。"}
+                  ? "No mail account connected yet. Use the current threads to review the reply and binding path."
+                  : "还没接入邮箱。先用当前线程检查回复和对象绑定路径。"}
             </p>
-            <p className="text-sm text-[color:var(--muted-foreground)]">{coldStartLine}</p>
           </div>
           <InboxMetric
             label={english ? "Waiting on us" : "待我方回复"}
@@ -537,7 +602,7 @@ export function InboxClient({
             }}
           />
           <InboxMetric
-            label={english ? "Real / imported threads" : "真实 / 导入线程"}
+            label={english ? "Customer threads" : "客户线程"}
             value={connectedThreads.length}
             active={statusFilter === "all" && relationshipFilter === "all"}
             onClick={() => {
@@ -758,7 +823,15 @@ export function InboxClient({
                     </Badge>
                   )}
                   {activeThread.company ? (
-                    <Badge variant="default">{activeThread.company.name}</Badge>
+                    <Link
+                      href={buildCustomerAssetHref(
+                        activeThread.company.id,
+                        "inbox-thread",
+                      )}
+                      className="rounded-full bg-[color:color-mix(in_oklab,var(--surface-subtle)_88%,var(--background)_12%)] px-2.5 py-1 text-xs font-medium text-[color:var(--foreground)] ring-1 ring-[color:var(--border)]"
+                    >
+                      {activeThread.company.name}
+                    </Link>
                   ) : null}
                   {activeThread.contact ? (
                     <Link
@@ -780,11 +853,11 @@ export function InboxClient({
                   <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                     {activeThread.source === "GMAIL"
                       ? english
-                        ? "Read-only note: the current Aliyun Mail connection is read-only and will not send or write back email."
-                        : "只读说明：当前接入阿里邮箱 IMAP/SMTP 权限，不会回写或发送邮件。"
+                        ? "Read-only: the current Aliyun Mail connection will not send or write back email."
+                        : "当前只读：阿里邮箱不会回写或发送邮件。"
                       : english
-                        ? "This thread comes from local demo or imported data."
-                        : "当前线程来自本地演示或导入数据。"}
+                        ? "This thread is available for review and object binding."
+                        : "当前线程可用于复核和对象绑定。"}
                   </p>
                   <Link
                     href={`/inbox/${activeThread.id}`}
@@ -961,13 +1034,39 @@ export function InboxClient({
                       </div>
                       <RiskBadge risk={activeThread.opportunity.riskLevel} />
                     </div>
-                    <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
-                      {english
-                        ? "This thread is already affecting opportunity-stage judgement, contact timeline and later recommendations."
-                        : "这条线程正在影响该机会的阶段判断、联系人时间线和后续建议。"}
-                    </p>
-                  </div>
-                ) : (
+	                    <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
+	                      {english
+	                        ? "This thread is already part of the opportunity asset and should be read with the next move."
+	                        : "这条线程已经进入机会资产，应和下一步一起看。"}
+	                    </p>
+	                    <div className="mt-3 flex flex-wrap gap-2">
+	                      <Button asChild size="sm" variant="secondary">
+	                        <Link
+	                          href={buildOpportunityAssetHref(
+	                            activeThread.opportunity.id,
+	                            "inbox-thread",
+	                          )}
+	                        >
+	                          {english ? "Open opportunity asset" : "打开机会资产"}
+	                          <ArrowRight className="h-4 w-4" />
+	                        </Link>
+	                      </Button>
+	                      {activeThread.company ? (
+	                        <Button asChild size="sm" variant="ghost">
+	                          <Link
+	                            href={buildCustomerAssetHref(
+	                              activeThread.company.id,
+	                              "inbox-thread",
+	                            )}
+	                          >
+	                            {english ? "Customer asset" : "客户资产"}
+	                            <ArrowRight className="h-4 w-4" />
+	                          </Link>
+	                        </Button>
+	                      ) : null}
+	                    </div>
+	                  </div>
+	                ) : (
                   <Button
                     className="w-full justify-start"
                     onClick={() =>

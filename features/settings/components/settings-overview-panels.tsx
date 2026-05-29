@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
 import { WorkspaceGuidancePanel } from "@/components/shared/workspace-guidance-panel";
 import { WorkspaceSurfacePreferences } from "@/components/shared/workspace-surface-preferences";
 import { Button } from "@/components/ui/button";
@@ -66,6 +68,7 @@ export function SettingsOverviewPanels({
   reminders,
   stats,
 }: SettingsOverviewPanelsProps) {
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const operatingCards = [
     {
       title: english ? "Ingress online" : "入口在线",
@@ -108,7 +111,7 @@ export function SettingsOverviewPanels({
       action: english ? "Open reviews" : "进入复核",
     },
     {
-      title: english ? "Cost posture" : "成本是否可控",
+      title: english ? "Work cost guard" : "推进成本守卫",
       value:
         operatingReadiness.llmFallbacks7d > 0
           ? english
@@ -118,8 +121,8 @@ export function SettingsOverviewPanels({
             ? `${operatingReadiness.budgetCount} budget rules`
             : `${operatingReadiness.budgetCount} 条预算规则`,
       body: english
-        ? "Assistive service, fallback and budget"
-        : "辅助服务、保守处理、预算",
+        ? "Service availability, fallback and budget"
+        : "服务可用性、兜底和预算",
       href: "/settings?tab=budgets",
       action: english ? "Check budgets" : "查看预算",
     },
@@ -128,47 +131,43 @@ export function SettingsOverviewPanels({
   return (
     <>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_360px]">
-        <WorkspaceGuidancePanel
-          eyebrow={english ? "Operating settings" : "经营设置"}
-          title={
-            english
-              ? "Change the setting that blocks today's work."
-              : "先改卡住今天工作的设置。"
-          }
-          summary={
-            english
-              ? "Start from ingress, permissions, review pressure and cost posture."
-              : "先看入口、权限、复核压力和成本姿态。"
-          }
-          recommendations={recommendations}
-          reminders={reminders}
-          recommendationsLabel={english ? "Recommended next moves" : "建议先处理"}
-          remindersLabel={english ? "Context reminders" : "上下文提醒"}
-          boundaryLabel={english ? "Boundary" : "边界"}
-          boundary={
-            english
-              ? "Changing settings updates operating posture immediately, but external actions still follow review rules."
-              : "设置变更会立刻影响操作姿态，但对外动作仍按复核规则走。"
-          }
-        />
+        <LazyDisclosure title={english ? "Reference: setting suggestions" : "引用：设置建议"}>
+          <WorkspaceGuidancePanel
+            eyebrow={english ? "Operating settings" : "经营设置"}
+            title={
+              english
+                ? "Change the setting that blocks today's work."
+                : "先改卡住今天工作的设置。"
+            }
+            summary={
+              english
+                ? "Start from ingress, permissions, review pressure and cost posture."
+                : "先看入口、权限、复核压力和成本姿态。"
+            }
+            recommendations={recommendations}
+            reminders={reminders}
+            recommendationsLabel={english ? "Recommended next moves" : "建议先处理"}
+            remindersLabel={english ? "Context reminders" : "上下文提醒"}
+            boundaryLabel={english ? "Boundary" : "边界"}
+            boundary={
+              english
+                ? "Changing settings updates operating posture immediately, but external actions still follow review rules."
+                : "设置变更会立刻影响操作姿态，但对外动作仍按复核规则走。"
+            }
+          />
+        </LazyDisclosure>
         <div className="workspace-surface-stack">
-          <details className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 text-sm text-[color:var(--muted)]">
-            <summary className="cursor-pointer list-none font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-              {english ? "View preferences" : "显示偏好"}
-            </summary>
-            <div className="mt-3">
-              <WorkspaceSurfacePreferences />
-            </div>
-          </details>
           <Card className="workspace-form-assist workspace-panel-muted">
             <CardContent className="space-y-3 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="workspace-eyebrow">
-                    {english ? "Recommended preset" : "推荐经营预设"}
+                    {english ? "Keep work moving" : "让今天继续推进"}
                   </p>
                   <p className="text-base font-semibold tracking-tight text-[color:var(--foreground)]">
-                    {english ? "Use the recommended controls." : "套用推荐控制。"}
+                    {english
+                      ? "Apply the safe operating posture."
+                      : "套用安全的经营姿态。"}
                   </p>
                 </div>
                 <details className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--muted)]">
@@ -189,10 +188,10 @@ export function SettingsOverviewPanels({
                   onClick={applyRecommendedPilotPreset}
                   disabled={!canApplyRecommendedPilotPreset}
                 >
-                  {english ? "Apply recommended preset" : "套用推荐预设"}
+                  {english ? "Apply posture" : "套用姿态"}
                 </Button>
                 <Button type="button" variant="secondary" onClick={onReviewAuthControls}>
-                  {english ? "Review auth controls" : "查看身份控制"}
+                  {english ? "Check access" : "查看访问"}
                 </Button>
               </div>
               {!canApplyRecommendedPilotPreset ? (
@@ -204,6 +203,21 @@ export function SettingsOverviewPanels({
               ) : null}
             </CardContent>
           </Card>
+          <details
+            className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 text-sm text-[color:var(--muted)]"
+            onToggle={(event) =>
+              setPreferencesOpen((event.currentTarget as HTMLDetailsElement).open)
+            }
+          >
+            <summary className="cursor-pointer list-none font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
+              {english ? "Display options" : "显示选项"}
+            </summary>
+            {preferencesOpen ? (
+              <div className="mt-3">
+                <WorkspaceSurfacePreferences />
+              </div>
+            ) : null}
+          </details>
         </div>
       </div>
 

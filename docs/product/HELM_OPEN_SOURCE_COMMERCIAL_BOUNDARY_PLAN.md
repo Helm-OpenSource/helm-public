@@ -21,8 +21,8 @@ archive_trigger:
 
 **2026-05-18 二次补丁**：
 
-3. **Grandfathered direct pilot 政策**：2026-05-18 GTM 切换前已落地的受控试点客户（Guangpu 等）作为**特殊历史安排**继续保留 Helm Inc. 直营关系，**不复用为未来商业模式**。详见 [`docs/internal/HELM_GRANDFATHERED_DIRECT_PILOTS_POLICY_V1.md`](../internal/HELM_GRANDFATHERED_DIRECT_PILOTS_POLICY_V1.md)（internal-only）。任何 2026-05-19 之后的新客户机会一律走 Certified DP / Helm Cloud / Helm Enterprise，**不接直营**。
-4. **`docs/sales/GUANGPU_*` 待重定位**：origin/main 上存在的 `docs/sales/GUANGPU_OUTWARD_POSITIONING_V1.md` / `GUANGPU_PILOT_DELIVERY_PLAN_V1.md` / `GUANGPU_ONE_PAGER_CN_V1.md` 等是 grandfathered 客户的销售材料，按 §0.3 应为 internal-only。计划独立 PR off origin/main 移到 `docs/internal/sales/`。
+3. **Grandfathered direct pilot 政策**：2026-05-18 GTM 切换前已落地的受控试点客户作为**特殊历史安排**继续保留 Helm Inc. 直营关系，**不复用为未来商业模式**。内部执行细则不随 OSS 仓库分发。任何 2026-05-19 之后的新客户机会一律走 Certified DP / Helm Cloud / Helm Enterprise，**不接直营**。
+4. **legacy direct-sales collateral 待重定位**：origin/main 上遗留的历史销售材料按 §0.3 应为 internal-only，公开仓库不再索引或依赖这类文档。
 
 ---
 

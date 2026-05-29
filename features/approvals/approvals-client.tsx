@@ -10,6 +10,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  ArrowRight,
   BellRing,
   CircleOff,
   Play,
@@ -24,6 +25,7 @@ import { RecommendationJudgementCard } from "@/components/recommendations/recomm
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { BlockerCard } from "@/components/shared/blocker-card";
 import { CommitmentCard } from "@/components/shared/commitment-card";
+import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FirstLoopSurfaceSummary } from "@/components/shared/first-loop-surface-summary";
 import {
@@ -363,6 +365,40 @@ export function ApprovalsClient({
     approvalText(text ?? "");
   const approvalOptionalTitle = (text: string | null | undefined) =>
     text ? approvalText(text) : undefined;
+  const formatContextSnapshot = (raw: string | null | undefined) => {
+    const trimmed = raw?.trim();
+    if (!trimmed) {
+      return english ? "No context yet" : "暂无上下文";
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const source = typeof parsed.source === "string" ? parsed.source : null;
+      if (source === "bi_signal_closure_kernel") {
+        const signalId = typeof parsed.signalId === "string" ? parsed.signalId : null;
+        const signalKey = typeof parsed.signalKey === "string" ? parsed.signalKey : null;
+        const severity = typeof parsed.severity === "string" ? parsed.severity : null;
+        const lines = english
+          ? [
+              "BI signal context (closure kernel)",
+              signalKey ? `- signalKey: ${signalKey}` : null,
+              severity ? `- severity: ${severity}` : null,
+              signalId ? `- signalId: ${signalId}` : null,
+            ]
+          : [
+              "BI 信号上下文（closure kernel）",
+              signalKey ? `- 信号 key：${signalKey}` : null,
+              severity ? `- 风险等级：${severity}` : null,
+              signalId ? `- 信号 id：${signalId}` : null,
+            ];
+        return lines.filter(Boolean).join("\n");
+      }
+    } catch {
+      // ignore and fall back
+    }
+
+    return trimmed;
+  };
   const pageStory = getWorkspaceStory("approvals", locale, demoMode);
   const actionLabels = getLocalizedActionTypeLabels(locale);
   const actionChannelLabels = getLocalizedActionTypeChannelLabels(locale);
@@ -440,6 +476,14 @@ export function ApprovalsClient({
     approvalOptionalTitle(previewed?.actionItem.opportunity?.title) ??
     approvalOptionalTitle(previewed?.actionItem.meeting?.title) ??
     (english ? "Current object" : "当前对象");
+  const previewedTargetHref = previewed
+    ? resolveApprovalObjectDetailHref({
+        contact: previewed.actionItem.contact,
+        opportunity: previewed.actionItem.opportunity,
+        meeting: previewed.actionItem.meeting,
+        biSource: previewed.biSource,
+      })
+    : null;
   const selectedApprovalHashTargetId = selected?.id ?? null;
   const selectedActionType = selected?.actionItem.actionType ?? null;
   const previewedActionType = previewed?.actionItem.actionType ?? null;
@@ -999,6 +1043,36 @@ export function ApprovalsClient({
     : approvalCandidate?.actionItem.meeting
       ? (["delivery", "operator"] as const)
       : (["founder", "operator"] as const);
+  const approvalFocusTitle = approvalCandidate
+    ? english
+      ? `Review “${approvalCandidate.actionItem.title}” first`
+      : `先复核“${approvalTitle(approvalCandidate.actionItem.title)}”`
+    : english
+      ? "No customer-visible draft is waiting right now"
+      : "当前没有客户可见草稿在等待";
+  const approvalFocusSummary = approvalCandidate
+    ? english
+      ? `${summary.pending} pending · ${summary.highRisk} high-risk · ${summary.external} external-facing. Decide whether the top draft can leave the boundary.`
+      : `${summary.pending} 条待处理 · ${summary.highRisk} 条高风险 · ${summary.external} 条对外动作。先判断第一条能不能离开边界。`
+    : english
+      ? "When a worker finishes a trust-sensitive draft, it will appear here before any external move."
+      : "只要协作者完成信任敏感草稿，它会先出现在这里，而不是直接对外推进。";
+  const approvalFocusPressure = approvalCandidate
+    ? approvalCandidate.isHighRisk
+      ? english
+        ? "High-risk draft. Human review must stay explicit."
+        : "高风险草稿，必须明确人工复核。"
+      : approvalCandidate.channel === "外发动作" ||
+          approvalCandidate.channel === "External action"
+        ? english
+          ? "External-facing action. Review wording before release."
+          : "对外动作，先复核措辞再放行。"
+        : english
+          ? "Draft is held until you decide."
+          : "草稿已停住，等你判断。"
+    : english
+      ? "No review pressure is open."
+      : "当前没有打开的复核压力。";
   const businessLoopGapReadout = buildBusinessLoopGapReadout({
     english,
     businessLoopGapSummary,
@@ -1322,9 +1396,66 @@ export function ApprovalsClient({
         />
       </div>
 
-      <details className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-4 py-3 text-sm text-[color:var(--muted)]">
+      <CustomerAssetFocusStrip
+        eyebrow={english ? "Customer-visible draft" : "客户可见草稿"}
+        title={approvalFocusTitle}
+        summary={approvalFocusSummary}
+        primaryAction={
+          approvalCandidate
+            ? {
+                label: english ? "Open draft" : "打开草稿",
+                href: buildApprovalDrawerHref(approvalCandidate.id),
+              }
+            : {
+                label: english ? "Back to dashboard" : "回到首页",
+                href: "/dashboard",
+              }
+        }
+        secondaryAction={
+          approvalCandidate
+            ? {
+                label: english ? "Open evidence" : "查看依据",
+                href: approvalCandidateMemoryHref,
+              }
+            : null
+        }
+        items={[
+          {
+            label: english ? "Object" : "对象",
+            value: approvalTarget,
+            detail: approvalCandidate
+              ? formatApprovalQueueStatus(approvalCandidate.status, english)
+              : undefined,
+            tone: "info",
+          },
+          {
+            label: english ? "Pressure" : "当前压力",
+            value: approvalFocusPressure,
+            tone: approvalCandidate?.isHighRisk ? "danger" : "warning",
+          },
+          {
+            label: english ? "Decision" : "需要你判断",
+            value: approvalCandidate
+              ? english
+                ? "Approve, rewrite, reject, or move to manual handling."
+                : "通过、改写、拒绝，或转人工处理。"
+              : english
+                ? "No decision required."
+                : "暂无需要判断。",
+            detail: approvalCandidate?.reasoning
+              ? approvalText(approvalCandidate.reasoning)
+              : null,
+            href: approvalCandidate
+              ? buildApprovalDrawerHref(approvalCandidate.id)
+              : null,
+            tone: "success",
+          },
+        ]}
+      />
+
+      <details className="order-last rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-4 py-3 text-sm text-[color:var(--muted)]">
         <summary className="cursor-pointer list-none font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-          {english ? "Page rules" : "页面规则"}
+          {english ? "Reference rules" : "引用规则"}
         </summary>
         <div className="mt-4 space-y-4">
           <HomeSurfaceArrivalBanner
@@ -1372,7 +1503,7 @@ export function ApprovalsClient({
       </details>
 
       {biBoardAccessState === "available" && biBoardContribution ? (
-        <Card className="workspace-panel border-[color:var(--mode-card-border)]">
+        <Card className="order-8 workspace-panel border-[color:var(--mode-card-border)]">
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1399,51 +1530,93 @@ export function ApprovalsClient({
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label={english ? "Pending" : "待复核"}
-          value={summary.pending}
-          tone="approval"
-          active={activeView === "pending" && activeFilter === "PENDING"}
-          onClick={() => {
-            setActiveView("pending");
-            setActiveFilter("PENDING");
-          }}
-        />
-        <MetricCard
-          label={english ? "High risk" : "高风险"}
-          value={summary.highRisk}
-          tone="danger"
-          active={activeView === "pending" && activeFilter === "highRisk"}
-          onClick={() => {
-            setActiveView("pending");
-            setActiveFilter("highRisk");
-          }}
-        />
-        <MetricCard
-          label={english ? "External waiting" : "待处理外发"}
-          value={summary.external}
-          tone="info"
-          active={activeView === "pending" && activeFilter === "external"}
-          onClick={() => {
-            setActiveView("pending");
-            setActiveFilter("external");
-          }}
-        />
-        <MetricCard
-          label={english ? "Executed history" : "已执行历史"}
-          value={summary.executed}
-          tone="success"
-          active={activeView === "history" && activeFilter === "EXECUTED"}
-          onClick={() => {
-            setActiveView("history");
-            setActiveFilter("EXECUTED");
-          }}
-        />
-      </div>
+      <details
+        className="order-2 rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
+        data-testid="approval-load-disclosure"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+              {english ? "Review load" : "复核负载"}
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+              {english
+                ? `${summary.pending} pending · ${summary.highRisk} high risk · ${summary.external} external waiting`
+                : `${summary.pending} 条待复核 · ${summary.highRisk} 条高风险 · ${summary.external} 条待处理外发`}
+            </span>
+          </span>
+          <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
+            {english ? "Open load" : "展开负载"}
+          </span>
+        </summary>
+        <div className="grid gap-4 px-4 pb-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label={english ? "Pending" : "待复核"}
+            value={summary.pending}
+            tone="approval"
+            active={activeView === "pending" && activeFilter === "PENDING"}
+            onClick={() => {
+              setActiveView("pending");
+              setActiveFilter("PENDING");
+            }}
+          />
+          <MetricCard
+            label={english ? "High risk" : "高风险"}
+            value={summary.highRisk}
+            tone="danger"
+            active={activeView === "pending" && activeFilter === "highRisk"}
+            onClick={() => {
+              setActiveView("pending");
+              setActiveFilter("highRisk");
+            }}
+          />
+          <MetricCard
+            label={english ? "External waiting" : "待处理外发"}
+            value={summary.external}
+            tone="info"
+            active={activeView === "pending" && activeFilter === "external"}
+            onClick={() => {
+              setActiveView("pending");
+              setActiveFilter("external");
+            }}
+          />
+          <MetricCard
+            label={english ? "Executed history" : "已执行历史"}
+            value={summary.executed}
+            tone="success"
+            active={activeView === "history" && activeFilter === "EXECUTED"}
+            onClick={() => {
+              setActiveView("history");
+              setActiveFilter("EXECUTED");
+            }}
+          />
+        </div>
+      </details>
 
-      <Card id="meeting-follow-through-review" className="workspace-panel">
-        <CardContent className="space-y-4 py-5">
+      <details
+        id="meeting-follow-through-review"
+        className="order-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+              {english ? "Other meeting drafts" : "其他会议草稿"}
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+              {meetingLinkedReviewItems.length
+                ? english
+                  ? `${meetingLinkedReviewItems.length} meeting-derived drafts are available when you need the full queue.`
+                  : `${meetingLinkedReviewItems.length} 条会议衍生草稿在这里，需要时再展开。`
+                : english
+                  ? "No meeting-derived draft is waiting right now."
+                  : "当前没有会议衍生草稿在等待。"}
+            </span>
+          </span>
+          <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
+            {english ? "Open drafts" : "展开草稿"}
+          </span>
+        </summary>
+        <div className="space-y-4 px-4 pb-4">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
               <Badge variant="approval">
@@ -1819,10 +1992,10 @@ export function ApprovalsClient({
               }
             />
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
-      <Card className="workspace-panel">
+      <Card className="order-3 workspace-panel">
         <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.2fr_repeat(3,minmax(0,0.92fr))]">
           <div className="space-y-2">
             <Badge variant="approval">
@@ -1881,7 +2054,7 @@ export function ApprovalsClient({
       </Card>
 
       {demoMode ? (
-        <Card className="workspace-panel-muted">
+        <Card className="order-4 workspace-panel-muted">
           <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.2fr_repeat(3,minmax(0,0.9fr))]">
             <div className="space-y-2">
               <Badge variant="approval">
@@ -1931,7 +2104,7 @@ export function ApprovalsClient({
         </Card>
       ) : null}
 
-      <Card id="approval-queue" className="workspace-panel">
+      <Card id="approval-queue" className="order-5 workspace-panel">
         <CardContent className="space-y-5 py-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-2">
@@ -2065,7 +2238,7 @@ export function ApprovalsClient({
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
+      <div className="order-6 grid gap-4 lg:grid-cols-[1fr_420px]">
         <div className="space-y-4">
           {filtered.length ? (
             filtered.map((task) => {
@@ -2084,7 +2257,7 @@ export function ApprovalsClient({
               return (
                 <article
                   key={task.id}
-                  className={`w-full rounded-[24px] border p-5 text-left 阴影-sm transition hover:bg-[color:var(--surface-subtle)] ${task.isHighRisk ? "border-[color:var(--status-danger-border)] bg-[color:var(--status-danger-bg)]/30" : task.channel === "外发动作" || task.channel === "External action" ? "border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)]/20" : "border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_92%,white_8%)]"}`}
+                  className={`w-full rounded-[24px] border p-5 text-left shadow-sm transition hover:bg-[color:var(--surface-subtle)] ${task.isHighRisk ? "border-[color:var(--status-danger-border)] bg-[color:var(--status-danger-bg)]/30" : task.channel === "外发动作" || task.channel === "External action" ? "border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)]/20" : "border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_92%,white_8%)]"}`}
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge
@@ -2205,7 +2378,7 @@ export function ApprovalsClient({
                         data-approval-object-detail-link="true"
                         className="inline-flex min-h-7 items-center rounded-lg px-1.5 font-medium text-[var(--accent)] hover:bg-[color:var(--surface-subtle)] hover:opacity-80"
                       >
-                        {english ? "Open object" : "查看对象详情"}
+                        {english ? "Open business object" : "打开经营对象"}
                       </Link>
                     ) : (
                       <span
@@ -2213,7 +2386,7 @@ export function ApprovalsClient({
                         data-approval-object-detail-unavailable="true"
                         className="inline-flex min-h-7 items-center rounded-lg px-1.5 font-medium text-[color:var(--muted-foreground)]"
                       >
-                        {english ? "No linked object" : "未关联对象，暂无详情"}
+                        {english ? "No linked business object" : "暂无关联经营对象"}
                       </span>
                     )}
                     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -2278,12 +2451,12 @@ export function ApprovalsClient({
         >
           <CardHeader>
             <CardTitle>
-              {english ? "Approval preview" : "审批详情预览"}
+              {english ? "Action waiting on you" : "需要你处理的动作"}
             </CardTitle>
             <CardDescription>
               {english
-                ? "After you select an action on the left, this panel gives you a high-level preview before opening the full drawer. The focus is source, risk and execution consequence."
-                : "左侧选中动作后，这里会先给你一个高层预览，再决定要不要展开抽屉。重点是看清来源、风险和执行后果。"}
+                ? "Select one item, confirm the linked business object, then approve, rewrite or hand it off."
+                : "先选中一条，看清它关联的经营对象，再决定通过、改写还是转人工。"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -2315,10 +2488,18 @@ export function ApprovalsClient({
                   </p>
                 </div>
                 <div className="grid gap-3">
+                  {previewedTargetHref ? (
+                    <Button asChild variant="secondary">
+                      <Link href={previewedTargetHref}>
+                        {english ? "Open linked business object" : "打开关联经营对象"}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  ) : null}
                   <Item
                     label={english ? "Source context" : "来源上下文"}
                     value={trimText(
-                      approvalText(previewed.contextSnapshot ?? ""),
+                      approvalText(formatContextSnapshot(previewed.contextSnapshot)),
                       42,
                     )}
                   />
@@ -2421,8 +2602,8 @@ export function ApprovalsClient({
                 title={english ? "Select an approval task" : "选择一个审批动作"}
                 description={
                   english
-                    ? "The preview shows full action content, AI reasoning, risk prompt and execution preview."
-                    : "审批详情会显示动作全文、判断原因、风险提示和执行结果预览。"
+                    ? "The preview will show source, risk, linked object and the exact action that needs your call."
+                    : "预览会显示来源、风险、关联对象，以及真正需要你拍板的动作。"
                 }
               />
             )}
@@ -2502,10 +2683,7 @@ export function ApprovalsClient({
                     data-tone="sky"
                   >
                     <p className="workspace-note-body text-sm leading-7">
-                      {approvalText(
-                        selected.contextSnapshot ??
-                          (english ? "No context yet" : "暂无上下文"),
-                      )}
+                      {approvalText(formatContextSnapshot(selected.contextSnapshot))}
                     </p>
                   </div>
                 </section>
