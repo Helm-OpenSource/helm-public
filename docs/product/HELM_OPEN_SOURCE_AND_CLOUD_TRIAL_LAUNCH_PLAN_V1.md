@@ -44,7 +44,7 @@ review_after: 2026-07-26
 - 共享层（`app/`、`features/`、`lib/`）必须把对租户 slug 的 hardcoded 引用抽到 `lib/extensions/registry.ts`，缺失时优雅降级
 - 选择路径：**双仓库（路径 A）** — 公开仓库 = 当前仓库做剥离后的版本；私有仓库 = `helm-tenants-private` 镜像 guangpu 子树
 - Git 历史中的 guangpu commit **不重写**（接受历史可搜到，HEAD 干净即可）。如果客户合同后续要求历史脱敏，再走 `git filter-repo` 路径
-- 详细执行计划为 private source-only 文档 `docs/internal/HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md`；公开镜像不包含该文件
+- 公开侧执行承接见 [CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md](../_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md) 与 [HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md](./HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)；internal-only 维护计划不随 OSS 仓库分发
 
 ### 2.3 云端试用：不承诺 SLA，数据保留期需法务签署后生效
 
@@ -179,7 +179,7 @@ review_after: 2026-07-26
 
 > **意图**：把发布日"两件事"（§一）从启发式判断升级为可证伪的 evidence checklist。
 > **规则**：6 项**必备证据**，任一缺失 = No-Go。每项必须有可点击的 evidence artifact 或可重跑的命令链。
-> **来源**：T010 派生自 private source-only review `docs/internal/HELM_COMPREHENSIVE_PROJECT_REVIEW_2026-05-19.md` §四 #10；公开镜像只保留结论边界，不链接内部审计正文。
+> **来源**：T010 派生自 internal comprehensive review 的 §四 #10；该原始评审材料不随 OSS 仓库分发。
 > **与 §二 / §五 的关系**：本节是发布日 Go 决策的**操作清单**；§二 是决策依赖的**输入约束**；§五 是触发回滚的**否决条件**。三者不冲突。
 
 ### 6.1 必备 evidence 6 项
@@ -285,7 +285,7 @@ Notes (any No-Go reason): ...
 
 ### 6.3 与历史"两件事"启发式的关系
 
-§一 的"两件事"（Track A 开源可读 / Track B 云端可注册）继续是**目标**陈述，但**决策门**完全替换为本节 §6.1 的 6 项 evidence checklist。后续如增减 evidence 项，必须先改本节，并在 private source-only comprehensive review 中同步出处。
+§一 的"两件事"（Track A 开源可读 / Track B 云端可注册）继续是**目标**陈述，但**决策门**完全替换为本节 §6.1 的 6 项 evidence checklist。后续如增减 evidence 项，必须先改本节，并同步 internal comprehensive review 的对应出处（该原始评审材料不随 OSS 仓库分发）。
 
 ---
 
@@ -300,6 +300,6 @@ Notes (any No-Go reason): ...
 5. [HELM_BUSINESS_ADVANCEMENT_PHASE3_RUNTIME_ENABLEMENT_REVIEW_V1.md](../reviews/HELM_BUSINESS_ADVANCEMENT_PHASE3_RUNTIME_ENABLEMENT_REVIEW_V1.md)：Phase 3 解禁详细范围与回滚剧本
 6. [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)：数据保留政策草案与硬删除流程；正式公开口径待法务最终签署
 7. [HELM_RELEASE_REALITY_ALIGNMENT.md](./HELM_RELEASE_REALITY_ALIGNMENT.md)：2026-05-02 公开承诺、release hard gates、需求减负与真实缺口收口；如与本计划冲突，以 release reality alignment 的 hard gate 口径为准
-8. `docs/internal/HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md`：private source-only tenant separation plan；公开镜像不包含该文件
+8. [CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md](../_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md)：公开 sample extraction 与 tenant-private 剥离的 public-safe 承接说明
 
 如本文件与 [HELM_RELEASE_REALITY_ALIGNMENT.md](./HELM_RELEASE_REALITY_ALIGNMENT.md) 的 release hard gate 口径冲突，以后者为准；其余执行节奏仍以本文件 §三 五周分解为准。
