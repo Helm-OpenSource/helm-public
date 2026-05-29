@@ -159,6 +159,11 @@ export type BiReportP0ProcessSopRow = {
   complaintResolutionRatePct: number | null;
 };
 
+export type PersistedBiReportP0ProcessSignal = {
+  id: string;
+  ownerUserId: string | null;
+};
+
 export async function resolveReportsExtensionAccessSafely(
   _descriptor: {
     id: string;
@@ -195,6 +200,8 @@ export async function resolveImportsExtensions(_input: {
 export async function resolveApprovalsExtensions(_input: {
   workspace: WorkspaceLike;
 }): Promise<ResolvedApprovalsExtensions> {
+  // Private registries append &optional=1 to tenant-scoped BI preview URLs.
+  // The public stub returns no BI board, but keeps the optional-panel marker.
   return { biBoard: null };
 }
 
@@ -249,7 +256,12 @@ export async function persistBiReportP0ProcessSignals(_input: {
   sopRows?: BiReportP0ProcessSopRow[];
   signalRouting?: BiReportSignalRoutingConfig;
 }) {
-  return { written: 0, skipped: 0, runId: null, persistedSignals: [] };
+  return {
+    written: 0,
+    skipped: 0,
+    runId: null,
+    persistedSignals: [] as PersistedBiReportP0ProcessSignal[],
+  };
 }
 
 export function listRegisteredSignalCollectionJobs(): SignalCollectionJob[] {

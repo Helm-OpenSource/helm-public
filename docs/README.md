@@ -37,8 +37,8 @@ review_after: 2026-06-13
    - [HELM_RDS_SECRET_HISTORY_REMEDIATION_PLAN.md](reviews/HELM_RDS_SECRET_HISTORY_REMEDIATION_PLAN.md) — RDS 历史凭据泄露 remediation：当前文件树已清，但 `origin/main` 历史仍需云端轮换 + 受控 history rewrite 才能解除 P0
    - [HELM_GITHUB_APACHE2_PUBLIC_RELEASE_EXECUTION_PLAN_TO_2026_05_31.md](reviews/HELM_GITHUB_APACHE2_PUBLIC_RELEASE_EXECUTION_PLAN_TO_2026_05_31.md) — 以 `2026-05-31` 为目标日的 GitHub Apache-2.0 公开发布倒排执行计划：唯一目标是 public release，关键路径固定为 secret rotation → history rewrite → real public mirror clean receipt → public docs/governance review → rehearsal → final Go/No-Go → GitHub release；6 月商业化试点准备动作明确降级到后续目标
    - [HELM_SECRET_ROTATION_AND_RELEASE_UNBLOCK_CHECKLIST_2026_05_20.md](operations/HELM_SECRET_ROTATION_AND_RELEASE_UNBLOCK_CHECKLIST_2026_05_20.md) — 面向 `2026-05-20` 的 secret rotation / revocation 单日执行清单：定义完成口径、Go/No-Go 条件、non-secret receipt 要求与日终汇报格式，用于把 public release 的唯一 P0 blocker 从“知道要做”推进到“已处理并可留档”
-   - [HELM_PUBLIC_RELEASE_REWRITE_REF_INVENTORY_2026_05_22.md](internal/HELM_PUBLIC_RELEASE_REWRITE_REF_INVENTORY_2026_05_22.md) — 面向 history rewrite maintenance window 的 remote ref 快照：汇总 `origin` 远端 refs 范围、直接相关 refs 和当前 prep-only 判断，用于 rewrite 前的协作者恢复范围确认
-   - [HELM_PUBLIC_RELEASE_FREEZE_AND_HISTORY_REWRITE_NOTICE_TEMPLATE_2026_05.md](internal/HELM_PUBLIC_RELEASE_FREEZE_AND_HISTORY_REWRITE_NOTICE_TEMPLATE_2026_05.md) — 协作者 freeze / history rewrite / recovery 通知模板：包含短版、完整版、freeze start 和 rewrite complete 恢复话术
+   - `docs/internal/HELM_PUBLIC_RELEASE_REWRITE_REF_INVENTORY_2026_05_22.md` — private source-only history rewrite ref inventory；公开镜像不包含该文件
+   - `docs/internal/HELM_PUBLIC_RELEASE_FREEZE_AND_HISTORY_REWRITE_NOTICE_TEMPLATE_2026_05.md` — private source-only freeze / recovery notice template；公开镜像不包含该文件
    - [HELM_PUBLIC_GITHUB_SURFACE_REVIEW_2026_05_26.md](reviews/HELM_PUBLIC_GITHUB_SURFACE_REVIEW_2026_05_26.md) — `2026-05-26` public GitHub surface 人工审校结果：记录 README / GOVERNANCE / CONTRIBUTING / public roadmap / public trial runbook / launch draft 的 repo-side 审校范围、已修复的 placeholder / dead-link 问题，以及 release 仍保持 No-Go 的原因
    - [HELM_BUSINESS_ADVANCEMENT_FOUNDER_INTERNAL_GATE_CLOSEOUT.md](reviews/HELM_BUSINESS_ADVANCEMENT_FOUNDER_INTERNAL_GATE_CLOSEOUT.md) — Founder-led Business Advancement internal gate：只允许 disabled internal dogfooding preparation；production query / runtime integration / public trial 继续 No-Go
    - [HELM_BUSINESS_ADVANCEMENT_INTERNAL_DOGFOOD_PACKET_CLOSEOUT.md](reviews/HELM_BUSINESS_ADVANCEMENT_INTERNAL_DOGFOOD_PACKET_CLOSEOUT.md) — Business Advancement disabled internal dogfooding packet：用 injected-row prototype 输出生成 review-only candidate groups 与 stop conditions，不接 production query
@@ -48,7 +48,7 @@ review_after: 2026-06-13
    - [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md) — 30/7 数据保留期、no-SLA 立场、用户权利
    - [HELM_PACK_A_PILOT_AGREEMENT_TEMPLATE_V1.md](legal/HELM_PACK_A_PILOT_AGREEMENT_TEMPLATE_V1.md) — Pack A 4 周 paid pilot 协议起草模板；非法律意见，需客户/Helm 法务终审
    - [HELM_PACK_A_DPA_TEMPLATE_V1.md](legal/HELM_PACK_A_DPA_TEMPLATE_V1.md) — Pack A 数据处理协议模板；限定 pilot 目的、90 天保留、子处理方、跨境说明和删除证明
-   - [HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md](internal/HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md) — `extensions/guangpu/` 双仓库剥离执行计划
+   - `docs/internal/HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md` — private source-only tenant separation plan；公开镜像不包含 tenant-private implementation
    - [HELM_PUBLIC_ROADMAP.md](roadmap/HELM_PUBLIC_ROADMAP.md) — 对外路线图（Now / Next 30 days / Later / Out of scope）
    - [PUBLIC_TRIAL_RUNBOOK.md](pilot/PUBLIC_TRIAL_RUNBOOK.md) — 公开试用用户须知 / 数据隔离 / 反馈渠道 / oncall 操作 / 状态机
    - [HELM_RETENTION_STATUS_CARD_DESIGN_V1.md](product/HELM_RETENTION_STATUS_CARD_DESIGN_V1.md) — `/settings/billing` 数据保留状态卡片设计与组件契约
@@ -102,22 +102,20 @@ review_after: 2026-06-13
   - 当前 active queue、短周期约束、repo-local Codex 使用姿态与执行提醒
 - [GOVERNANCE.md](../GOVERNANCE.md)
   - 开源治理、maintainer scope、贡献权利、release gate、认证和品牌边界；不创建企业 SLA、商标许可或认证平台
-- [.codex/config.toml](../.codex/config.toml)
-  - repo-local Codex profiles、`codex_hooks` feature 与 scoped agent roles；只服务仓库执行，不扩成平台层
-- [.codex/hooks.json](../.codex/hooks.json)
-  - repo-local guardrails 路由；当前先覆盖 `no-verify`、`git push` 目标/dirty/upstream 提醒、配置保护、设计质量检查、`console.log/console.error/debugger/TODO: remove before merge` 检查、窄 `SessionStart` bootstrap、Stop 阶段 validation 提醒
+- `.codex/config.toml`
+  - source-worktree local Codex profile；公开镜像不要求该本机配置存在
+- `.codex/hooks.json`
+  - source-worktree local guardrail routing；公开镜像不要求该本机配置存在
 - `scripts/codex-hooks/`
   - repo-local guardrail scripts；只做最小提醒与阻断，不扩成平台层
 - `extensions/`
-  - 租户客户定制需求的当前主目录；默认按 `extensions/<tenant-key>/<extension-slug>/` 落代码、文档、测试和资产，不再直接写进 shared top-level namespace
-- [extensions/guangpu/README.md](../extensions/guangpu/README.md)
-  - Guangpu tenant root 当前总览、tenant manifest 入口，以及 seat-profile / bi-report 两条扩展主线的协作入口
+  - public sample / future community pack 主目录；公开镜像当前只应包含 synthetic / non-production sample，不包含 tenant-private implementation
+- [extensions/case-management-sample/README.md](../extensions/case-management-sample/README.md)
+  - 公开 synthetic case-management sample pack；用于 delivery engineer Golden Path，不代表生产 tenant pack
 - [report-skills/README.md](../report-skills/README.md)
   - `BI report proactive push` 的 skill pack 目录约定：固定 `query.sql / schema.json / metrics.json / result-criteria.json / prompt.md / message-template.md`，当前只是 repo asset，不是 skill marketplace
-- [extensions/guangpu/GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md](../extensions/guangpu/GUANGPU_EXTENSION_UPDATE_ISSUES_V1.md)
-  - `guangpu` 当前 extension 收口问题清单，供开发团队继续对齐 manifest、目录职责、loader 和 script truth
-- [GUANGPU_ORGANIZATION_ROLE_GOAL_IMPLEMENTATION_REQUIREMENTS.md](../extensions/guangpu/docs/GUANGPU_ORGANIZATION_ROLE_GOAL_IMPLEMENTATION_REQUIREMENTS.md)
-  - Guangpu tenant-private 组织 / 岗位 / 目标 / 责任路由实施需求：固定公司唯一入口、组织单元、岗位职责、目标口径、米盾映射、信号路由、坐席画像新鲜度和人工复核证据的最小 slice；继续禁止 HR 绩效、自动派工、自动通知和米盾写回
+- `extensions/<tenant-private>/...`
+  - tenant-private implementation 只存在于 private source worktree；公开镜像只保留边界说明，不提供私有客户 pack 链接
 - [HELM_GUANGPU_SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md](reviews/HELM_GUANGPU_SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md)
   - 记录 Guangpu seat-profile 旧 `WorkspaceSolutionExtension` bare key 的 inventory/apply backfill 工具、preflight 规则和 operator 命令面
 
@@ -130,12 +128,8 @@ review_after: 2026-06-13
 
 ### requirements/
 
-- [SEAT_PROFILE_SRS_V1.md](../extensions/guangpu/seat-profile/docs/SEAT_PROFILE_SRS_V1.md)
-  - 坐席画像需求文档，面向运营与研发说明“每天更新一次、用于分案前参考”的产品目标、角色视图和边界
-- [SEAT_PROFILE_DETAILED_DESIGN_V1.md](../extensions/guangpu/seat-profile/docs/SEAT_PROFILE_DETAILED_DESIGN_V1.md)
-  - 坐席画像详细设计，包括指标口径、数据源、米盾云接口、Helm 内部 API、界面原型、数据模型和任务日志
-- [SEAT_PROFILE_OPERATOR_VALIDATION_CHECKLIST_V1.md](../extensions/guangpu/seat-profile/docs/SEAT_PROFILE_OPERATOR_VALIDATION_CHECKLIST_V1.md)
-  - 坐席画像运营验证清单与 dry-run 步骤，面向运营、产品、测试执行上线前与回归验收
+- `extensions/<tenant-private>/seat-profile/docs/*`
+  - tenant-private requirements / validation checklists；公开镜像不链接私有客户实施文档
 
 ### product/
 
@@ -284,6 +278,8 @@ review_after: 2026-06-13
   - **【交付工程师 Golden Path Phase 0/1 收口】** 记录本轮把 delivery-engineer toolkit 主轴落成最小可执行切片：新增 Golden Path requirements、`delivery:doctor`、`pack:fixture-check`、CLI wrapper 与 targeted Vitest；两条命令只做本地静态只读检查，不启动 Docker、不连 DB、不读 secret、不调用 connector / MCP / LLM / production API，不代表 30 分钟 onboarding 已通过
 - [HELM_DELIVERY_ENGINEER_PACK_FIXTURE_CHECK_CLOSEOUT.md](reviews/HELM_DELIVERY_ENGINEER_PACK_FIXTURE_CHECK_CLOSEOUT.md)
   - **【交付工程师 Pack Fixture Check 收口】** 记录 `npm run pack:fixture-check` Phase 1 read-only static pack gate：默认检查 `extensions/case-management-sample`，支持 `--pack` 指向 repo 内 fork pack，覆盖 HSI manifest validation、tenantKey / packId 对齐、non-Salesforce source、六类 signal family、`/operating` + review packet surface、implementation checklist ref、fixture JSON parse / non-empty 和通用 credential / cloud-host marker；不替代 HSI eval、public-release guard、redaction report 或 D2 fresh-clone smoke
+- [HELM_DELIVERY_ENGINEER_D2_PREFLIGHT_BLOCKED_2026_05_29.md](reviews/HELM_DELIVERY_ENGINEER_D2_PREFLIGHT_BLOCKED_2026_05_29.md)
+  - **【D2 fresh-clone preflight blocked】** 记录 `2026-05-29` 本机没有 Docker / compose，`npm run quickstart:doctor` fail closed；HSI eval 与 operating signal flow eval 通过，但这不是 `HELM_DELIVERY_ENGINEER_D2_SMOKE*.md` receipt，不解除 30 分钟 onboarding 的 D2 smoke blocker
 - [HELM_COMMERCIAL_PROMOTION_PACK_WORKER_SKILL_PLAN.md](product/HELM_COMMERCIAL_PROMOTION_PACK_WORKER_SKILL_PLAN.md)
   - **【商业推广 Skill Pack 规划】** 定义 Internal Commercial Promotion Pack 的 P0 worker / skill 选择：ICP desk research、design partner scorecard、validation call brief、meeting-to-proof signal、pilot scope packet、proof pack assembly；新增 `npm run eval:commercial-promotion` 验证 alias-only、review-first、deterministic scorecard 和 no external side effect 边界；新增 `npm run eval:pack-a-pilot-readiness` 把 A 市场 OPC 评分、Week 0 gate 与 4 个 Pack A Skill 集成覆盖合成统一 readiness gate；不做营销自动化、CRM 写回、自动外发、自动报价、public claim 自动发布或 Phase 3 runtime overclaim
 - [HELM_P0_PUBLIC_RELEASE_HYGIENE_CLOSEOUT.md](reviews/HELM_P0_PUBLIC_RELEASE_HYGIENE_CLOSEOUT.md)
