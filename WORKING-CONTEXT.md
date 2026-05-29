@@ -40,8 +40,8 @@
 - **Helm Inc 商业模式收敛**：① open-core 维护 ② Helm Cloud（可选托管） ③ Helm Enterprise（私有部署 / 商业 connector / 高级 audit） ④ Certified Delivery Partner 生态认证
 - **新增 P0 工作项**：`extensions/case-management-sample/` vertical 参考实现从 tenant-private vertical pack 脱敏抽出，作为 v0.1 公开镜像核心叙事的"带电池整机"证据；positioning collateral track 见 [docs/_planning/HELM_POSITIONING_COLLATERAL_TRACK_V1.md](docs/_planning/HELM_POSITIONING_COLLATERAL_TRACK_V1.md)
 - **三个执行决策确认**（2026-05-18 二次确认）：
-  1. **`docs/sales/GUANGPU_*` 处置 = 移到 `docs/internal/sales/`**（决策 b）。origin/main 上已落地的销售文档与新口径冲突；独立 PR off origin/main 移动，不影响当前 positioning cascade PR
-  2. **Grandfathered direct pilot 政策**：Guangpu 等既存试点客户作为**特殊历史安排**保留 Helm Inc. 直营关系，**不复用**；新客户一律走 Certified DP / Helm Cloud / Helm Enterprise。政策落到 [docs/internal/HELM_GRANDFATHERED_DIRECT_PILOTS_POLICY_V1.md](docs/internal/HELM_GRANDFATHERED_DIRECT_PILOTS_POLICY_V1.md)（internal-only）
+  1. **legacy direct-sales collateral 处置 = 移到 internal-only sales archive**（决策 b）。origin/main 上已落地的历史销售文档与新口径冲突；独立 PR off origin/main 移动，不影响当前 positioning cascade PR
+  2. **Grandfathered direct pilot 政策**：2026-05-18 GTM 切换前已落地的既有受控试点客户作为**特殊历史安排**保留直连关系，**不复用**；新客户一律走 Certified DP / Helm Cloud / Helm Enterprise。内部执行细则不随开源仓库分发
   3. **5-31 release 是真实目标**，**不延期**。critical path：① case-management-sample 抽取（5 人天，2026-05-22 截止）→ ② D2 onboarding 实跑验证（5-27 截止）→ ③ D3 cookbook（5-29 截止）→ ④ D4 demo video（5-30 截止）→ ⑤ Go/No-Go（5-30）→ ⑥ release（5-31）。任一节点 No-Go 则全停
 
 截至 `2026-05-02`（Release reality alignment + receipt checklist）：
@@ -305,7 +305,7 @@ npm run quality:regression
 - `npm run check:boundaries`：通过
 - `npm run typecheck`：通过
 - `npm run lint`：通过
-- `DATABASE_URL="mysql://root:root@127.0.0.1:3306/helm2026_ci_verify?charset=utf8mb4" DB_RESET_ALLOWLIST=helm2026_ci_verify HELM_SKIP_EXTENSION_SQL=1 npm run db:reset`：通过；不设置 `HELM_SKIP_EXTENSION_SQL=1` 时 Guangpu ODPS SQL 会被 MySQL 执行并报 `Unknown data type: 'STRING'`
+- `DATABASE_URL="mysql://root:root@127.0.0.1:3306/helm2026_ci_verify?charset=utf8mb4" DB_RESET_ALLOWLIST=helm2026_ci_verify HELM_SKIP_EXTENSION_SQL=1 npm run db:reset`：通过；不设置 `HELM_SKIP_EXTENSION_SQL=1` 时 tenant-private extension SQL 会被 MySQL 执行并报 `Unknown data type: 'STRING'`
 - `DATABASE_URL="mysql://root:root@127.0.0.1:3306/helm2026_ci_verify?charset=utf8mb4" npm run test`：461 files / 3287 tests 通过
 - `DATABASE_URL="mysql://root:root@127.0.0.1:3306/helm2026_ci_verify?charset=utf8mb4" npm run self-check`：21 / 21 通过
 - `DATABASE_URL="mysql://root:root@127.0.0.1:3306/helm2026_ci_verify?charset=utf8mb4" npm run release:check`：自动项全部通过；7 个人工 receipt 未满足，按预期 `NOT READY`

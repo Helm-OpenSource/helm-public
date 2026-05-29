@@ -254,8 +254,8 @@ Current branch: `codex/operating-signal-flow-automode`
 
 Prep artifacts created on `2026-05-22`:
 
-1. [HELM_PUBLIC_RELEASE_REWRITE_REF_INVENTORY_2026_05_22.md](../internal/HELM_PUBLIC_RELEASE_REWRITE_REF_INVENTORY_2026_05_22.md)
-2. [HELM_PUBLIC_RELEASE_FREEZE_AND_HISTORY_REWRITE_NOTICE_TEMPLATE_2026_05.md](../internal/HELM_PUBLIC_RELEASE_FREEZE_AND_HISTORY_REWRITE_NOTICE_TEMPLATE_2026_05.md)
+1. rewrite ref inventory（internal-only prep artifact；不随 OSS 仓库分发）
+2. freeze / recovery notice template（internal-only prep artifact；不随 OSS 仓库分发）
 
 Current conclusion:
 

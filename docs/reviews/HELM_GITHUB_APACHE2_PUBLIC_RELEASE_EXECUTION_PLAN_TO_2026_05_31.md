@@ -236,10 +236,8 @@ secret rotation
 
 今天已经补齐的 repo-side 准备项：
 
-1. rewrite 受影响 refs inventory 已导出：
-   - [HELM_PUBLIC_RELEASE_REWRITE_REF_INVENTORY_2026_05_22.md](../internal/HELM_PUBLIC_RELEASE_REWRITE_REF_INVENTORY_2026_05_22.md)
-2. collaborator freeze / recovery notice template 已准备：
-   - [HELM_PUBLIC_RELEASE_FREEZE_AND_HISTORY_REWRITE_NOTICE_TEMPLATE_2026_05.md](../internal/HELM_PUBLIC_RELEASE_FREEZE_AND_HISTORY_REWRITE_NOTICE_TEMPLATE_2026_05.md)
+1. rewrite 受影响 refs inventory 已导出（internal-only prep artifact；不随 OSS 仓库分发）
+2. collaborator freeze / recovery notice template 已准备（internal-only prep artifact；不随 OSS 仓库分发）
 3. 当前环境再次确认：
    - `aliyun` CLI 不存在
    - Aliyun / RDS 相关环境变量不存在

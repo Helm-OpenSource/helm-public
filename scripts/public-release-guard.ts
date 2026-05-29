@@ -199,8 +199,8 @@ const PRIVATE_ROOTS: ReadonlyArray<string> = [
 export const PUBLIC_MIRROR_PRIVATE_ROOTS: ReadonlyArray<string> = PRIVATE_ROOTS;
 
 // Specific files that are internal-only by policy and excluded from the
-// public mirror. The file's own header should declare its internal status.
-// Examples: the relocated long-form README that carries historical context.
+// public mirror. Keep this list narrow: public repo guard / self-check /
+// release-contract scripts belong in the OSS tree and must stay scannable.
 const PRIVATE_FILES: ReadonlyArray<string> = [
   "docs/HELM_INTERNAL_FREEZE_REFERENCE.md",
   // Internal-only documentation maintenance / release orchestration
