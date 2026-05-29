@@ -21,6 +21,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   AlertTriangle,
+  ArrowRight,
   CalendarClock,
   Paperclip,
   Plus,
@@ -36,6 +37,7 @@ import { RecommendationFeedbackButtons } from "@/components/recommendations/reco
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { BlockerCard } from "@/components/shared/blocker-card";
 import { CommitmentCard } from "@/components/shared/commitment-card";
+import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/shared/empty-state";
 import {
@@ -78,6 +80,7 @@ import {
   stageLabels,
 } from "@/data/constants";
 import { useConsoleStore } from "@/hooks/use-console-store";
+import { buildOpportunityAssetHref } from "@/features/business-assets/hrefs";
 import {
   getLocalizedOpportunityTypeLabels,
   getLocalizedRiskLabels,
@@ -748,14 +751,14 @@ export function OpportunitiesClient({
       : "放宽筛选，或新建一条。";
   const opportunityOperatingFocus =
     suggestedOrder[0] ?? filtered[0] ?? items[0] ?? null;
-  const _opportunityOperatingTitle = opportunityOperatingFocus
+  const opportunityOperatingTitle = opportunityOperatingFocus
     ? english
       ? `"${opportunityOperatingFocus.title}" is the strongest object to move first right now`
       : `“${displayText(opportunityOperatingFocus.title)}”是当前最值得先推进的机会对象`
     : english
       ? "The opportunity board still needs a real live object before it can rank the next move"
       : "机会面还需要先有真实活跃对象，才能给出可信排序";
-  const _opportunityOperatingSummary = opportunityOperatingFocus
+  const opportunityOperatingSummary = opportunityOperatingFocus
     ? english
       ? `${opportunityOperatingFocus.company?.name ?? "No company"} · ${stageLabelsByLocale[opportunityOperatingFocus.stage]} · ${riskLabelsByLocale[opportunityOperatingFocus.riskLevel]}. The board should now tell you whether to push, review, delegate or cool this deal.`
       : `${opportunityOperatingFocus.company?.name ?? "未关联公司"} · ${stageLabelsByLocale[opportunityOperatingFocus.stage]} · ${riskLabelsByLocale[opportunityOperatingFocus.riskLevel]}。这张机会面现在应该直接告诉你：该推进、该复核、该委派，还是该收口。`
@@ -1689,6 +1692,55 @@ export function OpportunitiesClient({
         }
       />
 
+      <CustomerAssetFocusStrip
+        eyebrow={english ? "Customer asset" : "客户资产"}
+        title={opportunityOperatingTitle}
+        summary={opportunityOperatingSummary}
+        primaryAction={
+          opportunityOperatingFocus
+            ? {
+                label: english ? "Open opportunity" : "打开机会",
+                href: buildOpportunityDetailHref(opportunityOperatingFocus.id),
+              }
+            : {
+                label: english ? "Create opportunity" : "新建机会",
+                href: "/opportunities#opportunity-workspace",
+              }
+        }
+        secondaryAction={{
+          label: english ? "High-risk only" : "只看高风险",
+          href: "/opportunities?preset=high-risk&sort=risk",
+        }}
+        items={[
+          {
+            label: english ? "Current state" : "当前状态",
+            value: opportunityOperatingSnapshot.objectState,
+            tone: "info",
+          },
+          {
+            label: english ? "Pressure" : "当前压力",
+            value: opportunityOperatingSnapshot.blocker,
+            tone:
+              opportunityOperatingFocus?.riskLevel === "HIGH" ||
+              opportunityOperatingFocus?.riskLevel === "CRITICAL"
+                ? "danger"
+                : "warning",
+          },
+          {
+            label: english ? "Next decision" : "下一步判断",
+            value: opportunityOperatingSnapshot.pendingDecision,
+            detail: opportunityOperatingSnapshot.nextAction,
+            href: opportunityOperatingFocus
+              ? buildOpportunityDetailHref(
+                  opportunityOperatingFocus.id,
+                  OPPORTUNITY_PAGE_ANCHORS.actionWorkspace,
+                )
+              : undefined,
+            tone: "success",
+          },
+        ]}
+      />
+
       <HomeSurfaceArrivalBanner
         kind="detail"
         english={english}
@@ -1784,176 +1836,200 @@ export function OpportunitiesClient({
             />
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[1.6fr_repeat(3,minmax(0,0.9fr))]">
-            <div className="space-y-2">
-              <p className="workspace-toolbar-label">
-                {english ? "Search" : "搜索"}
-              </p>
-              <Input
-                aria-label={english ? "Search opportunities" : "搜索机会"}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={
-                  english
-                    ? "Search title, company or contact"
-                    : "搜索标题、公司或联系人"
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <p className="workspace-toolbar-label">
-                {english ? "Type" : "类型"}
-              </p>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger
-                  aria-label={english ? "Type filter" : "类型筛选"}
-                >
-                  <SelectValue
-                    placeholder={english ? "Type filter" : "类型筛选"}
+          <details
+            className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
+            data-testid="opportunity-filter-disclosure"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+                  {english ? "Filter and sort" : "筛选和排序"}
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Open only when you need to narrow the ranked opportunity list."
+                    : "只有要收窄机会清单时再展开。"}
+                </span>
+              </span>
+              <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
+                {english ? "Open filters" : "展开筛选"}
+              </span>
+            </summary>
+            <div className="space-y-3 px-4 pb-4">
+              <div className="grid gap-3 xl:grid-cols-[1.6fr_repeat(3,minmax(0,0.9fr))]">
+                <div className="space-y-2">
+                  <p className="workspace-toolbar-label">
+                    {english ? "Search" : "搜索"}
+                  </p>
+                  <Input
+                    aria-label={english ? "Search opportunities" : "搜索机会"}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={
+                      english
+                        ? "Search title, company or contact"
+                        : "搜索标题、公司或联系人"
+                    }
                   />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {english ? "All types" : "全部类型"}
-                  </SelectItem>
-                  {Object.entries(typeLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <p className="workspace-toolbar-label">
-                {english ? "Stage" : "阶段"}
-              </p>
-              <Select value={stageFilter} onValueChange={setStageFilter}>
-                <SelectTrigger
-                  aria-label={english ? "Stage filter" : "阶段筛选"}
-                >
-                  <SelectValue
-                    placeholder={english ? "Stage filter" : "阶段筛选"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {english ? "All stages" : "全部阶段"}
-                  </SelectItem>
-                  {Object.entries(stageLabelsByLocale).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <p className="workspace-toolbar-label">
-                {english ? "Sort" : "排序"}
-              </p>
-              <Select
-                value={sortBy}
-                onValueChange={(value) =>
-                  setSortBy(value as "priority" | "risk" | "due" | "updated")
-                }
-              >
-                <SelectTrigger aria-label={english ? "Sort" : "排序"}>
-                  <SelectValue placeholder={english ? "Sort" : "排序"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="priority">
-                    {english ? "By priority" : "按优先级"}
-                  </SelectItem>
-                  <SelectItem value="updated">
-                    {english ? "By last updated" : "按最近更新"}
-                  </SelectItem>
-                  <SelectItem value="due">
-                    {english ? "By due date" : "按截止时间"}
-                  </SelectItem>
-                  <SelectItem value="risk">
-                    {english ? "By risk" : "按风险等级"}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid gap-3 xl:grid-cols-[1fr_1fr_1fr]">
-            <div className="space-y-2">
-              <p className="workspace-toolbar-label">
-                {english ? "Risk" : "风险"}
-              </p>
-              <Select value={riskFilter} onValueChange={setRiskFilter}>
-                <SelectTrigger
-                  aria-label={english ? "Risk filter" : "风险筛选"}
-                  data-testid="opportunity-risk-filter"
-                >
-                  <SelectValue
-                    placeholder={english ? "Risk filter" : "风险筛选"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {english ? "All risks" : "全部风险"}
-                  </SelectItem>
-                  {Object.entries(riskLabelsByLocale).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <p className="workspace-toolbar-label">
-                {english ? "Owner" : "负责人"}
-              </p>
-              <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-                <SelectTrigger
-                  aria-label={english ? "Owner filter" : "负责人筛选"}
-                >
-                  <SelectValue
-                    placeholder={english ? "Owner filter" : "负责人筛选"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {english ? "All owners" : "全部负责人"}
-                  </SelectItem>
-                  {memberships.map((membership) => (
-                    <SelectItem
-                      key={membership.user.id}
-                      value={membership.user.id}
+                </div>
+                <div className="space-y-2">
+                  <p className="workspace-toolbar-label">
+                    {english ? "Type" : "类型"}
+                  </p>
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger
+                      aria-label={english ? "Type filter" : "类型筛选"}
                     >
-                      {membership.user.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      <SelectValue
+                        placeholder={english ? "Type filter" : "类型筛选"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {english ? "All types" : "全部类型"}
+                      </SelectItem>
+                      {Object.entries(typeLabels).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="workspace-toolbar-label">
+                    {english ? "Stage" : "阶段"}
+                  </p>
+                  <Select value={stageFilter} onValueChange={setStageFilter}>
+                    <SelectTrigger
+                      aria-label={english ? "Stage filter" : "阶段筛选"}
+                    >
+                      <SelectValue
+                        placeholder={english ? "Stage filter" : "阶段筛选"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {english ? "All stages" : "全部阶段"}
+                      </SelectItem>
+                      {Object.entries(stageLabelsByLocale).map(
+                        ([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="workspace-toolbar-label">
+                    {english ? "Sort" : "排序"}
+                  </p>
+                  <Select
+                    value={sortBy}
+                    onValueChange={(value) =>
+                      setSortBy(value as "priority" | "risk" | "due" | "updated")
+                    }
+                  >
+                    <SelectTrigger aria-label={english ? "Sort" : "排序"}>
+                      <SelectValue placeholder={english ? "Sort" : "排序"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="priority">
+                        {english ? "By priority" : "按优先级"}
+                      </SelectItem>
+                      <SelectItem value="updated">
+                        {english ? "By last updated" : "按最近更新"}
+                      </SelectItem>
+                      <SelectItem value="due">
+                        {english ? "By due date" : "按截止时间"}
+                      </SelectItem>
+                      <SelectItem value="risk">
+                        {english ? "By risk" : "按风险等级"}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 xl:grid-cols-[1fr_1fr_1fr]">
+                <div className="space-y-2">
+                  <p className="workspace-toolbar-label">
+                    {english ? "Risk" : "风险"}
+                  </p>
+                  <Select value={riskFilter} onValueChange={setRiskFilter}>
+                    <SelectTrigger
+                      aria-label={english ? "Risk filter" : "风险筛选"}
+                      data-testid="opportunity-risk-filter"
+                    >
+                      <SelectValue
+                        placeholder={english ? "Risk filter" : "风险筛选"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {english ? "All risks" : "全部风险"}
+                      </SelectItem>
+                      {Object.entries(riskLabelsByLocale).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="workspace-toolbar-label">
+                    {english ? "Owner" : "负责人"}
+                  </p>
+                  <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+                    <SelectTrigger
+                      aria-label={english ? "Owner filter" : "负责人筛选"}
+                    >
+                      <SelectValue
+                        placeholder={english ? "Owner filter" : "负责人筛选"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {english ? "All owners" : "全部负责人"}
+                      </SelectItem>
+                      {memberships.map((membership) => (
+                        <SelectItem
+                          key={membership.user.id}
+                          value={membership.user.id}
+                        >
+                          {membership.user.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="workspace-toolbar-label">
+                    {english ? "More filters" : "更多筛选"}
+                  </p>
+                  <Select value={actionFilter} onValueChange={setActionFilter}>
+                    <SelectTrigger
+                      aria-label={english ? "More filters" : "更多筛选"}
+                    >
+                      <SelectValue
+                        placeholder={english ? "More filters" : "更多筛选"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {actionFilterOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <p className="workspace-toolbar-label">
-                {english ? "More filters" : "更多筛选"}
-              </p>
-              <Select value={actionFilter} onValueChange={setActionFilter}>
-                <SelectTrigger
-                  aria-label={english ? "More filters" : "更多筛选"}
-                >
-                  <SelectValue
-                    placeholder={english ? "More filters" : "更多筛选"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {actionFilterOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          </details>
 
           <div className="workspace-toolbar flex flex-wrap items-center gap-2 rounded-[24px] px-3 py-3">
             <p className="workspace-toolbar-label pr-1">
@@ -2361,14 +2437,25 @@ export function OpportunitiesClient({
                       {opportunity.owner?.name ??
                         (english ? "Unassigned" : "未分配")}
                     </td>
-                    <td className="py-4 pr-4">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => openDetail(opportunity)}
-                        >
-                          {english ? "Open details" : "查看详情"}
+	                    <td className="py-4 pr-4">
+	                      <div className="flex flex-wrap gap-2">
+	                        <Button asChild size="sm" variant="secondary">
+	                          <Link
+	                            href={buildOpportunityAssetHref(
+	                              opportunity.id,
+	                              "opportunity-list",
+	                            )}
+	                          >
+	                            {english ? "Open asset" : "经营资产"}
+	                            <ArrowRight className="h-4 w-4" />
+	                          </Link>
+	                        </Button>
+	                        <Button
+	                          size="sm"
+	                          variant="ghost"
+	                          onClick={() => openDetail(opportunity)}
+	                        >
+	                          {english ? "Open details" : "查看详情"}
                         </Button>
                         <Button
                           size="sm"
@@ -2432,17 +2519,30 @@ export function OpportunitiesClient({
           </SheetHeader>
           <div className="space-y-5 p-5">
             {activeOpportunity ? (
-              <StartRecordingButton
-                variant="secondary"
-                objectType="OPPORTUNITY"
-                objectId={activeOpportunity.id}
-                objectLabel={activeOpportunity.title}
-                defaultTitle={
-                  english
-                    ? `${activeOpportunity.title} live capture`
-                    : `${activeOpportunity.title} 现场记录`
-                }
-              />
+              <div className="flex flex-wrap gap-2">
+                <Button asChild variant="default">
+                  <Link
+                    href={buildOpportunityAssetHref(
+                      activeOpportunity.id,
+                      "opportunity-sheet",
+                    )}
+                  >
+                    {english ? "Open asset view" : "打开经营资产视图"}
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <StartRecordingButton
+                  variant="secondary"
+                  objectType="OPPORTUNITY"
+                  objectId={activeOpportunity.id}
+                  objectLabel={activeOpportunity.title}
+                  defaultTitle={
+                    english
+                      ? `${activeOpportunity.title} live capture`
+                      : `${activeOpportunity.title} 现场记录`
+                  }
+                />
+              </div>
             ) : null}
             {activeOpportunity ? (
               <div
@@ -3672,11 +3772,22 @@ function OpportunityCard({
             </div>
           </div>
           <UserRound className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-        </div>
-        <div className="grid gap-2">
-          <Button size="sm" variant="secondary" onClick={onOpen}>
-            {english ? "Open details" : "查看详情"}
-          </Button>
+	        </div>
+	        <div className="grid gap-2">
+	          <Button asChild size="sm" variant="secondary">
+	            <Link
+	              href={buildOpportunityAssetHref(
+	                opportunity.id,
+	                "opportunity-card",
+	              )}
+	            >
+	              {english ? "Open asset" : "经营资产"}
+	              <ArrowRight className="h-4 w-4" />
+	            </Link>
+	          </Button>
+	          <Button size="sm" variant="ghost" onClick={onOpen}>
+	            {english ? "Open details" : "查看详情"}
+	          </Button>
           <Button size="sm" variant="ghost" onClick={onGenerateDraft}>
             <Sparkles className="h-4 w-4" />
             {english ? "Generate follow-up draft" : "生成跟进草稿"}

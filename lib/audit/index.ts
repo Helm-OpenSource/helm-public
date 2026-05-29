@@ -1,5 +1,4 @@
-import { ActorType } from "@prisma/client";
-import { db } from "@/lib/db";
+import type { ActorType } from "@prisma/client";
 import { jsonStringify } from "@/lib/utils";
 import {
   getCurrentAuditTraceContext,
@@ -30,6 +29,7 @@ type AuditInput = {
 };
 
 export async function writeAuditLog(input: AuditInput) {
+  const { db } = await import("@/lib/db");
   const ambient = getCurrentAuditTraceContext();
   const trace = {
     traceId: input.trace?.traceId ?? ambient?.traceId ?? null,

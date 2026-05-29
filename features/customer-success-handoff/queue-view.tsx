@@ -22,6 +22,7 @@ import {
   type DetailOperatingSummaryConnection,
 } from "@/components/shared/detail-operating-summary-card";
 import { EmptyState } from "@/components/shared/empty-state";
+import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { buildBusinessLoopGapReadout } from "@/lib/presentation/business-loop-gap-readout";
@@ -206,26 +207,66 @@ export function CustomerSuccessQueueSurfaceView({
                 ))}
               </div>
 
-              <DetailOperatingSummaryCard
-                label={english ? "Current picture" : "当前局面摘要"}
-                items={operatingSummaryItems}
-                connectionsLabel={english ? "Connected chain" : "关联对象与推进链"}
-                connections={operatingSummaryConnections}
+              <CustomerSuccessFrontSummary
+                english={english}
+                objectLabel={operatingSummaryItems[0]?.value ?? pageJudgement}
+                blockerLabel={operatingSummaryItems[1]?.value ?? pageJudgementReason}
+                decisionItems={displayItems(model.protocol.pageDecisionRequest, english)}
+                actions={displayActions(model.protocol.pageNextAction, english)}
+                companyLabel={
+                  topQueueItem?.companyLabel ??
+                  topInboxItem?.companyLabel ??
+                  (english ? "Current account" : "当前客户")
+                }
               />
+
+              <details
+                data-customer-success-supporting-context="true"
+                className="rounded-[22px] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[color:var(--muted-foreground)]">
+                  <span>{english ? "Connected objects and evidence" : "关联对象与依据"}</span>
+                  <span className="text-lg leading-none">&quot;</span>
+                </summary>
+                <div className="mt-4">
+                  <DetailOperatingSummaryCard
+                    label={english ? "Current picture" : "当前局面摘要"}
+                    items={operatingSummaryItems}
+                    connectionsLabel={english ? "Connected chain" : "关联对象与推进链"}
+                    connections={operatingSummaryConnections}
+                  />
+                </div>
+              </details>
             </div>
 
             <div data-frontstage-block="decision-request">
-              <DecisionRequestCard
-                label={english ? "Decision request" : "待拍板事项"}
-                items={displayItems(model.protocol.pageDecisionRequest, english)}
-              />
+              <details className="rounded-[22px] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[color:var(--muted-foreground)]">
+                  <span>{english ? "All decision requests" : "全部待拍板项"}</span>
+                  <span className="text-lg leading-none">&quot;</span>
+                </summary>
+                <div className="mt-4">
+                  <DecisionRequestCard
+                    label={english ? "Decision request" : "待拍板事项"}
+                    items={displayItems(model.protocol.pageDecisionRequest, english)}
+                  />
+                </div>
+              </details>
             </div>
 
             <div data-frontstage-block="next-action" className="space-y-5">
-              <ActionRail
-                label={displayText(model.actionLabel, english)}
-                actions={displayActions(model.protocol.pageNextAction, english)}
-              />
+              <details className="rounded-[22px] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[color:var(--muted-foreground)]">
+                  <span>{displayText(model.actionLabel, english)}</span>
+                  <span className="text-lg leading-none">&quot;</span>
+                </summary>
+                <div className="mt-4">
+                  <ActionRail
+                    label={displayText(model.actionLabel, english)}
+                    actions={displayActions(model.protocol.pageNextAction, english)}
+                  />
+                </div>
+              </details>
 
               <QueueSection
                 label={english ? "Customer success work queue" : "客户成功待处理事项"}
@@ -345,6 +386,86 @@ export function CustomerSuccessQueueSurfaceView({
   );
 }
 
+function CustomerSuccessFrontSummary({
+  english,
+  objectLabel,
+  blockerLabel,
+  decisionItems,
+  actions,
+  companyLabel,
+}: {
+  english: boolean;
+  objectLabel: string;
+  blockerLabel: string;
+  decisionItems: string[];
+  actions: PageNextAction[];
+  companyLabel: string;
+}) {
+  const topDecision = decisionItems[0] ?? (english ? "Choose the next handoff owner." : "先判断谁接手。");
+  const visibleActions = actions.slice(0, 3);
+
+  return (
+    <section
+      className="rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-[0_18px_60px_-48px_rgba(15,23,42,0.45)]"
+      data-customer-success-front-summary="true"
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_minmax(260px,0.78fr)]">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--mode-link)]">
+            {english ? "Now" : "现在接手"}
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold leading-tight text-[color:var(--foreground)]">
+            {objectLabel}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+            {companyLabel}
+          </p>
+        </div>
+
+        <div className="grid gap-3">
+          <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-3">
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+              {english ? "Blocked by" : "当前卡点"}
+            </p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-[color:var(--foreground)]">
+              {blockerLabel}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-3">
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+              {english ? "Decision" : "要你判断"}
+            </p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-[color:var(--foreground)]">
+              {topDecision}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-3">
+          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+            {english ? "Next" : "下一步"}
+          </p>
+          <div className="mt-3 grid gap-2">
+            {visibleActions.map((action, index) => (
+              <Link
+                key={`${action.href}-${action.label}-${index}`}
+                href={action.href}
+                className={
+                  index === 0
+                    ? "theme-primary-action inline-flex min-h-10 items-center justify-center rounded-xl bg-[color:var(--accent)] px-3 text-sm font-semibold text-[color:var(--accent-foreground)]"
+                    : "inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-sm font-semibold text-[color:var(--foreground)]"
+                }
+              >
+                {action.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function FastPathGrid({
   english,
   immediateActions,
@@ -427,6 +548,9 @@ function QueueSection({
   items: CustomerSuccessQueueSurfaceItem[];
   english: boolean;
 }) {
+  const visibleItems = items.slice(0, 3);
+  const hiddenItems = items.slice(3);
+
   return (
     <section data-customer-success-queue-section="true" className="space-y-3">
       <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
@@ -434,9 +558,24 @@ function QueueSection({
       </p>
       {items.length ? (
         <div className="grid gap-3">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <QueueItemCard key={item.id} item={item} english={english} />
           ))}
+          {hiddenItems.length ? (
+            <LazyDisclosure
+              title={
+                english
+                  ? `Show ${hiddenItems.length} more customer lines`
+                  : `展开余下 ${hiddenItems.length} 条客户线`
+              }
+            >
+              <div className="grid gap-3">
+                {hiddenItems.map((item) => (
+                  <QueueItemCard key={item.id} item={item} english={english} />
+                ))}
+              </div>
+            </LazyDisclosure>
+          ) : null}
         </div>
       ) : (
         <EmptyState
@@ -465,6 +604,9 @@ function InboxSection({
   items: CustomerSuccessInboxSurfaceItem[];
   english: boolean;
 }) {
+  const visibleItems = items.slice(0, 3);
+  const hiddenItems = items.slice(3);
+
   return (
     <section data-customer-success-inbox-section="true" className="space-y-3">
       <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
@@ -472,9 +614,24 @@ function InboxSection({
       </p>
       {items.length ? (
         <div className="grid gap-3">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <InboxItemCard key={item.id} item={item} english={english} />
           ))}
+          {hiddenItems.length ? (
+            <LazyDisclosure
+              title={
+                english
+                  ? `Show ${hiddenItems.length} more customer messages`
+                  : `展开余下 ${hiddenItems.length} 条客户消息`
+              }
+            >
+              <div className="grid gap-3">
+                {hiddenItems.map((item) => (
+                  <InboxItemCard key={item.id} item={item} english={english} />
+                ))}
+              </div>
+            </LazyDisclosure>
+          ) : null}
         </div>
       ) : (
         <EmptyState

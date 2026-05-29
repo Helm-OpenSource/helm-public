@@ -15,7 +15,7 @@
  * executeLLMTask, so OpenAI / Qwen / future providers all share the same
  * enforcement.
  *
- * See internal LLM spend / abuse guard spec (T019).
+ * See HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 (internal).
  */
 
 import type { LLMTaskType } from "@/lib/llm/types";
@@ -34,7 +34,7 @@ const DEFAULT_MAX_OUTPUT_TOKENS_BY_TASK: Record<LLMTaskType, number> = {
   OPPORTUNITY_BRIEFING: 1024,
   MEETING_BRIEFING: 1024,
   RECOMMENDATION_EXPLANATION: 1536,
-  EXTERNAL_CASE_ASSIGNMENT: 2048,
+  EXTERNAL_CASE_ASSIGNMENT: 8192,
   EXTERNAL_CASE_ASSIGNMENT_ACTION_BRIEFING: 1536,
   EXTERNAL_EMPLOYEE_SIGNAL_ACTION_BRIEFING: 1536,
   EXTERNAL_EMPLOYEE_SIGNAL_OWNER_ROUTING: 1024,

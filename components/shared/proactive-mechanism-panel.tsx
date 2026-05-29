@@ -162,13 +162,13 @@ function ProactiveFlowCard({
       <div className="mt-5 grid gap-5 border-t border-[color:var(--border)] pt-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
         <div data-page-layer="midstage" className="space-y-4">
           <ReviewSnapshotBlock
-            label={english ? "Review snapshot" : "待复核结果快照"}
+            label={english ? "Prepared actions" : "待确认动作"}
             items={flow.activeReport.activeReportPreparationSummary}
             english={english}
           />
 
           <CollaborationRequestCard
-            label={english ? "Coordination request" : "协作请求"}
+            label={english ? "Support request" : "需要谁配合"}
             mode={flow.collaboration.collaborationMode}
             summary={flow.collaboration.collaborationSummary}
             request={flow.collaboration.collaborationRequest}
@@ -178,7 +178,7 @@ function ProactiveFlowCard({
 
           <div data-worker-assignment="true">
             <WorkerSummary
-              label={english ? "Coordination handoff" : "协作分工"}
+              label={english ? "Owners and support" : "负责人和配合"}
               items={[
                 ...flow.activeReport.activeReportWorkerSummary,
                 ...flow.collaboration.collaborationWorkerAssignment,
@@ -203,7 +203,7 @@ function ProactiveFlowCard({
         <div data-page-layer="evidence">
           <EvidenceDrawer
             marker="active"
-            label={english ? "Evidence drawer" : "证据抽屉"}
+            label={english ? "Sources and context" : "依据与来源"}
             leadingChip={labelForCollaborationMode(flow.collaboration.collaborationMode)}
             summaryItems={[
               ...flow.activeReport.activeReportEvidenceSummary,

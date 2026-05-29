@@ -58,7 +58,8 @@ describe("memory approval evidence context source contract", () => {
   it("keeps object-scoped memory links attached to the linked business object", () => {
     expect(memoryClientSource).toContain("buildObjectScopedMemoryLabel");
     expect(memoryClientSource).toContain("buildObjectScopedMemoryHref");
-    expect(memoryClientSource).toContain('return `/opportunities?opportunityId=${objectId}`');
+    expect(memoryClientSource).toContain("buildBusinessAssetHrefFromObject");
+    expect(memoryClientSource).toContain('source: "memory-scope"');
     expect(memoryClientSource).toContain(
       "objectScopedMemoryHref ? (",
     );

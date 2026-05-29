@@ -1,11 +1,17 @@
-import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
+import { getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { getTodayFocusRecommendations } from "@/lib/recommendations/recommendation.service";
 
 export async function GET(request: Request) {
   try {
-    const user = await requireCurrentUser();
-    const workspace = await getCurrentWorkspace();
+    const session = await getCurrentWorkspaceSessionOrNull();
+
+    if (!session) {
+      return errorResponse("UNAUTHORIZED", "UNAUTHORIZED", 401);
+    }
+
+    const user = session.user;
+    const workspace = session.workspace;
     const data = await getTodayFocusRecommendations({
       workspaceId: workspace.id,
       actorName: user.name,

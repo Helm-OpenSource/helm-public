@@ -289,9 +289,12 @@ function buildDashboardSummary(input: {
       : "当前还没有可影响今日经营判断的租户资源。";
   }
   if (input.blockedResourceCount > 0 && input.primaryImpact) {
+    const resourceName = input.primaryImpact.resourceName.includes(":")
+      ? input.primaryImpact.provider || "客户资源"
+      : input.primaryImpact.resourceName;
     return input.english
-      ? `${input.primaryImpact.resourceKey} is blocking resource-backed judgement until capability or ownership is corrected.`
-      : `${input.primaryImpact.resourceKey} 正在阻断资源驱动判断，需要先修正 capability 或归属。`;
+      ? `${resourceName} is blocking resource-backed judgement until permission or ownership is corrected.`
+      : `${resourceName} 正在阻断资源驱动判断，需要先修正权限或归属。`;
   }
   if (input.reviewQueueResourceCount > 0) {
     return input.english
@@ -330,8 +333,8 @@ function buildOperatingSummary(input: {
   }
   if (input.blockedResourceCount > 0) {
     return input.english
-      ? "A resource capability block is outranking normal operating guidance."
-      : "资源 capability 阻断当前比普通经营建议更优先。";
+      ? "A resource permission block is outranking normal operating guidance."
+      : "资源权限阻断当前比普通经营建议更优先。";
   }
 
   return input.english

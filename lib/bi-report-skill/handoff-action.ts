@@ -1,4 +1,5 @@
 import { ActionType, ActorType, RiskLevel, SourceType } from "@prisma/client";
+import { buildBiReportHandoffActionItemMetadata } from "@/lib/bi-report-skill/action-item-closure";
 import { buildBiReportBusinessHandoffDrafts } from "@/lib/bi-report-skill/business-handoff";
 import { db } from "@/lib/db";
 import type {
@@ -118,13 +119,74 @@ export async function materializeAcceptedBiReportHandoff(input: {
     },
   });
 
+  // Fallback idempotency: if an accepted decision was recreated (new decision id)
+  // but we already materialized a handoff action for this signal+targetType,
+  // reuse the existing ActionItem/ApprovalTask instead of creating a duplicate.
+  // We also rewrite the sourceId/metadata to the latest decision id so downstream
+  // materialization lookups remain consistent.
+  const existingBySignal = existing
+    ? null
+    : await db.actionItem.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          sourceType: SourceType.SYSTEM_INFERENCE,
+          sourceId: { startsWith: "bi-report-handoff:" },
+          metadata: {
+            contains: `"biReportSignalId":"${input.signal.id}"`,
+          },
+        },
+        include: {
+          approvalTask: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+  const riskLevel = mapDraftRiskLevel(draft);
+  const { dueDate, metadata } = buildBiReportHandoffActionItemMetadata({
+    signal: input.signal,
+    decision: input.decision,
+    sourceId,
+    handoffTargetType: draft.targetType,
+    riskLevel,
+  });
+
   if (existing) {
+    await db.actionItem.update({
+      where: { id: existing.id },
+      data: {
+        dueDate,
+        metadata: JSON.stringify(metadata),
+        riskLevel,
+      },
+    });
     return {
       actionItemId: existing.id,
       approvalTaskId: existing.approvalTask?.id ?? undefined,
       created: false,
       href: existing.approvalTask
         ? `/approvals?approvalId=${existing.approvalTask.id}`
+        : `/dashboard`,
+    };
+  }
+
+  if (existingBySignal) {
+    await db.actionItem.update({
+      where: { id: existingBySignal.id },
+      data: {
+        sourceId,
+        dueDate,
+        metadata: JSON.stringify(metadata),
+        riskLevel,
+      },
+    });
+    return {
+      actionItemId: existingBySignal.id,
+      approvalTaskId: existingBySignal.approvalTask?.id ?? undefined,
+      created: false,
+      href: existingBySignal.approvalTask
+        ? `/approvals?approvalId=${existingBySignal.approvalTask.id}`
         : `/dashboard`,
     };
   }
@@ -139,18 +201,13 @@ export async function materializeAcceptedBiReportHandoff(input: {
     description: draft.summary,
     aiReason: `由 BI 经营信号 "${input.signal.title}" 经人工确认后生成。`,
     draftContent: draft.summary,
-    riskLevel: mapDraftRiskLevel(draft),
+    riskLevel,
+    dueDate,
     ownerId: input.signal.ownerUserId ?? undefined,
     approverId: draft.targetType === "approval" ? (input.signal.ownerUserId ?? undefined) : undefined,
     sourceType: SourceType.SYSTEM_INFERENCE,
     sourceId,
-    metadata: {
-      biReportSignalId: input.signal.id,
-      biReportSignalKey: input.signal.signalKey,
-      biReportSkillKey: input.signal.skillKey,
-      handoffDecisionId: input.decision.id,
-      handoffTargetType: draft.targetType,
-    },
+    metadata,
     resultPreview:
       draft.targetType === "approval"
         ? "审批通过后将进入经营动作执行。"

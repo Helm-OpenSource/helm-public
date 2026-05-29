@@ -53,20 +53,20 @@ export default async function SettingsExtensionsPage() {
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--muted-foreground)]">
           {english
-            ? "Enable or disable per-workspace solution extensions. Changes take effect on the next page navigation. Tenant-level access still requires ENABLED_TENANT_KEYS to include this workspace's tenant."
-            : "启用或禁用工作区级别的解决方案扩展。变更下次页面导航生效。租户级别启用仍需 ENABLED_TENANT_KEYS 环境变量包含本工作区所属租户。"}
+            ? "Choose which business extensions this workspace should show. Changes take effect the next time the related page opens."
+            : "选择这个工作区要显示哪些业务扩展。变更会在下次打开相关页面时生效。"}
         </p>
       </div>
 
       <Card className="border-[color:var(--border)]">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">
-            {english ? "Available extensions" : "可配置扩展"}
+            {english ? "Business extensions" : "可启用的业务扩展"}
           </CardTitle>
           <CardDescription className="text-xs">
             {english
-              ? `Workspace: ${workspace.name} (slug=${workspace.slug})`
-              : `工作区：${workspace.name}（slug=${workspace.slug}）`}
+              ? `Current workspace: ${workspace.name}`
+              : `当前工作区：${workspace.name}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -107,9 +107,6 @@ export default async function SettingsExtensionsPage() {
                   <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
                     {english ? entry.descriptionEn : entry.descriptionZh}
                   </p>
-                  <p className="mt-1 font-mono text-[10px] text-[color:var(--muted-foreground)]">
-                    {entry.extensionKey}
-                  </p>
                 </div>
 
                 <form
@@ -141,14 +138,32 @@ export default async function SettingsExtensionsPage() {
         </CardContent>
       </Card>
 
-      <div className="flex gap-2 border-l-2 border-[color:var(--accent)] pl-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
-        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--accent)]" />
-        <p>
-          {english
-            ? "Toggling here flips status in WorkspaceSolutionExtension. The 4-layer access gate (tenant_enabled / tenant_match / extension_status / env_allowlist) still applies; status=ACTIVE alone does not bypass tenant or env gates."
-            : "切换状态写入 WorkspaceSolutionExtension。4 层访问闸门（租户启用 / 租户匹配 / 扩展状态 / env 白名单）仍生效，单独 status=ACTIVE 不会绕过租户或 env 层。"}
-        </p>
-      </div>
+      <details className="group rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-2">
+            <Lock className="h-4 w-4 text-[color:var(--accent)]" />
+            {english ? "Reference: enablement boundary" : "引用：启用边界"}
+          </span>
+          <span className="text-[color:var(--muted-foreground)] group-open:hidden">
+            +
+          </span>
+          <span className="hidden text-[color:var(--muted-foreground)] group-open:inline">
+            -
+          </span>
+        </summary>
+        <div className="mt-3 space-y-2 border-t border-[color:var(--border)] pt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
+          <p>
+            {english
+              ? "Workspace toggles only decide whether an already-allowed extension appears here. Tenant access, environment allowlists and extension status still apply before any extension route opens."
+              : "这里的开关只决定已允许的扩展是否在当前工作区出现。租户访问、环境白名单和扩展状态仍会在扩展页面打开前继续生效。"}
+          </p>
+          <p className="font-mono text-xs">
+            {english
+              ? `Internal reference: workspace=${workspace.slug}`
+              : `内部引用：workspace=${workspace.slug}`}
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

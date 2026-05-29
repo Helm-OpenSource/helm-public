@@ -127,7 +127,7 @@ const SKILL_CATALOG: OperatingSkillDefinition[] = [
   {
     id: "pilot-readiness-diagnostics",
     name: "试点 就绪度 诊断",
-    summary: "把判断建议、记忆、辅助服务、采集、客户关系接入和复核边界压成是否可放量的判断。",
+    summary: "把客户记忆、会议采集、关系接入和待确认动作压成能否继续放量的判断。",
     category: "diagnostics",
     reads: ["recommendationQuality", "memoryQuality", "llmOverview", "captureOverview", "crmSources", "approvalTasks"],
     writes: ["diagnosticsReadiness"],

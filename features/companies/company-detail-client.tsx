@@ -42,6 +42,7 @@ import {
   createCompanyQuickOpportunityAction,
   generateCompanyBriefAction,
 } from "@/features/companies/actions";
+import { buildOpportunityAssetHref } from "@/features/business-assets/hrefs";
 import { generateObjectBriefingAction } from "@/features/memory/actions";
 import { createActionFromRecommendationAction } from "@/features/recommendations/actions";
 import { StartRecordingButton } from "@/features/conversation-capture/start-recording-button";
@@ -270,7 +271,7 @@ export function CompanyDetailClient({
           description: english
             ? "Use the lead opportunity to judge whether this account is still warming or starting to cool."
             : "这条主机会最能说明这个账户是在继续升温还是开始变冷。",
-          href: `/opportunities?opportunityId=${company.opportunities[0].id}`,
+          href: buildOpportunityAssetHref(company.opportunities[0].id, "company-detail"),
         }
       : undefined,
     company.meetings[0]
@@ -347,7 +348,7 @@ export function CompanyDetailClient({
           body: english
             ? `Keep "${company.opportunities[0].title}" coherent before opening another path.`
             : `先让“${company.opportunities[0].title}”保持同向，再考虑拆出新的推进路径。`,
-          href: `/opportunities?opportunityId=${company.opportunities[0].id}`,
+          href: buildOpportunityAssetHref(company.opportunities[0].id, "company-detail"),
           meta: english ? "Opportunity anchor" : "机会锚点",
         }
       : undefined,
@@ -503,7 +504,10 @@ export function CompanyDetailClient({
               {company.opportunities[0] ? (
                 <Button type="button" variant="secondary" asChild>
                   <Link
-                    href={`/opportunities?opportunityId=${company.opportunities[0].id}`}
+                    href={buildOpportunityAssetHref(
+                      company.opportunities[0].id,
+                      "company-detail",
+                    )}
                   >
                     {english ? "Open lead opportunity" : "查看主机会"}
                   </Link>
@@ -1149,7 +1153,7 @@ export function CompanyDetailClient({
                 company.opportunities.map((opportunity) => (
                   <Link
                     key={opportunity.id}
-                    href={`/opportunities?opportunityId=${opportunity.id}`}
+                    href={buildOpportunityAssetHref(opportunity.id, "company-detail")}
                     aria-label={opportunity.title}
                     className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
                   >

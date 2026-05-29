@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { PageHeader } from "@/components/shared/page-header";
+import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -650,14 +652,14 @@ export function DiagnosticsClient({
               ? `${data.captureOverview.totalSessions} capture sessions exist, but completion still needs to become steadier before this reads as a strong wedge.`
               : `当前已有 ${data.captureOverview.totalSessions} 条会议采集，但完成度还需要更稳定，这条入口才能读成强切口。`
             : english
-              ? "No capture-backed meeting entry is visible yet, so the workflow wedge still lacks a strong live entry signal."
-              : "当前还没有采集支撑的会议入口，所以这条工作流切口还缺少强实时入口信号。",
+              ? "No capture-backed meeting entry is visible yet, so the meeting push still lacks a strong live entry signal."
+              : "当前还没有采集支撑的会议入口，所以会议推进还缺少强实时入口信号。",
       blocker:
         meetingEntryStatus === "ready"
           ? null
           : english
-            ? "Meeting entry is still too weak or too unstable, so users may not read this loop as a daily operating entrance."
-            : "会议入口当前还不够强或不够稳定，用户未必会把这条回路读成日常 operating 入口。",
+            ? "Meeting entry is still too weak or too unstable, so users may not read it as a daily operating entrance."
+            : "会议入口当前还不够强或不够稳定，用户未必会把它读成日常推进入口。",
       fix:
         meetingEntryStatus === "ready"
           ? null
@@ -1264,6 +1266,48 @@ export function DiagnosticsClient({
       value: diagnosticsText(item.value),
       description: diagnosticsText(item.description),
     }));
+  const diagnosticsAssetFocusItems = [
+    {
+      label: english ? "Object state" : "对象状态",
+      value: _diagnosticsOperatingSnapshot.objectState,
+      detail: diagnosticsText(meetingWorkflowReadiness.headline),
+      href: "/meetings",
+      tone:
+        meetingWorkflowGrade.status === "ready"
+          ? "success"
+          : meetingWorkflowGrade.status === "watch"
+            ? "warning"
+            : "danger",
+    },
+    {
+      label: english ? "Blocker" : "阻塞",
+      value: _diagnosticsOperatingSnapshot.blocker,
+      detail: english
+        ? "Clear this before reading lower-level checks."
+        : "先处理这一条，再读下层检查。",
+      href: businessLoopGapReadout.connection?.href,
+      tone: businessLoopGapReadout.blocker ? "warning" : "success",
+    },
+    {
+      label: english ? "Pending decision" : "待决策",
+      value: _diagnosticsOperatingSnapshot.pendingDecision,
+      detail: diagnosticsText(firstLoopAdoptionReadout.nextAttention),
+      href: diagnosticsFirstLoopModel.primaryAction.href,
+      tone: "warning",
+    },
+    {
+      label: english ? "Next action" : "下一步动作",
+      value: _diagnosticsOperatingSnapshot.nextAction,
+      detail: english
+        ? `${data.pendingApprovals} review item(s) still require human confirmation.`
+        : `${data.pendingApprovals} 条事项仍需要人工确认。`,
+      href:
+        data.pendingApprovals > 0
+          ? "/approvals#meeting-follow-through-review"
+          : diagnosticsFirstLoopModel.primaryAction.href,
+      tone: "info",
+    },
+  ] as const;
   const _visibleDiagnosticsGuidanceRecommendations =
     diagnosticsGuidanceRecommendations.map((item) => ({
       ...item,
@@ -1298,14 +1342,38 @@ export function DiagnosticsClient({
         }
       />
 
-      <Card id="meeting-workflow-readiness" className="workspace-panel">
-        <CardHeader>
-          <CardTitle>
-            {english ? "Meeting Workflow Readiness" : "会议协同回路就绪度"}
-          </CardTitle>
-          <CardDescription>{copy.meetingWorkflowDescription}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CustomerAssetFocusStrip
+        eyebrow={english ? "Readiness asset" : "就绪资产"}
+        title={
+          english
+            ? "Start with whether the customer loop can move today."
+            : "先判断客户回路今天能不能继续动。"
+        }
+        summary={
+          english
+            ? "The useful readout is the strongest business blocker, the waiting decision, and the next route."
+            : "有效读数是最强经营阻塞、待判断事项和下一步路径。"
+        }
+        items={[...diagnosticsAssetFocusItems]}
+        primaryAction={{
+          label: english ? "Open next check" : "打开下一项",
+          href: diagnosticsFirstLoopModel.primaryAction.href,
+        }}
+        secondaryAction={{
+          label: english ? "Open pending review" : "打开待复核",
+          href: "/approvals#meeting-follow-through-review",
+        }}
+      />
+
+      <LazyDisclosure title={english ? "Reference: meeting loop readiness" : "引用：会议回路就绪度"}>
+        <Card id="meeting-workflow-readiness" className="workspace-panel">
+          <CardHeader>
+            <CardTitle>
+              {english ? "Meeting Workflow Readiness" : "会议协同回路就绪度"}
+            </CardTitle>
+            <CardDescription>{copy.meetingWorkflowDescription}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-[1.02fr_0.98fr]">
             <div className="theme-surface-panel rounded-2xl px-5 py-5">
               <div className="flex flex-wrap items-center gap-2">
@@ -1430,19 +1498,21 @@ export function DiagnosticsClient({
               />
             ))}
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </LazyDisclosure>
 
-      <Card className="workspace-panel">
-        <CardHeader>
-          <CardTitle>
-            {english ? "Pilot readiness judgement" : "试点就绪判断"}
-          </CardTitle>
-          <CardDescription>
-            {diagnosticsText(readiness.summary)}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <LazyDisclosure title={english ? "Reference: pilot readiness judgement" : "引用：试点就绪判断"}>
+        <Card className="workspace-panel">
+          <CardHeader>
+            <CardTitle>
+              {english ? "Pilot readiness judgement" : "试点就绪判断"}
+            </CardTitle>
+            <CardDescription>
+              {diagnosticsText(readiness.summary)}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="theme-surface-panel rounded-2xl px-5 py-5">
             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
               {english ? "Current stage" : "当前阶段"}
@@ -1501,8 +1571,9 @@ export function DiagnosticsClient({
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </LazyDisclosure>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Metric

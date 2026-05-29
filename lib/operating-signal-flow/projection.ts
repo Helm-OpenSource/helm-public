@@ -19,6 +19,7 @@ export type OperatingSignalFlowDisplayStage = {
 
 export type OperatingSignalFlowPressureSignal = {
   id: string;
+  signalKey: string;
   label: string;
   detail: string;
   blocker: string;
@@ -26,6 +27,7 @@ export type OperatingSignalFlowPressureSignal = {
   object: string;
   evidence: string;
   href: string;
+  handoffHref: string;
   status: "blocked" | "review";
 };
 
@@ -141,6 +143,7 @@ export type OperatingSignalFlowDisplayModel = {
   postureHighlights: OperatingSignalFlowPostureHighlight[];
   pressureSignals: OperatingSignalFlowPressureSignal[];
   selectedPressure: {
+    signalKey: string;
     title: string;
     blocker: string;
     note: string;
@@ -148,7 +151,76 @@ export type OperatingSignalFlowDisplayModel = {
     object: string;
     evidence: string;
     href: string;
+    handoffHref: string;
   } | null;
+};
+
+export type OperatingSignalFlowDetailPhaseStatus =
+  | "done"
+  | "current"
+  | "blocked"
+  | "waiting"
+  | "learned";
+
+export type OperatingSignalFlowDetailEvent = {
+  id: string;
+  timeLabel: string;
+  title: string;
+  detail: string;
+  transition: string;
+  source: string;
+  object: string;
+  evidence: string;
+  trace: string;
+  blocker: string | null;
+  status: OperatingSignalFlowStageStatus;
+};
+
+export type OperatingSignalFlowDetailPhase = {
+  id: string;
+  label: string;
+  detail: string;
+  statusLabel: string;
+  status: OperatingSignalFlowDetailPhaseStatus;
+  count: number;
+  stateLabels: string[];
+  events: OperatingSignalFlowDetailEvent[];
+};
+
+export type OperatingSignalFlowDetailModel = {
+  signalKey: string;
+  title: string;
+  eyebrow: string;
+  summary: string;
+  customerAsset: string;
+  source: string;
+  object: string;
+  family: string;
+  state: string;
+  blocker: string;
+  evidence: string;
+  trace: string;
+  dataPosture: OperatingSignalDataPosture;
+  primaryAction: { label: string; href: string; detail: string };
+  secondaryActions: Array<{ label: string; href: string }>;
+  quickFacts: Array<{ label: string; value: string; detail: string }>;
+  lifecycle: {
+    title: string;
+    detail: string;
+    phases: OperatingSignalFlowDetailPhase[];
+  };
+  currentStop: {
+    label: string;
+    title: string;
+    detail: string;
+    blocker: string;
+    evidence: string;
+  };
+  aiPosture: Array<{ label: string; value: string; detail: string }>;
+  evidenceRefs: Array<{ label: string; value: string }>;
+  eventTrail: OperatingSignalFlowDetailEvent[];
+  boundary: string;
+  fixtureBanner: string;
 };
 
 const familyLabels = {
@@ -189,6 +261,10 @@ const customerAssetAliases: Record<string, { zh: string; en: string }> = {
   "Deal:alias-k": { zh: "Acme 年度经营动作控制台试点", en: "Acme annual operating console pilot" },
   "Meeting:alias-j": { zh: "GreenPeak 职位推进同步", en: "GreenPeak hiring sync" },
   "Workspace:demo": { zh: "客户承诺边界场景", en: "customer commitment boundary scene" },
+  "Workspace:runtime-shadow": { zh: "当前工作区经营闭环", en: "Current workspace operating loop" },
+  "action-item-shadow": { zh: "行动候选（脱敏计数）", en: "Action candidate, redacted count" },
+  "approval-task-shadow": { zh: "复核任务（脱敏计数）", en: "Review task, redacted count" },
+  "audit-log-shadow": { zh: "审计回执（脱敏计数）", en: "Audit receipt, redacted count" },
   "capture:alias-f": {
     zh: "Acme 试点承诺型外发草稿",
     en: "Acme pilot commitment-sensitive send draft",
@@ -243,6 +319,9 @@ const sourceKindLabels: Record<string, { zh: string; en: string }> = {
   ask_helm: { zh: "Ask Helm", en: "Ask Helm" },
   internal_capture: { zh: "内部采集", en: "Internal capture" },
   report_skill: { zh: "报告技能", en: "Report skill" },
+  action_item: { zh: "行动候选", en: "Action candidate" },
+  approval_task: { zh: "复核任务", en: "Review task" },
+  audit_log: { zh: "审计回执", en: "Audit receipt" },
 };
 
 const objectKindLabels: Record<
@@ -306,8 +385,8 @@ const lifecyclePhaseDefinitions = [
     id: "object-evidence",
     zh: "客户/机会对齐",
     en: "Customer and deal linked",
-    zhDetail: "把信号挂到客户、机会、承诺或工作区，并检查证据覆盖。",
-    enDetail: "Attach the signal to account, deal, commitment or workspace and check evidence coverage.",
+    zhDetail: "把信号挂到客户、机会或承诺，并检查证据是否够用。",
+    enDetail: "Attach the signal to the customer, opportunity or promise and check whether evidence is enough.",
     states: ["LINKED", "UNRESOLVED_SOURCE", "MISSING_EVIDENCE", "MISSING_OWNER", "STALE_SIGNAL"],
     status: "flowing",
   },
@@ -364,8 +443,8 @@ const lifecycleBranchDefinitions = [
     id: "evidence-object",
     zh: "客户材料缺口",
     en: "Evidence/object",
-    zhDetail: "缺证据、缺 owner、对象未关联时进入人工补齐或复核。",
-    enDetail: "Missing evidence, owner or object link enters human completion or review.",
+    zhDetail: "缺证据、缺负责人、客户未关联时进入人工补齐或复核。",
+    enDetail: "Missing evidence, owner or customer link enters human completion or review.",
     states: ["MISSING_EVIDENCE", "MISSING_OWNER"],
     href: "/approvals",
     status: "review",
@@ -394,6 +473,14 @@ const lifecycleBranchDefinitions = [
 
 const prototypeDisplayPosture: OperatingSignalDataPosture = "fixture";
 const postureHighlightOrder = ["empty", "fixture", "degraded"] as const;
+
+export function buildOperatingSignalFlowSignalHref(
+  signalKey: string,
+  source?: string | null,
+) {
+  const href = `/operating/signals/${encodeURIComponent(signalKey)}`;
+  return source ? `${href}?source=${encodeURIComponent(source)}` : href;
+}
 
 function localize(locale: UiLocale, value: { zh: string; en: string }) {
   return isEnglishLocale(locale) ? value.en : value.zh;
@@ -453,7 +540,13 @@ function formatObjectRef(event: OperatingSignalFlowEvent, locale: UiLocale) {
 }
 
 function formatCustomerAssetForEvent(event: OperatingSignalFlowEvent, locale: UiLocale) {
-  if (!event.objectRef || event.objectKind === "Workspace") {
+  if (!event.objectRef) {
+    return formatSourceRef(event, locale);
+  }
+  if (event.objectRef === "Workspace:runtime-shadow") {
+    return formatObjectRef(event, locale);
+  }
+  if (event.objectKind === "Workspace") {
     return formatSourceRef(event, locale);
   }
   return formatObjectRef(event, locale);
@@ -620,6 +713,313 @@ function buildJourney(
       };
     }),
   };
+}
+
+function detailEventFromEvent(
+  event: OperatingSignalFlowEvent,
+  locale: UiLocale,
+): OperatingSignalFlowDetailEvent {
+  return {
+    id: event.id,
+    timeLabel: formatTimeLabel(event.occurredAt),
+    title: formatState(event.transitionTo, locale),
+    detail: event.boundaryNote,
+    transition: formatTransition(event, locale),
+    source: formatSourceRef(event, locale),
+    object: formatObjectRef(event, locale),
+    evidence: formatEvidence(event, locale),
+    trace: formatTrace(event, locale),
+    blocker: event.currentBlockerType
+      ? formatBlocker(event.currentBlockerType, locale)
+      : null,
+    status: statusForEvent(event),
+  };
+}
+
+function phaseIndexForState(state: string | null) {
+  if (!state) return -1;
+  return lifecyclePhaseDefinitions.findIndex((phase) =>
+    (phase.states as readonly string[]).includes(state),
+  );
+}
+
+function detailPhaseStatusLabel(
+  status: OperatingSignalFlowDetailPhaseStatus,
+  locale: UiLocale,
+) {
+  const labels: Record<OperatingSignalFlowDetailPhaseStatus, { zh: string; en: string }> = {
+    done: { zh: "已走过", en: "covered" },
+    current: { zh: "当前", en: "current" },
+    blocked: { zh: "停住", en: "stopped" },
+    waiting: { zh: "未到", en: "waiting" },
+    learned: { zh: "已沉淀", en: "learned" },
+  };
+  return localize(locale, labels[status]);
+}
+
+function detailPhaseStatusForIndex(
+  phaseIndex: number,
+  currentPhaseIndex: number,
+  currentEventStatus: OperatingSignalFlowStageStatus,
+): OperatingSignalFlowDetailPhaseStatus {
+  if (phaseIndex > currentPhaseIndex) return "waiting";
+  if (phaseIndex < currentPhaseIndex) return "done";
+  if (currentEventStatus === "blocked") return "blocked";
+  if (currentEventStatus === "learned") return "learned";
+  return "current";
+}
+
+function findSignalEventsInList(
+  events: readonly OperatingSignalFlowEvent[],
+  signalKey: string,
+) {
+  const normalizedSignalKey = decodeURIComponent(signalKey);
+  return events
+    .filter(
+      (event) =>
+        event.signalKey === normalizedSignalKey ||
+        event.mergedIntoSignalKey === normalizedSignalKey ||
+        event.supersededBySignalKey === normalizedSignalKey,
+    )
+    .sort(
+      (first, second) =>
+        String(first.occurredAt).localeCompare(String(second.occurredAt)) ||
+        first.id.localeCompare(second.id),
+    );
+}
+
+function buildDetailPhases(
+  events: OperatingSignalFlowEvent[],
+  currentEvent: OperatingSignalFlowEvent,
+  locale: UiLocale,
+): OperatingSignalFlowDetailPhase[] {
+  const fallbackFromIndex = phaseIndexForState(currentEvent.transitionFrom);
+  const currentPhaseIndex = Math.max(
+    phaseIndexForState(currentEvent.transitionTo),
+    fallbackFromIndex,
+    0,
+  );
+  const currentEventStatus = statusForEvent(currentEvent);
+
+  return lifecyclePhaseDefinitions.map((phase, index) => {
+    const phaseEvents = events.filter((event) =>
+      (phase.states as readonly string[]).includes(event.transitionTo),
+    );
+    const status = detailPhaseStatusForIndex(
+      index,
+      currentPhaseIndex,
+      currentEventStatus,
+    );
+
+    return {
+      id: phase.id,
+      label: localize(locale, { zh: phase.zh, en: phase.en }),
+      detail: localize(locale, { zh: phase.zhDetail, en: phase.enDetail }),
+      statusLabel: detailPhaseStatusLabel(status, locale),
+      status,
+      count: phaseEvents.length,
+      stateLabels: phase.states.map((state) => formatState(state, locale)),
+      events: phaseEvents.map((event) => detailEventFromEvent(event, locale)),
+    };
+  });
+}
+
+function formatDetailBoundary(
+  dataPosture: OperatingSignalDataPosture,
+  lastEvent: OperatingSignalFlowEvent,
+  locale: UiLocale,
+) {
+  if (dataPosture === "current_window") {
+    return isEnglishLocale(locale)
+      ? `${lastEvent.boundaryNote} This current-window shadow detail is still a route-disconnected projection: no production page adoption, send, approval, writeback, connector action, or customer commitment is executed here.`
+      : `${lastEvent.boundaryNote} 这个当前窗口 shadow 详情仍是未接路由的投影：这里不代表生产页面已接入，不外发、不审批、不写回、不触发连接器动作，也不代表客户承诺已经成立。`;
+  }
+
+  return isEnglishLocale(locale)
+    ? `${lastEvent.boundaryNote} This fixture detail remains read-only: no send, approval, writeback, connector action, or customer commitment is executed here.`
+    : `${lastEvent.boundaryNote} 这个 fixture 详情仍然只读：这里不外发、不审批、不写回、不触发连接器动作，也不代表客户承诺已经成立。`;
+}
+
+function formatDetailBanner(dataPosture: OperatingSignalDataPosture, locale: UiLocale) {
+  const labels: Record<OperatingSignalDataPosture, { zh: string; en: string }> = {
+    empty: {
+      zh: "空窗口详情投影，仅用于验证空态路径，不代表真实客户生产数据。",
+      en: "Empty-window detail projection for path verification only; not live customer production data.",
+    },
+    fixture: {
+      zh: "脱敏 fixture 数据，仅用于路径和体验验证，不是真实客户生产数据。",
+      en: "Redacted fixture data for route and UX verification; not live customer production data.",
+    },
+    degraded: {
+      zh: "降级窗口详情投影，只暴露受影响路径，不刷新凭据或同步连接器。",
+      en: "Degraded-window detail projection; exposes affected paths only and does not refresh credentials or sync connectors.",
+    },
+    current_window: {
+      zh: "当前窗口 shadow 投影，只展示脱敏计数和经营链路；不代表生产页面已接入。",
+      en: "Current-window shadow projection with redacted counters and lifecycle only; not production page adoption.",
+    },
+  };
+  return localize(locale, labels[dataPosture]);
+}
+
+function buildOperatingSignalFlowDetailDisplayModelFromEvents(
+  sourceEvents: readonly OperatingSignalFlowEvent[],
+  dataPosture: OperatingSignalDataPosture,
+  locale: UiLocale,
+  signalKey: string,
+): OperatingSignalFlowDetailModel | null {
+  const normalizedSignalKey = decodeURIComponent(signalKey);
+  const events = findSignalEventsInList(sourceEvents, normalizedSignalKey);
+  const primaryEvents = events.filter(
+    (event) => event.signalKey === normalizedSignalKey,
+  );
+  const primarySignalEvents = primaryEvents.length ? primaryEvents : events;
+  const firstEvent = primarySignalEvents[0];
+  const lastEvent = latestEvent(primarySignalEvents);
+
+  if (!firstEvent || !lastEvent) {
+    return null;
+  }
+
+  const handoffHref = firstAllowedHref(lastEvent);
+  const handoffLabel = formatNextAction(handoffHref, locale);
+  const customerAsset = formatCustomerAssetForEvent(lastEvent, locale);
+  const source = formatSourceRef(firstEvent, locale);
+  const object = formatObjectRef(lastEvent, locale);
+  const family = formatFamily(lastEvent.signalFamily, locale);
+  const blocker = formatBlocker(lastEvent.currentBlockerType, locale);
+  const evidence = formatEvidence(lastEvent, locale);
+  const currentState = formatState(lastEvent.transitionTo, locale);
+  const eventTrail = events.map((event) => detailEventFromEvent(event, locale));
+  const evidenceRefs = unique(events.flatMap((event) => event.evidenceRefs)).map(
+    (ref, index) => ({
+      label: isEnglishLocale(locale) ? `Evidence ${index + 1}` : `依据 ${index + 1}`,
+      value: ref,
+    }),
+  );
+  const encodedSignalKey = encodeURIComponent(normalizedSignalKey);
+
+  return {
+    signalKey: normalizedSignalKey,
+    title: customerAsset,
+    eyebrow: isEnglishLocale(locale) ? "Operating signal lifecycle" : "经营信号全生命周期",
+    summary: isEnglishLocale(locale)
+      ? `${customerAsset} is now at ${currentState}. Helm has prepared the customer material and evidence; the next handoff is ${handoffLabel}, without send or writeback authority.`
+      : `${customerAsset} 现在处在「${currentState}」。Helm 已把客户材料和证据整理出来，下一步承接到「${handoffLabel}」，不外发、不写回。`,
+    customerAsset,
+    source,
+    object,
+    family,
+    state: currentState,
+    blocker,
+    evidence,
+    trace: formatTrace(lastEvent, locale),
+    dataPosture,
+    primaryAction: {
+      label: handoffLabel,
+      href: handoffHref,
+      detail: lastEvent.boundaryNote,
+    },
+    secondaryActions: [
+      {
+        label: isEnglishLocale(locale) ? "Back to operating map" : "回到经营总盘",
+        href: "/operating",
+      },
+      {
+        label: isEnglishLocale(locale) ? "Memory" : "经营记忆",
+        href: `/memory?signal=${encodedSignalKey}`,
+      },
+      {
+        label: isEnglishLocale(locale) ? "Review queue" : "复核队列",
+        href: `/approvals?source=operating-signal&signal=${encodedSignalKey}`,
+      },
+    ],
+    quickFacts: [
+      {
+        label: isEnglishLocale(locale) ? "Customer material" : "客户材料",
+        value: source,
+        detail: firstEvent.sourceRef,
+      },
+      {
+        label: isEnglishLocale(locale) ? "Customer asset" : "客户资产",
+        value: object,
+        detail: lastEvent.objectRef ?? normalizedSignalKey,
+      },
+      {
+        label: isEnglishLocale(locale) ? "Current stop" : "当前停住点",
+        value: blocker,
+        detail: lastEvent.boundaryNote,
+      },
+      {
+        label: isEnglishLocale(locale) ? "Evidence" : "证据",
+        value: evidence,
+        detail: evidenceRefs.map((item) => item.value).join(" / "),
+      },
+    ],
+    lifecycle: {
+      title: isEnglishLocale(locale) ? "Signal lifecycle" : "信号全链路",
+      detail: isEnglishLocale(locale)
+        ? "The visible line starts from customer material, passes through evidence, judgement and human boundary, then waits for receipt and memory."
+        : "可见链路从客户材料开始，经过证据、判断和人工边界，再进入回执和记忆。",
+      phases: buildDetailPhases(events, lastEvent, locale),
+    },
+    currentStop: {
+      label: isEnglishLocale(locale) ? "Current stop" : "当前停住点",
+      title: `${currentState} · ${blocker}`,
+      detail: lastEvent.boundaryNote,
+      blocker,
+      evidence,
+    },
+    aiPosture: [
+      {
+        label: isEnglishLocale(locale) ? "Evidence posture" : "证据姿态",
+        value: evidence,
+        detail: evidenceRefs.map((item) => item.value).join(" / "),
+      },
+      {
+        label: isEnglishLocale(locale) ? "Human boundary" : "人工边界",
+        value: lastEvent.reviewerRequired
+          ? localize(locale, { zh: "需人拍板", en: "human call" })
+          : localize(locale, { zh: "只读观察", en: "read-only" }),
+        detail: lastEvent.boundaryNote,
+      },
+      {
+        label: isEnglishLocale(locale) ? "External authority" : "外部权限",
+        value: "0",
+        detail: lastEvent.forbiddenNextActions.join(" / "),
+      },
+    ],
+    evidenceRefs,
+    eventTrail,
+    boundary: formatDetailBoundary(dataPosture, lastEvent, locale),
+    fixtureBanner: formatDetailBanner(dataPosture, locale),
+  };
+}
+
+export function buildOperatingSignalFlowSnapshotDetailDisplayModel(
+  snapshot: OperatingSignalFlowSnapshot,
+  locale: UiLocale,
+  signalKey: string,
+): OperatingSignalFlowDetailModel | null {
+  return buildOperatingSignalFlowDetailDisplayModelFromEvents(
+    snapshot.events,
+    snapshot.dataPosture,
+    locale,
+    signalKey,
+  );
+}
+
+export function buildOperatingSignalFlowDetailDisplayModel(
+  fixturePack: OperatingSignalFlowFixturePack,
+  locale: UiLocale,
+  signalKey: string,
+): OperatingSignalFlowDetailModel | null {
+  return buildOperatingSignalFlowDetailDisplayModelFromEvents(
+    allEvents(fixturePack),
+    prototypeDisplayPosture,
+    locale,
+    signalKey,
+  );
 }
 
 function statusForFamilyEvolutionCell(
@@ -917,13 +1317,15 @@ export function buildOperatingSignalFlowDisplayModel(
 
   const pressureSignals: OperatingSignalFlowPressureSignal[] = pressureEvents.map((event) => ({
     id: event.id,
+    signalKey: event.signalKey,
     label: `${formatCustomerAssetForEvent(event, locale)} · ${formatFamily(event.signalFamily, locale)}`,
     detail: event.boundaryNote,
     blocker: formatBlocker(event.currentBlockerType, locale),
     source: formatSourceRef(event, locale),
     object: formatObjectRef(event, locale),
     evidence: formatEvidence(event, locale),
-    href: firstAllowedHref(event),
+    href: buildOperatingSignalFlowSignalHref(event.signalKey, "operating-map"),
+    handoffHref: firstAllowedHref(event),
     status: event.boundaryCheckResult === "blocked" ? "blocked" : "review",
   }));
 
@@ -968,13 +1370,18 @@ export function buildOperatingSignalFlowDisplayModel(
     pressureSignals,
     selectedPressure: selectedPressureEvent
       ? {
+          signalKey: selectedPressureEvent.signalKey,
           title: `${formatCustomerAssetForEvent(selectedPressureEvent, locale)} · ${formatFamily(selectedPressureEvent.signalFamily, locale)}`,
           blocker: formatBlocker(selectedPressureEvent.currentBlockerType, locale),
           note: selectedPressureEvent.boundaryNote,
           source: formatSourceRef(selectedPressureEvent, locale),
           object: formatObjectRef(selectedPressureEvent, locale),
           evidence: formatEvidence(selectedPressureEvent, locale),
-          href: firstAllowedHref(selectedPressureEvent),
+          href: buildOperatingSignalFlowSignalHref(
+            selectedPressureEvent.signalKey,
+            "operating-map",
+          ),
+          handoffHref: firstAllowedHref(selectedPressureEvent),
         }
       : null,
   };

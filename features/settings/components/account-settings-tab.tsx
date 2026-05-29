@@ -282,11 +282,11 @@ export function AccountSettingsTab({
                 }
               />
               <Info
-                label={english ? "Conservative handling" : "辅助服务保守处理"}
+                label={english ? "Safe fallback" : "安全兜底"}
                 value={english ? `${data.governanceSummary.llmFallbacks7d}` : `${data.governanceSummary.llmFallbacks7d} 次`}
               />
               <Info
-                label={english ? "Accepted capability suggestions" : "已收敛候选能力"}
+                label={english ? "Reusable practices" : "可复用做法"}
                 value={
                   english
                     ? `${data.governanceSummary.acceptedSkillSuggestionCount}`
@@ -294,7 +294,7 @@ export function AccountSettingsTab({
                 }
               />
               <Info
-                label={english ? "Formal review queue" : "正式评审队列"}
+                label={english ? "Manual confirmation queue" : "待人工确认"}
                 value={
                   english
                     ? `${data.governanceSummary.formalReviewQueueCount}`
@@ -320,8 +320,8 @@ export function AccountSettingsTab({
             </div>
             <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
               {english
-                ? "The current boundary is explainable: high-risk actions wait for review, rule changes leave records, assistive-service failures are handled conservatively, and accepted adjustments become workspace rules or signals."
-                : "当前边界是清楚可讲的：高风险动作先等复核，规则变更会留记录，辅助服务失败会保守处理，已采纳调整会写成工作区规则或信号。"}
+                ? "High-risk actions wait for review, rule changes leave records, service failures fall back safely, and accepted adjustments become workspace rules or signals."
+                : "高风险动作先等复核，规则变更会留记录，服务不可用时会安全兜底，已采纳调整会写成工作区规则或信号。"}
             </div>
           </CardContent>
         </Card>
@@ -357,17 +357,17 @@ export function AccountSettingsTab({
               title={
                 data.governanceSummary.llmFallbacks7d > 0
                   ? english
-                    ? "Recent assistive-service fallback occurred"
-                    : "最近出现过辅助服务保守处理"
+                    ? "Recent safe fallback occurred"
+                    : "最近出现过安全兜底"
                   : english
-                    ? "No recent assistive-service fallback"
-                    : "最近没有新的辅助服务保守处理"
+                    ? "No recent safe fallback"
+                    : "最近没有新的安全兜底"
               }
               body={
                 data.governanceSummary.llmFallbacks7d > 0
                   ? english
                     ? "This does not mean the whole chain failed, but service configuration and quota should be checked before a live walkthrough."
-                    : "这不代表链路失败，但现场走查前最好确认辅助服务配置与调用额度。"
+                    : "这不代表链路失败，但现场走查前最好确认判断服务配置与调用额度。"
                   : english
                     ? "In the most recent data, the assisted flow has largely stayed usable."
                     : "说明最近一轮数据里，辅助判断链路基本可用。"
@@ -377,9 +377,18 @@ export function AccountSettingsTab({
         </Card>
       </div>
 
-      <Card>
+      <details className="rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
+          <span>
+            {english ? "Advanced: judgement service settings" : "高级：判断服务设置"}
+          </span>
+          <span className="rounded-full border border-[color:var(--border)] px-2.5 py-1 text-xs font-medium text-[color:var(--muted-foreground)]">
+            {english ? "Open when configuring" : "配置时展开"}
+          </span>
+        </summary>
+      <Card className="mt-4">
         <CardHeader>
-          <CardTitle>{english ? "Assistive judgement service" : "辅助判断服务状态"}</CardTitle>
+          <CardTitle>{english ? "Judgement service status" : "判断服务状态"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -396,7 +405,7 @@ export function AccountSettingsTab({
               value={formatSettingsModelSelection(llmConfig.defaultModel, english)}
             />
             <Info
-              label={english ? "Provider credential" : "服务凭据"}
+              label={english ? "Service credential" : "服务凭据"}
               value={
                 llmConfig.providerReady
                   ? english
@@ -452,7 +461,7 @@ export function AccountSettingsTab({
           </div>
           <div className="theme-surface-panel rounded-2xl px-4 py-4">
             <p className="text-sm font-semibold text-[color:var(--foreground)]">
-              {english ? "Service switch" : "辅助服务切换"}
+              {english ? "Service switch" : "判断服务切换"}
             </p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
@@ -556,8 +565,8 @@ export function AccountSettingsTab({
             {!canManageWorkspaceSetup ? (
               <p className="mt-4 text-xs leading-6 text-[color:var(--muted-foreground)]">
                 {english
-                  ? "Your current role can inspect assistive-service posture, but workspace setup managers must change service source or service selections."
-                  : "当前角色可以查看辅助服务姿态；服务来源和服务选择需要工作区设置管理员修改。"}
+                  ? "Your current role can inspect the service posture, but workspace setup managers must change service source or service selections."
+                  : "当前角色可以查看服务状态；服务来源和服务选择需要工作区设置管理员修改。"}
               </p>
             ) : null}
             <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -567,24 +576,24 @@ export function AccountSettingsTab({
                 disabled={pending || !canManageWorkspaceSetup}
                 variant="outline"
               >
-                {english ? "Save assistive service" : "保存辅助服务配置"}
+                {english ? "Save judgement service" : "保存判断服务配置"}
               </Button>
             </div>
             <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
               {english
                 ? "Saving uses your selected service values directly. Helm only checks endpoint health and does not require /models probing."
-                : "保存时按你选择的服务值直接写入；这里只做端点健康检查，不要求 /models 探测。"}
+                : "保存时按你选择的服务值直接写入；这里只检查服务是否可用，不要求额外探测。"}
             </p>
           </div>
           <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
             {english
-              ? "Ranking, reviews and rules still follow workspace controls. The assistive service only helps organize meeting facts, briefings and explanations. If the service is not configured or fails, Helm keeps the rule-based result and records why it handled the step conservatively."
-              : "排序、复核和规则仍按工作区控制走；辅助服务只帮助整理会议事实、简报和说明。若服务未配置或调用失败，Helm 会保留原有规则结果，并记录为什么保守处理。"}
+              ? "Ranking, reviews and rules still follow workspace controls. The service only helps organize meeting facts, briefings and explanations. If it is not configured or fails, Helm keeps the rule-based result and records the safe fallback."
+              : "排序、复核和规则仍按工作区控制走；判断服务只帮助整理会议事实、简报和说明。若未配置或调用失败，Helm 会保留规则结果，并记录安全兜底原因。"}
           </div>
           <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
             <div className="theme-surface-panel space-y-3 rounded-2xl px-4 py-4">
               <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                {english ? "Service capabilities" : "辅助服务能力"}
+                {english ? "Service capabilities" : "服务能力"}
               </p>
               {llmConfig.providerSummaries.map((provider) => (
                 <div key={provider.provider} className="workspace-panel rounded-2xl px-4 py-3">
@@ -699,6 +708,7 @@ export function AccountSettingsTab({
           </div>
         </CardContent>
       </Card>
+      </details>
     </TabsContent>
   );
 }

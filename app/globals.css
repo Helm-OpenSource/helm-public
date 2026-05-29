@@ -466,7 +466,7 @@ html[data-theme="dark"] a:not([class*="text-"]):hover {
 html body a.theme-primary-action,
 html body .theme-primary-action,
 html body [data-testid="mobile-hero-action-primary"],
-html body a[href*="/approvals?source=mobile"],
+html body a[href*="/approvals?source=mobile"].theme-primary-action,
 html body a.theme-primary-action :where(span, svg) {
   color: var(--accent-foreground) !important;
   -webkit-text-fill-color: var(--accent-foreground) !important;
@@ -474,14 +474,14 @@ html body a.theme-primary-action :where(span, svg) {
 
 html body a.theme-primary-action,
 html body [data-testid="mobile-hero-action-primary"],
-html body a[href*="/approvals?source=mobile"] {
+html body a[href*="/approvals?source=mobile"].theme-primary-action {
   text-decoration: none !important;
 }
 
 html[data-theme="dark"] body a.theme-primary-action,
 html[data-theme="dark"] body .theme-primary-action,
 html[data-theme="dark"] body [data-testid="mobile-hero-action-primary"],
-html[data-theme="dark"] body a[href*="/approvals?source=mobile"],
+html[data-theme="dark"] body a[href*="/approvals?source=mobile"].theme-primary-action,
 html[data-theme="dark"] body a.theme-primary-action :where(span, svg) {
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
@@ -490,13 +490,13 @@ html[data-theme="dark"] body a.theme-primary-action :where(span, svg) {
 html[data-theme="dark"] body a.theme-primary-action,
 html[data-theme="dark"] body .theme-primary-action,
 html[data-theme="dark"] body [data-testid="mobile-hero-action-primary"],
-html[data-theme="dark"] body a[href*="/approvals?source=mobile"] {
+html[data-theme="dark"] body a[href*="/approvals?source=mobile"].theme-primary-action {
   text-decoration: none !important;
 }
 
 html[data-theme="dark"] body a.theme-primary-action,
 html[data-theme="dark"] body [data-testid="mobile-hero-action-primary"],
-html[data-theme="dark"] body a[href*="/approvals?source=mobile"] {
+html[data-theme="dark"] body a[href*="/approvals?source=mobile"].theme-primary-action {
   background: #2563eb;
   border-color: #1d4ed8;
   color: #ffffff !important;
@@ -512,7 +512,7 @@ html[data-theme="dark"] body .theme-primary-action:hover {
 
 html[data-theme="dark"] body a.theme-primary-action:hover,
 html[data-theme="dark"] body [data-testid="mobile-hero-action-primary"]:hover,
-html[data-theme="dark"] body a[href*="/approvals?source=mobile"]:hover {
+html[data-theme="dark"] body a[href*="/approvals?source=mobile"].theme-primary-action:hover {
   background: #1d4ed8;
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
@@ -596,6 +596,7 @@ html body .signal-flow-track-item {
 
 html body .signal-flow-node {
   position: relative;
+  min-height: 4rem;
   min-width: 0;
   overflow: hidden;
   box-shadow: 0 18px 45px -34px rgba(15, 23, 42, 0.42);

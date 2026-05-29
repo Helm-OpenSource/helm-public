@@ -192,4 +192,27 @@ describe("buildBreadcrumbCrumbs", () => {
       },
     ]);
   });
+
+  it("keeps customer extension paths readable without exposing raw private slugs", () => {
+    expect(buildBreadcrumbCrumbs("/customer-workspace/business-system/readout", false)).toEqual([
+      {
+        href: "/customer-workspace",
+        label: "客户工作区",
+        isDynamic: false,
+        isNavigable: false,
+      },
+      {
+        href: "/customer-workspace/business-system",
+        label: "业务系统",
+        isDynamic: false,
+        isNavigable: false,
+      },
+      {
+        href: "/customer-workspace/business-system/readout",
+        label: "信号复核",
+        isDynamic: false,
+        isNavigable: true,
+      },
+    ]);
+  });
 });

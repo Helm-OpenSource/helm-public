@@ -3,6 +3,10 @@ import {
   OPPORTUNITY_PAGE_ANCHORS,
   buildSectionHref,
 } from "@/lib/presentation/page-section-anchors";
+import {
+  buildCustomerAssetHref,
+  buildOpportunityAssetHref,
+} from "@/features/business-assets/hrefs";
 
 export function buildDashboardMemoryHref(
   objectType?: string | null,
@@ -33,10 +37,12 @@ export function buildDashboardObjectHref(input: {
   opportunityAnchor?: string;
 }) {
   if (input.opportunity) {
-    return buildSectionHref(
-      `/opportunities?opportunityId=${input.opportunity.id}`,
-      input.opportunityAnchor ?? OPPORTUNITY_PAGE_ANCHORS.briefing,
-    );
+    return input.opportunityAnchor
+      ? buildSectionHref(
+          `/opportunities?opportunityId=${input.opportunity.id}`,
+          input.opportunityAnchor ?? OPPORTUNITY_PAGE_ANCHORS.briefing,
+        )
+      : buildOpportunityAssetHref(input.opportunity.id, "dashboard");
   }
 
   if (input.contact) {
@@ -48,7 +54,7 @@ export function buildDashboardObjectHref(input: {
   }
 
   if (input.company) {
-    return `/companies/${input.company.id}`;
+    return buildCustomerAssetHref(input.company.id, "dashboard");
   }
 
   return "/dashboard";
@@ -60,8 +66,10 @@ export function buildTopPriorityHref(item: {
 }) {
   if (item.objectType === "CONTACT") return `/contacts/${item.objectId}`;
   if (item.objectType === "MEETING") return `/meetings/${item.objectId}`;
-  if (item.objectType === "COMPANY") return `/companies/${item.objectId}`;
-  return `/opportunities?opportunityId=${item.objectId}`;
+  if (item.objectType === "COMPANY") {
+    return buildCustomerAssetHref(item.objectId, "dashboard-priority");
+  }
+  return buildOpportunityAssetHref(item.objectId, "dashboard-priority");
 }
 
 export function hasEvidenceTarget<T>(value: T | null | undefined): value is T {

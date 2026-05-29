@@ -49,6 +49,20 @@ export function Sidebar({
   const pathname = usePathname();
   const english = locale === "en-US";
   const demoProfile = demoMode ? getDemoModeProfile(demoMode, locale) : null;
+  const demoShellCopy =
+    demoProfile?.mode === "sales"
+      ? english
+        ? "Customer trials, recovery deals, and security reviews are ranked as today's next moves."
+        : "客户试点、老单恢复、安全评审，已经排成今天的推进动作。"
+      : demoProfile?.mode === "recruiter"
+        ? english
+          ? "Candidate cooling, overdue feedback, and role pressure are ranked for today's delivery."
+          : "候选人降温、反馈逾期、职位压力，已经排成今天的交付动作。"
+        : demoProfile?.mode === "founder"
+          ? english
+            ? "Founder decisions, customer follow-up, and team handoff are ranked for today."
+            : "创始人决策、客户跟进、团队交接，已经排成今天的处理顺序。"
+          : null;
   const operatingNavExclusions = [
     ...(canAccessTenantHealth ? ["/operating/tenant-health"] : []),
     ...(isHelmReserved ? ["/operating/gtm-leads"] : []),
@@ -58,11 +72,6 @@ export function Sidebar({
       href: "/imports",
       label: messages.shell.nav.imports,
       icon: <Upload className="h-4 w-4" />,
-    },
-    {
-      href: "/inbox",
-      label: messages.shell.nav.inbox,
-      icon: <Inbox className="h-4 w-4" />,
     },
     {
       href: "/capture",
@@ -87,6 +96,90 @@ export function Sidebar({
   const settingsActive =
     pathname === "/settings" ||
     settingsLinks.some((item) => pathname.startsWith(item.href));
+  const navSections = [
+    {
+      key: "today",
+      label: english ? "What needs attention" : "今天要处理",
+      items: [
+        {
+          href: "/dashboard",
+          icon: <BarChart3 className="h-4 w-4" />,
+          label: messages.shell.nav.dashboard,
+        },
+        {
+          href: "/operating",
+          icon: <BriefcaseBusiness className="h-4 w-4" />,
+          label: messages.shell.nav.operating,
+          activeDescendantExclusions: operatingNavExclusions,
+        },
+      ],
+    },
+    {
+      key: "work",
+      label: english ? "Customer assets" : "客户资产",
+      items: [
+        ...(isHelmReserved
+          ? [
+              {
+                href: "/operating/gtm-leads",
+                icon: <Target className="h-4 w-4" />,
+                label: messages.shell.nav.gtmLeads,
+              },
+            ]
+          : []),
+        {
+          href: "/opportunities",
+          icon: <Orbit className="h-4 w-4" />,
+          label: messages.shell.nav.opportunities,
+        },
+        {
+          href: "/meetings",
+          icon: <CalendarDays className="h-4 w-4" />,
+          label: messages.shell.nav.meetings,
+        },
+        {
+          href: "/inbox",
+          icon: <Inbox className="h-4 w-4" />,
+          label: messages.shell.nav.inbox,
+        },
+        ...(canAccessTenantHealth
+          ? [
+              {
+                href: "/operating/tenant-health",
+                icon: <Activity className="h-4 w-4" />,
+                label: messages.shell.nav.tenantHealth,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      key: "review",
+      label: english ? "Review and records" : "复核与记录",
+      items: [
+        {
+          href: "/approvals",
+          icon: <CheckSquare className="h-4 w-4" />,
+          label: messages.shell.nav.approvals,
+        },
+        {
+          href: "/memory",
+          icon: <MemoryStick className="h-4 w-4" />,
+          label: messages.shell.nav.memory,
+        },
+        {
+          href: "/reports",
+          icon: <ReceiptText className="h-4 w-4" />,
+          label: messages.shell.nav.reports,
+        },
+        {
+          href: "/mobile",
+          icon: <Smartphone className="h-4 w-4" />,
+          label: messages.shell.nav.mobile,
+        },
+      ],
+    },
+  ];
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[288px] shrink-0 px-4 py-4 lg:flex">
@@ -117,7 +210,9 @@ export function Sidebar({
               )}
             >
               {demoProfile
-                ? demoProfile.badge
+                ? english
+                  ? "Customer scenario"
+                  : "客户推进样例"
                 : english
                   ? "Operating layer"
                   : "经营控制层"}
@@ -141,71 +236,27 @@ export function Sidebar({
               demoProfile ? "text-white" : "text-[color:var(--foreground)]",
             )}
           >
-            {demoProfile ? demoProfile.title : messages.shell.shellHeadline}
+            {demoShellCopy ?? messages.shell.shellHeadline}
           </p>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-3 overflow-y-auto pr-1">
-          <div className="px-1 pb-1">
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Decision loop" : "经营循环"}
-            </p>
-          </div>
-          <NavLink
-            href="/dashboard"
-            icon={<BarChart3 className="h-4 w-4" />}
-            label={messages.shell.nav.dashboard}
-          />
-          <NavLink
-            href="/operating"
-            icon={<BriefcaseBusiness className="h-4 w-4" />}
-            label={messages.shell.nav.operating}
-            activeDescendantExclusions={operatingNavExclusions}
-          />
-          {canAccessTenantHealth ? (
-            <NavLink
-              href="/operating/tenant-health"
-              icon={<Activity className="h-4 w-4" />}
-              label={messages.shell.nav.tenantHealth}
-            />
-          ) : null}
-          {isHelmReserved ? (
-            <NavLink
-              href="/operating/gtm-leads"
-              icon={<Target className="h-4 w-4" />}
-              label={messages.shell.nav.gtmLeads}
-            />
-          ) : null}
-          <NavLink
-            href="/opportunities"
-            icon={<Orbit className="h-4 w-4" />}
-            label={messages.shell.nav.opportunities}
-          />
-          <NavLink
-            href="/meetings"
-            icon={<CalendarDays className="h-4 w-4" />}
-            label={messages.shell.nav.meetings}
-          />
-          <NavLink
-            href="/approvals"
-            icon={<CheckSquare className="h-4 w-4" />}
-            label={messages.shell.nav.approvals}
-          />
-          <NavLink
-            href="/memory"
-            icon={<MemoryStick className="h-4 w-4" />}
-            label={messages.shell.nav.memory}
-          />
-          <NavLink
-            href="/reports"
-            icon={<ReceiptText className="h-4 w-4" />}
-            label={messages.shell.nav.reports}
-          />
-          <NavLink
-            href="/mobile"
-            icon={<Smartphone className="h-4 w-4" />}
-            label={english ? "Mobile" : "移动端"}
-          />
+        <nav className="flex flex-1 flex-col gap-4 overflow-y-auto pr-1">
+          {navSections.map((section) => (
+            <div key={section.key} className="space-y-1">
+              <p className="px-1 pb-1 text-xs font-medium text-[color:var(--muted-foreground)]">
+                {section.label}
+              </p>
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  activeDescendantExclusions={item.activeDescendantExclusions}
+                />
+              ))}
+            </div>
+          ))}
 
           {navExtensionClusters.length > 0 ? (
             <div

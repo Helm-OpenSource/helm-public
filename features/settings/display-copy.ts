@@ -36,12 +36,12 @@ export function formatSettingsModelProviderName(
 
   const normalized = normalizeProviderName(provider.provider || provider.label);
   if (normalized.includes("openai")) {
-    return "主辅助服务";
+    return "主判断服务";
   }
 
   return provider.label && !/[A-Z]{2,}|openai|gpt/i.test(provider.label)
     ? provider.label
-    : "辅助服务";
+    : "判断服务";
 }
 
 export function formatSettingsModelProviderDetail(
@@ -60,8 +60,8 @@ export function formatSettingsCurrentModelProvider(
 ) {
   if (english) return provider;
 
-  if (!provider) return "未指定辅助服务";
-  return enabled ? "辅助服务已启用" : "辅助服务未启用";
+  if (!provider) return "未指定判断服务";
+  return enabled ? "判断服务已启用" : "判断服务未启用";
 }
 
 export function formatSettingsModelSelection(
@@ -155,12 +155,12 @@ export function formatSettingsSkillSuggestionText(
     .replace(/review-before-send/gi, "发送前复核")
     .replace(/自动发送外部消息/g, "获得对外发送权限")
     .replace(/approved-pending-promotion/gi, "已通过但待晋级")
-    .replace(/probationary capability/gi, "试运行能力")
-    .replace(/candidate capability/gi, "候选能力")
+    .replace(/probationary capability/gi, "试运行做法")
+    .replace(/candidate capability/gi, "可复用做法")
     .replace(/candidate-only/gi, "仅候选")
-    .replace(/formal review ready/gi, "达到正式评审条件")
-    .replace(/formal review/gi, "正式评审")
-    .replace(/formal skill/gi, "正式能力")
+    .replace(/formal review ready/gi, "达到人工确认条件")
+    .replace(/formal review/gi, "人工确认")
+    .replace(/formal skill/gi, "正式做法")
     .replace(/skill catalog/gi, "能力目录")
     .replace(/\bcatalog\b/gi, "目录")
     .replace(/\btests\b/gi, "测试")

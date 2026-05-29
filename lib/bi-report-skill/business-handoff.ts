@@ -80,6 +80,21 @@ function buildMetricDetailLines(signal: BiReportBusinessSignalRecord) {
   const metrics = signal.metrics ?? {};
   const evidence = signal.evidence ?? {};
 
+  type SignalTypeCountRow = { type: string; count: number };
+  function readSignalTypeCountRows(value: unknown): SignalTypeCountRow[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item): SignalTypeCountRow | null => {
+        if (!item || typeof item !== "object") return null;
+        const row = item as Record<string, unknown>;
+        const type = typeof row.type === "string" ? row.type : row.type == null ? "" : String(row.type);
+        const count = typeof row.count === "number" && Number.isFinite(row.count) ? row.count : Number(String(row.count ?? ""));
+        if (!type) return null;
+        return { type, count: Number.isFinite(count) ? count : 0 };
+      })
+      .filter((item): item is SignalTypeCountRow => item != null);
+  }
+
   switch (signal.signalType) {
     case "daily_process_weak_signal":
       return [
@@ -106,6 +121,30 @@ function buildMetricDetailLines(signal: BiReportBusinessSignalRecord) {
         lines.push(`- 异常信号数：当前 ${formatNumber(signalCount)} 个`);
       }
       if (relatedSignalTypes.length) {
+        lines.push(`- 涉及信号：${relatedSignalTypes.map(mapSignalTypeLabel).join("、")}`);
+      }
+      return lines;
+    }
+    case "hp.manager_intervention_required": {
+      const signalCount = readNumber(metrics.signalCount);
+      const relatedSignalTypes = readStringArray(evidence.relatedSignalTypes);
+      const typeCounts = readSignalTypeCountRows(
+        (evidence as Record<string, unknown>).relatedSignalTypeCounts,
+      );
+      const lines: string[] = [];
+      if (signalCount != null) {
+        lines.push(`- 异常信号数：当前 ${formatNumber(signalCount)} 条`);
+      }
+      if (typeCounts.length) {
+        const top = typeCounts
+          .slice(0, 6)
+          .map((row) => `${mapSignalTypeLabel(row.type)}(${formatNumber(row.count)})`)
+          .filter((item: string) => item.length > 0)
+          .join("、");
+        if (top) {
+          lines.push(`- 信号类型汇总：${top}`);
+        }
+      } else if (relatedSignalTypes.length) {
         lines.push(`- 涉及信号：${relatedSignalTypes.map(mapSignalTypeLabel).join("、")}`);
       }
       return lines;
@@ -167,5 +206,12 @@ function mapSignalTypeLabel(value: string) {
   if (value === "connect_efficiency_gap") return "触达偏弱";
   if (value === "complaint_risk_rising") return "投诉风险升高";
   if (value === "manager_daily_intervention_required") return "主管介入";
+  if (value === "hp.manager_intervention_required") return "主管介入";
+  if (value === "hp.intensity.zero_work") return "作业强度：疑似停摆";
+  if (value === "hp.contact.connect_rate_low") return "触达：接通率偏低";
+  if (value === "hp.repay.timing_rate_low") return "回款：序时达成率偏低";
+  if (value === "hp.reduce.convert_rate_low") return "减免：转化率偏低";
+  if (value === "hp.risk.complaint_unhandled_high") return "风险：投诉未处理偏高";
+  if (value.startsWith("hp.")) return value.slice("hp.".length);
   return value;
 }

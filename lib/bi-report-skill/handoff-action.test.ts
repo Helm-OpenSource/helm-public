@@ -5,6 +5,7 @@ const { dbMock, policyMock } = vi.hoisted(() => ({
     actionItem: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
+      update: vi.fn(),
     },
   },
   policyMock: {
@@ -134,6 +135,18 @@ describe("bi report handoff action materialization", () => {
         actionType: "CREATE_TASK",
         approverId: "owner-1",
         sourceId: "bi-report-handoff:decision-1",
+        dueDate: expect.any(Date),
+        metadata: expect.objectContaining({
+          biReportSignalId: "signal-1",
+          handoffDecisionId: "decision-1",
+          slaPolicy: "bi_report_risk_sla_24h",
+          operating_closure: expect.objectContaining({
+            source: expect.objectContaining({
+              sourceKind: "bi_handoff",
+              sourceId: "bi-report-handoff:decision-1",
+            }),
+          }),
+        }),
       }),
     );
     expect(result).toEqual({

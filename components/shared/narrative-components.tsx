@@ -661,7 +661,10 @@ export function EvidenceDrawer({
         className,
       )}
     >
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-4">
+      <summary
+        aria-label={label}
+        className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-4"
+      >
         <div className="inline-flex min-w-0 max-w-full items-center gap-2 text-sm font-medium text-[color:var(--foreground)]">
           <div className="workspace-note-icon-shell p-2 text-[color:var(--muted)]">
             <FileSearch className="h-4 w-4" />

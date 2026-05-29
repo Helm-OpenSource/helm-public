@@ -309,8 +309,8 @@ function buildAssignmentActionCard(
     nextStep:
       truncate(item.description) ||
       (english
-        ? "Helm has already summarized this assignment batch for you."
-        : "Helm 已经先帮你把这批分案汇总成下一步动作。"),
+        ? "This assignment batch is already condensed into your next move."
+        : "这批分案已经收成你下一步要做的动作。"),
     boundary: defaultBoundary(english, "assignment"),
     href: "/dashboard#employee-assignment-actions",
     ctaLabel: english ? "Open pending action items" : "查看待推进事项",
@@ -372,8 +372,8 @@ function buildTitle(state: DashboardHomeWorkEntryState, english: boolean) {
   switch (state) {
     case "empty-new":
       return english
-        ? "Start from one live signal, not the whole workspace."
-        : "先从一条真实信号开始，而不是一口气看完整个工作区。";
+        ? "Start from one live customer signal."
+        : "先从一条真实客户信号开始。";
     case "first-loop":
       return english
         ? "Move the first loop forward."
@@ -396,16 +396,16 @@ function buildSummary(
   switch (state) {
     case "empty-new":
       return input.english
-        ? "Use role, goal and the first live signal to open one bounded next step. Do not widen into setup, feature discovery or a full dashboard scan."
-        : "先用角色、目标和第一条真实信号打开一条有边界的下一步，不要重新退回初始化、功能浏览或全量首页扫描。";
+        ? "Pick the first real signal, name the business object, and decide the next move."
+        : "先挑第一条真实信号，确认它指向哪个经营对象，再决定下一步。";
     case "first-loop":
       return input.english
         ? "Current loop progress, review pressure and the next move."
         : "当前闭环进度、复核压力和下一步动作。";
     case "returning-active":
       return input.english
-        ? "Top work items, review pressure, resume point and blockers should all point into the next correct surface."
-        : "当前最重要事项、复核压力、恢复起点和阻塞都应该直接把你送进下一个正确工作面。";
+        ? "The top item, review pressure, resume point and blocker now route into the business object you can act on."
+        : "最重要事项、复核压力、恢复起点和阻塞都会直接指向可处理的经营对象。";
     case "review-heavy":
       return input.english
         ? "Customer-visible work should outrank explanation, browsing and broad reporting when multiple approvals are waiting."

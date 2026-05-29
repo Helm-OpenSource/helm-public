@@ -1,8 +1,50 @@
 # Helm Public Open-Source Readiness Repair Plan
 
-更新时间：2026-05-26
-状态：first repair batch complete; DB-backed runtime tests blocked by local MySQL availability
-分支：`codex/open-source-readiness-fixes`
+更新时间：2026-05-29
+状态：helm2026 public mirror sync validation complete; DB-backed e2e blocked by local MySQL availability
+分支：`codex/sync-helm2026-public-upgrades-20260529`
+
+## 0. 当前追加切片：同步 helm2026 public mirror 升级（2026-05-29）
+
+目标：
+
+- 在 `helm-public@a4007b9` 基线上创建 `codex/sync-helm2026-public-upgrades-20260529`，同步 `/Users/qianzhilong/Documents/helm` 中已经进入 public mirror 的最新工作。
+- 以 clean worktree 生成 source public mirror 候选，避免把 source 工作区未跟踪 receipt 或 tenant-private 实现误带入公开仓。
+- 同步 `origin/main@335e4d05` 的公开可见升级，并吸收 source 分支 `e3a0ff5b` 中 public-safe 的 `/health` robustness 变更。
+- 保留 `helm-public` 已有的 Docker quickstart、CI、CodeQL private-repo skip、public readiness gate 修复。
+
+影响面：
+
+- 公开镜像生成后的 shared app / feature / lib / script / docs 差异。
+- `/health` public-safe health page robustness。
+- README / docs index / release-readiness receipt 记录，仅在 public-safe、non-tenant-private 范围内同步。
+
+关键假设：
+
+- source truth 为 `/Users/qianzhilong/Documents/helm`；远端 `origin/main` 是已合并 source 主干，当前本地健康分支只额外提供 `/health` public-safe hardening。
+- `extensions/guangpu/*`、`docs/internal/*`、tenant-private root、commercial-private root 和 local artifacts 不进入 `helm-public`。
+- 本轮是 public repo 代码同步升级，不声明最终 `v0.1.0-trial` release-ready；manual release receipts、fresh-clone production receipt 与 secret-history governance 仍单列。
+
+不做：
+
+- 不直接 push `main`，不 tag，不创建 GitHub release。
+- 不同步 source 工作区未跟踪文件。
+- 不把 tenant-private extension、客户 slug、真实 host、生产凭据或 private implementation 写进公开仓。
+- 不改 source 仓库历史，不在 source 仓库清理用户未跟踪文件。
+
+验证：
+
+- source clean public mirror build / verify。
+- `git diff --check`
+- `npm run check:public-release`
+- `npm run check:boundaries`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test`
+- `npm run build`
+- `npm run e2e`
+- `npm run quality:regression`
+- 远端 PR checks 全绿后通过 PR 合入 `main`。
 
 ## 0. 当前追加切片：同步最新 main 后的公开仓门禁入口收口（2026-05-29）
 

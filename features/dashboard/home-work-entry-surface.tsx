@@ -133,7 +133,7 @@ function ActionRailItem({
   ctaVariant?: "default" | "secondary";
 }) {
   return (
-    <div className="theme-surface-panel flex min-h-[190px] flex-col justify-between rounded-2xl px-4 py-4">
+    <div className="theme-surface-panel flex min-h-[154px] flex-col justify-between rounded-[18px] px-3.5 py-3.5">
       <div className="min-w-0 space-y-3">
         <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
           {icon}
@@ -143,7 +143,9 @@ function ActionRailItem({
           <p className="break-words text-sm font-semibold leading-6 text-[color:var(--foreground)]">
             {title}
           </p>
-          <p className="break-words text-sm leading-6 text-[color:var(--muted)]">{body}</p>
+          <p className="break-words text-sm leading-6 text-[color:var(--muted)]">
+            {body}
+          </p>
         </div>
       </div>
       <div className="mt-4">
@@ -186,11 +188,11 @@ function WorkEntryActionRail({
   return (
     <nav
       aria-label={english ? "Current work quick actions" : "当前工作快速动作"}
-      className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+      className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-5"
       data-dashboard-work-entry-action-rail="true"
     >
       <ActionRailItem
-        label={english ? "Do first" : "先处理"}
+        label={english ? "Move" : "推进"}
         title={primary.title}
         body={primary.nextStep}
         href={primary.href}
@@ -200,7 +202,7 @@ function WorkEntryActionRail({
         ctaVariant="default"
       />
       <ActionRailItem
-        label={english ? "Review pressure" : "复核压力"}
+        label={english ? "Review" : "拍板"}
         title={
           review
             ? english
@@ -224,8 +226,8 @@ function WorkEntryActionRail({
         icon={<ShieldAlert className="h-3.5 w-3.5" />}
       />
       <ActionRailItem
-        label={english ? "Submit signal" : "上报信号"}
-        title={english ? "Add the work signal" : "补进工作新信号"}
+        label={english ? "Signal" : "信号"}
+        title={english ? "Add the work signal" : "上报信号"}
         body={
           english
             ? "When real work changes, add it from Ask Helm before the system guesses."
@@ -236,7 +238,7 @@ function WorkEntryActionRail({
         icon={<CircleAlert className="h-3.5 w-3.5" />}
       />
       <ActionRailItem
-        label={english ? "Data source" : "数据源"}
+        label={english ? "Source" : "来源"}
         title={english ? "Check source coverage" : "检查数据源状态"}
         body={
           english
@@ -406,7 +408,7 @@ export function DashboardHomeWorkEntrySurface({
 }) {
   return (
     <Card
-      className="workspace-panel-muted border-[color:var(--border-strong)]"
+      className="workspace-shell-panel border-[color:var(--border-strong)]"
       data-dashboard-work-entry="true"
     >
       <CardContent className="space-y-5 py-5">
@@ -429,116 +431,129 @@ export function DashboardHomeWorkEntrySurface({
 
         <WorkEntryActionRail model={model} english={english} />
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(0,0.82fr)]">
-          <div className="space-y-4">
-            <Block
-              title={english ? "Top 1-3 work items" : "当前前三项工作"}
-              description={
-                english
-                  ? "Only keep the one to three items that should really get attention now."
-                  : "先看现在最需要注意力的 1-3 件事。"
-              }
-              icon={<Target className="h-3.5 w-3.5" />}
-              items={model.topWorkItems}
-              emptyTitle={
-                english
-                  ? "No ranked work item yet"
-                  : "当前还没有排好序的工作事项"
-              }
-              emptyDescription={
-                english
-                  ? "Once the workspace narrows role, signal and priority, the next work item will appear here."
-                  : "当工作区把角色、信号和优先级收窄后，下一条工作事项会出现在这里。"
-              }
-              ctaVariant="default"
-            />
-            {model.reviewItemsArePrimary ? (
-              <ReviewQueueSummary items={model.reviewItems} english={english} />
-            ) : (
+        <details
+          className="group rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
+          data-dashboard-work-entry-supporting-context="true"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-[color:var(--foreground)]">
+            <span>
+              {english ? "Open ranked candidates and proof" : "展开候选项与依据"}
+            </span>
+            <span className="rounded-full border border-[color:var(--border)] px-2.5 py-1 text-xs text-[color:var(--muted-foreground)] transition group-open:bg-[color:var(--surface-subtle)]">
+              {english ? "Details" : "详情"}
+            </span>
+          </summary>
+          <div className="grid gap-4 px-3 pb-3 xl:grid-cols-[minmax(0,1.18fr)_minmax(0,0.82fr)]">
+            <div className="space-y-4">
               <Block
-                title={english ? "Needs your review" : "待你复核"}
+                title={english ? "Top 1-3 work items" : "当前前三项工作"}
                 description={
                   english
-                    ? "Keep trust-sensitive and decision-heavy work visible on the home surface."
-                    : "需要拍板或影响客户的事项先放在你眼前。"
+                    ? "Only keep the one to three items that should really get attention now."
+                    : "先看现在最需要注意力的 1-3 件事。"
                 }
-                icon={<ShieldAlert className="h-3.5 w-3.5" />}
-                items={model.reviewItems}
+                icon={<Target className="h-3.5 w-3.5" />}
+                items={model.topWorkItems}
                 emptyTitle={
-                  english ? "Review queue is clear" : "当前没有待你复核的事项"
+                  english
+                    ? "No ranked work item yet"
+                    : "当前还没有排好序的工作事项"
                 }
                 emptyDescription={
                   english
-                    ? "New customer-visible work will reappear here once review pressure returns."
-                    : "新的客户可见动作一旦出现，会重新回到这里。"
+                    ? "Once the workspace narrows role, signal and priority, the next work item will appear here."
+                    : "当工作区把角色、信号和优先级收窄后，下一条工作事项会出现在这里。"
                 }
                 ctaVariant="default"
-                actionKind="formal"
               />
-            )}
-          </div>
-
-          <div className="space-y-4">
-            {model.assignmentItems.length ? (
-              <div id="employee-assignment-actions">
+              {model.reviewItemsArePrimary ? (
+                <ReviewQueueSummary items={model.reviewItems} english={english} />
+              ) : (
                 <Block
-                  title={english ? "My pending action items" : "我的待推进事项"}
+                  title={english ? "Needs your review" : "待你复核"}
                   description={
                     english
-                      ? "Helm has already turned this batch's assignment summary into next-step suggestions for you."
-                      : "Helm 已把本批分案汇总先转成你自己的下一步建议。"
+                      ? "Keep trust-sensitive and decision-heavy work visible on the home surface."
+                      : "需要拍板或影响客户的事项先放在你眼前。"
                   }
-                  icon={<ListChecks className="h-3.5 w-3.5" />}
-                  items={model.assignmentItems}
-                  emptyTitle={english ? "No pending action item" : "当前没有待推进事项"}
+                  icon={<ShieldAlert className="h-3.5 w-3.5" />}
+                  items={model.reviewItems}
+                  emptyTitle={
+                    english ? "Review queue is clear" : "当前没有待你复核的事项"
+                  }
                   emptyDescription={
                     english
-                      ? "Once external case-assignment summaries map to your Helm account, they will appear here."
-                      : "当外部分案汇总映射到你的 Helm 账号后，会直接出现在这里。"
+                      ? "New customer-visible work will reappear here once review pressure returns."
+                      : "新的客户可见动作一旦出现，会重新回到这里。"
                   }
+                  ctaVariant="default"
+                  actionKind="formal"
                 />
-              </div>
-            ) : null}
-            <Block
-              title={english ? "Resume / continue" : "继续推进"}
-              description={
-                english
-                  ? "Resume is for work recovery, not for feeds."
-                  : "从上次停下的位置继续，不必重新浏览信息流。"
-              }
-              icon={<Clock3 className="h-3.5 w-3.5" />}
-              items={[model.resumeItem]}
-              emptyTitle={
-                english ? "No resume point yet" : "当前还没有恢复起点"
-              }
-              emptyDescription={
-                english
-                  ? "Once a bounded next step or return anchor is visible, it will appear here."
-                  : "一旦有边界的下一步或回访点成立，这里就会出现恢复入口。"
-              }
-            />
-            <Block
-              title={english ? "Light blocker summary" : "当前卡点"}
-              description={
-                english
-                  ? "Only keep blockers that change what the team should do next."
-                  : "只显示会改变团队下一步动作的阻塞。"
-              }
-              icon={<CircleAlert className="h-3.5 w-3.5" />}
-              items={model.blockerItems}
-              emptyTitle={
-                english
-                  ? "No blocker is outranking work now"
-                  : "当前没有比主工作更高优先级的阻塞"
-              }
-              emptyDescription={
-                english
-                  ? "If blocker pressure rises above the top work items, it will surface here."
-                  : "如果阻塞压力超过当前主工作，它会出现在这里。"
-              }
-            />
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {model.assignmentItems.length ? (
+                <div id="employee-assignment-actions">
+                  <Block
+                    title={english ? "My pending action items" : "我的待推进事项"}
+                    description={
+                      english
+                        ? "This batch's assignment summary is now condensed into your next-step candidates."
+                        : "本批分案汇总已经收成你自己的下一步候选。"
+                    }
+                    icon={<ListChecks className="h-3.5 w-3.5" />}
+                    items={model.assignmentItems}
+                    emptyTitle={english ? "No pending action item" : "当前没有待推进事项"}
+                    emptyDescription={
+                      english
+                        ? "Once external case-assignment summaries map to your account, they will appear here."
+                        : "当外部分案汇总映射到你的账号后，会直接出现在这里。"
+                    }
+                  />
+                </div>
+              ) : null}
+              <Block
+                title={english ? "Resume / continue" : "继续推进"}
+                description={
+                  english
+                    ? "Resume is for work recovery, not for feeds."
+                    : "从上次停下的位置继续，不必重新浏览信息流。"
+                }
+                icon={<Clock3 className="h-3.5 w-3.5" />}
+                items={[model.resumeItem]}
+                emptyTitle={
+                  english ? "No resume point yet" : "当前还没有恢复起点"
+                }
+                emptyDescription={
+                  english
+                    ? "Once a bounded next step or return anchor is visible, it will appear here."
+                    : "一旦有边界的下一步或回访点成立，这里就会出现恢复入口。"
+                }
+              />
+              <Block
+                title={english ? "Light blocker summary" : "当前卡点"}
+                description={
+                  english
+                    ? "Only keep blockers that change what the team should do next."
+                    : "只显示会改变团队下一步动作的阻塞。"
+                }
+                icon={<CircleAlert className="h-3.5 w-3.5" />}
+                items={model.blockerItems}
+                emptyTitle={
+                  english
+                    ? "No blocker is outranking work now"
+                    : "当前没有比主工作更高优先级的阻塞"
+                }
+                emptyDescription={
+                  english
+                    ? "If blocker pressure rises above the top work items, it will surface here."
+                    : "如果阻塞压力超过当前主工作，它会出现在这里。"
+                }
+              />
+            </div>
           </div>
-        </div>
+        </details>
       </CardContent>
     </Card>
   );

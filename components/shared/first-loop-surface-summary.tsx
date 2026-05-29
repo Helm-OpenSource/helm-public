@@ -178,7 +178,10 @@ export function FirstLoopSurfaceSummary({
           </div>
 
           <details className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-3 py-2">
-            <summary className="cursor-pointer list-none text-xs font-semibold text-[color:var(--muted)] marker:content-none [&::-webkit-details-marker]:hidden">
+            <summary
+              aria-label={english ? "More context" : "补充信息"}
+              className="cursor-pointer list-none text-xs font-semibold text-[color:var(--muted)] marker:content-none [&::-webkit-details-marker]:hidden"
+            >
               {english ? "More context" : "补充信息"}
             </summary>
             <div className="mt-3 grid gap-3 md:grid-cols-2">

@@ -1,3 +1,5 @@
+import { buildOpportunityAssetHref } from "@/features/business-assets/hrefs";
+
 export type ApprovalObjectDetailLinkTarget = {
   contact?: { id: string } | null;
   opportunity?: { id: string } | null;
@@ -27,7 +29,7 @@ export function resolveApprovalObjectDetailHref(
     return `/contacts/${target.contact.id}`;
   }
   if (target.opportunity) {
-    return `/opportunities?opportunityId=${target.opportunity.id}`;
+    return buildOpportunityAssetHref(target.opportunity.id, "approval");
   }
   if (target.meeting) {
     return `/meetings/${target.meeting.id}`;

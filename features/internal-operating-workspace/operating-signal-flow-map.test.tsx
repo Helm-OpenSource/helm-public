@@ -50,6 +50,10 @@ describe("OperatingSignalFlowMap", () => {
     expect(display.lifecycle.familyEvolution.map((item) => item.objectSummary).join(" / ")).toContain("Beacon");
     expect(display.lifecycle.familyEvolution.map((item) => item.objectSummary).join(" / ")).toContain("Aya Nakamura");
     expect(display.lifecycle.autoLineDetail).toContain("不外发");
+    expect(display.selectedPressure?.href).toMatch(
+      /^\/operating\/signals\/boundary%3Aalias-f/u,
+    );
+    expect(display.selectedPressure?.handoffHref).toBe("/approvals");
     expect(display.stages.map((item) => item.id)).toEqual([
       "source",
       "collector",
@@ -70,7 +74,7 @@ describe("OperatingSignalFlowMap", () => {
     expect(map).toHaveAttribute("data-animation-policy", "disabled");
     expect(screen.getAllByText("客户经营资产").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("只读复核").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("下一步先判断这件事")).toBeInTheDocument();
+    expect(screen.getByText("先判断这条客户动作")).toBeInTheDocument();
     const summaryNote = screen.getByLabelText("摘要附注");
     expect(summaryNote).toBeInTheDocument();
     expect(summaryNote).toHaveAttribute("aria-expanded", "false");
@@ -80,12 +84,12 @@ describe("OperatingSignalFlowMap", () => {
     expect(screen.getByText(/把 Nimbus、Beacon、GreenPeak/)).toBeInTheDocument();
     expect(screen.getByLabelText("只读附注")).toBeInTheDocument();
     expect(screen.getByTestId("signal-flow-business-summary")).toHaveTextContent(
-      "现在只判断一个问题",
+      "今天最高压力",
     );
     expect(screen.getByTestId("signal-flow-business-summary")).toHaveTextContent(
       "Acme 试点承诺型外发草稿",
     );
-    expect(screen.getByTestId("signal-flow-primary-safety-labels")).toHaveTextContent("只读投影");
+    expect(screen.getByTestId("signal-flow-primary-safety-labels")).toHaveTextContent("仅供判断");
     expect(screen.getByTestId("signal-flow-primary-safety-labels")).toHaveTextContent("未外发");
     expect(screen.getByTestId("signal-flow-primary-safety-labels")).toHaveTextContent("需人工复核");
     expect(screen.getByTestId("signal-flow-business-summary")).toHaveTextContent(
@@ -136,8 +140,40 @@ describe("OperatingSignalFlowMap", () => {
     const links = within(actions).getAllByRole("link");
     const firstLink = links[0]!;
     expect(links).toHaveLength(1);
-    expect(firstLink).toHaveAttribute("href", "/approvals");
-    expect(firstLink.textContent).toMatch(/Open review path/);
+    expect(firstLink).toHaveAttribute(
+      "href",
+      "/operating/signals/boundary%3Aalias-f?source=operating-map",
+    );
+    expect(firstLink.textContent).toMatch(/Open signal lifecycle/);
     expect(firstLink.textContent).not.toMatch(/send|approve|execute|write/i);
+  });
+
+  it("keeps the default layer customer-asset-first instead of product-mechanics-first", () => {
+    const { container } = render(<OperatingSignalFlowMap locale="zh-CN" />);
+    const map = container.querySelector("[data-operating-signal-flow-map='true']");
+
+    expect(map).toBeInTheDocument();
+    const visibleText = map?.textContent ?? "";
+
+    expect(screen.getByTestId("signal-flow-business-summary")).toHaveTextContent(
+      "Acme 试点承诺型外发草稿",
+    );
+    expect(screen.getByTestId("signal-flow-business-summary")).toHaveTextContent(
+      "外部动作需拍板",
+    );
+    expect(screen.getByTestId("signal-flow-business-summary")).toHaveTextContent(
+      "证据 2/2",
+    );
+    expect(screen.getByTestId("signal-flow-control-posture")).toHaveTextContent(
+      "停在人工复核",
+    );
+    expect(screen.getByTestId("signal-flow-control-layer")).not.toHaveTextContent(
+      "最高压力",
+    );
+
+    expect(visibleText).not.toMatch(
+      /ActionItem|ApprovalTask|AuditLog|runtime shadow|operator queue|workflow|review_required|LLM final/i,
+    );
+    expect(screen.queryByText(/fixture/iu)).not.toBeInTheDocument();
   });
 });

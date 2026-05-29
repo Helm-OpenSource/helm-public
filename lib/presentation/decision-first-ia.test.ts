@@ -21,7 +21,7 @@ describe("decision-first IA rollout", () => {
     expect(reportingPanel).toContain("data-reporting-protocol");
     expect(reportingPanel).toContain("Current summary");
     expect(reportingPanel).toContain('data-frontstage-block="current-summary"');
-    expect(reportingPanel).toContain("Review snapshot");
+    expect(reportingPanel).toContain("Prepared actions");
     expect(reportingPanel).toContain("Supporting context");
     expect(reportingPanel).toContain("pageWorkerAssignments");
     expect(reportingPanel).toContain("pageEvidenceGroups");

@@ -11,7 +11,7 @@ describe("approval queue object detail link source contract", () => {
     );
     expect(
       resolveApprovalObjectDetailHref({ opportunity: { id: "opportunity-1" } }),
-    ).toBe("/opportunities?opportunityId=opportunity-1");
+    ).toBe("/assets/opportunity/opportunity-1?source=approval");
     expect(resolveApprovalObjectDetailHref({ meeting: { id: "meeting-1" } })).toBe(
       "/meetings/meeting-1",
     );

@@ -16,10 +16,10 @@ export function WorkspaceStatus({ status, english = false }: WorkspaceStatusProp
     <div className="sticky top-0 z-10 bg-[color:var(--surface)]/95 backdrop-blur-sm border-b border-[color:var(--border)] px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">
+          <p className="text-sm font-semibold leading-snug text-[color:var(--foreground)]">
             {status.workspaceName}
           </p>
-          <p className="mt-0.5 text-sm text-[color:var(--muted)] truncate">
+          <p className="mt-0.5 text-sm leading-snug text-[color:var(--muted)]">
             {status.todaySummary}
           </p>
         </div>

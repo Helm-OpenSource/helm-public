@@ -68,10 +68,10 @@ export function getWorkspaceStory(
         : "升温、停滞，还是在悄悄凉？每家都标好原因和下一次该出手的时点。",
     },
     memory: {
-      eyebrow: english ? "What Helm knows" : "Helm 记住了什么",
+      eyebrow: english ? "Customer asset trail" : "客户资产脉络",
       description: english
-        ? "Every fact, commitment, blocker and correction — replayable, citable, never silently overwritten."
-        : "每条事实、每个承诺、每个阻塞、每次修正——都可回放、可引用，绝不被悄悄覆盖。",
+        ? "Every customer fact, promise, blocker and correction stays traceable."
+        : "客户事实、承诺、阻塞和修正都留在同一条脉络里。",
     },
     reports: {
       eyebrow: english ? "Weekly read" : "周复盘",

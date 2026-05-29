@@ -79,6 +79,18 @@ test.describe("Visual audit — highest-risk pages before company-wide trial", (
     });
   });
 
+  test("opportunities page (PC, viewport)", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginViaDemo(page);
+    await page.goto("/opportunities");
+    await waitForWorkspaceUiHydration(page);
+    await expect(page.locator('[data-customer-asset-focus="true"]')).toBeVisible();
+    await page.screenshot({
+      path: `${SCREENSHOT_DIR}/opportunities-pc-viewport.png`,
+      fullPage: false,
+    });
+  });
+
   test("approvals (PC, viewport)", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await loginViaDemo(page);
@@ -99,6 +111,7 @@ test.describe("Visual audit — highest-risk pages before company-wide trial", (
     await page.goto("/settings");
     await waitForWorkspaceUiHydration(page);
     await page.waitForLoadState("networkidle").catch(() => undefined);
+    await page.getByText(/Advanced: judgement service settings|高级：判断服务设置/).click();
     const assistiveServiceSave = page.getByTestId("settings-assistive-service-save");
     await expect(assistiveServiceSave).toBeVisible({ timeout: 10000 });
     await assistiveServiceSave.scrollIntoViewIfNeeded();

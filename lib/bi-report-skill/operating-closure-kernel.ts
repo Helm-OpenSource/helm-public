@@ -1,4 +1,11 @@
-import { ActorType, ActionExecutionMode, ActionStatus, ActionType, ApprovalStatus, RiskLevel, SourceType } from "@prisma/client";
+import { ActorType, ActionExecutionMode, ActionStatus, ActionType, ApprovalStatus, SourceType } from "@prisma/client";
+import {
+  buildBiReportDirectSignalActionItemMetadata,
+  mapBiReportSeverityToRiskLevel,
+  mergeBiReportActionItemMetadata,
+} from "@/lib/bi-report-skill/action-item-closure";
+import { materializeAcceptedBiReportHandoff } from "@/lib/bi-report-skill/handoff-action";
+import { createBiReportBusinessHandoffDecision } from "@/lib/bi-report-skill/handoff-decision";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
 import type {
@@ -103,6 +110,67 @@ export async function syncBiReportSignalToOperatingClosure(input: {
         ownerUserEmail: owner.user.email,
       },
     });
+  }
+
+  // Hard dedupe: once a signal has entered the canonical BI handoff approval path,
+  // we stop generating the legacy direct "[BI信号]" action/approval to avoid duplicates.
+  // Canonical materialization (bi-report-handoff:<decisionId>) will produce the actionItem
+  // + approval task and is the only path we want visible in /approvals.
+  const requiresApproval = signal.severity === "CRITICAL" || signal.severity === "ALERT";
+  if (requiresApproval) {
+    const acceptedApprovalDecision = await db.biReportBusinessHandoffDecision.findFirst({
+      where: {
+        workspaceId: signal.workspaceId,
+        signalId: signal.id,
+        targetType: "approval",
+        status: "accepted",
+      },
+      select: { id: true },
+    });
+    if (acceptedApprovalDecision) {
+      return summary;
+    }
+  }
+
+  // Outsourcing (HP) signals can be extremely high volume at row level. To keep
+  // /approvals usable, only the roll-up manager intervention signal should
+  // materialize an approval task. Row-level signals should not create approvals.
+  if (
+    signal.skillKey === "bi_outsourcing_operating_signal_daily" &&
+    signal.signalType !== "hp.manager_intervention_required"
+  ) {
+    return summary;
+  }
+
+  // Outsourcing manager roll-up should always go through canonical BI handoff
+  // so /approvals shows "经营审批：" (not the legacy BI closure kernel panel).
+  if (
+    signal.skillKey === "bi_outsourcing_operating_signal_daily" &&
+    signal.signalType === "hp.manager_intervention_required" &&
+    requiresApproval
+  ) {
+    const decision = await createBiReportBusinessHandoffDecision({
+      workspaceId: signal.workspaceId,
+      signalId: signal.id,
+      targetType: "approval",
+      status: "accepted",
+      reviewedByUserId: null,
+      reviewComment: "system: auto-route outsourcing manager roll-up to 经营审批",
+    });
+
+    if (decision) {
+      const materialized = await materializeAcceptedBiReportHandoff({
+        workspaceId: signal.workspaceId,
+        actorUserId: null,
+        actorType: ActorType.SYSTEM,
+        actorName: "系统",
+        signal,
+        decision,
+      });
+      if (materialized?.approvalTaskId) {
+        return { ...summary, actionItemUpserted: true, approvalTaskUpserted: true };
+      }
+    }
   }
 
   const actionItem = await upsertActionItem({
@@ -215,17 +283,41 @@ function mapSeverityToTruthWeight(severity: BiReportSeverity) {
   return 20;
 }
 
-function mapSeverityToRiskLevel(severity: BiReportSeverity): RiskLevel {
-  if (severity === "CRITICAL") return RiskLevel.CRITICAL;
-  if (severity === "ALERT") return RiskLevel.HIGH;
-  if (severity === "WARN") return RiskLevel.MEDIUM;
-  return RiskLevel.LOW;
-}
-
 async function upsertActionItem(input: {
   signal: BiReportBusinessSignalRecord;
   ownerUserId: string | null;
 }) {
+  // If this signal already has an accepted canonical BI handoff approval decision,
+  // prefer the handoff-materialized action item to avoid duplicating a direct
+  // "[BI信号]" action/approval task (sourceId = signalId).
+  const requiresApproval =
+    input.signal.severity === "CRITICAL" || input.signal.severity === "ALERT";
+  if (requiresApproval) {
+    const acceptedApprovalDecision = await db.biReportBusinessHandoffDecision.findFirst({
+      where: {
+        workspaceId: input.signal.workspaceId,
+        signalId: input.signal.id,
+        targetType: "approval",
+        status: "accepted",
+      },
+      select: { id: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (acceptedApprovalDecision) {
+      const canonical = await db.actionItem.findFirst({
+        where: {
+          workspaceId: input.signal.workspaceId,
+          sourceType: SourceType.SYSTEM_INFERENCE,
+          sourceId: `bi-report-handoff:${acceptedApprovalDecision.id}`,
+        },
+      });
+      if (canonical) {
+        return canonical;
+      }
+    }
+  }
+
   const existing = await db.actionItem.findFirst({
     where: {
       workspaceId: input.signal.workspaceId,
@@ -234,28 +326,64 @@ async function upsertActionItem(input: {
     },
   });
 
-  const requiresApproval =
-    input.signal.severity === "CRITICAL" || input.signal.severity === "ALERT";
   const executionMode = requiresApproval
     ? ActionExecutionMode.REQUIRES_APPROVAL
     : ActionExecutionMode.SUGGEST_ONLY;
   const status = requiresApproval ? ActionStatus.PENDING_APPROVAL : ActionStatus.SUGGESTED;
   const description = buildActionDescription(input.signal);
-  const dueDate = new Date(Date.now() + (input.signal.severity === "CRITICAL" ? 24 : 72) * 60 * 60 * 1000);
+  const riskLevel = mapBiReportSeverityToRiskLevel(input.signal.severity);
+  const actionPrefix =
+    input.signal.skillKey === "bi_outsourcing_operating_signal_daily" ? "[经营信号]" : "[BI信号]";
+  const { dueDate, metadata } = buildBiReportDirectSignalActionItemMetadata({
+    signal: input.signal,
+    sourceId: input.signal.id,
+  });
+  let dueDateToPersist = dueDate;
+  let metadataJson = JSON.stringify(metadata);
 
   if (existing) {
+    // Avoid SLA drift on retries: keep the existing SLA/dueDate if the policy
+    // hasn't changed. We still refresh source fields / ids.
+    const existingClosure = (() => {
+      if (!existing.metadata) return null;
+      try {
+        return JSON.parse(existing.metadata) as {
+          operating_closure?: {
+            sla?: { policyHours?: number; slaDueAt?: string };
+          };
+        };
+      } catch {
+        return null;
+      }
+    })();
+    const existingPolicyHours = existingClosure?.operating_closure?.sla?.policyHours;
+    const nextPolicyHours = metadata.operating_closure.sla.policyHours;
+    if (typeof existingPolicyHours === "number" && existingPolicyHours === nextPolicyHours) {
+      if (existing.dueDate) {
+        dueDateToPersist = existing.dueDate;
+      }
+      metadataJson = mergeBiReportActionItemMetadata(existing.metadata, {
+        operating_closure: { source: metadata.operating_closure.source },
+        biReportSignalId: metadata.biReportSignalId,
+        biReportSignalKey: metadata.biReportSignalKey,
+        biReportSkillKey: metadata.biReportSkillKey,
+        biReportSignalType: metadata.biReportSignalType,
+      });
+    }
+
     return db.actionItem.update({
       where: { id: existing.id },
       data: {
-        title: `[BI信号] ${input.signal.title}`,
+        title: `${actionPrefix} ${input.signal.title}`,
         description,
         aiReason: "generated_from_bi_signal",
         ownerId: input.ownerUserId ?? existing.ownerId,
-        riskLevel: mapSeverityToRiskLevel(input.signal.severity),
+        riskLevel,
         executionMode,
         requiresApproval,
         status,
-        dueDate,
+        dueDate: dueDateToPersist,
+        metadata: metadataJson,
       },
     });
   }
@@ -265,17 +393,18 @@ async function upsertActionItem(input: {
       workspaceId: input.signal.workspaceId,
       ownerId: input.ownerUserId,
       actionType: ActionType.CREATE_TASK,
-      title: `[BI信号] ${input.signal.title}`,
+      title: `${actionPrefix} ${input.signal.title}`,
       description,
       aiReason: "generated_from_bi_signal",
       sourceType: SourceType.SYSTEM_INFERENCE,
       sourceId: input.signal.id,
-      riskLevel: mapSeverityToRiskLevel(input.signal.severity),
+      riskLevel,
       executionMode,
       requiresApproval,
       status,
       executionStatus: "pending",
-      dueDate,
+      dueDate: dueDateToPersist,
+      metadata: metadataJson,
     },
   });
 }

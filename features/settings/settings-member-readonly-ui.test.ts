@@ -45,7 +45,7 @@ describe("settings member read-only UI contract", () => {
       "disabled={pending || !canManageWorkspaceSetup}",
     );
     expect(accountSettingsTabSource).toContain(
-      "当前角色可以查看辅助服务姿态；服务来源和服务选择需要工作区设置管理员修改。",
+      "当前角色可以查看服务状态；服务来源和服务选择需要工作区设置管理员修改。",
     );
   });
 });

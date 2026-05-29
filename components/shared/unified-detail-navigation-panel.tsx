@@ -67,7 +67,7 @@ export function UnifiedDetailNavigationPanel({
         <section className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <EvidenceChip
-              label={english ? "Detail chain" : "详情经营链"}
+              label={english ? "Current object" : "当前对象"}
               tone="sky"
             />
             <EvidenceChip
@@ -82,8 +82,8 @@ export function UnifiedDetailNavigationPanel({
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-2">
-                <p className="text-xs font-medium text-[color:var(--status-info-text)]/78">
-                  {english ? "Current node" : "当前节点"}
+                  <p className="text-xs font-medium text-[color:var(--status-info-text)]/78">
+                  {english ? "Now viewing" : "正在看"}
                 </p>
                 <h3 className="text-xl font-semibold tracking-tight text-white">
                   {labelForNodeType(currentNode.detailNodeType, english)}
@@ -137,7 +137,7 @@ export function UnifiedDetailNavigationPanel({
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Navigation hint" : "导航提示"}
+                    {english ? "Use this when" : "何时停在这里"}
                   </p>
                   <p className="text-sm leading-7 text-[color:var(--dark-inset-muted)]">
                     {text(currentNode.detailNodeNavigationHint)}
@@ -149,68 +149,97 @@ export function UnifiedDetailNavigationPanel({
         </section>
 
         <section className="space-y-4">
-          <DetailOperatingFoundationCard
-            label={displayOperatingFoundationSummary.label}
-            title={displayOperatingFoundationSummary.title}
-            summary={displayOperatingFoundationSummary.summary}
-            items={displayOperatingFoundationSummary.items}
-            connections={displayOperatingFoundationSummary.connections}
-            note={displayOperatingFoundationSummary.note}
-          />
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <NavigationLinkCard
-              label={english ? "Previous detail" : "上一段详情"}
-              link={currentNode.detailNodePrev}
-              emptyLabel={english ? "This is the first detail." : "这是当前链路的起点。"}
-              dataMarker="prev"
-              english={english}
-            />
-            <NavigationLinkCard
-              label={english ? "Next detail" : "下一段详情"}
-              link={currentNode.detailNodeNext}
-              emptyLabel={
-                english ? "Use the next action rail." : "请用下面的下一步动作继续推进。"
-              }
-              dataMarker="next"
-              english={english}
-            />
-          </div>
-
           <details
-            data-cross-detail-handoff="true"
-            className="theme-detail-shell-card rounded-[24px]"
+            data-detail-foundation-disclosure="true"
+            className="theme-detail-shell-card rounded-[24px] px-4 py-4"
           >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="workspace-note-icon-shell p-2 text-[color:var(--foreground)]">
-                  <ArrowLeftRight className="h-4 w-4" />
+                  <ShieldCheck className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Cross-detail handoff" : "跨详情交接"}
+                    {english ? "Context and handoff" : "依据与交接"}
                   </p>
                   <p className="text-sm leading-7 text-[color:var(--dark-inset-muted)]">
                     {english
-                      ? "Open when you need the full handoff chain."
-                      : "需要完整交接链时再展开。"}
+                      ? "Open for the full context chain."
+                      : "需要完整链路时再展开。"}
                   </p>
                 </div>
               </div>
               <div className="inline-flex shrink-0 items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
-                <span>{english ? `${handoffs.length} handoffs` : `${handoffs.length} 条`}</span>
+                <span>&quot;</span>
                 <ChevronDown className="h-4 w-4" />
               </div>
             </summary>
 
-            <div className="grid gap-3 border-t border-[color:var(--border)] px-4 py-4">
-              {handoffs.map((handoff) => (
-                <HandoffCard
-                  key={`${handoff.handoffSource}-${handoff.handoffTarget}-${handoff.handoffHref}`}
-                  handoff={handoff}
+            <div className="mt-4 space-y-4 border-t border-[color:var(--border)] pt-4">
+              <DetailOperatingFoundationCard
+                label={displayOperatingFoundationSummary.label}
+                title={displayOperatingFoundationSummary.title}
+                summary={displayOperatingFoundationSummary.summary}
+                items={displayOperatingFoundationSummary.items}
+                connections={displayOperatingFoundationSummary.connections}
+                note={displayOperatingFoundationSummary.note}
+              />
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <NavigationLinkCard
+                  label={english ? "Previous detail" : "上一段详情"}
+                  link={currentNode.detailNodePrev}
+                  emptyLabel={english ? "This is the first detail." : "这是当前链路的起点。"}
+                  dataMarker="prev"
                   english={english}
                 />
-              ))}
+                <NavigationLinkCard
+                  label={english ? "Next detail" : "下一段详情"}
+                  link={currentNode.detailNodeNext}
+                  emptyLabel={
+                    english ? "Use the next action rail." : "请用下面的下一步动作继续推进。"
+                  }
+                  dataMarker="next"
+                  english={english}
+                />
+              </div>
+
+              <details
+                data-cross-detail-handoff="true"
+                className="theme-detail-shell-card rounded-[24px]"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="workspace-note-icon-shell p-2 text-[color:var(--foreground)]">
+                      <ArrowLeftRight className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Cross-detail handoff" : "跨详情交接"}
+                      </p>
+                      <p className="text-sm leading-7 text-[color:var(--dark-inset-muted)]">
+                        {english
+                          ? "Open when you need the full handoff chain."
+                          : "需要完整交接链时再展开。"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="inline-flex shrink-0 items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
+                    <span>{english ? `${handoffs.length} handoffs` : `${handoffs.length} 条`}</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </summary>
+
+                <div className="grid gap-3 border-t border-[color:var(--border)] px-4 py-4">
+                  {handoffs.map((handoff) => (
+                    <HandoffCard
+                      key={`${handoff.handoffSource}-${handoff.handoffTarget}-${handoff.handoffHref}`}
+                      handoff={handoff}
+                      english={english}
+                    />
+                  ))}
+                </div>
+              </details>
             </div>
           </details>
         </section>
