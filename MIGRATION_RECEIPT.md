@@ -107,3 +107,38 @@ chain.
 History preservation into this public repository is deferred for this bootstrap
 cut. The private source repository remains the audit/history source until a
 dedicated history rewrite or filter-repo migration is approved.
+
+## Follow-up Candidate Check — 2026-05-31
+
+After the bootstrap mirror landed, `helm2026` advanced to
+`origin/main@335e4d059386ff5f2116f12ed16485a0df9466e9` via PR #225
+(`codex/site-ux-convergence-20260529`). The changed public-safe UI files from
+that PR were already present in `helm-public@8f7c19b5ba722ffd986add980fb8eccf0b1479c0`.
+
+A fresh candidate was generated from the repo-split source ref
+`origin/claude/helm-public-core-relationship-Cr6OV@ea2cb6ae290ffabe35f30dd4fed078c2f641e75d`
+using the source ref's current public mirror builder:
+
+```bash
+node --import tsx /tmp/helm2026-public-core-Af6PQg/scripts/build-public-mirror-tree.ts \
+  --source-root /tmp/helm2026-public-core-Af6PQg \
+  --mirror-root /tmp/helm-public-candidate-core2-e5KyAM \
+  --force-clean
+```
+
+Observed candidate result:
+
+- exit 0
+- verify=0
+- copied 3321 files
+- skipped 53 entries (`private-root=7`, `local-artifact-dir=1`,
+  `local-artifact-file=1`, `private-file=44`)
+- scanned 3320 files during public mirror verification
+
+The only content delta selected for the public target was
+`scripts/public-release-guard.ts`: repo-split planning document filenames were
+removed from the guard source comment/list because those docs now live under an
+internal-only documentation root that is already excluded by the public mirror
+policy. The target-local `MIGRATION_RECEIPT.md` is intentionally retained.
+Local generated artifacts and Husky helper files observed in the working tree
+are not part of the selected public sync.

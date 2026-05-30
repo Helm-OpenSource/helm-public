@@ -292,17 +292,10 @@ const PRIVATE_FILES: ReadonlyArray<string> = [
   "scripts/helm-self-check.ts",
   "scripts/helm-self-check-refactored.ts",
   "scripts/self-check/config.ts",
-  // Repo-split internal planning + migration tooling. These describe HOW to
-  // split helm2026 (naming tenant slugs / private paths as split targets) and
-  // are internal-only — they must not ship to the public Core mirror.
-  // Added 2026-05-30 with the repo-split work.
-  "docs/product/HELM_CORE_PACK_ECOSYSTEM_AND_REPO_TOPOLOGY_REQUIREMENTS_V1.md",
-  "docs/product/HELM_CORE_PACK_ECOSYSTEM_AND_REPO_TOPOLOGY_REQUIREMENTS_V2.md",
-  "docs/product/HELM_REPO_AND_PARTNER_OVERVIEW.md",
-  "docs/product/HELM_REPO_SPLIT_5B_ROUTE_ADAPTER_CONTRACT_V1.md",
-  "docs/product/HELM_REPO_SPLIT_EXECUTION_CHECKLIST_V1.md",
-  "docs/product/HELM_REPO_SPLIT_HANDOFF.md",
-  "docs/product/HELM_CORE_BOUNDARY_MANIFEST.md",
+  // Repo-split migration tooling. The companion planning docs live under
+  // docs/internal/, which is already excluded as a private root; do not list
+  // those doc filenames here because this guard source itself ships in the
+  // public mirror.
   "scripts/repo-split-manifest.ts",
   "scripts/repo-split-mapping.ts",
   "scripts/repo-split-execute.ts",
