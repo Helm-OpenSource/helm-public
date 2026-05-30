@@ -5,9 +5,18 @@
  * Runs the narrow public-mirror projections that are safe to apply after a
  * mirror tree has already been created:
  *   1. project package.json into its public shape
- *   2. replace lib/extensions/registry.tsx with the public stub
- *   3. replace .env.example with the public local-dev example
- *   4. replace .dockerignore with the public generic ignore list
+ *   2. replace .env.example with the public local-dev example
+ *   3. replace .dockerignore with the public generic ignore list
+ *   4. strip the migration-source banner from README.md (repo-split internals)
+ *
+ * Note (repo-split 5C): there is NO longer an extensions-registry projection.
+ * Since 5A inverted the registry to a read-only seam, the real
+ * lib/extensions/registry.tsx imports no tenant code and degrades to the
+ * "no extension available" shape when no Pack registers (the mirror omits the
+ * private extensions/pack-bootstrap.ts, so instrumentation finds no bootstrap
+ * and the store stays empty). The mirror therefore ships the real registry
+ * unchanged; the former build-public-mirror-extensions-stub.ts has been removed.
+ * Evidence: lib/extensions/registry-core-only-mirror-parity.test.ts.
  *
  * This script does NOT copy the repo, delete tenant-private roots, rewrite git
  * history, scan source maps, or produce an SBOM. It is intentionally only the
@@ -30,13 +39,13 @@ import {
   type PublicEnvExampleBuildResult,
 } from "./build-public-env-example";
 import {
-  buildPublicMirrorExtensionsStub,
-  type PublicMirrorExtensionsStubResult,
-} from "./build-public-mirror-extensions-stub";
-import {
   buildPublicPackageManifest,
   type PublicPackageManifestBuildResult,
 } from "./build-public-package-manifest";
+import {
+  buildPublicReadme,
+  type PublicReadmeBuildResult,
+} from "./build-public-readme";
 
 export type PublicMirrorPreflightOptions = {
   readonly mirrorRoot: string;
@@ -46,9 +55,9 @@ export type PublicMirrorPreflightOptions = {
 export type PublicMirrorPreflightResult = {
   readonly mirrorRoot: string;
   readonly packageManifest: PublicPackageManifestBuildResult;
-  readonly extensionsStub: PublicMirrorExtensionsStubResult;
   readonly envExample: PublicEnvExampleBuildResult;
   readonly dockerignore: PublicDockerignoreBuildResult;
+  readonly readme: PublicReadmeBuildResult;
   readonly exitCode: 0 | 1;
 };
 
@@ -65,10 +74,6 @@ export function buildPublicMirrorPreflight(
     outputPath: "package.json",
     checkMode: options.checkMode,
   });
-  const extensionsStub = buildPublicMirrorExtensionsStub({
-    repoRoot: mirrorRoot,
-    checkMode: options.checkMode,
-  });
   const envExample = buildPublicEnvExample({
     repoRoot: mirrorRoot,
     checkMode: options.checkMode,
@@ -77,20 +82,24 @@ export function buildPublicMirrorPreflight(
     repoRoot: mirrorRoot,
     checkMode: options.checkMode,
   });
+  const readme = buildPublicReadme({
+    repoRoot: mirrorRoot,
+    checkMode: options.checkMode,
+  });
   const exitCode =
     packageManifest.exitCode === 0 &&
-    extensionsStub.exitCode === 0 &&
     envExample.exitCode === 0 &&
-    dockerignore.exitCode === 0
+    dockerignore.exitCode === 0 &&
+    readme.exitCode === 0
       ? 0
       : 1;
 
   return {
     mirrorRoot,
     packageManifest,
-    extensionsStub,
     envExample,
     dockerignore,
+    readme,
     exitCode,
   };
 }
@@ -136,9 +145,10 @@ function main(): number {
   const lines = [
     `public-mirror-preflight: ${result.exitCode === 0 ? "PASS" : "FAIL"} — ${result.mirrorRoot}`,
     `package-json: ${result.packageManifest.status}; removed ${result.packageManifest.removedScripts.length} private script(s)`,
-    `extensions-registry: ${result.extensionsStub.status}`,
+    `extensions-registry: ships-real-registry (no stub; 5C)`,
     `env-example: ${result.envExample.status}`,
     `dockerignore: ${result.dockerignore.status}`,
+    `readme: ${result.readme.status}`,
   ];
 
   if (result.exitCode === 0) {

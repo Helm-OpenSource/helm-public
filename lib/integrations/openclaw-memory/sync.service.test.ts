@@ -40,7 +40,6 @@ vi.mock("@/lib/audit", () => ({
 }));
 
 import {
-  resolveOpenClawHostDefaults,
   syncOpenClawMemory,
   toOperatorSafeOpenClawMemorySyncStatus,
 } from "@/lib/integrations/openclaw-memory/sync.service";
@@ -52,9 +51,6 @@ function writeBackupRecord(dir: string, record: Record<string, unknown>) {
 describe("OpenClaw memory sync intake boundary", () => {
   let backupDir: string;
   const originalBackupDir = process.env.OPENCLAW_MEMORY_BACKUP_DIR;
-  const originalLanceDbPath = process.env.OPENCLAW_MEMORY_DB_PATH;
-  const originalOpenClawHome = process.env.OPENCLAW_HOME;
-  const originalOpenClawBin = process.env.OPENCLAW_BIN;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -84,21 +80,6 @@ describe("OpenClaw memory sync intake boundary", () => {
       delete process.env.OPENCLAW_MEMORY_BACKUP_DIR;
     } else {
       process.env.OPENCLAW_MEMORY_BACKUP_DIR = originalBackupDir;
-    }
-    if (originalLanceDbPath === undefined) {
-      delete process.env.OPENCLAW_MEMORY_DB_PATH;
-    } else {
-      process.env.OPENCLAW_MEMORY_DB_PATH = originalLanceDbPath;
-    }
-    if (originalOpenClawHome === undefined) {
-      delete process.env.OPENCLAW_HOME;
-    } else {
-      process.env.OPENCLAW_HOME = originalOpenClawHome;
-    }
-    if (originalOpenClawBin === undefined) {
-      delete process.env.OPENCLAW_BIN;
-    } else {
-      process.env.OPENCLAW_BIN = originalOpenClawBin;
     }
   });
 
@@ -262,18 +243,6 @@ describe("OpenClaw memory sync intake boundary", () => {
     expect(JSON.stringify(status)).not.toContain("/Users/tommyqian");
     expect(JSON.stringify(status)).not.toContain("/private/tmp");
     expect(JSON.stringify(status)).not.toContain("spawn");
-  });
-
-  it("derives host-local defaults from OPENCLAW_HOME instead of a machine-specific hardcoded path", () => {
-    delete process.env.OPENCLAW_MEMORY_BACKUP_DIR;
-    delete process.env.OPENCLAW_MEMORY_DB_PATH;
-    process.env.OPENCLAW_HOME = "/tmp/openclaw-home";
-
-    expect(resolveOpenClawHostDefaults()).toEqual({
-      backupDir: "/tmp/openclaw-home/memory/backups",
-      lanceDbPath: "/tmp/openclaw-home/memory/lancedb-pro",
-      openclawBin: "openclaw",
-    });
   });
 
   it("keeps sync audit and analytics payloads operator-safe when host-local sync fails", async () => {

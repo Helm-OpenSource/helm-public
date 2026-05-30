@@ -66,7 +66,7 @@ describe("getting-started salvage contract", () => {
     mocks.getCurrentUserMock.mockResolvedValue({ id: "user-1" });
     mocks.cookiesMock.mockResolvedValue(createCookieStore({ "helm-ui-locale": "en-US" }));
 
-    const element = await GettingStartedPage();
+    const element = await GettingStartedPage({});
     const html = renderToStaticMarkup(element);
 
     expect(html).toContain("3 steps");
@@ -82,7 +82,7 @@ describe("getting-started salvage contract", () => {
       throw buildRedirectError(path);
     });
 
-    await expect(GettingStartedPage()).rejects.toThrow("REDIRECT:/login");
+    await expect(GettingStartedPage({})).rejects.toThrow("REDIRECT:/login");
   });
 
   it("renders identity completion mode when pending cookie exists", async () => {

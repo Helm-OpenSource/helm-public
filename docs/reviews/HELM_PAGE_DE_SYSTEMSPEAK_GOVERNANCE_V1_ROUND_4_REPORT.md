@@ -20,11 +20,11 @@ review_after: 2026-10-08
 
 ## 已经完整成立
 
-- [`dashboard/page.tsx`](../../app/(workspace)/dashboard/page.tsx)、[`meetings/page.tsx`](../../app/(workspace)/meetings/page.tsx)、[`approvals-client.tsx`](../../features/approvals/approvals-client.tsx)、[`opportunities-client.tsx`](../../features/opportunities/opportunities-client.tsx) 已把残余 `Helm will / Helm keeps / Helm-initiated` 文案改成对象优先表达
-- [`queue-view.tsx`](../../features/customer-success-handoff/queue-view.tsx) 与 [`queue-model.ts`](../../features/customer-success-handoff/queue-model.ts) 已把 `Helm advisory`、`What Helm can do now`、`Resurfaced because` 等 queue 级标签收成对象优先标签
-- [`imports-client.tsx`](../../features/imports/imports-client.tsx) 与 [`inbox-client.tsx`](../../features/inbox/inbox-client.tsx) 也已压掉高频首屏系统主语，避免 workspace surface 再从接入页和收件箱回弹
-- [`proactive-mechanism-panel.tsx`](../../components/shared/proactive-mechanism-panel.tsx) 的协作模式标签已改成系统中性表达，不再把 panel 自身写成系统主语
-- [`shared-surface-hierarchy-guards.test.ts`](../../lib/presentation/shared-surface-hierarchy-guards.test.ts) 与 [`helm-self-check.ts`](../../scripts/helm-self-check.ts) 已新增 broader surface no-Helm audit，直接守住 queue / workspace / panel 高流量面
+- [`dashboard/page.tsx`](/Users/qianzhilong/Documents/helm/app/(workspace)/dashboard/page.tsx)、[`meetings/page.tsx`](/Users/qianzhilong/Documents/helm/app/(workspace)/meetings/page.tsx)、[`approvals-client.tsx`](/Users/qianzhilong/Documents/helm/features/approvals/approvals-client.tsx)、[`opportunities-client.tsx`](/Users/qianzhilong/Documents/helm/features/opportunities/opportunities-client.tsx) 已把残余 `Helm will / Helm keeps / Helm-initiated` 文案改成对象优先表达
+- [`queue-view.tsx`](/Users/qianzhilong/Documents/helm/features/customer-success-handoff/queue-view.tsx) 与 [`queue-model.ts`](/Users/qianzhilong/Documents/helm/features/customer-success-handoff/queue-model.ts) 已把 `Helm advisory`、`What Helm can do now`、`Resurfaced because` 等 queue 级标签收成对象优先标签
+- [`imports-client.tsx`](/Users/qianzhilong/Documents/helm/features/imports/imports-client.tsx) 与 [`inbox-client.tsx`](/Users/qianzhilong/Documents/helm/features/inbox/inbox-client.tsx) 也已压掉高频首屏系统主语，避免 workspace surface 再从接入页和收件箱回弹
+- [`proactive-mechanism-panel.tsx`](/Users/qianzhilong/Documents/helm/components/shared/proactive-mechanism-panel.tsx) 的协作模式标签已改成系统中性表达，不再把 panel 自身写成系统主语
+- [`shared-surface-hierarchy-guards.test.ts`](/Users/qianzhilong/Documents/helm/lib/presentation/shared-surface-hierarchy-guards.test.ts) 与 [`helm-self-check.ts`](/Users/qianzhilong/Documents/helm/scripts/helm-self-check.ts) 已新增 broader surface no-Helm audit，直接守住 queue / workspace / panel 高流量面
 
 ## 已成形但仍需下一层
 

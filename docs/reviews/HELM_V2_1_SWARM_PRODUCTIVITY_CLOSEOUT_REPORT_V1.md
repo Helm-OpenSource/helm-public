@@ -53,12 +53,12 @@ Owner：Helm Core
 
 merged implementation evidence：
 
-1. historical PR `#105` — `SWARM-004` narrow operator control surface
-2. historical PR `#106` — `SWARM-003` verification merge lanes
-3. historical PR `#108` — `SWARM-005` candidate-only consolidation narrow slice
-4. historical PR `#109` — `SWARM-006` persisted trace readout parity
-5. historical PR `#110` — `SWARM-007` takeover / remediation handoff parity
-6. historical PR `#111` — `SWARM-008` close / settlement adjacency parity
+1. [`#105`](https://github.com/Helm-Developers/helm2026/pull/105) `SWARM-004` narrow operator control surface
+2. [`#106`](https://github.com/Helm-Developers/helm2026/pull/106) `SWARM-003` verification merge lanes
+3. [`#108`](https://github.com/Helm-Developers/helm2026/pull/108) `SWARM-005` candidate-only consolidation narrow slice
+4. [`#109`](https://github.com/Helm-Developers/helm2026/pull/109) `SWARM-006` persisted trace readout parity
+5. [`#110`](https://github.com/Helm-Developers/helm2026/pull/110) `SWARM-007` takeover / remediation handoff parity
+6. [`#111`](https://github.com/Helm-Developers/helm2026/pull/111) `SWARM-008` close / settlement adjacency parity
 
 current-main substrate evidence：
 

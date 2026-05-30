@@ -430,7 +430,7 @@ describe("bi report business signal storage", () => {
     expect(signal?.status).toBe("resolved");
   });
 
-  it("allows a dismissed signal to return to triaged when a manager accepts the handoff later", async () => {
+  it("keeps dismissed signals terminal even if a later process requests a triage", async () => {
     const existing = {
       id: "signal-1",
       workspaceId: "workspace-1",
@@ -466,15 +466,8 @@ describe("bi report business signal storage", () => {
       status: "triaged",
     });
 
-    expect(dbMock.biReportBusinessSignal.update).toHaveBeenCalledWith({
-      where: {
-        id: "signal-1",
-      },
-      data: {
-        status: "triaged",
-      },
-    });
-    expect(signal?.status).toBe("triaged");
+    expect(dbMock.biReportBusinessSignal.update).not.toHaveBeenCalled();
+    expect(signal?.status).toBe("dismissed");
   });
 
   it("maps unknown status and broken json safely", () => {

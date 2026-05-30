@@ -6,6 +6,21 @@ export async function register() {
     return;
   }
 
+  // Composition root (repo-split Step 5A): wire Packs/Overlays into the Core
+  // registry via the generic bootstrap aggregator. Core names NO tenant here.
+  // `extensions/pack-bootstrap` is a PRIVATE_FILE, so the public Core mirror
+  // omits it → this import fails → empty registry → Core-only behavior (every
+  // resolve* degrades to empty/fallback). That degradation is intentional.
+  try {
+    const { registerAllPacks } = await import("@/extensions/pack-bootstrap");
+    registerAllPacks();
+    logInstrumentationInfo("registered pack contributions");
+  } catch (err) {
+    logInstrumentationInfo("no pack bootstrap present; running Core-only", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const { startEngineeringDeliveryReviewCron } = await import(
     "@/lib/reports/engineering-delivery-review-cron"
   );

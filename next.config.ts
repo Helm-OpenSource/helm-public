@@ -12,7 +12,11 @@ const projectRoot = dirname(fileURLToPath(import.meta.url));
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR?.trim() || ".next",
   outputFileTracingRoot: projectRoot,
-  allowedDevOrigins: configuredAllowedDevOrigins,
+  allowedDevOrigins: [
+    "10.16.10.55",
+    "helm.aicaigroup.com",
+    ...configuredAllowedDevOrigins,
+  ],
 };
 
 export default nextConfig;

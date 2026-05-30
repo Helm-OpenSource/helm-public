@@ -14,7 +14,7 @@ review_after: 2026-07-24
 
 ## 1. Purpose
 
-这份计划用于把 [HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md](../product/HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md) 收口成一条最小可实施、最小可验证、最小可回滚的执行线。
+这份计划用于把 [HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md) 收口成一条最小可实施、最小可验证、最小可回滚的执行线。
 
 当前目标不是“给 Helm 再做一个聊天产品”，而是把现有：
 
@@ -30,9 +30,9 @@ review_after: 2026-07-24
 
 本计划显式引用：
 
-1. [HELM_PRODUCT_PRINCIPLES_V1.md](../product/HELM_PRODUCT_PRINCIPLES_V1.md)
-2. [HELM_PRODUCT_PRIORITY_MAPPING_V1.md](../product/HELM_PRODUCT_PRIORITY_MAPPING_V1.md)
-3. [HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md](../product/HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md)
+1. [HELM_PRODUCT_PRINCIPLES_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_PRODUCT_PRINCIPLES_V1.md)
+2. [HELM_PRODUCT_PRIORITY_MAPPING_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_PRODUCT_PRIORITY_MAPPING_V1.md)
+3. [HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md)
 
 ### 2.1 接到哪条真实业务闭环
 
@@ -92,20 +92,20 @@ review_after: 2026-07-24
 
 ### 3.1 当前正式主链
 
-- [app/(workspace)/search/page.tsx](../../app/(workspace)/search/page.tsx)
-- [features/search/queries.ts](../../features/search/queries.ts)
-- [features/memory/page-loader.ts](../../features/memory/page-loader.ts)
-- [features/dashboard/current-role-foundation-card.tsx](../../features/dashboard/current-role-foundation-card.tsx)
-- [components/layout/topbar.tsx](../../components/layout/topbar.tsx)
-- [components/layout/command-palette.tsx](../../components/layout/command-palette.tsx)
+- [app/(workspace)/search/page.tsx](/Users/tommyqian/Documents/GitHub/helm2026/app/(workspace)/search/page.tsx)
+- [features/search/queries.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/search/queries.ts)
+- [features/memory/page-loader.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/memory/page-loader.ts)
+- [features/dashboard/current-role-foundation-card.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/current-role-foundation-card.tsx)
+- [components/layout/topbar.tsx](/Users/tommyqian/Documents/GitHub/helm2026/components/layout/topbar.tsx)
+- [components/layout/command-palette.tsx](/Users/tommyqian/Documents/GitHub/helm2026/components/layout/command-palette.tsx)
 
 ### 3.2 当前规则与边界锚点
 
-- [HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md](../product/HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md)
-- [HELM_DEFINITION_ASSIST_BASELINE_V1.md](../product/HELM_DEFINITION_ASSIST_BASELINE_V1.md)
-- [HELM_ROLE_PRESET_FOUNDATION_AND_STARTER_SKILL_BASELINE_V1.md](../product/HELM_ROLE_PRESET_FOUNDATION_AND_STARTER_SKILL_BASELINE_V1.md)
-- [llm-integration-architecture.md](../llm/llm-integration-architecture.md)
-- [LLM_GEMMA_DEFAULT_AND_MODEL_SWITCH_V1.md](../llm/LLM_GEMMA_DEFAULT_AND_MODEL_SWITCH_V1.md)
+- [HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_ASK_HELM_NATURAL_LANGUAGE_ENTRY_REQUIREMENTS_V1.md)
+- [HELM_DEFINITION_ASSIST_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_DEFINITION_ASSIST_BASELINE_V1.md)
+- [HELM_ROLE_PRESET_FOUNDATION_AND_STARTER_SKILL_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_ROLE_PRESET_FOUNDATION_AND_STARTER_SKILL_BASELINE_V1.md)
+- [llm-integration-architecture.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/llm/llm-integration-architecture.md)
+- [LLM_GEMMA_DEFAULT_AND_MODEL_SWITCH_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/llm/LLM_GEMMA_DEFAULT_AND_MODEL_SWITCH_V1.md)
 
 ## 4. 关键假设
 

@@ -144,7 +144,7 @@ function main(): number {
         `secret-history-check: PASS - no new known compromised commits beyond baseline ${result.baselineRef}; ${result.baselineViolations.length} baseline-known finding(s) suppressed.`,
       );
       console.warn(
-        "secret-history-check: baseline suppression is for PR CI only; release sources still require full history remediation.",
+        "secret-history-check: baseline suppression is for scoped CI only; release sources still require full history remediation.",
       );
       return 0;
     }

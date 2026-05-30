@@ -1,44 +1,31 @@
 {
   "manifestVersion": "1",
-  "bundleVersion": "2026.05.26",
+  "bundleVersion": "2026.05.18-worker-cookbook",
   "extensionKey": "case-management-sample-workers",
   "tenantKey": "case-management-sample",
   "extensionSlug": "workers",
-  "displayName": "Case Management Sample Workers",
-  "kind": "TENANT_CUSTOM",
-  "status": "ACTIVE",
-  "owner": "helm-open-source",
+  "owner": "case-management-sample",
   "nonCoreDeclaration": true,
   "compatibility": {
-    "minRuntimeContractVersion": "2026.05.26-public-sample",
-    "supportedWorkspaceClasses": [
-      "CUSTOMER"
-    ],
-    "requiredFeatures": [
-      "WorkspaceSolutionExtension"
-    ]
+    "minRuntimeContractVersion": "2026.04.22-harness-phase3",
+    "supportedWorkspaceClasses": ["CUSTOMER"],
+    "requiredFeatures": ["WorkspaceSolutionExtension"]
   },
   "migrationHints": [
-    "bundle_manifest_read_only_validation_phase4"
+    "public_sample_worker_cookbook_read_only_validation"
   ],
   "runtimeDeclarations": {
-    "workers": [
-      "case-allocation-driver",
-      "case-stewardship-driver"
-    ],
+    "workers": [],
     "skills": [],
     "resources": [],
     "hooks": [],
     "monitors": [],
-    "surfaces": [
-      "/operating",
-      "/approvals"
-    ]
+    "surfaces": []
   },
   "capabilityManifest": {
     "capabilityDeclarations": [
-      "case_allocation_review",
-      "case_stewardship_review"
+      "case-allocation-driver",
+      "case-stewardship-driver"
     ],
     "maxEffectMode": "read_only",
     "customerFacingAllowed": false,
@@ -46,25 +33,19 @@
     "nonCommitmentOnly": true
   },
   "dependencyDeclarations": {
-    "connectors": [
-      "case-import-source"
-    ],
-    "workspaceTruths": [
-      "WorkspaceSolutionExtension"
-    ],
-    "policyTruths": [
-      "review-first",
-      "observer-first"
-    ]
+    "connectors": [],
+    "workspaceTruths": ["WorkspaceSolutionExtension", "tenant workspace"],
+    "policyTruths": ["observer-first", "review-first", "non-commitment"]
   },
   "documentationPointers": {
-    "readme": "../README.md",
-    "docs": [
-      "../hsi-implementation-checklist.md"
-    ]
+    "readme": "README.md",
+    "docs": ["../README.md"]
   },
   "evalContract": {
-    "fixtures": [],
+    "fixtures": [
+      "../fixtures/case.sample.json",
+      "../fixtures/employee.sample.json"
+    ],
     "checks": [
       "manifest.test.ts",
       "worker-modes.test.ts",
@@ -73,9 +54,19 @@
       "case-stewardship-driver/decide.test.ts"
     ]
   },
-  "summary": "Public sample worker bundle for review-first case allocation and stewardship.",
-  "surfaces": [
-    "/operating",
-    "/approvals"
+  "summary": "Case management sample worker cookbook: allocation and stewardship pure decision functions.",
+  "surfaces": [],
+  "apiPrefixes": [],
+  "kind": "TENANT_CUSTOM",
+  "displayName": "Case Management Sample - Workers",
+  "status": "ACTIVE",
+  "ownedAssets": [
+    "case-allocation-driver",
+    "case-stewardship-driver"
+  ],
+  "capabilities": ["case-allocation-driver", "case-stewardship-driver"],
+  "notes": [
+    "Cookbook-only worker functions. They are not runtime-registered.",
+    "All outputs stay read-only, observer-first, review-first, and suggestion-only."
   ]
 }

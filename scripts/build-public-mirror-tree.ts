@@ -139,6 +139,11 @@ function getSkipReason(
   if (isDirectory && LOCAL_ARTIFACT_DIRS.has(entryName)) {
     return "local-artifact-dir";
   }
+  // In a git worktree, `.git` is a file (a gitdir pointer), not a directory.
+  // Skip it in file form too so the worktree pointer never reaches the mirror.
+  if (!isDirectory && entryName === ".git") {
+    return "local-artifact-file";
+  }
   if (!isDirectory && LOCAL_ARTIFACT_FILES.has(entryName)) {
     return "local-artifact-file";
   }

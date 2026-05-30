@@ -87,11 +87,7 @@ Please open an issue and discuss *before* writing code for:
 # Install dependencies
 npm install
 
-# If you do not have a host-local MySQL, start with the Docker-first path
-npm run quickstart:doctor
-npm run quickstart
-
-# If you want local development instead, copy the environment template
+# Copy the environment template (requires local MySQL)
 cp .env.example .env
 
 # Prepare the database
@@ -103,8 +99,6 @@ npm run db:seed
 npm run dev
 ```
 
-If you only want Helm running end-to-end, `npm run quickstart` is the default public entry path. The longer local-dev walkthrough lives in [docs/getting-started.en.md](docs/getting-started.en.md).
-
 `.env.example` is split into three tiers:
 
 - **MUST**: `DATABASE_URL`, `APP_URL`, `CONNECTOR_TOKEN_SECRET`
@@ -112,6 +106,10 @@ If you only want Helm running end-to-end, `npm run quickstart` is the default pu
 - **OPTIONAL_CONNECTORS**: DingTalk, HubSpot, Salesforce, Stripe, Alipay, WeChat Pay, etc.
 
 Only the MUST tier needs values along every code path; the others are enabled on demand.
+
+For the longer onboarding walkthrough, see [docs/getting-started.en.md](docs/getting-started.en.md).
+
+---
 
 ## 6. Default verification chain
 

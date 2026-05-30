@@ -119,7 +119,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
           </Button>
           <Button asChild variant="default">
             <a
-              href="https://github.com/Helm-OpenSource/helm-public"
+              href="https://github.com/Helm-Developers/helm2026"
               data-testid="demo-cta-github"
               target="_blank"
               rel="noopener noreferrer"
@@ -140,7 +140,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
           <p className="max-w-2xl text-base leading-7 text-[color:var(--muted)]">
             {english
               ? "Real workspace, seeded blockers — meetings, CRM imports, drafts waiting for review, overdue commitments. Click through anything; nothing leaves the building."
-              : "真工作区，铺好了真实卡点——会议、CRM 导入、等复核的草稿、过期承诺。随便点，不会对外发送任何内容。"}
+              : "真工作区，铺好了真实卡点——会议、CRM 导入、等复核的草稿、过期承诺。随便点，不会发出任何东西。"}
           </p>
         </section>
 
@@ -270,8 +270,8 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--accent)]" />
             <p className="text-sm leading-6 text-[color:var(--muted)]">
               {english
-                ? "Nothing leaves the building. Data is seeded, no emails go to real customers, no CRM gets written. Every click still lands an audit row, same as production."
-                : "建议 ≠ 承诺。演示入口不会对外发送任何内容。数据是预置的，不会发邮件、不会写 CRM。每一步动作仍会落一条审计——和真实环境一样。"}
+                ? "Advice ≠ commitment. Nothing leaves the building: seeded data, no emails to real customers, no CRM writes. Every click still lands an audit row, same as production."
+                : "建议 ≠ 承诺。不会对外发送任何内容：数据是预置的，不会发邮件、不会写 CRM。每一步动作仍会落一条审计——和真实环境一样。"}
             </p>
           </div>
         </section>
@@ -293,7 +293,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="default">
               <a
-                href="https://github.com/Helm-OpenSource/helm-public"
+                href="https://github.com/Helm-Developers/helm2026"
                 target="_blank"
                 rel="noopener noreferrer"
               >

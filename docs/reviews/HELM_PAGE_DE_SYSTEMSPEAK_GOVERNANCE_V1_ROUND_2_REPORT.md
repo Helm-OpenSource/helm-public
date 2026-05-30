@@ -20,11 +20,11 @@ review_after: 2026-10-08
 
 ## 已经完整成立
 
-- [`reporting-protocol-panel.tsx`](../../components/shared/reporting-protocol-panel.tsx) 已切到 `frontstage / midstage / backstage / evidence` 四段结构，前台层只保留 `Current summary / Decision request / Next action / Boundary`
-- [`proactive-mechanism-panel.tsx`](../../components/shared/proactive-mechanism-panel.tsx) 已切到同一套结构，不再让系统解释块占据首屏主叙事
-- [`queue-view.tsx`](../../features/customer-success-handoff/queue-view.tsx) 已收口到同一套 business-first 骨架，`ReviewSnapshotBlock` 与 `WhyItMattersBlock` 明确下沉
+- [`reporting-protocol-panel.tsx`](/Users/qianzhilong/Documents/helm/components/shared/reporting-protocol-panel.tsx) 已切到 `frontstage / midstage / backstage / evidence` 四段结构，前台层只保留 `Current summary / Decision request / Next action / Boundary`
+- [`proactive-mechanism-panel.tsx`](/Users/qianzhilong/Documents/helm/components/shared/proactive-mechanism-panel.tsx) 已切到同一套结构，不再让系统解释块占据首屏主叙事
+- [`queue-view.tsx`](/Users/qianzhilong/Documents/helm/features/customer-success-handoff/queue-view.tsx) 已收口到同一套 business-first 骨架，`ReviewSnapshotBlock` 与 `WhyItMattersBlock` 明确下沉
 - `dashboard`、`approvals`、`opportunities`、customer success queue model 的高频文案已改成对象优先，不再默认以 `Helm already...` 作为首页主语
-- [`shared-surface-hierarchy-guards.test.ts`](../../lib/presentation/shared-surface-hierarchy-guards.test.ts)、[`helm-self-check.ts`](../../scripts/helm-self-check.ts)、[`decision-first-boundary-check.ts`](../../scripts/decision-first-boundary-check.ts) 已把 shared panel、queue 和 detail cluster 的首屏预算 / copy audit 一起纳入
+- [`shared-surface-hierarchy-guards.test.ts`](/Users/qianzhilong/Documents/helm/lib/presentation/shared-surface-hierarchy-guards.test.ts)、[`helm-self-check.ts`](/Users/qianzhilong/Documents/helm/scripts/helm-self-check.ts)、[`decision-first-boundary-check.ts`](/Users/qianzhilong/Documents/helm/scripts/decision-first-boundary-check.ts) 已把 shared panel、queue 和 detail cluster 的首屏预算 / copy audit 一起纳入
 
 ## 已成形但仍需下一层
 

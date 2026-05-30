@@ -337,13 +337,19 @@ export async function fetchDingTalkAppAccessToken() {
     throw new Error("DingTalk app message config is incomplete");
   }
 
+  const timeoutMs = Number(process.env.DINGTALK_HTTP_TIMEOUT_MS ?? "");
+  const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), effectiveTimeoutMs);
+
   const url = new URL(DINGTALK_APP_ACCESS_TOKEN_URL);
   url.searchParams.set("appkey", config.clientId);
   url.searchParams.set("appsecret", config.clientSecret);
 
   const response = await fetch(url.toString(), {
     cache: "no-store",
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timer));
 
   if (!response.ok) {
     const body = await response.text();

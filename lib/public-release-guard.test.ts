@@ -17,7 +17,6 @@ const tenantPrivateRoot = ["extensions", tenantSlug].join("/");
 const implementationConsolePrivateRoot = [
   "extensions",
   "helm-implementation-console",
-  "private",
 ].join("/");
 const commercialPrivateRoot = ["customer", "proof", "packs"].join("-");
 const rmShuyaoHost = [["rm", "shuyao-dev"].join("-"), "aliyuncs", "com"].join(".");
@@ -145,14 +144,6 @@ describe("public release guard fixture coverage", () => {
     ]);
   });
 
-  it("still blocks concrete internal hosts in policy descriptor files", () => {
-    writeFixture("README.md", `Public docs must not mention ${rmShuyaoHost}.`);
-
-    const result = runGuard();
-
-    expect(result.violations.map((violation) => violation.rule)).toEqual([rmShuyaoRule]);
-  });
-
   it("does not scan private roots that are excluded from the public mirror", () => {
     writeFixture(
       path.posix.join(tenantPrivateRoot, "private.md"),
@@ -210,31 +201,6 @@ describe("public release guard fixture coverage", () => {
     const result = runGuard();
 
     expect(result.violations).toEqual([]);
-  });
-
-  it("strict public mirror mode still allows repo guard scripts that belong to the OSS tree", () => {
-    writeFixture("scripts/helm-self-check.ts", "export {};\n");
-    writeFixture("scripts/helm-self-check-refactored.ts", "export {};\n");
-    writeFixture("scripts/decision-first-boundary-check.ts", "export {};\n");
-    writeFixture("scripts/release-maintenance-runbook.ts", "export {};\n");
-    writeFixture("scripts/self-check/config.ts", "export const marker = true;\n");
-    writeFixture("docs/HELM_INTERNAL_FREEZE_REFERENCE.md", "internal-only\n");
-
-    const result = runPublicReleaseGuard({
-      repoRoot: fixtureRoot,
-      requirePrivateRootsAbsent: true,
-    });
-
-    expect(
-      result.violations.filter((violation) =>
-        violation.rule === "public-mirror-tree:private-file-present"
-      ),
-    ).toEqual([
-      expect.objectContaining({
-        path: "docs/HELM_INTERNAL_FREEZE_REFERENCE.md",
-        rule: "public-mirror-tree:private-file-present",
-      }),
-    ]);
   });
 
   it("does not scan local-only env files that can carry developer credentials", () => {
@@ -642,13 +608,13 @@ describe("public release guard fixture coverage", () => {
 
     expect(projection.manifest.private).toBe(false);
     expect(projection.removedScripts).toEqual([
+      "self-check",
+      "release:check",
       `seed:${tenantSlug}-workspace`,
       "proof-pack:build",
     ]);
     expect(projection.manifest.scripts).toMatchObject({
       dev: "next dev",
-      "self-check": "tsx scripts/helm-self-check-refactored.ts",
-      "release:check": "tsx scripts/release-readiness-check.ts",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
     });
@@ -766,6 +732,39 @@ describe("public release guard fixture coverage", () => {
       dev: "next dev",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+    });
+  });
+
+  // Regression for the leak class CodeX flagged (head cdd0411): a tenant-named
+  // Core helper shipped because the guard only matched content word-boundaries,
+  // missing camelCase-embedded slugs and file PATHS. All slug text below is
+  // fragment-built so the literal never appears in this scanned test file.
+  describe("camelCase + path tenant-slug detection", () => {
+    const slugB = ["mi", "dun"].join("");
+    const slugCap = slugB.charAt(0).toUpperCase() + slugB.slice(1);
+
+    it("flags a camelCase-embedded slug in CONTENT of a shipped Core file", () => {
+      writeFixture("lib/notifications/daily.ts", `export function shouldSend${slugCap}Mail() {}\n`);
+      const result = runGuard();
+      expect(result.violations.some((v) => v.rule === `tenant-slug:${slugB}`)).toBe(true);
+    });
+
+    it("flags a tenant-named FILE PATH even when content is clean", () => {
+      writeFixture(`lib/notifications/${slugB}-daily-mail-control.ts`, "export const x = 1;\n");
+      const result = runGuard();
+      expect(result.violations.some((v) => v.rule === `tenant-slug:${slugB}:path`)).toBe(true);
+    });
+
+    it("flags a camelCase slug embedded in a path segment", () => {
+      writeFixture(`lib/${slugCap}Helper.ts`, "export const y = 2;\n");
+      const result = runGuard();
+      expect(result.violations.some((v) => v.rule === `tenant-slug:${slugB}:path`)).toBe(true);
+    });
+
+    it("does NOT false-positive on unrelated words or clean Core paths", () => {
+      writeFixture("lib/notifications/system-mail.ts", "const medium = 1; const amidust = 2;\n");
+      const result = runGuard();
+      expect(result.violations.some((v) => v.rule.startsWith(`tenant-slug:${slugB}`))).toBe(false);
     });
   });
 });

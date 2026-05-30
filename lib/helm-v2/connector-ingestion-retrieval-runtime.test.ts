@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   MemoryItemKind,
   MemoryItemPromotionRule,
@@ -19,7 +19,9 @@ import {
   syncMeetingConnectorIngestionRetrievalRuntime,
 } from "@/lib/helm-v2/connector-ingestion-retrieval-runtime";
 import { ingestMeetingEndedRuntime } from "@/lib/helm-v2/meeting-action-pack-runtime";
-import { describeMySqlRuntime } from "@/lib/test/mysql-runtime-suite";
+
+const runMysqlIntegration = process.env.HELM_RUN_MYSQL_TESTS === "1";
+const describeMysqlIntegration = runMysqlIntegration ? describe : describe.skip;
 
 const cleanupWorkspaceIds: string[] = [];
 
@@ -153,7 +155,7 @@ afterEach(async () => {
   }
 });
 
-describeMySqlRuntime("Helm v2 richer connector ingestion and retrieval runtime", () => {
+describeMysqlIntegration("Helm v2 richer connector ingestion and retrieval runtime", () => {
   it("records richer source posture and retrieval traces without promoting untrusted content directly", async () => {
     const fixture = await createSprint7Fixture();
 

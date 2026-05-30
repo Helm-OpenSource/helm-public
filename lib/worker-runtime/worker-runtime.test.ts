@@ -130,7 +130,7 @@ describe("launchWorkerRuntime", () => {
     );
     expect(safeWriteAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionType: "GUANGPU_WORKER_RUNTIME_OBSERVED",
+        actionType: "WORKER_RUNTIME_OBSERVED",
         targetType: "Worker",
         targetId: READOUT_ONLY_RUNTIME_WORKER_IDS[0],
       }),
@@ -174,7 +174,7 @@ describe("launchWorkerRuntime", () => {
     );
     expect(safeWriteAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionType: "GUANGPU_WORKER_RUNTIME_REJECTED",
+        actionType: "WORKER_RUNTIME_REJECTED",
         targetId: "case-allocation-driver-preview-v0",
       }),
     );

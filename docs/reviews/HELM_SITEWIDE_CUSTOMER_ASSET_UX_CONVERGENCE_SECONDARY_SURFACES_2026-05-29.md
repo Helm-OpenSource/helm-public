@@ -106,16 +106,16 @@ npx eslint components/shared/customer-asset-focus-strip.tsx features/reports/rep
 npm run lint
 npm run typecheck
 npx vitest run lib/presentation/shared-surface-hierarchy-guards.test.ts
-DATABASE_URL='${DATABASE_URL_FOR_LOCAL_VERIFY}' npm run self-check
-DATABASE_URL='${DATABASE_URL_FOR_LOCAL_VERIFY}' npm run check:boundaries
-DATABASE_URL='${DATABASE_URL_FOR_LOCAL_VERIFY}' npm run build
+DATABASE_URL='mysql://root:root@127.0.0.1:3306/helm2026?charset=utf8mb4' npm run self-check
+DATABASE_URL='mysql://root:root@127.0.0.1:3306/helm2026?charset=utf8mb4' npm run check:boundaries
+DATABASE_URL='mysql://root:root@127.0.0.1:3306/helm2026?charset=utf8mb4' npm run build
 ```
 
 Browser-path validation attempted:
 
 ```bash
 npx playwright test tests/e2e/detail-hierarchy.spec.ts -g "reports/imports/settings/diagnostics/analytics 首屏先暴露用户资产读数"
-DATABASE_URL='${DATABASE_URL_FOR_E2E_VERIFY}' DB_RESET_ALLOWLIST='${DB_RESET_ALLOWLIST_FOR_E2E}' npm run db:reset
+DATABASE_URL='mysql://root:root@127.0.0.1:3306/helm2026_e2e_codex_siteux_20260529?charset=utf8mb4' DB_RESET_ALLOWLIST='helm2026_e2e_codex_siteux_20260529' npm run db:reset
 ```
 
 Blocked locally because this machine currently has no reachable MySQL server on `127.0.0.1:3306`, and Docker is not installed, so the isolated Playwright database could not be created. The E2E test itself was added and typechecked; it should be run in an environment with local MySQL or CI e2e DB support.

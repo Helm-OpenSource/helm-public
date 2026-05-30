@@ -87,7 +87,7 @@ npm run self-check
 
 npx playwright test tests/e2e/mobile-command-surface.spec.ts
 # failed before /mobile assertions at /demo login;
-# Prisma cannot reach ${HELM_DB_HOST}
+# Prisma cannot reach rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306
 ```
 
 这两个失败是同一个环境前提：本地验证进程没有可用数据库连接，demo login 在 `prisma.user.findUnique()` 前置步骤失败。它不改变 `/mobile` 实现、adapter、read model、boundary、build 和 regression 的收口判断。

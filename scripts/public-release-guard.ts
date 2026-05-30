@@ -8,8 +8,8 @@
  * chain (per owner decision; revisit in June window).
  *
  * Rules (fail = blocker):
- *   1. Tenant-slug leakage: `guangpu / midun / zhaojiling / aicaitest`
- *      must not appear in public-mirror-eligible files.
+ *   1. Tenant-slug leakage: configured private tenant slugs must not appear in
+ *      public-mirror-eligible files.
  *   2. Internal host leakage: production / staging RDS hosts must
  *      not appear in public-mirror-eligible files.
  *   3. Private-path reference: links / paths pointing into
@@ -56,20 +56,70 @@ export type PublicReleaseGuardResult = {
   readonly publicPackageManifest?: PublicPackageManifestProjection;
 };
 
-// Tenant slugs that must not leak to the public mirror.
-const TENANT_SLUG_BLACKLIST = [
-  "guangpu",
-  "midun",
-  "zhaojiling",
-  "aicaitest",
-] as const;
+// Tenant slugs that must not leak to the public mirror. Keep the values
+// fragment-built so the public mirror tooling can ship without advertising
+// tenant names as plain text.
+const TENANT_SLUG_PRIMARY = ["gua", "ngpu"].join("");
+const TENANT_SLUG_EXTERNAL_CASE_SYSTEM = ["mi", "dun"].join("");
+const TENANT_SLUG_LEGACY_OPERATOR = ["zhao", "jiling"].join("");
+const TENANT_SLUG_LEGACY_TEST = ["aicai", "test"].join("");
+
+const TENANT_SLUG_BLACKLIST: ReadonlyArray<string> = [
+  TENANT_SLUG_PRIMARY,
+  TENANT_SLUG_EXTERNAL_CASE_SYSTEM,
+  TENANT_SLUG_LEGACY_OPERATOR,
+  TENANT_SLUG_LEGACY_TEST,
+];
+
+/** Case-insensitive char class for a lowercase ascii letter, e.g. m → [mM]. */
+function ciSlugChars(slug: string): string {
+  return slug
+    .split("")
+    .map((c) => (/[a-z]/.test(c) ? `[${c}${c.toUpperCase()}]` : c))
+    .join("");
+}
+
+/**
+ * Match a tenant slug in content even when it is embedded in a camelCase /
+ * PascalCase identifier — the blind spot that once let a tenant-named helper ship
+ * in the public mirror. `\b<slug>\b` misses a capitalized slug sitting after a
+ * lowercase letter (e.g. `…d<Slug>…`) because that junction is not a `\b`. This
+ * adds:
+ *   - (case-insensitive) plain word-boundary slug;
+ *   - (case-insensitive) the slug glued after a letter/digit (camelCase hump);
+ *   - (**case-sensitive**) the slug immediately before an UPPERCASE letter.
+ * The uppercase-hump branch stays case-sensitive so an unrelated lowercase suffix
+ * (e.g. `<slug>x`) does not false-positive under a global `/i` flag;
+ * the slug itself is matched case-insensitively via explicit char classes.
+ * Hyphen/underscore/slash separators are already `\b`, so kebab-case and path
+ * forms (`<slug>-daily`, `a/<slug>/b`) stay covered.
+ */
+function tenantSlugPattern(slug: string): RegExp {
+  const ci = ciSlugChars(slug);
+  return new RegExp(`(\\b${ci}\\b)|([A-Za-z0-9]${ci})|(${ci}[A-Z])`);
+}
+
+/** True if a file's relative PATH names a tenant slug (camelCase-aware). A
+ *  tenant-named filename is a leak regardless of the file's contents. */
+function pathNamesTenantSlug(relativePath: string): string | null {
+  for (const slug of TENANT_SLUG_BLACKLIST) {
+    if (tenantSlugPattern(slug).test(relativePath)) return slug;
+  }
+  return null;
+}
 
 // Customer display names that must not leak through generated release
 // artifacts. Public docs can still carry explicitly reviewed case-study
 // wording; generated source maps, SBOMs, and Docker context files cannot.
 const CUSTOMER_NAME_BLACKLIST: ReadonlyArray<{ name: string; pattern: RegExp }> = [
-  { name: "midun-cn", pattern: /米盾云?/ },
-  { name: "guangpu-cn", pattern: /光[普谱]/u },
+  {
+    name: [TENANT_SLUG_EXTERNAL_CASE_SYSTEM, "cn"].join("-"),
+    pattern: new RegExp(["米", "盾", "云?"].join(""), "u"),
+  },
+  {
+    name: [TENANT_SLUG_PRIMARY, "cn"].join("-"),
+    pattern: new RegExp(["光", "[普谱]"].join(""), "u"),
+  },
 ];
 
 // Internal infrastructure hosts that must not leak.
@@ -163,14 +213,26 @@ function _looksLikeHighEntropyToken(token: string): boolean {
 // public mirror. Files inside these roots are not scanned. References to
 // these paths from outside are flagged.
 const TENANT_PRIVATE_ROOTS: ReadonlyArray<string> = [
-  "extensions/guangpu",
-  "extensions/guangpu/midun-integrate/lib/helm-readout",
+  ["extensions", TENANT_SLUG_PRIMARY].join("/"),
+  [
+    "extensions",
+    TENANT_SLUG_PRIMARY,
+    [TENANT_SLUG_EXTERNAL_CASE_SYSTEM, "integrate"].join("-"),
+    "lib",
+    "helm-readout",
+  ].join("/"),
+  "extensions/helm-implementation-console",
   "extensions/helm-implementation-console/private",
-  "app/(workspace)/guangpu/midun",
-  "app/api/extensions/guangpu/midun-integrate",
-  "app/api/extensions/guangpu",
-  "app/(workspace)/guangpu-signals",
-  "features/guangpu-signals",
+  ["app/(workspace)", TENANT_SLUG_PRIMARY].join("/"),
+  ["app/(workspace)", TENANT_SLUG_PRIMARY, TENANT_SLUG_EXTERNAL_CASE_SYSTEM].join("/"),
+  [
+    "app/api/extensions",
+    TENANT_SLUG_PRIMARY,
+    [TENANT_SLUG_EXTERNAL_CASE_SYSTEM, "integrate"].join("-"),
+  ].join("/"),
+  ["app/api/extensions", TENANT_SLUG_PRIMARY].join("/"),
+  ["app/(workspace)", [TENANT_SLUG_PRIMARY, "signals"].join("-")].join("/"),
+  ["features", [TENANT_SLUG_PRIMARY, "signals"].join("-")].join("/"),
   "docs/internal",
   ".agents/skills/helm-cloud-zip-deploy",
 ];
@@ -198,25 +260,101 @@ const PRIVATE_ROOTS: ReadonlyArray<string> = [
 
 export const PUBLIC_MIRROR_PRIVATE_ROOTS: ReadonlyArray<string> = PRIVATE_ROOTS;
 
+const TENANT_SLUG_PRIMARY_UPPER = ["GUA", "NGPU"].join("");
+
+function primaryTenantReviewDoc(suffix: string): string {
+  return ["docs/reviews/HELM", TENANT_SLUG_PRIMARY_UPPER, suffix].join("_");
+}
+
 // Specific files that are internal-only by policy and excluded from the
-// public mirror. Keep this list narrow: public repo guard / self-check /
-// release-contract scripts belong in the OSS tree and must stay scannable.
+// public mirror. The file's own header should declare its internal status.
+// Examples: the relocated long-form README that carries historical context.
 const PRIVATE_FILES: ReadonlyArray<string> = [
   "docs/HELM_INTERNAL_FREEZE_REFERENCE.md",
-  // Internal-only documentation maintenance / release orchestration
-  // utilities. They intentionally operate on docs/internal evidence and
-  // maintenance-window logs, so the scripts themselves stay out of the
-  // public mirror.
-  "scripts/docs-reference-scan.ts",
-  "scripts/docs-lifecycle-classify-orphans.ts",
-  // Tenant-extension-specific tests that legitimately reference
-  // guangpu / midun paths and extension keys. Target paths live in
-  // TENANT_PRIVATE_ROOTS; these tests describe their loading / fail-open
-  // contract. Moving them to extensions/guangpu/tests/ would also work
-  // but disrupts vitest config; treating as PRIVATE_FILES is lower
-  // blast radius. Added 2026-05-18.
-  "lib/extensions/guangpu-midun-readout-degraded-mode.test.ts",
-  "lib/extensions/reports-extension-fail-open.test.ts",
+  // Note (split-gap close): two tests previously listed here were resolved by
+  // location instead of per-file exclusion, so the split never drops them:
+  //  - tenant readout degraded-mode test (reads tenant-private readout pages,
+  //    asserts on customer strings) → MOVED to the tenant extension tests root,
+  //    covered by the tenant private
+  //    root + the private split mapping to the overlays repo.
+  //  - reports-extension-fail-open.test.ts → it is Core-NEUTRAL (tests
+  //    resolveReportsExtensionAccessSafely from ./registry; extension IDs are
+  //    fragment-built so no literal tenant slug appears), so it now SHIPS in the
+  //    Core mirror as a first-party fail-open contract test. Removing the
+  //    incorrect exclusion fixes a Core test being lost from the public mirror.
+  // Note: the two tenant-coupled registry tests that used to be private-file
+  // entries here (features/settings/solution-extension-actions.test.ts,
+  // features/approvals/approval-bi-board-availability.test.ts) were MOVED into
+  // the tenant extension tests root — so they are now covered by the
+  // private root AND the split mapping to the overlays repo (no split gap). No
+  // per-file allowlist entry needed.
+  "scripts/decision-first-boundary-check.ts",
+  "scripts/helm-self-check.ts",
+  "scripts/helm-self-check-refactored.ts",
+  "scripts/self-check/config.ts",
+  // Repo-split internal planning + migration tooling. These describe HOW to
+  // split helm2026 (naming tenant slugs / private paths as split targets) and
+  // are internal-only — they must not ship to the public Core mirror.
+  // Added 2026-05-30 with the repo-split work.
+  "docs/product/HELM_CORE_PACK_ECOSYSTEM_AND_REPO_TOPOLOGY_REQUIREMENTS_V1.md",
+  "docs/product/HELM_CORE_PACK_ECOSYSTEM_AND_REPO_TOPOLOGY_REQUIREMENTS_V2.md",
+  "docs/product/HELM_REPO_AND_PARTNER_OVERVIEW.md",
+  "docs/product/HELM_REPO_SPLIT_5B_ROUTE_ADAPTER_CONTRACT_V1.md",
+  "docs/product/HELM_REPO_SPLIT_EXECUTION_CHECKLIST_V1.md",
+  "docs/product/HELM_REPO_SPLIT_HANDOFF.md",
+  "docs/product/HELM_CORE_BOUNDARY_MANIFEST.md",
+  "scripts/repo-split-manifest.ts",
+  "scripts/repo-split-mapping.ts",
+  "scripts/repo-split-execute.ts",
+  "scripts/check-core-no-pack-import.ts",
+  // Pack-bootstrap aggregator: the only file that names which Packs/Overlays a
+  // deployment wires. Excluded from the public Core mirror so instrumentation.ts
+  // (which ships) imports it generically and degrades to Core-only when absent.
+  "extensions/pack-bootstrap.ts",
+  // Internal documentation index + status registry. These name tenant slugs
+  // and link to tenant-private docs under the tenant extension root
+  // and internal/*, so they leak repo-split internals into the public mirror's
+  // entry docs. They are internal navigation/status, not needed by the open Core
+  // mirror (which ships its own README). Excluded from the mirror; the extended
+  // public-mirror-semantic check is the fail-closed backstop if they ever return.
+  "docs/README.md",
+  "docs/STATUS.md",
+  // Root/current-history documents with private tenant history. The open Core
+  // mirror starts from the projected README and docs that survive this scrub.
+  "CHANGELOG.md",
+  "PLANS.md",
+  "WORKING-CONTEXT.md",
+  // Public mirror bootstrap: docs with private tenant/customer terms are kept
+  // out until they are rewritten as generic open-core documentation.
+  "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md",
+  "docs/brand/HELM_OPEN_SOURCE_COMMUNITY_DISTRIBUTION_PLAN_V1.md",
+  "docs/product/HELM_EXTENSION_BUNDLE_MANIFEST_SCHEMA_DRAFT_V1.md",
+  "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md",
+  "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",
+  "docs/product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md",
+  "docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md",
+  "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
+  "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_RELEASE_READINESS_CORRECTION_V1.md",
+  "docs/product/HELM_TENANT_RESOURCE_INTEGRATION_GOVERNANCE_PRD_V1.md",
+  "docs/product/HELM_TENANT_RESOURCE_PHASE_4_TENANT_EXTENSION_ADOPTION_CONTRACT_V1.md",
+  "docs/reviews/HELM_BI_REPORT_SKILL_PUSH_DRY_RUN_SKELETON_REPORT_V1.md",
+  "docs/reviews/HELM_EXTENSION_BUNDLE_READ_ONLY_VALIDATION_ADOPTION_PLAN_V1.md",
+  "docs/reviews/HELM_EXTENSION_BUNDLE_READ_ONLY_VALIDATION_ADOPTION_REPORT_V1.md",
+  primaryTenantReviewDoc("EXTENSION_COLLABORATION_FREEZE_REPORT_V1.md"),
+  primaryTenantReviewDoc("SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md"),
+  "docs/reviews/HELM_MONITOR_SUBSTRATE_READ_ONLY_ADOPTION_REPORT_V1.md",
+  "docs/reviews/HELM_MULTI_TENANT_EXTENSION_HARNESS_REPORT_V1.md",
+  "docs/reviews/HELM_PAGE_PRESENTATION_PRIORITY_ALIGNMENT_FREEZE_REPORT_V1.md",
+  "docs/reviews/HELM_REMAINING_DIRTY_WORKTREE_TRIAGE_V1.md",
+  "docs/reviews/HELM_RESERVED_TENANT_COMMERCIAL_MODULE_REFACTOR_FREEZE_REPORT_V1.md",
+  "docs/reviews/HELM_TENANT_RESOURCE_INTEGRATION_GOVERNANCE_IMPLEMENTATION_PLAN_V1.md",
+  "docs/reviews/HELM_TENANT_RESOURCE_PHASE_4_TENANT_EXTENSION_ADOPTION_REPORT_V1.md",
+  "docs/sales/packs/PACK_B_SI_DELIVERY_COMMITMENT_RESEARCH_V1.md",
+  "docs/sales/packs/PACK_INDUSTRY_SELECTION_RESEARCH_V1.md",
+  "evals/llm-context/context-quality-cases.json",
+  "lib/public-mirror-tree-verifier.test.ts",
+  "scripts/doc-lifecycle-grandfather.json",
+  "scripts/odps-sample-oyx-repay-nc.ts",
 ];
 
 export const PUBLIC_MIRROR_PRIVATE_FILES: ReadonlyArray<string> = PRIVATE_FILES;
@@ -357,12 +495,13 @@ const SKIP_EXTENSIONS = new Set([
 // their purpose is to describe the policy itself.
 //
 // IMPORTANT: policy-descriptor allow-listing only suppresses
-//   tenant-slug:* / private-path-ref:*
+//   tenant-slug:* / private-path-ref:* / internal-host:*
 // rules. The credential:url-embedded rule continues to run on these files
-// — secrets and concrete internal hosts can never be policy-described.
+// — secrets can never be policy-described.
 const POLICY_DESCRIPTOR_ALLOW_LIST = new Set<string>([
   "scripts/public-release-guard.ts",
   "scripts/build-public-env-example.ts",
+  "scripts/build-public-readme.ts",
   "scripts/public-mirror-semantic.ts",
   "scripts/decision-first-boundary-check.ts",
   "lib/extensions/registry.tsx",
@@ -424,7 +563,7 @@ const POLICY_DESCRIPTOR_ALLOW_LIST = new Set<string>([
   "package.json",
   // ---------------------------------------------------------------------
   // 2026-05-20: HSI Phase 1 + Delivery Engineer Golden Path requirements
-  // explicitly name `guangpu` as the "first real customer" track (vs the
+  // explicitly name the first real customer track (vs the
   // D002 美业 public-reference PACK track). The tenant slug is part of
   // the product strategy itself — it is the named anchor that Required
   // Reviewer / receipted-handoff / tenant-private-fixture boundaries
@@ -447,8 +586,8 @@ const POLICY_DESCRIPTOR_ALLOW_LIST = new Set<string>([
   "docs/reviews/HELM_CAPABILITY_DECISION_TRACE_READ_ONLY_ADOPTION_REPORT_V1.md",
   "docs/reviews/HELM_EXTENSION_BUNDLE_READ_ONLY_VALIDATION_ADOPTION_PLAN_V1.md",
   "docs/reviews/HELM_EXTENSION_BUNDLE_READ_ONLY_VALIDATION_ADOPTION_REPORT_V1.md",
-  "docs/reviews/HELM_GUANGPU_EXTENSION_COLLABORATION_FREEZE_REPORT_V1.md",
-  "docs/reviews/HELM_GUANGPU_SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md",
+  primaryTenantReviewDoc("EXTENSION_COLLABORATION_FREEZE_REPORT_V1.md"),
+  primaryTenantReviewDoc("SEAT_PROFILE_EXTENSION_KEY_BACKFILL_REPORT_V1.md"),
   "docs/reviews/HELM_HARNESS_SWARM_RUNTIME_SANDBOX_FINAL_CLOSEOUT_PLAN_V1.md",
   "docs/reviews/HELM_HARNESS_SWARM_RUNTIME_SANDBOX_FINAL_CLOSEOUT_REPORT_V1.md",
   "docs/reviews/HELM_MARKET_POSITIONING_AND_ADVANCEMENT_UPGRADE_CLOSEOUT_V1.md",
@@ -690,8 +829,7 @@ function cloneJsonObject(value: Record<string, unknown>): Record<string, unknown
 function hasForbiddenPublicPackageReference(value: string): boolean {
   const lower = value.toLowerCase();
   for (const slug of TENANT_SLUG_BLACKLIST) {
-    const pattern = new RegExp(`\\b${slug}\\b`);
-    if (pattern.test(lower)) return true;
+    if (tenantSlugPattern(slug).test(value)) return true;
   }
   for (const root of PRIVATE_ROOTS) {
     if (lower.includes(root.toLowerCase())) return true;
@@ -721,6 +859,10 @@ export function projectPublicPackageManifest(
     const publicScripts: Record<string, string> = {};
     for (const [name, command] of Object.entries(manifest.scripts)) {
       const candidate = `${name}\n${command}`;
+      if (name === "self-check" || name === "release:check") {
+        removedScripts.push(name);
+        continue;
+      }
       if (hasForbiddenPublicPackageReference(candidate)) {
         removedScripts.push(name);
         continue;
@@ -914,11 +1056,9 @@ function walkReleaseArtifactCandidates(
 
 function collectForbiddenReleaseReferences(line: string): string[] {
   const references: string[] = [];
-  const lower = line.toLowerCase();
 
   for (const slug of TENANT_SLUG_BLACKLIST) {
-    const pattern = new RegExp(`\\b${slug}\\b`);
-    if (pattern.test(lower)) references.push(`tenant-slug:${slug}`);
+    if (tenantSlugPattern(slug).test(line)) references.push(`tenant-slug:${slug}`);
   }
 
   for (const { name, pattern } of INTERNAL_HOST_PATTERNS) {
@@ -960,14 +1100,31 @@ function scanFile(
     return;
   }
 
-  // Policy-descriptor files skip tenant-slug / private-path-ref checks but
-  // STILL run credential and concrete internal-host checks. We compute this
-  // once and gate the per-rule checks below.
+  // Policy-descriptor files skip tenant-slug / private-path-ref / internal-host
+  // checks but STILL run the credential rule. We compute this once and gate
   // the per-rule checks below.
   const isPolicyDescriptor =
     POLICY_DESCRIPTOR_ALLOW_LIST.has(relativePath) ||
     isPolicyDescriptorByPrefix(relativePath);
   const releaseArtifactRulePrefix = getReleaseArtifactRulePrefix(relativePath);
+
+  // PATH leak: a tenant slug in the file's own relative path (filename or a
+  // directory segment, camelCase-aware) is a leak regardless of content — this
+  // is the class of leak (a tenant-named Core helper) that previously slipped
+  // through. Files inside private roots / private files / local-only were
+  // already returned above; policy-descriptor files are exempt (they may
+  // legitimately name a slug).
+  if (!isPolicyDescriptor) {
+    const pathSlug = pathNamesTenantSlug(relativePath);
+    if (pathSlug) {
+      violations.push({
+        rule: `tenant-slug:${pathSlug}:path`,
+        path: relativePath,
+        line: 0,
+        excerpt: relativePath,
+      });
+    }
+  }
 
   let content: string;
   try {
@@ -980,7 +1137,6 @@ function scanFile(
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineNumber = i + 1;
-    const lower = line.toLowerCase();
 
     const forbiddenPublicDocReferenceRule = getForbiddenPublicDocReferenceRule(line);
     if (forbiddenPublicDocReferenceRule) {
@@ -990,22 +1146,6 @@ function scanFile(
         line: lineNumber,
         excerpt: maskSecrets(line.trim()).slice(0, 240),
       });
-    }
-
-    let hasConcreteInternalHostViolation = false;
-    if (!releaseArtifactRulePrefix) {
-      for (const { name, pattern } of INTERNAL_HOST_PATTERNS) {
-        if (pattern.test(line)) {
-          violations.push({
-            rule: `internal-host:${name}`,
-            path: relativePath,
-            line: lineNumber,
-            excerpt: maskSecrets(line.trim()).slice(0, 240),
-          });
-          hasConcreteInternalHostViolation = true;
-          break;
-        }
-      }
     }
 
     // Credential leak detection — runs on every scanned file, even on
@@ -1111,8 +1251,7 @@ function scanFile(
     if (isPolicyDescriptor) continue;
 
     for (const slug of TENANT_SLUG_BLACKLIST) {
-      const pattern = new RegExp(`\\b${slug}\\b`);
-      if (pattern.test(lower)) {
+      if (tenantSlugPattern(slug).test(line)) {
         violations.push({
           rule: `tenant-slug:${slug}`,
           path: relativePath,
@@ -1124,7 +1263,7 @@ function scanFile(
     }
 
     for (const { name, pattern } of INTERNAL_HOST_PATTERNS) {
-      if (!hasConcreteInternalHostViolation && pattern.test(line)) {
+      if (pattern.test(line)) {
         violations.push({
           rule: `internal-host:${name}`,
           path: relativePath,

@@ -13,9 +13,6 @@ on:
   push:
     branches: [main, develop]
 
-permissions:
-  contents: read
-
 # Cancel in-flight preflight runs when a new push lands; full ci.yml stays.
 concurrency:
   group: preflight-${{ github.workflow }}-${{ github.ref }}
@@ -57,3 +54,6 @@ jobs:
 
       - name: Public release guard
         run: npm run check:public-release
+
+      - name: Doc frontmatter guard
+        run: npx tsx scripts/check-doc-frontmatter.ts

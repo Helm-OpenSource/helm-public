@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main, develop]
 
-permissions:
-  contents: read
-
 jobs:
   type-check:
     name: Type Check
@@ -89,8 +86,13 @@ jobs:
           HELM_SECRET_HISTORY_BASELINE_REF: origin/${{ github.base_ref }}
         run: npm run check:secret-history
 
-      - name: Secret history guard
+      - name: Secret history guard (push baseline)
         if: github.event_name != 'pull_request'
+        env:
+          # origin/main still carries the documented 2026-04-27 remediation debt.
+          # Push CI should reject new listed compromised commits while keeping the
+          # full no-baseline release check available for controlled remediation.
+          HELM_SECRET_HISTORY_BASELINE_REF: HEAD^
         run: npm run check:secret-history
 
   validate-env:

@@ -55,7 +55,7 @@ export default async function ProgramsPage() {
           </Button>
           <Button asChild variant="default">
             <a
-              href="https://github.com/Helm-OpenSource/helm-public"
+              href="https://github.com/Helm-Developers/helm2026"
               target="_blank"
               rel="noopener noreferrer"
             >

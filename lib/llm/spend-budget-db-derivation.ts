@@ -19,7 +19,7 @@
  * does NOT import @/lib/db directly — it accepts the client via parameter
  * so tests can inject a mock.
  *
- * See internal LLM spend / abuse guard spec (T019), Gap 3.
+ * See HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 (internal) §二 Gap 3.
  */
 
 import type { LLMProvider } from "@/lib/llm/types";

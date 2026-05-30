@@ -83,6 +83,10 @@ export async function sendBiReportToDingTalkAppMessage(input: {
   const token = await fetchDingTalkAppAccessToken();
   const url = new URL(DINGTALK_APP_MESSAGE_SEND_URL);
   url.searchParams.set("access_token", token.accessToken);
+  const timeoutMs = Number(process.env.DINGTALK_HTTP_TIMEOUT_MS ?? "");
+  const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), effectiveTimeoutMs);
   const response = await fetch(url.toString(), {
     method: "POST",
     headers: {
@@ -90,7 +94,9 @@ export async function sendBiReportToDingTalkAppMessage(input: {
     },
     body: requestBody,
     cache: "no-store",
+    signal: controller.signal,
   });
+  clearTimeout(timer);
   const responseBody = await response.text();
   const normalizedBody = responseBody.trim();
   const succeeded =

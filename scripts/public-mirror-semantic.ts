@@ -17,45 +17,92 @@ type PrivateSemanticPattern = {
   readonly pattern: RegExp;
 };
 
-function wordPattern(value: string): RegExp {
-  return new RegExp(`\\b${value}\\b`, "i");
+/** Case-insensitive char class for a lowercase ascii letter, e.g. m → [mM]. */
+function ciChars(value: string): string {
+  return value
+    .split("")
+    .map((c) => (/[a-z]/.test(c) ? `[${c}${c.toUpperCase()}]` : c))
+    .join("");
+}
+
+/**
+ * Match a tenant slug even when it is embedded in a camelCase / PascalCase
+ * identifier or a path segment — the blind spot that once let a tenant-named
+ * Core helper ship in the mirror. `\b${slug}\b` misses a capitalized slug sitting
+ * after a lowercase letter because that junction is not a `\b`. This adds:
+ *   - (case-insensitive) plain word-boundary slug;
+ *   - (case-insensitive) a camelCase hump: a letter/digit immediately followed by
+ *     the slug (e.g. `get<Slug>`, `x<Slug>`);
+ *   - (**case-sensitive** uppercase hump) the slug immediately followed by an
+ *     UPPERCASE letter (e.g. `<Slug>Daily`).
+ * The uppercase-hump branch is deliberately case-sensitive: under a global `/i`
+ * flag `[A-Z]` would also match lowercase, so an unrelated word like `<slug>x`
+ * would false-positive. Built with explicit case-insensitive
+ * char classes for the slug instead of the `/i` flag so the `[A-Z]` stays literal.
+ * Hyphen/underscore/slash separators are already word boundaries, so kebab and
+ * path forms (`<slug>-daily`, `a/<slug>/b`) are covered by the `\b` alternative.
+ */
+function slugPattern(value: string): RegExp {
+  const ci = ciChars(value);
+  // (a) plain word-boundary slug (ci); (b) slug glued AFTER a letter/digit (ci);
+  // (c) slug glued BEFORE an UPPERCASE letter (case-sensitive [A-Z]).
+  return new RegExp(`(\\b${ci}\\b)|([A-Za-z0-9]${ci})|(${ci}[A-Z])`);
 }
 
 function semanticRule(kind: "tenant-slug" | "customer-name", value: string): string {
   return ["semantic", kind, value].join(":");
 }
 
-const tenantSlugGuangpu = ["gua", "ngpu"].join("");
-const tenantSlugMidun = ["mi", "dun"].join("");
+const tenantSlugPrimary = ["gua", "ngpu"].join("");
+const tenantSlugExternalCase = ["mi", "dun"].join("");
 const tenantSlugZhaojiling = ["zhao", "jiling"].join("");
 const tenantSlugAicaitest = ["aicai", "test"].join("");
-const customerNameMidunCn = ["mi", "dun-cn"].join("");
-const customerNameGuangpuCn = ["gua", "ngpu-cn"].join("");
+const customerNameExternalCaseCn = ["mi", "dun-cn"].join("");
+const customerNamePrimaryCn = ["gua", "ngpu-cn"].join("");
+
+// repo-split internal entrypoints that must not leak into the public mirror's
+// entry docs (README / docs index): the private target-repo names and the
+// tenant extension source path. These name the commercial topology and are
+// internal-only, so the open Core mirror must not advertise them.
+const splitRepoName = (a: string, b: string) => [a, b].join("-");
+const repoSplitNames: ReadonlyArray<string> = [
+  splitRepoName("helm", "packs"),
+  splitRepoName("helm", "overlays"),
+  splitRepoName("helm", "control-plane"),
+];
+const tenantExtensionPath = ["extensions", tenantSlugPrimary].join("/");
+
+/** Tenant slugs, scanned in BOTH file content and the file's relative path,
+ *  with camelCase-aware matching (see slugPattern). */
+const TENANT_SLUGS: ReadonlyArray<string> = [
+  tenantSlugPrimary,
+  tenantSlugExternalCase,
+  tenantSlugZhaojiling,
+  tenantSlugAicaitest,
+];
 
 const PRIVATE_SEMANTIC_PATTERNS: ReadonlyArray<PrivateSemanticPattern> = [
+  ...TENANT_SLUGS.map((slug) => ({
+    rule: semanticRule("tenant-slug", slug),
+    pattern: slugPattern(slug),
+  })),
   {
-    rule: semanticRule("tenant-slug", tenantSlugGuangpu),
-    pattern: wordPattern(tenantSlugGuangpu),
-  },
-  {
-    rule: semanticRule("tenant-slug", tenantSlugMidun),
-    pattern: wordPattern(tenantSlugMidun),
-  },
-  {
-    rule: semanticRule("tenant-slug", tenantSlugZhaojiling),
-    pattern: wordPattern(tenantSlugZhaojiling),
-  },
-  {
-    rule: semanticRule("tenant-slug", tenantSlugAicaitest),
-    pattern: wordPattern(tenantSlugAicaitest),
-  },
-  {
-    rule: semanticRule("customer-name", customerNameMidunCn),
+    rule: semanticRule("customer-name", customerNameExternalCaseCn),
     pattern: new RegExp(["米", "盾", "云?"].join(""), "u"),
   },
   {
-    rule: semanticRule("customer-name", customerNameGuangpuCn),
+    rule: semanticRule("customer-name", customerNamePrimaryCn),
     pattern: new RegExp(["光", "[普谱]"].join(""), "u"),
+  },
+  ...repoSplitNames.map((name) => ({
+    rule: ["semantic", "split-repo", name].join(":"),
+    // Match the bare repo name as a word (e.g. `helm-packs`); the hyphenated
+    // form does not collide with ordinary prose.
+    pattern: new RegExp(`(^|[^\\w-])${name}([^\\w-]|$)`),
+  })),
+  {
+    rule: ["semantic", "private-path", tenantExtensionPath].join(":"),
+    pattern: new RegExp(tenantExtensionPath.replace(/\//g, "\\/")),
   },
 ];
 
@@ -81,12 +128,30 @@ const SEMANTIC_SCAN_ROOT_FILES = new Set([
   "package.json",
   "playwright.config.ts",
   "tsconfig.json",
+  // Public entry documentation — these are the first thing a reader of the open
+  // mirror sees, so they must not leak tenant slugs or repo-split internals.
+  "README.md",
+  "README.en.md",
 ]);
+
+// Public ENTRY documentation that is also scanned for the leak set: the docs
+// index + status registry a reader of the mirror lands on first. (Deep internal
+// planning/review docs under docs/** are governed by the curated
+// public-release-guard policy-descriptor allowlist, not re-scanned here, to
+// avoid double-flagging files that legitimately name a tenant to explain a
+// boundary. The mirror EXCLUDES these two via PUBLIC_MIRROR_PRIVATE_FILES, so in
+// a correctly-built mirror they are absent; this list is the fail-closed
+// backstop that trips if either is ever shipped again.)
+const SEMANTIC_ENTRY_DOC_FILES = new Set(["docs/README.md", "docs/STATUS.md"]);
 
 const SEMANTIC_ALLOW_FILES = new Set([
   "scripts/public-release-guard.ts",
   "scripts/public-mirror-semantic.ts",
   "scripts/public-mirror-smoke.ts",
+  // The README projection builder necessarily names the repo-split target repos
+  // in its doc comment in order to strip that banner. It is mirror tooling, not
+  // public-facing content (and is itself a PRIVATE_FILE excluded from mirrors).
+  "scripts/build-public-readme.ts",
 ]);
 
 const SKIP_DIRS = new Set([
@@ -109,6 +174,8 @@ function shouldScanSemanticPath(relativePath: string): boolean {
   const basename = path.basename(normalized);
   if (basename.includes(".test.") || basename.includes(".spec.")) return false;
   if (SEMANTIC_SCAN_ROOT_FILES.has(normalized)) return true;
+  // Public entry docs (docs index + status): fail-closed backstop.
+  if (SEMANTIC_ENTRY_DOC_FILES.has(normalized)) return true;
   const [root] = normalized.split("/");
   return SEMANTIC_SCAN_ROOTS.has(root);
 }
@@ -124,6 +191,7 @@ function isProbablyTextFile(filePath: string): boolean {
     ".js",
     ".json",
     ".jsx",
+    ".md",
     ".mjs",
     ".prisma",
     ".sql",
@@ -157,6 +225,28 @@ export function runPublicMirrorSemanticSmoke(repoRoot: string): {
     }
 
     if (!stats.isFile()) return;
+
+    // PATH scan (camelCase-aware): a tenant slug in the file's own relative path
+    // is a leak regardless of file type — the class of leak (a tenant-named Core
+    // helper) that previously slipped through undetected. Runs for any file under
+    // a semantic scan root (not just text files, and even for files whose CONTENT
+    // we skip, e.g. tests), but honors the allow-list.
+    const [pathRoot] = relativePath.split("/");
+    const pathInScanScope =
+      SEMANTIC_SCAN_ROOTS.has(pathRoot) && !SEMANTIC_ALLOW_FILES.has(relativePath);
+    if (pathInScanScope) {
+      for (const slug of TENANT_SLUGS) {
+        if (slugPattern(slug).test(relativePath)) {
+          violations.push({
+            rule: `${semanticRule("tenant-slug", slug)}:path`,
+            path: relativePath,
+            line: 0,
+            excerpt: relativePath,
+          });
+        }
+      }
+    }
+
     if (!shouldScanSemanticPath(relativePath)) return;
     if (!isProbablyTextFile(entryPath)) return;
 

@@ -1,0 +1,60 @@
+id: case_management_sample.daily_activity
+upstream: case-management-sample-bi-report
+endpoint:
+  path: sample://case-management/day-board
+  method: READ
+  via: static-fixture
+  upstream_terminus: Synthetic day-board fixture for the public case-management sample.
+freshness:
+  promised_max_lag: 24h
+  staleness_action: degrade
+  freshness_evidence:
+    measured_via: Static fixture timestamp in day-board.sample.json
+    typical_observed_lag: synthetic T+0 sample
+    last_audit_date: "2026-05-18"
+sensitivity: public
+data_owner:
+  team: helm-core
+  role: sample-maintainer
+  contact_path: GitHub Issues label vertical:case-management-sample
+commitment_level: suggestion_only
+caller_scopes:
+  - case-management-sample.bi-report
+schema_ref: extensions/case-management-sample/bi-report/report-skills/daily-activity-readout/schema.json
+field_dictionary:
+  - name: board_date
+    type: date
+    required: true
+    description: Synthetic day-board date.
+    pii_class: public
+  - name: open_case_count
+    type: integer
+    required: true
+    description: Number of open synthetic cases.
+    pii_class: public
+  - name: review_required_count
+    type: integer
+    required: true
+    description: Number of synthetic cases requiring human review.
+    pii_class: public
+  - name: stale_case_count
+    type: integer
+    required: true
+    description: Number of stale synthetic cases.
+    pii_class: public
+  - name: red_alert
+    type: boolean
+    required: true
+    description: Whether the synthetic day board is in red alert.
+    pii_class: public
+sample_payload:
+  request:
+    biz_date: "2026-05-18"
+  response:
+    rows:
+      - board_date: "2026-05-18"
+        open_case_count: 18
+        review_required_count: 5
+        stale_case_count: 2
+        red_alert: true
+upstream_known_issues: []

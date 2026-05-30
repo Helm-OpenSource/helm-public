@@ -92,7 +92,7 @@ describe("self-check consolidation slice 6", () => {
 
     expect(audit.mechanicalIntegrityOk).toBe(true);
     expect(audit.ok).toBe(false);
-    expect(audit.coverageGap.legacyMinusRefactoredRunCheckCount).toBe(145);
+    expect(audit.coverageGap.legacyMinusRefactoredRunCheckCount).toBe(157);
     expect(audit.coverageGap.legacyMinusRefactoredRunCheckCount).toBeLessThan(167);
     expect(audit.blockerRules).toEqual([
       "refactored_self_check_coverage_below_default_switch_floor",

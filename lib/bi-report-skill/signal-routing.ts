@@ -49,6 +49,10 @@ const skillRoleOverrides: Partial<Record<string, Partial<Record<BiReportSeverity
     ALERT: ["OPERATOR", "ADMIN", "OWNER", "REVIEWER", "MEMBER", "BILLING_ADMIN"],
     CRITICAL: ["OWNER", "ADMIN", "OPERATOR", "REVIEWER", "MEMBER", "BILLING_ADMIN"],
   },
+  bi_outsourcing_operating_signal_daily: {
+    // Outsourcing operating signals are typically owned by operations leads, not the workspace CEO/OWNER.
+    CRITICAL: ["OPERATOR", "ADMIN", "REVIEWER", "OWNER", "MEMBER", "BILLING_ADMIN"],
+  },
 };
 
 export async function resolveBiReportSignalOwner(input: {

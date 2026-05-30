@@ -94,9 +94,9 @@ npm run quality:regression
 页面复检：
 
 - Playwright 打开 `http://localhost:3000/demo` / `http://localhost:3000/dashboard` 并保存截图：
-  - `<local-screenshot-dir>/helm-dashboard-before-computeruse.png`
-  - `<local-screenshot-dir>/helm-dashboard-after-computeruse.png`
-  - `<local-screenshot-dir>/helm-dashboard-after-scroll-computeruse.png`
+  - `/Users/qianzhilong/Desktop/helm-dashboard-before-computeruse.png`
+  - `/Users/qianzhilong/Desktop/helm-dashboard-after-computeruse.png`
+  - `/Users/qianzhilong/Desktop/helm-dashboard-after-scroll-computeruse.png`
 - Computer Use 读取 Safari 页面后确认：
   - 已进入 `localhost:3000/dashboard`
   - 可读到主动作轨：`先处理 / 复核压力 / 继续入口 / 当前阻塞`

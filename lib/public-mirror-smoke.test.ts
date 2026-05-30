@@ -5,11 +5,23 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PUBLIC_DOCKERIGNORE_CONTENT } from "../scripts/build-public-dockerignore";
 import { PUBLIC_ENV_EXAMPLE_CONTENT } from "../scripts/build-public-env-example";
-import { STUB_CONTENT } from "../scripts/build-public-mirror-extensions-stub";
 import {
   runPublicMirrorSemanticSmoke,
   runPublicMirrorSmoke,
 } from "../scripts/public-mirror-smoke";
+
+// repo-split 5C: a tenant-free registry (no @/extensions import) — the real
+// registry ships unchanged in the mirror; there is no stub anymore.
+const TENANT_FREE_REGISTRY = [
+  'import "server-only";',
+  "",
+  'import { getRegisteredReportsExtensions } from "./registry-contract";',
+  "",
+  "export async function resolveReportsExtensions() {",
+  "  return { tabs: getRegisteredReportsExtensions().slice(0, 0), active: null };",
+  "}",
+  "",
+].join("\n");
 
 let fixtureRoot: string;
 
@@ -40,7 +52,7 @@ function seedProjectedMirror(): void {
   );
   writeText(".env.example", PUBLIC_ENV_EXAMPLE_CONTENT);
   writeText(".dockerignore", PUBLIC_DOCKERIGNORE_CONTENT);
-  writeText("lib/extensions/registry.tsx", STUB_CONTENT);
+  writeText("lib/extensions/registry.tsx", TENANT_FREE_REGISTRY);
 }
 
 describe("public mirror smoke", () => {

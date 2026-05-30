@@ -8,7 +8,7 @@
  * Helm Cloud public trial deployment requires Redis backend (T019.code
  * P1 #b — multi-instance rate limit persistence).
  *
- * Tier defaults (per internal LLM spend / abuse guard spec, Gap 2):
+ * Tier defaults (per HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 §二 Gap 2):
  *   - per-user: 60 / minute (briefing tier) | 10 / minute (reasoning tier)
  *   - per-workspace: 1000 / hour
  *   - per-IP (trial): 30 / minute
@@ -16,7 +16,7 @@
  * The reasoning tier applies to RECOMMENDATION_EXPLANATION and the heavier
  * BI_REPORT_REVIEW / BI_REPORT_ANALYSIS tasks. Everything else is briefing tier.
  *
- * See internal LLM spend / abuse guard spec (T019), Gap 2.
+ * See HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 (internal) §二 Gap 2.
  */
 
 import type { LLMTaskType } from "@/lib/llm/types";

@@ -88,7 +88,7 @@ review_after: 2026-07-23
 ```bash
 ./node_modules/.bin/vitest run lib/runtime-server-minimal.test.ts
 ./node_modules/.bin/eslint lib/runtime-server-minimal.ts lib/runtime-server-minimal.test.ts scripts/helm-self-check-refactored.ts scripts/helm-self-check.ts scripts/decision-first-boundary-check.ts
-DATABASE_URL="mysql://root:***@${HELM_DB_HOST}/helm2026_ci_verify?charset=utf8mb4" npm run self-check
+DATABASE_URL="mysql://root:***@rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306/helm2026_ci_verify?charset=utf8mb4" npm run self-check
 npm run check:boundaries
 npm run typecheck
 npm run test

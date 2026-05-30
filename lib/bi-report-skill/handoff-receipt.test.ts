@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dbMock, executionLogMock } = vi.hoisted(() => ({
+const { dbMock, executionLogMock, closureMock } = vi.hoisted(() => ({
   dbMock: {
     biReportBusinessHandoffDecision: {
       findFirst: vi.fn(),
@@ -9,6 +9,9 @@ const { dbMock, executionLogMock } = vi.hoisted(() => ({
   executionLogMock: {
     createBiReportHandoffExecutionLog: vi.fn(),
     listBiReportHandoffExecutionLogs: vi.fn(),
+  },
+  closureMock: {
+    applyBiReportHandoffReceiptToActionItem: vi.fn(),
   },
 }));
 
@@ -19,6 +22,10 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/bi-report-skill/handoff-execution-log", () => ({
   createBiReportHandoffExecutionLog: executionLogMock.createBiReportHandoffExecutionLog,
   listBiReportHandoffExecutionLogs: executionLogMock.listBiReportHandoffExecutionLogs,
+}));
+
+vi.mock("@/lib/bi-report-skill/action-item-closure", () => ({
+  applyBiReportHandoffReceiptToActionItem: closureMock.applyBiReportHandoffReceiptToActionItem,
 }));
 
 import {
@@ -77,6 +84,15 @@ describe("bi report handoff receipt", () => {
         decisionId: "decision-1",
         approvalTaskId: "approval-1",
         stage: "plan",
+      }),
+    );
+    expect(closureMock.applyBiReportHandoffReceiptToActionItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionItemId: "action-1",
+        receiptStage: "plan",
+        outcome: "approved_pending_execution",
+        signalStatus: "actioned",
+        executionLogId: "log-approval-1",
       }),
     );
   });

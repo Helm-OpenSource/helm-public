@@ -2,7 +2,6 @@ import { ActorType, ExternalSyncProvider, ExternalSyncStatus } from "@prisma/cli
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExternalAgentArtifact } from "@/features/external-agent-intake/artifact-contract";
 import {
@@ -20,6 +19,8 @@ import {
   type ParsedOpenClawMemoryRecord,
 } from "@/lib/integrations/openclaw-memory/parser";
 
+const DEFAULT_BACKUP_DIR = "/Users/chm/.openclaw/memory/backups";
+const DEFAULT_LANCEDB_PATH = "/Users/chm/.openclaw/memory/lancedb-pro";
 const DEFAULT_OPENCLAW_BIN = "openclaw";
 
 type SourceMode = "lancedb" | "backup_jsonl";
@@ -61,18 +62,6 @@ export type SyncOpenClawMemoryInput = {
   actorUserId?: string | null;
   maxItems?: number;
 };
-
-export function resolveOpenClawHostDefaults() {
-  const openclawHome = process.env.OPENCLAW_HOME?.trim() || join(homedir(), ".openclaw");
-
-  return {
-    backupDir:
-      process.env.OPENCLAW_MEMORY_BACKUP_DIR?.trim() || join(openclawHome, "memory", "backups"),
-    lanceDbPath:
-      process.env.OPENCLAW_MEMORY_DB_PATH?.trim() || join(openclawHome, "memory", "lancedb-pro"),
-    openclawBin: process.env.OPENCLAW_BIN?.trim() || DEFAULT_OPENCLAW_BIN,
-  };
-}
 
 function normalizeSourceMode(value?: string | null): SourceMode {
   if (value === "backup_jsonl") return "backup_jsonl";
@@ -741,7 +730,9 @@ export function toOperatorSafeOpenClawMemorySyncStatus(
 
 export async function syncOpenClawMemory(input: SyncOpenClawMemoryInput): Promise<OpenClawSyncStats> {
   const sourceMode = normalizeSourceMode(input.sourceMode ?? process.env.OPENCLAW_MEMORY_SOURCE_MODE);
-  const { backupDir, lanceDbPath, openclawBin } = resolveOpenClawHostDefaults();
+  const backupDir = process.env.OPENCLAW_MEMORY_BACKUP_DIR ?? DEFAULT_BACKUP_DIR;
+  const lanceDbPath = process.env.OPENCLAW_MEMORY_DB_PATH ?? DEFAULT_LANCEDB_PATH;
+  const openclawBin = process.env.OPENCLAW_BIN ?? DEFAULT_OPENCLAW_BIN;
 
   const sourceRef = buildOpenClawSyncSourceRef(sourceMode);
   const sourcePage = input.sourcePage ?? "/memory";

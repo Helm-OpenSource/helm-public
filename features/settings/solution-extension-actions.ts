@@ -18,7 +18,7 @@ import {
   requireCurrentUser,
 } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { SOLUTION_EXTENSION_CATALOG } from "@/lib/extensions/solution-extension-catalog";
+import { getSolutionExtensionCatalog } from "@/lib/extensions/solution-extension-catalog";
 
 const inputSchema = z.object({
   extensionKey: z.string().trim().min(1).max(120),
@@ -56,7 +56,7 @@ export async function setWorkspaceSolutionExtensionStatusAction(
     };
   }
 
-  const catalogEntry = SOLUTION_EXTENSION_CATALOG.find(
+  const catalogEntry = getSolutionExtensionCatalog().find(
     (entry) => entry.extensionKey === parsed.data.extensionKey,
   );
   if (!catalogEntry) {

@@ -46,16 +46,9 @@ export async function persistBiReportRowLevelSignals(input: {
     signalRouting: input.prepared.subscription.signalRouting,
   });
 
-  type PersistedSignalSummary = {
-    id: string;
-    ownerUserId: string | null;
-  };
-
-  const persistedSignals = (
-    result as { persistedSignals?: Array<PersistedSignalSummary | null> }
-  ).persistedSignals?.filter(
-    (signal): signal is PersistedSignalSummary => Boolean(signal),
-  ) ?? [];
+  const persistedSignals = result.persistedSignals.filter(
+    (signal): signal is NonNullable<typeof signal> => Boolean(signal),
+  );
 
   // Row-level notifications:
   // Prefer DingTalk app-message to the responsible owner if we can resolve a DingTalk target.

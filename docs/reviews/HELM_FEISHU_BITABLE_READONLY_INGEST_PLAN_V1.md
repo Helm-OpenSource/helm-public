@@ -1,9 +1,9 @@
 ---
 status: active
 owner: helm-core
-created: 2026-05-26
-review_after: 2026-08-24
-# frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-29
+created: 2026-05-21
+review_after: 2026-08-19
+# frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-26
 # rationale: default — no archive/dormant signal in path
 ---
 # Helm Feishu Bitable Read-only Ingest Plan

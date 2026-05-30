@@ -13,22 +13,12 @@ review_after: 2026-07-28
 本文档面向**第一次在本地跑 Helm**的开发者。读完应该能在 15 分钟内：
 
 1. 装好依赖
-2. 起好 MySQL 或 Docker demo 栈
+2. 起好 MySQL
 3. 跑通迁移与种子
 4. 启动 dev server 并看到 `/dashboard` 的「今天必须拍板的 3 件事」
 5. 知道下一步该读哪份文档
 
-如果你只是想 90 秒看 demo，请回到 [README.md](../README.md#90-秒看到-helm) 用 `npm run quickstart`。
-
-如果你没有本机 MySQL，只想先把 Helm 整体跑起来，推荐直接走 Docker-first quickstart：
-
-```bash
-npm install
-npm run quickstart:doctor
-npm run quickstart
-```
-
-这条路径不会自动改 `.env`，但会检查 Docker / compose / 端口前置，然后直接启动仓库内置的 `mysql:8.4 + app`。
+如果你只是想 90 秒看 demo，请回到 [README.md](../README.md#90-秒看到-helm) 用 `docker compose up`。
 
 ---
 
@@ -52,8 +42,8 @@ npm run quickstart
 ## 1. 克隆仓库
 
 ```bash
-git clone https://github.com/Helm-OpenSource/helm-public.git
-cd helm-public
+git clone https://github.com/<org>/helm.git
+cd helm
 ```
 
 ---
@@ -73,8 +63,6 @@ npm run db:generate
 ---
 
 ## 3. 准备 MySQL
-
-如果你已经使用上面的 `npm run quickstart`，这一节可以跳过。
 
 最简单的方式——用 Docker 起一个本地实例：
 
@@ -141,7 +129,7 @@ npm run db:seed        # 灌入开发示例数据
 如果迁移失败提示 extension SQL 相关，单独跑：
 
 ```bash
-npm run db:prepare     # 自动准备 schema / extension SQL
+npm run setup-db       # 自动应用 extension SQL
 ```
 
 需要重置时（**会删本地数据**）：
@@ -179,15 +167,6 @@ npm run dev
 npm run typecheck
 npm run lint
 npm run test
-```
-
-说明：
-
-- 默认 `npm run test` 会跳过 6 个 Helm v2 MySQL runtime integration suites，避免 fresh clone 被本机 MySQL 前置直接卡死。
-- 需要显式验证这批 runtime integration 时，再单独开启：
-
-```bash
-HELM_RUN_MYSQL_RUNTIME_TESTS=1 npx vitest run lib/helm-v2/*runtime.test.ts
 ```
 
 如果你打算改东西并提 PR，建议在提交前跑完整链：

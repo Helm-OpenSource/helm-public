@@ -79,7 +79,7 @@ export default async function TrialApplicationPage() {
                 : "想自部署？"}
             </span>
             <a
-              href="https://github.com/Helm-OpenSource/helm-public"
+              href="https://github.com/Helm-Developers/helm2026"
               target="_blank"
               rel="noopener noreferrer"
               className="font-semibold text-[color:var(--accent)] underline-offset-4 hover:underline"

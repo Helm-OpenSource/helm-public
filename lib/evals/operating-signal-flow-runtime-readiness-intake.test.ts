@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -119,14 +118,8 @@ describe("operating signal flow runtime readiness intake", () => {
 
   it("returns deterministic JSON with exit 64 for directory input paths", () => {
     const cli = spawnSync(
-      process.execPath,
-      [
-        "--import",
-        path.join(process.cwd(), "node_modules/tsx/dist/loader.mjs"),
-        "scripts/operating-signal-flow-runtime-readiness-intake.ts",
-        "--input",
-        ".",
-      ],
+      "node",
+      ["--import", "tsx", "scripts/operating-signal-flow-runtime-readiness-intake.ts", "--input", "."],
       {
         cwd: process.cwd(),
         encoding: "utf8",
