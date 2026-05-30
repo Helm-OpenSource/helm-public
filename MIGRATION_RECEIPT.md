@@ -9,7 +9,7 @@ for the Helm repo split.
 
 - Source repo: `Helm-Developers/helm2026`
 - Source branch: `claude/helm-public-core-relationship-Cr6OV`
-- Source commit: `349e4d2565c3feffaa98c4ece7341399ef9b8fb5`
+- Source commit: `9a3b79097d505908ad300e212e56f3b9cd6cfbb2`
 - Code validation baseline: `6cdcbf806`
 - Target branch: `codex/repo-split-public-mirror-20260530`
 
