@@ -66,6 +66,31 @@ Observed target-side result:
 - tenant/customer literal search: exit 1, no matches
 - nested `.git` search: exit 0, no matches
 
+## History and Leak Verification
+
+This bootstrap branch descends from the existing public `origin/main`; it does
+not preserve private source repository history. The only commits currently on
+top of public `origin/main` are the staged mirror commits for this PR.
+
+Additional checks:
+
+```bash
+git merge-base --is-ancestor origin/main HEAD
+git log --oneline origin/main..HEAD
+HELM_SECRET_HISTORY_BASELINE_REF=origin/main npm run check:secret-history
+npm run check:public-release
+node --import tsx scripts/check-public-mirror-tree.ts --mirror-root .
+```
+
+Observed result:
+
+- public branch ancestry: exit 0; branch descends from public `origin/main`
+- `origin/main..HEAD`: contains only public mirror staging/fix commits
+- `check:secret-history`: exit 0; no known compromised commits reachable across
+  the checked refs
+- `check:public-release`: exit 0; scanned 3339 public files
+- `check-public-mirror-tree`: exit 0; scanned 3339 public files
+
 ## Scope
 
 This is a Core/public staging branch. It intentionally excludes tenant-private
