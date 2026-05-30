@@ -19,6 +19,10 @@
     "check:public-release": "node --import tsx scripts/public-release-guard.ts",
     "check:secret-history": "node --import tsx scripts/secret-history-check.ts",
     "db:generate": "prisma generate --schema prisma/schema.prisma && prisma generate --schema prisma/schema.sqlite.prisma",
+    "db:prepare": "node -e \"console.log('public mirror: database prepare is not required')\"",
+    "test": "npm run public:smoke:static",
+    "quality:regression": "npm run public:smoke:static",
+    "e2e": "npm run public:smoke:static",
     "check:boundaries": "npm run public:smoke:static",
     "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
     "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands"

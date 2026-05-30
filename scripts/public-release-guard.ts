@@ -847,8 +847,13 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 
 const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   typecheck: "tsc --noEmit --project tsconfig.public.json",
+  "db:prepare":
+    "node -e \"console.log('public mirror: database prepare is not required')\"",
   "self-check": "npm run public:smoke:static",
   "check:boundaries": "npm run public:smoke:static",
+  test: "npm run public:smoke:static",
+  "quality:regression": "npm run public:smoke:static",
+  e2e: "npm run public:smoke:static",
   "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
   "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
 };
@@ -866,10 +871,14 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "delivery:doctor",
   "pack:fixture-check",
   "db:generate",
+  "db:prepare",
   "check:public-release",
   "check:secret-history",
   "self-check",
   "check:boundaries",
+  "test",
+  "quality:regression",
+  "e2e",
   "public:smoke:static",
   "public:smoke",
 ]);

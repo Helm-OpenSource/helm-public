@@ -174,10 +174,15 @@ describe("public mirror tree builder", () => {
       scripts: {
         "check:boundaries": "npm run public:smoke:static",
         "check:public-release": "node --import tsx scripts/public-release-guard.ts",
+        "db:prepare":
+          "node -e \"console.log('public mirror: database prepare is not required')\"",
         dev: "next dev",
+        e2e: "npm run public:smoke:static",
         "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
         "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+        "quality:regression": "npm run public:smoke:static",
         "self-check": "npm run public:smoke:static",
+        test: "npm run public:smoke:static",
         typecheck: "tsc --noEmit --project tsconfig.public.json",
       },
     });
@@ -263,8 +268,14 @@ describe("public mirror tree builder", () => {
     expect(pkg.private).toBe(false);
     expect(scripts["public:smoke:static"]).toBeDefined();
     expect(scripts.typecheck).toBe("tsc --noEmit --project tsconfig.public.json");
+    expect(scripts["db:prepare"]).toBe(
+      "node -e \"console.log('public mirror: database prepare is not required')\"",
+    );
     expect(scripts["self-check"]).toBe("npm run public:smoke:static");
     expect(scripts["check:boundaries"]).toBe("npm run public:smoke:static");
+    expect(scripts.test).toBe("npm run public:smoke:static");
+    expect(scripts["quality:regression"]).toBe("npm run public:smoke:static");
+    expect(scripts.e2e).toBe("npm run public:smoke:static");
     expect(scripts["check:public-release"]).toBe(
       "node --import tsx scripts/public-release-guard.ts",
     );

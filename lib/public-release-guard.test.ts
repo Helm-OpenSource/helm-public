@@ -616,7 +616,12 @@ describe("public release guard fixture coverage", () => {
       "self-check": "npm run public:smoke:static",
       dev: "next dev",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
+      "db:prepare":
+        "node -e \"console.log('public mirror: database prepare is not required')\"",
       "check:boundaries": "npm run public:smoke:static",
+      test: "npm run public:smoke:static",
+      "quality:regression": "npm run public:smoke:static",
+      e2e: "npm run public:smoke:static",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
     });
@@ -732,10 +737,15 @@ describe("public release guard fixture coverage", () => {
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
       "check:boundaries": "npm run public:smoke:static",
+      "db:prepare":
+        "node -e \"console.log('public mirror: database prepare is not required')\"",
       dev: "next dev",
+      e2e: "npm run public:smoke:static",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+      "quality:regression": "npm run public:smoke:static",
       "self-check": "npm run public:smoke:static",
+      test: "npm run public:smoke:static",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
     });
   });
