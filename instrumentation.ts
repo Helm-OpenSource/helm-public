@@ -9,10 +9,14 @@ export async function register() {
   // Composition root (repo-split Step 5A): wire Packs/Overlays into the Core
   // registry via the generic bootstrap aggregator. Core names NO tenant here.
   // `extensions/pack-bootstrap` is a PRIVATE_FILE, so the public Core mirror
-  // omits it → this import fails → empty registry → Core-only behavior (every
-  // resolve* degrades to empty/fallback). That degradation is intentional.
+  // omits it. Keep the import path non-literal so public typecheck/build does
+  // not require the private bootstrap file; runtime absence still degrades to
+  // Core-only behavior. That degradation is intentional.
   try {
-    const { registerAllPacks } = await import("@/extensions/pack-bootstrap");
+    const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");
+    const { registerAllPacks } = (await import(packBootstrapPath)) as {
+      registerAllPacks: () => void;
+    };
     registerAllPacks();
     logInstrumentationInfo("registered pack contributions");
   } catch (err) {

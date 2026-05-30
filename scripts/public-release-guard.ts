@@ -845,6 +845,35 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return Object.values(value).every((entry) => typeof entry === "string");
 }
 
+const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
+  typecheck: "tsc --noEmit --project tsconfig.public.json",
+  "self-check": "npm run public:smoke:static",
+  "check:boundaries": "npm run public:smoke:static",
+  "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
+  "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+};
+
+const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
+  "dev",
+  "build",
+  "start",
+  "postinstall",
+  "prepare",
+  "lint",
+  "lint:strict",
+  "typecheck",
+  "validate:env",
+  "delivery:doctor",
+  "pack:fixture-check",
+  "db:generate",
+  "check:public-release",
+  "check:secret-history",
+  "self-check",
+  "check:boundaries",
+  "public:smoke:static",
+  "public:smoke",
+]);
+
 export function projectPublicPackageManifest(
   sourceManifest: Record<string, unknown>,
 ): PublicPackageManifestProjection {
@@ -859,7 +888,7 @@ export function projectPublicPackageManifest(
     const publicScripts: Record<string, string> = {};
     for (const [name, command] of Object.entries(manifest.scripts)) {
       const candidate = `${name}\n${command}`;
-      if (name === "self-check" || name === "release:check") {
+      if (!PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST.has(name)) {
         removedScripts.push(name);
         continue;
       }
@@ -867,12 +896,11 @@ export function projectPublicPackageManifest(
         removedScripts.push(name);
         continue;
       }
+      publicScripts[name] = PUBLIC_PACKAGE_SCRIPT_OVERRIDES[name] ?? command;
+    }
+    for (const [name, command] of Object.entries(PUBLIC_PACKAGE_SCRIPT_OVERRIDES)) {
       publicScripts[name] = command;
     }
-    publicScripts["public:smoke:static"] =
-      "tsx scripts/public-mirror-smoke.ts --repo-root .";
-    publicScripts["public:smoke"] =
-      "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands";
     manifest.scripts = publicScripts;
   }
 

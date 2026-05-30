@@ -608,13 +608,15 @@ describe("public release guard fixture coverage", () => {
 
     expect(projection.manifest.private).toBe(false);
     expect(projection.removedScripts).toEqual([
-      "self-check",
       "release:check",
       `seed:${tenantSlug}-workspace`,
       "proof-pack:build",
     ]);
     expect(projection.manifest.scripts).toMatchObject({
+      "self-check": "npm run public:smoke:static",
       dev: "next dev",
+      typecheck: "tsc --noEmit --project tsconfig.public.json",
+      "check:boundaries": "npm run public:smoke:static",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
     });
@@ -729,9 +731,12 @@ describe("public release guard fixture coverage", () => {
     expect(result.violations).toEqual([]);
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
+      "check:boundaries": "npm run public:smoke:static",
       dev: "next dev",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+      "self-check": "npm run public:smoke:static",
+      typecheck: "tsc --noEmit --project tsconfig.public.json",
     });
   });
 
