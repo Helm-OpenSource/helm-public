@@ -18,7 +18,7 @@ import {
 import {
   setWorkspaceSolutionExtensionStatusAction,
 } from "@/features/settings/solution-extension-actions";
-import { SOLUTION_EXTENSION_CATALOG } from "@/lib/extensions/solution-extension-catalog";
+import { getSolutionExtensionCatalog } from "@/lib/extensions/solution-extension-catalog";
 
 export default async function SettingsExtensionsPage() {
   const workspace = await getCurrentWorkspace();
@@ -34,6 +34,7 @@ export default async function SettingsExtensionsPage() {
     select: { extensionKey: true, status: true, updatedAt: true },
   });
   const statusByKey = new Map(records.map((r) => [r.extensionKey, r]));
+  const solutionExtensionCatalog = getSolutionExtensionCatalog();
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-6 py-8">
@@ -70,7 +71,7 @@ export default async function SettingsExtensionsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {SOLUTION_EXTENSION_CATALOG.map((entry) => {
+          {solutionExtensionCatalog.map((entry) => {
             const record = statusByKey.get(entry.extensionKey);
             const isActive = record?.status === "ACTIVE";
 

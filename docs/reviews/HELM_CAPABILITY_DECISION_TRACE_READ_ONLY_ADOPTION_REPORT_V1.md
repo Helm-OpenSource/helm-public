@@ -103,7 +103,7 @@ Trace 结构保持 read model draft 的七段式：
 
 ```bash
 npx vitest run lib/capability-decision-trace.test.ts
-DATABASE_URL="mysql://root:***@${HELM_DB_HOST}/helm2026_ci_verify?charset=utf8mb4" npm run self-check
+DATABASE_URL="mysql://root:***@rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306/helm2026_ci_verify?charset=utf8mb4" npm run self-check
 npm run check:boundaries
 npx eslint lib/capability-decision-trace.ts lib/capability-decision-trace.test.ts features/programs/actions.ts features/participant-portal/actions.ts features/settings/actions.ts lib/billing/manual-settlement.ts scripts/helm-self-check-refactored.ts scripts/helm-self-check.ts scripts/decision-first-boundary-check.ts
 git diff --check

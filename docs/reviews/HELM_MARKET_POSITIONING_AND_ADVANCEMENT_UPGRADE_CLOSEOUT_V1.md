@@ -11,7 +11,7 @@ review_after: 2026-10-23
 更新时间：2026-04-26
 状态：Phase A documentation slice 关闭（仅文档与上下文层；未触发 runtime / scripts / schema / API / page 改造）
 基线提交：`origin/main@208ed1b5c fix: restore continuity runtime review surfaces`
-实施工作树 / 分支：`<repo-worktree>/helm2026-market-positioning-upgrade`（branch `codex/market-positioning-upgrade`）
+实施工作树 / 分支：`/Users/tommyqian/Documents/GitHub/helm2026-market-positioning-upgrade`（branch `codex/market-positioning-upgrade`）
 
 本报告对本轮 Helm 市场定位收口与 Business Advancement 下一阶段队列固定切片做关闭说明。本切片定位为 documentation/context-only，不批准 runtime/schema/API/page 改造，关闭以本文件为准。
 
@@ -72,7 +72,7 @@ Helm **不是**：
 
 1. **Mobile Command Surface 已实现**：`/mobile` 第一屏已经把 Ask Helm mobile answer、Must Push 必须推进项与 Review / Memory / Operating 承接入口收在同一张窄手机端经营推进入口。
 2. **上一切片的本地完整验证已通过**：在 Mobile Command Surface 实现切片之后已完成 isolated full-validation 跑批（`db:reset`、targeted continuity E2E、`check:boundaries`、`typecheck`、`test` 2667 用例、`build`、`quality:regression` 181 用例、`e2e` 34 用例全部通过）。本关闭报告引用这一基线，但不在本切片内重跑这一全链路。
-3. **DB-backed E2E blocker 历史化 / 已 unblocked**：旧版本里关于 DB-backed E2E 被 `${HELM_DB_HOST}` 不可达阻断的描述按「历史 / 已 unblocked」处理，不再代表当前主干 blocker。
+3. **DB-backed E2E blocker 历史化 / 已 unblocked**：旧版本里关于 DB-backed E2E 被 `rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306` 不可达阻断的描述按「历史 / 已 unblocked」处理，不再代表当前主干 blocker。
 4. **MySQL 1020 concurrency warning 仍是 hardening 残留**：在前一切片 E2E 跑批期间出现于 `dailyUsageSnapshot`、`recommendationLog`、`membership` 周边；最终 assertion 通过，但 hardening 未关闭，不能因为 assertion 通过就视为已解决。
 
 ---

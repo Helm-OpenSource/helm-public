@@ -1,8 +1,15 @@
 {
+  "$schema": "../../lib/headless-signal-interface/pack-manifest.ts",
+  "_note": "HSI-01 conformance declaration for the Case Management Sample. Phase 1 offline only — no runtime loader is wired against this file. Shape is verified by lib/headless-signal-interface/pack-manifest.test.ts.",
   "packId": "case-management-sample",
   "displayName": "Case Management Sample",
   "verticalKind": "case_management",
-  "sourceKinds": ["case_system", "im", "meeting", "email"],
+  "sourceKinds": [
+    "case_system",
+    "im",
+    "meeting",
+    "email"
+  ],
   "signalFamilies": [
     "commitment_missing",
     "stage_or_status_stale",

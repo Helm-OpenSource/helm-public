@@ -63,7 +63,7 @@ WORK=/tmp/helm-rds-secret-remediation-20260430
 python3 -m venv "$WORK/venv"
 "$WORK/venv/bin/python" -m pip install git-filter-repo
 cd "$WORK"
-git clone --mirror https://github.com/Helm-OpenSource/helm-public.git helm-public.git
+git clone --mirror https://github.com/Helm-Developers/helm2026.git helm2026.git
 cd helm2026.git
 "$WORK/venv/bin/git-filter-repo" --force --replace-text <replacement-spec>
 ```
@@ -115,7 +115,7 @@ WORK=/tmp/helm-rds-secret-remediation-$(date +%Y%m%d%H%M%S)
 python3 -m venv "$WORK/venv"
 "$WORK/venv/bin/python" -m pip install git-filter-repo
 cd "$WORK"
-git clone --mirror https://github.com/Helm-OpenSource/helm-public.git helm-public.git
+git clone --mirror https://github.com/Helm-Developers/helm2026.git helm2026.git
 cd helm2026.git
 "$WORK/venv/bin/git-filter-repo" --force --replace-text <private replacement spec>
 ```
@@ -143,7 +143,7 @@ Expected:
 Only after Step 1 and Step 4 pass:
 
 ```bash
-git remote add origin https://github.com/Helm-OpenSource/helm-public.git
+git remote add origin https://github.com/Helm-Developers/helm2026.git
 git push --force --mirror origin
 ```
 
@@ -219,78 +219,6 @@ Branch-local evidence for `codex/gtm-positioning-review-fixes-20260518`:
 | Current-head public mirror candidate, then `HELM_SECRET_HISTORY_REPO=<candidate> npm run check:secret-history` | PASS — no known compromised commits reachable in 1 ref |
 
 This evidence closes the branch-level no-new-exposure risk for the GTM / case-management-sample changes and provides a machine-checkable public mirror release path. The latest current-head receipt is `mirror-clean:public-mirror-2026-05-18-current-head-8a5a96e59`; `mirror-clean:public-mirror-2026-05-18-gtm-case-sample-af08f142b` remains historical evidence for the earlier minimum-reference source. This does **not** rewrite `origin/main` history; if the release source is `origin/main` rather than the clean mirror, the owner still needs coordinated public history rewrite after credential rotation.
-
-## 6.3 2026-05-20 Current Branch Verification Update
-
-Current branch: `codex/operating-signal-flow-automode`
-
-| Validation | Result |
-| --- | --- |
-| `npm run check:public-release` | PASS — scanned `3797` files; no public-mirror blockers |
-| `npm run test -- lib/public-release-guard.test.ts` | PASS — `30/30` tests passed |
-| `HELM_SECRET_HISTORY_BASELINE_REF=origin/main npm run check:secret-history` | PASS — no new known compromised commits beyond `origin/main`; `87` baseline-known findings suppressed |
-| `npm run check:secret-history` | FAIL — `87` known compromised commit reachability findings remain reachable from current refs |
-
-Additional note:
-
-1. After merging the latest `origin/main`, public-release guard temporarily failed because newly introduced public files referenced internal private documentation paths.
-2. The repo-side fix was completed by removing hard-coded private documentation path references from shared `lib/llm/*` comments and by classifying the internal-only maintenance scripts (`scripts/docs-reference-scan.ts`, `scripts/docs-lifecycle-classify-orphans.ts`, `scripts/release-maintenance-runbook.ts`) as `PRIVATE_FILES` for public-mirror purposes.
-3. This update restores the repo to a public-release-guard-clean state, but it does **not** satisfy cloud credential rotation or public history rewrite.
-4. As of `2026-05-20`, no Aliyun credential rotation receipt is recorded in this repository, so release status remains `No-Go` for rewrite / force-push execution.
-
-## 6.4 2026-05-22 Rewrite Prep Update
-
-Current branch: `codex/operating-signal-flow-automode`
-
-| Validation | Result |
-| --- | --- |
-| `aliyun` CLI | NOT AVAILABLE in this environment |
-| Aliyun / RDS env vars | NOT PRESENT in this environment |
-| `origin` remote ref snapshot | READY — `170` refs total, `128` codex refs, `30` feature refs, `5` chore/security refs |
-| collaborator freeze / recovery notice template | READY |
-| `npm run check:public-release` | PASS — scanned `3824` files; no public-mirror blockers |
-| `HELM_SECRET_HISTORY_BASELINE_REF=origin/main npm run check:secret-history` | PASS — no new known compromised commits beyond `origin/main`; `108` baseline-known findings suppressed |
-| `npm run check:secret-history` | FAIL — `108` known compromised commit reachability findings remain reachable from current refs |
-
-Prep artifacts created on `2026-05-22`:
-
-1. rewrite ref inventory（internal-only prep artifact；不随 OSS 仓库分发）
-2. freeze / recovery notice template（internal-only prep artifact；不随 OSS 仓库分发）
-
-Current conclusion:
-
-1. Repo-side rewrite prep artifacts and public GitHub surface review are now both ready.
-2. This does not change the blocker state: cloud credential rotation evidence is still absent.
-3. As of `2026-05-22`, push / release status remains `No-Go` until rotation receipt, rewrite, and post-rewrite validation all exist.
-
-## 6.5 2026-05-26 Public Surface Review Follow-up
-
-Current branch: `codex/operating-signal-flow-automode`
-
-| Validation | Result |
-| --- | --- |
-| public GitHub surface review doc | READY — [HELM_PUBLIC_GITHUB_SURFACE_REVIEW_2026_05_26.md](HELM_PUBLIC_GITHUB_SURFACE_REVIEW_2026_05_26.md) |
-| README / runbook / launch draft placeholder cleanup | DONE — public GitHub URLs aligned to `Helm-OpenSource/helm-public` |
-| public doc dead-link cleanup | DONE — `CONTRIBUTING.md` no longer points to internal-only docs |
-| `npm run check:public-release` | PASS — scanned `3823` files; no public-mirror blockers |
-| `HELM_SECRET_HISTORY_BASELINE_REF=origin/main npm run check:secret-history` | PASS — no new known compromised commits beyond `origin/main`; `108` baseline-known findings suppressed |
-| `npm run check:secret-history` | FAIL — `108` known compromised commit reachability findings remain reachable from current refs |
-
-Important boundary:
-
-1. The `2026-05-26` public surface review improves public-release readiness only at the documentation / wording layer.
-2. It does **not** replace cloud credential invalidation evidence.
-3. It does **not** replace formal history rewrite or post-rewrite validation.
-4. It does **not** create a real `mirror-clean:<receipt-id>`.
-
-Therefore the remediation conclusion remains unchanged:
-
-- release / push status is still `No-Go` until cloud rotation evidence, rewritten public history, and post-rewrite validation are all present.
-
-1. Repo-side rewrite prep continues to move forward.
-2. Cloud-side rotation / invalidation evidence is still missing.
-3. As of `2026-05-22`, rewrite rehearsal may still be practiced locally, but it cannot be accepted as completion of Milestone C until Milestone B is actually closed.
-4. Release status remains `red-alert / blocked`, not because the rewrite mechanism is unproven, but because the cloud credential prerequisite remains unverified in-repo.
 
 ## 7. Boundary
 

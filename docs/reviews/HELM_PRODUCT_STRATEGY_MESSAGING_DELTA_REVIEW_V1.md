@@ -21,11 +21,11 @@ review_after: 2026-07-11
 
 这份文档是 review / delta 文档，不替代以下 source of truth：
 
-- [AGENTS.md](../../AGENTS.md)
-- [README.md](../../README.md)
-- [HELM_CHINA_MARKET_MESSAGING_V1.md](../brand/HELM_CHINA_MARKET_MESSAGING_V1.md)
-- [HELM_PRODUCT_PRINCIPLES_V1.md](../product/HELM_PRODUCT_PRINCIPLES_V1.md)
-- [DESIGN.md](../../DESIGN.md)
+- [AGENTS.md](/Users/tommyqian/Documents/GitHub/helm2026/AGENTS.md)
+- [README.md](/Users/tommyqian/Documents/GitHub/helm2026/README.md)
+- [HELM_CHINA_MARKET_MESSAGING_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/brand/HELM_CHINA_MARKET_MESSAGING_V1.md)
+- [HELM_PRODUCT_PRINCIPLES_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_PRODUCT_PRINCIPLES_V1.md)
+- [DESIGN.md](/Users/tommyqian/Documents/GitHub/helm2026/DESIGN.md)
 
 ## 2. 输入与判断依据
 
@@ -39,9 +39,9 @@ review_after: 2026-07-11
 
 本轮直接参考的输入包括：
 
-- [docs/product-strategy-upgrade-recommendations.md](../product-strategy-upgrade-recommendations.md)
-- [app/page.tsx](../../app/page.tsx)
-- [features/dashboard/goal-driven-home-surface.tsx](../../features/dashboard/goal-driven-home-surface.tsx)
+- [docs/product-strategy-upgrade-recommendations.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product-strategy-upgrade-recommendations.md)
+- [app/page.tsx](/Users/tommyqian/Documents/GitHub/helm2026/app/page.tsx)
+- [features/dashboard/goal-driven-home-surface.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/goal-driven-home-surface.tsx)
 
 判断基线保持不变：
 
@@ -329,11 +329,11 @@ dashboard 下一轮文案应围绕以下 5 个问题：
 
 如果按本 review 落下一轮改稿，主要影响面会落在：
 
-- [app/page.tsx](../../app/page.tsx)
-- [features/auth/login-panel.tsx](../../features/auth/login-panel.tsx)
-- [features/dashboard/goal-driven-home-surface.tsx](../../features/dashboard/goal-driven-home-surface.tsx)
-- [lib/operating-system/goal-driven-home.ts](../../lib/operating-system/goal-driven-home.ts)
-- [HELM_CHINA_MARKET_MESSAGING_V1.md](../brand/HELM_CHINA_MARKET_MESSAGING_V1.md)
+- [app/page.tsx](/Users/tommyqian/Documents/GitHub/helm2026/app/page.tsx)
+- [features/auth/login-panel.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/auth/login-panel.tsx)
+- [features/dashboard/goal-driven-home-surface.tsx](/Users/tommyqian/Documents/GitHub/helm2026/features/dashboard/goal-driven-home-surface.tsx)
+- [lib/operating-system/goal-driven-home.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/operating-system/goal-driven-home.ts)
+- [HELM_CHINA_MARKET_MESSAGING_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/brand/HELM_CHINA_MARKET_MESSAGING_V1.md)
 
 扩面但不在首轮强制范围内的面包括：
 
@@ -445,7 +445,7 @@ dashboard 下一轮文案应围绕以下 5 个问题：
 
 更合理的位置是：
 
-- [HELM_CHINA_GTM_PACKAGE_V1.md](../brand/HELM_CHINA_GTM_PACKAGE_V1.md)
+- [HELM_CHINA_GTM_PACKAGE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/brand/HELM_CHINA_GTM_PACKAGE_V1.md)
 - 销售 / demo / founder handoff 材料
 
 更合理的内容方向不是：
@@ -585,7 +585,7 @@ dashboard 下一轮文案应围绕以下 5 个问题：
 
 这条线的独立收口见：
 
-- [HELM_LAYERED_INTEGRATION_CONTROL_PLANE_STRATEGY_REVIEW_V1.md](./HELM_LAYERED_INTEGRATION_CONTROL_PLANE_STRATEGY_REVIEW_V1.md)
+- [HELM_LAYERED_INTEGRATION_CONTROL_PLANE_STRATEGY_REVIEW_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_LAYERED_INTEGRATION_CONTROL_PLANE_STRATEGY_REVIEW_V1.md)
 
 ## 12. 下一步建议
 

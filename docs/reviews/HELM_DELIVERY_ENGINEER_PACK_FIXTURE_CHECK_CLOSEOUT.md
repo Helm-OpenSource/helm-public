@@ -3,8 +3,8 @@ status: active
 owner: Product / Delivery Engineering / Engineering
 created: 2026-05-20
 source_requirement: ../product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md
-review_after: 2026-08-18
-# missing required fields backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-29
+review_after: 2026-11-16
+# missing required fields backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-26
 ---
 
 # Helm Delivery Engineer Pack Fixture Check Closeout

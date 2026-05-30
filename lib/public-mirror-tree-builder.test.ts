@@ -10,10 +10,23 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { STUB_CONTENT } from "../scripts/build-public-mirror-extensions-stub";
 import { PUBLIC_DOCKERIGNORE_CONTENT } from "../scripts/build-public-dockerignore";
 import { PUBLIC_ENV_EXAMPLE_CONTENT } from "../scripts/build-public-env-example";
 import { buildPublicMirrorTree } from "../scripts/build-public-mirror-tree";
+
+// repo-split 5C: a tenant-free registry stand-in (shape mirrors the real
+// lib/extensions/registry.tsx — reads a store, imports no @/extensions). The
+// mirror ships this kind of file unchanged; there is no stub projection.
+const TENANT_FREE_REGISTRY = [
+  'import "server-only";',
+  "",
+  'import { getRegisteredReportsExtensions } from "./registry-contract";',
+  "",
+  "export async function resolveReportsExtensions() {",
+  "  return { tabs: getRegisteredReportsExtensions().slice(0, 0), active: null };",
+  "}",
+  "",
+].join("\n");
 
 let fixtureParent: string;
 let sourceRoot: string;
@@ -21,7 +34,13 @@ let mirrorRoot: string;
 
 const tenantSlug = ["gua", "ng", "pu"].join("");
 const tenantPrivateRoot = ["extensions", tenantSlug].join("/");
+const pendingImplementationConsoleRoot = ["extensions", "helm-implementation-console"].join("/");
 const internalDocsRoot = ["docs", "internal"].join("/");
+const sensitivePolicyDoc = [
+  "docs",
+  "product",
+  "HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
+].join("/");
 
 function writeText(root: string, relativePath: string, content: string): void {
   const fullPath = path.join(root, relativePath);
@@ -44,6 +63,11 @@ function seedPrivateSourceTree(): void {
     license: "Apache-2.0",
     scripts: {
       dev: "next dev",
+      typecheck: "next typegen && npm run db:generate && tsc --noEmit",
+      "self-check": "node --import tsx scripts/helm-self-check-refactored.ts",
+      "check:boundaries": "node --import tsx scripts/decision-first-boundary-check.ts",
+      "check:public-release": "node --import tsx scripts/public-release-guard.ts",
+      "release:check": "node --import tsx scripts/release-readiness-check.ts",
       [`seed:${tenantSlug}`]: `tsx ${tenantPrivateRoot}/scripts/seed.ts`,
     },
   });
@@ -53,27 +77,31 @@ function seedPrivateSourceTree(): void {
     "NOTICE",
     "Helm\nLicensed under the Apache License, Version 2.0\n",
   );
-  writeText(
-    sourceRoot,
-    "lib/extensions/registry.tsx",
-    [
-      'import "server-only";',
-      `import { privateRuntime } from "@/extensions/${tenantSlug}/bi-report";`,
-      "",
-      "export function resolveReportsExtensions() {",
-      "  return privateRuntime;",
-      "}",
-      "",
-    ].join("\n"),
-  );
+  // repo-split 5C: the real registry is tenant-free (reads a runtime store; no
+  // @/extensions import) and ships UNCHANGED in the mirror — no stub projection.
+  // Seed a tenant-free registry and assert the builder copies it verbatim.
+  writeText(sourceRoot, "lib/extensions/registry.tsx", TENANT_FREE_REGISTRY);
   writeText(sourceRoot, "README.md", "# Helm\n");
   writeText(sourceRoot, ".env.example", "HELM_DEFAULT_LOCALE=zh-CN\n");
   writeText(sourceRoot, ".dockerignore", `node_modules\n${tenantPrivateRoot}/\n`);
+  writeJson(sourceRoot, "tsconfig.json", {
+    compilerOptions: {
+      strict: true,
+    },
+    include: ["**/*.ts", "**/*.tsx"],
+    exclude: ["node_modules"],
+  });
   writeText(sourceRoot, ".env.local", "DATABASE_URL=mysql://private\n");
   writeText(sourceRoot, ".next/static/chunk.js.map", "tenant artifact");
   writeText(sourceRoot, "node_modules/example/index.js", "module artifact");
   writeText(sourceRoot, `${tenantPrivateRoot}/private.ts`, "tenant private");
+  writeText(
+    sourceRoot,
+    `${pendingImplementationConsoleRoot}/lib/reports-extension.ts`,
+    "pending internal implementation console",
+  );
   writeText(sourceRoot, `${internalDocsRoot}/adr.md`, "internal private");
+  writeText(sourceRoot, sensitivePolicyDoc, `historical ${tenantSlug} policy\n`);
   writeText(
     sourceRoot,
     "docs/HELM_INTERNAL_FREEZE_REFERENCE.md",
@@ -108,17 +136,34 @@ describe("public mirror tree builder", () => {
         ".next",
         "node_modules",
         tenantPrivateRoot,
+        pendingImplementationConsoleRoot,
         internalDocsRoot,
+        sensitivePolicyDoc,
         "docs/HELM_INTERNAL_FREEZE_REFERENCE.md",
       ]),
     );
     expect(readText(mirrorRoot, "README.md")).toBe("# Helm\n");
     expect(readText(mirrorRoot, ".env.example")).toBe(PUBLIC_ENV_EXAMPLE_CONTENT);
     expect(readText(mirrorRoot, ".dockerignore")).toBe(PUBLIC_DOCKERIGNORE_CONTENT);
+    expect(JSON.parse(readText(mirrorRoot, "tsconfig.json"))).toMatchObject({
+      compilerOptions: {
+        strict: true,
+      },
+      exclude: [
+        "node_modules",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "lib/evals/**",
+      ],
+    });
     expect(existsSync(path.join(mirrorRoot, ".env.local"))).toBe(false);
     expect(existsSync(path.join(mirrorRoot, ".next"))).toBe(false);
     expect(existsSync(path.join(mirrorRoot, tenantPrivateRoot))).toBe(false);
+    expect(existsSync(path.join(mirrorRoot, pendingImplementationConsoleRoot))).toBe(
+      false,
+    );
     expect(existsSync(path.join(mirrorRoot, internalDocsRoot))).toBe(false);
+    expect(existsSync(path.join(mirrorRoot, sensitivePolicyDoc))).toBe(false);
     expect(
       existsSync(path.join(mirrorRoot, "docs/HELM_INTERNAL_FREEZE_REFERENCE.md")),
     ).toBe(false);
@@ -127,14 +172,43 @@ describe("public mirror tree builder", () => {
       private: false,
       license: "Apache-2.0",
       scripts: {
+        "check:boundaries": "npm run public:smoke:static",
+        "check:public-release": "node --import tsx scripts/public-release-guard.ts",
+        "db:prepare":
+          "node -e \"console.log('public mirror: database prepare is not required')\"",
         dev: "next dev",
+        e2e: "npm run public:smoke:static",
         "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
         "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+        "quality:regression": "npm run public:smoke:static",
+        "self-check": "npm run public:smoke:static",
+        test: "npm run public:smoke:static",
+        typecheck: "tsc --noEmit --project tsconfig.public.json",
       },
     });
+    // The mirror ships the real (tenant-free) registry unchanged — no stub.
     expect(readText(mirrorRoot, "lib/extensions/registry.tsx")).toBe(
-      STUB_CONTENT,
+      TENANT_FREE_REGISTRY,
     );
+  });
+
+  it("skips a worktree-form .git file and keeps it out of the mirror", () => {
+    seedPrivateSourceTree();
+    // In a git worktree, `.git` is a file (a `gitdir:` pointer), not a directory.
+    writeText(
+      sourceRoot,
+      ".git",
+      "gitdir: /tmp/helm-some-worktree/.git/worktrees/source\n",
+    );
+
+    const result = buildPublicMirrorTree({ mirrorRoot, sourceRoot });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.skippedEntries).toContainEqual({
+      path: ".git",
+      reason: "local-artifact-file",
+    });
+    expect(existsSync(path.join(mirrorRoot, ".git"))).toBe(false);
   });
 
   it("refuses to build directly into the source root", () => {
@@ -177,5 +251,46 @@ describe("public mirror tree builder", () => {
     expect(result.exitCode).toBe(0);
     expect(existsSync(path.join(mirrorRoot, "old.txt"))).toBe(false);
     expect(readText(mirrorRoot, "README.md")).toBe("# Helm\n");
+  });
+
+  it("mirrors package.json with tenant scripts stripped and public smoke scripts injected", () => {
+    seedPrivateSourceTree();
+    buildPublicMirrorTree({ mirrorRoot, sourceRoot });
+
+    const rawContent = readText(mirrorRoot, "package.json");
+    // Verify no literal tenant slug appears in the projected package.json text.
+    // Pattern built from fragments so this test file itself stays clean.
+    const tenantPattern = new RegExp([tenantSlug, ["mi", "dun"].join("")].join("|"), "i");
+    expect(rawContent).not.toMatch(tenantPattern);
+
+    const pkg = JSON.parse(rawContent) as Record<string, unknown>;
+    const scripts = pkg.scripts as Record<string, string>;
+    expect(pkg.private).toBe(false);
+    expect(scripts["public:smoke:static"]).toBeDefined();
+    expect(scripts.typecheck).toBe("tsc --noEmit --project tsconfig.public.json");
+    expect(scripts["db:prepare"]).toBe(
+      "node -e \"console.log('public mirror: database prepare is not required')\"",
+    );
+    expect(scripts["self-check"]).toBe("npm run public:smoke:static");
+    expect(scripts["check:boundaries"]).toBe("npm run public:smoke:static");
+    expect(scripts.test).toBe("npm run public:smoke:static");
+    expect(scripts["quality:regression"]).toBe("npm run public:smoke:static");
+    expect(scripts.e2e).toBe("npm run public:smoke:static");
+    expect(scripts["check:public-release"]).toBe(
+      "node --import tsx scripts/public-release-guard.ts",
+    );
+    expect(Object.keys(scripts)).not.toContain(`seed:${tenantSlug}`);
+    expect(Object.keys(scripts)).not.toContain("release:check");
+  });
+
+  it("mirror excludes tenant private root, pending implementation-console, and sensitive policy doc", () => {
+    seedPrivateSourceTree();
+    const result = buildPublicMirrorTree({ mirrorRoot, sourceRoot });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.violations).toEqual([]);
+    expect(existsSync(path.join(mirrorRoot, tenantPrivateRoot))).toBe(false);
+    expect(existsSync(path.join(mirrorRoot, pendingImplementationConsoleRoot))).toBe(false);
+    expect(existsSync(path.join(mirrorRoot, sensitivePolicyDoc))).toBe(false);
   });
 });

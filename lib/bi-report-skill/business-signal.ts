@@ -332,6 +332,9 @@ function resolveBusinessSignalStatusTransition(
   if (current === "resolved") {
     return current;
   }
+  if (current === "dismissed") {
+    return current;
+  }
   if (requested === "dismissed" && current === "actioned") {
     return current;
   }

@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -18,12 +19,10 @@ import { resolveUiLocale } from "@/lib/i18n/config";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
-export const runtime = "nodejs";
 
 export async function generateMetadata(): Promise<Metadata> {
-  // Public /health should never fail due to per-request cookie parsing.
-  // Keep metadata deterministic and locale-neutral to avoid runtime crashes in production.
-  const english = false;
+  const locale = resolveUiLocale((await cookies()).get("helm-ui-locale")?.value);
+  const english = locale === "en-US";
 
   return {
     title: english ? "Helm Health | Public Safe" : "Helm Health | 公开安全",
@@ -70,26 +69,12 @@ function HealthIcon({ row }: { readonly row: PublicHealthRow }) {
 }
 
 export default async function HealthPage() {
-  // Keep /health robust: it must render even when request-scoped helpers throw.
-  // Locale is best-effort only; never fail rendering because of it.
-  const english = resolveUiLocale(undefined) === "en-US";
-
-  const readout = (() => {
-    try {
-      return buildPublicHealthReadout({
-        english,
-        auditWriteFailureSummary: getAuditWriteFailureSummary(),
-      });
-    } catch (error) {
-      process.stderr.write(
-        `[helm.health_readout_failure] ${error instanceof Error ? error.message : String(error)}\n`,
-      );
-      return buildPublicHealthReadout({
-        english,
-        auditWriteFailureSummary: { totalCount: 1 },
-      });
-    }
-  })();
+  const locale = resolveUiLocale((await cookies()).get("helm-ui-locale")?.value);
+  const english = locale === "en-US";
+  const readout = buildPublicHealthReadout({
+    english,
+    auditWriteFailureSummary: getAuditWriteFailureSummary(),
+  });
 
   return (
     <main className="min-h-screen bg-[color:var(--background)] px-6 py-10 text-[color:var(--foreground)]">

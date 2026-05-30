@@ -23,8 +23,7 @@ Helm 是一套面向受控试点的「经营推进控制台 / 经营推进操作
 
 如果你的改动涉及租户扩展、计费、连接器或公开发布相关脚本，请额外阅读：
 
-- `docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`（开源 / 商业 runtime / partner delivery 边界）
-- `docs/product/HELM_OPEN_CORE_COMMERCIAL_MATRIX.md`（open core / cloud / enterprise / custom 能力矩阵）
+- `docs/internal/HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md`（租户隔离与公开/私有仓库边界）
 - `docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md`（公开试用数据政策草案；最终以工作区契约和生效政策为准）
 - `docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md`（五月 launch plan）
 - `docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`（open core / commercial runtime / partner delivery 边界）
@@ -87,11 +86,7 @@ Helm 当前明确处于「受控试点」阶段。这意味着：
 # 安装依赖
 npm install
 
-# 如果你没有本机 MySQL，先走 Docker-first quickstart
-npm run quickstart:doctor
-npm run quickstart
-
-# 如果你要本机开发，再复制环境变量模板
+# 复制环境变量模板（需要本地 MySQL）
 cp .env.example .env
 
 # 准备数据库
@@ -102,8 +97,6 @@ npm run db:seed
 # 启动开发服务器
 npm run dev
 ```
-
-如果你只想先把 Helm 跑起来而不是本机开发，`npm run quickstart` 就是默认公开入口；更完整的说明见 [docs/getting-started.md](docs/getting-started.md)。
 
 `.env.example` 分三档：
 

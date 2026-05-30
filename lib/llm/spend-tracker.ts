@@ -15,7 +15,7 @@
  * Budget configuration: WorkspaceLLMConfig.monthlySpendBudgetUSD
  * (null = no budget tracking, undefined = no budget tracking).
  *
- * See internal LLM spend / abuse guard spec (T019), Gap 3.
+ * See HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 (internal) §二 Gap 3.
  */
 
 import type { LLMProvider, LLMTaskType, WorkspaceLLMConfig } from "@/lib/llm/types";

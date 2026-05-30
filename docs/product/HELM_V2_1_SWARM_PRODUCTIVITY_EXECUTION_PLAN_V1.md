@@ -10,7 +10,7 @@ review_after: 2026-07-15
 
 更新时间：2026-04-22
 状态：Historical Planning Baseline（已完成）
-输入来源：`<local-reference-pdf>/Agent Swarm Architectures and Their Applicability to Helm v2.1.pdf`
+输入来源：`/Users/tommyqian/Desktop/Agent Swarm Architectures and Their Applicability to Helm v2.1.pdf`
 
 收口说明：
 

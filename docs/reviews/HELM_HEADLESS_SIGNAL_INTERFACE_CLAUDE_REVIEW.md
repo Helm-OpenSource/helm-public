@@ -5,7 +5,7 @@ created: 2026-05-20
 source_requirement: ../product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md
 review_mode: claude-read-only-requirements-review + owner-audit
 review_after: 2026-08-18
-# missing required fields backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-29
+# missing required fields backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-26
 ---
 
 # Helm Headless Signal Interface Review

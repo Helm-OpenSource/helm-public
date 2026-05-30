@@ -1,3 +1,5 @@
+import { ActionStatus } from "@prisma/client";
+import { applyBiReportHandoffReceiptToActionItem } from "@/lib/bi-report-skill/action-item-closure";
 import {
   createBiReportHandoffExecutionLog,
   listBiReportHandoffExecutionLogs,
@@ -41,10 +43,24 @@ export async function writeBiReportHandoffApprovalReceipt(input: {
     (log) => log.stage === "plan" && log.approvalTaskId === input.approvalTaskId,
   );
   if (existingPlanLog) {
+    await syncHandoffReceiptToActionItem({
+      workspaceId: input.workspaceId,
+      actionItemId: input.actionItemId,
+      approvalTaskId: input.approvalTaskId,
+      authorUserId: input.authorUserId,
+      decisionReason: input.decisionReason,
+      signalId: context.signalId,
+      receiptStage: "plan",
+      outcome: "approved_pending_execution",
+      executionLogId: existingPlanLog.id,
+      signalStatus: "actioned",
+      actionStatus: ActionStatus.APPROVED,
+      executionStatus: "approved",
+    });
     return existingPlanLog;
   }
 
-  return createBiReportHandoffExecutionLog({
+  const planLog = await createBiReportHandoffExecutionLog({
     workspaceId: input.workspaceId,
     signalId: context.signalId,
     decisionId: context.decisionId,
@@ -61,6 +77,26 @@ export async function writeBiReportHandoffApprovalReceipt(input: {
     },
     followUpNeeded: true,
   });
+  if (!planLog) {
+    return null;
+  }
+
+  await syncHandoffReceiptToActionItem({
+    workspaceId: input.workspaceId,
+    actionItemId: input.actionItemId,
+    approvalTaskId: input.approvalTaskId,
+    authorUserId: input.authorUserId,
+    decisionReason: input.decisionReason,
+    signalId: context.signalId,
+    receiptStage: "plan",
+    outcome: "approved_pending_execution",
+    executionLogId: planLog.id,
+    signalStatus: "actioned",
+    actionStatus: ActionStatus.APPROVED,
+    executionStatus: "approved",
+  });
+
+  return planLog;
 }
 
 export async function writeBiReportHandoffExecutionReceipt(input: {
@@ -113,10 +149,25 @@ export async function writeBiReportHandoffExecutionReceipt(input: {
     (log) => log.stage === "result" && log.approvalTaskId === input.approvalTaskId,
   );
   if (existingResultLog) {
+    await syncHandoffReceiptToActionItem({
+      workspaceId: input.workspaceId,
+      actionItemId: input.actionItemId,
+      approvalTaskId: input.approvalTaskId,
+      authorUserId: input.authorUserId,
+      decisionReason: input.decisionReason,
+      signalId: context.signalId,
+      receiptStage: "result",
+      outcome: "executed",
+      executionLogId: existingResultLog.id,
+      signalStatus: "resolved",
+      actionStatus: ActionStatus.EXECUTED,
+      executionStatus: "executed",
+      executedAt: new Date(),
+    });
     return existingResultLog;
   }
 
-  return createBiReportHandoffExecutionLog({
+  const resultLog = await createBiReportHandoffExecutionLog({
     workspaceId: input.workspaceId,
     signalId: context.signalId,
     decisionId: context.decisionId,
@@ -135,6 +186,27 @@ export async function writeBiReportHandoffExecutionReceipt(input: {
     isEffective: null,
     followUpNeeded: true,
   });
+  if (!resultLog) {
+    return null;
+  }
+
+  await syncHandoffReceiptToActionItem({
+    workspaceId: input.workspaceId,
+    actionItemId: input.actionItemId,
+    approvalTaskId: input.approvalTaskId,
+    authorUserId: input.authorUserId,
+    decisionReason: input.decisionReason,
+    signalId: context.signalId,
+    receiptStage: "result",
+    outcome: "executed",
+    executionLogId: resultLog.id,
+    signalStatus: "resolved",
+    actionStatus: ActionStatus.EXECUTED,
+    executionStatus: "executed",
+    executedAt: new Date(),
+  });
+
+  return resultLog;
 }
 
 export async function writeBiReportHandoffRejectionReceipt(input: {
@@ -173,6 +245,20 @@ export async function writeBiReportHandoffRejectionReceipt(input: {
       log.details?.source === "approval_task_rejected",
   );
   if (existingResultLog) {
+    await syncHandoffReceiptToActionItem({
+      workspaceId: input.workspaceId,
+      actionItemId: input.actionItemId,
+      approvalTaskId: input.approvalTaskId,
+      authorUserId: input.authorUserId,
+      decisionReason: input.decisionReason,
+      signalId: context.signalId,
+      receiptStage: "result",
+      outcome: "rejected_not_executed",
+      executionLogId: existingResultLog.id,
+      signalStatus: "actioned",
+      actionStatus: ActionStatus.BLOCKED,
+      executionStatus: "blocked",
+    });
     return existingResultLog;
   }
 
@@ -196,7 +282,7 @@ export async function writeBiReportHandoffRejectionReceipt(input: {
     });
   }
 
-  return createBiReportHandoffExecutionLog({
+  const rejectionLog = await createBiReportHandoffExecutionLog({
     workspaceId: input.workspaceId,
     signalId: context.signalId,
     decisionId: context.decisionId,
@@ -214,6 +300,44 @@ export async function writeBiReportHandoffRejectionReceipt(input: {
     isEffective: false,
     followUpNeeded: true,
   });
+  if (!rejectionLog) {
+    return null;
+  }
+
+  await syncHandoffReceiptToActionItem({
+    workspaceId: input.workspaceId,
+    actionItemId: input.actionItemId,
+    approvalTaskId: input.approvalTaskId,
+    authorUserId: input.authorUserId,
+    decisionReason: input.decisionReason,
+    signalId: context.signalId,
+    receiptStage: "result",
+    outcome: "rejected_not_executed",
+    executionLogId: rejectionLog.id,
+    signalStatus: "actioned",
+    actionStatus: ActionStatus.BLOCKED,
+    executionStatus: "blocked",
+  });
+
+  return rejectionLog;
+}
+
+async function syncHandoffReceiptToActionItem(input: {
+  workspaceId: string;
+  actionItemId: string;
+  approvalTaskId: string;
+  authorUserId: string | null;
+  decisionReason?: string | null;
+  signalId: string;
+  receiptStage: "plan" | "result";
+  outcome: "approved_pending_execution" | "executed" | "rejected_not_executed";
+  executionLogId?: string;
+  signalStatus: "actioned" | "resolved";
+  actionStatus?: ActionStatus;
+  executionStatus?: string;
+  executedAt?: Date;
+}) {
+  await applyBiReportHandoffReceiptToActionItem(input);
 }
 
 async function resolveBiReportHandoffActionContext(input: {

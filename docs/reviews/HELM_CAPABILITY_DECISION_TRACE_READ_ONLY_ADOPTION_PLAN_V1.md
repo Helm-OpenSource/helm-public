@@ -15,10 +15,10 @@ review_after: 2026-07-21
 
 这份 plan 建立在以下 current-main 文档之上：
 
-- [HELM_CLAUDE_CODE_AND_CODEX_HARNESS_GAP_ANALYSIS_V1.md](./HELM_CLAUDE_CODE_AND_CODEX_HARNESS_GAP_ANALYSIS_V1.md)
-- [HELM_CAPABILITY_RESOLUTION_ENGINE_REQUIREMENTS_V1.md](../product/HELM_CAPABILITY_RESOLUTION_ENGINE_REQUIREMENTS_V1.md)
-- [HELM_CAPABILITY_DECISION_TRACE_READ_MODEL_DRAFT_V1.md](../product/HELM_CAPABILITY_DECISION_TRACE_READ_MODEL_DRAFT_V1.md)
-- [HELM_MULTITENANCY_CAPABILITY_AND_TENANT_OWNERSHIP_GOVERNANCE_BASELINE_V1.md](../product/HELM_MULTITENANCY_CAPABILITY_AND_TENANT_OWNERSHIP_GOVERNANCE_BASELINE_V1.md)
+- [HELM_CLAUDE_CODE_AND_CODEX_HARNESS_GAP_ANALYSIS_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_CLAUDE_CODE_AND_CODEX_HARNESS_GAP_ANALYSIS_V1.md)
+- [HELM_CAPABILITY_RESOLUTION_ENGINE_REQUIREMENTS_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_CAPABILITY_RESOLUTION_ENGINE_REQUIREMENTS_V1.md)
+- [HELM_CAPABILITY_DECISION_TRACE_READ_MODEL_DRAFT_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_CAPABILITY_DECISION_TRACE_READ_MODEL_DRAFT_V1.md)
+- [HELM_MULTITENANCY_CAPABILITY_AND_TENANT_OWNERSHIP_GOVERNANCE_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_MULTITENANCY_CAPABILITY_AND_TENANT_OWNERSHIP_GOVERNANCE_BASELINE_V1.md)
 
 ## 2. 为什么现在开这条 plan
 
@@ -51,9 +51,9 @@ review_after: 2026-07-21
 
 当前仓库中最适合的 read-only adoption cohort：
 
-- [features/programs/actions.ts](../../features/programs/actions.ts)
-- [features/participant-portal/actions.ts](../../features/participant-portal/actions.ts)
-- [lib/billing/manual-settlement.ts](../../lib/billing/manual-settlement.ts)
+- [features/programs/actions.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/programs/actions.ts)
+- [features/participant-portal/actions.ts](/Users/tommyqian/Documents/GitHub/helm2026/features/participant-portal/actions.ts)
+- [lib/billing/manual-settlement.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/billing/manual-settlement.ts)
 
 选择原因：
 
@@ -181,12 +181,12 @@ review_after: 2026-07-21
 
 当前分支已按本 plan 完成第一批 read-only adoption：
 
-- 新增 [lib/capability-decision-trace.ts](../../lib/capability-decision-trace.ts)
-- 新增 [lib/capability-decision-trace.test.ts](../../lib/capability-decision-trace.test.ts)
+- 新增 [lib/capability-decision-trace.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/capability-decision-trace.ts)
+- 新增 [lib/capability-decision-trace.test.ts](/Users/tommyqian/Documents/GitHub/helm2026/lib/capability-decision-trace.test.ts)
 - `features/programs/actions.ts` 和 `features/participant-portal/actions.ts` 在 selected write actions 返回 `capabilityDecisionTrace`
 - `features/settings/actions.ts` 在 manual settlement action wrapper 返回 `capabilityDecisionTrace`
 - `lib/billing/manual-settlement.ts` 暴露 manual settlement trace resolver，同时保持底层 service 返回值不变
-- 收口报告见 [HELM_CAPABILITY_DECISION_TRACE_READ_ONLY_ADOPTION_REPORT_V1.md](./HELM_CAPABILITY_DECISION_TRACE_READ_ONLY_ADOPTION_REPORT_V1.md)
+- 收口报告见 [HELM_CAPABILITY_DECISION_TRACE_READ_ONLY_ADOPTION_REPORT_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_CAPABILITY_DECISION_TRACE_READ_ONLY_ADOPTION_REPORT_V1.md)
 
 仍然明确延期：
 

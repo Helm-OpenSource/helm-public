@@ -1,6 +1,28 @@
 {
+  "$schema": "../../lib/headless-signal-interface/pack-artifacts.ts",
+  "_note": "HSI-01 review_packet_template for case-management-sample. Phase 1 OFFLINE only — no runtime writer is wired against this file. Every field with a forbidden literal (sent/approved/executed/committed/officialWritePerformed) must stay false in any concrete instance generated from this template; HSI-04 forbids them being flipped to true outside an explicit human reviewer surface.",
   "packId": "case-management-sample",
-  "templateVersion": "1.0.0",
+  "templateVersion": "0.1.0",
+  "schema": {
+    "packetId": "string — server-generated, idempotent per (capabilityId, fixtureId)",
+    "workspaceId": "string — must equal the authenticated workspace",
+    "capabilityId": "string — references a capability from search_signal_capabilities",
+    "fixtureId": "string — references a fixture under fixtures/ or hsi-payload-examples.json",
+    "evidenceRefs": "string[] — fixture / payload example paths only; raw payload not embedded",
+    "risks": "string[] — short human-readable risk lines",
+    "missingInfo": "string[] — what the human reviewer still needs before approval",
+    "allowedNextSurface": "one of operating_signal_flow_map | review_packet | approval_inbox | memory_review_queue | boundary_ledger",
+    "forbiddenActions": "string[] — explicit list of actions this packet must NOT trigger",
+    "requiredReviewSurface": "same enum as allowedNextSurface",
+    "humanReviewerRequired": "always true in Phase 1",
+    "notForAutoSend": "always true in Phase 1",
+    "sent": "always false in Phase 1 — flipping true is an HSI-04 boundary violation",
+    "approved": "always false in Phase 1 — flipping true is an HSI-04 boundary violation",
+    "executed": "always false in Phase 1 — flipping true is an HSI-04 boundary violation",
+    "committed": "always false in Phase 1 — flipping true is an HSI-04 boundary violation",
+    "officialWritePerformed": "always false in Phase 1 — flipping true is an HSI-04 boundary violation",
+    "draftBody": "string — preparation-only draft text (email, CRM note, IM message). Not sent."
+  },
   "defaults": {
     "humanReviewerRequired": true,
     "notForAutoSend": true,
@@ -21,5 +43,41 @@
       "auto_assign_owner",
       "promote_to_memory"
     ]
+  },
+  "example": {
+    "packetId": "synthetic-packet-001",
+    "workspaceId": "workspace-case-management-sample",
+    "capabilityId": "case-management-sample.commitment_missing",
+    "fixtureId": "cm-commitment-missing-meeting-followup",
+    "evidenceRefs": [
+      "extensions/case-management-sample/hsi-payload-examples.json#meeting-input-1",
+      "extensions/case-management-sample/fixtures/case.sample.json"
+    ],
+    "risks": [
+      "客户经理周一会议承诺周五前发方案，未在 case 系统创建跟进任务",
+      "若周五未交付，客户会重新引入历史 vendor"
+    ],
+    "missingInfo": [
+      "确认方案的最终版本归属（销售 vs 售前）",
+      "确认客户对承诺的接受口径（书面 vs 口头）"
+    ],
+    "allowedNextSurface": "review_packet",
+    "forbiddenActions": [
+      "execute_action",
+      "send_message",
+      "approve",
+      "write_crm_stage",
+      "auto_assign_owner",
+      "promote_to_memory"
+    ],
+    "requiredReviewSurface": "review_packet",
+    "humanReviewerRequired": true,
+    "notForAutoSend": true,
+    "sent": false,
+    "approved": false,
+    "executed": false,
+    "committed": false,
+    "officialWritePerformed": false,
+    "draftBody": "建议为周一会议中提到的『周五前发方案』承诺创建可复核的跟进任务，明确 owner、deadline 与方案版本归属。本草稿不应直接外发；外发版本由复核人确认后从 approval_inbox 启动。"
   }
 }

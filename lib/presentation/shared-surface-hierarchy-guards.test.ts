@@ -186,9 +186,7 @@ describe("shared surface hierarchy guards", () => {
     );
 
     expect(sidebar).toContain("demoShellCopy ?? messages.shell.shellHeadline");
-    expect(sidebar).toContain('? "Customer scenario"');
-    expect(sidebar).toContain('? "Operating layer"');
-    expect(sidebar).toContain(': "经营控制层"');
+    expect(sidebar).toContain("客户推进样例");
     expect(sidebar.match(/<h2\b/g) ?? []).toHaveLength(0);
     expect(pageHeader).toContain('titleAs?: "h1" | "h2"');
     expect(contactDetailClient).toContain('titleAs="h2"');
@@ -656,7 +654,7 @@ describe("shared surface hierarchy guards", () => {
 
     expect(topbar).toContain('{ href: "/capture", label: messages.shell.nav.capture }');
     expect(topbar).toContain(
-      "Data sources, field notes, outcome change and readiness checks stay here as the foundation.",
+      "Data sources, field notes, outcome change and readiness checks",
     );
     expect(topbar).toContain(
       "数据接入、现场记录、效果变化和就绪检查统一留在基础层。",

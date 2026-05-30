@@ -3,10 +3,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { STUB_CONTENT } from "../scripts/build-public-mirror-extensions-stub";
 import { PUBLIC_DOCKERIGNORE_CONTENT } from "../scripts/build-public-dockerignore";
 import { PUBLIC_ENV_EXAMPLE_CONTENT } from "../scripts/build-public-env-example";
 import { buildPublicMirrorPreflight } from "../scripts/build-public-mirror-preflight";
+
+// repo-split 5C: the preflight no longer projects lib/extensions/registry.tsx —
+// the real registry is tenant-free and ships unchanged (the former extensions
+// stub was removed). These tests therefore only cover the package/env/dockerignore
+// projections; registry parity is proven by
+// lib/extensions/registry-core-only-mirror-parity.test.ts.
 
 let fixtureRoot: string;
 
@@ -63,14 +68,13 @@ describe("public mirror preflight", () => {
     rmSync(fixtureRoot, { force: true, recursive: true });
   });
 
-  it("writes package projection and extensions stub against an explicit mirror root", () => {
-    seedPrivateMirrorInputs();
+  it("writes the package/env/dockerignore projections against an explicit mirror root", () => {
+    const { privateRegistry: privateRegistrySeed } = seedPrivateMirrorInputs();
 
     const result = buildPublicMirrorPreflight({ mirrorRoot: fixtureRoot });
 
     expect(result.exitCode).toBe(0);
     expect(result.packageManifest.status).toBe("wrote-projection");
-    expect(result.extensionsStub.status).toBe("wrote-stub");
     expect(result.envExample.status).toBe("wrote-projection");
     expect(result.dockerignore.status).toBe("wrote-projection");
     expect(JSON.parse(readText("package.json"))).toEqual({
@@ -85,7 +89,8 @@ describe("public mirror preflight", () => {
     });
     expect(readText(".env.example")).toBe(PUBLIC_ENV_EXAMPLE_CONTENT);
     expect(readText(".dockerignore")).toBe(PUBLIC_DOCKERIGNORE_CONTENT);
-    expect(readText("lib/extensions/registry.tsx")).toBe(STUB_CONTENT);
+    // The preflight does NOT touch lib/extensions/registry.tsx anymore (5C).
+    expect(readText("lib/extensions/registry.tsx")).toBe(privateRegistrySeed);
   });
 
   it("passes in check mode after the mirror root has been projected", () => {
@@ -100,13 +105,12 @@ describe("public mirror preflight", () => {
     expect(writeResult.exitCode).toBe(0);
     expect(checkResult.exitCode).toBe(0);
     expect(checkResult.packageManifest.status).toBe("already-projected");
-    expect(checkResult.extensionsStub.status).toBe("already-stub");
     expect(checkResult.envExample.status).toBe("already-projected");
     expect(checkResult.dockerignore.status).toBe("already-projected");
   });
 
   it("fails in check mode without mutating unprojected mirror inputs", () => {
-    const { privatePackage, privateRegistry } = seedPrivateMirrorInputs();
+    const { privatePackage } = seedPrivateMirrorInputs();
 
     const result = buildPublicMirrorPreflight({
       mirrorRoot: fixtureRoot,
@@ -115,10 +119,8 @@ describe("public mirror preflight", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.packageManifest.status).toBe("not-projected");
-    expect(result.extensionsStub.status).toBe("not-stub");
     expect(result.envExample.status).toBe("not-projected");
     expect(result.dockerignore.status).toBe("not-projected");
     expect(JSON.parse(readText("package.json"))).toEqual(privatePackage);
-    expect(readText("lib/extensions/registry.tsx")).toBe(privateRegistry);
   });
 });

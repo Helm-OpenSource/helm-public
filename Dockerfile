@@ -24,7 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
-COPY scripts/fix-local-lightningcss-signature.mjs ./scripts/fix-local-lightningcss-signature.mjs
 # `npm ci` runs `postinstall` which calls `prisma generate`.
 RUN npm ci --no-audit --no-fund
 
@@ -43,7 +42,6 @@ COPY . .
 # Local quality chain (`npm run typecheck && npm run lint && npm run test`)
 # remains the canonical correctness gate.
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run db:generate \
  && npm run build
 
@@ -66,9 +64,6 @@ COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/scripts ./scripts
-COPY --from=build /app/lib ./lib
-COPY --from=build /app/data ./data
-COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json ./package-lock.json
 

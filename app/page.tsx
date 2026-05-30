@@ -99,7 +99,7 @@ export default async function Home({
       body: english
         ? "Read the source, fork the repo, ship your first controlled customer in ~4 weeks. Apache-2.0, no royalty, no platform tax."
         : "看源码、fork 仓库、约 4 周交付首个受控客户。Apache-2.0，不抽成，不锁渠道。",
-      href: "https://github.com/Helm-OpenSource/helm-public",
+      href: "https://github.com/Helm-Developers/helm2026",
       cta: english ? "View on GitHub" : "去 GitHub 看源码",
       testId: "home-path-fork",
     },
@@ -251,13 +251,11 @@ export default async function Home({
             <Link href="/programs">{english ? "Partner programs" : "合作计划"}</Link>
           </Button>
           <Button asChild variant="ghost">
-            <Link href="/login" data-testid="home-path-login">
-              {english ? "Sign in" : "登录"}
-            </Link>
+            <Link href="/login">{english ? "Sign in" : "登录"}</Link>
           </Button>
           <Button asChild variant="default">
             <a
-              href="https://github.com/Helm-OpenSource/helm-public"
+              href="https://github.com/Helm-Developers/helm2026"
               data-testid="home-cta-github-header"
               target="_blank"
               rel="noopener noreferrer"
@@ -526,7 +524,7 @@ export default async function Home({
             <div className="flex flex-wrap gap-3">
               <Button asChild variant="default">
                 <a
-                  href="https://github.com/Helm-OpenSource/helm-public"
+                  href="https://github.com/Helm-Developers/helm2026"
                   data-testid="home-cta-github"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -565,7 +563,7 @@ export default async function Home({
           </div>
           <div className="flex flex-wrap items-center gap-4">
             <a
-              href="https://github.com/Helm-OpenSource/helm-public"
+              href="https://github.com/Helm-Developers/helm2026"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-[color:var(--foreground)]"

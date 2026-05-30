@@ -21,8 +21,10 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import path from "node:path";
 
@@ -31,6 +33,7 @@ import { verifyPublicMirrorTree } from "./check-public-mirror-tree";
 import {
   PUBLIC_MIRROR_PRIVATE_FILES,
   PUBLIC_MIRROR_PRIVATE_ROOTS,
+  projectPublicPackageManifest,
   type Violation,
 } from "./public-release-guard";
 
@@ -139,6 +142,11 @@ function getSkipReason(
   if (isDirectory && LOCAL_ARTIFACT_DIRS.has(entryName)) {
     return "local-artifact-dir";
   }
+  // In a git worktree, `.git` is a file (a gitdir pointer), not a directory.
+  // Skip it in file form too so the worktree pointer never reaches the mirror.
+  if (!isDirectory && entryName === ".git") {
+    return "local-artifact-file";
+  }
   if (!isDirectory && LOCAL_ARTIFACT_FILES.has(entryName)) {
     return "local-artifact-file";
   }
@@ -194,6 +202,46 @@ function prepareMirrorRoot(mirrorRoot: string, forceClean: boolean): void {
   mkdirSync(mirrorRoot, { recursive: true });
 }
 
+function projectPublicTsconfig(sourcePath: string): Record<string, unknown> {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(readFileSync(sourcePath, "utf8")) as Record<string, unknown>;
+  } catch {
+    parsed = {};
+  }
+
+  return {
+    ...parsed,
+    include: [
+      "next-env.d.ts",
+      "app/**/*.ts",
+      "app/**/*.tsx",
+      "components/**/*.ts",
+      "components/**/*.tsx",
+      "data/**/*.ts",
+      "data/**/*.tsx",
+      "features/**/*.ts",
+      "features/**/*.tsx",
+      "hooks/**/*.ts",
+      "hooks/**/*.tsx",
+      "lib/**/*.ts",
+      "lib/**/*.tsx",
+      "prisma/**/*.ts",
+      "instrumentation.ts",
+      "middleware.ts",
+      "next.config.ts",
+      ".next/types/**/*.ts",
+      ".next/dev/types/**/*.ts",
+    ],
+    exclude: [
+      "node_modules",
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "lib/evals/**",
+    ],
+  };
+}
+
 function copyPublicTree(sourceRoot: string, mirrorRoot: string): {
   copiedFiles: number;
   copiedDirectories: number;
@@ -241,7 +289,27 @@ function copyPublicTree(sourceRoot: string, mirrorRoot: string): {
     }
 
     mkdirSync(path.dirname(targetPath), { recursive: true });
-    copyFileSync(sourcePath, targetPath);
+
+    // package.json must be projected to strip tenant-private scripts before
+    // it enters the public mirror. A raw copy would leak tenant slug references
+    // present in the private dev convenience scripts.
+    if (relativePath === "package.json") {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(readFileSync(sourcePath, "utf8"));
+      } catch {
+        parsed = {};
+      }
+      const { manifest } = projectPublicPackageManifest(
+        parsed as Record<string, unknown>,
+      );
+      writeFileSync(targetPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    } else if (relativePath === "tsconfig.json") {
+      const tsconfig = projectPublicTsconfig(sourcePath);
+      writeFileSync(targetPath, `${JSON.stringify(tsconfig, null, 2)}\n`, "utf8");
+    } else {
+      copyFileSync(sourcePath, targetPath);
+    }
     copiedFiles += 1;
   }
 

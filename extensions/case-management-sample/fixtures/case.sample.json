@@ -1,7 +1,35 @@
-{
-  "caseId": "case-1001",
-  "customerAlias": "sample-customer-a",
-  "status": "pending_review",
-  "nextAction": "prepare_review_packet",
-  "dataPosture": "synthetic"
-}
+[
+  {
+    "workspaceId": "workspace-sample",
+    "caseId": "CASE-SAMPLE-001",
+    "ownerRefId": "employee-alice",
+    "stage": "review_required",
+    "ageDays": 3,
+    "priorityScore": 91,
+    "evidenceCount": 4,
+    "blockedReason": "boundary_attempt",
+    "observedDate": "2026-05-18"
+  },
+  {
+    "workspaceId": "workspace-sample",
+    "caseId": "CASE-SAMPLE-002",
+    "ownerRefId": "employee-bob",
+    "stage": "active_followup",
+    "ageDays": 1,
+    "priorityScore": 64,
+    "evidenceCount": 2,
+    "blockedReason": null,
+    "observedDate": "2026-05-18"
+  },
+  {
+    "workspaceId": "workspace-sample",
+    "caseId": "CASE-SAMPLE-003",
+    "ownerRefId": "employee-carol",
+    "stage": "evidence_gap",
+    "ageDays": 6,
+    "priorityScore": 78,
+    "evidenceCount": 0,
+    "blockedReason": "missing_evidence",
+    "observedDate": "2026-05-18"
+  }
+]

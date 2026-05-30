@@ -20,7 +20,7 @@ review_after: 2026-10-08
 
 - detail / handoff 主路径中残余的 `Helm can / Helm should / Helm now needs ...` 已继续改成对象优先表达
 - meeting explanation、onboarding / public-entry、settings guidance、program catalog placeholder 等高曝光运行面已纳入同一轮收口
-- [`shared-surface-hierarchy-guards.test.ts`](../../lib/presentation/shared-surface-hierarchy-guards.test.ts) 与 [`helm-self-check.ts`](../../scripts/helm-self-check.ts) 已新增 project-level systemspeak audit
+- [`shared-surface-hierarchy-guards.test.ts`](/Users/qianzhilong/Documents/helm/lib/presentation/shared-surface-hierarchy-guards.test.ts) 与 [`helm-self-check.ts`](/Users/qianzhilong/Documents/helm/scripts/helm-self-check.ts) 已新增 project-level systemspeak audit
 - 项目级 audit 现在不再只是检查 `queue / workspace / panel`，也会覆盖 meeting / onboarding / settings / detail handoff 等主运行面
 
 ## 已成形但仍需下一层

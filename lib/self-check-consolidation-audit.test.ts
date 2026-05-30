@@ -28,7 +28,7 @@ describe("self-check consolidation audit", () => {
   it("keeps package self-check pointed at the refactored gate", () => {
     const audit = buildSelfCheckConsolidationAudit();
 
-    expect(audit.defaultCommand).toBe("tsx scripts/helm-self-check-refactored.ts");
+    expect(audit.defaultCommand).toBe("node --import tsx scripts/helm-self-check-refactored.ts");
     expect(audit.defaultUsesRefactored).toBe(true);
   });
 

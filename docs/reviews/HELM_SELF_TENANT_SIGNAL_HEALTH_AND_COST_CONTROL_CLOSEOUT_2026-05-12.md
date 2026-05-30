@@ -10,7 +10,7 @@ review_after: 2026-11-08
 
 日期：2026-05-12  
 状态：P0 最小实现已落地  
-需求来源：`<local-requirements-drafts>/HELM_SELF_TENANT_SIGNAL_HEALTH_AND_LLM_COST_CONTROL_REQUIREMENTS_2026-05-12.md`
+需求来源：`/Users/tommyqian/Documents/Helm-local/requirements-drafts/HELM_SELF_TENANT_SIGNAL_HEALTH_AND_LLM_COST_CONTROL_REQUIREMENTS_2026-05-12.md`
 
 ## 结论
 

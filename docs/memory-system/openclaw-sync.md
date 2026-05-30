@@ -25,9 +25,9 @@ review_after: 2026-06-29
 
 默认数据源：OpenClaw `memory-lancedb-pro`（底层 LanceDB）
 
-默认路径：`${OPENCLAW_HOME:-$HOME/.openclaw}/memory/lancedb-pro`
+默认路径：`/Users/chm/.openclaw/memory/lancedb-pro`
 
-兼容回退模式：`backup_jsonl`（读取 `${OPENCLAW_HOME:-$HOME/.openclaw}/memory/backups/*.jsonl`）
+兼容回退模式：`backup_jsonl`（读取 `/Users/chm/.openclaw/memory/backups/*.jsonl`）
 
 每条记录读取字段后会先收成保守 intake readout：
 
@@ -94,13 +94,13 @@ npm run sync:openclaw-memory
 
 ```bash
 npm run sync:openclaw-memory -- --workspace-id=<workspaceId> --max-items=2000
-OPENCLAW_HOME="$HOME/.openclaw" npm run sync:openclaw-memory -- --source-mode=backup_jsonl
+npm run sync:openclaw-memory -- --source-mode=backup_jsonl --backup-dir=/Users/chm/.openclaw/memory/backups
 ```
 
 `cron` 示例（每 15 分钟）：
 
 ```cron
-*/15 * * * * cd <helm-repo-root> && OPENCLAW_HOME="$HOME/.openclaw" npm run sync:openclaw-memory >> /tmp/helm-openclaw-sync.log 2>&1
+*/15 * * * * cd /Users/chm/CodexWorkSpace/helm2026-main && npm run sync:openclaw-memory >> /tmp/helm-openclaw-sync.log 2>&1
 ```
 
 ## 审计与事件

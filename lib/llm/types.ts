@@ -98,7 +98,7 @@ export type WorkspaceLLMConfig = {
    * Per-month USD spend budget. When set, the spend-tracker rejects calls
    * whose estimated cost would push month-to-date spending above this cap.
    * `null` or `undefined` = no budget enforcement (existing behavior).
-   * See internal LLM spend / abuse guard spec (T019), Gap 3.
+   * See HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 (internal) §二 Gap 3.
    */
   monthlySpendBudgetUSD?: number | null;
   /**

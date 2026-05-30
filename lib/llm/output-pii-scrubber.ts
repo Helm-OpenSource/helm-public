@@ -20,7 +20,7 @@
  *   - Bank card (Luhn-checked 13-19 digit sequences)
  *   - Email (RFC simplified)
  *
- * See internal LLM spend / abuse guard spec (T019), Gap 4.
+ * See HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 (internal) §二 Gap 4.
  */
 
 export type PIIHit = {

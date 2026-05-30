@@ -95,11 +95,11 @@ Builder 保持纯函数：
 
 ```bash
 npx vitest run lib/memory-observability-budgeting.test.ts
-DATABASE_URL="mysql://root:***@${HELM_DB_HOST}/helm2026_ci_verify?charset=utf8mb4" npm run self-check
+DATABASE_URL="mysql://root:***@rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306/helm2026_ci_verify?charset=utf8mb4" npm run self-check
 npm run check:boundaries
 npm run typecheck
 npx eslint lib/memory-observability-budgeting.ts lib/memory-observability-budgeting.test.ts scripts/helm-self-check-refactored.ts scripts/helm-self-check.ts scripts/decision-first-boundary-check.ts
-DATABASE_URL="mysql://root:***@${HELM_DB_HOST}/helm2026_ci_verify?charset=utf8mb4" npm run test
+DATABASE_URL="mysql://root:***@rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306/helm2026_ci_verify?charset=utf8mb4" npm run test
 npm run build
 npm run quality:regression
 git diff --check

@@ -6,6 +6,25 @@ export async function register() {
     return;
   }
 
+  // Composition root (repo-split Step 5A): wire Packs/Overlays into the Core
+  // registry via the generic bootstrap aggregator. Core names NO tenant here.
+  // `extensions/pack-bootstrap` is a PRIVATE_FILE, so the public Core mirror
+  // omits it. Keep the import path non-literal so public typecheck/build does
+  // not require the private bootstrap file; runtime absence still degrades to
+  // Core-only behavior. That degradation is intentional.
+  try {
+    const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");
+    const { registerAllPacks } = (await import(packBootstrapPath)) as {
+      registerAllPacks: () => void;
+    };
+    registerAllPacks();
+    logInstrumentationInfo("registered pack contributions");
+  } catch (err) {
+    logInstrumentationInfo("no pack bootstrap present; running Core-only", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const { startEngineeringDeliveryReviewCron } = await import(
     "@/lib/reports/engineering-delivery-review-cron"
   );

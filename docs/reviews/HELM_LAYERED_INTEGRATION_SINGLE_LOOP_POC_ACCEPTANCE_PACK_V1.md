@@ -316,7 +316,7 @@ Owner：Helm Core
 如果继续沿这条线推进，下一步只应做下面 2 件事之一：
 
 1. 维持 `planning-only`，等待 homepage / dashboard / feedback / activation 主线收口
-2. 如果必须提前验证，只使用 [HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_IMPLEMENTATION_FREEZE_V1.md](./HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_IMPLEMENTATION_FREEZE_V1.md) 里冻结的 allowlist 和 stop condition，先开 `Batch A` 级别极小实现
+2. 如果必须提前验证，只使用 [HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_IMPLEMENTATION_FREEZE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/reviews/HELM_LAYERED_INTEGRATION_SINGLE_LOOP_POC_IMPLEMENTATION_FREEZE_V1.md) 里冻结的 allowlist 和 stop condition，先开 `Batch A` 级别极小实现
 
 当前不建议直接做：
 

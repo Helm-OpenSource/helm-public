@@ -21,10 +21,10 @@ review_after: 2026-10-08
 
 - 剩余 detail families 的 `detail-model.ts` 已继续改成对象优先表达，不再使用 `Helm already...`、`Helm has already...`、`Helm is already...`、`Helm resurfaced...`、`Helm AI work agent` 这类 system-self narration
 - 剩余 detail families 的 `detail-view.tsx` 已继续改成对象优先 / 页面优先帮助文案，不再用 `Use this detail when Helm...`、`What Helm already prepared` 作为主叙事
-- [`meeting-detail-client.tsx`](../../features/meetings/meeting-detail-client.tsx) 也已纳入同一合同，相关 prepared-summary prompt 改成 `What is already prepared from this meeting`
-- [`queue-model.ts`](../../features/customer-success-handoff/queue-model.ts) 的残余 `Helm AI work agent` 也已收口成 `Prepared review surface`
-- [`shared-surface-hierarchy-guards.test.ts`](../../lib/presentation/shared-surface-hierarchy-guards.test.ts) 已把 legacy detail model 一并纳入 copy audit，不只检查 detail view
-- [`helm-self-check.ts`](../../scripts/helm-self-check.ts) 已把 detail model 与 meeting detail 一并纳入 systemspeak audit，形成产品级护栏
+- [`meeting-detail-client.tsx`](/Users/qianzhilong/Documents/helm/features/meetings/meeting-detail-client.tsx) 也已纳入同一合同，相关 prepared-summary prompt 改成 `What is already prepared from this meeting`
+- [`queue-model.ts`](/Users/qianzhilong/Documents/helm/features/customer-success-handoff/queue-model.ts) 的残余 `Helm AI work agent` 也已收口成 `Prepared review surface`
+- [`shared-surface-hierarchy-guards.test.ts`](/Users/qianzhilong/Documents/helm/lib/presentation/shared-surface-hierarchy-guards.test.ts) 已把 legacy detail model 一并纳入 copy audit，不只检查 detail view
+- [`helm-self-check.ts`](/Users/qianzhilong/Documents/helm/scripts/helm-self-check.ts) 已把 detail model 与 meeting detail 一并纳入 systemspeak audit，形成产品级护栏
 
 ## 已成形但仍需下一层
 

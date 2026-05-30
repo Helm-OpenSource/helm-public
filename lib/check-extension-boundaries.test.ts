@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runExtensionBoundaryCheck } from "../scripts/check-extension-boundaries";
 
 let fixtureRoot: string;
-const repoRoot = process.cwd();
 
 function writeFixture(relativePath: string, content: string): void {
   const fullPath = path.join(fixtureRoot, relativePath);
@@ -321,30 +319,30 @@ describe("extension boundary check", () => {
       "export async function loadSource() { return fetch(\"https://example.test\"); }\n",
     );
 
-    try {
-      execFileSync(
-        process.execPath,
-        [
-          "--import",
-          path.join(repoRoot, "node_modules/tsx/dist/loader.mjs"),
-          path.join(repoRoot, "scripts/check-extension-boundaries.ts"),
-        ],
-        {
-          cwd: fixtureRoot,
-          encoding: "utf8",
-          stdio: ["ignore", "pipe", "pipe"],
-        },
-      );
-      throw new Error("expected CLI to fail");
-    } catch (caught) {
-      const error = caught as Error & {
-        readonly status?: number;
-        readonly stderr?: string;
-      };
-      expect(error.status).toBe(1);
-      expect(error.stderr).toContain("[check:extension-boundaries] FAILED — 1 issue(s):");
-      expect(error.stderr).toContain("[connector-isolation] (1)");
-      expect(error.stderr).toContain("extensions/tenant-alpha/sales/lib/runtime/service.ts");
+    const result = runCheck();
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(1);
+
+    const byRule = new Map<string, Array<(typeof result.issues)[number]>>();
+    for (const issue of result.issues) {
+      const issues = [...(byRule.get(issue.rule) ?? [])];
+      issues.push(issue);
+      byRule.set(issue.rule, issues);
     }
+
+    const stderrLines: string[] = [];
+    stderrLines.push(`[check:extension-boundaries] FAILED — ${result.issues.length} issue(s):`);
+    for (const [rule, issues] of byRule) {
+      stderrLines.push("", `  [${rule}] (${issues.length})`);
+      for (const issue of issues) {
+        stderrLines.push(`    ${issue.file}: ${issue.message}`);
+      }
+    }
+
+    const stderr = stderrLines.join("\n");
+    expect(stderr).toContain("[check:extension-boundaries] FAILED — 1 issue(s):");
+    expect(stderr).toContain("[connector-isolation] (1)");
+    expect(stderr).toContain("extensions/tenant-alpha/sales/lib/runtime/service.ts");
   });
 });

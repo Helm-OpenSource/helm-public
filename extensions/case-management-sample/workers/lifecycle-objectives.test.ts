@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { CASE_MANAGEMENT_SAMPLE_LIFECYCLE_OBJECTIVES } from "./lifecycle-objectives";
+
+import { buildLifecycleObjective } from "./lifecycle-objectives";
 
 describe("case-management-sample lifecycle objectives", () => {
-  it("stops at review packet preparation", () => {
-    expect(CASE_MANAGEMENT_SAMPLE_LIFECYCLE_OBJECTIVES.at(-1)).toBe(
-      "handoff_human_review",
-    );
+  it("keeps objective values non-negative and explainable", () => {
+    const objective = buildLifecycleObjective({
+      expectedRecoveryPoints: 91,
+      estimatedEffortMinutes: 30,
+      estimatedDaysToResolve: 2,
+      subject: "CASE-SAMPLE-001",
+    });
+
+    expect(objective.expectedRecoveryPoints).toBe(91);
+    expect(objective.estimatedEffortMinutes).toBe(30);
+    expect(objective.estimatedDaysToResolve).toBe(2);
+    expect(objective.reasonChain).toHaveLength(4);
   });
 });
