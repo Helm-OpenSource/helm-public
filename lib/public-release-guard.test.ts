@@ -653,9 +653,13 @@ describe("public release guard fixture coverage", () => {
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       "check:boundaries": "npm run public:smoke:static",
-      test: "npm run public:smoke:static",
-      "quality:regression": "npm run public:smoke:static",
-      e2e: "npm run public:smoke:static",
+      test: "vitest run --config vitest.public.config.ts",
+      "test:public:guards":
+        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+      "quality:regression":
+        "npm run test:public:guards && npm run public:smoke:static",
+      "public:e2e:smoke": "npm run public:smoke:static",
+      e2e: "npm run public:e2e:smoke",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
     });
@@ -774,12 +778,16 @@ describe("public release guard fixture coverage", () => {
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       dev: "next dev",
-      e2e: "npm run public:smoke:static",
+      e2e: "npm run public:e2e:smoke",
+      "public:e2e:smoke": "npm run public:smoke:static",
       "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
-      "quality:regression": "npm run public:smoke:static",
+      "quality:regression":
+        "npm run test:public:guards && npm run public:smoke:static",
       "self-check": "npm run public:smoke:static",
-      test: "npm run public:smoke:static",
+      test: "vitest run --config vitest.public.config.ts",
+      "test:public:guards":
+        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
     });
   });
