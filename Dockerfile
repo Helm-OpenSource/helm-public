@@ -24,7 +24,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
-# `npm ci` runs `postinstall` which calls `prisma generate`.
+COPY scripts/fix-local-lightningcss-signature.mjs ./scripts/fix-local-lightningcss-signature.mjs
+# `npm ci` runs postinstall; copy the local macOS lightningcss helper first so
+# Linux image builds can skip it cleanly instead of failing on a missing file.
 RUN npm ci --no-audit --no-fund
 
 # ---------- build ----------
