@@ -118,16 +118,44 @@ const CUSTOMER_NAME_BLACKLIST: ReadonlyArray<{ name: string; pattern: RegExp }> 
   },
   {
     name: [TENANT_SLUG_PRIMARY, "cn"].join("-"),
-    pattern: new RegExp(["光", "[普谱]"].join(""), "u"),
+    pattern: new RegExp(["光", "[普谱潽]"].join(""), "u"),
   },
+];
+
+const PRIVATE_PERSON_NAME_BLACKLIST: ReadonlyArray<{ name: string; pattern: RegExp }> = [
+  { name: "qian-zhilong", pattern: /钱志龙/u },
+  { name: "wang-lizhen", pattern: /王丽珍|wanglizhen/i },
+  { name: "li-jianle", pattern: /李建乐|lijianle/i },
 ];
 
 // Internal infrastructure hosts that must not leak.
 const INTERNAL_HOST_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> =
   [
-    { name: "rm-shuyao", pattern: /rm-shuyao[\w-]*\.aliyuncs\.com/i },
-    { name: "aliyun-rds-host", pattern: /[\w-]+\.rds\.aliyuncs\.com/i },
+    { name: "rm-shuyao", pattern: /rm-shuyao[\w.-]*\.aliyuncs\.com/i },
+    { name: "aliyun-mysql-rds-host", pattern: /[\w.-]+\.mysql\.rds\.aliyuncs\.com/i },
+    { name: "aliyun-rds-host", pattern: /[\w.-]+\.rds\.aliyuncs\.com/i },
+    { name: "customer-aicaigroup-host", pattern: /(?:^|[^\w.-])[\w.-]*aicaigroup\.com\b/i },
+    { name: "customer-aicaitest-host", pattern: /(?:^|[^\w.-])[\w.-]*aicaitest\.com\b/i },
+    { name: "customer-zhaojiling-host", pattern: /(?:^|[^\w.-])[\w.-]*zhaojiling\.com\b/i },
+    { name: "customer-hzmiz-host", pattern: /(?:^|[^\w.-])[\w.-]*hzmiz\.cn\b/i },
+    { name: "customer-360amc-host", pattern: /(?:^|[^\w.-])[\w.-]*360amc\.cn\b/i },
   ];
+
+const RFC1918_IPV4_PATTERN =
+  /\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b/;
+
+const CN_MOBILE_PATTERN = /(?<![\d+])(?:\+?86[-\s]?)?1[3-9]\d{9}\b/g;
+const SYNTHETIC_CN_MOBILE_NUMBERS = new Set([
+  "13800000000",
+  "13800138000",
+  "13800009999",
+  "13800001111",
+  "13800002222",
+  "13800003333",
+  "13800004444",
+  "13900139000",
+  "13900000000",
+]);
 
 // Placeholder credential values that are explicitly OK to ship in docs / examples.
 // Anything else captured by URL_EMBEDDED_CREDENTIAL_PATTERN is treated as a
@@ -608,6 +636,13 @@ const POLICY_DESCRIPTOR_PREFIX_ALLOW_LIST: ReadonlyArray<string> = [
   // legitimate review doc must be added explicitly to
   // POLICY_DESCRIPTOR_ALLOW_LIST above.
 ];
+
+const POLICY_REFERENCE_IMPLEMENTATION_FILES = new Set<string>([
+  "scripts/public-release-guard.ts",
+  "scripts/public-mirror-semantic.ts",
+  "lib/public-release-guard.test.ts",
+  "lib/public-mirror-semantic-entry-docs.test.ts",
+]);
 
 function isPolicyDescriptorByPrefix(relativePath: string): boolean {
   return POLICY_DESCRIPTOR_PREFIX_ALLOW_LIST.some((prefix) =>
@@ -1099,11 +1134,37 @@ function collectForbiddenReleaseReferences(line: string): string[] {
     if (pattern.test(line)) references.push(`customer-name:${name}`);
   }
 
+  for (const { name, pattern } of PRIVATE_PERSON_NAME_BLACKLIST) {
+    if (pattern.test(line)) references.push(`person-name:${name}`);
+  }
+
+  CN_MOBILE_PATTERN.lastIndex = 0;
+  let mobileMatch: RegExpExecArray | null;
+  while ((mobileMatch = CN_MOBILE_PATTERN.exec(line)) !== null) {
+    const normalized = mobileMatch[0].replace(/\D/g, "").replace(/^86/, "");
+    if (SYNTHETIC_CN_MOBILE_NUMBERS.has(normalized)) continue;
+    references.push("cn-mobile");
+    break;
+  }
+
+  if (RFC1918_IPV4_PATTERN.test(line)) references.push("internal-ip:rfc1918");
+
   for (const root of PRIVATE_ROOTS) {
     if (line.includes(root)) references.push(`private-path-ref:${root}`);
   }
 
   return references;
+}
+
+function isPolicyDescriptorSuppressedReference(reference: string): boolean {
+  return (
+    reference.startsWith("tenant-slug:") ||
+    reference.startsWith("private-path-ref:")
+  );
+}
+
+function isPolicyReferenceImplementationFile(relativePath: string): boolean {
+  return POLICY_REFERENCE_IMPLEMENTATION_FILES.has(relativePath);
 }
 
 function scanFile(
@@ -1278,42 +1339,21 @@ function scanFile(
       continue;
     }
 
-    if (isPolicyDescriptor) continue;
-
-    for (const slug of TENANT_SLUG_BLACKLIST) {
-      if (tenantSlugPattern(slug).test(line)) {
-        violations.push({
-          rule: `tenant-slug:${slug}`,
-          path: relativePath,
-          line: lineNumber,
-          excerpt: maskSecrets(line.trim()).slice(0, 240),
-        });
-        break;
+    const forbiddenReferences = collectForbiddenReleaseReferences(line);
+    for (const reference of forbiddenReferences) {
+      if (isPolicyReferenceImplementationFile(relativePath)) continue;
+      if (
+        isPolicyDescriptor &&
+        isPolicyDescriptorSuppressedReference(reference)
+      ) {
+        continue;
       }
-    }
-
-    for (const { name, pattern } of INTERNAL_HOST_PATTERNS) {
-      if (pattern.test(line)) {
-        violations.push({
-          rule: `internal-host:${name}`,
-          path: relativePath,
-          line: lineNumber,
-          excerpt: maskSecrets(line.trim()).slice(0, 240),
-        });
-        break;
-      }
-    }
-
-    for (const root of PRIVATE_ROOTS) {
-      if (line.includes(root)) {
-        violations.push({
-          rule: `private-path-ref:${root}`,
-          path: relativePath,
-          line: lineNumber,
-          excerpt: maskSecrets(line.trim()).slice(0, 240),
-        });
-        break;
-      }
+      violations.push({
+        rule: reference,
+        path: relativePath,
+        line: lineNumber,
+        excerpt: maskSecrets(line.trim()).slice(0, 240),
+      });
     }
   }
 }

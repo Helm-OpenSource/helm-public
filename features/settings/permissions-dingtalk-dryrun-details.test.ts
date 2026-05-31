@@ -31,14 +31,14 @@ describe("dingtalk dry-run detail readout", () => {
             {
               dingtalkUserId: "u-1",
               unionId: "union-1",
-              name: "李建乐",
+              name: "张三",
               mobile: "13800138000",
               normalizedPhone: "+8613800138000",
               title: "AI交付工程师",
               jobNumber: "001",
               deptIds: [123],
               isLeader: false,
-              placeholderEmail: "lijianle-zj@example.com",
+              placeholderEmail: "zhangsan-zj@example.com",
               userResolution: "CREATED_PLACEHOLDER_EMAIL",
               membershipStatus: "DRY_RUN_SIMULATED",
               messageStatus: "DRY_RUN_SIMULATED",
@@ -52,9 +52,9 @@ describe("dingtalk dry-run detail readout", () => {
     expect(summary).not.toBeNull();
     expect(summary?.processed).toBe(39);
     expect(summary?.details).toHaveLength(1);
-    expect(summary?.details[0]?.name).toBe("李建乐");
+    expect(summary?.details[0]?.name).toBe("张三");
     expect(summary?.details[0]?.placeholderEmail).toBe(
-      "lijianle-zj@example.com",
+      "zhangsan-zj@example.com",
     );
   });
 
@@ -77,7 +77,7 @@ describe("dingtalk dry-run detail readout", () => {
         details: [
           {
             dingtalkUserId: "u-legacy-1",
-            name: "李建乐",
+            name: "张三",
             normalizedPhone: "+8613800138000",
             deptIds: [123],
             userResolution: "CREATED_PLACEHOLDER_EMAIL",
@@ -147,14 +147,14 @@ describe("dingtalk dry-run detail readout", () => {
             {
               dingtalkUserId: "u-1",
               unionId: "union-1",
-              name: "李建乐",
+              name: "张三",
               mobile: "13800138000",
               normalizedPhone: "+8613800138000",
               title: "AI交付工程师",
               jobNumber: "001",
               deptIds: [123],
               isLeader: false,
-              placeholderEmail: "lijianle-zj@example.com",
+              placeholderEmail: "zhangsan-zj@example.com",
               userResolution: "CREATED_PLACEHOLDER_EMAIL",
               membershipStatus: "DRY_RUN_SIMULATED",
               messageStatus: "DRY_RUN_SIMULATED",
@@ -267,9 +267,9 @@ describe("dingtalk dry-run detail readout", () => {
     );
 
     expect(screen.getByText("钉钉待邀请人员明细（最近 dry-run）")).toBeInTheDocument();
-    expect(screen.getByText("李建乐")).toBeInTheDocument();
+    expect(screen.getByText("张三")).toBeInTheDocument();
     expect(screen.getByText("+8613800138000")).toBeInTheDocument();
-    expect(screen.getByText("lijianle-zj@example.com")).toBeInTheDocument();
+    expect(screen.getByText("zhangsan-zj@example.com")).toBeInTheDocument();
     expect(screen.getByText("待邀请")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "邀请" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重新邀请" })).toBeInTheDocument();

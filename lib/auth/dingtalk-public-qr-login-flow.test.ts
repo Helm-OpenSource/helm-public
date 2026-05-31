@@ -143,7 +143,7 @@ describe("dingtalk public qr login flow", () => {
     dingtalkMock.getDingTalkConfig.mockReturnValue({
       clientId: "ding-client",
       clientSecret: "ding-secret",
-      redirectUri: "http://helm.aicaigroup.com:3000/api/auth/dingtalk/callback",
+      redirectUri: "http://helm.example.com:3000/api/auth/dingtalk/callback",
     });
     dingtalkMock.exchangeDingTalkAuthCode.mockResolvedValue({
       accessToken: "access-token",

@@ -141,9 +141,9 @@ observe -> judge -> assign -> execute bounded action -> audit -> follow up -> im
 | 外部副作用 | 0 unexpected external side effect |
 | 产品缺口 | 已转成 product improvement candidate 或明确 No-Go |
 
-## 7. 光潽租户落地样例
+## 7. 示例客户租户落地样例
 
-光潽是个贷不良资产管理和催收场景。Founder Mode 不应该只看“有多少信号”，而要判断经营信号版图是否足以管理这家公司。
+示例客户是个贷不良资产管理和催收场景。Founder Mode 不应该只看“有多少信号”，而要判断经营信号版图是否足以管理这家公司。
 
 ### 7.1 必要经营信号版图
 
@@ -157,7 +157,7 @@ observe -> judge -> assign -> execute bounded action -> audit -> follow up -> im
 | 数据质量 | 重复工作区、映射缺失、SLA 缺失、metadata 超限 | 重复空工作区、ActionItem 缺 dueDate |
 | 系统交付 | Helm 是否把信号准确转为动作和审计 | ActionItem / AuditLog / readout 一致性 |
 
-### 7.2 光潽首批 Founder Mode 输出
+### 7.2 示例客户首批 Founder Mode 输出
 
 | 输出 | 责任人类型 | 说明 |
 |---|---|---|
@@ -175,7 +175,7 @@ Helm 自身租户必须把 Founder Mode 用在 Helm 业务上：
 |---|---|
 | 生产稳定 | health、login、进程、部署路径、zip 校验、回滚路径 |
 | 产品质量 | 经营中暴露的系统缺口转成代码 / 文档 / eval / guard |
-| 交付价值 | 光潽等客户租户是否形成真实业务闭环 |
+| 交付价值 | 示例客户等客户租户是否形成真实业务闭环 |
 | 发布治理 | zip/SFTP 部署流程、`.env` 保留、hash、build、restart、smoke |
 | 商业化 | Helm 自身经营租户的候选客户、试跑、复盘、渠道判断 |
 
@@ -205,7 +205,7 @@ Founder Mode 的价值评估不能只看 PR 数、文档数或聊天质量。必
 | Phase 2 | Read-only projection | 从现有 ActionItem / AuditLog / BI signal 投影 Founder Readout | 不创建外部动作，不跨租户聚合 |
 | Phase 3 | Controlled ActionItem writer | idempotent sourceId、owner routing、dueDate、audit coverage | 不自动外发，不自动审批 |
 | Phase 4 | `/operating` Founder Mode surface | 首屏 Founder Readout、责任队列、产品改进候选 | 不做 workflow engine |
-| Phase 5 | Customer tenant playbook | 光潽样例沉淀为可复用 vertical operating pack | 不把客户私有数据进入 public pack |
+| Phase 5 | Customer tenant playbook | 示例客户样例沉淀为可复用 vertical operating pack | 不把客户私有数据进入 public pack |
 
 ## 11. 验收标准
 
@@ -217,7 +217,7 @@ P0 / P1 完成后，至少满足：
 4. 找不到 owner 的事项不会沉默丢失，必须进入 DecisionEscalation。
 5. 所有外部副作用默认 No-Go，只能生成 review packet。
 6. 重复 sourceId、跨 workspace projection、raw secret / credential / PII fixture 均触发 failure。
-7. 光潽样例能覆盖资产池、回收结果、过程动作、风险合规、人员组织、数据质量、系统交付七层信号。
+7. 示例客户样例能覆盖资产池、回收结果、过程动作、风险合规、人员组织、数据质量、系统交付七层信号。
 8. Helm 自经营样例能覆盖生产、产品、交付、发布、商业化五层信号。
 
 ## 12. 四档状态
@@ -225,13 +225,13 @@ P0 / P1 完成后，至少满足：
 | 档位 | 条目 |
 |---|---|
 | 已完整成立 | Founder-led OPC 协议、现有 `/operating`、`/approvals`、`/memory` 基础面、ActionItem / AuditLog 基础对象 |
-| 已成形但仍需下一层 | Founder Mode 需求合同、运行循环、对象合同、光潽 / Helm 自经营样例、价值评估指标 |
+| 已成形但仍需下一层 | Founder Mode 需求合同、运行循环、对象合同、示例客户 / Helm 自经营样例、价值评估指标 |
 | 刻意未做 | 自动外发、自动承诺、自动审批、自动执行、完整 workflow / BI / HR 绩效、跨租户自动聚合 |
 | 风险项 | 真实 runtime 接入前的权限边界、重复租户治理、外部副作用误触发、经营信号缺 owner / evidence、把聊天结论误当经营结果 |
 
 ## 13. 下一步
 
-1. 建 `evals/founder-operating-mode/` alias-only fixture，覆盖 Helm 自经营和光潽个贷不良两类 run。
+1. 建 `evals/founder-operating-mode/` alias-only fixture，覆盖 Helm 自经营和示例客户个贷不良两类 run。
 2. 建 deterministic evaluator，验证 owner / evidence / dueDate / audit / boundary / no side-effect。
 3. 定义 `FounderOperatingReadout` TypeScript contract，但暂不接 DB writer。
 4. 把当前 `/operating` 的 Signal Flow Map 和 business-loop gap readout 映射到 Founder Mode readout。
@@ -241,4 +241,4 @@ P0 / P1 完成后，至少满足：
 
 | 日期 | 变化 |
 |---|---|
-| 2026-05-21 | 首版：把 founder operating loop 产品化为 Founder Operating Mode requirements，固定对象合同、运行循环、光潽 / Helm 自经营样例、价值评估指标和 phased MVP 边界 |
+| 2026-05-21 | 首版：把 founder operating loop 产品化为 Founder Operating Mode requirements，固定对象合同、运行循环、示例客户 / Helm 自经营样例、价值评估指标和 phased MVP 边界 |

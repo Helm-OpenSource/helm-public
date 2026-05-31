@@ -278,7 +278,7 @@ describe("auth session substrate", () => {
     headersMock.mockResolvedValue(
       createHeaderStore({
         "user-agent": "Vitest Browser",
-        "x-forwarded-for": "10.0.0.1, 10.0.0.2",
+        "x-forwarded-for": "203.0.113.1, 203.0.113.2",
       }),
     );
     dbMock.authSession.findUnique.mockResolvedValueOnce(buildAuthSessionRecord());
@@ -313,7 +313,7 @@ describe("auth session substrate", () => {
           sourcePage: "/login",
           providerType: AUTH_SESSION_PROVIDER_TYPES.PASSWORD,
           userAgent: "Vitest Browser",
-          ipAddress: "10.0.0.1",
+          ipAddress: "203.0.113.1",
         }),
       }),
     );
@@ -343,7 +343,7 @@ describe("auth session substrate", () => {
     headersMock.mockResolvedValue(
       createHeaderStore({
         "user-agent": "Signup Browser",
-        "x-forwarded-for": "10.0.0.11",
+        "x-forwarded-for": "203.0.113.11",
       }),
     );
     dbMock.authSession.findUnique.mockRejectedValueOnce(
@@ -386,7 +386,7 @@ describe("auth session substrate", () => {
     headersMock.mockResolvedValue(
       createHeaderStore({
         "user-agent": "Rotated Browser",
-        "x-forwarded-for": "10.0.0.9",
+        "x-forwarded-for": "203.0.113.9",
       }),
     );
     dbMock.authSession.findUnique.mockResolvedValueOnce(
@@ -400,7 +400,7 @@ describe("auth session substrate", () => {
         sessionKeyHash: "session-hash-rotated",
         expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
         userAgent: "Rotated Browser",
-        ipAddress: "10.0.0.9",
+        ipAddress: "203.0.113.9",
       }),
     );
     dbMock.authSession.update.mockResolvedValue({});

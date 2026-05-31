@@ -23,7 +23,7 @@ The current operating queue is:
 - Engineering receipt: assigned.
 - Product receipt: assigned.
 - Operations receipt: assigned.
-- Security receipt: founder appointment blocker resolved; 李建乐 is now the responsible independent Security Reviewer, and the receipt itself is still pending.
+- Security receipt: founder appointment blocker resolved; 安全评审员甲 is now the responsible independent Security Reviewer, and the receipt itself is still pending.
 
 ## Routed Tasks
 
@@ -31,7 +31,7 @@ The current operating queue is:
 | --- | --- | --- | --- | --- | --- |
 | Engineering | `cmpfh2mim00011yoviq56xcxn` | `cmpfh2mmz00051yovptqoyq31` | `李健` | `APPROVED` | `approved`, not executed |
 | Product | `cmpfh2n8j000j1yovt0fkb245` | `cmpfh2nba000n1yovbxljh713` | `Helm` | `APPROVED` | `approved`, not executed |
-| Security | `cmpfh2npx00111yovtnia7kvb` | `cmpfh2nsq00151yov4pwlcahh` | `李建乐` | `APPROVED` | owner appointed, receipt pending, not executed |
+| Security | `cmpfh2npx00111yovtnia7kvb` | `cmpfh2nsq00151yov4pwlcahh` | `安全评审员甲` | `APPROVED` | owner appointed, receipt pending, not executed |
 | Operations | `cmpfh2o7a001j1yovgor5nyw9` | `cmpfh2o9x001n1yovo159q36w` | `周攀` | `APPROVED` | `approved`, not executed |
 
 All four approval tasks are `EXECUTED` as approvals only, with `autoExecute=false`.
@@ -45,7 +45,7 @@ All four approval tasks are `EXECUTED` as approvals only, with `autoExecute=fals
 | Security | `cmpfh2nrd00131yovod3zm6sh` / `AI_GENERATED_ACTION` | `cmpfh2o2k001d1yovr0o3wc29` / `APPROVAL_APPROVED` |
 | Operations | `cmpfh2o8i001l1yov33610o5b` / `AI_GENERATED_ACTION` | `cmpfh2ojn001v1yovhchtt8f2` / `APPROVAL_APPROVED` |
 
-The original Security task was intentionally worded as a blocker because the current Helm reserved workspace membership did not provide a clearly independent Security Reviewer without founder appointment. The blocker is now resolved by founder decision: 李建乐 is the Security receipt owner. The appointment audit is `cmpfhhni800011yi9xx4bb2o6` / `SECURITY_RECEIPT_OWNER_APPOINTED`.
+The original Security task was intentionally worded as a blocker because the current Helm reserved workspace membership did not provide a clearly independent Security Reviewer without founder appointment. The blocker is now resolved by founder decision: 安全评审员甲 is the Security receipt owner. The appointment audit is `cmpfhhni800011yi9xx4bb2o6` / `SECURITY_RECEIPT_OWNER_APPOINTED`.
 
 ## Post-Routing Shadow Probe
 
@@ -82,7 +82,7 @@ The probe remains single-workspace, `boundaryCounter=0`, `pendingReviewCount=0`.
 
 Founder decision:
 
-> 李建乐 is appointed as the independent Security Reviewer for the Phase 3 `/operating` route adoption receipt.
+> 安全评审员甲 is appointed as the independent Security Reviewer for the Phase 3 `/operating` route adoption receipt.
 
 The appointed reviewer must sign a receipt covering:
 
@@ -103,7 +103,7 @@ Until this receipt is attached, route adoption cannot move forward even if Engin
 - Collect Engineering receipt against ActionItem `cmpfh2mim00011yoviq56xcxn`.
 - Collect Product receipt against ActionItem `cmpfh2n8j000j1yovt0fkb245`.
 - Collect Operations receipt against ActionItem `cmpfh2o7a001j1yovgor5nyw9`.
-- Collect Security receipt from 李建乐 against ActionItem `cmpfh2npx00111yovtnia7kvb`.
+- Collect Security receipt from 安全评审员甲 against ActionItem `cmpfh2npx00111yovtnia7kvb`.
 - Execute each task only when its receipt reference is attached.
 
 ## Forbidden Work

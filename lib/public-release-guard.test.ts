@@ -20,7 +20,11 @@ const implementationConsolePrivateRoot = [
 ].join("/");
 const commercialPrivateRoot = ["customer", "proof", "packs"].join("-");
 const rmShuyaoHost = [["rm", "shuyao-dev"].join("-"), "aliyuncs", "com"].join(".");
+const mysqlRdsHost = ["rm-shuyao-dev-pub", "mysql", "rds", "aliyuncs", "com"].join(".");
 const aliyunRdsHost = ["example-prod", "rds", "aliyuncs", "com"].join(".");
+const customerHost = ["helm", "aicaigroup", "com"].join(".");
+const privateEmail = ["member", ["360amc", "cn"].join(".")].join("@");
+const realMobile = ["+86", "13958044686"].join("");
 const urlCredential = ["mysql://root", "RealPass123"].join(":") + "@db.example.com/helm";
 const placeholderUrlCredential = ["mysql://root", "password"].join(":") + "@localhost:3306/helm";
 const rmShuyaoRule = ["internal-host", ["rm", "shuyao"].join("-")].join(":");
@@ -232,6 +236,7 @@ describe("public release guard fixture coverage", () => {
         `Do not mention ${tenantSlug} in public release notes.`,
         `Do not link ${commercialPrivateRoot} from public docs.`,
         `Do not mention ${rmShuyaoHost} in public docs.`,
+        `Do not mention ${mysqlRdsHost} in public docs.`,
         `Do not mention ${aliyunRdsHost} in public docs.`,
       ].join("\n"),
     );
@@ -242,7 +247,36 @@ describe("public release guard fixture coverage", () => {
       `tenant-slug:${tenantSlug}`,
       `private-path-ref:${commercialPrivateRoot}`,
       rmShuyaoRule,
+      "internal-host:rm-shuyao",
+      "internal-host:aliyun-mysql-rds-host",
       "internal-host:aliyun-rds-host",
+      "internal-host:aliyun-rds-host",
+    ]);
+  });
+
+  it("flags customer PII even when a policy descriptor would allow tenant-boundary prose", () => {
+    writeFixture(
+      "README.md",
+      [
+        `Policy docs cannot carry ${customerHost}.`,
+        `Policy docs cannot carry ${privateEmail}.`,
+        `Policy docs cannot carry ${realMobile}.`,
+        "Policy docs cannot name 王丽珍 or 李建乐.",
+        "Policy docs cannot name 杭州光潽科技有限公司.",
+        "Policy docs cannot carry RFC1918 10.16.10.55.",
+      ].join("\n"),
+    );
+
+    const result = runGuard();
+
+    expect(result.violations.map((violation) => violation.rule)).toEqual([
+      "internal-host:customer-aicaigroup-host",
+      "internal-host:customer-360amc-host",
+      "cn-mobile",
+      "person-name:wang-lizhen",
+      "person-name:li-jianle",
+      `customer-name:${tenantSlug}-cn`,
+      "internal-ip:rfc1918",
     ]);
   });
 

@@ -6,15 +6,15 @@ import type { DingTalkDirectoryInviteDetail } from "@/lib/connectors/dingtalk-di
 const details: DingTalkDirectoryInviteDetail[] = [
   {
     dingtalkUserId: "4360",
-    unionId: "union-wanglizhen",
-    name: "王丽珍",
-    mobile: "13958044686",
-    normalizedPhone: "+8613958044686",
+    unionId: "union-membera",
+    name: "测试主管甲",
+    mobile: "13800001111",
+    normalizedPhone: "+8613800001111",
     title: "策略运营",
     jobNumber: "4360",
     deptIds: [895695377],
     isLeader: false,
-    placeholderEmail: "wanglizhen-zj@example.test",
+    placeholderEmail: "membera-zj@example.test",
     userResolution: "CREATED_PLACEHOLDER_EMAIL",
     membershipStatus: "INVITED_UPSERTED",
     messageStatus: "SENT",
@@ -43,9 +43,9 @@ describe("dingtalk directory invite snapshot resolver", () => {
     expect(
       resolveDingTalkDirectoryInviteDetailUserId({
         details,
-        name: "王丽珍",
-        email: "wanglizhen@360amc.cn",
-        phone: "+8613958044686",
+        name: "测试主管甲",
+        email: "membera@example.test",
+        phone: "+8613800001111",
       }),
     ).toBe("4360");
   });
@@ -54,8 +54,8 @@ describe("dingtalk directory invite snapshot resolver", () => {
     expect(
       resolveDingTalkDirectoryInviteDetailUserId({
         details,
-        name: "王丽珍",
-        email: "wanglizhen@360amc.cn",
+        name: "测试主管甲",
+        email: "membera@example.test",
       }),
     ).toBe("4360");
   });

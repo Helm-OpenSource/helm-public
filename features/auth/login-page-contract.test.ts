@@ -212,10 +212,10 @@ describe("login page salvage contract", () => {
   it("turns DingTalk invite prefill into a single-purpose invitation entry", async () => {
     mocks.readPublicOauthSignupPrefillCookieMock.mockReturnValue({
       provider: "dingtalk",
-      name: "钱志龙",
+      name: "测试成员甲",
       email: null,
-      phone: "+8613082858822",
-      organizationName: "杭州光潽科技有限公司",
+      phone: "+8613800000000",
+      organizationName: "杭州示例科技有限公司",
       title: "董事",
       invitedWorkspaceId: "workspace-invite-demo",
     });
@@ -229,7 +229,7 @@ describe("login page salvage contract", () => {
     });
     const html = renderToStaticMarkup(element);
 
-    expect(html).toContain("确认加入「杭州光潽科技有限公司」。");
+    expect(html).toContain("确认加入「杭州示例科技有限公司」。");
     expect(html).toContain("Helm 已经知道你是谁、要加入哪个组织。");
     expect(html).toContain('data-testid="login-invitation-orientation"');
     expect(html).toContain("已识别身份");

@@ -10,11 +10,11 @@ import {
 
 describe("dingtalk directory invite helpers", () => {
   it("normalizes Chinese names to pinyin base", () => {
-    expect(normalizeNameToPinyinBase("李建乐")).toBe("lijianle");
+    expect(normalizeNameToPinyinBase("张三")).toBe("zhangsan");
   });
 
   it("normalizes mixed names to lowercase alphanumeric base", () => {
-    expect(normalizeNameToPinyinBase("Alice 李建乐")).toBe("alicelijianle");
+    expect(normalizeNameToPinyinBase("Alice 张三")).toBe("alicezhangsan");
   });
 
   it("falls back to member for empty names", () => {
@@ -22,11 +22,11 @@ describe("dingtalk directory invite helpers", () => {
   });
 
   it("builds default placeholder email", () => {
-    expect(buildPlaceholderEmail("lijianle", 1)).toBe("lijianle-zj@example.com");
+    expect(buildPlaceholderEmail("zhangsan", 1)).toBe("zhangsan-zj@example.com");
   });
 
   it("builds collision placeholder email with numeric suffix", () => {
-    expect(buildPlaceholderEmail("lijianle", 3)).toBe("lijianle-zj-3@example.com");
+    expect(buildPlaceholderEmail("zhangsan", 3)).toBe("zhangsan-zj-3@example.com");
   });
 
   it("defaults directory invite sync to dry-run when no live-send flag is supplied", () => {

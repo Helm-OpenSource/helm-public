@@ -16,7 +16,7 @@ review_after: 2026-11-08
 
 本轮将草案收窄为 `HELM_RESERVED` 自身租户内部只读观察能力：不做 schema migration、不新增 rollup 表、不做 hard cap 执行、不开放租户自助页；只提供隐私安全派生查询、成本分桶、信号健康状态和支持介入队列。
 
-2026-05-21 复核补充：该能力的业务定义是 Helm 自身租户里的可用性守护和健康体检，用于帮助 Helm 更好地服务客户租户；它不是演示功能，也不是普通客户租户自助页。已移除特定 customer workspace 可见性例外，光潽等普通客户租户不应显示入口或直达访问。
+2026-05-21 复核补充：该能力的业务定义是 Helm 自身租户里的可用性守护和健康体检，用于帮助 Helm 更好地服务客户租户；它不是演示功能，也不是普通客户租户自助页。已移除特定 customer workspace 可见性例外，示例客户等普通客户租户不应显示入口或直达访问。
 
 ## 已经完整成立
 
@@ -51,7 +51,7 @@ review_after: 2026-11-08
 ## 2026-05-21 可见性修复
 
 - 新增 [HELM_SELF_TENANT_HEALTH_VISIBILITY_HARDENING_2026-05-21.md](./HELM_SELF_TENANT_HEALTH_VISIBILITY_HARDENING_2026-05-21.md)。
-- 光潽等 `CUSTOMER` workspace 访问 `/operating/tenant-health` 必须 fail closed。
+- 示例客户等 `CUSTOMER` workspace 访问 `/operating/tenant-health` 必须 fail closed。
 - Sidebar、Topbar、`/operating` 内部入口继续复用同一个 reserved-only capability。
 - `self_tenant_health_privacy_boundary` 增加静态 guard，防止再次加入 customer workspace carveout。
 

@@ -32,6 +32,7 @@ const tenantSlug = ["gua", "ngpu"].join("");
 const tenantPath = ["extensions", tenantSlug].join("/");
 const tenantSlugRule = ["semantic", "tenant-slug", tenantSlug].join(":");
 const tenantPathRule = ["semantic", "private-path", tenantPath].join(":");
+const customerNamePrimaryCn = [tenantSlug, "cn"].join("-");
 
 beforeEach(() => {
   root = mkdtempSync(path.join(tmpdir(), "helm-semantic-entry-"));
@@ -73,6 +74,27 @@ describe("entry docs index/status are scanned (fail-closed backstop)", () => {
     write("docs/STATUS.md", `| ${tenantSlug} readout | done |\n`);
     const { violations } = runPublicMirrorSemanticSmoke(root);
     expect(violations.map((v) => v.rule)).toContain(tenantSlugRule);
+  });
+});
+
+describe("entry docs and runtime config are scanned for public PII / infra leaks", () => {
+  it("flags known customer identity, person, domain, and internal IP patterns", () => {
+    write(
+      "README.md",
+      [
+        "# Helm",
+        "Do not ship 杭州光潽科技有限公司, 王丽珍, or 李建乐.",
+        "Do not ship helm.aicaigroup.com, member@360amc.cn, or 10.16.10.55.",
+      ].join("\n"),
+    );
+    const { violations } = runPublicMirrorSemanticSmoke(root);
+    const rules = violations.map((v) => v.rule);
+    expect(rules).toContain(`semantic:customer-name:${customerNamePrimaryCn}`);
+    expect(rules).toContain("semantic:person-name:wang-lizhen");
+    expect(rules).toContain("semantic:person-name:li-jianle");
+    expect(rules).toContain("semantic:internal-host:customer-aicaigroup-host");
+    expect(rules).toContain("semantic:internal-host:customer-360amc-host");
+    expect(rules).toContain("semantic:internal-ip:rfc1918");
   });
 });
 
