@@ -42,7 +42,7 @@ review_after: 2026-07-28
 ## 1. 克隆仓库
 
 ```bash
-git clone https://github.com/<org>/helm.git
+git clone https://github.com/Helm-OpenSource/helm-public.git
 cd helm
 ```
 

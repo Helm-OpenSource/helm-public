@@ -55,7 +55,7 @@ Helm **encodes these three answers into an open-source reference implementation*
 ## 90 seconds to see Helm
 
 ```bash
-git clone https://github.com/<org>/helm.git
+git clone https://github.com/Helm-OpenSource/helm-public.git
 cd helm
 cp .env.example .env       # Local MySQL by default
 docker compose up          # mysql:8.4 + app
@@ -190,8 +190,8 @@ Pipedrive, Zoho, Dynamics, Notion, Coda, Tencent Meeting, Webex, Yonyou, Kingdee
 | Channel | Purpose |
 |---|---|
 | GitHub Issues `integration:` label | Public call / roadmap discussion |
-| [GitHub Discussions](https://github.com/<org>/helm/discussions) | Community Q&A, blockers, vertical co-building |
-| `partners@helm.<domain>` | Commercial partnerships / co-launch (not the default entry; go through Discussions or issue first) |
+| [GitHub Issues](https://github.com/Helm-OpenSource/helm-public/issues) | Public issue tracker, blockers, vertical co-building |
+| `partners@helm.<domain>` | Commercial partnerships / co-launch (not the default entry; open an issue first) |
 | [docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md](docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) | Open source / commercial boundary |
 
 ---
@@ -348,7 +348,7 @@ Please do not disclose undisclosed security issues in public channels. See [SECU
 | Entry | Purpose |
 |---|---|
 | **🚀 `git clone` + `docker compose up`** | Core surfaces running locally; fork your customer vertical from `extensions/case-management-sample/` |
-| **💬 [GitHub Discussions](https://github.com/<org>/helm/discussions)** | Community Q&A, vertical co-building, blocker support |
+| **💬 [GitHub Issues](https://github.com/Helm-OpenSource/helm-public/issues)** | Public issue tracker, vertical co-building, blocker support |
 | **🎯 [Certified Delivery Partner](docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md)** | Delivery certification, brand endorsement, case-study co-building |
 | **☁️ Helm Cloud (hosted)** | Optional; does not replace open source; for delivery engineers / customers who don't want to self-host |
 
