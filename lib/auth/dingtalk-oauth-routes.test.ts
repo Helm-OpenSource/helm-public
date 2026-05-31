@@ -635,12 +635,12 @@ describe("dingtalk oauth routes", () => {
     publicOauthMock.resolvePublicOauthUserMatch.mockResolvedValue({
       status: "unmatched",
       normalizedEmail: "invitee@helm.so",
-      normalizedPhone: "+8615910628189",
+      normalizedPhone: "+8613800002222",
     });
     dingtalkMock.fetchDingTalkUserProfile.mockResolvedValue({
       email: "invitee@helm.so",
-      mobile: "15910628189",
-      nick: "王丽珍",
+      mobile: "13800002222",
+      nick: "测试主管甲",
       avatarUrl: null,
       openId: "open-id-1",
       unionId: "union-id-1",

@@ -13,7 +13,7 @@ describe("dingtalk work progress parser", () => {
       draftPayload: JSON.stringify({
         payload: {
           report_id: "report-1",
-          creator_name: "王丽珍",
+          creator_name: "测试主管甲",
           dept_name: "资产运营部",
           contents: [
             {

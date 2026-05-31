@@ -368,7 +368,7 @@ export const MANUAL_CHECKLIST: ReadonlyArray<ManualChecklistItem> = [
     id: "credential_rotated",
     envKey: "RELEASE_READINESS_CREDENTIAL_ROTATED",
     description:
-      "rm-shuyao-dev-pub MySQL root password rotated (Aliyun RDS console + internal secret stores updated + access logs reviewed)",
+      "CI MySQL root password rotated (Aliyun RDS console + internal secret stores updated + access logs reviewed)",
     howToSatisfy:
       "Set RELEASE_READINESS_CREDENTIAL_ROTATED=<YYYY-MM-DD rotation date> after the operations team confirms rotation.",
     validate: (value) => validateReleaseReadinessDate("RELEASE_READINESS_CREDENTIAL_ROTATED", value),

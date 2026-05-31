@@ -1,6 +1,6 @@
 # Canonical human owner identity for contribution accounting.
-钱志龙 <hzqian@gmail.com> hzqian2026 <hzqian@gmail.com>
-钱志龙 <hzqian@gmail.com> 钱志龙 <qianzhilong@Mac-mini.local>
+Helm Maintainer <helm-maintainer@example.com> hzqian2026 <hzqian2026@users.noreply.github.com>
+Helm Maintainer <helm-maintainer@example.com> Helm Maintainer <helm-maintainer@example.com>
 
 # Keep AI execution contributions separate from the human owner ledger.
 # Codex <codex@example.com>

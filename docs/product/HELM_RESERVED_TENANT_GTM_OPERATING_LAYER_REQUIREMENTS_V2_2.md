@@ -58,12 +58,12 @@ GTM Operating Layer 必须默认锚定 Helm reserved workspace：
 
 - reserved workspace identity：`Workspace.workspaceClass = HELM_RESERVED`
 - reserved system key：`Workspace.systemKey = "helm_reserved_primary"`
-- 主账号锚点：`helm@zhaojiling.com`
+- 主账号锚点：`${HELM_SYSTEM_EMAIL}`
 
 关键边界：
 
 1. 普通客户租户默认不可见 Helm GTM pipeline、贡献记录、应计候选、结算复核和内部 GTM 资产库。
-2. `ALIYUN_MAIL_SYSTEM_EMAIL=helm@zhaojiling.com` 只代表系统发信账号，不代表当前请求属于 Helm reserved workspace。
+2. `ALIYUN_MAIL_SYSTEM_EMAIL=${HELM_SYSTEM_EMAIL}` 只代表系统发信账号，不代表当前请求属于 Helm reserved workspace。
 3. public program catalog 可以读取 Helm reserved host 的公开 program 信息，但这不等于客户租户能访问内部 GTM、结算或贡献治理面。
 4. 任何未来垂直行业版本都应先通过 tenant custom extension 或独立 productization 决策进入，不得把 Helm 自营 GTM 数据泄露给普通客户租户。
 

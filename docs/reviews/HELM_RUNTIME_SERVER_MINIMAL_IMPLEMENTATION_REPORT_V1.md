@@ -103,15 +103,15 @@ queue 行为：
 ```bash
 ./node_modules/.bin/vitest run lib/runtime-server-minimal.test.ts
 ./node_modules/.bin/eslint lib/runtime-server-minimal.ts lib/runtime-server-minimal.test.ts scripts/helm-self-check-refactored.ts scripts/helm-self-check.ts scripts/decision-first-boundary-check.ts
-DATABASE_URL="mysql://root:***@rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306/helm2026_ci_verify?charset=utf8mb4" npm run self-check
+DATABASE_URL="mysql://root:***@${HELM_CI_DATABASE_HOST}:3306/helm2026_ci_verify?charset=utf8mb4" npm run self-check
 npm run check:boundaries
 npm run typecheck
 npm run lint
 npm run quality:regression
 npm run build
 ./node_modules/.bin/next build --webpack
-DATABASE_URL="mysql://root:***@rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306/helm2026_ci_verify?charset=utf8mb4" npm run test
-DATABASE_URL="mysql://root:***@rm-shuyao-dev-pub.mysql.rds.aliyuncs.com:3306/helm2026_ci_verify?charset=utf8mb4" ./node_modules/.bin/vitest run lib/operating-system/index.test.ts lib/billing/ops-summary.test.ts features/memory/memory-approval-evidence-context.test.ts
+DATABASE_URL="mysql://root:***@${HELM_CI_DATABASE_HOST}:3306/helm2026_ci_verify?charset=utf8mb4" npm run test
+DATABASE_URL="mysql://root:***@${HELM_CI_DATABASE_HOST}:3306/helm2026_ci_verify?charset=utf8mb4" ./node_modules/.bin/vitest run lib/operating-system/index.test.ts lib/billing/ops-summary.test.ts features/memory/memory-approval-evidence-context.test.ts
 git diff --check
 ```
 

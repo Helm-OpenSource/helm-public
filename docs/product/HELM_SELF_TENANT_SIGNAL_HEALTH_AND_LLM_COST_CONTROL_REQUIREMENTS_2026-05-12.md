@@ -25,7 +25,7 @@ Helm 需要一个自身租户的可用性守护和健康体检面：只看跨租
 - 本轮不做 Prisma schema migration。
 - 本轮不新增物化 rollup 表。
 - 本轮允许新增 `HELM_RESERVED` 专属只读页面 `/operating/tenant-health`。
-- 不允许为任何 `CUSTOMER` workspace 增加专用 slug / systemKey carveout；光潽等客户租户不可见、不可直达该页面。
+- 不允许为任何 `CUSTOMER` workspace 增加专用 slug / systemKey carveout；示例客户等客户租户不可见、不可直达该页面。
 - 页面只能消费 privacy-safe derived query。
 - 跨租户查询不得选择 `inputSummary`、`outputSummary`、`signalSummary`、`normalizedPayload`、`AuditLog.payload`、`AuditLog.summary` 或业务对象原文字段。
 - 成本只显示估算分桶，不显示精确账单金额。

@@ -212,7 +212,7 @@ export function lintBiReportOdpsQuery(input: {
     warnings.push("SQL 命中了金额字段，但没有明显金额单位换算，需确认是否仍按“厘”口径输出。");
   }
 
-  if (sqlLower.includes("zjl_aicai_rds__aicai_pay__bill_repay__1d") && sqlLower.includes("zjl_aicai_rds__aicai_finance__lender_repay_serial__1d")) {
+  if (sqlLower.includes("sample_rds__loan_pay__bill_repay__1d") && sqlLower.includes("sample_rds__loan_finance__lender_repay_serial__1d")) {
     warnings.push("SQL 同时使用 bill_repay 和 lender_repay_serial，需确认是否混用了用户侧与资金侧还款口径。");
   }
 

@@ -13,7 +13,7 @@ review_after: 2026-07-19
 
 ## 1. 目标与结论
 
-本需求用于指导 Helm 租户（账户锚点：`helm@zhaojiling.com`）的商业模块重构整理。
+本需求用于指导 Helm 租户（账户锚点：`${HELM_SYSTEM_EMAIL}`）的商业模块重构整理。
 目标是把现有能力收口到一条可持续运营主链路，而不是扩平台：
 
 1. `Program Catalog -> Application Intake -> Participant Portal -> Settlement Operations`
