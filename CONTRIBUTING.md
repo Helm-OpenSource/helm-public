@@ -23,10 +23,10 @@ Helm 是一套面向受控试点的「经营推进控制台 / 经营推进操作
 
 如果你的改动涉及租户扩展、计费、连接器或公开发布相关脚本，请额外阅读：
 
-- `docs/internal/HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md`（租户隔离与公开/私有仓库边界）
 - `docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md`（公开试用数据政策草案；最终以工作区契约和生效政策为准）
 - `docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md`（五月 launch plan）
 - `docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`（open core / commercial runtime / partner delivery 边界）
+- 对于客户专属 Overlay、商业 Pack 或私有部署细节，请在对应私有仓库阅读其仓库级说明；不要把这些材料复制到 `helm-public`。
 
 ---
 

@@ -72,7 +72,7 @@ Every one is backed by code or a current release gate, not a commercial promise.
 
 `extensions/<vertical>/` is a complete machine with batteries: full signal schema, worker driver previews, connectors, BI report skill assets. The target path is **fork → swap slug → swap schema → ship the first controlled customer, saving 6–8 weeks of modeling work**; actual cycle time depends on customer data access, permissions, reviewers, and connector readiness.
 
-The v0.1 public release gate includes **[`extensions/case-management-sample/`](../../extensions/case-management-sample/)** as the sanitized reference vertical (case / customer service / business operations domain). The landed scope is a minimum public reference plus a worker / BI cookbook minimum slice: manifests, signal types, four synthetic fixture classes, a case mapper test, case allocation / stewardship driver cookbooks, and daily activity readout report skill assets. Docker / fresh-clone onboarding remains pending on the [`CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md`](../_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md) track. The tenant-private original is not in the public mirror.
+The v0.1 public release gate includes **[`extensions/case-management-sample/`](../../extensions/case-management-sample/)** as the sanitized reference vertical (case / customer service / business operations domain). The landed scope is a minimum public reference plus a worker / BI cookbook minimum slice: manifests, signal types, four synthetic fixture classes, a case mapper test, case allocation / stewardship driver cookbooks, and daily activity readout report skill assets. The current public onboarding entry is [docs/README.md](../README.md). The tenant-private original is not in the public mirror.
 
 ### 2. Boundary invariants encoded in eval gates
 
@@ -174,7 +174,7 @@ Details: [AGENTS.md §6-§7](../../AGENTS.md).
 | You want to | Look here |
 |---|---|
 | Just run it | [README.md](../../README.md) 90-second demo |
-| Track the complete vertical extraction | [`CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md`](../_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md) |
+| Track the public vertical entry | [docs/README.md](../README.md) |
 | Wire up your customer's systems | [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md) (coming with v0.1.0) |
 | Understand the OS / commercial boundary | [`docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`](../product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) |
 | Apply for Certified Delivery Partner | [`docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md`](../product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) |

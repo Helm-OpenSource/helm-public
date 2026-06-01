@@ -21,6 +21,7 @@ export default mergeConfig(baseConfig, {
       "lib/public-mirror-preflight.test.ts",
       "lib/public-mirror-smoke.test.ts",
       "lib/public-package-manifest-builder.test.ts",
+      "lib/evals/pack-a-pilot-readiness.test.ts",
       "scripts/repo-split-execute.test.ts",
     ],
   },

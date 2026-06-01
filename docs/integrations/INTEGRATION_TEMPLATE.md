@@ -222,7 +222,7 @@ npm run test -- lib/connectors/<name> # 你连接器的本地测试
 npm run e2e -- --grep "<name>"        # 如有 e2e 用例
 ```
 
-并在 PR 描述中粘贴上面 7 条命令的结果或免责（参考 [`docs/_planning/HELM_GITHUB_APACHE_2_0_PUBLIC_RELEASE_EXECUTION_PLAN_TO_2026-05-31`](.) §8 验收命令清单的不可跑回退机制）。
+并在 PR 描述中粘贴上面 7 条命令的结果或免责；如果某条命令不能在本地环境运行，说明原因、剩余风险和补跑计划。
 
 ---
 

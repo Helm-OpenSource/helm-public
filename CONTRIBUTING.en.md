@@ -25,10 +25,10 @@ Read these in order — don't skip:
 
 If your change touches tenant separation, billing, connectors, or public-release scripts, also read:
 
-- `docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md` — public/private repo boundary and May launch posture
 - `docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md` — public trial data policy
 - `docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md` — May launch plan
 - `docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md` — open core / commercial runtime / partner delivery boundary
+- For customer-specific overlays, commercial packs, or private deployment details, read the corresponding private repository guidance; do not copy those materials into `helm-public`.
 
 ---
 

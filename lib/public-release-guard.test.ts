@@ -664,7 +664,11 @@ describe("public release guard fixture coverage", () => {
         "npm run test:public:guards && npm run public:smoke:static",
       "public:e2e:smoke": "npm run public:smoke:static",
       e2e: "npm run public:e2e:smoke",
-      "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
+      "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "check:public-release":
+        "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
+      "public:smoke:static":
+        "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
     });
     expect(validatePublicPackageManifestProjection(projection)).toEqual([]);
@@ -779,12 +783,16 @@ describe("public release guard fixture coverage", () => {
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
       "check:boundaries": "npm run public:smoke:static",
+      "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "check:public-release":
+        "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       dev: "next dev",
       e2e: "npm run public:e2e:smoke",
       "public:e2e:smoke": "npm run public:smoke:static",
-      "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
+      "public:smoke:static":
+        "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
       "quality:regression":
         "npm run test:public:guards && npm run public:smoke:static",

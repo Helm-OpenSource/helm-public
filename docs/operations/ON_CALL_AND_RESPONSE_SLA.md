@@ -67,7 +67,7 @@ P1 条件：
 1. First responder 在 15 分钟内标记 P0/P1。
 2. Operations lead 与 owner 进入同一事件线程。
 3. P0 默认先止血：关闭相关 feature flag、撤回公开承诺入口、暂停新试点邀请。
-4. 事件结束后必须补一份 `docs/reviews/` incident closeout 或在 `docs/STATUS.md` 风险项更新证据。
+4. 事件结束后必须补一份私有 incident closeout，或在 `docs/STATUS.md` 风险项更新公开可见证据。
 
 ## 五、失败时的公开口径
 
@@ -94,4 +94,3 @@ P1 条件：
 - first responder 已有人承担
 - owner 知道 1 个工作日 / 7 个工作日目标是运营负债
 - 若无法承担，README 必须改成 best-effort，不得继续写目标窗口
-
