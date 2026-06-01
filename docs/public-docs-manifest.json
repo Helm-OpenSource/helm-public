@@ -8,6 +8,7 @@
     "docs/getting-started.en.md",
     "docs/getting-started.md",
     "docs/integrations/INTEGRATION_TEMPLATE.md",
+    "docs/launch/HELM_PUBLIC_CORE_LAUNCH_ANNOUNCEMENT_V1.md",
     "docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md",
     "docs/operations/HELM_PUBLIC_VISIBILITY_GATE_CHECKLIST_V1.md",
     "docs/operations/ON_CALL_AND_RESPONSE_SLA.md",
@@ -29,6 +30,7 @@
     "docs/reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md",
     "docs/reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md",
     "docs/reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md",
+    "docs/reviews/HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md",
     "docs/roadmap/HELM_PUBLIC_ROADMAP.md"
   ]
 }
