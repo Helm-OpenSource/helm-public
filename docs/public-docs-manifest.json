@@ -9,6 +9,7 @@
     "docs/getting-started.md",
     "docs/integrations/INTEGRATION_TEMPLATE.md",
     "docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md",
+    "docs/operations/HELM_PUBLIC_VISIBILITY_GATE_CHECKLIST_V1.md",
     "docs/operations/ON_CALL_AND_RESPONSE_SLA.md",
     "docs/pilot/PUBLIC_TRIAL_RUNBOOK.md",
     "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md",
