@@ -40,6 +40,21 @@ current evidence for:
 - clean public history or fresh sanitized snapshot
 - owner Go/No-Go
 
+## Manual Tagging Boundary
+
+`npm run release:check` does not create tags or GitHub Releases. It only decides
+whether maintainers may enter the manual tagging step.
+
+The trial release target remains `v0.1.0-trial`. If this repository already has
+a higher stable release tag, maintainers must not let a lower trial tag replace
+the repository's latest stable release. In that case, publish the trial tag as a
+prerelease with `--latest=false`, or update the version strategy and supporting
+docs before tagging.
+
+The release gate prints suggested manual commands based on the local tag state.
+Those commands are guidance for a human maintainer; they are not executed by the
+gate.
+
 ## Cloud Trial Boundary
 
 Cloud Trial is optional and separate from the Apache-2.0 Core. It does not create

@@ -17,6 +17,7 @@ import {
   REQUIRED_CALIBRATION_REPORT_PATH,
   RELEASE_READINESS_AUTOMATED_STEP_COUNT,
   STEPS,
+  buildReleaseTagStrategy,
   getPublicMirrorCleanReceiptPath,
   validatePublicMirrorCleanReceiptDocument,
   validateApprovalRecordId,
@@ -227,5 +228,44 @@ describe("release readiness manual receipt truth", () => {
       ),
     ).toContain(REQUIRED_CALIBRATION_REPORT_PATH);
     expect(validateCalibrationReportPath(REQUIRED_CALIBRATION_REPORT_PATH)).toBe(undefined);
+  });
+
+  it("prints a prerelease non-latest tagging plan when a higher stable release tag already exists", () => {
+    const strategy = buildReleaseTagStrategy({
+      currentHead: "79bc11653a7ce99787f1ae350ee1d89749f3b4dd",
+      existingTags: [
+        {
+          name: "V1.0.0",
+          targetCommit: "bc0413ff8fce20a43dd0a3452970f8971e76de1d",
+        },
+      ],
+    });
+
+    expect(strategy.blockingIssues).toEqual([]);
+    expect(strategy.warnings.join("\n")).toContain("V1.0.0");
+    expect(strategy.releaseFlags).toContain("--prerelease");
+    expect(strategy.releaseFlags).toContain("--latest=false");
+    expect(strategy.releaseFlags).toContain("--notes-start-tag V1.0.0");
+    expect(strategy.manualCommands).toEqual([
+      'git tag -a v0.1.0-trial 79bc11653a7ce99787f1ae350ee1d89749f3b4dd -m "Helm v0.1.0-trial release gate passed"',
+      "git push origin v0.1.0-trial",
+      'gh release create v0.1.0-trial --verify-tag --title "Helm v0.1.0-trial" --prerelease --latest=false --generate-notes --notes-start-tag V1.0.0',
+    ]);
+  });
+
+  it("blocks manual tagging when the target release tag already points at another commit", () => {
+    const strategy = buildReleaseTagStrategy({
+      currentHead: "79bc11653a7ce99787f1ae350ee1d89749f3b4dd",
+      existingTags: [
+        {
+          name: "v0.1.0-trial",
+          targetCommit: "bc0413ff8fce20a43dd0a3452970f8971e76de1d",
+        },
+      ],
+    });
+
+    expect(strategy.blockingIssues.join("\n")).toContain("already exists");
+    expect(strategy.blockingIssues.join("\n")).toContain("bc0413ff");
+    expect(strategy.manualCommands).toEqual([]);
   });
 });
