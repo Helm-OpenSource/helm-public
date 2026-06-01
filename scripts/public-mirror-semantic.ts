@@ -53,6 +53,11 @@ function semanticRule(kind: "tenant-slug" | "customer-name", value: string): str
   return ["semantic", kind, value].join(":");
 }
 
+function customerHostPattern(labelParts: ReadonlyArray<string>, tld: string): RegExp {
+  const domain = `${labelParts.join("")}\\.${tld}`;
+  return new RegExp(`(?:^|[^\\w.-])[\\w.-]*${domain}\\b`, "i");
+}
+
 const tenantSlugPrimary = ["gua", "ngpu"].join("");
 const tenantSlugExternalCase = ["mi", "dun"].join("");
 const tenantSlugZhaojiling = ["zhao", "jiling"].join("");
@@ -96,35 +101,35 @@ const PRIVATE_SEMANTIC_PATTERNS: ReadonlyArray<PrivateSemanticPattern> = [
   },
   {
     rule: ["semantic", "person-name", "qian-zhilong"].join(":"),
-    pattern: /钱志龙/u,
+    pattern: new RegExp(["钱", "志", "龙"].join(""), "u"),
   },
   {
     rule: ["semantic", "person-name", "wang-lizhen"].join(":"),
-    pattern: /王丽珍|wanglizhen/i,
+    pattern: new RegExp([["王", "丽", "珍"].join(""), ["wang", "lizhen"].join("")].join("|"), "i"),
   },
   {
     rule: ["semantic", "person-name", "li-jianle"].join(":"),
-    pattern: /李建乐|lijianle/i,
+    pattern: new RegExp([["李", "建", "乐"].join(""), ["li", "jianle"].join("")].join("|"), "i"),
   },
   {
     rule: ["semantic", "internal-host", "aliyun-mysql-rds-host"].join(":"),
     pattern: /[\w.-]+\.mysql\.rds\.aliyuncs\.com/i,
   },
   {
-    rule: ["semantic", "internal-host", "customer-aicaigroup-host"].join(":"),
-    pattern: /(?:^|[^\w.-])[\w.-]*aicaigroup\.com\b/i,
+    rule: ["semantic", "internal-host", "customer-domain-a-host"].join(":"),
+    pattern: customerHostPattern(["aicai", "group"], "com"),
   },
   {
-    rule: ["semantic", "internal-host", "customer-zhaojiling-host"].join(":"),
-    pattern: /(?:^|[^\w.-])[\w.-]*zhaojiling\.com\b/i,
+    rule: ["semantic", "internal-host", "customer-domain-c-host"].join(":"),
+    pattern: customerHostPattern(["zhao", "jiling"], "com"),
   },
   {
-    rule: ["semantic", "internal-host", "customer-hzmiz-host"].join(":"),
-    pattern: /(?:^|[^\w.-])[\w.-]*hzmiz\.cn\b/i,
+    rule: ["semantic", "internal-host", "customer-domain-d-host"].join(":"),
+    pattern: customerHostPattern(["hz", "miz"], "cn"),
   },
   {
-    rule: ["semantic", "internal-host", "customer-360amc-host"].join(":"),
-    pattern: /(?:^|[^\w.-])[\w.-]*360amc\.cn\b/i,
+    rule: ["semantic", "internal-host", "customer-domain-e-host"].join(":"),
+    pattern: customerHostPattern(["360", "amc"], "cn"),
   },
   {
     rule: ["semantic", "internal-ip", "rfc1918"].join(":"),

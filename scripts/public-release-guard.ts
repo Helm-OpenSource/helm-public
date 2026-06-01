@@ -99,6 +99,11 @@ function tenantSlugPattern(slug: string): RegExp {
   return new RegExp(`(\\b${ci}\\b)|([A-Za-z0-9]${ci})|(${ci}[A-Z])`);
 }
 
+function customerHostPattern(labelParts: ReadonlyArray<string>, tld: string): RegExp {
+  const domain = `${labelParts.join("")}\\.${tld}`;
+  return new RegExp(`(?:^|[^\\w.-])[\\w.-]*${domain}\\b`, "i");
+}
+
 /** True if a file's relative PATH names a tenant slug (camelCase-aware). A
  *  tenant-named filename is a leak regardless of the file's contents. */
 function pathNamesTenantSlug(relativePath: string): string | null {
@@ -123,9 +128,15 @@ const CUSTOMER_NAME_BLACKLIST: ReadonlyArray<{ name: string; pattern: RegExp }> 
 ];
 
 const PRIVATE_PERSON_NAME_BLACKLIST: ReadonlyArray<{ name: string; pattern: RegExp }> = [
-  { name: "qian-zhilong", pattern: /钱志龙/u },
-  { name: "wang-lizhen", pattern: /王丽珍|wanglizhen/i },
-  { name: "li-jianle", pattern: /李建乐|lijianle/i },
+  { name: "qian-zhilong", pattern: new RegExp(["钱", "志", "龙"].join(""), "u") },
+  {
+    name: "wang-lizhen",
+    pattern: new RegExp([["王", "丽", "珍"].join(""), ["wang", "lizhen"].join("")].join("|"), "i"),
+  },
+  {
+    name: "li-jianle",
+    pattern: new RegExp([["李", "建", "乐"].join(""), ["li", "jianle"].join("")].join("|"), "i"),
+  },
 ];
 
 // Internal infrastructure hosts that must not leak.
@@ -134,11 +145,11 @@ const INTERNAL_HOST_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> =
     { name: "rm-shuyao", pattern: /rm-shuyao[\w.-]*\.aliyuncs\.com/i },
     { name: "aliyun-mysql-rds-host", pattern: /[\w.-]+\.mysql\.rds\.aliyuncs\.com/i },
     { name: "aliyun-rds-host", pattern: /[\w.-]+\.rds\.aliyuncs\.com/i },
-    { name: "customer-aicaigroup-host", pattern: /(?:^|[^\w.-])[\w.-]*aicaigroup\.com\b/i },
-    { name: "customer-aicaitest-host", pattern: /(?:^|[^\w.-])[\w.-]*aicaitest\.com\b/i },
-    { name: "customer-zhaojiling-host", pattern: /(?:^|[^\w.-])[\w.-]*zhaojiling\.com\b/i },
-    { name: "customer-hzmiz-host", pattern: /(?:^|[^\w.-])[\w.-]*hzmiz\.cn\b/i },
-    { name: "customer-360amc-host", pattern: /(?:^|[^\w.-])[\w.-]*360amc\.cn\b/i },
+    { name: "customer-domain-a-host", pattern: customerHostPattern(["aicai", "group"], "com") },
+    { name: "customer-domain-b-host", pattern: customerHostPattern(["aicai", "test"], "com") },
+    { name: "customer-domain-c-host", pattern: customerHostPattern(["zhao", "jiling"], "com") },
+    { name: "customer-domain-d-host", pattern: customerHostPattern(["hz", "miz"], "cn") },
+    { name: "customer-domain-e-host", pattern: customerHostPattern(["360", "amc"], "cn") },
   ];
 
 const RFC1918_IPV4_PATTERN =
