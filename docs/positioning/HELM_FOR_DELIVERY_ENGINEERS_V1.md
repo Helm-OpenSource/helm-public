@@ -179,7 +179,9 @@ zh/en 在 contract 层（不只是翻译 README）；locale-aware projection 已
 | 接客户的系统 | [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md)（随 v0.1.0 一起开放） |
 | 理解开源 / 商业边界 | [`docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`](../product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) |
 | 申请 Certified Delivery Partner | [`docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md`](../product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) |
-| 商业合作 | `partners@helm.<domain>` |
+| 商业合作 / 联系我们 | 微信 `ffjw0821`（受控人工对接） |
+| 加入社区 | 微信群邀请二维码（先加微信 `ffjw0821` 获取当期有效码） |
+| 社交媒体 / 公众号 | 待补充（当前不作为承诺入口） |
 
 ---
 
