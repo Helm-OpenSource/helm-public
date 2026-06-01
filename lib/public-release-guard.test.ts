@@ -20,11 +20,11 @@ const implementationConsolePrivateRoot = [
 ].join("/");
 const commercialPrivateRoot = ["customer", "proof", "packs"].join("-");
 const rmShuyaoHost = [["rm", "shuyao-dev"].join("-"), "aliyuncs", "com"].join(".");
-const mysqlRdsHost = ["rm-shuyao-dev-pub", "mysql", "rds", "aliyuncs", "com"].join(".");
+const mysqlRdsHost = [["rm", "shuyao-dev", "pub"].join("-"), "mysql", "rds", "aliyuncs", "com"].join(".");
 const aliyunRdsHost = ["example-prod", "rds", "aliyuncs", "com"].join(".");
 const customerHost = ["helm", ["aicai", "group"].join(""), "com"].join(".");
 const privateEmail = ["member", [["360", "amc"].join(""), "cn"].join(".")].join("@");
-const realMobile = ["+86", "13958044686"].join("");
+const realMobile = ["+86", ["139", "5804", "4686"].join("")].join("");
 const personWang = ["王", "丽", "珍"].join("");
 const personLi = ["李", "建", "乐"].join("");
 const companyCn = ["杭州", "光", "潽", "科技有限公司"].join("");

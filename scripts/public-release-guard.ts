@@ -200,7 +200,7 @@ const URL_EMBEDDED_CREDENTIAL_PATTERN =
 // original value, and the guard's job is to prevent re-introduction into
 // the working tree.
 const KNOWN_LEAKED_TOKEN_SHA256: ReadonlySet<string> = new Set([
-  // rm-shuyao-dev-pub MySQL root (P0 redaction 2026-04-27).
+  // Rotated MySQL root host marker (P0 redaction 2026-04-27).
   "1f2690821816efa16646ccb339b92178107ac6a29d98938379002868c86736e6",
 ]);
 
