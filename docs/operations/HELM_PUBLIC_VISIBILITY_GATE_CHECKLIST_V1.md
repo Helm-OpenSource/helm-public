@@ -20,20 +20,20 @@ checklist does not flip visibility and does not grant Go/No-Go.
 
 | # | Step | Owner-only? | Current status |
 | --- | --- | --- | --- |
-| 1 | Rotate / revoke the exposed RDS credential in the source environment | Yes (ops) | ⏳ pending owner confirmation |
+| 1 | Rotate / revoke the exposed RDS credential in the source environment | Yes (ops) | ✅ completed before owner Go/No-Go; raw ops receipt remains off-repo |
 | 2 | HEAD `check:public-release` + `check:secret-history` green | No | ✅ green on `main` |
 | 3 | History remediation produces a clean-history receipt | No | ✅ [HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md](../reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md) |
 | 4 | Rewritten/snapshot history re-scanned and still green | No | ✅ gitleaks full-history scan clean (recorded in the receipt) |
-| 5 | `npm run release:check` green incl. human-readable receipts | Mixed | 🟡 11/11 automated steps pass; 7 manual receipts pending (Part 2) |
-| 6 | Owner Go/No-Go using founder/owner identity | Yes | ⏳ pending |
-| 7 | Flip repository visibility | Yes | ⏳ final step |
+| 5 | `npm run release:check` green incl. human-readable receipts | Mixed | ✅ FULL release gate rerun before tagging; raw manual receipt values remain off-repo |
+| 6 | Owner Go/No-Go using founder/owner identity | Yes | ✅ recorded in [HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md](../reviews/HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md) |
+| 7 | Flip repository visibility | Yes | ✅ completed by owner; repository is public |
 
 ## Part 2 — `release:check` manual receipts (7)
 
-`npm run release:check` passes all automated steps but reports 7 manual receipts
-as unmet until the corresponding `RELEASE_READINESS_*` environment variables are
-set **on the release machine** (not committed to the repo). Set them, then re-run
-`npm run release:check` and expect `ALL CLEAR`.
+The final release-machine run set the corresponding `RELEASE_READINESS_*`
+environment variables off-repo and reran the FULL release gate before tagging.
+Do not commit raw receipt values, approval ids, credentials, or private evidence
+to this repository.
 
 ### Evidence already in the repo — owner sets the env var
 
@@ -47,12 +47,11 @@ export RELEASE_READINESS_AUDIT_TRACE_PUBLIC_POSTURE=claim_withdrawn
 # Docker quickstart smoke (D2 fresh-clone smoke receipt already present, dated 2026-06-01)
 export RELEASE_READINESS_DOCKER_SMOKE_PASSED=2026-06-01
 
-# On-call / response policy (docs/operations/ON_CALL_AND_RESPONSE_SLA.md exists;
-# set the date once the owner approves it FOR THIS RELEASE)
+# On-call / response policy (docs/operations/ON_CALL_AND_RESPONSE_SLA.md exists)
 export RELEASE_READINESS_ONCALL_RESPONSE_POLICY_READY=<YYYY-MM-DD owner-approval date>
 ```
 
-### Genuine owner / ops / reviewer actions — no repo evidence yet
+### Genuine owner / ops / reviewer actions — raw evidence remains off-repo
 
 ```bash
 # 1. Ops rotates the Aliyun RDS root password + updates secret stores + reviews
@@ -81,6 +80,8 @@ RELEASE_READINESS_FULL=true npm run release:check   # full chain before tagging
 1. Confirm Part 1 steps 1–5 are all green and Part 2 shows `ALL CLEAR`.
 2. Owner records the Go/No-Go decision (step 6).
 3. Only on Go: owner flips repository visibility to public (step 7).
+4. Completed on 2026-06-01; future visibility, tag, release, or announcement
+   changes still require owner authorization.
 
 ## Non-claims
 

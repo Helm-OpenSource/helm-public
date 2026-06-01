@@ -179,8 +179,8 @@ OpenAI API 默认关闭。启用时：
 
 ### 6.1 当前节奏
 
-- **Now**：Public Core、sample pack、Golden Path doctor、offline evals、public-release guard；repo visibility remains gated.
-- **Next**：visibility gate、history-level clean receipt、docs curation、split-repo readiness checks, and owner Go/No-Go.
+- **Now**：Public Core、sample pack、Golden Path doctor、offline evals、public-release guard；repo visibility is public after owner Go/No-Go.
+- **Next**：public-channel watch, docs curation, split-repo readiness checks, and owner-gated release changes.
 - **Later**：cloud trial and enterprise readiness only after the corresponding legal, operational, and deployment evidence exists.
 
 详见 [HELM_PUBLIC_ROADMAP.md](../roadmap/HELM_PUBLIC_ROADMAP.md)。
