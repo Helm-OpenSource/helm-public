@@ -3099,7 +3099,7 @@ export function ApprovalsClient({
                         <Button
                           type="button"
                           variant="secondary"
-                          disabled={pending || !canReviewGovernedActions}
+                          disabled={pending}
                           onClick={() =>
                             saveSelectedBiExecutionLog(
                               "plan",
@@ -3210,7 +3210,7 @@ export function ApprovalsClient({
                         <Button
                           type="button"
                           variant="secondary"
-                          disabled={pending || !canReviewGovernedActions}
+                          disabled={pending}
                           onClick={() =>
                             saveSelectedBiExecutionLog(
                               "result",
@@ -3341,7 +3341,7 @@ export function ApprovalsClient({
                   {selectedActionAwaitingExecution ? (
                     <>
                       <Button
-                        disabled={pending || !canReviewGovernedActions}
+                        disabled={pending}
                         onClick={() =>
                           runAction(
                             () =>
@@ -3359,7 +3359,7 @@ export function ApprovalsClient({
                         {english ? "Mark executed" : "标记已执行"}
                       </Button>
                       <Button
-                        disabled={pending || !canReviewGovernedActions}
+                        disabled={pending}
                         variant="secondary"
                         onClick={() =>
                           runAction(
@@ -3383,7 +3383,7 @@ export function ApprovalsClient({
                   ) : selectedActionExecuted || selectedActionBlocked ? null : (
                     <>
                       <Button
-                        disabled={pending || !canReviewGovernedActions}
+                        disabled={pending}
                         onClick={() =>
                           runAction(
                             () => approveTaskAction(selected.id),
@@ -3413,7 +3413,7 @@ export function ApprovalsClient({
                         {english ? "Approve edited draft" : "编辑后批准待执行"}
                       </Button>
                       <Button
-                        disabled={pending || !canReviewGovernedActions}
+                        disabled={pending}
                         variant="secondary"
                         onClick={() =>
                           runAction(
@@ -3431,7 +3431,7 @@ export function ApprovalsClient({
                         {english ? "Reject" : "拒绝"}
                       </Button>
                       <Button
-                        disabled={pending || !canReviewGovernedActions}
+                        disabled={pending}
                         variant="secondary"
                         onClick={() =>
                           runAction(

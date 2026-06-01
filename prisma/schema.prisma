@@ -3312,7 +3312,7 @@ model ActionItem {
   description          String?
   aiReason             String?
   draftContent         String?
-  metadata             String?
+  metadata             String?             @db.LongText
   sourceType           SourceType?
   sourceId             String?
   riskLevel            RiskLevel           @default(MEDIUM)
