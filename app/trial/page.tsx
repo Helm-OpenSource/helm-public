@@ -45,8 +45,8 @@ export default async function TrialApplicationPage() {
           <p className="text-sm font-semibold">{english ? "Helm" : "Helm 掌舵者"}</p>
           <p className="max-w-[28rem] text-xs text-[color:var(--muted-foreground)]">
             {english
-              ? "Open-source AI operating toolkit · for B2B delivery engineers"
-              : "面向 B 端 AI 交付工程师的开源经营推进工具集"}
+              ? "Open-source AI operating toolkit · for enterprise AI delivery engineers"
+              : "面向企业 AI 交付工程师的开源经营推进工具集"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -79,7 +79,7 @@ export default async function TrialApplicationPage() {
                 : "想自部署？"}
             </span>
             <a
-              href="https://github.com/Helm-Developers/helm2026"
+              href="https://github.com/Helm-OpenSource/helm-public"
               target="_blank"
               rel="noopener noreferrer"
               className="font-semibold text-[color:var(--accent)] underline-offset-4 hover:underline"

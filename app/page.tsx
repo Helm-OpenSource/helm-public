@@ -30,11 +30,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: english
-      ? "Helm | Open-source AI operating toolkit for B2B delivery engineers"
-      : "Helm | 面向 B 端 AI 交付工程师的开源经营推进工具集",
+      ? "Helm | Open-source AI operating toolkit for enterprise AI delivery engineers"
+      : "Helm | 面向企业 AI 交付工程师的开源经营推进工具集",
     description: english
-      ? "AI agent platforms give you Lego bricks. Helm is the assembled, customizable, boundary-disciplined operating-loop reference implementation. Apache-2.0, forkable, 30-minute onboarding. Ship your first controlled customer in ~4 weeks."
-      : "AI 平台给你乐高积木。Helm 是已经搭好、可定制、有边界纪律的经营推进闭环参考实现。Apache-2.0、可 fork、30 分钟跑通完整闭环，Fork 后约 4 周交付首个受控客户。",
+      ? "AI agent platforms give you Lego bricks. Helm turns judgement, evidence, review, boundaries, and delivery packages into a forkable Apache-2.0 Core for enterprise AI delivery engineers."
+      : "AI 平台给你乐高积木。Helm 把判断、证据、复核、边界、交付包做成可 fork 的 Apache-2.0 Core，给企业 AI 交付工程师复用。",
   };
 }
 
@@ -98,9 +98,9 @@ export default async function Home({
       eyebrow: english ? "Apache-2.0 · GitHub" : "Apache-2.0 · GitHub",
       title: english ? "Fork the toolkit" : "Fork 这套工具集",
       body: english
-        ? "Read the source, fork the repo, ship your first controlled customer in ~4 weeks. Apache-2.0, no royalty, no platform tax."
-        : "看源码、fork 仓库、约 4 周交付首个受控客户。Apache-2.0，不抽成，不锁渠道。",
-      href: "https://github.com/Helm-Developers/helm2026",
+        ? "Read the source, fork the repo, and use the Golden Path checks to keep judgement, evidence, review, and boundaries visible. Apache-2.0, no royalty, no platform tax."
+        : "看源码、fork 仓库，用 Golden Path 检查链把判断、证据、复核、边界看清楚。Apache-2.0，不抽成，不锁渠道。",
+      href: "https://github.com/Helm-OpenSource/helm-public",
       cta: english ? "View on GitHub" : "去 GitHub 看源码",
       testId: "home-path-fork",
     },
@@ -228,8 +228,8 @@ export default async function Home({
           <p className="text-sm font-semibold">{english ? "Helm" : "Helm 掌舵者"}</p>
           <p className="max-w-[24rem] text-xs text-[color:var(--muted-foreground)]">
             {english
-              ? "Open-source AI operating toolkit · for B2B delivery engineers"
-              : "面向 B 端 AI 交付工程师的开源经营推进工具集"}
+              ? "Open-source AI operating toolkit · for enterprise AI delivery engineers"
+              : "面向企业 AI 交付工程师的开源经营推进工具集"}
           </p>
         </div>
         <nav
@@ -256,7 +256,7 @@ export default async function Home({
           </Button>
           <Button asChild variant="default">
             <a
-              href="https://github.com/Helm-Developers/helm2026"
+              href="https://github.com/Helm-OpenSource/helm-public"
               data-testid="home-cta-github-header"
               target="_blank"
               rel="noopener noreferrer"
@@ -281,13 +281,13 @@ export default async function Home({
             </p>
             <h1 className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
               {english
-                ? "Stop rebuilding the boring scaffolding for every B2B AI delivery."
-                : "别为每个 B 端 AI 交付项目重写同一套无聊的脚手架。"}
+                ? "Stop rebuilding the boring scaffolding for every enterprise AI delivery."
+                : "别为每个企业 AI 交付项目重写同一套无聊的脚手架。"}
             </h1>
             <p className="max-w-2xl text-base leading-7 text-[color:var(--muted)] md:text-lg md:leading-8">
               {english
-                ? "Helm is the assembled operating loop — verticals, connectors, review gates, BI — that your delivery team forks and ships to a B2B customer in about four weeks."
-                : "Helm 是已经搭好的一整套经营推进闭环——vertical、连接器、复核门、BI 都接好了——你的交付团队 fork 一份，大约四周就能交付给一个 B 端客户。"}
+                ? "Helm is the assembled operating loop for turning customer implementation work into judgement, evidence, review, boundary, and delivery-package artifacts your team can fork and verify."
+                : "Helm 是已经搭好的经营推进闭环，把客户业务落地里的判断、证据、复核、边界、交付包做成可 fork、可验证的工程结构。"}
             </p>
             <div
               className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-1.5 text-xs leading-5 text-[color:var(--muted)]"
@@ -296,8 +296,8 @@ export default async function Home({
               <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--accent)]" />
               <span>
                 {english
-                  ? "Apache-2.0 · 30 min to a working loop · ~4 weeks to your first customer"
-                  : "Apache-2.0 · 30 分钟跑通闭环 · 约 4 周交付首个客户"}
+                  ? "Apache-2.0 · Forkable Core · Review-first Golden Path"
+                  : "Apache-2.0 · 可 fork Core · Review-first Golden Path"}
               </span>
             </div>
           </div>
@@ -518,14 +518,14 @@ export default async function Home({
               </h2>
               <p className="text-sm leading-6 text-[color:var(--muted)]">
                 {english
-                  ? "Clone it (Apache-2.0, ~30 min to a working loop), or apply for Helm Cloud — managed, invite-only."
-                  : "自己跑（Apache-2.0，约 30 分钟跑通完整闭环），或申请 Helm Cloud（托管版，仅邀请制）。"}
+                  ? "Clone it and run the Golden Path checks, or apply for Helm Cloud — managed, invite-only."
+                  : "自己 clone 并跑 Golden Path 检查链，或申请 Helm Cloud（托管版，仅邀请制）。"}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button asChild variant="default">
                 <a
-                  href="https://github.com/Helm-Developers/helm2026"
+                  href="https://github.com/Helm-OpenSource/helm-public"
                   data-testid="home-cta-github"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -564,7 +564,7 @@ export default async function Home({
           </div>
           <div className="flex flex-wrap items-center gap-4">
             <a
-              href="https://github.com/Helm-Developers/helm2026"
+              href="https://github.com/Helm-OpenSource/helm-public"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-[color:var(--foreground)]"
@@ -581,7 +581,7 @@ export default async function Home({
               {english ? "Helm Cloud trial" : "Helm Cloud 试用"}
             </Link>
             <a
-              href="https://github.com/Helm-Developers/helm2026/issues"
+              href="https://github.com/Helm-OpenSource/helm-public/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-[color:var(--foreground)]"

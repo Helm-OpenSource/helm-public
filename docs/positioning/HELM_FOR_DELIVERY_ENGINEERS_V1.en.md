@@ -3,7 +3,7 @@ status: draft
 owner: helm-core
 created: 2026-05-18
 review_after: 2026-05-25
-target_audience: delivery engineers building B2B operations systems on top of AI agent platforms (Coze / Wukong / Dify / LangGraph / general LLM frameworks)
+target_audience: delivery engineers building enterprise AI operations systems on top of AI agent platforms (Coze / Wukong / Dify / LangGraph / general LLM frameworks)
 public_safety: Intended for the public mirror. No tenant-private references; verticals named generically.
 mirrors: HELM_FOR_DELIVERY_ENGINEERS_V1.md (Chinese is authoritative; resolve drift toward zh)
 archive_trigger:
@@ -16,7 +16,7 @@ archive_trigger:
 
 ## One-line positioning
 
-> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for B2B business operations, with full boundary discipline, built to help delivery engineers ship the first controlled customer in about 4 weeks when prerequisites are met.**
+> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for enterprise AI operations systems, with full boundary discipline, built to help delivery engineers turn judgement / evidence / review / boundaries / delivery packages into a forkable engineering structure.**
 
 ---
 
@@ -24,7 +24,7 @@ archive_trigger:
 
 You are:
 
-- A delivery engineer **building B2B systems for enterprise customers** on top of Coze / Alibaba Wukong / Dify / LangGraph / a general agent platform
+- A delivery engineer **building enterprise AI operations systems** on top of Coze / Alibaba Wukong / Dify / LangGraph / a general agent platform
 - Stuck in the "I don't know my customer's business — how do I configure this agent?" phase
 - Being asked "will the AI overstep? will recommendations turn into commitments? will tenant data cross-contaminate?" and needing an **auditable** answer
 - Wanting an **opinionated scaffold** rather than assembling a framework from scratch
@@ -37,7 +37,7 @@ Then this page is for you. If you are a CEO or business buyer comparing SaaS ven
 
 Generic agent platforms and LLM frameworks solve **how to assemble**. They don't solve:
 
-1. **What to assemble** — the real B2B need is "today's 3 calls a human must make + why + boundary," not a chat box
+1. **What to assemble** — the real enterprise need is "today's 3 calls a human must make + why + boundary," not a chat box
 2. **How not to blow it** — AI overreach, auto-commitment, cross-tenant data leakage — the platform doesn't carry these risks for you; your customer does
 3. **How to ship faster** — modeling from scratch per customer, building review gates, writing connectors, shipping dashboards — burns through your person-months
 
@@ -56,9 +56,9 @@ Helm encodes these three answers into one **open-source reference implementation
 | Multi-tenant isolation | Platform layer (black box) | DIY | **Deployment Profile + Tenant Overlay 4-layer cut already designed** |
 | Chinese-locale connector | Partial | DIY | **DingTalk / IMAP / Aliyun Mail / Qwen built-in working samples** |
 | Fully forkable? | Varies (Dify is self-hostable; hosted platforms usually lock you in) | Yes (no vertical) | **Yes (Apache-2.0 + vertical pack)** |
-| 30-minute full loop ready? | No | No | **`docker compose up`** |
+| Forkable local loop? | No | No | **`docker compose up` + Golden Path checks** |
 | Commercial model (for you) | Platform takes a cut / their channel | You set your price | **open-core**: fork it, sell it commercially yourself. Helm Inc. doesn't take a cut |
-| Who it's for | People building chat-style agents | People building general LLM apps | **Delivery engineers shipping B2B operations** |
+| Who it's for | People building chat-style agents | People building general LLM apps | **Delivery engineers shipping enterprise AI operations** |
 
 > This table compares **types**, not any specific product's current feature checklist; platforms keep evolving. The contrast is in abstraction level and product shape. [Dify's official docs](https://docs.dify.ai/) emphasize its open-source / self-hostable posture; this table compares Dify as a visual AI application platform, not as a closed-source locked platform.
 
@@ -70,7 +70,7 @@ Every one is backed by code or a current release gate, not a commercial promise.
 
 ### 1. Vertical reference implementation (batteries included)
 
-`extensions/<vertical>/` is a complete machine with batteries: full signal schema, worker driver previews, connectors, BI report skill assets. The target path is **fork → swap slug → swap schema → ship the first controlled customer, saving 6–8 weeks of modeling work**; actual cycle time depends on customer data access, permissions, reviewers, and connector readiness.
+`extensions/<vertical>/` is a complete machine with batteries: signal schema, worker driver previews, connectors, BI report skill assets. The target path is **fork → swap slug → swap schema → run Golden Path checks → prepare a controlled-pilot review packet**; actual cycle time depends on customer data access, permissions, reviewers, and connector readiness.
 
 The v0.1 public release gate includes **[`extensions/case-management-sample/`](../../extensions/case-management-sample/)** as the sanitized reference vertical (case / customer service / business operations domain). The landed scope is a minimum public reference plus a worker / BI cookbook minimum slice: manifests, signal types, four synthetic fixture classes, a case mapper test, case allocation / stewardship driver cookbooks, and daily activity readout report skill assets. The current public onboarding entry is [docs/README.md](../README.md). The tenant-private original is not in the public mirror.
 
@@ -117,20 +117,20 @@ As the delivery partner base grows, Helm's reasoning quality itself improves, an
 
 ---
 
-## 30-minute onboarding anchor
+## Golden Path onboarding anchor
 
-Success = within 30 minutes you can complete this executable path. Steps 3 / 4 now have a minimum public reference to read and edit; steps 1 / 2 have a [D2 smoke receipt](../reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md) for the Docker fresh-clone path. This verifies the public Core quickstart only; it is not a commercial release, customer deployment, or SLA commitment.
+Success = completing this executable path and having the local check chain prove judgement, evidence, review, and boundaries remain review-first. Steps 1 / 2 have a [D2 smoke receipt](../reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md) for the Docker fresh-clone path; it verifies the public Core quickstart only and is not a commercial release, customer deployment, or SLA commitment. Minute labels are navigation aids, not SLAs, launch promises, or customer deployment proof.
 
-1. `git clone <repo> && cd helm && docker compose up` — local workspace running
+1. `git clone https://github.com/Helm-OpenSource/helm-public.git && cd helm-public && docker compose up` — local workspace running
 2. `open http://localhost:3000` — see `/operating` (operating signal flow map), `/approvals` (review gate), `/memory` (operating memory) — three already-working surfaces (⚠️ `/operating` is currently a **Phase 2 fixture demo**; connecting live tenant data requires Phase 2.3 runtime adoption)
 3. Read [`extensions/case-management-sample/README.md`](../../extensions/case-management-sample/README.md) — understand how a public-safe vertical starting point is organized
 4. Modify [`extensions/case-management-sample/tenant.manifest.json`](../../extensions/case-management-sample/tenant.manifest.json) slug + displayName — your customer's vertical starts taking shape
 5. Run `npm run eval:operating-signal-flow` — see which of 7 signal families / 10 blockers / 22 states your fixture covers, and which it doesn't
-6. Read [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md) (**coming with v0.1.0**) — wire up your customer's existing systems
+6. Read [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md) — wire up your customer's existing systems
 
-Completing these 6 steps = you've done 90% of the scaffold work for your customer. The remaining 10% is schema customization, connector adaptation, and copy polish.
+Completing these 6 steps means you have inspected the core forkable engineering structure. The remaining work is schema customization, connector adaptation, copy polish, and human review.
 
-> If you're stuck on any step for more than 5 minutes after release, post on GitHub Discussions. A 30-minute onboarding that doesn't work is our bug; before release, it triggers the positioning collateral No-Go / demotion path.
+> If you get stuck, post on GitHub Discussions. If the Golden Path does not pass, demote the claim by gate and do not describe it as externally verified.
 
 ---
 
@@ -175,7 +175,7 @@ Details: [AGENTS.md §6-§7](../../AGENTS.md).
 |---|---|
 | Just run it | [README.md](../../README.md) 90-second demo |
 | Track the public vertical entry | [docs/README.md](../README.md) |
-| Wire up your customer's systems | [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md) (coming with v0.1.0) |
+| Wire up your customer's systems | [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md) |
 | Understand the OS / commercial boundary | [`docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`](../product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) |
 | Apply for Certified Delivery Partner | [`docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md`](../product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) |
 | Commercial partnerships / contact | WeChat `ffjw0821` (human-routed, controlled) |

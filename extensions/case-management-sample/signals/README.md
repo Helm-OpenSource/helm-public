@@ -7,12 +7,12 @@
 - `types.ts` — generic operating-signal identity / scope / trace / commitment types
 - `types.test.ts` — deterministic key and tenant pinning tests
 - `case/` — case signal mapper + tests using synthetic records
-- `../fixtures/` — 100% synthetic case / day-board / employee / qc-issue examples
+- `../fixtures/` — public sample case / day-board / employee / qc-issue examples with provenance under review
 
 ## Boundaries
 
 - All read-only at the contract level (`maxEffectMode: "read_only"`)
 - No auto-execute, no commitment writes (`nonCommitmentOnly: true`)
-- All fixtures 100% synthetic; no real customer data
+- Public fixtures must contain no real customer data; keep provenance under review until the synthetic evidence gate is signed off
 
 See: [`../README.md`](../README.md) · [extraction spec](../../../docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md)

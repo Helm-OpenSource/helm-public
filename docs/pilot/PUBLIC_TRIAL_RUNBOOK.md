@@ -148,7 +148,7 @@ OpenAI API 默认关闭。启用时：
 
 ### 5.1 普通反馈与功能讨论
 
-- **GitHub Issues**：[github.com/<org>/helm/issues](https://github.com/<org>/helm/issues) — 公开问题、功能讨论、文档勘误
+- **GitHub Issues**：[github.com/Helm-OpenSource/helm-public/issues](https://github.com/Helm-OpenSource/helm-public/issues) — 公开问题、功能讨论、文档勘误
 - 标签建议：`trial-feedback` / `bug` / `docs` / `discussion`
 
 ### 5.2 安全漏洞披露
@@ -175,9 +175,9 @@ OpenAI API 默认关闭。启用时：
 
 ### 6.1 当前节奏
 
-- **`v0.1.0-trial`**：2026-05-31 目标公开发布
-- **`v0.1.x`**：试用反馈窗口；bug 修复 + 数据保留 / 邮件提醒 / dogfooding 闭环
-- **`v0.2`**：待评估（取决于试用反馈与 Phase 3 thin read-model adapter 全量解禁条件）
+- **Now**：Public Core、sample pack、Golden Path doctor、offline evals、public-release guard；repo visibility remains gated.
+- **Next**：visibility gate、history-level clean receipt、docs curation、split-repo readiness checks, and owner Go/No-Go.
+- **Later**：cloud trial and enterprise readiness only after the corresponding legal, operational, and deployment evidence exists.
 
 详见 [HELM_PUBLIC_ROADMAP.md](../roadmap/HELM_PUBLIC_ROADMAP.md)。
 

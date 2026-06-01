@@ -55,6 +55,7 @@ export type RunDeliveryDoctorOptions = {
 const REQUIRED_FILES = [
   "README.md",
   "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md",
+  "docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md",
   "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",
   "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md",
   "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md",

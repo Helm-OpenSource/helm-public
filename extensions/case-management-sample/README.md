@@ -2,23 +2,23 @@
 status: minimum-public-reference
 owner: helm-core
 created: 2026-05-18
-target_release: v0.1.0-trial (2026-05-31)
+target_release: gate-relative public Core release
 public_safety: Intended for the public mirror. No tenant-private references.
 ---
 
 # Case Management Sample
 
-> Helm 的公开 vertical 参考实现：把通用案件管理工作流（分案 / 跟进 / 复核 / 闭环）做成可 fork 的整机。
+> Helm 的公开 sample pack 参考实现：把通用案件管理工作流（分案 / 跟进 / 复核 / 闭环）做成可 fork 的工程结构。
 >
-> A public reference vertical: case management / customer support / business operations as a forkable, opinionated end-to-end loop.
+> A public sample pack reference: case management / customer support / business operations as a forkable, opinionated end-to-end loop.
 
 ---
 
 ## 这是什么 / What this is
 
-公开 Apache-2.0 vertical 参考实现，给基于 AI 平台（Coze / 阿里悟空 / Dify / LangGraph）做 B 端经营推进系统的**交付工程师**当起点。
+公开 Apache-2.0 sample pack 参考实现，给基于 AI 平台（Coze / 阿里悟空 / Dify / LangGraph）做企业 AI 经营推进系统的**交付工程师**当起点。
 
-A public Apache-2.0 vertical reference implementation, intended as a starting point for **delivery engineers** building B2B operations systems on top of AI platforms (Coze / Alibaba Wukong / Dify / LangGraph).
+A public Apache-2.0 sample pack reference implementation, intended as a starting point for **delivery engineers** building enterprise AI operations systems on top of AI platforms (Coze / Alibaba Wukong / Dify / LangGraph).
 
 定位见 / Positioning: [`docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md`](../../docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md)
 
@@ -28,16 +28,16 @@ A public Apache-2.0 vertical reference implementation, intended as a starting po
 
 ## 当前状态 / Current status
 
-**Minimum public reference** — 这不是 production-ready vertical，但已经消除了公开 README / 1-pager 的 dead-link 风险：
+**Minimum public reference** — 这是 synthetic public sample pack（provenance under review），不是 production-ready vertical，但已经消除了公开 README / 1-pager 的 dead-link 风险：
 
 - 已有 `tenant.manifest.json` + signals / workers / bi-report manifests
 - 已有 `signals/types.ts`，固定 deterministic signal identity、tenant pinning、suggestion-only 边界
-- 已有 4 类 100% synthetic fixtures：case / day-board / employee / qc-issue
+- 已有 4 类 public sample fixtures：case / day-board / employee / qc-issue；在 owner 完成 synthetic provenance gate 前，公开口径为 synthetic public sample pack, provenance under review
 - 已有一个可运行 case mapper + Vitest，用于展示"从业务记录到 review-first signal"的最小路径
 - 已有 worker cookbook：case allocation / case stewardship 两个纯函数 driver + Vitest
 - 已有 BI report cookbook：daily activity readout 的 query / schema / metrics / criteria / prompt / template / resource
 
-本目录可以作为 onboarding 的可读 / 可改起点；不能被描述为 production-ready 模板。
+本目录可以作为 Golden Path 的可读 / 可改起点；不能被描述为 production-ready 模板、客户部署包或已认证 Pack。
 
 ---
 
@@ -82,6 +82,23 @@ extensions/case-management-sample/
 
 ---
 
+## Minimal Start Here
+
+1. 打开 `fixtures/case.sample.json`。
+2. 改一条 synthetic sample case 的非敏感字段，例如 `status`、`severity` 或 `blockers`。
+3. 跑：
+
+```bash
+npm run pack:fixture-check
+npm run eval:headless-signal-interface
+```
+
+4. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey` 和 forbidden-action 边界。
+
+不要把真实客户记录、真实邮箱、真实手机号、私有域名、内网 IP、凭据或部署信息放进本目录。
+
+---
+
 ## Sanitization 来源 / Provenance
 
 本 vertical 从 tenant-private vertical pack（不在公开镜像）脱敏抽出。具体抽取规则见 [extraction spec §3](../../docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md)。
@@ -92,7 +109,7 @@ This vertical is sanitized from a tenant-private vertical pack (not in the publi
 
 - 不含 tenant-private slug（`public-release-guard` 强制） / no tenant-private slugs (enforced by guard)
 - 不含真实客户名 / 员工姓名 / 真实邮箱 / 真实凭据 / no real customer names / employee names / real emails / real credentials
-- 所有 fixture 100% 合成 / all fixtures 100% synthetic
+- fixture 口径为 synthetic public sample pack, provenance under review；只有完成 [Golden Path synthetic provenance gate](../../docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md#7-synthetic-provenance-gate) 后，才能升级为 `100% synthetic`
 
 ---
 

@@ -2,6 +2,8 @@
 
 Date: 2026-05-30
 
+> Historical migration receipt only. Current repository positioning is `Helm-OpenSource/helm-public` open-source Core, not a mirror staging repository.
+
 This repository snapshot is the Step 4B sanitized public mirror staging output
 for the Helm repo split.
 

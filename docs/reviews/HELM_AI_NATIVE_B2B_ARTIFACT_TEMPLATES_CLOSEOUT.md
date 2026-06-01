@@ -10,7 +10,7 @@ archive_trigger:
   - The work is moved out of `helm-public`
 ---
 
-# Helm AI-Native B2B Artifact Templates Closeout
+# Helm AI-Native Enterprise AI Artifact Templates Closeout
 
 > Supersession note (2026-06-01): the D2 Docker blocker recorded in this
 > closeout was later closed by
@@ -20,7 +20,7 @@ archive_trigger:
 
 ## 1. Conclusion
 
-This slice turns the internal AI-native B2B UX reference work into public-safe Pack delivery artifacts inside `helm-public`.
+This slice turns the internal AI-native enterprise AI UX reference work into public-safe Pack delivery artifacts inside `helm-public`.
 
 The implemented loop is:
 

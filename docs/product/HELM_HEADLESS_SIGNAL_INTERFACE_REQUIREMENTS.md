@@ -42,7 +42,7 @@ Passing this contract is necessary but not sufficient for a customer deployment.
 
 ## 1. Current Public Repo Truth
 
-1. Helm is positioned for delivery engineers building B2B operating systems on top of AI platforms and LLM frameworks.
+1. Helm is positioned for delivery engineers building enterprise AI operations systems on top of AI platforms and LLM frameworks.
 2. `extensions/case-management-sample/` is the minimum public reference pack.
 3. `evals/headless-signal-interface/headless-signal-interface-cases.json` is the public offline fixture pack for HSI.
 4. `scripts/headless-signal-interface-evals.ts` is the local read-only eval wrapper.
