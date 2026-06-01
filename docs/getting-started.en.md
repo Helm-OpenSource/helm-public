@@ -42,8 +42,8 @@ Optional (as needed):
 ## 1. Clone
 
 ```bash
-git clone https://github.com/<org>/helm.git
-cd helm
+git clone https://github.com/Helm-OpenSource/helm-public.git
+cd helm-public
 ```
 
 ---

@@ -6,9 +6,9 @@
 
 > For delivery engineers building B2B operations systems on top of Coze / Alibaba Wukong / Dify / LangGraph / general agent platforms.
 >
-> Generic platforms tell you "how to assemble." Helm tells you "what to assemble, how not to blow it, and how to ship the first controlled customer in about 4 weeks when prerequisites are met" — and writes the answers as forkable code.
+> Generic platforms tell you "how to assemble." Helm helps you turn judgement, evidence, review, boundaries, and delivery packages in customer implementation work into a forkable engineering structure.
 
-**License**: Apache-2.0 · **First public release**: `v0.1.0-trial` (planned 2026-05-31) · **Helm Cloud / Enterprise**: optional commercial editions; do not replace open source
+**License**: Apache-2.0 · **Repository posture**: open-source Core positioning; visibility flip happens only after the public-release gate and owner Go/No-Go · **Helm Cloud / Enterprise**: optional commercial editions; do not replace open source
 
 > **Not an engineer?** First read the one-pager positioning at [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md); or after running the repo, open `/demo` (about 90 seconds, no email required).
 
@@ -16,7 +16,7 @@
 
 ## One-line positioning
 
-> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for B2B business operations, with full boundary discipline, built to help delivery engineers ship the first controlled customer in about 4 weeks when prerequisites are met.**
+> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for B2B business operations, with full boundary discipline, built to help delivery engineers turn judgement / evidence / review / boundaries / delivery packages into a forkable engineering structure.**
 
 Full argument: [HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md).
 
@@ -45,7 +45,7 @@ Helm **encodes these three answers into an open-source reference implementation*
 | Multi-tenant isolation | Platform layer (black box) | DIY | **Deployment Profile + Tenant Overlay 4-layer cut already designed** |
 | Chinese-locale connector | Partial | DIY | **DingTalk / IMAP / Aliyun Mail / Qwen built-in working samples** |
 | Fully forkable? | Varies (Dify is self-hostable; hosted platforms usually lock you in) | Yes (no vertical) | **Yes (Apache-2.0 + vertical pack)** |
-| 30-minute full loop? | No | No | **`docker compose up`** |
+| Forkable local loop? | No | No | **`docker compose up` + Golden Path checks** |
 | Commercial model (for you) | Platform takes a cut / their channel | You set your price | **open-core**: fork it, sell it commercially. Helm Inc. doesn't take a cut |
 
 > This table compares **types**, not specific products' current feature checklists; platforms keep evolving. The contrast is in abstraction level and product shape. [Dify's official docs](https://docs.dify.ai/) emphasize its open-source / self-hostable posture; this table compares Dify as a visual AI application platform, not as a closed-source locked platform.
@@ -55,8 +55,8 @@ Helm **encodes these three answers into an open-source reference implementation*
 ## 90 seconds to see Helm
 
 ```bash
-git clone https://github.com/<org>/helm.git
-cd helm
+git clone https://github.com/Helm-OpenSource/helm-public.git
+cd helm-public
 cp .env.example .env       # Local MySQL by default
 docker compose up          # mysql:8.4 + app
 open http://localhost:3000
@@ -68,7 +68,25 @@ First screen: `/operating` (operating signal flow map), `/approvals` (review gat
 
 > Requires local Docker Desktop / OrbStack / colima. Boots the minimal set (no connectors, no AI, no payments).
 
-Full 30-minute onboarding: see [HELM_FOR_DELIVERY_ENGINEERS_V1.en.md §30-minute onboarding anchor](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md#30-minute-onboarding-anchor); `extensions/case-management-sample/` now provides a readable / editable minimum public vertical reference plus a worker / BI cookbook minimum slice. Docker / fresh-clone onboarding still needs v0.1 release-track verification.
+Golden Path acceptance: see [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md). `extensions/case-management-sample/` provides a readable / editable public sample pack. Docker / fresh-clone evidence is governed by review receipts and gates, not date promises.
+
+## Delivery Engineer Golden Path
+
+This path answers three questions: can I trust the boundaries, where do I make the first change, and can I prove the fork remains review-first? It reuses existing surfaces; it does not add pages, packages, or commands.
+
+```bash
+npm run delivery:doctor
+npm run pack:fixture-check
+npm run eval:headless-signal-interface
+npm run check:public-release
+```
+
+Minimal edit entry:
+
+1. Open `extensions/case-management-sample/fixtures/case.sample.json`.
+2. Change one synthetic fixture.
+3. Run `npm run pack:fixture-check` and `npm run eval:headless-signal-interface`.
+4. Return to `/demo` / `/operating` and confirm judgement, evidence, review, and boundaries stay review-first.
 
 ---
 
@@ -190,8 +208,8 @@ Pipedrive, Zoho, Dynamics, Notion, Coda, Tencent Meeting, Webex, Yonyou, Kingdee
 | Channel | Purpose |
 |---|---|
 | GitHub Issues `integration:` label | Public call / roadmap discussion |
-| [GitHub Discussions](https://github.com/<org>/helm/discussions) | Community Q&A, blockers, vertical co-building |
-| `partners@helm.<domain>` | Commercial partnerships / co-launch (not the default entry; go through Discussions or issue first) |
+| [GitHub Discussions](https://github.com/Helm-OpenSource/helm-public/discussions) | Community Q&A, blockers, vertical co-building |
+| Certified Delivery Partner issue | Commercial partnerships / co-launch (not the default entry; go through Discussions or issue first) |
 | [docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md](docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) | Open source / commercial boundary |
 
 ---
@@ -224,20 +242,18 @@ Details: [AGENTS.md §6-§7](AGENTS.md), [lib/operating-signal-flow/contract.ts]
 
 ## Roadmap
 
-**Now (2026-05)**
-- May open-source + public release prep (`v0.1.0-trial`, target 2026-05-31); must pass release hard gates
-- Release hard gates: RDS credential rotation + history remediation, on-call response policy, public commitment demotion, trace public posture safety
-- **`extensions/case-management-sample/`** vertical reference implementation extraction (sanitized from tenant-private vertical pack)
-- **Positioning collateral ready by 5-31**: 1-pager (done) · `docker compose up` 30-min onboarding verification · 1 vertical cookbook · short demo video
-- Phase 3 runtime adoption limited unblock (TPQR-001 / TPQR-003 / TPQR-004 only)
-- README · governance docs · `.env.example` tiering · `docker-compose.yml`
+**Now**
+- Public Core, Docker quickstart, case-management sample pack, Golden Path doctor, offline evals, public-release guard.
+- Repo split boundary: Core stays in this repository; industry Packs, customer Overlays, and BOM / authorization / deployment metadata move through their corresponding private target repositories, not Public Core.
+- Repository visibility remains gated until the public-release gate, history-level checks, and owner Go/No-Go are complete.
+- README, governance docs, `.env.example` tiers, and `docker-compose.yml`.
 
-**Next 30 days**
-- `/mobile` first-screen Must Push data source swap (read-first → adapter, feature-flag controlled)
-- Ask Helm asset capture lands (writes `MemoryCandidate` / `SkillSuggestion`, review-first)
-- Retention status display + self-serve export (settings / billing card)
-- Degraded-mode health surface: visible failure of connector / LLM / DB / capture
-- 5-role Required Reviewer assessment + redacted live DB calibration
+**Next**
+- Remove frozen legacy repository links and date-style release copy from public entry points.
+- Document the Builder walkthrough as "change this line -> run this command -> observe this change".
+- Complete the sample provenance gate, fork-and-rename guide, "what Helm does not do", and forker upgrade story.
+- Add a read-only split doctor in the corresponding governance repository, aggregating Core / Pack / Overlay / BOM readiness.
+- Continue degraded-mode health surface, Required Reviewer review, and redacted live DB calibration.
 
 **Later**
 - Community-contributed vertical pack collaboration (open-source vertical vs tenant-private boundary)
@@ -254,7 +270,8 @@ Details: [docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md](docs/
 
 | Document | Role |
 |---|---|
-| **[docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md)** | **Root positioning: one-pager for delivery engineers + differentiation table + 30-min onboarding anchor** |
+| **[docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md)** | **Root positioning: one-pager for delivery engineers + differentiation table + forkable Core anchor** |
+| **[docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)** | **Golden Path: forkable engineering requirements and gates for judgement / evidence / review / boundaries / delivery packages** |
 | [docs/getting-started.en.md](docs/getting-started.en.md) | Developer quickstart (English) |
 | [docs/getting-started.md](docs/getting-started.md) | Developer quickstart (Chinese) |
 | [AGENTS.md](AGENTS.md) | Long-term repo execution rules, hard boundaries, validation chain |
@@ -312,7 +329,7 @@ Details: [CONTRIBUTING.en.md](CONTRIBUTING.en.md) · participation implies agree
 
 ## Early-landing partner path (not the default CTA)
 
-> **The main path is fork + self-host + 30-minute onboarding for delivery engineers.** The early-landing partner path is only a backup for design partners who need Helm-team-led hands-on support. If you're a potential Helm Inc. partner, look at [Certified Delivery Partner](docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) first; pilot engagement is reserved for cases where Certified doesn't fit.
+> **The main path is fork + self-host + Golden Path checks.** The early-landing partner path is only a backup for design partners who need Helm-team-led hands-on support. If you're a potential Helm Inc. partner, look at [Certified Delivery Partner](docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) first; pilot engagement is reserved for cases where Certified doesn't fit.
 
 | Target | Acceptance |
 |---|---|
@@ -348,8 +365,8 @@ Please do not disclose undisclosed security issues in public channels. See [SECU
 | Entry | Purpose |
 |---|---|
 | **🚀 `git clone` + `docker compose up`** | Core surfaces running locally; fork your customer vertical from `extensions/case-management-sample/` |
-| **💬 [GitHub Discussions](https://github.com/<org>/helm/discussions)** | Community Q&A, vertical co-building, blocker support |
+| **💬 [GitHub Discussions](https://github.com/Helm-OpenSource/helm-public/discussions)** | Community Q&A, vertical co-building, blocker support |
 | **🎯 [Certified Delivery Partner](docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md)** | Delivery certification, brand endorsement, case-study co-building |
 | **☁️ Helm Cloud (hosted)** | Optional; does not replace open source; for delivery engineers / customers who don't want to self-host |
 
-> **Goal: help delivery engineers ship the first controlled B2B operations system in about 4 weeks when prerequisites are met.**
+> **Goal: help delivery engineers turn judgement, evidence, review, boundaries, and delivery packages inside customer implementation work into a forkable engineering structure.**

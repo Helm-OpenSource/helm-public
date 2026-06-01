@@ -22,6 +22,10 @@ All subsequent Codex tasks default to reading this file first, then [README.en.m
 - `app/` remains the sole or primary route owner
 - `data/queries.ts` remains the query aggregation entry — it has been thinned but still exists
 - Anything marked "doc placeholder" is treated as **not implemented** unless code already lives in `app/api/` or the corresponding implementation directory
+- This repository is `Helm-OpenSource/helm-public`; it only accepts open-source Core, base SDK, sample pack, public docs, public tests, and Docker quickstart work.
+- This repository must stay Apache-2.0, independently buildable, and public-safe. Do not add customer names, real email addresses or phone numbers, private domains, intranet IPs, secrets, customer deployment details, commercial private logic, or any customer-specific content.
+- `Core` must never reverse-depend on `Pack` or `Overlay`; this repository must not import `helm-packs`, `helm-overlays`, or any customer overlay path. The only allowed dependency direction is `Overlay -> Pack SDK -> Core SDK`.
+- If a requirement belongs to an industry Pack, customer Overlay, or control-plane metadata, route it to the corresponding repository. If the code still lives in `helm2026`, open a migration / backfill PR first, then continue development in the target repository.
 
 ## 3. What Helm Currently Is
 

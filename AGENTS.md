@@ -22,6 +22,10 @@
 - `app/` 仍是当前唯一或主要 route owner
 - `data/queries.ts` 仍是查询聚合入口，只是已经更薄
 - 文档中如标记为“文档预留”，默认视为未实现，除非代码已经落在 `app/api/` 或对应实现目录
+- 本仓是 `Helm-OpenSource/helm-public`，只承接开源 Core、基础 SDK、sample pack、公开文档、公开测试和 Docker quickstart。
+- 本仓必须保持 Apache-2.0、可独立构建、public-safe；不得放客户名称、真实邮箱 / 手机号、私有域名、内网 IP、密钥、客户部署信息、商业私有逻辑或任何客户个性化内容。
+- `Core` 永远不能反向依赖 `Pack` 或 `Overlay`；本仓不得 import `helm-packs`、`helm-overlays` 或任何客户 overlay 路径。依赖方向只能是 `Overlay -> Pack SDK -> Core SDK`。
+- 若需求属于行业 Pack、客户 Overlay 或 control-plane 元数据，必须转到对应仓库；如果代码还在 `helm2026`，先做迁移 / 补漏 PR，再在目标仓继续开发。
 
 ## 3. Helm 当前定位
 

@@ -119,7 +119,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
           </Button>
           <Button asChild variant="default">
             <a
-              href="https://github.com/Helm-Developers/helm2026"
+              href="https://github.com/Helm-OpenSource/helm-public"
               data-testid="demo-cta-github"
               target="_blank"
               rel="noopener noreferrer"
@@ -286,14 +286,14 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
             </p>
             <p className="text-sm leading-6 text-[color:var(--muted)]">
               {english
-                ? "Clone it (Apache-2.0, ~30 min to a working loop), or apply for Helm Cloud — managed, invite-only."
-                : "自己跑（Apache-2.0，约 30 分钟跑通闭环），或申请 Helm Cloud（托管版，仅邀请制）。"}
+                ? "Clone it and run the Golden Path checks, or apply for Helm Cloud — managed, invite-only."
+                : "自己 clone 并跑 Golden Path 检查链，或申请 Helm Cloud（托管版，仅邀请制）。"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="default">
               <a
-                href="https://github.com/Helm-Developers/helm2026"
+                href="https://github.com/Helm-OpenSource/helm-public"
                 target="_blank"
                 rel="noopener noreferrer"
               >

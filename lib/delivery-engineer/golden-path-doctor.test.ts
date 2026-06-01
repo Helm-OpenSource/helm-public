@@ -19,6 +19,7 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
     "package.json": JSON.stringify({ scripts }),
     "README.md": "For delivery engineers",
     "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md": "delivery engineers",
+    "docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md": "Golden Path requirements",
     "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md": "HSI",
     "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md": "closeout",
     "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md": "D2 smoke pending",
