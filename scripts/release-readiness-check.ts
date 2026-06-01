@@ -34,7 +34,7 @@
  * This script does NOT tag a release. It only decides whether v0.1.0-trial
  * is allowed to enter the manual tagging step.
  */
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -49,6 +49,8 @@ export const REQUIRED_CALIBRATION_REPORT_PATH =
 export const PUBLIC_MIRROR_CLEAN_RECEIPT_DIR =
   "docs/operations/release-readiness-receipts";
 export const PUBLIC_MIRROR_CLEAN_RECEIPT_KIND = "public-mirror-clean";
+export const RELEASE_READINESS_TARGET_TAG = "v0.1.0-trial";
+export const RELEASE_READINESS_TARGET_TITLE = "Helm v0.1.0-trial";
 
 type Step = {
   readonly id: string;
@@ -63,6 +65,26 @@ type ManualChecklistItem = {
   readonly description: string;
   readonly howToSatisfy: string;
   readonly validate?: (value: string) => string | undefined;
+};
+
+export type ExistingReleaseTag = {
+  readonly name: string;
+  readonly targetCommit?: string;
+};
+
+export type ReleaseTagStrategyInput = {
+  readonly currentHead: string;
+  readonly existingTags: ReadonlyArray<ExistingReleaseTag>;
+  readonly targetTag?: string;
+};
+
+export type ReleaseTagStrategy = {
+  readonly targetTag: string;
+  readonly targetCommit: string;
+  readonly releaseFlags: ReadonlyArray<string>;
+  readonly manualCommands: ReadonlyArray<string>;
+  readonly warnings: ReadonlyArray<string>;
+  readonly blockingIssues: ReadonlyArray<string>;
 };
 
 export type PublicMirrorCleanReceiptCommandEvidence = {
@@ -87,6 +109,121 @@ type SecretHistoryReceiptValidationOptions = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeCommit(value: string | undefined): string | undefined {
+  return value?.trim().toLowerCase();
+}
+
+function shortCommit(value: string | undefined): string {
+  return value ? value.slice(0, 8) : "unknown";
+}
+
+function parseTagVersionBase(tagName: string): [number, number, number] | undefined {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i.exec(tagName.trim());
+  return match
+    ? [Number(match[1]), Number(match[2]), Number(match[3])]
+    : undefined;
+}
+
+function parseStableTagVersion(tagName: string): [number, number, number] | undefined {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/i.exec(tagName.trim());
+  return match
+    ? [Number(match[1]), Number(match[2]), Number(match[3])]
+    : undefined;
+}
+
+function compareVersionTuple(a: [number, number, number], b: [number, number, number]): number {
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return 0;
+}
+
+function findHighestStableTag(
+  existingTags: ReadonlyArray<ExistingReleaseTag>,
+): ExistingReleaseTag | undefined {
+  return existingTags
+    .filter((tag) => parseStableTagVersion(tag.name))
+    .sort((a, b) =>
+      compareVersionTuple(
+        parseStableTagVersion(b.name) ?? [0, 0, 0],
+        parseStableTagVersion(a.name) ?? [0, 0, 0],
+      ),
+    )[0];
+}
+
+function releaseFlagsForTagPlan(highestStableTag: ExistingReleaseTag | undefined): string[] {
+  const flags = ["--prerelease", "--latest=false", "--generate-notes"];
+  if (highestStableTag) {
+    flags.push(`--notes-start-tag ${highestStableTag.name}`);
+  }
+  return flags;
+}
+
+export function buildReleaseTagStrategy(input: ReleaseTagStrategyInput): ReleaseTagStrategy {
+  const targetTag = input.targetTag ?? RELEASE_READINESS_TARGET_TAG;
+  const targetCommit = input.currentHead.trim();
+  const targetVersion = parseTagVersionBase(targetTag);
+  const targetTagRecord = input.existingTags.find((tag) => tag.name === targetTag);
+  const highestStableTag = findHighestStableTag(input.existingTags);
+  const releaseFlags = releaseFlagsForTagPlan(highestStableTag);
+  const warnings: string[] = [];
+  const blockingIssues: string[] = [];
+
+  if (targetTagRecord?.targetCommit) {
+    const current = normalizeCommit(targetCommit);
+    const existing = normalizeCommit(targetTagRecord.targetCommit);
+    if (current && existing && current !== existing) {
+      blockingIssues.push(
+        `${targetTag} already exists at ${shortCommit(targetTagRecord.targetCommit)}, not current HEAD ${shortCommit(targetCommit)}. Do not create or publish a release until the tag target is reconciled.`,
+      );
+    }
+  }
+
+  if (highestStableTag && targetVersion) {
+    const highestStableVersion = parseStableTagVersion(highestStableTag.name);
+    if (highestStableVersion && compareVersionTuple(highestStableVersion, targetVersion) > 0) {
+      warnings.push(
+        `Existing stable release tag ${highestStableTag.name} is higher than ${targetTag}; publish ${targetTag} only as a prerelease with --latest=false, or update the version strategy before tagging.`,
+      );
+    }
+  }
+
+  if (blockingIssues.length > 0) {
+    return {
+      targetTag,
+      targetCommit,
+      releaseFlags,
+      manualCommands: [],
+      warnings,
+      blockingIssues,
+    };
+  }
+
+  const releaseCommand = [
+    "gh release create",
+    targetTag,
+    "--verify-tag",
+    `--title "${RELEASE_READINESS_TARGET_TITLE}"`,
+    ...releaseFlags,
+  ].join(" ");
+  const manualCommands = targetTagRecord
+    ? [releaseCommand]
+    : [
+        `git tag -a ${targetTag} ${targetCommit} -m "${RELEASE_READINESS_TARGET_TITLE} release gate passed"`,
+        `git push origin ${targetTag}`,
+        releaseCommand,
+      ];
+
+  return {
+    targetTag,
+    targetCommit,
+    releaseFlags,
+    manualCommands,
+    warnings,
+    blockingIssues,
+  };
 }
 
 export function validateReleaseReadinessDate(envKey: string, value: string): string | undefined {
@@ -425,6 +562,58 @@ export const RELEASE_READINESS_AUTOMATED_STEP_COUNT = STEPS.length;
 type StepResult =
   | { readonly id: string; readonly status: "ok" | "skipped" | "failed"; readonly note?: string };
 
+function readCurrentHeadForReleaseTagStrategy(): string {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "<current-head-unavailable>";
+  }
+}
+
+function readLocalTagsForReleaseTagStrategy(): ExistingReleaseTag[] {
+  try {
+    return execFileSync(
+      "git",
+      ["for-each-ref", "refs/tags", "--format=%(refname:short)%09%(objectname)%09%(*objectname)"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    )
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [name, objectName, peeledObjectName] = line.split("\t");
+        return { name, targetCommit: peeledObjectName || objectName };
+      });
+  } catch {
+    return [];
+  }
+}
+
+function printReleaseTagStrategy(strategy: ReleaseTagStrategy): void {
+  console.log("\n=== Manual tagging strategy (read-only guidance) ===");
+  console.log(`  Target tag: ${strategy.targetTag}`);
+  console.log(`  Target commit: ${strategy.targetCommit}`);
+  for (const warning of strategy.warnings) {
+    console.log(`  ! ${warning}`);
+  }
+  for (const issue of strategy.blockingIssues) {
+    console.log(`  ✗ ${issue}`);
+  }
+  if (strategy.blockingIssues.length === 0) {
+    console.log("  Suggested manual commands:");
+    for (const command of strategy.manualCommands) {
+      console.log(`    ${command}`);
+    }
+    console.log("  These commands are not executed by release:check.");
+  }
+}
+
 function runStep(step: Step, isFullChain: boolean): StepResult {
   if (step.fullChainOnly && !isFullChain) {
     return {
@@ -497,8 +686,17 @@ function main(): number {
 
   const failedSteps = stepResults.filter((r) => r.status === "failed");
   const unmetChecklist = checklistResults.filter((r) => !r.satisfied);
+  const tagStrategy = buildReleaseTagStrategy({
+    currentHead: readCurrentHeadForReleaseTagStrategy(),
+    existingTags: readLocalTagsForReleaseTagStrategy(),
+  });
+  printReleaseTagStrategy(tagStrategy);
 
-  if (failedSteps.length === 0 && unmetChecklist.length === 0) {
+  if (
+    failedSteps.length === 0 &&
+    unmetChecklist.length === 0 &&
+    tagStrategy.blockingIssues.length === 0
+  ) {
     console.log("\nALL CLEAR — v0.1.0-trial may proceed to the manual tagging step.");
     if (!isFullChain) {
       console.log(
@@ -509,7 +707,7 @@ function main(): number {
   }
 
   console.log(
-    `\nNOT READY — ${failedSteps.length} failed automated step(s) and ${unmetChecklist.length} unmet manual item(s).`,
+    `\nNOT READY — ${failedSteps.length} failed automated step(s), ${unmetChecklist.length} unmet manual item(s), and ${tagStrategy.blockingIssues.length} tag strategy blocker(s).`,
   );
   return 1;
 }

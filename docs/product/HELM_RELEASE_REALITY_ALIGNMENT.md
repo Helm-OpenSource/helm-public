@@ -93,6 +93,12 @@ P0 只保留：
 - `RELEASE_READINESS_REVIEWER_APPROVAL_RECORD_ID`
 - `RELEASE_READINESS_CALIBRATION_REPORT`
 
+`release:check` 还会打印只读 manual tagging strategy。该策略不新增第 8 个人工
+receipt，也不创建 release；它用于防止在仓库已有更高 stable tag 时，把
+`v0.1.0-trial` 误发布为 Latest。若已有更高 stable tag，`v0.1.0-trial`
+只能按 prerelease + `--latest=false` 执行，除非 owner 先更新版本策略、gate 文案
+和 launch docs。
+
 > **发布日决策门**见 [`HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md`](./HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md) §六 "Go/No-Go Evidence Checklist"。本节定义 hard gates **输入约束**，§六 定义 owner 发布日的 6 项 **必备 evidence + Go/No-Go 决策记录格式**。两者不重复：本节是 `release:check` 命令的阻断口径，§六 是人工 sign-off 流程。
 
 ## 三、需求减负决策
@@ -185,7 +191,7 @@ P0 只保留：
 | 类别 | 档位 | 说明 |
 | --- | --- | --- |
 | 公开承诺收口 | 已成形但仍需下一层 | README / public docs 已降级；仍需 launch post / sales copy 同步 |
-| Release hard gates | 已成形但仍需下一层 | `release:check` 已增强；外部 receipt 仍待 owner |
+| Release hard gates | 已成形但仍需下一层 | `release:check` 已增强；7 个 private owner receipt 只通过 env / receipt 保存，不写入 public docs；manual tag / GitHub Release / announcement 仍是独立外部动作 |
 | OPC dogfood 合并 | 已成形但仍需下一层 | 方向已定；代码级合并未做 |
 | 过程报告归档 | 已成形但仍需下一层 | 需要 guard registry 后再批量归档 |
 | Design partner P0 | 风险项 | 真实候选与付费验证未完成 |
