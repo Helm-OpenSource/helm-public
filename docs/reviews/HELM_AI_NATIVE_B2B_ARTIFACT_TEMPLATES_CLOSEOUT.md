@@ -12,6 +12,12 @@ archive_trigger:
 
 # Helm AI-Native B2B Artifact Templates Closeout
 
+> Supersession note (2026-06-01): the D2 Docker blocker recorded in this
+> closeout was later closed by
+> [HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md](HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md).
+> The blocker section below is retained as historical closeout state, not
+> current public Core status.
+
 ## 1. Conclusion
 
 This slice turns the internal AI-native B2B UX reference work into public-safe Pack delivery artifacts inside `helm-public`.
@@ -27,7 +33,7 @@ Context Packet
   -> Golden Path doctor / eval / public guard validation
 ```
 
-Current status: **static / offline / local runtime smoke closed; D2 fresh-clone Docker smoke still blocked by local environment**.
+Historical closeout status: **static / offline / local runtime smoke closed; D2 fresh-clone Docker smoke still blocked by local environment**.
 
 Do not treat this as customer deployment readiness, commercial release readiness, or a verified 30-minute onboarding claim.
 
@@ -74,8 +80,8 @@ Do not treat this as customer deployment readiness, commercial release readiness
 
 ## 5. Remaining Blockers
 
-1. D2 fresh-clone Docker smoke is not complete. The local environment returned `docker: command not found`, so no receipt matching `docs/reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE*.md` was created.
-2. `delivery:doctor` correctly keeps one warning: missing D2 fresh-clone smoke receipt. This warning must remain until a clean checkout runs the documented path.
+1. Closed after this closeout: D2 fresh-clone Docker smoke was not complete in this slice because the local environment returned `docker: command not found`. It is now superseded by [HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md](HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md).
+2. Closed after this closeout: `delivery:doctor` previously kept one warning for the missing D2 fresh-clone smoke receipt. The D2 receipt now lets the doctor report the receipt as present.
 3. The artifact templates are static delivery artifacts. They do not create runtime APIs, schema, connector adoption, customer data intake, hosted MCP, auto-send, auto-approve, auto-execute, silent CRM write, or public proof claims.
 4. Commercial-grade availability still requires a real clean-machine onboarding receipt, deployment packaging, rollback proof, and owner approval.
 

@@ -120,7 +120,7 @@ zh/en 在 contract 层（不只是翻译 README）；locale-aware projection 已
 
 ## 30 分钟 onboarding 锚点
 
-成功 = 在 30 分钟内完成以下可执行路径。当前第 3 / 4 步已有最小公开参考可读 / 可改；第 5 步仍需 D2 onboarding verification 在 fresh-clone 环境实跑，不把它提前写成已完全验证。
+成功 = 在 30 分钟内完成以下可执行路径。当前第 3 / 4 步已有最小公开参考可读 / 可改；第 1 / 2 步的 Docker fresh-clone 路径已由 [D2 smoke receipt](../reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md) 验证。这个验证只证明 public Core quickstart，不代表商业发布、客户部署或 SLA 承诺。
 
 1. `git clone <repo> && cd helm && docker compose up` — 起本地工作区
 2. `open http://localhost:3000` — 看到 `/operating`（经营信号流图）、`/approvals`（复核闸）、`/memory`（经营记忆）三张已经可工作的面（⚠️ `/operating` 当前为 **Phase 2 fixture demo**；接入真实业务数据需 Phase 2.3 runtime adoption 解锁）
@@ -191,3 +191,4 @@ zh/en 在 contract 层（不只是翻译 README）；locale-aware projection 已
 | 2026-05-18 | V1 二稿：填实 `<reference-vertical>` → `case-management-sample`（从 tenant-private vertical pack 抽出），固化为 v0.1 发布物 |
 | 2026-05-18 | V1 三稿：收紧至 4 周目标、Dify forkability、代码/eval 承诺口径，并给 `case-management-sample` 补上 release gate 防线 |
 | 2026-05-18 | V1 四稿：`case-management-sample` 最小公开参考已落地；30 分钟 onboarding 从"等待目录"调整为"等待 fresh-clone 实跑验证" |
+| 2026-06-01 | D2 Docker fresh-clone smoke 已落 receipt；公开 onboarding 口径改为 public Core quickstart 已验证，但不升级为商业发布或客户部署承诺 |
