@@ -188,7 +188,7 @@ review_after: 2026-07-26
 
 `/setup?onboarding=trial` 与公开首页 signup flow 必须包含一个**必勾** checkbox：
 
-> 「我已阅读 [试用数据政策 v1](/legal/trial-data-policy)，理解 Helm 当前为受控试点，不承诺 SLA，数据保留期以本工作区试用契约与生效数据政策为准。数据驻留中国境内（阿里云 cn-hangzhou）；OpenAI API 与支付能力默认关闭，启用前会另行告知并请求同意。」
+> 「我已阅读试用数据政策 v1（当前草案见 `docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md`；正式 UI 路由待实现），理解 Helm 当前为受控试点，不承诺 SLA，数据保留期以本工作区试用契约与生效数据政策为准。数据驻留中国境内（阿里云 cn-hangzhou）；OpenAI API 与支付能力默认关闭，启用前会另行告知并请求同意。」
 
 ### 6.2 同意记录
 

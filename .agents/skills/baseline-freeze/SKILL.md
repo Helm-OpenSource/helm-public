@@ -61,9 +61,8 @@ npm run quality:regression
 - 页面、守卫、测试、自检各说各话
 - 把“已成形但仍需下一层”误写成“已经完整成立”
 
-## 模板引用
+## 公开仓参考
 
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [report_template_freeze.md](../../../docs/codex/report_template_freeze.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
-- [release_checklist.md](../../../docs/codex/release_checklist.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [docs/STATUS.md](../../../docs/STATUS.md)

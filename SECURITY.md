@@ -135,7 +135,7 @@ Helm 默认**不**对外部系统自动写入或自动发送：
 我们持续投入的常规安全实践（不构成承诺，仅作披露）：
 
 - `npm audit` / `gh dependabot` 月度跑批与 P0/P1 修复
-- 每次 release 前跑 `/security-review` 与回归链
+- 每次 release 前跑 security review 与回归链
 - `scripts/decision-first-boundary-check.ts` 守卫建议/承诺边界与租户 slug 反向边界
 - `scripts/public-release-guard.ts` 守卫公开发布前的关键文件（含已知泄露凭据 SHA-256 deny-list）
 - `lib/audit/trace-context.ts` 提供 AsyncLocalStorage 关联 ID；关键写路径必须携带 `traceId`，统一用户可见 trace timeline 未落地前不宣传“0 秒可回放”

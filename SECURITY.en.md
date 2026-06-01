@@ -135,7 +135,7 @@ If you observe what appears to be unauthorized access in the public-trial enviro
 Routine security practices we invest in (disclosure, not commitment):
 
 - Monthly `npm audit` / `gh dependabot` runs and P0/P1 fixes
-- `/security-review` and the regression chain run before each release
+- Security review and the regression chain run before each release
 - `scripts/decision-first-boundary-check.ts` guards the recommendation/commitment boundary and the tenant-slug reverse boundary
 - `scripts/public-release-guard.ts` guards critical files before public release
 - Code review and least-privilege on critical paths

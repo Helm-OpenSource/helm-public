@@ -132,11 +132,10 @@ npm run quality:regression
 - recommendation / commitment 边界变模糊
 - 破坏根目录 `app/` route owner 和 `data/queries.ts` seam 的 current-main truth
 
-## 模板引用
+## 公开仓参考
 
-- [README.md](../../../docs/codex/README.md)
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
-- [release_checklist.md](../../../docs/codex/release_checklist.md)
-- [report_template_sprint.md](../../../docs/codex/report_template_sprint.md)
-- [report_template_freeze.md](../../../docs/codex/report_template_freeze.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [README.md](../../../README.md)
+- [docs/README.md](../../../docs/README.md)
+- [docs/STATUS.md](../../../docs/STATUS.md)

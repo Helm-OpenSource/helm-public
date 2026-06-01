@@ -178,7 +178,7 @@ open http://localhost:3000    # 5. 访问
 
 Pipedrive、Zoho、Dynamics、Notion、Coda、腾讯会议、Webex、用友、金蝶、HRIS、Jira、GitHub、通话、税务、现金流等方向先走 `integration:` issue。我们会判断是否服务于"会议 / CRM / 邮箱 → Must Push → Review Action"的首批闭环；不承诺排期。
 
-#### ⭐ 可接受 PR 的边界
+#### 可接受 PR 的边界
 
 | 类型 | 允许范围 |
 |---|---|

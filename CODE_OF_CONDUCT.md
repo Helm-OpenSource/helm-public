@@ -88,7 +88,7 @@
 
 ## 致谢
 
-本行为准则改编自 [Contributor Covenant][homepage], 版本 2.1，参见 [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1]。
+本行为准则改编自 [Contributor Covenant][homepage], 版本 2.1，参见 [Contributor Covenant v2.1][v2.1]。
 
 社区影响准则参考了 [Mozilla 行为准则执行阶梯][Mozilla CoC]。
 

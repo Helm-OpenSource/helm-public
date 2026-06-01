@@ -2,7 +2,7 @@
 
 > 状态：Phase 1 contract templates only. No runtime, no DB write, no external provider access, no UI surface.
 
-本目录承载 Helm 外部资源接入的 **planning contract templates 与 dry-run fixtures**，落地 [HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md](../docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md) 的 §5（实施工具形态）与 §6 Phase 0–2 的产出位置。
+本目录承载 Helm 外部资源接入的 **planning contract templates 与 dry-run fixtures**。它是公开 Core 的 public-safe kit companion，服务于 [HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md](../docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md) 与 [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md) 定义的 review-first 交付闭环。
 
 ## 不做什么
 
@@ -32,7 +32,7 @@ external-resource-kit/
       review-packet.json
 ```
 
-`examples/` 为空，必须由 owner 提供 business owner / sample provenance plan / generic-vs-tenant 标注后才能落首条 example，参见 method doc §6 Phase 0 / Phase 1 Go 条件。
+`examples/synthetic-demo/` 是 synthetic-only 首个公开示例。新增 example 必须由 owner 提供 business owner / sample provenance plan / generic-vs-tenant 标注后才能进入本目录。
 
 ## 快速试运行
 
@@ -50,7 +50,7 @@ dry-run 拒绝在 `extensions/<tenant>/` 路径下运行；租户专属示例走
 
 | 文件 | 服务阶段 | 关键约束 |
 |---|---|---|
-| `templates/resource-intake.json` | Phase 0 inventory | 必填字段见 method §5.1；`nonGoals` 显式列出本资源不承担的事 |
+| `templates/resource-intake.json` | Phase 0 inventory | `nonGoals` 显式列出本资源不承担的事 |
 | `templates/source-contract.json` | Phase 1 contract | source-of-truth posture、freshness、redaction、audit、failure modes 必须答清 |
 | `templates/mapping.json` | Phase 1 contract | 外部字段 → projection / evidence；冲突与缺失字段策略必须显式 |
 | `templates/signal-rules.json` | Phase 1 contract | deterministic eligibility / threshold / severity / dedupe / rejection 规则；rejection 必须按 5 类 taxonomy 标 `rejectionCategory` |
@@ -75,11 +75,11 @@ dry-run 拒绝在 `extensions/<tenant>/` 路径下运行；租户专属示例走
 
 ## 验证门槛
 
-method doc §9 列出本目录改动的额外业务前置；本目录不替代 [AGENTS.md](../AGENTS.md) §10 验证链。涉及代码实现时仍按 §10 顺序执行。
+本目录改动不替代 [AGENTS.md](../AGENTS.md) §10 验证链。涉及代码实现时仍按 §10 顺序执行。
 
 ## 参考
 
-- 方法论：[HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md](../docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md)
-- Release readiness 收口：[HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_RELEASE_READINESS_CORRECTION_V1.md](../docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_RELEASE_READINESS_CORRECTION_V1.md)
-- Phase 3 解禁范围：[HELM_BUSINESS_ADVANCEMENT_PHASE3_RUNTIME_ENABLEMENT_REVIEW_V1.md](../docs/reviews/HELM_BUSINESS_ADVANCEMENT_PHASE3_RUNTIME_ENABLEMENT_REVIEW_V1.md)
-- 租户隔离：[HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md](../docs/internal/HELM_PRIVATE_TENANT_SEPARATION_PLAN_V1.md)
+- Public Core 信号接口：[HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md](../docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md)
+- Golden Path 要求：[HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
+- 商业边界：[HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md](../docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)
+- 公开仓工作规则：[AGENTS.md](../AGENTS.md)

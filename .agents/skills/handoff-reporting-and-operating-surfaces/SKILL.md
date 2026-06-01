@@ -89,17 +89,10 @@ npm run quality:regression
 - evidence / memory / audit 被前置成噪声，压掉 judgement
 - 页面文案越过边界，把建议或 readiness 写成承诺
 
-## 模板引用
+## 公开仓参考
 
-- [README.md](../../../docs/codex/README.md)
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
-- [release_checklist.md](../../../docs/codex/release_checklist.md)
-- [HELM_REPORTING_PROTOCOL_REPORT.md](../../../docs/product/HELM_REPORTING_PROTOCOL_REPORT.md)
-- [HELM_ACTIVE_REPORTING_MECHANISM_REPORT.md](../../../docs/product/HELM_ACTIVE_REPORTING_MECHANISM_REPORT.md)
-- [CUSTOMER_SUCCESS_HANDOFF_SURFACE_CONTRACT_REPORT.md](../../../docs/product/CUSTOMER_SUCCESS_HANDOFF_SURFACE_CONTRACT_REPORT.md)
-- [CROSS_DETAIL_HANDOFF_MODEL_REPORT.md](../../../docs/product/CROSS_DETAIL_HANDOFF_MODEL_REPORT.md)
-- [DETAIL_NAVIGATION_HANDOFF_BASELINE_FREEZE_REPORT.md](../../../docs/product/DETAIL_NAVIGATION_HANDOFF_BASELINE_FREEZE_REPORT.md)
-- [HELM_GOAL_DRIVEN_HOME_CHAIN_LINK_REPORT.md](../../../docs/product/HELM_GOAL_DRIVEN_HOME_CHAIN_LINK_REPORT.md)
-- [CUSTOMER_SUCCESS_HANDOFF_ALIGNMENT_REPORT.md](../../../docs/reviews/CUSTOMER_SUCCESS_HANDOFF_ALIGNMENT_REPORT.md)
-- [HELM_GOAL_DRIVEN_HOME_ALIGNMENT_REPORT.md](../../../docs/reviews/HELM_GOAL_DRIVEN_HOME_ALIGNMENT_REPORT.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../../../docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
+- [HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md](../../../docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md)
+- [HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md](../../../docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md)

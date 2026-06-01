@@ -107,7 +107,7 @@ review_after: 2026-07-26
 
 **第三周**：
 
-- 看 `/settings/billing` → 数据保留状态卡片，确认了解阶段转换时间点
+- 看 `/settings?tab=billing` → 数据保留状态卡片，确认了解阶段转换时间点
 - 决定是否要：(a) 继续 active（导出 + 联系延期），(b) 进入 grace（计划停用），(c) 立即结束并物理删除
 
 ---
@@ -123,7 +123,7 @@ review_after: 2026-07-26
 ### 4.2 Audit log
 
 - 关键写路径都有审计事件
-- 你可在 `/settings/audit` 查看本 workspace 的事件流（待 v0.1 GA 完整开放；当前可通过反馈渠道索取）
+- 你可在 `/settings?tab=permissions` 查看本 workspace 的管理审计摘要；完整事件流待 v0.1 GA 开放，当前可通过反馈渠道索取
 
 ### 4.3 Sub-processor 与第三方数据流
 
@@ -137,8 +137,8 @@ OpenAI API 默认关闭。启用时：
 
 ### 4.4 删除与导出
 
-- **自助导出**：`/settings/billing` → 数据保留状态卡片 → 「导出全部」按钮，生成 zip（CSV + JSON）
-- **自助删除**：`/settings/billing` → 「立即结束试用」 → 按生效数据政策进入 grace / 删除链路
+- **自助导出**：`/settings?tab=billing` → 数据保留状态卡片 → 「导出全部」按钮，生成 zip（CSV + JSON）
+- **自助删除**：`/settings?tab=billing` → 「立即结束试用」 → 按生效数据政策进入 grace / 删除链路
 - **删除证明**：物理删除完成 24 小时内通过阿里云 DirectMail 发出
 - **法律保留期**：删除完成后内部 audit log 保留 5 年（仅记录 `deletion attestation`，不保留你的业务数据）
 
@@ -228,7 +228,7 @@ OpenAI API 默认关闭。启用时：
 
 ### 7.5 用户主动撤回 grace
 
-- 用户在 `/settings/billing` 点「撤回到 active」 → 立即恢复，无 cooldown
+- 用户在 `/settings?tab=billing` 点「撤回到 active」 → 立即恢复，无 cooldown
 - 撤回事件在 audit log 落 `RetentionGraceWithdrawn` 类型，记 5 年
 
 ---

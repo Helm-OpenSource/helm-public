@@ -51,9 +51,9 @@ npm run quality:regression
 - 没有代表性页面 / 链路，导致报告停留在概念层
 - 文档未同步，后续无法复用
 
-## 模板引用
+## 公开仓参考
 
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [report_template_sprint.md](../../../docs/codex/report_template_sprint.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
-- [release_checklist.md](../../../docs/codex/release_checklist.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [docs/STATUS.md](../../../docs/STATUS.md)
+- [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../../../docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)

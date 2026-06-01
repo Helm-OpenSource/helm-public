@@ -2,6 +2,7 @@ import { ActorType, ExternalSyncProvider, ExternalSyncStatus } from "@prisma/cli
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExternalAgentArtifact } from "@/features/external-agent-intake/artifact-contract";
 import {
@@ -19,8 +20,8 @@ import {
   type ParsedOpenClawMemoryRecord,
 } from "@/lib/integrations/openclaw-memory/parser";
 
-const DEFAULT_BACKUP_DIR = "/Users/chm/.openclaw/memory/backups";
-const DEFAULT_LANCEDB_PATH = "/Users/chm/.openclaw/memory/lancedb-pro";
+const DEFAULT_BACKUP_DIR = join(homedir(), ".openclaw", "memory", "backups");
+const DEFAULT_LANCEDB_PATH = join(homedir(), ".openclaw", "memory", "lancedb-pro");
 const DEFAULT_OPENCLAW_BIN = "openclaw";
 
 type SourceMode = "lancedb" | "backup_jsonl";

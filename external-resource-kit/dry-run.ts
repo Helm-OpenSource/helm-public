@@ -6,7 +6,7 @@
  * dir, applies deterministic rules, and emits `dry-run-result.json`
  * plus `review-packets.json`.
  *
- * Hard boundaries (per method doc §1 / §5):
+ * Hard boundaries (public Core kit contract):
  *   - No DB write, no provider call, no schema migration.
  *   - LLM is not invoked; severity is deterministic.
  *   - Refuses to run inside `extensions/<tenant>/` paths — tenant-

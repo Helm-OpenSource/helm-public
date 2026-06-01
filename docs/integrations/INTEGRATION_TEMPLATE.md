@@ -70,7 +70,7 @@ public_safety: Intended for the public mirror. No tenant-private references.
 | 数据方向 | inbound only |
 | 拉取频率 | on-demand（用户在 /settings 点击 sync） |
 | 落地对象 | Workspace member directory + Meeting capture metadata |
-| 落地 surface | /settings/connectors · /meetings |
+| 落地 surface | /settings?tab=connectors · /meetings |
 | 失败降级 | 显示 banner "DingTalk 临时不可用"，缓存最近一次成功 sync 结果 |
 | 凭据持久化 | `connector_credential.encryptedToken`，AES-GCM with CONNECTOR_TOKEN_SECRET |
 | trace 写入 | 目录同步 / 邀请审批通过 |
@@ -201,7 +201,7 @@ describe("connector <name>", () => {
 
 每个 connector 必须支持：
 
-1. **从 `/settings` 解绑**：用户在 `/settings/connectors` 一键解绑 + 清理凭据
+1. **从 `/settings` 解绑**：用户在 `/settings?tab=connectors` 一键解绑 + 清理凭据
 2. **数据可携带**：连接器拉到 Helm 的数据，用户可从 `/settings` 一键导出（first-party）
 3. **第三方原数据 stays**：原始数据仍在原系统，Helm 不主张拥有权
 4. **保留期符合 [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)** — 试点期内 30 天 active + 7 天 grace（目标口径）

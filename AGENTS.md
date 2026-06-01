@@ -264,7 +264,7 @@ npm run quality:regression
 - 项目说明：[README.md](README.md)
 - 文档索引：[docs/README.md](docs/README.md)
 - Codex 模板目录：[docs/codex/README.md](docs/codex/README.md)
-- 首批 skills：`/.agents/skills/`
+- 首批 skills：`.agents/skills/`
 
 ## 15. 默认判断原则
 
