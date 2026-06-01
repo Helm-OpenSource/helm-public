@@ -1,0 +1,93 @@
+{
+  "_template": "signal-rules",
+  "_method": "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md#5.4",
+  "_phase": "Phase 1 Contract",
+  "_instructions": "Copy this file to examples/<resource-key>/signal-rules.json. All ranking decisions must be deterministic; LLM may explain but cannot grade severity.",
+
+  "signalType": null,
+  "_signalTypeEnum": [
+    "blocked_decision",
+    "customer_waiting",
+    "overdue_commitment",
+    "metric_anomaly",
+    "missing_evidence",
+    "risk_escalation",
+    "knowledge_conflict"
+  ],
+  "_signalTypeNote": "Only blocked_decision (TPQR-001), overdue_commitment (TPQR-003), customer_waiting (TPQR-004) are eligible for /mobile gated Must Push under May Phase 3 enablement. Other signals stay in review packet / brief / report only.",
+
+  "sourceTypes": [],
+  "_sourceTypesEnum": ["business_system", "management_report", "collaboration_system", "document_knowledge"],
+
+  "eligibilityRules": [],
+  "_eligibilityRulesShape": {
+    "rule": null,
+    "appliesTo": null,
+    "expectedDisposition": "<eligible|skip|defer>"
+  },
+
+  "thresholdRules": [],
+  "_thresholdRulesShape": {
+    "metric": null,
+    "operator": "<gt|gte|lt|lte|eq|neq|range|trend>",
+    "value": null,
+    "windowDays": null,
+    "severityWeight": null
+  },
+
+  "severityResolution": null,
+  "_severityResolutionEnum": ["max_of_thresholds", "weighted_sum", "explicit_table"],
+
+  "dedupeFingerprint": null,
+  "_dedupeFingerprintNote": "Stable hash inputs only (object refs, signal type, threshold rule key). LLM output may not contribute to fingerprint.",
+
+  "watchOnlyRules": [],
+  "_watchOnlyRulesShape": {
+    "rule": null,
+    "reason": null,
+    "expectedDisposition": "watch_only"
+  },
+
+  "rejectionRules": [
+    {
+      "rejectionCategory": "workspace_boundary",
+      "condition": null,
+      "expectedDisposition": null,
+      "reviewNote": null
+    },
+    {
+      "rejectionCategory": "sensitivity",
+      "condition": null,
+      "expectedDisposition": null,
+      "reviewNote": null
+    },
+    {
+      "rejectionCategory": "missing_evidence",
+      "condition": null,
+      "expectedDisposition": null,
+      "reviewNote": null
+    },
+    {
+      "rejectionCategory": "stale_source",
+      "condition": null,
+      "expectedDisposition": null,
+      "reviewNote": null
+    },
+    {
+      "rejectionCategory": "write_authority",
+      "condition": null,
+      "expectedDisposition": null,
+      "reviewNote": null
+    }
+  ],
+  "_rejectionRulesNote": "Five mandatory rejection categories per method §5.4. The 'other' category requires categoryRationale and cannot substitute for any of the five.",
+  "_rejectionRuleShape": {
+    "rejectionCategory": "<workspace_boundary|sensitivity|missing_evidence|stale_source|write_authority|other>",
+    "condition": "<deterministic predicate>",
+    "expectedDisposition": "<reject|defer|watch_only>",
+    "reviewNote": "<reason and follow-up path>",
+    "categoryRationale": "<required only when rejectionCategory == other>"
+  },
+
+  "boundaryNotes": []
+}

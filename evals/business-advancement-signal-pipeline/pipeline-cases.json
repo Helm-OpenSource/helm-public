@@ -1,0 +1,1136 @@
+{
+  "version": "business-advancement-signal-pipeline-phase1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "synthetic_and_alias_only",
+  "boundary": "pipeline_offline_only_no_runtime_no_schema_no_api_no_ui_no_official_write",
+  "targets": {
+    "minimumTotalCases": 20,
+    "minimumSourceKindCount": 6,
+    "minimumMustPushItemCount": 3,
+    "maximumMustPushItemCount": 5,
+    "maximumInvalidMustPushItemCount": 0,
+    "maximumRawPayloadEchoCount": 0,
+    "maximumAutoExecutionAttemptCount": 0,
+    "maximumOfficialWriteAttemptCount": 0,
+    "maximumCanonicalMemoryWriteCount": 0,
+    "minimumLearningCandidateCount": 20,
+    "minimumReviewerEvidenceCoveragePercent": 100,
+    "minimumRemediationCoveragePercent": 100
+  },
+  "cases": [
+    {
+      "id": "BA-PIPE-MEETING-OVERDUE-001",
+      "source": {
+        "kind": "meeting",
+        "ref": "meeting:alias-a:2026-05-01",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "commitment",
+        "objectId": "commitment:alias-a-renewal-plan",
+        "canonicalObjectRef": "commitment:alias-a-renewal-plan",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "overdue_commitment:alias-a-renewal-plan",
+        "signalType": "overdue_commitment",
+        "severity": "high",
+        "evidenceRefs": [
+          "meeting:alias-a:2026-05-01",
+          "crm:alias-a:renewal-opportunity",
+          "owner-note:alias-a:founder-review"
+        ],
+        "evidenceFreshnessHours": 12,
+        "sourceCount": 3,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["prepare_draft", "open_review_packet", "assign_owner"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "must_push_ready",
+      "expectedAudienceDecision": "surface_to_human_and_worker",
+      "expectedOutputs": {
+        "mustPushItem": true,
+        "reviewRequiredAction": false,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-CRM-STALLED-002",
+      "source": {
+        "kind": "crm",
+        "ref": "crm:alias-b:opportunity",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "opportunity",
+        "objectId": "opportunity:alias-b",
+        "canonicalObjectRef": "opportunity:alias-b",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "stalled_opportunity:alias-b",
+        "signalType": "stalled_opportunity",
+        "severity": "high",
+        "evidenceRefs": ["crm:alias-b:last-activity", "meeting:alias-b:next-step", "email:alias-b:followup"],
+        "evidenceFreshnessHours": 24,
+        "sourceCount": 3,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["prepare_draft", "open_review_packet", "summarize_context"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "must_push_ready",
+      "expectedAudienceDecision": "surface_to_human_and_worker",
+      "expectedOutputs": {
+        "mustPushItem": true,
+        "reviewRequiredAction": false,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-EMAIL-WAITING-003",
+      "source": {
+        "kind": "email_im",
+        "ref": "email:alias-c:waiting",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "customer",
+        "objectId": "customer:alias-c",
+        "canonicalObjectRef": "customer:alias-c",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "customer_waiting:alias-c",
+        "signalType": "customer_waiting",
+        "severity": "high",
+        "evidenceRefs": ["email:alias-c:waiting", "crm:alias-c:last-touch", "meeting:alias-c:commitment"],
+        "evidenceFreshnessHours": 6,
+        "sourceCount": 3,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["prepare_draft", "open_review_packet", "collect_evidence"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "must_push_ready",
+      "expectedAudienceDecision": "surface_to_human_and_worker",
+      "expectedOutputs": {
+        "mustPushItem": true,
+        "reviewRequiredAction": false,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-RESOURCE-PROOF-004",
+      "source": {
+        "kind": "tenant_resource",
+        "ref": "resource:alias-d:proof-gap",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "resource",
+        "objectId": "resource:alias-d-proof",
+        "canonicalObjectRef": "resource:alias-d-proof",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "proof_or_review_required:alias-d-proof",
+        "signalType": "proof_or_review_required",
+        "severity": "high",
+        "evidenceRefs": ["resource:alias-d:proof-gap", "crm:alias-d:stage", "owner-note:alias-d:review"],
+        "evidenceFreshnessHours": 10,
+        "sourceCount": 3,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["collect_evidence", "open_review_packet", "assign_owner"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "must_push_ready",
+      "expectedAudienceDecision": "surface_to_human_and_worker",
+      "expectedOutputs": {
+        "mustPushItem": true,
+        "reviewRequiredAction": false,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-ASK-HELM-FOLLOWUP-005",
+      "source": {
+        "kind": "ask_helm",
+        "ref": "ask:alias-e:followup-risk",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "meeting",
+        "objectId": "meeting:alias-e",
+        "canonicalObjectRef": "meeting:alias-e",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "meeting_follow_up:alias-e",
+        "signalType": "meeting_follow_up",
+        "severity": "high",
+        "evidenceRefs": ["ask:alias-e:followup-risk", "meeting:alias-e:summary", "crm:alias-e:opportunity"],
+        "evidenceFreshnessHours": 2,
+        "sourceCount": 3,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["prepare_draft", "open_review_packet", "summarize_context"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "must_push_ready",
+      "expectedAudienceDecision": "surface_to_human_and_worker",
+      "expectedOutputs": {
+        "mustPushItem": true,
+        "reviewRequiredAction": false,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-EXTERNAL-AGENT-CONTRADICTION-006",
+      "source": {
+        "kind": "external_agent",
+        "ref": "external-agent:coze-manual:alias-f",
+        "redactionStatus": "redacted",
+        "rawPayloadIncluded": false,
+        "provider": "coze_manual"
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "decision",
+        "objectId": "decision:alias-f-security",
+        "canonicalObjectRef": "decision:alias-f-security",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "blocked_decision:alias-f-security",
+        "signalType": "blocked_decision",
+        "severity": "high",
+        "evidenceRefs": ["external-agent:coze-manual:alias-f", "crm:alias-f:stage-note"],
+        "evidenceFreshnessHours": 5,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": ["email:alias-f:customer-says-approved"],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet", "collect_evidence"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "review_required",
+      "expectedFinalDisposition": "review_required",
+      "expectedAudienceDecision": "review_first",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-MEETING-BLOCKED-DECISION-007",
+      "source": {
+        "kind": "meeting",
+        "ref": "meeting:alias-g:blocker",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "decision",
+        "objectId": "decision:alias-g-pricing",
+        "canonicalObjectRef": "decision:alias-g-pricing",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "blocked_decision:alias-g-pricing",
+        "signalType": "blocked_decision",
+        "severity": "high",
+        "evidenceRefs": ["meeting:alias-g:blocker", "crm:alias-g:stage-note"],
+        "evidenceFreshnessHours": 7,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": ["email:alias-g:customer-approved"],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet", "collect_evidence"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "review_required",
+      "expectedFinalDisposition": "review_required",
+      "expectedAudienceDecision": "review_first",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-WEAK-EVIDENCE-008",
+      "source": {
+        "kind": "crm",
+        "ref": "crm:alias-h:single-note",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "opportunity",
+        "objectId": "opportunity:alias-h",
+        "canonicalObjectRef": "opportunity:alias-h",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "stalled_opportunity:alias-h",
+        "signalType": "stalled_opportunity",
+        "severity": "high",
+        "evidenceRefs": ["crm:alias-h:single-note"],
+        "evidenceFreshnessHours": 3,
+        "sourceCount": 1,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet", "collect_evidence"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "review_required",
+      "expectedFinalDisposition": "review_required",
+      "expectedAudienceDecision": "review_first",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-MISSING-OWNER-009",
+      "source": {
+        "kind": "report",
+        "ref": "report:alias-i:risk",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "opportunity",
+        "objectId": "opportunity:alias-i",
+        "canonicalObjectRef": "opportunity:alias-i",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "risk_escalation:alias-i",
+        "signalType": "risk_escalation",
+        "severity": "high",
+        "evidenceRefs": ["report:alias-i:risk", "meeting:alias-i:open-risk"],
+        "evidenceFreshnessHours": 9,
+        "sourceCount": 2,
+        "hasOwner": false,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["assign_owner", "open_review_packet"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "review_required",
+      "expectedFinalDisposition": "review_required",
+      "expectedAudienceDecision": "review_first",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-MISSING-NEXT-ACTION-010",
+      "source": {
+        "kind": "tenant_resource",
+        "ref": "resource:alias-j:review-gap",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "resource",
+        "objectId": "resource:alias-j",
+        "canonicalObjectRef": "resource:alias-j",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "proof_or_review_required:alias-j",
+        "signalType": "proof_or_review_required",
+        "severity": "high",
+        "evidenceRefs": ["resource:alias-j:review-gap", "crm:alias-j:stage"],
+        "evidenceFreshnessHours": 8,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": false,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet", "collect_evidence"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "review_required",
+      "expectedFinalDisposition": "review_required",
+      "expectedAudienceDecision": "review_first",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-SINGLE-SOURCE-FOLLOWUP-011",
+      "source": {
+        "kind": "meeting",
+        "ref": "meeting:alias-k:followup",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "meeting",
+        "objectId": "meeting:alias-k",
+        "canonicalObjectRef": "meeting:alias-k",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "meeting_follow_up:alias-k",
+        "signalType": "meeting_follow_up",
+        "severity": "normal",
+        "evidenceRefs": ["meeting:alias-k:followup"],
+        "evidenceFreshnessHours": 4,
+        "sourceCount": 1,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet", "collect_evidence"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "review_required",
+      "expectedFinalDisposition": "review_required",
+      "expectedAudienceDecision": "review_first",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-STALE-WATCH-012",
+      "source": {
+        "kind": "crm",
+        "ref": "crm:alias-l:last-activity",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "opportunity",
+        "objectId": "opportunity:alias-l",
+        "canonicalObjectRef": "opportunity:alias-l",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "stalled_opportunity:alias-l",
+        "signalType": "stalled_opportunity",
+        "severity": "normal",
+        "evidenceRefs": ["crm:alias-l:last-activity", "meeting:alias-l:old"],
+        "evidenceFreshnessHours": 240,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "watch_only",
+      "expectedFinalDisposition": "watch_only",
+      "expectedAudienceDecision": "watch_only_digest",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": false,
+        "workerInstruction": false,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-DUPLICATE-WATCH-013",
+      "source": {
+        "kind": "email_im",
+        "ref": "email:alias-m:waiting-duplicate",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "customer",
+        "objectId": "customer:alias-m",
+        "canonicalObjectRef": "customer:alias-m",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "customer_waiting:alias-m",
+        "signalType": "customer_waiting",
+        "severity": "normal",
+        "evidenceRefs": ["email:alias-m:waiting", "crm:alias-m:last-touch"],
+        "evidenceFreshnessHours": 8,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": true,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "watch_only",
+      "expectedFinalDisposition": "watch_only",
+      "expectedAudienceDecision": "watch_only_digest",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": false,
+        "workerInstruction": false,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-WATCH-SEVERITY-014",
+      "source": {
+        "kind": "report",
+        "ref": "report:alias-n:low-signal",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "customer",
+        "objectId": "customer:alias-n",
+        "canonicalObjectRef": "customer:alias-n",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "risk_watch:alias-n",
+        "signalType": "risk_watch",
+        "severity": "watch",
+        "evidenceRefs": ["report:alias-n:trend", "crm:alias-n:activity"],
+        "evidenceFreshnessHours": 20,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "watch_only",
+      "expectedFinalDisposition": "watch_only",
+      "expectedAudienceDecision": "watch_only_digest",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": false,
+        "workerInstruction": false,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-CROSS-WORKSPACE-015",
+      "source": {
+        "kind": "crm",
+        "ref": "crm:other-workspace:alias-o",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "customer",
+        "objectId": "customer:alias-o",
+        "canonicalObjectRef": "customer:alias-o",
+        "identityStable": false,
+        "tenantMismatch": true,
+        "crossWorkspaceConflict": true
+      },
+      "signal": {
+        "signalKey": "proof_or_review_required:alias-o",
+        "signalType": "proof_or_review_required",
+        "severity": "critical",
+        "evidenceRefs": ["crm:other-workspace:alias-o", "meeting:workspace-demo:alias-o"],
+        "evidenceFreshnessHours": 6,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet"],
+      "unsafeActionRequests": ["update_crm_stage"],
+      "expectedValidityDisposition": "rejected",
+      "expectedFinalDisposition": "rejected",
+      "expectedAudienceDecision": "reject_and_contain",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": false,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-UNSAFE-AUTHORITY-016",
+      "source": {
+        "kind": "ask_helm",
+        "ref": "ask:alias-p:auto-send-request",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "opportunity",
+        "objectId": "opportunity:alias-p",
+        "canonicalObjectRef": "opportunity:alias-p",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "customer_waiting:alias-p",
+        "signalType": "customer_waiting",
+        "severity": "critical",
+        "evidenceRefs": ["ask:alias-p:auto-send-request", "crm:alias-p:stage"],
+        "evidenceFreshnessHours": 1,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": true,
+        "llmFinalRanking": true,
+        "autoPromotion": true,
+        "officialWriteIntent": true
+      },
+      "safeActionRequests": ["prepare_draft", "open_review_packet"],
+      "unsafeActionRequests": ["send_email", "update_crm_stage", "canonical_memory_write"],
+      "expectedValidityDisposition": "rejected",
+      "expectedFinalDisposition": "rejected",
+      "expectedAudienceDecision": "reject_and_contain",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": false,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-EXTERNAL-UNREDACTED-017",
+      "source": {
+        "kind": "external_agent",
+        "ref": "external-agent:openclaw-local:alias-q",
+        "redactionStatus": "unredacted",
+        "rawPayloadIncluded": true,
+        "provider": "openclaw_local"
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "customer",
+        "objectId": "customer:alias-q",
+        "canonicalObjectRef": "customer:alias-q",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "customer_waiting:alias-q",
+        "signalType": "customer_waiting",
+        "severity": "high",
+        "evidenceRefs": ["external-agent:openclaw-local:alias-q", "crm:alias-q:last-touch"],
+        "evidenceFreshnessHours": 2,
+        "sourceCount": 2,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["prepare_draft", "open_review_packet"],
+      "unsafeActionRequests": [],
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "rejected",
+      "expectedAudienceDecision": "reject_and_contain",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": false,
+        "learningCandidate": true,
+        "remediationContainment": "not_required"
+      }
+    },
+    {
+      "id": "BA-PIPE-POST-ADMISSION-STALE-018",
+      "source": {
+        "kind": "meeting",
+        "ref": "meeting:alias-r:renewal",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "commitment",
+        "objectId": "commitment:alias-r-renewal",
+        "canonicalObjectRef": "commitment:alias-r-renewal",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "overdue_commitment:alias-r-renewal",
+        "signalType": "overdue_commitment",
+        "severity": "high",
+        "evidenceRefs": ["meeting:alias-r:renewal", "crm:alias-r:opportunity", "email:alias-r:followup"],
+        "evidenceFreshnessHours": 16,
+        "sourceCount": 3,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["prepare_draft", "open_review_packet"],
+      "unsafeActionRequests": [],
+      "postAdmission": {
+        "currentExposures": {
+          "mustPushItemIds": ["must-push:alias-r-renewal"],
+          "reviewPacketIds": [],
+          "draftIds": ["draft:alias-r-renewal"],
+          "memoryCandidateIds": ["memory-candidate:alias-r-renewal"],
+          "canonicalMemoryIds": [],
+          "skillSuggestionIds": [],
+          "officialWriteIds": []
+        },
+        "postAdmissionFindings": {
+          "staleEvidence": true,
+          "contradictoryEvidence": false,
+          "duplicateSignal": false,
+          "wrongObjectBinding": false,
+          "tenantMismatch": false,
+          "unsafeBoundary": false,
+          "officialWriteIntent": false,
+          "canonicalMemoryWrite": false
+        },
+        "operatorCorrection": "outdated",
+        "expectedContainment": "revoked",
+        "expectedActions": [
+          "remove_must_push",
+          "quarantine_draft",
+          "quarantine_memory_candidate",
+          "create_learning_candidate"
+        ]
+      },
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "watch_only",
+      "expectedAudienceDecision": "watch_only_digest",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": false,
+        "workerInstruction": false,
+        "learningCandidate": true,
+        "remediationContainment": "revoked"
+      }
+    },
+    {
+      "id": "BA-PIPE-POST-ADMISSION-CONTRADICTION-019",
+      "source": {
+        "kind": "crm",
+        "ref": "crm:alias-s:security",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "decision",
+        "objectId": "decision:alias-s-security",
+        "canonicalObjectRef": "decision:alias-s-security",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "blocked_decision:alias-s-security",
+        "signalType": "blocked_decision",
+        "severity": "high",
+        "evidenceRefs": ["crm:alias-s:security", "meeting:alias-s:next-step", "owner-note:alias-s"],
+        "evidenceFreshnessHours": 13,
+        "sourceCount": 3,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet", "collect_evidence"],
+      "unsafeActionRequests": [],
+      "postAdmission": {
+        "currentExposures": {
+          "mustPushItemIds": ["must-push:alias-s-security"],
+          "reviewPacketIds": ["review:alias-s-security"],
+          "draftIds": ["draft:alias-s-security"],
+          "memoryCandidateIds": [],
+          "canonicalMemoryIds": [],
+          "skillSuggestionIds": [],
+          "officialWriteIds": []
+        },
+        "postAdmissionFindings": {
+          "staleEvidence": false,
+          "contradictoryEvidence": true,
+          "duplicateSignal": false,
+          "wrongObjectBinding": false,
+          "tenantMismatch": false,
+          "unsafeBoundary": false,
+          "officialWriteIntent": false,
+          "canonicalMemoryWrite": false
+        },
+        "operatorCorrection": "contradictory_evidence",
+        "expectedContainment": "downgraded",
+        "expectedActions": [
+          "downgrade_to_review_required",
+          "freeze_draft",
+          "attach_blast_radius_report",
+          "create_learning_candidate"
+        ]
+      },
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "review_required",
+      "expectedAudienceDecision": "review_first",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": true,
+        "learningCandidate": true,
+        "remediationContainment": "downgraded"
+      }
+    },
+    {
+      "id": "BA-PIPE-POST-ADMISSION-WRONG-OBJECT-020",
+      "source": {
+        "kind": "tenant_resource",
+        "ref": "resource:alias-t:proof",
+        "redactionStatus": "synthetic",
+        "rawPayloadIncluded": false
+      },
+      "object": {
+        "workspaceId": "workspace_demo",
+        "tenantKey": "helm-internal",
+        "sourceWindowKey": "2026-W18",
+        "objectType": "resource",
+        "objectId": "resource:alias-t-proof",
+        "canonicalObjectRef": "resource:alias-t-proof",
+        "identityStable": true,
+        "tenantMismatch": false,
+        "crossWorkspaceConflict": false
+      },
+      "signal": {
+        "signalKey": "proof_or_review_required:alias-t-proof",
+        "signalType": "proof_or_review_required",
+        "severity": "high",
+        "evidenceRefs": ["resource:alias-t:proof", "crm:alias-t:stage", "meeting:alias-t:handoff"],
+        "evidenceFreshnessHours": 11,
+        "sourceCount": 3,
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "hasOutcomeMetric": true,
+        "contradictoryEvidenceRefs": [],
+        "duplicateSignal": false,
+        "unsafeBoundary": false,
+        "llmFinalRanking": false,
+        "autoPromotion": false,
+        "officialWriteIntent": false
+      },
+      "safeActionRequests": ["open_review_packet", "collect_evidence"],
+      "unsafeActionRequests": [],
+      "postAdmission": {
+        "currentExposures": {
+          "mustPushItemIds": ["must-push:alias-t-proof"],
+          "reviewPacketIds": ["review:alias-t-proof"],
+          "draftIds": [],
+          "memoryCandidateIds": ["memory-candidate:alias-t-proof"],
+          "canonicalMemoryIds": ["memory:alias-t-proof"],
+          "skillSuggestionIds": [],
+          "officialWriteIds": []
+        },
+        "postAdmissionFindings": {
+          "staleEvidence": false,
+          "contradictoryEvidence": false,
+          "duplicateSignal": false,
+          "wrongObjectBinding": true,
+          "tenantMismatch": true,
+          "unsafeBoundary": false,
+          "officialWriteIntent": false,
+          "canonicalMemoryWrite": true
+        },
+        "operatorCorrection": "wrong_object",
+        "expectedContainment": "quarantined",
+        "expectedActions": [
+          "remove_must_push",
+          "quarantine_review_packet",
+          "quarantine_memory_candidate",
+          "tombstone_canonical_memory",
+          "create_learning_candidate"
+        ]
+      },
+      "expectedValidityDisposition": "must_push_ready",
+      "expectedFinalDisposition": "rejected",
+      "expectedAudienceDecision": "reject_and_contain",
+      "expectedOutputs": {
+        "mustPushItem": false,
+        "reviewRequiredAction": true,
+        "workerInstruction": false,
+        "learningCandidate": true,
+        "remediationContainment": "quarantined"
+      }
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "large_budget_subgroup_stability_drift_aging",
+    "label": "Large budget-pressure cohort keeps subgroup drift, wording aging, and material impact aging explicit",
+    "sourceCaseId": "large_budget_scale_up_recheck",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetIntervalWordingRegressionRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupStabilityDriftIncludes": [
+        "Subgroup stability drift review",
+        "subgroup drift review",
+        "BUDGET_PRESSURE"
+      ],
+      "intervalWordingAgingIncludes": [
+        "Interval wording aging audit",
+        "regression rate 0%",
+        "wide confidence interval"
+      ],
+      "materialImpactPatternAgingIncludes": [
+        "Material impact pattern aging review",
+        "Prune trace review",
+        "evidence-first"
+      ],
+      "sessionReviewIncludes": [
+        "subgroup drift review",
+        "Interval wording aging audit",
+        "Material impact pattern aging review"
+      ]
+    }
+  },
+  {
+    "id": "large_replay_subgroup_stability_drift_aging",
+    "label": "Large replay-drift cohort keeps settled wording aging and persistent impact aging visible",
+    "sourceCaseId": "large_replay_scale_up_recheck",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetRiskBand": "LOW",
+      "targetStabilityBand": "STABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "SETTLED",
+      "targetIntervalWordingRegressionRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupStabilityDriftIncludes": [
+        "Subgroup stability drift review",
+        "subgroup drift review",
+        "RESUMED_MEETING"
+      ],
+      "intervalWordingAgingIncludes": [
+        "Interval wording aging audit",
+        "regression rate 0%",
+        "settled confidence interval"
+      ],
+      "materialImpactPatternAgingIncludes": [
+        "Material impact pattern aging review",
+        "Replay gap review",
+        "longer pilot horizon"
+      ],
+      "sessionReviewIncludes": [
+        "subgroup drift review",
+        "Interval wording aging audit",
+        "Material impact pattern aging review"
+      ]
+    }
+  },
+  {
+    "id": "growing_protected_subgroup_stability_drift_aging",
+    "label": "Growing protected-state cohort keeps subgroup drift and aging impact review conservative",
+    "sourceCaseId": "growing_protected_scale_up_recheck",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetIntervalWordingRegressionRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupStabilityDriftIncludes": [
+        "Subgroup stability drift review",
+        "subgroup drift review",
+        "PROTECTED_STATE_GAP"
+      ],
+      "intervalWordingAgingIncludes": [
+        "Interval wording aging audit",
+        "regression rate 0%",
+        "wide confidence interval"
+      ],
+      "materialImpactPatternAgingIncludes": [
+        "Material impact pattern aging review",
+        "Protected field review",
+        "evidence-first"
+      ],
+      "sessionReviewIncludes": [
+        "subgroup drift review",
+        "Interval wording aging audit",
+        "Material impact pattern aging review"
+      ]
+    }
+  }
+]

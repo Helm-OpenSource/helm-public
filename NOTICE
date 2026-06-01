@@ -1,0 +1,18 @@
+Helm
+Copyright 2026 Helm Contributors
+
+This product includes software developed by the Helm project contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Helm 是面向受控试点经营团队的经营推进控制台。
+本仓库当前阶段为 controlled-trial 基线，不是完整的企业级 SSO / SCIM、
+不是完整 workflow / orchestration / agent 平台、不是自动执行平面，
+也不承诺生产级 SLA。详见 README.md 与 AGENTS.md。
+
+Third-party components retain their own licenses; see package.json and
+node_modules/*/LICENSE for details.

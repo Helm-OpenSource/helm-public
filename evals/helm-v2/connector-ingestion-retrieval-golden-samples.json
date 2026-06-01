@@ -1,0 +1,153 @@
+[
+  {
+    "id": "meeting-core-sources",
+    "label": "Meeting analyst loads boundary-safe core sources",
+    "workspaceSummary": "当前 workspace 以 judgement-first 方式把会议、对象状态、审批和下一步收成同一条经营推进链。",
+    "meeting": {
+      "title": "Contoso ROI planning sync",
+      "agenda": "确认 ROI follow-up、预算 owner 和 procurement review",
+      "startsAt": "2026-04-09T02:00:00.000Z",
+      "endsAt": "2026-04-09T03:00:00.000Z",
+      "companyName": "Contoso",
+      "ownerName": "Alex",
+      "contacts": ["Mia", "Kevin"],
+      "opportunity": {
+        "title": "Contoso Expansion",
+        "type": "CLIENT",
+        "stage": "ADVANCING",
+        "riskLevel": "MEDIUM",
+        "nextAction": "发送 ROI summary 并确认采购评审时间"
+      },
+      "note": {
+        "meetingGoal": "确认采购窗口和下一步 ROI follow-up。",
+        "riskAlerts": "预算 owner 仍未完全确认；任何价格或交付日期都不能提前承诺。",
+        "summary": "客户接受我们先发 ROI follow-up，本周补预算 owner，再约采购评审。",
+        "keyDecisions": "先发 ROI follow-up，并准备采购评审时间建议。",
+        "confirmations": "销售 owner 在 24 小时内发跟进草稿。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "客户之前已经明确 ROI 是当前采购推进的关键。"
+    ],
+    "staleMemorySummaries": [
+      "旧 checkpoint：上月认为客户已经锁定预算 owner。"
+    ],
+    "includeTranscript": true,
+    "includeEmailThread": true,
+    "includeHumanEdit": true,
+    "includeDraftCommsRuntime": true,
+    "expected": {
+      "sourceExpectations": [
+        { "sourceType": "calendar_event", "trustLevel": "trusted", "promotionEligibility": "human_confirmed" },
+        { "sourceType": "meeting_transcript", "trustLevel": "untrusted", "promotionEligibility": "draft_only" },
+        { "sourceType": "meeting_note", "trustLevel": "trusted", "promotionEligibility": "human_confirmed" },
+        { "sourceType": "crm_snapshot", "trustLevel": "trusted", "promotionEligibility": "system_of_record" },
+        { "sourceType": "email_thread", "trustLevel": "untrusted", "promotionEligibility": "draft_only" },
+        { "sourceType": "human_edit", "trustLevel": "trusted", "promotionEligibility": "human_confirmed" },
+        { "sourceType": "agent_inference", "trustLevel": "untrusted", "promotionEligibility": "draft_only" }
+      ],
+      "requiredLoadedKeys": ["policy-summary", "workspace-summary", "meeting_note:note_meeting-core-sources"],
+      "requiredSkippedKeys": ["historical-meetings", "historical-proposals", "learned-patterns"],
+      "staleSuppressedKeys": ["memory:stale_mem_meeting-core-sources_0"]
+    }
+  },
+  {
+    "id": "proposal-requested-retrieval",
+    "label": "Proposal runtime keeps selective retrieval and on-demand history",
+    "workspaceSummary": "当前 workspace 把 proposal draft、review posture 和 external boundary 放到同一条经营推进链里。",
+    "meeting": {
+      "title": "Northwind proposal review",
+      "agenda": "确认客户 follow-up 结构和内部协同 brief",
+      "startsAt": "2026-04-11T02:00:00.000Z",
+      "endsAt": "2026-04-11T03:00:00.000Z",
+      "companyName": "Northwind",
+      "ownerName": "Riley",
+      "contacts": ["June"],
+      "opportunity": {
+        "title": "Northwind Expansion",
+        "type": "CLIENT",
+        "stage": "ADVANCING",
+        "riskLevel": "HIGH",
+        "nextAction": "准备 follow-up draft 并等 manager review"
+      },
+      "note": {
+        "meetingGoal": "确认客户 follow-up 结构和内部协同 brief。",
+        "riskAlerts": "客户明确问到价格，但当前还不能形成正式报价承诺。",
+        "summary": "客户要我们先发 follow-up draft，内部再统一口径。",
+        "keyDecisions": "先发 draft，不自动发送。",
+        "confirmations": "manager 先 review 再人工发送。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "Northwind 的 follow-up 一直需要 manager 先看一轮。"
+    ],
+    "staleMemorySummaries": [],
+    "includeTranscript": false,
+    "includeEmailThread": false,
+    "includeHumanEdit": true,
+    "includeDraftCommsRuntime": true,
+    "expected": {
+      "sourceExpectations": [
+        { "sourceType": "calendar_event", "trustLevel": "trusted", "promotionEligibility": "human_confirmed" },
+        { "sourceType": "meeting_note", "trustLevel": "trusted", "promotionEligibility": "human_confirmed" },
+        { "sourceType": "crm_snapshot", "trustLevel": "trusted", "promotionEligibility": "system_of_record" },
+        { "sourceType": "human_edit", "trustLevel": "trusted", "promotionEligibility": "human_confirmed" },
+        { "sourceType": "agent_inference", "trustLevel": "untrusted", "promotionEligibility": "draft_only" }
+      ],
+      "requiredLoadedKeys": ["policy-summary", "workspace-summary", "primary-opportunity-summary"],
+      "requiredSkippedKeys": ["historical-meetings", "historical-proposals", "learned-patterns"],
+      "staleSuppressedKeys": []
+    }
+  },
+  {
+    "id": "official-write-retrieval",
+    "label": "Official write review loads guarded policy and keeps stale memory suppressed",
+    "workspaceSummary": "当前 workspace 对 official integration 保持 guarded、approval-first、audited path。",
+    "meeting": {
+      "title": "Procurement closure review",
+      "agenda": "确认 shadow recommendation 是否值得进入 official write intent",
+      "startsAt": "2026-04-12T02:00:00.000Z",
+      "endsAt": "2026-04-12T03:00:00.000Z",
+      "companyName": "Fabrikam",
+      "ownerName": "Taylor",
+      "contacts": ["Ivy"],
+      "opportunity": {
+        "title": "Fabrikam Renewal",
+        "type": "CLIENT",
+        "stage": "ADVANCING",
+        "riskLevel": "MEDIUM",
+        "nextAction": "review guarded official write intent"
+      },
+      "note": {
+        "meetingGoal": "确认 guarded official write 是否有足够 evidence。",
+        "riskAlerts": "没有 explicit approval 之前不能写 official CRM。",
+        "summary": "当前可以先生成 guarded intent，再走 explicit approval。",
+        "keyDecisions": "intent 不等于 actual official write。",
+        "confirmations": "acknowledged success 才能代表 official 成功。"
+      }
+    },
+    "promotedMemorySummaries": [
+      "最近一次 explicit approval 只允许 shadow consume，不允许默认 auto-write。"
+    ],
+    "staleMemorySummaries": [
+      "旧 checkpoint：去年曾假设 procurement review 后会直接写 official CRM。"
+    ],
+    "includeTranscript": false,
+    "includeEmailThread": true,
+    "includeHumanEdit": false,
+    "includeDraftCommsRuntime": false,
+    "includeOfficialWriteRuntime": true,
+    "expected": {
+      "sourceExpectations": [
+        { "sourceType": "calendar_event", "trustLevel": "trusted", "promotionEligibility": "human_confirmed" },
+        { "sourceType": "meeting_note", "trustLevel": "trusted", "promotionEligibility": "human_confirmed" },
+        { "sourceType": "crm_snapshot", "trustLevel": "trusted", "promotionEligibility": "system_of_record" },
+        { "sourceType": "email_thread", "trustLevel": "untrusted", "promotionEligibility": "draft_only" },
+        { "sourceType": "agent_inference", "trustLevel": "untrusted", "promotionEligibility": "draft_only" }
+      ],
+      "requiredLoadedKeys": ["policy-summary", "workspace-summary", "official-write-stage-policy"],
+      "requiredSkippedKeys": ["historical-meetings", "historical-proposals", "learned-patterns"],
+      "staleSuppressedKeys": ["memory:stale_mem_official-write-retrieval_0"]
+    }
+  }
+]

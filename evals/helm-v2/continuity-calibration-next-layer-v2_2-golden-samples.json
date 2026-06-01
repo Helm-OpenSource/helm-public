@@ -1,0 +1,282 @@
+[
+  {
+    "id": "growing_long_context_budget_family",
+    "label": "Growing long-context cohort keeps budget pressure on an early-review profile",
+    "workspaceSessionCount": 7,
+    "queueEntries": [
+      {
+        "id": "budget_case_high",
+        "title": "Budget pressure high",
+        "failureTaxonomy": "BUDGET_PRESSURE",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "PRUNE",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "latest_prune_edit",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_REPRUNE_LOOP",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "INEFFECTIVE",
+        "updatedAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "id": "budget_case_watch",
+        "title": "Budget pressure watch",
+        "failureTaxonomy": "BUDGET_PRESSURE",
+        "recoveryState": "RECOVERABLE",
+        "posture": "PRUNE",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "latest_prune_edit",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "PARTIAL",
+        "updatedAt": "2026-04-04T09:00:00.000Z"
+      },
+      {
+        "id": "replay_case_watch",
+        "title": "Replay watch",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "RECOVERABLE",
+        "posture": "COMPACT",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "checkpoint_plus_edits",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "PARTIAL",
+        "updatedAt": "2026-04-04T08:00:00.000Z"
+      },
+      {
+        "id": "anchor_case_low",
+        "title": "Anchor blocked",
+        "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "recoveryState": "BLOCKED",
+        "posture": "WATCH",
+        "replayStatus": "NONE",
+        "payloadStateSource": "all_persisted",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T07:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "BUDGET_PRESSURE",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "cohortIncludes": [
+        "GROWING pilot workspace",
+        "GROWING · LONG_CONTEXT_MEETING · BUDGET_PRESSURE",
+        "REVIEW_REQUIRED · INEFFECTIVE"
+      ],
+      "recalibrationIncludes": [
+        "high-risk",
+        "watch-risk",
+        "failure_class BUDGET_PRESSURE",
+        "threshold 1"
+      ],
+      "longHorizonIncludes": [
+        "Long-horizon pilot drift remains high",
+        "GROWING · LONG_CONTEXT_MEETING · BUDGET_PRESSURE keeps drifting across the longer pilot horizon"
+      ],
+      "varianceIncludes": [
+        "outcomes still degrade afterward",
+        "Prune trace review is being followed in part",
+        "Tighten prune trace review evidence collection"
+      ],
+      "targetStepLabel": "Prune trace review"
+    }
+  },
+  {
+    "id": "large_resumed_replay_family",
+    "label": "Large resumed cohort keeps replay drift in a high-risk recalibration band",
+    "workspaceSessionCount": 11,
+    "queueEntries": [
+      {
+        "id": "replay_case_high_1",
+        "title": "Replay drift high 1",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "COMPACT",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_plus_edits",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_INEFFECTIVE_ACTION",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "INEFFECTIVE",
+        "updatedAt": "2026-04-04T11:00:00.000Z"
+      },
+      {
+        "id": "replay_case_high_2",
+        "title": "Replay drift high 2",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "COMPACT",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_INEFFECTIVE_ACTION",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "INEFFECTIVE",
+        "updatedAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "id": "replay_case_watch",
+        "title": "Replay drift watch",
+        "failureTaxonomy": "REPLAY_DRIFT",
+        "recoveryState": "RECOVERABLE",
+        "posture": "COMPACT",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "checkpoint_plus_edits",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "PARTIAL",
+        "updatedAt": "2026-04-04T09:00:00.000Z"
+      },
+      {
+        "id": "payload_case_watch",
+        "title": "Payload drift watch",
+        "failureTaxonomy": "PAYLOAD_STATE_DRIFT",
+        "recoveryState": "RECOVERABLE",
+        "posture": "WATCH",
+        "replayStatus": "WATCH",
+        "payloadStateSource": "latest_prune_edit",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "MEDIUM",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T08:00:00.000Z"
+      },
+      {
+        "id": "protected_case_review",
+        "title": "Protected review",
+        "failureTaxonomy": "PROTECTED_STATE_GAP",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "WATCH",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_REVIEW_REQUIRED",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T07:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "REPLAY_DRIFT",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetRiskBand": "HIGH",
+      "cohortIncludes": [
+        "LARGE pilot workspace",
+        "LARGE · RESUMED_MEETING · REPLAY_DRIFT",
+        "REVIEW_REQUIRED · INEFFECTIVE"
+      ],
+      "recalibrationIncludes": [
+        "high-risk",
+        "cohort_family LARGE · RESUMED_MEETING · REPLAY_DRIFT",
+        "threshold 1"
+      ],
+      "longHorizonIncludes": [
+        "Long-horizon pilot drift remains high",
+        "LARGE · RESUMED_MEETING · REPLAY_DRIFT keeps drifting across the longer pilot horizon"
+      ],
+      "varianceIncludes": [
+        "outcomes still degrade afterward",
+        "Replay gap review is being followed in part",
+        "Tighten replay gap review evidence collection"
+      ],
+      "targetStepLabel": "Replay gap review"
+    }
+  },
+  {
+    "id": "small_lean_anchor_family",
+    "label": "Small lean anchor cohort keeps skipped guidance visible in the next-layer review",
+    "workspaceSessionCount": 3,
+    "queueEntries": [
+      {
+        "id": "anchor_case_skip",
+        "title": "Anchor blocked repeat",
+        "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "recoveryState": "BLOCKED",
+        "posture": "WATCH",
+        "replayStatus": "NONE",
+        "payloadStateSource": "all_persisted",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_BLOCKED_ACTION",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T11:00:00.000Z"
+      },
+      {
+        "id": "anchor_case_match",
+        "title": "Anchor blocked once",
+        "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+        "recoveryState": "BLOCKED",
+        "posture": "WATCH",
+        "replayStatus": "NONE",
+        "payloadStateSource": "all_persisted",
+        "riskLevel": "WATCH",
+        "remediationAttempts": 1,
+        "repeatPatternStatus": "NONE",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T10:00:00.000Z"
+      },
+      {
+        "id": "protected_case_review",
+        "title": "Protected review",
+        "failureTaxonomy": "PROTECTED_STATE_GAP",
+        "recoveryState": "REVIEW_REQUIRED",
+        "posture": "WATCH",
+        "replayStatus": "WEAK",
+        "payloadStateSource": "checkpoint_snapshot",
+        "riskLevel": "HIGH",
+        "remediationAttempts": 2,
+        "repeatPatternStatus": "REPEATED_REVIEW_REQUIRED",
+        "calibrationConfidence": "LOW",
+        "latestEffectiveness": "NO_SIGNAL",
+        "updatedAt": "2026-04-04T09:00:00.000Z"
+      }
+    ],
+    "targetFailureTaxonomy": "NO_RECOVERY_ANCHOR",
+    "expected": {
+      "workspaceSizeBand": "SMALL",
+      "targetMeetingShape": "LEAN_MEETING",
+      "targetRiskBand": "HIGH",
+      "cohortIncludes": [
+        "SMALL pilot workspace",
+        "SMALL · LEAN_MEETING · NO_RECOVERY_ANCHOR",
+        "BLOCKED · NO_SIGNAL"
+      ],
+      "recalibrationIncludes": [
+        "high-risk",
+        "failure_class NO_RECOVERY_ANCHOR",
+        "threshold 1"
+      ],
+      "longHorizonIncludes": [
+        "Long-horizon pilot drift remains high",
+        "SMALL · LEAN_MEETING · NO_RECOVERY_ANCHOR keeps drifting across the longer pilot horizon"
+      ],
+      "varianceIncludes": [
+        "SOP variance is still driven more by skipped guidance",
+        "Anchor check is still skipped often enough",
+        "Tighten anchor check evidence collection"
+      ],
+      "targetStepLabel": "Anchor check"
+    }
+  }
+]

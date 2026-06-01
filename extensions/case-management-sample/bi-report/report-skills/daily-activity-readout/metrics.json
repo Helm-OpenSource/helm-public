@@ -1,0 +1,31 @@
+{
+  "version": "v1",
+  "aggregations": [
+    {
+      "key": "open_case_count",
+      "label": "Open cases",
+      "type": "sum",
+      "field": "open_case_count",
+      "format": "integer"
+    },
+    {
+      "key": "review_required_count",
+      "label": "Review required",
+      "type": "sum",
+      "field": "review_required_count",
+      "format": "integer"
+    },
+    {
+      "key": "stale_case_count",
+      "label": "Stale cases",
+      "type": "sum",
+      "field": "stale_case_count",
+      "format": "integer"
+    }
+  ],
+  "displayOrder": [
+    "open_case_count",
+    "review_required_count",
+    "stale_case_count"
+  ]
+}

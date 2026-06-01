@@ -1,0 +1,177 @@
+[
+  {
+    "id": "ten-001",
+    "dimension": "tenant_personalization",
+    "description": "Tenant-alpha with schema v1.0 and isolation boundary respected — learning candidate for personalization baseline.",
+    "input": {
+      "dimension": "tenant_personalization",
+      "evalRunId": "eval-run-ten-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ten-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tenantAlias": "tenant-alpha",
+      "usagePatternSchemaVersion": "1.0",
+      "crossWorkspaceAggregationAttempted": false
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Isolation boundary respected; no cross-workspace aggregation attempted. Clean tenant personalization baseline case.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ten-002",
+    "dimension": "tenant_personalization",
+    "description": "Tenant-beta with schema v1.1 and isolation respected — learning candidate showing schema version upgrade path.",
+    "input": {
+      "dimension": "tenant_personalization",
+      "evalRunId": "eval-run-ten-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-ten-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tenantAlias": "tenant-beta",
+      "usagePatternSchemaVersion": "1.1",
+      "crossWorkspaceAggregationAttempted": false
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Schema version 1.1 with isolation intact. Good case for tracking schema evolution without boundary violations.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ten-003",
+    "dimension": "tenant_personalization",
+    "description": "Tenant-gamma with schema v1.0 but low usage pattern signal — watch_only given sparse tenant data.",
+    "input": {
+      "dimension": "tenant_personalization",
+      "evalRunId": "eval-run-ten-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ten-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tenantAlias": "tenant-gamma",
+      "usagePatternSchemaVersion": "1.0",
+      "crossWorkspaceAggregationAttempted": false
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Tenant-gamma has sparse usage pattern data at schema v1.0. Monitor for signal accumulation before treating as learning candidate.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ten-004",
+    "dimension": "tenant_personalization",
+    "description": "Tenant-alpha with schema v2.0 and isolation respected — learning candidate for advanced schema testing.",
+    "input": {
+      "dimension": "tenant_personalization",
+      "evalRunId": "eval-run-ten-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-ten-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tenantAlias": "tenant-alpha",
+      "usagePatternSchemaVersion": "2.0",
+      "crossWorkspaceAggregationAttempted": false
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Schema v2.0 validated with strict isolation. Useful case for testing schema migration path without boundary crossing.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ten-005",
+    "dimension": "tenant_personalization",
+    "description": "Tenant-beta with schema v1.0 and multiple evidence refs — learning candidate demonstrating evidence accumulation.",
+    "input": {
+      "dimension": "tenant_personalization",
+      "evalRunId": "eval-run-ten-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ten-005a", "timestamp": "2026-05-02T00:00:00.000Z" },
+        { "type": "eval_run", "id": "eval-run-ten-005b", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tenantAlias": "tenant-beta",
+      "usagePatternSchemaVersion": "1.0",
+      "crossWorkspaceAggregationAttempted": false
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Multiple evidence refs with isolation respected. Good multi-evidence candidate for per-tenant quality tracking.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "ten-006",
+    "dimension": "tenant_personalization",
+    "description": "NEGATIVE: Cross-workspace aggregation was attempted — isolation boundary violation, review required.",
+    "input": {
+      "dimension": "tenant_personalization",
+      "evalRunId": "eval-run-ten-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ten-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tenantAlias": "tenant-gamma",
+      "usagePatternSchemaVersion": "1.0",
+      "crossWorkspaceAggregationAttempted": true
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "Cross-workspace aggregation was attempted, violating workspace-first isolation. Human review required before this case can be used.",
+      "boundaryViolations": ["no_runtime_self_learning"]
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "ten-007",
+    "dimension": "tenant_personalization",
+    "description": "NEGATIVE: Unsupported usagePatternSchemaVersion '99.0' submitted for tenant-gamma — malformed schema version, rejected.",
+    "input": {
+      "dimension": "tenant_personalization",
+      "evalRunId": "eval-run-ten-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-ten-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "tenantAlias": "tenant-gamma",
+      "usagePatternSchemaVersion": "99.0",
+      "crossWorkspaceAggregationAttempted": false
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "usagePatternSchemaVersion '99.0' is not a recognised schema version. Fixture rejected as malformed input.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "ten-008",
+    "dimension": "tenant_personalization",
+    "description": "NEGATIVE: Schema version is empty string — malformed input, rejected.",
+    "input": {
+      "dimension": "tenant_personalization",
+      "evalRunId": "eval-run-ten-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [],
+      "tenantAlias": "tenant-alpha",
+      "usagePatternSchemaVersion": "",
+      "crossWorkspaceAggregationAttempted": false
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Schema version is empty string and no evidence refs provided. Malformed tenant personalization input; cannot evaluate.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

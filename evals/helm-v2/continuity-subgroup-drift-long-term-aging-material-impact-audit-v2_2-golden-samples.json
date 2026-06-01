@@ -1,0 +1,104 @@
+[
+  {
+    "id": "large_budget_subgroup_drift_long_term_aging_material_impact_audit",
+    "label": "Large budget-pressure cohort keeps long-term sample expansion and impact aging audit conservative",
+    "sourceCaseId": "large_budget_subgroup_drift_impact_aging_refinement",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetCrossReadoutRegressionAuditRate": 30,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftLongTermAgingIncludes": [
+        "Subgroup drift long-term sample expansion review",
+        "expansion-risk",
+        "BUDGET_PRESSURE"
+      ],
+      "intervalWordingCrossReadoutAuditIncludes": [
+        "Cross-readout interval wording regression audit",
+        "30% regression or coverage gap",
+        "threshold, step, and guidance"
+      ],
+      "materialImpactSamplingAgingAuditIncludes": [
+        "Material impact sampling aging audit",
+        "Prune trace review",
+        "review-bound"
+      ],
+      "sessionReviewIncludes": [
+        "long-term sample expansion review",
+        "cross-readout interval wording regression audit",
+        "Material impact sampling aging audit"
+      ]
+    }
+  },
+  {
+    "id": "large_replay_subgroup_drift_long_term_aging_material_impact_audit",
+    "label": "Large replay-drift cohort keeps cross-readout wording audit and impact aging audit operator-visible",
+    "sourceCaseId": "large_replay_subgroup_drift_impact_aging_refinement",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetRiskBand": "LOW",
+      "targetStabilityBand": "STABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetCrossReadoutRegressionAuditRate": 16,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftLongTermAgingIncludes": [
+        "Subgroup drift long-term sample expansion review",
+        "broader-sample holding cohorts",
+        "REPLAY_DRIFT"
+      ],
+      "intervalWordingCrossReadoutAuditIncludes": [
+        "Cross-readout interval wording regression audit",
+        "16% regression or coverage gap",
+        "threshold, step, and guidance"
+      ],
+      "materialImpactSamplingAgingAuditIncludes": [
+        "Material impact sampling aging audit",
+        "Replay gap review",
+        "review-bound"
+      ],
+      "sessionReviewIncludes": [
+        "long-term sample expansion review",
+        "cross-readout interval wording regression audit",
+        "Material impact sampling aging audit"
+      ]
+    }
+  },
+  {
+    "id": "growing_protected_subgroup_drift_long_term_aging_material_impact_audit",
+    "label": "Growing protected-state cohort keeps long-term sample expansion and impact aging audit conservative",
+    "sourceCaseId": "growing_protected_subgroup_drift_impact_aging_refinement",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetCrossReadoutRegressionAuditRate": 29,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftLongTermAgingIncludes": [
+        "Subgroup drift long-term sample expansion review",
+        "expansion-risk",
+        "PROTECTED_STATE_GAP"
+      ],
+      "intervalWordingCrossReadoutAuditIncludes": [
+        "Cross-readout interval wording regression audit",
+        "29% regression or coverage gap",
+        "threshold, step, and guidance"
+      ],
+      "materialImpactSamplingAgingAuditIncludes": [
+        "Material impact sampling aging audit",
+        "Protected field review",
+        "review-bound"
+      ],
+      "sessionReviewIncludes": [
+        "long-term sample expansion review",
+        "cross-readout interval wording regression audit",
+        "Material impact sampling aging audit"
+      ]
+    }
+  }
+]

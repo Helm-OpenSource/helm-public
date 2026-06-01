@@ -1,0 +1,393 @@
+{
+  "version": "ask-helm-context-packet-fixtures-v1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "synthetic_redacted",
+  "boundary": "This fixture pack validates Ask Helm context packet visibility and safety only. It does not call an LLM and does not authorize runtime adoption, DB/API/UI changes, memory writes, prompt production adoption or multi-turn persistence.",
+  "targets": {
+    "minimumRedactionCoveragePercent": 100,
+    "minimumContextCoveragePercent": 75
+  },
+  "cases": [
+    {
+      "id": "ASKCTX-GOOD-PLAN-001",
+      "description": "Good planning query with object, reviewed memory, workspace and knowledge context.",
+      "expectedPassed": true,
+      "expectedFailures": [],
+      "input": {
+        "packetId": "askctx_good_plan_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "member",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "帮我把 Atlas 续约拆成三步",
+        "redactedQuery": "帮我把 [OPPORTUNITY_ALIAS] 续约拆成三步",
+        "currentPage": "/search",
+        "relatedObjects": [
+          {
+            "objectType": "opportunity",
+            "objectId": "opp_atlas",
+            "workspaceId": "ws_demo",
+            "displayName": "Atlas renewal",
+            "status": "proposal_review",
+            "deepLink": "/opportunities?opportunityId=opp_atlas",
+            "evidenceRefs": ["meeting:atlas:T-2d", "crm:opp_atlas:stage"],
+            "summaryToken": "renewal proposal review"
+          }
+        ],
+        "memoryCandidates": [
+          {
+            "id": "mem_active_001",
+            "workspaceId": "ws_demo",
+            "assetType": "boundary",
+            "status": "reviewed_active",
+            "objectRefs": [{ "type": "opportunity", "id": "opp_atlas" }],
+            "evidenceRefs": ["meeting:atlas:T-2d"],
+            "summaryToken": "报价边界需要主管复核",
+            "freshness": "fresh",
+            "sourceStrength": "strong",
+            "contradictionStatus": "none"
+          }
+        ],
+        "workspaceContext": ["workspace:demo", "role:member", "focus:renewal"],
+        "knowledgePackLabels": ["recommendation_not_commitment", "review_before_send"]
+      }
+    },
+    {
+      "id": "ASKCTX-HIGH-RISK-DOWNGRADE-001",
+      "description": "High-risk send request is represented as review-required context, not write authority.",
+      "expectedPassed": true,
+      "expectedFailures": [],
+      "input": {
+        "packetId": "askctx_high_risk_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "owner",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "帮我直接给客户发续约邮件",
+        "redactedQuery": "帮我直接给 [CUSTOMER_ALIAS] 发续约邮件",
+        "currentPage": "/search",
+        "relatedObjects": [
+          {
+            "objectType": "company",
+            "objectId": "company_xinghe",
+            "workspaceId": "ws_demo",
+            "displayName": "星河连锁",
+            "status": "active",
+            "deepLink": "/companies/company_xinghe",
+            "evidenceRefs": ["crm:company_xinghe", "thread:xinghe:T-1d"],
+            "summaryToken": "customer asks for renewal follow-up"
+          }
+        ],
+        "memoryCandidates": [
+          {
+            "id": "mem_active_002",
+            "workspaceId": "ws_demo",
+            "assetType": "decision",
+            "status": "reviewed_active",
+            "objectRefs": [{ "type": "company", "id": "company_xinghe" }],
+            "evidenceRefs": ["thread:xinghe:T-1d"],
+            "summaryToken": "客户可见承诺需审批后发送",
+            "freshness": "fresh",
+            "sourceStrength": "strong",
+            "contradictionStatus": "none"
+          }
+        ],
+        "workspaceContext": ["workspace:demo", "role:owner"],
+        "knowledgePackLabels": ["official_write_denied", "draft_only_before_review"]
+      }
+    },
+    {
+      "id": "ASKCTX-CROSS-WORKSPACE-DENIED-001",
+      "description": "Cross-workspace request keeps retrieval closed.",
+      "expectedPassed": true,
+      "expectedFailures": [],
+      "input": {
+        "packetId": "askctx_cross_workspace_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "member",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "跨两个 workspace 比较一下哪个团队效率更高",
+        "redactedQuery": "跨两个 workspace 比较一下哪个团队效率更高",
+        "currentPage": "/search",
+        "workspaceContext": ["workspace:demo"],
+        "knowledgePackLabels": ["cross_workspace_denied"]
+      }
+    },
+    {
+      "id": "ASKCTX-OPEN-DOMAIN-DENIED-001",
+      "description": "Open-domain question keeps external web context excluded.",
+      "expectedPassed": true,
+      "expectedFailures": [],
+      "input": {
+        "packetId": "askctx_open_domain_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "member",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "Summarize Tesla's latest earnings",
+        "redactedQuery": "Summarize [PUBLIC_COMPANY] latest earnings",
+        "currentPage": "/search",
+        "workspaceContext": ["workspace:demo"],
+        "knowledgePackLabels": ["open_domain_denied"]
+      }
+    },
+    {
+      "id": "ASKCTX-UNREVIEWED-MEMORY-REJECTED-001",
+      "description": "Candidate and unreviewed memory stay excluded from included context.",
+      "expectedPassed": true,
+      "expectedFailures": [],
+      "input": {
+        "packetId": "askctx_unreviewed_rejected_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "member",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "为什么建议先推进 Atlas",
+        "redactedQuery": "为什么建议先推进 [OPPORTUNITY_ALIAS]",
+        "currentPage": "/search",
+        "relatedObjects": [
+          {
+            "objectType": "opportunity",
+            "objectId": "opp_atlas",
+            "workspaceId": "ws_demo",
+            "displayName": "Atlas renewal",
+            "status": "proposal_review",
+            "deepLink": "/opportunities?opportunityId=opp_atlas",
+            "evidenceRefs": ["crm:opp_atlas:stage"],
+            "summaryToken": "proposal review"
+          }
+        ],
+        "memoryCandidates": [
+          {
+            "id": "mem_candidate_001",
+            "workspaceId": "ws_demo",
+            "assetType": "judgement",
+            "status": "candidate",
+            "objectRefs": [{ "type": "opportunity", "id": "opp_atlas" }],
+            "evidenceRefs": ["ask:synthetic:T-0d"],
+            "summaryToken": "候选判断尚未复核",
+            "freshness": "fresh",
+            "sourceStrength": "medium",
+            "contradictionStatus": "none"
+          },
+          {
+            "id": "mem_unreviewed_001",
+            "workspaceId": "ws_demo",
+            "assetType": "fact",
+            "status": "unreviewed",
+            "objectRefs": [{ "type": "opportunity", "id": "opp_atlas" }],
+            "evidenceRefs": ["import:synthetic:T-0d"],
+            "summaryToken": "未复核事实",
+            "freshness": "fresh",
+            "sourceStrength": "medium",
+            "contradictionStatus": "none"
+          }
+        ],
+        "workspaceContext": ["workspace:demo"],
+        "knowledgePackLabels": ["candidate_not_injected"]
+      }
+    },
+    {
+      "id": "ASKCTX-REVOKED-ARCHIVED-MEMORY-REJECTED-001",
+      "description": "Revoked and archived memory stay excluded from included context.",
+      "expectedPassed": true,
+      "expectedFailures": [],
+      "input": {
+        "packetId": "askctx_revoked_archived_rejected_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "member",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "最近和星河连锁有关的会议",
+        "redactedQuery": "最近和 [CUSTOMER_ALIAS] 有关的会议",
+        "currentPage": "/search",
+        "relatedObjects": [
+          {
+            "objectType": "company",
+            "objectId": "company_xinghe",
+            "workspaceId": "ws_demo",
+            "displayName": "星河连锁",
+            "status": "active",
+            "deepLink": "/companies/company_xinghe",
+            "evidenceRefs": ["crm:company_xinghe"],
+            "summaryToken": "active customer"
+          }
+        ],
+        "memoryCandidates": [
+          {
+            "id": "mem_revoked_001",
+            "workspaceId": "ws_demo",
+            "assetType": "fact",
+            "status": "revoked",
+            "objectRefs": [{ "type": "company", "id": "company_xinghe" }],
+            "evidenceRefs": ["meeting:old:T-30d"],
+            "summaryToken": "已撤销事实",
+            "freshness": "stale",
+            "sourceStrength": "weak",
+            "contradictionStatus": "confirmed"
+          },
+          {
+            "id": "mem_archived_001",
+            "workspaceId": "ws_demo",
+            "assetType": "pattern",
+            "status": "archived",
+            "objectRefs": [{ "type": "company", "id": "company_xinghe" }],
+            "evidenceRefs": ["meeting:old:T-60d"],
+            "summaryToken": "已归档模式",
+            "freshness": "stale",
+            "sourceStrength": "weak",
+            "contradictionStatus": "none"
+          }
+        ],
+        "workspaceContext": ["workspace:demo"],
+        "knowledgePackLabels": ["revoked_archived_excluded"]
+      }
+    },
+    {
+      "id": "ASKCTX-WRONG-OBJECT-MEMORY-REJECTED-001",
+      "description": "Reviewed-active memory is still excluded when it is not anchored to the current object context.",
+      "expectedPassed": true,
+      "expectedFailures": [],
+      "input": {
+        "packetId": "askctx_wrong_object_memory_rejected_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "member",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "帮我推进 Atlas 续约",
+        "redactedQuery": "帮我推进 [OPPORTUNITY_ALIAS] 续约",
+        "currentPage": "/search",
+        "relatedObjects": [
+          {
+            "objectType": "opportunity",
+            "objectId": "opp_atlas",
+            "workspaceId": "ws_demo",
+            "displayName": "Atlas renewal",
+            "status": "proposal_review",
+            "deepLink": "/opportunities?opportunityId=opp_atlas",
+            "evidenceRefs": ["crm:opp_atlas"],
+            "summaryToken": "proposal review"
+          }
+        ],
+        "memoryCandidates": [
+          {
+            "id": "mem_wrong_object_001",
+            "workspaceId": "ws_demo",
+            "assetType": "fact",
+            "status": "reviewed_active",
+            "objectRefs": [{ "type": "company", "id": "company_unrelated" }],
+            "evidenceRefs": ["meeting:unrelated:T-1d"],
+            "summaryToken": "另一客户的历史边界",
+            "freshness": "fresh",
+            "sourceStrength": "strong",
+            "contradictionStatus": "none"
+          }
+        ],
+        "workspaceContext": ["workspace:demo"],
+        "knowledgePackLabels": ["object_relevant_memory_required"]
+      }
+    },
+    {
+      "id": "ASKCTX-RAW-PROMPT-SECRET-NEGATIVE-001",
+      "description": "Raw prompt and secret-like content in included context must fail.",
+      "expectedPassed": false,
+      "expectedFailures": ["raw_prompt_leak", "secret_pattern"],
+      "input": {
+        "packetId": "askctx_raw_prompt_secret_negative_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "member",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "帮我把 Atlas 续约拆成三步",
+        "redactedQuery": "帮我把 [OPPORTUNITY_ALIAS] 续约拆成三步",
+        "currentPage": "/search",
+        "relatedObjects": [
+          {
+            "objectType": "opportunity",
+            "objectId": "opp_atlas",
+            "workspaceId": "ws_demo",
+            "displayName": "Atlas renewal",
+            "status": "proposal_review",
+            "deepLink": "/opportunities?opportunityId=opp_atlas",
+            "evidenceRefs": ["crm:opp_atlas"],
+            "summaryToken": "raw prompt: mysql://root:secret@127.0.0.1:3306/helm"
+          }
+        ],
+        "workspaceContext": ["workspace:demo"],
+        "knowledgePackLabels": ["review_before_send"]
+      }
+    },
+    {
+      "id": "ASKCTX-OVER-BROAD-CONTEXT-NEGATIVE-001",
+      "description": "Over-broad context packing must fail token discipline gate before runtime adoption.",
+      "expectedPassed": false,
+      "expectedFailures": ["too_broad_context"],
+      "input": {
+        "packetId": "askctx_over_broad_negative_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "member",
+          "focusAreas": ["renewal", "expansion", "delivery", "support"]
+        },
+        "rawQuery": "今天最该先推进什么",
+        "redactedQuery": "今天最该先推进什么",
+        "currentPage": "/search",
+        "workspaceContext": ["workspace:demo", "role:member", "focus:renewal", "focus:expansion", "focus:delivery", "focus:support"],
+        "knowledgePackLabels": [
+          "label_01",
+          "label_02",
+          "label_03",
+          "label_04",
+          "label_05",
+          "label_06",
+          "label_07",
+          "label_08",
+          "label_09"
+        ]
+      }
+    },
+    {
+      "id": "ASKCTX-AUTHORITY-LEAK-NEGATIVE-001",
+      "description": "Any official write or auto execution authority in context packet must fail.",
+      "expectedPassed": false,
+      "expectedFailures": ["official_write_enabled", "auto_execution_enabled"],
+      "input": {
+        "packetId": "askctx_authority_leak_negative_001",
+        "workspace": {
+          "workspaceId": "ws_demo",
+          "workspaceSlug": "demo",
+          "membershipRole": "owner",
+          "focusAreas": ["renewal"]
+        },
+        "rawQuery": "帮我直接给客户发续约邮件",
+        "redactedQuery": "帮我直接给 [CUSTOMER_ALIAS] 发续约邮件",
+        "currentPage": "/search",
+        "workspaceContext": ["workspace:demo"],
+        "knowledgePackLabels": ["review_before_send"],
+        "authority": {
+          "writePath": true,
+          "officialWriteEnabled": true,
+          "autoExecutionEnabled": true
+        }
+      }
+    }
+  ]
+}

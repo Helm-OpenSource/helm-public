@@ -1,0 +1,703 @@
+{
+  "version": "2026-04-27.company-memory-benchmark.v1",
+  "status": "planning_fixture_pack",
+  "redactionPosture": "no_real_pii_no_secrets_no_customer_identifiers",
+  "boundary": "fixtures only; does not authorize runtime, schema, API, UI, auto-promotion, official write, or LLM final ranking",
+  "distribution": {
+    "meeting": 12,
+    "email": 10,
+    "crm": 8,
+    "report": 8,
+    "ask_helm": 8,
+    "mixed": 4,
+    "total": 50
+  },
+  "cases": [
+    {
+      "id": "CM-MTG-001",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-001.md", "occurredAt": "2026-04-01T02:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "commitment", "objectRef": { "type": "opportunity", "id": "opp_alpha_renewal" }, "evidenceRefs": ["CM-MTG-001#decision-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_alpha" }, "evidenceRefs": ["CM-MTG-001#risk-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["customer_alpha owns opp_alpha_renewal", "opp_alpha_renewal has a renewal proposal commitment pending review"],
+      "expectedRetrievalAssertions": ["renewal proposal commitment selected for opportunity briefing", "boundary note selected before any customer-facing draft"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "prepare_review_packet", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MTG-002",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-002.md", "occurredAt": "2026-04-01T05:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "workstream", "id": "delivery_beta_onboarding" }, "evidenceRefs": ["CM-MTG-002#blocker-1"], "reviewPosture": "confirmed" },
+        { "assetType": "preference", "objectRef": { "type": "contact", "id": "contact_beta_ops" }, "evidenceRefs": ["CM-MTG-002#preference-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["delivery_beta_onboarding is blocked by missing resource mapping", "contact_beta_ops prefers written rollout plans before calls"],
+      "expectedRetrievalAssertions": ["blocker appears in delivery handoff", "preference appears in next meeting briefing without becoming a commitment"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_delivery_handoff", "boundaryRequired": false }
+    },
+    {
+      "id": "CM-MTG-003",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-003.md", "occurredAt": "2026-04-02T01:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "decision", "objectRef": { "type": "opportunity", "id": "opp_gamma_pilot" }, "evidenceRefs": ["CM-MTG-003#decision-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_gamma_pilot" }, "evidenceRefs": ["CM-MTG-003#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "company", "id": "company_gamma" }, "evidenceRefs": ["CM-MTG-003#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["opp_gamma_pilot next milestone is internal security review", "company_gamma asks for proof before commercial discussion"],
+      "expectedRetrievalAssertions": ["security review decision selected for Must Push explanation", "proof requirement selected in proposal preparation"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_approvals", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MTG-004",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-004.md", "occurredAt": "2026-04-02T07:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "campaign", "id": "campaign_delta_launch" }, "evidenceRefs": ["CM-MTG-004#gap-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "campaign", "id": "campaign_delta_launch" }, "evidenceRefs": ["CM-MTG-004#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "commitment", "objectRef": { "type": "workstream", "id": "workstream_delta_enablement" }, "evidenceRefs": ["CM-MTG-004#commitment-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["campaign_delta_launch lacks enablement owner", "workstream_delta_enablement has a due review packet"],
+      "expectedRetrievalAssertions": ["operating gap selected for dashboard judgement", "commitment selected only with review-required boundary"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "assign_reviewer", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MTG-005",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-005.md", "occurredAt": "2026-04-03T03:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "candidate", "id": "candidate_echo" }, "evidenceRefs": ["CM-MTG-005#fact-1"], "reviewPosture": "confirmed" },
+        { "assetType": "preference", "objectRef": { "type": "customer", "id": "customer_echo" }, "evidenceRefs": ["CM-MTG-005#preference-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["candidate_echo requires panel briefing before next interview", "customer_echo values candidate context more than speed"],
+      "expectedRetrievalAssertions": ["candidate briefing memory selected for recruiting handoff", "preference not converted into customer commitment"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "prepare_panel_briefing", "boundaryRequired": false }
+    },
+    {
+      "id": "CM-MTG-006",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-006.md", "occurredAt": "2026-04-03T09:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "opportunity", "id": "opp_foxtrot_expansion" }, "evidenceRefs": ["CM-MTG-006#blocker-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_foxtrot_expansion" }, "evidenceRefs": ["CM-MTG-006#boundary-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["opp_foxtrot_expansion is blocked by pricing approval", "pricing approval is not equivalent to proposal commitment"],
+      "expectedRetrievalAssertions": ["pricing blocker selected for Ask Helm why-blocked answer", "boundary prevents customer-facing commitment wording"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_pricing_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MTG-007",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-007.md", "occurredAt": "2026-04-04T02:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "decision", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-MTG-007#decision-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-MTG-007#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-MTG-007#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["project_golf_migration pilot scope is limited to read-only audit", "writeback is explicitly deferred"],
+      "expectedRetrievalAssertions": ["read-only scope selected for project briefing", "writeback deferral selected for boundary answer"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MTG-008",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-008.md", "occurredAt": "2026-04-04T06:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "commitment", "objectRef": { "type": "customer", "id": "customer_hotel" }, "evidenceRefs": ["CM-MTG-008#commitment-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_hotel" }, "evidenceRefs": ["CM-MTG-008#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "operating_gap", "objectRef": { "type": "customer", "id": "customer_hotel" }, "evidenceRefs": ["CM-MTG-008#gap-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["customer_hotel needs answer on integration owner", "integration owner is unassigned"],
+      "expectedRetrievalAssertions": ["unassigned owner selected before next-step recommendation", "commitment selected with owner review required"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "assign_owner", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MTG-009",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-009.md", "occurredAt": "2026-04-05T02:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "preference", "objectRef": { "type": "partner", "id": "partner_india" }, "evidenceRefs": ["CM-MTG-009#preference-1"], "reviewPosture": "confirmed" },
+        { "assetType": "decision", "objectRef": { "type": "partner", "id": "partner_india" }, "evidenceRefs": ["CM-MTG-009#decision-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["partner_india prefers co-marketing proof before referral", "referral plan is deferred until proof is ready"],
+      "expectedRetrievalAssertions": ["partner preference selected for partner handoff", "deferred decision suppresses premature referral action"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": false }
+    },
+    {
+      "id": "CM-MTG-010",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-010.md", "occurredAt": "2026-04-05T09:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "customer", "id": "customer_juliet" }, "evidenceRefs": ["CM-MTG-010#blocker-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_juliet" }, "evidenceRefs": ["CM-MTG-010#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_juliet" }, "evidenceRefs": ["CM-MTG-010#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["customer_juliet rollout risk is data ownership ambiguity", "legal owner must clarify data boundary"],
+      "expectedRetrievalAssertions": ["data ownership blocker selected for legal briefing", "fact trace includes meeting source"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_legal_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MTG-011",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-011.md", "occurredAt": "2026-04-06T04:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-MTG-011#gap-1"], "reviewPosture": "review_required" },
+        { "assetType": "decision", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-MTG-011#decision-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["campaign_kilo_retention has no weekly owner review cadence", "team decided to restore weekly review"],
+      "expectedRetrievalAssertions": ["review cadence gap selected for operating summary", "decision selected in next briefing"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "schedule_review", "boundaryRequired": false }
+    },
+    {
+      "id": "CM-MTG-012",
+      "caseCategory": "meeting",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "meeting", "redactedPayloadRef": "payloads/meeting/CM-MTG-012.md", "occurredAt": "2026-04-06T08:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "resource", "id": "resource_lima_capacity" }, "evidenceRefs": ["CM-MTG-012#fact-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "resource", "id": "resource_lima_capacity" }, "evidenceRefs": ["CM-MTG-012#boundary-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["resource_lima_capacity is constrained for the next sprint", "capacity note is internal-only and not customer commitment"],
+      "expectedRetrievalAssertions": ["capacity fact selected for delivery planning", "internal-only boundary selected before customer reply draft"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "review_capacity_plan", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-EMAIL-001",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-001.eml.txt", "occurredAt": "2026-04-07T01:15:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "commitment", "objectRef": { "type": "customer", "id": "customer_alpha" }, "evidenceRefs": ["CM-EMAIL-001#reply-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_alpha" }, "evidenceRefs": ["CM-EMAIL-001#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "blocker", "objectRef": { "type": "opportunity", "id": "opp_alpha_renewal" }, "evidenceRefs": ["CM-EMAIL-001#blocker-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["customer_alpha is waiting for renewal timeline", "opp_alpha_renewal blocked by missing internal approval"],
+      "expectedRetrievalAssertions": ["email waiting evidence selected for customer_waiting signal", "missing approval blocker selected before draft"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "prepare_customer_reply_draft", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-EMAIL-002",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-002.eml.txt", "occurredAt": "2026-04-07T03:45:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "preference", "objectRef": { "type": "contact", "id": "contact_beta_ops" }, "evidenceRefs": ["CM-EMAIL-002#preference-1"], "reviewPosture": "confirmed" },
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_beta" }, "evidenceRefs": ["CM-EMAIL-002#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["contact_beta_ops wants short written summaries", "customer_beta has weekly review window on Friday"],
+      "expectedRetrievalAssertions": ["communication preference selected in reply assistance", "weekly review window selected in scheduling answer"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": false }
+    },
+    {
+      "id": "CM-EMAIL-003",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-003.eml.txt", "occurredAt": "2026-04-07T07:10:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_gamma" }, "evidenceRefs": ["CM-EMAIL-003#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "commitment", "objectRef": { "type": "opportunity", "id": "opp_gamma_pilot" }, "evidenceRefs": ["CM-EMAIL-003#commitment-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["customer_gamma requested formal approval before any public reference", "opp_gamma_pilot has reference-pack request pending review"],
+      "expectedRetrievalAssertions": ["approval boundary selected before proposal language", "reference-pack request selected for approval queue"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_reference_approval", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-EMAIL-004",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-004.eml.txt", "occurredAt": "2026-04-08T00:40:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "workstream", "id": "delivery_delta_setup" }, "evidenceRefs": ["CM-EMAIL-004#gap-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_delta" }, "evidenceRefs": ["CM-EMAIL-004#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_delta" }, "evidenceRefs": ["CM-EMAIL-004#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["delivery_delta_setup lacks connector owner", "customer_delta has provided sandbox credentials through approved channel"],
+      "expectedRetrievalAssertions": ["connector owner gap selected for delivery Must Push", "credential note not exposed in generated response"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "assign_connector_owner", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-EMAIL-005",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-005.eml.txt", "occurredAt": "2026-04-08T04:20:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "candidate", "id": "candidate_echo" }, "evidenceRefs": ["CM-EMAIL-005#blocker-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "candidate", "id": "candidate_echo" }, "evidenceRefs": ["CM-EMAIL-005#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "commitment", "objectRef": { "type": "candidate", "id": "candidate_echo" }, "evidenceRefs": ["CM-EMAIL-005#commitment-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["candidate_echo next interview cannot proceed without customer feedback", "feedback request is pending review"],
+      "expectedRetrievalAssertions": ["candidate feedback blocker selected for recruiting handoff", "feedback request not sent automatically"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "prepare_feedback_request", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-EMAIL-006",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-006.eml.txt", "occurredAt": "2026-04-08T09:05:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "partner", "id": "partner_india" }, "evidenceRefs": ["CM-EMAIL-006#fact-1"], "reviewPosture": "confirmed" },
+        { "assetType": "decision", "objectRef": { "type": "partner", "id": "partner_india" }, "evidenceRefs": ["CM-EMAIL-006#decision-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["partner_india has moved workshop to next month", "co-marketing action should be deferred"],
+      "expectedRetrievalAssertions": ["new workshop timing suppresses stale follow-up", "defer decision selected for partner summary"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": false }
+    },
+    {
+      "id": "CM-EMAIL-007",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-007.eml.txt", "occurredAt": "2026-04-09T02:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_juliet" }, "evidenceRefs": ["CM-EMAIL-007#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_juliet" }, "evidenceRefs": ["CM-EMAIL-007#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["customer_juliet asks for data deletion explanation", "privacy response requires approved wording"],
+      "expectedRetrievalAssertions": ["privacy boundary selected for Ask Helm answer", "approved wording requirement selected before any draft"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_privacy_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-EMAIL-008",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-008.eml.txt", "occurredAt": "2026-04-09T06:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "commitment", "objectRef": { "type": "workstream", "id": "workstream_lima_capacity" }, "evidenceRefs": ["CM-EMAIL-008#commitment-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "workstream", "id": "workstream_lima_capacity" }, "evidenceRefs": ["CM-EMAIL-008#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "operating_gap", "objectRef": { "type": "workstream", "id": "workstream_lima_capacity" }, "evidenceRefs": ["CM-EMAIL-008#gap-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["capacity plan needs owner response by next business day", "owner is not assigned"],
+      "expectedRetrievalAssertions": ["missing owner gap selected for Must Push", "response due date selected with review-required action"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "assign_capacity_owner", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-EMAIL-009",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-009.eml.txt", "occurredAt": "2026-04-10T01:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "preference", "objectRef": { "type": "customer", "id": "customer_mike" }, "evidenceRefs": ["CM-EMAIL-009#preference-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_mike_expansion" }, "evidenceRefs": ["CM-EMAIL-009#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "opportunity", "id": "opp_mike_expansion" }, "evidenceRefs": ["CM-EMAIL-009#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["customer_mike wants monthly executive summary", "opp_mike_expansion is still exploratory"],
+      "expectedRetrievalAssertions": ["executive summary preference selected for briefing", "exploratory status prevents commitment wording"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": true }
+    },
+    {
+      "id": "CM-EMAIL-010",
+      "caseCategory": "email",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "email", "redactedPayloadRef": "payloads/email/CM-EMAIL-010.eml.txt", "occurredAt": "2026-04-10T07:45:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "customer", "id": "customer_november" }, "evidenceRefs": ["CM-EMAIL-010#blocker-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_november" }, "evidenceRefs": ["CM-EMAIL-010#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "commitment", "objectRef": { "type": "customer", "id": "customer_november" }, "evidenceRefs": ["CM-EMAIL-010#commitment-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["customer_november is waiting on settlement proof", "settlement proof is internal review-required"],
+      "expectedRetrievalAssertions": ["settlement blocker selected but proof not written as external success", "review-required boundary selected"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_settlement_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-CRM-001",
+      "caseCategory": "crm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "crm", "redactedPayloadRef": "payloads/crm/CM-CRM-001.json", "occurredAt": "2026-04-11T02:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "opportunity", "id": "opp_alpha_renewal" }, "evidenceRefs": ["CM-CRM-001#stage-1"], "reviewPosture": "confirmed" },
+        { "assetType": "operating_gap", "objectRef": { "type": "opportunity", "id": "opp_alpha_renewal" }, "evidenceRefs": ["CM-CRM-001#stale-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["opp_alpha_renewal stage is commercial review", "opp_alpha_renewal has no owner update in seven days"],
+      "expectedRetrievalAssertions": ["stale opportunity gap selected for operating summary", "CRM stage selected in opportunity briefing"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_opportunity_review", "boundaryRequired": false }
+    },
+    {
+      "id": "CM-CRM-002",
+      "caseCategory": "crm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "crm", "redactedPayloadRef": "payloads/crm/CM-CRM-002.json", "occurredAt": "2026-04-11T04:15:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "opportunity", "id": "opp_beta_delivery" }, "evidenceRefs": ["CM-CRM-002#blocker-1"], "reviewPosture": "confirmed" },
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_beta" }, "evidenceRefs": ["CM-CRM-002#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["opp_beta_delivery is blocked by onboarding resource mismatch", "customer_beta is in expansion path not new acquisition"],
+      "expectedRetrievalAssertions": ["resource blocker selected before expansion recommendation", "customer lifecycle fact selected in dashboard"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "review_onboarding_resource", "boundaryRequired": false }
+    },
+    {
+      "id": "CM-CRM-003",
+      "caseCategory": "crm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "crm", "redactedPayloadRef": "payloads/crm/CM-CRM-003.json", "occurredAt": "2026-04-11T07:45:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_gamma_pilot" }, "evidenceRefs": ["CM-CRM-003#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "decision", "objectRef": { "type": "opportunity", "id": "opp_gamma_pilot" }, "evidenceRefs": ["CM-CRM-003#decision-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["opp_gamma_pilot remains review-only until security approval", "team decided not to send pricing before approval"],
+      "expectedRetrievalAssertions": ["security approval boundary selected in Ask Helm next-step answer", "pricing suppression selected before draft"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_security_approval", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-CRM-004",
+      "caseCategory": "crm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "crm", "redactedPayloadRef": "payloads/crm/CM-CRM-004.json", "occurredAt": "2026-04-12T02:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_delta" }, "evidenceRefs": ["CM-CRM-004#fact-1"], "reviewPosture": "confirmed" },
+        { "assetType": "operating_gap", "objectRef": { "type": "opportunity", "id": "opp_delta_upgrade" }, "evidenceRefs": ["CM-CRM-004#gap-1"], "reviewPosture": "watch_only" }
+      ],
+      "expectedWorldModelAssertions": ["customer_delta has low usage trend", "opp_delta_upgrade is not yet a Must Push without customer signal"],
+      "expectedRetrievalAssertions": ["usage trend selected as watch-only context", "watch-only gap does not become active Must Push"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": false }
+    },
+    {
+      "id": "CM-CRM-005",
+      "caseCategory": "crm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "crm", "redactedPayloadRef": "payloads/crm/CM-CRM-005.json", "occurredAt": "2026-04-12T05:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "commitment", "objectRef": { "type": "opportunity", "id": "opp_mike_expansion" }, "evidenceRefs": ["CM-CRM-005#next-step-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_mike_expansion" }, "evidenceRefs": ["CM-CRM-005#boundary-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["opp_mike_expansion has executive summary next step", "summary is draft-only until owner review"],
+      "expectedRetrievalAssertions": ["executive summary next step selected for Must Push", "draft-only boundary selected"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "prepare_executive_summary", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-CRM-006",
+      "caseCategory": "crm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "crm", "redactedPayloadRef": "payloads/crm/CM-CRM-006.json", "occurredAt": "2026-04-12T08:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "opportunity", "id": "opp_november_settlement" }, "evidenceRefs": ["CM-CRM-006#blocker-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_november_settlement" }, "evidenceRefs": ["CM-CRM-006#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_november" }, "evidenceRefs": ["CM-CRM-006#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["opp_november_settlement is blocked by settlement proof review", "customer_november has escalation risk"],
+      "expectedRetrievalAssertions": ["settlement proof blocker selected for review queue", "escalation risk selected in customer briefing"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_settlement_evidence", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-CRM-007",
+      "caseCategory": "crm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "crm", "redactedPayloadRef": "payloads/crm/CM-CRM-007.json", "occurredAt": "2026-04-13T01:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "decision", "objectRef": { "type": "opportunity", "id": "opp_oscar_archive" }, "evidenceRefs": ["CM-CRM-007#decision-1"], "reviewPosture": "confirmed" },
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_oscar" }, "evidenceRefs": ["CM-CRM-007#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["opp_oscar_archive is closed-lost by customer priority shift", "customer_oscar should remain relationship nurture"],
+      "expectedRetrievalAssertions": ["closed-lost decision suppresses Must Push", "nurture fact selected only in long-term account summary"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": false }
+    },
+    {
+      "id": "CM-CRM-008",
+      "caseCategory": "crm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "crm", "redactedPayloadRef": "payloads/crm/CM-CRM-008.json", "occurredAt": "2026-04-13T06:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "opportunity", "id": "opp_papa_renewal" }, "evidenceRefs": ["CM-CRM-008#gap-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_papa_renewal" }, "evidenceRefs": ["CM-CRM-008#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "commitment", "objectRef": { "type": "opportunity", "id": "opp_papa_renewal" }, "evidenceRefs": ["CM-CRM-008#commitment-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["opp_papa_renewal due date has passed", "owner response is not recorded"],
+      "expectedRetrievalAssertions": ["overdue renewal selected as Must Push", "missing owner response selected as reason"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_overdue_commitment", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-REPORT-001",
+      "caseCategory": "report",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "report", "redactedPayloadRef": "payloads/report/CM-REPORT-001.json", "occurredAt": "2026-04-14T01:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "resource", "id": "resource_queue_alpha" }, "evidenceRefs": ["CM-REPORT-001#metric-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "workstream", "id": "delivery_beta_onboarding" }, "evidenceRefs": ["CM-REPORT-001#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["resource_queue_alpha backlog exceeds agreed threshold", "delivery_beta_onboarding is affected by backlog"],
+      "expectedRetrievalAssertions": ["resource backlog selected for operating gap", "affected delivery workstream selected for handoff"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "review_resource_backlog", "boundaryRequired": false }
+    },
+    {
+      "id": "CM-REPORT-002",
+      "caseCategory": "report",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "report", "redactedPayloadRef": "payloads/report/CM-REPORT-002.json", "occurredAt": "2026-04-14T03:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_delta" }, "evidenceRefs": ["CM-REPORT-002#metric-1"], "reviewPosture": "confirmed" },
+        { "assetType": "operating_gap", "objectRef": { "type": "customer", "id": "customer_delta" }, "evidenceRefs": ["CM-REPORT-002#gap-1"], "reviewPosture": "watch_only" }
+      ],
+      "expectedWorldModelAssertions": ["customer_delta activity decreased for two periods", "low activity is watch-only until paired with customer signal"],
+      "expectedRetrievalAssertions": ["activity decrease selected as context", "watch-only posture prevents active Must Push"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": false }
+    },
+    {
+      "id": "CM-REPORT-003",
+      "caseCategory": "report",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "report", "redactedPayloadRef": "payloads/report/CM-REPORT-003.json", "occurredAt": "2026-04-14T08:15:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-REPORT-003#metric-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-REPORT-003#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "decision", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-REPORT-003#decision-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["campaign_kilo_retention has churn-risk spike", "decision requires owner review before outreach"],
+      "expectedRetrievalAssertions": ["churn-risk blocker selected for Must Push", "owner-review decision selected before outreach draft"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_retention_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-REPORT-004",
+      "caseCategory": "report",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "report", "redactedPayloadRef": "payloads/report/CM-REPORT-004.json", "occurredAt": "2026-04-15T01:20:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "resource", "id": "resource_lima_capacity" }, "evidenceRefs": ["CM-REPORT-004#metric-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "resource", "id": "resource_lima_capacity" }, "evidenceRefs": ["CM-REPORT-004#boundary-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["resource_lima_capacity is below delivery demand", "capacity projection is internal-only"],
+      "expectedRetrievalAssertions": ["capacity projection selected for internal planning", "internal-only boundary selected before customer answer"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "review_internal_capacity", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-REPORT-005",
+      "caseCategory": "report",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "report", "redactedPayloadRef": "payloads/report/CM-REPORT-005.json", "occurredAt": "2026-04-15T05:10:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-REPORT-005#metric-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-REPORT-005#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-REPORT-005#fact-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["project_golf_migration has unresolved validation failures", "failures are read-only evidence not write success"],
+      "expectedRetrievalAssertions": ["validation failures selected for review packet", "proof boundary selected before success wording"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_validation_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-REPORT-006",
+      "caseCategory": "report",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "report", "redactedPayloadRef": "payloads/report/CM-REPORT-006.json", "occurredAt": "2026-04-15T08:45:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "campaign", "id": "campaign_delta_launch" }, "evidenceRefs": ["CM-REPORT-006#metric-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "campaign", "id": "campaign_delta_launch" }, "evidenceRefs": ["CM-REPORT-006#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "decision", "objectRef": { "type": "campaign", "id": "campaign_delta_launch" }, "evidenceRefs": ["CM-REPORT-006#decision-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["campaign_delta_launch has enough qualified interest", "team decided not to expand audience until proof review"],
+      "expectedRetrievalAssertions": ["qualified interest fact selected for operating summary", "do-not-expand decision suppresses broad campaign action"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": true }
+    },
+    {
+      "id": "CM-REPORT-007",
+      "caseCategory": "report",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "report", "redactedPayloadRef": "payloads/report/CM-REPORT-007.json", "occurredAt": "2026-04-16T02:25:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "workstream", "id": "workstream_support_november" }, "evidenceRefs": ["CM-REPORT-007#metric-1"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_november" }, "evidenceRefs": ["CM-REPORT-007#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "operating_gap", "objectRef": { "type": "customer", "id": "customer_november" }, "evidenceRefs": ["CM-REPORT-007#gap-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["workstream_support_november has unresolved SLA-like support pressure", "customer_november requires internal review before external wording"],
+      "expectedRetrievalAssertions": ["support pressure blocker selected for Must Push", "no-SLA boundary selected before customer response"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "review_support_pressure", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-REPORT-008",
+      "caseCategory": "report",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "report", "redactedPayloadRef": "payloads/report/CM-REPORT-008.json", "occurredAt": "2026-04-16T07:05:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "fact", "objectRef": { "type": "resource", "id": "resource_queue_alpha" }, "evidenceRefs": ["CM-REPORT-008#metric-1"], "reviewPosture": "confirmed" },
+        { "assetType": "decision", "objectRef": { "type": "resource", "id": "resource_queue_alpha" }, "evidenceRefs": ["CM-REPORT-008#decision-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["resource_queue_alpha backlog returned below threshold", "previous backlog Must Push should not remain active"],
+      "expectedRetrievalAssertions": ["fresh resolved signal suppresses stale backlog alert", "decision appears in resource history"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": false }
+    },
+    {
+      "id": "CM-ASK-001",
+      "caseCategory": "ask_helm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "ask_helm", "redactedPayloadRef": "payloads/ask-helm/CM-ASK-001.json", "occurredAt": "2026-04-17T01:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "customer", "id": "customer_alpha" }, "evidenceRefs": ["CM-ASK-001#intent-1"], "reviewPosture": "watch_only" },
+        { "assetType": "preference", "objectRef": { "type": "user", "id": "user_owner_alpha" }, "evidenceRefs": ["CM-ASK-001#intent-2"], "reviewPosture": "watch_only" }
+      ],
+      "expectedWorldModelAssertions": ["owner repeatedly asks what blocks customer_alpha", "repeated intent is watch-only until confirmed follow-through gap"],
+      "expectedRetrievalAssertions": ["repeated intent can support Ask Helm asset capture", "watch-only intent does not become active Must Push alone"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": false }
+    },
+    {
+      "id": "CM-ASK-002",
+      "caseCategory": "ask_helm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "ask_helm", "redactedPayloadRef": "payloads/ask-helm/CM-ASK-002.json", "occurredAt": "2026-04-17T04:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "boundary", "objectRef": { "type": "workspace", "id": "redacted_workspace_alpha" }, "evidenceRefs": ["CM-ASK-002#boundary-hit-1"], "reviewPosture": "review_required" },
+        { "assetType": "decision", "objectRef": { "type": "workspace", "id": "redacted_workspace_alpha" }, "evidenceRefs": ["CM-ASK-002#decision-1"], "reviewPosture": "confirmed" }
+      ],
+      "expectedWorldModelAssertions": ["Ask Helm denied cross-workspace request", "denial must not create cross-workspace memory"],
+      "expectedRetrievalAssertions": ["boundary hit available for governance review only", "no related object from other workspace is selected"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": true }
+    },
+    {
+      "id": "CM-ASK-003",
+      "caseCategory": "ask_helm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "ask_helm", "redactedPayloadRef": "payloads/ask-helm/CM-ASK-003.json", "occurredAt": "2026-04-17T07:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "opportunity", "id": "opp_papa_renewal" }, "evidenceRefs": ["CM-ASK-003#abandoned-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_papa_renewal" }, "evidenceRefs": ["CM-ASK-003#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "commitment", "objectRef": { "type": "opportunity", "id": "opp_papa_renewal" }, "evidenceRefs": ["CM-ASK-003#plan-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["owner saw high-confidence renewal answer but did not follow through", "follow-through gap requires review before Must Push"],
+      "expectedRetrievalAssertions": ["abandoned high-confidence answer selected as evidence", "action plan selected only as draft/review packet"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "review_abandoned_answer", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-ASK-004",
+      "caseCategory": "ask_helm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "ask_helm", "redactedPayloadRef": "payloads/ask-helm/CM-ASK-004.json", "occurredAt": "2026-04-18T02:45:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_juliet" }, "evidenceRefs": ["CM-ASK-004#boundary-hit-1"], "reviewPosture": "review_required" },
+        { "assetType": "fact", "objectRef": { "type": "customer", "id": "customer_juliet" }, "evidenceRefs": ["CM-ASK-004#answer-1"], "reviewPosture": "watch_only" }
+      ],
+      "expectedWorldModelAssertions": ["Ask Helm explained deletion policy without creating official legal commitment", "customer_juliet privacy issue remains review-required"],
+      "expectedRetrievalAssertions": ["privacy boundary selected in future Ask Helm response", "policy explanation not promoted to commitment"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_privacy_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-ASK-005",
+      "caseCategory": "ask_helm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "ask_helm", "redactedPayloadRef": "payloads/ask-helm/CM-ASK-005.json", "occurredAt": "2026-04-18T06:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "preference", "objectRef": { "type": "user", "id": "user_owner_alpha" }, "evidenceRefs": ["CM-ASK-005#intent-1"], "reviewPosture": "watch_only" },
+        { "assetType": "boundary", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-ASK-005#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "decision", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-ASK-005#answer-1"], "reviewPosture": "watch_only" }
+      ],
+      "expectedWorldModelAssertions": ["owner frequently asks for retention priority ranking", "Ask Helm ranking is explanatory and not final policy"],
+      "expectedRetrievalAssertions": ["retention intent can inform future briefing", "LLM ranking not used as final Must Push ordering"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": true }
+    },
+    {
+      "id": "CM-ASK-006",
+      "caseCategory": "ask_helm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "ask_helm", "redactedPayloadRef": "payloads/ask-helm/CM-ASK-006.json", "occurredAt": "2026-04-19T01:20:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "boundary", "objectRef": { "type": "workspace", "id": "redacted_workspace_alpha" }, "evidenceRefs": ["CM-ASK-006#unsupported-1"], "reviewPosture": "review_required" },
+        { "assetType": "operating_gap", "objectRef": { "type": "workspace", "id": "redacted_workspace_alpha" }, "evidenceRefs": ["CM-ASK-006#unsupported-2"], "reviewPosture": "watch_only" }
+      ],
+      "expectedWorldModelAssertions": ["open-domain unsupported request must not create active candidate", "unsupported intent can inform docs gap review"],
+      "expectedRetrievalAssertions": ["unsupported request selected only for boundary asset review", "no active Must Push generated"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": true }
+    },
+    {
+      "id": "CM-ASK-007",
+      "caseCategory": "ask_helm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "ask_helm", "redactedPayloadRef": "payloads/ask-helm/CM-ASK-007.json", "occurredAt": "2026-04-19T05:00:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "commitment", "objectRef": { "type": "candidate", "id": "candidate_echo" }, "evidenceRefs": ["CM-ASK-007#saved-draft-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "candidate", "id": "candidate_echo" }, "evidenceRefs": ["CM-ASK-007#boundary-1"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["owner saved interview follow-up draft", "saved draft is not sent and requires review"],
+      "expectedRetrievalAssertions": ["saved draft selected for review packet", "draft-not-send boundary selected"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_saved_draft_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-ASK-008",
+      "caseCategory": "ask_helm",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [{ "sourceType": "ask_helm", "redactedPayloadRef": "payloads/ask-helm/CM-ASK-008.json", "occurredAt": "2026-04-19T08:30:00.000Z" }],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-ASK-008#review-packet-1"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-ASK-008#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "decision", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-ASK-008#answer-1"], "reviewPosture": "watch_only" }
+      ],
+      "expectedWorldModelAssertions": ["owner generated review packet for unresolved validation failures", "review packet is not official remediation"],
+      "expectedRetrievalAssertions": ["review packet selected for project Must Push", "not-official-success boundary selected"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_review_packet", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MIXED-001",
+      "caseCategory": "mixed",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [
+        { "sourceType": "meeting", "redactedPayloadRef": "payloads/mixed/CM-MIXED-001-meeting.md", "occurredAt": "2026-04-20T01:00:00.000Z" },
+        { "sourceType": "email", "redactedPayloadRef": "payloads/mixed/CM-MIXED-001-email.txt", "occurredAt": "2026-04-20T03:00:00.000Z" },
+        { "sourceType": "crm", "redactedPayloadRef": "payloads/mixed/CM-MIXED-001-crm.json", "occurredAt": "2026-04-20T04:00:00.000Z" }
+      ],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "opportunity", "id": "opp_alpha_renewal" }, "evidenceRefs": ["CM-MIXED-001#meeting-blocker", "CM-MIXED-001#crm-stage"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "customer", "id": "customer_alpha" }, "evidenceRefs": ["CM-MIXED-001#boundary-1"], "reviewPosture": "review_required" },
+        { "assetType": "commitment", "objectRef": { "type": "customer", "id": "customer_alpha" }, "evidenceRefs": ["CM-MIXED-001#email-waiting"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["customer_alpha waiting signal and CRM stage point to same renewal blocker", "email follow-up requires approval context"],
+      "expectedRetrievalAssertions": ["multi-source evidence merged into one Must Push", "duplicate renewal blocker not emitted twice"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "prepare_renewal_review_packet", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MIXED-002",
+      "caseCategory": "mixed",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [
+        { "sourceType": "report", "redactedPayloadRef": "payloads/mixed/CM-MIXED-002-report.json", "occurredAt": "2026-04-20T06:00:00.000Z" },
+        { "sourceType": "ask_helm", "redactedPayloadRef": "payloads/mixed/CM-MIXED-002-ask.json", "occurredAt": "2026-04-20T07:00:00.000Z" }
+      ],
+      "expectedMemoryAssets": [
+        { "assetType": "operating_gap", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-MIXED-002#report-risk", "CM-MIXED-002#ask-intent"], "reviewPosture": "review_required" },
+        { "assetType": "boundary", "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" }, "evidenceRefs": ["CM-MIXED-002#ask-boundary"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["retention risk metric and repeated owner intent reinforce same operating gap", "outreach remains review-required"],
+      "expectedRetrievalAssertions": ["report and Ask Helm evidence selected together", "LLM suggestion not used as final ranking"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_retention_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MIXED-003",
+      "caseCategory": "mixed",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [
+        { "sourceType": "meeting", "redactedPayloadRef": "payloads/mixed/CM-MIXED-003-meeting.md", "occurredAt": "2026-04-21T01:00:00.000Z" },
+        { "sourceType": "report", "redactedPayloadRef": "payloads/mixed/CM-MIXED-003-report.json", "occurredAt": "2026-04-21T02:30:00.000Z" },
+        { "sourceType": "email", "redactedPayloadRef": "payloads/mixed/CM-MIXED-003-email.txt", "occurredAt": "2026-04-21T05:00:00.000Z" }
+      ],
+      "expectedMemoryAssets": [
+        { "assetType": "blocker", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-MIXED-003#meeting-blocker", "CM-MIXED-003#report-failure"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "project", "id": "project_golf_migration" }, "evidenceRefs": ["CM-MIXED-003#email-boundary"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["migration failure report confirms meeting blocker", "customer email requests update but official success is not proven"],
+      "expectedRetrievalAssertions": ["failure proof selected for review packet", "not-external-success boundary selected before customer update"],
+      "expectedAdvancementOutcome": { "mustPushExpected": true, "acceptedPrimaryAction": "open_validation_review", "boundaryRequired": true }
+    },
+    {
+      "id": "CM-MIXED-004",
+      "caseCategory": "mixed",
+      "workspaceId": "redacted_workspace_alpha",
+      "sourceEvents": [
+        { "sourceType": "crm", "redactedPayloadRef": "payloads/mixed/CM-MIXED-004-crm.json", "occurredAt": "2026-04-21T07:00:00.000Z" },
+        { "sourceType": "meeting", "redactedPayloadRef": "payloads/mixed/CM-MIXED-004-meeting.md", "occurredAt": "2026-04-21T08:00:00.000Z" },
+        { "sourceType": "ask_helm", "redactedPayloadRef": "payloads/mixed/CM-MIXED-004-ask.json", "occurredAt": "2026-04-21T09:00:00.000Z" }
+      ],
+      "expectedMemoryAssets": [
+        { "assetType": "decision", "objectRef": { "type": "opportunity", "id": "opp_oscar_archive" }, "evidenceRefs": ["CM-MIXED-004#crm-closed", "CM-MIXED-004#meeting-decision"], "reviewPosture": "confirmed" },
+        { "assetType": "boundary", "objectRef": { "type": "opportunity", "id": "opp_oscar_archive" }, "evidenceRefs": ["CM-MIXED-004#ask-boundary"], "reviewPosture": "review_required" }
+      ],
+      "expectedWorldModelAssertions": ["closed-lost CRM status and meeting decision agree", "Ask Helm should not recommend active sales follow-up"],
+      "expectedRetrievalAssertions": ["closed-lost decision suppresses active Must Push", "boundary selected for why-not-follow-up explanation"],
+      "expectedAdvancementOutcome": { "mustPushExpected": false, "boundaryRequired": true }
+    }
+  ]
+}

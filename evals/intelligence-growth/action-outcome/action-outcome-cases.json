@@ -1,0 +1,176 @@
+[
+  {
+    "id": "act-001",
+    "dimension": "action_outcome",
+    "description": "Must_push action with annotated outcome and two feedback cycles — strong learning candidate.",
+    "input": {
+      "dimension": "action_outcome",
+      "evalRunId": "eval-run-act-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-act-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "actionCategory": "must_push",
+      "outcomeAnnotated": true,
+      "feedbackCycleCount": 2
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Outcome is annotated with two completed feedback cycles. High-quality candidate for correlation scoring.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "act-002",
+    "dimension": "action_outcome",
+    "description": "Worker_instruction action with annotated outcome and one feedback cycle — learning candidate for instruction tracking.",
+    "input": {
+      "dimension": "action_outcome",
+      "evalRunId": "eval-run-act-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-act-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "actionCategory": "worker_instruction",
+      "outcomeAnnotated": true,
+      "feedbackCycleCount": 1
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Worker instruction with one annotated feedback cycle. Eligible as a correlation training case.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "act-003",
+    "dimension": "action_outcome",
+    "description": "Review_required action with no feedback cycle yet — watch_only until at least one cycle is complete.",
+    "input": {
+      "dimension": "action_outcome",
+      "evalRunId": "eval-run-act-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-act-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "actionCategory": "review_required",
+      "outcomeAnnotated": false,
+      "feedbackCycleCount": 0
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Outcome not yet annotated and no feedback cycles complete. Correct posture is monitoring.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "act-004",
+    "dimension": "action_outcome",
+    "description": "Learning_candidate action with annotated outcome and three feedback cycles — high-confidence learning candidate.",
+    "input": {
+      "dimension": "action_outcome",
+      "evalRunId": "eval-run-act-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-act-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "actionCategory": "learning_candidate",
+      "outcomeAnnotated": true,
+      "feedbackCycleCount": 3
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Three annotated feedback cycles on a learning candidate action. Well-formed data point for outcome correlation study.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "act-005",
+    "dimension": "action_outcome",
+    "description": "Must_push action with one feedback cycle but outcome not annotated — watch_only pending annotation.",
+    "input": {
+      "dimension": "action_outcome",
+      "evalRunId": "eval-run-act-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-act-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "actionCategory": "must_push",
+      "outcomeAnnotated": false,
+      "feedbackCycleCount": 1
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "One feedback cycle completed but outcome is not yet annotated. Monitor until annotation is added.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "act-006",
+    "dimension": "action_outcome",
+    "description": "NEGATIVE: Must_push action with no outcome annotation and no feedback — insufficient data, review required.",
+    "input": {
+      "dimension": "action_outcome",
+      "evalRunId": "eval-run-act-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-act-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "actionCategory": "must_push",
+      "outcomeAnnotated": false,
+      "feedbackCycleCount": 0
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "Must_push action has no outcome annotation and zero feedback cycles. Cannot enter correlation path without human review.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "act-007",
+    "dimension": "action_outcome",
+    "description": "NEGATIVE: Review_required action with abnormally high feedback cycle count suggesting runaway loop — rejected.",
+    "input": {
+      "dimension": "action_outcome",
+      "evalRunId": "eval-run-act-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-act-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "actionCategory": "review_required",
+      "outcomeAnnotated": false,
+      "feedbackCycleCount": 50
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "50 feedback cycles without outcome annotation indicates a loop or data integrity issue. Rejected as unsafe training data.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "act-008",
+    "dimension": "action_outcome",
+    "description": "NEGATIVE: Learning_candidate action with no evidence refs and no annotation — rejected as untracked case.",
+    "input": {
+      "dimension": "action_outcome",
+      "evalRunId": "eval-run-act-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [],
+      "actionCategory": "learning_candidate",
+      "outcomeAnnotated": false,
+      "feedbackCycleCount": 0
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "No evidence refs and no annotation. Untracked learning candidate cannot enter the outcome correlation study.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

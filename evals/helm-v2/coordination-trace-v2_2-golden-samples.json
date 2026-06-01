@@ -1,0 +1,162 @@
+[
+  {
+    "id": "coord_trace_action_ready",
+    "label": "Confirmed problem space without downstream execution",
+    "problemSpaces": [
+      {
+        "id": "problem_1",
+        "title": "Next-step alignment",
+        "status": "ASSIGNED",
+        "ownerHint": "Alice",
+        "evidenceRefs": ["meeting:1", "memory:1"],
+        "meetingId": "meeting_1",
+        "opportunityId": "opp_1",
+        "companyId": "company_1",
+        "updatedAt": "2026-04-03T09:00:00.000Z",
+        "driAssignments": [
+          {
+            "assignedUserName": "Alice",
+            "assignedByName": "Bob",
+            "note": "Assigned so one person owns the confirmed next step."
+          }
+        ]
+      }
+    ],
+    "humanExecutions": [],
+    "officialFollowThrough": [],
+    "expected": {
+      "posture": "ACTION_READY",
+      "summaryIncludes": ["action-ready", "no downstream human execution"],
+      "linkageIncludes": ["meeting context only"]
+    }
+  },
+  {
+    "id": "coord_trace_waiting_signal",
+    "label": "Weak truth remains blocked before execution",
+    "problemSpaces": [
+      {
+        "id": "problem_2",
+        "title": "Truth boundary review",
+        "status": "WAITING_ON_SIGNAL",
+        "ownerHint": "Alice",
+        "evidenceRefs": ["meeting:2", "signal:1"],
+        "meetingId": "meeting_2",
+        "opportunityId": "opp_2",
+        "companyId": "company_2",
+        "updatedAt": "2026-04-03T10:00:00.000Z",
+        "driAssignments": []
+      }
+    ],
+    "humanExecutions": [],
+    "officialFollowThrough": [],
+    "expected": {
+      "posture": "WAITING_ON_SIGNAL",
+      "summaryIncludes": ["weak or conflicted", "blocked before downstream execution"],
+      "linkageIncludes": ["meeting context only"]
+    }
+  },
+  {
+    "id": "coord_trace_human_progress",
+    "label": "Human execution is active but still manual-only progress",
+    "problemSpaces": [
+      {
+        "id": "problem_3",
+        "title": "Checklist handoff",
+        "status": "ASSIGNED",
+        "ownerHint": "Alice",
+        "evidenceRefs": ["meeting:3", "memory:3"],
+        "meetingId": "meeting_3",
+        "opportunityId": "opp_3",
+        "companyId": "company_3",
+        "updatedAt": "2026-04-03T11:00:00.000Z",
+        "driAssignments": [
+          {
+            "assignedUserName": "Alice",
+            "assignedByName": "Bob",
+            "note": "Assigned so execution has one accountable owner."
+          }
+        ]
+      }
+    ],
+    "humanExecutions": [
+      {
+        "id": "human_1",
+        "meetingId": "meeting_3",
+        "opportunityId": "opp_3",
+        "companyId": "company_3",
+        "status": "EXECUTED",
+        "executionIntent": "Send the internal checklist.",
+        "executionOwnerName": "Alice",
+        "followThroughStatus": "shared internally",
+        "executedAt": "2026-04-03T11:10:00.000Z",
+        "updatedAt": "2026-04-03T11:10:00.000Z"
+      }
+    ],
+    "officialFollowThrough": [],
+    "expected": {
+      "posture": "HUMAN_IN_PROGRESS",
+      "summaryIncludes": ["manual progress", "same operating thread"],
+      "linkageIncludes": ["meeting and opportunity context"],
+      "humanExecutionSummaryIncludes": ["executed"]
+    }
+  },
+  {
+    "id": "coord_trace_followthrough_open",
+    "label": "Official follow-through is visible without overclaiming official success",
+    "problemSpaces": [
+      {
+        "id": "problem_4",
+        "title": "Receipt confirmation",
+        "status": "ASSIGNED",
+        "ownerHint": "Alice",
+        "evidenceRefs": ["meeting:4", "memory:4"],
+        "meetingId": "meeting_4",
+        "opportunityId": "opp_4",
+        "companyId": "company_4",
+        "updatedAt": "2026-04-03T12:00:00.000Z",
+        "driAssignments": [
+          {
+            "assignedUserName": "Alice",
+            "assignedByName": "Bob",
+            "note": "Assigned so one owner tracks the official receipt."
+          }
+        ]
+      }
+    ],
+    "humanExecutions": [
+      {
+        "id": "human_2",
+        "meetingId": "meeting_4",
+        "opportunityId": "opp_4",
+        "companyId": "company_4",
+        "status": "EXECUTED",
+        "executionIntent": "Attach the note in CRM.",
+        "executionOwnerName": "Alice",
+        "followThroughStatus": "awaiting receipt",
+        "executedAt": "2026-04-03T12:05:00.000Z",
+        "updatedAt": "2026-04-03T12:05:00.000Z"
+      }
+    ],
+    "officialFollowThrough": [
+      {
+        "id": "follow_1",
+        "meetingId": "meeting_4",
+        "opportunityId": "opp_4",
+        "companyId": "company_4",
+        "followThroughStatus": "OPEN",
+        "followThroughResolutionStatus": "OPEN",
+        "followThroughOwnerName": "Alice",
+        "followThroughNextAction": "Check the external receipt and reconcile if needed.",
+        "followThroughSummary": "Receipt is still pending reconciliation.",
+        "updatedAt": "2026-04-03T12:20:00.000Z"
+      }
+    ],
+    "expected": {
+      "posture": "FOLLOW_THROUGH_OPEN",
+      "summaryIncludes": ["post-write handling", "not automatic official success"],
+      "linkageIncludes": ["meeting and opportunity context"],
+      "humanExecutionSummaryIncludes": ["executed"],
+      "officialFollowThroughSummaryIncludes": ["open", "unresolved"]
+    }
+  }
+]

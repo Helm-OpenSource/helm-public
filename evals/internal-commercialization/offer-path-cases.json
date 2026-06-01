@@ -1,0 +1,648 @@
+{
+  "version": "2026-05-11.internal-commercialization.v0",
+  "status": "offline_contract_only",
+  "boundary": "candidate-only; review-first; no runtime/API/UI/schema/connector; no auto-send; no silent CRM write; no official commitment; no public claim auto-publish; no Pack DSL; no marketplace; no LLM final ranking",
+  "targetTenantKey": "helm-business-development",
+  "upstreamPackId": "helm_internal_ai_service_provider",
+  "offerPath": {
+    "pathId": "helm_internal_commercialization_ai_service_provider_motion",
+    "pathName": "Helm Internal Commercialization Motion for AI Service Providers",
+    "owner": "founder",
+    "operatingMode": "diagnosis_to_trial_to_pilot_to_closeout",
+    "reviewMode": "review_first",
+    "allowedActions": [
+      "prepare_diagnosis_brief_for_review",
+      "prepare_trial_scope_draft_for_review",
+      "prepare_pilot_scope_packet_for_review",
+      "prepare_closeout_report_candidate_for_review",
+      "downgrade_or_pause"
+    ],
+    "neverAllowed": [
+      "send customer message",
+      "book meeting automatically",
+      "write CRM silently",
+      "trigger workflow",
+      "commit price",
+      "approve legal terms",
+      "publish proof claim automatically",
+      "promise fully automated AI employee",
+      "claim deterministic decision",
+      "create Agent platform build commitment"
+    ]
+  },
+  "managementLifecycle": {
+    "contractId": "helm_internal_commercialization_lifecycle_management",
+    "managedObjects": [
+      "service_provider_candidate",
+      "customer_opportunity_alias",
+      "commercialization_run",
+      "stage_review_packet",
+      "outcome_evidence",
+      "channel_gate_assessment",
+      "next_cycle_decision"
+    ],
+    "states": [
+      "candidate_pool",
+      "daily_top3_selected",
+      "diagnosis_packet_prepared",
+      "diagnosis_reviewed",
+      "trial_scope_prepared",
+      "trial_running",
+      "trial_closeout_ready",
+      "pilot_scope_prepared",
+      "pilot_running",
+      "pilot_closeout_ready",
+      "closeout_report_prepared",
+      "channel_gate_assessed",
+      "next_cycle_selected",
+      "data_boundary_review_required",
+      "paused"
+    ],
+    "transitions": [
+      ["candidate_pool", "daily_top3_selected"],
+      ["daily_top3_selected", "diagnosis_packet_prepared"],
+      ["diagnosis_packet_prepared", "diagnosis_reviewed"],
+      ["diagnosis_reviewed", "trial_scope_prepared"],
+      ["trial_scope_prepared", "trial_running"],
+      ["trial_running", "trial_closeout_ready"],
+      ["trial_closeout_ready", "pilot_scope_prepared"],
+      ["pilot_scope_prepared", "pilot_running"],
+      ["pilot_running", "pilot_closeout_ready"],
+      ["pilot_closeout_ready", "closeout_report_prepared"],
+      ["closeout_report_prepared", "channel_gate_assessed"],
+      ["channel_gate_assessed", "next_cycle_selected"],
+      ["candidate_pool", "paused"],
+      ["daily_top3_selected", "data_boundary_review_required"],
+      ["data_boundary_review_required", "paused"],
+      ["diagnosis_reviewed", "paused"],
+      ["trial_closeout_ready", "paused"],
+      ["pilot_closeout_ready", "paused"],
+      ["channel_gate_assessed", "paused"]
+    ],
+    "maximumPositiveReviewStaleHours": 72,
+    "customerFacingOwner": "service_provider",
+    "helmDirectCustomerContactAllowed": false,
+    "requiresStageReviewPacketForPositiveCases": true
+  },
+  "targets": {
+    "stageCount": 4,
+    "managedObjectCount": 7,
+    "lifecycleStateCount": 15,
+    "caseCount": 8,
+    "minimumPositiveCaseCount": 4,
+    "minimumNegativeOrWatchCaseCount": 4,
+    "maximumExternalSideEffectAllowedCount": 0,
+    "maximumOfficialCommitmentAllowedCount": 0,
+    "maximumPublicClaimAllowedCount": 0,
+    "maximumCustomerVisibleWithoutReviewCount": 0,
+    "maximumRawPiiIncludedCount": 0,
+    "maximumBoundaryDriftSelectedCount": 0,
+    "maximumDirectCustomerContactAllowedCount": 0,
+    "maximumUnmanagedPositiveCaseCount": 0,
+    "maximumMissingReviewPacketForPositiveCount": 0,
+    "maximumStalePositiveCaseCount": 0
+  },
+  "stages": [
+    {
+      "stageId": "diagnosis_1h",
+      "displayName": "1 hour AI operating diagnosis",
+      "entryCriteria": [
+        "budget_owner_or_business_owner_visible",
+        "one_named_business_problem",
+        "data_boundary_discussed"
+      ],
+      "outputs": [
+        "fit_decision",
+        "top_trial_candidate",
+        "trial_data_boundary_draft",
+        "no_go_reason_when_applicable"
+      ],
+      "successMetrics": [
+        "diagnosis_fit_decision_made",
+        "trial_candidate_identified",
+        "data_boundary_clarity_percent"
+      ],
+      "reviewRequiredFor": [
+        "customer_visible_diagnosis_summary",
+        "trial_recommendation",
+        "data_request"
+      ],
+      "forbiddenClaims": [
+        "guaranteed AI transformation",
+        "fully automated operating system",
+        "deterministic decision AI"
+      ]
+    },
+    {
+      "stageId": "trial_7d",
+      "displayName": "7 day operating advancement trial",
+      "entryCriteria": [
+        "safe_sample_available",
+        "review_first_accepted",
+        "trial_owner_named"
+      ],
+      "outputs": [
+        "daily_top3_readout",
+        "why_this_and_why_not_others",
+        "review_safe_next_action",
+        "risk_boundary",
+        "day7_go_defer_no_go"
+      ],
+      "successMetrics": [
+        "accepted_daily_top3_count",
+        "reviewed_action_count",
+        "boundary_incident_count"
+      ],
+      "reviewRequiredFor": [
+        "customer_visible_trial_summary",
+        "follow_up_message_draft",
+        "pilot_recommendation"
+      ],
+      "forbiddenClaims": [
+        "automatic customer follow-up",
+        "silent CRM update",
+        "direct Must Push truth"
+      ]
+    },
+    {
+      "stageId": "pilot_4w",
+      "displayName": "4 week co-creation pilot",
+      "entryCriteria": [
+        "week0_scope_ready",
+        "paid_pilot_intent_visible",
+        "owner_reviewer_map_ready",
+        "success_metrics_defined"
+      ],
+      "outputs": [
+        "pilot_scope_packet",
+        "weekly_review_scorecard",
+        "stop_conditions",
+        "proof_candidate_log"
+      ],
+      "successMetrics": [
+        "week1_usable_output_seen",
+        "review_cadence_completion_percent",
+        "proof_candidate_count",
+        "wrong_commitment_incident_count"
+      ],
+      "reviewRequiredFor": [
+        "paid_pilot_scope",
+        "success_metric",
+        "legal_or_data_processing_statement",
+        "price_or_contract_language"
+      ],
+      "forbiddenClaims": [
+        "price commitment without founder review",
+        "legal approval without receipt",
+        "all systems supported"
+      ]
+    },
+    {
+      "stageId": "closeout_report",
+      "displayName": "pilot closeout and proof report",
+      "entryCriteria": [
+        "pilot_scorecard_available",
+        "review_notes_available",
+        "claim_approval_status_known"
+      ],
+      "outputs": [
+        "adopted_recommendation_list",
+        "blocked_or_downgraded_recommendation_list",
+        "proof_claim_allowlist",
+        "proof_claim_denylist",
+        "next_cycle_recommendation"
+      ],
+      "successMetrics": [
+        "proof_claim_trace_coverage_percent",
+        "customer_to_channel_gate_level",
+        "next_cycle_decision_made"
+      ],
+      "reviewRequiredFor": [
+        "public_safe_claim",
+        "customer_quote",
+        "case_study",
+        "channel_candidate_display"
+      ],
+      "forbiddenClaims": [
+        "public proof without approval",
+        "customer quote without authorization",
+        "automatic partner promotion"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "comm_001",
+      "aliasId": "ai_eco_alpha",
+      "lifecycleRunId": "run_alpha_001",
+      "providerAliasId": "ai_eco_alpha",
+      "customerOpportunityAliasIds": ["cust_alpha_01"],
+      "currentLifecycleState": "daily_top3_selected",
+      "nextLifecycleState": "diagnosis_packet_prepared",
+      "managingThroughServiceProvider": true,
+      "serviceProviderCustomerFacingOwner": true,
+      "helmDirectCustomerContactAllowed": false,
+      "stageReviewPacketRequired": true,
+      "reviewStaleHours": 12,
+      "requiredEvidenceKinds": [
+        "provider_tracker",
+        "validation_note"
+      ],
+      "channelAssessmentRequired": false,
+      "providerType": "ai_service_provider",
+      "requestedCommercialPackage": "diagnosis_1h",
+      "commercialSignals": {
+        "customerPoolQuality": 86,
+        "painStrength": 88,
+        "budgetOwnerVisible": true,
+        "paidPilotLikelihood": 82,
+        "dataBoundaryClarity": 76,
+        "proofPotential": 78,
+        "channelAmplificationPotential": 80,
+        "reviewFirstAcceptance": true
+      },
+      "riskTags": [],
+      "expectedOfferStage": "diagnosis_1h",
+      "expectedDecision": "prepare_diagnosis",
+      "expectedNextAction": "prepare_diagnosis_brief_for_review",
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "evidenceRefs": [
+        "provider_tracker:ai_eco_alpha",
+        "validation_note:alpha_redacted"
+      ],
+      "outcomeWindowHours": 72,
+      "safeSampleAvailable": true,
+      "acceptedReviewFirst": true,
+      "requiresReview": true,
+      "channelGateLevel": "L1",
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "publicClaimAllowed": false,
+      "customerVisibleWithoutReview": false,
+      "rawPiiIncluded": false
+    },
+    {
+      "caseId": "comm_002",
+      "aliasId": "ai_eco_beta",
+      "lifecycleRunId": "run_beta_001",
+      "providerAliasId": "ai_eco_beta",
+      "customerOpportunityAliasIds": ["cust_beta_01", "cust_beta_02"],
+      "currentLifecycleState": "diagnosis_reviewed",
+      "nextLifecycleState": "trial_scope_prepared",
+      "managingThroughServiceProvider": true,
+      "serviceProviderCustomerFacingOwner": true,
+      "helmDirectCustomerContactAllowed": false,
+      "stageReviewPacketRequired": true,
+      "reviewStaleHours": 18,
+      "requiredEvidenceKinds": [
+        "provider_tracker",
+        "safe_sample"
+      ],
+      "channelAssessmentRequired": false,
+      "providerType": "ai_consulting_training",
+      "requestedCommercialPackage": "trial_7d",
+      "commercialSignals": {
+        "customerPoolQuality": 74,
+        "painStrength": 84,
+        "budgetOwnerVisible": true,
+        "paidPilotLikelihood": 78,
+        "dataBoundaryClarity": 80,
+        "proofPotential": 70,
+        "channelAmplificationPotential": 68,
+        "reviewFirstAcceptance": true
+      },
+      "riskTags": [
+        "training_heavy"
+      ],
+      "expectedOfferStage": "trial_7d",
+      "expectedDecision": "prepare_trial",
+      "expectedNextAction": "prepare_trial_scope_draft_for_review",
+      "ownerAlias": "founder",
+      "reviewerAlias": "data_protection",
+      "evidenceRefs": [
+        "provider_tracker:ai_eco_beta",
+        "safe_sample:beta_trial_seed"
+      ],
+      "outcomeWindowHours": 72,
+      "safeSampleAvailable": true,
+      "acceptedReviewFirst": true,
+      "requiresReview": true,
+      "channelGateLevel": "L1",
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "publicClaimAllowed": false,
+      "customerVisibleWithoutReview": false,
+      "rawPiiIncluded": false
+    },
+    {
+      "caseId": "comm_003",
+      "aliasId": "ai_eco_gamma",
+      "lifecycleRunId": "run_gamma_001",
+      "providerAliasId": "ai_eco_gamma",
+      "customerOpportunityAliasIds": ["cust_gamma_01"],
+      "currentLifecycleState": "trial_closeout_ready",
+      "nextLifecycleState": "pilot_scope_prepared",
+      "managingThroughServiceProvider": true,
+      "serviceProviderCustomerFacingOwner": true,
+      "helmDirectCustomerContactAllowed": false,
+      "stageReviewPacketRequired": true,
+      "reviewStaleHours": 24,
+      "requiredEvidenceKinds": [
+        "provider_tracker",
+        "week0_scope"
+      ],
+      "channelAssessmentRequired": false,
+      "providerType": "agent_delivery_provider",
+      "requestedCommercialPackage": "pilot_4w",
+      "commercialSignals": {
+        "customerPoolQuality": 79,
+        "painStrength": 82,
+        "budgetOwnerVisible": true,
+        "paidPilotLikelihood": 81,
+        "dataBoundaryClarity": 78,
+        "proofPotential": 75,
+        "channelAmplificationPotential": 72,
+        "reviewFirstAcceptance": true
+      },
+      "riskTags": [
+        "agent_delivery_boundary_watch"
+      ],
+      "expectedOfferStage": "pilot_4w",
+      "expectedDecision": "prepare_pilot",
+      "expectedNextAction": "prepare_pilot_scope_packet_for_review",
+      "ownerAlias": "founder",
+      "reviewerAlias": "product",
+      "evidenceRefs": [
+        "provider_tracker:ai_eco_gamma",
+        "week0_scope:gamma_redacted"
+      ],
+      "outcomeWindowHours": 168,
+      "safeSampleAvailable": true,
+      "acceptedReviewFirst": true,
+      "requiresReview": true,
+      "channelGateLevel": "L2",
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "publicClaimAllowed": false,
+      "customerVisibleWithoutReview": false,
+      "rawPiiIncluded": false
+    },
+    {
+      "caseId": "comm_004",
+      "aliasId": "ai_eco_delta",
+      "lifecycleRunId": "run_delta_001",
+      "providerAliasId": "ai_eco_delta",
+      "customerOpportunityAliasIds": ["cust_delta_01", "cust_delta_02"],
+      "currentLifecycleState": "closeout_report_prepared",
+      "nextLifecycleState": "channel_gate_assessed",
+      "managingThroughServiceProvider": true,
+      "serviceProviderCustomerFacingOwner": true,
+      "helmDirectCustomerContactAllowed": false,
+      "stageReviewPacketRequired": true,
+      "reviewStaleHours": 36,
+      "requiredEvidenceKinds": [
+        "pilot_scorecard",
+        "review_notes"
+      ],
+      "channelAssessmentRequired": true,
+      "providerType": "ai_service_provider",
+      "requestedCommercialPackage": "closeout_report",
+      "commercialSignals": {
+        "customerPoolQuality": 80,
+        "painStrength": 78,
+        "budgetOwnerVisible": true,
+        "paidPilotLikelihood": 76,
+        "dataBoundaryClarity": 82,
+        "proofPotential": 86,
+        "channelAmplificationPotential": 84,
+        "reviewFirstAcceptance": true
+      },
+      "riskTags": [],
+      "expectedOfferStage": "closeout_report",
+      "expectedDecision": "prepare_closeout",
+      "expectedNextAction": "prepare_closeout_report_candidate_for_review",
+      "ownerAlias": "founder",
+      "reviewerAlias": "legal_data_protection",
+      "evidenceRefs": [
+        "pilot_scorecard:ai_eco_delta",
+        "review_notes:delta_redacted"
+      ],
+      "outcomeWindowHours": 72,
+      "safeSampleAvailable": true,
+      "acceptedReviewFirst": true,
+      "requiresReview": true,
+      "channelGateLevel": "L3",
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "publicClaimAllowed": false,
+      "customerVisibleWithoutReview": false,
+      "rawPiiIncluded": false
+    },
+    {
+      "caseId": "comm_005",
+      "aliasId": "ai_eco_content_only",
+      "lifecycleRunId": "run_content_only_001",
+      "providerAliasId": "ai_eco_content_only",
+      "customerOpportunityAliasIds": [],
+      "currentLifecycleState": "candidate_pool",
+      "nextLifecycleState": "paused",
+      "managingThroughServiceProvider": false,
+      "serviceProviderCustomerFacingOwner": false,
+      "helmDirectCustomerContactAllowed": false,
+      "stageReviewPacketRequired": false,
+      "reviewStaleHours": 0,
+      "requiredEvidenceKinds": [
+        "provider_tracker"
+      ],
+      "channelAssessmentRequired": false,
+      "providerType": "content_only_kol",
+      "requestedCommercialPackage": "diagnosis_1h",
+      "commercialSignals": {
+        "customerPoolQuality": 25,
+        "painStrength": 60,
+        "budgetOwnerVisible": false,
+        "paidPilotLikelihood": 20,
+        "dataBoundaryClarity": 10,
+        "proofPotential": 55,
+        "channelAmplificationPotential": 80,
+        "reviewFirstAcceptance": true
+      },
+      "riskTags": [
+        "content_only"
+      ],
+      "expectedOfferStage": null,
+      "expectedDecision": "no_go",
+      "expectedNextAction": "downgrade_or_pause",
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "evidenceRefs": [
+        "provider_tracker:content_only_redacted"
+      ],
+      "outcomeWindowHours": 72,
+      "safeSampleAvailable": false,
+      "acceptedReviewFirst": true,
+      "requiresReview": false,
+      "channelGateLevel": "L0",
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "publicClaimAllowed": false,
+      "customerVisibleWithoutReview": false,
+      "rawPiiIncluded": false
+    },
+    {
+      "caseId": "comm_006",
+      "aliasId": "ai_eco_platform_builder",
+      "lifecycleRunId": "run_platform_builder_001",
+      "providerAliasId": "ai_eco_platform_builder",
+      "customerOpportunityAliasIds": ["cust_platform_builder_01"],
+      "currentLifecycleState": "diagnosis_reviewed",
+      "nextLifecycleState": "paused",
+      "managingThroughServiceProvider": true,
+      "serviceProviderCustomerFacingOwner": true,
+      "helmDirectCustomerContactAllowed": false,
+      "stageReviewPacketRequired": true,
+      "reviewStaleHours": 20,
+      "requiredEvidenceKinds": [
+        "validation_note"
+      ],
+      "channelAssessmentRequired": false,
+      "providerType": "platform_builder_requester",
+      "requestedCommercialPackage": "pilot_4w",
+      "commercialSignals": {
+        "customerPoolQuality": 72,
+        "painStrength": 88,
+        "budgetOwnerVisible": true,
+        "paidPilotLikelihood": 70,
+        "dataBoundaryClarity": 66,
+        "proofPotential": 60,
+        "channelAmplificationPotential": 74,
+        "reviewFirstAcceptance": false
+      },
+      "riskTags": [
+        "platform_builder_requester",
+        "agent_platform_drift"
+      ],
+      "expectedOfferStage": null,
+      "expectedDecision": "no_go",
+      "expectedNextAction": "downgrade_or_pause",
+      "ownerAlias": "founder",
+      "reviewerAlias": "product",
+      "evidenceRefs": [
+        "validation_note:platform_builder_request_redacted"
+      ],
+      "outcomeWindowHours": 72,
+      "safeSampleAvailable": true,
+      "acceptedReviewFirst": false,
+      "requiresReview": true,
+      "channelGateLevel": "L0",
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "publicClaimAllowed": false,
+      "customerVisibleWithoutReview": false,
+      "rawPiiIncluded": false
+    },
+    {
+      "caseId": "comm_007",
+      "aliasId": "ai_eco_free_poc",
+      "lifecycleRunId": "run_free_poc_001",
+      "providerAliasId": "ai_eco_free_poc",
+      "customerOpportunityAliasIds": ["cust_free_poc_01"],
+      "currentLifecycleState": "candidate_pool",
+      "nextLifecycleState": "paused",
+      "managingThroughServiceProvider": true,
+      "serviceProviderCustomerFacingOwner": true,
+      "helmDirectCustomerContactAllowed": false,
+      "stageReviewPacketRequired": false,
+      "reviewStaleHours": 0,
+      "requiredEvidenceKinds": [
+        "validation_note"
+      ],
+      "channelAssessmentRequired": false,
+      "providerType": "ai_consulting_training",
+      "requestedCommercialPackage": "trial_7d",
+      "commercialSignals": {
+        "customerPoolQuality": 58,
+        "painStrength": 74,
+        "budgetOwnerVisible": false,
+        "paidPilotLikelihood": 18,
+        "dataBoundaryClarity": 72,
+        "proofPotential": 50,
+        "channelAmplificationPotential": 62,
+        "reviewFirstAcceptance": true
+      },
+      "riskTags": [
+        "free_poc_only"
+      ],
+      "expectedOfferStage": null,
+      "expectedDecision": "no_go",
+      "expectedNextAction": "downgrade_or_pause",
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "evidenceRefs": [
+        "validation_note:free_poc_only_redacted"
+      ],
+      "outcomeWindowHours": 72,
+      "safeSampleAvailable": true,
+      "acceptedReviewFirst": true,
+      "requiresReview": false,
+      "channelGateLevel": "L0",
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "publicClaimAllowed": false,
+      "customerVisibleWithoutReview": false,
+      "rawPiiIncluded": false
+    },
+    {
+      "caseId": "comm_008",
+      "aliasId": "ai_eco_no_data",
+      "lifecycleRunId": "run_no_data_001",
+      "providerAliasId": "ai_eco_no_data",
+      "customerOpportunityAliasIds": ["cust_no_data_01"],
+      "currentLifecycleState": "daily_top3_selected",
+      "nextLifecycleState": "data_boundary_review_required",
+      "managingThroughServiceProvider": true,
+      "serviceProviderCustomerFacingOwner": true,
+      "helmDirectCustomerContactAllowed": false,
+      "stageReviewPacketRequired": true,
+      "reviewStaleHours": 16,
+      "requiredEvidenceKinds": [
+        "validation_note"
+      ],
+      "channelAssessmentRequired": false,
+      "providerType": "agent_delivery_provider",
+      "requestedCommercialPackage": "trial_7d",
+      "commercialSignals": {
+        "customerPoolQuality": 66,
+        "painStrength": 79,
+        "budgetOwnerVisible": true,
+        "paidPilotLikelihood": 58,
+        "dataBoundaryClarity": 8,
+        "proofPotential": 22,
+        "channelAmplificationPotential": 70,
+        "reviewFirstAcceptance": true
+      },
+      "riskTags": [
+        "no_data_readiness"
+      ],
+      "expectedOfferStage": null,
+      "expectedDecision": "watch_only",
+      "expectedNextAction": "downgrade_or_pause",
+      "ownerAlias": "founder",
+      "reviewerAlias": "data_protection",
+      "evidenceRefs": [
+        "validation_note:no_data_redacted"
+      ],
+      "outcomeWindowHours": 72,
+      "safeSampleAvailable": false,
+      "acceptedReviewFirst": true,
+      "requiresReview": true,
+      "channelGateLevel": "L1",
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "publicClaimAllowed": false,
+      "customerVisibleWithoutReview": false,
+      "rawPiiIncluded": false
+    }
+  ]
+}

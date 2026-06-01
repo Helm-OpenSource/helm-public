@@ -1,0 +1,218 @@
+[
+  {
+    "id": "obj-001",
+    "dimension": "object_signal",
+    "description": "Opportunity object with fresh signals and must_push_ready gate — high-confidence learning candidate.",
+    "input": {
+      "dimension": "object_signal",
+      "evalRunId": "eval-run-obj-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-obj-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "objectRef": {
+        "kind": "opportunity",
+        "id": "opp-alias-001",
+        "workspaceId": "tenant-alpha"
+      },
+      "signalCount": 8,
+      "staleSignalCount": 0,
+      "currentGate": "must_push_ready"
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Gate is must_push_ready with 8 signals and zero stale. High accuracy fixture for gate coverage.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "obj-002",
+    "dimension": "object_signal",
+    "description": "Goal object with moderate signal count and one stale signal — watch_only while monitoring signal freshness.",
+    "input": {
+      "dimension": "object_signal",
+      "evalRunId": "eval-run-obj-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-obj-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "objectRef": {
+        "kind": "goal",
+        "id": "goal-alias-001",
+        "workspaceId": "tenant-beta"
+      },
+      "signalCount": 5,
+      "staleSignalCount": 1,
+      "currentGate": "watch_only"
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Gate is watch_only with one stale signal out of five. Monitoring state is appropriate.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "obj-003",
+    "dimension": "object_signal",
+    "description": "Commitment object with review_required gate and low stale ratio — learning candidate for gate precision study.",
+    "input": {
+      "dimension": "object_signal",
+      "evalRunId": "eval-run-obj-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-obj-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "objectRef": {
+        "kind": "commitment",
+        "id": "commit-alias-001",
+        "workspaceId": "tenant-gamma"
+      },
+      "signalCount": 6,
+      "staleSignalCount": 1,
+      "currentGate": "review_required"
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Commitment object correctly gated at review_required; stale ratio is low; good precision training case.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "obj-004",
+    "dimension": "object_signal",
+    "description": "Belief object with high signal count and no staleness — must_push_ready gate is well-supported.",
+    "input": {
+      "dimension": "object_signal",
+      "evalRunId": "eval-run-obj-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-obj-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "objectRef": {
+        "kind": "belief",
+        "id": "belief-alias-001",
+        "workspaceId": "tenant-alpha"
+      },
+      "signalCount": 12,
+      "staleSignalCount": 0,
+      "currentGate": "must_push_ready"
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "12 fresh signals fully support must_push_ready gate. Strong positive example for gate accuracy training.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "obj-005",
+    "dimension": "object_signal",
+    "description": "Operating gap object with moderate signals and watch_only gate — learning candidate for gap tracking patterns.",
+    "input": {
+      "dimension": "object_signal",
+      "evalRunId": "eval-run-obj-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-obj-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "objectRef": {
+        "kind": "operating_gap",
+        "id": "gap-alias-001",
+        "workspaceId": "tenant-beta"
+      },
+      "signalCount": 4,
+      "staleSignalCount": 0,
+      "currentGate": "watch_only"
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Operating gap with four signals in watch_only is a well-formed monitoring case for gap tracking.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "obj-006",
+    "dimension": "object_signal",
+    "description": "NEGATIVE: Majority of signals are stale on a must_push_ready object — gate accuracy is suspect, review required.",
+    "input": {
+      "dimension": "object_signal",
+      "evalRunId": "eval-run-obj-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-obj-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "objectRef": {
+        "kind": "opportunity",
+        "id": "opp-alias-002",
+        "workspaceId": "tenant-gamma"
+      },
+      "signalCount": 7,
+      "staleSignalCount": 5,
+      "currentGate": "must_push_ready"
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "5 of 7 signals are stale; must_push_ready gate is likely over-optimistic. Human review required.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "obj-007",
+    "dimension": "object_signal",
+    "description": "NEGATIVE: Object has zero signals but is gated as must_push_ready — gate is invalid without signal support.",
+    "input": {
+      "dimension": "object_signal",
+      "evalRunId": "eval-run-obj-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-obj-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "objectRef": {
+        "kind": "goal",
+        "id": "goal-alias-002",
+        "workspaceId": "tenant-alpha"
+      },
+      "signalCount": 0,
+      "staleSignalCount": 0,
+      "currentGate": "must_push_ready"
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Zero signals; must_push_ready gate has no evidentiary basis. Object gate decision is invalid.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "obj-008",
+    "dimension": "object_signal",
+    "description": "NEGATIVE: All signals are stale on a review_required object — cannot proceed without fresh signal intake.",
+    "input": {
+      "dimension": "object_signal",
+      "evalRunId": "eval-run-obj-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-obj-008", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "objectRef": {
+        "kind": "commitment",
+        "id": "commit-alias-002",
+        "workspaceId": "tenant-beta"
+      },
+      "signalCount": 3,
+      "staleSignalCount": 3,
+      "currentGate": "review_required"
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "All 3 signals are stale. No fresh signal available for gate evaluation. Commitment object must be rejected until signals are refreshed.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

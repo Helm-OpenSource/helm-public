@@ -1,0 +1,174 @@
+[
+  {
+    "id": "continuity-recovery-stable",
+    "label": "Stable continuity stays non-remediating",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 42,
+      "prunedTokenCount": 0,
+      "latestCheckpointStatus": "READY",
+      "resumedFromKey": null
+    },
+    "replay": {
+      "fidelityStatus": "STRONG",
+      "fidelityScore": 100,
+      "missing": []
+    },
+    "payloadState": {
+      "source": "checkpoint_snapshot"
+    },
+    "substrate": {
+      "latestCheckpoint": {
+        "id": "checkpoint_stable",
+        "label": "meeting_review",
+        "status": "READY"
+      },
+      "persistedPayloadCount": 3,
+      "pruneTraceCount": 0
+    },
+    "expected": {
+      "recoveryState": "STABLE",
+      "failureTaxonomy": "NONE",
+      "allowedActions": [],
+      "rollbackAnchorRequired": true,
+      "summaryIncludes": ["stable", "no remediation action"],
+      "actionIncludes": ["No remediation is needed"]
+    }
+  },
+  {
+    "id": "continuity-recovery-replay-drift",
+    "label": "Checkpoint-backed replay drift stays recoverable",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 63,
+      "prunedTokenCount": 0,
+      "latestCheckpointStatus": "READY",
+      "resumedFromKey": null
+    },
+    "replay": {
+      "fidelityStatus": "WATCH",
+      "fidelityScore": 86,
+      "missing": ["open questions", "evidence refs"]
+    },
+    "payloadState": {
+      "source": "checkpoint_plus_edits"
+    },
+    "substrate": {
+      "latestCheckpoint": {
+        "id": "checkpoint_watch",
+        "label": "meeting_review",
+        "status": "READY"
+      },
+      "persistedPayloadCount": 4,
+      "pruneTraceCount": 1
+    },
+    "expected": {
+      "recoveryState": "RECOVERABLE",
+      "failureTaxonomy": "REPLAY_DRIFT",
+      "allowedActions": ["RESUME_CHECKPOINT"],
+      "rollbackAnchorRequired": true,
+      "summaryIncludes": ["rolled back", "checkpoint anchor"],
+      "actionIncludes": ["Restore the latest checkpoint"]
+    }
+  },
+  {
+    "id": "continuity-recovery-budget-pressure",
+    "label": "Budget pressure remains recoverable with bounded actions",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 79,
+      "prunedTokenCount": 18,
+      "latestCheckpointStatus": "READY",
+      "resumedFromKey": null
+    },
+    "replay": {
+      "fidelityStatus": "STRONG",
+      "fidelityScore": 96,
+      "missing": []
+    },
+    "payloadState": {
+      "source": "latest_prune_edit"
+    },
+    "substrate": {
+      "latestCheckpoint": {
+        "id": "checkpoint_budget",
+        "label": "meeting_ingest",
+        "status": "READY"
+      },
+      "persistedPayloadCount": 5,
+      "pruneTraceCount": 2
+    },
+    "expected": {
+      "recoveryState": "RECOVERABLE",
+      "failureTaxonomy": "PAYLOAD_STATE_DRIFT",
+      "allowedActions": ["REPRUNE_CONTEXT", "SAVE_RECOVERY_CHECKPOINT"],
+      "rollbackAnchorRequired": true,
+      "summaryIncludes": ["prune history", "re-anchored"],
+      "actionIncludes": ["Save a fresh recovery checkpoint"]
+    }
+  },
+  {
+    "id": "continuity-recovery-review-required",
+    "label": "Protected continuity gaps require review first",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 67,
+      "prunedTokenCount": 0,
+      "latestCheckpointStatus": "READY",
+      "resumedFromKey": null
+    },
+    "replay": {
+      "fidelityStatus": "WEAK",
+      "fidelityScore": 71,
+      "missing": ["confirmed facts", "boundary note"]
+    },
+    "payloadState": {
+      "source": "checkpoint_snapshot"
+    },
+    "substrate": {
+      "latestCheckpoint": {
+        "id": "checkpoint_review",
+        "label": "meeting_review",
+        "status": "READY"
+      },
+      "persistedPayloadCount": 3,
+      "pruneTraceCount": 0
+    },
+    "expected": {
+      "recoveryState": "REVIEW_REQUIRED",
+      "failureTaxonomy": "PROTECTED_STATE_GAP",
+      "allowedActions": [],
+      "rollbackAnchorRequired": true,
+      "summaryIncludes": ["Critical continuity fields", "confirmed facts", "boundary note"],
+      "actionIncludes": ["Human review is required"]
+    }
+  },
+  {
+    "id": "continuity-recovery-blocked",
+    "label": "No anchor and no payload substrate remains blocked",
+    "budgetPostureInput": {
+      "budgetTokenLimit": 100,
+      "budgetTokenUsed": 54,
+      "prunedTokenCount": 0,
+      "latestCheckpointStatus": null,
+      "resumedFromKey": null
+    },
+    "replay": null,
+    "payloadState": {
+      "source": "all_persisted"
+    },
+    "substrate": {
+      "latestCheckpoint": null,
+      "persistedPayloadCount": 0,
+      "pruneTraceCount": 0
+    },
+    "expected": {
+      "recoveryState": "BLOCKED",
+      "failureTaxonomy": "NO_RECOVERY_ANCHOR",
+      "allowedActions": [],
+      "rollbackAnchorRequired": false,
+      "summaryIncludes": ["cannot proceed safely", "No checkpoint anchor"],
+      "actionIncludes": ["Rebuild continuity substrate first"]
+    }
+  }
+]

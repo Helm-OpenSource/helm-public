@@ -1,0 +1,31 @@
+{
+  "tenantKey": "case-management-sample",
+  "displayName": "Case Management Sample",
+  "status": "ACTIVE",
+  "ownedExtensions": [
+    {
+      "extensionSlug": "signals",
+      "extensionKey": "case-management-sample-signals",
+      "displayName": "Case Management Sample - Signals",
+      "rootPath": "extensions/case-management-sample/signals"
+    },
+    {
+      "extensionSlug": "workers",
+      "extensionKey": "case-management-sample-workers",
+      "displayName": "Case Management Sample - Workers",
+      "rootPath": "extensions/case-management-sample/workers"
+    },
+    {
+      "extensionSlug": "bi-report",
+      "extensionKey": "case-management-sample-bi-report",
+      "displayName": "Case Management Sample - Daily Activity Readout",
+      "rootPath": "extensions/case-management-sample/bi-report"
+    }
+  ],
+  "notes": [
+    "Public reference vertical: case management / customer support / business operations domain.",
+    "Sanitized minimum public reference intended for delivery engineers to fork; not a production tenant.",
+    "Do not seed real customer data. All fixtures are 100% synthetic.",
+    "Includes tenant manifest, signal type contract, synthetic fixtures, minimal case mapper, worker cookbook, and BI report cookbook."
+  ]
+}

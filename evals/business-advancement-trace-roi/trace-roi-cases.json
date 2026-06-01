@@ -1,0 +1,578 @@
+{
+  "version": "trace-roi-phase1.1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "synthetic_and_alias_only",
+  "boundary": "planning_only_no_runtime_adoption_no_official_write",
+  "targets": {
+    "minimumTraceCoveragePercent": 100,
+    "minimumFollowUp48hCompletionPercent": 60,
+    "maximumWrongCommitmentIncidentCount": 0,
+    "minimumPreventedWrongCommitmentCount": 1,
+    "minimumDraftAdoptionPercent": 50,
+    "minimumDealsRescuedCount": 1,
+    "minimumManagerReviewTimeSavedMinutes": 15
+  },
+  "cases": [
+    {
+      "id": "TRACE-ROI-001",
+      "scenario": "alias-a-renewal: meeting -> Must Push -> review -> draft -> approved CRM write-back preview",
+      "trace": {
+        "meetingExtraction": {
+          "source": "meeting:alias-a-2026-04-29",
+          "extractedAtIso": "2026-04-29T10:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-a-renewal",
+          "createdAtIso": "2026-04-29T10:05:00.000Z",
+          "ownerSuggestionRole": "客户负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-29T11:30:00.000Z",
+          "decision": "accept",
+          "boundaryNote": "draft != send",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": {
+          "draftId": "draft:alias-a-renewal",
+          "preparedAtIso": "2026-04-29T11:45:00.000Z",
+          "adopted": true
+        },
+        "crmWriteBack": {
+          "writeBackId": "crm-preview:alias-a-renewal",
+          "previewedAtIso": "2026-04-29T11:50:00.000Z",
+          "officialWritePerformed": false,
+          "approvedByReviewer": true
+        }
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": true,
+        "managerReviewTimeSavedMinutes": 25,
+        "draftAdopted": true,
+        "preventedWrongCommitment": false
+      }
+    },
+    {
+      "id": "TRACE-ROI-002",
+      "scenario": "alias-b-security: Must Push downgraded after contradiction; draft frozen, no send",
+      "trace": {
+        "meetingExtraction": {
+          "source": "meeting:alias-b-2026-04-28",
+          "extractedAtIso": "2026-04-28T15:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-b-security",
+          "createdAtIso": "2026-04-28T15:05:00.000Z",
+          "ownerSuggestionRole": "审批负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-28T16:00:00.000Z",
+          "decision": "downgrade",
+          "boundaryNote": "explanation != approval",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": {
+          "draftId": "draft:alias-b-security-note",
+          "preparedAtIso": "2026-04-28T16:05:00.000Z",
+          "adopted": false,
+          "frozen": true
+        },
+        "crmWriteBack": {
+          "writeBackId": "crm-preview:alias-b-security",
+          "previewedAtIso": "2026-04-28T16:10:00.000Z",
+          "officialWritePerformed": false,
+          "approvedByReviewer": false
+        }
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 10,
+        "draftAdopted": false,
+        "preventedWrongCommitment": true
+      }
+    },
+    {
+      "id": "TRACE-ROI-003",
+      "scenario": "alias-c-proof: cross-tenant signal rejected; nothing reaches CRM; reviewer time saved",
+      "trace": {
+        "meetingExtraction": {
+          "source": "email:alias-c-2026-04-30",
+          "extractedAtIso": "2026-04-30T09:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-c-proof",
+          "createdAtIso": "2026-04-30T09:05:00.000Z",
+          "ownerSuggestionRole": "复核负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-30T09:10:00.000Z",
+          "decision": "reject",
+          "boundaryNote": "cross-tenant: rejected",
+          "finalPosture": "rejected"
+        },
+        "draftPreparation": null,
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 20,
+        "draftAdopted": false,
+        "preventedWrongCommitment": true
+      }
+    },
+    {
+      "id": "TRACE-ROI-004",
+      "scenario": "alias-d-followup: customer waiting; CRM write-back blocked pending reviewer",
+      "trace": {
+        "meetingExtraction": {
+          "source": "crm:alias-d:stage",
+          "extractedAtIso": "2026-04-30T13:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-d-followup",
+          "createdAtIso": "2026-04-30T13:05:00.000Z",
+          "ownerSuggestionRole": "客户负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-30T14:00:00.000Z",
+          "decision": "accept",
+          "boundaryNote": "draft != send",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": {
+          "draftId": "draft:alias-d-followup-reply",
+          "preparedAtIso": "2026-04-30T14:10:00.000Z",
+          "adopted": true
+        },
+        "crmWriteBack": {
+          "writeBackId": "crm-preview:alias-d-stage",
+          "previewedAtIso": "2026-04-30T14:15:00.000Z",
+          "officialWritePerformed": false,
+          "approvedByReviewer": true
+        }
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": true,
+        "managerReviewTimeSavedMinutes": 18,
+        "draftAdopted": true,
+        "preventedWrongCommitment": false
+      }
+    },
+    {
+      "id": "TRACE-ROI-005",
+      "scenario": "alias-e-stale: Must Push superseded; followup not closed in 48h",
+      "trace": {
+        "meetingExtraction": {
+          "source": "meeting:alias-e-2026-04-26",
+          "extractedAtIso": "2026-04-26T08:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-e-stale",
+          "createdAtIso": "2026-04-26T08:05:00.000Z",
+          "ownerSuggestionRole": "动作项负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-26T11:00:00.000Z",
+          "decision": "quarantine",
+          "boundaryNote": "stale evidence: watch only",
+          "finalPosture": "watch_only"
+        },
+        "draftPreparation": null,
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": false,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 5,
+        "draftAdopted": false,
+        "preventedWrongCommitment": false
+      }
+    },
+    {
+      "id": "TRACE-ROI-006",
+      "scenario": "Pack A renewal: alias-f executive-summary recap → Must Push → reviewer accepts → adopted draft",
+      "trace": {
+        "meetingExtraction": {
+          "source": "meeting:alias-f-2026-04-29-executive-recap",
+          "extractedAtIso": "2026-04-29T10:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-f-renewal-followup",
+          "createdAtIso": "2026-04-29T10:05:00.000Z",
+          "ownerSuggestionRole": "客户负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-29T11:30:00.000Z",
+          "decision": "accept",
+          "boundaryNote": "draft != send",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": {
+          "draftId": "draft:alias-f-renewal-followup",
+          "preparedAtIso": "2026-04-29T11:45:00.000Z",
+          "adopted": true
+        },
+        "crmWriteBack": {
+          "writeBackId": "crm-preview:alias-f-renewal",
+          "previewedAtIso": "2026-04-29T11:50:00.000Z",
+          "officialWritePerformed": false,
+          "approvedByReviewer": true
+        }
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": true,
+        "managerReviewTimeSavedMinutes": 22,
+        "draftAdopted": true,
+        "preventedWrongCommitment": false
+      }
+    },
+    {
+      "id": "TRACE-ROI-007",
+      "scenario": "Pack A renewal: alias-g pricing-objection captured; reviewer downgrades to review_required, draft frozen",
+      "trace": {
+        "meetingExtraction": {
+          "source": "meeting:alias-g-2026-04-28-pricing",
+          "extractedAtIso": "2026-04-28T14:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-g-pricing-objection",
+          "createdAtIso": "2026-04-28T14:05:00.000Z",
+          "ownerSuggestionRole": "审批负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-28T15:00:00.000Z",
+          "decision": "downgrade",
+          "boundaryNote": "explanation != approval",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": {
+          "draftId": "draft:alias-g-pricing-objection-note",
+          "preparedAtIso": "2026-04-28T15:10:00.000Z",
+          "adopted": false,
+          "frozen": true
+        },
+        "crmWriteBack": {
+          "writeBackId": "crm-preview:alias-g-pricing",
+          "previewedAtIso": "2026-04-28T15:20:00.000Z",
+          "officialWritePerformed": false,
+          "approvedByReviewer": false
+        }
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 12,
+        "draftAdopted": false,
+        "preventedWrongCommitment": true
+      }
+    },
+    {
+      "id": "TRACE-ROI-008",
+      "scenario": "Pack A renewal: alias-h proof-pack assembly accepted; CRM preview only; deal rescued",
+      "trace": {
+        "meetingExtraction": {
+          "source": "email:alias-h-2026-04-30-proof-pack",
+          "extractedAtIso": "2026-04-30T08:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-h-proof-pack",
+          "createdAtIso": "2026-04-30T08:05:00.000Z",
+          "ownerSuggestionRole": "客户负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-30T09:30:00.000Z",
+          "decision": "accept",
+          "boundaryNote": "draft != send",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": {
+          "draftId": "draft:alias-h-proof-pack-summary",
+          "preparedAtIso": "2026-04-30T09:45:00.000Z",
+          "adopted": true
+        },
+        "crmWriteBack": {
+          "writeBackId": "crm-preview:alias-h-proof-pack",
+          "previewedAtIso": "2026-04-30T09:50:00.000Z",
+          "officialWritePerformed": false,
+          "approvedByReviewer": true
+        }
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": true,
+        "managerReviewTimeSavedMinutes": 20,
+        "draftAdopted": true,
+        "preventedWrongCommitment": false
+      }
+    },
+    {
+      "id": "TRACE-ROI-009",
+      "scenario": "Phase 3 disabled-runtime: alias-i TPQR-001 candidate previewed offline; reviewer accepts read-only signal; no draft path applicable",
+      "trace": {
+        "meetingExtraction": {
+          "source": "crm:alias-i:stage",
+          "extractedAtIso": "2026-04-29T07:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-i-tpqr-001-preview",
+          "createdAtIso": "2026-04-29T07:05:00.000Z",
+          "ownerSuggestionRole": "机会负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-29T08:00:00.000Z",
+          "decision": "accept",
+          "boundaryNote": "read-only adapter preview; runtime adoption No-Go",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": null,
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 16,
+        "draftAdopted": false,
+        "preventedWrongCommitment": false
+      }
+    },
+    {
+      "id": "TRACE-ROI-010",
+      "scenario": "Phase 3 disabled-runtime: alias-j TPQR-003 stage signal contradicts memory; reviewer downgrades; draft frozen",
+      "trace": {
+        "meetingExtraction": {
+          "source": "crm:alias-j:stage",
+          "extractedAtIso": "2026-04-29T13:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-j-tpqr-003-contradiction",
+          "createdAtIso": "2026-04-29T13:05:00.000Z",
+          "ownerSuggestionRole": "审批负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-29T13:30:00.000Z",
+          "decision": "downgrade",
+          "boundaryNote": "contradiction with memory; review-required, no auto-promotion",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": {
+          "draftId": "draft:alias-j-tpqr-003-clarification",
+          "preparedAtIso": "2026-04-29T13:35:00.000Z",
+          "adopted": false,
+          "frozen": true
+        },
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 11,
+        "draftAdopted": false,
+        "preventedWrongCommitment": true
+      }
+    },
+    {
+      "id": "TRACE-ROI-011",
+      "scenario": "Phase 3 disabled-runtime: alias-k TPQR-004 owner-change suggestion rejected (cross-workspace risk)",
+      "trace": {
+        "meetingExtraction": {
+          "source": "crm:alias-k:owner",
+          "extractedAtIso": "2026-04-30T10:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-k-tpqr-004-owner-change",
+          "createdAtIso": "2026-04-30T10:05:00.000Z",
+          "ownerSuggestionRole": "复核负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-30T10:30:00.000Z",
+          "decision": "reject",
+          "boundaryNote": "cross-workspace ownership change rejected",
+          "finalPosture": "rejected"
+        },
+        "draftPreparation": null,
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 14,
+        "draftAdopted": false,
+        "preventedWrongCommitment": true
+      }
+    },
+    {
+      "id": "TRACE-ROI-012",
+      "scenario": "Internal tenant dogfood: helm-business-development weekly scorecard signal accepted; draft adopted",
+      "trace": {
+        "meetingExtraction": {
+          "source": "scorecard:helm-business-development:2026-W17",
+          "extractedAtIso": "2026-04-27T09:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:helm-bd-w17-followup",
+          "createdAtIso": "2026-04-27T09:05:00.000Z",
+          "ownerSuggestionRole": "客户负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "founder:demo",
+          "decidedAtIso": "2026-04-27T10:00:00.000Z",
+          "decision": "accept",
+          "boundaryNote": "internal dogfood; review-only; no production write",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": {
+          "draftId": "draft:helm-bd-w17-followup-summary",
+          "preparedAtIso": "2026-04-27T10:10:00.000Z",
+          "adopted": true
+        },
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 18,
+        "draftAdopted": true,
+        "preventedWrongCommitment": false
+      }
+    },
+    {
+      "id": "TRACE-ROI-013",
+      "scenario": "Internal tenant dogfood: alias-l candidate flagged on permission_insufficient signal; rejected; manager time saved",
+      "trace": {
+        "meetingExtraction": {
+          "source": "audit:alias-l:permission-posture",
+          "extractedAtIso": "2026-04-28T13:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-l-permission-insufficient",
+          "createdAtIso": "2026-04-28T13:05:00.000Z",
+          "ownerSuggestionRole": "复核负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "founder:demo",
+          "decidedAtIso": "2026-04-28T13:30:00.000Z",
+          "decision": "reject",
+          "boundaryNote": "permission insufficient: rejected",
+          "finalPosture": "rejected"
+        },
+        "draftPreparation": null,
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 15,
+        "draftAdopted": false,
+        "preventedWrongCommitment": true
+      }
+    },
+    {
+      "id": "TRACE-ROI-014",
+      "scenario": "Internal tenant dogfood: alias-m hallucinated evidence detected; quarantined; learning candidate emitted",
+      "trace": {
+        "meetingExtraction": {
+          "source": "meeting:alias-m-2026-04-29-fabricated-quote",
+          "extractedAtIso": "2026-04-29T11:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-m-hallucinated-evidence",
+          "createdAtIso": "2026-04-29T11:05:00.000Z",
+          "ownerSuggestionRole": "复核负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "founder:demo",
+          "decidedAtIso": "2026-04-29T12:00:00.000Z",
+          "decision": "quarantine",
+          "boundaryNote": "hallucinated evidence: quarantined",
+          "finalPosture": "rejected"
+        },
+        "draftPreparation": null,
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 13,
+        "draftAdopted": false,
+        "preventedWrongCommitment": true
+      }
+    },
+    {
+      "id": "TRACE-ROI-015",
+      "scenario": "Boundary negative: alias-n reviewer accepts but draft path not applicable (read-only signal)",
+      "trace": {
+        "meetingExtraction": {
+          "source": "kpi:alias-n:revenue-anomaly",
+          "extractedAtIso": "2026-04-30T16:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-n-kpi-anomaly",
+          "createdAtIso": "2026-04-30T16:05:00.000Z",
+          "ownerSuggestionRole": "指标负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-04-30T16:30:00.000Z",
+          "decision": "accept",
+          "boundaryNote": "read-only diagnostics; no outbound action",
+          "finalPosture": "review_required"
+        },
+        "draftPreparation": null,
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": true,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 9,
+        "draftAdopted": false,
+        "preventedWrongCommitment": false
+      }
+    },
+    {
+      "id": "TRACE-ROI-016",
+      "scenario": "Boundary negative: alias-o watch-only stale; followup intentionally not pursued in 48h",
+      "trace": {
+        "meetingExtraction": {
+          "source": "meeting:alias-o-2026-03-15",
+          "extractedAtIso": "2026-03-15T08:00:00.000Z"
+        },
+        "mustPushCreation": {
+          "mustPushItemId": "must-push:alias-o-stale-watch",
+          "createdAtIso": "2026-03-15T08:05:00.000Z",
+          "ownerSuggestionRole": "动作项负责人"
+        },
+        "reviewDecision": {
+          "reviewer": "manager:demo",
+          "decidedAtIso": "2026-03-15T11:00:00.000Z",
+          "decision": "quarantine",
+          "boundaryNote": "stale evidence: watch only",
+          "finalPosture": "watch_only"
+        },
+        "draftPreparation": null,
+        "crmWriteBack": null
+      },
+      "roiOutcome": {
+        "followUpCompletedWithin48h": false,
+        "dealRescued": false,
+        "managerReviewTimeSavedMinutes": 6,
+        "draftAdopted": false,
+        "preventedWrongCommitment": false
+      }
+    }
+  ]
+}

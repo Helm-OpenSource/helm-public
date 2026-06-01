@@ -1,0 +1,54 @@
+{
+  "_template": "context-packet",
+  "_status": "template_only_not_runtime",
+  "_instructions": "Copy this file into a Pack working folder and replace placeholders with synthetic or redacted values only. Do not include real customer names, real emails, phone numbers, private domains, intranet IPs, secrets, deployment details, or raw customer data.",
+  "packetId": "<pack-id>-context-001",
+  "packId": "<pack-id>",
+  "createdAt": "<YYYY-MM-DD>",
+  "createdBy": "<delivery-engineer-alias>",
+  "dataPosture": "synthetic",
+  "_dataPostureEnum": ["synthetic", "redacted", "alias_only"],
+  "scope": {
+    "businessProblem": "<one narrow business problem>",
+    "runWindow": "7-day Run candidate",
+    "allowedUse": "review-first Pack preparation",
+    "forbiddenUse": [
+      "public claim",
+      "auto-send",
+      "auto-approve",
+      "auto-execute",
+      "silent CRM write"
+    ]
+  },
+  "review": {
+    "businessOwnerAlias": "<owner-alias>",
+    "reviewerAlias": "<reviewer-alias>",
+    "customerVisibleCandidate": false,
+    "publicEligibleCandidate": false,
+    "claimReviewRequired": true
+  },
+  "contextRows": [
+    {
+      "objectAlias": "object-001",
+      "sourceFamily": "meeting",
+      "_sourceFamilyEnum": ["crm", "email", "meeting", "document", "ticket", "report", "spreadsheet", "manual_note"],
+      "sourceRef": "redacted-source-ref-001",
+      "ownerRef": "owner-alias-001",
+      "permissionPosture": "founder-only",
+      "_permissionPostureEnum": ["founder-only", "delivery-engineer-safe", "customer-visible-candidate"],
+      "freshness": "current",
+      "_freshnessEnum": ["current", "stale", "unknown"],
+      "conflictState": "none",
+      "_conflictStateEnum": ["none", "conflict", "insufficient"],
+      "safeExcerpt": "<redacted or synthetic excerpt>",
+      "redactionNotes": ["no raw names", "no direct contact details"]
+    }
+  ],
+  "passGate": {
+    "allRowsHaveSource": false,
+    "allRowsHaveOwner": false,
+    "allRowsHaveFreshness": false,
+    "rawCustomerDataCount": 0,
+    "secretOrCredentialCount": 0
+  }
+}

@@ -1,0 +1,104 @@
+[
+  {
+    "id": "large_budget_stability_scale_up",
+    "label": "Large budget-pressure cohort keeps scale-up, wording drift audit, and material impact review explicit",
+    "sourceCaseId": "large_budget_stability_recheck",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetMaterialImpactBand": "HIGH",
+      "stabilityScaleUpIncludes": [
+        "stability scale-up",
+        "BUDGET_PRESSURE",
+        "fragile or narrow-sample pockets"
+      ],
+      "intervalWordingDriftIncludes": [
+        "Interval wording drift audit",
+        "aligned / 0 drifted",
+        "Wide confidence interval: advisory-only readout"
+      ],
+      "longTermMaterialImpactReviewIncludes": [
+        "Long-term material impact review",
+        "Prune trace review",
+        "high material impact on long-term outcomes"
+      ],
+      "sessionReviewIncludes": [
+        "scale-up",
+        "canonical wide interval wording",
+        "material impact review"
+      ]
+    }
+  },
+  {
+    "id": "large_replay_stability_scale_up",
+    "label": "Large replay-drift cohort keeps broader-sample scale-up and settled interval drift audit visible",
+    "sourceCaseId": "large_replay_stability_recheck",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetRiskBand": "LOW",
+      "targetStabilityBand": "STABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "SETTLED",
+      "targetMaterialImpactBand": "HIGH",
+      "stabilityScaleUpIncludes": [
+        "stability scale-up",
+        "REPLAY_DRIFT",
+        "RESUMED_MEETING"
+      ],
+      "intervalWordingDriftIncludes": [
+        "Interval wording drift audit",
+        "aligned / 0 drifted",
+        "Settled confidence interval: comparatively stable review readout"
+      ],
+      "longTermMaterialImpactReviewIncludes": [
+        "Long-term material impact review",
+        "Replay gap review",
+        "high material impact on long-term outcomes"
+      ],
+      "sessionReviewIncludes": [
+        "scale-up",
+        "canonical settled interval wording",
+        "material impact review"
+      ]
+    }
+  },
+  {
+    "id": "growing_protected_stability_scale_up",
+    "label": "Growing protected-state cohort keeps narrow-sample scale-up and material impact review conservative",
+    "sourceCaseId": "growing_protected_stability_recheck",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetMaterialImpactBand": "HIGH",
+      "stabilityScaleUpIncludes": [
+        "stability scale-up",
+        "PROTECTED_STATE_GAP",
+        "LONG_CONTEXT_MEETING"
+      ],
+      "intervalWordingDriftIncludes": [
+        "Interval wording drift audit",
+        "aligned / 0 drifted",
+        "Wide confidence interval: advisory-only readout"
+      ],
+      "longTermMaterialImpactReviewIncludes": [
+        "Long-term material impact review",
+        "Protected field review",
+        "high material impact on long-term outcomes"
+      ],
+      "sessionReviewIncludes": [
+        "scale-up",
+        "canonical wide interval wording",
+        "material impact review"
+      ]
+    }
+  }
+]

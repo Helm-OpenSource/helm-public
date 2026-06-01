@@ -1,0 +1,82 @@
+{
+  "_template": "signal-rules",
+  "_method": "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md#5.4",
+  "_phase": "Phase 1 Contract (synthetic demo)",
+
+  "signalType": "metric_anomaly",
+  "sourceTypes": ["management_report"],
+  "rulePackVersion": "synthetic-demo-v0",
+
+  "eligibilityRules": [
+    {
+      "rule": "isAggregated == true",
+      "appliesTo": "row must be a daily aggregate, not raw transactions",
+      "expectedDisposition": "eligible"
+    }
+  ],
+
+  "thresholdRules": [
+    {
+      "metric": "anomalyScore",
+      "operator": "gte",
+      "value": 0.7,
+      "windowDays": 1,
+      "severityWeight": 2
+    },
+    {
+      "metric": "anomalyScore",
+      "operator": "gte",
+      "value": 0.9,
+      "windowDays": 1,
+      "severityWeight": 3
+    }
+  ],
+
+  "severityResolution": "max_of_thresholds",
+  "dedupeFingerprint": "signalType|metricKey|reportingDate",
+
+  "watchOnlyRules": [
+    {
+      "rule": "anomalyScore >= 0.5",
+      "reason": "softer drift; track but no review packet escalation"
+    }
+  ],
+
+  "rejectionRules": [
+    {
+      "rejectionCategory": "workspace_boundary",
+      "condition": "workspaceId != \"synthetic-demo-ws\"",
+      "expectedDisposition": "reject",
+      "reviewNote": "synthetic demo only accepts the demo workspace"
+    },
+    {
+      "rejectionCategory": "sensitivity",
+      "condition": "containsSensitivePii == true",
+      "expectedDisposition": "reject",
+      "reviewNote": "synthetic demo refuses any row marked PII"
+    },
+    {
+      "rejectionCategory": "missing_evidence",
+      "condition": "anomalyScore == null",
+      "expectedDisposition": "reject",
+      "reviewNote": "anomaly score absent; cannot evaluate"
+    },
+    {
+      "rejectionCategory": "stale_source",
+      "condition": "ageHours > 36",
+      "expectedDisposition": "reject",
+      "reviewNote": "row exceeds 36h freshness SLA"
+    },
+    {
+      "rejectionCategory": "write_authority",
+      "condition": "writeIntentDetected == true",
+      "expectedDisposition": "reject",
+      "reviewNote": "synthetic demo is read-only; reject any row carrying a write intent"
+    }
+  ],
+
+  "boundaryNotes": [
+    "Phase 3 enablement gate excludes metric_anomaly from /mobile Must Push; output stays in review packet / brief / report only.",
+    "LLM is not consulted in this dry-run; severity comes only from deterministic thresholds."
+  ]
+}

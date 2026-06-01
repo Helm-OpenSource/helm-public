@@ -1,0 +1,29 @@
+{
+  "description": "Explicit allowlist for the public Helm Core documentation surface. Additions here should be intentional public information architecture, not broad source-repo mirror carry-over.",
+  "allowedDocs": [
+    "docs/README.md",
+    "docs/STATUS.md",
+    "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md",
+    "docs/codex/README.md",
+    "docs/getting-started.en.md",
+    "docs/getting-started.md",
+    "docs/integrations/INTEGRATION_TEMPLATE.md",
+    "docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md",
+    "docs/operations/ON_CALL_AND_RESPONSE_SLA.md",
+    "docs/pilot/PUBLIC_TRIAL_RUNBOOK.md",
+    "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md",
+    "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md",
+    "docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md",
+    "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",
+    "docs/product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md",
+    "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
+    "docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md",
+    "docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md",
+    "docs/product/HELM_RELEASE_REALITY_ALIGNMENT.md",
+    "docs/product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md",
+    "docs/public-docs-manifest.json",
+    "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md",
+    "docs/reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md",
+    "docs/roadmap/HELM_PUBLIC_ROADMAP.md"
+  ]
+}

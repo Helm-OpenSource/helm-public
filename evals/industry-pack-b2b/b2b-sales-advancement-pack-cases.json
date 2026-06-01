@@ -1,0 +1,852 @@
+{
+  "version": "2026-05-02.industry-pack-b2b.v0",
+  "status": "offline_contract_only",
+  "boundary": "candidate-only; review-first; no runtime/API/UI/schema/connector; no auto-send; no silent CRM write; no direct Must Push truth",
+  "pack": {
+    "packId": "b2b_sales_advancement",
+    "packName": "B2B Sales Advancement Pack",
+    "packVersion": "0.0.0-offline",
+    "helmCoreCompat": ">=0.1 <1.0",
+    "industryArchetype": "b2b_sales",
+    "ownershipBoundary": "candidate-only",
+    "coreObjects": [
+      "account",
+      "opportunity",
+      "contact",
+      "meeting",
+      "email_thread",
+      "draft"
+    ],
+    "criticalFields": [
+      "tier",
+      "healthStatus",
+      "stage",
+      "amountBand",
+      "ownerAlias",
+      "ownerAliasConflict",
+      "nextStepAt",
+      "lastInteractionAt",
+      "lastCustomerReplyAt",
+      "relationshipStrength",
+      "customerAskedFor",
+      "summaryAvailable"
+    ],
+    "signals": [
+      "stalled_opportunity",
+      "missed_follow_through",
+      "customer_visible_draft_needed",
+      "high_value_owner_gap",
+      "mapping_gap_blocks_advancement"
+    ],
+    "signalEvaluationOrder": [
+      "mapping_gap_blocks_advancement",
+      "customer_visible_draft_needed",
+      "high_value_owner_gap",
+      "missed_follow_through",
+      "stalled_opportunity"
+    ],
+    "signalConflictResolution": "deny_over_review_over_watch_over_no_signal",
+    "judgementRubrics": [
+      "b2b_advancement_priority",
+      "customer_visible_risk",
+      "mapping_gap_degradation",
+      "healthy_snapshot_default"
+    ],
+    "proofPolicies": [
+      "absence_of_interaction_review",
+      "source_snapshot_timestamp",
+      "customer_visible_draft_review",
+      "denied_internal_record"
+    ],
+    "actionTemplates": [
+      "prepare_owner_handoff",
+      "mark_watch_only",
+      "prepare_customer_followup_draft",
+      "request_mapping_gap_review",
+      "mark_internal_denied"
+    ],
+    "workerSkillBindings": [
+      "b2b_advancement_signal_reader",
+      "b2b_owner_handoff_packet_builder",
+      "b2b_mapping_gap_reviewer",
+      "b2b_customer_followup_draft_preparer"
+    ],
+    "degradationPolicy": [
+      "missing_mapping_to_no_judgement",
+      "stale_evidence_to_watch_only",
+      "customer_visible_commitment_to_deny",
+      "worker_provenance_gap_to_deny"
+    ],
+    "confidenceSourceEnum": [
+      "deterministic_high",
+      "deterministic_medium",
+      "deterministic_low",
+      "manual_review_required",
+      "no_judgement"
+    ],
+    "relationshipToPackA": {
+      "mode": "coexist_then_upgrade",
+      "supersedeGranularity": "per_signal",
+      "coreDedupRequired": true,
+      "silentOverlapAllowed": false,
+      "supersedesOnlyAfter": [
+        "manifest_review_passed",
+        "offline_eval_passed",
+        "no_go_gate_passed",
+        "owner_acceptance"
+      ]
+    },
+    "permissionSummary": {
+      "autoAllowed": [
+        "read alias-only source objects",
+        "prepare internal review packet",
+        "prepare mapping gap readout",
+        "mark watch-only candidate"
+      ],
+      "reviewRequired": [
+        "customer-visible draft",
+        "proof request",
+        "owner handoff involving conflicting mapping"
+      ],
+      "neverAllowed": [
+        "send customer message",
+        "write CRM silently",
+        "commit pricing",
+        "approve legal terms",
+        "settle commercial exception",
+        "create direct Must Push truth"
+      ]
+    },
+    "tenantOverlayRules": {
+      "overlayRelation": "overlay_subset_of_pack_subset_of_core",
+      "canNarrow": [
+        "freshnessWindow",
+        "reviewRequired",
+        "allowedSourceObject",
+        "allowedActionTemplate",
+        "ownerAliasMapping"
+      ],
+      "cannotBroaden": [
+        "autoAllowed",
+        "customerVisibleActions",
+        "outboundActions",
+        "writePermissions",
+        "coreNeverAllow"
+      ]
+    }
+  },
+  "targets": {
+    "packFixtureCount": 12,
+    "coreCompatFixtureCount": 2,
+    "routingRouteCount": 9,
+    "coreRouteCount": 2,
+    "maximumDirectMustPushTruthCount": 0,
+    "maximumAutoSendCount": 0,
+    "maximumSilentCrmWriteCount": 0,
+    "maximumConnectorRuntimeApiUiSchemaCapabilityCount": 0,
+    "maximumRawPiiFieldCount": 0,
+    "maximumCustomerIdentifiableTextFieldCount": 0
+  },
+  "routingMatrix": [
+    {
+      "routeId": "R1",
+      "signalOrDefault": "stalled_opportunity",
+      "rubricOrEvaluator": "b2b_advancement_priority",
+      "branch": "review_required_priority_candidate",
+      "proofPolicy": "absence_of_interaction_review",
+      "actionTemplate": "prepare_owner_handoff",
+      "fixtureIds": [
+        "b2b_advancement_001"
+      ]
+    },
+    {
+      "routeId": "R2",
+      "signalOrDefault": "stalled_opportunity",
+      "rubricOrEvaluator": "b2b_advancement_priority",
+      "branch": "watch_only",
+      "proofPolicy": "source_snapshot_timestamp",
+      "actionTemplate": "mark_watch_only",
+      "fixtureIds": [
+        "b2b_advancement_005"
+      ]
+    },
+    {
+      "routeId": "R3",
+      "signalOrDefault": "missed_follow_through",
+      "rubricOrEvaluator": "customer_visible_risk",
+      "branch": "internal_handoff_only",
+      "proofPolicy": "absence_of_interaction_review",
+      "actionTemplate": "prepare_owner_handoff",
+      "fixtureIds": [
+        "b2b_advancement_002"
+      ]
+    },
+    {
+      "routeId": "R4",
+      "signalOrDefault": "customer_visible_draft_needed",
+      "rubricOrEvaluator": "customer_visible_risk",
+      "branch": "draft_review_required",
+      "proofPolicy": "customer_visible_draft_review",
+      "actionTemplate": "prepare_customer_followup_draft",
+      "fixtureIds": [
+        "b2b_advancement_003",
+        "b2b_advancement_011"
+      ]
+    },
+    {
+      "routeId": "R5",
+      "signalOrDefault": "customer_visible_draft_needed",
+      "rubricOrEvaluator": "customer_visible_risk",
+      "branch": "deny",
+      "proofPolicy": "denied_internal_record",
+      "actionTemplate": "mark_internal_denied",
+      "fixtureIds": [
+        "b2b_advancement_006",
+        "b2b_advancement_012"
+      ]
+    },
+    {
+      "routeId": "R6",
+      "signalOrDefault": "high_value_owner_gap",
+      "rubricOrEvaluator": "mapping_gap_degradation",
+      "branch": "mapping_gap_review_required",
+      "proofPolicy": "source_snapshot_timestamp",
+      "actionTemplate": "request_mapping_gap_review",
+      "fixtureIds": [
+        "b2b_advancement_007"
+      ]
+    },
+    {
+      "routeId": "R7",
+      "signalOrDefault": "mapping_gap_blocks_advancement",
+      "rubricOrEvaluator": "mapping_gap_degradation",
+      "branch": "no_judgement",
+      "proofPolicy": "source_snapshot_timestamp",
+      "actionTemplate": "request_mapping_gap_review",
+      "fixtureIds": [
+        "b2b_advancement_004",
+        "b2b_advancement_010"
+      ]
+    },
+    {
+      "routeId": "R8",
+      "signalOrDefault": "mapping_gap_blocks_advancement",
+      "rubricOrEvaluator": "mapping_gap_degradation",
+      "branch": "mapping_gap_review_required",
+      "proofPolicy": "source_snapshot_timestamp",
+      "actionTemplate": "request_mapping_gap_review",
+      "fixtureIds": [
+        "b2b_advancement_009"
+      ]
+    },
+    {
+      "routeId": "R9",
+      "signalOrDefault": "no_signal_healthy_snapshot",
+      "rubricOrEvaluator": "healthy_snapshot_default",
+      "branch": "none",
+      "proofPolicy": "source_snapshot_timestamp",
+      "actionTemplate": "mark_watch_only",
+      "fixtureIds": [
+        "b2b_advancement_008"
+      ]
+    }
+  ],
+  "coreCompatibilityMatrix": [
+    {
+      "routeId": "C1",
+      "coreGate": "tenant_overlay_narrowing_validator",
+      "decision": "reject_overlay_broadening",
+      "fixtureIds": [
+        "core_compat_001"
+      ]
+    },
+    {
+      "routeId": "C2",
+      "coreGate": "pack_compatibility_gate",
+      "decision": "merge_duplicate_candidates_with_source_trace",
+      "fixtureIds": [
+        "core_compat_002"
+      ]
+    }
+  ],
+  "packFixtures": [
+    {
+      "fixtureId": "b2b_advancement_001",
+      "title": "high value opportunity stalled after customer reply",
+      "inputObjects": [
+        {
+          "objectType": "account",
+          "aliasId": "acct_alpha",
+          "fields": {
+            "tier": "strategic",
+            "healthStatus": "stable"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_alpha",
+          "fields": {
+            "stage": "proposal_review",
+            "amountBand": "high",
+            "ownerAlias": "owner_alpha",
+            "nextStepAt": "T-3d",
+            "lastInteractionAt": "T-5d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_alpha",
+          "fields": {
+            "lastCustomerReplyAt": "T-5d"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "stalled_opportunity"
+      ],
+      "expectedRubricBranch": "review_required_priority_candidate",
+      "expectedProofPolicy": "absence_of_interaction_review",
+      "expectedActionTemplate": "prepare_owner_handoff",
+      "expectedNoGo": [
+        "no_direct_must_push_truth",
+        "no_auto_send"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_002",
+      "title": "meeting happened but no follow through within 48h",
+      "inputObjects": [
+        {
+          "objectType": "meeting",
+          "aliasId": "meeting_beta",
+          "fields": {
+            "heldAt": "T-3d",
+            "summaryAvailable": true
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_beta",
+          "fields": {
+            "stage": "discovery",
+            "amountBand": "medium",
+            "ownerAlias": "owner_beta",
+            "nextStepAt": "T-1d",
+            "lastInteractionAt": "T-3d"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "missed_follow_through"
+      ],
+      "expectedRubricBranch": "internal_handoff_only",
+      "expectedProofPolicy": "absence_of_interaction_review",
+      "expectedActionTemplate": "prepare_owner_handoff",
+      "expectedNoGo": [
+        "no_customer_visible_action_without_review",
+        "no_direct_must_push_truth"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_003",
+      "title": "customer asked for material and draft is needed",
+      "inputObjects": [
+        {
+          "objectType": "contact",
+          "aliasId": "contact_gamma",
+          "fields": {
+            "role": "decision_maker",
+            "relationshipStrength": "warm"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_gamma",
+          "fields": {
+            "stage": "evaluation",
+            "amountBand": "medium",
+            "ownerAlias": "owner_gamma",
+            "nextStepAt": "T+1d",
+            "lastInteractionAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_gamma",
+          "fields": {
+            "lastCustomerReplyAt": "T-1d"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "customer_visible_draft_needed"
+      ],
+      "expectedRubricBranch": "draft_review_required",
+      "expectedProofPolicy": "customer_visible_draft_review",
+      "expectedActionTemplate": "prepare_customer_followup_draft",
+      "expectedNoGo": [
+        "no_auto_send",
+        "no_commitment_wording"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_004",
+      "title": "missing opportunity owner blocks judgement",
+      "inputObjects": [
+        {
+          "objectType": "account",
+          "aliasId": "acct_delta",
+          "fields": {
+            "tier": "strategic",
+            "healthStatus": "stable"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_delta",
+          "fields": {
+            "stage": "negotiation",
+            "amountBand": "high",
+            "ownerAlias": null,
+            "nextStepAt": "T-2d",
+            "lastInteractionAt": "T-4d"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "mapping_gap_blocks_advancement"
+      ],
+      "expectedRubricBranch": "no_judgement",
+      "expectedProofPolicy": "source_snapshot_timestamp",
+      "expectedActionTemplate": "request_mapping_gap_review",
+      "expectedNoGo": [
+        "no_fabricated_owner",
+        "no_direct_must_push_truth"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_005",
+      "title": "stale evidence causes watch only",
+      "inputObjects": [
+        {
+          "objectType": "account",
+          "aliasId": "acct_epsilon",
+          "fields": {
+            "tier": "standard",
+            "healthStatus": "unknown"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_epsilon",
+          "fields": {
+            "stage": "discovery",
+            "amountBand": "low",
+            "ownerAlias": "owner_epsilon",
+            "nextStepAt": "T-10d",
+            "lastInteractionAt": "T-35d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_epsilon",
+          "fields": {
+            "lastCustomerReplyAt": "T-35d"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "stalled_opportunity"
+      ],
+      "expectedRubricBranch": "watch_only",
+      "expectedProofPolicy": "source_snapshot_timestamp",
+      "expectedActionTemplate": "mark_watch_only",
+      "expectedNoGo": [
+        "no_high_confidence_from_stale_evidence",
+        "no_customer_visible_action_without_review"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_006",
+      "title": "pricing language request is denied as commitment risk",
+      "inputObjects": [
+        {
+          "objectType": "contact",
+          "aliasId": "contact_zeta",
+          "fields": {
+            "role": "economic_buyer",
+            "relationshipStrength": "warm"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_zeta",
+          "fields": {
+            "stage": "negotiation",
+            "amountBand": "high",
+            "ownerAlias": "owner_zeta",
+            "nextStepAt": "T+1d",
+            "lastInteractionAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_zeta",
+          "fields": {
+            "lastCustomerReplyAt": "T-1d",
+            "customerAskedFor": "pricing_commitment"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "customer_visible_draft_needed"
+      ],
+      "expectedRubricBranch": "deny",
+      "expectedProofPolicy": "denied_internal_record",
+      "expectedActionTemplate": "mark_internal_denied",
+      "expectedNoGo": [
+        "no_commit_pricing",
+        "no_auto_send"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_007",
+      "title": "high value owner mapping conflict requires review",
+      "inputObjects": [
+        {
+          "objectType": "account",
+          "aliasId": "acct_eta",
+          "fields": {
+            "tier": "strategic",
+            "healthStatus": "expansion_ready"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_eta",
+          "fields": {
+            "stage": "expansion",
+            "amountBand": "high",
+            "ownerAlias": "owner_eta_a",
+            "ownerAliasConflict": "owner_eta_b",
+            "nextStepAt": "T+2d",
+            "lastInteractionAt": "T-2d"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "high_value_owner_gap"
+      ],
+      "expectedRubricBranch": "mapping_gap_review_required",
+      "expectedProofPolicy": "source_snapshot_timestamp",
+      "expectedActionTemplate": "request_mapping_gap_review",
+      "expectedNoGo": [
+        "no_silent_owner_selection",
+        "no_direct_must_push_truth"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_008",
+      "title": "healthy account with future next step stays watch only",
+      "inputObjects": [
+        {
+          "objectType": "account",
+          "aliasId": "acct_theta",
+          "fields": {
+            "tier": "standard",
+            "healthStatus": "stable"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_theta",
+          "fields": {
+            "stage": "evaluation",
+            "amountBand": "medium",
+            "ownerAlias": "owner_theta",
+            "nextStepAt": "T+5d",
+            "lastInteractionAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_theta",
+          "fields": {
+            "lastCustomerReplyAt": "T-1d"
+          }
+        }
+      ],
+      "expectedSignals": [],
+      "expectedRubricBranch": "none",
+      "expectedProofPolicy": "source_snapshot_timestamp",
+      "expectedActionTemplate": "mark_watch_only",
+      "expectedNoGo": [
+        "no_unnecessary_escalation",
+        "no_direct_must_push_truth"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_009",
+      "title": "missing contact role blocks customer visible draft judgement",
+      "inputObjects": [
+        {
+          "objectType": "contact",
+          "aliasId": "contact_iota",
+          "fields": {
+            "role": null,
+            "relationshipStrength": "warm"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_iota",
+          "fields": {
+            "stage": "evaluation",
+            "amountBand": "medium",
+            "ownerAlias": "owner_iota",
+            "nextStepAt": "T+1d",
+            "lastInteractionAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_iota",
+          "fields": {
+            "lastCustomerReplyAt": "T-1d"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "mapping_gap_blocks_advancement"
+      ],
+      "expectedRubricBranch": "mapping_gap_review_required",
+      "expectedProofPolicy": "source_snapshot_timestamp",
+      "expectedActionTemplate": "request_mapping_gap_review",
+      "expectedNoGo": [
+        "no_customer_visible_draft_without_role",
+        "no_auto_send"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_010",
+      "title": "recent reply but no next step date requires mapping gap review",
+      "inputObjects": [
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_kappa",
+          "fields": {
+            "stage": "discovery",
+            "amountBand": "medium",
+            "ownerAlias": "owner_kappa",
+            "nextStepAt": null,
+            "lastInteractionAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_kappa",
+          "fields": {
+            "lastCustomerReplyAt": "T-1d"
+          }
+        }
+      ],
+      "expectedSignals": [
+        "mapping_gap_blocks_advancement"
+      ],
+      "expectedRubricBranch": "no_judgement",
+      "expectedProofPolicy": "source_snapshot_timestamp",
+      "expectedActionTemplate": "request_mapping_gap_review",
+      "expectedNoGo": [
+        "no_invented_next_step",
+        "no_direct_must_push_truth"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_011",
+      "title": "worker draft output still requires rubric and core arbitration",
+      "inputObjects": [
+        {
+          "objectType": "contact",
+          "aliasId": "contact_lambda",
+          "fields": {
+            "role": "champion",
+            "relationshipStrength": "warm"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_lambda",
+          "fields": {
+            "stage": "proposal_review",
+            "amountBand": "high",
+            "ownerAlias": "owner_lambda",
+            "nextStepAt": "T+1d",
+            "lastInteractionAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_lambda",
+          "fields": {
+            "lastCustomerReplyAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "worker_output",
+          "aliasId": "draft_lambda",
+          "fields": {
+            "outputType": "customer_followup_draft",
+            "passedRubric": false
+          }
+        }
+      ],
+      "expectedSignals": [
+        "customer_visible_draft_needed"
+      ],
+      "expectedRubricBranch": "draft_review_required",
+      "expectedProofPolicy": "customer_visible_draft_review",
+      "expectedActionTemplate": "prepare_customer_followup_draft",
+      "expectedNoGo": [
+        "no_worker_output_direct_to_action",
+        "no_auto_send"
+      ]
+    },
+    {
+      "fixtureId": "b2b_advancement_012",
+      "title": "worker output missing provenance is denied",
+      "inputObjects": [
+        {
+          "objectType": "contact",
+          "aliasId": "contact_mu",
+          "fields": {
+            "role": "champion",
+            "relationshipStrength": "warm"
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_mu",
+          "fields": {
+            "stage": "proposal_review",
+            "amountBand": "high",
+            "ownerAlias": "owner_mu",
+            "nextStepAt": "T+1d",
+            "lastInteractionAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "email_thread",
+          "aliasId": "thread_mu",
+          "fields": {
+            "lastCustomerReplyAt": "T-1d"
+          }
+        },
+        {
+          "objectType": "worker_output",
+          "aliasId": "draft_mu",
+          "fields": {
+            "outputType": "customer_followup_draft",
+            "passedRubric": true,
+            "provenance": null,
+            "branchId": null,
+            "rubricVersion": null
+          }
+        }
+      ],
+      "expectedSignals": [
+        "customer_visible_draft_needed"
+      ],
+      "expectedRubricBranch": "deny",
+      "expectedProofPolicy": "denied_internal_record",
+      "expectedActionTemplate": "mark_internal_denied",
+      "expectedNoGo": [
+        "no_worker_output_without_provenance",
+        "no_auto_send"
+      ]
+    }
+  ],
+  "coreCompatFixtures": [
+    {
+      "fixtureId": "core_compat_001",
+      "title": "tenant overlay attempts to broaden write permission and is rejected by Core",
+      "inputObjects": [
+        {
+          "objectType": "tenant_overlay",
+          "aliasId": "overlay_mu",
+          "fields": {
+            "requestedAutoAllowed": [
+        "write_crm_stage"
+            ],
+            "requestedCustomerVisibleAction": [
+        "send_followup"
+            ]
+          }
+        },
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_mu_core",
+          "fields": {
+            "stage": "evaluation",
+            "amountBand": "high",
+            "ownerAlias": "owner_mu",
+            "nextStepAt": "T-2d",
+            "lastInteractionAt": "T-3d"
+          }
+        }
+      ],
+      "expectedPackSignals": [],
+      "expectedCoreGate": "tenant_overlay_narrowing_validator",
+      "expectedCoreDecision": "reject_overlay_broadening",
+      "expectedNoGo": [
+        "no_overlay_broadening",
+        "no_silent_crm_write",
+        "no_auto_send"
+      ]
+    },
+    {
+      "fixtureId": "core_compat_002",
+      "title": "Pack A and B2B Pack emit overlapping stalled opportunity candidates and Core deduplicates",
+      "inputObjects": [
+        {
+          "objectType": "opportunity",
+          "aliasId": "opp_overlap_alpha",
+          "fields": {
+            "stage": "proposal_review",
+            "amountBand": "high",
+            "ownerAlias": "owner_overlap_alpha",
+            "nextStepAt": "T-3d",
+            "lastInteractionAt": "T-5d"
+          }
+        },
+        {
+          "objectType": "pack_candidate",
+          "aliasId": "pack_a_candidate_alpha",
+          "fields": {
+            "sourcePack": "pack_a",
+            "signal": "stalled_opportunity",
+            "candidatePriority": "high"
+          }
+        },
+        {
+          "objectType": "pack_candidate",
+          "aliasId": "b2b_pack_candidate_alpha",
+          "fields": {
+            "sourcePack": "b2b_sales_advancement",
+            "signal": "stalled_opportunity",
+            "candidatePriority": "review_required_priority_candidate"
+          }
+        }
+      ],
+      "expectedPackSignals": [
+        "stalled_opportunity"
+      ],
+      "expectedCoreGate": "pack_compatibility_gate",
+      "expectedCoreDecision": "merge_duplicate_candidates_with_source_trace",
+      "expectedNoGo": [
+        "no_silent_supersede",
+        "no_pack_single_owner_truth",
+        "no_direct_must_push_truth"
+      ]
+    }
+  ]
+}

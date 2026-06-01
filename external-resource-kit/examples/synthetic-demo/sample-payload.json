@@ -1,0 +1,109 @@
+[
+  {
+    "_id": "row-001-positive-high",
+    "_source": { "sourceKey": "synthetic-demo-management-report", "reportSnapshotDate": "2026-04-26" },
+    "_capturedAt": "2026-04-27T01:00:00Z",
+    "_objectRefs": [{ "helmObjectType": "Workstream", "helmObjectId": "ws-synthetic-demo-001", "matchedVia": "deterministic_key", "matchConfidence": "high" }],
+    "_evidenceRefs": [{ "evidenceType": "report-row", "evidenceId": "synthetic-row-001", "evidenceHash": "demo-hash-001", "redactionApplied": true }],
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": true,
+    "anomalyScore": 0.92,
+    "containsSensitivePii": false,
+    "ageHours": 4,
+    "writeIntentDetected": false
+  },
+  {
+    "_id": "row-002-positive-medium",
+    "_source": { "sourceKey": "synthetic-demo-management-report", "reportSnapshotDate": "2026-04-26" },
+    "_capturedAt": "2026-04-27T01:00:00Z",
+    "_objectRefs": [],
+    "_evidenceRefs": [],
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": true,
+    "anomalyScore": 0.75,
+    "containsSensitivePii": false,
+    "ageHours": 8,
+    "writeIntentDetected": false
+  },
+  {
+    "_id": "row-003-positive-edge",
+    "_source": { "sourceKey": "synthetic-demo-management-report", "reportSnapshotDate": "2026-04-26" },
+    "_capturedAt": "2026-04-27T01:00:00Z",
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": true,
+    "anomalyScore": 0.7,
+    "containsSensitivePii": false,
+    "ageHours": 12,
+    "writeIntentDetected": false
+  },
+  {
+    "_id": "row-004-watch-only",
+    "_source": { "sourceKey": "synthetic-demo-management-report", "reportSnapshotDate": "2026-04-26" },
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": true,
+    "anomalyScore": 0.55,
+    "containsSensitivePii": false,
+    "ageHours": 6,
+    "writeIntentDetected": false
+  },
+  {
+    "_id": "row-005-skip-non-aggregate",
+    "_source": { "sourceKey": "synthetic-demo-management-report" },
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": false,
+    "anomalyScore": 0.95,
+    "containsSensitivePii": false,
+    "ageHours": 2,
+    "writeIntentDetected": false
+  },
+  {
+    "_id": "row-006-rejected-stale",
+    "_source": { "sourceKey": "synthetic-demo-management-report" },
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": true,
+    "anomalyScore": 0.85,
+    "containsSensitivePii": false,
+    "ageHours": 72,
+    "writeIntentDetected": false
+  },
+  {
+    "_id": "row-007-rejected-pii",
+    "_source": { "sourceKey": "synthetic-demo-management-report" },
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": true,
+    "anomalyScore": 0.9,
+    "containsSensitivePii": true,
+    "ageHours": 4,
+    "writeIntentDetected": false
+  },
+  {
+    "_id": "row-008-rejected-foreign-workspace",
+    "_source": { "sourceKey": "synthetic-demo-management-report" },
+    "workspaceId": "some-other-ws",
+    "isAggregated": true,
+    "anomalyScore": 0.95,
+    "containsSensitivePii": false,
+    "ageHours": 4,
+    "writeIntentDetected": false
+  },
+  {
+    "_id": "row-009-rejected-write-intent",
+    "_source": { "sourceKey": "synthetic-demo-management-report" },
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": true,
+    "anomalyScore": 0.8,
+    "containsSensitivePii": false,
+    "ageHours": 4,
+    "writeIntentDetected": true
+  },
+  {
+    "_id": "row-010-rejected-missing-score",
+    "_source": { "sourceKey": "synthetic-demo-management-report" },
+    "workspaceId": "synthetic-demo-ws",
+    "isAggregated": true,
+    "anomalyScore": null,
+    "containsSensitivePii": false,
+    "ageHours": 4,
+    "writeIntentDetected": false
+  }
+]

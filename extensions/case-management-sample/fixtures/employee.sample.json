@@ -1,0 +1,37 @@
+[
+  {
+    "employeeRefId": "employee-alice",
+    "displayName": "Alice",
+    "role": "case-owner",
+    "active": true,
+    "reviewCapacity": 6
+  },
+  {
+    "employeeRefId": "employee-bob",
+    "displayName": "Bob",
+    "role": "case-owner",
+    "active": true,
+    "reviewCapacity": 4
+  },
+  {
+    "employeeRefId": "employee-carol",
+    "displayName": "Carol",
+    "role": "reviewer",
+    "active": true,
+    "reviewCapacity": 5
+  },
+  {
+    "employeeRefId": "employee-dave",
+    "displayName": "Dave",
+    "role": "manager",
+    "active": true,
+    "reviewCapacity": 3
+  },
+  {
+    "employeeRefId": "employee-eve",
+    "displayName": "Eve",
+    "role": "observer",
+    "active": false,
+    "reviewCapacity": 0
+  }
+]

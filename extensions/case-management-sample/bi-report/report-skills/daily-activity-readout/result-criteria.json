@@ -1,0 +1,31 @@
+{
+  "version": "v1",
+  "severityOrder": ["CLEAR", "WATCH", "WARN", "ALERT"],
+  "summaryMetricKeys": [
+    "open_case_count",
+    "review_required_count",
+    "stale_case_count"
+  ],
+  "rules": [
+    {
+      "id": "review-required-alert",
+      "severity": "ALERT",
+      "metricKey": "review_required_count",
+      "operator": ">=",
+      "threshold": 5,
+      "title": "Review queue requires same-day attention",
+      "reason": "The review queue is large enough to affect closure quality."
+    },
+    {
+      "id": "stale-case-warn",
+      "severity": "WARN",
+      "metricKey": "stale_case_count",
+      "operator": ">=",
+      "threshold": 2,
+      "title": "Stale cases need owner follow-through",
+      "reason": "Stale cases indicate follow-through gaps."
+    }
+  ],
+  "silenceThreshold": "WARN",
+  "maxFindings": 3
+}

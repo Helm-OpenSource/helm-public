@@ -1,0 +1,167 @@
+[
+  {
+    "packetId": "metric_anomaly-row-001-positive-high",
+    "signalType": "metric_anomaly",
+    "sourceSummary": {
+      "sourceKey": "synthetic-demo-management-report",
+      "reportSnapshotDate": "2026-04-26",
+      "freshnessAtCapture": "2026-04-27T01:00:00Z"
+    },
+    "objectRefs": [
+      {
+        "helmObjectType": "Workstream",
+        "helmObjectId": "ws-synthetic-demo-001",
+        "matchedVia": "deterministic_key",
+        "matchConfidence": "high"
+      }
+    ],
+    "evidenceRefs": [
+      {
+        "evidenceType": "report-row",
+        "evidenceId": "synthetic-row-001",
+        "evidenceHash": "demo-hash-001",
+        "redactionApplied": true
+      }
+    ],
+    "ruleResult": {
+      "rulePackVersion": "synthetic-demo-v0",
+      "thresholdEvaluations": [
+        "anomalyScore gte 0.7",
+        "anomalyScore gte 0.9"
+      ],
+      "matchedRules": []
+    },
+    "confidence": "high",
+    "llmExplanation": null,
+    "boundaryNote": "review-first; no auto-action; LLM not consulted",
+    "recommendedNextMove": null,
+    "suggestedDri": null,
+    "suggestedDue": null,
+    "allowedActions": [
+      {
+        "action": "review",
+        "surface": "approvals",
+        "capabilityRequired": "workspace_owner"
+      }
+    ],
+    "forbiddenActions": [
+      "official_write_to_external_system",
+      "auto_send",
+      "auto_approval",
+      "cross_workspace_aggregation"
+    ],
+    "rollbackPath": "drop candidate from dry-run output; do not propagate to runtime; review-first",
+    "mustPushEligibility": {
+      "eligible": false,
+      "gateReason": "Phase 3 runtime enablement gate not satisfied; only TPQR-001/003/004 may surface to /mobile Must Push after 6 hard prerequisites + 5-role approval",
+      "phase3Prerequisites": {
+        "redactedCalibrationEvidence": false,
+        "fiveRoleApproval": false,
+        "disabledByDefaultRollout": false,
+        "rollbackProof": false,
+        "auditCompleteness": false,
+        "boundaryRegressionTest": false
+      }
+    }
+  },
+  {
+    "packetId": "metric_anomaly-row-002-positive-medium",
+    "signalType": "metric_anomaly",
+    "sourceSummary": {
+      "sourceKey": "synthetic-demo-management-report",
+      "reportSnapshotDate": "2026-04-26",
+      "freshnessAtCapture": "2026-04-27T01:00:00Z"
+    },
+    "objectRefs": [],
+    "evidenceRefs": [],
+    "ruleResult": {
+      "rulePackVersion": "synthetic-demo-v0",
+      "thresholdEvaluations": [
+        "anomalyScore gte 0.7"
+      ],
+      "matchedRules": []
+    },
+    "confidence": "medium",
+    "llmExplanation": null,
+    "boundaryNote": "review-first; no auto-action; LLM not consulted",
+    "recommendedNextMove": null,
+    "suggestedDri": null,
+    "suggestedDue": null,
+    "allowedActions": [
+      {
+        "action": "review",
+        "surface": "approvals",
+        "capabilityRequired": "workspace_owner"
+      }
+    ],
+    "forbiddenActions": [
+      "official_write_to_external_system",
+      "auto_send",
+      "auto_approval",
+      "cross_workspace_aggregation"
+    ],
+    "rollbackPath": "drop candidate from dry-run output; do not propagate to runtime; review-first",
+    "mustPushEligibility": {
+      "eligible": false,
+      "gateReason": "Phase 3 runtime enablement gate not satisfied; only TPQR-001/003/004 may surface to /mobile Must Push after 6 hard prerequisites + 5-role approval",
+      "phase3Prerequisites": {
+        "redactedCalibrationEvidence": false,
+        "fiveRoleApproval": false,
+        "disabledByDefaultRollout": false,
+        "rollbackProof": false,
+        "auditCompleteness": false,
+        "boundaryRegressionTest": false
+      }
+    }
+  },
+  {
+    "packetId": "metric_anomaly-row-003-positive-edge",
+    "signalType": "metric_anomaly",
+    "sourceSummary": {
+      "sourceKey": "synthetic-demo-management-report",
+      "reportSnapshotDate": "2026-04-26",
+      "freshnessAtCapture": "2026-04-27T01:00:00Z"
+    },
+    "objectRefs": [],
+    "evidenceRefs": [],
+    "ruleResult": {
+      "rulePackVersion": "synthetic-demo-v0",
+      "thresholdEvaluations": [
+        "anomalyScore gte 0.7"
+      ],
+      "matchedRules": []
+    },
+    "confidence": "medium",
+    "llmExplanation": null,
+    "boundaryNote": "review-first; no auto-action; LLM not consulted",
+    "recommendedNextMove": null,
+    "suggestedDri": null,
+    "suggestedDue": null,
+    "allowedActions": [
+      {
+        "action": "review",
+        "surface": "approvals",
+        "capabilityRequired": "workspace_owner"
+      }
+    ],
+    "forbiddenActions": [
+      "official_write_to_external_system",
+      "auto_send",
+      "auto_approval",
+      "cross_workspace_aggregation"
+    ],
+    "rollbackPath": "drop candidate from dry-run output; do not propagate to runtime; review-first",
+    "mustPushEligibility": {
+      "eligible": false,
+      "gateReason": "Phase 3 runtime enablement gate not satisfied; only TPQR-001/003/004 may surface to /mobile Must Push after 6 hard prerequisites + 5-role approval",
+      "phase3Prerequisites": {
+        "redactedCalibrationEvidence": false,
+        "fiveRoleApproval": false,
+        "disabledByDefaultRollout": false,
+        "rollbackProof": false,
+        "auditCompleteness": false,
+        "boundaryRegressionTest": false
+      }
+    }
+  }
+]

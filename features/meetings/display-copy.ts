@@ -1,0 +1,317 @@
+import { formatSeededBusinessCopy } from "@/lib/presentation/seeded-business-copy";
+
+const meetingChineseReplacements: Array<[RegExp, string]> = [
+  [/HELM_V2_HUMAN_ACTION_EXECUTION_READY/g, "人工动作执行就绪"],
+  [/HELM_V2_HUMAN_ACTION_EXECUTION_ACKNOWLEDGED/g, "人工动作执行确认"],
+  [/HELM_V2_OFFICIAL_WRITE_INTENT_CREATED/g, "正式写入意图创建"],
+  [/HELM_V2_LIMITED_AUTO_INTENT_SYNCED/g, "受限自动意图同步"],
+  [/HELM_V2_OFFICIAL_FOLLOWTHROUGH_SYNCED/g, "正式跟进同步"],
+  [/HELM_V2_OFFICIAL_FOLLOWTHROUGH_UPDATED/g, "正式跟进更新"],
+  [/HELM_V2_LIMITED_AUTO_EXECUTED/g, "受限自动执行"],
+  [/HELM_V2_LIMITED_AUTO_REVIEWED/g, "受限自动复核"],
+  [/HELM_V2_OFFICIAL_WRITE_INTENT_REVIEWED/g, "正式写入意图复核"],
+  [/HELM_V2_OFFICIAL_WRITE_ATTEMPTED/g, "正式写入尝试"],
+  [/HELM_V2_OFFICIAL_WRITE_ACKNOWLEDGED/g, "正式写入确认"],
+  [/HELM_V2_DRAFT_COMMS_RUNTIME_STARTED/g, "沟通草稿链路已启动"],
+  [/HELM_V2_DRAFT_COMMS_REVIEWED/g, "沟通草稿已复核"],
+  [
+    /HELM_V2_MEETING_FACTS_READY_FOR_OPPORTUNITY_JUDGE/g,
+    "会议事实可进入机会判断",
+  ],
+  [/HELM_V2_MEETING_RUNTIME_INGESTED/g, "会议运行记录已接入"],
+  [/MEETING_MEMORY_PROCESSED/g, "会议记忆已处理"],
+  [
+    /Helm v2 ingested ([^.。]+) into the meeting-to-action runtime\./gi,
+    "会议推进链路已接入：$1。",
+  ],
+  [
+    /Structured calendar context for the current meeting runtime\./gi,
+    "当前会议的日历上下文已接入运行链。",
+  ],
+  [
+    /Raw email threads can inform retrieval, but not long-term fact promotion without review\./gi,
+    "原始邮件线程只用于辅助检索；未经复核不会提升为长期事实。",
+  ],
+  [
+    /Current handling matches protected-field guidance by holding remediation behind explicit review\./gi,
+    "当前处理符合受保护字段指引：修复动作必须留在显式复核之后。",
+  ],
+  [
+    /Most current pilot cases match the intended SOP handling, and no major guidance-skipping pattern is visible\./gi,
+    "当前多数试点案例符合预期 SOP 处理方式，暂未看到明显绕过指引的模式。",
+  ],
+  [
+    /The loaded context exceeded safe headroom, so bulky context was replaced by handle \+ preview \+ summary\./gi,
+    "当前上下文超过安全余量，系统已把大段资料改为索引、预览和摘要。",
+  ],
+  [
+    /(\d+) tokens are now externalized behind traceable payload handles\./gi,
+    "已将 $1 个上下文片段保存为可追踪资料。",
+  ],
+  [
+    /Critical continuity fields are missing or weakened: ([^.。]+)\./gi,
+    "关键运行字段缺失或变弱：$1。",
+  ],
+  [
+    /Human review is required before any remediation\. Confirm the missing protected fields instead of mutating continuity state blindly\./gi,
+    "任何恢复动作前都需要人工复核；先确认缺失的受保护字段，不要直接改动运行状态。",
+  ],
+  [
+    /Protected-state gaps mean the compacted context may have lost blockers, decisions, owners, due dates, or boundary notes that should never be silently dropped\./gi,
+    "受保护状态出现缺口，说明整理后的上下文可能丢失了阻塞、决策、负责人、到期时间或边界说明，需要先复核。",
+  ],
+  [
+    /PROTECTED_STATE_GAP is currently inside acceptable pilot bounds; the current remediation threshold.*?(?:\.\.\.|\.|$)/gi,
+    "当前受保护状态缺口仍在试点可接受范围内，暂不需要调整处置阈值。",
+  ],
+  [
+    /Check whether blockers, decisions, next actions, owners, due dates, and boundary notes still survive in notebook state\./gi,
+    "检查阻塞、决策、下一步、负责人、到期时间和边界说明是否仍在后台记录中。",
+  ],
+  [
+    /Compare protected field presence between the saved checkpoint and the live notebook\./gi,
+    "对比恢复点与当前记录里的受保护字段是否一致。",
+  ],
+  [
+    /Review whether a recent prune or checkpoint save happened just before the protected-state gap appeared\./gi,
+    "复核状态缺口出现前，是否刚发生过上下文整理或恢复点保存。",
+  ],
+  [
+    /Operator workflow only\. SOP guidance does not expand send authority, execution authority, or broad write authority\./gi,
+    "这只是操作流程指引，不会扩大对外发送、执行或写入权限。",
+  ],
+  [/Relevant objects:/gi, "相关对象："],
+  [/Decisions:/gi, "已定判断："],
+  [/\bMeeting:/gi, "会议："],
+  [/\bOpportunity:/gi, "机会："],
+  [/\bCompany:/gi, "公司："],
+  [/AWAITING_REVIEW/g, "等待复核"],
+  [/PROTECTED_STATE_GAP/g, "受保护状态缺口"],
+  [/meeting_ingest/gi, "会议接入"],
+  [/Protected-field review SOP/gi, "受保护字段复核 SOP"],
+  [
+    /Escalate immediately to review-required; do not use remediation as a shortcut around protected-field review\./gi,
+    "立即升级到需复核；不要把修复动作当作绕过受保护字段复核的捷径。",
+  ],
+  [
+    /Resolve protected-field review first: ([^.。]+)\./gi,
+    "先完成受保护字段复核：$1。",
+  ],
+  [/HELM_V2_MEETING_FACTS_KEPT_DRAFT/g, "会议事实保留为草稿"],
+  [/HELM_V2_MEETING_FACTS_CONFIRMED/g, "会议事实已确认"],
+  [/HELM_V2_MEETING_FACTS_REJECTED/g, "会议事实已拒绝"],
+  [/HELM_V2_OPPORTUNITY_JUDGEMENT_CREATED/g, "机会判断已生成"],
+  [/HELM_V2_OPPORTUNITY_JUDGEMENT_CONSUMED/g, "机会判断已被接收"],
+  [/HELM_V2_OPPORTUNITY_JUDGEMENT_CONFIRMED/g, "机会判断已确认"],
+  [/HELM_V2_OPPORTUNITY_JUDGEMENT_BLOCKED/g, "机会判断已阻断"],
+  [/HELM_V2_OPPORTUNITY_JUDGEMENT_INSUFFICIENT_EVIDENCE/g, "机会判断证据不足"],
+  [/HELM_V2_OPPORTUNITY_JUDGEMENT_KEPT_DRAFT/g, "机会判断保留为草稿"],
+  [/HELM_V2_OPPORTUNITY_JUDGEMENT_REJECTED/g, "机会判断已拒绝"],
+  [/RECOMMENDATION_GENERATED/g, "建议已生成"],
+  [/\bWAITING_THEM\b/g, "等待对方"],
+  [/\bINTERNAL_SYNC\b/g, "需内部协同"],
+  [/\bSYSTEM_INFERENCE\b/g, "系统推断"],
+  [/\bNEW\b/g, "新机会"],
+  [/\bCONTACTED\b/g, "已接触"],
+  [/\bMeeting OS wedge\b/gi, "会议推进切片"],
+  [/\bADVANCING\b/g, "推进中"],
+  [/\bDONE\b/g, "已完成"],
+  [/\bLOST\b/g, "已结束"],
+  [/\bLOW\b/g, "低风险"],
+  [/\bMEDIUM\b/g, "中风险"],
+  [/\bHIGH\b/g, "高风险"],
+  [/\bCRITICAL\b/g, "关键风险"],
+  [/\bSUGGEST_ONLY\b/g, "仅建议"],
+  [/\bREQUIRES_APPROVAL\b/g, "需审批"],
+  [/\bPENDING_REVIEW\b/g, "等待复核"],
+  [/\bAPPROVED\b/g, "已批准"],
+  [/\bREJECTED\b/g, "已拒绝"],
+  [/\bBLOCKED\b/g, "已阻断"],
+  [/\bmeeting detail\b/gi, "会议详情"],
+  [/\bmeeting note\b/gi, "会议记录"],
+  [/\baction pack\b/gi, "行动包"],
+  [/\baction items\b/gi, "动作项"],
+  [/\baction item\b/gi, "动作项"],
+  [/\bsignal event\b/gi, "信号事件"],
+  [/\bsignals\b/gi, "信号"],
+  [/\bworld model snapshot\b/gi, "世界模型快照"],
+  [/\bworld model\b/gi, "世界模型"],
+  [/\bartifact versions\b/gi, "产物版本"],
+  [/\bartifact version\b/gi, "产物版本"],
+  [/\bcapability catalog entry\b/gi, "能力目录条目"],
+  [/\bcapabilities\b/gi, "能力目录"],
+  [/\bcapability\b/gi, "能力"],
+  [/\bproject skill library\b/gi, "项目技能库"],
+  [/\bproject skill entry\b/gi, "项目技能条目"],
+  [/\benvironment execution seam\b/gi, "环境执行边界"],
+  [/\benvironment seams\b/gi, "环境边界"],
+  [/\benvironment seam\b/gi, "环境边界"],
+  [/\bWorkspace context seam\b/gi, "工作区上下文边界"],
+  [/\bConnector seam\b/gi, "连接器边界"],
+  [/\bBrowser seam\b/gi, "浏览器边界"],
+  [/\bControl-plane seam\b/gi, "控制面边界"],
+  [/\bOfficial action seam\b/gi, "正式动作边界"],
+  [/\bapproval gated\b/gi, "审批后可用"],
+  [/\breview first\b/gi, "先复核"],
+  [/\bboundary only\b/gi, "仅边界定义"],
+  [/\boperator progress summary\b/gi, "操作进度摘要"],
+  [/\boperator action summary\b/gi, "操作动作摘要"],
+  [/\boperator control summary\b/gi, "操作控制摘要"],
+  [/\bboundary-aware\b/gi, "边界清楚"],
+  [/\breview-aware\b/gi, "保留复核意识"],
+  [/\breview-only\b/gi, "仅复核"],
+  [/\bprotected-field review\b/gi, "受保护字段复核"],
+  [/\bprotected-field\b/gi, "受保护字段"],
+  [/\bbounded remediation\b/gi, "有边界修复"],
+  [/\bread-only\b/gi, "只读"],
+  [/\boperating memory\b/gi, "经营记忆"],
+  [/\boperating\b/gi, "经营"],
+  [/\bmemory facts\b/gi, "记忆事实"],
+  [/\bmemory fact\b/gi, "记忆事实"],
+  [/\bfacts\b/gi, "事实"],
+  [/\bfact\b/gi, "事实"],
+  [/\bgoal\b/gi, "目标字段"],
+  [/\bSOP\b/g, "标准操作指引"],
+  [/\bboundary posture\b/gi, "边界状态"],
+  [/\breview posture\b/gi, "复核状态"],
+  [/\bdelivery review\b/gi, "交付复核"],
+  [/\bopen questions\b/gi, "待确认问题"],
+  [/\bevidence refs\b/gi, "依据引用"],
+  [/\bevidence packaging\b/gi, "依据打包"],
+  [/\bshadow boundary\b/gi, "影子写入边界"],
+  [/\bshadow stage\b/gi, "影子阶段"],
+  [/\bshadow update\b/gi, "影子更新"],
+  [/\bshadow-only\b/gi, "仅影子态"],
+  [/\bshadow\b/gi, "影子态"],
+  [/\bofficial CRM state\b/gi, "正式 CRM 状态"],
+  [/\bofficial-write\b/gi, "正式写入"],
+  [/\bofficial write authority\b/gi, "正式写入权限"],
+  [/\bofficial write\b/gi, "正式写入"],
+  [/\bdownstream judgement\b/gi, "下游判断"],
+  [/\bdownstream handoff\b/gi, "下游交接"],
+  [/\bconfirmed facts\b/gi, "已确认事实"],
+  [/\bmeeting facts\b/gi, "会议事实"],
+  [/\bhuman confirm\b/gi, "人工确认"],
+  [/\bhuman-confirmed\b/gi, "人工确认"],
+  [/\bhuman action\b/gi, "人工动作"],
+  [/\bpromoted memory\b/gi, "已提升记忆"],
+  [/\bmemory promotion\b/gi, "记忆提升"],
+  [/\bpromotion memory\b/gi, "提升记忆"],
+  [/\bpromotion\b/gi, "提升"],
+  [/\bdraft-only\b/gi, "仅草稿"],
+  [/\bdraft comms\b/gi, "沟通草稿"],
+  [/\bdraft\b/gi, "草稿"],
+  [/\bingestion\b/gi, "接入"],
+  [/\bretrieval\b/gi, "检索"],
+  [/\bcheckpoint\b/gi, "检查点"],
+  [/\bpersisted payloads\b/gi, "已保存资料"],
+  [/\bpersisted payload\b/gi, "已保存资料"],
+  [/\bactive\b/gi, "当前使用"],
+  [/\bprune trace\b/gi, "精简记录"],
+  [/\bprune\b/gi, "整理上下文"],
+  [/\btruth conflict\b/gi, "事实冲突"],
+  [/\bcomposition failure\b/gi, "整理失败"],
+  [/\brecovery\b/gi, "恢复"],
+  [/\bremediation\b/gi, "处置"],
+  [/\bcontinuity fields?\b/gi, "运行字段"],
+  [/\bcontinuity state\b/gi, "运行状态"],
+  [/\bcontinuity\b/gi, "连续性"],
+  [/\bnotebook state\b/gi, "后台记录"],
+  [/\blive notebook\b/gi, "当前记录"],
+  [/\bnotebook\b/gi, "后台记录"],
+  [/\bprotected-state gaps?\b/gi, "受保护状态缺口"],
+  [/\bprotected state gaps?\b/gi, "受保护状态缺口"],
+  [/\bprotected fields?\b/gi, "受保护字段"],
+  [/\bowners\b/gi, "负责人"],
+  [/\bdue dates\b/gi, "到期时间"],
+  [/\bboundary notes\b/gi, "边界说明"],
+  [/\bnotes\b/gi, "说明"],
+  [/\benvironment execution authority\b/gi, "环境执行边界"],
+  [/\bexecution authority\b/gi, "执行权限"],
+  [/\bbroad write authority\b/gi, "广泛写入权限"],
+  [/\bruntime\b/gi, "运行链路"],
+  [/\bworkflow control\b/gi, "流程控制权"],
+  [/\bworkflow\b/gi, "流程"],
+  [/\bworker\b/gi, "执行单元"],
+  [/\bowner\b/gi, "负责人"],
+  [/\boperator\b/gi, "操作员"],
+  [/\bdebugger\b/gi, "调试器"],
+  [/\btrace\b/gi, "追踪"],
+  [/\bapproval ownership\b/gi, "审批归属"],
+  [/\bcommitment authority\b/gi, "承诺权限"],
+  [/\bsend authority\b/gi, "发送权限"],
+  [/\btrusted\b/gi, "可信"],
+  [/\buntrusted\b/gi, "未确认"],
+  [/\bcommitment\b/gi, "承诺"],
+  [/\bpanel briefing\b/gi, "面试小组简报"],
+  [/thread-linked facts/gi, "线程事实"],
+  [/thread-linked commitments/gi, "线程承诺"],
+  [/\bpost-meeting\b/gi, "会后"],
+  [/\bfollow-up email\b/gi, "跟进邮件"],
+  [/\bfollow-up 邮件/gi, "跟进邮件"],
+  [/\bfollow-up\b/gi, "跟进"],
+  [/结构化 跟进/g, "结构化跟进"],
+  [/结构化跟进\s+(?=[\u4e00-\u9fff])/g, "结构化跟进"],
+  [/\bwalkthrough\b/gi, "走查"],
+  [/\bnext-step\b/gi, "下一步"],
+  [/\bfollow-through\b/gi, "后续推进"],
+  [/\bbriefing\b/gi, "会前简报"],
+  [/\brecommendations\b/gi, "判断建议"],
+  [/\brecommendation\b/gi, "判断建议"],
+  [/\bblockers\b/gi, "阻塞"],
+  [/\bblocker\b/gi, "阻塞"],
+  [/\bcommitments\b/gi, "承诺"],
+  [/\bmemory\b/gi, "记忆"],
+  [/\bboundary\b/gi, "边界"],
+  [/\bposture\b/gi, "状态"],
+  [/\breview\b/gi, "复核"],
+  [/accountable conversation/gi, "可追踪沟通"],
+  [/Contact 详情/g, "联系人详情"],
+  [/Company 详情/g, "公司详情"],
+  [/Founder 接手面/g, "创始人接手面"],
+  [/跟进 邮件/g, "跟进邮件"],
+  [/阻碍/g, "阻塞"],
+];
+
+export function formatMeetingDisplayText(text: string, english: boolean) {
+  if (english) return text;
+  const source = extractReadableMeetingSummary(text);
+
+  const formatted = meetingChineseReplacements.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    source,
+  );
+
+  return formatSeededBusinessCopy(formatted, english);
+}
+
+function extractReadableMeetingSummary(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) return text;
+  const summaryMatch = trimmed.match(/"summary"\s*:\s*"([^"]+)/);
+  if (summaryMatch?.[1]?.trim()) {
+    return summaryMatch[1];
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      summary?: unknown;
+      recommendedNextSteps?: unknown;
+    };
+    if (typeof parsed.summary === "string" && parsed.summary.trim()) {
+      return parsed.summary;
+    }
+
+    if (Array.isArray(parsed.recommendedNextSteps)) {
+      const firstStep = parsed.recommendedNextSteps.find(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      );
+      if (firstStep) return firstStep;
+    }
+  } catch {
+    return text;
+  }
+
+  return text;
+}

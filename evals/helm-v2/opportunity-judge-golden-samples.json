@@ -1,0 +1,113 @@
+[
+  {
+    "id": "pilot-advancing-budget",
+    "label": "ROI 跟进和联合评审把机会推到 advancing，但预算 owner 仍未锁定",
+    "workspaceSummary": "当前 workspace 以 judgement-first 方式把会议、对象状态、审批和下一步收成同一条经营推进链。",
+    "meeting": {
+      "title": "Northwind ROI 跟进会",
+      "agenda": "确认 ROI follow-up、联合评审和预算 owner",
+      "startsAt": "2026-04-02T10:00:00.000Z",
+      "endsAt": "2026-04-02T11:00:00.000Z",
+      "companyName": "Northwind",
+      "ownerName": "Alice",
+      "contacts": ["张琳", "采购负责人"],
+      "opportunity": {
+        "title": "Northwind Expansion",
+        "type": "CLIENT",
+        "stage": "CONTACTED",
+        "riskLevel": "MEDIUM",
+        "nextAction": "确认客户内部采购窗口"
+      },
+      "note": {
+        "meetingGoal": "确认会后 ROI 跟进 owner 和联合评审窗口。",
+        "riskAlerts": "预算 owner 仍未确认，如果一周内不推进，采购评估会被推迟。",
+        "summary": "客户接受我们先发 ROI follow-up，并在预算 owner 明确后安排联合评审。",
+        "keyDecisions": "本周先发 ROI follow-up；下周安排联合评审。当前不形成正式价格承诺。",
+        "confirmations": "销售 owner 在 24 小时内发跟进草稿，manager 复核 pricing wording。"
+      }
+    },
+    "promotedMemorySummaries": ["该客户过去两轮都要求在 manager review 后才会进入采购评估。"],
+    "historicalTimeline": ["2026-03-28: 客户确认愿意看 ROI 资料，但预算 owner 仍待明确。"],
+    "expected": {
+      "expectedShadowStage": "ADVANCING",
+      "expectedTopBlockerIncludes": "预算",
+      "expectedNextActionIncludes": ["ROI", "联合评审"],
+      "expectedAttentionFlagKeys": ["budget_uncertainty", "missing_champion", "escalation_candidate"],
+      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "confirmed 只表示允许把 judgement consume 到 shadow summary"]
+    }
+  },
+  {
+    "id": "waiting-them-procurement",
+    "label": "客户回去内部确认，Opportunity Judge 保持 waiting-them posture",
+    "workspaceSummary": "当前 workspace 以 judgement-first 方式把会议、对象状态、审批和下一步收成同一条经营推进链。",
+    "meeting": {
+      "title": "Fabrikam 内部确认会",
+      "agenda": "确认客户内部采购评估节奏",
+      "startsAt": "2026-04-03T09:00:00.000Z",
+      "endsAt": "2026-04-03T10:00:00.000Z",
+      "companyName": "Fabrikam",
+      "ownerName": "Bob",
+      "contacts": ["王敏", "业务负责人"],
+      "opportunity": {
+        "title": "Fabrikam Pilot",
+        "type": "CLIENT",
+        "stage": "CONTACTED",
+        "riskLevel": "MEDIUM",
+        "nextAction": "等待客户内部确认"
+      },
+      "note": {
+        "meetingGoal": "明确客户内部采购评估和回看窗口。",
+        "riskAlerts": "客户表示需要回去确认预算和采购优先级。",
+        "summary": "本周不推进报价，先等客户内部采购评估和回看结果。",
+        "keyDecisions": "客户回去确认预算和采购优先级；我们本周只保留资料跟进。",
+        "confirmations": "暂不推进正式报价，等待对方确认后再约下一次会。"
+      }
+    },
+    "promotedMemorySummaries": ["该客户常在内部采购评估完成前保持信息收集状态。"],
+    "historicalTimeline": ["2026-03-29: 客户表示本周先做内部优先级梳理。"],
+    "expected": {
+      "expectedShadowStage": "WAITING_THEM",
+      "expectedTopBlockerIncludes": "采购",
+      "expectedNextActionIncludes": ["确认", "下一次会"],
+      "expectedAttentionFlagKeys": ["budget_uncertainty", "timeline_risk"],
+      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "attention，不是 final decision"]
+    }
+  },
+  {
+    "id": "internal-sync-dependency",
+    "label": "多重内部依赖让 judgement 保持 internal-sync 并抬高 manager attention",
+    "workspaceSummary": "当前 workspace 以 judgement-first 方式把会议、对象状态、审批和下一步收成同一条经营推进链。",
+    "meeting": {
+      "title": "Contoso 交付评审会",
+      "agenda": "确认法务、交付和资源协调",
+      "startsAt": "2026-04-04T07:00:00.000Z",
+      "endsAt": "2026-04-04T08:00:00.000Z",
+      "companyName": "Contoso",
+      "ownerName": "Carol",
+      "contacts": ["刘洋", "交付经理"],
+      "opportunity": {
+        "title": "Contoso Delivery Expansion",
+        "type": "CLIENT",
+        "stage": "ADVANCING",
+        "riskLevel": "HIGH",
+        "nextAction": "确认内部资源协调"
+      },
+      "note": {
+        "meetingGoal": "判断是否需要先做内部资源协调再继续推进。",
+        "riskAlerts": "法务条款、交付日期和资源协调都还没收口。",
+        "summary": "当前先不对客户承诺交付日期，需要内部法务和交付评审先收口。",
+        "keyDecisions": "本周内部优先级和法务评审先行；对外仍保持 discussion-only。",
+        "confirmations": "先整理内部 blocker，再决定是否对客户提供时间建议。"
+      }
+    },
+    "promotedMemorySummaries": ["该机会过去两轮都因内部法务和交付依赖而延迟进入正式承诺。"],
+    "historicalTimeline": ["2026-03-31: 法务要求先确认条款，交付团队要求先锁资源。"],
+    "expected": {
+      "expectedShadowStage": "INTERNAL_SYNC",
+      "expectedTopBlockerIncludes": "法务",
+      "expectedNextActionIncludes": ["内部", "blocker"],
+      "expectedAttentionFlagKeys": ["dependency_risk", "commitment_risk", "escalation_candidate"],
+      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "formal commitment boundary"]
+    }
+  }
+]

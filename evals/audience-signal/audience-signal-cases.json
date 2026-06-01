@@ -1,0 +1,186 @@
+{
+  "version": "audience-signal-phase1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "synthetic_and_alias_only",
+  "boundary": "audience_aware_signal_projection_no_runtime_no_schema_no_auto_execution",
+  "targets": {
+    "maximumHumanBulletCount": 3,
+    "minimumReviewerEvidenceCoveragePercent": 100,
+    "maximumWorkerForbiddenActionLeakCount": 0,
+    "maximumRawPayloadEchoCount": 0,
+    "maximumAutoExecutionAttemptCount": 0,
+    "maximumCanonicalMemoryWriteCount": 0
+  },
+  "cases": [
+    {
+      "id": "AUD-SIG-MUST-PUSH-HUMAN-WORKER-001",
+      "expectedDecision": "surface_to_human_and_worker",
+      "candidate": {
+        "validityDisposition": "must_push_ready",
+        "signalType": "overdue_commitment",
+        "severity": "high",
+        "objectRef": "commitment:alias-a-renewal-plan",
+        "evidenceRefs": [
+          "meeting:alias-a:2026-05-01",
+          "crm:alias-a:renewal-opportunity",
+          "owner-note:founder-review"
+        ],
+        "contradictoryEvidenceRefs": [],
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "suggestedSafeActions": ["prepare_draft", "open_review_packet", "assign_owner"],
+        "unsafeActionRequests": [],
+        "rawPayloadIncluded": false
+      },
+      "expectations": {
+        "humanMode": "compact_must_push",
+        "workerMode": "bounded_instruction",
+        "reviewRequired": false,
+        "learningCategory": "positive_pattern_candidate"
+      }
+    },
+    {
+      "id": "AUD-SIG-REVIEW-CONTRADICTION-001",
+      "expectedDecision": "review_first",
+      "candidate": {
+        "validityDisposition": "review_required",
+        "signalType": "blocked_decision",
+        "severity": "high",
+        "objectRef": "decision:alias-b-security-review",
+        "evidenceRefs": [
+          "meeting:alias-b:blocker",
+          "crm:alias-b:stage-note"
+        ],
+        "contradictoryEvidenceRefs": ["email:alias-b:customer-says-approved"],
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "suggestedSafeActions": ["prepare_draft", "open_review_packet"],
+        "unsafeActionRequests": [],
+        "rawPayloadIncluded": false
+      },
+      "expectations": {
+        "humanMode": "review_banner",
+        "workerMode": "review_packet_only",
+        "reviewRequired": true,
+        "learningCategory": "threshold_or_boundary_candidate"
+      }
+    },
+    {
+      "id": "AUD-SIG-WATCH-DUPLICATE-001",
+      "expectedDecision": "watch_only_digest",
+      "candidate": {
+        "validityDisposition": "watch_only",
+        "signalType": "customer_waiting",
+        "severity": "normal",
+        "objectRef": "customer:alias-c",
+        "evidenceRefs": [
+          "email:alias-c:waiting",
+          "crm:alias-c:last-touch"
+        ],
+        "contradictoryEvidenceRefs": [],
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "suggestedSafeActions": ["open_review_packet"],
+        "unsafeActionRequests": [],
+        "rawPayloadIncluded": false
+      },
+      "expectations": {
+        "humanMode": "digest_or_suppress",
+        "workerMode": "no_instruction",
+        "reviewRequired": false,
+        "learningCategory": "noise_or_freshness_candidate"
+      }
+    },
+    {
+      "id": "AUD-SIG-REJECT-CROSS-WORKSPACE-001",
+      "expectedDecision": "reject_and_contain",
+      "candidate": {
+        "validityDisposition": "rejected",
+        "signalType": "proof_or_review_required",
+        "severity": "critical",
+        "objectRef": "customer:alias-d",
+        "evidenceRefs": [
+          "crm:other-workspace:alias-d",
+          "meeting:workspace-demo:alias-d"
+        ],
+        "contradictoryEvidenceRefs": [],
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "suggestedSafeActions": ["open_review_packet"],
+        "unsafeActionRequests": ["update_crm_stage"],
+        "rawPayloadIncluded": false
+      },
+      "expectations": {
+        "humanMode": "suppress_and_alert_reviewer",
+        "workerMode": "blocked",
+        "reviewRequired": true,
+        "learningCategory": "negative_fixture_candidate"
+      }
+    },
+    {
+      "id": "AUD-SIG-REJECT-UNSAFE-ACTION-001",
+      "expectedDecision": "reject_and_contain",
+      "candidate": {
+        "validityDisposition": "rejected",
+        "signalType": "customer_waiting",
+        "severity": "critical",
+        "objectRef": "opportunity:alias-e",
+        "evidenceRefs": [
+          "email:alias-e:waiting",
+          "crm:alias-e:stage-note",
+          "meeting:alias-e:pricing-risk"
+        ],
+        "contradictoryEvidenceRefs": [],
+        "hasOwner": true,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "suggestedSafeActions": ["prepare_draft", "open_review_packet"],
+        "unsafeActionRequests": ["send_email", "commit_price", "canonical_memory_write"],
+        "rawPayloadIncluded": false
+      },
+      "expectations": {
+        "humanMode": "suppress_and_alert_reviewer",
+        "workerMode": "blocked",
+        "reviewRequired": true,
+        "learningCategory": "negative_fixture_candidate"
+      }
+    },
+    {
+      "id": "AUD-SIG-REVIEW-MISSING-OWNER-001",
+      "expectedDecision": "review_first",
+      "candidate": {
+        "validityDisposition": "review_required",
+        "signalType": "risk_escalation",
+        "severity": "high",
+        "objectRef": "opportunity:alias-f",
+        "evidenceRefs": [
+          "report:alias-f:risk",
+          "meeting:alias-f:open-risk"
+        ],
+        "contradictoryEvidenceRefs": [],
+        "hasOwner": false,
+        "hasNextAction": true,
+        "hasBoundaryNote": true,
+        "hasReviewPosture": true,
+        "suggestedSafeActions": ["assign_owner", "open_review_packet"],
+        "unsafeActionRequests": [],
+        "rawPayloadIncluded": false
+      },
+      "expectations": {
+        "humanMode": "review_banner",
+        "workerMode": "review_packet_only",
+        "reviewRequired": true,
+        "learningCategory": "threshold_or_boundary_candidate"
+      }
+    }
+  ]
+}

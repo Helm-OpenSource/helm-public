@@ -1,0 +1,41 @@
+export type {
+  ActionOutcomeInput,
+  ActionOutcomeResult,
+  BusinessObjectRef,
+  ContextPacketSnapshot,
+  ContextQualityInput,
+  ContextQualityResult,
+  CostModelToolInput,
+  CostModelToolResult,
+  EvalReplayGrowthInput,
+  EvalReplayGrowthResult,
+  EvidenceRef,
+  GrowthBoundaryPosture,
+  GrowthDecision,
+  GrowthFailure,
+  GrowthInputBase,
+  GrowthMetric,
+  GrowthResultBase,
+  IntelligenceDimension,
+  MemoryGrowthInput,
+  MemoryGrowthResult,
+  NoGoBoundary,
+  ObjectSignalGrowthInput,
+  ObjectSignalGrowthResult,
+  PromptPolicyGrowthInput,
+  PromptPolicyGrowthResult,
+  RoutingGrowthInput,
+  RoutingGrowthResult,
+  TenantPersonalizationInput,
+  TenantPersonalizationResult,
+  WorkerSkillGrowthInput,
+  WorkerSkillGrowthResult,
+} from "./types";
+
+export type { IntelligenceGrowthDimensionDescriptor } from "./contracts";
+
+export {
+  assertGrowthDecisionIsNonPromoting,
+  getIntelligenceGrowthDimensionDescriptor,
+  INTELLIGENCE_GROWTH_DIMENSION_DESCRIPTORS,
+} from "./contracts";

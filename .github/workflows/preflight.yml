@@ -1,0 +1,59 @@
+name: Preflight (Fast PR Feedback)
+
+# Lightweight CI that runs only the three fastest gates (lint / typecheck /
+# boundary) for quick PR reviewer feedback. Heavier checks (build / test /
+# e2e / quality regression) continue to run in ci.yml.
+#
+# Goal: < 3 min feedback on every PR push, vs ~15 min for full ci.yml.
+# Reviewers can decline a PR early instead of waiting for the full chain.
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+# Cancel in-flight preflight runs when a new push lands; full ci.yml stays.
+concurrency:
+  group: preflight-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: Lint + Typecheck + Boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Lint (strict)
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run lint:strict
+
+      - name: Typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run typecheck
+
+      - name: Boundary checks
+        run: npm run check:boundaries
+
+      - name: Public release guard
+        run: npm run check:public-release
+
+      - name: Doc frontmatter guard
+        run: npx tsx scripts/check-doc-frontmatter.ts

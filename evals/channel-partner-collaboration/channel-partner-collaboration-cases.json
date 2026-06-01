@@ -1,0 +1,434 @@
+{
+  "version": "channel-partner-collaboration-p0-v2.1",
+  "status": "offline_evaluation_fixture",
+  "redactionPosture": "alias_only_no_real_customer_identity",
+  "boundary": "p0_offline_only_no_schema_no_migration_no_runtime_no_api_no_ui_no_outbound_send",
+  "sourceDoc": "docs/product/HELM_CHANNEL_PARTNER_COLLABORATION_REQUIREMENTS_2026-05-12.md",
+  "scope": "P0-REQ-08",
+  "notes": [
+    "All customer identifiers are alias-only (alias-cust-a, alias-cust-b, ...).",
+    "No real workspace names, URLs, slugs, industry, size, or amounts appear.",
+    "Fixture pack does not import any runtime, DB, schema, API, UI, network, or LLM surface.",
+    "P0 only freezes offline contract; P1 internal implementation and P2 PartnerWorkspace runtime stay out-of-scope."
+  ],
+  "targets": {
+    "minimumTotalCases": 20,
+    "minimumNudgeLifecycleCoverageCount": 5,
+    "minimumRevocationCoverageCount": 2,
+    "minimumAttributionLedgerAnchorCoverageCount": 2,
+    "minimumPartnerSafeDtoCoverageCount": 3,
+    "maximumUnauthorizedAccessCount": 0,
+    "maximumOutboundSendIncidentCount": 0,
+    "maximumDisclosureMissingCount": 0,
+    "maximumAttributionUniquenessViolations": 0,
+    "maximumPartnerDataLeakedToCustomerWorkspaceCount": 0,
+    "maximumCustomerDataRawLeakedToPartnerCount": 0,
+    "maximumDirectRecommendationCreationByPartnerCount": 0,
+    "maximumAskHelmAccessByPartnerCount": 0,
+    "maximumCrossTenantHelperLeakCount": 0,
+    "maximumDirectSourceTableReadCount": 0,
+    "maximumMissingGrantAcceptedCount": 0,
+    "maximumUnauthorizedNudgeAcceptanceCount": 0,
+    "maximumSchemaRuntimeApiUiIncidentCount": 0,
+    "maximumPartnerWorkspaceRuntimeIncidentCount": 0
+  },
+  "cases": [
+    {
+      "id": "CP-001-GRANT-MISSING-REJECT",
+      "scenario": "grant_missing_reject",
+      "description": "Partner attempts PartnerSafe DTO readout without any PartnerCustomerGrant; system must reject.",
+      "actor": "partner",
+      "request": "read_partner_safe_dto",
+      "dtoUsed": "PartnerSafeRecommendationDTO",
+      "grant": { "present": false, "status": "missing" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_grant_required"],
+        "flags": {},
+        "coverage": { "partnerSafeDto": true }
+      }
+    },
+    {
+      "id": "CP-002-GRANT-REJECTED-BY-CUSTOMER",
+      "scenario": "grant_rejected",
+      "description": "Customer admin rejected the inbound PartnerCustomerGrant request; partner cannot read.",
+      "actor": "partner",
+      "request": "read_partner_safe_dto",
+      "dtoUsed": "PartnerSafeMustPushDTO",
+      "grant": { "present": true, "status": "rejected" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_grant_required"],
+        "flags": {},
+        "coverage": { "partnerSafeDto": true }
+      }
+    },
+    {
+      "id": "CP-003-SAFE-DTO-ALLOWLIST",
+      "scenario": "partner_safe_dto_allowed",
+      "description": "Active grant + read via PartnerSafeRecommendationDTO white list; allowed but only via projection, not raw table.",
+      "actor": "partner",
+      "request": "read_partner_safe_dto",
+      "dtoUsed": "PartnerSafeRecommendationDTO",
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_safe_dto_only"],
+        "flags": {},
+        "coverage": { "partnerSafeDto": true }
+      }
+    },
+    {
+      "id": "CP-004-DIRECT-SOURCE-TABLE-READ-REJECT",
+      "scenario": "direct_source_table_read_rejected",
+      "description": "Partner attempts to select directly from raw Recommendation source table; must be rejected by safe-DTO boundary.",
+      "actor": "partner",
+      "request": "read_source_table",
+      "dtoUsed": "raw_source_table",
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_safe_dto_only", "raw_source_table_blocked"],
+        "flags": {},
+        "coverage": { "partnerSafeDto": true }
+      }
+    },
+    {
+      "id": "CP-005-ASK-HELM-REJECT",
+      "scenario": "ask_helm_blocked",
+      "description": "Partner attempts to issue an Ask Helm query against customer workspace; must be hard-blocked (P0-REQ-02 black list).",
+      "actor": "partner",
+      "request": "ask_helm_invocation",
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_ask_helm_forbidden"],
+        "flags": {}
+      }
+    },
+    {
+      "id": "CP-006-OUTBOUND-SEND-REJECT",
+      "scenario": "outbound_send_blocked",
+      "description": "Partner attempts to draft and send an outbound email through customer workspace; must be rejected.",
+      "actor": "partner",
+      "request": "outbound_send",
+      "channel": "email",
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_collaborator_no_outbound_send"],
+        "flags": {}
+      }
+    },
+    {
+      "id": "CP-007-DIRECT-RECOMMENDATION-CREATION-REJECT",
+      "scenario": "direct_recommendation_creation_blocked",
+      "description": "Partner attempts to directly create a Recommendation row instead of submitting a PartnerNudgeDraft; must be rejected.",
+      "actor": "partner",
+      "request": "create_recommendation_direct",
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_nudge_no_direct_promotion"],
+        "flags": {}
+      }
+    },
+    {
+      "id": "CP-008-UNAUTHORIZED-ACCEPT-REJECT",
+      "scenario": "unauthorized_nudge_acceptance_blocked",
+      "description": "Non-admin / non-operator / non-champion customer member tries to accept or promote a PartnerNudgeDraft; must be rejected.",
+      "actor": "customer_member",
+      "request": "accept_nudge",
+      "nudgeLifecycle": { "from": "submitted", "to": "accepted_by_customer" },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_nudge_acceptance_unauthorized"],
+        "flags": {},
+        "coverage": { "nudgeLifecycle": true }
+      }
+    },
+    {
+      "id": "CP-009-NUDGE-ACCEPTED-INTERNAL-REVIEW-PROMOTED",
+      "scenario": "nudge_promoted_full_path",
+      "description": "Authorized customer admin accepts a PartnerNudgeDraft, sends it through customer_internal_review, then promotes to Recommendation candidate.",
+      "actor": "customer_admin",
+      "request": "promote_nudge",
+      "nudgeLifecycle": {
+        "from": "submitted",
+        "through": ["accepted_by_customer", "customer_internal_review"],
+        "to": "promoted_to_recommendation"
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_nudge_lifecycle_promoted"],
+        "flags": {},
+        "coverage": { "nudgeLifecycle": true }
+      }
+    },
+    {
+      "id": "CP-010-NUDGE-KEPT-AS-NOTE",
+      "scenario": "nudge_kept_as_partner_note",
+      "description": "Customer accepts nudge into customer_internal_review but explicitly keeps it as partner note instead of promoting.",
+      "actor": "customer_operator",
+      "request": "kept_as_note",
+      "nudgeLifecycle": {
+        "from": "accepted_by_customer",
+        "through": ["customer_internal_review"],
+        "to": "kept_as_partner_note"
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_nudge_lifecycle_kept_as_note"],
+        "flags": {},
+        "coverage": { "nudgeLifecycle": true }
+      }
+    },
+    {
+      "id": "CP-011-NUDGE-TIMEOUT-KEPT-AS-NOTE",
+      "scenario": "nudge_timeout_kept_as_note",
+      "description": "Nudge sits in customer_internal_review without further action for 14 days; system auto-keeps it as partner note.",
+      "actor": "system",
+      "request": "kept_as_note",
+      "nudgeLifecycle": {
+        "from": "customer_internal_review",
+        "to": "kept_as_partner_note",
+        "trigger": "timeout_14_days"
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_nudge_timeout_kept_as_note"],
+        "flags": {},
+        "coverage": { "nudgeLifecycle": true }
+      }
+    },
+    {
+      "id": "CP-012-NUDGE-REJECTED",
+      "scenario": "nudge_rejected",
+      "description": "Authorized customer admin rejects a submitted PartnerNudgeDraft with a reason; allowed lifecycle outcome.",
+      "actor": "customer_admin",
+      "request": "reject_nudge",
+      "nudgeLifecycle": { "from": "submitted", "to": "rejected_by_customer" },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_nudge_lifecycle_rejected"],
+        "flags": {},
+        "coverage": { "nudgeLifecycle": true }
+      }
+    },
+    {
+      "id": "CP-013-EXPIRED-AND-RETRY-RATE-LIMITED",
+      "scenario": "nudge_expired_then_resubmit_rate_limited",
+      "description": "Nudge auto-expires after 30 days; partner retries within same calendar week and is rate-limited per (partnerCandidate, customer, calendar_week).",
+      "actor": "partner",
+      "request": "submit_nudge",
+      "nudgeLifecycle": { "from": "expired", "to": "rate_limited_resubmit" },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_nudge_resubmit_rate_limited"],
+        "flags": {},
+        "coverage": { "nudgeLifecycle": true }
+      }
+    },
+    {
+      "id": "CP-014-SINGLE-ACTIVE-ATTRIBUTION-LOCK",
+      "scenario": "single_active_attribution_lock",
+      "description": "Customer alias-cust-c has one active AttributionCandidate locked at trial-to-paid; uniqueness invariant must hold (no second active candidate).",
+      "actor": "system",
+      "request": "attribution_lock",
+      "attribution": {
+        "customerAlias": "alias-cust-c",
+        "activeCandidates": 1,
+        "partnerType": "implementation",
+        "lockedAtTrialToPaid": true
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_attribution_single_active_ok"],
+        "flags": {},
+        "coverage": { "attributionLedgerAnchor": true }
+      }
+    },
+    {
+      "id": "CP-015-MULTI-PARTNER-DOWNGRADE-TO-CONTRIBUTION",
+      "scenario": "multi_partner_downgrade_to_contribution",
+      "description": "Two partners both pushed alias-cust-d during the same trial; only one can attribution-lock, the other downgrades to contribution-only path.",
+      "actor": "system",
+      "request": "attribution_lock_contest",
+      "attribution": {
+        "customerAlias": "alias-cust-d",
+        "activeCandidates": 1,
+        "contributionOnlyCandidates": 1,
+        "partnerType": "implementation"
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_attribution_contest_downgraded_to_contribution"],
+        "flags": {},
+        "coverage": { "attributionLedgerAnchor": true }
+      }
+    },
+    {
+      "id": "CP-016-IMPLEMENTATION-THRESHOLD-RELEASED",
+      "scenario": "implementation_threshold_not_met_released",
+      "description": "Implementation partner did not meet minActivityThreshold by trial-to-paid; AttributionCandidate enters released, not locked.",
+      "actor": "system",
+      "request": "attribution_threshold_evaluation",
+      "attribution": {
+        "customerAlias": "alias-cust-e",
+        "partnerType": "implementation",
+        "acceptedNudgeCount": 1,
+        "minAcceptedNudgeCount": 3,
+        "minActivityMet": false,
+        "outcome": "released"
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_attribution_threshold_released"],
+        "flags": {},
+        "coverage": { "attributionLedgerAnchor": true }
+      }
+    },
+    {
+      "id": "CP-017-REFERRAL-LOCK",
+      "scenario": "referral_only_locked",
+      "description": "Referral-only partner with valid grant satisfies grant_only threshold; trial-to-paid converts to locked AttributionCandidate.",
+      "actor": "system",
+      "request": "attribution_lock",
+      "attribution": {
+        "customerAlias": "alias-cust-f",
+        "partnerType": "referral_only",
+        "grantOnly": true,
+        "minActivityMet": true,
+        "outcome": "locked"
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_attribution_referral_locked"],
+        "flags": {},
+        "coverage": { "attributionLedgerAnchor": true }
+      }
+    },
+    {
+      "id": "CP-018-LEDGER-ANCHOR-EXPECTATION",
+      "scenario": "ledger_anchor_expectation",
+      "description": "Locked AttributionCandidate is expected to generate/link a SalesReferral and a RevenueAttributionLedger entry; offline contract requires references, not runtime writes.",
+      "actor": "system",
+      "request": "attribution_ledger_anchor",
+      "attribution": {
+        "customerAlias": "alias-cust-g",
+        "linkedSalesReferralKey": "alias-sr-g",
+        "linkedRevenueAttributionLedgerId": "alias-ral-g",
+        "outcome": "locked"
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_attribution_ledger_anchor_referenced"],
+        "flags": {},
+        "coverage": { "attributionLedgerAnchor": true }
+      }
+    },
+    {
+      "id": "CP-019-P2-PARTNERWORKSPACE-CANCELED-SUSPEND-CANDIDATE",
+      "scenario": "p2_partner_workspace_canceled_collaborator_auto_suspend_candidate",
+      "description": "P2 candidate path: PartnerWorkspace canceled triggers auto-suspend candidate for any PARTNER_COLLABORATOR memberships; P0 only captures the offline expectation, no runtime suspend executed.",
+      "actor": "system",
+      "request": "partner_workspace_cancel_suspend_candidate",
+      "p2Candidate": {
+        "partnerWorkspaceCanceled": true,
+        "autoSuspendCandidateRecorded": true,
+        "runtimeSuspendExecuted": false
+      },
+      "grant": { "present": true, "status": "suspended" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["p2_partner_workspace_cancel_suspend_candidate_offline_only"],
+        "flags": {}
+      }
+    },
+    {
+      "id": "CP-020-CUSTOMER-REVOKES-GRANT-CLEANUP",
+      "scenario": "customer_revokes_grant_cleanup",
+      "description": "Customer admin revokes PartnerCustomerGrant. Drafted/submitted nudges hide, accepted/promoted retain partner signature, accrued-but-not-settled stays for manual settlement review, portfolio alias removed.",
+      "actor": "customer_admin",
+      "request": "revoke_grant",
+      "revocation": {
+        "draftedAndSubmittedHidden": true,
+        "acceptedAndPromotedRetained": true,
+        "accruedButUnsettledKeptForManualReview": true,
+        "portfolioAliasRemoved": true,
+        "futureEffectOnly": true
+      },
+      "grant": { "present": true, "status": "revoked" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_grant_revocation_cleanup_offline_contract"],
+        "flags": {},
+        "coverage": { "revocation": true, "nudgeLifecycle": true }
+      }
+    },
+    {
+      "id": "CP-021-PORTFOLIO-PRIVACY-ALIAS-ONLY",
+      "scenario": "portfolio_readout_privacy_alias_only",
+      "description": "Partner portfolio readout returns only HMAC-scoped aliases, bucketed health, bucketed MustPush counts; no raw workspace name/URL/slug/industry/size/exact amount.",
+      "actor": "partner",
+      "request": "portfolio_readout",
+      "portfolioReadout": {
+        "aliasUsed": true,
+        "rawCustomerNameLeaked": false,
+        "exactAmountLeaked": false,
+        "buckets": ["healthy", "watch", "risk"]
+      },
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_portfolio_privacy_boundary_ok"],
+        "flags": {}
+      }
+    },
+    {
+      "id": "CP-022-CROSS-TENANT-HELPER-FORBIDDEN",
+      "scenario": "generic_cross_tenant_helper_forbidden",
+      "description": "Partner-adjacent code attempts to call a generic cross-tenant helper rather than a scoped portfolio readout; must be rejected by P0-REQ-07 cross-tenant scope guard.",
+      "actor": "partner",
+      "request": "cross_tenant_helper",
+      "crossTenantHelperAttempted": true,
+      "grant": { "present": true, "status": "active" },
+      "expect": {
+        "outcome": "rejected",
+        "reasonCodes": ["partner_portfolio_cross_tenant_scope"],
+        "flags": {}
+      }
+    },
+    {
+      "id": "CP-023-REVOKED-PENDING-ATTRIBUTION-RELEASED",
+      "scenario": "revoked_pending_attribution_released",
+      "description": "Customer revokes an active grant before trial-to-paid. Pending AttributionCandidate is released, prior customer history retains partner signature, and partner readout closes.",
+      "actor": "customer_champion",
+      "request": "revoke_grant",
+      "revocation": {
+        "pendingAttributionReleased": true,
+        "historySignatureRetained": true,
+        "partnerReadoutClosed": true,
+        "manualSettlementReviewStillRequired": false
+      },
+      "grant": { "present": true, "status": "revoked" },
+      "expect": {
+        "outcome": "allowed",
+        "reasonCodes": ["partner_grant_revocation_pending_attribution_released"],
+        "flags": {},
+        "coverage": { "revocation": true }
+      }
+    }
+  ]
+}

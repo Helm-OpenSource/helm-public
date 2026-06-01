@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "parameters": [
+    {
+      "name": "biz_date",
+      "type": "date",
+      "required": true
+    }
+  ],
+  "columns": [
+    { "name": "board_date", "type": "date" },
+    { "name": "open_case_count", "type": "integer" },
+    { "name": "review_required_count", "type": "integer" },
+    { "name": "stale_case_count", "type": "integer" },
+    { "name": "red_alert", "type": "boolean" }
+  ]
+}

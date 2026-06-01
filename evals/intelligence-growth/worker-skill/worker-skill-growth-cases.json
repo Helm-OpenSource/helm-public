@@ -1,0 +1,218 @@
+[
+  {
+    "id": "wsk-001",
+    "dimension": "worker_skill",
+    "description": "Worker with high artifact quality, zero skill invocation failures, and zero boundary hits — strong learning candidate.",
+    "input": {
+      "dimension": "worker_skill",
+      "evalRunId": "eval-run-wsk-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-wsk-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "workerRef": {
+        "kind": "worker",
+        "id": "worker-alias-001",
+        "workspaceId": "tenant-alpha"
+      },
+      "artifactQualityScore": 0.91,
+      "skillInvocationFailureCount": 0,
+      "boundaryHitCount": 0
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "High artifact quality with no failures or boundary hits. Ideal baseline case for worker skill quality measurement.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "wsk-002",
+    "dimension": "worker_skill",
+    "description": "Worker with moderate artifact quality and one skill invocation failure — watch_only while failure cause is assessed.",
+    "input": {
+      "dimension": "worker_skill",
+      "evalRunId": "eval-run-wsk-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-wsk-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "workerRef": {
+        "kind": "worker",
+        "id": "worker-alias-002",
+        "workspaceId": "tenant-beta"
+      },
+      "artifactQualityScore": 0.72,
+      "skillInvocationFailureCount": 1,
+      "boundaryHitCount": 0
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "One skill invocation failure warrants monitoring. Quality is moderate; failure root cause needs assessment.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "wsk-003",
+    "dimension": "worker_skill",
+    "description": "Skill object with high quality and one boundary hit that was correctly blocked — learning candidate for boundary gate study.",
+    "input": {
+      "dimension": "worker_skill",
+      "evalRunId": "eval-run-wsk-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-wsk-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "workerRef": {
+        "kind": "skill",
+        "id": "skill-alias-001",
+        "workspaceId": "tenant-gamma"
+      },
+      "artifactQualityScore": 0.85,
+      "skillInvocationFailureCount": 0,
+      "boundaryHitCount": 1
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "One boundary hit was correctly surfaced and not bypassed. Quality is high; this is a positive boundary enforcement case.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "wsk-004",
+    "dimension": "worker_skill",
+    "description": "Worker with high artifact quality and two boundary hits — watch_only given repeated boundary contact.",
+    "input": {
+      "dimension": "worker_skill",
+      "evalRunId": "eval-run-wsk-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-wsk-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "workerRef": {
+        "kind": "worker",
+        "id": "worker-alias-003",
+        "workspaceId": "tenant-alpha"
+      },
+      "artifactQualityScore": 0.88,
+      "skillInvocationFailureCount": 0,
+      "boundaryHitCount": 2
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Two boundary hits require monitoring even though artifact quality is high. Pattern of boundary contact needs review.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "wsk-005",
+    "dimension": "worker_skill",
+    "description": "Skill object with moderate quality and zero failures — learning candidate for skill invocation success baseline.",
+    "input": {
+      "dimension": "worker_skill",
+      "evalRunId": "eval-run-wsk-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-wsk-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "workerRef": {
+        "kind": "skill",
+        "id": "skill-alias-002",
+        "workspaceId": "tenant-beta"
+      },
+      "artifactQualityScore": 0.78,
+      "skillInvocationFailureCount": 0,
+      "boundaryHitCount": 0
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Moderate quality with zero failures and no boundary hits. Clean baseline for skill invocation success tracking.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "wsk-006",
+    "dimension": "worker_skill",
+    "description": "NEGATIVE: High failure count suggests broken skill invocation — review required before worker can be promoted.",
+    "input": {
+      "dimension": "worker_skill",
+      "evalRunId": "eval-run-wsk-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-wsk-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "workerRef": {
+        "kind": "worker",
+        "id": "worker-alias-004",
+        "workspaceId": "tenant-gamma"
+      },
+      "artifactQualityScore": 0.55,
+      "skillInvocationFailureCount": 8,
+      "boundaryHitCount": 0
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "8 skill invocation failures with below-average quality. Worker cannot advance without human review of failure root causes.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "wsk-007",
+    "dimension": "worker_skill",
+    "description": "NEGATIVE: Artifact quality is zero — worker produced no usable output, rejected.",
+    "input": {
+      "dimension": "worker_skill",
+      "evalRunId": "eval-run-wsk-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-wsk-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "workerRef": {
+        "kind": "worker",
+        "id": "worker-alias-005",
+        "workspaceId": "tenant-alpha"
+      },
+      "artifactQualityScore": 0.00,
+      "skillInvocationFailureCount": 3,
+      "boundaryHitCount": 0
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Zero artifact quality with 3 failures. Worker produced no usable output and must be rejected from the learning pipeline.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "wsk-008",
+    "dimension": "worker_skill",
+    "description": "NEGATIVE: Excessive boundary hits indicate worker is repeatedly violating scope constraints — rejected.",
+    "input": {
+      "dimension": "worker_skill",
+      "evalRunId": "eval-run-wsk-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-wsk-008", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "workerRef": {
+        "kind": "skill",
+        "id": "skill-alias-003",
+        "workspaceId": "tenant-beta"
+      },
+      "artifactQualityScore": 0.65,
+      "skillInvocationFailureCount": 0,
+      "boundaryHitCount": 12
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "12 boundary hits indicate repeated scope violations. Skill must be rejected until boundary adherence is verified.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

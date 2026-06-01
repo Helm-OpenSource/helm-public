@@ -1,0 +1,229 @@
+{
+  "version": "company-memory-object-graph-health-targets-v1",
+  "status": "offline_evaluation_fixture",
+  "asOf": "2026-04-22T00:00:00.000Z",
+  "redactionPosture": "synthetic_redacted_object_refs_only",
+  "boundary": "No production object graph, PII, secrets, tenant-private content, runtime query, schema migration, LLM call, auto-promotion, official write, or execution authority is included.",
+  "targets": [
+    {
+      "objectRef": { "type": "opportunity", "id": "opp_alpha_renewal" },
+      "priority": "high",
+      "requiredAssetTypes": ["commitment", "blocker", "fact", "operating_gap"],
+      "requiresBoundary": false,
+      "expectedMinCases": 4,
+      "expectedMinEvidenceRefs": 6,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 3,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "customer", "id": "customer_alpha" },
+      "priority": "high",
+      "requiredAssetTypes": ["boundary", "commitment", "operating_gap"],
+      "requiresBoundary": true,
+      "expectedMinCases": 4,
+      "expectedMinEvidenceRefs": 6,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 3,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "project", "id": "project_golf_migration" },
+      "priority": "high",
+      "requiredAssetTypes": ["decision", "boundary", "fact", "operating_gap", "blocker"],
+      "requiresBoundary": true,
+      "expectedMinCases": 4,
+      "expectedMinEvidenceRefs": 10,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "campaign", "id": "campaign_kilo_retention" },
+      "priority": "high",
+      "requiredAssetTypes": ["operating_gap", "decision", "blocker", "boundary"],
+      "requiresBoundary": true,
+      "expectedMinCases": 4,
+      "expectedMinEvidenceRefs": 8,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "candidate", "id": "candidate_echo" },
+      "priority": "high",
+      "requiredAssetTypes": ["fact", "blocker", "boundary", "commitment"],
+      "requiresBoundary": true,
+      "expectedMinCases": 3,
+      "expectedMinEvidenceRefs": 6,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "customer", "id": "customer_november" },
+      "priority": "high",
+      "requiredAssetTypes": ["blocker", "boundary", "commitment", "fact", "operating_gap"],
+      "requiresBoundary": true,
+      "expectedMinCases": 3,
+      "expectedMinEvidenceRefs": 6,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 3,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "opportunity", "id": "opp_gamma_pilot" },
+      "priority": "high",
+      "requiredAssetTypes": ["decision", "boundary", "commitment"],
+      "requiresBoundary": true,
+      "expectedMinCases": 3,
+      "expectedMinEvidenceRefs": 5,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 3,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "customer", "id": "customer_juliet" },
+      "priority": "high",
+      "requiredAssetTypes": ["blocker", "boundary", "fact"],
+      "requiresBoundary": true,
+      "expectedMinCases": 3,
+      "expectedMinEvidenceRefs": 6,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 3,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "campaign", "id": "campaign_delta_launch" },
+      "priority": "medium",
+      "requiredAssetTypes": ["operating_gap", "boundary", "fact", "decision"],
+      "requiresBoundary": true,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 5,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "customer", "id": "customer_delta" },
+      "priority": "medium",
+      "requiredAssetTypes": ["boundary", "fact", "operating_gap"],
+      "requiresBoundary": true,
+      "expectedMinCases": 3,
+      "expectedMinEvidenceRefs": 5,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 3,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "opportunity", "id": "opp_papa_renewal" },
+      "priority": "medium",
+      "requiredAssetTypes": ["operating_gap", "boundary", "commitment"],
+      "requiresBoundary": true,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 6,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 1,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "resource", "id": "resource_lima_capacity" },
+      "priority": "medium",
+      "requiredAssetTypes": ["fact", "boundary"],
+      "requiresBoundary": true,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 4,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "resource", "id": "resource_queue_alpha" },
+      "priority": "medium",
+      "requiredAssetTypes": ["operating_gap", "fact", "decision"],
+      "requiresBoundary": false,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 3,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "opportunity", "id": "opp_mike_expansion" },
+      "priority": "medium",
+      "requiredAssetTypes": ["boundary", "fact", "commitment"],
+      "requiresBoundary": true,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 4,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "workspace", "id": "redacted_workspace_alpha" },
+      "priority": "medium",
+      "requiredAssetTypes": ["boundary", "decision", "operating_gap"],
+      "requiresBoundary": true,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 4,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 0,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "partner", "id": "partner_india" },
+      "priority": "medium",
+      "requiredAssetTypes": ["preference", "decision", "fact"],
+      "requiresBoundary": false,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 4,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "workstream", "id": "delivery_beta_onboarding" },
+      "priority": "medium",
+      "requiredAssetTypes": ["blocker", "fact"],
+      "requiresBoundary": false,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 2,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "opportunity", "id": "opp_oscar_archive" },
+      "priority": "medium",
+      "requiredAssetTypes": ["decision", "boundary"],
+      "requiresBoundary": true,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 4,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 1,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "customer", "id": "customer_beta" },
+      "priority": "low",
+      "requiredAssetTypes": ["fact"],
+      "requiresBoundary": false,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 2,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    },
+    {
+      "objectRef": { "type": "contact", "id": "contact_beta_ops" },
+      "priority": "low",
+      "requiredAssetTypes": ["preference"],
+      "requiresBoundary": false,
+      "expectedMinCases": 2,
+      "expectedMinEvidenceRefs": 2,
+      "maxFreshnessDays": 21,
+      "expectedRelationshipAssertionCount": 2,
+      "expectedContradictionPosture": "none"
+    }
+  ]
+}

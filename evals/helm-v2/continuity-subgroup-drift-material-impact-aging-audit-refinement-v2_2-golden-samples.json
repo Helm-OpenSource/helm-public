@@ -1,0 +1,104 @@
+[
+  {
+    "id": "large_budget_subgroup_drift_material_impact_aging_audit_refinement",
+    "label": "Large budget-pressure cohort keeps sample refinement and impact refinement audit conservative",
+    "sourceCaseId": "large_budget_subgroup_drift_long_term_aging_material_impact_audit",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetCrossReadoutRegressionRefinementRate": 10,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftExpansionRefinementIncludes": [
+        "sample expansion refinement",
+        "fragile-support",
+        "BUDGET_PRESSURE"
+      ],
+      "intervalWordingCrossReadoutRefinementIncludes": [
+        "Cross-readout interval wording regression refinement",
+        "10% regression or coverage gap",
+        "session summary"
+      ],
+      "materialImpactSamplingRefinementAuditIncludes": [
+        "Material impact sampling aging refinement audit",
+        "Prune trace review",
+        "regressing-comparison"
+      ],
+      "sessionReviewIncludes": [
+        "sample expansion refinement review",
+        "cross-readout interval wording regression refinement",
+        "Material impact sampling aging refinement audit"
+      ]
+    }
+  },
+  {
+    "id": "large_replay_subgroup_drift_material_impact_aging_audit_refinement",
+    "label": "Large replay-drift cohort keeps sample refinement and wording refinement operator-visible",
+    "sourceCaseId": "large_replay_subgroup_drift_long_term_aging_material_impact_audit",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetRiskBand": "LOW",
+      "targetStabilityBand": "STABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetCrossReadoutRegressionRefinementRate": 5,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftExpansionRefinementIncludes": [
+        "sample expansion refinement",
+        "deep-support",
+        "REPLAY_DRIFT"
+      ],
+      "intervalWordingCrossReadoutRefinementIncludes": [
+        "Cross-readout interval wording regression refinement",
+        "5% regression or coverage gap",
+        "queue summary"
+      ],
+      "materialImpactSamplingRefinementAuditIncludes": [
+        "Material impact sampling aging refinement audit",
+        "Replay gap review",
+        "durable-comparison"
+      ],
+      "sessionReviewIncludes": [
+        "sample expansion refinement review",
+        "cross-readout interval wording regression refinement",
+        "Material impact sampling aging refinement audit"
+      ]
+    }
+  },
+  {
+    "id": "growing_protected_subgroup_drift_material_impact_aging_audit_refinement",
+    "label": "Growing protected-state cohort keeps sample refinement and impact refinement audit conservative",
+    "sourceCaseId": "growing_protected_subgroup_drift_long_term_aging_material_impact_audit",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetCrossReadoutRegressionRefinementRate": 9,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupDriftExpansionRefinementIncludes": [
+        "sample expansion refinement",
+        "fragile-support",
+        "PROTECTED_STATE_GAP"
+      ],
+      "intervalWordingCrossReadoutRefinementIncludes": [
+        "Cross-readout interval wording regression refinement",
+        "9% regression or coverage gap",
+        "operator card"
+      ],
+      "materialImpactSamplingRefinementAuditIncludes": [
+        "Material impact sampling aging refinement audit",
+        "Protected field review",
+        "regressing-comparison"
+      ],
+      "sessionReviewIncludes": [
+        "sample expansion refinement review",
+        "cross-readout interval wording regression refinement",
+        "Material impact sampling aging refinement audit"
+      ]
+    }
+  }
+]

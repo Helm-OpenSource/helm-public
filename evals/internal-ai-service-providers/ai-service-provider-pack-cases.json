@@ -1,0 +1,619 @@
+{
+  "version": "2026-05-03.internal-ai-service-provider-pack.v0",
+  "status": "offline_contract_only",
+  "boundary": "candidate-only; review-first; no runtime/API/UI/schema/connector; no auto-send; no silent CRM write; no direct Must Push truth; no Pack DSL; no marketplace; no LLM final ranking",
+  "pack": {
+    "packId": "helm_internal_ai_service_provider",
+    "packName": "Helm Internal AI Service Provider Pack",
+    "packVersion": "0.0.0-offline",
+    "targetTenantKey": "helm-internal",
+    "ownershipBoundary": "candidate-only",
+    "operatingMode": "daily_top3_readout",
+    "objectType": "ai_ecosystem_service_provider",
+    "providerTypes": [
+      "ai_service_provider",
+      "ai_consulting_training",
+      "agent_delivery_provider",
+      "content_only_kol",
+      "platform_builder_requester"
+    ],
+    "profileFields": [
+      "aliasId",
+      "providerType",
+      "activeCustomerBand",
+      "customerIndustryFocus",
+      "deliveryModel",
+      "recurringServiceSignal",
+      "painStrength",
+      "paidPilotLikelihood",
+      "channelAmplificationPotential",
+      "dataReadiness",
+      "proofPotential",
+      "boundaryRiskTags"
+    ],
+    "rankingModel": {
+      "finalRanker": "deterministic_weighted_score",
+      "llmFinalRankingAllowed": false,
+      "weights": {
+        "painStrength": 0.25,
+        "paidPilotLikelihood": 0.25,
+        "channelAmplificationPotential": 0.2,
+        "dataReadiness": 0.15,
+        "proofPotential": 0.15
+      },
+      "riskPenalties": {
+        "content_only": 30,
+        "zero_active_customers": 25,
+        "platform_builder_requester": 50,
+        "no_data_readiness": 15,
+        "competitor_lock_in": 20,
+        "free_poc_only": 25,
+        "no_outcome_streak": 20
+      }
+    },
+    "actionTemplates": [
+      "prepare_validation_call_brief_for_review",
+      "prepare_pilot_scope_draft_for_review",
+      "prepare_redacted_data_request_for_review",
+      "run_pain_review",
+      "downgrade_or_pause"
+    ],
+    "channelGateLevels": [
+      "L0",
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "permissionSummary": {
+      "autoAllowed": [
+        "rank alias-only candidate fixtures",
+        "prepare internal daily readout candidate",
+        "mark watch-only candidate",
+        "record non-customer-visible downgrade reason"
+      ],
+      "reviewRequired": [
+        "customer-visible pilot scope draft",
+        "redacted data request",
+        "validation call outreach",
+        "public-safe proof claim",
+        "channel candidate display"
+      ],
+      "neverAllowed": [
+        "send customer message",
+        "write CRM silently",
+        "commit pricing",
+        "approve legal terms",
+        "publish public claim automatically",
+        "create direct Must Push truth",
+        "grant runtime_capability",
+        "grant api_capability",
+        "grant ui_capability",
+        "grant schema_capability",
+        "grant connector_capability",
+        "use LLM final ranking",
+        "create Pack DSL",
+        "create marketplace"
+      ]
+    },
+    "degradationPolicy": [
+      "content_only_to_no_go",
+      "too_small_to_downgrade",
+      "platform_builder_requester_to_no_go",
+      "no_data_to_watch_only",
+      "free_poc_only_to_no_go",
+      "no_outcome_streak_to_downgrade"
+    ]
+  },
+  "targets": {
+    "candidateFixtureCount": 8,
+    "dailyTop3Count": 3,
+    "minimumNotSelectedRationaleCount": 5,
+    "minimumPositiveFixtureCount": 3,
+    "minimumNegativeOrDowngradedFixtureCount": 4,
+    "expectedOutcomeLedgerCount": 5,
+    "maximumAutoSendCount": 0,
+    "maximumSilentCrmWriteCount": 0,
+    "maximumDirectMustPushTruthCount": 0,
+    "maximumExternalSideEffectAllowedCount": 0,
+    "maximumOfficialCommitmentAllowedCount": 0,
+    "maximumBoundaryAskSelectedCount": 0,
+    "maximumConnectorRuntimeApiUiSchemaCapabilityCount": 0,
+    "maximumRawPiiFieldCount": 0,
+    "maximumCustomerIdentifiableTextFieldCount": 0
+  },
+  "dailyReadoutExpectation": {
+    "sourceWindowKey": "2026-W18-DAY-5",
+    "selectedFixtureIds": [
+      "ai_eco_001",
+      "ai_eco_002",
+      "ai_eco_003"
+    ],
+    "notSelectedRationales": [
+      {
+        "fixtureId": "ai_eco_004",
+        "reasonCode": "content_only_no_delivery",
+        "summary": "High audience signal but no delivery entity or enterprise customer evidence."
+      },
+      {
+        "fixtureId": "ai_eco_005",
+        "reasonCode": "platform_builder_drift",
+        "summary": "Primary ask is Agent platform building, which would pull Helm into orchestration scope."
+      },
+      {
+        "fixtureId": "ai_eco_006",
+        "reasonCode": "too_small_no_safe_sample",
+        "summary": "No paid enterprise customer evidence or safe sample path, so it stays watch-only."
+      },
+      {
+        "fixtureId": "ai_eco_007",
+        "reasonCode": "direct_crm_write_ask",
+        "summary": "The candidate asks Helm to write CRM automatically, which violates review-first and no silent write."
+      },
+      {
+        "fixtureId": "ai_eco_008",
+        "reasonCode": "no_outcome_streak",
+        "summary": "Repeatedly appeared in candidate pool without 72h outcome, so it must downgrade."
+      }
+    ]
+  },
+  "outcomeLedger": [
+    {
+      "fixtureId": "ai_eco_001",
+      "outcomeWindowHours": 72,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "expectedStatus": "review_packet_ready",
+      "expectedResult": "pilot_scope_draft_prepared_for_review",
+      "nextLearningCandidate": "ai_eco_001",
+      "downgradeReason": ""
+    },
+    {
+      "fixtureId": "ai_eco_002",
+      "outcomeWindowHours": 72,
+      "ownerAlias": "founder",
+      "reviewerAlias": "data_protection",
+      "expectedStatus": "sample_request_ready",
+      "expectedResult": "redacted_data_request_prepared_for_review",
+      "nextLearningCandidate": "ai_eco_002",
+      "downgradeReason": ""
+    },
+    {
+      "fixtureId": "ai_eco_003",
+      "outcomeWindowHours": 72,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product",
+      "expectedStatus": "pain_review_ready",
+      "expectedResult": "platform_drift_boundary_review_prepared",
+      "nextLearningCandidate": "ai_eco_003",
+      "downgradeReason": ""
+    },
+    {
+      "fixtureId": "ai_eco_005",
+      "outcomeWindowHours": 72,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product",
+      "expectedStatus": "rejected_at_review",
+      "expectedResult": "agent_platform_build_request_rejected",
+      "nextLearningCandidate": "ai_eco_005",
+      "downgradeReason": "agent_platform_build_request"
+    },
+    {
+      "fixtureId": "ai_eco_008",
+      "outcomeWindowHours": 72,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "expectedStatus": "outcome_window_missed_to_downgrade",
+      "expectedResult": "candidate_paused_until_new_safe_sample",
+      "nextLearningCandidate": "ai_eco_008",
+      "downgradeReason": "no_72h_outcome_streak"
+    }
+  ],
+  "candidates": [
+    {
+      "fixtureId": "ai_eco_001",
+      "title": "AI productized service provider with paid customer pool",
+      "aliasId": "ai_eco_alpha",
+      "providerType": "ai_service_provider",
+      "profile": {
+        "activeCustomerBand": "21-100",
+        "customerIndustryFocus": "b2b_services",
+        "deliveryModel": "hybrid",
+        "recurringServiceSignal": "retainer_present"
+      },
+      "scoreFactors": {
+        "painStrength": 88,
+        "paidPilotLikelihood": 86,
+        "channelAmplificationPotential": 80,
+        "dataReadiness": 78,
+        "proofPotential": 76
+      },
+      "boundaryRiskTags": [],
+      "evidenceRefs": [
+        "public:website:ai_eco_alpha",
+        "alias_note:validation_call_alpha",
+        "internal:provider_tracker:w18"
+      ],
+      "expectedDecisionBranch": "selected_top3",
+      "expectedRank": 1,
+      "expectedActionTemplate": "prepare_pilot_scope_draft_for_review",
+      "expectedChannelLevel": "L2",
+      "expectedChannelCandidateVisible": true,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "outcomeRequiredWithinHours": 72,
+      "safeSampleAvailable": true,
+      "safeSampleRecordCount": 12,
+      "safeSampleBoundaryNote": "alias_only_redacted_operating_sample",
+      "acceptedReviewFirst": true,
+      "askedForAutoSend": false,
+      "askedForCrmWrite": false,
+      "askedForWorkflowTrigger": false,
+      "askedForAgentBuild": false,
+      "requiresReview": true,
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "expectedNoGo": [
+        "no_auto_send",
+        "no_silent_crm_write",
+        "no_direct_must_push_truth",
+        "no_price_commitment",
+        "no_public_claim_auto_publish",
+        "llm_final_ranking_forbidden"
+      ]
+    },
+    {
+      "fixtureId": "ai_eco_002",
+      "title": "AI consulting and training team with recurring enterprise workshops",
+      "aliasId": "ai_eco_beta",
+      "providerType": "ai_consulting_training",
+      "profile": {
+        "activeCustomerBand": "6-20",
+        "customerIndustryFocus": "professional_services",
+        "deliveryModel": "consulting",
+        "recurringServiceSignal": "workshop_to_retainer"
+      },
+      "scoreFactors": {
+        "painStrength": 76,
+        "paidPilotLikelihood": 74,
+        "channelAmplificationPotential": 82,
+        "dataReadiness": 66,
+        "proofPotential": 70
+      },
+      "boundaryRiskTags": [],
+      "evidenceRefs": [
+        "public:website:ai_eco_beta",
+        "alias_note:training_pipeline_beta",
+        "internal:provider_tracker:w18"
+      ],
+      "expectedDecisionBranch": "selected_top3",
+      "expectedRank": 2,
+      "expectedActionTemplate": "prepare_redacted_data_request_for_review",
+      "expectedChannelLevel": "L1",
+      "expectedChannelCandidateVisible": false,
+      "ownerAlias": "founder",
+      "reviewerAlias": "data_protection",
+      "outcomeRequiredWithinHours": 72,
+      "safeSampleAvailable": true,
+      "safeSampleRecordCount": 8,
+      "safeSampleBoundaryNote": "redacted_workshop_to_retainer_sample_only",
+      "acceptedReviewFirst": true,
+      "askedForAutoSend": false,
+      "askedForCrmWrite": false,
+      "askedForWorkflowTrigger": false,
+      "askedForAgentBuild": false,
+      "requiresReview": true,
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "expectedNoGo": [
+        "no_auto_send",
+        "no_silent_crm_write",
+        "no_direct_must_push_truth",
+        "no_price_commitment",
+        "no_raw_customer_data",
+        "channel_l1_not_candidate",
+        "llm_final_ranking_forbidden"
+      ]
+    },
+    {
+      "fixtureId": "ai_eco_003",
+      "title": "Agent delivery provider with scoped implementation pain",
+      "aliasId": "ai_eco_gamma",
+      "providerType": "agent_delivery_provider",
+      "profile": {
+        "activeCustomerBand": "6-20",
+        "customerIndustryFocus": "manufacturing_services",
+        "deliveryModel": "project_delivery",
+        "recurringServiceSignal": "post_project_support"
+      },
+      "scoreFactors": {
+        "painStrength": 82,
+        "paidPilotLikelihood": 72,
+        "channelAmplificationPotential": 68,
+        "dataReadiness": 70,
+        "proofPotential": 72
+      },
+      "boundaryRiskTags": [
+        "platform_drift_watch"
+      ],
+      "evidenceRefs": [
+        "public:website:ai_eco_gamma",
+        "alias_note:implementation_gap_gamma",
+        "internal:provider_tracker:w18"
+      ],
+      "expectedDecisionBranch": "selected_top3",
+      "expectedRank": 3,
+      "expectedActionTemplate": "run_pain_review",
+      "expectedChannelLevel": "L0",
+      "expectedChannelCandidateVisible": false,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product",
+      "outcomeRequiredWithinHours": 72,
+      "safeSampleAvailable": true,
+      "safeSampleRecordCount": 6,
+      "safeSampleBoundaryNote": "scoped_implementation_pain_sample_only",
+      "acceptedReviewFirst": true,
+      "askedForAutoSend": false,
+      "askedForCrmWrite": false,
+      "askedForWorkflowTrigger": false,
+      "askedForAgentBuild": false,
+      "requiresReview": true,
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "expectedNoGo": [
+        "no_auto_send",
+        "no_silent_crm_write",
+        "no_direct_must_push_truth",
+        "no_price_commitment",
+        "no_agent_platform_build",
+        "no_workflow_engine",
+        "no_runtime_orchestration",
+        "llm_final_ranking_forbidden"
+      ]
+    },
+    {
+      "fixtureId": "ai_eco_004",
+      "title": "Content-only AI influencer without delivery entity",
+      "aliasId": "ai_eco_delta",
+      "providerType": "content_only_kol",
+      "profile": {
+        "activeCustomerBand": "0",
+        "customerIndustryFocus": "unknown",
+        "deliveryModel": "training",
+        "recurringServiceSignal": "none"
+      },
+      "scoreFactors": {
+        "painStrength": 78,
+        "paidPilotLikelihood": 45,
+        "channelAmplificationPotential": 88,
+        "dataReadiness": 20,
+        "proofPotential": 45
+      },
+      "boundaryRiskTags": [
+        "content_only",
+        "zero_active_customers",
+        "no_data_readiness"
+      ],
+      "evidenceRefs": [
+        "public:channel:ai_eco_delta",
+        "internal:provider_tracker:w18"
+      ],
+      "expectedDecisionBranch": "no_go",
+      "expectedActionTemplate": "downgrade_or_pause",
+      "expectedChannelLevel": "L0",
+      "expectedChannelCandidateVisible": false,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "outcomeRequiredWithinHours": 0,
+      "safeSampleAvailable": false,
+      "safeSampleRecordCount": 0,
+      "safeSampleBoundaryNote": "no_enterprise_delivery_sample",
+      "acceptedReviewFirst": false,
+      "askedForAutoSend": false,
+      "askedForCrmWrite": false,
+      "askedForWorkflowTrigger": false,
+      "askedForAgentBuild": false,
+      "requiresReview": false,
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "expectedNoGo": [
+        "content_only_to_no_go",
+        "zero_active_customers_to_downgrade",
+        "no_data_to_watch_only"
+      ]
+    },
+    {
+      "fixtureId": "ai_eco_005",
+      "title": "Requester trying to turn Helm into an Agent platform",
+      "aliasId": "ai_eco_epsilon",
+      "providerType": "platform_builder_requester",
+      "profile": {
+        "activeCustomerBand": "21-100",
+        "customerIndustryFocus": "mixed",
+        "deliveryModel": "project_delivery",
+        "recurringServiceSignal": "unknown"
+      },
+      "scoreFactors": {
+        "painStrength": 90,
+        "paidPilotLikelihood": 80,
+        "channelAmplificationPotential": 70,
+        "dataReadiness": 74,
+        "proofPotential": 70
+      },
+      "boundaryRiskTags": [
+        "platform_builder_requester"
+      ],
+      "evidenceRefs": [
+        "alias_note:platform_request_epsilon",
+        "internal:provider_tracker:w18"
+      ],
+      "expectedDecisionBranch": "no_go",
+      "expectedActionTemplate": "downgrade_or_pause",
+      "expectedChannelLevel": "L0",
+      "expectedChannelCandidateVisible": false,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product",
+      "outcomeRequiredWithinHours": 0,
+      "safeSampleAvailable": true,
+      "safeSampleRecordCount": 5,
+      "safeSampleBoundaryNote": "sample_rejected_due_to_agent_platform_scope",
+      "acceptedReviewFirst": false,
+      "askedForAutoSend": false,
+      "askedForCrmWrite": false,
+      "askedForWorkflowTrigger": true,
+      "askedForAgentBuild": true,
+      "requiresReview": false,
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "expectedNoGo": [
+        "platform_builder_requester_to_no_go",
+        "no_agent_orchestration_platform",
+        "no_pack_dsl",
+        "no_marketplace"
+      ]
+    },
+    {
+      "fixtureId": "ai_eco_006",
+      "title": "Small personal implementer with no paid enterprise customer evidence",
+      "aliasId": "ai_eco_zeta",
+      "providerType": "agent_delivery_provider",
+      "profile": {
+        "activeCustomerBand": "0",
+        "customerIndustryFocus": "unknown",
+        "deliveryModel": "project_delivery",
+        "recurringServiceSignal": "none"
+      },
+      "scoreFactors": {
+        "painStrength": 62,
+        "paidPilotLikelihood": 38,
+        "channelAmplificationPotential": 35,
+        "dataReadiness": 24,
+        "proofPotential": 30
+      },
+      "boundaryRiskTags": [
+        "zero_active_customers",
+        "no_data_readiness"
+      ],
+      "evidenceRefs": [
+        "public:profile:ai_eco_zeta",
+        "internal:provider_tracker:w18"
+      ],
+      "expectedDecisionBranch": "watch_only",
+      "expectedActionTemplate": "downgrade_or_pause",
+      "expectedChannelLevel": "L0",
+      "expectedChannelCandidateVisible": false,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "outcomeRequiredWithinHours": 0,
+      "safeSampleAvailable": false,
+      "safeSampleRecordCount": 0,
+      "safeSampleBoundaryNote": "no_safe_sample_available",
+      "acceptedReviewFirst": true,
+      "askedForAutoSend": false,
+      "askedForCrmWrite": false,
+      "askedForWorkflowTrigger": false,
+      "askedForAgentBuild": false,
+      "requiresReview": false,
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "expectedNoGo": [
+        "too_small_to_downgrade",
+        "no_data_to_watch_only"
+      ]
+    },
+    {
+      "fixtureId": "ai_eco_007",
+      "title": "Provider asking Helm to write CRM automatically",
+      "aliasId": "ai_eco_eta",
+      "providerType": "ai_service_provider",
+      "profile": {
+        "activeCustomerBand": "21-100",
+        "customerIndustryFocus": "retail_services",
+        "deliveryModel": "saas",
+        "recurringServiceSignal": "subscription_present"
+      },
+      "scoreFactors": {
+        "painStrength": 84,
+        "paidPilotLikelihood": 78,
+        "channelAmplificationPotential": 82,
+        "dataReadiness": 76,
+        "proofPotential": 72
+      },
+      "boundaryRiskTags": [],
+      "evidenceRefs": [
+        "public:website:ai_eco_eta",
+        "alias_note:auto_crm_write_ask_eta",
+        "internal:provider_tracker:w18"
+      ],
+      "expectedDecisionBranch": "no_go",
+      "expectedActionTemplate": "downgrade_or_pause",
+      "expectedChannelLevel": "L1",
+      "expectedChannelCandidateVisible": false,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "outcomeRequiredWithinHours": 0,
+      "safeSampleAvailable": true,
+      "safeSampleRecordCount": 9,
+      "safeSampleBoundaryNote": "sample_rejected_due_to_silent_crm_write_ask",
+      "acceptedReviewFirst": true,
+      "askedForAutoSend": false,
+      "askedForCrmWrite": true,
+      "askedForWorkflowTrigger": false,
+      "askedForAgentBuild": false,
+      "requiresReview": false,
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "expectedNoGo": [
+        "no_silent_crm_write",
+        "direct_crm_write_ask_to_no_go",
+        "channel_l1_not_candidate"
+      ]
+    },
+    {
+      "fixtureId": "ai_eco_008",
+      "title": "Repeated ghost candidate without outcome feedback",
+      "aliasId": "ai_eco_theta",
+      "providerType": "ai_consulting_training",
+      "profile": {
+        "activeCustomerBand": "6-20",
+        "customerIndustryFocus": "education_services",
+        "deliveryModel": "consulting",
+        "recurringServiceSignal": "unknown"
+      },
+      "scoreFactors": {
+        "painStrength": 72,
+        "paidPilotLikelihood": 68,
+        "channelAmplificationPotential": 66,
+        "dataReadiness": 60,
+        "proofPotential": 62
+      },
+      "boundaryRiskTags": [
+        "no_outcome_streak"
+      ],
+      "evidenceRefs": [
+        "alias_note:no_outcome_theta",
+        "internal:provider_tracker:w18"
+      ],
+      "expectedDecisionBranch": "watch_only",
+      "expectedActionTemplate": "downgrade_or_pause",
+      "expectedChannelLevel": "L0",
+      "expectedChannelCandidateVisible": false,
+      "ownerAlias": "founder",
+      "reviewerAlias": "product_ops",
+      "outcomeRequiredWithinHours": 0,
+      "safeSampleAvailable": false,
+      "safeSampleRecordCount": 0,
+      "safeSampleBoundaryNote": "no_recent_outcome_sample",
+      "acceptedReviewFirst": true,
+      "askedForAutoSend": false,
+      "askedForCrmWrite": false,
+      "askedForWorkflowTrigger": false,
+      "askedForAgentBuild": false,
+      "requiresReview": false,
+      "externalSideEffectAllowed": false,
+      "officialCommitmentAllowed": false,
+      "expectedNoGo": [
+        "no_outcome_streak_to_downgrade"
+      ]
+    }
+  ]
+}

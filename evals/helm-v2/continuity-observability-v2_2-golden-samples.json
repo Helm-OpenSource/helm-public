@@ -1,0 +1,112 @@
+[
+  {
+    "id": "continuity-calibration-low",
+    "label": "Strong replay with stable payload source stays low risk",
+    "replayCalibration": {
+      "fidelityScore": 100,
+      "missing": [],
+      "expectedStatus": "STRONG"
+    },
+    "payloadStateCalibration": {
+      "source": "checkpoint_snapshot",
+      "expectedRiskWeight": "LOW"
+    },
+    "riskInput": {
+      "budgetPosture": "SAFE",
+      "hasPruneTrace": false
+    },
+    "expected": {
+      "level": "LOW",
+      "summaryIncludes": ["stable"],
+      "actionIncludes": ["No immediate continuity intervention"]
+    }
+  },
+  {
+    "id": "continuity-calibration-watch-replay",
+    "label": "Watch replay with checkpoint edits remains watch risk",
+    "replayCalibration": {
+      "fidelityScore": 88,
+      "missing": ["payload source posture"],
+      "expectedStatus": "WATCH"
+    },
+    "payloadStateCalibration": {
+      "source": "checkpoint_plus_edits",
+      "expectedRiskWeight": "WATCH"
+    },
+    "riskInput": {
+      "budgetPosture": "COMPACT",
+      "hasPruneTrace": true
+    },
+    "expected": {
+      "level": "WATCH",
+      "summaryIncludes": ["watch-level", "checkpoint_plus_edits"],
+      "actionIncludes": ["Inspect replay missing fields"]
+    }
+  },
+  {
+    "id": "continuity-calibration-high-critical-missing",
+    "label": "Critical replay drift is always high risk",
+    "replayCalibration": {
+      "fidelityScore": 90,
+      "missing": ["confirmed facts"],
+      "expectedStatus": "WEAK"
+    },
+    "payloadStateCalibration": {
+      "source": "latest_prune_edit",
+      "expectedRiskWeight": "WATCH"
+    },
+    "riskInput": {
+      "budgetPosture": "PRUNE",
+      "hasPruneTrace": true
+    },
+    "expected": {
+      "level": "HIGH",
+      "summaryIncludes": ["replay is weak", "recovery-risk"],
+      "actionIncludes": ["Review replay missing fields first"]
+    }
+  },
+  {
+    "id": "continuity-calibration-watch-budget",
+    "label": "Budget-sensitive prune posture stays watch even with strong replay",
+    "replayCalibration": {
+      "fidelityScore": 95,
+      "missing": [],
+      "expectedStatus": "STRONG"
+    },
+    "payloadStateCalibration": {
+      "source": "latest_prune_edit",
+      "expectedRiskWeight": "WATCH"
+    },
+    "riskInput": {
+      "budgetPosture": "PRUNE",
+      "hasPruneTrace": true
+    },
+    "expected": {
+      "level": "WATCH",
+      "summaryIncludes": ["budget-sensitive", "Payload state is prune-edit-derived"],
+      "actionIncludes": ["Check prune trace protected items"]
+    }
+  },
+  {
+    "id": "continuity-calibration-high-low-score",
+    "label": "Low fidelity score without critical label still calibrates to weak",
+    "replayCalibration": {
+      "fidelityScore": 70,
+      "missing": ["open questions"],
+      "expectedStatus": "WEAK"
+    },
+    "payloadStateCalibration": {
+      "source": "all_persisted",
+      "expectedRiskWeight": "LOW"
+    },
+    "riskInput": {
+      "budgetPosture": "WATCH",
+      "hasPruneTrace": false
+    },
+    "expected": {
+      "level": "HIGH",
+      "summaryIncludes": ["replay is weak"],
+      "actionIncludes": ["confirm blockers/decisions/next actions"]
+    }
+  }
+]

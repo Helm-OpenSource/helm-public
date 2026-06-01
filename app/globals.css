@@ -1,0 +1,1350 @@
+@import "tailwindcss";
+
+:root {
+  --font-plex-sans:
+    "Avenir Next",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans SC",
+    "Microsoft YaHei",
+    "Segoe UI",
+    sans-serif;
+  --font-plex-mono:
+    "SFMono-Regular",
+    "JetBrains Mono",
+    "IBM Plex Mono",
+    "Cascadia Mono",
+    "Menlo",
+    "Consolas",
+    monospace;
+
+  /* 基础色彩系统 - 修复对比度问题，确保所有文字都清晰可见 */
+  --background: #ffffff; /* 纯白背景 */
+  --background-elevated: #ffffff;
+  --foreground: #0f0f0f; /* 深黑色文字，最高对比度 */
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc; /* 极淡的蓝色背景，避免混淆 */
+  --muted: #475569; /* 深灰色，确保可读性 */
+  --muted-foreground: #64748b; /* 中等灰色，清晰可见 */
+
+  /* 主色调 - 保持专业但增加舒适度 */
+  --accent: #2563eb; /* 深蓝色，对比度更高 */
+  --accent-foreground: #ffffff;
+  --accent-soft: #dbeafe; /* 柔和的蓝色背景 */
+  --accent-hover: #1d4ed8; /* 悬停时的深蓝色 */
+
+  /* 辅助色彩 - 更清晰的状态区分 */
+  --accent-warm: #f59e0b; /* 琥珀色 - 重要提醒 */
+  --accent-success: #10b981; /* 翠绿色 - 成功状态 */
+  --accent-danger: #ef4444; /* 红色 - 危险状态 */
+
+  /* 边框和阴影 - 清晰的层次 */
+  --border: #e2e8f0; /* 清晰的边框颜色 */
+  --border-strong: #cbd5e1; /* 强调边框 */
+  --ring: rgba(37, 99, 235, 0.25); /* 清晰的焦点环 */
+
+  /* 阴影系统 - 更轻更有层次 */
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-shell: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* 状态色彩 - 更清晰的语义化颜色 */
+  --status-success-bg: #dcfce7;
+  --status-success-text: #166534;
+  --status-success-border: #bbf7d0;
+  --status-warning-bg: #fef3c7;
+  --status-warning-text: #92400e;
+  --status-warning-border: #fde68a;
+  --status-danger-bg: #fee2e2;
+  --status-danger-text: #991b1b;
+  --status-danger-border: #fecaca;
+  --status-info-bg: #dbeafe;
+  --status-info-text: #1e40af;
+  --status-info-border: #bfdbfe;
+
+  /* Dark inset surface — 固定深色卡片配色，不随 light/dark 主题切换。
+     用于 demo emphasis cards、judgement glass cards 等"局部深色卡片"语义。
+     若需要让 inset 跟着主题翻转，应改用 --background/--surface 等普通 token。 */
+  --dark-inset-bg: #020617;
+  --dark-inset-surface: #0f172a;
+  --dark-inset-overlay: #1e293b;
+  --dark-inset-border: #1e293b;
+  --dark-inset-foreground: #f1f5f9;
+  --dark-inset-muted: #e2e8f0;
+
+  /* 渐变 - 用于重要区域 */
+  --gradient-primary: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --gradient-warm: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+
+  /* 网格背景 */
+  --grid-color: rgba(14, 165, 233, 0.03);
+
+  /* 排版系统 - 优化可读性 */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  --text-3xl: 1.875rem;  /* 30px */
+
+  /* 行高系统 */
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* 间距系统 - 8px 基础网格 */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+}
+
+/* 深色模式 - 优化为更舒适、更易分辨的配色 */
+html[data-theme="dark"] {
+  /* 背景色系 - 使用更深的背景，减少眼睛疲劳 */
+  --background: #0a0a0a; /* 接近纯黑，减少蓝光刺激 */
+  --background-elevated: #141414; /* 轻微提升，保持对比 */
+  --foreground: #e4e4e7; /* 高对比度浅灰，确保可读性 */
+  --surface: #1a1a1a; /* 卡片背景，明显区分于主背景 */
+  --surface-subtle: #262626; /* 次级表面，适度对比 */
+
+  /* 文本色系 - 清晰的层次对比 */
+  --muted: #a1a1aa; /* 次要文本，足够亮度 */
+  --muted-foreground: #71717a; /* 辅助文本，明显区分 */
+
+  /* 主色调 - 更明亮的蓝色，确保在深色背景下突出 */
+  --accent: #60a5fa; /* 明亮的天蓝色，对比度更高 */
+  --accent-foreground: #0a0a0a; /* 深色前景，确保文字可读 */
+  --accent-soft: rgba(96, 165, 250, 0.15); /* 柔和的背景强调 */
+  --accent-hover: #3b82f6; /* 悬停时更饱和 */
+
+  /* 辅助色彩 - 在深色模式下更鲜明 */
+  --accent-warm: #fbbf24; /* 琥珀色 - 温暖且醒目 */
+  --accent-success: #34d399; /* 翠绿色 - 清晰的成功状态 */
+  --accent-danger: #f87171; /* 珊瑚红 - 醒目的危险状态 */
+
+  /* 边框色系 - 清晰的层次区分 */
+  --border: #262626; /* 基础边框，适度对比 */
+  --border-strong: #404040; /* 强调边框，更高对比度 */
+
+  /* 焦点环 - 清晰可见的焦点指示器 */
+  --ring: rgba(96, 165, 250, 0.4);
+
+  /* 阴影系统 - 适应深色背景的阴影 */
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-shell: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+
+  /* 状态色彩 - 深色模式优化的状态色 */
+  --status-success-bg: rgba(52, 211, 153, 0.2); /* 半透明背景 */
+  --status-success-text: #6ee7b7; /* 明亮的绿色文字 */
+  --status-success-border: rgba(110, 231, 183, 0.35);
+  --status-warning-bg: rgba(251, 191, 36, 0.2);
+  --status-warning-text: #fcd34d; /* 明亮的黄色文字 */
+  --status-warning-border: rgba(252, 211, 77, 0.35);
+  --status-danger-bg: rgba(248, 113, 113, 0.2);
+  --status-danger-text: #fca5a5; /* 明亮的红色文字 */
+  --status-danger-border: rgba(252, 165, 165, 0.35);
+  --status-info-bg: rgba(96, 165, 250, 0.2);
+  --status-info-text: #93c5fd; /* 明亮的蓝色文字 */
+  --status-info-border: rgba(147, 197, 253, 0.35);
+
+  /* 渐变 - 深色模式下的渐变调整 */
+  --gradient-primary: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  --gradient-success: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  --gradient-warm: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+
+  /* 网格背景 - 深色模式下更微妙的网格 */
+  --grid-color: rgba(96, 165, 250, 0.04);
+}
+
+/* 基础样式重置和增强 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-plex-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--foreground);
+  background-color: var(--background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 改进的排版样式 */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.025em;
+  color: var(--foreground); /* 确保标题使用深色文字 */
+}
+
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl); }
+h4 { font-size: var(--text-lg); }
+
+/* 浅色模式下的文字对比度修复 */
+html:not([data-theme="dark"]) {
+  /* 确保所有常见文字元素都有足够对比度 */
+  color: var(--foreground);
+}
+
+/*
+ * 不要用通配规则覆盖 Tailwind 的 text-* 工具类。规则要求"浅色模式下默认文字深色"，
+ * 但不能影响显式声明 text-white / text-white/N（如 demo-shell-panel 这类深底浅字面板）
+ * 与 text-[color:...] 任意色值的元素。`[class*="text-"]` 匹配任何 text-* 类，让 Tailwind
+ * 自己的工具类按特异性正常生效。
+ */
+html:not([data-theme="dark"]) p:not([class*="text-"]),
+html:not([data-theme="dark"]) span:not([class*="text-"]),
+html:not([data-theme="dark"]) div:not([class*="text-"]) {
+  color: var(--foreground);
+}
+
+/* 确保辅助文字有足够对比度 */
+html:not([data-theme="dark"]) .text-slate-400,
+html:not([data-theme="dark"]) .text-muted-foreground {
+  color: var(--muted-foreground) !important;
+}
+
+/* 增强的交互反馈 */
+button, a {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 卡片悬停效果 */
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* 加载状态动画 */
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--surface-subtle) 0%,
+    var(--border) 50%,
+    var(--surface-subtle) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* 改进的徽章样式 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  border-radius: 9999px;
+  transition: all 0.2s;
+}
+
+.badge-success {
+  background-color: var(--status-success-bg);
+  color: var(--status-success-text);
+}
+
+.badge-warning {
+  background-color: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+
+.badge-danger {
+  background-color: var(--status-danger-bg);
+  color: var(--status-danger-text);
+}
+
+.badge-info {
+  background-color: var(--status-info-bg);
+  color: var(--status-info-text);
+}
+
+/* 改进的按钮样式 */
+.btn-primary {
+  background: var(--gradient-primary);
+  color: var(--accent-foreground);
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-card);
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.theme-primary-action {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  -webkit-text-fill-color: var(--accent-foreground);
+  border: 1px solid color-mix(in oklab, var(--accent) 82%, black 18%);
+}
+
+.theme-primary-action:hover {
+  background: var(--accent-hover);
+  -webkit-text-fill-color: var(--accent-foreground);
+}
+
+.theme-primary-action:disabled {
+  background: color-mix(in oklab, var(--accent) 54%, white 46%);
+  border-color: color-mix(in oklab, var(--accent) 42%, white 58%);
+}
+
+/* 改进的输入框样式 */
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* 无障碍增强 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* 浅色模式对比度修复 */
+html:not([data-theme="dark"]) {
+  /* 修复浅色文字在浅色背景上看不见的问题 */
+  --text-primary: #0f0f0f;
+  --text-secondary: #374151;
+  --text-tertiary: #4b5563;
+  --text-quaternary: #6b7280;
+}
+
+html:not([data-theme="dark"]) body {
+  /* 确保主要文字颜色足够深 */
+  color: var(--foreground);
+}
+
+/* 确保常见文字类在浅色模式下有足够对比度 */
+html:not([data-theme="dark"]) .text-slate-300,
+html:not([data-theme="dark"]) .text-slate-400,
+html:not([data-theme="dark"]) .text-slate-500 {
+  color: var(--muted-foreground) !important;
+}
+
+html:not([data-theme="dark"]) .text-gray-300,
+html:not([data-theme="dark"]) .text-gray-400,
+html:not([data-theme="dark"]) .text-gray-500 {
+  color: var(--muted-foreground) !important;
+}
+
+/* 修复普通链接颜色，但不要覆盖显式 text-* 工具类里的按钮/卡片文字。 */
+html:not([data-theme="dark"]) a:not([class*="text-"]) {
+  color: var(--accent);
+}
+
+html:not([data-theme="dark"]) a:not([class*="text-"]):hover {
+  color: var(--accent-hover);
+}
+
+/* 深色模式优化 */
+html[data-theme="dark"] {
+  /* 减少蓝色光，保护眼睛 */
+  color-scheme: dark;
+
+  /* 优化文本渲染 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 深色模式下的导航栏选中状态修复 */
+html[data-theme="dark"] .nav-active,
+html[data-theme="dark"] .nav-selected {
+  /* 使用更亮的背景色，确保对比度 */
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.3) 0%, rgba(59, 130, 246, 0.3) 100%) !important;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  color: #ffffff !important; /* 使用纯白文字，最高对比度 */
+}
+
+html[data-theme="dark"] .nav-active .nav-icon,
+html[data-theme="dark"] .nav-selected .nav-icon {
+  /* 图标背景使用更亮的蓝色 */
+  background: rgba(96, 165, 250, 0.4) !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .nav-active span,
+html[data-theme="dark"] .nav-selected span {
+  /* 确保所有span元素都使用白色文字 */
+  color: #ffffff !important;
+}
+
+/* 深色模式下的渐变背景修复 */
+html[data-theme="dark"] .bg-gradient-to-r {
+  /* 对于从蓝色开始的渐变，使用更亮的颜色 */
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.3) 0%, rgba(59, 130, 246, 0.3) 100%) !important;
+}
+
+/* 确保深色模式下文字颜色正确 */
+html[data-theme="dark"] .text-white {
+  color: #ffffff !important;
+}
+
+/* 深色模式下的特殊优化 */
+html[data-theme="dark"] body {
+  /* 深色模式下减少背景图案的干扰 */
+  background-image: none;
+  background-color: var(--background);
+}
+
+/* 深色模式下的卡片优化 */
+html[data-theme="dark"] .card-hover {
+  /* 减少阴影强度，避免过度干扰 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme="dark"] .card-hover:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* 深色模式下的文字优化 */
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6 {
+  /* 标题使用更亮的颜色，增强层次感 */
+  color: #fafafa;
+}
+
+html[data-theme="dark"] p,
+html[data-theme="dark"] span,
+html[data-theme="dark"] div {
+  /* 正文使用舒适的对比度 */
+  color: var(--foreground);
+}
+
+/* 深色模式下的普通链接优化，同样保留显式 text-* 工具类。 */
+html[data-theme="dark"] a:not([class*="text-"]) {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+html[data-theme="dark"] a:not([class*="text-"]):hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+html body a.theme-primary-action,
+html body .theme-primary-action,
+html body [data-testid="mobile-hero-action-primary"],
+html body a[href*="/approvals?source=mobile"].theme-primary-action,
+html body a.theme-primary-action :where(span, svg) {
+  color: var(--accent-foreground) !important;
+  -webkit-text-fill-color: var(--accent-foreground) !important;
+}
+
+html body a.theme-primary-action,
+html body [data-testid="mobile-hero-action-primary"],
+html body a[href*="/approvals?source=mobile"].theme-primary-action {
+  text-decoration: none !important;
+}
+
+html[data-theme="dark"] body a.theme-primary-action,
+html[data-theme="dark"] body .theme-primary-action,
+html[data-theme="dark"] body [data-testid="mobile-hero-action-primary"],
+html[data-theme="dark"] body a[href*="/approvals?source=mobile"].theme-primary-action,
+html[data-theme="dark"] body a.theme-primary-action :where(span, svg) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html[data-theme="dark"] body a.theme-primary-action,
+html[data-theme="dark"] body .theme-primary-action,
+html[data-theme="dark"] body [data-testid="mobile-hero-action-primary"],
+html[data-theme="dark"] body a[href*="/approvals?source=mobile"].theme-primary-action {
+  text-decoration: none !important;
+}
+
+html[data-theme="dark"] body a.theme-primary-action,
+html[data-theme="dark"] body [data-testid="mobile-hero-action-primary"],
+html[data-theme="dark"] body a[href*="/approvals?source=mobile"].theme-primary-action {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html[data-theme="dark"] body a.theme-primary-action:hover,
+html[data-theme="dark"] body .theme-primary-action:hover {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-decoration: none !important;
+}
+
+html[data-theme="dark"] body a.theme-primary-action:hover,
+html[data-theme="dark"] body [data-testid="mobile-hero-action-primary"]:hover,
+html[data-theme="dark"] body a[href*="/approvals?source=mobile"].theme-primary-action:hover {
+  background: #1d4ed8;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Workspace surface primitives */
+html body .surface-grid {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklab, var(--border) 42%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--border) 36%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 44px 44px;
+}
+
+html body .workspace-surface-stack {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+html[data-workspace-density="compact"] body .workspace-surface-stack {
+  gap: 1rem;
+}
+
+html body .signal-flow-map {
+  isolation: isolate;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--surface) 96%, white 4%) 0%,
+      color-mix(in oklab, var(--surface-subtle) 78%, var(--surface) 22%) 100%
+    );
+}
+
+html body .signal-flow-map-grid {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklab, var(--border) 42%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--border) 36%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 36px 36px;
+  opacity: 0.58;
+}
+
+html body .signal-flow-track {
+  display: grid;
+  grid-template-columns:
+    minmax(92px, 1fr) minmax(22px, 0.18fr)
+    minmax(92px, 1fr) minmax(22px, 0.18fr)
+    minmax(92px, 1fr) minmax(22px, 0.18fr)
+    minmax(92px, 1fr) minmax(22px, 0.18fr)
+    minmax(92px, 1fr) minmax(22px, 0.18fr)
+    minmax(92px, 1fr) minmax(22px, 0.18fr)
+    minmax(92px, 1fr);
+  align-items: center;
+  gap: 0.375rem;
+}
+
+html body .signal-flow-track-item {
+  display: contents;
+}
+
+html body .signal-flow-node {
+  position: relative;
+  min-height: 4rem;
+  min-width: 0;
+  overflow: hidden;
+  box-shadow: 0 18px 45px -34px rgba(15, 23, 42, 0.42);
+}
+
+html body .signal-flow-node::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  content: "";
+  opacity: 0.9;
+}
+
+html body .signal-flow-node[data-status="flowing"]::after,
+html body .signal-flow-node[data-status="learned"]::after {
+  background: var(--accent-success);
+}
+
+html body .signal-flow-node[data-status="review"]::after {
+  background: var(--accent-warm);
+}
+
+html body .signal-flow-node[data-status="blocked"]::after {
+  background: var(--accent-danger);
+}
+
+html body .signal-flow-edge {
+  position: relative;
+  height: 3px;
+  min-width: 22px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--border-strong) 58%, transparent 42%);
+}
+
+html body .signal-flow-edge::after {
+  position: absolute;
+  inset: 0;
+  width: 58%;
+  border-radius: inherit;
+  content: "";
+  animation: signal-flow-sweep 2.2s linear infinite;
+}
+
+html body .signal-flow-edge[data-posture="flowing"]::after {
+  background: var(--accent-success);
+}
+
+html body .signal-flow-edge[data-posture="review"]::after {
+  background: var(--accent-warm);
+  animation-duration: 2.8s;
+}
+
+html body .signal-flow-edge[data-posture="blocked"]::after {
+  background: var(--accent-danger);
+  animation-duration: 3.3s;
+}
+
+html body .signal-flow-map[data-posture="fixture"] .signal-flow-edge::after {
+  animation: none;
+}
+
+html body .signal-flow-map[data-animation-policy="disabled"] .signal-flow-edge::after {
+  animation: none;
+}
+
+html body .signal-flow-pressure-row[data-status="blocked"] {
+  border-color: color-mix(in oklab, var(--accent-danger) 36%, var(--border) 64%);
+}
+
+html body .signal-flow-pressure-row[data-status="review"] {
+  border-color: color-mix(in oklab, var(--accent-warm) 34%, var(--border) 66%);
+}
+
+@keyframes signal-flow-sweep {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(210%);
+  }
+}
+
+@media (max-width: 1024px) {
+  html body .signal-flow-track {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  html body .signal-flow-track-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  html body .signal-flow-edge {
+    width: 3px;
+    min-width: 3px;
+    height: 28px;
+    align-self: center;
+  }
+
+  html body .signal-flow-edge::after {
+    width: 100%;
+    height: 58%;
+    animation-name: signal-flow-sweep-y;
+  }
+}
+
+@keyframes signal-flow-sweep-y {
+  from {
+    transform: translateY(-110%);
+  }
+
+  to {
+    transform: translateY(210%);
+  }
+}
+
+html body .workspace-shell-panel,
+html body .workspace-panel,
+html body .workspace-panel-muted,
+html body .workspace-guidance-card,
+html body .workspace-preference-card {
+  border-color: var(--border);
+  background: color-mix(in oklab, var(--surface) 96%, white 4%);
+  box-shadow: 0 18px 60px -42px rgba(15, 23, 42, 0.48);
+}
+
+html[data-theme="dark"] body .workspace-shell-panel,
+html[data-theme="dark"] body .workspace-panel,
+html[data-theme="dark"] body .workspace-panel-muted,
+html[data-theme="dark"] body .workspace-guidance-card,
+html[data-theme="dark"] body .workspace-preference-card {
+  background: color-mix(in oklab, var(--surface) 94%, white 6%);
+  box-shadow: 0 22px 70px -44px rgba(0, 0, 0, 0.82);
+}
+
+html body .workspace-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 94%, white 6%);
+}
+
+html[data-theme="dark"] body .workspace-panel {
+  background: color-mix(in oklab, var(--surface) 92%, white 5%);
+}
+
+html body .workspace-panel-muted {
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface-subtle) 86%, white 14%);
+}
+
+html[data-theme="dark"] body .workspace-panel-muted {
+  background: color-mix(in oklab, var(--surface-subtle) 88%, white 4%);
+}
+
+html body .workspace-toolbar {
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface-subtle) 76%, white 24%);
+}
+
+html body .workspace-toolbar-label,
+html body .workspace-eyebrow,
+html body .workspace-note-label,
+html body .workspace-note-meta,
+html body .workspace-accent-card-label {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
+}
+
+html body .workspace-accent-card {
+  border: 1px solid color-mix(in oklab, var(--accent) 26%, var(--border) 74%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--accent-soft) 70%, var(--surface) 30%),
+    color-mix(in oklab, var(--surface) 88%, white 12%)
+  );
+}
+
+html[data-theme="dark"] body .workspace-accent-card {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--accent-soft) 78%, var(--surface) 22%),
+    color-mix(in oklab, var(--surface) 90%, white 5%)
+  );
+}
+
+html body .workspace-accent-card-value,
+html body .workspace-note-title,
+html body .workspace-note-value {
+  color: var(--foreground);
+}
+
+html body .workspace-accent-card-detail,
+html body .workspace-note-body {
+  color: var(--muted);
+}
+
+html body .workspace-note-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: color-mix(in oklab, var(--surface) 92%, white 8%);
+}
+
+html[data-theme="dark"] body .workspace-note-card {
+  background: color-mix(in oklab, var(--surface) 92%, white 5%);
+}
+
+html body .workspace-note-card[data-tone="amber"] {
+  border-color: color-mix(in oklab, var(--accent-warm) 34%, var(--border) 66%);
+}
+
+html body .workspace-note-card[data-tone="sky"] {
+  border-color: color-mix(in oklab, var(--accent) 34%, var(--border) 66%);
+}
+
+html body .workspace-note-card[data-tone="violet"] {
+  border-color: color-mix(in oklab, #8b5cf6 32%, var(--border) 68%);
+}
+
+html body .workspace-note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface-subtle) 72%, white 28%);
+  padding: 0.2rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+html body .workspace-note-icon-shell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface-subtle) 78%, white 22%);
+}
+
+html body .theme-detail-shell,
+html body .theme-detail-shell-card,
+html body .theme-detail-shell-tile,
+html body .theme-detail-shell-footer {
+  --dark-inset-bg: var(--surface-subtle);
+  --dark-inset-surface: var(--surface);
+  --dark-inset-overlay: color-mix(in oklab, var(--surface-subtle) 72%, white 28%);
+  --dark-inset-border: var(--border);
+  --dark-inset-foreground: var(--foreground);
+  --dark-inset-muted: var(--muted);
+  color: var(--foreground);
+}
+
+html[data-theme="dark"] body .theme-detail-shell,
+html[data-theme="dark"] body .theme-detail-shell-card,
+html[data-theme="dark"] body .theme-detail-shell-tile,
+html[data-theme="dark"] body .theme-detail-shell-footer {
+  --dark-inset-bg: color-mix(in oklab, var(--surface-subtle) 82%, black 18%);
+  --dark-inset-surface: color-mix(in oklab, var(--surface) 88%, white 12%);
+  --dark-inset-overlay: color-mix(in oklab, var(--surface-subtle) 78%, white 8%);
+  --dark-inset-border: var(--border-strong);
+  --dark-inset-foreground: var(--foreground);
+  --dark-inset-muted: var(--muted);
+}
+
+html body .theme-detail-shell {
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--surface) 94%, var(--accent-soft) 6%) 0%,
+    color-mix(in oklab, var(--surface) 88%, var(--surface-subtle) 12%) 100%
+  );
+  box-shadow: 0 22px 70px -48px rgba(15, 23, 42, 0.5);
+}
+
+html[data-theme="dark"] body .theme-detail-shell {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--surface) 88%, white 6%) 0%,
+    color-mix(in oklab, var(--surface-subtle) 90%, black 10%) 100%
+  );
+  box-shadow: 0 28px 80px -50px rgba(0, 0, 0, 0.88);
+}
+
+html body .theme-detail-shell-card,
+html body .theme-detail-shell-tile {
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 90%, var(--surface-subtle) 10%);
+}
+
+html body .theme-detail-shell-card {
+  box-shadow: 0 18px 54px -42px rgba(15, 23, 42, 0.44);
+}
+
+html body .theme-detail-shell-tile {
+  background: color-mix(in oklab, var(--surface-subtle) 82%, white 18%);
+}
+
+html[data-theme="dark"] body .theme-detail-shell-card,
+html[data-theme="dark"] body .theme-detail-shell-tile {
+  background: color-mix(in oklab, var(--surface) 86%, white 6%);
+}
+
+html body .theme-detail-shell-footer {
+  border-top: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface-subtle) 76%, white 24%);
+}
+
+html[data-theme="dark"] body .theme-detail-shell-footer {
+  background: color-mix(in oklab, var(--surface-subtle) 86%, black 8%);
+}
+
+html body .theme-detail-shell .text-white,
+html body .theme-detail-shell-card.text-white,
+html body .theme-detail-shell-card .text-white,
+html body .theme-detail-shell-tile.text-white,
+html body .theme-detail-shell-tile .text-white {
+  color: var(--foreground) !important;
+}
+
+html body .theme-detail-shell-link {
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border) 72%);
+  background: color-mix(in oklab, var(--accent-soft) 62%, var(--surface) 38%);
+  color: var(--accent);
+}
+
+html body .theme-detail-shell-link:hover {
+  border-color: color-mix(in oklab, var(--accent) 44%, var(--border) 56%);
+  background: color-mix(in oklab, var(--accent-soft) 78%, var(--surface) 22%);
+  color: var(--accent-hover);
+}
+
+html body .demo-shell-panel {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgb(37, 99, 235) 0%, rgb(30, 64, 175) 100%);
+  box-shadow: 0 18px 48px -32px rgba(15, 23, 42, 0.55);
+}
+
+html body .workspace-guidance-card {
+  container-type: inline-size;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+html body .workspace-guidance-disclosure {
+  display: block;
+}
+
+html body .workspace-guidance-summary {
+  display: flex;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  color: var(--foreground);
+}
+
+html body .workspace-guidance-summary::marker,
+html body .workspace-guidance-summary::-webkit-details-marker {
+  display: none;
+  content: "";
+}
+
+html body .workspace-guidance-summary:hover {
+  background: color-mix(in oklab, var(--accent-soft) 30%, transparent 70%);
+}
+
+html body .workspace-guidance-heading {
+  color: var(--foreground);
+  font-size: 1rem;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+html body .workspace-guidance-summary-copy {
+  color: var(--muted);
+}
+
+html body .workspace-guidance-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+html body .workspace-guidance-meta-pill {
+  display: inline-flex;
+  min-height: 1.65rem;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface-subtle) 78%, white 22%);
+  padding: 0.25rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+html body .workspace-guidance-toggle {
+  display: inline-flex;
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface-subtle) 84%, white 16%);
+  color: var(--muted);
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+html body .workspace-guidance-disclosure[open] .workspace-guidance-toggle {
+  transform: rotate(180deg);
+  background: color-mix(in oklab, var(--accent-soft) 62%, var(--surface) 38%);
+  color: var(--accent);
+}
+
+html body .workspace-guidance-body {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+html body .workspace-guidance-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@container (min-width: 720px) {
+  html body .workspace-guidance-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  }
+}
+
+html body .workspace-guidance-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+html body .workspace-guidance-section-label {
+  color: color-mix(in oklab, var(--accent) 54%, var(--muted) 46%);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+html body .workspace-guidance-item {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: color-mix(in oklab, var(--surface-subtle) 80%, white 20%);
+  padding: 0.9rem 1rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+html body .workspace-guidance-item:hover {
+  border-color: color-mix(in oklab, var(--accent) 32%, var(--border) 68%);
+  box-shadow: 0 14px 36px -30px rgba(15, 23, 42, 0.58);
+  transform: translateY(-1px);
+}
+
+html[data-workspace-motion="reduced"] body .workspace-guidance-item:hover {
+  transform: none;
+}
+
+html body .workspace-guidance-item-title {
+  color: var(--foreground);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+html body .workspace-guidance-item-body,
+html body .workspace-guidance-item-meta {
+  margin-top: 0.45rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+html body .workspace-guidance-boundary {
+  border-radius: 1.25rem;
+  border: 1px solid
+    color-mix(in oklab, var(--accent-warm) 30%, var(--border) 70%);
+  background: color-mix(
+    in oklab,
+    var(--status-warning-bg) 34%,
+    var(--surface) 66%
+  );
+  padding: 0.9rem 1rem;
+}
+
+html[data-workspace-guidance="focused"] body .workspace-guidance-detail,
+html[data-workspace-guidance="focused"] body .workspace-form-assist,
+html[data-workspace-form-assist="disabled"] body .workspace-form-assist {
+  display: none;
+}
+
+html[data-workspace-density="compact"] body .workspace-guidance-summary,
+html[data-workspace-density="compact"] body .workspace-guidance-body {
+  padding: 1rem;
+}
+
+html[data-workspace-density="compact"] body .workspace-guidance-item,
+html[data-workspace-density="compact"] body .workspace-guidance-boundary {
+  padding: 0.75rem 0.85rem;
+}
+
+html body .workspace-preference-card {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+html body .workspace-preference-disclosure {
+  min-width: 0;
+}
+
+html body .workspace-preference-summary {
+  display: flex;
+  min-height: 3.25rem;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.9rem;
+}
+
+html body .workspace-preference-summary::-webkit-details-marker {
+  display: none;
+}
+
+html body .workspace-preference-summary::after {
+  content: "+";
+  display: inline-flex;
+  height: 1.75rem;
+  width: 1.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+html body .workspace-preference-summary-icon {
+  min-height: 2.25rem;
+  justify-content: center;
+  padding: 0.35rem;
+}
+
+html body .workspace-preference-summary-icon > span {
+  display: inline-flex;
+  height: 1.75rem;
+  width: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface-subtle) 84%, white 16%);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+html body .workspace-preference-summary-icon::after {
+  height: 1.35rem;
+  width: 1.35rem;
+  font-size: 0.78rem;
+}
+
+html body .workspace-preference-disclosure[open] .workspace-preference-summary::after {
+  content: "-";
+}
+
+html body .workspace-preference-current {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+html body .workspace-preference-current span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface-subtle) 78%, white 22%);
+  padding: 0.25rem 0.55rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+html body .workspace-preference-body {
+  display: grid;
+  gap: 1rem;
+  border-top: 1px solid var(--border);
+  padding: 1rem;
+}
+
+html body .workspace-preference-group {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+
+html body .workspace-preference-group-title {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+html body .workspace-preference-option-row {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+html body .workspace-preference-option {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 1.15rem;
+  background: color-mix(in oklab, var(--surface-subtle) 78%, white 22%);
+  padding: 0.85rem 0.9rem;
+  text-align: left;
+}
+
+html body .workspace-preference-option:hover {
+  border-color: color-mix(in oklab, var(--accent) 34%, var(--border) 66%);
+}
+
+html body .workspace-preference-option[data-active="true"] {
+  border-color: color-mix(in oklab, var(--accent) 58%, var(--border) 42%);
+  background: color-mix(in oklab, var(--accent-soft) 62%, var(--surface) 38%);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklab, var(--accent) 28%, transparent 72%);
+}
+
+html body .workspace-preference-option-label {
+  display: block;
+  color: var(--foreground);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+html body .workspace-preference-option-description,
+html body .workspace-preference-note-copy {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+html body .workspace-preference-note {
+  border-radius: 1rem;
+  border: 1px dashed var(--border);
+  background: color-mix(in oklab, var(--surface-subtle) 70%, white 30%);
+  padding: 0.85rem 0.9rem;
+}
+
+@media (max-width: 640px) {
+  html body .workspace-surface-stack {
+    gap: 1rem;
+  }
+
+  html body .workspace-guidance-summary {
+    padding: 1rem;
+  }
+
+  html body .workspace-guidance-heading {
+    font-size: 1.35rem;
+  }
+
+  html body .workspace-guidance-body {
+    padding: 0.9rem 1rem 1rem;
+  }
+
+  html body .workspace-preference-option-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 减少动画偏好支持 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+[data-helm-v2-meeting-runtime="true"] .grid > *,
+[data-helm-v2-ingestion-retrieval="true"] .grid > * {
+  min-width: 0;
+}
+
+[data-helm-v2-meeting-runtime="true"] .theme-surface-panel,
+[data-helm-v2-ingestion-retrieval="true"] .theme-surface-panel {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+[data-helm-v2-meeting-runtime="true"] p,
+[data-helm-v2-meeting-runtime="true"] li,
+[data-helm-v2-meeting-runtime="true"] pre,
+[data-helm-v2-meeting-runtime="true"] code,
+[data-helm-v2-ingestion-retrieval="true"] p,
+[data-helm-v2-ingestion-retrieval="true"] li,
+[data-helm-v2-ingestion-retrieval="true"] pre,
+[data-helm-v2-ingestion-retrieval="true"] code {
+  overflow-wrap: anywhere;
+}

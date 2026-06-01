@@ -1,0 +1,184 @@
+[
+  {
+    "id": "evr-001",
+    "dimension": "eval_replay",
+    "description": "High fixture count with strong production path coverage and all failure cases replayed — learning candidate.",
+    "input": {
+      "dimension": "eval_replay",
+      "evalRunId": "eval-run-evr-001",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-evr-001", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "fixtureCount": 80,
+      "coveredProductionPathCount": 18,
+      "totalKnownProductionPathCount": 20,
+      "failureCasesReplayed": 30
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "90% production path coverage with all 30 failure cases replayed. High-quality eval coverage candidate.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "evr-002",
+    "dimension": "eval_replay",
+    "description": "Moderate fixture count with good coverage ratio — learning candidate for coverage baseline tracking.",
+    "input": {
+      "dimension": "eval_replay",
+      "evalRunId": "eval-run-evr-002",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "eval_run", "id": "eval-run-evr-002", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "fixtureCount": 40,
+      "coveredProductionPathCount": 12,
+      "totalKnownProductionPathCount": 15,
+      "failureCasesReplayed": 12
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "80% path coverage with solid failure replay count. Acceptable coverage candidate for baseline tracking.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "evr-003",
+    "dimension": "eval_replay",
+    "description": "Low coverage ratio with partial failure replay — watch_only until coverage improves.",
+    "input": {
+      "dimension": "eval_replay",
+      "evalRunId": "eval-run-evr-003",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-evr-003", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "fixtureCount": 20,
+      "coveredProductionPathCount": 6,
+      "totalKnownProductionPathCount": 15,
+      "failureCasesReplayed": 5
+    },
+    "expected": {
+      "decision": "watch_only",
+      "reason": "Only 40% path coverage; failure replay is partial. Coverage is below the 60% threshold for advancement.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "evr-004",
+    "dimension": "eval_replay",
+    "description": "Full production path coverage with high fixture count — strong learning candidate for eval maturity study.",
+    "input": {
+      "dimension": "eval_replay",
+      "evalRunId": "eval-run-evr-004",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "human_review", "id": "hr-evr-004", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "fixtureCount": 120,
+      "coveredProductionPathCount": 20,
+      "totalKnownProductionPathCount": 20,
+      "failureCasesReplayed": 45
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "Full 100% production path coverage with 120 fixtures and comprehensive failure replay. Highest maturity eval state.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "evr-005",
+    "dimension": "eval_replay",
+    "description": "Good coverage ratio with moderate failure replay — learning candidate suitable for incremental improvement tracking.",
+    "input": {
+      "dimension": "eval_replay",
+      "evalRunId": "eval-run-evr-005",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-evr-005", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "fixtureCount": 55,
+      "coveredProductionPathCount": 14,
+      "totalKnownProductionPathCount": 18,
+      "failureCasesReplayed": 20
+    },
+    "expected": {
+      "decision": "learning_candidate",
+      "reason": "78% path coverage with 20 failure cases replayed. Solid candidate for incremental improvement tracking.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": false
+  },
+  {
+    "id": "evr-006",
+    "dimension": "eval_replay",
+    "description": "NEGATIVE: Zero fixture count — eval framework has no cases to replay, review required.",
+    "input": {
+      "dimension": "eval_replay",
+      "evalRunId": "eval-run-evr-006",
+      "workspaceId": "tenant-gamma",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-evr-006", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "fixtureCount": 0,
+      "coveredProductionPathCount": 0,
+      "totalKnownProductionPathCount": 10,
+      "failureCasesReplayed": 0
+    },
+    "expected": {
+      "decision": "review_required",
+      "reason": "Zero fixtures and zero coverage. Eval framework cannot function without fixtures; human review needed to investigate gap.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "evr-007",
+    "dimension": "eval_replay",
+    "description": "NEGATIVE: Covered paths exceed total known paths — data integrity violation, rejected.",
+    "input": {
+      "dimension": "eval_replay",
+      "evalRunId": "eval-run-evr-007",
+      "workspaceId": "tenant-alpha",
+      "evidenceRefs": [
+        { "type": "fixture", "id": "fixture-evr-007", "timestamp": "2026-05-02T00:00:00.000Z" }
+      ],
+      "fixtureCount": 30,
+      "coveredProductionPathCount": 25,
+      "totalKnownProductionPathCount": 10,
+      "failureCasesReplayed": 8
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "Covered paths (25) exceed total known paths (10). This is a data integrity violation; fixture is malformed and rejected.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  },
+  {
+    "id": "evr-008",
+    "dimension": "eval_replay",
+    "description": "NEGATIVE: No evidence refs and zero coverage with known paths — rejected as unverifiable eval state.",
+    "input": {
+      "dimension": "eval_replay",
+      "evalRunId": "eval-run-evr-008",
+      "workspaceId": "tenant-beta",
+      "evidenceRefs": [],
+      "fixtureCount": 5,
+      "coveredProductionPathCount": 0,
+      "totalKnownProductionPathCount": 8,
+      "failureCasesReplayed": 0
+    },
+    "expected": {
+      "decision": "rejected",
+      "reason": "No evidence refs and zero path coverage. Eval state is unverifiable; cannot enter coverage improvement pipeline.",
+      "boundaryViolations": []
+    },
+    "isNegativeBoundary": true
+  }
+]

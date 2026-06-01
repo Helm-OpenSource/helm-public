@@ -1,0 +1,107 @@
+[
+  {
+    "id": "large_budget_subgroup_cohort_aging_impact",
+    "label": "Large budget-pressure cohort keeps cohort aging, wording regression, and impact sampling explicit",
+    "sourceCaseId": "large_budget_subgroup_stability_drift_aging",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetIntervalWordingRegressionRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupCohortAgingIncludes": [
+        "Long-term cohort aging review",
+        "cohort aging comparison",
+        "BUDGET_PRESSURE"
+      ],
+      "intervalWordingRegressionIncludes": [
+        "Cross-surface interval wording regression review",
+        "meeting detail",
+        "wide confidence interval"
+      ],
+      "materialImpactSamplingIncludes": [
+        "Material impact sampling review",
+        "Prune trace review",
+        "evidence-first"
+      ],
+      "sessionReviewIncludes": [
+        "cohort aging comparison",
+        "cross-surface interval wording regression review",
+        "Material impact sampling review"
+      ]
+    }
+  },
+  {
+    "id": "large_replay_subgroup_cohort_aging_impact",
+    "label": "Large replay-drift cohort keeps settled wording regression and broader impact sampling visible",
+    "sourceCaseId": "large_replay_subgroup_stability_drift_aging",
+    "expected": {
+      "workspaceSizeBand": "LARGE",
+      "targetMeetingShape": "RESUMED_MEETING",
+      "targetRiskBand": "LOW",
+      "targetStabilityBand": "STABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "SETTLED",
+      "targetIntervalWordingRegressionRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupCohortAgingIncludes": [
+        "Long-term cohort aging review",
+        "cohort aging comparison",
+        "RESUMED_MEETING"
+      ],
+      "intervalWordingRegressionIncludes": [
+        "Cross-surface interval wording regression review",
+        "operator panel",
+        "settled confidence interval"
+      ],
+      "materialImpactSamplingIncludes": [
+        "Material impact sampling review",
+        "Replay gap review",
+        "broader-sample"
+      ],
+      "sessionReviewIncludes": [
+        "cohort aging comparison",
+        "cross-surface interval wording regression review",
+        "Material impact sampling review"
+      ]
+    }
+  },
+  {
+    "id": "growing_protected_subgroup_cohort_aging_impact",
+    "label": "Growing protected-state cohort keeps cohort aging and impact sampling conservative",
+    "sourceCaseId": "growing_protected_subgroup_stability_drift_aging",
+    "expected": {
+      "workspaceSizeBand": "GROWING",
+      "targetMeetingShape": "LONG_CONTEXT_MEETING",
+      "targetRiskBand": "HIGH",
+      "targetStabilityBand": "UNSTABLE",
+      "targetStabilityConfidenceBand": "LOW",
+      "targetConfidenceInterval": "WIDE",
+      "targetIntervalWordingRegressionRate": 0,
+      "targetMaterialImpactBand": "HIGH",
+      "subgroupCohortAgingIncludes": [
+        "Long-term cohort aging review",
+        "cohort aging comparison",
+        "PROTECTED_STATE_GAP"
+      ],
+      "intervalWordingRegressionIncludes": [
+        "Cross-surface interval wording regression review",
+        "runbook",
+        "wide confidence interval"
+      ],
+      "materialImpactSamplingIncludes": [
+        "Material impact sampling review",
+        "Protected field review",
+        "evidence-first"
+      ],
+      "sessionReviewIncludes": [
+        "cohort aging comparison",
+        "cross-surface interval wording regression review",
+        "Material impact sampling review"
+      ]
+    }
+  }
+]

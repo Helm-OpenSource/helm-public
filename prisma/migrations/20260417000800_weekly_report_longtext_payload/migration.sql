@@ -1,0 +1,3 @@
+ALTER TABLE `WeeklyReport`
+  MODIFY `summaryText` LONGTEXT NOT NULL,
+  MODIFY `payload` LONGTEXT NULL;
