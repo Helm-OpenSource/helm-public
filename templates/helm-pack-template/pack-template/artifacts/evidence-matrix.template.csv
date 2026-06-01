@@ -1,0 +1,4 @@
+claim_id,object_alias,question,cell_state,evidence_ref,source_family,freshness,reviewer_alias,next_step,public_claim_candidate,boundary_note
+claim-001,object-001,Is there a real high-frequency business pain?,insufficient,redacted-source-ref-001,meeting,current,reviewer-alias,request_more_evidence,false,AI output is not fact
+claim-002,object-001,Is the proposed action review-safe?,supported,redacted-source-ref-002,document,current,reviewer-alias,prepare_review_packet,false,no auto-send no auto-execute
+claim-003,object-002,Can this become a proof candidate?,contradicted,redacted-source-ref-003,report,stale,reviewer-alias,downgrade_or_split_claim,false,public claim denied by default

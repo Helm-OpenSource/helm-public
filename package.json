@@ -14,6 +14,8 @@
     "typecheck": "tsc --noEmit --project tsconfig.public.json",
     "validate:env": "node --import tsx scripts/validate-env.ts",
     "delivery:doctor": "node --import tsx scripts/delivery-engineer-doctor.ts",
+    "eval:headless-signal-interface": "tsx scripts/headless-signal-interface-evals.ts",
+    "eval:operating-signal-flow": "tsx scripts/operating-signal-flow-evals.ts",
     "pack:fixture-check": "node --import tsx scripts/pack-fixture-check.ts",
     "self-check": "npm run public:smoke:static",
     "check:public-release": "node --import tsx scripts/public-release-guard.ts",

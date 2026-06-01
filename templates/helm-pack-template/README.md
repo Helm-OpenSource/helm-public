@@ -13,6 +13,7 @@
 - **Day-1 行业有效性**：每个 Skill 必须自带 seed/（playbook + templates + thresholds），开箱可用
 - **作业质量是核心证据**：每个 Skill 必须有量化作业质量门槛 + 业务侧可读验证
 - **首次落地是种子事件**：首批 design partner 客户的首日感知决定生态启动
+- **证据先于承诺**：Pack 交付前先准备 Context Packet、Pack Studio safe sample、Evidence Matrix、Review-Ready Work Pack 和 Proof Loop closeout；这些都是 review-first artifact，不是自动执行能力
 
 ### 快速开始
 ```bash
@@ -28,6 +29,7 @@ cd ../my-helm-pack
 - `docs/GETTING_STARTED.md` 入门
 - `docs/SKILL_MD_REFERENCE.md` SKILL.md frontmatter 字段参考
 - `docs/GOVERNANCE.md` 治理边界（建议 vs 承诺、不掉案件 invariant）
+- `pack-template/artifacts/` public-safe 交付 artifact 模板
 
 ### 参考实现
 `examples/` 指向 Helm 官方 Pack A（B2B SaaS 销售推进）作为完整范例。

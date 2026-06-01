@@ -4,9 +4,29 @@
 
 set -e
 PACK_ROOT="$(dirname "$0")/.."
+PACK_CONTENT_ROOT="$PACK_ROOT"
+if [ -d "$PACK_ROOT/pack-template" ]; then
+  PACK_CONTENT_ROOT="$PACK_ROOT/pack-template"
+fi
+shopt -s nullglob
 ERRORS=0
 
-for skill_dir in "$PACK_ROOT"/skills/*/; do
+required_artifacts=(
+  "artifacts/context-packet.template.json"
+  "artifacts/pack-studio.sample.csv"
+  "artifacts/evidence-matrix.template.csv"
+  "artifacts/work-pack.template.md"
+  "artifacts/proof-loop-closeout.template.md"
+)
+
+echo "Checking Pack artifact templates..."
+for artifact in "${required_artifacts[@]}"; do
+  if [ ! -f "$PACK_CONTENT_ROOT/$artifact" ]; then
+    echo "  ❌ Missing $artifact"; ERRORS=$((ERRORS+1))
+  fi
+done
+
+for skill_dir in "$PACK_CONTENT_ROOT"/skills/*/; do
   skill_name=$(basename "$skill_dir")
   echo "Checking $skill_name..."
 
