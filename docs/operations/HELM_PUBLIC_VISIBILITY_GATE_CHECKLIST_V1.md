@@ -7,33 +7,38 @@ public_safety: Public-safe operational checklist. Lists gate steps, env-var name
 ---
 # Helm Public Visibility Gate Checklist V1
 
-Operational checklist for taking `helm-public` from private to public. It
+Operational checklist for taking `helm-public` from private to public. The
+2026-06-01 launch has completed; this file now preserves the executed gate
+state and the public-safe follow-up items that remain after launch. It
 operationalizes the visibility gate defined in
 [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
 §6.
 
 **Hard rule:** repository visibility is flipped by the owner as the final manual
-action, only after every step below is green. Any failed step is a No-Go. This
-checklist does not flip visibility and does not grant Go/No-Go.
+action, only after every step below is green. Any failed step before launch is a
+No-Go. This checklist does not flip visibility and does not grant Go/No-Go.
 
 ## Part 1 — Visibility gate steps
 
 | # | Step | Owner-only? | Current status |
 | --- | --- | --- | --- |
-| 1 | Rotate / revoke the exposed RDS credential in the source environment | Yes (ops) | ⏳ pending owner confirmation |
+| 1 | Rotate / revoke the exposed RDS credential in the source environment | Yes (ops) | ✅ owner-attested for launch; machine-readable ops receipt still pending |
 | 2 | HEAD `check:public-release` + `check:secret-history` green | No | ✅ green on `main` |
 | 3 | History remediation produces a clean-history receipt | No | ✅ [HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md](../reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md) |
 | 4 | Rewritten/snapshot history re-scanned and still green | No | ✅ gitleaks full-history scan clean (recorded in the receipt) |
-| 5 | `npm run release:check` green incl. human-readable receipts | Mixed | 🟡 11/11 automated steps pass; 7 manual receipts pending (Part 2) |
-| 6 | Owner Go/No-Go using founder/owner identity | Yes | ⏳ pending |
-| 7 | Flip repository visibility | Yes | ⏳ final step |
+| 5 | `npm run release:check` green incl. human-readable receipts | Mixed | ✅ `RELEASE_READINESS_FULL=true npm run release:check` reported ALL CLEAR before tagging |
+| 6 | Owner Go/No-Go using founder/owner identity | Yes | ✅ GO recorded in [HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md](../reviews/HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md) |
+| 7 | Flip repository visibility | Yes | ✅ repository is public |
+| 8 | Publish trial tag / GitHub Release / announcement | Yes | ✅ `v0.1.0-trial` published as pre-release with `--latest=false`; existing `V1.0.0` remains Latest |
 
 ## Part 2 — `release:check` manual receipts (7)
 
-`npm run release:check` passes all automated steps but reports 7 manual receipts
-as unmet until the corresponding `RELEASE_READINESS_*` environment variables are
-set **on the release machine** (not committed to the repo). Set them, then re-run
-`npm run release:check` and expect `ALL CLEAR`.
+For the 2026-06-01 launch, `RELEASE_READINESS_FULL=true npm run release:check`
+reported `ALL CLEAR` on the release machine before the owner created the
+`v0.1.0-trial` tag, GitHub Release, and announcement. Future releases must set
+the corresponding `RELEASE_READINESS_*` environment variables **on the release
+machine** again; do not commit private approval IDs, credentials, or raw ops
+receipts into this repo.
 
 ### Evidence already in the repo — owner sets the env var
 
@@ -47,21 +52,20 @@ export RELEASE_READINESS_AUDIT_TRACE_PUBLIC_POSTURE=claim_withdrawn
 # Docker quickstart smoke (D2 fresh-clone smoke receipt already present, dated 2026-06-01)
 export RELEASE_READINESS_DOCKER_SMOKE_PASSED=2026-06-01
 
-# On-call / response policy (docs/operations/ON_CALL_AND_RESPONSE_SLA.md exists;
-# set the date once the owner approves it FOR THIS RELEASE)
+# On-call / response policy (docs/operations/ON_CALL_AND_RESPONSE_SLA.md exists)
 export RELEASE_READINESS_ONCALL_RESPONSE_POLICY_READY=<YYYY-MM-DD owner-approval date>
 ```
 
-### Genuine owner / ops / reviewer actions — no repo evidence yet
+### Genuine owner / ops / reviewer actions — keep private
 
 ```bash
 # 1. Ops rotates the Aliyun RDS root password + updates secret stores + reviews
-#    access logs, then record the rotation date:
+#    access logs, then records the rotation date:
 export RELEASE_READINESS_CREDENTIAL_ROTATED=<YYYY-MM-DD rotation date>
 
 # 2. Secret-history remediation. check:secret-history already passes and the
 #    clean-history receipt is in the repo; set a date (or mirror-clean:<receipt-id>
-#    backed by docs/operations/release-readiness-receipts/<id>.json) once satisfied:
+#    backed by a private receipt id) once satisfied:
 export RELEASE_READINESS_SECRET_HISTORY_REMEDIATED=<YYYY-MM-DD remediation date>
 
 # 3. 5-role Required Reviewer approval record id (every canonical role = approved
@@ -78,9 +82,16 @@ RELEASE_READINESS_FULL=true npm run release:check   # full chain before tagging
 
 ## Part 3 — Final flip (owner)
 
-1. Confirm Part 1 steps 1–5 are all green and Part 2 shows `ALL CLEAR`.
-2. Owner records the Go/No-Go decision (step 6).
-3. Only on Go: owner flips repository visibility to public (step 7).
+Executed on 2026-06-01:
+
+1. Owner recorded the Go decision.
+2. Owner flipped repository visibility to public.
+3. Owner created `v0.1.0-trial` and published it as a pre-release with
+   `--latest=false`.
+4. Owner posted the public announcement in GitHub Discussions.
+
+For future releases, repeat the same gate sequence rather than reusing the
+2026-06-01 release receipts.
 
 ## Non-claims
 
