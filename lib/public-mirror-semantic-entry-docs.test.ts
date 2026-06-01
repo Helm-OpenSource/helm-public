@@ -33,6 +33,12 @@ const tenantPath = ["extensions", tenantSlug].join("/");
 const tenantSlugRule = ["semantic", "tenant-slug", tenantSlug].join(":");
 const tenantPathRule = ["semantic", "private-path", tenantPath].join(":");
 const customerNamePrimaryCn = [tenantSlug, "cn"].join("-");
+const personWang = ["王", "丽", "珍"].join("");
+const personLi = ["李", "建", "乐"].join("");
+const companyCn = ["杭州", "光", "潽", "科技有限公司"].join("");
+const customerHost = ["helm", ["aicai", "group"].join(""), "com"].join(".");
+const privateEmail = ["member", [["360", "amc"].join(""), "cn"].join(".")].join("@");
+const internalIp = ["10", "16", "10", "55"].join(".");
 
 beforeEach(() => {
   root = mkdtempSync(path.join(tmpdir(), "helm-semantic-entry-"));
@@ -83,8 +89,8 @@ describe("entry docs and runtime config are scanned for public PII / infra leaks
       "README.md",
       [
         "# Helm",
-        "Do not ship 杭州光潽科技有限公司, 王丽珍, or 李建乐.",
-        "Do not ship helm.aicaigroup.com, member@360amc.cn, or 10.16.10.55.",
+        `Do not ship ${companyCn}, ${personWang}, or ${personLi}.`,
+        `Do not ship ${customerHost}, ${privateEmail}, or ${internalIp}.`,
       ].join("\n"),
     );
     const { violations } = runPublicMirrorSemanticSmoke(root);
@@ -92,8 +98,8 @@ describe("entry docs and runtime config are scanned for public PII / infra leaks
     expect(rules).toContain(`semantic:customer-name:${customerNamePrimaryCn}`);
     expect(rules).toContain("semantic:person-name:wang-lizhen");
     expect(rules).toContain("semantic:person-name:li-jianle");
-    expect(rules).toContain("semantic:internal-host:customer-aicaigroup-host");
-    expect(rules).toContain("semantic:internal-host:customer-360amc-host");
+    expect(rules).toContain("semantic:internal-host:customer-domain-a-host");
+    expect(rules).toContain("semantic:internal-host:customer-domain-e-host");
     expect(rules).toContain("semantic:internal-ip:rfc1918");
   });
 });

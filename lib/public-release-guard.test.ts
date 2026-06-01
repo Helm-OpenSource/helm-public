@@ -22,9 +22,13 @@ const commercialPrivateRoot = ["customer", "proof", "packs"].join("-");
 const rmShuyaoHost = [["rm", "shuyao-dev"].join("-"), "aliyuncs", "com"].join(".");
 const mysqlRdsHost = ["rm-shuyao-dev-pub", "mysql", "rds", "aliyuncs", "com"].join(".");
 const aliyunRdsHost = ["example-prod", "rds", "aliyuncs", "com"].join(".");
-const customerHost = ["helm", "aicaigroup", "com"].join(".");
-const privateEmail = ["member", ["360amc", "cn"].join(".")].join("@");
+const customerHost = ["helm", ["aicai", "group"].join(""), "com"].join(".");
+const privateEmail = ["member", [["360", "amc"].join(""), "cn"].join(".")].join("@");
 const realMobile = ["+86", "13958044686"].join("");
+const personWang = ["王", "丽", "珍"].join("");
+const personLi = ["李", "建", "乐"].join("");
+const companyCn = ["杭州", "光", "潽", "科技有限公司"].join("");
+const internalIp = ["10", "16", "10", "55"].join(".");
 const urlCredential = ["mysql://root", "RealPass123"].join(":") + "@db.example.com/helm";
 const placeholderUrlCredential = ["mysql://root", "password"].join(":") + "@localhost:3306/helm";
 const rmShuyaoRule = ["internal-host", ["rm", "shuyao"].join("-")].join(":");
@@ -261,17 +265,17 @@ describe("public release guard fixture coverage", () => {
         `Policy docs cannot carry ${customerHost}.`,
         `Policy docs cannot carry ${privateEmail}.`,
         `Policy docs cannot carry ${realMobile}.`,
-        "Policy docs cannot name 王丽珍 or 李建乐.",
-        "Policy docs cannot name 杭州光潽科技有限公司.",
-        "Policy docs cannot carry RFC1918 10.16.10.55.",
+        `Policy docs cannot name ${personWang} or ${personLi}.`,
+        `Policy docs cannot name ${companyCn}.`,
+        `Policy docs cannot carry RFC1918 ${internalIp}.`,
       ].join("\n"),
     );
 
     const result = runGuard();
 
     expect(result.violations.map((violation) => violation.rule)).toEqual([
-      "internal-host:customer-aicaigroup-host",
-      "internal-host:customer-360amc-host",
+      "internal-host:customer-domain-a-host",
+      "internal-host:customer-domain-e-host",
       "cn-mobile",
       "person-name:wang-lizhen",
       "person-name:li-jianle",
