@@ -62,7 +62,7 @@ Helm 默认**不**对外部系统自动写入或自动发送：
 
 请通过以下私下渠道之一报告：
 
-- **Email**：`security@helm.run`（首选）
+- **Email**：`security@zhaojiling.com`（首选）
 - **加密**：如需 PGP，请在邮件中说明，我们会回复 public key
 
 报告中请尽量包含：

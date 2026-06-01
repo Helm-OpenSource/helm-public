@@ -148,24 +148,28 @@ OpenAI API 默认关闭。启用时：
 
 ### 5.1 普通反馈与功能讨论
 
-- **GitHub Issues**：[github.com/Helm-OpenSource/helm-public/issues](https://github.com/Helm-OpenSource/helm-public/issues) — 公开问题、功能讨论、文档勘误
-- 标签建议：`trial-feedback` / `bug` / `docs` / `discussion`
+- **GitHub Discussions**：[github.com/Helm-OpenSource/helm-public/discussions](https://github.com/Helm-OpenSource/helm-public/discussions) — 试用问题、使用经验、场景讨论
+- **GitHub Issues**：[github.com/Helm-OpenSource/helm-public/issues](https://github.com/Helm-OpenSource/helm-public/issues) — 可公开复现的问题、功能建议、文档勘误
+- 标签建议：`trial-feedback` / `bug` / `docs`
 
 ### 5.2 安全漏洞披露
 
 **请勿在公开 issue 或 PR 披露未公开的安全漏洞**。私下披露见 [SECURITY.md](../../SECURITY.md)：
 
-- Email：`security@helm.run`
+- Email：`security@zhaojiling.com`
 - 响应时间：3 工作日内确认；7 工作日内初步评估；P0/P1 30 日内修复
 
 ### 5.3 数据保护 / 合规问题
 
-- Email：`privacy@helm.run`
-- 涉及 GDPR / 个人信息保护法 / sub-processor 调整 / 数据保留延期等
+- 不含个人数据或敏感信息的公开问题：使用 [GitHub Issues](https://github.com/Helm-OpenSource/helm-public/issues)
+- 涉及个人数据、未公开安全信息或敏感合规材料：发邮件至 `security@zhaojiling.com`，主题标注 `[Privacy]`
+- 适用范围：GDPR / 个人信息保护法 / sub-processor 调整 / 数据保留延期等
 
-### 5.4 试用 oncall（公开试用启动后填入）
+### 5.4 试用支持
 
-- Email：`trial-support@helm.run`
+- 普通试用问题：优先使用 [GitHub Discussions](https://github.com/Helm-OpenSource/helm-public/discussions)
+- 可公开复现的缺陷或文档问题：使用 [GitHub Issues](https://github.com/Helm-OpenSource/helm-public/issues)
+- 含个人数据或敏感信息的问题：发邮件至 `security@zhaojiling.com`，主题标注 `[Trial Support]`
 - 响应窗口：周一至周五 9:00–18:00（UTC+8）
 - **不**承诺周末 / 法定假期 / 24×7 响应
 
@@ -262,7 +266,7 @@ Active (duration from effective workspace contract)
 
 **Q: 我能延长试用期吗？**
 
-A: 可以。联系 `trial-support@helm.run`，说明用例。延期会评估是否升级到 reserved tenant 路径（不再走公开试用环境）。
+A: 可以。在 GitHub Discussions 发起不含敏感信息的说明；如果需要包含个人数据、租户信息或未公开部署细节，请发邮件至 `security@zhaojiling.com`，主题标注 `[Trial Extension]`。延期会评估是否升级到 reserved tenant 路径（不再走公开试用环境）。
 
 **Q: 我的数据存在哪里？**
 

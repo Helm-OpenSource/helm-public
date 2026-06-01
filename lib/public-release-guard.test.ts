@@ -284,6 +284,25 @@ describe("public release guard fixture coverage", () => {
     ]);
   });
 
+  it("allows the reviewed public security disclosure email without opening the whole domain", () => {
+    writeFixture(
+      "SECURITY.md",
+      "Report undisclosed vulnerabilities to security@zhaojiling.com.",
+    );
+    writeFixture(
+      "docs/public.md",
+      "Do not publish another contact such as ops@zhaojiling.com.",
+    );
+
+    const result = runGuard();
+
+    expect(result.violations.map((violation) => violation.rule)).toEqual([
+      "tenant-slug:zhaojiling",
+      "internal-host:customer-domain-c-host",
+    ]);
+    expect(result.violations.every((violation) => violation.path === "docs/public.md")).toBe(true);
+  });
+
   it("requires public release license and notice baseline files", () => {
     rmSync(path.join(fixtureRoot, "LICENSE"), { force: true });
     rmSync(path.join(fixtureRoot, "NOTICE"), { force: true });

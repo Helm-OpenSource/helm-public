@@ -152,6 +152,19 @@ const INTERNAL_HOST_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> =
     { name: "customer-domain-e-host", pattern: customerHostPattern(["360", "amc"], "cn") },
   ];
 
+// Owner-approved public disclosure addresses. These are intentionally narrow:
+// the guard still blocks the underlying private-looking domain / slug anywhere
+// else, and it still blocks other addresses on the same domain.
+const PUBLIC_CONTACT_EMAIL_ALLOW_LIST: ReadonlySet<string> = new Set([
+  "security@zhaojiling.com",
+]);
+
+const PUBLIC_CONTACT_EMAIL_DOCUMENT_ALLOW_LIST: ReadonlySet<string> = new Set([
+  "SECURITY.md",
+  "SECURITY.en.md",
+  "docs/pilot/PUBLIC_TRIAL_RUNBOOK.md",
+]);
+
 const RFC1918_IPV4_PATTERN =
   /\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b/;
 
@@ -1184,6 +1197,25 @@ function isPolicyReferenceImplementationFile(relativePath: string): boolean {
   return POLICY_REFERENCE_IMPLEMENTATION_FILES.has(relativePath);
 }
 
+function isAllowedPublicContactReference(
+  relativePath: string,
+  line: string,
+  reference: string,
+): boolean {
+  if (!PUBLIC_CONTACT_EMAIL_DOCUMENT_ALLOW_LIST.has(relativePath)) return false;
+
+  const lowerLine = line.toLowerCase();
+  const mentionsAllowedEmail = Array.from(PUBLIC_CONTACT_EMAIL_ALLOW_LIST).some(
+    (email) => lowerLine.includes(email),
+  );
+  if (!mentionsAllowedEmail) return false;
+
+  return (
+    reference === `tenant-slug:${TENANT_SLUG_LEGACY_OPERATOR}` ||
+    reference === "internal-host:customer-domain-c-host"
+  );
+}
+
 function scanFile(
   root: string,
   relativePath: string,
@@ -1346,6 +1378,9 @@ function scanFile(
     if (releaseArtifactRulePrefix) {
       const forbiddenReferences = collectForbiddenReleaseReferences(line);
       for (const reference of forbiddenReferences) {
+        if (isAllowedPublicContactReference(relativePath, line, reference)) {
+          continue;
+        }
         violations.push({
           rule: `${releaseArtifactRulePrefix}:${reference}`,
           path: relativePath,
@@ -1363,6 +1398,9 @@ function scanFile(
         isPolicyDescriptor &&
         isPolicyDescriptorSuppressedReference(reference)
       ) {
+        continue;
+      }
+      if (isAllowedPublicContactReference(relativePath, line, reference)) {
         continue;
       }
       violations.push({
