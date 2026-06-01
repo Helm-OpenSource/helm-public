@@ -52,8 +52,9 @@ npm run eval:operating-signal-flow
 npm run check:public-release
 ```
 
-Repository visibility remains gated until public-release checks, history-level
-checks, and owner Go/No-Go are complete.
+Repository visibility is public after public-release checks, history-level
+checks, and owner Go/No-Go completed. Future release, tag, announcement, and
+visibility changes remain owner-gated.
 
 ## Next
 

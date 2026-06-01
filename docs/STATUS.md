@@ -16,7 +16,7 @@ private Pack, Overlay, or customer deployment readiness.
 | Local developer quickstart | Docker fresh-clone smoke verified for public Core; still not commercial release approval | [D2 Docker fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md), [getting-started.md](getting-started.md), `docker-compose.yml`, `Dockerfile` |
 | Delivery engineer Golden Path requirements | Established as public Core requirements; implementation remains staged by evidence gates | [Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md), `npm run delivery:doctor`, `npm run pack:fixture-check` |
 | Public/private boundary guard | Established at HEAD level | `npm run check:public-release`, `npm run check:public-docs` |
-| Public docs information architecture | Established by allowlist, still subject to owner review before visibility flip | [public-docs-manifest.json](public-docs-manifest.json) |
+| Public docs information architecture | Established by allowlist; visibility is public after owner Go/No-Go, and new public docs still require intentional review | [public-docs-manifest.json](public-docs-manifest.json) |
 | Cloud trial / enterprise readiness | Not established by this repository alone | See [release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md) |
 
 ## Deliberately Not Claimed

@@ -8,7 +8,7 @@
 >
 > Generic platforms tell you "how to assemble." Helm helps you turn judgement, evidence, review, boundaries, and delivery packages in customer implementation work into a forkable engineering structure.
 
-**License**: Apache-2.0 · **Repository posture**: open-source Core positioning; visibility flip happens only after the public-release gate and owner Go/No-Go · **Helm Cloud / Enterprise**: optional commercial editions; do not replace open source
+**License**: Apache-2.0 · **Repository posture**: open-source Core, public after owner Go/No-Go · **Helm Cloud / Enterprise**: optional commercial editions; do not replace open source
 
 > **Not an engineer?** First read the one-pager positioning at [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md); or after running the repo, open `/demo` (about 90 seconds, no email required).
 
@@ -245,7 +245,7 @@ Details: [AGENTS.md §6-§7](AGENTS.md), [lib/operating-signal-flow/contract.ts]
 **Now**
 - Public Core, Docker quickstart, case-management sample pack, Golden Path doctor, offline evals, public-release guard.
 - Repo split boundary: Core stays in this repository; industry Packs, customer Overlays, and BOM / authorization / deployment metadata move through their corresponding private target repositories, not Public Core.
-- Repository visibility remains gated until the public-release gate, history-level checks, and owner Go/No-Go are complete.
+- Repository visibility is public after the owner Go/No-Go; future release, tag, and announcement changes remain owner-gated.
 - README, governance docs, `.env.example` tiers, and `docker-compose.yml`.
 
 **Next**
