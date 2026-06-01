@@ -4,7 +4,7 @@
 
 ### AI 平台给你乐高积木。Helm 是已经搭好、可定制、有边界纪律的经营推进闭环参考实现。
 
-> For delivery engineers building B2B operations systems on top of Coze / 阿里悟空 / Dify / LangGraph / 通用 agent 平台。
+> For delivery engineers building enterprise AI operations systems on top of Coze / 阿里悟空 / Dify / LangGraph / 通用 agent 平台。
 >
 > 通用平台告诉你"怎么搭"。Helm 帮你把客户业务落地里的判断、证据、复核、边界、交付包做成可 fork 的工程结构。
 
@@ -16,7 +16,7 @@
 
 ## 一句话定位
 
-> **Helm 不是另一个 agent 平台，也不是 LLM framework。它是一套面向 B 端经营场景、带完整边界纪律的参考实现 + 方法论，目标是让交付工程师把客户业务落地里的判断 / 证据 / 复核 / 边界 / 交付包做成可 fork 的工程结构。**
+> **Helm 不是另一个 agent 平台，也不是 LLM framework。它是一套面向企业 AI 经营推进场景、带完整边界纪律的参考实现 + 方法论，目标是让交付工程师把客户业务落地里的判断 / 证据 / 复核 / 边界 / 交付包做成可 fork 的工程结构。**
 
 完整论述见 [HELM_FOR_DELIVERY_ENGINEERS_V1.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md)。
 
@@ -26,7 +26,7 @@
 
 通用 agent 平台和 LLM framework 解决了"怎么搭"。剩下三个问题没人替你扛：
 
-1. **该搭什么** — B 端客户真实诉求是"今天必须由谁拍板的 3 件事 + 为什么 + 边界"，不是一个聊天框
+1. **该搭什么** — 企业客户真实诉求是"今天必须由谁拍板的 3 件事 + 为什么 + 边界"，不是一个聊天框
 2. **怎么不出事** — AI 越权外发 / 自动承诺 / 跨租户串数据，平台不替你扛，你的客户会替你扛
 3. **怎么交付得快** — 每个客户从零建模 / 搭审批闸 / 写连接器 / 做 dashboard，你的人月被烧光
 

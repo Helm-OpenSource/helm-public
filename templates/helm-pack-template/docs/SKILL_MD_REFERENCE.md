@@ -44,7 +44,7 @@
 
 | 段 | 含义 |
 |---|---|
-| `acceptance.pilot_4w` | 4 周 pilot 量化目标 |
+| `acceptance.pilot_4w` | 历史字段名；表示 pilot 量化验收目标，不作为公开 4 周交付承诺 |
 | `acceptance.steady_6m` | 6 月稳态量化目标 |
 | `acceptance.business_readable` | 业务侧可读验证机制 |
 

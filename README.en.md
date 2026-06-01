@@ -4,7 +4,7 @@
 
 ### AI platforms hand you LEGO bricks. Helm is an assembled, customizable, boundary-aware **business operations loop reference implementation**.
 
-> For delivery engineers building B2B operations systems on top of Coze / Alibaba Wukong / Dify / LangGraph / general agent platforms.
+> For delivery engineers building enterprise AI operations systems on top of Coze / Alibaba Wukong / Dify / LangGraph / general agent platforms.
 >
 > Generic platforms tell you "how to assemble." Helm helps you turn judgement, evidence, review, boundaries, and delivery packages in customer implementation work into a forkable engineering structure.
 
@@ -16,7 +16,7 @@
 
 ## One-line positioning
 
-> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for B2B business operations, with full boundary discipline, built to help delivery engineers turn judgement / evidence / review / boundaries / delivery packages into a forkable engineering structure.**
+> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for enterprise AI operations systems, with full boundary discipline, built to help delivery engineers turn judgement / evidence / review / boundaries / delivery packages into a forkable engineering structure.**
 
 Full argument: [HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md).
 
@@ -26,7 +26,7 @@ Full argument: [HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_
 
 Generic agent platforms and LLM frameworks solve "how to assemble." Three things they don't carry for you:
 
-1. **What to assemble** — the real B2B need is "today's 3 calls a human must make + why + boundary," not a chat box
+1. **What to assemble** — the real enterprise need is "today's 3 calls a human must make + why + boundary," not a chat box
 2. **How not to blow it** — AI overreach, auto-commitment, cross-tenant data leakage — the platform doesn't carry these; your customer does
 3. **How to ship faster** — modeling from scratch per customer, building review gates, writing connectors, shipping dashboards — burns through your person-months
 

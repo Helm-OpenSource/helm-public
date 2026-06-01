@@ -45,8 +45,8 @@ export default async function TrialApplicationPage() {
           <p className="text-sm font-semibold">{english ? "Helm" : "Helm 掌舵者"}</p>
           <p className="max-w-[28rem] text-xs text-[color:var(--muted-foreground)]">
             {english
-              ? "Open-source AI operating toolkit · for B2B delivery engineers"
-              : "面向 B 端 AI 交付工程师的开源经营推进工具集"}
+              ? "Open-source AI operating toolkit · for enterprise AI delivery engineers"
+              : "面向企业 AI 交付工程师的开源经营推进工具集"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">

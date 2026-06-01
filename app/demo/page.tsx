@@ -30,8 +30,8 @@ export async function generateMetadata(): Promise<Metadata> {
       ? "60-second demo | See the vertical your team can fork"
       : "60 秒演示 | 看看你的团队 day-1 能 fork 的 vertical",
     description: english
-      ? "Three pre-loaded role workspaces — each a generic vertical your delivery engineering team can fork, customize and ship to a B2B customer. Real product, real cards. No email required."
-      : "3 个预置角色工作区——每个都是通用 vertical 样板，你的交付工程团队可以 fork、改造、交付给 B 端客户。真产品、真判断卡。不要求留邮箱。",
+      ? "Three pre-loaded role workspaces — each a generic vertical your delivery engineering team can fork, customize and ship to an enterprise customer. Real product, real cards. No email required."
+      : "3 个预置角色工作区——每个都是通用 vertical 样板，你的交付工程团队可以 fork、改造、交付给企业客户。真产品、真判断卡。不要求留邮箱。",
   };
 }
 

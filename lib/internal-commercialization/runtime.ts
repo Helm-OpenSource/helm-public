@@ -100,11 +100,11 @@ function stateLabel(
     DAILY_TOP3_SELECTED: english ? "Daily Top 3" : "Daily Top 3",
     DIAGNOSIS_PACKET_PREPARED: english ? "Diagnosis packet" : "诊断包已准备",
     DIAGNOSIS_REVIEWED: english ? "Diagnosis reviewed" : "诊断已复核",
-    TRIAL_SCOPE_PREPARED: english ? "7-day trial scope" : "7 天试跑范围",
-    TRIAL_RUNNING: english ? "7-day trial running" : "7 天试跑中",
+    TRIAL_SCOPE_PREPARED: english ? "Controlled trial scope" : "受控试跑范围",
+    TRIAL_RUNNING: english ? "Controlled trial running" : "受控试跑中",
     TRIAL_CLOSEOUT_READY: english ? "Trial closeout" : "试跑复盘待审",
-    PILOT_SCOPE_PREPARED: english ? "4-week pilot scope" : "4 周试点范围",
-    PILOT_RUNNING: english ? "4-week pilot running" : "4 周试点中",
+    PILOT_SCOPE_PREPARED: english ? "Controlled pilot scope" : "受控试点范围",
+    PILOT_RUNNING: english ? "Controlled pilot running" : "受控试点中",
     PILOT_CLOSEOUT_READY: english ? "Pilot closeout" : "试点复盘待审",
     CLOSEOUT_REPORT_PREPARED: english ? "Closeout report" : "复盘报告候选",
     CHANNEL_GATE_ASSESSED: english ? "Channel gate" : "客户转渠道判断",
@@ -124,8 +124,8 @@ function decisionLabel(
 ) {
   const labels: Record<InternalCommercializationDecision, string> = {
     PREPARE_DIAGNOSIS: english ? "Prepare diagnosis" : "准备诊断",
-    PREPARE_TRIAL: english ? "Prepare 7-day trial" : "准备 7 天试跑",
-    PREPARE_PILOT: english ? "Prepare 4-week pilot" : "准备 4 周试点",
+    PREPARE_TRIAL: english ? "Prepare controlled trial" : "准备受控试跑",
+    PREPARE_PILOT: english ? "Prepare controlled pilot" : "准备受控试点",
     PREPARE_CLOSEOUT: english ? "Prepare closeout" : "准备复盘",
     NO_GO: english ? "No-Go" : "No-Go",
     WATCH_ONLY: english ? "Watch only" : "只观察",
@@ -142,8 +142,8 @@ function offerStageLabel(
 
   const labels: Record<InternalCommercializationOfferStage, string> = {
     DIAGNOSIS_1H: english ? "1-hour diagnosis" : "1 小时诊断",
-    TRIAL_7D: english ? "7-day operating trial" : "7 天经营试跑",
-    PILOT_4W: english ? "4-week co-creation pilot" : "4 周共创试点",
+    TRIAL_7D: english ? "Controlled operating trial" : "受控经营试跑",
+    PILOT_4W: english ? "Controlled co-creation pilot" : "受控共创试点",
     CLOSEOUT_REPORT: english ? "Closeout report" : "复盘报告",
   };
 
@@ -159,11 +159,11 @@ function reviewSafeActionLabel(
       ? "Prepare diagnosis brief for review"
       : "准备诊断 brief，等待复核",
     PREPARE_TRIAL_SCOPE_DRAFT_FOR_REVIEW: english
-      ? "Prepare 7-day trial scope for review"
-      : "准备 7 天试跑范围草稿，等待复核",
+      ? "Prepare controlled trial scope for review"
+      : "准备受控试跑范围草稿，等待复核",
     PREPARE_PILOT_SCOPE_PACKET_FOR_REVIEW: english
-      ? "Prepare 4-week pilot scope packet for review"
-      : "准备 4 周试点 scope packet，等待复核",
+      ? "Prepare controlled pilot scope packet for review"
+      : "准备受控试点 scope packet，等待复核",
     PREPARE_CLOSEOUT_REPORT_CANDIDATE_FOR_REVIEW: english
       ? "Prepare closeout report candidate for review"
       : "准备复盘报告候选，等待复核",
@@ -306,8 +306,8 @@ export function buildInternalCommercializationLifecycleReadout({
       ? "Internal commercialization lifecycle"
       : "自身商业化经营闭环",
     summary: english
-      ? "AI service providers are managed as alias-only commercialization runs: candidate pool, Daily Top 3, diagnosis, 7-day trial, 4-week pilot, closeout and channel gate."
-      : "把 AI 服务商作为 alias-only 经营对象，管理候选池、Daily Top 3、诊断、7 天试跑、4 周试点、复盘和客户转渠道判断。",
+      ? "AI service providers are managed as alias-only commercialization runs: candidate pool, Daily Top 3, diagnosis, controlled trial, controlled pilot, closeout and channel gate."
+      : "把 AI 服务商作为 alias-only 经营对象，管理候选池、Daily Top 3、诊断、受控试跑、受控试点、复盘和客户转渠道判断。",
     boundary: english
       ? "Read-only reserved-workspace board. Helm prepares review packets and next actions; it does not contact customers, auto-send, silently write CRM, quote, contract, publish claims or run workflows."
       : "这是 Helm 自留工作区的只读经营看板。Helm 只准备复核包和下一步建议，不直接触客、不自动外发、不静默写 CRM、不自动报价/签约/发布 claim，也不触发 workflow。",
@@ -322,12 +322,12 @@ export function buildInternalCommercializationLifecycleReadout({
       },
       {
         id: "trial",
-        label: english ? "7-day trial" : "7 天试跑",
+        label: english ? "Controlled trial" : "受控试跑",
         count: counts.trialCount,
       },
       {
         id: "pilot",
-        label: english ? "4-week pilot" : "4 周试点",
+        label: english ? "Controlled pilot" : "受控试点",
         count: counts.pilotCount,
       },
       {

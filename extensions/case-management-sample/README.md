@@ -16,9 +16,9 @@ public_safety: Intended for the public mirror. No tenant-private references.
 
 ## 这是什么 / What this is
 
-公开 Apache-2.0 sample pack 参考实现，给基于 AI 平台（Coze / 阿里悟空 / Dify / LangGraph）做 B 端经营推进系统的**交付工程师**当起点。
+公开 Apache-2.0 sample pack 参考实现，给基于 AI 平台（Coze / 阿里悟空 / Dify / LangGraph）做企业 AI 经营推进系统的**交付工程师**当起点。
 
-A public Apache-2.0 sample pack reference implementation, intended as a starting point for **delivery engineers** building B2B operations systems on top of AI platforms (Coze / Alibaba Wukong / Dify / LangGraph).
+A public Apache-2.0 sample pack reference implementation, intended as a starting point for **delivery engineers** building enterprise AI operations systems on top of AI platforms (Coze / Alibaba Wukong / Dify / LangGraph).
 
 定位见 / Positioning: [`docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md`](../../docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md)
 

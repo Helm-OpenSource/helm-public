@@ -1,6 +1,6 @@
 # 抽取为独立仓库的说明（内部备注）
 
-> 本目录是 helm-ai/helm-pack-template 仓库的骨架，**位于 helm2026 主仓临时托管**。
+> 本目录是 helm-ai/helm-pack-template 仓库的骨架，**位于当前 public Core 仓临时托管**。
 > 当 GTM 启动需要正式开源时，按以下步骤抽出为独立 GitHub 仓库。
 
 ## 抽取步骤
@@ -27,7 +27,7 @@ git push -u origin main
 - 如删除：在 docs/brand/HELM_OPEN_SOURCE_COMMUNITY_DISTRIBUTION_PLAN_V1.md §4.1 仓库结构表更新链接
 
 ## 抽取时机建议
-- ✅ Pack A 4 周 pilot 完成且首个 Cookbook Skill 准备发 ClawHub 时
+- ✅ 外部 forker 验证、public-safe evidence gate 与 owner 抽取门通过时
 - ❌ 不要在 Pack A 开发期间过早抽出（避免主仓与子仓双轨修改）
 
 ## 与 helm-cookbook、helm-core 的关系

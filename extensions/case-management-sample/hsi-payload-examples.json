@@ -1,6 +1,6 @@
 {
   "$schema": "../../lib/headless-signal-interface/pack-artifacts.ts",
-  "_note": "HSI-01 payload_examples for case-management-sample. Phase 1 OFFLINE only. Every example is 100% synthetic; no real customer data, no live credentials. Each entry is tagged synthetic | redacted | alias_only and used by lib/headless-signal-interface/pack-artifacts.test.ts to verify HSI-01 compliance.",
+  "_note": "HSI-01 payload_examples for case-management-sample. Phase 1 OFFLINE only. Examples are public sample payloads with provenance under review; no real customer data, no live credentials. Each entry is tagged synthetic | redacted | alias_only and used by lib/headless-signal-interface/pack-artifacts.test.ts to verify HSI-01 compliance.",
   "packId": "case-management-sample",
   "version": "0.1.0",
   "examples": [

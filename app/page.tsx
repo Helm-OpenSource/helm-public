@@ -30,11 +30,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: english
-      ? "Helm | Open-source AI operating toolkit for B2B delivery engineers"
-      : "Helm | 面向 B 端 AI 交付工程师的开源经营推进工具集",
+      ? "Helm | Open-source AI operating toolkit for enterprise AI delivery engineers"
+      : "Helm | 面向企业 AI 交付工程师的开源经营推进工具集",
     description: english
-      ? "AI agent platforms give you Lego bricks. Helm turns judgement, evidence, review, boundaries, and delivery packages into a forkable Apache-2.0 Core for B2B AI delivery engineers."
-      : "AI 平台给你乐高积木。Helm 把判断、证据、复核、边界、交付包做成可 fork 的 Apache-2.0 Core，给 B 端 AI 交付工程师复用。",
+      ? "AI agent platforms give you Lego bricks. Helm turns judgement, evidence, review, boundaries, and delivery packages into a forkable Apache-2.0 Core for enterprise AI delivery engineers."
+      : "AI 平台给你乐高积木。Helm 把判断、证据、复核、边界、交付包做成可 fork 的 Apache-2.0 Core，给企业 AI 交付工程师复用。",
   };
 }
 
@@ -228,8 +228,8 @@ export default async function Home({
           <p className="text-sm font-semibold">{english ? "Helm" : "Helm 掌舵者"}</p>
           <p className="max-w-[24rem] text-xs text-[color:var(--muted-foreground)]">
             {english
-              ? "Open-source AI operating toolkit · for B2B delivery engineers"
-              : "面向 B 端 AI 交付工程师的开源经营推进工具集"}
+              ? "Open-source AI operating toolkit · for enterprise AI delivery engineers"
+              : "面向企业 AI 交付工程师的开源经营推进工具集"}
           </p>
         </div>
         <nav
@@ -281,8 +281,8 @@ export default async function Home({
             </p>
             <h1 className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
               {english
-                ? "Stop rebuilding the boring scaffolding for every B2B AI delivery."
-                : "别为每个 B 端 AI 交付项目重写同一套无聊的脚手架。"}
+                ? "Stop rebuilding the boring scaffolding for every enterprise AI delivery."
+                : "别为每个企业 AI 交付项目重写同一套无聊的脚手架。"}
             </h1>
             <p className="max-w-2xl text-base leading-7 text-[color:var(--muted)] md:text-lg md:leading-8">
               {english

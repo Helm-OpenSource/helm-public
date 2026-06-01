@@ -5,9 +5,9 @@ import { resolveUiLocale, UI_LOCALE_COOKIE } from "@/lib/i18n/config";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Helm | 面向 B 端 AI 交付工程师的开源经营推进工具集",
+  title: "Helm | 面向企业 AI 交付工程师的开源经营推进工具集",
   description:
-    "Open-source AI operating toolkit for B2B delivery engineers — Apache-2.0, forkable, with verticals, connectors, eval gates and BI artefacts already wired in. | 面向 B 端 AI 交付工程师的开源经营推进工具集，Apache-2.0、可 fork、含 vertical 样板与边界纪律。",
+    "Open-source AI operating toolkit for enterprise AI delivery engineers — Apache-2.0, forkable, with verticals, connectors, eval gates and BI artefacts already wired in. | 面向企业 AI 交付工程师的开源经营推进工具集，Apache-2.0、可 fork、含 vertical 样板与边界纪律。",
 };
 
 export default async function RootLayout({

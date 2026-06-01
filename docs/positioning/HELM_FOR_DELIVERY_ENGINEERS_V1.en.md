@@ -3,7 +3,7 @@ status: draft
 owner: helm-core
 created: 2026-05-18
 review_after: 2026-05-25
-target_audience: delivery engineers building B2B operations systems on top of AI agent platforms (Coze / Wukong / Dify / LangGraph / general LLM frameworks)
+target_audience: delivery engineers building enterprise AI operations systems on top of AI agent platforms (Coze / Wukong / Dify / LangGraph / general LLM frameworks)
 public_safety: Intended for the public mirror. No tenant-private references; verticals named generically.
 mirrors: HELM_FOR_DELIVERY_ENGINEERS_V1.md (Chinese is authoritative; resolve drift toward zh)
 archive_trigger:
@@ -16,7 +16,7 @@ archive_trigger:
 
 ## One-line positioning
 
-> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for B2B business operations, with full boundary discipline, built to help delivery engineers turn judgement / evidence / review / boundaries / delivery packages into a forkable engineering structure.**
+> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for enterprise AI operations systems, with full boundary discipline, built to help delivery engineers turn judgement / evidence / review / boundaries / delivery packages into a forkable engineering structure.**
 
 ---
 
@@ -24,7 +24,7 @@ archive_trigger:
 
 You are:
 
-- A delivery engineer **building B2B systems for enterprise customers** on top of Coze / Alibaba Wukong / Dify / LangGraph / a general agent platform
+- A delivery engineer **building enterprise AI operations systems** on top of Coze / Alibaba Wukong / Dify / LangGraph / a general agent platform
 - Stuck in the "I don't know my customer's business — how do I configure this agent?" phase
 - Being asked "will the AI overstep? will recommendations turn into commitments? will tenant data cross-contaminate?" and needing an **auditable** answer
 - Wanting an **opinionated scaffold** rather than assembling a framework from scratch
@@ -37,7 +37,7 @@ Then this page is for you. If you are a CEO or business buyer comparing SaaS ven
 
 Generic agent platforms and LLM frameworks solve **how to assemble**. They don't solve:
 
-1. **What to assemble** — the real B2B need is "today's 3 calls a human must make + why + boundary," not a chat box
+1. **What to assemble** — the real enterprise need is "today's 3 calls a human must make + why + boundary," not a chat box
 2. **How not to blow it** — AI overreach, auto-commitment, cross-tenant data leakage — the platform doesn't carry these risks for you; your customer does
 3. **How to ship faster** — modeling from scratch per customer, building review gates, writing connectors, shipping dashboards — burns through your person-months
 
@@ -58,7 +58,7 @@ Helm encodes these three answers into one **open-source reference implementation
 | Fully forkable? | Varies (Dify is self-hostable; hosted platforms usually lock you in) | Yes (no vertical) | **Yes (Apache-2.0 + vertical pack)** |
 | Forkable local loop? | No | No | **`docker compose up` + Golden Path checks** |
 | Commercial model (for you) | Platform takes a cut / their channel | You set your price | **open-core**: fork it, sell it commercially yourself. Helm Inc. doesn't take a cut |
-| Who it's for | People building chat-style agents | People building general LLM apps | **Delivery engineers shipping B2B operations** |
+| Who it's for | People building chat-style agents | People building general LLM apps | **Delivery engineers shipping enterprise AI operations** |
 
 > This table compares **types**, not any specific product's current feature checklist; platforms keep evolving. The contrast is in abstraction level and product shape. [Dify's official docs](https://docs.dify.ai/) emphasize its open-source / self-hostable posture; this table compares Dify as a visual AI application platform, not as a closed-source locked platform.
 

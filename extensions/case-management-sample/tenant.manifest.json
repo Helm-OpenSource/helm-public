@@ -25,7 +25,7 @@
   "notes": [
     "Public reference vertical: case management / customer support / business operations domain.",
     "Sanitized minimum public reference intended for delivery engineers to fork; not a production tenant.",
-    "Do not seed real customer data. All fixtures are 100% synthetic.",
+    "Do not seed real customer data. Fixtures are public sample data with provenance under review.",
     "Includes tenant manifest, signal type contract, synthetic fixtures, minimal case mapper, worker cookbook, and BI report cookbook."
   ]
 }
