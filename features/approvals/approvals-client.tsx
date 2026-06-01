@@ -3544,7 +3544,10 @@ function Item({
       <p className="workspace-note-label text-[15px] font-semibold tracking-[0.01em]">
         {label}
       </p>
-      <p className="workspace-note-value mt-4 text-[17px] font-semibold leading-9">
+      <p
+        className="workspace-note-value mt-4 text-[17px] font-semibold leading-9"
+        suppressHydrationWarning
+      >
         {value}
       </p>
     </div>
