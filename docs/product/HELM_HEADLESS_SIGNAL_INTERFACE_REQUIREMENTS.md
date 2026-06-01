@@ -4,8 +4,8 @@ owner: Product / Delivery Engineering / Engineering
 created: 2026-05-20
 last_reviewed: 2026-06-01
 review_after: 2026-06-15
-claude_review: ../reviews/HELM_HEADLESS_SIGNAL_INTERFACE_CLAUDE_REVIEW.md
-phase1_closeout: ../reviews/HELM_HEADLESS_SIGNAL_INTERFACE_PHASE1_OFFLINE_EVAL_CLOSEOUT_2026-05-20.md
+public_closeout: ../reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md
+review_history: Historical source-repo review receipts are not part of the curated public docs surface.
 archive_trigger:
   - A newer public Headless Signal Interface contract replaces this document
   - Helm no longer uses the delivery-engineer-facing open-core motion

@@ -20,7 +20,7 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
     "README.md": "For delivery engineers",
     "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md": "delivery engineers",
     "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md": "HSI",
-    "docs/reviews/HELM_HEADLESS_SIGNAL_INTERFACE_CLAUDE_REVIEW.md": "review",
+    "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md": "closeout",
     "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md": "D2 smoke pending",
     "extensions/case-management-sample/README.md": "sample",
     "extensions/case-management-sample/tenant.manifest.json": "{}",

@@ -41,11 +41,16 @@ check:public-docs` fails when a new doc appears without that review.
 - [Agent working entry](codex/README.md)
 - [Status truth table](STATUS.md)
 
+## Selected Public Validation Receipts
+
+- [AI-native B2B artifact templates closeout](reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md)
+- [Node fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md)
+
 ## Not In This Public Docs Surface
 
 - Customer-specific overlays
 - Commercial Pack implementation details
-- Internal review packets and closeout reports
+- Private review packets and broad source-repo closeout reports
 - Investor, sales, and private GTM materials
 - Secret remediation receipts and private deployment evidence
 
