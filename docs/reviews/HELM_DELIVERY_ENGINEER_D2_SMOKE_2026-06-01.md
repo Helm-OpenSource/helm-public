@@ -4,10 +4,10 @@ owner: Product / Delivery Engineering / Engineering
 created: 2026-06-01
 review_after: 2026-06-15
 source_pr: https://github.com/Helm-OpenSource/helm-public/pull/36
-source_head_commit: b2366e1735d867aaaf6f9e0389d1edb82db2e574
-tested_checkout_commit: f8534500d63328ff3c2d5d7719f38f57a692f01e
-github_actions_run: https://github.com/Helm-OpenSource/helm-public/actions/runs/26735894670
-github_actions_job: https://github.com/Helm-OpenSource/helm-public/actions/runs/26735894670/job/78788966556
+source_head_commit: 9839d1f9c1b20639f80772358e0ab7624375687f
+tested_checkout_commit: 3402d454c94080d14b603faa2320adc8d9026767
+github_actions_run: https://github.com/Helm-OpenSource/helm-public/actions/runs/26736471759
+github_actions_job: https://github.com/Helm-OpenSource/helm-public/actions/runs/26736471759/job/78790648678
 receipt_kind: d2_docker_fresh_clone_smoke
 archive_trigger:
   - A later D2 Docker fresh-clone smoke receipt supersedes this receipt
@@ -39,25 +39,25 @@ This receipt closes the previous `delivery:doctor` D2 warning for the tested bra
 | PR | [#36](https://github.com/Helm-OpenSource/helm-public/pull/36) |
 | Workflow | `D2 Docker Smoke` |
 | Job | `Fresh Clone Docker Smoke` |
-| Run | `26735894670` |
-| Job ID | `78788966556` |
-| Started | `2026-06-01T04:53:27Z` |
-| Completed | `2026-06-01T04:57:59Z` |
-| Head commit | `b2366e1735d867aaaf6f9e0389d1edb82db2e574` |
-| Tested checkout | `f8534500d63328ff3c2d5d7719f38f57a692f01e` |
+| Run | `26736471759` |
+| Job ID | `78790648678` |
+| Started | `2026-06-01T05:12:43Z` |
+| Completed | `2026-06-01T05:17:11Z` |
+| Head commit | `9839d1f9c1b20639f80772358e0ab7624375687f` |
+| Tested checkout | `3402d454c94080d14b603faa2320adc8d9026767` |
 | Runner OS | `ubuntu-latest` |
 | Docker | `Docker version 28.0.4, build b8034c0` |
 | Docker Compose | `Docker Compose version v2.38.2` |
-| Smoke workdir | `/tmp/helm-public-d2-smoke.j6FgRV` |
+| Smoke workdir | `/tmp/helm-public-d2-smoke.2gc2Wq` |
 
 ## 3. Commands And Results
 
 | Command / Step | Result |
 |---|---|
 | `bash scripts/d2-docker-smoke.sh` | PASS |
-| `git clone --no-checkout /home/runner/work/helm-public/helm-public /tmp/helm-public-d2-smoke.j6FgRV` | PASS |
+| `git clone --no-checkout /home/runner/work/helm-public/helm-public /tmp/helm-public-d2-smoke.2gc2Wq` | PASS |
 | `git fetch --depth 1 origin HEAD` | PASS |
-| `git checkout --detach FETCH_HEAD` | PASS; checkout `f8534500d63328ff3c2d5d7719f38f57a692f01e` |
+| `git checkout --detach FETCH_HEAD` | PASS; checkout `3402d454c94080d14b603faa2320adc8d9026767` |
 | `docker compose up --build -d` | PASS |
 | MySQL container | PASS; `helm-mysql` became healthy |
 | App container | PASS; `helm-app` started |
