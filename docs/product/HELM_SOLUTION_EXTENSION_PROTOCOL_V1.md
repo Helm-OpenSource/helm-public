@@ -8,76 +8,52 @@ review_after: 2026-07-11
 ---
 # Helm Solution Extension Protocol V1
 
-## 1. 目的
+This is the public Core version of the Solution Extension protocol.
 
-这份协议用于冻结 Helm 当前对以下问题的分类方式：
+It defines how public, generic extensions should relate to Helm Core. It does
+not publish private customer overlays, commercial Pack implementation details,
+settlement logic, or private delivery runbooks.
 
-- Helm 自己的经营扩展应该怎么定义
-- 定制开发类客户的“共性功能”应该落在哪一层
-- 哪些东西应该进入 `worker / skill / resource`
-- 哪些东西必须继续保留为产品模块、交付模块或商业模块
+## Purpose
 
-它的目标不是把 Helm 扩成：
+A Solution Extension is a review-first bundle that can add domain-specific
+surfaces, fixtures, report assets, and bounded runtime adapters on top of Helm
+Core.
 
-- 完整 SI 平台
-- marketplace
-- project ERP
-- delivery orchestration platform
-- creator economy / revenue marketplace
+It is not:
 
-它只做一件更基础的事：
+- a marketplace
+- a plugin sandbox
+- a settlement rail
+- a customer delivery project tracker
+- an automatic external-send authority
 
-- 把对象边界冻结清楚，避免后续开发把 capability、页面、交付、结算和 reserved data 混成一团
+## Public Extension Rules
 
-## 2. 当前问题
+Public extensions must:
 
-当前 repo 已经同时存在几类不同性质的对象：
+1. Use generic or synthetic names.
+2. Use synthetic or redacted fixtures.
+3. Declare review-first boundaries.
+4. Avoid customer-specific configuration.
+5. Keep Core independently buildable.
 
-- `Worker`
-- `Skill`
-- `Resource`
-- `CustomEngagement`
-- `PartnerProgram / ProgramApplication`
-- `RevenueRule / RevenueAttributionLedger / SettlementBatch`
-- `SkillSuggestion / CapabilityCatalogEntry`
-- Helm 自己的 internal operating / engineering review / operator surfaces
+Private customer customization belongs outside `helm-public`. See
+[HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md](HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md).
 
-如果没有一套明确分类，后续最容易出现 3 种混乱：
+## Boundary Model
 
-1. 把定制交付模块误写成 `Skill` 或 `Worker`
-2. 把收益线 / 结算线误写成 capability catalog
-3. 把 Helm 自己的 first-party 经营功能误写成所有租户共享的 core product
+```text
+Core SDK <- Pack SDK <- Overlay
+```
 
-## 3. 当前主干引用
+Public Core can expose stable SDK seams. Commercial Packs and private Overlays
+may depend on those seams, but Core must not import them.
 
-这份协议显式建立在以下 current-main truth 之上：
+## Current Public Status
 
-- [HELM_WORKER_SKILL_RESOURCE_PROTOCOL_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_WORKER_SKILL_RESOURCE_PROTOCOL_V1.md)
-- [HELM_PARTNER_REGISTRY_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_PARTNER_REGISTRY_BASELINE_V1.md)
-- [HELM_PROGRAM_CATALOG_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_PROGRAM_CATALOG_BASELINE_V1.md)
-- [HELM_REVENUE_ATTRIBUTION_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_REVENUE_ATTRIBUTION_BASELINE_V1.md)
-- [HELM_SKILL_SUGGESTION_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_SKILL_SUGGESTION_BASELINE_V1.md)
-- [HELM_SKILL_FORMAL_REVIEW_QUEUE_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_SKILL_FORMAL_REVIEW_QUEUE_BASELINE_V1.md)
-- [HELM_SKILL_FORMAL_REVIEW_DECISION_WORKFLOW_BASELINE_V1.md](/Users/tommyqian/Documents/GitHub/helm2026/docs/product/HELM_SKILL_FORMAL_REVIEW_DECISION_WORKFLOW_BASELINE_V1.md)
-
-## 4. 分类总图
-
-Helm 继续保留以下总图：
-
-- `Control Plane`
-  - 负责治理、review、audit、memory、ownership、workspace boundary
-- `Worker`
-  - 回答“谁在工作”
-- `Skill`
-  - 回答“会什么能力”
-- `Resource`
-  - 回答“调什么底层供给”
-- `Solution Extension`
-  - 回答“为了某类场景 / 某类客户 / 某个 first-party 经营域，需要组合哪些对象、页面、规则、报表和运行约束”
-- `Commercial / Delivery Line`
-  - 回答“钱怎么来、怎么分、怎么审、怎么结、怎么 invite / review / settle”
-
-核心原则：
+The public repository carries the Core and public sample material only. Real
+customer overlays and commercial Pack source are intentionally excluded.
 
 - `Worker` 不负责定义定制项目
 - `Skill` 不负责承载结算或交付对象

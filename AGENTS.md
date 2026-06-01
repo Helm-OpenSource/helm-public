@@ -249,7 +249,7 @@ npm run quality:regression
 12. 越权自动对外发送
 13. 越权自动修改高风险状态
 14. 直接 push 到受保护分支（包括 `main`）。即便本地 gh CLI 用 admin 身份能绕过 GitHub branch protection（`enforce_admins=false`），默认仍**必须走 PR + `gh pr merge --admin` 路径**，保留 PR audit trail；每次 admin break-glass merge 必须在 PR body 顶端记一条 "Break-glass merge intended: <reason>" 的 audit 行（参考 PR #206 模式）。**直接 push 到 main 没有 PR 凭据时不允许**，无论 commit author 身份为何（包括 `Codex` 等 agent 身份）。
-15. 把任何 tenant-private slug 写进非 `PRIVATE_ROOTS` 路径（具体禁用 slug 名单与豁免子树定义在 `scripts/public-release-guard.ts` 的 `PRIVATE_TENANT_SLUGS` 常量，**该文件是这条规则的单一真值**——本规则不重复名单以避免自指）。常见错误是把租户生产健康探测 URL、admin 端点、tenant-private 主机名直接写进 `docs/reviews/` 等公开镜像可见路径；这些必须用 `${HELM_TENANT_HOST}` 等参数化占位符代替。`check:public-release` 是这条规则的机器化执行通道，提交前本地必须跑一次。
+15. 不得把任何客户专属 slug、生产健康探测 URL、admin 端点、私有主机名或部署回执写进公开仓可见路径。需要说明示例时必须使用 `${HELM_TENANT_HOST}` 等参数化占位符。`check:public-release` 是这条规则的机器化执行通道，提交前本地必须跑一次。
 16. 在 Helm reserved workspace 内 agent 自创自批 HIGH / CRITICAL risk ActionItem / ApprovalTask。按 founder-led OPC 协议：agent 可创建 review-first task 并准备 review packet，但**最终批准必须由 founder 真实身份发起**（`ApprovalTask.approverId` 应是 founder 的 user ID，不是 agent / system / null）。HIGH risk action 默认不得 `autoExecute=true`。涉及 helm_reserved_primary workspace 的批准动作 commit / PR 描述里必须显式记录 founder 审批身份的 receipt 链（如 audit log ID）。
 
 ## 14. 文档入口

@@ -343,19 +343,7 @@ const PRIVATE_FILES: ReadonlyArray<string> = [
   // deployment wires. Excluded from the public Core mirror so instrumentation.ts
   // (which ships) imports it generically and degrades to Core-only when absent.
   "extensions/pack-bootstrap.ts",
-  // Internal documentation index + status registry. These name tenant slugs
-  // and link to tenant-private docs under the tenant extension root
-  // and internal/*, so they leak repo-split internals into the public mirror's
-  // entry docs. They are internal navigation/status, not needed by the open Core
-  // mirror (which ships its own README). Excluded from the mirror; the extended
-  // public-mirror-semantic check is the fail-closed backstop if they ever return.
-  "docs/README.md",
-  "docs/STATUS.md",
-  // Root/current-history documents with private tenant history. The open Core
-  // mirror starts from the projected README and docs that survive this scrub.
-  "CHANGELOG.md",
   "PLANS.md",
-  "WORKING-CONTEXT.md",
   // Public mirror bootstrap: docs with private tenant/customer terms are kept
   // out until they are rewritten as generic open-core documentation. The
   // Golden Path HSI and case-management sample anchors now ship as public-safe
@@ -363,9 +351,6 @@ const PRIVATE_FILES: ReadonlyArray<string> = [
   "docs/brand/HELM_OPEN_SOURCE_COMMUNITY_DISTRIBUTION_PLAN_V1.md",
   "docs/product/HELM_EXTENSION_BUNDLE_MANIFEST_SCHEMA_DRAFT_V1.md",
   "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md",
-  "docs/product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md",
-  "docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md",
-  "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
   "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_RELEASE_READINESS_CORRECTION_V1.md",
   "docs/product/HELM_TENANT_RESOURCE_INTEGRATION_GOVERNANCE_PRD_V1.md",
   "docs/product/HELM_TENANT_RESOURCE_PHASE_4_TENANT_EXTENSION_ADOPTION_CONTRACT_V1.md",
@@ -896,8 +881,12 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "quality:regression": "npm run test:public:guards && npm run public:smoke:static",
   "public:e2e:smoke": "npm run public:smoke:static",
   e2e: "npm run public:e2e:smoke",
-  "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
   "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+  "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+  "check:public-release":
+    "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
+  "public:smoke:static":
+    "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
 };
 
 const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
@@ -916,6 +905,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "pack:fixture-check",
   "db:generate",
   "db:prepare",
+  "check:public-docs",
   "check:public-release",
   "check:secret-history",
   "self-check",

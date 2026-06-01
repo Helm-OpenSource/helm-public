@@ -18,7 +18,8 @@
     "eval:operating-signal-flow": "tsx scripts/operating-signal-flow-evals.ts",
     "pack:fixture-check": "node --import tsx scripts/pack-fixture-check.ts",
     "self-check": "npm run public:smoke:static",
-    "check:public-release": "node --import tsx scripts/public-release-guard.ts",
+    "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+    "check:public-release": "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
     "check:secret-history": "node --import tsx scripts/secret-history-check.ts",
     "db:generate": "prisma generate --schema prisma/schema.prisma && prisma generate --schema prisma/schema.sqlite.prisma",
     "db:prepare": "node -e \"console.log('public mirror: database prepare is not required')\"",
@@ -28,7 +29,7 @@
     "public:e2e:smoke": "npm run public:smoke:static",
     "e2e": "npm run public:e2e:smoke",
     "check:boundaries": "npm run public:smoke:static",
-    "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
+    "public:smoke:static": "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
     "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands"
   },
   "prisma": {

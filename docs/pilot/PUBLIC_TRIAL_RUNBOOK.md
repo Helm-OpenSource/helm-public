@@ -215,7 +215,7 @@ OpenAI API 默认关闭。启用时：
 2. 5 分钟内：oncall 主备 + Operations Lead 上线
 3. 15 分钟内：判断是否需要回滚 `BUSINESS_ADVANCEMENT_RUNTIME_ENABLED` flag
 4. 30 分钟内：判断是否需要 incident 公告（站内 banner + 邮件）
-5. 完整链路：参考 [HELM_BUSINESS_ADVANCEMENT_PHASE3_RUNTIME_ENABLEMENT_REVIEW_V1.md](../reviews/HELM_BUSINESS_ADVANCEMENT_PHASE3_RUNTIME_ENABLEMENT_REVIEW_V1.md) §四 回滚剧本
+5. 完整链路：先按本 runbook 止血，再由 maintainer 在私有 incident 记录中补充完整回滚证据；私有运行时评审材料不进入 `helm-public`
 
 ### 7.3 数据保留阶段转换异常
 

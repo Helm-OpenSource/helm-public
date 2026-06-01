@@ -18,7 +18,7 @@ review_after: 2026-07-26
 1. **不承诺 SLA**（受控试点姿态，不承诺可用性、性能、恢复时点）
 2. **目标数据保留期**（明确生命周期、硬删除、导出与删除证明的目标机制；法务签署前不作为对外承诺）
 
-本文件按 [HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_RELEASE_READINESS_CORRECTION_V1.md](../product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_RELEASE_READINESS_CORRECTION_V1.md) §一 #1（retention A = 30/7）与 #3（cloud target = 阿里云 cn-hangzhou + 实名 sub-processor）形成目标草案；不走 90/30/7、不新增 `pending_deletion` schema、不新增默认外部写入。正式公开试点以工作区契约和法务签署后的生效政策为准。
+本文件按 [Helm open source and cloud trial launch posture](../product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md) 与 [release reality alignment](../product/HELM_RELEASE_REALITY_ALIGNMENT.md) 形成目标草案；不走 90/30/7、不新增 `pending_deletion` schema、不新增默认外部写入。正式公开试点以工作区契约和法务签署后的生效政策为准。
 
 ---
 
@@ -205,9 +205,9 @@ review_after: 2026-07-26
 ## 七、与既有文档的关系
 
 1. [AGENTS.md](../../AGENTS.md)：长期硬边界（受控试点不等于企业级）— 本文件不放松这条
-2. [HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_RELEASE_READINESS_CORRECTION_V1.md](../product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_RELEASE_READINESS_CORRECTION_V1.md) §一 #1 / #3：本文件落地该决策
+2. [HELM_RELEASE_REALITY_ALIGNMENT.md](../product/HELM_RELEASE_REALITY_ALIGNMENT.md)：本文件继承公开承诺收口与 release hard gate 姿态
 3. [HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md](../product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md) §2.3：launch plan 的 retention 描述需同步收口至 30/7
-4. [HELM_MARKET_POSITIONING_AND_ADVANCEMENT_UPGRADE_V1.md](../product/HELM_MARKET_POSITIONING_AND_ADVANCEMENT_UPGRADE_V1.md) §一 1.4：「Helm 不是什么」— 本文件继承此姿态
+4. [README.md](../../README.md)：本文件继承“Helm 当前刻意不做”的公开边界
 5. 未来正式商用版本：本文件**不**替代未来 ToS / DPA / SLA；正式商用版本必须独立起草
 
 ---
