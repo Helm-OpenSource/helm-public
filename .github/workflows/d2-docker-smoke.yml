@@ -1,0 +1,31 @@
+name: D2 Docker Smoke
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - ".github/workflows/d2-docker-smoke.yml"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "prisma/**"
+      - "scripts/d2-docker-smoke.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  d2-docker-smoke:
+    name: Fresh Clone Docker Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HELM_D2_SMOKE_REPO_URL: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.clone_url || format('https://github.com/{0}.git', github.repository) }}
+      HELM_D2_SMOKE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run D2 fresh-clone Docker smoke
+        run: bash scripts/d2-docker-smoke.sh
