@@ -89,14 +89,10 @@ npm run quality:regression
 - 真实 provider 缺失时 demo 直接断路
 - 只改 API，不同步 fallback、文档和 observability
 
-## 模板引用
+## 公开仓参考
 
-- [README.md](../../../docs/codex/README.md)
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
-- [release_checklist.md](../../../docs/codex/release_checklist.md)
-- [design.md](../../../docs/conversation-capture/design.md)
-- [implementation.md](../../../docs/conversation-capture/implementation.md)
-- [seed-scenarios.md](../../../docs/conversation-capture/seed-scenarios.md)
-- [MEETING_CONNECTOR_READINESS_GATE_V1.md](../../../docs/product/MEETING_CONNECTOR_READINESS_GATE_V1.md)
-- [MEETING_CONNECTOR_READINESS_REPORT_V1.md](../../../docs/reviews/MEETING_CONNECTOR_READINESS_REPORT_V1.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [INTEGRATION_TEMPLATE.md](../../../docs/integrations/INTEGRATION_TEMPLATE.md)
+- [HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md](../../../docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md)
+- [HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md](../../../docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md)

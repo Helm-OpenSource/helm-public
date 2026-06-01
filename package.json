@@ -17,6 +17,7 @@
     "eval:headless-signal-interface": "tsx scripts/headless-signal-interface-evals.ts",
     "eval:internal-commercialization": "tsx scripts/internal-commercialization-eval.ts",
     "eval:operating-signal-flow": "tsx scripts/operating-signal-flow-evals.ts",
+    "kit:dry-run": "tsx external-resource-kit/dry-run.ts",
     "pack:fixture-check": "node --import tsx scripts/pack-fixture-check.ts",
     "self-check": "npm run public:smoke:static",
     "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",

@@ -97,17 +97,9 @@ npm run eval:recommendation
 - explanation 前台化了，但 feedback / audit / eval 没同步
 - 新增写路径导致本地试点环境出现不必要写放大
 
-## 模板引用
+## 公开仓参考
 
-- [README.md](../../../docs/codex/README.md)
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
-- [release_checklist.md](../../../docs/codex/release_checklist.md)
-- [implementation.md](../../../docs/memory-system/implementation.md)
-- [api-examples.md](../../../docs/memory-system/api-examples.md)
-- [stage2-design.md](../../../docs/recommendation-engine/stage2-design.md)
-- [implementation.md](../../../docs/recommendation-engine/implementation.md)
-- [HELM_ORGANIZATIONAL_MEMORY_FOUNDATION_V1.md](../../../docs/product/HELM_ORGANIZATIONAL_MEMORY_FOUNDATION_V1.md)
-- [HELM_ORGANIZATIONAL_MEMORY_BASELINE_FREEZE_REPORT.md](../../../docs/product/HELM_ORGANIZATIONAL_MEMORY_BASELINE_FREEZE_REPORT.md)
-- [memory-system-code-review.md](../../../docs/reviews/memory-system-code-review.md)
-- [recommendation-engine-code-review.md](../../../docs/reviews/recommendation-engine-code-review.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md](../../../docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md)
+- [HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md](../../../docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md)

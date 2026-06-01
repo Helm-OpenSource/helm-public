@@ -89,16 +89,9 @@ npm run quality:regression
 - 把 trial / grace / read_only 的局部成立误写成完整 commercial platform
 - 只改页面，不同步 access boundary、seed、audit 和 docs
 
-## 模板引用
+## 公开仓参考
 
-- [README.md](../../../docs/codex/README.md)
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
-- [release_checklist.md](../../../docs/codex/release_checklist.md)
-- [HELM_BILLING_FOUNDATION_BASELINE_V1.md](../../../docs/product/HELM_BILLING_FOUNDATION_BASELINE_V1.md)
-- [SETTINGS_BILLING_OVERVIEW_POLISH_REPORT.md](../../../docs/product/SETTINGS_BILLING_OVERVIEW_POLISH_REPORT.md)
-- [HELM_NARROW_PAYMENT_INTEGRATION_SPRINT_1_REPORT.md](../../../docs/product/HELM_NARROW_PAYMENT_INTEGRATION_SPRINT_1_REPORT.md)
-- [HELM_CONTRIBUTOR_PORTAL_BASELINE_V1.md](../../../docs/product/HELM_CONTRIBUTOR_PORTAL_BASELINE_V1.md)
-- [HELM_READONLY_GRACE_BOUNDARY_SPRINT_1_REPORT.md](../../../docs/product/HELM_READONLY_GRACE_BOUNDARY_SPRINT_1_REPORT.md)
-- [HELM_TRIAL_ONBOARDING_SELF_SERVE_SIGNUP_SPRINT_1_REPORT.md](../../../docs/product/HELM_TRIAL_ONBOARDING_SELF_SERVE_SIGNUP_SPRINT_1_REPORT.md)
-- [trial-readiness-checklist.md](../../../docs/reviews/trial-readiness-checklist.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md](../../../docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)
+- [HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md](../../../docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md)

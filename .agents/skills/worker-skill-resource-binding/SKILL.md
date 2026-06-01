@@ -56,9 +56,9 @@ npm run quality:regression
 - customer-facing 输出越过 review / boundary
 - 被误写成完整 orchestration / execution 平台
 
-## 模板引用
+## 公开仓参考
 
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [report_template_sprint.md](../../../docs/codex/report_template_sprint.md)
-- [report_template_freeze.md](../../../docs/codex/report_template_freeze.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../../../docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
+- [HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md](../../../docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)

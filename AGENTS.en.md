@@ -254,7 +254,7 @@ Unified entry points for Codex work:
 - Project overview: [README.md](README.md) / [README.en.md](README.en.md)
 - Doc index: [docs/README.md](docs/README.md) (Chinese)
 - Codex template directory: [docs/codex/README.md](docs/codex/README.md)
-- First-batch skills: `/.agents/skills/`
+- First-batch skills: `.agents/skills/`
 
 ## 15. Default Judgement Principles
 

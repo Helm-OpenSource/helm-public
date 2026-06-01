@@ -57,8 +57,8 @@ npm run quality:regression
 - 没有 action outlet 或 decision request
 - evidence 没有受控下钻路径
 
-## 模板引用
+## 公开仓参考
 
-- [batch_task_master_template.md](../../../docs/codex/batch_task_master_template.md)
-- [report_template_sprint.md](../../../docs/codex/report_template_sprint.md)
-- [definition_of_done.md](../../../docs/codex/definition_of_done.md)
+- [Agent Working Entry](../../../docs/codex/README.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../../../docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)

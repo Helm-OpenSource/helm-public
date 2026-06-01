@@ -692,8 +692,8 @@ export function buildCustomerSuccessQueueSurfaceModel({
         ]
       : [
           {
-            label: english ? "Open customer success docs" : "打开客户成功文档",
-            href: "/docs",
+            label: english ? "Open reports" : "打开报告",
+            href: "/reports",
           },
         ],
     pageBoundarySummary: [
