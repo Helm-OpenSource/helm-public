@@ -83,6 +83,16 @@ P0 只保留：
 
 如果无法自动验证，必须通过环境变量显式确认，并在 release evidence 中保留 receipt。
 
+当前 `release:check` 人工 receipt 环境变量为：
+
+- `RELEASE_READINESS_CREDENTIAL_ROTATED`
+- `RELEASE_READINESS_SECRET_HISTORY_REMEDIATED`
+- `RELEASE_READINESS_DOCKER_SMOKE_PASSED`
+- `RELEASE_READINESS_ONCALL_RESPONSE_POLICY_READY`
+- `RELEASE_READINESS_AUDIT_TRACE_PUBLIC_POSTURE`
+- `RELEASE_READINESS_REVIEWER_APPROVAL_RECORD_ID`
+- `RELEASE_READINESS_CALIBRATION_REPORT`
+
 > **发布日决策门**见 [`HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md`](./HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md) §六 "Go/No-Go Evidence Checklist"。本节定义 hard gates **输入约束**，§六 定义 owner 发布日的 6 项 **必备 evidence + Go/No-Go 决策记录格式**。两者不重复：本节是 `release:check` 命令的阻断口径，§六 是人工 sign-off 流程。
 
 ## 三、需求减负决策

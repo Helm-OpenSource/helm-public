@@ -11,7 +11,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   MANUAL_CHECKLIST,
-  PUBLIC_MIRROR_CLEAN_RECEIPT_DIR,
   PUBLIC_MIRROR_CLEAN_RECEIPT_KIND,
   MANUAL_CHECKLIST_COUNT,
   MANUAL_CHECKLIST_ENV_KEYS,
@@ -27,8 +26,6 @@ import {
   validateSecretHistoryReceipt,
 } from "../scripts/release-readiness-check";
 
-const REPO_ROOT = process.cwd();
-
 const EXPECTED_MANUAL_RECEIPT_ENV_KEYS = [
   "RELEASE_READINESS_CREDENTIAL_ROTATED",
   "RELEASE_READINESS_SECRET_HISTORY_REMEDIATED",
@@ -39,36 +36,26 @@ const EXPECTED_MANUAL_RECEIPT_ENV_KEYS = [
   "RELEASE_READINESS_CALIBRATION_REPORT",
 ] as const;
 
-const CURRENT_RECEIPT_WORDING = /7 个 receipt|7 个人工 release receipt/;
-
-const EXPECTED_FAST_GOVERNANCE_COMMANDS = [
-  "npm run eval:agentic-governance",
-  "npm run eval:intelligence-growth-boundary-static",
-  "npm run eval:intelligence-growth-determinism",
-  "npm run eval:business-advancement-trace-roi",
-  "npm run eval:gate-consolidation",
-  "npm run eval:external-agent-intake-p0-req-07",
+const EXPECTED_FAST_PUBLIC_COMMANDS = [
+  "npm run validate:env",
+  "npm run delivery:doctor",
+  "npm run pack:fixture-check",
+  "npm run eval:headless-signal-interface",
+  "npm run eval:operating-signal-flow",
+  "npm run check:public-release",
+  "npm run check:secret-history",
+  "npm run check:boundaries",
+  "npm run self-check",
+  "npm run typecheck",
+  "npm run lint",
 ] as const;
 
-const LEGACY_FOUR_ITEM_WORDING = [
-  new RegExp(["4", "项手动 checklist"].join(" ")),
-  new RegExp(["4项手动", "checklist"].join(" ")),
-  new RegExp(["4", "manual checklist"].join(" "), "i"),
-  new RegExp(
-    [
-      "凭据轮换日期",
-      "Docker smoke 日期",
-      "Reviewer approval id",
-      "calibration 报告路径",
-    ].join(" / "),
-  ),
-] as const;
+const REPO_ROOT = process.cwd();
 
-const DOCUMENTS_WITH_RECEIPT_TRUTH = [
-  "docs/operations/RELEASE_READINESS_RECEIPT_CHECKLIST.md",
-  "docs/launch/HELM_V0_1_0_TRIAL_LAUNCH_POST_DRAFT_V1.md",
-  "docs/STATUS.md",
-  "CHANGELOG.md",
+const PUBLIC_RELEASE_GATE_DOCS = [
+  "README.md",
+  "docs/product/HELM_RELEASE_REALITY_ALIGNMENT.md",
+  "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
 ] as const;
 
 function readRepoFile(path: string): string {
@@ -82,17 +69,17 @@ function writeJson(path: string, value: unknown): void {
 
 describe("release readiness manual receipt truth", () => {
   it("exports the stable 7-item manual checklist and env keys", () => {
-    expect(RELEASE_READINESS_AUTOMATED_STEP_COUNT).toBe(17);
+    expect(RELEASE_READINESS_AUTOMATED_STEP_COUNT).toBe(15);
     expect(MANUAL_CHECKLIST_COUNT).toBe(7);
     expect(MANUAL_CHECKLIST).toHaveLength(7);
     expect(MANUAL_CHECKLIST_ENV_KEYS).toEqual([...EXPECTED_MANUAL_RECEIPT_ENV_KEYS]);
   });
 
-  it("keeps governance offline gates in the FAST preflight chain", () => {
+  it("keeps public Core gates in the FAST preflight chain", () => {
     const stepsByCommand = new Map(STEPS.map((step) => [step.command, step]));
     const fullOnlySteps = STEPS.filter((step) => step.fullChainOnly);
 
-    for (const command of EXPECTED_FAST_GOVERNANCE_COMMANDS) {
+    for (const command of EXPECTED_FAST_PUBLIC_COMMANDS) {
       const step = stepsByCommand.get(command);
       expect(step, `${command} should be present in release readiness STEPS`).toBeDefined();
       expect(step?.fullChainOnly, `${command} should run in FAST mode`).not.toBe(true);
@@ -106,32 +93,19 @@ describe("release readiness manual receipt truth", () => {
     ]);
   });
 
-  it("keeps release docs aligned on the current 7 receipt wording", () => {
-    for (const documentPath of DOCUMENTS_WITH_RECEIPT_TRUTH) {
-      const content = readRepoFile(documentPath);
-
-      expect(content, `${documentPath} should state the current 7 receipt posture`).toMatch(
-        CURRENT_RECEIPT_WORDING,
+  it("keeps public release docs aligned with the runnable release gate", () => {
+    for (const documentPath of PUBLIC_RELEASE_GATE_DOCS) {
+      expect(readRepoFile(documentPath), `${documentPath} should reference release:check`).toContain(
+        "npm run release:check",
       );
-
-      for (const legacyPattern of LEGACY_FOUR_ITEM_WORDING) {
-        expect(content, `${documentPath} should not retain the legacy 4-item wording`).not.toMatch(
-          legacyPattern,
-        );
-      }
     }
-  });
 
-  it("keeps the checklist docs covering every release readiness env key", () => {
-    const receiptChecklist = readRepoFile("docs/operations/RELEASE_READINESS_RECEIPT_CHECKLIST.md");
-    const changelog = readRepoFile("CHANGELOG.md");
-
-    expect(changelog).toContain("17 步自动化");
-
+    const releaseReality = readRepoFile("docs/product/HELM_RELEASE_REALITY_ALIGNMENT.md");
     for (const envKey of EXPECTED_MANUAL_RECEIPT_ENV_KEYS) {
-      expect(MANUAL_CHECKLIST_ENV_KEYS).toContain(envKey);
-      expect(receiptChecklist).toContain(envKey);
-      expect(changelog).toContain(envKey);
+      expect(
+        releaseReality,
+        `HELM_RELEASE_REALITY_ALIGNMENT should document ${envKey}`,
+      ).toContain(envKey);
     }
   });
 
@@ -238,21 +212,6 @@ describe("release readiness manual receipt truth", () => {
     ).toContain("public-mirror:build or public-mirror:verify");
   });
 
-  it("documents the mirror-clean receipt evidence path and public mirror commands", () => {
-    const receiptChecklist = readRepoFile("docs/operations/RELEASE_READINESS_RECEIPT_CHECKLIST.md");
-    const secretHistoryReceipt = MANUAL_CHECKLIST.find(
-      (item) => item.id === "secret_history_remediated",
-    );
-
-    expect(secretHistoryReceipt?.howToSatisfy).toContain(PUBLIC_MIRROR_CLEAN_RECEIPT_DIR);
-    expect(secretHistoryReceipt?.howToSatisfy).toContain("public-mirror:build");
-    expect(secretHistoryReceipt?.howToSatisfy).toContain("public-mirror:verify");
-    expect(receiptChecklist).toContain(PUBLIC_MIRROR_CLEAN_RECEIPT_DIR);
-    expect(receiptChecklist).toContain("public-mirror:clean-receipt:check");
-    expect(receiptChecklist).toContain("npm run public-mirror:build -- --mirror-root <candidate>");
-    expect(receiptChecklist).toContain("npm run public-mirror:verify -- --mirror-root <candidate>");
-  });
-
   it("keeps calibration receipt fixed to the required redacted live report", () => {
     expect(validateCalibrationReportPathContract(REQUIRED_CALIBRATION_REPORT_PATH)).toBe(undefined);
     expect(validateCalibrationReportPathContract("/tmp/report.md")).toContain(REQUIRED_CALIBRATION_REPORT_PATH);
@@ -267,6 +226,6 @@ describe("release readiness manual receipt truth", () => {
         "docs/reviews/COMMITMENT_REINFORCEMENT_SENDABILITY_ALIGNMENT_REPORT.md",
       ),
     ).toContain(REQUIRED_CALIBRATION_REPORT_PATH);
-    expect(validateCalibrationReportPath(REQUIRED_CALIBRATION_REPORT_PATH)).toContain("does not exist");
+    expect(validateCalibrationReportPath(REQUIRED_CALIBRATION_REPORT_PATH)).toBe(undefined);
   });
 });

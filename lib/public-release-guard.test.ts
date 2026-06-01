@@ -646,12 +646,12 @@ describe("public release guard fixture coverage", () => {
 
     expect(projection.manifest.private).toBe(false);
     expect(projection.removedScripts).toEqual([
-      "release:check",
       `seed:${tenantSlug}-workspace`,
       "proof-pack:build",
     ]);
     expect(projection.manifest.scripts).toMatchObject({
       "self-check": "npm run public:smoke:static",
+      "release:check": "node --import tsx scripts/release-readiness-check.ts",
       dev: "next dev",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
       "db:prepare":
@@ -796,6 +796,7 @@ describe("public release guard fixture coverage", () => {
       "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
       "quality:regression":
         "npm run test:public:guards && npm run public:smoke:static",
+      "release:check": "node --import tsx scripts/release-readiness-check.ts",
       "self-check": "npm run public:smoke:static",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":

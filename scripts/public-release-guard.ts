@@ -885,6 +885,7 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
   "check:public-release":
     "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
+  "release:check": "node --import tsx scripts/release-readiness-check.ts",
   "public:smoke:static":
     "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
 };
@@ -914,6 +915,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "check:public-docs",
   "check:public-release",
   "check:secret-history",
+  "release:check",
   "self-check",
   "check:boundaries",
   "test",

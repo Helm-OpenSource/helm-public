@@ -105,7 +105,7 @@ export const STEPS: ReadonlyArray<StepSpec> = [
   { id: "mirror-build", title: "npm run public-mirror:build -- --mirror-root <candidate>", kind: "orchestrate" },
   { id: "mirror-verify", title: "npm run public-mirror:verify -- --mirror-root <candidate>", kind: "orchestrate" },
   { id: "clean-receipt", title: "npm run public-mirror:clean-receipt -- --receipt-id <id> --source-ref <ref> --mirror-root <candidate>", kind: "orchestrate" },
-  { id: "release-check", title: "npm run release:check MUST pass with all 17 automatic checks green", kind: "verify" },
+  { id: "release-check", title: "npm run release:check MUST pass with all public Core automatic checks green", kind: "verify" },
   { id: "go-nogo", title: "Final Go/No-Go evidence checklist (6 items) — owner signoff", kind: "manual" },
 ];
 
