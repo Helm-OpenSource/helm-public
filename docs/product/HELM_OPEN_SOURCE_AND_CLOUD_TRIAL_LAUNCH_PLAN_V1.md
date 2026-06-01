@@ -35,6 +35,7 @@ current evidence for:
 - `npm run check:public-docs`
 - `npm run check:public-release`
 - `npm run check:secret-history`
+- `npm run release:check`
 - public CI / test / typecheck
 - clean public history or fresh sanitized snapshot
 - owner Go/No-Go

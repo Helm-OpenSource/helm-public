@@ -2,8 +2,8 @@
 /**
  * v0.1.0-trial release readiness gate
  *
- * Single-command pre-tag check: runs the AGENTS.md §10 validation chain
- * **plus** prints a manual-action checklist for the items that depend on
+ * Single-command public Core pre-tag check: runs the public-safe validation
+ * chain plus prints a manual-action checklist for items that depend on
  * external coordination (credential rotation, secret-history remediation,
  * response/on-call posture, audit-trace public posture, Required Reviewer
  * approval, redacted live DB calibration, Docker smoke).
@@ -271,6 +271,26 @@ export const STEPS: ReadonlyArray<Step> = [
     command: "npm run validate:env",
   },
   {
+    id: "delivery:doctor",
+    description: "Delivery Engineer Golden Path static doctor",
+    command: "npm run delivery:doctor",
+  },
+  {
+    id: "pack:fixture-check",
+    description: "Public reference pack static fixture gate",
+    command: "npm run pack:fixture-check",
+  },
+  {
+    id: "eval:headless-signal-interface",
+    description: "Headless Signal Interface public offline eval",
+    command: "npm run eval:headless-signal-interface",
+  },
+  {
+    id: "eval:operating-signal-flow",
+    description: "Operating Signal Flow public offline eval",
+    command: "npm run eval:operating-signal-flow",
+  },
+  {
     id: "check:public-release",
     description: "Public-release guard (tenant-slug / private-path / internal-host / credential)",
     command: "npm run check:public-release",
@@ -282,50 +302,13 @@ export const STEPS: ReadonlyArray<Step> = [
   },
   {
     id: "check:boundaries",
-    description:
-      "Decision-first boundary checks (200+ rules including Phase 3 runtime adoption and env-derived spawn inventory)",
+    description: "Public Core boundary checks",
     command: "npm run check:boundaries",
   },
   {
     id: "self-check",
-    description: "Helm self-check (file inventory, contract markers, tenant separation)",
+    description: "Public Core self-check",
     command: "npm run self-check",
-  },
-  {
-    id: "eval:agentic-governance",
-    description:
-      "Agentic Governance offline gate (trace, connector permission summary, messaging, provider-class drift)",
-    command: "npm run eval:agentic-governance",
-  },
-  {
-    id: "eval:intelligence-growth-boundary-static",
-    description:
-      "IGS boundary static no-go gate (DB/API/runtime/provider/network drift)",
-    command: "npm run eval:intelligence-growth-boundary-static",
-  },
-  {
-    id: "eval:intelligence-growth-determinism",
-    description:
-      "IGS determinism gate (canonical summaries remain stable across repeated offline runs)",
-    command: "npm run eval:intelligence-growth-determinism",
-  },
-  {
-    id: "eval:business-advancement-trace-roi",
-    description:
-      "P0-REQ-05 trace + ROI scorecard gate (6-question coverage, 0 wrong-commitment incident)",
-    command: "npm run eval:business-advancement-trace-roi",
-  },
-  {
-    id: "eval:gate-consolidation",
-    description:
-      "P0-REQ-06 gate consolidation registry gate (active keep gates declare customer-visible risk + 5 required keep klasses)",
-    command: "npm run eval:gate-consolidation",
-  },
-  {
-    id: "eval:external-agent-intake-p0-req-07",
-    description:
-      "P0-REQ-07 external agent strict boundary gate (cross-tenant / unredacted / no-trace / stale / missing-metadata quarantine)",
-    command: "npm run eval:external-agent-intake-p0-req-07",
   },
   {
     id: "typecheck",

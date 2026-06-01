@@ -186,6 +186,7 @@ describe("public mirror tree builder", () => {
         "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
         "quality:regression":
           "npm run test:public:guards && npm run public:smoke:static",
+        "release:check": "node --import tsx scripts/release-readiness-check.ts",
         "self-check": "npm run public:smoke:static",
         test: "vitest run --config vitest.public.config.ts",
         "test:public:guards":
@@ -295,8 +296,10 @@ describe("public mirror tree builder", () => {
     expect(scripts["check:public-release"]).toBe(
       "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
     );
+    expect(scripts["release:check"]).toBe(
+      "node --import tsx scripts/release-readiness-check.ts",
+    );
     expect(Object.keys(scripts)).not.toContain(`seed:${tenantSlug}`);
-    expect(Object.keys(scripts)).not.toContain("release:check");
   });
 
   it("mirror excludes tenant private root, pending implementation-console, and sensitive policy doc", () => {
