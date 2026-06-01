@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      HELM_D2_SMOKE_REPO_URL: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.clone_url || format('https://github.com/{0}.git', github.repository) }}
-      HELM_D2_SMOKE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+      HELM_D2_SMOKE_REPO_URL: ${{ github.workspace }}
+      HELM_D2_SMOKE_REF: HEAD
     steps:
       - uses: actions/checkout@v5
 
