@@ -44,6 +44,7 @@ check:public-docs` fails when a new doc appears without that review.
 ## Selected Public Validation Receipts
 
 - [AI-native B2B artifact templates closeout](reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md)
+- [D2 Docker fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md)
 - [Node fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md)
 
 ## Not In This Public Docs Surface

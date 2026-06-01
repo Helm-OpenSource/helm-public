@@ -13,7 +13,7 @@ private Pack, Overlay, or customer deployment readiness.
 | Category | Status | Evidence |
 |---|---|---|
 | Apache-2.0 Core repository | Established for public Core development | `LICENSE`, `NOTICE`, `package.json`, `README.md` |
-| Local developer quickstart | Formed, still needs release-candidate smoke on fresh machines | [getting-started.md](getting-started.md), `docker-compose.yml`, `Dockerfile` |
+| Local developer quickstart | Docker fresh-clone smoke verified for public Core; still not commercial release approval | [D2 Docker fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md), [getting-started.md](getting-started.md), `docker-compose.yml`, `Dockerfile` |
 | Public/private boundary guard | Established at HEAD level | `npm run check:public-release`, `npm run check:public-docs` |
 | Public docs information architecture | Established by allowlist, still subject to owner review before visibility flip | [public-docs-manifest.json](public-docs-manifest.json) |
 | Cloud trial / enterprise readiness | Not established by this repository alone | See [release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md) |
