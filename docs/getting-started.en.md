@@ -236,5 +236,7 @@ Expected — the seed data requires a sign-in. If even `/login` won't submit, do
 ## 11. Where to ask for help
 
 - GitHub Issues — prefer public questions so others can find them
-- `partners@helm.<domain>` — commercial / partnership topics
+- WeChat `ffjw0821` — contact us / partnership topics / community coordination
+- Community invite QR — add WeChat `ffjw0821` first to receive the currently valid invite QR (QR codes expire)
+- Social media / official account — TBD (not a committed support channel yet)
 - Security vulnerabilities — **do not** use public issues; see [../SECURITY.md](../SECURITY.md)

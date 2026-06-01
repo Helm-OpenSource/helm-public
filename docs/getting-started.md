@@ -234,5 +234,7 @@ npm run quality:regression
 ## 11. 卡住了找谁
 
 - GitHub Issues — 优先公开提问，便于其他人搜到
-- `partners@helm.<domain>` — 商业 / 合作话题
+- 微信 `ffjw0821` — 联系我们 / 商业合作 / 社群沟通（人工受控入口）
+- 微信社群邀请二维码 — 先加微信 `ffjw0821` 获取当期有效二维码（邀请二维码存在时效）
+- 社交媒体 / 公众号 — 待补充（当前不作为承诺入口）
 - 安全漏洞——**不要**走公开 issue，见 [../SECURITY.md](../SECURITY.md)

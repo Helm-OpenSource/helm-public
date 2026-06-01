@@ -178,7 +178,9 @@ Details: [AGENTS.md §6-§7](../../AGENTS.md).
 | Wire up your customer's systems | [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md) (coming with v0.1.0) |
 | Understand the OS / commercial boundary | [`docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`](../product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) |
 | Apply for Certified Delivery Partner | [`docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md`](../product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) |
-| Commercial partnerships | `partners@helm.<domain>` |
+| Commercial partnerships / contact | WeChat `ffjw0821` (human-routed, controlled) |
+| Join community | WeChat invite QR (add WeChat `ffjw0821` to get the currently valid QR) |
+| Social media / official account | TBD (not a committed channel yet) |
 
 ---
 
