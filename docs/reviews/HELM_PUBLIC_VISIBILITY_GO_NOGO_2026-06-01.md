@@ -12,6 +12,30 @@ public_safety: Public-safe decision record. Captures the Go decision, gate evide
 **GO** — recorded by the owner (founder identity). Repository visibility was
 flipped to **public** by the owner as the final manual action (gate step 7).
 
+## Release and announcement record
+
+Owner approval to create the tag, GitHub Release, and external announcement was
+given on 2026-06-01 after the visibility Go decision.
+
+Actions completed:
+
+- Tag `v0.1.0-trial` was created and pushed for
+  `main@420b8e3140dc8241cb75f721ea70c80fcde719c7`.
+- GitHub Release
+  [`Helm v0.1.0-trial`](https://github.com/Helm-OpenSource/helm-public/releases/tag/v0.1.0-trial)
+  was published as a **pre-release** with `--latest=false`.
+- Existing release `V1.0.0` remains the repository **Latest** release.
+- External announcement was posted in GitHub Discussions:
+  [#49 Helm Public Core is now open source (Apache-2.0)](https://github.com/Helm-OpenSource/helm-public/discussions/49).
+
+The release gate was rerun in FULL mode immediately before tagging:
+
+```bash
+RELEASE_READINESS_FULL=true npm run release:check
+```
+
+Result: **ALL CLEAR** — 15/15 automated steps and 7/7 manual receipts satisfied.
+
 ## Gate evidence
 
 `RELEASE_READINESS_FULL=true npm run release:check` → **ALL CLEAR**
