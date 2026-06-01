@@ -357,12 +357,12 @@ const PRIVATE_FILES: ReadonlyArray<string> = [
   "PLANS.md",
   "WORKING-CONTEXT.md",
   // Public mirror bootstrap: docs with private tenant/customer terms are kept
-  // out until they are rewritten as generic open-core documentation.
-  "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md",
+  // out until they are rewritten as generic open-core documentation. The
+  // Golden Path HSI and case-management sample anchors now ship as public-safe
+  // projections, so they are intentionally not listed here.
   "docs/brand/HELM_OPEN_SOURCE_COMMUNITY_DISTRIBUTION_PLAN_V1.md",
   "docs/product/HELM_EXTENSION_BUNDLE_MANIFEST_SCHEMA_DRAFT_V1.md",
   "docs/product/HELM_EXTERNAL_RESOURCE_SIGNAL_INTEGRATION_METHOD_V1.md",
-  "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",
   "docs/product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md",
   "docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md",
   "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
@@ -911,6 +911,8 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "typecheck",
   "validate:env",
   "delivery:doctor",
+  "eval:headless-signal-interface",
+  "eval:operating-signal-flow",
   "pack:fixture-check",
   "db:generate",
   "db:prepare",

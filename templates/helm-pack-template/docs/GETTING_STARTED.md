@@ -34,18 +34,29 @@ cd ../my-helm-pack
 ### 6. 填 fixtures/（强约束 A）
 让 Day-1 看板有真实可读内容。
 
-### 7. 实现 worker
+### 7. 准备 review-first 交付 artifacts
+从 `pack-template/artifacts/` 复制并填写：
+
+- `context-packet.template.json`
+- `pack-studio.sample.csv`
+- `evidence-matrix.template.csv`
+- `work-pack.template.md`
+- `proof-loop-closeout.template.md`
+
+这些 artifacts 只使用 synthetic / redacted / alias-only 样本。它们不授权自动外发、自动审批、自动执行、silent CRM write 或 public claim。
+
+### 8. 实现 worker
 - 商业版：闭源 worker 仓库
 - 开源版：可在 `implementation/worker.ts` 直接放代码（注意 license）
 - 模板版：仅放 `implementation/reference.md`
 
-### 8. 自检
+### 9. 自检
 ```bash
 ./scripts/check.sh
 ```
 检查 SKILL.md frontmatter 完整性、seed 必填项、fixtures 存在性。
 
-### 9. 发布
+### 10. 发布
 按你的 Pack 类型选择：
 - **商业版 Pack**：上 Helm Cloud / Enterprise（联系 Helm 官方）
 - **开源 Cookbook Skill**：发到 ClawHub `@helm-cookbook/<slug>` 命名空间（参考 Helm Cookbook 发布协议）

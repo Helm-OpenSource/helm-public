@@ -9,6 +9,7 @@ A scaffolding repo for the Helm dual-layer Skill structure (SKILL.md natural-lan
 - **Day-1 industry effectiveness** — each Skill ships seed/ (playbook + templates + thresholds), works out of the box
 - **Operating quality is the core evidence** — each Skill defines quantitative quality thresholds + business-side readable validation
 - **First landing is the seed event** — the first Day-1 impression of the first design partner customer determines ecosystem ignition
+- **Evidence before commitment** — before a Pack delivery becomes a claim, prepare a Context Packet, Pack Studio safe sample, Evidence Matrix, Review-Ready Work Pack, and Proof Loop closeout. These are review-first artifacts, not execution authority.
 
 ## Quick start
 ```bash
@@ -21,6 +22,7 @@ cd ../my-helm-pack
 - `docs/GETTING_STARTED.md`
 - `docs/SKILL_MD_REFERENCE.md`
 - `docs/GOVERNANCE.md`
+- `pack-template/artifacts/`
 
 ## License
 - Template & examples: Apache-2.0
