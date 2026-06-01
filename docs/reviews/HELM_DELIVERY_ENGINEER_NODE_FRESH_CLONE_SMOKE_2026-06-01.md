@@ -13,13 +13,17 @@ archive_trigger:
 
 # Helm Delivery Engineer Node Fresh-Clone Smoke Receipt
 
+> Supersession note (2026-06-01): this node-only receipt remains useful
+> historical evidence, but its Docker blocker is superseded by
+> [HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md](HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md).
+
 ## 1. Conclusion
 
 This receipt proves the merged `helm-public` main branch can be cloned into a clean directory and pass the Node-based Golden Path checks, offline evals, public guards, production build, and a local `next start` HTTP smoke.
 
 This is **not** the D2 Docker fresh-clone smoke receipt. It deliberately does not match the `HELM_DELIVERY_ENGINEER_D2_SMOKE*.md` file pattern that `npm run delivery:doctor` checks for.
 
-Current status:
+Status at the time of this node-only receipt:
 
 - Node fresh-clone path: **PASS**
 - D2 Docker fresh-clone path: **BLOCKED by local environment** (`docker`, `colima`, `orb`, and `podman` were not available on PATH)
@@ -79,6 +83,6 @@ This receipt does not prove:
 6. Production connector readiness.
 7. Commercial release go/no-go approval.
 
-## 6. Next Required Step
+## 6. Superseded Required Step
 
-To close the D2 release blocker, run the documented Docker fresh-clone path on a machine with Docker Desktop, OrbStack, Colima, or equivalent Docker-compatible runtime installed, then commit a separate receipt named `HELM_DELIVERY_ENGINEER_D2_SMOKE*.md`.
+The required Docker fresh-clone path was later run in GitHub Actions and recorded in [HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md](HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md). That later receipt closes the D2 blocker for public Core quickstart only; it does not prove customer deployment readiness or commercial release Go/No-Go.

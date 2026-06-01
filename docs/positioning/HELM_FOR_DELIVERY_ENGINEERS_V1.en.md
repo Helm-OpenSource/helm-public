@@ -119,7 +119,7 @@ As the delivery partner base grows, Helm's reasoning quality itself improves, an
 
 ## 30-minute onboarding anchor
 
-Success = within 30 minutes you can complete this executable path. Steps 3 / 4 now have a minimum public reference to read and edit; step 5 still needs D2 onboarding verification in a fresh-clone environment before we claim the flow is fully verified.
+Success = within 30 minutes you can complete this executable path. Steps 3 / 4 now have a minimum public reference to read and edit; steps 1 / 2 have a [D2 smoke receipt](../reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md) for the Docker fresh-clone path. This verifies the public Core quickstart only; it is not a commercial release, customer deployment, or SLA commitment.
 
 1. `git clone <repo> && cd helm && docker compose up` — local workspace running
 2. `open http://localhost:3000` — see `/operating` (operating signal flow map), `/approvals` (review gate), `/memory` (operating memory) — three already-working surfaces (⚠️ `/operating` is currently a **Phase 2 fixture demo**; connecting live tenant data requires Phase 2.3 runtime adoption)
@@ -191,3 +191,4 @@ Details: [AGENTS.md §6-§7](../../AGENTS.md).
 | 2026-05-18 | V1 English mirror created (this file). Chinese is authoritative; resolve drift toward zh |
 | 2026-05-18 | V1 zh revision 3 mirrored: tightened 6-week goal, Dify forkability, code/eval promise wording, and added a release-gate guardrail for `case-management-sample` |
 | 2026-05-18 | V1 zh revision 4 mirrored: minimum public `case-management-sample` landed; onboarding status now depends on fresh-clone verification |
+| 2026-06-01 | D2 Docker fresh-clone smoke receipt landed; onboarding wording now says public Core quickstart is verified without upgrading it to commercial release or customer deployment readiness |
