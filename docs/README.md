@@ -40,6 +40,7 @@ check:public-docs` fails when a new doc appears without that review.
 - [Public trial runbook](pilot/PUBLIC_TRIAL_RUNBOOK.md)
 - [Public trial data policy](legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)
 - [Trial response and on-call posture](operations/ON_CALL_AND_RESPONSE_SLA.md)
+- [Public maintainer status baseline](operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md)
 - [Agent working entry](codex/README.md)
 - [Status truth table](STATUS.md)
 
