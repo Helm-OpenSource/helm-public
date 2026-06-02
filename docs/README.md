@@ -43,6 +43,7 @@ check:public-docs` fails when a new doc appears without that review.
 - [Trial response and on-call posture](operations/ON_CALL_AND_RESPONSE_SLA.md)
 - [Public maintainer status baseline](operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md)
 - [Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md)
+- [OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md)
 - [Agent working entry](codex/README.md)
 - [Status truth table](STATUS.md)
 

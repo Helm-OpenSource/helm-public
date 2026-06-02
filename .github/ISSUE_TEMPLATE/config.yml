@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security disclosure
+    url: https://github.com/Helm-OpenSource/helm-public/blob/main/SECURITY.md
+    about: Do not report security vulnerabilities in public issues.
+  - name: Community discussion
+    url: https://github.com/Helm-OpenSource/helm-public/discussions
+    about: Use Discussions for questions, walkthrough notes, and community help.
+  - name: Contributing guide
+    url: https://github.com/Helm-OpenSource/helm-public/blob/main/CONTRIBUTING.md
+    about: Read the public contribution rules before opening a PR.

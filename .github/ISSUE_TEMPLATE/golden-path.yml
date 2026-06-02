@@ -1,0 +1,70 @@
+name: Golden Path activation report
+description: Report a public Core Golden Path success, blocker, or friction point.
+title: "docs: Golden Path activation - "
+labels: ["documentation", "help wanted"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This report helps maintainers rank activation friction by evidence. Use synthetic sample data only. Do not include customer data, credentials, private deployment evidence, or private contact lists.
+  - type: checkboxes
+    id: public-safety
+    attributes:
+      label: Public-safety confirmation
+      options:
+        - label: This report uses only public repository files, synthetic sample data, and public-safe command output.
+          required: true
+        - label: I understand this report is not a Cloud, Enterprise, production SLA, or customer deployment proof.
+          required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result type
+      options:
+        - Ran successfully
+        - Hit a reproducible blocker
+        - Hit environment setup friction
+        - Documentation was unclear
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, Node version, npm version, Docker or container runtime, and commit or release.
+      placeholder: |
+        OS:
+        node -v:
+        npm -v:
+        Docker / OrbStack / colima:
+        commit or release:
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands or route path tested
+      description: List only commands or public routes you actually tried.
+      placeholder: |
+        docker compose up
+        npm run delivery:doctor
+        npm run pack:fixture-check
+        npm run eval:headless-signal-interface
+        /operating
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed result
+      description: Paste short output or describe the visible result. Do not paste secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Friction or next improvement
+      description: What should maintainers fix, clarify, or leave as a documented environment prerequisite?
+    validations:
+      required: false
