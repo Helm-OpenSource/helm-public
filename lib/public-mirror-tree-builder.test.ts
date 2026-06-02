@@ -173,6 +173,8 @@ describe("public mirror tree builder", () => {
       license: "Apache-2.0",
       scripts: {
         "check:boundaries": "npm run public:smoke:static",
+        "check:public-commit-metadata":
+          "node --import tsx scripts/public-commit-metadata-check.ts",
         "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
         "check:public-release":
           "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
