@@ -21,6 +21,7 @@ private Pack, Overlay, or customer deployment readiness.
 | Open-source operating model and OKR/KPI loop | Formed as a public Core operating model; first weekly packet and activation evidence still need next-layer execution | [Open source operating model](operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md) |
 | Open-source growth operating loop | Formed as a seven-day public-Core activation plan with a first-change walkthrough; activation evidence, community intake templates, and day-7 readout still need next-layer execution | [Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md) |
 | OPC intake and packet loop | Public issue templates, PR template, and weekly OPC packet template established as repo files; first real template-submitted issue / PR still needs dry-run review | [OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md), `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` |
+| China accessibility and evidence routing | Formed as a two-tier reachability and evidence model; GitHub public-safe evidence remains primary proof while WeChat / QR / community handoffs are assisted signals only | [China accessibility and evidence routing packet](operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md) |
 | Cloud trial / enterprise readiness | Not established by this repository alone | See [release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md) |
 
 ## Deliberately Not Claimed
