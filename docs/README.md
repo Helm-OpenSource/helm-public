@@ -44,6 +44,7 @@ check:public-docs` fails when a new doc appears without that review.
 - [Public maintainer status baseline](operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md)
 - [Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md)
 - [OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md)
+- [China accessibility and evidence routing packet](operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md)
 - [Agent working entry](codex/README.md)
 - [Status truth table](STATUS.md)
 
