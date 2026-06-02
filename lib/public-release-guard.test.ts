@@ -287,7 +287,7 @@ describe("public release guard fixture coverage", () => {
   it("allows the reviewed public security disclosure email without opening the whole domain", () => {
     writeFixture(
       "SECURITY.md",
-      "Report undisclosed vulnerabilities to security@zhaojiling.com.",
+      "Report undisclosed vulnerabilities to Helm-security@zhaojiling.com.",
     );
     writeFixture(
       "docs/public.md",

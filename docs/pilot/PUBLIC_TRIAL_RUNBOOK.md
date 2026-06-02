@@ -156,20 +156,20 @@ OpenAI API 默认关闭。启用时：
 
 **请勿在公开 issue 或 PR 披露未公开的安全漏洞**。私下披露见 [SECURITY.md](../../SECURITY.md)：
 
-- Email：`security@zhaojiling.com`
+- Email：`Helm-security@zhaojiling.com`
 - 响应时间：3 工作日内确认；7 工作日内初步评估；P0/P1 30 日内修复
 
 ### 5.3 数据保护 / 合规问题
 
 - 不含个人数据或敏感信息的公开问题：使用 [GitHub Issues](https://github.com/Helm-OpenSource/helm-public/issues)
-- 涉及个人数据、未公开安全信息或敏感合规材料：发邮件至 `security@zhaojiling.com`，主题标注 `[Privacy]`
+- 涉及个人数据、未公开安全信息或敏感合规材料：发邮件至 `Helm-security@zhaojiling.com`，主题标注 `[Privacy]`
 - 适用范围：GDPR / 个人信息保护法 / sub-processor 调整 / 数据保留延期等
 
 ### 5.4 试用支持
 
 - 普通试用问题：优先使用 [GitHub Discussions](https://github.com/Helm-OpenSource/helm-public/discussions)
 - 可公开复现的缺陷或文档问题：使用 [GitHub Issues](https://github.com/Helm-OpenSource/helm-public/issues)
-- 含个人数据或敏感信息的问题：发邮件至 `security@zhaojiling.com`，主题标注 `[Trial Support]`
+- 含个人数据或敏感信息的问题：发邮件至 `Helm-security@zhaojiling.com`，主题标注 `[Trial Support]`
 - 响应窗口：周一至周五 9:00–18:00（UTC+8）
 - **不**承诺周末 / 法定假期 / 24×7 响应
 
@@ -266,7 +266,7 @@ Active (duration from effective workspace contract)
 
 **Q: 我能延长试用期吗？**
 
-A: 可以。在 GitHub Discussions 发起不含敏感信息的说明；如果需要包含个人数据、租户信息或未公开部署细节，请发邮件至 `security@zhaojiling.com`，主题标注 `[Trial Extension]`。延期会评估是否升级到 reserved tenant 路径（不再走公开试用环境）。
+A: 可以。在 GitHub Discussions 发起不含敏感信息的说明；如果需要包含个人数据、租户信息或未公开部署细节，请发邮件至 `Helm-security@zhaojiling.com`，主题标注 `[Trial Extension]`。延期会评估是否升级到 reserved tenant 路径（不再走公开试用环境）。
 
 **Q: 我的数据存在哪里？**
 
