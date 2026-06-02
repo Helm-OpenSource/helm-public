@@ -85,15 +85,24 @@ extensions/case-management-sample/
 ## Minimal Start Here
 
 1. 打开 `fixtures/case.sample.json`。
-2. 改一条 synthetic sample case 的非敏感字段，例如 `status`、`severity` 或 `blockers`。
-3. 跑：
+2. 找到 `CASE-SAMPLE-002`，把 `"priorityScore": 64` 改成 `"priorityScore": 82`。这只改变 synthetic fixture 的优先级，不引入真实客户数据。
+3. 观察 mapper 变化：
+
+```bash
+npx tsx -e "import fs from 'node:fs'; import { mapCaseRecordToSignals } from './extensions/case-management-sample/signals/case/case-mapper.ts'; const cases = JSON.parse(fs.readFileSync('extensions/case-management-sample/fixtures/case.sample.json', 'utf8')); const sample = cases.find((item) => item.caseId === 'CASE-SAMPLE-002'); const signal = mapCaseRecordToSignals(sample)[0]; console.log(signal.identity.severity, signal.payload.nextAction);"
+```
+
+改动前输出应为 `info continue_followup`；改动后应为 `warning continue_followup`。
+
+4. 跑：
 
 ```bash
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
+npm run check:public-release
 ```
 
-4. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey` 和 forbidden-action 边界。
+5. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey` 和 forbidden-action 边界。
 
 不要把真实客户记录、真实邮箱、真实手机号、私有域名、内网 IP、凭据或部署信息放进本目录。
 

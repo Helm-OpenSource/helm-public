@@ -1,0 +1,84 @@
+name: Integration request
+description: Request a read-first or review-first integration path.
+title: "feat: integration - "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Integration requests must start from use case, data flow, and boundary. Opening this issue does not create a roadmap commitment or delivery date.
+  - type: checkboxes
+    id: public-safety
+    attributes:
+      label: Public-safety confirmation
+      options:
+        - label: This request contains no customer names, private contacts, private domains, internal IPs, credentials, private deployment evidence, or undisclosed security details.
+          required: true
+        - label: I understand this issue does not commit Helm maintainers to build, schedule, certify, or support the integration.
+          required: true
+  - type: input
+    id: system
+    attributes:
+      label: System or provider
+      placeholder: "Slack, Microsoft 365, Google Workspace, Zoom, ..."
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Delivery-engineer use case
+      description: Describe the generic customer workflow without naming a real customer.
+      placeholder: "A delivery engineer needs to turn meeting transcripts into review-first operating signals."
+    validations:
+      required: true
+  - type: textarea
+    id: data-flow
+    attributes:
+      label: Data flow
+      description: State the source object, fields needed, destination inside Helm, and whether data is synthetic, fixture, or real.
+      placeholder: |
+        Source:
+        Fields:
+        Helm destination:
+        Fixture or dry-run path:
+    validations:
+      required: true
+  - type: textarea
+    id: boundary-table
+    attributes:
+      label: Boundary table
+      description: Fill all three rows.
+      placeholder: |
+        Auto:
+        Review-first:
+        Never:
+    validations:
+      required: true
+  - type: textarea
+    id: auth-scopes
+    attributes:
+      label: Authentication and least-privilege scopes
+      description: List expected auth mode, scopes, token storage, and revocation needs if known.
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and verification idea
+      description: What fixture, dry-run, or guard should prove this stays read-first or review-first?
+      placeholder: "Synthetic fixture, dry-run connector, eval case, or public guard."
+    validations:
+      required: true
+  - type: dropdown
+    id: first-loop
+    attributes:
+      label: First-loop fit
+      description: Does this support the first public loop of meeting, CRM, or email into Must Push and Review Action?
+      options:
+        - Yes, meeting to review-first action
+        - Yes, CRM to operating signal
+        - Yes, email or thread to review-first action
+        - Adjacent but not first-loop
+        - Not sure
+    validations:
+      required: true
