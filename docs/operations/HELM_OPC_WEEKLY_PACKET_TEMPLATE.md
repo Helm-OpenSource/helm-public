@@ -60,6 +60,31 @@ Use activation evidence before reach metrics.
 | Discussions with delivery-engineer context |  |  |
 | Stars / forks / clones |  | Reach signal only |
 
+## Owner-Gated China Access Receipt
+
+Use this section only when owner-approved China-market access guidance has all
+six execution fields. A draft copy, copy hash, or CPO / Monetization pass is not
+execution authorization by itself.
+
+| Field | Receipt |
+| --- | --- |
+| Owner approved exact copy verbatim |  |
+| Approved channel |  |
+| Timing / window |  |
+| Responsible person or account |  |
+| One-time manual access guidance only |  |
+| No-go confirmation | No #49 repost, no README / docs / template change, no overseas outreach, no service, response, deployment, or business commitment wording |
+| Exact copy SHA-256 |  |
+| Execution timestamp |  |
+| Confirmation that no extra wording was added |  |
+| Public-safe GitHub evidence produced |  |
+| Assisted reach / contact signal only |  |
+
+WeChat, QR, and community contact remain reach / contact or assisted signals
+unless they later produce GitHub public-safe evidence or an owner-approved
+redacted receipt. Do not copy private data, credentials, private domains,
+deployment details, or security details into public repo surfaces.
+
 ## Queue Classification
 
 | Queue | Items | Owner Decision Needed |
