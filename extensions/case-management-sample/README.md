@@ -194,4 +194,10 @@ npx vitest run extensions/case-management-sample/signals/case/case-mapper.test.t
 
 ## 反馈 / Feedback
 
-GitHub Issues with label `vertical: case-management-sample`.
+Use the current public-safe GitHub issue templates instead of a label route:
+
+- Golden Path success, blocker, or sample-pack friction: `Golden Path activation report`.
+- Stale or unclear sample documentation: `Documentation correction`.
+- New source-system or integration idea: `Integration request`.
+
+Use synthetic sample data and public-safe command output only. Do not include customer data, private contacts, private domains, credentials, private deployment evidence, security details, or response-time, commercial, support, service, implementation, or roadmap commitment wording.
