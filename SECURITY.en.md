@@ -62,7 +62,7 @@ Please do **not** report undisclosed security vulnerabilities through:
 
 Please use one of the private channels:
 
-- **Email**: `security@zhaojiling.com` (preferred)
+- **Email**: `Helm-security@zhaojiling.com` (preferred)
 - **Encryption**: if you need PGP, mention it in the email and we will reply with a public key
 
 In the report, please include where possible:

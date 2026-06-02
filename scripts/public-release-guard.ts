@@ -156,7 +156,7 @@ const INTERNAL_HOST_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> =
 // the guard still blocks the underlying private-looking domain / slug anywhere
 // else, and it still blocks other addresses on the same domain.
 const PUBLIC_CONTACT_EMAIL_ALLOW_LIST: ReadonlySet<string> = new Set([
-  "security@zhaojiling.com",
+  "Helm-security@zhaojiling.com",
 ]);
 
 const PUBLIC_CONTACT_EMAIL_DOCUMENT_ALLOW_LIST: ReadonlySet<string> = new Set([
@@ -1206,7 +1206,7 @@ function isAllowedPublicContactReference(
 
   const lowerLine = line.toLowerCase();
   const mentionsAllowedEmail = Array.from(PUBLIC_CONTACT_EMAIL_ALLOW_LIST).some(
-    (email) => lowerLine.includes(email),
+    (email) => lowerLine.includes(email.toLowerCase()),
   );
   if (!mentionsAllowedEmail) return false;
 
