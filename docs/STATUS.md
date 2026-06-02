@@ -17,6 +17,7 @@ private Pack, Overlay, or customer deployment readiness.
 | Delivery engineer Golden Path requirements | Established as public Core requirements; implementation remains staged by evidence gates | [Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md), `npm run delivery:doctor`, `npm run pack:fixture-check` |
 | Public/private boundary guard | Established at HEAD level | `npm run check:public-release`, `npm run check:public-docs` |
 | Public docs information architecture | Established by allowlist; visibility is public after owner Go/No-Go, and new public docs still require intentional review | [public-docs-manifest.json](public-docs-manifest.json) |
+| OPC intake and packet loop | Public issue templates, PR template, and weekly OPC packet template established as repo files; first real template-submitted issue / PR still needs dry-run review | [OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md), `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` |
 | Cloud trial / enterprise readiness | Not established by this repository alone | See [release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md) |
 
 ## Deliberately Not Claimed

@@ -1,0 +1,82 @@
+name: Bug report
+description: Report a reproducible public Core bug.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for public Core bugs only. Do not include customer data, private domains, internal IPs, credentials, private deployment evidence, or undisclosed security details.
+  - type: checkboxes
+    id: public-safety
+    attributes:
+      label: Public-safety confirmation
+      options:
+        - label: This issue contains no customer names, private contacts, private domains, internal IPs, credentials, private deployment evidence, or undisclosed security details.
+          required: true
+        - label: This is not a security vulnerability. Security issues go through SECURITY.md, not public issues.
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What failed?
+      description: State the bug in one or two sentences.
+      placeholder: "`npm run pack:fixture-check` fails after changing a synthetic fixture."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: List exact commands, route paths, fixture paths, or sample inputs.
+      placeholder: |
+        1. Clone the repo.
+        2. Run ...
+        3. Open ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the smallest relevant error text. Do not paste secrets.
+    validations:
+      required: true
+  - type: input
+    id: ref
+    attributes:
+      label: Commit, branch, or release
+      placeholder: "main@<sha>, v0.1.0-trial, or your branch name"
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Commands already run
+      description: Paste commands and short results.
+      placeholder: |
+        npm run check:public-docs
+        npm run check:public-release
+    validations:
+      required: false
+  - type: dropdown
+    id: boundary
+    attributes:
+      label: Boundary area
+      description: Pick the closest boundary this bug touches.
+      options:
+        - Public docs or quickstart
+        - Synthetic sample pack or fixture
+        - Read-only connector or dry-run path
+        - Review-first approval or draft path
+        - Build, test, guard, or CI
+        - Not sure
+    validations:
+      required: true
