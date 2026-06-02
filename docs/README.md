@@ -36,6 +36,7 @@ check:public-docs` fails when a new doc appears without that review.
 
 ## Contribution And Operations
 
+- [Community operations owner packet](operations/HELM_COMMUNITY_OPERATIONS_OWNER_PACKET_2026-06-02.md)
 - [Integration template](integrations/INTEGRATION_TEMPLATE.md)
 - [Open source operating model](operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md)
 - [Public trial runbook](pilot/PUBLIC_TRIAL_RUNBOOK.md)
