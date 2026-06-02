@@ -19,6 +19,7 @@ private Pack, Overlay, or customer deployment readiness.
 | Public docs information architecture | Established by allowlist; visibility is public after owner Go/No-Go, and new public docs still require intentional review | [public-docs-manifest.json](public-docs-manifest.json) |
 | Open-source maintainer operating loop | First post-public baseline established; branch protection is enabled; contribution templates, metadata cleanup, required-check drift monitoring, and release-latest posture still need next-layer action | [Public maintainer status baseline](operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md) |
 | Open-source operating model and OKR/KPI loop | Formed as a public Core operating model; first weekly packet and activation evidence still need next-layer execution | [Open source operating model](operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md) |
+| Open-source growth operating loop | Formed as a seven-day public-Core activation plan with a first-change walkthrough; activation evidence, community intake templates, and day-7 readout still need next-layer execution | [Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md) |
 | Cloud trial / enterprise readiness | Not established by this repository alone | See [release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md) |
 
 ## Deliberately Not Claimed
