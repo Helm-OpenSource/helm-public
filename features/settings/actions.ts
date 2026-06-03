@@ -1645,10 +1645,12 @@ export async function transferOrganizationOwnershipAction(
 
 export async function switchOrganizationAction(input: z.infer<typeof switchWorkspaceSchema>) {
   const user = await requireCurrentUser();
+  const currentWorkspace = await getCurrentWorkspace();
+  const english = currentWorkspace.defaultLocale === "en-US";
   const parsed = switchWorkspaceSchema.safeParse(input);
 
   if (!parsed.success) {
-    return { ok: false, error: "Invalid workspace" };
+    return { ok: false, error: english ? "Invalid workspace" : "工作区参数无效" };
   }
 
   const membership = await db.membership.findUnique({
@@ -1664,7 +1666,7 @@ export async function switchOrganizationAction(input: z.infer<typeof switchWorks
   });
 
   if (!membership || membership.status === MembershipStatus.INACTIVE) {
-    return { ok: false, error: "Workspace unavailable" };
+    return { ok: false, error: english ? "Workspace unavailable" : "当前无法切换到该工作区" };
   }
 
   await ensureWorkspaceCommercialFoundation(membership.workspaceId);
