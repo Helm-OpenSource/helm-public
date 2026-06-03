@@ -284,6 +284,33 @@ describe("wecom oauth routes", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/settings");
   });
 
+  it("localizes unresolved workspace callback context from request locale before exchange", async () => {
+    const cookieStore = createCookieStore({
+      "helm-wecom-oauth-state": JSON.stringify({
+        state: "state-1",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+        provider: "wecom",
+      }),
+      "helm-ui-locale": "zh-CN",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+    dbMock.workspace.findUnique.mockResolvedValue(null);
+
+    const response = await wecomCallbackRoute(
+      new Request("http://localhost/api/auth/wecom/callback?code=code-1&state=state-1"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(decodeURIComponent(response.headers.get("location") ?? "")).toContain(
+      "无法解析工作区回调上下文。",
+    );
+    expect(oauthCallbackGovernanceMock.resolveWorkspaceOauthCallbackContext).toHaveBeenCalledWith(
+      expect.objectContaining({ english: false }),
+    );
+    expect(wecomMock.exchangeWeComAuthCode).not.toHaveBeenCalled();
+  });
+
   it("records a mismatch posture when WeCom identity does not match the active workspace user", async () => {
     const cookieStore = createCookieStore({
       "helm-wecom-oauth-state": JSON.stringify({

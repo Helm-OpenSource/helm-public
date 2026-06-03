@@ -31,8 +31,11 @@ import {
   persistDingTalkConnectorCallbackResult,
 } from "@/lib/connectors/dingtalk";
 import { db } from "@/lib/db";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
-import type { UiLocale } from "@/lib/i18n/config";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiWorkspaceMessage,
+} from "@/lib/i18n/api-message-locale";
+import { resolveUiLocale, UI_LOCALE_COOKIE, type UiLocale } from "@/lib/i18n/config";
 
 function normalizeEmail(value: string | null | undefined) {
   const trimmed = value?.trim().toLowerCase();
@@ -578,6 +581,8 @@ export async function GET(request: Request) {
   }
 
   const rawState = cookieStore.get(getDingTalkStateCookieName())?.value ?? null;
+  const requestLocale = resolveUiLocale(cookieStore.get(UI_LOCALE_COOKIE)?.value);
+  const requestEnglish = requestLocale === "en-US";
   cookieStore.delete(getDingTalkStateCookieName());
 
   if (rawPublicState && !rawState) {
@@ -597,7 +602,7 @@ export async function GET(request: Request) {
     return buildSettingsRedirect(request, {
       status: "missing-state",
       message: buildCallbackStatusCopy({
-        english: true,
+        english: requestEnglish,
         status: "missing-state",
       }),
     });
@@ -608,14 +613,14 @@ export async function GET(request: Request) {
     stateParam: state,
     currentUser,
     capability: "connectors",
-    english: true,
+    english: requestEnglish,
   });
 
   if (!callbackContext.ok) {
     return buildSettingsRedirect(request, {
       status: callbackContext.status,
       message: buildCallbackStatusCopy({
-        english: true,
+        english: requestEnglish,
         status: callbackContext.status,
         message: callbackContext.message,
       }),
@@ -644,7 +649,10 @@ export async function GET(request: Request) {
   if (!workspace || !workspaceUser) {
     return buildSettingsRedirect(request, {
       status: "failure",
-      message: "Workspace callback context could not be resolved.",
+      message: resolveApiWorkspaceMessage(requestLocale, {
+        zh: "无法解析工作区回调上下文。",
+        en: "Workspace callback context could not be resolved.",
+      }),
     });
   }
 
