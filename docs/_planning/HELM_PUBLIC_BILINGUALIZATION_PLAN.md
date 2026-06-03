@@ -38,6 +38,26 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口交付工程师黄金路径要求的中文要求 / 边界术语混写；只调整交付工程师黄金路径、
+公开 Core 要求契约、判断 / 证据 / 复核 / 边界 / 交付包工作、可复刻工程结构、已有表面、
+验证契约、公开样板包、公开文档、公开测试、离线评测、部署注册表、版本清单、健康心跳、
+用量元数据、零新增表面、相对门禁措辞、证据门禁、仓库可见性切换、负责人动作、
+黄金路径最小链路、信号 / 复核包路径和禁止写入 / 发送 / 批准 / 执行 / 跨租户路径文案，
+不改变英文参考、跨仓路由、验收命令、Docker 快速启动、样板包结构或非承诺边界。
+
+This round further localizes mixed Chinese requirement / boundary terminology
+in the delivery engineer Golden Path requirements doc. It changes
+delivery-engineer Golden Path, public-Core requirements contract, judgement /
+evidence / review / boundary / delivery-package work, forkable engineering
+structure, existing surface, verification contract, public sample pack, public
+docs, public tests, offline evals, deployment registry, version inventory,
+health heartbeat, usage metadata, zero-new-surface, gate-relative wording,
+evidence gates, repository visibility flip, owner action, Golden Path minimum
+chain, signal / review-packet path, and forbidden write / send / approve /
+execute / cross-tenant path wording only, without changing the English
+reference, cross-repo routing, acceptance commands, Docker quickstart,
+sample-pack structure, or non-commitment boundaries.
+
 本轮继续收口 Codex 工作入口的中文公开仓边界术语混写；只调整公开 Core 贡献者、
 私有源仓拆分执行者、私有域名、联系人、凭据、内部规划 / 复核归档、公开文档、
 私有多代理交接、复核包、发布回执和客户交付作业手册文案，不改变 public-docs manifest、

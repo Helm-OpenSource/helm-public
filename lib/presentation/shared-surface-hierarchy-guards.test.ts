@@ -2162,6 +2162,41 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps delivery engineer Golden Path Chinese body localized for requirement-boundary terminology", () => {
+    const goldenPath = read(
+      "docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md",
+    );
+    const chineseBody = goldenPath.slice(
+      goldenPath.indexOf("本文是 `Helm-OpenSource/helm-public`"),
+      goldenPath.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("交付工程师黄金路径");
+    expect(chineseBody).toContain("公开 Core 要求契约");
+    expect(chineseBody).toContain("判断、证据、复核、边界和交付包工作");
+    expect(chineseBody).toContain("可复刻的工程结构");
+    expect(chineseBody).toContain("已有表面的要求与验证契约");
+    expect(chineseBody).toContain("公开样板包");
+    expect(chineseBody).toContain("公开文档");
+    expect(chineseBody).toContain("公开测试");
+    expect(chineseBody).toContain("离线评测");
+    expect(chineseBody).toContain("部署注册表");
+    expect(chineseBody).toContain("版本清单");
+    expect(chineseBody).toContain("健康心跳与用量元数据");
+    expect(chineseBody).toContain("零新增表面");
+    expect(chineseBody).toContain("既有评测和既有公开发布守卫");
+    expect(chineseBody).toContain("只写相对门禁措辞");
+    expect(chineseBody).toContain("证据门禁");
+    expect(chineseBody).toContain("仓库可见性切换是最终负责人动作");
+    expect(chineseBody).toContain("黄金路径的最小链路");
+    expect(chineseBody).toContain("信号 / 复核包路径");
+    expect(chineseBody).toContain("禁止写入 / 发送 / 批准 / 执行 / 跨租户路径");
+
+    expect(chineseBody).not.toMatch(
+      /delivery-engineer|public Core requirements contract|judgement|evidence、review|boundary 和 delivery package work|可 fork|requirements 与 verification contract|existing evals|existing public-release guards|Gate-relative wording only|evidence gates|launch date|version-date promise|visibility flip|owner action|workstream|No overclaim|clone public Core|Docker quickstart|public sample pack|synthetic fixture|signal \/ review packet path|forbidden write \/ send \/ approve \/ execute \/ cross-tenant path|public docs|public tests|offline evals|deployment registry|version inventory|health heartbeat|usage metadata/,
+    );
+  });
+
   it("keeps OPC weekly packet Chinese body free of recently fixed mixed public-operations fragments", () => {
     const opcPacket = read("docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md");
     const chineseBody = opcPacket.slice(

@@ -16,31 +16,28 @@ source_basis:
 
 ## 中文主文本 / Chinese Main Text
 
-本文是 `Helm-OpenSource/helm-public` 中 delivery-engineer Golden Path 的 public
-Core requirements contract。它把北极星目标收敛成仓库可验证工作：帮助 AI 交付工程师
-把客户业务实施中的 judgement、evidence、review、boundary 和 delivery package 工作，
-组织成可 fork 的工程结构。
+本文是 `Helm-OpenSource/helm-public` 中交付工程师黄金路径的公开 Core 要求契约。它把北极星目标
+收敛成仓库可验证工作：帮助 AI 交付工程师把客户业务实施中的判断、证据、复核、边界和交付包工作，
+组织成可复刻的工程结构。
 
-第一版只覆盖已有 surface 的 requirements 与 verification contract，不新增产品面。
-`helm-public` 只承接 public Core、base SDK、public sample pack、public docs、
-public tests、Docker quickstart 和 offline evals。商业行业 Pack 属于
-`helm-packs`；客户 Overlay 属于 `helm-overlays`；BOM、授权、部署 registry、版本
-inventory、health heartbeat 与 usage metadata 属于 `helm-control-plane`。
+第一版只覆盖已有表面的要求与验证契约，不新增产品面。`helm-public` 只承接公开 Core、
+基础 SDK、公开样板包、公开文档、公开测试、Docker 快速启动和离线评测。商业行业 Pack 属于
+`helm-packs`；客户 Overlay 属于 `helm-overlays`；BOM、授权、部署注册表、版本清单、
+健康心跳与用量元数据属于 `helm-control-plane`。
 
 核心铁律：
 
-1. Zero new surface：优先复用 `/demo`、`extensions/case-management-sample`、
-   `delivery:doctor`、existing evals 和 existing public-release guards。
-2. Gate-relative wording only：公开文本只能使用 Now / Next / Later 和 evidence gates，
-   不写具体 launch date 或 version-date promise。
-3. Private until gate：visibility flip 是最终 owner action，不由本 workstream 自动完成。
-4. No overclaim：没有精确 evidence gate 和引用，不得写 `verified`、`clean SDK`、
+1. 零新增表面：优先复用 `/demo`、`extensions/case-management-sample`、
+   `delivery:doctor`、既有评测和既有公开发布守卫。
+2. 只写相对门禁措辞：公开文本只能使用“现在 / 下一步 / 更后续”和证据门禁，
+   不写具体发布日期或版本日期承诺。
+3. 过门禁前保持私有：仓库可见性切换是最终负责人动作，不由本工作流自动完成。
+4. 不夸大声明：没有精确证据门禁和引用，不得写 `verified`、`clean SDK`、
    `100% synthetic`、`release-ready` 或 `production-ready`。
 
-Golden Path 的最小链路是：clone public Core、用 Docker quickstart 或标准本地路径启动、
-查看 `/demo` 与 public sample pack、修改 synthetic fixture、运行既有检查、观察 signal /
-review packet path，并确认 forbidden write / send / approve / execute / cross-tenant path
-仍被阻断。
+黄金路径的最小链路是：克隆公开 Core、用 Docker 快速启动或标准本地路径启动、
+查看 `/demo` 与公开样板包、修改合成夹具、运行既有检查、观察信号 / 复核包路径，
+并确认禁止写入 / 发送 / 批准 / 执行 / 跨租户路径仍被阻断。
 
 ## English Reference
 
