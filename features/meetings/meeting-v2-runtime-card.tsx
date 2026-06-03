@@ -2253,47 +2253,47 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div>
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "benchmark matrix" : "benchmark matrix"}
+                            {english ? "benchmark matrix" : "基准矩阵"}
                           </p>
                           <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.benchmarkMatrix.workflow.summary}
                           </p>
                           <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted)]">
                             <li>
-                              - workflow · {runtime.v21.benchmarkMatrix.workflow.state} ·{" "}
+                              - {english ? "workflow" : "工作流"} · {runtime.v21.benchmarkMatrix.workflow.state} ·{" "}
                               {runtime.v21.benchmarkMatrix.workflow.pendingRequestCount}{" "}
-                              {english ? "pending request(s)" : "pending request(s)"} ·{" "}
+                              {english ? "pending request(s)" : "待处理请求"} ·{" "}
                               {runtime.v21.benchmarkMatrix.workflow.acknowledgedRunCount}{" "}
-                              {english ? "acknowledged run(s)" : "acknowledged run(s)"}
+                              {english ? "acknowledged run(s)" : "已确认运行"}
                             </li>
                             <li>
-                              - request · {runtime.v21.benchmarkMatrix.workflow.request.state} ·{" "}
-                              {runtime.v21.benchmarkMatrix.workflow.request.requestKey ?? "none"}
+                              - {english ? "request" : "请求"} · {runtime.v21.benchmarkMatrix.workflow.request.state} ·{" "}
+                              {runtime.v21.benchmarkMatrix.workflow.request.requestKey ?? (english ? "none" : "暂无")}
                               {runtime.v21.benchmarkMatrix.workflow.request.requestedAt
                                 ? ` · ${formatDateLabel(runtime.v21.benchmarkMatrix.workflow.request.requestedAt)}`
                                 : ""}
                             </li>
                             <li>
-                              - latest run · {runtime.v21.benchmarkMatrix.workflow.latestRun.state} ·{" "}
+                              - {english ? "latest run" : "最近运行"} · {runtime.v21.benchmarkMatrix.workflow.latestRun.state} ·{" "}
                               {runtime.v21.benchmarkMatrix.workflow.latestRun.runLabel ??
                                 runtime.v21.benchmarkMatrix.workflow.latestRun.benchmarkRunId ??
-                                "none"}
+                                (english ? "none" : "暂无")}
                               {runtime.v21.benchmarkMatrix.workflow.latestRun.recordedAt
                                 ? ` · ${formatDateLabel(runtime.v21.benchmarkMatrix.workflow.latestRun.recordedAt)}`
                                 : ""}
                             </li>
                             <li>
                               - 已确认 · {runtime.v21.benchmarkMatrix.workflow.acknowledgement.state} ·{" "}
-                              {runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedBy ?? "none"}
+                              {runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedBy ?? (english ? "none" : "暂无")}
                               {runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedAt
                                 ? ` · ${formatDateLabel(runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedAt)}`
                                 : ""}
                             </li>
                             <li>
-                              - follow-through · {runtime.v21.benchmarkMatrix.workflow.followThrough.state} ·{" "}
+                              - {english ? "follow-through" : "跟进闭环"} · {runtime.v21.benchmarkMatrix.workflow.followThrough.state} ·{" "}
                               {runtime.v21.benchmarkMatrix.workflow.followThrough.nextAction ??
                                 runtime.v21.benchmarkMatrix.workflow.followThrough.resolvedBy ??
-                                "none"}
+                                (english ? "none" : "暂无")}
                               {(runtime.v21.benchmarkMatrix.workflow.followThrough.resolvedAt ??
                                 runtime.v21.benchmarkMatrix.workflow.followThrough.requestedAt)
                                 ? ` · ${formatDateLabel(

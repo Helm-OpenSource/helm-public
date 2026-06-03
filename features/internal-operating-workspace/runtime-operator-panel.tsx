@@ -100,6 +100,29 @@ function renderStatusLabel(status: string, english: boolean) {
   return labels[normalized] ?? status.replace(/_/g, " ");
 }
 
+function formatMetricLabel(label: string, english: boolean) {
+  if (english) return label;
+
+  const labels: Record<string, string> = {
+    cadence: "节奏",
+    density: "密度",
+    hit: "命中",
+    impact: "影响",
+    interval: "区间",
+    "ineffective after guidance": "指引后无效",
+    "ineffective-after-hit": "命中后无效",
+    risk: "风险",
+    "review escalation": "复核升级",
+    sample: "样本",
+    skip: "跳过",
+    stability: "稳定性",
+    "stability confidence": "稳定性置信度",
+    threshold: "阈值",
+  };
+
+  return labels[label] ?? label;
+}
+
 function formatPanelVisibleText(value: string, english: boolean) {
   if (english) return value;
 
@@ -1167,7 +1190,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.topFailureClasses.slice(0, 3).map((item) => (
                     <div key={item.failureTaxonomy} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.failureTaxonomy} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.failureTaxonomy} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.stabilitySummary}</p>
@@ -1197,7 +1220,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.cohortFamilies.slice(0, 3).map((item) => (
                     <div key={item.cohortKey} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.cohortKey} · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.cohortKey} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1214,7 +1237,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.meetingShapeCohorts.slice(0, 2).map((item) => (
                     <div key={item.meetingShape} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.meetingShape} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.meetingShape} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1228,7 +1251,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.sessionDensityCohorts.slice(0, 2).map((item) => (
                     <div key={item.sessionDensityBand} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.sessionDensityBand} density · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.sessionDensityBand} {formatMetricLabel("density", english)} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1240,7 +1263,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.meetingFrequencyCohorts.slice(0, 2).map((item) => (
                     <div key={item.meetingFrequencyBand} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.meetingFrequencyBand} cadence · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.meetingFrequencyBand} {formatMetricLabel("cadence", english)} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1254,7 +1277,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.participantRoleCohorts.slice(0, 2).map((item) => (
                     <div key={item.participantRolePosture} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.participantRolePosture} · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.participantRolePosture} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1267,12 +1290,12 @@ export function RuntimeOperatorPanel({
                 <ul className="space-y-1 text-sm text-[color:var(--muted-foreground)]">
                   {overview.continuityPilotReview.remediationPostureCohorts.slice(0, 3).map((item) => (
                     <li key={`${item.recoveryState}-${item.latestEffectiveness}`}>
-                      - {item.recoveryState} · {item.latestEffectiveness} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · {item.summary}
+                      - {item.recoveryState} · {item.latestEffectiveness} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {item.summary}
                     </li>
                   ))}
                   {overview.continuityPilotReview.failureHistoryCohorts.slice(0, 3).map((item) => (
                     <li key={item.failureHistoryBand}>
-                      - {item.failureHistoryBand} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · {item.summary} · {item.varianceSummary}
+                      - {item.failureHistoryBand} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {item.summary} · {item.varianceSummary}
                     </li>
                   ))}
                 </ul>
@@ -1560,7 +1583,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.thresholdRevisions.map((item) => (
                     <li key={item.scope} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.scopeType} · {item.scope} · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand} · interval {item.confidenceInterval}
+                        {item.scopeType} · {item.scope} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand} · {formatMetricLabel("interval", english)} {item.confidenceInterval}
                       </p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
                       <p className="mt-1 leading-6">{item.confidenceSummary}</p>
@@ -1570,7 +1593,7 @@ export function RuntimeOperatorPanel({
                     </li>
                   ))}
                   {!overview.continuityPilotReview.thresholdRevisions.length ? (
-                    <li>{english ? "No threshold revision is currently suggested." : "当前没有 thres持守 revision 建议。"}</li>
+                    <li>{english ? "No threshold revision is currently suggested." : "当前没有阈值修订建议。"}</li>
                   ) : null}
                 </ul>
                 <ul className="space-y-1 text-sm text-[color:var(--muted-foreground)]">
@@ -1696,7 +1719,7 @@ export function RuntimeOperatorPanel({
                 <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
                   {english
                     ? `ineffective after guidance ${overview.continuityPilotReview.operatorHandlingEffectiveness.ineffectiveAfterGuidanceRate}% · review escalation ${overview.continuityPilotReview.operatorHandlingEffectiveness.reviewEscalationRate}%`
-                    : `ineffective after guidance ${overview.continuityPilotReview.operatorHandlingEffectiveness.ineffectiveAfterGuidanceRate}% · review escalation ${overview.continuityPilotReview.operatorHandlingEffectiveness.reviewEscalationRate}%`}
+                    : `${formatMetricLabel("ineffective after guidance", english)} ${overview.continuityPilotReview.operatorHandlingEffectiveness.ineffectiveAfterGuidanceRate}% · ${formatMetricLabel("review escalation", english)} ${overview.continuityPilotReview.operatorHandlingEffectiveness.reviewEscalationRate}%`}
                 </p>
                 <ul className="space-y-1 text-sm text-[color:var(--muted-foreground)]">
                   {overview.continuityPilotReview.operatorHandlingEffectiveness.highlights.map((item, index) => (
@@ -1719,7 +1742,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.operatorHandlingEffectiveness.stepReviews.slice(0, 3).map((item) => (
                     <div key={item.stepId} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.label} · {item.correlationBand} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand} · interval {item.confidenceInterval} · impact {item.materialImpactBand} · hit {item.matchedGuidanceRate}% · skip {item.skippedGuidanceRate}% · ineffective-after-hit {item.ineffectiveAfterHitRate}%
+                        {item.label} · {item.correlationBand} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand} · {formatMetricLabel("interval", english)} {item.confidenceInterval} · {formatMetricLabel("impact", english)} {item.materialImpactBand} · {formatMetricLabel("hit", english)} {item.matchedGuidanceRate}% · {formatMetricLabel("skip", english)} {item.skippedGuidanceRate}% · {formatMetricLabel("ineffective-after-hit", english)} {item.ineffectiveAfterHitRate}%
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.correlationSummary}</p>
@@ -1737,7 +1760,7 @@ export function RuntimeOperatorPanel({
             <Card className="workspace-shell-panel border-[color:var(--mode-card-border)]" data-testid="continuity-sop-highlights-card">
               <CardHeader>
                 <CardTitle className="text-lg tracking-tight text-[color:var(--foreground)]">
-                  {english ? "Refined operator SOP" : "refined operator SOP"}
+                  {english ? "Refined operator SOP" : "操作员 SOP 细化"}
                 </CardTitle>
                 <CardDescription className="text-sm leading-7 text-[color:var(--muted-foreground)]">
                   {english
@@ -1763,7 +1786,7 @@ export function RuntimeOperatorPanel({
 
           <div className="grid gap-4 xl:grid-cols-2">
             <QueueCard
-              title={english ? "Budgeted continuity queue" : "budgeted continuity queue"}
+              title={english ? "Budgeted continuity queue" : "有预算的连续性队列"}
               description={
                 english
                   ? "Sessions should show posture, replay risk, recovery state, remediation analytics, repeat-pattern evidence, and bounded runbook guidance without widening execution authority."
@@ -1962,7 +1985,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Verification and truth queue" : "验证 与 truth 队列"}
+              title={english ? "Verification and truth queue" : "验证与真实性队列"}
               description={
                 english
                   ? "Why something was blocked, downgraded or held for review should be visible before any operator treats it as fact."
@@ -1991,7 +2014,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Operating-gap queue" : "operating-gap queue"}
+              title={english ? "Operating-gap queue" : "经营缺口队列"}
               description={
                 english
                   ? "Missing owners, missing evidence, unresolved conflicts, blocked threads, and capability gaps stay explicit here instead of dissolving across separate runtime queues."
@@ -2019,7 +2042,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Promotion posture" : "promotion posture"}
+              title={english ? "Promotion posture" : "晋升姿态"}
               description={
                 english
                   ? "Recent promote / reject / defer decisions stay source-grounded and operator-readable instead of collapsing into silent memory writes."
@@ -2053,7 +2076,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Handoff packets" : "handoff packets"}
+              title={english ? "Handoff packets" : "交接包"}
               description={
                 english
                   ? "Lead-to-worker and worker-to-worker handoffs stay explicit, typed, and reviewable instead of hiding inside conversational carry-over."
@@ -2072,7 +2095,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Initiative runs" : "initiative runs"}
+              title={english ? "Initiative runs" : "主动运行"}
               description={
                 english
                   ? "Bounded problem spaces become initiative runs with explicit target outcomes instead of expanding into a workflow engine."
@@ -2091,7 +2114,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Problem-space queue" : "problem-space queue"}
+              title={english ? "Problem-space queue" : "问题空间队列"}
               description={
                 english
                   ? "Open issues are expressed as bounded problem spaces with owner hints and next steps, not as a workflow engine."
@@ -2113,7 +2136,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Player-coach queue" : "player-coach queue"}
+              title={english ? "Player-coach queue" : "陪跑教练队列"}
               description={
                 english
                   ? "These briefs stay internal and operator-facing. They help a lead coach the next move without becoming an external commitment surface."
@@ -2134,7 +2157,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Coordination trace bridge" : "coordination trace bridge"}
+              title={english ? "Coordination trace bridge" : "协同轨迹桥"}
               description={
                 english
                   ? "This queue shows whether a verified coordination item is still waiting, has entered human execution, or has reached official follow-through on the same operating thread."
@@ -2252,7 +2275,7 @@ export function RuntimeOperatorPanel({
           </Card>
 
           <QueueCard
-            title={english ? "Reflection queue" : "reflection queue"}
+            title={english ? "Reflection queue" : "反思队列"}
             description={
               english
                 ? "Compacts trusted state into reviewable summaries. Candidates only — no auto-promote."
@@ -2273,7 +2296,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Consolidation queue" : "consolidation queue"}
+            title={english ? "Consolidation queue" : "整合队列"}
             description={
               overview.consolidationAuditSummary.summary
             }
@@ -2338,7 +2361,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Capability catalog" : "capability catalog"}
+              title={english ? "Capability catalog" : "能力目录"}
               description={
                 english
                   ? "Capability hints should stay explicit and reviewable. This surface shows what the runtime currently knows how to assemble without implying broader orchestration authority."
@@ -2417,7 +2440,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator next move summary" : "operator next move summary"}
+            title={english ? "Operator next move summary" : "操作员下一步摘要"}
             description={
               english
                 ? "After the top cue is known, the workspace should still answer one bounded next move before anyone scans multiple operator cards by hand."
@@ -2453,7 +2476,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator action cue" : "operator action cue"}
+            title={english ? "Operator action cue" : "操作员动作提示"}
             description={
               english
                 ? "Workspace-level operator scanning should still collapse into one coarse action lane before anyone compares detailed control, review, or continuity cards by hand."
@@ -2490,7 +2513,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator review/control cue" : "operator review/control cue"}
+            title={english ? "Operator review/control cue" : "操作员复核 / 控制提示"}
             description={
               english
                 ? "After the top work lane is clear, the workspace should still say whether the next bounded entry point is review or control before anyone scans both cards by hand."
@@ -2529,7 +2552,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator start point" : "operator start point"}
+            title={english ? "Operator start point" : "操作员起点"}
             description={
               english
                 ? "Workspace-level operator scanning should collapse into one primary bounded move plus one secondary fallback before anyone fans out into the full operating surface."
@@ -2601,7 +2624,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator review action summary" : "operator review action summary"}
+            title={english ? "Operator review action summary" : "操作员复核动作摘要"}
             description={
               english
                 ? "Workspace-level review posture should compress into one bounded next action before the operator scans every review queue by hand."
@@ -2639,7 +2662,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator work summary" : "operator work summary"}
+            title={english ? "Operator work summary" : "操作员工作摘要"}
             description={
               english
                 ? "Workspace-level operator work should collapse continuity attention, control posture, review queues, and critical operating gaps into one bounded next-work summary."
@@ -2776,7 +2799,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator control summary" : "operator control summary"}
+            title={english ? "Operator control summary" : "操作员控制摘要"}
             description={
               english
                 ? "Environment authority, latest execution seam, and benchmark workflow should collapse into one operator-facing control posture before anyone treats this substrate slice as settled."
@@ -2816,7 +2839,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Environment seams" : "environment seams"}
+            title={english ? "Environment seams" : "环境边界"}
             description={
               english
                 ? `Connector, browser, control-plane, workspace-context, and official-action seams stay explicit so capability hints do not silently widen authority. ${overview.environmentContract.summary.connectedConnectorCount} connector(s) are currently connected. Latest execution seam is ${overview.environmentContract.executionSeam.posture}, and authority posture is ${overview.environmentContract.executionAuthority.posture}.`
@@ -2897,7 +2920,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Benchmark matrix" : "benchmark matrix"}
+            title={english ? "Benchmark matrix" : "基准矩阵"}
             description={
               english
                 ? `Runtime eval, adapter conformance, boundary regression, and operator usability stay explicit as four validation gates before this substrate can be trusted. ${overview.benchmarkMatrix.workflow.summary}`
@@ -2923,7 +2946,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Composition-failure inbox" : "composition-failure inbox"}
+            title={english ? "Composition-failure inbox" : "组合失败收件箱"}
             description={
               english
                 ? "Context misses, verification failures and policy blocks stay visible so operators can fix the runtime path instead of silently retrying."
