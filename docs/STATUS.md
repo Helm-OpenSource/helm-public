@@ -50,6 +50,16 @@ not change home routing, demo sign-in, GitHub links, Helm Cloud invite-only
 posture, or no-auto-send boundaries, and does not claim full-repo
 bilingualization completion.
 
+公开登录 / 邀请入口中文文案混写也已继续清理；本批只改登录页的 Helm 组织、试点工作区、
+返回工作区和 Helm Cloud 试用入口文案及源码守卫，不改变认证、SSO、邀请预填、试用申请
+或登录跳转流程，也不声明全仓双语化完成。
+
+Mixed Chinese copy in the public login / invite entry has also been further
+localized. This batch changes login-page Helm organization, trial-workspace,
+return-workspace, and Helm Cloud trial-entry copy plus source guards only; it
+does not change authentication, SSO, invite prefill, trial application, or
+login redirect flows, and does not claim full-repo bilingualization completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。

@@ -1819,4 +1819,18 @@ describe("shared surface hierarchy guards", () => {
       /AI 平台|企业 AI|可 fork|Fork 这套|fork 仓库|Golden Path 检查链|ROI 材料|ROI 问题|CRM 阶段|关键写路径打 trace ID|Helm 已经|Helm 是|CRM 和 HR|clone 并跑/,
     );
   });
+
+  it("keeps public login Chinese entry copy free of mixed Helm spacing", () => {
+    const loginPage = read("app/(auth)/login/page.tsx");
+
+    expect(loginPage).toContain("你的Helm组织");
+    expect(loginPage).toContain("Helm已经知道你是谁");
+    expect(loginPage).toContain("开通你的Helm试点工作区");
+    expect(loginPage).toContain("回到你的Helm工作区");
+    expect(loginPage).toContain("申请Helm Cloud试用");
+
+    expect(loginPage).not.toMatch(
+      /你的 Helm 组织|Helm 已经|开通你的 Helm 试点工作区|回到你的 Helm 工作区|申请 Helm Cloud 试用/,
+    );
+  });
 });

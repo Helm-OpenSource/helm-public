@@ -115,6 +115,16 @@ explanation copy plus source guards only, without changing home routing,
 demo sign-in, GitHub links, Helm Cloud invite-only posture, or no-auto-send
 boundaries.
 
+本轮继续收口公开登录 / 邀请入口中文文案混写；只调整登录页的 Helm 组织、试点工作区、
+返回工作区和 Helm Cloud 试用入口文案及源码守卫，不改变认证、SSO、邀请预填、试用申请
+或登录跳转流程。
+
+This round further localizes mixed Chinese copy in the public login / invite
+entry. It changes login-page Helm organization, trial-workspace,
+return-workspace, and Helm Cloud trial-entry copy plus source guards only,
+without changing authentication, SSO, invite prefill, trial application, or
+login redirect flows.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |
