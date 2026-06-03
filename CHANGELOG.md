@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 Phase 3 脱敏实时校准回执的中文发布门禁术语混写；本批只改公开安全回执、发布负责人、公开发布门禁、脱敏实时校准证据、原始客户数据、原始数据库行、工作区编号、客户标识符、私有复核人备注、私有部署证据、自动客户部署就绪、客户服务等级承诺、生产运行时采用、自动发送 / 批准 / 付款 / 执行权限、原始校准数据、功能开关、允许名单、回滚、审计和复核人控制文案及源码守卫，不改 release readiness 环境变量、校准阈值表、发布门禁回执字段或非声明边界。
 - 继续收口 Node 全新克隆冒烟回执的中文证明范围术语混写；本批只改主分支、干净目录、基于 Node 的黄金路径检查、离线评测、公开守卫、生产构建、本地 HTTP 冒烟验证、D2 Docker 全新克隆冒烟回执、Node / D2 全新克隆路径、阻断项、Docker Compose 上手路径、基于 MySQL 的本地工作区设置、30 分钟上手声明、D2 冒烟完成、客户部署就绪、生产连接器就绪和商业发布 Go/No-Go 批准文案及源码守卫，不改命令表、HTTP smoke 结果、Docker 阻断历史或 D2 回执已关闭阻断项的结论。
 - 继续收口 AI 原生企业 AI 工件模板收口回执的中文证明范围术语混写；本批只改收口回执、公开安全 Pack 交付工件模板、AI 原生企业 AI 用户体验参考工作、公开可审查工件、上下文包、Pack Studio 安全样例、证据矩阵、待复核工作包、证明闭环、黄金路径诊断 / 评测 / 公开守卫验证、静态 / 离线 / 本地运行时冒烟验证、D2 Docker 全新克隆冒烟验证、历史收口状态、发布批准、客户部署就绪、商业发布就绪、30 分钟上手声明、运行时 API、数据模式、连接器采用、客户数据接入、托管 MCP、自动发送 / 批准 / 执行、静默客户关系系统写入和公开证明声明文案及源码守卫，不改验证表、命令结果、剩余阻断项或历史回执边界。
 - 继续收口 Clean History 回执的中文公开安全证明范围术语混写；本批只改仓库可见性门禁、历史级步骤、公开安全回执、公开 Core 历史、真实密钥、完整历史扫描、凭据轮换、发布批准、仓库可见性切换、负责人动作、清洗后的快照、完整私有单体仓库历史、私有源仓受损提交、引用可达性、非密钥、假夹具、密钥检测器、真实凭据和形似凭据内容文案及源码守卫，不改 gitleaks 证据、finding 分类、复现命令、非声明边界或私有凭据轮换责任。

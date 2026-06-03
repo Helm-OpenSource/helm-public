@@ -16,6 +16,26 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：Phase 3 脱敏实时校准回执的中文发布门禁术语混写已继续清理；本批只改
+公开安全回执、发布负责人、公开发布门禁、脱敏实时校准证据、原始客户数据、原始数据库行、
+工作区编号、客户标识符、私有复核人备注、私有部署证据、自动客户部署就绪、客户服务等级承诺、
+生产运行时采用、自动发送 / 批准 / 付款 / 执行权限、原始校准数据、功能开关、允许名单、
+回滚、审计和复核人控制文案及源码守卫，不改变 release readiness 环境变量、校准阈值表、
+发布门禁回执字段或非声明边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese release-gate terminology in the
+Phase 3 redacted live calibration receipt has been further localized. This
+batch changes public-safe receipt, release owner, public release gate, redacted
+live calibration evidence, raw customer data, raw database rows, workspace id,
+customer identifier, private reviewer note, private deployment evidence,
+automatic customer deployment readiness, customer service-level commitment,
+production runtime adoption, automatic send / approve / pay / execute
+permission, raw calibration data, feature flag, allowlist, rollback, audit, and
+reviewer controls wording plus source guards only; it does not change
+release-readiness environment variables, calibration threshold tables,
+release-gate receipt fields, or non-claim boundaries, and does not claim
+full-repo bilingualization completion.
+
 最新双语化收口：Node 全新克隆冒烟回执的中文证明范围术语混写已继续清理；本批只改主分支、
 干净目录、基于 Node 的黄金路径检查、离线评测、公开守卫、生产构建、本地 HTTP 冒烟验证、
 D2 Docker 全新克隆冒烟回执、Node / D2 全新克隆路径、阻断项、Docker Compose 上手路径、

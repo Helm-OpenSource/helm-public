@@ -2220,6 +2220,43 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps redacted live calibration receipt Chinese scope copy localized", () => {
+    const calibrationReceipt = read(
+      "docs/reviews/HELM_BUSINESS_ADVANCEMENT_PHASE3_REDACTED_LIVE_CALIBRATION_REPORT_V1.md",
+    );
+    const chineseBody = calibrationReceipt.slice(
+      calibrationReceipt.indexOf(
+        "本文件是 `RELEASE_READINESS_CALIBRATION_REPORT`",
+      ),
+      calibrationReceipt.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("公开安全回执");
+    expect(chineseBody).toContain("发布负责人");
+    expect(chineseBody).toContain("公开发布门禁");
+    expect(chineseBody).toContain("脱敏实时校准证据");
+    expect(chineseBody).toContain("原始客户数据");
+    expect(chineseBody).toContain("原始数据库行");
+    expect(chineseBody).toContain("工作区编号");
+    expect(chineseBody).toContain("客户标识符");
+    expect(chineseBody).toContain("SQL 输出");
+    expect(chineseBody).toContain("私有复核人备注");
+    expect(chineseBody).toContain("私有部署证据");
+    expect(chineseBody).toContain("自动客户部署就绪");
+    expect(chineseBody).toContain("客户服务等级承诺");
+    expect(chineseBody).toContain("生产运行时采用");
+    expect(chineseBody).toContain("自动发送 / 自动批准 /");
+    expect(chineseBody).toContain("自动付款 / 自动执行权限");
+    expect(chineseBody).toContain("原始校准数据");
+    expect(chineseBody).toContain("功能开关");
+    expect(chineseBody).toContain("允许名单");
+    expect(chineseBody).toContain("回滚、审计和复核人控制");
+
+    expect(chineseBody).not.toMatch(
+      /public-safe receipt|release owner|release gate|redacted live calibration evidence|raw customer data|raw database rows|workspace ids|customer identifiers|SQL output|private reviewer notes|private deployment evidence|该 receipt|automatic customer deployment readiness|customer SLA|production runtime adoption|auto-send|auto-approve|auto-pay|auto-execute permission|raw calibration data|runtime adoption|feature flag|allowlist|rollback|audit 和 reviewer controls/,
+    );
+  });
+
   it("keeps clean-history receipt Chinese safety-scope copy localized", () => {
     const cleanHistoryReceipt = read(
       "docs/reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md",

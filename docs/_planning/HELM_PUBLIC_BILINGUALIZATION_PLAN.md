@@ -38,6 +38,24 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 Phase 3 脱敏实时校准回执的中文发布门禁术语混写；只调整公开安全回执、
+发布负责人、公开发布门禁、脱敏实时校准证据、原始客户数据、原始数据库行、工作区编号、
+客户标识符、私有复核人备注、私有部署证据、自动客户部署就绪、客户服务等级承诺、
+生产运行时采用、自动发送 / 批准 / 付款 / 执行权限、原始校准数据、功能开关、允许名单、
+回滚、审计和复核人控制文案，不改变 release readiness 环境变量、校准阈值表、发布门禁
+回执字段或非声明边界。
+
+This round further localizes mixed Chinese release-gate terminology in the Phase
+3 redacted live calibration receipt. It changes public-safe receipt, release
+owner, public release gate, redacted live calibration evidence, raw customer
+data, raw database rows, workspace id, customer identifier, private reviewer
+note, private deployment evidence, automatic customer deployment readiness,
+customer service-level commitment, production runtime adoption, automatic send
+/ approve / pay / execute permission, raw calibration data, feature flag,
+allowlist, rollback, audit, and reviewer controls wording only, without
+changing release-readiness environment variables, calibration threshold tables,
+release-gate receipt fields, or non-claim boundaries.
+
 本轮继续收口 Node 全新克隆冒烟回执的中文证明范围术语混写；只调整主分支、干净目录、
 基于 Node 的黄金路径检查、离线评测、公开守卫、生产构建、本地 HTTP 冒烟验证、D2 Docker
 全新克隆冒烟回执、Node / D2 全新克隆路径、阻断项、Docker Compose 上手路径、基于 MySQL

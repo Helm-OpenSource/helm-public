@@ -11,15 +11,13 @@ public_safety: Public-safe release receipt summary only. Raw rows, workspace ids
 
 ## 中文主文本 / Chinese Main Text
 
-本文件是 `RELEASE_READINESS_CALIBRATION_REPORT` 需要的 public-safe receipt。它只记录
-release owner 已确认公开 release gate 所需的 redacted live calibration evidence，不包含
-raw customer data、raw database rows、workspace ids、customer identifiers、SQL output、
-private reviewer notes 或 private deployment evidence。
+本文件是 `RELEASE_READINESS_CALIBRATION_REPORT` 需要的公开安全回执。它只记录
+发布负责人已确认公开发布门禁所需的脱敏实时校准证据，不包含原始客户数据、原始数据库行、
+工作区编号、客户标识符、SQL 输出、私有复核人备注或私有部署证据。
 
-该 receipt 不声明 automatic customer deployment readiness、customer SLA、production
-runtime adoption、auto-send / auto-approve / auto-pay / auto-execute permission，也不授权
-发布 raw calibration data。未来 runtime adoption 仍需要对应 feature flag、allowlist、
-rollback、audit 和 reviewer controls。
+该回执不声明自动客户部署就绪、客户服务等级承诺、生产运行时采用、自动发送 / 自动批准 /
+自动付款 / 自动执行权限，也不授权发布原始校准数据。未来运行时采用仍需要对应功能开关、
+允许名单、回滚、审计和复核人控制。
 
 ## English Reference
 
