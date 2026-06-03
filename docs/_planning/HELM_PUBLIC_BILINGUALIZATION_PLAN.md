@@ -76,7 +76,7 @@ changing event types, contract keys, request / response shapes, memory-layer
 keys, or promotion-rule logic.
 
 本轮继续收口 Helm v2 opportunity judge runtime 的中文输出混写；只调整机会判断、主管关注、
-下一步摘要和内部复核提示文案，不改变阶段推断、正则匹配、artifact 文件名、正式 CRM 边界或阴影更新协议。
+下一步摘要和内部复核提示文案，不改变阶段推断、正则匹配、artifact 文件名、正式客户关系系统边界或阴影更新协议。
 
 This round further localizes mixed Chinese output copy in the Helm v2
 opportunity judge runtime. It changes opportunity judgement, manager-attention,
@@ -136,7 +136,7 @@ guidance copy plus source guards only, without changing root layout structure,
 offline mode, retry buttons, or database connection logic.
 
 本轮继续收口公开 trial / demo 入口中文混写；只调整托管版申请、自部署复刻、60 秒演示、
-行业样板、完整读数、黄金路径检查链和真实CRM边界提示文案及源码守卫，不改变试用申请表、
+行业样板、完整读数、黄金路径检查链和客户关系系统边界提示文案及源码守卫，不改变试用申请表、
 demo 登录、行业 pack 数据、GitHub 链接或不自动外发边界。
 
 This round further localizes mixed Chinese copy in the public trial / demo

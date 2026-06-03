@@ -1967,12 +1967,12 @@ describe("shared surface hierarchy guards", () => {
     expect(demoPage).toContain("通用行业样板");
     expect(demoPage).toContain("客户关系管理导入");
     expect(demoPage).toContain("打开完整读数");
-    expect(demoPage).toContain("不会写入CRM");
+    expect(demoPage).toContain("不会写入客户关系系统");
     expect(demoPage).toContain("自己克隆仓库并跑黄金路径检查链");
-    expect(demoLoading).toContain("不会写回真实CRM");
+    expect(demoLoading).toContain("不会写回真实客户关系系统");
 
     expect(combined).not.toMatch(
-      /企业 AI|直接 fork|去 GitHub fork|Helm 自动跑什么|在哪条线停下来|day-1|vertical 样板|通用 vertical|CRM 导入|完整 readout|写 CRM|clone 并跑|Golden Path 检查链|真实 CRM/,
+      /企业 AI|直接 fork|去 GitHub fork|Helm 自动跑什么|在哪条线停下来|day-1|vertical 样板|通用 vertical|CRM 导入|完整 readout|写 CRM|写入CRM|真实CRM|clone 并跑|Golden Path 检查链|真实 CRM/,
     );
   });
 
