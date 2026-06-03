@@ -2084,6 +2084,32 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps public release train runbook Chinese body free of recently fixed mixed release-governance fragments", () => {
+    const releaseTrainRunbook = read(
+      "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",
+    );
+    const chineseBody = releaseTrainRunbook.slice(
+      releaseTrainRunbook.indexOf("本 runbook 定义"),
+      releaseTrainRunbook.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("发布批准");
+    expect(chineseBody).toContain("商业发布声明");
+    expect(chineseBody).toContain("生产服务等级承诺");
+    expect(chineseBody).toContain("检查通过是必要条件但不等于发布批准");
+    expect(chineseBody).toContain("试用版发布保持预发布且不标记为最新版本");
+    expect(chineseBody).toContain("稳定语义化版本线");
+    expect(chineseBody).toContain("负责人闸门");
+    expect(chineseBody).toContain("私有回执、凭据、客户证据和批准编号");
+    expect(chineseBody).toContain("发布命令只是给人工维护者的指引");
+    expect(chineseBody).toContain("公开安全");
+    expect(chineseBody).toContain("人工回执变量");
+
+    expect(chineseBody).not.toMatch(
+      /release approval|commercial launch statement|production SLA|customer deployment proof|Enterprise readiness claim|green checks|trial release|prerelease 且|非 latest|owner 修改 version strategy|stable release|stable semver line|owner gate|private receipt|credential、customer evidence|approval id|release command|maintainer 的 guidance|release tag|public safety gates|quality gates|release machine|manual receipt/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");

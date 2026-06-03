@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 public release train runbook 的中文发布治理术语混写；本批只改发布批准、商业发布声明、生产服务等级承诺、负责人闸门、稳定语义化版本线、私有回执、发布命令和公开安全门禁文案及源码守卫，不改 release gate、GitHub Release、版本策略、人工回执变量或非 SLA 边界。
 - 继续收口 integration template 的中文连接器术语混写；本批只改连接器 / 适配器、自动 / 复核 / 永远手动、预演、只读、提示条、追踪、OAuth 范围、退出与数据保留说明及源码守卫，不改连接器安全清单、测试要求、`authMode=MOCK` 默认或可接受 PR 边界。
 - 继续收口 trial response / on-call 文档里的中文运营术语混写；本批只改首次响应人、值守维护者、普通试用反馈、跨工作区、数据保留 / 删除、审计链、发布硬门禁、集成请求和尽力响应文案及源码守卫，不改响应目标、P0/P1 升级规则、`release:check` 变量或非 SLA 边界。
 - 继续收口 public trial data policy 的中文法律 / 数据保留术语混写；本批只改工作区负责人、宽限期、子处理方、数据处理协议、删除请求、发布硬门禁、注册勾选框与数据保留清单文案及源码守卫，不改 `AccessState` 枚举、30/7 目标口径、删除证明、数据导出、SLA 或未来 ToS / DPA 边界。

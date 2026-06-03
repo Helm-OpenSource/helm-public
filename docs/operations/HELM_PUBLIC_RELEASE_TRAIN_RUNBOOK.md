@@ -12,19 +12,17 @@ public_safety: Public release train runbook. Lists public-safe cadence, gates, c
 ## 中文主文本 / Chinese Main Text
 
 本 runbook 定义 `Helm-OpenSource/helm-public` 在第一轮 public-Core launch 之后
-如何发布。它不是 release approval、commercial launch statement、production SLA、
-customer deployment proof 或 Cloud / Enterprise readiness claim。
+如何发布。它不是发布批准、商业发布声明、生产服务等级承诺、
+客户部署证明，也不是 Helm Cloud / Helm Enterprise 已就绪声明。
 
 发布原则：public Core 通过小而可 review 的 PR 发布，不能直接 push 到 `main`；
-green checks 是必要条件但不等于 release approval；trial release 保持 prerelease 且
-非 latest，除非 owner 修改 version strategy；stable release 必须推进 stable semver line
-并需要 owner gate；所有 private receipt、credential、customer evidence 和 approval id
-都留在 repo 外。
+检查通过是必要条件但不等于发布批准；试用版发布保持预发布且不标记为最新版本，
+除非负责人修改版本策略；稳定版发布必须推进稳定语义化版本线并通过负责人闸门；
+所有私有回执、凭据、客户证据和批准编号都留在仓库外。
 
-`npm run release:check` 打印的 release command 只是给人工 maintainer 的 guidance；
-命令本身不会创建 tag 或 GitHub Release。任何 release tag 前都必须重新跑 public safety
-gates、activation / quality gates，并在 release machine 上设置必要的 manual receipt
-变量。
+`npm run release:check` 打印的发布命令只是给人工维护者的指引；
+命令本身不会创建 tag 或 GitHub Release。任何发布标签前都必须重新跑公开安全
+门禁、激活 / 质量门禁，并在发布机器上设置必要的人工回执变量。
 
 ## English Reference
 
