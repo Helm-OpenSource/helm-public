@@ -11,21 +11,38 @@ public_safety: Public maintainer operating baseline. Records repository, release
 
 ## 中文主文本 / Chinese Main Text
 
-本文是 `helm-public` 在 2026-06-01 公开后的第一份 maintainer operating
-baseline。它是 project-health snapshot，不是 release approval、commercial SLA、
-customer commitment 或 Cloud / Enterprise readiness statement。
+本文是 `helm-public` 在 2026-06-01 公开后的第一份维护者运营基线。它是项目健康快照，
+不是发布批准、商业服务等级承诺、客户承诺，也不是 Helm Cloud / Helm Enterprise 就绪声明。
 
-范围只包含公开 GitHub repository surface、release / tag posture、`main` 上的 CI /
-guard status、public docs / contribution entry points，以及当前 maintainer risks 和
-next operating queue。私有 Pack、Overlay、客户部署、control-plane readiness、私有
-owner approval record、credential rotation receipt、legal reviewer record，以及自动
-write / send / approval / settlement / customer commitment path 均不在本状态表内。
+范围只包含公开 GitHub 仓库表面、发布与标签姿态、`main` 上的 CI / 守卫状态、
+公开文档 / 贡献入口，以及当前维护者风险和下一步运营队列。私有 Pack、Overlay、客户部署、
+控制面就绪、私有负责人批准记录、凭据轮换回执、法律复核记录，以及自动写入 / 发送 / 批准 /
+结算 / 客户承诺路径均不在本状态表内。
 
-该 baseline 的运营含义是：public Core repo、docs index、CI / Preflight、branch
-protection、prerelease tag、launch announcement 和 issue / PR templates 已成立；
-maintainer operating loop、issue triage、community onboarding、Golden Path external
-testing、release metadata hygiene、required-check drift monitoring 和 day-7 readout
-仍需下一层执行。
+该运营基线的含义是：公开 Core 仓库、文档索引、CI / 预检、分支保护、预发布标签、
+发布公告和 issue / PR 模板已成立；维护者运营闭环、issue 分诊、社区上手、Golden Path
+外部测试、发布元数据卫生、必需检查漂移监控和第 7 日读数仍需下一层执行。
+
+证据摘要：仓库已经是公开 Apache-2.0 Core 仓库；默认分支是 `main`；`main` 头部与
+`origin/main` 已同步；最新 `main` 检查为绿；分支保护已开启并要求严格状态检查、PR 复核、
+管理员执行、禁止强推 / 删除和会话解决；`v0.1.0-trial` 已作为预发布发布；公开 issue 队列
+保留 Golden Path 测试入口；Discussions、issue 模板、PR 模板和公开文档清单已成立。
+
+四档摘要：已经完整成立的是公开 Core 仓库、文档索引、`main` 上的 CI / 预检、分支保护、
+预发布标签、发布公告、issue / PR 模板、发布列车作业手册和无开放 PR 积压队列。已成形但仍需
+下一层的是维护者运营闭环、issue 分诊、社区上手、Golden Path 外部测试、发布元数据卫生、
+必需检查漂移监控和第 7 日增长读数。刻意未做的是更改 GitHub Latest 标识状态、声明 Cloud /
+Enterprise 就绪或给出稳定版发布批准。风险项是 GitHub 社区资料文档元数据仍指向
+`tree/master/docs`、旧 `V1.0.0` 仍显示为仓库 Latest，以及必需检查名称需要与工作流任务名称保持同步。
+
+风险队列摘要：`main` 分支保护、贡献入口模板和可复用发布列车作业手册已关闭；仍需处理的是
+仓库文档元数据漂移、旧 `V1.0.0` 与 `v0.1.0-trial` 的 Latest 标识姿态，以及发布后
+人工回执缺口的公开安全表达。
+
+下一步摘要：先决定旧 `V1.0.0` 与 `v0.1.0-trial` 的 Latest 标识姿态，再把仓库文档元数据
+从 `master/docs` 修到 `main/docs`，随后在 2026-06-09 用公开安全证据跑第 7 日增长读数；
+下一次 `v0.2.0-trial` 候选必须先完成完整门禁和负责人回执检查；issue #39 继续作为首个公开
+Golden Path 测试路线，反馈必须先做范围复核，再转成小 PR。
 
 ## English Reference
 

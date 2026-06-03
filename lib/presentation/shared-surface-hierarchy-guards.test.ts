@@ -2400,6 +2400,44 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps public maintainer status Chinese body localized for operating baseline terminology", () => {
+    const maintainerStatus = read(
+      "docs/operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md",
+    );
+    const chineseBody = maintainerStatus.slice(
+      maintainerStatus.indexOf("本文是 `helm-public`"),
+      maintainerStatus.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("维护者运营基线");
+    expect(chineseBody).toContain("项目健康快照");
+    expect(chineseBody).toContain("发布批准");
+    expect(chineseBody).toContain("商业服务等级承诺");
+    expect(chineseBody).toContain("公开 GitHub 仓库表面");
+    expect(chineseBody).toContain("发布与标签姿态");
+    expect(chineseBody).toContain("公开文档 / 贡献入口");
+    expect(chineseBody).toContain("维护者风险");
+    expect(chineseBody).toContain("下一步运营队列");
+    expect(chineseBody).toContain("负责人批准记录");
+    expect(chineseBody).toContain("凭据轮换回执");
+    expect(chineseBody).toContain("法律复核记录");
+    expect(chineseBody).toContain("自动写入 / 发送 / 批准 /");
+    expect(chineseBody).toContain("维护者运营闭环");
+    expect(chineseBody).toContain("issue 分诊");
+    expect(chineseBody).toContain("社区上手");
+    expect(chineseBody).toContain("外部测试");
+    expect(chineseBody).toContain("发布元数据卫生");
+    expect(chineseBody).toContain("必需检查漂移监控");
+    expect(chineseBody).toContain("证据摘要");
+    expect(chineseBody).toContain("四档摘要");
+    expect(chineseBody).toContain("风险队列摘要");
+    expect(chineseBody).toContain("下一步摘要");
+
+    expect(chineseBody).not.toMatch(
+      /maintainer operating baseline|project-health snapshot|release approval|commercial SLA|customer commitment|readiness statement|repository surface|tag posture|guard status|public docs|contribution entry points|maintainer risks|next operating queue|control-plane readiness|owner approval record|credential rotation receipt|legal reviewer record|customer commitment path|public Core repo|docs index|branch protection|prerelease tag|launch announcement|maintainer operating loop|issue triage|community onboarding|external testing|release metadata hygiene|required-check drift monitoring|day-7 readout|repository metadata|post-launch|workflow job/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");

@@ -38,6 +38,26 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口公开维护者状态文档的中文维护者运营术语混写，并补齐中文证据、四档、
+风险队列和下一步摘要；只调整维护者运营基线、项目健康快照、发布批准、商业服务等级承诺、
+公开仓库表面、发布与标签姿态、维护者风险、运营队列、负责人批准记录、凭据轮换回执、
+法律复核记录、自动写入 / 发送 / 批准 / 结算 / 客户承诺路径、维护者运营闭环、issue 分诊、
+社区上手、外部测试、发布元数据卫生和必需检查漂移监控文案，不改变英文参考表格、GitHub 证据、
+分支保护、发布姿态、仅负责人回执边界或 Cloud / Enterprise 非承诺边界。
+
+This round further localizes mixed Chinese maintainer-operations terminology in
+the public maintainer status doc and adds Chinese evidence, four-tier,
+risk-queue, and next-step summaries. It changes
+maintainer-operating-baseline, project-health-snapshot, release-approval,
+commercial-service-level-commitment, public-repository-surface, release/tag
+posture, maintainer risks, operating queue, owner-approval record,
+credential-rotation receipt, legal-reviewer record, automatic write / send /
+approval / settlement / customer-commitment path, maintainer operating loop,
+issue triage, community onboarding, external testing, release-metadata hygiene,
+and required-check drift-monitoring wording only, without changing the English
+reference tables, GitHub evidence, branch protection, release posture,
+owner-only receipt boundaries, or Cloud / Enterprise non-commitment boundaries.
+
 本轮继续收口 public trial runbook 里的中文运营术语混写；只调整内部交接、复核动作、
 当前工作区、追踪时间线、发布硬门禁、连接器预演、受控租户、值守和子处理方文案，
 不改变 trace 字段、审计对象、试用数据政策、自动外发或写回边界。
