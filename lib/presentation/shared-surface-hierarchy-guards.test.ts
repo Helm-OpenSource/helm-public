@@ -2197,6 +2197,40 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps public operating model Chinese opening free of recently fixed mixed operating-model fragments", () => {
+    const operatingModel = read(
+      "docs/operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md",
+    );
+    const chineseOpening = operatingModel.slice(
+      operatingModel.indexOf("本文定义 `Helm-OpenSource/helm-public`"),
+      operatingModel.indexOf("## English Reference"),
+    );
+
+    expect(chineseOpening).toContain("公开 Core 使命");
+    expect(chineseOpening).toContain("运营方法");
+    expect(chineseOpening).toContain("OKR / KPI 闭环");
+    expect(chineseOpening).toContain("认证伙伴状态");
+    expect(chineseOpening).toContain("生产服务等级承诺");
+    expect(chineseOpening).toContain("客户部署就绪");
+    expect(chineseOpening).toContain("自动对外发送、自动批准、自动结算");
+    expect(chineseOpening).toContain("市场或插件沙箱");
+    expect(chineseOpening).toContain("可复刻、有证据支撑、复核优先的运营闭环");
+    expect(chineseOpening).toContain("先建立信任再扩大规模");
+    expect(chineseOpening).toContain("先激活再触达");
+    expect(chineseOpening).toContain("先贡献再扩张");
+    expect(chineseOpening).toContain("用证据推进集成");
+    expect(chineseOpening).toContain("边界明确的开放核心");
+    expect(chineseOpening).toContain("公开守卫");
+    expect(chineseOpening).toContain("夹具证据");
+    expect(chineseOpening).toContain("激活回执");
+    expect(chineseOpening).toContain("负责人闸门");
+    expect(chineseOpening).toContain("触达指标不能替代激活证据");
+
+    expect(chineseOpening).not.toMatch(
+      /public Core mission|operating method|KPI loop|certified partner status|production SLA|customer deployment readiness|automatic external send|automatic approval|automatic settlement|marketplace|plugin sandbox|mission 是|operations work|forkable|evidence-backed|review-first|operating loop|trust before scale|activation before reach|contribution before expansion|integration by evidence|open-core with explicit boundary|公开 guard|fixture evidence|activation receipt|owner gate|public SLA|reach metrics|activation evidence/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");

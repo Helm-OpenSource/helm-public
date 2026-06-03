@@ -11,20 +11,19 @@ public_safety: Public Core operating model. This is not a release approval, comm
 
 ## 中文主文本 / Chinese Main Text
 
-本文定义 `Helm-OpenSource/helm-public` 的 public Core mission、direction、
-operating method 和第一层 OKR / KPI loop。它只适用于 Apache-2.0 Core 仓库，
-不批准 Helm Cloud、Helm Enterprise、certified partner status、production SLA、
-customer deployment readiness、automatic external send、automatic approval、
-automatic settlement、marketplace 或 plugin sandbox。
+本文定义 `Helm-OpenSource/helm-public` 的公开 Core 使命、方向、
+运营方法和第一层 OKR / KPI 闭环。它只适用于 Apache-2.0 Core 仓库，
+不批准 Helm Cloud、Helm Enterprise、认证伙伴状态、生产服务等级承诺、
+客户部署就绪、自动对外发送、自动批准、自动结算、市场或插件沙箱。
 
-Helm Public Core 的 mission 是帮助交付工程师把企业 AI operations work 转成
-forkable、evidence-backed、review-first 的 operating loop。运营方式必须坚持：
-trust before scale、activation before reach、contribution before expansion、
-integration by evidence，以及 open-core with explicit boundary。
+Helm 公开 Core 的使命是帮助交付工程师把企业 AI 运营工作转成
+可复刻、有证据支撑、复核优先的运营闭环。运营方式必须坚持：
+先建立信任再扩大规模、先激活再触达、先贡献再扩张、
+用证据推进集成，以及边界明确的开放核心。
 
-所有公开运营变更默认通过小 PR、公开 guard、fixture evidence 或 activation receipt
-证明；高风险措辞、商业姿态、安全细节和外部承诺必须走 owner gate。KPI 是运营目标，
-不是 public SLA；reach metrics 不能替代 activation evidence。
+所有公开运营变更默认通过小 PR、公开守卫、夹具证据或激活回执
+证明；高风险措辞、商业姿态、安全细节和外部承诺必须走负责人闸门。
+KPI 是运营目标，不是公开服务等级承诺；触达指标不能替代激活证据。
 
 ## English Reference
 
