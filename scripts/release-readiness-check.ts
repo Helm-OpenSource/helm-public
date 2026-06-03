@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * v0.1.0-trial release readiness gate
+ * Helm public Core release readiness gate
  *
  * Single-command public Core pre-tag check: runs the public-safe validation
  * chain plus prints a manual-action checklist for items that depend on
@@ -17,8 +17,15 @@
  *   # Local pre-tag rehearsal (skips the heavier suite):
  *   npm run release:check
  *
- *   # Full pre-tag run (use before tagging v0.1.0-trial):
+ *   # Full pre-tag run:
  *   RELEASE_READINESS_FULL=true npm run release:check
+ *
+ *   # Configure the next release train when not checking the default v0.1.0-trial:
+ *   HELM_RELEASE_CHANNEL=trial \
+ *   HELM_RELEASE_TARGET_TAG=v0.2.0-trial \
+ *   HELM_RELEASE_TARGET_TITLE="Helm v0.2.0-trial" \
+ *   RELEASE_READINESS_FULL=true \
+ *   npm run release:check
  *
  *   # Acknowledge each manual item before final tag:
  *   RELEASE_READINESS_CREDENTIAL_ROTATED=2026-04-27 \
@@ -31,8 +38,8 @@
  *   RELEASE_READINESS_FULL=true \
  *   npm run release:check
  *
- * This script does NOT tag a release. It only decides whether v0.1.0-trial
- * is allowed to enter the manual tagging step.
+ * This script does NOT tag a release. It only decides whether the configured
+ * release target is allowed to enter the manual tagging step.
  */
 import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -51,6 +58,9 @@ export const PUBLIC_MIRROR_CLEAN_RECEIPT_DIR =
 export const PUBLIC_MIRROR_CLEAN_RECEIPT_KIND = "public-mirror-clean";
 export const RELEASE_READINESS_TARGET_TAG = "v0.1.0-trial";
 export const RELEASE_READINESS_TARGET_TITLE = "Helm v0.1.0-trial";
+export const RELEASE_READINESS_DEFAULT_CHANNEL = "trial";
+
+export type ReleaseChannel = "trial" | "stable";
 
 type Step = {
   readonly id: string;
@@ -76,6 +86,8 @@ export type ReleaseTagStrategyInput = {
   readonly currentHead: string;
   readonly existingTags: ReadonlyArray<ExistingReleaseTag>;
   readonly targetTag?: string;
+  readonly targetTitle?: string;
+  readonly releaseChannel?: ReleaseChannel;
 };
 
 export type ReleaseTagStrategy = {
@@ -85,6 +97,13 @@ export type ReleaseTagStrategy = {
   readonly manualCommands: ReadonlyArray<string>;
   readonly warnings: ReadonlyArray<string>;
   readonly blockingIssues: ReadonlyArray<string>;
+};
+
+export type ReleaseTargetConfig = {
+  readonly targetTag: string;
+  readonly targetTitle: string;
+  readonly releaseChannel: ReleaseChannel;
+  readonly configurationErrors: ReadonlyArray<string>;
 };
 
 export type PublicMirrorCleanReceiptCommandEvidence = {
@@ -153,8 +172,37 @@ function findHighestStableTag(
     )[0];
 }
 
-function releaseFlagsForTagPlan(highestStableTag: ExistingReleaseTag | undefined): string[] {
-  const flags = ["--prerelease", "--latest=false", "--generate-notes"];
+export function resolveReleaseTargetFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): ReleaseTargetConfig {
+  const targetTag = env.HELM_RELEASE_TARGET_TAG?.trim() || RELEASE_READINESS_TARGET_TAG;
+  const targetTitle = env.HELM_RELEASE_TARGET_TITLE?.trim() || `Helm ${targetTag}`;
+  const configuredChannel = env.HELM_RELEASE_CHANNEL?.trim();
+  const configurationErrors: string[] = [];
+  let releaseChannel: ReleaseChannel = RELEASE_READINESS_DEFAULT_CHANNEL;
+
+  if (configuredChannel === "stable" || configuredChannel === "trial") {
+    releaseChannel = configuredChannel;
+  } else if (configuredChannel) {
+    configurationErrors.push("HELM_RELEASE_CHANNEL must be trial or stable.");
+  }
+
+  return {
+    targetTag,
+    targetTitle,
+    releaseChannel,
+    configurationErrors,
+  };
+}
+
+function releaseFlagsForTagPlan(
+  releaseChannel: ReleaseChannel,
+  highestStableTag: ExistingReleaseTag | undefined,
+): string[] {
+  const flags =
+    releaseChannel === "stable"
+      ? ["--latest", "--generate-notes"]
+      : ["--prerelease", "--latest=false", "--generate-notes"];
   if (highestStableTag) {
     flags.push(`--notes-start-tag ${highestStableTag.name}`);
   }
@@ -163,11 +211,13 @@ function releaseFlagsForTagPlan(highestStableTag: ExistingReleaseTag | undefined
 
 export function buildReleaseTagStrategy(input: ReleaseTagStrategyInput): ReleaseTagStrategy {
   const targetTag = input.targetTag ?? RELEASE_READINESS_TARGET_TAG;
+  const targetTitle = input.targetTitle ?? `Helm ${targetTag}`;
+  const releaseChannel = input.releaseChannel ?? RELEASE_READINESS_DEFAULT_CHANNEL;
   const targetCommit = input.currentHead.trim();
   const targetVersion = parseTagVersionBase(targetTag);
   const targetTagRecord = input.existingTags.find((tag) => tag.name === targetTag);
   const highestStableTag = findHighestStableTag(input.existingTags);
-  const releaseFlags = releaseFlagsForTagPlan(highestStableTag);
+  const releaseFlags = releaseFlagsForTagPlan(releaseChannel, highestStableTag);
   const warnings: string[] = [];
   const blockingIssues: string[] = [];
 
@@ -183,11 +233,31 @@ export function buildReleaseTagStrategy(input: ReleaseTagStrategyInput): Release
 
   if (highestStableTag && targetVersion) {
     const highestStableVersion = parseStableTagVersion(highestStableTag.name);
-    if (highestStableVersion && compareVersionTuple(highestStableVersion, targetVersion) > 0) {
-      warnings.push(
-        `Existing stable release tag ${highestStableTag.name} is higher than ${targetTag}; publish ${targetTag} only as a prerelease with --latest=false, or update the version strategy before tagging.`,
+    const stableComparison = highestStableVersion
+      ? compareVersionTuple(highestStableVersion, targetVersion)
+      : 0;
+    if (highestStableVersion && stableComparison > 0) {
+      if (releaseChannel === "stable") {
+        blockingIssues.push(
+          `Stable release target ${targetTag} must be greater than existing stable release tag ${highestStableTag.name}. Use releaseChannel=trial for prereleases, or update the version strategy before tagging.`,
+        );
+      } else {
+        warnings.push(
+          `Existing stable release tag ${highestStableTag.name} is higher than ${targetTag}; publish ${targetTag} only as a prerelease with --latest=false, or update the version strategy before tagging.`,
+        );
+      }
+    }
+    if (releaseChannel === "stable" && highestStableVersion && stableComparison === 0) {
+      blockingIssues.push(
+        `Stable release target ${targetTag} must be greater than existing stable release tag ${highestStableTag.name}. Reusing the same stable version would create release-latest ambiguity.`,
       );
     }
+  }
+
+  if (releaseChannel === "stable" && !parseStableTagVersion(targetTag)) {
+    blockingIssues.push(
+      `Stable release target ${targetTag} must be a stable semver tag such as v1.0.1.`,
+    );
   }
 
   if (blockingIssues.length > 0) {
@@ -205,13 +275,13 @@ export function buildReleaseTagStrategy(input: ReleaseTagStrategyInput): Release
     "gh release create",
     targetTag,
     "--verify-tag",
-    `--title "${RELEASE_READINESS_TARGET_TITLE}"`,
+    `--title "${targetTitle}"`,
     ...releaseFlags,
   ].join(" ");
   const manualCommands = targetTagRecord
     ? [releaseCommand]
     : [
-        `git tag -a ${targetTag} ${targetCommit} -m "${RELEASE_READINESS_TARGET_TITLE} release gate passed"`,
+        `git tag -a ${targetTag} ${targetCommit} -m "${targetTitle} release gate passed"`,
         `git push origin ${targetTag}`,
         releaseCommand,
       ];
@@ -659,9 +729,17 @@ function evaluateChecklist(): ChecklistResult[] {
 
 function main(): number {
   const isFullChain = process.env.RELEASE_READINESS_FULL?.toLowerCase() === "true";
+  const releaseTarget = resolveReleaseTargetFromEnv();
   console.log(
-    `\n=== Helm v0.1.0-trial release readiness check (${isFullChain ? "FULL" : "FAST"}) ===`,
+    `\n=== ${releaseTarget.targetTitle} release readiness check (${isFullChain ? "FULL" : "FAST"} / ${releaseTarget.releaseChannel}) ===`,
   );
+  if (releaseTarget.configurationErrors.length > 0) {
+    console.log("\n=== Release target configuration errors ===");
+    for (const error of releaseTarget.configurationErrors) {
+      console.log(`  ✗ ${error}`);
+    }
+    return 1;
+  }
 
   const stepResults: StepResult[] = [];
   for (const step of STEPS) {
@@ -689,6 +767,9 @@ function main(): number {
   const tagStrategy = buildReleaseTagStrategy({
     currentHead: readCurrentHeadForReleaseTagStrategy(),
     existingTags: readLocalTagsForReleaseTagStrategy(),
+    releaseChannel: releaseTarget.releaseChannel,
+    targetTag: releaseTarget.targetTag,
+    targetTitle: releaseTarget.targetTitle,
   });
   printReleaseTagStrategy(tagStrategy);
 
@@ -697,7 +778,9 @@ function main(): number {
     unmetChecklist.length === 0 &&
     tagStrategy.blockingIssues.length === 0
   ) {
-    console.log("\nALL CLEAR — v0.1.0-trial may proceed to the manual tagging step.");
+    console.log(
+      `\nALL CLEAR — ${releaseTarget.targetTag} may proceed to the manual tagging step.`,
+    );
     if (!isFullChain) {
       console.log(
         "  (Note: FAST mode skipped test/build/e2e/quality:regression. Re-run with RELEASE_READINESS_FULL=true before tagging.)",
