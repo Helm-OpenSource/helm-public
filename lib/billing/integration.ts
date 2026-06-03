@@ -143,6 +143,12 @@ function getPortalAvailabilityMessage(rail: PaymentRailResolution, english: bool
     : "中国区支付通道当前不提供完整订阅门户能力。订阅管理仍保持为一层窄订阅概览，加上对应支付渠道的购买 / 恢复路径。";
 }
 
+function getMissingBillingCustomerMessage(english: boolean) {
+  return english
+    ? "This organization does not have a live billing customer yet. Start checkout first."
+    : "当前组织还没有可管理的付费客户，请先完成订阅购买。";
+}
+
 function getRefreshAvailabilityMessage(rail: PaymentRailResolution, english: boolean) {
   if (rail.provider === PAYMENT_PROVIDER.STRIPE) {
     return english
@@ -653,7 +659,7 @@ export async function createWorkspaceBillingPortalSession(input: {
       billingPortalMode: rail.billingPortalMode,
     })
   ) {
-    throw new Error("This organization does not have a live billing customer yet. Start checkout first.");
+    throw new Error(getMissingBillingCustomerMessage(english));
   }
 
   const portal = await createStripeBillingPortalSession({
