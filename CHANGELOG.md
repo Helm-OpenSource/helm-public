@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 Solution Extension 协议的中文公开扩展边界术语混写；本批只改公开 Core 版本、通用扩展、私有客户 overlay、结算逻辑、私有交付作业手册、复核优先、有界方案扩展层、领域特定界面、报告资产、有界运行时适配器、市场、插件沙箱、结算通道、客户交付项目跟踪器、自动对外发送权限、通用 / 合成名称、合成 / 脱敏夹具和复核优先边界文案及源码守卫，不改扩展协议、目录命名规则、私有客户定制边界或 Core / Pack / Overlay 依赖方向。
 - 继续收口运营信号流图要求的中文只读信号流术语混写；本批只改运营信号流图、公开 Core 契约、业务信号、建议 / 承诺、只读投影、运行时 DAG、调度器、重试队列、分发器、工作流引擎、BI 平台、自动执行平面、顺畅 / 积压 / 阻塞、来源信号、复核包、候选动作、报告、记忆候选、被拒输入、确定性规则、AI 辅助解释、人工复核、稳定信号键、来源家族、对象链接、拒绝原因、证据姿态、复核状态、负责人 / 复核人路由、边界说明、私有域名和私有部署回执文案及源码守卫，不改英文参考、信号流合约、验收命令或不自动执行边界。
 - 继续收口认证生态清单的中文人工认证边界术语混写；本批只改连接器、工作流包、伙伴、部署、人工认证门禁、市场、结算通道、转售计划、客户结果保证、负责人、范围、支持 / 不支持用例、证据引用、复核边界、回滚 / 撤回路径、客户可见声明、非承诺说明、批准和复核优先边界文案及源码守卫，不改认证流程、输出枚举、公开 Helm Certified 字样规则或品牌授权边界。
 - 继续收口开源与商业边界文档的中文公开 / 商业边界术语混写；本批只改复刻、复核优先、公开安全、SDK 接缝、Core 导入、维护者复核、认证、市场、结算通道、客户结果保证和商标许可文案及源码守卫，不改 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、依赖方向或认证品牌边界。

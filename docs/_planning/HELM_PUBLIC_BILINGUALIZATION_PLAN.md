@@ -38,6 +38,23 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 Solution Extension 协议的中文公开扩展边界术语混写；只调整公开 Core 版本、
+通用扩展、私有客户 overlay、结算逻辑、私有交付作业手册、复核优先、有界方案扩展层、
+领域特定界面、报告资产、有界运行时适配器、市场、插件沙箱、结算通道、客户交付项目跟踪器、
+自动对外发送权限、通用 / 合成名称、合成 / 脱敏夹具和复核优先边界文案，
+不改变扩展协议、目录命名规则、私有客户定制边界或 Core / Pack / Overlay 依赖方向。
+
+This round further localizes mixed Chinese public-extension boundary
+terminology in the Solution Extension protocol. It changes public Core version,
+generic extension, private customer overlay, settlement logic, private delivery
+runbook, review-first, bounded solution-extension layer, domain-specific
+surface, report asset, bounded runtime adapter, marketplace, plugin sandbox,
+settlement rail, customer delivery project tracker, automatic external-send
+authority, generic / synthetic names, synthetic / redacted fixtures, and
+review-first boundaries wording only, without changing the extension protocol,
+directory naming rules, private customer customization boundary, or Core / Pack
+/ Overlay dependency direction.
+
 本轮继续收口运营信号流图要求的中文只读信号流术语混写；只调整运营信号流图、公开 Core 契约、
 业务信号、建议 / 承诺、只读投影、运行时 DAG、调度器、重试队列、分发器、工作流引擎、
 BI 平台、自动执行平面、顺畅 / 积压 / 阻塞、来源信号、复核包、候选动作、报告、记忆候选、

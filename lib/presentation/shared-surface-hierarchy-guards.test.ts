@@ -2362,6 +2362,37 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps solution extension protocol Chinese body localized for public extension boundary terms", () => {
+    const extensionProtocol = read(
+      "docs/product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md",
+    );
+    const chineseBody = extensionProtocol.slice(
+      extensionProtocol.indexOf("本文件是 Solution Extension"),
+      extensionProtocol.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("Solution Extension 协议的公开 Core 版本");
+    expect(chineseBody).toContain("公开、通用的扩展");
+    expect(chineseBody).toContain("结算逻辑");
+    expect(chineseBody).toContain("私有交付作业手册");
+    expect(chineseBody).toContain("复核优先的有界方案扩展层");
+    expect(chineseBody).toContain("领域特定界面");
+    expect(chineseBody).toContain("报告资产");
+    expect(chineseBody).toContain("有界运行时适配器");
+    expect(chineseBody).toContain("不是市场");
+    expect(chineseBody).toContain("插件沙箱");
+    expect(chineseBody).toContain("结算通道");
+    expect(chineseBody).toContain("客户交付项目跟踪器");
+    expect(chineseBody).toContain("自动对外发送权限");
+    expect(chineseBody).toContain("通用 / 合成名称");
+    expect(chineseBody).toContain("合成 / 脱敏夹具");
+    expect(chineseBody).toContain("复核优先边界");
+
+    expect(chineseBody).not.toMatch(
+      /Solution Extension protocol|public Core version|generic 的|extension 如何|settlement logic|delivery runbook|review-first|domain-specific surfaces|fixtures、report assets|bounded runtime adapters|marketplace|plugin sandbox|settlement rail|customer delivery project tracker|external-send authority|generic \/ synthetic|synthetic \/ redacted fixtures|review-first boundaries/,
+    );
+  });
+
   it("keeps OPC weekly packet Chinese body free of recently fixed mixed public-operations fragments", () => {
     const opcPacket = read("docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md");
     const chineseBody = opcPacket.slice(

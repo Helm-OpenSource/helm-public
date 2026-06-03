@@ -12,17 +12,15 @@ review_after: 2026-07-11
 
 ## 中文主文本 / Chinese Main Text
 
-本文件是 Solution Extension protocol 的 public Core 版本。它定义公开、generic 的
-extension 如何与 Helm Core 发生关系，但不发布私有客户 overlay、商业 Pack 实现细节、
-settlement logic 或私有 delivery runbook。
+本文件是 Solution Extension 协议的公开 Core 版本。它定义公开、通用的扩展如何与 Helm Core
+发生关系，但不发布私有客户 overlay、商业 Pack 实现细节、结算逻辑或私有交付作业手册。
 
-Solution Extension 是 review-first 的有界方案扩展层，可以在 Helm Core 之上组合
-domain-specific surfaces、fixtures、report assets 和 bounded runtime adapters。它不是
-marketplace、plugin sandbox、settlement rail、customer delivery project tracker 或自动
-external-send authority。
+Solution Extension 是复核优先的有界方案扩展层，可以在 Helm Core 之上组合
+领域特定界面、夹具、报告资产和有界运行时适配器。它不是市场、插件沙箱、结算通道、
+客户交付项目跟踪器或自动对外发送权限。
 
-公开 extension 必须使用 generic / synthetic 名称，使用 synthetic / redacted fixtures，
-声明 review-first boundaries，避免客户专属配置，并保持 Core 可独立构建。私有客户定制
+公开扩展必须使用通用 / 合成名称，使用合成 / 脱敏夹具，
+声明复核优先边界，避免客户专属配置，并保持 Core 可独立构建。私有客户定制
 必须留在 `helm-public` 之外。
 
 ## English Reference
