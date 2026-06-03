@@ -56,6 +56,15 @@ definitions, starter-skill suggestions, and portal validation prompts only,
 without changing role matching, capability routing, portal access, or settlement
 boundaries.
 
+本轮继续收口 Helm v2 meeting action-pack runtime 的中文运行时摘要混写；只调整会议动作资料、
+风险提示、未决问题和 artifact 摘要文案，不改变 artifact 文件名、运行时状态机、记忆晋升或阴影更新边界。
+
+This round further localizes mixed Chinese runtime summaries in the Helm v2
+meeting action-pack runtime. It changes meeting action-pack, risk-hint,
+open-question, and artifact-summary copy only, without changing artifact
+filenames, runtime state machines, memory promotion, or shadow-update
+boundaries.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

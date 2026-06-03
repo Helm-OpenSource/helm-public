@@ -37,6 +37,16 @@ starter-skill suggestions, and portal validation prompts only; it does not
 change role matching, capability routing, portal access, or settlement
 boundaries, and does not claim full-repo bilingualization completion.
 
+Helm v2 meeting action-pack runtime 的中文运行时摘要混写已继续清理；本批只改会议动作资料、
+风险提示、未决问题和 artifact 摘要文案，不改变 artifact 文件名、运行时状态机、记忆晋升或阴影更新边界，
+也不声明全仓双语化完成。
+
+Mixed Chinese runtime summaries in the Helm v2 meeting action-pack runtime have
+also been further localized. This batch changes meeting action-pack, risk-hint,
+open-question, and artifact-summary copy only; it does not change artifact
+filenames, runtime state machines, memory promotion, or shadow-update
+boundaries, and does not claim full-repo bilingualization completion.
+
 | 类别 / Category | 状态 / Status | 证据 / Evidence |
 |---|---|---|
 | Apache-2.0 Core 仓库 / Apache-2.0 Core repository | 已为 public Core 开发成立；Established for public Core development | `LICENSE`, `NOTICE`, `package.json`, `README.md` |

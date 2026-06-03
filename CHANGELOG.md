@@ -53,6 +53,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 billing settlement 与 tenant resource readiness 面板中的可见混写；本批只改结算收口与受控写回试点说明文案，不改结算、写回、确认或外部系统边界。
 - 继续收口 customer-facing offer 与 commercial narrative detail surface 的中文边界文案混写；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，不改发送评估、外发、复核或非承诺边界。
 - 继续收口 role preset / starter skill 与 participant portal action 文案中的中文混写；本批只改角色定义、起步能力建议和门户校验提示，不改角色匹配、能力路由、门户访问或结算边界。
+- 继续收口 Helm v2 meeting action-pack runtime 的中文运行时摘要混写；本批只改会议动作资料、风险提示、未决问题和 artifact 摘要文案，不改 artifact 文件名、运行时状态机、记忆晋升或阴影更新边界。
 - 继续补齐 meeting runtime closeout / close server action 的 pre-session validation fallback；本批只改 action caller 可见错误文案，不改鉴权顺序、运行时状态机或执行边界。
 - 继续收口 public auth 表单密码确认 validation 文案；本批只改 action caller 可见错误文案，不改注册、登录、验证码或身份补全流程。
 - 继续收口 trial admin decision action 的复核权限、参数与更新失败文案；本批只改管理员可见错误文案，不改试用申请、复核权限或通知流程。

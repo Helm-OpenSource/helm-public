@@ -1709,4 +1709,26 @@ describe("shared surface hierarchy guards", () => {
       /复核-required|哪些动作需要先 internal sync|哪些沟通要先 internal sync|hiring 判断|hiring team 的|hiring 负责人|正式 offer|issue 升级|把 follow-through|向 CS 说明上线后 follow-through|交付 下一步|识别 时间线|向运营说明 rollout 节奏|内部 就绪度|对外 ready|仍需保留复核和 rollout guard|负责人\/admin|复核面 补齐|试点 就绪度|starter skill suggestion 资料|候选 capability|正式 skill|top 动作|提案 clarifications|时间线 或|帮助 AE|帮助 CS|issue 等待|适用于 QBR|实施 kick-off|动作item|starter skills 已|starter skill姿态|contribution terms 已确认/,
     );
   });
+
+  it("keeps meeting action-pack runtime Chinese copy free of mixed operational fragments", () => {
+    const actionPackRuntime = read(
+      "lib/helm-v2/meeting-action-pack-runtime.ts",
+    );
+
+    expect(actionPackRuntime).toContain("从风险提醒或会中风险提示里抽出的推断");
+    expect(actionPackRuntime).toContain("会议动作资料需要更强人工确认");
+    expect(actionPackRuntime).toContain("会议 / 公司层");
+    expect(actionPackRuntime).toContain("当前会议还没有关联公司");
+    expect(actionPackRuntime).toContain("事实与推导继续分层保存");
+    expect(actionPackRuntime).toContain("## 未决问题");
+    expect(actionPackRuntime).toContain("暂无额外未决问题");
+    expect(actionPackRuntime).toContain("先由人工确认动作资料");
+    expect(actionPackRuntime).toContain("动作资料仍带有未决问题");
+    expect(actionPackRuntime).toContain("总体继续沿会议动作资料推进");
+    expect(actionPackRuntime).toContain("会议分析已把会议摘要");
+
+    expect(actionPackRuntime).not.toMatch(
+      /风险 alerts|meeting 动作资料|meeting \/ company|关联 company|明确 下一步|facts 与 推导|推导 默认不 晋升|Open questions|open question|确认 动作资料|动作资料 仍带有 未决问题|沿 meeting 动作资料|会议分析 已/,
+    );
+  });
 });
