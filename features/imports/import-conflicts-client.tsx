@@ -49,7 +49,7 @@ export function ImportConflictsClient({
             : "优先处理评分最高的身份分叉"
           : english
             ? "Return to CRM imports after the queue clears"
-            : "冲突清空后回到 CRM 导入面",
+            : "冲突清空后回到客户关系系统导入面",
       body:
         conflicts.length > 0
           ? english
@@ -57,7 +57,7 @@ export function ImportConflictsClient({
             : "一次错误链接就会污染下游记忆和对象状态。先处理置信度最高、影响最大的那条，不要随机扫列表。"
           : english
             ? "No conflicts are waiting now. The next step is to inspect the latest import result or continue CRM ingress."
-            : "当前没有待处理冲突，下一步应该回到最近的导入结果或继续 CRM 接入。",
+            : "当前没有待处理冲突，下一步应该回到最近的导入结果或继续客户关系系统接入。",
       meta:
         topConflict
           ? english
@@ -119,7 +119,7 @@ export function ImportConflictsClient({
         description={english ? "Link, keep separate, or ignore — one per row." : "合并、保留或忽略——每行选一个。"}
         actions={
           <Button variant="secondary" asChild>
-            <Link href="/imports/crm">{english ? "Back to CRM imports" : "返回 CRM 导入"}</Link>
+            <Link href="/imports/crm">{english ? "Back to CRM imports" : "返回客户关系系统导入"}</Link>
           </Button>
         }
       />
@@ -167,7 +167,7 @@ export function ImportConflictsClient({
               <div className="flex flex-wrap gap-3">
                 <Button type="button" variant="secondary" asChild>
                   <Link href="/imports/crm">
-                    {english ? "Back to CRM imports" : "返回 CRM 导入"}
+                    {english ? "Back to CRM imports" : "返回客户关系系统导入"}
                   </Link>
                 </Button>
                 <Button type="button" variant="secondary" asChild>
@@ -215,7 +215,7 @@ export function ImportConflictsClient({
             label: english ? "Best next move" : "最合适下一步",
             value: english
               ? "Resolve the highest-impact conflicts, then return to CRM imports or the latest import result."
-              : "先处理影响最大的冲突，再回到 CRM 导入或最近一次导入结果。",
+              : "先处理影响最大的冲突，再回到客户关系系统导入或最近一次导入结果。",
           },
         ]}
       />

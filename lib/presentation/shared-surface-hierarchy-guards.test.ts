@@ -1190,7 +1190,10 @@ describe("shared surface hierarchy guards", () => {
   it("keeps import ingress Chinese copy localized while preserving connector boundaries", () => {
     const importsClient = read("features/imports/imports-client.tsx");
     const crmImportClient = read("features/imports/crm-import-client.tsx");
-    const combined = `${importsClient}\n${crmImportClient}`;
+    const importConflictsClient = read(
+      "features/imports/import-conflicts-client.tsx",
+    );
+    const combined = `${importsClient}\n${crmImportClient}\n${importConflictsClient}`;
 
     expect(importsClient).toContain("优先接客户关系系统");
     expect(crmImportClient).toContain("客户关系系统导入已经开始决定");
@@ -1201,9 +1204,13 @@ describe("shared surface hierarchy guards", () => {
     expect(crmImportClient).toContain("客户关系系统操作摘要");
     expect(crmImportClient).toContain("还没有客户关系系统导入任务");
     expect(crmImportClient).toContain("识别客户关系系统笔记与事件里的阻塞与承诺");
+    expect(importConflictsClient).toContain("冲突清空后回到客户关系系统导入面");
+    expect(importConflictsClient).toContain("继续客户关系系统接入");
+    expect(importConflictsClient).toContain("返回客户关系系统导入");
+    expect(importConflictsClient).toContain("再回到客户关系系统导入");
 
     expect(combined).not.toMatch(
-      /优先接 CRM|CRM 导入已经|CRM 来源|CRM 导入预览|CRM 增量同步|CRM 首次导入|已断开 CRM 连接|CRM 入口|CRM 里的对象层|CRM 操作摘要|还没有 CRM 导入任务|识别 CRM 笔记/,
+      /优先接 CRM|CRM 导入已经|CRM 来源|CRM 导入预览|CRM 增量同步|CRM 首次导入|已断开 CRM 连接|CRM 入口|CRM 里的对象层|CRM 操作摘要|还没有 CRM 导入任务|识别 CRM 笔记|CRM 导入面|继续 CRM 接入|返回 CRM 导入|回到 CRM 导入/,
     );
   });
 

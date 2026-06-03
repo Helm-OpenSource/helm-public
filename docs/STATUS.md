@@ -106,6 +106,17 @@ it does not change CSV parsing, OAuth, connector actions, import APIs, warmup,
 or conflict-review logic, and does not claim full-repo bilingualization
 completion.
 
+import conflict review 的中文 CRM 混写也已继续清理；本批只改冲突复核页的
+返回导入、继续接入和下一步提示文案及源码守卫，不改变冲突处理 API、连接器 action、
+导入结果或身份复核逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese CRM copy in import conflict review has also been further
+localized. This batch changes return-to-import, continue-ingress, and next-step
+guidance copy on the conflict review page plus source guards only; it does not
+change conflict resolution APIs, connector actions, import results, or
+identity-review logic, and does not claim full-repo bilingualization
+completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或

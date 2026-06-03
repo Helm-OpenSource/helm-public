@@ -167,6 +167,15 @@ import entry and CRM connection wizard plus source guards only, without changing
 CSV parsing, OAuth, connector actions, import APIs, warmup, or conflict-review
 logic.
 
+本轮继续收口 import conflict review 的中文 CRM 混写；只调整冲突复核页的
+返回导入、继续接入和下一步提示文案及源码守卫，不改变冲突处理 API、连接器 action、
+导入结果或身份复核逻辑。
+
+This round further localizes mixed Chinese CRM copy in import conflict review.
+It changes return-to-import, continue-ingress, and next-step guidance copy on
+the conflict review page plus source guards only, without changing conflict
+resolution APIs, connector actions, import results, or identity-review logic.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成
