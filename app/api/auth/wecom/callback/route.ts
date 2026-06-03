@@ -95,9 +95,9 @@ function buildCallbackStatusCopy(input: {
     case "mismatch":
       return "企业微信回调已完成，但企业微信身份与当前工作区用户不匹配。";
     case "missing-state":
-      return "企业微信回调状态 缺失或已过期。";
+      return "企业微信回调状态缺失或已过期。";
     case "invalid-state":
-      return "企业微信回调状态 无法被信任。";
+      return "企业微信回调状态无法被信任。";
     case "forbidden":
       return "当前角色不能管理这个工作区的企业微信连接器回调。";
   }

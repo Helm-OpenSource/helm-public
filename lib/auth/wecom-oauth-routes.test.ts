@@ -311,6 +311,24 @@ describe("wecom oauth routes", () => {
     expect(wecomMock.exchangeWeComAuthCode).not.toHaveBeenCalled();
   });
 
+  it("localizes missing callback state from request locale before exchange", async () => {
+    const cookieStore = createCookieStore({
+      "helm-ui-locale": "zh-CN",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+
+    const response = await wecomCallbackRoute(
+      new Request("http://localhost/api/auth/wecom/callback?code=code-1"),
+    );
+
+    expect(response.status).toBe(307);
+    const location = decodeURIComponent(response.headers.get("location") ?? "");
+    expect(location).toContain("status=missing-state");
+    expect(location).toContain("企业微信回调状态缺失或已过期。");
+    expect(oauthCallbackGovernanceMock.resolveWorkspaceOauthCallbackContext).not.toHaveBeenCalled();
+    expect(wecomMock.exchangeWeComAuthCode).not.toHaveBeenCalled();
+  });
+
   it("records a mismatch posture when WeCom identity does not match the active workspace user", async () => {
     const cookieStore = createCookieStore({
       "helm-wecom-oauth-state": JSON.stringify({

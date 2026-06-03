@@ -648,6 +648,24 @@ describe("dingtalk oauth routes", () => {
     expect(dingtalkMock.exchangeDingTalkAuthCode).not.toHaveBeenCalled();
   });
 
+  it("localizes missing callback state from request locale before exchange", async () => {
+    const cookieStore = createCookieStore({
+      "helm-ui-locale": "zh-CN",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+
+    const response = await dingtalkCallbackRoute(
+      new Request("http://localhost/api/auth/dingtalk/callback?authCode=code-1"),
+    );
+
+    expect(response.status).toBe(307);
+    const location = decodeURIComponent(response.headers.get("location") ?? "");
+    expect(location).toContain("status=missing-state");
+    expect(location).toContain("钉钉回调状态缺失或已过期。");
+    expect(oauthCallbackGovernanceMock.resolveWorkspaceOauthCallbackContext).not.toHaveBeenCalled();
+    expect(dingtalkMock.exchangeDingTalkAuthCode).not.toHaveBeenCalled();
+  });
+
   it("recovers public callback when state cookie is missing but snapshot exists", async () => {
     const cookieStore = createCookieStore();
     cookiesMock.mockResolvedValue(cookieStore);

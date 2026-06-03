@@ -201,9 +201,9 @@ function buildCallbackStatusCopy(input: {
     case "mismatch":
       return "钉钉回调已完成，但钉钉身份与当前工作区用户不匹配。";
     case "missing-state":
-      return "钉钉回调状态 缺失或已过期。";
+      return "钉钉回调状态缺失或已过期。";
     case "invalid-state":
-      return "钉钉回调状态 无法被信任。";
+      return "钉钉回调状态无法被信任。";
     case "forbidden":
       return "当前角色不能管理这个工作区的钉钉连接器回调。";
   }

@@ -62,6 +62,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口中国区支付 APP_URL 缺失 fallback 文案；本批只改 Alipay / WeChat Pay checkout URL 生成前的配置错误文案与 locale 透传，不改 URL path、支付参数或窄支付边界。
 - 继续收口 Alipay / WeChat Pay checkout 未配置 fallback 文案；本批只改中国区支付 checkout 配置错误文案，不改签名、notify、query、支付请求或窄支付边界。
 - 继续收口连接器 action 的 env 配置错误 fallback 文案；本批只改 Aliyun founder default 与 DingTalk app agent id 缺失提示，不改连接器权限、同步、邀请发送或凭据读取逻辑。
+- 继续收口企业微信 / 飞书 / 钉钉 OAuth callback state fallback 文案；本批只改 settings redirect 可见缺 state 文案质量，不改 OAuth、session、connector 写入或 public-login fallback。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -128,6 +129,7 @@ English reference:
 - Further localized China payment APP_URL missing fallback copy; this batch changes config-error copy and locale propagation before Alipay / WeChat Pay checkout URL generation only, leaving URL paths, payment parameters, and the narrow-payment boundary unchanged.
 - Further localized Alipay / WeChat Pay checkout-not-configured fallback copy; this batch changes China-payment checkout config-error copy only and leaves signing, notify, query, payment requests, and the narrow-payment boundary unchanged.
 - Further localized connector action env-configuration fallback copy; this batch changes Aliyun founder-default and DingTalk app-agent-id missing prompts only and leaves connector permissions, sync, invite sending, and credential lookup logic unchanged.
+- Further localized WeCom / Feishu / DingTalk OAuth callback-state fallback copy; this batch changes settings-redirect-visible missing-state copy quality only and leaves OAuth, sessions, connector writes, and public-login fallback unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
