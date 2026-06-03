@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口开源与商业边界文档的中文公开 / 商业边界术语混写；本批只改复刻、复核优先、公开安全、SDK 接缝、Core 导入、维护者复核、认证、市场、结算通道、客户结果保证和商标许可文案及源码守卫，不改 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、依赖方向或认证品牌边界。
 - 继续收口 HSI 要求文档的中文复核优先信号边界术语混写；本批只改无头信号接口、公开可复刻契约、复核优先运营信号、客户关系系统替代品、托管 agent 运行时、工作流引擎、市场、执行平面、包清单、合成 / 脱敏夹具、确定性评测门禁、复核包准备、边界证据、交付闭环、复刻 / 检查 / 映射 / 评测 / 复核链路、受控试点、仅离线、运行时查询、API 路由、schema 迁移、生产连接器、正式写入、自动发送 / 批准 / 执行和大模型最终排名文案及源码守卫，不改 HSI 英文参考、评测命令、阶段门禁、只读离线边界或不自动执行边界。
 - 继续收口开源与 Cloud Trial 发布姿态文档的中文发布治理术语混写；本批只改发布批准、私有发布回执、负责人 Go/No-Go、人工打标签、Core 源码、Docker 快速启动、公开样板 Pack、无 SLA 试用姿态、密钥轮换回执、控制面授权状态、私有发布负责人批准记录、发布机器、发布通道 / 目标标签 / 目标标题、预发布、稳定语义化版本标签、稳定线和企业级 SLA 文案及源码守卫，不改 release check、GitHub Release、人工标签流程、Cloud Trial 可选路径或非 SLA 边界。
 - 继续收口交付工程师黄金路径要求的中文要求 / 边界术语混写；本批只改交付工程师黄金路径、公开 Core 要求契约、判断 / 证据 / 复核 / 边界 / 交付包工作、可复刻工程结构、已有表面、验证契约、公开样板包、公开文档、公开测试、离线评测、部署注册表、版本清单、健康心跳、用量元数据、零新增表面、相对门禁措辞、证据门禁、仓库可见性切换、负责人动作、黄金路径最小链路、信号 / 复核包路径和禁止写入 / 发送 / 批准 / 执行 / 跨租户路径文案及源码守卫，不改英文参考、跨仓路由、验收命令、Docker 快速启动、样板包结构或非承诺边界。

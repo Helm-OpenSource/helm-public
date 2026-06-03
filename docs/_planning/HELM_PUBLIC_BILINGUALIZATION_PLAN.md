@@ -38,6 +38,18 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口开源与商业边界文档的中文公开 / 商业边界术语混写；只调整复刻、复核优先、
+公开安全、SDK 接缝、Core 导入、维护者复核、认证、市场、结算通道、客户结果保证和商标许可文案，
+不改变 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、依赖方向或认证品牌边界。
+
+This round further localizes mixed Chinese public/commercial boundary
+terminology in the open-source and commercial boundary doc. It changes fork,
+review-first, public-safe, SDK seam, Core import, maintainer review,
+certification, marketplace, payout rail, customer outcome guarantee, and
+trademark license wording only, without changing Apache-2.0, commercial Pack /
+customer Overlay / control-plane routing, dependency direction, or
+certification-brand boundaries.
+
 本轮继续收口 HSI 要求文档的中文复核优先信号边界术语混写；只调整无头信号接口、
 公开可复刻契约、复核优先运营信号、客户关系系统替代品、托管 agent 运行时、工作流引擎、市场、
 执行平面、包清单、合成 / 脱敏夹具、确定性评测门禁、复核包准备、边界证据、交付闭环、

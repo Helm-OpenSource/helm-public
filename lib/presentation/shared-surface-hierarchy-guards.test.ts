@@ -2267,6 +2267,32 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps open-source commercial boundary Chinese body localized for public/commercial terms", () => {
+    const commercialBoundary = read(
+      "docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md",
+    );
+    const chineseBody = commercialBoundary.slice(
+      commercialBoundary.indexOf("Helm Core 采用"),
+      commercialBoundary.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("独立");
+    expect(chineseBody).toContain("复刻、运行和审查");
+    expect(chineseBody).toContain("复核优先的业务运营参考实现");
+    expect(chineseBody).toContain("公开仓库必须保持公开安全");
+    expect(chineseBody).toContain("稳定 SDK 接缝");
+    expect(chineseBody).toContain("Core 不能导入");
+    expect(chineseBody).toContain("维护者复核");
+    expect(chineseBody).toContain("认证不是市场");
+    expect(chineseBody).toContain("结算通道");
+    expect(chineseBody).toContain("客户结果保证");
+    expect(chineseBody).toContain("商标许可");
+
+    expect(chineseBody).not.toMatch(
+      /fork|review-first|public-safe|SDK seam|import\s+商业|maintainer review|Certification 不是 marketplace|payout rail|outcome guarantee|trademark license/,
+    );
+  });
+
   it("keeps OPC weekly packet Chinese body free of recently fixed mixed public-operations fragments", () => {
     const opcPacket = read("docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md");
     const chineseBody = opcPacket.slice(
