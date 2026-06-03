@@ -54,6 +54,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口企业微信 / 飞书 / 钉钉 OAuth callback 的 workspace context fallback 文案；本批只改 settings redirect 可见错误文案，不改 OAuth、connector 写入或审计逻辑。
 - 继续收口 settings workspace switch action 的 invalid / unavailable fallback 文案；本批只改 action caller 可见错误文案，不改 membership 查询、active workspace 设置或 locale cookie 成功路径。
 - 继续收口 runtime signal collection cron API 的 auth / method / job fallback 文案；本批只改 API caller 可见错误文案，不改 cron token 校验、jobKey 解析或信号采集调度。
+- 继续收口 extension API catch-all dispatcher 的 not-found / method fallback 文案；本批只改 API caller 可见错误文案，不改 route registry、handler delegation、HEAD parity 或 Allow header 语义。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -112,6 +113,7 @@ English reference:
 - Further localized WeCom / Feishu / DingTalk OAuth callback workspace-context fallback copy; this batch changes settings-redirect-visible error copy only and leaves OAuth, connector writes, and audit logic unchanged.
 - Further localized settings workspace switch action invalid / unavailable fallback copy; this batch changes action-caller-visible error copy only and leaves membership lookup, active-workspace setting, and locale-cookie success paths unchanged.
 - Further localized runtime signal collection cron API auth / method / job fallback copy; this batch changes API-caller-visible error copy only and leaves cron-token validation, jobKey parsing, and signal-collection dispatch unchanged.
+- Further localized extension API catch-all dispatcher not-found / method fallback copy; this batch changes API-caller-visible error copy only and leaves the route registry, handler delegation, HEAD parity, and Allow-header semantics unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
