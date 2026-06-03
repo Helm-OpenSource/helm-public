@@ -283,6 +283,14 @@ audit summaries, missing-source fallback, and failure fallback wording plus
 source guards only, without changing import orchestration, object writes, audit
 fields, or warmup logic.
 
+本轮继续收口 memory display copy 里的中文 CRM 混写；只调整 `CRM_IMPORT_COMPLETED` 的
+客户关系系统导入完成显示标签及源码守卫，不改变 audit action type、事件枚举或记忆数据。
+
+This round further localizes mixed Chinese CRM copy in memory display copy. It
+changes the `CRM_IMPORT_COMPLETED` customer-relationship-system import-completed
+display label plus source guards only, without changing audit action types,
+event enums, or memory data.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

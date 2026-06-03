@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 memory display copy 里的中文 CRM 混写；本批只改 `CRM_IMPORT_COMPLETED` 的客户关系系统导入完成显示标签及源码守卫，不改 audit action type、事件枚举或记忆数据。
 - 继续收口 imports 服务层里的中文 CRM 混写；本批只改客户关系系统导入预热 actor、任务导入记忆 / 审计摘要、导入来源缺失和失败 fallback 文案及源码守卫，不改导入编排、对象写入、审计字段或 warmup 逻辑。
 - 继续收口 CRM import API fallback 里的中文混写；本批只改 preview / run / sync route 的客户关系系统预览、导入与增量同步失败文案及源码守卫，不改请求 schema、权限检查、导入执行或错误状态码。
 - 继续收口 billing lifecycle 边界读数里的中文 CRM 混写；本批只改订阅暂停 / 只读说明中的客户关系系统预览与导入显示文案及源码守卫，不改 lifecycle gating、usage ledger 或操作枚举。
