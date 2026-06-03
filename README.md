@@ -82,6 +82,7 @@ open http://localhost:3000
 
 ```bash
 npm run delivery:doctor
+npm run delivery:doctor -- --region cn   # 中国客户交付前的本地静态预检
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run check:public-release

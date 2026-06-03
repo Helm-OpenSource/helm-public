@@ -874,10 +874,10 @@ function buildPageModel({
       : kind === "success-check"
         ? english
           ? "Success check"
-          : "Success check"
+          : "客户成功验收"
         : english
           ? "Expansion review"
-          : "Expansion review";
+          : "拓展复核";
 
   return {
     rootDataAttributes: {
@@ -896,9 +896,7 @@ function buildPageModel({
     eyebrow: english
       ? `Customer success chain / ${titlePrefix}`
       : `Customer success 链 / ${titlePrefix}`,
-    title: english
-      ? `${detail.title} · ${titlePrefix}`
-      : `${detail.title} · ${titlePrefix}`,
+    title: `${detail.title} · ${titlePrefix}`,
     description: english
       ? `${detail.company?.name ?? "No company"} · ${stageLabel} · ${stageText}`
       : `${detail.company?.name ?? "暂无公司"} · ${stageLabel} · ${stageText}`,
@@ -968,15 +966,15 @@ function buildPageModel({
         value: ownershipText,
       },
       {
-        label: english ? "Ownership pressure" : "Ownership 压力",
+        label: english ? "Ownership pressure" : "负责人压力",
         value: ownershipPressureText,
       },
       {
-        label: english ? "Authority" : "Authority",
+        label: english ? "Authority" : "执行权限",
         value: buildAuthoritySummary(authorityState, english),
       },
       {
-        label: english ? "Attention" : "Attention",
+        label: english ? "Attention" : "关注状态",
         value: buildAttentionSummary(attentionState, english),
       },
       {
@@ -2394,9 +2392,7 @@ function buildExternalDrafts({
           : fallbackMode === "blocked-by-boundary"
             ? "violet"
             : "sky",
-      queueSummary: english
-        ? `${kindLabel}: ${trimText(summary, 116)}`
-        : `${kindLabel}：${trimText(summary, 116)}`,
+      queueSummary: `${kindLabel}${english ? ": " : "："}${trimText(summary, 116)}`,
       queueBlockedSummary:
         kind === "review-before-send-follow-up"
           ? english
@@ -3657,8 +3653,7 @@ function buildInternalActionExecutionSummary({
     : (actionItem?.executedAt ?? null);
   if (!executedAt) return null;
 
-  const actorLabel =
-    metadata?.executedByName ?? (english ? "Helm AI" : "Helm AI");
+  const actorLabel = metadata?.executedByName ?? "Helm AI";
   return english
     ? `${actorLabel} executed this internally on ${formatDateLabel(executedAt)}.`
     : `${actorLabel} 在 ${formatDateLabel(executedAt)} 完成了内部执行。`;
@@ -3784,7 +3779,7 @@ function buildHeaderLinks({
       },
       signals.pendingReview
         ? {
-            label: english ? "Review request" : "Review request",
+            label: english ? "Review request" : "复核请求",
             href: `/review-requests/${signals.pendingReview.id}`,
             variant: "ghost" as const,
           }
@@ -3943,7 +3938,7 @@ function buildNavigation({
       ? {
           type: "success-check" as const,
           href: `/success-checks/${detail.id}`,
-          label: english ? "Success check" : "Success check",
+          label: english ? "Success check" : "客户成功验收",
           summary: english
             ? "Move here once the handoff is explicit and the next question becomes whether the account is genuinely ready to continue."
             : "当接手已经说清楚，而下一步问题变成账户是否真的能继续推进时，就切到这里。",
@@ -3952,7 +3947,7 @@ function buildNavigation({
         ? {
             type: "expansion-review" as const,
             href: `/expansion-reviews/${detail.id}`,
-            label: english ? "Expansion review" : "Expansion review",
+            label: english ? "Expansion review" : "拓展复核",
             summary: english
               ? "Move here when the chain needs to judge whether the next story should widen into expansion."
               : "当这条链需要判断下一步是否应扩大成拓展叙事时，就切到这里。",
@@ -3960,7 +3955,7 @@ function buildNavigation({
         : {
             type: "package" as const,
             href: `/packages/${detail.id}`,
-            label: english ? "Package detail" : "Package detail",
+            label: english ? "Package detail" : "方案包详情",
             summary: english
               ? "Move here once expansion review needs to turn back into the narrower commercial package line."
               : "当拓展复核需要重新落回更窄的 commercial 方案包线时，就切到这里。",
@@ -3983,10 +3978,10 @@ function buildNavigation({
             label: signals.pendingReview
               ? english
                 ? "Review request detail"
-                : "Review request detail"
+                : "复核请求详情"
               : english
                 ? "Company detail"
-                : "Company detail",
+                : "公司详情",
             summary: reviewSummary,
           },
           detailNodeNext: nextLink,
@@ -4013,10 +4008,10 @@ function buildNavigation({
               label: signals.pendingReview
                 ? english
                   ? "Review request detail"
-                  : "Review request detail"
+                  : "复核请求详情"
                 : english
                   ? "Company detail"
-                  : "Company detail",
+                  : "公司详情",
               summary: reviewSummary,
             },
             detailNodeNext: nextLink,
@@ -4042,10 +4037,10 @@ function buildNavigation({
               label: signals.pendingReview
                 ? english
                   ? "Review request detail"
-                  : "Review request detail"
+                  : "复核请求详情"
                 : english
                   ? "Company detail"
-                  : "Company detail",
+                  : "公司详情",
               summary: reviewSummary,
             },
             detailNodeNext: nextLink,
@@ -4478,7 +4473,7 @@ function buildEvidenceGroups({
   return [
     {
       groupId: "replay",
-      label: english ? "Replay" : "Replay",
+      label: english ? "Replay" : "回放",
       items: compactStrings([
         detail.meetings[0]?.note?.summary
           ? trimText(detail.meetings[0].note?.summary ?? "", 120)
@@ -4492,7 +4487,7 @@ function buildEvidenceGroups({
     },
     {
       groupId: "audit",
-      label: english ? "Audit" : "Audit",
+      label: english ? "Audit" : "审计",
       items: compactStrings([
         detail.auditLogs[0]
           ? `${detail.auditLogs[0].actor} · ${trimText(detail.auditLogs[0].summary, 100)}`
@@ -4508,7 +4503,7 @@ function buildEvidenceGroups({
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "Memory",
+      label: english ? "Memory" : "记忆",
       items: compactStrings([
         detail.memoryFacts[0]
           ? `${detail.memoryFacts[0].title} · ${trimText(detail.memoryFacts[0].content, 100)}`
@@ -4522,7 +4517,7 @@ function buildEvidenceGroups({
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker output",
+      label: english ? "Worker output" : "执行输出",
       items: compactStrings([
         detail.briefingSnapshot?.payload.recommendedNextSteps?.[0] ??
           (english
@@ -4535,7 +4530,7 @@ function buildEvidenceGroups({
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "Boundary trace",
+      label: english ? "Boundary trace" : "边界痕迹",
       items: compactStrings([
         signals.topBlocker
           ? trimText(signals.topBlocker.blockerText, 120)
@@ -4549,7 +4544,7 @@ function buildEvidenceGroups({
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "Sendability trace",
+      label: english ? "Sendability trace" : "发送评估痕迹",
       items: [
         english
           ? `Current customer success sendability stays at ${formatSendabilityMode(customerSuccessDetailSendabilityMode, true)}.`
@@ -4558,7 +4553,7 @@ function buildEvidenceGroups({
     },
     {
       groupId: "handoff_trace",
-      label: english ? "Handoff trace" : "Handoff trace",
+      label: english ? "Handoff trace" : "交接痕迹",
       items: compactStrings([
         signals.pendingReview
           ? english
@@ -4576,7 +4571,7 @@ function buildEvidenceGroups({
     },
     {
       groupId: "success_trace",
-      label: english ? "Success trace" : "Success trace",
+      label: english ? "Success trace" : "成功轨迹",
       items: compactStrings([
         detail.commitments[0]
           ? `${detail.commitments[0].title} · ${detail.commitments[0].status}`
@@ -4592,7 +4587,7 @@ function buildEvidenceGroups({
     },
     {
       groupId: "historical_changes",
-      label: english ? "Historical changes" : "Historical changes",
+      label: english ? "Historical changes" : "历史变化",
       items: compactStrings([
         english
           ? `Opportunity updated ${formatDateLabel(detail.updatedAt)}`
@@ -4608,13 +4603,13 @@ function buildEvidenceGroups({
 function formatStage(stage: CustomerSuccessHandoffStage, english: boolean) {
   switch (stage) {
     case "success-follow-through":
-      return english ? "Success follow-through" : "Success 跟进";
+      return english ? "Success follow-through" : "客户成功跟进";
     case "activation-follow-through":
-      return english ? "Activation follow-through" : "Activation 跟进";
+      return english ? "Activation follow-through" : "激活跟进";
     case "review-follow-through":
       return english ? "Review follow-through" : "复核跟进";
     case "expansion-review":
-      return english ? "Expansion review" : "Expansion review";
+      return english ? "Expansion review" : "拓展复核";
     case "expansion-ready-but-blocked":
       return english ? "Expansion ready but blocked" : "扩展准备好但被阻塞";
     case "issue-follow-through":
@@ -4639,10 +4634,10 @@ function formatVariantMode(
   }
 
   if (stage === "issue-follow-through") {
-    return english ? "Issue variant" : "Issue 变体";
+    return english ? "Issue variant" : "问题变体";
   }
 
-  return english ? "Follow-through variant" : "Follow-through 变体";
+  return english ? "Follow-through variant" : "跟进变体";
 }
 
 function buildDeeperVariantSummaryItems({
@@ -4715,7 +4710,7 @@ function formatIssueSubVariant({
   if (sendabilityMode === "review-before-send" || signals.pendingReview) {
     return english
       ? "review-before-send issue response"
-      : "review-before-send issue response";
+      : "发送前复核的问题回复";
   }
 
   if (
@@ -4725,29 +4720,29 @@ function formatIssueSubVariant({
   ) {
     return english
       ? "boundary-only issue response"
-      : "boundary-only issue response";
+      : "仅边界的问题回复";
   }
 
   if (
     sendabilityMode === "internal-only" ||
     sendabilityMode === "discussion-only"
   ) {
-    return english ? "internal-only issue prep" : "internal-only issue prep";
+    return english ? "internal-only issue prep" : "仅内部的问题准备";
   }
 
   if (signals.topBlocker) {
-    return english ? "blocked issue resolution" : "blocked issue resolution";
+    return english ? "blocked issue resolution" : "受阻问题处理";
   }
 
   if (sendabilityMode === "customer-visible-with-boundary") {
     return english
       ? "customer-visible issue clarification"
-      : "customer-visible issue clarification";
+      : "客户可见的问题澄清";
   }
 
   return english
     ? "success issue follow-through"
-    : "success issue follow-through";
+    : "成功问题跟进";
 }
 
 function formatEscalationSubVariant({
@@ -4766,15 +4761,15 @@ function formatEscalationSubVariant({
   english: boolean;
 }) {
   if (ownershipMode === "shared-with-founder") {
-    return english ? "founder-escalated issue" : "founder-escalated issue";
+    return english ? "founder-escalated issue" : "创始人升级问题";
   }
 
   if (ownershipMode === "shared-with-delivery") {
-    return english ? "delivery-escalated issue" : "delivery-escalated issue";
+    return english ? "delivery-escalated issue" : "交付升级问题";
   }
 
   if (ownershipMode === "shared-with-sales") {
-    return english ? "sales-escalated issue" : "sales-escalated issue";
+    return english ? "sales-escalated issue" : "销售升级问题";
   }
 
   if (
@@ -4783,7 +4778,7 @@ function formatEscalationSubVariant({
   ) {
     return english
       ? "blocked-by-dependency escalation"
-      : "blocked-by-dependency escalation";
+      : "依赖阻塞升级";
   }
 
   if (
@@ -4794,7 +4789,7 @@ function formatEscalationSubVariant({
   ) {
     return english
       ? "blocked-by-boundary escalation"
-      : "blocked-by-boundary escalation";
+      : "边界阻塞升级";
   }
 
   if (
@@ -4803,12 +4798,12 @@ function formatEscalationSubVariant({
   ) {
     return english
       ? "internal-only escalation prep"
-      : "internal-only escalation prep";
+      : "仅内部的升级准备";
   }
 
   return english
     ? "escalation-triggered follow-through"
-    : "escalation-triggered follow-through";
+    : "升级触发跟进";
 }
 
 function formatRenewalExpansionRiskSubVariant({
@@ -4832,7 +4827,7 @@ function formatRenewalExpansionRiskSubVariant({
   ) {
     return english
       ? "review-before-send expansion clarification"
-      : "review-before-send expansion clarification";
+      : "发送前复核的拓展澄清";
   }
 
   if (
@@ -4843,22 +4838,22 @@ function formatRenewalExpansionRiskSubVariant({
   ) {
     return english
       ? "expansion blocked clarification"
-      : "expansion blocked clarification";
+      : "拓展阻塞澄清";
   }
 
   if (signals.overdueCommitment) {
     return english
       ? "success follow-through before expansion"
-      : "success follow-through before expansion";
+      : "先完成成功跟进再拓展";
   }
 
   if (fallbackMode === "non-commitment-fallback") {
     return english
       ? "non-commitment fallback for success / expansion"
-      : "non-commitment fallback for success / expansion";
+      : "成功 / 拓展的非承诺降级";
   }
 
-  return english ? "renewal risk clarification" : "renewal risk clarification";
+  return english ? "renewal risk clarification" : "续费风险澄清";
 }
 
 function blockerSuggestsDependency(text: string | null) {
@@ -4943,11 +4938,11 @@ function formatAudienceMode(
 ) {
   switch (mode) {
     case "customer-success":
-      return english ? "Customer success" : "Customer success";
+      return english ? "Customer success" : "客户成功";
     case "success-owner":
-      return english ? "Success owner" : "Success owner";
+      return english ? "Success owner" : "成功负责人";
     case "expansion-owner":
-      return english ? "Expansion owner" : "Expansion owner";
+      return english ? "Expansion owner" : "拓展负责人";
     case "shared-review":
       return english ? "Shared review" : "共享复核";
     case "customer-visible":
@@ -5078,13 +5073,13 @@ function formatExternalDraftKind(
 ) {
   switch (kind) {
     case "holding-reply":
-      return english ? "Holding reply" : "Holding reply";
+      return english ? "Holding reply" : "暂缓回复";
     case "boundary-aware-check-in":
-      return english ? "Boundary-aware check-in" : "边界感知 check-in";
+      return english ? "Boundary-aware check-in" : "带边界确认";
     case "decision-dependency-clarification-request":
       return english
         ? "Decision / dependency clarification request"
-        : "Decision / 依赖澄清请求";
+        : "判断 / 依赖澄清请求";
     case "review-before-send-follow-up":
       return english
         ? "Review-before-send follow-up"
@@ -5140,7 +5135,7 @@ function formatFallbackMode(
 ) {
   switch (mode) {
     case "non-commitment-fallback":
-      return english ? "Non-commitment fallback" : "Non-commitment fallback";
+      return english ? "Non-commitment fallback" : "非承诺降级";
     case "internal-only":
       return english ? "Internal only" : "仅内部";
     case "blocked-by-boundary":

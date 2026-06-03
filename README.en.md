@@ -81,6 +81,7 @@ This path answers three questions: can I trust the boundaries, where do I make t
 
 ```bash
 npm run delivery:doctor
+npm run delivery:doctor -- --region cn   # local static preflight before China customer delivery
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run check:public-release

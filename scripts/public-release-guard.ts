@@ -729,6 +729,8 @@ const COMMERCIAL_ENTITLEMENT_SOURCE_EXTENSIONS = new Set<string>([
 const COMMERCIAL_ENTITLEMENT_ALLOW_LIST = new Set<string>([
   "lib/deployment-profile/contract.ts",
   "lib/deployment-profile/contract.test.ts",
+  "lib/delivery-engineer/golden-path-doctor.ts",
+  "lib/delivery-engineer/golden-path-doctor.test.ts",
   "scripts/validate-env.ts",
 ]);
 

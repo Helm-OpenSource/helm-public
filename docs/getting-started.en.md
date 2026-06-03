@@ -161,6 +161,32 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · Alipay · WeChat Pay.
 
 Leave them all blank on a first run.
 
+### China delivery profile preflight (optional)
+
+If this fork is being prepared for a China customer delivery, first align the
+local `.env` profile and network mirror hints:
+
+```bash
+# .env
+HELM_DEPLOYMENT_REGION="cn"
+HELM_DATA_RESIDENCY="cn"
+NPM_REGISTRY="https://registry.npmmirror.com"
+LLM_DEFAULT_PROVIDER="qwen"
+DASHSCOPE_API_KEY="<your-dashscope-key>"
+ASR_ENABLED="false"
+```
+
+Then run the read-only static doctor:
+
+```bash
+npm run delivery:doctor -- --region cn
+```
+
+The command does not make network calls or read customer systems. It flags
+common China-delivery misconfigurations: Qwen configured with only
+`OPENAI_API_KEY`, region / residency still set to `global`, missing npm mirror
+hints, or enabling the current OpenAI-only ASR path under a China profile.
+
 ---
 
 ## 5. Initialize the database

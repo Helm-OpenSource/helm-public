@@ -563,6 +563,14 @@ describe("public release guard fixture coverage", () => {
       `const value = process.env.${releaseProfileEnv};`,
     );
     writeFixture(
+      "lib/delivery-engineer/golden-path-doctor.ts",
+      `const value = process.env.${releaseProfileEnv};`,
+    );
+    writeFixture(
+      "lib/delivery-engineer/golden-path-doctor.test.ts",
+      `const value = process.env.${releaseProfileEnv};`,
+    );
+    writeFixture(
       "app/layout.tsx",
       `const locale = process.env.${defaultLocaleEnv};`,
     );

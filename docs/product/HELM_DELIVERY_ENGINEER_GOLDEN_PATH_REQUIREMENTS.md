@@ -116,7 +116,7 @@ readiness, or customer deployment commitments.
 
 | Gate | Delivery-engineer question | Passing evidence | Explicit non-claim |
 |---|---|---|---|
-| Gate-10, nominal first trust | "Can I trust the shape of this repo?" | `npm run delivery:doctor` and `npm run pack:fixture-check` pass with zero failures. | Does not prove SDK cleanliness, customer deployment readiness, or complete sample provenance. |
+| Gate-10, nominal first trust | "Can I trust the shape of this repo?" | `npm run delivery:doctor` and `npm run pack:fixture-check` pass with zero failures. For China-region delivery preflight, `npm run delivery:doctor -- --region cn` reports no unexpected warnings for local profile / mirror / ASR configuration. | Does not prove SDK cleanliness, customer deployment readiness, production region approval, or complete sample provenance. |
 | Gate-30, nominal edit loop | "Do I know where to make the first business change?" | README points to the Golden Path, `case-management-sample` has a minimal edit loop, and the HSI eval path is visible. D2 fresh-clone receipts can support Docker onboarding evidence, but they do not become release approval. | Does not prove a time-bound onboarding guarantee, live connector readiness, or production deployment. |
 | Gate-60, nominal review proof | "Can I prove the fork stays inside review-first boundaries?" | HSI and operating-signal evals pass, forbidden actions remain rejected, and a review packet can be prepared from checked-in public sample artifacts. | Does not approve a pilot, send anything externally, write CRM state, or certify a customer Pack. |
 
@@ -133,6 +133,7 @@ The first version uses existing assets only:
 
 ```bash
 npm run delivery:doctor
+npm run delivery:doctor -- --region cn
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run eval:operating-signal-flow
@@ -220,6 +221,7 @@ command merely to prove the first Golden Path slice.
 
 ```bash
 npm run delivery:doctor
+npm run delivery:doctor -- --region cn
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run eval:operating-signal-flow
