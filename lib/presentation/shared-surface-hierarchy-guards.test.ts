@@ -2221,6 +2221,45 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps AI-native artifact template closeout Chinese scope copy localized", () => {
+    const artifactCloseout = read(
+      "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md",
+    );
+    const chineseBody = artifactCloseout.slice(
+      artifactCloseout.indexOf("本收口回执记录"),
+      artifactCloseout.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("收口回执");
+    expect(chineseBody).toContain("公开安全的 Pack 交付工件模板");
+    expect(chineseBody).toContain("AI 原生企业 AI 用户体验参考工作");
+    expect(chineseBody).toContain("公开可审查工件");
+    expect(chineseBody).toContain("上下文包");
+    expect(chineseBody).toContain("Pack Studio 安全样例");
+    expect(chineseBody).toContain("证据矩阵");
+    expect(chineseBody).toContain("待复核工作包");
+    expect(chineseBody).toContain("证明闭环收口");
+    expect(chineseBody).toContain("黄金路径诊断 / 评测 / 公开守卫验证");
+    expect(chineseBody).toContain("静态 / 离线 / 本地运行时冒烟验证");
+    expect(chineseBody).toContain("D2 Docker 全新克隆冒烟验证");
+    expect(chineseBody).toContain("历史收口状态");
+    expect(chineseBody).toContain("当前发布批准");
+    expect(chineseBody).toContain("客户部署就绪");
+    expect(chineseBody).toContain("商业发布就绪");
+    expect(chineseBody).toContain("30 分钟上手声明");
+    expect(chineseBody).toContain("运行时 API");
+    expect(chineseBody).toContain("数据模式");
+    expect(chineseBody).toContain("连接器采用");
+    expect(chineseBody).toContain("客户数据接入");
+    expect(chineseBody).toContain("自动发送");
+    expect(chineseBody).toContain("静默客户关系系统写入");
+    expect(chineseBody).toContain("公开证明声明");
+
+    expect(chineseBody).not.toMatch(
+      /closeout|public-safe|Pack delivery artifact templates|slice|AI-native enterprise AI UX reference work|artifact：|Context Packet|safe sample|Evidence Matrix|Review-Ready Work Pack|Proof Loop closeout|Golden Path doctor|eval \/ public guard validation|static \/ offline \/ local runtime smoke|fresh-clone Docker smoke|release approval|customer deployment readiness|commercial release readiness|30-minute onboarding claim|artifact templates|runtime API、schema|connector adoption|customer data intake|hosted MCP|auto-send|auto-approve|auto-execute|silent CRM write|public proof claim/,
+    );
+  });
+
   it("keeps public release train runbook Chinese body free of recently fixed mixed release-governance fragments", () => {
     const releaseTrainRunbook = read(
       "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",

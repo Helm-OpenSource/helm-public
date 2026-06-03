@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 AI 原生企业 AI 工件模板收口回执的中文证明范围术语混写；本批只改收口回执、公开安全 Pack 交付工件模板、AI 原生企业 AI 用户体验参考工作、公开可审查工件、上下文包、Pack Studio 安全样例、证据矩阵、待复核工作包、证明闭环、黄金路径诊断 / 评测 / 公开守卫验证、静态 / 离线 / 本地运行时冒烟验证、D2 Docker 全新克隆冒烟验证、历史收口状态、发布批准、客户部署就绪、商业发布就绪、30 分钟上手声明、运行时 API、数据模式、连接器采用、客户数据接入、托管 MCP、自动发送 / 批准 / 执行、静默客户关系系统写入和公开证明声明文案及源码守卫，不改验证表、命令结果、剩余阻断项或历史回执边界。
 - 继续收口 Clean History 回执的中文公开安全证明范围术语混写；本批只改仓库可见性门禁、历史级步骤、公开安全回执、公开 Core 历史、真实密钥、完整历史扫描、凭据轮换、发布批准、仓库可见性切换、负责人动作、清洗后的快照、完整私有单体仓库历史、私有源仓受损提交、引用可达性、非密钥、假夹具、密钥检测器、真实凭据和形似凭据内容文案及源码守卫，不改 gitleaks 证据、finding 分类、复现命令、非声明边界或私有凭据轮换责任。
 - 继续收口 D2 Docker 全新克隆冒烟回执的中文证明范围术语混写；本批只改全新克隆冒烟验证、干净检出、随附 MySQL 服务、公开上手端点、被测 PR 分支、公开 Core Docker 快速启动冒烟验证、客户部署就绪、发布就绪、生产连接器凭据 / 回调、生产数据保留、数据处理协议、服务等级承诺、事件流程、客户 Overlay、运行时市场和自动对外发送 / 批准 / 结算 / 客户承诺权限文案及源码守卫，不改 GitHub Actions 证据、D2 smoke 结论、Docker 命令、HTTP smoke 结果或非发布批准边界。
 - 继续收口公开文档索引的中文入口术语混写；本批只改公开 Core、样板 Pack、Docker 快速启动、复核、检查 / 复刻 / 首次改动、验证命令、公开安全证据路径、首次改动证明、黄金路径、扩展目录、运营信号流图、作业手册、值守姿态、发布节奏、周报包、证据路由包和密钥修复回执文案及源码守卫，不改 public-docs manifest、链接目标、公开文档收录流程或私有材料排除边界。
