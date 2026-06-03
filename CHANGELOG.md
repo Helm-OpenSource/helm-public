@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 public visibility gate checklist 的中文可见性门禁术语混写；本批只改私有 / 公开仓库、运营门禁、公开发布、门禁状态、公开安全事项、可见性门禁、仓库可见性、负责人、步骤通过、清单、回执、凭据、批准编号、负责人动作和发布机器文案及源码守卫，不改 `RELEASE_READINESS_*` 变量、发布命令、已执行状态、Go/No-Go 记录或 owner-only 边界。
 - 继续收口 OPC weekly packet template 的中文公开运营术语混写；本批只改负责人闸门、证据优先、受控执行闭环、发布批准、客户承诺、服务等级承诺、自动外联活动、认证批准、证据包、队列、公开安全事实、命令回执、激活阻断项、贡献者信号、受保护分支、中国访问性回执、触达 / 联系与脱敏回执文案及源码守卫，不改 OPC 模板结构、GitHub issue / PR 字段、owner 决策边界或 public-safe 证据要求。
 - 继续收口 public roadmap 的中文路线图边界术语混写；本批只改相对门禁路线图、AI 交付工程师、判断 / 证据 / 复核 / 边界 / 交付包工作、商业发布批准、生产服务等级承诺、客户部署承诺、仓库可见性批准、建议 / 承诺、复核包、证据门禁、发布日期承诺、仓库路由和负责人批准文案及源码守卫，不改 roadmap 分期、Pack / Overlay / control-plane 路由或 Cloud / Enterprise 非承诺边界。
 - 继续收口 public release train runbook 的中文发布治理术语混写；本批只改发布批准、商业发布声明、生产服务等级承诺、负责人闸门、稳定语义化版本线、私有回执、发布命令和公开安全门禁文案及源码守卫，不改 release gate、GitHub Release、版本策略、人工回执变量或非 SLA 边界。

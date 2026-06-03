@@ -5,23 +5,23 @@ created: 2026-06-01
 review_after: 2026-09-01
 public_safety: Public-safe operational checklist. Lists gate steps, env-var names, and evidence file paths only. Set actual RELEASE_READINESS_* values on the release machine — do not commit dates, credentials, approval ids, or receipts produced by owner actions into this repo.
 ---
-# Helm Public Visibility Gate Checklist V1 / Helm 公开可见性 Gate 清单 V1
+# Helm Public Visibility Gate Checklist V1 / Helm 公开可见性门禁清单 V1
 
 > **语言 / Language**: **中文主文本** + **English reference**
 
 ## 中文主文本 / Chinese Main Text
 
-本清单记录 `helm-public` 从 private 到 public 的 operational gate。2026-06-01 的
-launch 已完成；本文现在保留已执行 gate state 和 launch 后仍需跟进的 public-safe
-items。它 operationalizes Golden Path requirements 中定义的 visibility gate。
+本清单记录 `helm-public` 从私有仓库切到公开仓库的运营门禁。2026-06-01 的
+公开发布已完成；本文现在保留已执行门禁状态和发布后仍需跟进的公开安全事项。
+它把 Golden Path 要求中定义的可见性门禁落成可执行检查。
 
-硬规则：repository visibility 只能由 owner 作为最后一步人工动作执行，并且必须在所有
-步骤 green 之后完成。任何 launch 前失败步骤都是 No-Go。本 checklist 不会 flip
-visibility，也不授予 Go/No-Go。
+硬规则：仓库可见性只能由负责人作为最后一步人工动作执行，并且必须在所有
+步骤通过之后完成。任何发布前失败步骤都是 No-Go。本清单不会切换
+仓库可见性，也不授予 Go/No-Go。
 
-未来 release 不能复用 2026-06-01 的 receipt。每次 release 都必须重新设置对应
-`RELEASE_READINESS_*` 变量，且实际 receipt、credential、approval id 和 owner action
-记录必须保留在 release machine 或私有记录中，不得提交到公开仓库。
+未来发布不能复用 2026-06-01 的回执。每次发布都必须重新设置对应
+`RELEASE_READINESS_*` 变量，且实际回执、凭据、批准编号和负责人动作
+记录必须保留在发布机器或私有记录中，不得提交到公开仓库。
 
 ## English Reference
 

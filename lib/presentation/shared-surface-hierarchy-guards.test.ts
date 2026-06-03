@@ -2169,6 +2169,34 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps public visibility gate Chinese body free of recently fixed mixed visibility-gate fragments", () => {
+    const visibilityGate = read(
+      "docs/operations/HELM_PUBLIC_VISIBILITY_GATE_CHECKLIST_V1.md",
+    );
+    const chineseBody = visibilityGate.slice(
+      visibilityGate.indexOf("本清单记录 `helm-public`"),
+      visibilityGate.indexOf("## English Reference"),
+    );
+
+    expect(visibilityGate).toContain("Helm 公开可见性门禁清单 V1");
+    expect(chineseBody).toContain("从私有仓库切到公开仓库");
+    expect(chineseBody).toContain("运营门禁");
+    expect(chineseBody).toContain("公开发布已完成");
+    expect(chineseBody).toContain("已执行门禁状态");
+    expect(chineseBody).toContain("公开安全事项");
+    expect(chineseBody).toContain("可见性门禁");
+    expect(chineseBody).toContain("仓库可见性只能由负责人");
+    expect(chineseBody).toContain("步骤通过之后完成");
+    expect(chineseBody).toContain("本清单不会切换");
+    expect(chineseBody).toContain("未来发布不能复用");
+    expect(chineseBody).toContain("实际回执、凭据、批准编号和负责人动作");
+    expect(chineseBody).toContain("发布机器或私有记录");
+
+    expect(chineseBody).not.toMatch(
+      /private 到 public|operational gate|launch 已完成|gate state|public-safe\s+items|operationalizes|Golden Path requirements|visibility gate|repository visibility|owner 作为|步骤 green|launch 前失败|checklist 不会 flip|flip\s+visibility|未来 release|receipt|credential|approval id|owner action|release machine/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");
