@@ -152,6 +152,17 @@ customer-relationship-system source copy, and source guards only; it does not
 change settings persistence, connector priority, auth configuration, or
 data-ingress logic, and does not claim full-repo bilingualization completion.
 
+meeting v2 组件里的中文 CRM 边界混写也已继续清理；本批只改机会判断、人工执行和
+运行时卡片里的正式客户关系系统状态、写回、步骤与权限文案及源码守卫，不改变 runtime
+状态机、阴影摘要、人工回执或正式写回边界，也不声明全仓双语化完成。
+
+Mixed Chinese CRM boundary copy in meeting v2 components has also been further
+localized. This batch changes official customer-relationship-system state,
+writeback, step, and permission wording in opportunity-judgement, human-action,
+and runtime cards plus source guards only; it does not change runtime state
+machines, shadow summaries, manual receipts, or official-write boundaries, and
+does not claim full-repo bilingualization completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或

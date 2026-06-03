@@ -214,7 +214,7 @@ export function MeetingV2OpportunityJudgeCard({ meetingId, runtime }: MeetingV2O
               {runtime
                 ? english
                   ? "Confirmed facts flow into stage, attention, next-step, review. CRM stays unchanged."
-                  : "确认的会议事实会进入阶段、关注、下一步、复核。正式 CRM 不变。"
+                  : "确认的会议事实会进入阶段、关注、下一步、复核。正式客户关系系统状态不变。"
                 : english
                   ? "Waiting for confirmed meeting facts."
                   : "等会议事实被人工确认后启动。"}
@@ -300,7 +300,7 @@ export function MeetingV2OpportunityJudgeCard({ meetingId, runtime }: MeetingV2O
                   <div className="mt-4 space-y-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
                     <p>{runtime.bundle?.boundaryNotes[0] ?? (english ? "Shadow consume still requires explicit review." : "写入阴影摘要仍需显式复核。")}</p>
                     <p>{runtime.bundle?.approvedMeans ?? (english ? "Approved means shadow summary consume only." : "批准只表示允许写入阴影摘要。")}</p>
-                    <p>{runtime.bundle?.approvedDoesNotMean ?? (english ? "Approved does not mean official CRM writeback." : "批准不代表正式 CRM 写回。")}</p>
+                    <p>{runtime.bundle?.approvedDoesNotMean ?? (english ? "Approved does not mean official CRM writeback." : "批准不代表正式客户关系系统写回。")}</p>
                   </div>
                 </div>
 
@@ -321,7 +321,7 @@ export function MeetingV2OpportunityJudgeCard({ meetingId, runtime }: MeetingV2O
                     <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
                       {english
                         ? "You can confirm shadow consume, edit then confirm, reject, keep as draft, mark insufficient evidence, or block this judgement by boundary. Confirm still does not mean official CRM writeback."
-                        : "你可以确认写入阴影摘要、编辑后确认、驳回、保留为草稿、标记依据不足，或按边界阻断。确认仍不等于正式 CRM 写回。"}
+                        : "你可以确认写入阴影摘要、编辑后确认、驳回、保留为草稿、标记依据不足，或按边界阻断。确认仍不等于正式客户关系系统写回。"}
                     </p>
                     <OpportunityJudgeReviewForm
                       key={runtime.artifactReview?.id ?? runtime.latestOpportunityDeltaEvent?.id ?? meetingId}
@@ -340,7 +340,7 @@ export function MeetingV2OpportunityJudgeCard({ meetingId, runtime }: MeetingV2O
                       {runtime.artifactReview?.status === "CONFIRMED"
                         ? english
                           ? "This judgement bundle has been confirmed for shadow consume only. Official CRM state still remains unchanged."
-                          : "这组判断套件已被确认写入阴影摘要，但正式 CRM 状态仍保持不变。"
+                          : "这组判断套件已被确认写入阴影摘要，但正式客户关系系统状态仍保持不变。"
                         : runtime.artifactReview?.status === "REJECTED"
                           ? english
                             ? "This judgement bundle has been rejected or boundary-blocked. Evidence remains visible, but nothing writes official state."

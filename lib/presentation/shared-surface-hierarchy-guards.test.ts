@@ -1862,6 +1862,27 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps meeting v2 CRM boundary component copy localized", () => {
+    const opportunityJudgeCard = read(
+      "features/meetings/meeting-v2-opportunity-judge-card.tsx",
+    );
+    const humanActionCard = read(
+      "features/meetings/meeting-v2-human-action-execution-card.tsx",
+    );
+    const runtimeCard = read("features/meetings/meeting-v2-runtime-card.tsx");
+    const combined = `${opportunityJudgeCard}\n${humanActionCard}\n${runtimeCard}`;
+
+    expect(opportunityJudgeCard).toContain("正式客户关系系统状态不变");
+    expect(opportunityJudgeCard).toContain("正式客户关系系统写回");
+    expect(humanActionCard).toContain("客户关系系统写入权限");
+    expect(humanActionCard).toContain("标记已人工完成客户关系系统步骤");
+    expect(runtimeCard).toContain("正式客户关系系统状态");
+
+    expect(combined).not.toMatch(
+      /正式 CRM|CRM 步骤|CRM 写入|CRM 状态/,
+    );
+  });
+
   it("keeps public home Chinese entry copy localized for delivery engineers", () => {
     const publicHome = read("app/page.tsx");
 

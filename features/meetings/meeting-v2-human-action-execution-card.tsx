@@ -56,7 +56,7 @@ function primaryAcknowledgement(action: HumanActionExecutionRuntimeAction, engli
     case "manual_crm_step":
       return {
         mode: "mark_crm_step_done" as HumanActionExecutionAckMode,
-        label: english ? "Mark CRM step done" : "标记已人工完成 CRM 步骤",
+        label: english ? "Mark CRM step done" : "标记已人工完成客户关系系统步骤",
       };
     case "manual_handoff_delivery":
     case "manual_handoff_customer_success":
@@ -243,7 +243,7 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
               {runtime
                 ? english
                   ? "Manual execution + proof + writeback. Helm doesn't get send authority or CRM write."
-                  : "人工执行 + 证据 + 回写。Helm 不获得发送权限或 CRM 写入。"
+                  : "人工执行 + 证据 + 回写。Helm 不获得发送权限或客户关系系统写入权限。"
                 : english
                   ? "Waiting for an approved draft or confirmed shadow judgement."
                   : "等已通过的草稿或已确认的阴影判断。"}
@@ -407,7 +407,7 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
                   <ul className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--foreground)]">
                     <li>{english ? "It does not send email automatically." : "它不会自动发邮件。"}</li>
                     <li>{english ? "It does not book external calendars automatically." : "它不会自动预约外部日程。"}</li>
-                    <li>{english ? "It does not write official CRM state automatically." : "它不会自动写正式 CRM 状态。"}</li>
+                    <li>{english ? "It does not write official CRM state automatically." : "它不会自动写正式客户关系系统状态。"}</li>
                     <li>{english ? "It does not treat approved as committed or executed." : "它不会把已通过混成已提交或已执行。"}</li>
                   </ul>
                 </div>

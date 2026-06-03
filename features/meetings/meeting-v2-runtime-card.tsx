@@ -1428,7 +1428,7 @@ export function MeetingV2RuntimeCard({
                       <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "shadow boundary" : "影子写入边界"}</p>
                       <ul className="mt-2 space-y-1 text-sm text-[color:var(--muted)]">
                         <li>- {english ? "Shadow stage / risk / next action only." : "只更新影子阶段、风险和下一步。"}</li>
-                        <li>- {english ? "No official CRM state writeback happens here." : "这里不会写入正式 CRM 状态。"}</li>
+                        <li>- {english ? "No official CRM state writeback happens here." : "这里不会写入正式客户关系系统状态。"}</li>
                         <li>- {english ? "No external send or commitment is created." : "这里不会生成外发或正式承诺。"}</li>
                       </ul>
                     </div>
