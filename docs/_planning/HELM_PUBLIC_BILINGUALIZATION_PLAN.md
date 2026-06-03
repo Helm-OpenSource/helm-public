@@ -25,13 +25,16 @@ reviewers must still be able to understand the public Core contract.
 
 本计划不声明全仓已经双语化完成。当前状态是：P0 入口、docs entry、P1 product /
 operations / roadmap / launch / trial / legal 文档已分批落地；P2 sample pack、review
-receipts、templates、report-skill 与 contributor-facing surfaces 正在推进。
+receipts、templates、report-skill 与 contributor-facing surfaces 正在推进。源码 / UI
+侧已继续收口会议人工执行与正式写回运行时面板，但全工程扫描仍显示剩余候选项。
 
 This plan does not claim that the whole repository is already bilingual. The
 current state is: P0 entry surfaces, docs entry points, and P1 product /
 operations / roadmap / launch / trial / legal docs have landed in staged
 commits; P2 sample pack, review receipts, templates, report-skill, and
-contributor-facing surfaces are underway.
+contributor-facing surfaces are underway. On the source / UI side, the meeting
+human-execution and official-write runtime panels have been further localized,
+but whole-project scans still show remaining candidates.
 
 ## 3. 双语标准 / Bilingual Standard
 
@@ -86,7 +89,10 @@ This PR's source audit result:
    modules 和主要 API action messages 均使用 locale 分支或 message resolver。
 3. 抽查 264 个 `.tsx` 文件后，少量硬编码英文 UI 标签已修正；workspace runtime
    可见面板中的指标标签、加载策略和基准矩阵文案继续收口，直接 JSX 英文标签扫描已降为 0。
-   剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
+   会议人工执行与正式写回运行时面板的中文操作字段已继续收口，目标文件的 `english`
+   条件中文分支扫描为 0；全工程启发式扫描仍有候选项，后续集中在 runtime / detail /
+   settings surface。剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为
+   P3，不作为中文 UI 缺口。
 4. 后续如果新增 public-facing UI，必须优先接入 `resolveUiLocale` / `getUiMessages`
    或对应 feature display-copy，而不是直接写单语长文案。
 
@@ -98,7 +104,11 @@ This PR's source audit result:
 3. After sampling 264 `.tsx` files, a small set of hard-coded English UI labels
    was corrected; visible workspace runtime metric labels, loading strategy
    labels, and benchmark matrix copy were further localized, and the direct JSX
-   English-label scan now returns 0 hits. Remaining brand names, language
+   English-label scan now returns 0 hits. The meeting human-execution and
+   official-write runtime panels have also been localized for Chinese operation
+   fields, and the target-file `english` conditional scan returns 0 hits;
+   whole-project heuristic scans still show remaining candidates, concentrated
+   in runtime / detail / settings surfaces. Remaining brand names, language
    labels, provider names, trace keys, and runtime enums are P3 rather than
    Chinese UI gaps.
 4. New public-facing UI must use `resolveUiLocale` / `getUiMessages` or the
@@ -140,7 +150,7 @@ This plan does not authorize:
 | P1-C | roadmap、launch、trial、legal 双语化 / Bilingualize roadmap, launch, trial, and legal docs | roadmap、launch announcement、trial runbook、trial data policy |
 | P2-A | sample pack 与 integration docs 双语化 / Bilingualize sample-pack and integration docs | `extensions/case-management-sample/`、`docs/integrations/INTEGRATION_TEMPLATE.md` |
 | P2-B | review receipts 与 report-skill docs 双语摘要 / Add bilingual summaries to review receipts and report-skill docs | selected receipts、`external-resource-kit/` docs |
-| P2-C | 源码 / UI 双语审计 / Source and UI bilingual audit | `lib/i18n/`、public routes、workspace shell、display-copy modules、selected hard-coded UI labels |
+| P2-C | 源码 / UI 双语审计 / Source and UI bilingual audit | `lib/i18n/`、public routes、workspace shell、display-copy modules、selected hard-coded UI labels、meeting execution / official-write runtime panels |
 
 ## 7. 验证 / Verification
 
@@ -190,6 +200,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-03 | 继续收口会议人工执行与正式写回运行时面板中文操作字段，目标文件 `english` 条件中文分支扫描为 0；Further localized meeting human-execution and official-write runtime operation fields; target-file `english` conditional scan now returns 0 hits |
 | 2026-06-03 | 继续收口 workspace runtime 可见面板中的指标标签、加载策略和基准矩阵文案，直接 JSX 英文标签扫描降为 0；Further localized visible workspace runtime metric labels, loading strategy labels, and benchmark matrix copy; direct JSX English-label scan now returns 0 hits |
 | 2026-06-03 | 增加源码 / UI 审计标准，并记录 `zh-CN` 默认、`en-US` 可切换、display-copy 与少量硬编码 UI 标签修正；Added source / UI audit standard and recorded the `zh-CN` default, `en-US` switch, display-copy posture, and small hard-coded UI label fixes |
 | 2026-06-03 | 将“交付工程师友好”加入双语化完成标准：必须说明 inspect / fork / first change / commands / evidence route / boundary；Added delivery-engineer friendliness to the bilingualization completion standard: inspect / fork / first change / commands / evidence route / boundary must be clear |

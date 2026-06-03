@@ -56,7 +56,7 @@ function primaryAcknowledgement(action: HumanActionExecutionRuntimeAction, engli
     case "manual_crm_step":
       return {
         mode: "mark_crm_step_done" as HumanActionExecutionAckMode,
-        label: english ? "Mark CRM step done" : "标记已人工完成 CRM step",
+        label: english ? "Mark CRM step done" : "标记已人工完成 CRM 步骤",
       };
     case "manual_handoff_delivery":
     case "manual_handoff_customer_success":
@@ -113,13 +113,13 @@ function ExecutionAcknowledgeForm({
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-            {english ? "proof note" : "proof note"}
+            {english ? "proof note" : "执行证据备注"}
           </p>
           <Textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="mt-2 text-sm" />
         </div>
         <div>
           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-            {english ? "external reference (optional)" : "external reference（可选）"}
+            {english ? "external reference (optional)" : "外部引用（可选）"}
           </p>
           <Input value={externalReference} onChange={(event) => setExternalReference(event.target.value)} className="mt-2 text-sm" />
         </div>
@@ -127,7 +127,7 @@ function ExecutionAcknowledgeForm({
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-            {english ? "what was not done" : "what was not done"}
+            {english ? "what was not done" : "未完成事项"}
           </p>
           <Textarea
             value={whatWasNotDone}
@@ -138,7 +138,7 @@ function ExecutionAcknowledgeForm({
         </div>
         <div>
           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-            {english ? "follow-through status" : "follow-through status"}
+            {english ? "follow-through status" : "跟进闭环状态"}
           </p>
           <Textarea
             value={followThroughStatus}
@@ -176,7 +176,7 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
     startTransition(async () => {
       const result = await runMeetingHumanActionExecutionRuntimeAction(meetingId, force);
       if (!result.ok) {
-        toast.error(result.error ?? (english ? "Human execution surface failed" : "human execution surface 失败"));
+        toast.error(result.error ?? (english ? "Human execution surface failed" : "人工执行面失败"));
         return;
       }
       const actionCount = result.actionCount ?? 0;
@@ -260,29 +260,29 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
           <>
             <div className="grid gap-3 md:grid-cols-4">
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "ready actions" : "ready actions"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "ready actions" : "待执行动作"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{runtime.bundle?.readyCount ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "approved still means manual next step only" : "已通过仍只表示人工下一步"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "executed proofs" : "executed proofs"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "executed proofs" : "已记录执行证据"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{runtime.bundle?.executedCount ?? 0}</p>
-                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "proof still does not mean external outcome" : "proof 仍不等于外部结果"}</p>
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "proof still does not mean external outcome" : "执行证据仍不等于外部结果"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "blocked / deferred" : "blocked / deferred"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "blocked / deferred" : "受阻 / 延后"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
                   {(runtime.bundle?.blockedCount ?? 0) + (runtime.bundle?.deferredCount ?? 0)}
                 </p>
-                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "boundary and dependency posture stays visible" : "边界和依赖姿态 继续可见"}</p>
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "boundary and dependency posture stays visible" : "边界和依赖姿态继续可见"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "approved sources" : "approved sources"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "approved sources" : "已批准源头"}</p>
                 <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">
                   {[
-                    runtime.approvedSources.draftCommsApproved ? "draft" : null,
-                    runtime.approvedSources.opportunityJudgementApproved ? "shadow" : null,
-                    runtime.approvedSources.handoffArtifactsAvailable > 0 ? "handoff" : null,
+                    runtime.approvedSources.draftCommsApproved ? (english ? "draft" : "草稿") : null,
+                    runtime.approvedSources.opportunityJudgementApproved ? (english ? "shadow" : "阴影判断") : null,
+                    runtime.approvedSources.handoffArtifactsAvailable > 0 ? (english ? "handoff" : "交接") : null,
                   ]
                     .filter(Boolean)
                     .join(" / ") || (english ? "none" : "暂无")}
@@ -310,32 +310,32 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
                         <p className="text-sm font-semibold text-[color:var(--foreground)]">{action.sourceArtifactTitle}</p>
                         <p className="text-sm leading-6 text-[color:var(--foreground)]">{action.sourceArtifactSummary}</p>
                         <p className="text-sm text-[color:var(--foreground)]">
-                          <span className="font-medium text-[color:var(--foreground)]">{english ? "Why now" : "Why now"}:</span>{" "}
+                          <span className="font-medium text-[color:var(--foreground)]">{english ? "Why now" : "为什么现在执行"}:</span>{" "}
                           {action.executionIntent}
                         </p>
                         <p className="text-sm text-[color:var(--foreground)]">
-                          <span className="font-medium text-[color:var(--foreground)]">{english ? "Boundary" : "Boundary"}:</span>{" "}
+                          <span className="font-medium text-[color:var(--foreground)]">{english ? "Boundary" : "边界"}:</span>{" "}
                           {action.executionBoundary}
                         </p>
                         <p className="text-sm text-[color:var(--foreground)]">
-                          <span className="font-medium text-[color:var(--foreground)]">{english ? "Approval context" : "Approval context"}:</span>{" "}
+                          <span className="font-medium text-[color:var(--foreground)]">{english ? "Approval context" : "审批上下文"}:</span>{" "}
                           {action.approvalContext}
                         </p>
                         {action.executionPrerequisite ? (
                           <p className="text-sm text-[color:var(--foreground)]">
-                            <span className="font-medium text-[color:var(--foreground)]">{english ? "Prerequisite" : "Prerequisite"}:</span>{" "}
+                            <span className="font-medium text-[color:var(--foreground)]">{english ? "Prerequisite" : "前置条件"}:</span>{" "}
                             {action.executionPrerequisite}
                           </p>
                         ) : null}
                         {action.executionDependency ? (
                           <p className="text-sm text-[color:var(--foreground)]">
-                            <span className="font-medium text-[color:var(--foreground)]">{english ? "Dependency" : "Dependency"}:</span>{" "}
+                            <span className="font-medium text-[color:var(--foreground)]">{english ? "Dependency" : "依赖"}:</span>{" "}
                             {action.executionDependency}
                           </p>
                         ) : null}
                         {action.riskReviewSummary ? (
                           <p className="text-sm text-[color:var(--foreground)]">
-                            <span className="font-medium text-[color:var(--foreground)]">{english ? "Risk review" : "Risk review"}:</span>{" "}
+                            <span className="font-medium text-[color:var(--foreground)]">{english ? "Risk review" : "风险复核"}:</span>{" "}
                             {action.riskReviewSummary}
                           </p>
                         ) : null}
@@ -365,7 +365,7 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
 
               <div className="space-y-4">
                 <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Execution boundary" : "Execution boundary"}</p>
+                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Execution boundary" : "执行边界"}</p>
                   <div className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--foreground)]">
                     <p>{runtime.bundle?.humanOnly ?? (english ? "This surface is for human execution only." : "这是一层人工执行面。")}</p>
                     <p>{runtime.bundle?.approvedMeans ?? (english ? "Approved means only manual next step." : "已通过只表示允许人工下一步。")}</p>
@@ -375,22 +375,22 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
                 </div>
 
                 <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Current write-back" : "Current write-back"}</p>
+                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Current write-back" : "当前回写"}</p>
                   <div className="mt-3 space-y-3 text-sm leading-6 text-[color:var(--foreground)]">
                     <div>
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "meeting summary" : "meeting summary"}</p>
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "meeting summary" : "会议摘要"}</p>
                       <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[color:var(--foreground)]">
-                        {runtime.latestWriteback.meetingPostMeetingSummary ?? (english ? "No execution write-back yet." : "当前还没有 execution write-back。")}
+                        {runtime.latestWriteback.meetingPostMeetingSummary ?? (english ? "No execution write-back yet." : "当前还没有执行回写。")}
                       </pre>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "opportunity summary" : "opportunity summary"}</p>
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "opportunity summary" : "机会摘要"}</p>
                       <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[color:var(--foreground)]">
-                        {runtime.latestWriteback.opportunityNextStepSummary ?? (english ? "No opportunity write-back yet." : "当前还没有机会 write-back。")}
+                        {runtime.latestWriteback.opportunityNextStepSummary ?? (english ? "No opportunity write-back yet." : "当前还没有机会回写。")}
                       </pre>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "latest checkpoint" : "latest checkpoint"}</p>
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "latest checkpoint" : "最新检查点"}</p>
                       <p className="mt-2 text-sm text-[color:var(--foreground)]">
                         {runtime.latestWriteback.latestCheckpoint
                           ? `${runtime.latestWriteback.latestCheckpoint.kind} · ${runtime.latestWriteback.latestCheckpoint.summary}`
@@ -403,11 +403,11 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
                 </div>
 
                 <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "What this does not do" : "What this does not do"}</p>
+                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "What this does not do" : "它不会做什么"}</p>
                   <ul className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--foreground)]">
                     <li>{english ? "It does not send email automatically." : "它不会自动发邮件。"}</li>
                     <li>{english ? "It does not book external calendars automatically." : "它不会自动预约外部日程。"}</li>
-                    <li>{english ? "It does not write official CRM state automatically." : "它不会自动写 正式 CRM state。"}</li>
+                    <li>{english ? "It does not write official CRM state automatically." : "它不会自动写正式 CRM 状态。"}</li>
                     <li>{english ? "It does not treat approved as committed or executed." : "它不会把已通过混成已提交或已执行。"}</li>
                   </ul>
                 </div>
