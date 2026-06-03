@@ -707,6 +707,49 @@ describe("shared surface hierarchy guards", () => {
     expect(queueModel).toContain("这一面仍继续禁用对外发送和承诺");
   });
 
+  it("keeps customer-facing offer and external proposal copy free of recently fixed mixed fragments", () => {
+    const detailModel = read(
+      "features/customer-facing-offer-external-proposal/detail-model.ts",
+    );
+
+    for (const fragment of [
+      "对外安全 动作",
+      "经营记忆事实 和完整发送评估",
+      "跟进安全语言 和异议",
+      "创始人 /操作员",
+      "信任敏感 措辞",
+      "决定 可对外措辞",
+      "一版 可对外提案",
+      "对外闸口 前",
+      "提案 面",
+      "仅讨论 措辞",
+      "发送前复核闸口 由谁",
+      "依赖清理 或",
+      "把 可对外叙事",
+      "下一步 号召动作",
+      "becomes可发送",
+      "可发送 之前",
+      "使用 可对外提案",
+      "提案安全 版本",
+      "as可发送 copy",
+    ]) {
+      expect(detailModel).not.toContain(fragment);
+    }
+
+    expect(detailModel).toContain("下一步对外安全动作由谁接");
+    expect(detailModel).toContain("经营记忆事实和完整发送评估轨迹");
+    expect(detailModel).toContain("跟进安全语言和异议安全备选表达");
+    expect(detailModel).toContain("创始人 / 操作员复核");
+    expect(detailModel).toContain("信任敏感措辞");
+    expect(detailModel).toContain("一版可对外提案结构");
+    expect(detailModel).toContain("对外闸口前");
+    expect(detailModel).toContain("同一个提案面");
+    expect(detailModel).toContain("仅讨论措辞");
+    expect(detailModel).toContain("下一步号召动作");
+    expect(detailModel).toContain("anything becomes sendable");
+    expect(detailModel).toContain("sendable copy");
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 

@@ -54,7 +54,7 @@ export function buildCustomerFacingOfferPageContract({
         : `确认这版当前是继续保持「${labelForSendabilityMode(sendabilityMode, false)}」，还是需要退回内部复核。`,
       english
         ? "Confirm who owns the next outward-safe move, and whether it should remain review-before-send before anyone sends or reinforces expectation."
-        : "确认下一步对外安全 动作由谁接，以及在任何人外发或加强预期前，是否仍必须保持发送前复核。",
+        : "确认下一步对外安全动作由谁接，以及在任何人外发或加强预期前，是否仍必须保持发送前复核。",
     ],
     customerOfferPageBoundarySummary: [
       english
@@ -68,7 +68,7 @@ export function buildCustomerFacingOfferPageContract({
     customerOfferPageEvidenceSummary: [
       english
         ? `${detail.auditLogs.length} audit changes, ${detail.memoryFacts.length} memory facts and the full sendability trace are grouped below without interrupting the main narrative.`
-        : `当前 ${detail.auditLogs.length} 条审计变化、${detail.memoryFacts.length} 条经营记忆事实 和完整发送评估轨迹已经分组收在下面，不会打断主叙事。`,
+        : `当前 ${detail.auditLogs.length} 条审计变化、${detail.memoryFacts.length} 条经营记忆事实和完整发送评估轨迹已经分组收在下面，不会打断主叙事。`,
       english
         ? "Replay, audit, memory, worker output, boundary trace, sendability trace and historical changes remain available on demand."
         : "回放、审计、经营记忆、执行输出、边界轨迹、发送评估轨迹和历史变更都在附注层按需可看。",
@@ -76,10 +76,10 @@ export function buildCustomerFacingOfferPageContract({
     customerOfferPageWorkerSummary: [
       english
         ? "Sales worker keeps the outward framing, follow-up-safe language and objection-safe alternatives visible."
-        : "销售执行会持续把对外措辞、跟进安全语言 和异议安全备选表达挂在前台。",
+        : "销售执行会持续把对外措辞、跟进安全语言和异议安全备选表达挂在前台。",
       english
         ? "Founder / operator review keeps sendability, promise pressure and trust-sensitive wording from being flattened too early."
-        : "创始人 /操作员复核会持续防止发送评估、承诺压力和信任敏感 措辞被过早说实。",
+        : "创始人 / 操作员复核会持续防止发送评估、承诺压力和信任敏感措辞被过早说实。",
     ],
     customerOfferPageNextAction: buildCustomerOfferNextActions({
       id: detail.id,
@@ -108,7 +108,7 @@ export function buildCustomerFacingOfferPageContract({
           : `当前仍有 ${signals.openCommitmentCount} 条开放承诺在影响信任压力，所以下一版报价措辞不能假装已经获得了还没被兑现的确定性。`
         : english
           ? "There is no single open commitment dominating the page, so this is the right moment to decide how far the external-safe wording can go."
-          : "当前没有单条开放承诺主导整个页面，所以现在正适合决定 可对外措辞能走到哪一步。",
+          : "当前没有单条开放承诺主导整个页面，所以现在正适合决定可对外措辞能走到哪一步。",
       english
         ? "The current page already separates what can go outward from what must remain internal, so the remaining value is deciding sendability, not rediscovering context."
         : "当前页已经把哪些能对外、哪些必须内部保留分开了，所以现在真正要决定的是发送评估，而不是重新拼上下文。",
@@ -171,17 +171,17 @@ export function buildExternalProposalPageContract({
     externalProposalPageActionSummary: [
       english
         ? "An external-safe proposal structure is already prepared, together with the current boundary, prerequisite and dependency notes."
-        : "当前已经准备好一版 可对外提案结构，并把边界、前置和依赖备注一起收好。",
+        : "当前已经准备好一版可对外提案结构，并把边界、前置和依赖备注一起收好。",
       signals.pendingApprovalCount
         ? english
           ? `${signals.pendingApprovalCount} approval-sensitive actions are still blocking the outward gate, so this page stays explicit about review-before-send.`
-          : `当前仍有 ${signals.pendingApprovalCount} 条审批敏感动作挡在对外闸口 前，所以这页会明确保持发送前复核。`
+          : `当前仍有 ${signals.pendingApprovalCount} 条审批敏感动作挡在对外闸口前，所以这页会明确保持发送前复核。`
         : english
           ? "The latest blocker, commitment and sendability context are already grouped so the team can review one proposal surface instead of raw rows."
-          : "最新阻塞、承诺和发送评估上下文都已经被分组收好，团队现在可以复核同一个提案 面，而不是原始数据行。",
+          : "最新阻塞、承诺和发送评估上下文都已经被分组收好，团队现在可以复核同一个提案面，而不是原始数据行。",
       english
         ? "Discussion-only wording, safe-with-boundary wording and internal-only review notes are already separated."
-        : "仅讨论 措辞、带边界可说措辞和仅内部复核备注已经区分开了。",
+        : "仅讨论措辞、带边界可说措辞和仅内部复核备注已经区分开了。",
     ],
     externalProposalPageDecisionRequest: [
       english
@@ -189,12 +189,12 @@ export function buildExternalProposalPageContract({
         : `决定这版当前是继续保持「${labelForSendabilityMode(sendabilityMode, false)}」，还是在任何对外动作前先退回方案包复核。`,
       english
         ? "Decide who owns the next review-before-send gate, and whether founder, sales or delivery needs to co-sign the next version."
-        : "决定下一道发送前复核闸口 由谁接，以及创始人、销售、交付是否需要共同确认下一版。",
+        : "决定下一道发送前复核闸口由谁接，以及创始人、销售、交付是否需要共同确认下一版。",
     ],
     externalProposalPageBoundarySummary: [
       english
         ? "External proposal wording can never silently absorb internal-only caveats, dependency cleanup or unresolved scope notes."
-        : "外部提案措辞不能悄悄吸收仅内部注脚、依赖清理 或未解决的范围备注。",
+        : "外部提案措辞不能悄悄吸收仅内部注脚、依赖清理或未解决的范围备注。",
       buildBoundaryLineForSendability(sendabilityMode, english),
       english
         ? "Recommendation, discussion-only language and proposal reinforcement still do not equal commitment."
@@ -211,10 +211,10 @@ export function buildExternalProposalPageContract({
     externalProposalPageWorkerSummary: [
       english
         ? "Sales worker keeps the external-safe narrative and next-step call-to-action aligned."
-        : "销售执行会持续把 可对外叙事和下一步 号召动作对齐。",
+        : "销售执行会持续把可对外叙事和下一步号召动作对齐。",
       english
-        ? "Delivery / founder review keeps dependency, scope and promise pressure visible before anything becomes可发送."
-        : "交付 / 创始人复核会在任何内容变成可发送 之前，持续把依赖、范围和承诺压力挂在前台。",
+        ? "Delivery / founder review keeps dependency, scope and promise pressure visible before anything becomes sendable."
+        : "交付 / 创始人复核会在任何内容变成可发送之前，持续把依赖、范围和承诺压力挂在前台。",
     ],
     externalProposalPageNextAction: buildExternalProposalNextActions({
       id: detail.id,
@@ -226,7 +226,7 @@ export function buildExternalProposalPageContract({
     externalProposalPageEvidenceGroups: buildEvidenceGroups(detail, english),
     externalProposalPageCustomerFacingCue: english
       ? "Only external-safe proposal wording may move outward; keep claims scoped and reversible."
-      : "当前只允许使用 可对外提案措辞对外；所有表述都必须保持范围明确且可回退。",
+      : "当前只允许使用可对外提案措辞对外；所有表述都必须保持范围明确且可回退。",
     externalProposalPageInternalOnlyCue: english
       ? "Internal objections, scope tension and dependency repair notes remain review-only."
       : "内部异议、范围张力和依赖修复备注仍然只适合复核层使用。",
@@ -272,7 +272,7 @@ export function buildExternalProposalPageContract({
           : "当前确实存在把提案向外推进的空间，但前提是发送评估边界必须一直显式可见。",
       english
         ? "The proposal-safe version is already prepared, so the remaining value is deciding whether the next expression should move, pause or fall back."
-        : "当前提案安全 版本已经准备好，所以现在真正的价值在于决定下一次表达是继续、暂停，还是先退回。",
+        : "当前提案安全版本已经准备好，所以现在真正的价值在于决定下一次表达是继续、暂停，还是先退回。",
     ],
     pageEscalationHint:
       sendabilityMode === "safe_to_send" ||
@@ -428,7 +428,7 @@ function buildCustomerOfferJudgement(
   }
   if (mode === "discussion_only") {
     return english
-      ? "This customer-facing offer is discussion-only and should not be treated as可发送 copy."
+      ? "This customer-facing offer is discussion-only and should not be treated as sendable copy."
       : "当前客户可见报价仍是仅讨论，不应被当成可直接外发文案。";
   }
   if (mode === "review_before_send") {
