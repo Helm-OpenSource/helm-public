@@ -43,7 +43,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       },
     });
 
-    return successResponse({ suggestion }, "skill formal review approved");
+    return successResponse(
+      { suggestion },
+      english ? "Skill formal review approved" : "正式评审已批准",
+    );
   } catch (error) {
     return errorResponse(
       error instanceof Error

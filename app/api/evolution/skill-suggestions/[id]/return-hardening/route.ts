@@ -34,7 +34,10 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "skill formal review returned for hardening");
+    return successResponse(
+      { suggestion },
+      english ? "Skill formal review returned for hardening" : "正式评审已退回加固",
+    );
   } catch (error) {
     return errorResponse(
       error instanceof Error

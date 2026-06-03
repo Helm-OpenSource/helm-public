@@ -459,46 +459,55 @@ describe("insight governance write paths", () => {
     expect(acceptSkillResponse.status).toBe(200);
     await expect(acceptSkillResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Skill suggestion accepted",
       data: { suggestion: { id: "skill-1" } },
     });
     expect(dismissSkillResponse.status).toBe(200);
     await expect(dismissSkillResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Skill suggestion dismissed",
       data: { suggestion: { id: "skill-1" } },
     });
     expect(acceptResponse.status).toBe(200);
     await expect(acceptResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Strategy suggestion accepted",
       data: { suggestion: { id: "suggestion-1" } },
     });
     expect(dismissResponse.status).toBe(200);
     await expect(dismissResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Strategy suggestion dismissed",
       data: { suggestion: { id: "suggestion-1" } },
     });
     expect(queueFormalReviewResponse.status).toBe(200);
     await expect(queueFormalReviewResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Skill formal review queued",
       data: { suggestion: { id: "skill-1" } },
     });
     expect(approveFormalReviewResponse.status).toBe(200);
     await expect(approveFormalReviewResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Skill formal review approved",
       data: { suggestion: { id: "skill-1" } },
     });
     expect(deferFormalReviewResponse.status).toBe(200);
     await expect(deferFormalReviewResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Skill formal review deferred",
       data: { suggestion: { id: "skill-1" } },
     });
     expect(rejectFormalReviewResponse.status).toBe(200);
     await expect(rejectFormalReviewResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Skill formal review rejected",
       data: { suggestion: { id: "skill-1" } },
     });
     expect(returnFormalReviewResponse.status).toBe(200);
     await expect(returnFormalReviewResponse.json()).resolves.toMatchObject({
       success: true,
+      message: "Skill formal review returned for hardening",
       data: { suggestion: { id: "skill-1" } },
     });
     expect(skillSuggestionMock.acceptSkillSuggestion).toHaveBeenCalledWith({
@@ -587,6 +596,128 @@ describe("insight governance write paths", () => {
       "workspace-1",
       "suggestion-1",
     );
+  });
+
+  it("uses workspace default locale for evolution suggestion success messages", async () => {
+    sessionMock.getCurrentWorkspaceSession.mockResolvedValue({
+      user: { id: "user-1", name: "Owner" },
+      membership: { role: "MEMBER" },
+      workspace: { id: "workspace-1", defaultLocale: "zh-CN" },
+    });
+    settingsGovernanceMock.canManageWorkspacePolicies.mockReturnValue(true);
+    skillSuggestionMock.acceptSkillSuggestion.mockResolvedValue({ id: "skill-1" });
+    skillSuggestionMock.dismissSkillSuggestion.mockResolvedValue({ id: "skill-1" });
+    skillSuggestionMock.queueSkillFormalReview.mockResolvedValue({ id: "skill-1" });
+    skillSuggestionMock.approveSkillFormalReview.mockResolvedValue({ id: "skill-1" });
+    skillSuggestionMock.deferSkillFormalReview.mockResolvedValue({ id: "skill-1" });
+    skillSuggestionMock.rejectSkillFormalReview.mockResolvedValue({ id: "skill-1" });
+    skillSuggestionMock.returnSkillFormalReviewForHardening.mockResolvedValue({ id: "skill-1" });
+    strategySuggestionMock.acceptStrategySuggestion.mockResolvedValue({ id: "suggestion-1" });
+    strategySuggestionMock.dismissStrategySuggestion.mockResolvedValue({ id: "suggestion-1" });
+
+    const responses = await Promise.all([
+      acceptSkillSuggestionRoute(
+        new Request("http://localhost/api/evolution/skill-suggestions/skill-1/accept", {
+          method: "POST",
+        }),
+        { params: Promise.resolve({ id: "skill-1" }) },
+      ),
+      dismissSkillSuggestionRoute(
+        new Request("http://localhost/api/evolution/skill-suggestions/skill-1/dismiss", {
+          method: "POST",
+        }),
+        { params: Promise.resolve({ id: "skill-1" }) },
+      ),
+      queueSkillFormalReviewRoute(
+        new Request("http://localhost/api/evolution/skill-suggestions/skill-1/queue-formal-review", {
+          method: "POST",
+        }),
+        { params: Promise.resolve({ id: "skill-1" }) },
+      ),
+      approveSkillFormalReviewRoute(
+        new Request("http://localhost/api/evolution/skill-suggestions/skill-1/approve-formal-review", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            note: "ready",
+            checklist: {
+              catalogPatchReady: true,
+              testsReady: true,
+              guardsReady: true,
+              docsReady: true,
+              boundaryConfirmed: true,
+            },
+          }),
+        }),
+        { params: Promise.resolve({ id: "skill-1" }) },
+      ),
+      deferSkillFormalReviewRoute(
+        new Request("http://localhost/api/evolution/skill-suggestions/skill-1/defer-formal-review", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            note: "later",
+            checklist: {
+              catalogPatchReady: false,
+              testsReady: false,
+              guardsReady: false,
+              docsReady: false,
+              boundaryConfirmed: true,
+            },
+          }),
+        }),
+        { params: Promise.resolve({ id: "skill-1" }) },
+      ),
+      rejectSkillFormalReviewRoute(
+        new Request("http://localhost/api/evolution/skill-suggestions/skill-1/reject-formal-review", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            note: "no",
+            checklist: {
+              catalogPatchReady: false,
+              testsReady: false,
+              guardsReady: false,
+              docsReady: false,
+              boundaryConfirmed: true,
+            },
+          }),
+        }),
+        { params: Promise.resolve({ id: "skill-1" }) },
+      ),
+      returnSkillFormalReviewRoute(
+        new Request("http://localhost/api/evolution/skill-suggestions/skill-1/return-hardening", {
+          method: "POST",
+        }),
+        { params: Promise.resolve({ id: "skill-1" }) },
+      ),
+      acceptStrategySuggestionRoute(
+        new Request("http://localhost/api/evolution/strategy-suggestions/suggestion-1/accept", {
+          method: "POST",
+        }),
+        { params: Promise.resolve({ id: "suggestion-1" }) },
+      ),
+      dismissStrategySuggestionRoute(
+        new Request("http://localhost/api/evolution/strategy-suggestions/suggestion-1/dismiss", {
+          method: "POST",
+        }),
+        { params: Promise.resolve({ id: "suggestion-1" }) },
+      ),
+    ]);
+
+    const payloads = await Promise.all(responses.map((response) => response.json()));
+
+    expect(payloads.map((payload) => payload.message)).toEqual([
+      "候选能力建议已采纳",
+      "候选能力建议已忽略",
+      "正式评审已加入队列",
+      "正式评审已批准",
+      "正式评审已暂缓",
+      "正式评审已拒绝",
+      "正式评审已退回加固",
+      "策略建议已采纳",
+      "策略建议已忽略",
+    ]);
   });
 
   it("uses workspace default locale for evolution suggestion fallback errors", async () => {

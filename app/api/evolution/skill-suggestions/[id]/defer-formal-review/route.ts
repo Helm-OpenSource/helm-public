@@ -43,7 +43,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       },
     });
 
-    return successResponse({ suggestion }, "skill formal review deferred");
+    return successResponse(
+      { suggestion },
+      english ? "Skill formal review deferred" : "正式评审已暂缓",
+    );
   } catch (error) {
     return errorResponse(
       error instanceof Error

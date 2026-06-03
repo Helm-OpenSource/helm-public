@@ -34,7 +34,10 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "skill formal review queued");
+    return successResponse(
+      { suggestion },
+      english ? "Skill formal review queued" : "正式评审已加入队列",
+    );
   } catch (error) {
     return errorResponse(
       error instanceof Error

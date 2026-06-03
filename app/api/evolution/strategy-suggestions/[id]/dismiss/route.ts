@@ -31,7 +31,10 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "strategy suggestion dismissed");
+    return successResponse(
+      { suggestion },
+      english ? "Strategy suggestion dismissed" : "策略建议已忽略",
+    );
   } catch (error) {
     return errorResponse(
       error instanceof Error

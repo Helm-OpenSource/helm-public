@@ -31,7 +31,10 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "skill suggestion dismissed");
+    return successResponse(
+      { suggestion },
+      english ? "Skill suggestion dismissed" : "候选能力建议已忽略",
+    );
   } catch (error) {
     return errorResponse(
       error instanceof Error
