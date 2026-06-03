@@ -6,6 +6,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- Further localized mixed Chinese display labels in worker / skill / resource presentation; this batch changes delivery-activation checklist, CRM-context, workspace-state, and membership-state labels plus source guards only and leaves worker / skill / resource contracts, control-plane checks, and page assembly unchanged.
 - Further localized mixed Chinese copy in the Helm v2 human action execution runtime; this batch changes manual-action status, execution-proof, scheduling, CRM/pipeline, and formal-CRM boundary prompts only and leaves the human-execution state machine, receipts, official writeback, external send, and approval boundaries unchanged.
 - Added the public bilingualization plan and bilingual GitHub issue / PR intake surfaces.
 - Added Chinese main text and English reference markers to product / boundary docs.

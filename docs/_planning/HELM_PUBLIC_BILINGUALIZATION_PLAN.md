@@ -94,6 +94,16 @@ scheduling, CRM/pipeline, and formal-CRM boundary prompts only, without
 changing the human-execution state machine, receipts, official writeback,
 external send, or approval boundaries.
 
+本轮继续收口 worker / skill / resource presentation 的中文展示标签混写；只调整
+交付激活清单、CRM上下文、工作区状态和成员身份状态标签及源码守卫，不改变
+worker / skill / resource 合同、控制面检查或页面装配逻辑。
+
+This round further localizes mixed Chinese display labels in worker / skill /
+resource presentation. It changes delivery-activation checklist, CRM-context,
+workspace-state, and membership-state labels plus source guards only, without
+changing worker / skill / resource contracts, control-plane checks, or page
+assembly logic.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

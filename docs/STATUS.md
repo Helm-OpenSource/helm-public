@@ -27,6 +27,17 @@ prompts only; it does not change the human-execution state machine, receipts,
 official writeback, external send, or approval boundaries, and does not claim
 full-repo bilingualization completion.
 
+Worker / skill / resource presentation 的中文展示标签混写也已继续清理；本批只改交付激活清单、
+CRM上下文、工作区状态和成员身份状态标签及源码守卫，不改变 worker / skill / resource 合同、
+控制面检查或页面装配逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese display labels in worker / skill / resource presentation have
+also been further localized. This batch changes delivery-activation checklist,
+CRM-context, workspace-state, and membership-state labels plus source guards
+only; it does not change worker / skill / resource contracts, control-plane
+checks, or page assembly logic, and does not claim full-repo bilingualization
+completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。
