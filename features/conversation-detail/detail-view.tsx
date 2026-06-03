@@ -581,33 +581,29 @@ function SecondarySummaryCard({
 function formatMode(mode: ConversationDetailMode, english: boolean) {
   switch (mode) {
     case "founder-meeting":
-      return english ? "Founder meeting" : "Founder meeting";
+      return english ? "Founder meeting" : "创始人会议";
     case "founder-demo":
-      return english ? "Founder demo" : "Founder demo";
+      return english ? "Founder demo" : "创始人演示";
     case "sales-first-contact":
-      return english ? "Sales first contact" : "Sales first contact";
+      return english ? "Sales first contact" : "销售首次接触";
     case "sales-follow-up":
-      return english ? "Sales follow-up" : "Sales follow-up";
+      return english ? "Sales follow-up" : "销售跟进";
     case "objection-handling":
-      return english ? "Objection handling" : "Objection handling";
+      return english ? "Objection handling" : "异议处理";
     case "proposal-walkthrough":
-      return english ? "Proposal walkthrough" : "Proposal walkthrough";
+      return english ? "Proposal walkthrough" : "方案走查";
     case "boundary-clarification":
-      return english ? "Boundary clarification" : "Boundary clarification";
+      return english ? "Boundary clarification" : "边界澄清";
     case "prerequisite-clarification":
-      return english
-        ? "Prerequisite clarification"
-        : "Prerequisite clarification";
+      return english ? "Prerequisite clarification" : "前置条件澄清";
     case "dependency-clarification":
-      return english ? "Dependency clarification" : "Dependency clarification";
+      return english ? "Dependency clarification" : "依赖澄清";
     case "non-commitment-clarification":
-      return english
-        ? "Non-commitment clarification"
-        : "Non-commitment clarification";
+      return english ? "Non-commitment clarification" : "非承诺澄清";
     case "review-before-send":
-      return english ? "Review before send" : "Review before send";
+      return english ? "Review before send" : "发送前复核";
     default:
-      return english ? "Internal prep only" : "Internal-only 准备";
+      return english ? "Internal prep only" : "仅内部准备";
   }
 }
 

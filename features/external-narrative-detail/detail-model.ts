@@ -379,7 +379,7 @@ function buildDeliveryCue(level: ExternalNarrativeDetailLevel, english: boolean)
     level === "review-before-send" ||
     level === "non-commitment-fallback"
     ? "交付这时最适合先把范围、前置和依赖注脚挂在前台，再允许这层叙事变成客户可见。"
-    : "只要故事开始触碰交付 预期，交付就该先保护 implementation 注脚。";
+    : "只要故事开始触碰交付预期，交付就该先保护实施注脚。";
 }
 
 function buildNextActions({
@@ -431,36 +431,36 @@ function buildEvidenceGroups(
   return [
     {
       groupId: "replay",
-      label: english ? "Replay" : "Replay",
+      label: english ? "Replay" : "回放",
       items: [
         english
           ? `Use the current narrative layer ${labelForLevel(level, true)} to replay the next outward-safe story.`
-          : `可按当前叙事层「${labelForLevel(level, false)}」回放下一轮对外安全 故事。`,
+          : `可按当前叙事层「${labelForLevel(level, false)}」回放下一轮对外安全故事。`,
       ],
     },
     {
       groupId: "audit",
-      label: english ? "Audit" : "Audit",
+      label: english ? "Audit" : "审计",
       items: [latestAudit],
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "Memory",
+      label: english ? "Memory" : "经营记忆",
       items: [latestMemory],
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker output",
+      label: english ? "Worker output" : "执行输出",
       items: [latestAction],
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "Boundary trace",
+      label: english ? "Boundary trace" : "边界轨迹",
       items: [topBlocker],
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "Sendability trace",
+      label: english ? "Sendability trace" : "发送评估轨迹",
       items: [
         english
           ? `Current sendability remains ${labelForSendability(sendabilityMode, true)}.`
@@ -469,12 +469,12 @@ function buildEvidenceGroups(
     },
     {
       groupId: "narrative_trace",
-      label: english ? "Narrative trace" : "Narrative trace",
+      label: english ? "Narrative trace" : "叙事轨迹",
       items: [summary],
     },
     {
       groupId: "fallback_trace",
-      label: english ? "Fallback trace" : "Fallback trace",
+      label: english ? "Fallback trace" : "兜底轨迹",
       items: [
         english
           ? `Fallback stays ${fallbackLabel(fallbackMode, true)}.`
@@ -483,7 +483,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "historical_changes",
-      label: english ? "Historical changes" : "Historical changes",
+      label: english ? "Historical changes" : "历史变化",
       items: [
         english
           ? `${topCommitment} · updated ${formatRelative(detail.updatedAt)}`
@@ -496,25 +496,25 @@ function buildEvidenceGroups(
 function labelForLevel(level: ExternalNarrativeDetailLevel, english: boolean) {
   switch (level) {
     case "internal-framing":
-      return english ? "internal framing" : "internal framing";
+      return english ? "internal framing" : "内部构形";
     case "customer-visible-light":
-      return english ? "customer-visible light" : "customer-visible light";
+      return english ? "customer-visible light" : "轻量客户可见";
     case "customer-visible-structured":
-      return english ? "customer-visible structured" : "customer-visible structured";
+      return english ? "customer-visible structured" : "结构化客户可见";
     case "exploratory-narrative":
-      return english ? "exploratory narrative" : "exploratory narrative";
+      return english ? "exploratory narrative" : "探索型叙事";
     case "proposal-supporting-narrative":
-      return english ? "proposal-supporting narrative" : "proposal-supporting narrative";
+      return english ? "proposal-supporting narrative" : "提案支撑叙事";
     case "strengthening-narrative":
-      return english ? "strengthening narrative" : "strengthening narrative";
+      return english ? "strengthening narrative" : "加固叙事";
     case "review-before-send":
-      return english ? "review before send" : "review-before-send";
+      return english ? "review before send" : "发送前复核";
     case "boundary-only":
-      return english ? "boundary only" : "boundary-only";
+      return english ? "boundary only" : "仅边界";
     case "non-commitment-fallback":
-      return english ? "non-commitment fallback" : "non-commitment fallback";
+      return english ? "non-commitment fallback" : "非承诺兜底";
     default:
-      return english ? "blocked narrative" : "blocked narrative";
+      return english ? "blocked narrative" : "受阻叙事";
   }
 }
 
@@ -524,13 +524,13 @@ function fallbackLabel(
 ) {
   switch (mode) {
     case "boundary-only":
-      return english ? "boundary only" : "boundary-only";
+      return english ? "boundary only" : "仅边界";
     case "non-commitment-fallback":
-      return english ? "non-commitment fallback" : "non-commitment fallback";
+      return english ? "non-commitment fallback" : "非承诺兜底";
     case "review-hold":
-      return english ? "review hold" : "review-hold";
+      return english ? "review hold" : "复核暂缓";
     case "blocked":
-      return english ? "blocked" : "blocked";
+      return english ? "blocked" : "受阻";
     default:
       return english ? "no fallback" : "无需兜底";
   }
@@ -552,7 +552,7 @@ function labelForSendability(
     case "internal-only":
       return english ? "internal only" : "仅内部";
     case "non-commitment-fallback":
-      return english ? "non-commitment fallback" : "non-commitment fallback";
+      return english ? "non-commitment fallback" : "非承诺兜底";
     default:
       return english ? "not safe to send" : "当前不能外发";
   }

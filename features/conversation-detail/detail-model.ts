@@ -419,7 +419,7 @@ function buildEvidenceGroups(
   return [
     {
       groupId: "replay",
-      label: english ? "Replay" : "Replay",
+      label: english ? "Replay" : "回放",
       items: [
         english
           ? `Use the current scene ${labelForMode(mode, true)} to replay the next spoken move.`
@@ -428,27 +428,27 @@ function buildEvidenceGroups(
     },
     {
       groupId: "audit",
-      label: english ? "Audit" : "Audit",
+      label: english ? "Audit" : "审计",
       items: [latestAudit],
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "Memory",
+      label: english ? "Memory" : "经营记忆",
       items: [latestMemory],
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker output",
+      label: english ? "Worker output" : "执行输出",
       items: [latestAction],
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "Boundary trace",
+      label: english ? "Boundary trace" : "边界轨迹",
       items: [topBlocker],
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "Sendability trace",
+      label: english ? "Sendability trace" : "发送评估轨迹",
       items: [
         english
           ? `Current sendability remains ${labelForSendability(sendabilityMode, true)}.`
@@ -457,12 +457,12 @@ function buildEvidenceGroups(
     },
     {
       groupId: "conversation_trace",
-      label: english ? "Conversation trace" : "Conversation trace",
+      label: english ? "Conversation trace" : "对话轨迹",
       items: [summary],
     },
     {
       groupId: "scenario_trace",
-      label: english ? "Scenario trace" : "Scenario trace",
+      label: english ? "Scenario trace" : "场景轨迹",
       items: [
         english
           ? `Related cues: founder-risk-clarification / sales-objection-response / proposal-shaping-review / delivery_activation_checklist.`
@@ -471,7 +471,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "historical_changes",
-      label: english ? "Historical changes" : "Historical changes",
+      label: english ? "Historical changes" : "历史变化",
       items: [
         english
           ? `${topCommitment} · updated ${formatRelative(detail.updatedAt)}`
@@ -484,27 +484,27 @@ function buildEvidenceGroups(
 function labelForMode(mode: ConversationDetailMode, english: boolean) {
   switch (mode) {
     case "founder-meeting":
-      return english ? "founder meeting" : "founder meeting";
+      return english ? "founder meeting" : "创始人会议";
     case "founder-demo":
-      return english ? "founder demo" : "founder demo";
+      return english ? "founder demo" : "创始人演示";
     case "sales-first-contact":
-      return english ? "sales first contact" : "sales first contact";
+      return english ? "sales first contact" : "销售首次接触";
     case "sales-follow-up":
-      return english ? "sales follow-up" : "sales follow-up";
+      return english ? "sales follow-up" : "销售跟进";
     case "objection-handling":
-      return english ? "objection handling" : "objection handling";
+      return english ? "objection handling" : "异议处理";
     case "proposal-walkthrough":
-      return english ? "proposal walkthrough" : "proposal walkthrough";
+      return english ? "proposal walkthrough" : "方案走查";
     case "boundary-clarification":
-      return english ? "boundary clarification" : "boundary clarification";
+      return english ? "boundary clarification" : "边界澄清";
     case "prerequisite-clarification":
-      return english ? "prerequisite clarification" : "prerequisite clarification";
+      return english ? "prerequisite clarification" : "前置条件澄清";
     case "dependency-clarification":
-      return english ? "dependency clarification" : "dependency clarification";
+      return english ? "dependency clarification" : "依赖澄清";
     case "non-commitment-clarification":
-      return english ? "non-commitment clarification" : "non-commitment clarification";
+      return english ? "non-commitment clarification" : "非承诺澄清";
     case "review-before-send":
-      return english ? "review before send" : "review-before-send";
+      return english ? "review before send" : "发送前复核";
     default:
       return english ? "internal prep only" : "仅内部准备";
   }
@@ -517,13 +517,13 @@ function fallbackLabel(mode: ConversationDetailMode, english: boolean) {
     case "sales-follow-up":
     case "objection-handling":
     case "proposal-walkthrough":
-      return english ? "boundary clarification" : "boundary clarification";
+      return english ? "boundary clarification" : "边界澄清";
     case "boundary-clarification":
     case "prerequisite-clarification":
     case "dependency-clarification":
       return english ? "internal prep only" : "仅内部准备";
     default:
-      return english ? "review before send" : "review-before-send";
+      return english ? "review before send" : "发送前复核";
   }
 }
 

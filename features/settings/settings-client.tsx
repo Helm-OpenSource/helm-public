@@ -856,7 +856,7 @@ export function SettingsClient({
     data.billingOverview.paymentRailStage === "LIVE"
       ? english
         ? "Live integration"
-        : "live integration"
+        : "真实接入"
       : english
         ? "Foundation only"
         : "基础层已冻结";

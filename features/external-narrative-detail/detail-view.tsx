@@ -538,31 +538,25 @@ function SecondarySummaryCard({
 function formatLevel(level: ExternalNarrativeDetailLevel, english: boolean) {
   switch (level) {
     case "internal-framing":
-      return english ? "Internal framing" : "Internal framing";
+      return english ? "Internal framing" : "内部构形";
     case "customer-visible-light":
-      return english ? "Customer-visible light" : "Customer-visible light";
+      return english ? "Customer-visible light" : "轻量客户可见";
     case "customer-visible-structured":
-      return english
-        ? "Customer-visible structured"
-        : "Customer-visible structured";
+      return english ? "Customer-visible structured" : "结构化客户可见";
     case "exploratory-narrative":
-      return english ? "Exploratory narrative" : "Exploratory narrative";
+      return english ? "Exploratory narrative" : "探索型叙事";
     case "proposal-supporting-narrative":
-      return english
-        ? "Proposal-supporting narrative"
-        : "Proposal-supporting narrative";
+      return english ? "Proposal-supporting narrative" : "提案支撑叙事";
     case "strengthening-narrative":
-      return english ? "Strengthening narrative" : "Strengthening narrative";
+      return english ? "Strengthening narrative" : "加固叙事";
     case "review-before-send":
-      return english ? "Review before send" : "Review before send";
+      return english ? "Review before send" : "发送前复核";
     case "boundary-only":
-      return english ? "Boundary only" : "Boundary only";
+      return english ? "Boundary only" : "仅边界";
     case "non-commitment-fallback":
-      return english
-        ? "Non-commitment fallback"
-        : "Non-commitment fallback";
+      return english ? "Non-commitment fallback" : "非承诺兜底";
     default:
-      return english ? "Blocked narrative" : "Blocked narrative";
+      return english ? "Blocked narrative" : "受阻叙事";
   }
 }
 
@@ -624,9 +618,7 @@ function formatSendabilityMode(
     case "internal-only":
       return english ? "Internal only" : "仅内部";
     case "non-commitment-fallback":
-      return english
-        ? "Non-commitment fallback"
-        : "Non-commitment fallback";
+      return english ? "Non-commitment fallback" : "非承诺兜底";
     default:
       return english ? "Not safe to send" : "当前不能外发";
   }
@@ -638,15 +630,13 @@ function formatFallbackMode(
 ) {
   switch (mode) {
     case "boundary-only":
-      return english ? "Boundary only" : "Boundary only";
+      return english ? "Boundary only" : "仅边界";
     case "non-commitment-fallback":
-      return english
-        ? "Non-commitment fallback"
-        : "Non-commitment fallback";
+      return english ? "Non-commitment fallback" : "非承诺兜底";
     case "review-hold":
-      return english ? "Review hold" : "Review hold";
+      return english ? "Review hold" : "复核暂缓";
     case "blocked":
-      return english ? "Blocked" : "Blocked";
+      return english ? "Blocked" : "受阻";
     default:
       return english ? "No fallback" : "无需兜底";
   }
