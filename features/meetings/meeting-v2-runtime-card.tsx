@@ -225,11 +225,11 @@ function MeetingV2RuntimeReviewForm({
   return (
     <div className="mt-4 space-y-4">
       <div>
-        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "confirmed facts json" : "confirmed facts json"}</p>
+        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "confirmed facts json" : "已确认事实 JSON"}</p>
         <Textarea value={factsJson} onChange={(event) => setFactsJson(event.target.value)} rows={12} className="mt-2 font-mono text-xs" />
       </div>
       <div>
-        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "action pack markdown" : "action pack markdown"}</p>
+        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "action pack markdown" : "行动包 Markdown"}</p>
         <Textarea
           value={actionPackMarkdown}
           onChange={(event) => setActionPackMarkdown(event.target.value)}
@@ -238,12 +238,12 @@ function MeetingV2RuntimeReviewForm({
         />
       </div>
       <div>
-        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "review notes" : "review notes"}</p>
+        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "review notes" : "复核备注"}</p>
         <Textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={4} className="mt-2 text-sm" />
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={() => submit("keep_draft")} disabled={pending}>
-          {english ? "Keep as draft" : "保留为 draft"}
+          {english ? "Keep as draft" : "保留为草稿"}
         </Button>
         <Button variant="secondary" onClick={() => submit("reject")} disabled={pending}>
           <ShieldAlert className="h-4 w-4" />
@@ -380,7 +380,7 @@ export function MeetingV2RuntimeCard({
           : mode === "keep_draft"
             ? english
               ? "Meeting facts kept as draft"
-              : "会议事实已保留为 draft"
+              : "会议事实已保留为草稿"
             : result.opportunityJudgeTriggered
               ? english
                 ? "Meeting facts confirmed and opportunity judgement started"
@@ -401,10 +401,10 @@ export function MeetingV2RuntimeCard({
         sourcePage: `/meetings/${meetingId}`,
       });
       if (!result.ok) {
-        toast.error(result.error ?? (english ? "Consolidation queue failed" : "整合 入队失败"));
+        toast.error(result.error ?? (english ? "Consolidation queue failed" : "整合入队失败"));
         return;
       }
-      toast.success(english ? "Consolidation job queued" : "整合 job 已加入队列");
+      toast.success(english ? "Consolidation job queued" : "整合作业已加入队列");
       router.refresh();
     });
   };
@@ -416,7 +416,7 @@ export function MeetingV2RuntimeCard({
         toast.error(result.error ?? (english ? "Reflection queue failed" : "反思入队失败"));
         return;
       }
-      toast.success(english ? "Reflection job queued" : "反思 job 已加入队列");
+      toast.success(english ? "Reflection job queued" : "反思作业已加入队列");
       router.refresh();
     });
   };
@@ -431,7 +431,7 @@ export function MeetingV2RuntimeCard({
         toast.error(result.error ?? (english ? "Reflection candidate accept failed" : "接受反思候选失败"));
         return;
       }
-      toast.success(english ? "Reflection 延续 candidate accepted" : "已接受反思延续候选");
+      toast.success(english ? "Reflection carry-forward candidate accepted" : "已接受反思延续候选");
       router.refresh();
     });
   };
@@ -446,7 +446,7 @@ export function MeetingV2RuntimeCard({
         toast.error(result.error ?? (english ? "Reflection candidate dismiss failed" : "忽略反思候选失败"));
         return;
       }
-      toast.success(english ? "Reflection 延续 candidate dismissed" : "已忽略反思延续候选");
+      toast.success(english ? "Reflection carry-forward candidate dismissed" : "已忽略反思延续候选");
       router.refresh();
     });
   };
@@ -460,17 +460,17 @@ export function MeetingV2RuntimeCard({
         sourcePage: `/meetings/${meetingId}`,
       });
       if (!result.ok) {
-        toast.error(result.error ?? (english ? "Consolidation update failed" : "整合 更新失败"));
+        toast.error(result.error ?? (english ? "Consolidation update failed" : "整合更新失败"));
         return;
       }
       toast.success(
         mode === "pause"
           ? english
             ? "Consolidation job paused"
-            : "整合 job 已暂停"
+            : "整合作业已暂停"
           : english
             ? "Consolidation job resumed"
-            : "整合 job 已恢复排队",
+            : "整合作业已恢复排队",
       );
       router.refresh();
     });
@@ -532,7 +532,7 @@ export function MeetingV2RuntimeCard({
         });
 
         if (!result.ok) {
-          toast.error(result.error ?? (english ? "Operator takeover request failed" : "操作员接管 请求失败"));
+          toast.error(result.error ?? (english ? "Operator takeover request failed" : "操作员接管请求失败"));
           return;
         }
 
@@ -540,10 +540,10 @@ export function MeetingV2RuntimeCard({
           result.reused
             ? english
               ? "Operator takeover request already recorded"
-              : "操作员接管请求 已存在"
+              : "操作员接管请求已存在"
             : english
               ? "Operator takeover request recorded"
-              : "操作员接管请求 已记录",
+              : "操作员接管请求已记录",
         );
         setTakeoverRequestStateOverride("requested");
         setRequestPostureTakeoverStateOverride("requested");
@@ -1645,7 +1645,7 @@ export function MeetingV2RuntimeCard({
                         </ul>
                       </div>
                       <div data-testid="continuity-sop">
-                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "SOP" : "SOP"}</p>
+                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "SOP" : "标准操作流程"}</p>
                         <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{runtime.v21.continuity.sop.title}</p>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{runtime.v21.continuity.sop.summary}</p>
                         <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
@@ -1727,7 +1727,7 @@ export function MeetingV2RuntimeCard({
                     ) : null}
                     {runtime.judgeRun ? (
                       <Badge variant={renderStatusVariant(runtime.judgeRun.status)}>
-                        {english ? "judge" : "judge"} · {runtime.judgeRun.status}
+                        {english ? "judge" : "判断"} · {runtime.judgeRun.status}
                       </Badge>
                     ) : null}
                   </div>
@@ -1773,7 +1773,7 @@ export function MeetingV2RuntimeCard({
                         : runtime.artifactReview?.status === "REJECTED"
                           ? english
                             ? "This runtime was rejected. Evidence is retained, but nothing was promoted or written into shadow state."
-                            : "这条运行时已被拒绝。evidence 仍然保留，但没有 晋升，也没有写入阴影状态。"
+                            : "这条运行时已被拒绝。证据仍然保留，但没有提升，也没有写入阴影状态。"
                           : english
                             ? "This runtime is not waiting on human confirmation right now."
                             : "当前这条运行链暂时不在等待人工确认。"}
@@ -1809,7 +1809,7 @@ export function MeetingV2RuntimeCard({
                       <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
                         {english
                           ? `${runtime.v21.promotionQueue.candidates} candidates, ${runtime.v21.promotionQueue.promoted} promoted, ${runtime.v21.promotionQueue.deferred} deferred, ${runtime.v21.promotionQueue.rejected} rejected`
-                          : `${runtime.v21.promotionQueue.candidates} 个候选，${runtime.v21.promotionQueue.promoted} 个 promoted，${runtime.v21.promotionQueue.deferred} 个 deferred，${runtime.v21.promotionQueue.rejected} 个 rejected`}
+                          : `${runtime.v21.promotionQueue.candidates} 个候选，${runtime.v21.promotionQueue.promoted} 个已提升，${runtime.v21.promotionQueue.deferred} 个已延后，${runtime.v21.promotionQueue.rejected} 个已拒绝`}
                       </p>
                       {runtime.v21.verification?.blockedReasons.length ? (
                         <ul className="mt-3 space-y-1 text-sm text-[color:var(--muted)]">
@@ -1838,10 +1838,10 @@ export function MeetingV2RuntimeCard({
                               <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                                 {[
                                   item.sourceClasses.length
-                                    ? `${english ? "sources" : "sources"}: ${item.sourceClasses.join(" / ")}`
+                                    ? `${english ? "sources" : "来源"}: ${item.sourceClasses.join(" / ")}`
                                     : null,
-                                  item.confidence !== null ? `${english ? "confidence" : "confidence"}: ${item.confidence}` : null,
-                                  item.evidenceRefs.length ? `${english ? "evidence" : "evidence"}: ${item.evidenceRefs.join(" / ")}` : null,
+                                  item.confidence !== null ? `${english ? "confidence" : "置信度"}: ${item.confidence}` : null,
+                                  item.evidenceRefs.length ? `${english ? "evidence" : "证据"}: ${item.evidenceRefs.join(" / ")}` : null,
                                 ]
                                   .filter(Boolean)
                                   .join(" · ")}
@@ -1863,7 +1863,7 @@ export function MeetingV2RuntimeCard({
                     </div>
 
                     <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                      <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Problem spaces and edge briefs" : "问题空间s 与 edge摘要s"}</p>
+                      <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Problem spaces and edge briefs" : "问题空间与边缘简报"}</p>
                       <div className="mt-3 space-y-3">
                         {runtime.v21.problemSpaces.map((item) => (
                           <div key={item.id} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
@@ -1881,7 +1881,7 @@ export function MeetingV2RuntimeCard({
                           </div>
                         ))}
                         {!runtime.v21.problemSpaces.length ? (
-                          <p className="text-sm text-[color:var(--muted-foreground)]">{english ? "No problem space yet." : "当前还没有 问题空间。"}</p>
+                          <p className="text-sm text-[color:var(--muted-foreground)]">{english ? "No problem space yet." : "当前还没有问题空间。"}</p>
                         ) : null}
                       </div>
                       <div className="mt-4 space-y-2">
@@ -1898,7 +1898,7 @@ export function MeetingV2RuntimeCard({
                           </div>
                         ))}
                         {!runtime.v21.edgeBriefs.length ? (
-                          <p className="text-sm text-[color:var(--muted-foreground)]">{english ? "No edge brief yet." : "当前还没有 edge摘要。"}</p>
+                          <p className="text-sm text-[color:var(--muted-foreground)]">{english ? "No edge brief yet." : "当前还没有边缘简报。"}</p>
                         ) : null}
                       </div>
                     </div>
@@ -1913,27 +1913,27 @@ export function MeetingV2RuntimeCard({
                       <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">{runtime.v21.coordinationTrace.boundaryNote}</p>
                       <div className="mt-4 grid gap-3 md:grid-cols-3">
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "traced items" : "traced items"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "traced items" : "已追踪项"}</p>
                           <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">{runtime.v21.coordinationTrace.items.length}</p>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "human execution" : "human execution"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "human execution" : "人工执行"}</p>
                           <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">{runtime.v21.coordinationTrace.humanExecution.total}</p>
                           <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                             {english
                               ? `${runtime.v21.coordinationTrace.humanExecution.executed} executed · ${runtime.v21.coordinationTrace.humanExecution.blocked} blocked`
-                              : `${runtime.v21.coordinationTrace.humanExecution.executed} executed · ${runtime.v21.coordinationTrace.humanExecution.blocked} blocked`}
+                              : `${runtime.v21.coordinationTrace.humanExecution.executed} 已执行 · ${runtime.v21.coordinationTrace.humanExecution.blocked} 已阻断`}
                           </p>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "official follow-through" : "official follow-through"}
+                            {english ? "official follow-through" : "正式跟进闭环"}
                           </p>
                           <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">{runtime.v21.coordinationTrace.officialFollowThrough.total}</p>
                           <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                             {english
                               ? `${runtime.v21.coordinationTrace.officialFollowThrough.open} open · ${runtime.v21.coordinationTrace.officialFollowThrough.resolved} resolved`
-                              : `${runtime.v21.coordinationTrace.officialFollowThrough.open} open · ${runtime.v21.coordinationTrace.officialFollowThrough.resolved} resolved`}
+                              : `${runtime.v21.coordinationTrace.officialFollowThrough.open} 未完成 · ${runtime.v21.coordinationTrace.officialFollowThrough.resolved} 已解决`}
                           </p>
                         </div>
                       </div>
@@ -2305,12 +2305,12 @@ export function MeetingV2RuntimeCard({
                             {runtime.v21.benchmarkMatrix.layers.map((item) => (
                               <li key={item.layerId}>
                                 - {item.label} · {item.outcomeStatus} · {item.recordedGateCount}/{item.gates.length}{" "}
-                                {english ? "gate(s)" : "gate(s)"}
+                                {english ? "gate(s)" : "个闸口"}
                                 {item.latestRecordedAt ? ` · ${formatDateLabel(item.latestRecordedAt)}` : ""}
                               </li>
                             ))}
                             {!runtime.v21.benchmarkMatrix.layers.length ? (
-                              <li>- {english ? "No benchmark gate yet." : "当前还没有 benchmark闸口。"}</li>
+                              <li>- {english ? "No benchmark gate yet." : "当前还没有基准闸口。"}</li>
                             ) : null}
                           </ul>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -2322,47 +2322,47 @@ export function MeetingV2RuntimeCard({
 
                     <div className="theme-surface-panel rounded-2xl px-4 py-4">
                       <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                        {english ? "Handoff and coordination telemetry" : "交接与协同 telemetry"}
+                        {english ? "Handoff and coordination telemetry" : "交接与协同遥测"}
                       </p>
                       <div className="mt-3 grid gap-4 md:grid-cols-2">
                         <div>
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "handoff packets" : "handoff packets"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "handoff packets" : "交接包"}</p>
                           <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted)]">
                             {runtime.v21.handoffPackets.map((item) => (
                               <li key={item.id}>- {item.fromAgent} {"->"} {item.toAgent} · {item.goal}</li>
                             ))}
-                            {!runtime.v21.handoffPackets.length ? <li>- {english ? "No handoff packet yet." : "当前还没有交接 资料et。"}</li> : null}
+                            {!runtime.v21.handoffPackets.length ? <li>- {english ? "No handoff packet yet." : "当前还没有交接包。"}</li> : null}
                           </ul>
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "initiative runs" : "initiative runs"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "initiative runs" : "主动运行"}</p>
                           <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted)]">
                             {runtime.v21.initiativeRuns.map((item) => (
                               <li key={item.id}>- {item.status} · {item.title} · {item.targetOutcome}</li>
                             ))}
-                            {!runtime.v21.initiativeRuns.length ? <li>- {english ? "No initiative run yet." : "当前还没有 主动跑动。"}</li> : null}
+                            {!runtime.v21.initiativeRuns.length ? <li>- {english ? "No initiative run yet." : "当前还没有主动运行。"}</li> : null}
                           </ul>
                         </div>
                       </div>
                       <div className="mt-4 grid gap-3 md:grid-cols-5">
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "action ready" : "action ready"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "action ready" : "动作就绪"}</p>
                           <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">{runtime.v21.coordinationMetrics.actionReady}</p>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "review needed" : "review needed"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "review needed" : "需要复核"}</p>
                           <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">{runtime.v21.coordinationMetrics.reviewNeeded}</p>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "waiting on signal" : "waiting on signal"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "waiting on signal" : "等待信号"}</p>
                           <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">{runtime.v21.coordinationMetrics.waitingOnSignal}</p>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "waiting on authority" : "waiting on authority"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "waiting on authority" : "等待权限"}</p>
                           <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">{runtime.v21.coordinationMetrics.waitingOnAuthority}</p>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "capability gap" : "capability gap"}</p>
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "capability gap" : "能力缺口"}</p>
                           <p className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">{runtime.v21.coordinationMetrics.capabilityGap}</p>
                         </div>
                       </div>
@@ -2370,7 +2370,7 @@ export function MeetingV2RuntimeCard({
 
                     <div className="theme-surface-panel rounded-2xl px-4 py-4">
                       <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                        {english ? "Operator debugger spine" : "operator debugger spine"}
+                        {english ? "Operator debugger spine" : "操作员调试主线"}
                       </p>
                       <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{runtime.v21.debugger.summary}</p>
                       <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">{runtime.v21.debugger.boundaryNote}</p>
@@ -2443,7 +2443,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3" data-testid="operator-debugger-replay-assistance">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "replay + resume assistance" : "replay + resume assistance"}
+                            {english ? "replay + resume assistance" : "回放 + 恢复辅助"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{runtime.v21.debugger.replayAssistance.summary}</p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">{runtime.v21.debugger.replayAssistance.boundaryNote}</p>
@@ -2460,7 +2460,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3" data-testid="operator-debugger-persisted-lifecycle-trace">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "persisted lifecycle trace" : "persisted lifecycle trace"}
+                            {english ? "persisted lifecycle trace" : "已持久化生命周期轨迹"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.debugger.persistedLifecycleTrace.summary}
@@ -2484,7 +2484,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3" data-testid="operator-debugger-write-contract">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "replay / recovery write contract" : "replay / recovery write contract"}
+                            {english ? "replay / recovery write contract" : "回放 / 恢复写入契约"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{runtime.v21.debugger.writeContract.summary}</p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -3051,7 +3051,7 @@ export function MeetingV2RuntimeCard({
                           data-testid="operator-debugger-recovery-action-contract"
                         >
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "recovery action lifecycle" : "recovery action lifecycle"}
+                            {english ? "recovery action lifecycle" : "恢复动作生命周期"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.debugger.recoveryActionContract.summary}
@@ -3086,7 +3086,7 @@ export function MeetingV2RuntimeCard({
                           data-testid="operator-debugger-recovery-lifecycle-contract"
                         >
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "recovery lifecycle lane" : "recovery lifecycle lane"}
+                            {english ? "recovery lifecycle lane" : "恢复生命周期泳道"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.debugger.recoveryLifecycleContract.summary}
@@ -3120,7 +3120,7 @@ export function MeetingV2RuntimeCard({
                           data-testid="operator-debugger-recovery-transition-contract"
                         >
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "recovery transition contract" : "recovery transition contract"}
+                            {english ? "recovery transition contract" : "恢复流转契约"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.debugger.recoveryTransitionContract.summary}
@@ -3153,7 +3153,7 @@ export function MeetingV2RuntimeCard({
                           data-testid="operator-debugger-recovery-state-machine-contract"
                         >
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "recovery state machine" : "recovery state machine"}
+                            {english ? "recovery state machine" : "恢复状态机"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.debugger.recoveryStateMachineContract.summary}
@@ -3186,7 +3186,7 @@ export function MeetingV2RuntimeCard({
                           data-testid="operator-debugger-recovery-execution-contract"
                         >
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "recovery execution contract" : "recovery execution contract"}
+                            {english ? "recovery execution contract" : "恢复执行契约"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.debugger.recoveryExecutionContract.summary}
@@ -3228,14 +3228,14 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3" data-testid="operator-debugger-takeover-assistance">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "operator takeover assistance" : "operator takeover assistance"}
+                            {english ? "operator takeover assistance" : "操作员接管辅助"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{runtime.v21.debugger.takeoverAssistance.summary}</p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {runtime.v21.debugger.takeoverAssistance.boundaryNote}
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                            {english ? "recommended action" : "recommended action"} ·{" "}
+                            {english ? "recommended action" : "推荐动作"} ·{" "}
                             {runtime.v21.debugger.takeoverAssistance.recommendedAction ?? "none"}
                           </p>
                           {takeoverRemediationHandoffReadout ? (
@@ -3252,7 +3252,7 @@ export function MeetingV2RuntimeCard({
                           ) : null}
                           <div className="mt-3 rounded-2xl border border-[color:var(--border)]/80 bg-[color:var(--surface-subtle)]/70 px-3 py-3" data-testid="operator-debugger-takeover-request">
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "takeover request" : "takeover request"}
+                              {english ? "takeover request" : "接管请求"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{debuggerView?.takeoverRequest.summary ?? runtime.v21.debugger.takeoverRequest.summary}</p>
                               <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -3276,7 +3276,7 @@ export function MeetingV2RuntimeCard({
                               data-testid="operator-debugger-takeover-activation"
                             >
                               <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                                {english ? "takeover activation" : "takeover activation"}
+                                {english ? "takeover activation" : "接管激活"}
                               </p>
                               <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                                 {takeoverActivationSummary}
@@ -3302,7 +3302,7 @@ export function MeetingV2RuntimeCard({
                               </p>
                               {runtime.v21.debugger.takeoverActivation.releaseReason ? (
                                 <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                                  {english ? "release reason" : "release reason"} ·{" "}
+                                  {english ? "release reason" : "释放原因"} ·{" "}
                                   {runtime.v21.debugger.takeoverActivation.releaseReason}
                                 </p>
                               ) : null}
@@ -3321,7 +3321,7 @@ export function MeetingV2RuntimeCard({
                                 data-testid="operator-debugger-takeover-followthrough"
                               >
                                 <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                                  {english ? "takeover follow-through" : "takeover follow-through"}
+                                  {english ? "takeover follow-through" : "接管跟进闭环"}
                                 </p>
                                 <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                                   {runtime.v21.debugger.takeoverFollowThrough.summary}
@@ -3342,7 +3342,7 @@ export function MeetingV2RuntimeCard({
                                 </p>
                                 {runtime.v21.debugger.takeoverFollowThrough.nextAction ? (
                                   <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                                    {english ? "next action" : "next action"} ·{" "}
+                                    {english ? "next action" : "下一动作"} ·{" "}
                                     {runtime.v21.debugger.takeoverFollowThrough.nextAction}
                                   </p>
                                 ) : null}
@@ -3463,7 +3463,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3" data-testid="operator-debugger-interrupt-reason">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "interrupt reason" : "interrupt reason"}
+                            {english ? "interrupt reason" : "中断原因"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{runtime.v21.debugger.interruptReason.summary}</p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -3479,7 +3479,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3" data-testid="operator-debugger-resume-ask">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "resume ask" : "resume ask"}
+                            {english ? "resume ask" : "恢复请求"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{runtime.v21.debugger.resumeAsk.prompt}</p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -3498,7 +3498,7 @@ export function MeetingV2RuntimeCard({
                           data-testid="run-thread-settlement-flow"
                         >
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "variable snapshot" : "variable snapshot"}
+                            {english ? "variable snapshot" : "变量快照"}
                           </p>
                           <ul className="mt-3 space-y-2 text-sm text-[color:var(--muted)]">
                             {runtime.v21.debugger.variableSnapshot.map((item) => (
@@ -3510,7 +3510,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "request posture" : "request posture"}
+                            {english ? "request posture" : "请求姿态"}
                           </p>
                           <p
                             className="mt-3 text-sm leading-6 text-[color:var(--foreground)]"
@@ -3520,10 +3520,14 @@ export function MeetingV2RuntimeCard({
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {[
-                              `takeover ${requestPostureTakeoverState}`,
-                              `human input ${requestPostureHumanInputState}`,
-                              `${runThreadView?.requestPosture.activeRequestCount ?? runtime.v21.runThread.requestPosture.activeRequestCount} active`,
-                              `${runThreadView?.requestPosture.acknowledgedRequestCount ?? runtime.v21.runThread.requestPosture.acknowledgedRequestCount} acknowledged`,
+                              english ? `takeover ${requestPostureTakeoverState}` : `接管 ${requestPostureTakeoverState}`,
+                              english ? `human input ${requestPostureHumanInputState}` : `人工输入 ${requestPostureHumanInputState}`,
+                              english
+                                ? `${runThreadView?.requestPosture.activeRequestCount ?? runtime.v21.runThread.requestPosture.activeRequestCount} active`
+                                : `${runThreadView?.requestPosture.activeRequestCount ?? runtime.v21.runThread.requestPosture.activeRequestCount} 个活跃请求`,
+                              english
+                                ? `${runThreadView?.requestPosture.acknowledgedRequestCount ?? runtime.v21.runThread.requestPosture.acknowledgedRequestCount} acknowledged`
+                                : `${runThreadView?.requestPosture.acknowledgedRequestCount ?? runtime.v21.runThread.requestPosture.acknowledgedRequestCount} 个已确认请求`,
                               runThreadView?.requestPosture.latestLifecycleKind ?? runtime.v21.runThread.requestPosture.latestLifecycleKind,
                               (runThreadView?.requestPosture.latestAcknowledgedAt ?? runtime.v21.runThread.requestPosture.latestAcknowledgedAt)
                                 ? formatDateLabel(runThreadView?.requestPosture.latestAcknowledgedAt ?? runtime.v21.runThread.requestPosture.latestAcknowledgedAt)
@@ -3540,7 +3544,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "result 已确认" : "result 已确认"}
+                            {english ? "result acknowledgement" : "结果确认"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.runThread.resultAcknowledgement.summary}
@@ -3563,7 +3567,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "result flow" : "result flow"}
+                            {english ? "result flow" : "结果流"}
                           </p>
                           <p
                             className="mt-3 text-sm leading-6 text-[color:var(--foreground)]"
@@ -3573,9 +3577,15 @@ export function MeetingV2RuntimeCard({
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {[
-                              `${runtime.v21.runThread.resultFlow.trackedSourceCount} tracked`,
-                              `${runtime.v21.runThread.resultFlow.requiresOperatorAttentionCount} attention`,
-                              `${runtime.v21.runThread.resultFlow.resolvedCount} resolved`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.trackedSourceCount} tracked`
+                                : `${runtime.v21.runThread.resultFlow.trackedSourceCount} 个已追踪源头`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.requiresOperatorAttentionCount} attention`
+                                : `${runtime.v21.runThread.resultFlow.requiresOperatorAttentionCount} 个需要关注`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.resolvedCount} resolved`
+                                : `${runtime.v21.runThread.resultFlow.resolvedCount} 个已解决`,
                               runtime.v21.runThread.resultFlow.latestSource,
                               runtime.v21.runThread.resultFlow.latestState,
                               runtime.v21.runThread.resultFlow.latestUpdatedAt
@@ -3587,13 +3597,27 @@ export function MeetingV2RuntimeCard({
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {[
-                              `${runtime.v21.runThread.resultFlow.counts.pending} pending`,
-                              `${runtime.v21.runThread.resultFlow.counts.acknowledged} acknowledged`,
-                              `${runtime.v21.runThread.resultFlow.counts.failed} failed`,
-                              `${runtime.v21.runThread.resultFlow.counts.blocked} blocked`,
-                              `${runtime.v21.runThread.resultFlow.counts.deferred} deferred`,
-                              `${runtime.v21.runThread.resultFlow.counts.followThroughOpen} follow-through open`,
-                              `${runtime.v21.runThread.resultFlow.counts.followThroughResolved} follow-through resolved`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.counts.pending} pending`
+                                : `${runtime.v21.runThread.resultFlow.counts.pending} 待处理`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.counts.acknowledged} acknowledged`
+                                : `${runtime.v21.runThread.resultFlow.counts.acknowledged} 已确认`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.counts.failed} failed`
+                                : `${runtime.v21.runThread.resultFlow.counts.failed} 失败`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.counts.blocked} blocked`
+                                : `${runtime.v21.runThread.resultFlow.counts.blocked} 已阻断`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.counts.deferred} deferred`
+                                : `${runtime.v21.runThread.resultFlow.counts.deferred} 已延后`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.counts.followThroughOpen} follow-through open`
+                                : `${runtime.v21.runThread.resultFlow.counts.followThroughOpen} 跟进未完成`,
+                              english
+                                ? `${runtime.v21.runThread.resultFlow.counts.followThroughResolved} follow-through resolved`
+                                : `${runtime.v21.runThread.resultFlow.counts.followThroughResolved} 跟进已解决`,
                             ].join(" · ")}
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -3616,14 +3640,14 @@ export function MeetingV2RuntimeCard({
                                 -{" "}
                                 {english
                                   ? "No downstream result flow is visible on this thread yet."
-                                  : "当前这条线程还没有可见的 downstream result flow。"}
+                                  : "当前这条线程还没有可见的下游结果流。"}
                               </li>
                             ) : null}
                           </ul>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "forward flow" : "forward flow"}
+                            {english ? "forward flow" : "推进流"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.runThread.forwardFlow.summary}
@@ -3631,7 +3655,9 @@ export function MeetingV2RuntimeCard({
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {[
                               runtime.v21.runThread.forwardFlow.state,
-                              `${runtime.v21.runThread.forwardFlow.attentionCount} attention`,
+                              english
+                                ? `${runtime.v21.runThread.forwardFlow.attentionCount} attention`
+                                : `${runtime.v21.runThread.forwardFlow.attentionCount} 个关注项`,
                               runtime.v21.runThread.forwardFlow.currentOwner,
                               runtime.v21.runThread.forwardFlow.checkpointKey,
                               runtime.v21.runThread.forwardFlow.latestLifecycleKind,
@@ -3643,7 +3669,8 @@ export function MeetingV2RuntimeCard({
                               .join(" · ")}
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                            {runtime.v21.runThread.forwardFlow.nextAction ?? "No open next action."}
+                            {runtime.v21.runThread.forwardFlow.nextAction ??
+                              (english ? "No open next action." : "当前没有未完成的下一动作。")}
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {runtime.v21.runThread.forwardFlow.boundaryNote}
@@ -3651,7 +3678,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "closeout flow" : "closeout flow"}
+                            {english ? "closeout flow" : "收口流"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.runThread.closeoutFlow.summary}
@@ -3659,8 +3686,12 @@ export function MeetingV2RuntimeCard({
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {[
                               runtime.v21.runThread.closeoutFlow.state,
-                              `${runtime.v21.runThread.closeoutFlow.openCount} open`,
-                              `${runtime.v21.runThread.closeoutFlow.resolvedCount} resolved`,
+                              english
+                                ? `${runtime.v21.runThread.closeoutFlow.openCount} open`
+                                : `${runtime.v21.runThread.closeoutFlow.openCount} 未完成`,
+                              english
+                                ? `${runtime.v21.runThread.closeoutFlow.resolvedCount} resolved`
+                                : `${runtime.v21.runThread.closeoutFlow.resolvedCount} 已解决`,
                               runtime.v21.runThread.closeoutFlow.latestSource,
                               runtime.v21.runThread.closeoutFlow.currentOwner,
                               runtime.v21.runThread.closeoutFlow.checkpointKey,
@@ -3672,7 +3703,8 @@ export function MeetingV2RuntimeCard({
                               .join(" · ")}
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                            {runtime.v21.runThread.closeoutFlow.nextAction ?? "No open closeout action."}
+                            {runtime.v21.runThread.closeoutFlow.nextAction ??
+                              (english ? "No open closeout action." : "当前没有未完成的收口动作。")}
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {runtime.v21.runThread.closeoutFlow.boundaryNote}
@@ -3701,14 +3733,14 @@ export function MeetingV2RuntimeCard({
                                 -{" "}
                                 {english
                                   ? "No thread-level closeout source is visible on this thread yet."
-                                  : "当前这条线程还没有可见的线程-level closeout 源头。"}
+                                  : "当前这条线程还没有可见的线程级收口源头。"}
                               </li>
                             ) : null}
                           </ul>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "settlement flow" : "settlement flow"}
+                            {english ? "settlement flow" : "结算流"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
                             {runtime.v21.runThread.settlementFlow.summary}
@@ -3717,9 +3749,15 @@ export function MeetingV2RuntimeCard({
                             {[
                               runtime.v21.runThread.settlementFlow.state,
                               runtime.v21.runThread.settlementFlow.driver,
-                              `${runtime.v21.runThread.settlementFlow.forwardAttentionCount} forward attention`,
-                              `${runtime.v21.runThread.settlementFlow.openCloseoutCount} closeout open`,
-                              `${runtime.v21.runThread.settlementFlow.resolvedCloseoutCount} closeout resolved`,
+                              english
+                                ? `${runtime.v21.runThread.settlementFlow.forwardAttentionCount} forward attention`
+                                : `${runtime.v21.runThread.settlementFlow.forwardAttentionCount} 个推进关注项`,
+                              english
+                                ? `${runtime.v21.runThread.settlementFlow.openCloseoutCount} closeout open`
+                                : `${runtime.v21.runThread.settlementFlow.openCloseoutCount} 个收口未完成`,
+                              english
+                                ? `${runtime.v21.runThread.settlementFlow.resolvedCloseoutCount} closeout resolved`
+                                : `${runtime.v21.runThread.settlementFlow.resolvedCloseoutCount} 个收口已解决`,
                               runtime.v21.runThread.settlementFlow.currentOwner,
                               runtime.v21.runThread.settlementFlow.checkpointKey,
                               runtime.v21.runThread.settlementFlow.latestUpdatedAt
@@ -3731,7 +3769,7 @@ export function MeetingV2RuntimeCard({
                           </p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {runtime.v21.runThread.settlementFlow.nextAction ??
-                              "No open settlement action."}
+                              (english ? "No open settlement action." : "当前没有未完成的结算动作。")}
                           </p>
                           {closeSettlementHandoffReadout ? (
                             <div
@@ -3741,7 +3779,7 @@ export function MeetingV2RuntimeCard({
                               <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
                                 {english
                                   ? "close / settlement handoff"
-                                  : "close / settlement handoff"}
+	                                  : "收口 / 结算交接"}
                               </p>
                               <div className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
                                 <p>{closeSettlementHandoffReadout.compactSummary}</p>
@@ -3759,7 +3797,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-closeout-summary"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "closeout summary" : "closeout summary"}
+	                              {english ? "closeout summary" : "收口摘要"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeoutSummary.summary}
@@ -3779,7 +3817,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutSummary.nextAction ??
-                                "No explicit closeout summary action is attached to this thread yet."}
+	                                (english ? "No explicit closeout summary action is attached to this thread yet." : "当前这条线程还没有明确的收口摘要动作。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutSummary.boundaryNote}
@@ -3790,7 +3828,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-closeout-resolution"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "closeout resolution" : "closeout resolution"}
+	                              {english ? "closeout resolution" : "收口解决"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeoutResolution.summary}
@@ -3810,7 +3848,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutResolution.nextAction ??
-                                "No explicit closeout resolution is attached to this thread yet."}
+	                                (english ? "No explicit closeout resolution is attached to this thread yet." : "当前这条线程还没有明确的收口解决记录。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutResolution.boundaryNote}
@@ -3826,7 +3864,7 @@ export function MeetingV2RuntimeCard({
                                   data-testid="run-thread-record-closeout-close"
                                   onClick={() => recordCloseoutResolution("close_thread")}
                                 >
-                                  {english ? "Record close decision" : "记录 close 决议"}
+	                                  {english ? "Record close decision" : "记录关闭决议"}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -3835,7 +3873,7 @@ export function MeetingV2RuntimeCard({
                                   data-testid="run-thread-record-closeout-keep-open"
                                   onClick={() => recordCloseoutResolution("keep_open")}
                                 >
-                                  {english ? "Record keep-open decision" : "记录 keep-open 决议"}
+	                                  {english ? "Record keep-open decision" : "记录保持开启决议"}
                                 </Button>
                               </div>
                             ) : null}
@@ -3847,7 +3885,7 @@ export function MeetingV2RuntimeCard({
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
                               {english
                                 ? "closeout resolution follow-through"
-                                : "closeout resolution follow-through"}
+	                                : "收口解决跟进闭环"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeoutResolutionFollowThrough.summary}
@@ -3928,7 +3966,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-closeout-outcome"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "closeout outcome" : "closeout outcome"}
+	                              {english ? "closeout outcome" : "收口结果"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeoutOutcome.summary}
@@ -3948,7 +3986,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutOutcome.nextAction ??
-                                "No explicit closeout outcome is attached to this thread yet."}
+	                                (english ? "No explicit closeout outcome is attached to this thread yet." : "当前这条线程还没有明确的收口结果。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutOutcome.boundaryNote}
@@ -3960,7 +3998,7 @@ export function MeetingV2RuntimeCard({
                             id="run-thread-close-request"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "close request" : "close request"}
+	                              {english ? "close request" : "关闭请求"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeRequest.summary}
@@ -3981,7 +4019,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeRequest.nextAction ??
-                                "No explicit close request is attached to this thread yet."}
+	                                (english ? "No explicit close request is attached to this thread yet." : "当前这条线程还没有明确的关闭请求。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeRequest.boundaryNote}
@@ -4000,10 +4038,10 @@ export function MeetingV2RuntimeCard({
                                 {runtime.v21.runThread.closeRequest.state === "stale"
                                   ? english
                                     ? "Re-request thread close"
-                                    : "重新请求线程 close"
+	                                    : "重新请求关闭线程"
                                   : english
                                     ? "Request thread close"
-                                    : "请求线程 close"}
+	                                    : "请求关闭线程"}
                               </Button>
                             ) : null}
                           </div>
@@ -4012,7 +4050,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-close-lifecycle"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "close lifecycle" : "close lifecycle"}
+	                              {english ? "close lifecycle" : "关闭生命周期"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeLifecycle.summary}
@@ -4033,7 +4071,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeLifecycle.nextAction ??
-                                "No explicit close lifecycle summary is attached to this thread yet."}
+	                                (english ? "No explicit close lifecycle summary is attached to this thread yet." : "当前这条线程还没有明确的关闭生命周期摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeLifecycle.boundaryNote}
@@ -4044,7 +4082,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-close-control"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "close control" : "close control"}
+	                              {english ? "close control" : "关闭控制"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeControl.summary}
@@ -4065,7 +4103,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeControl.nextAction ??
-                                "No explicit close control summary is attached to this thread yet."}
+	                                (english ? "No explicit close control summary is attached to this thread yet." : "当前这条线程还没有明确的关闭控制摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeControl.boundaryNote}
@@ -4076,7 +4114,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-close-control-flow"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "close control flow" : "close control flow"}
+	                              {english ? "close control flow" : "关闭控制流"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeControlFlow.summary}
@@ -4098,11 +4136,13 @@ export function MeetingV2RuntimeCard({
                                 .join(" · ")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                              {`${runtime.v21.runThread.closeControlFlow.forwardAttentionCount} forward attention · ${runtime.v21.runThread.closeControlFlow.openCloseoutCount} closeout open`}
+	                              {english
+	                                ? `${runtime.v21.runThread.closeControlFlow.forwardAttentionCount} forward attention · ${runtime.v21.runThread.closeControlFlow.openCloseoutCount} closeout open`
+	                                : `${runtime.v21.runThread.closeControlFlow.forwardAttentionCount} 个推进关注项 · ${runtime.v21.runThread.closeControlFlow.openCloseoutCount} 个收口未完成`}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeControlFlow.nextAction ??
-                                "No explicit close control flow summary is attached to this thread yet."}
+	                                (english ? "No explicit close control flow summary is attached to this thread yet." : "当前这条线程还没有明确的关闭控制流摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeControlFlow.boundaryNote}
@@ -4113,7 +4153,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-close-decision-flow"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "close decision flow" : "close decision flow"}
+	                              {english ? "close decision flow" : "关闭决策流"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeDecisionFlow.summary}
@@ -4137,7 +4177,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeDecisionFlow.nextAction ??
-                                "No explicit close decision flow summary is attached to this thread yet."}
+	                                (english ? "No explicit close decision flow summary is attached to this thread yet." : "当前这条线程还没有明确的关闭决策流摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeDecisionFlow.boundaryNote}
@@ -4150,7 +4190,7 @@ export function MeetingV2RuntimeCard({
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
                               {english
                                 ? "close decision control"
-                                : "close decision control"}
+	                                : "关闭决策控制"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeDecisionControlSummary.summary}
@@ -4179,7 +4219,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeDecisionControlSummary.nextAction ??
-                                "No explicit close decision control summary is attached to this thread yet."}
+	                                (english ? "No explicit close decision control summary is attached to this thread yet." : "当前这条线程还没有明确的关闭决策控制摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeDecisionControlSummary.boundaryNote}
@@ -4190,7 +4230,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-close-resolution-summary"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "close resolution" : "close resolution"}
+	                              {english ? "close resolution" : "关闭解决"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeResolutionSummary.summary}
@@ -4216,7 +4256,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeResolutionSummary.nextAction ??
-                                "No explicit close resolution summary is attached to this thread yet."}
+	                                (english ? "No explicit close resolution summary is attached to this thread yet." : "当前这条线程还没有明确的关闭解决摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeResolutionSummary.boundaryNote}
@@ -4229,7 +4269,7 @@ export function MeetingV2RuntimeCard({
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
                               {english
                                 ? "close resolution forward"
-                                : "close resolution forward"}
+	                                : "关闭解决推进"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeResolutionForwardSummary.summary}
@@ -4256,11 +4296,13 @@ export function MeetingV2RuntimeCard({
                                 .join(" · ")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                              {`${runtime.v21.runThread.closeResolutionForwardSummary.forwardAttentionCount} forward attention · ${runtime.v21.runThread.closeResolutionForwardSummary.openCloseoutCount} closeout open`}
+	                              {english
+	                                ? `${runtime.v21.runThread.closeResolutionForwardSummary.forwardAttentionCount} forward attention · ${runtime.v21.runThread.closeResolutionForwardSummary.openCloseoutCount} closeout open`
+	                                : `${runtime.v21.runThread.closeResolutionForwardSummary.forwardAttentionCount} 个推进关注项 · ${runtime.v21.runThread.closeResolutionForwardSummary.openCloseoutCount} 个收口未完成`}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeResolutionForwardSummary.nextAction ??
-                                "No explicit close resolution forward summary is attached to this thread yet."}
+	                                (english ? "No explicit close resolution forward summary is attached to this thread yet." : "当前这条线程还没有明确的关闭解决推进摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeResolutionForwardSummary.boundaryNote}
@@ -4273,7 +4315,7 @@ export function MeetingV2RuntimeCard({
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
                               {english
                                 ? "close resolution control"
-                                : "close resolution control"}
+	                                : "关闭解决控制"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeResolutionControlSummary.summary}
@@ -4301,7 +4343,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeResolutionControlSummary.nextAction ??
-                                "No explicit close resolution control summary is attached to this thread yet."}
+	                                (english ? "No explicit close resolution control summary is attached to this thread yet." : "当前这条线程还没有明确的关闭解决控制摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeResolutionControlSummary.boundaryNote}
@@ -4312,7 +4354,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-close-posture-summary"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "close posture" : "close posture"}
+	                              {english ? "close posture" : "关闭姿态"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closePostureSummary.summary}
@@ -4339,7 +4381,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closePostureSummary.nextAction ??
-                                "No explicit close posture summary is attached to this thread yet."}
+	                                (english ? "No explicit close posture summary is attached to this thread yet." : "当前这条线程还没有明确的关闭姿态摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closePostureSummary.boundaryNote}
@@ -4350,7 +4392,7 @@ export function MeetingV2RuntimeCard({
                             data-testid="run-thread-close-posture-forward-summary"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "close posture forward" : "close posture forward"}
+	                              {english ? "close posture forward" : "关闭姿态推进"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closePostureForwardSummary.summary}
@@ -4378,11 +4420,13 @@ export function MeetingV2RuntimeCard({
                                 .join(" · ")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                              {`${runtime.v21.runThread.closePostureForwardSummary.forwardAttentionCount} forward attention · ${runtime.v21.runThread.closePostureForwardSummary.openCloseoutCount} closeout open`}
+	                              {english
+	                                ? `${runtime.v21.runThread.closePostureForwardSummary.forwardAttentionCount} forward attention · ${runtime.v21.runThread.closePostureForwardSummary.openCloseoutCount} closeout open`
+	                                : `${runtime.v21.runThread.closePostureForwardSummary.forwardAttentionCount} 个推进关注项 · ${runtime.v21.runThread.closePostureForwardSummary.openCloseoutCount} 个收口未完成`}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closePostureForwardSummary.nextAction ??
-                                "No explicit close posture forward summary is attached to this thread yet."}
+	                                (english ? "No explicit close posture forward summary is attached to this thread yet." : "当前这条线程还没有明确的关闭姿态推进摘要。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closePostureForwardSummary.boundaryNote}
@@ -4394,7 +4438,7 @@ export function MeetingV2RuntimeCard({
                             id="run-thread-settlement-review"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "settlement review" : "settlement review"}
+	                              {english ? "settlement review" : "结算复核"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.settlementReview.summary}
@@ -4416,7 +4460,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.settlementReview.nextAction ??
-                                "No explicit settlement review is attached to this thread yet."}
+	                                (english ? "No explicit settlement review is attached to this thread yet." : "当前这条线程还没有明确的结算复核。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.settlementReview.boundaryNote}
@@ -4431,7 +4475,7 @@ export function MeetingV2RuntimeCard({
                                 data-testid="run-thread-request-settlement-review"
                                 onClick={() => requestSettlementReview()}
                               >
-                                {english ? "Request settlement review" : "请求 settlement 复核"}
+	                                {english ? "Request settlement review" : "请求结算复核"}
                               </Button>
                             ) : null}
                             {canManageRuntime &&
@@ -4444,7 +4488,7 @@ export function MeetingV2RuntimeCard({
                                 data-testid="run-thread-resolve-settlement-review"
                                 onClick={() => resolveSettlementReview()}
                               >
-                                {english ? "Resolve settlement review" : "解决 settlement 复核"}
+	                                {english ? "Resolve settlement review" : "解决结算复核"}
                               </Button>
                             ) : null}
                           </div>
@@ -4454,7 +4498,7 @@ export function MeetingV2RuntimeCard({
                             id="run-thread-closeout-confirmation"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "closeout confirmation" : "closeout confirmation"}
+	                              {english ? "closeout confirmation" : "收口确认"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeoutConfirmation.summary}
@@ -4473,7 +4517,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutConfirmation.nextAction ??
-                                "No explicit closeout confirmation is attached to this thread yet."}
+	                                (english ? "No explicit closeout confirmation is attached to this thread yet." : "当前这条线程还没有明确的收口确认。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutConfirmation.boundaryNote}
@@ -4492,10 +4536,10 @@ export function MeetingV2RuntimeCard({
                                 {runtime.v21.runThread.closeoutConfirmation.state === "stale"
                                   ? english
                                     ? "Reconfirm closeout"
-                                    : "重新确认 closeout"
+	                                    : "重新确认收口"
                                   : english
                                     ? "Confirm closeout"
-                                    : "确认 closeout"}
+	                                    : "确认收口"}
                               </Button>
                             ) : null}
                           </div>
@@ -4505,7 +4549,7 @@ export function MeetingV2RuntimeCard({
                             id="run-thread-closeout-refresh"
                           >
                             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                              {english ? "closeout refresh" : "closeout refresh"}
+	                              {english ? "closeout refresh" : "收口刷新"}
                             </p>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
                               {runtime.v21.runThread.closeoutRefresh.summary}
@@ -4526,7 +4570,7 @@ export function MeetingV2RuntimeCard({
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutRefresh.nextAction ??
-                                "No explicit closeout refresh is attached to this thread yet."}
+	                                (english ? "No explicit closeout refresh is attached to this thread yet." : "当前这条线程还没有明确的收口刷新。")}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
                               {runtime.v21.runThread.closeoutRefresh.boundaryNote}
@@ -4541,7 +4585,7 @@ export function MeetingV2RuntimeCard({
                                 data-testid="run-thread-request-closeout-refresh"
                                 onClick={() => requestCloseoutRefresh()}
                               >
-                                {english ? "Request closeout refresh" : "请求 closeout refresh"}
+	                                {english ? "Request closeout refresh" : "请求收口刷新"}
                               </Button>
                             ) : null}
                           </div>
@@ -4551,7 +4595,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "run thread lifecycle" : "run thread lifecycle"}
+                            {english ? "run thread lifecycle" : "运行线程生命周期"}
                           </p>
                           <ul className="mt-3 space-y-3 text-sm text-[color:var(--muted)]">
                             {runtime.v21.runThread.lifecycleLog.map((item) => (
@@ -4566,13 +4610,13 @@ export function MeetingV2RuntimeCard({
                               </li>
                             ))}
                             {!runtime.v21.runThread.lifecycleLog.length ? (
-                              <li>- {english ? "No run thread lifecycle note yet." : "当前还没有 run 线程 生命周期 备注。"}</li>
+                              <li>- {english ? "No run thread lifecycle note yet." : "当前还没有运行线程生命周期备注。"}</li>
                             ) : null}
                           </ul>
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "trace history" : "trace history"}
+                            {english ? "trace history" : "追踪历史"}
                           </p>
                           <ul className="mt-3 space-y-3 text-sm text-[color:var(--muted)]">
                             {runtime.v21.debugger.history.map((item) => (
@@ -4590,7 +4634,7 @@ export function MeetingV2RuntimeCard({
                         </div>
                         <div className="rounded-2xl border border-[color:var(--border)] px-3 py-3" data-testid="operator-debugger-handoff-payload">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "handoff payload" : "handoff payload"}
+                            {english ? "handoff payload" : "交接载荷"}
                           </p>
                           <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{runtime.v21.debugger.handoffPayload.summary}</p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -4608,7 +4652,7 @@ export function MeetingV2RuntimeCard({
                       </div>
                       <div className="mt-3 rounded-2xl border border-[color:var(--border)]/80 px-3 py-3" data-testid="operator-debugger-human-input-checkpoint">
                         <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                          {english ? "human input checkpoint" : "human input checkpoint"}
+                          {english ? "human input checkpoint" : "人工输入检查点"}
                         </p>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{runtime.v21.debugger.humanInputCheckpoint.summary}</p>
                         <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -4622,7 +4666,7 @@ export function MeetingV2RuntimeCard({
                         <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">{runtime.v21.debugger.humanInputCheckpoint.boundaryNote}</p>
                         <div className="mt-3 rounded-2xl border border-[color:var(--border)]/80 bg-[color:var(--surface-subtle)]/70 px-3 py-3" data-testid="operator-debugger-human-input-request">
                           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {english ? "human input request" : "human input request"}
+                            {english ? "human input request" : "人工输入请求"}
                           </p>
                           <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{runtime.v21.debugger.humanInputRequest.summary}</p>
                           <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
@@ -4657,7 +4701,7 @@ export function MeetingV2RuntimeCard({
                               data-testid="operator-debugger-request-human-input"
                               onClick={requestHumanInputCheckpoint}
                             >
-                              {english ? "Request human input" : "请求 human input"}
+	                              {english ? "Request human input" : "请求人工输入"}
                             </Button>
                           ) : null}
                           {canManageRuntime && humanInputRequestState === "requested" ? (
@@ -4667,7 +4711,7 @@ export function MeetingV2RuntimeCard({
                               data-testid="operator-debugger-acknowledge-human-input"
                               onClick={acknowledgeHumanInputCheckpoint}
                             >
-                              {english ? "Acknowledge human input" : "确认 human input"}
+	                              {english ? "Acknowledge human input" : "确认人工输入"}
                             </Button>
                           ) : null}
                         </div>
@@ -4676,7 +4720,7 @@ export function MeetingV2RuntimeCard({
 
                     <div className="theme-surface-panel rounded-2xl px-4 py-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Reflection queue" : "reflection queue"}</p>
+                        <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Reflection queue" : "反思队列"}</p>
                         {canManageRuntime ? (
                           <Button variant="secondary" onClick={queueReflection} disabled={pending}>
                             {english ? "Queue reflection" : "加入反思队列"}
@@ -4691,7 +4735,7 @@ export function MeetingV2RuntimeCard({
                       <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
                         {english
                           ? `${runtime.v21.reflection.activeJobs} active reflection jobs in this session`
-                          : `当前 session 有 ${runtime.v21.reflection.activeJobs} 个 active 反思 jobs`}
+	                          : `当前会话有 ${runtime.v21.reflection.activeJobs} 个活跃反思作业`}
                       </p>
                       <div className="mt-3 space-y-3">
                         {runtime.v21.reflection.recentJobs.map((job) => (
@@ -4738,7 +4782,7 @@ export function MeetingV2RuntimeCard({
                       </div>
                       <div className="mt-4 space-y-3">
                         <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                          {english ? "Reflection 延续" : "reflection 延续"}
+	                          {english ? "Reflection carry-forward" : "反思延续"}
                         </p>
                         {runtime.v21.reflection.recentCandidates.map((candidate) => (
                           <div key={candidate.id} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
@@ -4793,8 +4837,8 @@ export function MeetingV2RuntimeCard({
                         {!runtime.v21.reflection.recentCandidates.length ? (
                           <p className="text-sm text-[color:var(--muted-foreground)]">
                             {english
-                              ? "No reflection 延续 candidate yet."
-                              : "当前还没有反思 延续 候选。"}
+	                              ? "No reflection carry-forward candidate yet."
+	                              : "当前还没有反思 延续 候选。"}
                           </p>
                         ) : null}
                       </div>
@@ -4802,7 +4846,7 @@ export function MeetingV2RuntimeCard({
 
                     <div className="theme-surface-panel rounded-2xl px-4 py-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Consolidation queue" : "consolidation queue"}</p>
+                        <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Consolidation queue" : "整合队列"}</p>
                         {canManageRuntime ? (
                           <Button variant="secondary" onClick={queueConsolidation} disabled={pending}>
                             {english ? "Queue manual consolidation" : "加入人工整合队列"}
@@ -4818,7 +4862,7 @@ export function MeetingV2RuntimeCard({
                       <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
                         {english
                           ? `${runtime.v21.consolidation.activeJobs} active jobs in this session`
-                          : `当前 session 有 ${runtime.v21.consolidation.activeJobs} 个 active jobs`}
+	                          : `当前会话有 ${runtime.v21.consolidation.activeJobs} 个活跃作业`}
                       </p>
                       <div className="mt-3 space-y-3">
                         {runtime.v21.consolidation.recentJobs.map((job) => (

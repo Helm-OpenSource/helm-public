@@ -89,10 +89,10 @@ This PR's source audit result:
    modules 和主要 API action messages 均使用 locale 分支或 message resolver。
 3. 抽查 264 个 `.tsx` 文件后，少量硬编码英文 UI 标签已修正；workspace runtime
    可见面板中的指标标签、加载策略和基准矩阵文案继续收口，直接 JSX 英文标签扫描已降为 0。
-   会议人工执行与正式写回运行时面板的中文操作字段已继续收口，目标文件的 `english`
-   条件中文分支扫描为 0；全工程启发式扫描仍有候选项，后续集中在 runtime / detail /
-   settings surface。剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为
-   P3，不作为中文 UI 缺口。
+   会议人工执行、正式写回与 meeting v2 runtime 主面板的中文操作字段已继续收口，
+   这些目标文件的 `english` 条件中文分支扫描为 0；全工程启发式扫描仍有 313 个
+   候选项，后续集中在 detail / settings / billing surface。剩余品牌名、语言名、
+   provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
 4. 后续如果新增 public-facing UI，必须优先接入 `resolveUiLocale` / `getUiMessages`
    或对应 feature display-copy，而不是直接写单语长文案。
 
@@ -104,13 +104,13 @@ This PR's source audit result:
 3. After sampling 264 `.tsx` files, a small set of hard-coded English UI labels
    was corrected; visible workspace runtime metric labels, loading strategy
    labels, and benchmark matrix copy were further localized, and the direct JSX
-   English-label scan now returns 0 hits. The meeting human-execution and
-   official-write runtime panels have also been localized for Chinese operation
-   fields, and the target-file `english` conditional scan returns 0 hits;
-   whole-project heuristic scans still show remaining candidates, concentrated
-   in runtime / detail / settings surfaces. Remaining brand names, language
-   labels, provider names, trace keys, and runtime enums are P3 rather than
-   Chinese UI gaps.
+   English-label scan now returns 0 hits. The meeting human-execution,
+   official-write, and meeting v2 runtime main panels have also been localized
+   for Chinese operation fields, and the target-file `english` conditional scan
+   returns 0 hits; whole-project heuristic scans still show 313 remaining
+   candidates, concentrated in detail / settings / billing surfaces. Remaining
+   brand names, language labels, provider names, trace keys, and runtime enums
+   are P3 rather than Chinese UI gaps.
 4. New public-facing UI must use `resolveUiLocale` / `getUiMessages` or the
    relevant feature display-copy instead of embedding long single-language copy.
 
@@ -200,6 +200,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-03 | 继续收口 meeting v2 runtime 主面板中文操作字段，目标文件 `english` 条件中文分支扫描为 0，全工程启发式候选项降为 313；Further localized meeting v2 runtime main-panel operation fields; target-file `english` conditional scan now returns 0 hits, and whole-project heuristic candidates are down to 313 |
 | 2026-06-03 | 继续收口会议人工执行与正式写回运行时面板中文操作字段，目标文件 `english` 条件中文分支扫描为 0；Further localized meeting human-execution and official-write runtime operation fields; target-file `english` conditional scan now returns 0 hits |
 | 2026-06-03 | 继续收口 workspace runtime 可见面板中的指标标签、加载策略和基准矩阵文案，直接 JSX 英文标签扫描降为 0；Further localized visible workspace runtime metric labels, loading strategy labels, and benchmark matrix copy; direct JSX English-label scan now returns 0 hits |
 | 2026-06-03 | 增加源码 / UI 审计标准，并记录 `zh-CN` 默认、`en-US` 可切换、display-copy 与少量硬编码 UI 标签修正；Added source / UI audit standard and recorded the `zh-CN` default, `en-US` switch, display-copy posture, and small hard-coded UI label fixes |
