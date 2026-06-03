@@ -188,21 +188,21 @@ function buildCallbackStatusCopy(input: {
 
   switch (input.status) {
     case "connected":
-      return "钉钉 OAuth 回调已完成，当前 workspace 范围会话已生效。";
+      return "钉钉 OAuth 回调已完成，当前工作区范围会话已生效。";
     case "oauth-error":
       return "钉钉在回调阶段返回了 OAuth 错误。";
     case "failure":
       return "钉钉回调在身份绑定完成前失败。";
     case "unresolved":
-      return "钉钉回调已完成，但 Helm 无法把钉钉身份解析到当前 workspace 用户。";
+      return "钉钉回调已完成，但 Helm 无法把钉钉身份解析到当前工作区用户。";
     case "mismatch":
-      return "钉钉回调已完成，但钉钉身份与当前 workspace 用户不匹配。";
+      return "钉钉回调已完成，但钉钉身份与当前工作区用户不匹配。";
     case "missing-state":
       return "钉钉回调状态 缺失或已过期。";
     case "invalid-state":
       return "钉钉回调状态 无法被信任。";
     case "forbidden":
-      return "当前角色不能管理这个 workspace 的钉钉连接器回调。";
+      return "当前角色不能管理这个工作区的钉钉连接器回调。";
   }
 }
 
@@ -751,10 +751,10 @@ export async function GET(request: Request) {
         redirectStatus: "unresolved",
         summary: english
           ? "DingTalk OAuth callback could not resolve a provider email"
-          : "钉钉 OAuth 回调无法解析 provider 邮箱",
+          : "钉钉 OAuth 回调无法解析服务商邮箱",
         message: english
           ? "DingTalk returned no email, so Helm could not bind the callback to the active workspace user."
-          : "钉钉没有返回邮箱，Helm 无法把回调绑定到当前 workspace 用户。",
+          : "钉钉没有返回邮箱，Helm 无法把回调绑定到当前工作区用户。",
         profile,
         corpId: token.corpId,
       });
@@ -768,10 +768,10 @@ export async function GET(request: Request) {
         redirectStatus: "mismatch",
         summary: english
           ? "DingTalk OAuth callback identity mismatched the active workspace user"
-          : "钉钉 OAuth 回调身份与当前 workspace 用户不匹配",
+          : "钉钉 OAuth 回调身份与当前工作区用户不匹配",
         message: english
           ? `DingTalk returned ${providerEmail}, but the active workspace user is ${matchedWorkspaceUserEmail}.`
-          : `钉钉返回的是 ${providerEmail}，但当前 workspace 用户是 ${matchedWorkspaceUserEmail}。`,
+          : `钉钉返回的是 ${providerEmail}，但当前工作区用户是 ${matchedWorkspaceUserEmail}。`,
         profile,
         corpId: token.corpId,
         matchedWorkspaceUserEmail,
@@ -831,7 +831,7 @@ export async function GET(request: Request) {
       actionType: DINGTALK_OAUTH_CALLBACK_AUDIT_ACTIONS.SUCCESS,
       summary: english
         ? `DingTalk OAuth callback resolved ${providerEmail} for the active workspace user`
-        : `钉钉 OAuth 回调已把 ${providerEmail} 解析到当前 workspace 用户`,
+        : `钉钉 OAuth 回调已把 ${providerEmail} 解析到当前工作区用户`,
       callbackResult,
       provider: "DINGTALK",
       role: callbackContext.role,

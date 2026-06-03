@@ -791,8 +791,8 @@ export async function syncWeComReadonlyConnector(input: {
         ? "Keep calendar runtime pending until a follow-on slice binds the established WeCom calendar registry into the runtime ingest seam."
         : "Persist a workspace-scoped WeCom calendar registry (`cal_id`) before claiming calendar runtime is established."
       : calendarRegistryEstablished
-        ? "在后续 slice 把已成立的企业微信日历注册表接进运行时 ingest seam 之前，继续保持 calendar 运行时为待成立。"
-        : "先持久化 workspace-scoped 的企业微信日历注册表（`cal_id`），再宣称 calendar 运行时已成立。",
+        ? "在后续切片把已成立的企业微信日历注册表接进运行时采集边界之前，继续保持日历运行时为待成立。"
+        : "先持久化工作区范围内的企业微信日历注册表（`cal_id`），再宣称日历运行时已成立。",
   );
 
   scopeResults.push(unresolvedMessageScope);
@@ -804,7 +804,7 @@ export async function syncWeComReadonlyConnector(input: {
   pendingQuestions.push(
     input.english
       ? "Verify whether WeCom exposes a stable pull/read contract for message notifications that fits the current workspace-first seam."
-      : "继续核实企业微信是否存在适配当前 workspace-first seam 的稳定消息通知 pull/read 合同。",
+      : "继续核实企业微信是否存在适配当前工作区优先边界的稳定消息通知拉取 / 读取合同。",
   );
 
   const ingestedScopeCount = scopeResults.filter(

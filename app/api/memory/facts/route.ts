@@ -106,7 +106,7 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "对象不在当前 workspace 中",
+      error instanceof Error ? error.message : "对象不在当前工作区中",
       isWorkspaceOwnershipError(error) ? "OBJECT_NOT_FOUND" : "READ_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

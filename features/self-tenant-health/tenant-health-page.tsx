@@ -156,7 +156,7 @@ export function TenantHealthPage({
         <SummaryCard
           label={english ? "Tenants observed" : "观察租户"}
           value={data.summary.totalTenants}
-          note={english ? "Customer workspaces only" : "只统计客户 workspace"}
+          note={english ? "Customer workspaces only" : "只统计客户工作区"}
           icon={<ShieldCheck className="h-5 w-5" />}
         />
         <SummaryCard
