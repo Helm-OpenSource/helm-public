@@ -2293,6 +2293,36 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps certified ecosystem checklist Chinese body localized for manual certification boundary terms", () => {
+    const certificationChecklist = read(
+      "docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md",
+    );
+    const chineseBody = certificationChecklist.slice(
+      certificationChecklist.indexOf("本清单定义"),
+      certificationChecklist.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("连接器、工作流包、伙伴和部署");
+    expect(chineseBody).toContain("人工认证门禁");
+    expect(chineseBody).toContain("不创建市场");
+    expect(chineseBody).toContain("结算通道");
+    expect(chineseBody).toContain("转售计划");
+    expect(chineseBody).toContain("客户结果保证");
+    expect(chineseBody).toContain("负责人、范围");
+    expect(chineseBody).toContain("支持 / 不支持的用例");
+    expect(chineseBody).toContain("证据引用");
+    expect(chineseBody).toContain("复核边界");
+    expect(chineseBody).toContain("回滚 / 撤回路径");
+    expect(chineseBody).toContain("客户可见声明");
+    expect(chineseBody).toContain("非承诺说明");
+    expect(chineseBody).toContain("批准之后");
+    expect(chineseBody).toContain("复核优先边界");
+
+    expect(chineseBody).not.toMatch(
+      /connector|workflow pack|partner|deployment|gate|marketplace|payout rail|reseller program|outcome guarantee|owner|scope|supported \/ unsupported use case|version|evidence refs|review boundary|rollback \/ withdrawal path|customer-visible claim|non-commitment note|approval 之后|customer-visible claim|review-first boundary/,
+    );
+  });
+
   it("keeps OPC weekly packet Chinese body free of recently fixed mixed public-operations fragments", () => {
     const opcPacket = read("docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md");
     const chineseBody = opcPacket.slice(

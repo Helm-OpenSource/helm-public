@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口认证生态清单的中文人工认证边界术语混写；本批只改连接器、工作流包、伙伴、部署、人工认证门禁、市场、结算通道、转售计划、客户结果保证、负责人、范围、支持 / 不支持用例、证据引用、复核边界、回滚 / 撤回路径、客户可见声明、非承诺说明、批准和复核优先边界文案及源码守卫，不改认证流程、输出枚举、公开 Helm Certified 字样规则或品牌授权边界。
 - 继续收口开源与商业边界文档的中文公开 / 商业边界术语混写；本批只改复刻、复核优先、公开安全、SDK 接缝、Core 导入、维护者复核、认证、市场、结算通道、客户结果保证和商标许可文案及源码守卫，不改 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、依赖方向或认证品牌边界。
 - 继续收口 HSI 要求文档的中文复核优先信号边界术语混写；本批只改无头信号接口、公开可复刻契约、复核优先运营信号、客户关系系统替代品、托管 agent 运行时、工作流引擎、市场、执行平面、包清单、合成 / 脱敏夹具、确定性评测门禁、复核包准备、边界证据、交付闭环、复刻 / 检查 / 映射 / 评测 / 复核链路、受控试点、仅离线、运行时查询、API 路由、schema 迁移、生产连接器、正式写入、自动发送 / 批准 / 执行和大模型最终排名文案及源码守卫，不改 HSI 英文参考、评测命令、阶段门禁、只读离线边界或不自动执行边界。
 - 继续收口开源与 Cloud Trial 发布姿态文档的中文发布治理术语混写；本批只改发布批准、私有发布回执、负责人 Go/No-Go、人工打标签、Core 源码、Docker 快速启动、公开样板 Pack、无 SLA 试用姿态、密钥轮换回执、控制面授权状态、私有发布负责人批准记录、发布机器、发布通道 / 目标标签 / 目标标题、预发布、稳定语义化版本标签、稳定线和企业级 SLA 文案及源码守卫，不改 release check、GitHub Release、人工标签流程、Cloud Trial 可选路径或非 SLA 边界。

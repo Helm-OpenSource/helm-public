@@ -14,18 +14,17 @@ archive_trigger:
 
 ## 中文主文本 / Chinese Main Text
 
-本清单定义 connector、workflow pack、partner 和 deployment 的第一层人工认证
-gate。它不创建 marketplace、payout rail、reseller program、自动认证系统或客户
-outcome guarantee。
+本清单定义连接器、工作流包、伙伴和部署的第一层人工认证门禁。它不创建市场、
+结算通道、转售计划、自动认证系统或客户结果保证。
 
-所有认证候选都必须说明 owner、scope、supported / unsupported use case、version、
-evidence refs、review boundary、rollback / withdrawal path、customer-visible claim
-和 non-commitment note。任何候选都不得声称自动发送、广泛自动写入、自动审批、
+所有认证候选都必须说明负责人、范围、支持 / 不支持的用例、版本、
+证据引用、复核边界、回滚 / 撤回路径、客户可见声明
+和非承诺说明。任何候选都不得声称自动发送、广泛自动写入、自动审批、
 自动结算或保证商业结果。
 
-公开使用 **Helm Certified ...** 字样只能发生在 approval 之后。认证记录在 owner
-批准公开使用前应保留在内部；如果 scope、安全姿态、客户可见 claim 或
-review-first boundary 发生漂移，认证可以撤销。
+公开使用 **Helm Certified ...** 字样只能发生在批准之后。认证记录在负责人
+批准公开使用前应保留在内部；如果范围、安全姿态、客户可见声明或
+复核优先边界发生漂移，认证可以撤销。
 
 ## English Reference
 

@@ -38,6 +38,21 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口认证生态清单的中文人工认证边界术语混写；只调整连接器、工作流包、伙伴、部署、
+人工认证门禁、市场、结算通道、转售计划、客户结果保证、负责人、范围、支持 / 不支持用例、
+证据引用、复核边界、回滚 / 撤回路径、客户可见声明、非承诺说明、批准和复核优先边界文案，
+不改变认证流程、输出枚举、公开 Helm Certified 字样规则或品牌授权边界。
+
+This round further localizes mixed Chinese manual certification-boundary
+terminology in the certified ecosystem checklist. It changes connector,
+workflow pack, partner, deployment, manual certification gate, marketplace,
+payout rail, reseller program, customer outcome guarantee, owner, scope,
+supported / unsupported use case, evidence refs, review boundary, rollback /
+withdrawal path, customer-visible claim, non-commitment note, approval, and
+review-first boundary wording only, without changing the certification flow,
+output enums, public Helm Certified wording rules, or brand-authorization
+boundaries.
+
 本轮继续收口开源与商业边界文档的中文公开 / 商业边界术语混写；只调整复刻、复核优先、
 公开安全、SDK 接缝、Core 导入、维护者复核、认证、市场、结算通道、客户结果保证和商标许可文案，
 不改变 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、依赖方向或认证品牌边界。
