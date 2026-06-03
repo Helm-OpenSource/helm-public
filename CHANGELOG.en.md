@@ -21,6 +21,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized billing / participant portal, proposal package detail surfaces, conversation detail view, and trial CTA labels; this batch's target-file scan found no new explicit English leftovers, while whole-project remaining candidates have not been recalibrated yet.
 - Further localized Helm v2 action-pack, opportunity-judge, human-action-execution, and worker-registry runtime copy; this batch changes visible copy only and leaves artifact filenames, enums, and state machines unchanged.
 - Further localized Chinese visible OAuth callback and read-only connector troubleshooting copy for WeCom, Feishu, and DingTalk; this batch changes status / audit summaries only and leaves OAuth, ingestion, and connector protocols unchanged.
+- Further localized Chinese visible mixed-language copy in demo industry packs, role foundations, the Ask Helm interpreter, and recommendation presentation; this batch changes visible copy only and leaves demo data structures, state machines, and recommendation logic unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

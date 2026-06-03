@@ -153,7 +153,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: "Keep candidate and hiring-team momentum continuous without losing the main hiring judgement.",
     },
     ownedOutcomes: {
-      zh: ["推动候选人到下一个明确阶段", "协调面试和 follow-up", "收拢岗位、候选人和反馈回路"],
+      zh: ["推动候选人到下一个明确阶段", "协调面试和后续跟进", "收拢岗位、候选人和反馈回路"],
       en: ["Move candidates to the next clear stage", "Coordinate interviews and follow-up", "Keep role, candidate, and feedback loops coherent"],
     },
     mainJudgements: {

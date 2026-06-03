@@ -121,7 +121,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "Custom Partner Program",
     },
     summary: {
-      zh: "面向能提供 custom integration、实施、维护或联合交付的服务伙伴。",
+      zh: "面向能提供定制集成、实施、维护或联合交付的服务伙伴。",
       en: "For service partners who can deliver custom integration, implementation, maintenance, or joint delivery.",
     },
     audienceSummary: {
@@ -129,7 +129,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "Best for partners who can handle implementation, maintenance, delivery coordination, or enterprise system integration.",
     },
     contributionSummary: {
-      zh: "可以参与 custom implementation、custom maintenance、联合交付和窄 connector/adapter 落地。",
+      zh: "可以参与定制实施、定制维护、联合交付和窄连接器 / 适配器落地。",
       en: "Partners can contribute to custom implementation, custom maintenance, joint delivery, and narrow connector/adapter rollouts.",
     },
     revenueSummary: {
@@ -154,7 +154,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "This version freezes the custom partner revenue source, review posture, reversal boundary, and manual-settlement reality.",
     },
     revenueDefinition: {
-      zh: "当前收益线来自 custom implementation 和 custom maintenance 的归因收入，不等于完整服务市场。",
+      zh: "当前收益线来自定制实施和定制维护的归因收入，不等于完整服务市场。",
       en: "Revenue currently comes from attributed custom implementation and maintenance lines, not a full service marketplace.",
     },
     splitLogicSummary: {

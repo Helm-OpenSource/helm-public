@@ -34,7 +34,7 @@ export const SI_DELIVERY_PACK: IndustryDemoPack = {
       explanation:
         "事实链：M3 任务进度看板（实际 64% / 计划 100%）· 客户 PMO 0521 周报仍标「绿灯」· 项目经理 0518 内部 slack 提及「来不及但还没和客户讲」· 历史相似 11 个项目，越晚告知客户越伤合作，平均 NPS 损失 2.4 分。",
       whyNotAutoExecute:
-        "对客户透明化延期是经营决策（涉及合同 / 法务 / 商务）— Helm 给 3 种披露口径草稿（提前 / 同步 / 滞后兜底），由 PM + 商务 + 法务联合 click。",
+        "对客户透明化延期是经营决策（涉及合同 / 法务 / 商务）— Helm 给 3 种披露口径草稿（提前 / 同步 / 滞后兜底），由 PM + 商务 + 法务联合确认。",
       urgencyScore: 95,
       impactScore: 92,
       confidenceScore: 88,
@@ -50,7 +50,7 @@ export const SI_DELIVERY_PACK: IndustryDemoPack = {
       explanation:
         "事实链：变更追踪 14 项 · 累计估工 35 人天 · 客户业务联系人邮件 14 封含「能不能也加上」「再帮个忙」· 内部 slack 0517「这样下去验收前我们要赔死了」· 变更单系统 0 条记录。",
       whyNotAutoExecute:
-        "范围谈判是商务 + 客户成功联合判断（继续吸收 vs 启动变更单 vs 暂缓）— Helm 给 3 个谈判脚本草稿，由人 click 哪条线发起。",
+        "范围谈判是商务 + 客户成功联合判断（继续吸收 vs 启动变更单 vs 暂缓）— Helm 给 3 个谈判脚本草稿，由人确认哪条线发起。",
       urgencyScore: 80,
       impactScore: 88,
       confidenceScore: 85,
@@ -66,7 +66,7 @@ export const SI_DELIVERY_PACK: IndustryDemoPack = {
       explanation:
         "事实链：日历查询 3 项目共占 张工 0517-0524 共 78 小时（标准周 40 小时）· 3 名 PM 各自项目计划假设张工投入 50% · 上周类似冲突导致蓝海项目里程碑 M2 延期 5 天 · 招聘候补架构师流程进行中（预计 4 周到岗）。",
       whyNotAutoExecute:
-        "资源冲突解决是组织决策（暂停某项目 / 加班 / 招聘）— Helm 给冲突时段表 + 3 种解决方案候选，由资源中心 click。",
+        "资源冲突解决是组织决策（暂停某项目 / 加班 / 招聘）— Helm 给冲突时段表 + 3 种解决方案候选，由资源中心确认。",
       urgencyScore: 75,
       impactScore: 82,
       confidenceScore: 92,
@@ -96,9 +96,9 @@ export const SI_DELIVERY_PACK: IndustryDemoPack = {
       score: 82,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：决策请求邮件 0501 · 客户业务高管 0508 / 0515 / 0521 三次访问决策邮件后无回复 · M4 / M5 项目计划标「等待客户决策 21 天」· 合同条款规定客户决策延期超 14 天 PM 可触发 escalation · 历史 8 个相似项目最终都因为客户决策慢导致总延期 30+ 天。",
+        "事实链：决策请求邮件 0501 · 客户业务高管 0508 / 0515 / 0521 三次访问决策邮件后无回复 · M4 / M5 项目计划标「等待客户决策 21 天」· 合同条款规定客户决策延期超 14 天 PM 可触发升级处理 · 历史 8 个相似项目最终都因为客户决策慢导致总延期 30+ 天。",
       whyNotAutoExecute:
-        "正式触发合同条款 escalation 涉及法律 / 商务关系 — Helm 给 escalation 模板草稿 + 客户高管联系人推荐，由项目经理 + 商务 + 法务联合 click。",
+        "正式触发合同条款升级处理涉及法律 / 商务关系 — Helm 给升级处理模板草稿 + 客户高管联系人推荐，由项目经理 + 商务 + 法务联合确认。",
       urgencyScore: 90,
       impactScore: 90,
       confidenceScore: 78,
@@ -114,7 +114,7 @@ export const SI_DELIVERY_PACK: IndustryDemoPack = {
       explanation:
         "事实链：第三方供应商 SLA 草稿邮件 0508 · 供应商法务 0512 / 0517 反馈仍在评审 · M3 验收依赖该接口 · 客户上线计划 0530（剩 8 天）· 历史相似第三方延期 4 个项目，最终 3 个被迫延期上线。",
       whyNotAutoExecute:
-        "第三方供应商谈判 / 客户上线延期沟通 / 启用备用方案三选一是经营决策 — Helm 给 3 路径剧本，由项目经理 + 客户成功 + 供应链 click。",
+        "第三方供应商谈判 / 客户上线延期沟通 / 启用备用方案三选一是经营决策 — Helm 给 3 路径剧本，由项目经理 + 客户成功 + 供应链确认。",
       urgencyScore: 92,
       impactScore: 88,
       confidenceScore: 85,

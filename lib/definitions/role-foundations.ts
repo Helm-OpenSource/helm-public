@@ -207,7 +207,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Helps a sales lead decide which opportunity deserves attention today instead of spreading effort evenly.",
         },
         activationCue: {
-          zh: "适用于 pipeline 复核、阶段推进和 conversion 阻塞排序。",
+          zh: "适用于管线复核、阶段推进和转化阻塞排序。",
           en: "Use during pipeline review, stage progression, and conversion-blocker prioritization.",
         },
       },
@@ -249,7 +249,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Helps an AE produce reviewable outbound follow-up drafts faster.",
         },
         activationCue: {
-          zh: "适用于客户会后、线程停滞后和回应 draft 需要更快落笔时。",
+          zh: "适用于客户会后、线程停滞后和回应草稿需要更快落笔时。",
           en: "Use after customer calls, when threads stall, or when a reply draft needs to move quickly.",
         },
       },
@@ -340,7 +340,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
       {
         skillId: "external-followup-draft",
         rationale: {
-          zh: "把风险说明、下一步和客户语境收成更稳的 follow-up 草稿。",
+          zh: "把风险说明、下一步和客户语境收成更稳的跟进草稿。",
           en: "Turns risk explanation, next steps, and customer context into a more reliable follow-up draft.",
         },
         activationCue: {
@@ -459,14 +459,14 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Helps operations, finance, and support roles protect high-risk state changes behind explicit human review.",
         },
         activationCue: {
-          zh: "适用于 seat、billing、support exception 或高风险组织状态更新前。",
+          zh: "适用于席位、计费、支持例外或高风险组织状态更新前。",
           en: "Use before seat, billing, support-exception, or high-risk organization-state updates.",
         },
       },
       {
         skillId: "pilot-readiness-diagnostics",
         rationale: {
-          zh: "帮助这类角色把 recommendation、经营记忆、LLM、采集 和审批边界压成 就绪度 判断。",
+          zh: "帮助这类角色把建议、经营记忆、LLM、采集和审批边界压成就绪度判断。",
           en: "Helps these roles compress recommendation, memory, LLM, capture, and approval boundaries into a readiness judgement.",
         },
         activationCue: {

@@ -201,7 +201,7 @@ function buildPersonalizationHint(input: {
     input.context.objectType === ObjectType.MEETING &&
     input.ranked.usesCommitment
   ) {
-    return "你团队通常会在会后 24 小时内完成 follow-up，这条动作因此被提高了优先级。";
+    return "你团队通常会在会后 24 小时内完成跟进，这条动作因此被提高了优先级。";
   }
 
   if (input.ranked.sortHint === "clarity") {
@@ -363,7 +363,7 @@ export function buildRecommendationPresentationPayload(input: {
       .map((fact) => trimText(fact.content, 42)),
     briefingSummary: evidence.briefingSummary ?? null,
     evidenceSummary: evidence.memoryRetrievalPack
-      ? `已引用 ${evidence.supportingFactIds.length} 条事实、${evidence.blockerIds.length} 个阻塞、${evidence.commitmentIds.length} 个承诺；retrieval pack 入选 ${evidence.memoryRetrievalPack.trace.selectedCount} 条、省略 ${evidence.memoryRetrievalPack.trace.omittedCount} 条。`
+      ? `已引用 ${evidence.supportingFactIds.length} 条事实、${evidence.blockerIds.length} 个阻塞、${evidence.commitmentIds.length} 个承诺；检索包入选 ${evidence.memoryRetrievalPack.trace.selectedCount} 条、省略 ${evidence.memoryRetrievalPack.trace.omittedCount} 条。`
       : `已引用 ${evidence.supportingFactIds.length} 条事实、${evidence.blockerIds.length} 个阻塞、${evidence.commitmentIds.length} 个承诺。`,
     memoryRetrievalPack: evidence.memoryRetrievalPack ?? null,
   };

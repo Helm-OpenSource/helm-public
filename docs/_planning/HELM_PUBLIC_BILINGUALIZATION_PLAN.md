@@ -98,7 +98,8 @@ This PR's source audit result:
    proposal、commercial narrative strengthening detail model、proposal package
    detail surfaces、billing / participant portal surface、trial CTA、Helm v2 action
    pack、opportunity judge、human action execution、worker registry、企业微信 / 飞书 /
-   钉钉 OAuth 回调与只读连接器排错文案的中文操作字段已继续收口。
+   钉钉 OAuth 回调与只读连接器排错文案、demo 行业包、角色基础、Ask Helm
+   解释器与推荐展示文案的中文操作字段已继续收口。
    这些目标文件的本批次严格可见残留已清理；全工程广义 ASCII 中文分支扫描与严格可见
    文案扫描尚未重新校准，后续仍需继续检查 billing surface 与其他低频 detail surfaces。
    剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
@@ -126,9 +127,11 @@ This PR's source audit result:
    customer-facing offer / external proposal, commercial narrative
    strengthening detail model, proposal package detail surfaces, billing /
    participant portal surface, trial CTA, Helm v2 action pack, opportunity
-   judge, human action execution, worker registry, and WeCom / Feishu /
-   DingTalk OAuth callback plus read-only connector troubleshooting copy have also been localized for
-   Chinese operation fields. This batch clears the target-file strict visible-copy leftovers; the
+   judge, human action execution, worker registry, WeCom / Feishu / DingTalk
+   OAuth callback plus read-only connector troubleshooting copy, demo industry
+   packs, role foundations, the Ask Helm interpreter, and recommendation
+   presentation have also been localized for Chinese operation fields. This
+   batch clears the target-file strict visible-copy leftovers; the
    whole-project broad ASCII zh-branch scan and strict visible-copy scan have
    not been recalibrated yet, and billing plus other lower-frequency detail
    surfaces still need follow-up review. Remaining brand names, language labels,
@@ -230,6 +233,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-03 | 继续收口 demo 行业包、角色基础、Ask Helm 解释器与推荐展示文案中的中文混写；本批只改中文用户可见文案，不改 demo 数据结构、状态机或推荐逻辑；Further localized Chinese visible mixed-language copy in demo industry packs, role foundations, the Ask Helm interpreter, and recommendation presentation; this batch changes visible copy only and leaves demo data structures, state machines, and recommendation logic unchanged |
 | 2026-06-03 | 继续收口企业微信、飞书、钉钉 OAuth 回调与只读连接器排错文案中的中文混写；本批只改中文用户可见状态 / 审计摘要，不改 OAuth、采集或连接器协议；Further localized Chinese visible OAuth callback and read-only connector troubleshooting copy for WeCom, Feishu, and DingTalk; this batch changes status / audit summaries only and leaves OAuth, ingestion, and connector protocols unchanged |
 | 2026-06-03 | 继续收口 Helm v2 action pack、opportunity judge、human action execution 与 worker registry 的中文运行时文案；本批仅修改可见文案，不改 artifact 文件名、enum 或状态机；Further localized Helm v2 action-pack, opportunity-judge, human-action-execution, and worker-registry runtime copy; this batch changes visible copy only and leaves artifact filenames, enums, and state machines unchanged |
 | 2026-06-03 | 继续收口 billing / participant portal、proposal package detail surfaces、conversation detail view 与 trial CTA 的中文可见标签；本批目标文件扫描未发现新的明确英文残留，全工程剩余候选尚未重新校准；Further localized billing / participant portal, proposal package detail surfaces, conversation detail view, and trial CTA labels; this batch's target-file scan found no new explicit English leftovers, while whole-project remaining candidates have not been recalibrated yet |

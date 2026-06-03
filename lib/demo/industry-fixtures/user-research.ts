@@ -32,7 +32,7 @@ export const USER_RESEARCH_PACK: IndustryDemoPack = {
       explanation:
         "事实链：8 场访谈纪要文档存在但未跨场聚合 · Slack 频道讨论 47 条 · 邮件提及关键洞察 12 封 · 飞书文档 0506 后无更新 · 下周产品委员会议程含「v3 路线决策」· 历史相似项目 6 个，5 个最终决策与访谈结论分离。",
       whyNotAutoExecute:
-        "用研结论提炼是判断工作（哪些是普遍信号 / 哪些是极端案例）— Helm 给候选洞察聚合 + 反例标注，由用研负责人 click 哪些进决策包。",
+        "用研结论提炼是判断工作（哪些是普遍信号 / 哪些是极端案例）— Helm 给候选洞察聚合 + 反例标注，由用研负责人确认哪些进决策包。",
       urgencyScore: 92,
       impactScore: 90,
       confidenceScore: 78,
@@ -48,7 +48,7 @@ export const USER_RESEARCH_PACK: IndustryDemoPack = {
       explanation:
         "事实链：v2.3 功能 3 周数据 · Mixpanel 显示采用率 18%（PM 已看）· Amplitude 漏斗显示 step 3 流失 62%（PM 未看）· 客服工单 14 条 v2.3 相关 · 销售 demo 反馈 5 条「学习曲线陡」· NPS 评论 9 条提及 v2.3 · 5 数据源结论可能不一致。",
       whyNotAutoExecute:
-        "「保留 v2.3 / 简化 v2.3 / 暂下线 v2.3」三选一是产品判断 — Helm 给 5 数据源聚合视图 + 3 路径决策矩阵，由 PM click。",
+        "「保留 v2.3 / 简化 v2.3 / 暂下线 v2.3」三选一是产品判断 — Helm 给 5 数据源聚合视图 + 3 路径决策矩阵，由 PM 确认。",
       urgencyScore: 78,
       impactScore: 85,
       confidenceScore: 82,
@@ -64,7 +64,7 @@ export const USER_RESEARCH_PACK: IndustryDemoPack = {
       explanation:
         "事实链：5 场访谈纪要含「会发您研究摘要」· 承诺时间窗 0508-0522 · 已逾期 7 天 · 受访者邮件 0521 / 0522 询问进展 · 历史用研履约率 42%（行业基准 80%）· 关键受访者下次合作意愿与研究履约相关。",
       whyNotAutoExecute:
-        "对受访者外发是客户面动作 — Helm 给 5 份摘要草稿（基于访谈纪要 + 研究结论），由用研负责人 click 谁审 / 谁发。",
+        "对受访者外发是客户面动作 — Helm 给 5 份摘要草稿（基于访谈纪要 + 研究结论），由用研负责人确认谁审 / 谁发。",
       urgencyScore: 80,
       impactScore: 65,
       confidenceScore: 95,
@@ -80,7 +80,7 @@ export const USER_RESEARCH_PACK: IndustryDemoPack = {
       explanation:
         "事实链：v3.1 决策纪要 0521 「方向：自动推荐」· 2025-11 用研结论文档「用户希望保留控制感」· 两份决策 / 结论从未在产品委员会议程中并列出现 · 涉及 14 名用户访谈样本 · 相似冲突 3 次，最终 2 次产品上线后用户负向反馈。",
       whyNotAutoExecute:
-        "产品方向是经营决策 — Helm 把两份结论并列给委员会（含原始引语 + 时间 + 受访者），不替你 vote。",
+        "产品方向是经营决策 — Helm 把两份结论并列给委员会（含原始引语 + 时间 + 受访者），不替你投票。",
       urgencyScore: 85,
       impactScore: 92,
       confidenceScore: 88,
@@ -96,7 +96,7 @@ export const USER_RESEARCH_PACK: IndustryDemoPack = {
       explanation:
         "事实链：12 名 power users 活跃度变化（35 → 10 次/周，4 周）· 用研接触记录 6 周空白 · 历史 power user 流失模式：先活跃下降，4-8 周后取消订阅或换工具 · 上次访谈 2025-12，结论「这群用户对路线最有判断」。",
       whyNotAutoExecute:
-        "联系 12 名 power user 是研究决策（哪几位优先 / 用什么口径 / 提供什么 incentive）— Helm 给候选名单 + 3 种联系话术，由用研负责人 click。",
+        "联系 12 名高频用户是研究决策（哪几位优先 / 用什么口径 / 提供什么激励）— Helm 给候选名单 + 3 种联系话术，由用研负责人确认。",
       urgencyScore: 88,
       impactScore: 88,
       confidenceScore: 75,
@@ -112,7 +112,7 @@ export const USER_RESEARCH_PACK: IndustryDemoPack = {
       explanation:
         "事实链：PM / CS / 销售三轮访谈总样本 12 人 · 访谈大纲对比 70% 问题重叠 · 三团队结论文档独立存放无聚合 · 历史相似浪费 4 次（每次估计 ~80 工时）· 用研团队未触发跨团队访谈协同流程。",
       whyNotAutoExecute:
-        "建立跨团队访谈协同流程是组织决策（强制走中央调度 vs 保持各自做）— Helm 给当前 3 份结论聚合 + 跨团队协议草稿，由用研负责人 + 三团队 PM click。",
+        "建立跨团队访谈协同流程是组织决策（强制走中央调度 vs 保持各自做）— Helm 给当前 3 份结论聚合 + 跨团队协议草稿，由用研负责人 + 三团队 PM 确认。",
       urgencyScore: 60,
       impactScore: 75,
       confidenceScore: 92,

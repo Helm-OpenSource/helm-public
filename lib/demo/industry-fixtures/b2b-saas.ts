@@ -2,7 +2,7 @@
  * B2B SaaS 行业 demo fixture pack
  *
  * 共情锚点：会后 48 小时无人寄 ROI / 安全评审 / 交付承诺 — 大客户试点
- * 在沉默中流失。覆盖销售负责人 / 创始人 / 客户成功 三类典型 persona。
+ * 在沉默中流失。覆盖销售负责人 / 创始人 / 客户成功三类典型画像。
  *
  * 数据全部 fictional 但情节贴 B2B SaaS 真实公开 benchmark（不取自具体客户）。
  */
@@ -30,9 +30,9 @@ export const B2B_SAAS_PACK: IndustryDemoPack = {
       score: 92,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：采购会纪要含「需要 ROI 材料」承诺 · CFO 邮件 0518 要求 3 项财务回报口径 · CRM stage = business_review · 外发草稿 v3 在复核中。",
+        "事实链：采购会纪要含「需要 ROI 材料」承诺 · CFO 邮件 0518 要求 3 项财务回报口径 · CRM 阶段 = 商务评审 · 外发草稿 v3 在复核中。",
       whyNotAutoExecute:
-        "对外发送对客户可见。Helm 不会替你点发送 — 草稿已就位，但客户的 inbox 由你拍板才进。",
+        "对外发送对客户可见。Helm 不会替你点发送 — 草稿已就位，但客户收件箱由你拍板才进。",
       urgencyScore: 95,
       impactScore: 90,
       confidenceScore: 88,
@@ -46,9 +46,9 @@ export const B2B_SAAS_PACK: IndustryDemoPack = {
       score: 84,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：技术评审纪要 0506 已通过 · 安全问题 3 条 / 法务问题 2 条散在 5 条邮件链 · 客户 IT 总监 0517 询问进展 · 内部 owner 未指定。",
+        "事实链：技术评审纪要 0506 已通过 · 安全问题 3 条 / 法务问题 2 条散在 5 条邮件链 · 客户 IT 总监 0517 询问进展 · 内部负责人未指定。",
       whyNotAutoExecute:
-        "指定 owner 是组织决策，Helm 给候选 — 谁接手由你拍板。",
+        "指定负责人是组织决策，Helm 给候选 — 谁接手由你拍板。",
       urgencyScore: 78,
       impactScore: 85,
       confidenceScore: 82,
@@ -74,13 +74,13 @@ export const B2B_SAAS_PACK: IndustryDemoPack = {
       id: "b2b-saas-renewal-cool-down",
       title: "鲸落咨询续约前 30 天客户对 1:1 取消已 3 次",
       description:
-        "续约窗口 28 天后，客户主联系人连续取消 3 次 1:1。CSM 平台显示活跃度下滑 40%，但还没正式 escalate。",
+        "续约窗口 28 天后，客户主联系人连续取消 3 次 1:1。CSM 平台显示活跃度下滑 40%，但还没正式升级处理。",
       score: 81,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：1:1 取消 0509 / 0514 / 0520 · 平台活跃度从 9.2/10 → 5.4/10 · 续约 owner 邮件 0518 未回 · 上次合同价值 ¥120 万。",
+        "事实链：1:1 取消 0509 / 0514 / 0520 · 平台活跃度从 9.2/10 → 5.4/10 · 续约负责人邮件 0518 未回 · 上次合同价值 ¥120 万。",
       whyNotAutoExecute:
-        "客户成功 escalate 的口径需要由你定 — Helm 给三种 escalate 模板（高管对接 / 缩小续约 / 主动暂停）候选。",
+        "客户成功升级处理的口径需要由你定 — Helm 给三种升级处理模板（高管对接 / 缩小续约 / 主动暂停）候选。",
       urgencyScore: 90,
       impactScore: 95,
       confidenceScore: 70,
@@ -112,7 +112,7 @@ export const B2B_SAAS_PACK: IndustryDemoPack = {
       explanation:
         "事实链：会议纪要 0517 含「正在评估 [竞品]」· 客户 CTO 邮件 0518 询问 SOC2 进度 · 内部市场情报 0519 提示竞品 sales engineer 已访谈客户 · 我方差异化材料 v2 在草稿。",
       whyNotAutoExecute:
-        "对外材料外发由你 click。差异化口径要避免直接攻击竞品 — 客户面话术由你审。",
+        "对外材料外发由你确认。差异化口径要避免直接攻击竞品 — 客户面话术由你审。",
       urgencyScore: 85,
       impactScore: 70,
       confidenceScore: 65,
