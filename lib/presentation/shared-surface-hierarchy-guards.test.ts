@@ -2187,6 +2187,40 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps clean-history receipt Chinese safety-scope copy localized", () => {
+    const cleanHistoryReceipt = read(
+      "docs/reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md",
+    );
+    const chineseBody = cleanHistoryReceipt.slice(
+      cleanHistoryReceipt.indexOf("本文件是仓库可见性门禁"),
+      cleanHistoryReceipt.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("仓库可见性门禁");
+    expect(chineseBody).toContain("历史级步骤");
+    expect(chineseBody).toContain("公开安全回执");
+    expect(chineseBody).toContain("公开 Core 历史");
+    expect(chineseBody).toContain("真实密钥");
+    expect(chineseBody).toContain("完整历史扫描");
+    expect(chineseBody).toContain("不轮换凭据");
+    expect(chineseBody).toContain("不批准发布");
+    expect(chineseBody).toContain("不切换仓库可见性");
+    expect(chineseBody).toContain("负责人动作");
+    expect(chineseBody).toContain("清洗后的快照");
+    expect(chineseBody).toContain("完整私有单体仓库历史");
+    expect(chineseBody).toContain("私有源仓受损提交");
+    expect(chineseBody).toContain("任何引用都不可达");
+    expect(chineseBody).toContain("非密钥");
+    expect(chineseBody).toContain("刻意构造的假夹具");
+    expect(chineseBody).toContain("密钥检测器");
+    expect(chineseBody).toContain("真实凭据");
+    expect(chineseBody).toContain("形似凭据的内容");
+
+    expect(chineseBody).not.toMatch(
+      /repository visibility gate|history-level|public-safe receipt|public Core history|secret|full-history scan|credential|release|flip repository visibility|owner action|sanitized snapshot|private monorepo history|private source repo compromised commits|ref 都不可达|finding|non-secret|deliberate fake fixture|secret detector|history 被重写|new commit|credential-shaped content/,
+    );
+  });
+
   it("keeps public release train runbook Chinese body free of recently fixed mixed release-governance fragments", () => {
     const releaseTrainRunbook = read(
       "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",

@@ -16,6 +16,25 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：Clean History 回执的中文公开安全证明范围术语混写已继续清理；本批只改仓库
+可见性门禁、历史级步骤、公开安全回执、公开 Core 历史、真实密钥、完整历史扫描、凭据轮换、
+发布批准、仓库可见性切换、负责人动作、清洗后的快照、完整私有单体仓库历史、私有源仓受损
+提交、引用可达性、非密钥、假夹具、密钥检测器、真实凭据和形似凭据内容文案及源码守卫，
+不改变 gitleaks 证据、finding 分类、复现命令、非声明边界或私有凭据轮换责任，也不声明全仓
+双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese public-safety proof-scope
+terminology in the Clean History receipt has been further localized. This batch
+changes repository visibility gate, history-level step, public-safe receipt,
+public Core history, real secret, full-history scan, credential rotation,
+release approval, repository visibility flip, owner action, sanitized snapshot,
+full private-monorepo history, private source compromised commit, ref
+reachability, non-secret, fake fixture, secret detector, real credential, and
+credential-shaped content wording plus source guards only; it does not change
+gitleaks evidence, finding classifications, reproduction commands, non-claim
+boundaries, or private credential-rotation responsibility, and does not claim
+full-repo bilingualization completion.
+
 最新双语化收口：D2 Docker 全新克隆冒烟回执的中文证明范围术语混写已继续清理；本批只改
 全新克隆冒烟验证、干净检出、随附 MySQL 服务、公开上手端点、被测 PR 分支、公开 Core
 Docker 快速启动冒烟验证、客户部署就绪、发布就绪、生产连接器凭据 / 回调、生产数据保留、

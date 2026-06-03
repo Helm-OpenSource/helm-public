@@ -11,16 +11,14 @@ public_safety: Public-safe history-scan receipt. Records scan evidence and class
 
 ## 中文主文本 / Chinese Main Text
 
-本文件是 repository visibility gate 中 history-level 步骤的 public-safe receipt：public
-Core history 不包含真实 secret，full-history scan 已确认。它不轮换 credential、不批准
-release，也不 flip repository visibility；这些仍是 owner action。
+本文件是仓库可见性门禁中历史级步骤的公开安全回执：公开 Core 历史不包含真实密钥，
+完整历史扫描已确认。它不轮换凭据、不批准发布，也不切换仓库可见性；这些仍是负责人动作。
 
-public Core history 是 sanitized snapshot，不是完整 private monorepo history。已知的
-private source repo compromised commits 不在本仓且从任何 ref 都不可达。`gitleaks`
-报告的 6 个 finding 均已被分类为 non-secret 或 deliberate fake fixture，用于测试 secret
-detector；没有真实 credential。
+公开 Core 历史是清洗后的快照，不是完整私有单体仓库历史。已知的私有源仓受损提交不在本仓，
+且从任何引用都不可达。`gitleaks` 报告的 6 个发现均已被分类为非密钥或刻意构造的假夹具，
+用于测试密钥检测器；没有真实凭据。
 
-未来如果 history 被重写或新 commit 增加 credential-shaped content，必须重新扫描。
+未来如果历史被重写，或新提交增加形似凭据的内容，必须重新扫描。
 
 ## English Reference
 

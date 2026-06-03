@@ -38,6 +38,23 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 Clean History 回执的中文公开安全证明范围术语混写；只调整仓库可见性门禁、
+历史级步骤、公开安全回执、公开 Core 历史、真实密钥、完整历史扫描、凭据轮换、发布批准、
+仓库可见性切换、负责人动作、清洗后的快照、完整私有单体仓库历史、私有源仓受损提交、
+引用可达性、非密钥、假夹具、密钥检测器、真实凭据和形似凭据内容文案，
+不改变 gitleaks 证据、finding 分类、复现命令、非声明边界或私有凭据轮换责任。
+
+This round further localizes mixed Chinese public-safety proof-scope
+terminology in the Clean History receipt. It changes repository visibility
+gate, history-level step, public-safe receipt, public Core history, real
+secret, full-history scan, credential rotation, release approval, repository
+visibility flip, owner action, sanitized snapshot, full private-monorepo
+history, private source compromised commit, ref reachability, non-secret, fake
+fixture, secret detector, real credential, and credential-shaped content
+wording only, without changing gitleaks evidence, finding classifications,
+reproduction commands, non-claim boundaries, or private credential-rotation
+responsibility.
+
 本轮继续收口 D2 Docker 全新克隆冒烟回执的中文证明范围术语混写；只调整全新克隆冒烟验证、
 干净检出、随附 MySQL 服务、公开上手端点、被测 PR 分支、公开 Core Docker 快速启动冒烟验证、
 客户部署就绪、发布就绪、生产连接器凭据 / 回调、生产数据保留、数据处理协议、服务等级承诺、
