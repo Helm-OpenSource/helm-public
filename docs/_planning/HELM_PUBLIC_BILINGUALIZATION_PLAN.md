@@ -228,6 +228,16 @@ execution-boundary wording plus source guards only, without changing action
 types, artifacts, state machines, manual receipts, or official-write
 permissions.
 
+本轮继续收口 remaining meeting runtime 里的中文 CRM 边界混写；只调整
+opportunity judge、draft handoff、action pack runtime 与 meeting display-copy 的
+正式客户关系系统状态 / 写回文案及源码守卫，不改变事件、artifact、shadow 更新或发送 / 写回权限。
+
+This round further localizes mixed Chinese CRM boundary copy in remaining
+meeting runtimes. It changes official customer-relationship-system state /
+writeback wording in opportunity judge, draft handoff, action pack runtime, and
+meeting display-copy plus source guards only, without changing events,
+artifacts, shadow updates, send authority, or write authority.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

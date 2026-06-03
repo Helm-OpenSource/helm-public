@@ -33,9 +33,9 @@ const DEFAULT_WORKSPACE_SUMMARY =
 export const DRAFT_ONLY_COMMS_BOUNDARY_NOTE =
   "这组对外草稿仍然只是发送前复核交接，不会自动发送、不会自动创建外部日程，也不会形成正式承诺。";
 const DRAFT_ONLY_APPROVAL_NOTE =
-  "已通过只表示允许进入下一步人工动作，不代表任何邮件已发送、日程已创建，或正式 CRM 状态已改写。";
+  "已通过只表示允许进入下一步人工动作，不代表任何邮件已发送、日程已创建，或正式客户关系系统状态已改写。";
 const APPROVED_DOES_NOT_MEAN_SENT_NOTE =
-  "已通过不等于已发送；不代表邮件已发送、不代表日程已创建，也不代表形成正式承诺或正式 CRM 写回。";
+  "已通过不等于已发送；不代表邮件已发送、不代表日程已创建，也不代表形成正式承诺或正式客户关系系统写回。";
 const NON_COMMITMENT_FALLBACK_NOTE =
   "涉及报价、合同、交付日期、折扣或正式范围承诺的内容，仍需在内部复核后再单独确认。";
 const CALENDAR_SUGGESTION_NOTE =

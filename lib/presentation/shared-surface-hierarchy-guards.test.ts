@@ -1788,9 +1788,10 @@ describe("shared surface hierarchy guards", () => {
     expect(actionPackRuntime).toContain("动作资料仍带有未决问题");
     expect(actionPackRuntime).toContain("总体继续沿会议动作资料推进");
     expect(actionPackRuntime).toContain("会议分析已把会议摘要");
+    expect(actionPackRuntime).toContain("正式客户关系系统状态");
 
     expect(actionPackRuntime).not.toMatch(
-      /风险 alerts|meeting 动作资料|meeting \/ company|关联 company|明确 下一步|facts 与 推导|推导 默认不 晋升|Open questions|open question|确认 动作资料|动作资料 仍带有 未决问题|沿 meeting 动作资料|会议分析 已/,
+      /风险 alerts|meeting 动作资料|meeting \/ company|关联 company|明确 下一步|facts 与 推导|推导 默认不 晋升|Open questions|open question|确认 动作资料|动作资料 仍带有 未决问题|沿 meeting 动作资料|会议分析 已|正式 CRM/,
     );
   });
 
@@ -1839,9 +1840,12 @@ describe("shared surface hierarchy guards", () => {
     expect(opportunityJudge).toContain("机会判断套件已就绪：阶段差异");
     expect(opportunityJudge).toContain("当前没有新增主管关注标记");
     expect(opportunityJudge).toContain("当前没有新增主管升级信号");
+    expect(opportunityJudge).toContain("正式客户关系系统已写回");
+    expect(opportunityJudge).toContain("正式客户关系系统写回");
+    expect(opportunityJudge).toContain("正式客户关系系统已更新");
 
     expect(opportunityJudge).not.toMatch(
-      /decision criteria|champion \/ 负责人|主管 复核|主管 \/操作员|额外 主管|仅阴影 复核|历史 timeline|object 经营记忆|判断 消费进阴影摘要|下一步摘要 已生成|操作员\/ 主管|stage差异|套件 已就绪|新增 主管 升级/,
+      /decision criteria|champion \/ 负责人|主管 复核|主管 \/操作员|额外 主管|仅阴影 复核|历史 timeline|object 经营记忆|判断 消费进阴影摘要|下一步摘要 已生成|操作员\/ 主管|stage差异|套件 已就绪|新增 主管 升级|正式 CRM/,
     );
   });
 
@@ -1881,6 +1885,20 @@ describe("shared surface hierarchy guards", () => {
     expect(combined).not.toMatch(
       /正式 CRM|CRM 步骤|CRM 写入|CRM 状态/,
     );
+  });
+
+  it("keeps meeting draft handoff CRM boundary copy localized", () => {
+    const draftCommsRuntime = read(
+      "lib/helm-v2/draft-comms-handoff-runtime.ts",
+    );
+    const meetingDisplayCopy = read("features/meetings/display-copy.ts");
+    const combined = `${draftCommsRuntime}\n${meetingDisplayCopy}`;
+
+    expect(draftCommsRuntime).toContain("正式客户关系系统状态已改写");
+    expect(draftCommsRuntime).toContain("正式客户关系系统写回");
+    expect(meetingDisplayCopy).toContain("正式客户关系系统状态");
+
+    expect(combined).not.toMatch(/正式 CRM|CRM 写回|CRM 状态/);
   });
 
   it("keeps public home Chinese entry copy localized for delivery engineers", () => {

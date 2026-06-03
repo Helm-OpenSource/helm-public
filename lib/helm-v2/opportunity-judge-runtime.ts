@@ -38,9 +38,9 @@ const DEFAULT_WORKSPACE_SUMMARY =
 const SHADOW_ONLY_BOUNDARY_NOTE =
   "This layer only updates shadow opportunity posture after explicit review. Official CRM state stays unchanged.";
 const SHADOW_APPROVAL_NOTE =
-  "已确认只表示允许把判断消费进阴影摘要，不代表正式 CRM 已写回，也不代表形成外部承诺。";
+  "已确认只表示允许把判断消费进阴影摘要，不代表正式客户关系系统已写回，也不代表形成外部承诺。";
 const SHADOW_APPROVED_DOES_NOT_MEAN_NOTE =
-  "已确认不等于正式 CRM 写回，不代表正式 CRM 已更新，也不代表形成对外承诺。";
+  "已确认不等于正式客户关系系统写回，不代表正式客户关系系统已更新，也不代表形成对外承诺。";
 const INSUFFICIENT_EVIDENCE_NOTE =
   "当前证据仍不足以支持阶段跨越，需要补足证据后再确认。";
 
@@ -783,7 +783,7 @@ function buildNextStepBrief(input: {
       "",
       "## 边界",
       `- ${SHADOW_ONLY_BOUNDARY_NOTE}`,
-      "- 这份摘要只服务于内部判断和下一步安排，不代表正式 CRM 已更新。",
+      "- 这份摘要只服务于内部判断和下一步安排，不代表正式客户关系系统已更新。",
     ].join("\n"),
     audiences: ["operator", "manager", "seller_owner"] as Array<
       "operator" | "manager" | "seller_owner"

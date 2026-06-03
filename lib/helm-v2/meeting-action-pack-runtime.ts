@@ -34,7 +34,7 @@ import { jsonStringify, safeParseJson, trimText } from "@/lib/utils";
 const MEETING_ANALYST_AGENT = "meeting-analyst";
 const OPPORTUNITY_JUDGE_AGENT = "opportunity-judge";
 const DEFAULT_WORKSPACE_SUMMARY = "当前工作区以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
-const ACTION_PACK_BOUNDARY_NOTE_CN = "这份动作资料仍然只是草稿建议套件，不会自动外发、不会形成对外承诺，也不会写入正式 CRM 状态。";
+const ACTION_PACK_BOUNDARY_NOTE_CN = "这份动作资料仍然只是草稿建议套件，不会自动外发、不会形成对外承诺，也不会写入正式客户关系系统状态。";
 const SHADOW_BOUNDARY_NOTE = "Only shadow fields are updated in Sprint 2. Official opportunity state stays unchanged.";
 
 type MeetingRuntimeMeeting = NonNullable<Awaited<ReturnType<typeof loadMeetingRuntimeMeeting>>>;
