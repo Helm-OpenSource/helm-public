@@ -238,6 +238,14 @@ writeback wording in opportunity judge, draft handoff, action pack runtime, and
 meeting display-copy plus source guards only, without changing events,
 artifacts, shadow updates, send authority, or write authority.
 
+本轮继续收口公开 demo 入口里的中文 CRM 边界混写；只调整演示页与 loading 边界提示中的
+客户关系系统写入 / 写回文案及源码守卫，不改变 demo 路由、session、审计或不自动外发边界。
+
+This round further localizes mixed Chinese CRM boundary copy in the public demo
+entry. It changes customer-relationship-system write / writeback wording in the
+demo page and loading boundary notes plus source guards only, without changing
+demo routing, sessions, audit logging, or no-auto-send boundaries.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

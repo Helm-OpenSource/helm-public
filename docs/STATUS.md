@@ -186,6 +186,16 @@ runtime, and meeting display-copy plus source guards only; it does not change
 events, artifacts, shadow updates, send authority, or write authority, and does
 not claim full-repo bilingualization completion.
 
+公开 demo 入口里的中文 CRM 边界混写也已继续清理；本批只改演示页与 loading 边界提示中的
+客户关系系统写入 / 写回文案及源码守卫，不改变 demo 路由、session、审计或不自动外发边界，
+也不声明全仓双语化完成。
+
+Mixed Chinese CRM boundary copy in the public demo entry has also been further
+localized. This batch changes customer-relationship-system write / writeback
+wording in the demo page and loading boundary notes plus source guards only; it
+does not change demo routing, sessions, audit logging, or no-auto-send
+boundaries, and does not claim full-repo bilingualization completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或

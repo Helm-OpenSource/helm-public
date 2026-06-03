@@ -271,7 +271,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
             <p className="text-sm leading-6 text-[color:var(--muted)]">
               {english
                 ? "Advice ≠ commitment. Nothing leaves the building: seeded data, no emails to real customers, no CRM writes. Every click still lands an audit row, same as production."
-                : "建议 ≠ 承诺。不会对外发送任何内容：数据是预置的，不会发邮件、不会写入CRM。每一步动作仍会落一条审计——和真实环境一样。"}
+                : "建议 ≠ 承诺。不会对外发送任何内容：数据是预置的，不会发邮件、不会写入客户关系系统。每一步动作仍会落一条审计——和真实环境一样。"}
             </p>
           </div>
         </section>
