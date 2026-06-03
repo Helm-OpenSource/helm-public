@@ -30,6 +30,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized Chinese visible mixed-language copy in customer-facing offer / external proposal and proposal package boundary copy; this batch changes visible copy only and leaves sendability evaluation, proposal layering, and non-commitment boundaries unchanged.
 - Further localized Chinese settlement terminology in billing settlement and payout-readiness panels; this batch changes visible copy only and leaves manual settlement, off-platform payment, payout execution, and SLA boundaries unchanged.
 - Further localized Chinese boundary labels in customer-facing offer and commercial narrative detail views; this batch changes visible labels only and leaves customer-visible, internal-only, and non-commitment boundary protocols unchanged.
+- Further localized Chinese boundary notes, draft summaries, and risk-guard copy in the Helm v2 draft-comms runtime; this batch keeps artifact / enum / requestedAction protocol fields intact, adds equivalent Chinese mitigation detection, and grants no auto-send, auto-booking, or formal-commitment authority.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
