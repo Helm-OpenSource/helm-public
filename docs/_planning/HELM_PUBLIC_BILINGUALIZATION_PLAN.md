@@ -109,7 +109,8 @@ This PR's source audit result:
    payout readiness 面板中的中文结算术语、customer-facing offer 与 commercial
    narrative detail view 的中文边界标签、Helm v2 draft comms 运行时的中文边界说明、
    草稿摘要和风险守卫文案、contrast-test / dark-mode-test 低频公开测试 route
-   说明文案、weekly report 生成服务的 summary / audit copy 已继续收口。
+   说明文案、weekly report 生成服务的 summary / audit copy、Helm v2/runtime API
+   validation fallback 文案已继续收口。
    这些目标文件的本批次严格可见残留已清理；全工程广义 ASCII 中文分支扫描与严格可见
    文案扫描尚未重新校准，后续仍需继续检查 billing surface 与其他低频 detail surfaces。
    剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
@@ -152,8 +153,9 @@ This PR's source audit result:
    narrative detail-view boundary labels, plus Helm v2 draft-comms runtime
    boundary notes, draft summaries, risk-guard copy, contrast-test /
    dark-mode-test low-frequency public test-route explanatory copy, and
-   weekly-report service summary / audit copy, have also been localized for
-   Chinese operation fields. This
+   weekly-report service summary / audit copy, and Helm v2/runtime API
+   validation fallback copy, have also been localized for Chinese operation
+   fields. This
    batch clears the target-file strict visible-copy leftovers; the
    whole-project broad ASCII zh-branch scan and strict visible-copy scan have
    not been recalibrated yet, and billing plus other lower-frequency detail
@@ -262,6 +264,7 @@ true:
 | 2026-06-03 | 继续收口 Helm v2 draft comms 运行时的中文边界说明、草稿摘要和风险守卫文案；本批保留 artifact / enum / requestedAction 协议字段，并补充等价中文缓释语识别，不授予自动发送、自动预约或正式承诺权限；Further localized Chinese boundary notes, draft summaries, and risk-guard copy in the Helm v2 draft-comms runtime; this batch keeps artifact / enum / requestedAction protocol fields intact, adds equivalent Chinese mitigation detection, and grants no auto-send, auto-booking, or formal-commitment authority |
 | 2026-06-03 | 继续收口 contrast-test 与 dark-mode-test 低频公开测试 route 的双语文案；本批只改可见说明文案和语言读取，不改配色、主题切换或可访问性测试语义；Further localized contrast-test and dark-mode-test low-frequency public test routes; this batch changes visible explanatory copy and locale reading only, and leaves palettes, theme switching, and accessibility-test semantics unchanged |
 | 2026-06-03 | 继续收口 weekly report 生成服务的摘要与审计文案；本批使用既有 workspace locale 入参生成中英文 summary / audit copy，不改报告指标、权限或数据结构；Further localized weekly-report service summaries and audit copy; this batch uses the existing workspace-locale input for bilingual summary / audit copy and leaves report metrics, permissions, and data structures unchanged |
+| 2026-06-03 | 继续收口 Helm v2/runtime API validation fallback 文案；本批使用 workspace default locale 解析常见参数、受众与 session / meeting 缺失错误，不改 route 权限、状态码或 payload 结构；Further localized Helm v2/runtime API validation fallback copy; this batch resolves common parameter, audience, and session / meeting missing errors from workspace default locale and leaves route permissions, status codes, and payload structures unchanged |
 | 2026-06-03 | 继续收口 skill suggestion formal review、human action execution boundary 与 program invite issuance 文案中的中文混写；本批只改中文可见文案，不改能力晋升状态机、人工执行契约或邀请发放权限；Further localized Chinese visible mixed-language copy in skill suggestion formal review, human action execution boundary, and program invite issuance copy; this batch changes visible copy only and leaves capability-promotion state machines, human-execution contracts, and invite-issuance permissions unchanged |
 | 2026-06-03 | 继续收口 recommendation feedback、home surface arrival banner 与 billing program catalog 文案中的中文混写；本批只改中文可见文案，不改推荐反馈动作、首页路由或分成规则结构；Further localized Chinese visible mixed-language copy in recommendation feedback, home surface arrival banner, and billing program catalog surfaces; this batch changes visible copy only and leaves recommendation feedback actions, home routing, and revenue-rule structures unchanged |
 | 2026-06-03 | 继续收口 approval first-loop 复核卡片与步骤列表中的中文混写；本批只改中文 display model 文案，不改审批协议、状态机或执行边界；Further localized Chinese visible mixed-language copy in the approval first-loop review card and step list; this batch changes display-model copy only and leaves approval protocol, state machines, and execution boundaries unchanged |

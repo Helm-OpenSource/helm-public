@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  getApiValidationMessage,
   isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
   resolveApiWorkspaceMessage,
 } from "@/lib/i18n/api-message-locale";
 
@@ -28,5 +30,31 @@ describe("api message locale", () => {
     expect(resolveApiWorkspaceMessage("fr-FR", message)).toBe("中文错误文案");
     expect(resolveApiWorkspaceMessage(null, message)).toBe("中文错误文案");
     expect(resolveApiWorkspaceMessage(undefined, message)).toBe("中文错误文案");
+  });
+
+  it("resolves common API validation fallbacks from workspace default locale", () => {
+    expect(getApiValidationMessage("zh-CN")).toBe("参数不完整");
+    expect(getApiValidationMessage("en-US")).toBe("Incomplete parameters");
+    expect(getApiValidationMessage("en-US", "invalidAudience")).toBe(
+      "Invalid audience",
+    );
+    expect(getApiValidationMessage("en-US", "missingSessionOrMeeting")).toBe(
+      "Provide sessionId or meetingId",
+    );
+  });
+
+  it("maps known Chinese validation issues to English without rewriting unknown Zod details", () => {
+    expect(
+      resolveApiValidationIssueMessage("en-US", "需要 sessionId 或 meetingId"),
+    ).toBe("Provide sessionId or meetingId");
+    expect(resolveApiValidationIssueMessage("en-US", "受众不合法")).toBe(
+      "Invalid audience",
+    );
+    expect(resolveApiValidationIssueMessage("zh-CN", "受众不合法")).toBe(
+      "受众不合法",
+    );
+    expect(
+      resolveApiValidationIssueMessage("en-US", "Invalid input: expected string"),
+    ).toBe("Invalid input: expected string");
   });
 });
