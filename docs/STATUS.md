@@ -117,6 +117,19 @@ change conflict resolution APIs, connector actions, import results, or
 identity-review logic, and does not claim full-repo bilingualization
 completion.
 
+settings / tenant-health 隐私与资源就绪说明里的中文混写也已继续清理；本批只改
+租户健康页的客户关系系统记录、Ask Helm 提问原文、大模型提示词说明，以及租户资源空状态里的
+客户关系系统导入文案和源码守卫，不改变健康检查数据、设置 action、连接器或权限边界，也不声明
+全仓双语化完成。
+
+Mixed Chinese copy in settings / tenant-health privacy and resource-readiness
+guidance has also been further localized. This batch changes tenant-health
+customer-relationship-system record, Ask Helm original-question, large-model
+prompt wording, and tenant-resource empty-state customer-relationship-system
+import copy plus source guards only; it does not change health data, settings
+actions, connectors, or permission boundaries, and does not claim full-repo
+bilingualization completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或

@@ -148,7 +148,7 @@ export function TenantHealthPage({
             : "这是为了提供更好服务的健康体检，不是客户租户功能。",
           summary: english
             ? "This page stays inside Helm's reserved workspace and does not expose tenant meetings, CRM records, Ask Helm text, LLM prompts or model outputs. Cost is an estimated bucket, not a billable amount."
-            : "本页面只在 Helm 自身租户内使用，不打开租户会议、CRM 记录、Ask Helm 原文、LLM prompt 或模型输出。成本只是估算分桶，不是账单金额。",
+            : "本页面只在 Helm 自身租户内使用，不打开租户会议、客户关系系统记录、Ask Helm 提问原文、大模型提示词或模型输出。成本只是估算分桶，不是账单金额。",
         }}
       />
 

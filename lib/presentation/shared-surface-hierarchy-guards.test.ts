@@ -891,17 +891,27 @@ describe("shared surface hierarchy guards", () => {
     const tenantResourceReadinessPanel = read(
       "features/settings/components/tenant-resource-readiness-panel.tsx",
     );
-    const sources = `${settlementBatchPanels}\n${tenantResourceReadinessPanel}`;
+    const tenantHealthPage = read(
+      "features/self-tenant-health/tenant-health-page.tsx",
+    );
+    const sources = `${settlementBatchPanels}\n${tenantResourceReadinessPanel}\n${tenantHealthPage}`;
 
     for (const fragment of [
       "进入 closeout",
       "Optional 已确认 note",
       "review / 已确认 seam",
+      "CRM 记录",
+      "LLM prompt 或",
+      "CRM 导入、现场采集",
     ]) {
       expect(sources).not.toContain(fragment);
     }
 
     expect(settlementBatchPanels).toContain("已导出的批次才能进入收口");
+    expect(tenantHealthPage).toContain("客户关系系统记录");
+    expect(tenantHealthPage).toContain("Ask Helm 提问原文");
+    expect(tenantHealthPage).toContain("大模型提示词");
+    expect(tenantResourceReadinessPanel).toContain("客户关系系统导入、现场采集");
     expect(tenantResourceReadinessPanel).toContain(
       "Optional acknowledgement note.",
     );

@@ -240,7 +240,7 @@ export function TenantResourceReadinessPanel({
             <div className="workspace-panel rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted-foreground)]">
               {english
                 ? "No tenant resources are registered yet. Connectors, CRM imports, capture sessions and tenant extensions will appear here after their existing source-of-truth records exist."
-                : "当前还没有登记的租户资源。已有连接器、CRM 导入、现场采集和租户扩展在各自来源记录存在后会出现在这里。"}
+                : "当前还没有登记的租户资源。已有连接器、客户关系系统导入、现场采集和租户扩展在各自来源记录存在后会出现在这里。"}
             </div>
           )}
         </div>
