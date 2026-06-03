@@ -5,7 +5,24 @@ created: 2026-06-01
 review_after: 2026-09-01
 public_safety: Public-safe history-scan receipt. Records scan evidence and classification only. Contains no real credentials; all referenced strings are checked-in placeholders or test fixtures already present in the public tree.
 ---
-# Helm Public Clean History Receipt V1
+# Helm Public Clean History Receipt V1 / Helm 公开 Clean History 回执 V1
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文件是 repository visibility gate 中 history-level 步骤的 public-safe receipt：public
+Core history 不包含真实 secret，full-history scan 已确认。它不轮换 credential、不批准
+release，也不 flip repository visibility；这些仍是 owner action。
+
+public Core history 是 sanitized snapshot，不是完整 private monorepo history。已知的
+private source repo compromised commits 不在本仓且从任何 ref 都不可达。`gitleaks`
+报告的 6 个 finding 均已被分类为 non-secret 或 deliberate fake fixture，用于测试 secret
+detector；没有真实 credential。
+
+未来如果 history 被重写或新 commit 增加 credential-shaped content，必须重新扫描。
+
+## English Reference
 
 ## Purpose
 

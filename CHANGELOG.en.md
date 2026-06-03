@@ -9,6 +9,8 @@ This project follows a release-note-first changelog until the first public tag.
 - Added the public bilingualization plan and bilingual GitHub issue / PR intake surfaces.
 - Added Chinese main text and English reference markers to product / boundary docs.
 - Added Chinese main text or English reference summaries to operations / roadmap / launch / trial / legal docs.
+- Added delivery-engineer friendliness to the public bilingualization standard, requiring entry docs to explain first-change proof, verification commands, and public-safe evidence routes.
+- Added a source / UI bilingual audit note and fixed a small set of hard-coded English UI labels.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
 - Added the first public Core operating model with mission, OKRs, KPIs, and workstream boundaries.

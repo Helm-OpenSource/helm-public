@@ -40,6 +40,14 @@ Helm is:
 - `delivery-engineer-facing` (since 2026-05-18: the audience layer is AI-ecosystem delivery engineers, not direct SaaS sales to end customers)
 - `open-source-first` (Apache-2.0; commercial editions do not replace open source; see [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md))
 
+All public entry points, docs, templates, and sample packs must default to being
+delivery-engineer-friendly: a reader should quickly understand what to inspect,
+what to fork, which small change to make, which commands to run, and what
+public-safe evidence to submit. Bilingualization is not just text translation; it
+must let China-market delivery engineers complete an independent first-change
+proof while preserving recommendation / commitment, review-first, and
+public/private boundaries.
+
 Helm currently is **not**:
 
 - A complete enterprise multi-org / multi-permission / multi-tenant platform

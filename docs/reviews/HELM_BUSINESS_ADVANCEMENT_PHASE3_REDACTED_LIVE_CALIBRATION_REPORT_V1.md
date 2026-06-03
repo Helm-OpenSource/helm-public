@@ -5,7 +5,23 @@ created: 2026-06-01
 review_after: 2026-07-01
 public_safety: Public-safe release receipt summary only. Raw rows, workspace ids, customer identifiers, SQL output, and private approval evidence are excluded.
 ---
-# Helm Business Advancement Phase 3 Redacted Live Calibration Report V1
+# Helm Business Advancement Phase 3 Redacted Live Calibration Report V1 / Helm Business Advancement Phase 3 脱敏校准回执 V1
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文件是 `RELEASE_READINESS_CALIBRATION_REPORT` 需要的 public-safe receipt。它只记录
+release owner 已确认公开 release gate 所需的 redacted live calibration evidence，不包含
+raw customer data、raw database rows、workspace ids、customer identifiers、SQL output、
+private reviewer notes 或 private deployment evidence。
+
+该 receipt 不声明 automatic customer deployment readiness、customer SLA、production
+runtime adoption、auto-send / auto-approve / auto-pay / auto-execute permission，也不授权
+发布 raw calibration data。未来 runtime adoption 仍需要对应 feature flag、allowlist、
+rollback、audit 和 reviewer controls。
+
+## English Reference
 
 ## Purpose
 

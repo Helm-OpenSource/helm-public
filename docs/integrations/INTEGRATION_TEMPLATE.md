@@ -7,7 +7,21 @@ audience: delivery engineers wiring up their customer's existing systems via Hel
 public_safety: Intended for the public mirror. No tenant-private references.
 ---
 
-# Integration Template
+# Integration Template / 集成模板
+
+> **语言 / Language**: **中文主文本** + **English reference summary**
+
+## English Reference Summary
+
+This template defines what a Helm connector / adapter contributor must prepare
+before implementation: the customer use case, data flow, auto / review / never
+boundary table, OAuth or API-key security checklist, fixture and dry-run plan,
+user-visible naming rules, and disconnect / export behavior.
+
+The default acceptable path is read-only or review-first. Automatic external
+send, automatic approval, and automatic write-back are outside the current PR
+boundary. A contributor who cannot answer the use case, data flow, and boundary
+questions should open an `integration: <system>` issue first.
 
 > 接你客户的现有系统是你的核心交付动作——这一份模板告诉你做一个 Helm 集成（connector / adapter）需要交付的全部内容、按什么顺序、用什么边界。
 

@@ -23,12 +23,15 @@ reviewers must still be able to understand the public Core contract.
 
 ## 2. 当前结论 / Current Conclusion
 
-本计划不声明全仓已经双语化完成。当前状态是：P0 入口正在落地，P1/P2 文档与
-sample pack 仍需分批 PR 推进。
+本计划不声明全仓已经双语化完成。当前状态是：P0 入口、docs entry、P1 product /
+operations / roadmap / launch / trial / legal 文档已分批落地；P2 sample pack、review
+receipts、templates、report-skill 与 contributor-facing surfaces 正在推进。
 
 This plan does not claim that the whole repository is already bilingual. The
-current state is: P0 entry surfaces are being implemented, while P1/P2 docs and
-sample-pack surfaces still need staged PRs.
+current state is: P0 entry surfaces, docs entry points, and P1 product /
+operations / roadmap / launch / trial / legal docs have landed in staged
+commits; P2 sample pack, review receipts, templates, report-skill, and
+contributor-facing surfaces are underway.
 
 ## 3. 双语标准 / Bilingual Standard
 
@@ -38,6 +41,65 @@ sample-pack surfaces still need staged PRs.
 | P1 | 中文主文本 + English reference，或成对 `.md` / `.en.md`；Chinese-first with English reference, or paired `.md` / `.en.md` files | product、operations、roadmap、launch、trial、legal docs |
 | P2 | 可读双语摘要 + 英文技术细节；Bilingual summary with English technical detail | sample pack、integration template、report skills、review receipts |
 | P3 | 按需双语；Bilingual only when user-facing or contributor-facing | internal test fixture labels、low-level code comments、machine-only files |
+
+## 3.1 交付工程师友好标准 / Delivery-Engineer-Friendly Standard
+
+每个公开入口和可贡献 surface 不只需要双语，还必须让交付工程师快速回答：
+
+Each public entry point and contributor-facing surface must be bilingual and
+help a delivery engineer quickly answer:
+
+1. 我应该先检查什么？/ What should I inspect first?
+2. 我可以 fork 或复制哪一层？/ What can I fork or copy?
+3. 第一处安全改动在哪里？/ Where is the first safe change?
+4. 我应该跑哪些命令？/ Which commands should I run?
+5. 什么证据可以 public-safe 地提交？/ What evidence can I submit publicly?
+6. 哪些行为永远不该自动化或外发？/ Which actions must never be automated or externally sent?
+
+如果一份文档只翻译了术语，但没有说明 first-change proof、verification、evidence route
+和 boundary，它只能算“已成形但仍需下一层”，不能算双语化完成。
+
+If a document only translates terms but does not explain the first-change proof,
+verification, evidence route, and boundary, it is only "formed but needs the next
+layer" and must not be counted as bilingualization complete.
+
+## 3.2 源码 / UI 审计标准 / Source And UI Audit Standard
+
+源码层的双语化不要求翻译变量名、enum、trace key、test fixture 或机器协议字段。
+需要检查的是用户可见 UI、API 错误文案、display-copy、公开页面 metadata、表单提示和
+contributor-facing templates 是否能在 `zh-CN` 默认语言下可读，并在 `en-US` 下保留
+英文 reviewer 可读性。
+
+Source-level bilingualization does not require translating variable names,
+enums, trace keys, test fixtures, or machine protocol fields. The audit target is
+user-visible UI, API error copy, display-copy, public page metadata, form hints,
+and contributor-facing templates: they must be readable under the default
+`zh-CN` locale and remain reviewable under `en-US`.
+
+本轮源码审计结果：
+
+This PR's source audit result:
+
+1. `lib/i18n/config.ts` 仍以 `zh-CN` 为默认 UI locale，并保留 `en-US` 切换。
+   `lib/i18n/messages.ts` 提供 shell / CRM / settings / diagnostics / capture 的中英文 copy。
+2. 首页、登录页、trial 页、programs 页、workspace shell、layout、display-copy
+   modules 和主要 API action messages 均使用 locale 分支或 message resolver。
+3. 抽查 264 个 `.tsx` 文件后，少量硬编码英文 UI 标签已修正；剩余品牌名、语言名、
+   provider 名、trace key、runtime enum 和内部指标标签列为 P3，不作为中文 UI 缺口。
+4. 后续如果新增 public-facing UI，必须优先接入 `resolveUiLocale` / `getUiMessages`
+   或对应 feature display-copy，而不是直接写单语长文案。
+
+1. `lib/i18n/config.ts` keeps `zh-CN` as the default UI locale and preserves the
+   `en-US` switch.
+2. The home, login, trial, programs, workspace shell, layout, display-copy
+   modules, and main API action messages use locale branches or message
+   resolvers.
+3. After sampling 264 `.tsx` files, a small set of hard-coded English UI labels
+   was corrected; remaining brand names, language labels, provider names, trace
+   keys, runtime enums, and internal metric labels are P3 rather than Chinese UI
+   gaps.
+4. New public-facing UI must use `resolveUiLocale` / `getUiMessages` or the
+   relevant feature display-copy instead of embedding long single-language copy.
 
 ## 4. 本轮 P0 范围 / Current P0 Scope
 
@@ -75,6 +137,7 @@ This plan does not authorize:
 | P1-C | roadmap、launch、trial、legal 双语化 / Bilingualize roadmap, launch, trial, and legal docs | roadmap、launch announcement、trial runbook、trial data policy |
 | P2-A | sample pack 与 integration docs 双语化 / Bilingualize sample-pack and integration docs | `extensions/case-management-sample/`、`docs/integrations/INTEGRATION_TEMPLATE.md` |
 | P2-B | review receipts 与 report-skill docs 双语摘要 / Add bilingual summaries to review receipts and report-skill docs | selected receipts、`external-resource-kit/` docs |
+| P2-C | 源码 / UI 双语审计 / Source and UI bilingual audit | `lib/i18n/`、public routes、workspace shell、display-copy modules、selected hard-coded UI labels |
 
 ## 7. 验证 / Verification
 
@@ -115,13 +178,17 @@ true:
 2. `docs/STATUS.md` 已更新对应状态。/ `docs/STATUS.md` reflects the final status.
 3. `docs/public-docs-manifest.json` 仍与文档树一致。/ `docs/public-docs-manifest.json` still matches the docs tree.
 4. public guards 通过。/ Public guards pass.
-5. 没有新增客户、私有部署、密钥或商业私有逻辑泄漏。/ No customer, private deployment, secret, or commercial-private leakage is introduced.
-6. 没有新增 release-ready、SLA、Cloud / Enterprise ready 或客户承诺 overclaim。/ No release-ready, SLA, Cloud / Enterprise ready, or customer-commitment overclaim is introduced.
+5. 源码 / UI 可见文案已完成 `zh-CN` 默认与 `en-US` 可切换审计。/ Source / UI visible copy has passed the `zh-CN` default and `en-US` switchable audit.
+6. 交付工程师能从入口文档找到 first-change proof、verification commands 和 public-safe evidence route。/ Delivery engineers can find the first-change proof, verification commands, and public-safe evidence route from entry docs.
+7. 没有新增客户、私有部署、密钥或商业私有逻辑泄漏。/ No customer, private deployment, secret, or commercial-private leakage is introduced.
+8. 没有新增 release-ready、SLA、Cloud / Enterprise ready 或客户承诺 overclaim。/ No release-ready, SLA, Cloud / Enterprise ready, or customer-commitment overclaim is introduced.
 
 ## 9. 变更记录 / Change Log
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-03 | 增加源码 / UI 审计标准，并记录 `zh-CN` 默认、`en-US` 可切换、display-copy 与少量硬编码 UI 标签修正；Added source / UI audit standard and recorded the `zh-CN` default, `en-US` switch, display-copy posture, and small hard-coded UI label fixes |
+| 2026-06-03 | 将“交付工程师友好”加入双语化完成标准：必须说明 inspect / fork / first change / commands / evidence route / boundary；Added delivery-engineer friendliness to the bilingualization completion standard: inspect / fork / first change / commands / evidence route / boundary must be clear |
 | 2026-06-03 | P1-B operations / roadmap / launch / trial / legal docs 开始加入中文主文本或 English reference summary；P1-B operations / roadmap / launch / trial / legal docs started adopting Chinese main text or English reference summaries |
 | 2026-06-03 | P1-A product / boundary docs 开始加入中文主文本 + English reference；P1-A product / boundary docs started adopting Chinese main text plus English reference |
 | 2026-06-03 | 建立 public-safe 双语化计划，并把 P0 intake 与 docs-entry 范围固定为独立 PR；Established the public-safe bilingualization plan and scoped P0 intake plus docs-entry work as a standalone PR |

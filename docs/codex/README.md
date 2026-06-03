@@ -5,7 +5,26 @@ created: 2026-06-01
 review_after: 2026-07-01
 public_safety: Public agent working entry. Private orchestration and review packets are excluded from helm-public.
 ---
-# Agent Working Entry
+# Agent Working Entry / Agent 工作入口
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+在 `helm-public` 中，agent 应作为 public Core 仓库的贡献者工作，而不是私有 source
+split 的 operator。开始前默认阅读 [AGENTS.md](../../AGENTS.md)、[README.md](../../README.md)
+和 [docs/README.md](../README.md)。
+
+公开仓规则：保持 Apache-2.0 Core 可独立构建；不要加入客户名称、私有 domain、
+contact、overlay、credential、私有部署证据或商业 Pack 实现细节；不要把广泛内部
+planning / review archive 加进 `docs/`；任何新 public doc 都必须显式列入
+[public-docs-manifest.json](../public-docs-manifest.json)，并在开 PR 前运行
+`npm run check:public-docs` 与 `npm run check:public-release`。
+
+私有 multi-agent handoff、review packet、release receipt 和客户 delivery runbook
+继续留在私有仓库。
+
+## English Reference
 
 For `helm-public`, agents should work as contributors to the public Core
 repository, not as operators of the private source split.

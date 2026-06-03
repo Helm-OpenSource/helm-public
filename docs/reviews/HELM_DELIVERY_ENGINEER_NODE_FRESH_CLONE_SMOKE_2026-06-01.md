@@ -11,7 +11,26 @@ archive_trigger:
   - The documented onboarding path no longer depends on Docker
 ---
 
-# Helm Delivery Engineer Node Fresh-Clone Smoke Receipt
+# Helm Delivery Engineer Node Fresh-Clone Smoke Receipt / Helm 交付工程师 Node Fresh-Clone Smoke 回执
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本回执证明已合并的 `helm-public` main branch 可以 clone 到 clean directory，并通过
+Node-based Golden Path checks、offline evals、public guards、production build 和本地
+`next start` HTTP smoke。
+
+它不是 D2 Docker fresh-clone smoke receipt，且刻意不匹配
+`HELM_DELIVERY_ENGINEER_D2_SMOKE*.md` 文件模式。记录时 Node fresh-clone path 为 PASS，
+D2 Docker fresh-clone path 因本地环境缺少 `docker` / `colima` / `orb` / `podman` 而
+BLOCKED；后续 D2 回执已关闭该 blocker。
+
+本回执不证明 Docker Compose onboarding、MySQL-backed local workspace setup、30-minute
+onboarding claim、D2 smoke completion、customer deployment readiness、production
+connector readiness 或 commercial release Go/No-Go approval。
+
+## English Reference
 
 > Supersession note (2026-06-01): this node-only receipt remains useful
 > historical evidence, but its Docker blocker is superseded by

@@ -29,6 +29,15 @@ do not belong here. Every `docs/` file must be explicitly listed in
 [public-docs-manifest.json](public-docs-manifest.json); `npm run
 check:public-docs` fails when a new doc appears without that review.
 
+交付工程师优先阅读：公开文档应尽量直接说明 inspect / fork / first change /
+verification commands / public-safe evidence route / boundary。只翻译术语但不能指导
+first-change proof 的文档，仍需下一层改造。
+
+Delivery-engineer-first reading: public docs should make inspect / fork / first
+change / verification commands / public-safe evidence route / boundary explicit.
+Docs that only translate terms without guiding a first-change proof still need
+the next layer.
+
 ## 从这里开始 / Start Here
 
 - [README](../README.md) / [README English](../README.en.md)

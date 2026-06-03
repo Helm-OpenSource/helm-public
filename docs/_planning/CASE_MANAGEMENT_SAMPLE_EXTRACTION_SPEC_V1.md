@@ -11,7 +11,28 @@ archive_trigger:
   - This document is misused to claim production readiness or customer deployment readiness
 ---
 
-# Case Management Sample Extraction Spec
+# Case Management Sample Extraction Spec / Case Management Sample 抽取规范
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+`extensions/case-management-sample/` 是 Helm 最小公开参考 Pack。它让交付工程师
+可以检查、fork、测试和改造一个完整但 synthetic 的 case-management 形状，而不接触
+任何客户专属配置或私有实现逻辑。
+
+公开 sample 必须只包含 generic manifest、synthetic fixture、source-agnostic signal
+family、review-first worker example、BI report cookbook 以及 HSI / delivery-engineer
+static checks。它不得包含客户名称、真实员工名、真实邮箱 / 手机号、私有 domain、
+内网 IP、cloud database host、secret、token、credential、prompt replay、客户部署细节、
+客户 runtime configuration 或商业私有 connector logic。
+
+在声称 sample pack 可作为公开参考之前，至少要跑 `delivery:doctor`、
+`pack:fixture-check`、HSI / operating-signal eval、`check:public-release` 和
+`check:boundaries`。如果 sample 需要真实客户数据、production credential、auto-send /
+auto-approve / auto-execute / silent CRM write 或未授权 pilot outcome，必须停止并单独 review。
+
+## English Reference
 
 ## 1. Purpose
 

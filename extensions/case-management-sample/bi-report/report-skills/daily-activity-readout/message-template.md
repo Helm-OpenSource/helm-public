@@ -1,10 +1,10 @@
-# Daily Case Activity
+# Daily Case Activity / 每日案件活动
 
-Date: `{{board_date}}`
+Date / 日期: `{{board_date}}`
 
-- Open cases: `{{open_case_count}}`
-- Review required: `{{review_required_count}}`
-- Stale cases: `{{stale_case_count}}`
-- Red alert: `{{red_alert}}`
+- Open cases / 未结案件: `{{open_case_count}}`
+- Review required / 需要复核: `{{review_required_count}}`
+- Stale cases / 停滞案件: `{{stale_case_count}}`
+- Red alert / 红色预警: `{{red_alert}}`
 
-Boundary: this readout is internal, review-first, and non-commitment.
+Boundary / 边界: this readout is internal, review-first, and non-commitment. 本 readout 仅用于内部复核，保持 review-first，不构成承诺。

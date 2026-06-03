@@ -1,13 +1,17 @@
-# Proof Loop Closeout Template
+# Proof Loop Closeout Template / Proof Loop 收口模板
 
+> **语言 / Language**: **中文主文本** + **English reference**
+
+> 收口一个 7-day Run，但不把内部学习直接变成 public claim。
+>
 > Close a 7-day Run without turning internal learning into a public claim.
 
-## 0. Boundary
+## 0. Boundary / 边界
 
-- This closeout is internal by default.
-- `proof candidate` does not mean proof.
-- Public or customer-visible claims require separate written customer authorization and claim review.
-- Do not include raw customer data, secrets, private domains, intranet IPs, deployment details, or customer-specific configuration.
+- 本 closeout 默认 internal-only。/ This closeout is internal by default.
+- `proof candidate` 不等于 proof。/ `proof candidate` does not mean proof.
+- Public 或 customer-visible claims 需要单独 written customer authorization 与 claim review。/ Public or customer-visible claims require separate written customer authorization and claim review.
+- 不包含 raw customer data、secrets、private domains、intranet IPs、deployment details 或 customer-specific configuration。/ Do not include raw customer data, secrets, private domains, intranet IPs, deployment details, or customer-specific configuration.
 
 ## 1. Run Summary
 

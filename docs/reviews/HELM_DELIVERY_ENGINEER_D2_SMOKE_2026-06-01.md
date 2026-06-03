@@ -14,7 +14,24 @@ archive_trigger:
   - The Docker quickstart path is materially changed
 ---
 
-# Helm Delivery Engineer D2 Docker Fresh-Clone Smoke Receipt
+# Helm Delivery Engineer D2 Docker Fresh-Clone Smoke Receipt / Helm 交付工程师 D2 Docker Fresh-Clone Smoke 回执
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本回执记录 PR #36 的 D2 Docker fresh-clone smoke 已在 GitHub Actions 于
+2026-06-01 通过。它证明测试分支可以被 clean checkout 到新目录，用
+`docker compose up --build -d` 构建，连接 bundled MySQL 8.4 service 初始化，并服务最小
+public onboarding endpoints。
+
+当前证明范围仅限 tested PR branch 的 public Core Docker quickstart smoke。它不证明客户
+部署 ready、Helm Cloud / Enterprise release ready、生产 connector credential 或 callback
+ready、生产数据 retention / DPA / SLA / incident process ready、商业 Pack / customer Overlay
+ready、runtime marketplace，或任何 automatic external send / approval / settlement /
+customer commitment authority。
+
+## English Reference
 
 ## 1. Conclusion
 

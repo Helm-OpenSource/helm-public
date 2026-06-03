@@ -1539,12 +1539,12 @@ export function MeetingV2RuntimeCard({
                           <p>{runtime.v21.continuity.recovery.operatorAction}</p>
                           {runtime.v21.continuity.recovery.reviewReasons.length ? (
                             <p>
-                              review reasons · {runtime.v21.continuity.recovery.reviewReasons.join(" / ")}
+                              {english ? "review reasons" : "复核原因"} · {runtime.v21.continuity.recovery.reviewReasons.join(" / ")}
                             </p>
                           ) : null}
                           {runtime.v21.continuity.recovery.blockedReasons.length ? (
                             <p>
-                              blocked reasons · {runtime.v21.continuity.recovery.blockedReasons.join(" / ")}
+                              {english ? "blocked reasons" : "阻断原因"} · {runtime.v21.continuity.recovery.blockedReasons.join(" / ")}
                             </p>
                           ) : null}
                         </div>
@@ -1572,7 +1572,9 @@ export function MeetingV2RuntimeCard({
                           ))}
                           {!runtime.v21.continuity.recovery.allowedActions.length ? (
                             <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">
-                              No bounded remediation action is available here.
+                              {english
+                                ? "No bounded remediation action is available here."
+                                : "当前没有可用的有界修复动作。"}
                             </p>
                           ) : null}
                           {continuityRemediationPreview ? (
@@ -1606,7 +1608,7 @@ export function MeetingV2RuntimeCard({
                         <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{runtime.v21.continuity.analytics.repeatPattern.status}</p>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{text(runtime.v21.continuity.analytics.repeatPattern.summary)}</p>
                         <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
-                          attempts {runtime.v21.continuity.analytics.totalAttempts} · applied {runtime.v21.continuity.analytics.appliedCount} · review {runtime.v21.continuity.analytics.reviewRequiredCount} · blocked {runtime.v21.continuity.analytics.blockedCount}
+                          {english ? "attempts" : "尝试"} {runtime.v21.continuity.analytics.totalAttempts} · {english ? "applied" : "已应用"} {runtime.v21.continuity.analytics.appliedCount} · {english ? "review" : "需复核"} {runtime.v21.continuity.analytics.reviewRequiredCount} · {english ? "blocked" : "已阻断"} {runtime.v21.continuity.analytics.blockedCount}
                         </p>
                       </div>
                       <div data-testid="continuity-remediation-effectiveness">
@@ -1614,7 +1616,7 @@ export function MeetingV2RuntimeCard({
                         <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{runtime.v21.continuity.effectiveness.latestOutcome}</p>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{text(runtime.v21.continuity.effectiveness.latestSummary)}</p>
                         <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
-                          effective {runtime.v21.continuity.effectiveness.effectiveCount} · partial {runtime.v21.continuity.effectiveness.partialCount} · ineffective {runtime.v21.continuity.effectiveness.ineffectiveCount} · no signal {runtime.v21.continuity.effectiveness.noSignalCount}
+                          {english ? "effective" : "有效"} {runtime.v21.continuity.effectiveness.effectiveCount} · {english ? "partial" : "部分有效"} {runtime.v21.continuity.effectiveness.partialCount} · {english ? "ineffective" : "无效"} {runtime.v21.continuity.effectiveness.ineffectiveCount} · {english ? "no signal" : "无信号"} {runtime.v21.continuity.effectiveness.noSignalCount}
                         </p>
                       </div>
                       <div data-testid="continuity-recovery-calibration">
@@ -1628,10 +1630,10 @@ export function MeetingV2RuntimeCard({
                       <div data-testid="continuity-evidence-surface">
                         <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Evidence surface" : "证据面"}</p>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                          Repeat pattern · {runtime.v21.continuity.analytics.repeatPattern.summary}
+                          {english ? "Repeat pattern" : "重复模式"} · {runtime.v21.continuity.analytics.repeatPattern.summary}
                         </p>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                          Blocked because · {runtime.v21.continuity.recovery.blockedReasons.length ? runtime.v21.continuity.recovery.blockedReasons.join(" / ") : runtime.v21.continuity.recovery.operatorAction}
+                          {english ? "Blocked because" : "阻断原因"} · {runtime.v21.continuity.recovery.blockedReasons.length ? runtime.v21.continuity.recovery.blockedReasons.join(" / ") : runtime.v21.continuity.recovery.operatorAction}
                         </p>
                         <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
                           {runtime.v21.continuity.evidence.items.slice(0, 4).map((item, index) => (
@@ -1647,7 +1649,7 @@ export function MeetingV2RuntimeCard({
                         <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{runtime.v21.continuity.sop.title}</p>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{runtime.v21.continuity.sop.summary}</p>
                         <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
-                          evidence collection · {runtime.v21.continuity.sop.evidenceChecklist.join(" / ")}
+                          {english ? "evidence collection" : "证据收集"} · {runtime.v21.continuity.sop.evidenceChecklist.join(" / ")}
                         </p>
                       </div>
                       <div data-testid="continuity-runbook">
@@ -1664,46 +1666,46 @@ export function MeetingV2RuntimeCard({
                       <div className="md:col-span-2" data-testid="continuity-pilot-review">
                         <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">{english ? "Pilot review" : "试点复核"}</p>
                         <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">
-                          {runtime.v21.continuity.pilotReview.failureTaxonomy} · threshold {runtime.v21.continuity.pilotReview.recommendedIneffectiveThreshold} · risk {runtime.v21.continuity.pilotReview.riskBand}
+                          {runtime.v21.continuity.pilotReview.failureTaxonomy} · {english ? "threshold" : "阈值"} {runtime.v21.continuity.pilotReview.recommendedIneffectiveThreshold} · {english ? "risk" : "风险"} {runtime.v21.continuity.pilotReview.riskBand}
                         </p>
                         <div className="mt-2 grid gap-2 text-xs leading-5 text-[color:var(--muted-foreground)] md:grid-cols-2">
-                          <p>pilot workspace {runtime.v21.continuity.pilotReview.workspaceSizeBand} · session density {runtime.v21.continuity.pilotReview.sessionDensityBand}</p>
-                          <p>meeting cadence {runtime.v21.continuity.pilotReview.meetingFrequencyBand} · failure history {runtime.v21.continuity.pilotReview.failureHistoryBand}</p>
-                          <p>participants {runtime.v21.continuity.pilotReview.participantRolePosture} · sample {runtime.v21.continuity.pilotReview.sampleCoverageBand}</p>
-                          <p>stability {runtime.v21.continuity.pilotReview.stabilityBand} · stability confidence {runtime.v21.continuity.pilotReview.stabilityConfidenceBand}</p>
-                          <p>scale-up {text(runtime.v21.continuity.pilotReview.stabilityScaleUpSummary)}</p>
-                          <p>scale-up recheck {text(runtime.v21.continuity.pilotReview.stabilityScaleUpRecheckSummary)}</p>
-                          <p>subgroup stability drift review {text(runtime.v21.continuity.pilotReview.subgroupStabilityDriftSummary)}</p>
-                          <p>cohort aging comparison {text(runtime.v21.continuity.pilotReview.subgroupCohortAgingSummary)}</p>
-                          <p>cohort aging scale-up review {text(runtime.v21.continuity.pilotReview.subgroupDriftAgingScaleUpSummary)}</p>
-                          <p>subgroup drift long-term cohort aging review {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermCohortAgingSummary)}</p>
-                          <p>subgroup drift long-term sample expansion review {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermSampleExpansionSummary)}</p>
-                          <p>sample expansion refinement review {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermSampleExpansionRefinementSummary)}</p>
-                          <p>interval {runtime.v21.continuity.pilotReview.confidenceInterval} confidence interval · {text(runtime.v21.continuity.pilotReview.intervalWordingSummary)}</p>
-                          <p>wording drift audit {text(runtime.v21.continuity.pilotReview.intervalWordingDriftSummary)}</p>
-                          <p>wording drift tracking {text(runtime.v21.continuity.pilotReview.wordingDriftTrackingSummary)}</p>
-                          <p>interval consistency guidance {text(runtime.v21.continuity.pilotReview.intervalConsistencyGuidanceSummary)}</p>
-                          <p>interval wording aging audit {text(runtime.v21.continuity.pilotReview.intervalWordingAgingSummary)}</p>
-                          <p>cross-surface interval wording regression review {text(runtime.v21.continuity.pilotReview.intervalWordingRegressionSummary)}</p>
-                          <p>cross-surface interval wording consistency audit {text(runtime.v21.continuity.pilotReview.intervalWordingConsistencyAuditSummary)}</p>
-                          <p>cross-surface interval wording regression audit {text(runtime.v21.continuity.pilotReview.intervalWordingRegressionAuditSummary)}</p>
-                          <p>cross-readout interval wording regression audit {text(runtime.v21.continuity.pilotReview.intervalWordingCrossReadoutAuditSummary)}</p>
-                          <p>cross-readout interval wording regression refinement {text(runtime.v21.continuity.pilotReview.intervalWordingCrossReadoutRegressionRefinementSummary)}</p>
-                          <p>outcome {runtime.v21.continuity.pilotReview.outcomeCorrelationBand} · horizon drift {text(runtime.v21.continuity.pilotReview.longHorizonSummary)}</p>
-                          <p>long-term SOP {text(runtime.v21.continuity.pilotReview.longTermSopImpactSummary)}</p>
-                          <p>material impact {runtime.v21.continuity.pilotReview.longTermMaterialImpactBand} · material impact on long-term outcomes {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactSummary)}</p>
-                          <p>material impact review {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactReviewSummary)}</p>
-                          <p>material impact audit {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactAuditSummary)}</p>
-                          <p>material impact pattern aging review {text(runtime.v21.continuity.pilotReview.materialImpactPatternAgingSummary)}</p>
-                          <p>material impact sampling review {text(runtime.v21.continuity.pilotReview.materialImpactSamplingSummary)}</p>
-                          <p>material impact sampling aging review {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingSummary)}</p>
-                          <p>material impact sampling aging refinement {text(runtime.v21.continuity.pilotReview.materialImpactAgingRefinementSummary)}</p>
-                          <p>material impact sampling aging audit {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingAuditSummary)}</p>
-                          <p>material impact sampling aging refinement audit {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingRefinementAuditSummary)}</p>
-                          <p>guidance {text(runtime.v21.continuity.pilotReview.guidanceRefinementSummary)}</p>
-                          <p>operator handling {text(runtime.v21.continuity.pilotReview.operatorHandlingSummary)}</p>
-                          <p>variance {text(runtime.v21.continuity.pilotReview.varianceSummary)}</p>
-                          <p>runbook evidence collection {text(runtime.v21.continuity.runbook.summary)}</p>
+                          <p>{english ? "pilot workspace" : "试点工作区"} {runtime.v21.continuity.pilotReview.workspaceSizeBand} · {english ? "session density" : "会话密度"} {runtime.v21.continuity.pilotReview.sessionDensityBand}</p>
+                          <p>{english ? "meeting cadence" : "会议节奏"} {runtime.v21.continuity.pilotReview.meetingFrequencyBand} · {english ? "failure history" : "失败历史"} {runtime.v21.continuity.pilotReview.failureHistoryBand}</p>
+                          <p>{english ? "participants" : "参与方"} {runtime.v21.continuity.pilotReview.participantRolePosture} · {english ? "sample" : "样本"} {runtime.v21.continuity.pilotReview.sampleCoverageBand}</p>
+                          <p>{english ? "stability" : "稳定性"} {runtime.v21.continuity.pilotReview.stabilityBand} · {english ? "stability confidence" : "稳定性置信度"} {runtime.v21.continuity.pilotReview.stabilityConfidenceBand}</p>
+                          <p>{english ? "scale-up" : "放大评估"} {text(runtime.v21.continuity.pilotReview.stabilityScaleUpSummary)}</p>
+                          <p>{english ? "scale-up recheck" : "放大复查"} {text(runtime.v21.continuity.pilotReview.stabilityScaleUpRecheckSummary)}</p>
+                          <p>{english ? "subgroup stability drift review" : "子组稳定性漂移复核"} {text(runtime.v21.continuity.pilotReview.subgroupStabilityDriftSummary)}</p>
+                          <p>{english ? "cohort aging comparison" : "队列老化对比"} {text(runtime.v21.continuity.pilotReview.subgroupCohortAgingSummary)}</p>
+                          <p>{english ? "cohort aging scale-up review" : "队列老化放大复核"} {text(runtime.v21.continuity.pilotReview.subgroupDriftAgingScaleUpSummary)}</p>
+                          <p>{english ? "subgroup drift long-term cohort aging review" : "子组漂移长期队列老化复核"} {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermCohortAgingSummary)}</p>
+                          <p>{english ? "subgroup drift long-term sample expansion review" : "子组漂移长期样本扩展复核"} {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermSampleExpansionSummary)}</p>
+                          <p>{english ? "sample expansion refinement review" : "样本扩展细化复核"} {text(runtime.v21.continuity.pilotReview.subgroupDriftLongTermSampleExpansionRefinementSummary)}</p>
+                          <p>{english ? "interval" : "区间"} {runtime.v21.continuity.pilotReview.confidenceInterval} {english ? "confidence interval" : "置信区间"} · {text(runtime.v21.continuity.pilotReview.intervalWordingSummary)}</p>
+                          <p>{english ? "wording drift audit" : "措辞漂移审计"} {text(runtime.v21.continuity.pilotReview.intervalWordingDriftSummary)}</p>
+                          <p>{english ? "wording drift tracking" : "措辞漂移跟踪"} {text(runtime.v21.continuity.pilotReview.wordingDriftTrackingSummary)}</p>
+                          <p>{english ? "interval consistency guidance" : "区间一致性指引"} {text(runtime.v21.continuity.pilotReview.intervalConsistencyGuidanceSummary)}</p>
+                          <p>{english ? "interval wording aging audit" : "区间措辞老化审计"} {text(runtime.v21.continuity.pilotReview.intervalWordingAgingSummary)}</p>
+                          <p>{english ? "cross-surface interval wording regression review" : "跨界面区间措辞回归复核"} {text(runtime.v21.continuity.pilotReview.intervalWordingRegressionSummary)}</p>
+                          <p>{english ? "cross-surface interval wording consistency audit" : "跨界面区间措辞一致性审计"} {text(runtime.v21.continuity.pilotReview.intervalWordingConsistencyAuditSummary)}</p>
+                          <p>{english ? "cross-surface interval wording regression audit" : "跨界面区间措辞回归审计"} {text(runtime.v21.continuity.pilotReview.intervalWordingRegressionAuditSummary)}</p>
+                          <p>{english ? "cross-readout interval wording regression audit" : "跨读面区间措辞回归审计"} {text(runtime.v21.continuity.pilotReview.intervalWordingCrossReadoutAuditSummary)}</p>
+                          <p>{english ? "cross-readout interval wording regression refinement" : "跨读面区间措辞回归细化"} {text(runtime.v21.continuity.pilotReview.intervalWordingCrossReadoutRegressionRefinementSummary)}</p>
+                          <p>{english ? "outcome" : "结果"} {runtime.v21.continuity.pilotReview.outcomeCorrelationBand} · {english ? "horizon drift" : "周期漂移"} {text(runtime.v21.continuity.pilotReview.longHorizonSummary)}</p>
+                          <p>{english ? "long-term SOP" : "长期 SOP"} {text(runtime.v21.continuity.pilotReview.longTermSopImpactSummary)}</p>
+                          <p>{english ? "material impact" : "实质影响"} {runtime.v21.continuity.pilotReview.longTermMaterialImpactBand} · {english ? "material impact on long-term outcomes" : "对长期结果的实质影响"} {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactSummary)}</p>
+                          <p>{english ? "material impact review" : "实质影响复核"} {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactReviewSummary)}</p>
+                          <p>{english ? "material impact audit" : "实质影响审计"} {text(runtime.v21.continuity.pilotReview.longTermMaterialImpactAuditSummary)}</p>
+                          <p>{english ? "material impact pattern aging review" : "实质影响模式老化复核"} {text(runtime.v21.continuity.pilotReview.materialImpactPatternAgingSummary)}</p>
+                          <p>{english ? "material impact sampling review" : "实质影响采样复核"} {text(runtime.v21.continuity.pilotReview.materialImpactSamplingSummary)}</p>
+                          <p>{english ? "material impact sampling aging review" : "实质影响采样老化复核"} {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingSummary)}</p>
+                          <p>{english ? "material impact sampling aging refinement" : "实质影响采样老化细化"} {text(runtime.v21.continuity.pilotReview.materialImpactAgingRefinementSummary)}</p>
+                          <p>{english ? "material impact sampling aging audit" : "实质影响采样老化审计"} {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingAuditSummary)}</p>
+                          <p>{english ? "material impact sampling aging refinement audit" : "实质影响采样老化细化审计"} {text(runtime.v21.continuity.pilotReview.materialImpactSamplingAgingRefinementAuditSummary)}</p>
+                          <p>{english ? "guidance" : "指引"} {text(runtime.v21.continuity.pilotReview.guidanceRefinementSummary)}</p>
+                          <p>{english ? "operator handling" : "操作处理"} {text(runtime.v21.continuity.pilotReview.operatorHandlingSummary)}</p>
+                          <p>{english ? "variance" : "方差"} {text(runtime.v21.continuity.pilotReview.varianceSummary)}</p>
+                          <p>{english ? "runbook evidence collection" : "运行手册证据收集"} {text(runtime.v21.continuity.runbook.summary)}</p>
                         </div>
                       </div>
                     </div>
