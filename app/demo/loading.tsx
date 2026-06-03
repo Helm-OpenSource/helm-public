@@ -80,7 +80,7 @@ export default async function DemoLoading() {
             <p className="text-sm leading-6 text-[color:var(--muted)]">
               {english
                 ? "Demo entry does not auto-send anything to a customer or write back to a real CRM."
-                : "演示入口不会对外发送任何内容，也不会写回真实 CRM。"}
+                : "演示入口不会对外发送任何内容，也不会写回真实CRM。"}
             </p>
           </div>
         </section>

@@ -135,6 +135,16 @@ engineering-capability summary, and database-disconnected / corporate-VPN
 guidance copy plus source guards only, without changing root layout structure,
 offline mode, retry buttons, or database connection logic.
 
+本轮继续收口公开 trial / demo 入口中文混写；只调整托管版申请、自部署复刻、60 秒演示、
+行业样板、完整读数、黄金路径检查链和真实CRM边界提示文案及源码守卫，不改变试用申请表、
+demo 登录、行业 pack 数据、GitHub 链接或不自动外发边界。
+
+This round further localizes mixed Chinese copy in the public trial / demo
+entries. It changes managed-trial application, self-hosting fork, 60-second
+demo, industry-template, full-readout, golden-path-check, and real-CRM boundary
+guidance copy plus source guards only, without changing the trial application
+form, demo login, industry pack data, GitHub links, or no-auto-send boundaries.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

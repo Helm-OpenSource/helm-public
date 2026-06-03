@@ -71,6 +71,17 @@ guidance copy plus source guards only; it does not change root layout
 structure, offline mode, retry buttons, or database connection logic, and does
 not claim full-repo bilingualization completion.
 
+公开 trial / demo 入口中文混写也已继续清理；本批只改托管版申请、自部署复刻、60 秒演示、
+行业样板、完整读数、黄金路径检查链和真实CRM边界提示文案及源码守卫，不改变试用申请表、
+demo 登录、行业 pack 数据、GitHub 链接或不自动外发边界，也不声明全仓双语化完成。
+
+Mixed Chinese copy in the public trial / demo entries has also been further
+localized. This batch changes managed-trial application, self-hosting fork,
+60-second demo, industry-template, full-readout, golden-path-check, and real-CRM
+boundary guidance copy plus source guards only; it does not change the trial
+application form, demo login, industry pack data, GitHub links, or no-auto-send
+boundaries, and does not claim full-repo bilingualization completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。

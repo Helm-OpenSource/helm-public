@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: english ? "Apply for Helm Cloud (invite-only managed Helm)" : "申请 Helm Cloud 试用 | 托管版仅邀请制",
     description: english
       ? "Helm Cloud is the invite-only managed version of Helm. Answer 4 short questions about your operating loop. We reply in 1 business day with yes / not yet / not a fit. For self-hosting, fork the open-source repo instead."
-      : "Helm Cloud 是 Helm 的托管版（仅邀请制）。回答 4 个关于经营回路的简短问题，1 个工作日内答复「通过 / 暂时不合适 / 不匹配」。想自部署？直接 fork 开源仓库。",
+      : "Helm Cloud 是 Helm 的托管版（仅邀请制）。回答 4 个关于经营回路的简短问题，1 个工作日内答复「通过 / 暂时不合适 / 不匹配」。想自部署？直接复刻开源仓库。",
   };
 }
 
@@ -46,7 +46,7 @@ export default async function TrialApplicationPage() {
           <p className="max-w-[28rem] text-xs text-[color:var(--muted-foreground)]">
             {english
               ? "Open-source AI operating toolkit · for enterprise AI delivery engineers"
-              : "面向企业 AI 交付工程师的开源经营推进工具集"}
+              : "面向企业AI交付工程师的开源经营推进工具集"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -69,7 +69,7 @@ export default async function TrialApplicationPage() {
           <p className="max-w-2xl text-base leading-7 text-[color:var(--muted)]">
             {english
               ? "Managed Helm, invite-only. A human reads every application; we reply within one business day. If you'd rather self-host, fork the open-source repo."
-              : "托管版 Helm，仅邀请制。每份申请人工读，1 个工作日内答复。想自部署？直接 fork 开源仓库。"}
+              : "托管版 Helm，仅邀请制。每份申请人工读，1 个工作日内答复。想自部署？直接复刻开源仓库。"}
           </p>
           <div className="inline-flex flex-wrap items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-2 text-xs leading-5 text-[color:var(--muted)]">
             <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--accent)]" />
@@ -84,7 +84,7 @@ export default async function TrialApplicationPage() {
               rel="noopener noreferrer"
               className="font-semibold text-[color:var(--accent)] underline-offset-4 hover:underline"
             >
-              {english ? "Fork on GitHub" : "去 GitHub fork"}
+              {english ? "Fork on GitHub" : "在 GitHub 上复刻"}
             </a>
             <span>·</span>
             <Link
@@ -109,7 +109,7 @@ export default async function TrialApplicationPage() {
                 <span>
                   {english
                     ? <><strong>Yes</strong> — we open your Helm Cloud workspace, walk you through what Helm auto-runs and where it stops, and book your first 1:1 inside 7 days.</>
-                    : <><strong>通过</strong>——立刻开通你的 Helm Cloud 工作区，带你过一遍 Helm 自动跑什么 / 在哪条线停下来，并在 7 天内排上第一次 1:1。</>}
+                    : <><strong>通过</strong>——立刻开通你的 Helm Cloud 工作区，带你过一遍 Helm 会自动运行什么、会在哪些边界停下来，并在 7 天内安排第一次一对一导览。</>}
                 </span>
               </li>
               <li className="flex items-start gap-2">
