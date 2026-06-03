@@ -105,7 +105,8 @@ This PR's source audit result:
    复核卡片 / 步骤列表、recommendation feedback、home surface arrival banner
    与 billing program catalog 文案、skill suggestion formal review、human
    action execution boundary、program invite issuance、customer-facing offer /
-   external proposal 与 proposal package 边界文案的中文操作字段已继续收口。
+   external proposal 与 proposal package 边界文案、billing settlement 与
+   payout readiness 面板中的中文结算术语已继续收口。
    这些目标文件的本批次严格可见残留已清理；全工程广义 ASCII 中文分支扫描与严格可见
    文案扫描尚未重新校准，后续仍需继续检查 billing surface 与其他低频 detail surfaces。
    剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
@@ -143,8 +144,9 @@ This PR's source audit result:
    recommendation feedback, home surface arrival banner, and billing program
    catalog copy, skill suggestion formal review, human action execution
    boundary, program invite issuance, customer-facing offer / external proposal,
-   and proposal package boundary copy have also been localized for Chinese
-   operation fields. This
+   proposal package boundary copy, and billing settlement plus payout-readiness
+   panel settlement terminology have also been localized for Chinese operation
+   fields. This
    batch clears the target-file strict visible-copy leftovers; the
    whole-project broad ASCII zh-branch scan and strict visible-copy scan have
    not been recalibrated yet, and billing plus other lower-frequency detail
@@ -248,6 +250,7 @@ true:
 | 日期 / Date | 变更 / Change |
 |---|---|
 | 2026-06-03 | 继续收口 customer-facing offer / external proposal 与 proposal package 边界文案中的中文混写；本批只改中文可见文案，不改发送评估、提案层级或非承诺边界；Further localized Chinese visible mixed-language copy in customer-facing offer / external proposal and proposal package boundary copy; this batch changes visible copy only and leaves sendability evaluation, proposal layering, and non-commitment boundaries unchanged |
+| 2026-06-03 | 继续收口 billing settlement 与 payout readiness 面板中的中文结算术语；本批只改中文可见文案，不改手工结算、站外付款、支付执行或 SLA 边界；Further localized Chinese settlement terminology in billing settlement and payout-readiness panels; this batch changes visible copy only and leaves manual settlement, off-platform payment, payout execution, and SLA boundaries unchanged |
 | 2026-06-03 | 继续收口 skill suggestion formal review、human action execution boundary 与 program invite issuance 文案中的中文混写；本批只改中文可见文案，不改能力晋升状态机、人工执行契约或邀请发放权限；Further localized Chinese visible mixed-language copy in skill suggestion formal review, human action execution boundary, and program invite issuance copy; this batch changes visible copy only and leaves capability-promotion state machines, human-execution contracts, and invite-issuance permissions unchanged |
 | 2026-06-03 | 继续收口 recommendation feedback、home surface arrival banner 与 billing program catalog 文案中的中文混写；本批只改中文可见文案，不改推荐反馈动作、首页路由或分成规则结构；Further localized Chinese visible mixed-language copy in recommendation feedback, home surface arrival banner, and billing program catalog surfaces; this batch changes visible copy only and leaves recommendation feedback actions, home routing, and revenue-rule structures unchanged |
 | 2026-06-03 | 继续收口 approval first-loop 复核卡片与步骤列表中的中文混写；本批只改中文 display model 文案，不改审批协议、状态机或执行边界；Further localized Chinese visible mixed-language copy in the approval first-loop review card and step list; this batch changes display-model copy only and leaves approval protocol, state machines, and execution boundaries unchanged |

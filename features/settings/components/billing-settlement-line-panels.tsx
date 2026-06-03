@@ -88,10 +88,10 @@ export function BillingSettlementLinePanels({
             </Badge>
             {line.payoutProfile ? (
               <Badge variant="success">
-                {english ? `Profile: ${line.payoutProfile.displayName}` : `资料：${line.payoutProfile.displayName}`}
+                {english ? `Profile: ${line.payoutProfile.displayName}` : `结算资料：${line.payoutProfile.displayName}`}
               </Badge>
             ) : line.payoutProfileRequired ? (
-              <Badge variant="danger">{english ? "Missing profile" : "缺少资料"}</Badge>
+              <Badge variant="danger">{english ? "Missing profile" : "缺少结算资料"}</Badge>
             ) : null}
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
