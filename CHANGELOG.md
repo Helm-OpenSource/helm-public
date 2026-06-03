@@ -1,11 +1,26 @@
-# Changelog
+# 变更记录 / Changelog
+
+在第一个公开 tag 之前，本项目使用 release-note-first 的变更记录。
 
 This project follows a release-note-first changelog until the first public tag.
 
-## Unreleased
+## 未发布 / Unreleased
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 新增公开双语化计划，并把 GitHub issue / PR intake 入口改为中英文双语。
+- 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
+- 新增 public release train runbook，并刷新 maintainer status baseline。
+- 新增首份 public Core operating model，覆盖 mission、OKR、KPI 与 workstream boundary。
+- 新增 public issue / PR intake templates 与 OPC weekly packet template。
+- 新增 China accessibility and evidence-routing packet，用于 public-safe activation proof。
+- 在 OPC weekly packet template 中新增 owner-gated China access receipt fields。
+- 梳理 `helm-public` 的公开文档面。
+- 新增 `npm run check:public-docs`，让 public docs 保持显式 allowlist。
+
+English reference:
+
+- Added the public bilingualization plan and bilingual GitHub issue / PR intake surfaces.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
 - Added the first public Core operating model with mission, OKRs, KPIs, and workstream boundaries.
@@ -14,5 +29,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Added owner-gated China access receipt fields to the OPC weekly packet template.
 - Curated the public documentation surface for `helm-public`.
 - Added `npm run check:public-docs` to keep public docs on an explicit allowlist.
+
+安全致谢仅在 reporter 同意后列入本文件。
 
 Security acknowledgements may be listed here with reporter consent.

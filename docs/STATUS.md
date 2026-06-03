@@ -7,28 +7,36 @@ public_safety: Public Core status table. This is not a commercial release approv
 ---
 # Helm Public Status
 
+> **语言 / Language**: **中文主文本** + **English reference**
+
+本表是 public Core 的公开状态基线。它刻意不追踪私有 Pack、Overlay 或客户部署
+ready 状态，也不是商业发布批准。
+
 This table is the public Core status baseline. It deliberately does not track
-private Pack, Overlay, or customer deployment readiness.
+private Pack, Overlay, or customer deployment readiness, and it is not a
+commercial release approval.
 
-| Category | Status | Evidence |
+| 类别 / Category | 状态 / Status | 证据 / Evidence |
 |---|---|---|
-| Apache-2.0 Core repository | Established for public Core development | `LICENSE`, `NOTICE`, `package.json`, `README.md` |
-| Local developer quickstart | Docker fresh-clone smoke verified for public Core; still not commercial release approval | [D2 Docker fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md), [getting-started.md](getting-started.md), `docker-compose.yml`, `Dockerfile` |
-| Delivery engineer Golden Path requirements | Established as public Core requirements; implementation remains staged by evidence gates | [Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md), `npm run delivery:doctor`, `npm run pack:fixture-check` |
-| Public/private boundary guard | Established at HEAD level | `npm run check:public-release`, `npm run check:public-docs` |
-| Public docs information architecture | Established by allowlist; visibility is public after owner Go/No-Go, and new public docs still require intentional review | [public-docs-manifest.json](public-docs-manifest.json) |
-| Open-source maintainer operating loop | First post-public baseline established; branch protection, contribution templates, and public release train runbook are established; metadata cleanup, required-check drift monitoring, day-7 readout, and release-latest posture still need next-layer action | [Public maintainer status baseline](operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md), [Public release train runbook](operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md) |
-| Open-source operating model and OKR/KPI loop | Formed as a public Core operating model; first weekly packet and activation evidence still need next-layer execution | [Open source operating model](operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md) |
-| Open-source growth operating loop | Formed as a seven-day public-Core activation plan with a first-change walkthrough; activation evidence, community intake templates, and day-7 readout still need next-layer execution | [Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md) |
-| OPC intake and packet loop | Public issue templates, PR template, weekly OPC packet template, and owner-gated China access receipt fields established as repo files; first real template-submitted issue / PR still needs dry-run review | [OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md), `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` |
-| China accessibility and evidence routing | Formed as a two-tier reachability and evidence model; GitHub public-safe evidence remains primary proof while WeChat / QR / community handoffs are assisted signals only | [China accessibility and evidence routing packet](operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md) |
-| AI recommendation governance | Formed as a public Core governance contract for suggestion, evidence, human review, and owner-held decision boundaries; enforcement remains staged through code, tests, receipts, and PR review | [AI recommendation governance](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md), `npm run check:boundaries`, `npm run check:public-release` |
-| Cloud trial / enterprise readiness | Not established by this repository alone | See [release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md) |
+| Apache-2.0 Core 仓库 / Apache-2.0 Core repository | 已为 public Core 开发成立；Established for public Core development | `LICENSE`, `NOTICE`, `package.json`, `README.md` |
+| 本地开发 quickstart / Local developer quickstart | Docker fresh-clone smoke 已验证 public Core；仍不是商业发布批准；Docker fresh-clone smoke verified for public Core; still not commercial release approval | [D2 Docker fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md), [getting-started.md](getting-started.md), `docker-compose.yml`, `Dockerfile` |
+| 交付工程师 Golden Path 要求 / Delivery engineer Golden Path requirements | 已作为 public Core 要求成立；实现仍按 evidence gate 分阶段；Established as public Core requirements; implementation remains staged by evidence gates | [Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md), `npm run delivery:doctor`, `npm run pack:fixture-check` |
+| 公开 / 私有边界 guard / Public/private boundary guard | 已在 HEAD level 成立；Established at HEAD level | `npm run check:public-release`, `npm run check:public-docs` |
+| 公开文档信息架构 / Public docs information architecture | 已通过 allowlist 成立；新增公开文档仍需刻意 review；Established by allowlist; new public docs still require intentional review | [public-docs-manifest.json](public-docs-manifest.json) |
+| 公开双语化状态 / Public bilingualization posture | 已成形为分阶段计划；P0 intake 与文档入口正在推进；全仓双语完成尚未声明；Formed as a staged plan; P0 intake and docs-entry work is underway; full-repo bilingual completion is not claimed | [Public bilingualization plan](./_planning/HELM_PUBLIC_BILINGUALIZATION_PLAN.md), `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` |
+| 开源维护者运营闭环 / Open-source maintainer operating loop | 首个 post-public baseline 已成立；metadata cleanup、required-check drift monitoring、day-7 readout 与 release-latest posture 仍需下一层；First post-public baseline established; metadata cleanup, required-check drift monitoring, day-7 readout, and release-latest posture still need next-layer action | [Public maintainer status baseline](operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md), [Public release train runbook](operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md) |
+| 开源运营模型与 OKR/KPI 闭环 / Open-source operating model and OKR/KPI loop | 已成形为 public Core operating model；首个 weekly packet 与 activation evidence 仍需下一层执行；Formed as a public Core operating model; first weekly packet and activation evidence still need next-layer execution | [Open source operating model](operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md) |
+| 开源增长运营闭环 / Open-source growth operating loop | 已成形为 7 日 public-Core activation plan；activation evidence、community intake templates 与 day-7 readout 仍需下一层执行；Formed as a seven-day public-Core activation plan; activation evidence, community intake templates, and day-7 readout still need next-layer execution | [Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md) |
+| OPC intake 与 packet 闭环 / OPC intake and packet loop | public issue templates、PR template、weekly OPC packet template 与 owner-gated China access receipt fields 已作为仓库文件成立；首次真实 template-submitted issue / PR 仍需 dry-run review；Public issue templates, PR template, weekly OPC packet template, and owner-gated China access receipt fields are established as repo files; first real template-submitted issue / PR still needs dry-run review | [OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md), `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` |
+| 中国访问性与证据路由 / China accessibility and evidence routing | 已成形为双层 reachability 与 evidence model；GitHub public-safe evidence 仍是 primary proof，WeChat / QR / community handoff 仅是 assisted signal；Formed as a two-tier reachability and evidence model; GitHub public-safe evidence remains primary proof while WeChat / QR / community handoffs are assisted signals only | [China accessibility and evidence routing packet](operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md) |
+| AI 推荐治理 / AI recommendation governance | 已成形为 public Core 治理契约，覆盖 suggestion、evidence、human review 与 owner-held decision 边界；执行仍按代码、测试、回执与 PR review 分阶段；Formed as a public Core governance contract for suggestion, evidence, human review, and owner-held decision boundaries; enforcement remains staged through code, tests, receipts, and PR review | [AI recommendation governance](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md), `npm run check:boundaries`, `npm run check:public-release` |
+| Cloud trial / enterprise readiness | 不由本仓单独成立；Not established by this repository alone | See [release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md) |
 
-## Deliberately Not Claimed
+## 刻意不声明 / Deliberately Not Claimed
 
-- No production SLA.
-- No complete enterprise SSO / SCIM / immutable audit platform.
-- No third-party plugin sandbox.
-- No runtime marketplace.
-- No automatic external send, approval, settlement, or customer commitment.
+- 不声明生产 SLA。/ No production SLA.
+- 不声明完整 enterprise SSO / SCIM / immutable audit platform。/ No complete enterprise SSO / SCIM / immutable audit platform.
+- 不声明第三方 plugin sandbox。/ No third-party plugin sandbox.
+- 不声明 runtime marketplace。/ No runtime marketplace.
+- 不声明自动对外发送、审批、结算或客户承诺。/ No automatic external send, approval, settlement, or customer commitment.
+- 不声明全仓双语化已经完成。/ No claim that full-repo bilingualization is complete.
