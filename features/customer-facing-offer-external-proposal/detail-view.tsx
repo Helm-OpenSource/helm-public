@@ -308,7 +308,7 @@ export function CustomerFacingOfferExternalProposalDetailView(
                   ),
                 },
                 {
-                  label: text(english ? "Internal-only wording" : "internal-only wording"),
+                  label: text(english ? "Internal-only wording" : "仅内部措辞"),
                   value: text(
                     mode === "customer-offer"
                       ? props.contract.customerOfferPageInternalOnlyCue

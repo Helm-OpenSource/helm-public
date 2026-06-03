@@ -247,11 +247,11 @@ export function CommercialNarrativeStrengtheningDetailView({
                   value: text(formatFallbackMode(contract.strengtheningFallbackMode, english)),
                 },
                 {
-                  label: english ? "Customer-visible cue" : text("customer-visible cue"),
+                  label: english ? "Customer-visible cue" : text("客户可见提示"),
                   value: text(contract.strengtheningCustomerVisibleCue),
                 },
                 {
-                  label: english ? "Internal-only cue" : text("internal-only cue"),
+                  label: english ? "Internal-only cue" : text("仅内部提示"),
                   value: text(contract.strengtheningInternalOnlyCue),
                 },
                 {
