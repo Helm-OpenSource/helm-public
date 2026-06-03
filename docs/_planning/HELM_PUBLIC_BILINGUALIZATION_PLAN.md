@@ -217,6 +217,17 @@ step, and permission wording in opportunity-judgement, human-action, and
 runtime cards plus source guards only, without changing runtime state machines,
 shadow summaries, manual receipts, or official-write boundaries.
 
+本轮继续收口 human action execution runtime 里的中文 CRM 边界混写；只调整
+人工执行输出里的正式客户关系系统更新、写回权限、客户关系系统 / 管线步骤和执行边界文案
+及源码守卫，不改变 action type、artifact、状态机、人工回执或正式写回权限。
+
+This round further localizes mixed Chinese CRM boundary copy in the human action
+execution runtime. It changes official customer-relationship-system update,
+write authority, customer-relationship-system / pipeline step, and
+execution-boundary wording plus source guards only, without changing action
+types, artifacts, state machines, manual receipts, or official-write
+permissions.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 human action execution runtime 里的中文 CRM 边界混写；本批只改人工执行输出里的正式客户关系系统更新、写回权限、客户关系系统 / 管线步骤和执行边界文案及源码守卫，不改 action type、artifact、状态机、人工回执或正式写回权限。
 - 继续收口 meeting v2 组件里的中文 CRM 边界混写；本批只改机会判断、人工执行和运行时卡片里的正式客户关系系统状态、写回、步骤与权限文案及源码守卫，不改 runtime 状态机、阴影摘要、人工回执或正式写回边界。
 - 继续收口 settings setup / account 连接说明里的中文 CRM 混写；本批只改初始化向导的客户关系系统连接标题、账户设置里的未命名客户关系系统来源文案和源码守卫，不改设置保存、连接器优先级、认证配置或数据接入逻辑。
 - 继续收口 diagnostics 试点诊断页里的中文 CRM 混写；本批只改客户关系系统稳定性、来源空状态、身份绑定债和已连接来源文案及源码守卫，不改诊断数据、试点判断、导入任务或身份复核逻辑。

@@ -37,7 +37,7 @@ import { jsonStringify, safeParseJson, trimText } from "@/lib/utils";
 const EXECUTION_SURFACE_BOUNDARY_NOTE =
   "This is a human execution entry only. Helm still has no send authority, no auto booking, and no official CRM write authority.";
 const EXECUTION_APPROVED_NOTE =
-  "已批准只表示允许你人工执行下一步，不代表系统已发送、已预约、已承诺，或正式CRM已更新。";
+  "已批准只表示允许你人工执行下一步，不代表系统已发送、已预约、已承诺，或正式客户关系系统已更新。";
 const EXECUTION_PROOF_NOTE =
   "执行证明只表示Helm已记录人工动作与确认；除非另有明确回执，它不自动代表外部结果已经发生。";
 const EXECUTION_HUMAN_ONLY_NOTE = "这是人工执行入口，不是自动执行入口。";
@@ -287,7 +287,7 @@ function formatExecutionLine(action: HumanActionExecutionRuntimeAction) {
         : action.actionType === "manual_calendar_send"
           ? "已人工发送时间建议"
           : action.actionType === "manual_crm_step"
-            ? "已人工完成CRM/管线步骤"
+            ? "已人工完成客户关系系统/管线步骤"
             : action.actionType === "manual_handoff_delivery" || action.actionType === "manual_handoff_customer_success"
               ? "已人工完成交接"
               : "已人工完成内部共享"
@@ -303,7 +303,7 @@ function formatExecutionLine(action: HumanActionExecutionRuntimeAction) {
         ? "当前仍停在人工执行前，不代表系统已执行。"
       : action.status === HumanActionExecutionStatus.DEFERRED
         ? "当前仍停在人工执行前，不代表系统已执行。"
-        : "已批准只表示允许人工下一步，不代表系统已发送、已预约或已写正式CRM。";
+        : "已批准只表示允许人工下一步，不代表系统已发送、已预约或已写正式客户关系系统。";
   return `- [${when}] ${subject} · ${statusLabel} · ${action.followThroughStatus ?? action.status}。${tail}`;
 }
 
@@ -315,7 +315,7 @@ function buildDefaultWhatWasNotDone(actionType: HumanActionExecutionActionType) 
     case "manual_calendar_send":
       return "未自动替你创建外部日程，仅记录已人工发送时间建议。";
     case "manual_crm_step":
-      return "未自动替你写正式CRM；如果外部系统已更新，仍需明确回执。";
+      return "未自动替你写正式客户关系系统；如果外部系统已更新，仍需明确回执。";
     default:
       return "未自动触发任何外部发送、外部预约或正式系统写回。";
   }
@@ -365,7 +365,7 @@ function buildExecutionWritebackSummary(input: {
     case "mark_shared_internally":
       return `[${when}] ${actor} 已人工完成内部共享。${statusLine}仅表示内部协同动作已记录，不代表任何外部承诺已形成。`;
     case "mark_crm_step_done":
-      return `[${when}] ${actor} 已人工完成CRM/管线步骤。${statusLine}仅表示人工步骤已记录，不自动代表正式CRM已同步成功。`;
+      return `[${when}] ${actor} 已人工完成客户关系系统/管线步骤。${statusLine}仅表示人工步骤已记录，不自动代表正式客户关系系统已同步成功。`;
     case "mark_handoff_done":
       return `[${when}] ${actor} 已人工完成交接。${statusLine}仅表示交接动作已记录，不自动代表下游已完全接收或外部结果已成立。`;
     case "mark_blocked":
@@ -390,7 +390,7 @@ function buildApprovalContextForDraft(reviewStatus: DraftCommsBundleArtifact["re
 }
 
 function buildApprovalContextForShadow() {
-  return "人工阴影判断已确认并消费进阴影摘要；这仍然不代表正式CRM已写回。";
+  return "人工阴影判断已确认并消费进阴影摘要；这仍然不代表正式客户关系系统已写回。";
 }
 
 async function loadExecutionMeeting(workspaceId: string, meetingId: string) {
@@ -790,8 +790,8 @@ function buildShadowExecutionContracts(input: {
       audience: "pipeline",
       executionOwnerId: ownerId,
       executionOwnerName: ownerName,
-      executionIntent: `按已确认阴影判断手工推进CRM/管线下一步：${delta.nextBestAction}`,
-      executionBoundary: "这仍然只是人工CRM/管线步骤，不是Helm自动正式写回。",
+      executionIntent: `按已确认阴影判断手工推进客户关系系统/管线下一步：${delta.nextBestAction}`,
+      executionBoundary: "这仍然只是人工客户关系系统/管线步骤，不是Helm自动正式写回。",
       executionPrerequisite: delta.openQuestions.length
         ? delta.openQuestions.slice(0, 3).join("；")
         : "阴影判断已确认；当前仍需人工决定是否以及如何反映到外部系统。",
@@ -806,7 +806,7 @@ function buildShadowExecutionContracts(input: {
       boundaryTrace: listUniqueStrings([
         EXECUTION_SURFACE_BOUNDARY_NOTE,
         EXECUTION_APPROVED_NOTE,
-        "已确认的阴影差异只进入阴影摘要，不授予正式CRM写回权限。",
+        "已确认的阴影差异只进入阴影摘要，不授予正式客户关系系统写回权限。",
       ]),
     },
   ];
@@ -884,7 +884,7 @@ function buildBundleFromActions(actions: HumanActionExecutionBundleInput[]) {
       ...actions.flatMap((item) => item.boundaryTrace),
     ]),
     approvedMeans: EXECUTION_APPROVED_NOTE,
-    approvedDoesNotMean: "已批准不等于已执行，不等于已发送、已预约或已承诺，也不等于正式CRM已更新。",
+    approvedDoesNotMean: "已批准不等于已执行，不等于已发送、已预约或已承诺，也不等于正式客户关系系统已更新。",
     humanOnly: EXECUTION_HUMAN_ONLY_NOTE,
     proofDoesNotMean: EXECUTION_PROOF_NOTE,
     readyCount: actions.length,

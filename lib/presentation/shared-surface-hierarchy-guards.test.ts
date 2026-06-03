@@ -1848,17 +1848,17 @@ describe("shared surface hierarchy guards", () => {
   it("keeps human action execution runtime Chinese boundary copy free of mixed CRM spacing", () => {
     const humanAction = read("lib/helm-v2/human-action-execution-runtime.ts");
 
-    expect(humanAction).toContain("正式CRM已更新");
+    expect(humanAction).toContain("正式客户关系系统已更新");
     expect(humanAction).toContain("Helm已记录人工动作");
-    expect(humanAction).toContain("已人工完成CRM/管线步骤");
-    expect(humanAction).toContain("未自动替你写正式CRM");
-    expect(humanAction).toContain("人工CRM/管线步骤");
+    expect(humanAction).toContain("已人工完成客户关系系统/管线步骤");
+    expect(humanAction).toContain("未自动替你写正式客户关系系统");
+    expect(humanAction).toContain("人工客户关系系统/管线步骤");
     expect(humanAction).toContain("不是Helm自动正式写回");
     expect(humanAction).toContain("当前没有新增主管关注");
-    expect(humanAction).toContain("正式CRM写回权限");
+    expect(humanAction).toContain("正式客户关系系统写回权限");
 
     expect(humanAction).not.toMatch(
-      /正式 CRM|Helm 已记录|CRM 步骤|CRM \/ 管线|人工 scheduling|新增 主管关注|Helm 自动正式写回/,
+      /正式 CRM|正式CRM|Helm 已记录|CRM 步骤|CRM\/管线|CRM \/ 管线|人工 scheduling|新增 主管关注|Helm 自动正式写回/,
     );
   });
 

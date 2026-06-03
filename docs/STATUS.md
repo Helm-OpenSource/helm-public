@@ -163,6 +163,17 @@ and runtime cards plus source guards only; it does not change runtime state
 machines, shadow summaries, manual receipts, or official-write boundaries, and
 does not claim full-repo bilingualization completion.
 
+human action execution runtime 里的中文 CRM 边界混写也已继续清理；本批只改人工执行输出里的
+正式客户关系系统更新、写回权限、客户关系系统 / 管线步骤和执行边界文案及源码守卫，不改变
+action type、artifact、状态机、人工回执或正式写回权限，也不声明全仓双语化完成。
+
+Mixed Chinese CRM boundary copy in the human action execution runtime has also
+been further localized. This batch changes official customer-relationship-system
+update, write authority, customer-relationship-system / pipeline step, and
+execution-boundary wording plus source guards only; it does not change action
+types, artifacts, state machines, manual receipts, or official-write
+permissions, and does not claim full-repo bilingualization completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或
