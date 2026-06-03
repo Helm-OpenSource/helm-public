@@ -106,6 +106,20 @@ it does not change CSV parsing, OAuth, connector actions, import APIs, warmup,
 or conflict-review logic, and does not claim full-repo bilingualization
 completion.
 
+search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
+客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
+AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或
+analytics 查询逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese copy in search / reports / analytics has also been further
+localized. This batch changes Ask Helm boundary guidance,
+customer-relationship-system fields, formal-must-push wording, large-model
+context-layer wording, raw-prompt / audio retention guidance, weekly-report
+recommendations, and AI-work-posture copy plus source guards only; it does not
+change Ask Helm form actions, audit candidates, context packets, report
+generation, or analytics query logic, and does not claim full-repo
+bilingualization completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。

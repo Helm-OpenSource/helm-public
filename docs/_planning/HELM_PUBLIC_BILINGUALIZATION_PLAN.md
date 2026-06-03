@@ -167,6 +167,18 @@ import entry and CRM connection wizard plus source guards only, without changing
 CSV parsing, OAuth, connector actions, import APIs, warmup, or conflict-review
 logic.
 
+本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
+客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
+和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成
+或 analytics 查询逻辑。
+
+This round further localizes mixed Chinese copy in search / reports /
+analytics. It changes Ask Helm boundary guidance, customer-relationship-system
+fields, formal-must-push wording, large-model context-layer wording, raw-prompt
+/ audio retention guidance, weekly-report recommendations, and AI-work-posture
+copy plus source guards only, without changing Ask Helm form actions, audit
+candidates, context packets, report generation, or analytics query logic.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

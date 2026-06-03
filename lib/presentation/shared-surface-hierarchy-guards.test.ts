@@ -1919,4 +1919,28 @@ describe("shared surface hierarchy guards", () => {
       /企业 AI|直接 fork|去 GitHub fork|Helm 自动跑什么|在哪条线停下来|day-1|vertical 样板|通用 vertical|CRM 导入|完整 readout|写 CRM|clone 并跑|Golden Path 检查链|真实 CRM/,
     );
   });
+
+  it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
+    const searchPage = read("app/(workspace)/search/page.tsx");
+    const reportsClient = read("features/reports/reports-client.tsx");
+    const analyticsClient = read("features/analytics/analytics-client.tsx");
+    const combined = `${searchPage}\n${reportsClient}\n${analyticsClient}`;
+
+    expect(searchPage).toContain("自动写客户关系系统状态");
+    expect(searchPage).toContain("正式必推事项");
+    expect(searchPage).toContain("客户关系系统字段");
+    expect(searchPage).toContain("受限大模型 / 公共辅助");
+    expect(searchPage).toContain("大模型仅在已审计上下文范围内解释");
+    expect(searchPage).toContain("不保留原始提示词或原始音频");
+    expect(searchPage).toContain("大模型推理");
+    expect(reportsClient).toContain("扩大客户关系系统接入");
+    expect(reportsClient).toContain("Helm会基于真实推进和风险");
+    expect(analyticsClient).toContain("AI工作姿态");
+    expect(analyticsClient).toContain("先看AI是帮上忙还是安全停住");
+    expect(analyticsClient).toContain("最近AI工作记录");
+
+    expect(combined).not.toMatch(
+      /写 CRM 状态|CRM 字段|正式 Must Push|受限 LLM|LLM 仅|LLM 推理|不保留 raw|扩大 CRM 接入|CRM 优先|Helm 会基于|AI 工作姿态|先看 AI|最近 AI 工作记录|查看 AI/,
+    );
+  });
 });
