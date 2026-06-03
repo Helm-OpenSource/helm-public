@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续补齐 open-source growth 7-day plan 的中文表格摘要；本批新增角色、指标、7 日计划、渠道与 backlog 中文摘要，覆盖增长负责人、维护者、文档负责人、验证负责人、公开安全复核、独立本地运行、社区路由、首批贡献准备度、首次运行歧义、结构化反馈、负责人闸门公开叙事、公开安全读数、GitHub Discussions / Issues、WeChat 触达、开发者社交发布和复刻改名指南文案及源码守卫，不改英文参考表格、指标定义、验证命令、Cloud / Enterprise 非承诺边界或 GitHub intake 路径。
 - 继续收口 open-source growth 7-day plan 的中文增长运营术语混写；本批只改公开 Core 增长运营计划、认知、激活、社区接入、摩擦移除、商业发布批准、服务等级承诺、自动外联活动、公开发布、交付工程师激活闭环、合成样板包、激活摩擦、虚荣指标、理解 / 激活 / 贡献质量、触达信号、夹具改动、公开安全报告、可复现阻断项和激活证明文案及源码守卫，不改 7 日计划表、渠道表、指标定义、验证命令、Cloud / Enterprise 非承诺边界或 GitHub intake 路径。
 - 继续补齐 public open source operating model 的中文表格摘要；本批新增方向、OKR 与协作分工中文摘要，覆盖先信任后规模、激活优先于触达、贡献优先于扩张、证据推进集成、商业路径边界、PR 队列、激活证据、风险、请求决策、受控执行队列和工作流分工文案及源码守卫，不改英文参考表格、OKR 指标、工作流职责、验证命令、Cloud / Enterprise 非承诺边界或 owner-only 决策边界。
 - 继续收口 public open source operating model 的中文运营模型术语混写；本批只改公开 Core 使命、方向、运营方法、OKR / KPI 闭环、认证伙伴状态、生产服务等级承诺、客户部署就绪、自动对外发送 / 批准 / 结算、市场、插件沙箱、可复刻、有证据支撑、复核优先、运营闭环、公开守卫、夹具证据、激活回执、负责人闸门、触达指标和激活证据文案及源码守卫，不改 OKR 表格、工作流分解、验证命令、Cloud / Enterprise 非承诺边界或 owner-only 决策边界。
