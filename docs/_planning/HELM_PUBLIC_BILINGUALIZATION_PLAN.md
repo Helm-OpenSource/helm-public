@@ -38,6 +38,24 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口公开可见性 GO 决策回执的中文发布边界术语混写；只调整负责人 / 创始人身份、
+可见性 GO、仓库可见性、最终人工动作、切换公开、标签、GitHub 预发布、GitHub Discussions
+公告、发布门禁、完整模式、全部通过、自动步骤、人工回执、Clean History 回执、审计缺口、
+凭据轮换回执、法律文件、复核人批准编号、占位编号、发布机器、真实记录值、建议 / 承诺、
+复核优先和不自动写入 / 发送 / 批准 / 结算文案，不改变 GO 决策事实、tag / release /
+discussion 记录、release gate 命令或 owner-only 边界。
+
+This round further localizes mixed Chinese release-boundary terminology in the
+public visibility GO decision receipt. It changes owner / founder identity,
+visibility GO, repository visibility, final manual action, public flip, tag,
+GitHub prerelease, GitHub Discussions announcement, release gate, full mode,
+all clear, automated steps, manual receipts, Clean History receipt, audit gap,
+credential-rotation receipt, legal document, reviewer approval id, placeholder
+id, release machine, recorded values, recommendation / commitment,
+review-first, and no automatic write / send / approve / settle wording only,
+without changing the GO decision facts, tag / release / discussion records,
+release-gate command, or owner-only boundaries.
+
 本轮继续收口 Phase 3 脱敏实时校准回执的中文发布门禁术语混写；只调整公开安全回执、
 发布负责人、公开发布门禁、脱敏实时校准证据、原始客户数据、原始数据库行、工作区编号、
 客户标识符、私有复核人备注、私有部署证据、自动客户部署就绪、客户服务等级承诺、

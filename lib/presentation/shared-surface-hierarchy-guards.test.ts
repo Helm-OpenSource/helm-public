@@ -2257,6 +2257,43 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps visibility Go decision Chinese release-boundary copy localized", () => {
+    const visibilityGo = read(
+      "docs/reviews/HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md",
+    );
+    const chineseBody = visibilityGo.slice(
+      visibilityGo.indexOf("本文件记录 2026-06-01"),
+      visibilityGo.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("负责人（创始人身份）");
+    expect(chineseBody).toContain("可见性 **GO** 决策");
+    expect(chineseBody).toContain("仓库可见性");
+    expect(chineseBody).toContain("最终人工动作");
+    expect(chineseBody).toContain("切换为公开");
+    expect(chineseBody).toContain("GitHub 预发布");
+    expect(chineseBody).toContain("GitHub Discussions 公告");
+    expect(chineseBody).toContain("发布门禁");
+    expect(chineseBody).toContain("完整模式");
+    expect(chineseBody).toContain("全部通过");
+    expect(chineseBody).toContain("自动步骤");
+    expect(chineseBody).toContain("人工回执");
+    expect(chineseBody).toContain("Clean History 回执");
+    expect(chineseBody).toContain("审计缺口");
+    expect(chineseBody).toContain("运维保存 RDS 凭据轮换回执");
+    expect(chineseBody).toContain("真实复核人批准编号");
+    expect(chineseBody).toContain("占位编号");
+    expect(chineseBody).toContain("发布机器");
+    expect(chineseBody).toContain("真实记录值");
+    expect(chineseBody).toContain("建议不等于承诺");
+    expect(chineseBody).toContain("复核优先");
+    expect(chineseBody).toContain("不自动写入 / 发送 / 批准 / 结算");
+
+    expect(chineseBody).not.toMatch(
+      /owner|founder identity|visibility|repository visibility|manual action|flip|tag|prerelease|announcement|release gate|tagging|FULL mode|ALL CLEAR|automated steps|manual receipts|clean-history receipt|audit gaps|ops 保存|credential-rotation receipt|legal document|reviewer approval id|placeholder|release machine|recorded values|full release gate|recommendation|commitment|review-first|auto-write|send \/ approve \/ settle/,
+    );
+  });
+
   it("keeps clean-history receipt Chinese safety-scope copy localized", () => {
     const cleanHistoryReceipt = read(
       "docs/reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md",

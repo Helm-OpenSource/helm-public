@@ -16,6 +16,25 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：公开可见性 GO 决策回执的中文发布边界术语混写已继续清理；本批只改负责人 /
+创始人身份、可见性 GO、仓库可见性、最终人工动作、切换公开、标签、GitHub 预发布、GitHub
+Discussions 公告、发布门禁、完整模式、全部通过、自动步骤、人工回执、Clean History 回执、
+审计缺口、凭据轮换回执、法律文件、复核人批准编号、占位编号、发布机器、真实记录值、
+建议 / 承诺、复核优先和不自动写入 / 发送 / 批准 / 结算文案及源码守卫，不改变 GO 决策事实、
+tag / release / discussion 记录、release gate 命令或 owner-only 边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese release-boundary terminology in
+the public visibility GO decision receipt has been further localized. This
+batch changes owner / founder identity, visibility GO, repository visibility,
+final manual action, public flip, tag, GitHub prerelease, GitHub Discussions
+announcement, release gate, full mode, all clear, automated steps, manual
+receipts, Clean History receipt, audit gap, credential-rotation receipt, legal
+document, reviewer approval id, placeholder id, release machine, recorded
+values, recommendation / commitment, review-first, and no automatic write /
+send / approve / settle wording plus source guards only; it does not change the
+GO decision facts, tag / release / discussion records, release-gate command, or
+owner-only boundaries, and does not claim full-repo bilingualization completion.
+
 最新双语化收口：Phase 3 脱敏实时校准回执的中文发布门禁术语混写已继续清理；本批只改
 公开安全回执、发布负责人、公开发布门禁、脱敏实时校准证据、原始客户数据、原始数据库行、
 工作区编号、客户标识符、私有复核人备注、私有部署证据、自动客户部署就绪、客户服务等级承诺、

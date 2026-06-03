@@ -11,21 +11,18 @@ public_safety: Public-safe decision record. Captures the Go decision, gate evide
 
 ## 中文主文本 / Chinese Main Text
 
-本文件记录 2026-06-01 owner（founder identity）给出的 visibility **GO** 决策。
-repository visibility 已由 owner 作为最终 manual action flip 为 public。随后 owner 批准
-创建 `v0.1.0-trial` tag、GitHub prerelease（`--latest=false`）和 GitHub Discussions
-announcement。
+本文件记录 2026-06-01 负责人（创始人身份）给出的可见性 **GO** 决策。
+仓库可见性已由负责人作为最终人工动作切换为公开。随后负责人批准创建
+`v0.1.0-trial` 标签、GitHub 预发布（`--latest=false`）和 GitHub Discussions 公告。
 
-release gate 在 tagging 前以 FULL mode 重新运行并显示 ALL CLEAR：15/15 automated
-steps 与 7/7 manual receipts 均满足。历史安全证据由 clean-history receipt 记录。
+发布门禁在打标签前以完整模式重新运行并显示全部通过：15/15 个自动步骤与
+7/7 个人工回执均满足。历史安全证据由 Clean History 回执记录。
 
-仍需跟进的 audit gaps：ops 保存 RDS credential-rotation receipt；用 legal document
-中的真实 reviewer approval id 替换 placeholder；在 release machine 上用真实 recorded
-values 重新运行 full release gate。
+仍需跟进的审计缺口：运维保存 RDS 凭据轮换回执；用法律文件中的真实复核人批准编号替换
+占位编号；在发布机器上用真实记录值重新运行完整发布门禁。
 
-该 GO 决策不改变 Helm 硬边界：recommendation 不等于 commitment，review-first，
-不 auto-write / send / approve / settle，Core 不依赖 Pack 或 Overlay，也不声明
-`100% synthetic` provenance。
+该 GO 决策不改变 Helm 硬边界：建议不等于承诺，复核优先，不自动写入 / 发送 / 批准 / 结算，
+Core 不依赖 Pack 或 Overlay，也不声明 `100% synthetic` provenance。
 
 ## English Reference
 
