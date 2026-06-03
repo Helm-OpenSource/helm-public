@@ -51,6 +51,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized Helm v2 runtime trace / checkpoint resume API not-found / resume-failed fallback copy; this batch changes API-caller-visible fallback copy only and leaves runtime ownership, resume execution, and trace payloads unchanged.
 - Further localized WeCom / Feishu / DingTalk OAuth callback workspace-context fallback copy; this batch changes settings-redirect-visible error copy only and leaves OAuth, connector writes, and audit logic unchanged.
 - Further localized settings workspace switch action invalid / unavailable fallback copy; this batch changes action-caller-visible error copy only and leaves membership lookup, active-workspace setting, and locale-cookie success paths unchanged.
+- Further localized runtime signal collection cron API auth / method / job fallback copy; this batch changes API-caller-visible error copy only and leaves cron-token validation, jobKey parsing, and signal-collection dispatch unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
