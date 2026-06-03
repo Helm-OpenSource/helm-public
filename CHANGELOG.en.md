@@ -32,6 +32,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized Chinese boundary labels in customer-facing offer and commercial narrative detail views; this batch changes visible labels only and leaves customer-visible, internal-only, and non-commitment boundary protocols unchanged.
 - Further localized Chinese boundary notes, draft summaries, and risk-guard copy in the Helm v2 draft-comms runtime; this batch keeps artifact / enum / requestedAction protocol fields intact, adds equivalent Chinese mitigation detection, and grants no auto-send, auto-booking, or formal-commitment authority.
 - Further localized contrast-test and dark-mode-test low-frequency public test routes; this batch changes visible explanatory copy and locale reading only, and leaves palettes, theme switching, and accessibility-test semantics unchanged.
+- Further localized weekly-report service summaries and audit copy; this batch uses the existing workspace-locale input for bilingual summary / audit copy and leaves report metrics, permissions, and data structures unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
