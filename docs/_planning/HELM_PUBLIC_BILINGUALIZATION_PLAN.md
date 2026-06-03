@@ -49,6 +49,17 @@ controlled-tenant, on-call, and sub-processor wording only, without changing
 trace fields, audit objects, trial data policy, auto-send, or writeback
 boundaries.
 
+本轮继续收口 public trial data policy 的中文法律 / 数据保留术语混写；只调整工作区负责人、
+宽限期、子处理方、数据处理协议、删除请求、发布硬门禁、注册勾选框和数据保留清单文案，
+不改变 `AccessState` 枚举、30/7 目标口径、删除证明、数据导出、SLA 或未来 ToS / DPA 边界。
+
+This round further localizes mixed Chinese legal / data-retention terminology in
+the public trial data policy. It changes workspace-owner, grace-period,
+sub-processor, data-processing-agreement, deletion-request, release-hard-gate,
+registration-checkbox, and data-retention-checklist wording only, without
+changing `AccessState` enums, the 30/7 target posture, deletion attestations,
+data export, SLA, or future ToS / DPA boundaries.
+
 本轮继续收口 customer-facing offer 与 commercial narrative detail surface 的中文边界文案混写，
 只调整客户可见提案、对外叙事交接与商业叙事加固标签，不改变发送评估、外发、复核或非承诺边界。
 
@@ -583,6 +594,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-04 | 继续收口 public trial data policy 的中文法律 / 数据保留术语混写；本批只改工作区负责人、宽限期、子处理方、数据处理协议、删除请求、发布硬门禁、注册勾选框与数据保留清单文案及源码守卫，不改 `AccessState` 枚举、30/7 目标口径、删除证明、数据导出、SLA 或未来 ToS / DPA 边界；Further localized mixed Chinese legal / data-retention terminology in the public trial data policy; this batch changes workspace-owner, grace-period, sub-processor, data-processing-agreement, deletion-request, release-hard-gate, registration-checkbox, and data-retention-checklist wording plus source guards only and leaves `AccessState` enums, the 30/7 target posture, deletion attestations, data export, SLA, and future ToS / DPA boundaries unchanged |
 | 2026-06-04 | 继续收口 public trial runbook 里的中文运营术语混写；本批只改内部交接、复核动作、当前工作区、追踪时间线、发布硬门禁、连接器预演、受控租户、值守与子处理方文案及源码守卫，不改 trace 字段、审计对象、试用数据政策或自动外发 / 写回边界；Further localized mixed Chinese operational terminology in the public trial runbook; this batch changes internal-handoff, review-action, current-workspace, trace-timeline, release-hard-gate, connector-dry-run, controlled-tenant, on-call, and sub-processor wording plus source guards only and leaves trace fields, audit objects, trial data policy, auto-send, and writeback boundaries unchanged |
 | 2026-06-04 | 继续收口 customer success handoff detail / queue 的中文空格式与术语混写；本批只改交接路由、发送前复核、边界姿态、客户成功验收、队列派生与外发禁用文案及源码守卫，不改路由模型、队列派生或审批协议；Further localized mixed Chinese spacing and terminology in customer-success handoff detail / queue surfaces; this batch changes visible handoff-route, review-before-send, boundary-posture, success-check, derived-queue, and disabled-send copy plus source guards only and leaves route models, derived queues, and approval protocols unchanged |
 | 2026-06-04 | 继续收口 customer success handoff detail / queue 的剩余中文术语混写；本批只改接手、分诊、建议、负责人归属、客户成功收件箱与商业交接文案及源码守卫，不改派生队列、外发禁用或审批边界；Further localized remaining mixed Chinese terminology in customer-success handoff detail / queue surfaces; this batch changes visible handoff, triage, advisory, ownership, success-inbox, and commercial-handoff copy plus source guards only and leaves derived queues, disabled external send, and approval boundaries unchanged |

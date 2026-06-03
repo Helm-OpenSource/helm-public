@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 public trial data policy 的中文法律 / 数据保留术语混写；本批只改工作区负责人、宽限期、子处理方、数据处理协议、删除请求、发布硬门禁、注册勾选框与数据保留清单文案及源码守卫，不改 `AccessState` 枚举、30/7 目标口径、删除证明、数据导出、SLA 或未来 ToS / DPA 边界。
 - 继续收口 public trial runbook 里的中文运营术语混写；本批只改内部交接、复核动作、当前工作区、追踪时间线、发布硬门禁、连接器预演、受控租户、值守与子处理方文案及源码守卫，不改 `traceId / requestId / parentEventId`、`AuditLog`、试用数据政策或自动外发 / 写回边界。
 - 继续收口 Ask Helm / workspace story / trial runbook 里的中文 CRM 边界混写；本批只改经营信号上报、复核队列和试点 runbook 中的客户关系系统正式状态 / 阶段变更文案及源码守卫，不改 intent 分类、审计候选、trace 字段或写回权限。
 - 继续收口 demo / signal fixture 里的中文 CRM 混写；本批只改行业 demo pack 与 business advancement fixture 的客户关系系统阶段、记录、承诺、写回边界文案及源码守卫，不改 fixture id、sourceType、signalType 或 eval 合约。

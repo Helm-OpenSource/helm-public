@@ -2025,6 +2025,25 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps public trial data policy Chinese body free of recently fixed mixed legal fragments", () => {
+    const dataPolicy = read("docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md");
+    const chineseBody = dataPolicy.slice(dataPolicy.indexOf("更新时间："));
+
+    expect(chineseBody).toContain("30/7 数据保留期");
+    expect(chineseBody).toContain("注册同意勾选框");
+    expect(chineseBody).toContain("工作区负责人");
+    expect(chineseBody).toContain("宽限期结束前自助导出");
+    expect(chineseBody).toContain("公开试用工作区的目标生命周期");
+    expect(chineseBody).toContain("第三方子处理方");
+    expect(chineseBody).toContain("数据处理协议");
+    expect(chineseBody).toContain("发布硬门禁姿态");
+    expect(chineseBody).toContain("五月落地清单");
+
+    expect(chineseBody).not.toMatch(
+      /retention 是|checkbox|schema enum|retention sweep|deletion attestation|workspace owner|grace 期|公开试用 workspace|workspace 创建|read-only|retention 自动|sub-processor|data processing agreement|deletion request|workspace 数据|first-party 数据|soft-delete|release hard gate|launch plan 的 retention|五月落地 checklist|public trial 默认|single region|prompt \/ response|settings 中|banner|signup flow/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");
