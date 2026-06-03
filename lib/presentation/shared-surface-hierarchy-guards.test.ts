@@ -2156,6 +2156,37 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps D2 Docker smoke receipt Chinese proof-scope copy localized", () => {
+    const d2SmokeReceipt = read(
+      "docs/reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md",
+    );
+    const chineseBody = d2SmokeReceipt.slice(
+      d2SmokeReceipt.indexOf("本回执记录 PR #36"),
+      d2SmokeReceipt.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("D2 Docker 全新克隆冒烟验证");
+    expect(chineseBody).toContain("干净检出到新目录");
+    expect(chineseBody).toContain("随附 MySQL 8.4 服务");
+    expect(chineseBody).toContain("公开上手端点");
+    expect(chineseBody).toContain("被测 PR 分支");
+    expect(chineseBody).toContain("公开 Core Docker 快速启动冒烟验证");
+    expect(chineseBody).toContain("客户部署就绪");
+    expect(chineseBody).toContain("发布就绪");
+    expect(chineseBody).toContain("生产连接器凭据或回调就绪");
+    expect(chineseBody).toContain("生产数据保留");
+    expect(chineseBody).toContain("数据处理协议");
+    expect(chineseBody).toContain("服务等级承诺");
+    expect(chineseBody).toContain("事件流程就绪");
+    expect(chineseBody).toContain("客户 Overlay 就绪");
+    expect(chineseBody).toContain("运行时市场");
+    expect(chineseBody).toContain("自动对外发送 / 批准 / 结算 / 客户承诺权限");
+
+    expect(chineseBody).not.toMatch(
+      /fresh-clone smoke|clean checkout|bundled MySQL|service 初始化|public onboarding endpoints|tested PR branch|public Core Docker quickstart smoke|部署 ready|release ready|connector credential|callback\s+ready|retention \/ DPA \/ SLA \/ incident process ready|customer Overlay\s+ready|runtime marketplace|automatic external send|approval \/ settlement|customer commitment authority/,
+    );
+  });
+
   it("keeps public release train runbook Chinese body free of recently fixed mixed release-governance fragments", () => {
     const releaseTrainRunbook = read(
       "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",

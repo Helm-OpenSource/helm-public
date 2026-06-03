@@ -38,6 +38,23 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 D2 Docker 全新克隆冒烟回执的中文证明范围术语混写；只调整全新克隆冒烟验证、
+干净检出、随附 MySQL 服务、公开上手端点、被测 PR 分支、公开 Core Docker 快速启动冒烟验证、
+客户部署就绪、发布就绪、生产连接器凭据 / 回调、生产数据保留、数据处理协议、服务等级承诺、
+事件流程、客户 Overlay、运行时市场和自动对外发送 / 批准 / 结算 / 客户承诺权限文案，
+不改变 GitHub Actions 证据、D2 smoke 结论、Docker 命令、HTTP smoke 结果或非发布批准边界。
+
+This round further localizes mixed Chinese proof-scope terminology in the D2
+Docker fresh-clone smoke receipt. It changes fresh-clone smoke, clean checkout,
+bundled MySQL service, public onboarding endpoint, tested PR branch, public
+Core Docker quickstart smoke, customer deployment readiness, release readiness,
+production connector credential / callback, production data retention,
+data-processing agreement, service-level commitment, incident process,
+customer Overlay, runtime marketplace, and automatic external send / approval /
+settlement / customer-commitment authority wording only, without changing the
+GitHub Actions evidence, D2 smoke conclusion, Docker commands, HTTP smoke
+results, or non-release-approval boundary.
+
 本轮继续收口公开文档索引的中文入口术语混写；只调整公开 Core、样板 Pack、Docker 快速启动、
 复核、检查 / 复刻 / 首次改动、验证命令、公开安全证据路径、首次改动证明、黄金路径、扩展目录、
 运营信号流图、作业手册、值守姿态、发布节奏、周报包、证据路由包和密钥修复回执文案，
