@@ -50,6 +50,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续补齐 meeting runtime closeout / close server action 的 pre-session validation fallback；本批只改 action caller 可见错误文案，不改鉴权顺序、运行时状态机或执行边界。
 - 继续收口 public auth 表单密码确认 validation 文案；本批只改 action caller 可见错误文案，不改注册、登录、验证码或身份补全流程。
 - 继续收口 trial admin decision action 的复核权限、参数与更新失败文案；本批只改管理员可见错误文案，不改试用申请、复核权限或通知流程。
+- 继续收口 Helm v2 runtime trace / checkpoint resume API 的 not-found / resume-failed fallback 文案；本批只改 API caller 可见 fallback，不改 runtime ownership、续传执行或 trace payload。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -104,6 +105,7 @@ English reference:
 - Further filled meeting runtime closeout / close server-action pre-session validation fallbacks; this batch changes action-caller-visible error copy only and leaves authorization order, runtime state machines, and execution boundaries unchanged.
 - Further localized public-auth password confirmation validation copy; this batch changes action-caller-visible error copy only and leaves signup, login, verification-code, and identity-completion flows unchanged.
 - Further localized trial admin decision action review-permission, payload, and update-failure copy; this batch changes admin-visible error copy only and leaves trial applications, review permissions, and notification flows unchanged.
+- Further localized Helm v2 runtime trace / checkpoint resume API not-found / resume-failed fallback copy; this batch changes API-caller-visible fallback copy only and leaves runtime ownership, resume execution, and trace payloads unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

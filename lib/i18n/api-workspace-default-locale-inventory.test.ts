@@ -177,6 +177,11 @@ const reviewedApiWorkspaceDefaultLocaleEntries = [
       "app/api/helm-v2/runtime/checkpoints/[id]/resume/route.ts",
   },
   {
+    path: "app/api/helm-v2/runtime/sessions/[id]/trace/route.ts",
+    documentToken:
+      "app/api/helm-v2/runtime/sessions/[id]/trace/route.ts",
+  },
+  {
     path: "app/api/helm-v2/runtime/consolidation/jobs/[id]/status/route.ts",
     documentToken:
       "app/api/helm-v2/runtime/consolidation/jobs/[id]/status/route.ts",
