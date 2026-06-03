@@ -37,6 +37,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 weekly report 生成服务的摘要与审计文案；本批使用既有 workspace locale 入参生成中英文 summary / audit copy，不改报告指标、权限或数据结构。
 - 继续收口 Helm v2/runtime API validation fallback 文案；本批使用 workspace default locale 解析常见参数、受众与 session / meeting 缺失错误，不改 route 权限、状态码或 payload 结构。
 - 继续收口 meeting server action 的 pre-session validation fallback 文案；本批对校验先于 workspace session 的 action 使用中英并列 fallback，不改鉴权顺序、运行时状态机或执行边界。
+- 继续收口 blockers / commitments / memory API 的 validation 与失败 fallback 文案；本批只改 API caller 可见错误文案，不改权限、状态码、schema 或 memory/runtime 服务调用。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -78,6 +79,7 @@ English reference:
 - Further localized weekly-report service summaries and audit copy; this batch uses the existing workspace-locale input for bilingual summary / audit copy and leaves report metrics, permissions, and data structures unchanged.
 - Further localized Helm v2/runtime API validation fallback copy; this batch resolves common parameter, audience, and session / meeting missing errors from workspace default locale and leaves route permissions, status codes, and payload structures unchanged.
 - Further localized meeting server-action pre-session validation fallback copy; this batch uses explicit zh/en fallback for actions that validate before loading workspace session and leaves authorization order, runtime state machines, and execution boundaries unchanged.
+- Further localized blockers / commitments / memory API validation and failure fallback copy; this batch changes API-caller-visible error copy only and leaves permissions, status codes, schemas, and memory / runtime service calls unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

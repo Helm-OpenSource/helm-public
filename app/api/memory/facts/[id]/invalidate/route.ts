@@ -1,6 +1,9 @@
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { assertWorkspaceMemoryFactOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+} from "@/lib/i18n/api-message-locale";
 import { invalidateMemoryFact } from "@/lib/memory/correction.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { invalidateMemoryFactSchema } from "@/lib/memory/schemas";
@@ -14,7 +17,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const payload = invalidateMemoryFactSchema.safeParse(await request.json().catch(() => ({})));
 
   if (!payload.success) {
-    return errorResponse(payload.error.issues[0]?.message ?? "参数不完整");
+    return errorResponse(
+      resolveApiValidationIssueMessage(workspace.defaultLocale, payload.error.issues[0]?.message),
+    );
   }
 
   if (!canManageMemoryFacts(membership.role)) {
@@ -47,7 +52,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "记忆失效失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to invalidate memory fact"
+          : "记忆失效失败",
       isWorkspaceOwnershipError(error) ? "FACT_NOT_FOUND" : "INVALIDATE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );
