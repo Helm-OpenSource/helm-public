@@ -228,7 +228,7 @@ export default async function ContactsPage() {
           <Button variant="secondary" asChild>
             <Link href="/imports/crm">
               <Building2 className="h-4 w-4" />
-              {english ? "Connect CRM data" : "连接 CRM 数据"}
+              {english ? "Connect CRM data" : "连接客户关系系统数据"}
             </Link>
           </Button>
         </CardContent>

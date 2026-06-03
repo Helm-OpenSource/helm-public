@@ -120,6 +120,16 @@ change Ask Helm form actions, audit candidates, context packets, report
 generation, or analytics query logic, and does not claim full-repo
 bilingualization completion.
 
+object entry surfaces 的中文 CRM 混写也已继续清理；本批只改 proposals、meetings、
+companies、contacts 与 business asset detail 的客户关系系统提示文案及源码守卫，
+不改变对象查询、路由、导入入口或资产信号逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese CRM copy in object entry surfaces has also been further localized.
+This batch changes customer-relationship-system guidance copy in proposals,
+meetings, companies, contacts, and business asset detail plus source guards
+only; it does not change object queries, routing, import entrypoints, or
+asset-signal logic, and does not claim full-repo bilingualization completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。

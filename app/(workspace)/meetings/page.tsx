@@ -381,7 +381,7 @@ export default async function MeetingsPage() {
                 description={
                   english
                     ? "New meetings from CRM, imports or capture will appear here."
-                    : "新的 CRM、导入或记录会议会出现在这里。"
+                    : "新的客户关系系统、导入或记录会议会出现在这里。"
                 }
               />
             )}

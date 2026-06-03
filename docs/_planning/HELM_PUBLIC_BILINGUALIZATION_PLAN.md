@@ -179,6 +179,15 @@ fields, formal-must-push wording, large-model context-layer wording, raw-prompt
 copy plus source guards only, without changing Ask Helm form actions, audit
 candidates, context packets, report generation, or analytics query logic.
 
+本轮继续收口 object entry surfaces 的中文 CRM 混写；只调整 proposals、meetings、
+companies、contacts 与 business asset detail 的客户关系系统提示文案及源码守卫，
+不改变对象查询、路由、导入入口或资产信号逻辑。
+
+This round further localizes mixed Chinese CRM copy in object entry surfaces. It
+changes customer-relationship-system guidance copy in proposals, meetings,
+companies, contacts, and business asset detail plus source guards only, without
+changing object queries, routing, import entrypoints, or asset-signal logic.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

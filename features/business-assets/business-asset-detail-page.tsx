@@ -208,7 +208,7 @@ export function BusinessAssetDetailPage({
               description={
                 english
                   ? "Once meetings, CRM changes, promises, or risks mention this asset, they will appear here first."
-                  : "会议、CRM 变化、承诺或风险一旦指向这个资产，会先出现在这里。"
+                  : "会议、客户关系系统变化、承诺或风险一旦指向这个资产，会先出现在这里。"
               }
               presetTone="judgement"
             />

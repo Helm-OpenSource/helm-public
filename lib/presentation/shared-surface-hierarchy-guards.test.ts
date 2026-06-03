@@ -1943,4 +1943,25 @@ describe("shared surface hierarchy guards", () => {
       /写 CRM 状态|CRM 字段|正式 Must Push|受限 LLM|LLM 仅|LLM 推理|不保留 raw|扩大 CRM 接入|CRM 优先|Helm 会基于|AI 工作姿态|先看 AI|最近 AI 工作记录|查看 AI/,
     );
   });
+
+  it("keeps object entry surfaces using localized CRM wording", () => {
+    const proposalsPage = read("app/(workspace)/proposals/page.tsx");
+    const meetingsPage = read("app/(workspace)/meetings/page.tsx");
+    const companiesPage = read("app/(workspace)/companies/page.tsx");
+    const contactsPage = read("app/(workspace)/contacts/page.tsx");
+    const businessAssetPage = read(
+      "features/business-assets/business-asset-detail-page.tsx",
+    );
+    const combined = `${proposalsPage}\n${meetingsPage}\n${companiesPage}\n${contactsPage}\n${businessAssetPage}`;
+
+    expect(proposalsPage).toContain("客户关系系统信号或会议承诺");
+    expect(meetingsPage).toContain("新的客户关系系统、导入或记录会议");
+    expect(companiesPage).toContain("导入客户关系系统数据或从会议带入");
+    expect(contactsPage).toContain("连接客户关系系统数据");
+    expect(businessAssetPage).toContain("会议、客户关系系统变化、承诺或风险");
+
+    expect(combined).not.toMatch(
+      /CRM 信号|新的 CRM|导入 CRM|连接 CRM 数据|CRM 变化/,
+    );
+  });
 });
