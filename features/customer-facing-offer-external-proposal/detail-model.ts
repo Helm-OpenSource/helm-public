@@ -229,7 +229,7 @@ export function buildExternalProposalPageContract({
       : "当前只允许使用 可对外提案措辞对外；所有表述都必须保持范围明确且可回退。",
     externalProposalPageInternalOnlyCue: english
       ? "Internal objections, scope tension and dependency repair notes remain review-only."
-      : "internal 异议、范围张力和依赖修复备注仍然只适合复核层使用。",
+      : "内部异议、范围张力和依赖修复备注仍然只适合复核层使用。",
     externalProposalPageNonCommitmentCue: english
       ? "This external proposal remains non-commitment unless a human explicitly approves stronger reinforcement."
       : "当前外部提案仍属于非承诺，除非人工明确批准更强加固。",
@@ -238,8 +238,8 @@ export function buildExternalProposalPageContract({
       sendabilityMode === "safe_to_send" ||
       sendabilityMode === "safe_with_boundary"
         ? english
-          ? "A可发送 review surface is already prepared, but a human still decides whether the next version is safe enough to move."
-          : "当前已经准备好可发送 复核 面，但下一版是否足够安全仍由人工决定。"
+          ? "A sendability review surface is already prepared, but a human still decides whether the next version is safe enough to move."
+          : "当前已经准备好可发送复核面，但下一版是否足够安全仍由人工决定。"
         : english
           ? "The proposal still needs coordinated review before anyone treats it as ready for outward use."
           : "这版提案在任何人把它视为可对外使用之前，仍需要联合复核。",
@@ -487,7 +487,7 @@ function buildBoundaryLineForSendability(
   if (mode === "safe_to_send") {
     return english
       ? "Safe-to-send still means send-safe wording, not contract-level commitment."
-      : "可发送 只代表当前措辞可以安全发送，不代表 contract-level 承诺。";
+      : "可发送只代表当前措辞可以安全发送，不代表合同级承诺。";
   }
   if (mode === "safe_with_boundary") {
     return english

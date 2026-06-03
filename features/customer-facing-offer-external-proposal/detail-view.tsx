@@ -474,7 +474,7 @@ function buildUnifiedNavigation({
                 : "客户面向报价详情",
               summary: english
                 ? "Return to the lighter customer offer if the external proposal still needs a safer surface."
-                : "如果外部提案仍需要更安全的表达表面，就回到更轻的客户 offer。",
+                : "如果外部提案仍需要更安全的表达表面，就回到更轻的客户提案。",
             },
       detailNodeNext:
         mode === "customer-offer"
@@ -504,10 +504,10 @@ function buildUnifiedNavigation({
         mode === "customer-offer"
           ? english
             ? "Use this detail when the customer-visible offer still needs sendability plus boundary cues tightly attached."
-            : "当客户可见提案 仍需要把发送评估与边界线索紧贴主叙事放置时，停在这里。"
+            : "当客户可见提案仍需要把发送评估与边界线索紧贴主叙事放置时，停在这里。"
           : english
             ? "Use this detail when the work is already in the structured external proposal phase and the next question is reinforcement, not more raw offer drafting."
-            : "当工作已经进入结构化的外部提案阶段，下一步问题变成加固而不是继续起草原始提案 时，停在这里。",
+            : "当工作已经进入结构化的外部提案阶段，下一步问题变成加固而不是继续起草原始提案时，停在这里。",
     },
     handoffs:
       mode === "customer-offer"
@@ -527,7 +527,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction:
                 protocol.pageNextAction[0]?.label ??
-                (english ? "Open customer-facing offer detail" : "打开客户可见提案 detail"),
+                (english ? "Open customer-facing offer detail" : "打开客户可见提案详情"),
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode:
@@ -541,7 +541,7 @@ function buildUnifiedNavigation({
               handoffTarget: "conversation",
               handoffReason: english
                 ? "The customer-facing offer is coherent enough that the next useful move is scene-specific talk-track guidance, not another round of lighter copy edits."
-                : "当前客户可见提案 已经足够连贯，下一步真正有价值的是场景化 话术指引，而不是继续改更轻的文案。",
+                : "当前客户可见提案已经足够连贯，下一步真正有价值的是场景化话术指引，而不是继续改更轻的文案。",
               handoffBoundary: protocol.pageBoundarySummary[0],
               handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
               handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -551,7 +551,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction: english
                 ? "Open conversation detail"
-                : "打开对话 detail",
+                : "打开对话详情",
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode:
@@ -567,7 +567,7 @@ function buildUnifiedNavigation({
               handoffTarget: "external-proposal",
               handoffReason: english
                 ? "A more structured external proposal layer is needed now, not another round of fragmented offer bullets."
-                : "当前需要的是更结构化的外部提案层，而不是继续堆零散的 offer bullet。",
+                : "当前需要的是更结构化的外部提案层，而不是继续堆零散的报价要点。",
               handoffBoundary: protocol.pageBoundarySummary[0],
               handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
               handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -577,7 +577,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction:
                 protocol.pageNextAction[0]?.label ??
-                (english ? "Open external proposal detail" : "打开外部提案 detail"),
+                (english ? "Open external proposal detail" : "打开外部提案详情"),
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode:
@@ -602,7 +602,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction: english
                 ? "Open reinforcement detail"
-                : "打开加固 detail",
+                : "打开加固详情",
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode: "internal-only",

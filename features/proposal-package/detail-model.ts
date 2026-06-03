@@ -284,7 +284,7 @@ export function buildPackagePageContract({
           : "当前方案包已适合进入销售 / 交付复核，但还不能被当成客户承诺。"
         : english
           ? "This package can move into a customer-safe version, while still keeping the non-commitment boundary explicit."
-          : "当前方案包可以整理成客户安全 版本，但仍要把非承诺边界写明。",
+          : "当前方案包可以整理成客户安全版本，但仍要把非承诺边界写明。",
     packagePageJudgementReason:
       detail.briefingSnapshot?.payload.summary ??
       (english
@@ -293,7 +293,7 @@ export function buildPackagePageContract({
     packagePageActionSummary: [
       english
         ? "The current package view already groups scope pressure, dependency pressure and the latest review-ready summary."
-        : "当前方案包视图已经把范围压力、依赖压力和最新复核-ready 摘要收在一起。",
+        : "当前方案包视图已经把范围压力、依赖压力和最新待复核摘要收在一起。",
       signals.pendingApprovalCount
         ? english
           ? `${signals.pendingApprovalCount} approval-sensitive actions are already intercepted, so this page is not pretending risk does not exist.`
