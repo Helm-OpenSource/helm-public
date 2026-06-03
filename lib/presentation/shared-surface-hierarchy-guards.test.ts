@@ -2231,6 +2231,42 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps HSI requirements Chinese body localized for review-first signal boundary terminology", () => {
+    const hsiRequirements = read(
+      "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",
+    );
+    const chineseBody = hsiRequirements.slice(
+      hsiRequirements.indexOf("Helm 无头信号接口"),
+      hsiRequirements.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("Helm 无头信号接口");
+    expect(chineseBody).toContain("公开、可复刻的契约");
+    expect(chineseBody).toContain("复核优先的运营信号");
+    expect(chineseBody).toContain("客户关系系统替代品");
+    expect(chineseBody).toContain("托管 agent 运行时");
+    expect(chineseBody).toContain("工作流引擎、市场");
+    expect(chineseBody).toContain("执行平面");
+    expect(chineseBody).toContain("公开契约只覆盖包清单");
+    expect(chineseBody).toContain("合成 / 脱敏夹具");
+    expect(chineseBody).toContain("确定性评测门禁");
+    expect(chineseBody).toContain("复核包准备");
+    expect(chineseBody).toContain("边界证据");
+    expect(chineseBody).toContain("交付闭环可诊断");
+    expect(chineseBody).toContain("复刻 Helm");
+    expect(chineseBody).toContain("准备复核包");
+    expect(chineseBody).toContain("受控试点");
+    expect(chineseBody).toContain("第一阶段保持仅离线");
+    expect(chineseBody).toContain("运行时查询");
+    expect(chineseBody).toContain("生产连接器");
+    expect(chineseBody).toContain("正式写入");
+    expect(chineseBody).toContain("大模型最终排名");
+
+    expect(chineseBody).not.toMatch(
+      /Headless Signal Interface|可 fork|contract|review-first|operating signals|CRM replacement|hosted agent runtime|workflow engine|marketplace|execution plane|pack manifests|synthetic \/ redacted fixtures|deterministic eval gates|review packet preparation|boundary evidence|delivery loop|fork Helm|inspect sample pack|map source fields|safe fixtures|run HSI eval|inspect operating signal output|prepare review packet|controlled pilot|HSI contract|Phase 1|offline-only|runtime query|API route|schema migration|production connector|hosted MCP|official write|auto-send|auto-approve|auto-execute|LLM final ranking/,
+    );
+  });
+
   it("keeps OPC weekly packet Chinese body free of recently fixed mixed public-operations fragments", () => {
     const opcPacket = read("docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md");
     const chineseBody = opcPacket.slice(

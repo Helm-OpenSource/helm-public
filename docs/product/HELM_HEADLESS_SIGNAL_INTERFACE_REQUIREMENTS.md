@@ -18,27 +18,26 @@ archive_trigger:
 
 ## 中文主文本 / Chinese Main Text
 
-Helm Headless Signal Interface（HSI）是公开、可 fork 的 contract，帮助交付工程师
-把既有业务系统转成 review-first operating signals。它不是 CRM replacement、hosted
-agent runtime、workflow engine、marketplace 或 execution plane。
+Helm 无头信号接口（HSI）是公开、可复刻的契约，帮助交付工程师把既有业务系统转成
+复核优先的运营信号。它不是客户关系系统替代品、托管 agent 运行时、工作流引擎、市场
+或执行平面。
 
-HSI 的公开 contract 只覆盖 pack manifests、synthetic / redacted fixtures、
-deterministic eval gates、review packet preparation，以及客户试点前可检查的
-boundary evidence。它的第一目标是让 delivery loop 可诊断：
+HSI 的公开契约只覆盖包清单、合成 / 脱敏夹具、确定性评测门禁、复核包准备，
+以及客户试点前可检查的边界证据。它的第一目标是让交付闭环可诊断：
 
 ```text
-fork Helm
-  -> inspect sample pack
-  -> map source fields into safe fixtures
-  -> run HSI eval
-  -> inspect operating signal output
-  -> prepare review packet
-  -> decide whether a controlled pilot is ready
+复刻 Helm
+  -> 检查样板包
+  -> 把来源字段映射到安全夹具
+  -> 运行 HSI 评测
+  -> 检查运营信号输出
+  -> 准备复核包
+  -> 判断是否已经可以进入受控试点
 ```
 
-通过 HSI contract 是客户部署的必要但不充分条件。Phase 1 保持 offline-only，不授权
-runtime query、API route、schema migration、production connector、hosted MCP、official
-write、auto-send、auto-approve、auto-execute 或 LLM final ranking。
+通过 HSI 契约是客户部署的必要但不充分条件。第一阶段保持仅离线，不授权运行时查询、
+API 路由、schema 迁移、生产连接器、托管 MCP、正式写入、自动发送、自动批准、自动执行
+或大模型最终排名。
 
 ## English Reference
 

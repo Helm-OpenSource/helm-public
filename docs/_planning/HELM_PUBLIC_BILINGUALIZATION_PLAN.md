@@ -38,6 +38,25 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 HSI 要求文档的中文复核优先信号边界术语混写；只调整无头信号接口、
+公开可复刻契约、复核优先运营信号、客户关系系统替代品、托管 agent 运行时、工作流引擎、市场、
+执行平面、包清单、合成 / 脱敏夹具、确定性评测门禁、复核包准备、边界证据、交付闭环、
+复刻 / 检查 / 映射 / 评测 / 复核链路、受控试点、仅离线、运行时查询、API 路由、schema 迁移、
+生产连接器、正式写入、自动发送 / 批准 / 执行和大模型最终排名文案，不改变 HSI 英文参考、
+评测命令、阶段门禁、只读离线边界或不自动执行边界。
+
+This round further localizes mixed Chinese review-first signal-boundary
+terminology in the HSI requirements doc. It changes headless signal interface,
+public forkable contract, review-first operating signals, CRM replacement,
+hosted agent runtime, workflow engine, marketplace, execution plane, pack
+manifests, synthetic / redacted fixtures, deterministic eval gates, review
+packet preparation, boundary evidence, delivery loop, fork / inspect / map /
+eval / review chain, controlled pilot, offline-only, runtime query, API route,
+schema migration, production connector, official write, automatic send /
+approval / execution, and LLM final ranking wording only, without changing the
+HSI English reference, eval command, stage gates, read-only offline boundary, or
+no-auto-execution boundary.
+
 本轮继续收口开源与 Cloud Trial 发布姿态文档的中文发布治理术语混写；只调整发布批准、
 私有发布回执、负责人 Go/No-Go、人工打标签、Core 源码、Docker 快速启动、公开样板 Pack、
 无 SLA 试用姿态、密钥轮换回执、控制面授权状态、私有发布负责人批准记录、发布机器、
