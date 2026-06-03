@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口开源与 Cloud Trial 发布姿态文档的中文发布治理术语混写；本批只改发布批准、私有发布回执、负责人 Go/No-Go、人工打标签、Core 源码、Docker 快速启动、公开样板 Pack、无 SLA 试用姿态、密钥轮换回执、控制面授权状态、私有发布负责人批准记录、发布机器、发布通道 / 目标标签 / 目标标题、预发布、稳定语义化版本标签、稳定线和企业级 SLA 文案及源码守卫，不改 release check、GitHub Release、人工标签流程、Cloud Trial 可选路径或非 SLA 边界。
 - 继续收口交付工程师黄金路径要求的中文要求 / 边界术语混写；本批只改交付工程师黄金路径、公开 Core 要求契约、判断 / 证据 / 复核 / 边界 / 交付包工作、可复刻工程结构、已有表面、验证契约、公开样板包、公开文档、公开测试、离线评测、部署注册表、版本清单、健康心跳、用量元数据、零新增表面、相对门禁措辞、证据门禁、仓库可见性切换、负责人动作、黄金路径最小链路、信号 / 复核包路径和禁止写入 / 发送 / 批准 / 执行 / 跨租户路径文案及源码守卫，不改英文参考、跨仓路由、验收命令、Docker 快速启动、样板包结构或非承诺边界。
 - 继续收口 Codex 工作入口的中文公开仓边界术语混写；本批只改公开 Core 贡献者、私有源仓拆分执行者、私有域名、联系人、凭据、内部规划 / 复核归档、公开文档、私有多代理交接、复核包、发布回执和客户交付作业手册文案及源码守卫，不改 public-docs manifest、公开文档收录流程、验证命令或私有交接资料不得进公开仓的边界。
 - 继续收口公开维护者状态文档的中文维护者运营术语混写，并补齐中文证据、四档、风险队列和下一步摘要；本批只改维护者运营基线、项目健康快照、发布批准、商业服务等级承诺、公开仓库表面、发布与标签姿态、维护者风险、运营队列、负责人批准记录、凭据轮换回执、法律复核记录、自动写入 / 发送 / 批准 / 结算 / 客户承诺路径、维护者运营闭环、issue 分诊、社区上手、外部测试、发布元数据卫生和必需检查漂移监控文案及源码守卫，不改英文参考表格、GitHub 证据、分支保护、发布姿态、仅负责人回执边界或 Cloud / Enterprise 非承诺边界。

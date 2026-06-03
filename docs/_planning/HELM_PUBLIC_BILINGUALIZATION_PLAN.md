@@ -38,6 +38,22 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口开源与 Cloud Trial 发布姿态文档的中文发布治理术语混写；只调整发布批准、
+私有发布回执、负责人 Go/No-Go、人工打标签、Core 源码、Docker 快速启动、公开样板 Pack、
+无 SLA 试用姿态、密钥轮换回执、控制面授权状态、私有发布负责人批准记录、发布机器、
+发布通道 / 目标标签 / 目标标题、预发布、稳定语义化版本标签、稳定线和企业级 SLA 文案，
+不改变 release check、GitHub Release、人工标签流程、Cloud Trial 可选路径或非 SLA 边界。
+
+This round further localizes mixed Chinese release-governance terminology in
+the open-source and Cloud Trial launch posture doc. It changes release
+approval, private release receipt, owner Go/No-Go, manual tagging, Core source,
+Docker quickstart, public sample Pack, no-SLA trial posture,
+secret-rotation receipt, control-plane entitlement state, private release-owner
+approval record, release machine, release channel / target tag / target title,
+prerelease, stable semver tag, stable line, and enterprise SLA wording only,
+without changing release checks, GitHub Releases, manual tagging flow, the
+optional Cloud Trial path, or non-SLA boundaries.
+
 本轮继续收口交付工程师黄金路径要求的中文要求 / 边界术语混写；只调整交付工程师黄金路径、
 公开 Core 要求契约、判断 / 证据 / 复核 / 边界 / 交付包工作、可复刻工程结构、已有表面、
 验证契约、公开样板包、公开文档、公开测试、离线评测、部署注册表、版本清单、健康心跳、

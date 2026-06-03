@@ -2134,6 +2134,40 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps open-source and Cloud Trial launch posture Chinese body localized for release-governance terminology", () => {
+    const launchPosture = read(
+      "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
+    );
+    const chineseBody = launchPosture.slice(
+      launchPosture.indexOf("本文记录 Helm Core"),
+      launchPosture.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("公开发布姿态");
+    expect(chineseBody).toContain("发布批准");
+    expect(chineseBody).toContain("私有发布回执");
+    expect(chineseBody).toContain("负责人 Go/No-Go");
+    expect(chineseBody).toContain("人工打标签决策");
+    expect(chineseBody).toContain("Apache-2.0 Core 源码");
+    expect(chineseBody).toContain("本地 Docker 快速启动");
+    expect(chineseBody).toContain("公开样板 Pack");
+    expect(chineseBody).toContain("无 SLA 的试用姿态");
+    expect(chineseBody).toContain("密钥轮换回执");
+    expect(chineseBody).toContain("控制面授权状态");
+    expect(chineseBody).toContain("私有发布负责人批准记录");
+    expect(chineseBody).toContain("人工打标签步骤");
+    expect(chineseBody).toContain("发布机器");
+    expect(chineseBody).toContain("发布通道、目标标签和目标标题");
+    expect(chineseBody).toContain("试用版只能按预发布");
+    expect(chineseBody).toContain("稳定语义化版本标签");
+    expect(chineseBody).toContain("已有稳定线");
+    expect(chineseBody).toContain("企业级 SLA");
+
+    expect(chineseBody).not.toMatch(
+      /release approval|release receipt|owner approval|人工 tagging|Core source|Docker quickstart|public sample Pack|no-SLA|trial posture|secret rotation receipt|control-plane entitlement state|release owner approval record|manual tagging|trial \/ stable release train|release machine|release channel|target tag|target title|prerelease|stable semver tag|stable line|enterprise SLA/,
+    );
+  });
+
   it("keeps public roadmap Chinese body free of recently fixed mixed roadmap-boundary fragments", () => {
     const publicRoadmap = read("docs/roadmap/HELM_PUBLIC_ROADMAP.md");
     const chineseBody = publicRoadmap.slice(

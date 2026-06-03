@@ -11,20 +11,20 @@ public_safety: Public launch posture. Private release receipts and customer depl
 
 ## 中文主文本 / Chinese Main Text
 
-本文记录 Helm Core 与可选 Cloud Trial 路径的公开发布姿态。它不是 release
-approval，也不能替代私有 release receipt、owner Go/No-Go 或人工 tagging 决策。
+本文记录 Helm Core 与可选 Cloud Trial 路径的公开发布姿态。它不是发布批准，
+也不能替代私有发布回执、负责人 Go/No-Go 或人工打标签决策。
 
-可以公开的是 Apache-2.0 Core source、本地 Docker quickstart、public sample Pack、
-公开贡献 / 安全 / 治理文档，以及 no-SLA 的 trial posture。必须保留在私有侧的是
-客户 overlay、客户部署证据、商业 Pack 实现细节、secret rotation receipt、
-基础设施证明、control-plane entitlement state 和私有 release owner approval record。
+可以公开的是 Apache-2.0 Core 源码、本地 Docker 快速启动、公开样板 Pack、
+公开贡献 / 安全 / 治理文档，以及无 SLA 的试用姿态。必须保留在私有侧的是
+客户 overlay、客户部署证据、商业 Pack 实现细节、密钥轮换回执、
+基础设施证明、控制面授权状态和私有发布负责人批准记录。
 
-`npm run release:check` 只判断维护者是否可以进入人工 tagging 步骤；它不会创建
-tag 或 GitHub Release。后续 trial / stable release train 必须在 release machine 上
-显式设置 release channel、target tag 和 target title。trial 只能按 prerelease 且
-`--latest=false` 发布；stable 必须使用稳定 semver tag 并推进已有 stable line。
+`npm run release:check` 只判断维护者是否可以进入人工打标签步骤；它不会创建
+标签或 GitHub Release。后续试用版 / 稳定版发布列车必须在发布机器上
+显式设置发布通道、目标标签和目标标题。试用版只能按预发布且
+`--latest=false` 发布；稳定版必须使用稳定语义化版本标签并推进已有稳定线。
 
-Cloud Trial 是 Apache-2.0 Core 之外的可选路径，默认不产生 enterprise SLA。
+Cloud Trial 是 Apache-2.0 Core 之外的可选路径，默认不产生企业级 SLA。
 
 ## English Reference
 
