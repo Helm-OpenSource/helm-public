@@ -58,6 +58,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 runtime dispatch-notifications 与 DingTalk hourly sync cron API 的 auth / validation fallback 文案；本批只改 API caller 可见错误文案，不改 cron token 校验、DingTalk 采集或 signal notification dispatch。
 - 继续收口 billing checkout 的 payment-rail 不可用 fallback 文案；本批只改 settings action 可见错误文案，不改支付通道解析、checkout 创建、结算或窄支付边界。
 - 继续收口 billing portal 的 customer-missing fallback 文案；本批只改 settings action 可见错误文案，不改 portal eligibility、Stripe portal 创建、支付通道解析或结算边界。
+- 继续收口 Stripe checkout missing-redirect fallback 文案；本批只改 settings action 可见错误文案，不改 Stripe checkout 创建、审计顺序、支付通道解析或结算边界。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -120,6 +121,7 @@ English reference:
 - Further localized runtime dispatch-notifications and DingTalk hourly-sync cron API auth / validation fallback copy; this batch changes API-caller-visible error copy only and leaves cron-token validation, DingTalk ingest, and signal-notification dispatch unchanged.
 - Further localized billing-checkout payment-rail unavailable fallback copy; this batch changes settings-action-visible error copy only and leaves payment-rail resolution, checkout creation, settlement, and the narrow-payment boundary unchanged.
 - Further localized billing-portal customer-missing fallback copy; this batch changes settings-action-visible error copy only and leaves portal eligibility, Stripe portal creation, payment-rail resolution, and settlement boundaries unchanged.
+- Further localized Stripe checkout missing-redirect fallback copy; this batch changes settings-action-visible error copy only and leaves Stripe checkout creation, audit ordering, payment-rail resolution, and settlement boundaries unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

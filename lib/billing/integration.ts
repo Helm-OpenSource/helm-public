@@ -149,6 +149,12 @@ function getMissingBillingCustomerMessage(english: boolean) {
     : "当前组织还没有可管理的付费客户，请先完成订阅购买。";
 }
 
+function getStripeCheckoutMissingRedirectMessage(english: boolean) {
+  return english
+    ? "Stripe checkout session did not return a redirect URL"
+    : "Stripe checkout session 未返回跳转 URL";
+}
+
 function getRefreshAvailabilityMessage(rail: PaymentRailResolution, english: boolean) {
   if (rail.provider === PAYMENT_PROVIDER.STRIPE) {
     return english
@@ -546,7 +552,7 @@ export async function createWorkspaceCheckoutSession(input: {
     });
 
     if (!checkout.url) {
-      throw new Error("Stripe checkout session did not return a redirect URL");
+      throw new Error(getStripeCheckoutMissingRedirectMessage(english));
     }
 
     return checkout.url;
