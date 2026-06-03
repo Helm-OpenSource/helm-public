@@ -61,6 +61,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized Alipay / WeChat Pay checkout-not-configured fallback copy; this batch changes China-payment checkout config-error copy only and leaves signing, notify, query, payment requests, and the narrow-payment boundary unchanged.
 - Further localized connector action env-configuration fallback copy; this batch changes Aliyun founder-default and DingTalk app-agent-id missing prompts only and leaves connector permissions, sync, invite sending, and credential lookup logic unchanged.
 - Further localized WeCom / Feishu / DingTalk OAuth callback-state fallback copy; this batch changes settings-redirect-visible missing-state copy quality only and leaves OAuth, sessions, connector writes, and public-login fallback unchanged.
+- Further localized mixed Chinese copy in CRM import dynamic display text; this batch changes Chinese display-cleanup rules only and leaves connector onboarding, import preview, warmup, and conflict handling unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

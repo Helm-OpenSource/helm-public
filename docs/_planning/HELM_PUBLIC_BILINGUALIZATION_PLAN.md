@@ -274,6 +274,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-04 | 继续收口 CRM import 动态显示文案中的中文混写；本批只改中文显示清洗规则，不改连接器接入、导入预览、预热或冲突处理逻辑；Further localized mixed Chinese copy in CRM import dynamic display text; this batch changes Chinese display-cleanup rules only and leaves connector onboarding, import preview, warmup, and conflict handling unchanged |
 | 2026-06-04 | 继续收口企业微信 / 飞书 / 钉钉 OAuth callback state fallback 文案；本批只改 settings redirect 可见缺 state 文案质量，不改 OAuth、session、connector 写入或 public-login fallback；Further localized WeCom / Feishu / DingTalk OAuth callback-state fallback copy; this batch changes settings-redirect-visible missing-state copy quality only and leaves OAuth, sessions, connector writes, and public-login fallback unchanged |
 | 2026-06-04 | 继续收口连接器 action 的 env 配置错误 fallback 文案；本批只改 Aliyun founder default 与 DingTalk app agent id 缺失提示，不改连接器权限、同步、邀请发送或凭据读取逻辑；Further localized connector action env-configuration fallback copy; this batch changes Aliyun founder-default and DingTalk app-agent-id missing prompts only and leaves connector permissions, sync, invite sending, and credential lookup logic unchanged |
 | 2026-06-04 | 继续收口 Alipay / WeChat Pay checkout 未配置 fallback 文案；本批只改中国区支付 checkout 配置错误文案，不改签名、notify、query、支付请求或窄支付边界；Further localized Alipay / WeChat Pay checkout-not-configured fallback copy; this batch changes China-payment checkout config-error copy only and leaves signing, notify, query, payment requests, and the narrow-payment boundary unchanged |
