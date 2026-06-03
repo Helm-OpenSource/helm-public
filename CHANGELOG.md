@@ -4,6 +4,8 @@ This project follows a release-note-first changelog until the first public tag.
 
 ## Unreleased
 
+- Parameterized `npm run release:check` for later trial and stable release trains.
+- Added the public release train runbook and refreshed the maintainer status baseline.
 - Added the first public Core operating model with mission, OKRs, KPIs, and workstream boundaries.
 - Added public issue / PR intake templates and an OPC weekly packet template.
 - Added a China accessibility and evidence-routing packet for public-safe activation proof.

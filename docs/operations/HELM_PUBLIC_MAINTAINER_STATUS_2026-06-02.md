@@ -36,24 +36,24 @@ Out of scope:
 | Repository visibility | Public | GitHub repository `Helm-OpenSource/helm-public`, `visibility=PUBLIC`, `isPrivate=false` |
 | Default branch | `main` | GitHub default branch metadata |
 | License | Apache-2.0 | GitHub license metadata and `LICENSE` |
-| Latest local / remote head | Synced | `main@fb0ce2e` / `origin/main@fb0ce2e` |
-| Latest `main` checks | Green | CI and Preflight succeeded for `fb0ce2e` on 2026-06-01 |
+| Latest GitHub `main` head | Synced | `main@e8994a0cccb379e10423650d84049a5b17d227da` / `origin/main@e8994a0cccb379e10423650d84049a5b17d227da` |
+| Latest `main` checks | Green | CI and Preflight succeeded for `e8994a0cccb379e10423650d84049a5b17d227da` on 2026-06-03 |
 | Branch protection | Enabled | Strict required checks, PR review required, admin enforcement on, force pushes and deletions disabled |
 | Trial release | Published as prerelease | `v0.1.0-trial`, published 2026-06-01 13:54:20 UTC |
-| Open PR queue | Clear | `gh pr list --state open` returned `[]` |
+| Open PR queue | Clear | `gh pr list --state open` returned `[]` on 2026-06-03 |
 | Open issue queue | One public onboarding issue | Issue #39: Golden Path testing, labels `documentation`, `good first issue`, `help wanted` |
 | Discussions | Open | Discussion #49 launch announcement and #41 welcome thread |
-| Community profile | Partially complete | GitHub community profile health: 75%; missing issue and PR templates |
+| Contribution intake | Established | `.github/ISSUE_TEMPLATE/*` and `.github/pull_request_template.md` are present |
 | Public docs curation | Established | `docs/public-docs-manifest.json` plus `npm run check:public-docs` |
 
 ## Four-Tier Maintainer Readout
 
 | Tier | Items |
 | --- | --- |
-| Already established | Public Apache-2.0 Core repository; public docs index; CI / Preflight on `main`; branch protection; prerelease tag and launch announcement; no open PR backlog |
-| Formed but needs next layer | Maintainer operating loop; issue triage; community onboarding; Golden Path external testing; release metadata hygiene; required-check drift monitoring |
-| Deliberately not done | Issue / PR template creation, release latest-status changes, Cloud / Enterprise readiness claims |
-| Risks | Issue / PR templates are absent; GitHub community profile docs metadata still points to `tree/master/docs`; older `V1.0.0` remains repository Latest while `v0.1.0-trial` is the public Core prerelease; required check names must be kept in sync with workflow job names |
+| Already established | Public Apache-2.0 Core repository; public docs index; CI / Preflight on `main`; branch protection; prerelease tag and launch announcement; issue / PR templates; release train runbook; no open PR backlog |
+| Formed but needs next layer | Maintainer operating loop; issue triage; community onboarding; Golden Path external testing; release metadata hygiene; required-check drift monitoring; day-7 growth readout |
+| Deliberately not done | Release latest-status changes, Cloud / Enterprise readiness claims, stable release approval |
+| Risks | GitHub community profile docs metadata still points to `tree/master/docs`; older `V1.0.0` remains repository Latest while `v0.1.0-trial` is the public Core prerelease; required check names must be kept in sync with workflow job names |
 
 ## Maintainer Risk Queue
 
@@ -82,11 +82,23 @@ Current protection:
 Operational caution: if workflow job names change, maintainers must update the
 required-check context list before merging the workflow rename.
 
-### P1 - Add contribution intake templates
+### P1 - Add contribution intake templates - closed on 2026-06-02
 
-GitHub Community Profile reports no issue template and no pull request template.
-This leaves public contributors without a structured place to declare goal,
-boundary confirmation, verification commands, and rights-to-contribute status.
+Issue templates and the pull request template now give public contributors a
+structured place to declare goal, boundary confirmation, verification commands,
+and rights-to-contribute status.
+
+### P1 - Establish reusable release train runbook - closed on 2026-06-03
+
+The release train now has a public-safe runbook and parameterized
+`release:check` target controls:
+
+- `HELM_RELEASE_CHANNEL=trial|stable`
+- `HELM_RELEASE_TARGET_TAG=<tag>`
+- `HELM_RELEASE_TARGET_TITLE=<release title>`
+
+The runbook preserves the existing owner gate: `release:check` never creates
+tags or GitHub Releases, and private receipt values stay off-repo.
 
 ### P1 - Fix repository metadata drift
 
@@ -111,12 +123,11 @@ public-safe machine receipt is created.
 
 ## Next Operating Queue
 
-1. Monitor the first protected PR merge path and adjust required-check contexts
-   only if GitHub reports job-name drift.
-2. Add issue and PR templates that encode scope, boundary, verification, and
-   rights confirmation.
-3. Correct repository documentation metadata from `master/docs` to `main/docs`.
-4. Decide release latest posture for old `V1.0.0` versus `v0.1.0-trial`.
+1. Decide release latest posture for old `V1.0.0` versus `v0.1.0-trial`.
+2. Correct repository documentation metadata from `master/docs` to `main/docs`.
+3. Run the day-7 public growth readout on 2026-06-09 using public-safe evidence.
+4. Use the release train runbook for the next `v0.2.0-trial` candidate only
+   after full gate and owner receipt checks.
 5. Keep issue #39 active as the first public Golden Path testing route and
    convert verified feedback into small PRs only after scope review.
 

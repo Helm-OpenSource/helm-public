@@ -19,6 +19,7 @@ import {
   STEPS,
   buildReleaseTagStrategy,
   getPublicMirrorCleanReceiptPath,
+  resolveReleaseTargetFromEnv,
   validatePublicMirrorCleanReceiptDocument,
   validateApprovalRecordId,
   validateCalibrationReportPathContract,
@@ -251,6 +252,137 @@ describe("release readiness manual receipt truth", () => {
       "git push origin v0.1.0-trial",
       'gh release create v0.1.0-trial --verify-tag --title "Helm v0.1.0-trial" --prerelease --latest=false --generate-notes --notes-start-tag V1.0.0',
     ]);
+  });
+
+  it("uses configured trial release target and title without marking it latest", () => {
+    const strategy = buildReleaseTagStrategy({
+      currentHead: "79bc11653a7ce99787f1ae350ee1d89749f3b4dd",
+      existingTags: [
+        {
+          name: "V1.0.0",
+          targetCommit: "bc0413ff8fce20a43dd0a3452970f8971e76de1d",
+        },
+      ],
+      targetTag: "v0.2.0-trial",
+      targetTitle: "Helm v0.2.0-trial",
+      releaseChannel: "trial",
+    });
+
+    expect(strategy.blockingIssues).toEqual([]);
+    expect(strategy.releaseFlags).toEqual([
+      "--prerelease",
+      "--latest=false",
+      "--generate-notes",
+      "--notes-start-tag V1.0.0",
+    ]);
+    expect(strategy.manualCommands).toEqual([
+      'git tag -a v0.2.0-trial 79bc11653a7ce99787f1ae350ee1d89749f3b4dd -m "Helm v0.2.0-trial release gate passed"',
+      "git push origin v0.2.0-trial",
+      'gh release create v0.2.0-trial --verify-tag --title "Helm v0.2.0-trial" --prerelease --latest=false --generate-notes --notes-start-tag V1.0.0',
+    ]);
+  });
+
+  it("uses stable release flags only when the configured stable tag advances the stable line", () => {
+    const strategy = buildReleaseTagStrategy({
+      currentHead: "79bc11653a7ce99787f1ae350ee1d89749f3b4dd",
+      existingTags: [
+        {
+          name: "V1.0.0",
+          targetCommit: "bc0413ff8fce20a43dd0a3452970f8971e76de1d",
+        },
+      ],
+      targetTag: "v1.0.1",
+      targetTitle: "Helm v1.0.1",
+      releaseChannel: "stable",
+    });
+
+    expect(strategy.blockingIssues).toEqual([]);
+    expect(strategy.releaseFlags).toEqual([
+      "--latest",
+      "--generate-notes",
+      "--notes-start-tag V1.0.0",
+    ]);
+    expect(strategy.manualCommands).toEqual([
+      'git tag -a v1.0.1 79bc11653a7ce99787f1ae350ee1d89749f3b4dd -m "Helm v1.0.1 release gate passed"',
+      "git push origin v1.0.1",
+      'gh release create v1.0.1 --verify-tag --title "Helm v1.0.1" --latest --generate-notes --notes-start-tag V1.0.0',
+    ]);
+  });
+
+  it("blocks stable release targets that do not advance the existing stable line", () => {
+    const strategy = buildReleaseTagStrategy({
+      currentHead: "79bc11653a7ce99787f1ae350ee1d89749f3b4dd",
+      existingTags: [
+        {
+          name: "V1.0.0",
+          targetCommit: "bc0413ff8fce20a43dd0a3452970f8971e76de1d",
+        },
+      ],
+      targetTag: "v0.2.0",
+      targetTitle: "Helm v0.2.0",
+      releaseChannel: "stable",
+    });
+
+    expect(strategy.blockingIssues.join("\n")).toContain(
+      "must be greater than existing stable release tag V1.0.0",
+    );
+    expect(strategy.manualCommands).toEqual([]);
+  });
+
+  it("blocks stable release targets that only duplicate the existing stable version", () => {
+    const strategy = buildReleaseTagStrategy({
+      currentHead: "79bc11653a7ce99787f1ae350ee1d89749f3b4dd",
+      existingTags: [
+        {
+          name: "V1.0.0",
+          targetCommit: "bc0413ff8fce20a43dd0a3452970f8971e76de1d",
+        },
+      ],
+      targetTag: "v1.0.0",
+      targetTitle: "Helm v1.0.0",
+      releaseChannel: "stable",
+    });
+
+    expect(strategy.blockingIssues.join("\n")).toContain(
+      "must be greater than existing stable release tag V1.0.0",
+    );
+    expect(strategy.manualCommands).toEqual([]);
+  });
+
+  it("resolves release target configuration from env while preserving trial defaults", () => {
+    expect(resolveReleaseTargetFromEnv({})).toEqual({
+      configurationErrors: [],
+      releaseChannel: "trial",
+      targetTag: "v0.1.0-trial",
+      targetTitle: "Helm v0.1.0-trial",
+    });
+
+    expect(
+      resolveReleaseTargetFromEnv({
+        HELM_RELEASE_CHANNEL: "stable",
+        HELM_RELEASE_TARGET_TAG: "v1.0.1",
+        HELM_RELEASE_TARGET_TITLE: "Helm v1.0.1",
+      }),
+    ).toEqual({
+      configurationErrors: [],
+      releaseChannel: "stable",
+      targetTag: "v1.0.1",
+      targetTitle: "Helm v1.0.1",
+    });
+  });
+
+  it("fails closed when release channel configuration is invalid", () => {
+    expect(
+      resolveReleaseTargetFromEnv({
+        HELM_RELEASE_CHANNEL: "production",
+        HELM_RELEASE_TARGET_TAG: "v1.0.1",
+      }),
+    ).toEqual({
+      configurationErrors: ["HELM_RELEASE_CHANNEL must be trial or stable."],
+      releaseChannel: "trial",
+      targetTag: "v1.0.1",
+      targetTitle: "Helm v1.0.1",
+    });
   });
 
   it("blocks manual tagging when the target release tag already points at another commit", () => {
