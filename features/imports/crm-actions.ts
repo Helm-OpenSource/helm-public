@@ -104,7 +104,7 @@ export async function disconnectCrmSourceAction(sourceId: string) {
   if (!source) {
     return {
       ok: false,
-      error: "CRM 导入来源不存在",
+      error: "客户关系系统导入来源不存在",
     };
   }
 

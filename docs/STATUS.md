@@ -228,6 +228,17 @@ guards only; it does not change request schemas, permission checks, import
 execution, or error status codes, and does not claim full-repo bilingualization
 completion.
 
+imports 服务层里的中文 CRM 混写也已继续清理；本批只改客户关系系统导入预热 actor、任务导入
+记忆 / 审计摘要、导入来源缺失和失败 fallback 文案及源码守卫，不改变导入编排、对象写入、
+审计字段或 warmup 逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese CRM copy in import services has also been further localized. This
+batch changes customer-relationship-system import warmup actors, task-import
+memory / audit summaries, missing-source fallback, and failure fallback wording
+plus source guards only; it does not change import orchestration, object writes,
+audit fields, or warmup logic, and does not claim full-repo bilingualization
+completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或

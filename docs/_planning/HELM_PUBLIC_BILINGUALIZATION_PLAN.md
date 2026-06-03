@@ -273,6 +273,16 @@ failure wording in the preview / run / sync routes plus source guards only,
 without changing request schemas, permission checks, import execution, or error
 status codes.
 
+本轮继续收口 imports 服务层里的中文 CRM 混写；只调整客户关系系统导入预热 actor、任务导入
+记忆 / 审计摘要、导入来源缺失和失败 fallback 文案及源码守卫，不改变导入编排、对象写入、
+审计字段或 warmup 逻辑。
+
+This round further localizes mixed Chinese CRM copy in import services. It
+changes customer-relationship-system import warmup actors, task-import memory /
+audit summaries, missing-source fallback, and failure fallback wording plus
+source guards only, without changing import orchestration, object writes, audit
+fields, or warmup logic.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

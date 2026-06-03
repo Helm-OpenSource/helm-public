@@ -59,7 +59,7 @@ export async function runImportWarmup(input: {
     await hydrateMeetingMemoryFromNote({
       workspaceId: input.workspaceId,
       meetingId,
-      actorName: "CRM 导入预热",
+      actorName: "客户关系系统导入预热",
       actorType: "SYSTEM",
       actorUserId: input.userId ?? null,
       sourcePage: "/imports/crm",
@@ -105,7 +105,7 @@ export async function runImportWarmup(input: {
       actorUserId: input.userId ?? null,
       objectType: target.objectType,
       objectId: target.objectId,
-      actorName: "CRM 导入预热",
+      actorName: "客户关系系统导入预热",
       actorType: "SYSTEM",
       sourcePage: "/imports/crm",
     });
@@ -123,7 +123,7 @@ export async function runImportWarmup(input: {
   await writeAuditLog({
     workspaceId: input.workspaceId,
     userId: input.userId ?? null,
-    actor: "CRM 导入预热",
+    actor: "客户关系系统导入预热",
     actorType: "SYSTEM",
     actionType: "IMPORT_WARMUP_COMPLETED",
     targetType: "ImportJob",
