@@ -2218,7 +2218,7 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseOpening).toContain("先建立信任再扩大规模");
     expect(chineseOpening).toContain("先激活再触达");
     expect(chineseOpening).toContain("先贡献再扩张");
-    expect(chineseOpening).toContain("用证据推进集成");
+    expect(chineseOpening).toContain("集成必须从来源对象、数据流、夹具、预演和复核边界开始");
     expect(chineseOpening).toContain("边界明确的开放核心");
     expect(chineseOpening).toContain("公开守卫");
     expect(chineseOpening).toContain("夹具证据");
@@ -2228,6 +2228,42 @@ describe("shared surface hierarchy guards", () => {
 
     expect(chineseOpening).not.toMatch(
       /public Core mission|operating method|KPI loop|certified partner status|production SLA|customer deployment readiness|automatic external send|automatic approval|automatic settlement|marketplace|plugin sandbox|mission 是|operations work|forkable|evidence-backed|review-first|operating loop|trust before scale|activation before reach|contribution before expansion|integration by evidence|open-core with explicit boundary|公开 guard|fixture evidence|activation receipt|owner gate|public SLA|reach metrics|activation evidence/,
+    );
+  });
+
+  it("keeps public operating model Chinese table summaries covering direction, OKR, and workstreams", () => {
+    const operatingModel = read(
+      "docs/operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md",
+    );
+    const chineseOpening = operatingModel.slice(
+      operatingModel.indexOf("方向摘要："),
+      operatingModel.indexOf("## English Reference"),
+    );
+
+    expect(chineseOpening).toContain("方向摘要");
+    expect(chineseOpening).toContain("先建立信任再扩大规模");
+    expect(chineseOpening).toContain("先用克隆、运行、夹具和首次改动证明激活");
+    expect(chineseOpening).toContain("触达信号");
+    expect(chineseOpening).toContain("先让贡献者能理解、验证和复核小能力");
+    expect(chineseOpening).toContain(
+      "集成必须从来源对象、数据流、夹具、预演和复核边界开始",
+    );
+    expect(chineseOpening).toContain("商业路径必须保持可选且有清晰边界");
+    expect(chineseOpening).toContain("服务等级承诺或客户承诺已经就绪");
+    expect(chineseOpening).toContain("OKR 摘要");
+    expect(chineseOpening).toContain("公开 Core 要保持可信且可合并");
+    expect(chineseOpening).toContain("第一条交付工程师闭环要可复现");
+    expect(chineseOpening).toContain("贡献者入口要变成可靠运营队列");
+    expect(chineseOpening).toContain("周度运营包只汇总 PR 队列、激活证据、风险、请求决策和");
+    expect(chineseOpening).toContain("受控执行队列");
+    expect(chineseOpening).toContain("决策必须和建议分开");
+    expect(chineseOpening).toContain("协作分工摘要");
+    expect(chineseOpening).toContain("维护者执行负责小 PR、检查、复核和受保护分支纪律");
+    expect(chineseOpening).toContain("增长运营先把公开可见性转成激活和首次改动证据");
+    expect(chineseOpening).toContain("复核优先的集成路径");
+
+    expect(chineseOpening).not.toMatch(
+      /Trust before scale|Activation before reach|Contribution before expansion|Integration by evidence|Open-core with explicit boundary|reach signals only|owner gate|roadmap commitment|customer commitment readiness|Weekly operating packets|controlled execution queue|decisions are separated from recommendations|Maintainer execution|Workstream Decomposition/,
     );
   });
 
