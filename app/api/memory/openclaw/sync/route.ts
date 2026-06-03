@@ -41,7 +41,10 @@ export async function POST(request: Request) {
       maxItems: parsed.data.maxItems,
     });
 
-    return successResponse(stats, "openclaw memory sync completed");
+    return successResponse(
+      stats,
+      english ? "OpenClaw memory sync completed" : "OpenClaw 记忆同步已完成",
+    );
   } catch (error) {
     const safeMessage =
       buildOpenClawOperatorSafeErrorSummary(error instanceof Error ? error.message : String(error)) ??

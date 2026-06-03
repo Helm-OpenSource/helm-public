@@ -115,6 +115,7 @@ This PR's source audit result:
    recommendations API 的 validation / success / failure fallback 文案、memory timeline /
    evolution patterns / problem-spaces API 的低频 validation / source label 文案、
    conversation capture 服务层的 fallback transcript / speaker label / audit summary 文案、
+   conversation capture ingest 与 OpenClaw memory sync API 的 success message、
    memory export API 的 text/plain 导出正文标签、LLM / briefing API 的失败 fallback 文案、
    evolution skill / strategy suggestion API 的 failure / success message 已继续收口。
    这些目标文件的本批次严格可见残留已清理；全工程广义 ASCII 中文分支扫描与严格可见
@@ -165,7 +166,8 @@ This PR's source audit result:
    failure copy, plus recommendations API validation / success / failure
    fallback copy, plus low-frequency validation / source-label copy in the memory
    timeline, evolution patterns, and problem-spaces APIs, plus conversation-capture
-   service fallback transcript / speaker-label / audit-summary copy, plus text/plain
+   service fallback transcript / speaker-label / audit-summary copy, plus
+   conversation-capture ingest and OpenClaw memory-sync API success messages, plus text/plain
    export-body labels in the memory export API, plus LLM / briefing API failure
    fallback copy, plus evolution skill / strategy suggestion API failure / success
    messages, have also been localized
@@ -284,6 +286,7 @@ true:
 | 2026-06-03 | 继续收口 recommendations API 的 validation、success 与 failure fallback 文案；本批只改 API caller 可见 message，不改推荐生成、排序、埋点、反馈权限或 payload 结构；Further localized recommendations API validation, success, and failure fallback copy; this batch changes API-caller-visible messages only and leaves recommendation generation, ranking, tracking, feedback permissions, and payload structures unchanged |
 | 2026-06-03 | 继续收口 memory timeline、evolution patterns 与 problem-spaces API 的低频 validation / source label 文案；本批只改 API caller 可见文案与默认 source label，不改查询、权限、runtime ownership 或 problem-space 创建逻辑；Further localized low-frequency validation / source-label copy in the memory timeline, evolution patterns, and problem-spaces APIs; this batch changes API-caller-visible copy plus default source labels only and leaves queries, permissions, runtime ownership, and problem-space creation logic unchanged |
 | 2026-06-03 | 继续收口 conversation capture 服务层的 fallback transcript、speaker label 与审计摘要文案；本批只改 capture caller / audit 可见文案，不改权限、ASR、落库结构或处理流程；Further localized conversation-capture service fallback transcript, speaker-label, and audit-summary copy; this batch changes capture-caller / audit-visible copy only and leaves permissions, ASR, persistence structure, and processing flow unchanged |
+| 2026-06-04 | 继续收口 conversation capture ingest 与 OpenClaw memory sync API 的成功 message；本批只改 API caller 可见成功文案，不改 capture 权限、ownership、落库流程、OpenClaw host-local 同步边界或错误脱敏；Further localized conversation-capture ingest and OpenClaw memory-sync API success messages; this batch changes API-caller-visible success copy only and leaves capture permissions, ownership checks, persistence flow, OpenClaw host-local sync boundaries, and error redaction unchanged |
 | 2026-06-03 | 继续收口 memory export API 的 text/plain 导出正文标签；本批只改导出文件内的 caller 可见文案，不改查询、权限、审计 payload、headers 或文件名；Further localized text/plain export-body labels in the memory export API; this batch changes caller-visible copy inside the exported file only and leaves queries, permissions, audit payloads, headers, and filenames unchanged |
 | 2026-06-03 | 继续收口 LLM / briefing API 的失败 fallback 文案；本批只改 API caller 可见失败文案，不改 insight / memory 权限、ownership 校验、LLM 调用或返回 payload 结构；Further localized LLM / briefing API failure fallback copy; this batch changes API-caller-visible failure copy only and leaves insight / memory permissions, ownership checks, LLM calls, and response payload structures unchanged |
 | 2026-06-04 | 继续收口 evolution skill / strategy suggestion API 的失败 fallback 文案；本批只改 API caller 可见失败文案，不改 workspace policy 权限、ownership 校验、能力晋级、正式复核或策略建议状态机；Further localized evolution skill / strategy suggestion API failure fallback copy; this batch changes API-caller-visible failure copy only and leaves workspace-policy permissions, ownership checks, capability promotion, formal review, and strategy-suggestion state machines unchanged |
