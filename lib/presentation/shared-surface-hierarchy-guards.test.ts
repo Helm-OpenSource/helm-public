@@ -1757,4 +1757,29 @@ describe("shared surface hierarchy guards", () => {
       /draft 已形成|低风险 draft-only 行动层|交接 资料|CS 接手面|触发 Meeting Analyst|人工确认 meeting facts|object 经营记忆 晋升|主管关注 标记|对 draft 制品|交付 checklist|当前 workspace 的经营摘要|promised 范围|open risks|first 14 day plan|进入 正式write 意图阶段|system-of-record 边界|最近 acknowledgement|相关 meeting \/ 机会|正式write 意图创建|受控正式集成 边界|执行 proof|scratch 只用于|learned pattern 必须|晋升 rule 当前是 none|system-of-record 校验/,
     );
   });
+
+  it("keeps opportunity judge runtime Chinese output copy free of mixed operational fragments", () => {
+    const opportunityJudge = read(
+      "lib/helm-v2/opportunity-judge-runtime.ts",
+    );
+
+    expect(opportunityJudge).toContain("当前还缺少足够的决策标准");
+    expect(opportunityJudge).toContain("当前仍缺少明确支持人 / 负责人");
+    expect(opportunityJudge).toContain("预算或采购决策标准仍未确认");
+    expect(opportunityJudge).toContain("需要主管复核措辞和让步边界");
+    expect(opportunityJudge).toContain("升级给主管 / 操作员共同复核");
+    expect(opportunityJudge).toContain("当前无需额外主管升级");
+    expect(opportunityJudge).toContain("历史时间线当前主要指向");
+    expect(opportunityJudge).toContain("已复用对象经营记忆");
+    expect(opportunityJudge).toContain("当前支持人 / 负责人仍不明确");
+    expect(opportunityJudge).toContain("已批准只表示允许把判断消费进阴影摘要");
+    expect(opportunityJudge).toContain("下一步摘要已生成");
+    expect(opportunityJudge).toContain("机会判断套件已就绪：阶段差异");
+    expect(opportunityJudge).toContain("当前没有新增主管关注标记");
+    expect(opportunityJudge).toContain("当前没有新增主管升级信号");
+
+    expect(opportunityJudge).not.toMatch(
+      /decision criteria|champion \/ 负责人|主管 复核|主管 \/操作员|额外 主管|仅阴影 复核|历史 timeline|object 经营记忆|判断 消费进阴影摘要|下一步摘要 已生成|操作员\/ 主管|stage差异|套件 已就绪|新增 主管 升级/,
+    );
+  });
 });

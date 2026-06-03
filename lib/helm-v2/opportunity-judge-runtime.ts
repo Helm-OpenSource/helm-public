@@ -503,7 +503,7 @@ function buildDecisionCriteria(input: {
 
   if (criteria.length === 0) {
     criteria.push({
-      label: "当前还缺少足够的 decision criteria，需要先补充结构化会后确认。",
+      label: "当前还缺少足够的决策标准，需要先补充结构化会后确认。",
       status: "missing",
       source: "inferred",
       evidenceRefs: input.evidenceRefs,
@@ -621,7 +621,7 @@ function buildManagerAttentionFlags(input: {
     flags.push({
       key: "missing_champion",
       severity: "high",
-      detail: "当前仍缺少明确 champion / 负责人，容易导致推进动作在客户侧失焦。",
+      detail: "当前仍缺少明确支持人 / 负责人，容易导致推进动作在客户侧失焦。",
       evidenceRefs: input.evidenceRefs,
     });
   }
@@ -639,7 +639,7 @@ function buildManagerAttentionFlags(input: {
       key: "budget_uncertainty",
       severity: "high",
       detail:
-        "预算或采购 decision criteria 仍未确认，不适合把当前判断上升成正式承诺。",
+        "预算或采购决策标准仍未确认，不适合把当前判断上升成正式承诺。",
       evidenceRefs: input.evidenceRefs,
     });
   }
@@ -653,7 +653,7 @@ function buildManagerAttentionFlags(input: {
       key: "pricing_sensitivity",
       severity: "medium",
       detail:
-        "价格 / 折扣敏感项已经出现，需要 主管 复核措辞和让步边界。",
+        "价格 / 折扣敏感项已经出现，需要主管复核措辞和让步边界。",
       evidenceRefs: input.evidenceRefs,
     });
   }
@@ -708,7 +708,7 @@ function buildManagerAttentionFlags(input: {
       key: "escalation_candidate",
       severity: "high",
       detail:
-        "这条机会已经具备升级给 主管 /操作员共同复核的必要条件。",
+        "这条机会已经具备升级给主管 / 操作员共同复核的必要条件。",
       evidenceRefs: input.evidenceRefs,
     });
   }
@@ -751,7 +751,7 @@ function buildNextStepBrief(input: {
           .map((item) => item.detail)
           .slice(0, 2)
           .join("；")
-      : "当前无需额外 主管 升级，但仍建议保留仅阴影 复核。";
+      : "当前无需额外主管升级，但仍建议保留仅阴影复核。";
 
   const ownerName = input.meeting.owner?.name ?? "当前负责人";
 
@@ -882,7 +882,7 @@ export function buildOpportunityJudgeArtifacts(input: {
       : []),
     ...(input.historicalTimeline.length > 0
       ? [
-          `历史 timeline 当前主要指向：${trimText(input.historicalTimeline[0] ?? "", 80)}`,
+          `历史时间线当前主要指向：${trimText(input.historicalTimeline[0] ?? "", 80)}`,
         ]
       : []),
   ].filter(Boolean);
@@ -896,14 +896,14 @@ export function buildOpportunityJudgeArtifacts(input: {
           .join("；")}。`
       : "当前卡点仍可控。",
     input.relevantObjectMemory.length > 0
-      ? `已复用 object 经营记忆：${trimText(input.relevantObjectMemory[0] ?? "", 56)}。`
-      : "当前仍需继续补充 object 经营记忆。",
+      ? `已复用对象经营记忆：${trimText(input.relevantObjectMemory[0] ?? "", 56)}。`
+      : "当前仍需继续补充对象经营记忆。",
   ].join(" ");
 
   const openQuestions = listUniqueStrings(
     ...input.actionPack.openQuestions,
     ...(championStatus === "missing"
-      ? ["当前 champion / 负责人仍不明确。"]
+      ? ["当前支持人 / 负责人仍不明确。"]
       : []),
     ...decisionCriteria
       .filter((item) => item.status !== "confirmed")
@@ -972,7 +972,7 @@ export function buildOpportunityJudgeArtifacts(input: {
             .map((item) => item.detail)
             .slice(0, 3)
             .join("；")
-        : "当前没有新增 主管关注 标记，但仍建议保留仅阴影 复核。",
+        : "当前没有新增主管关注标记，但仍建议保留仅阴影复核。",
     evidenceRefs: input.evidenceRefs,
     sourceProvenance: input.sourceProvenance,
     confidence: deltaArtifact.confidence,
@@ -1019,7 +1019,7 @@ export function buildOpportunityJudgeArtifacts(input: {
     reviewStatus: "pending_review",
     boundaryNotes,
     approvedMeans:
-      "approved 只表示允许把判断 消费进阴影摘要，并供后续 展示面 / 时间线 / 检查点使用。",
+      "已批准只表示允许把判断消费进阴影摘要，并供后续展示面 / 时间线 / 检查点使用。",
     approvedDoesNotMean: SHADOW_APPROVED_DOES_NOT_MEAN_NOTE,
     noOfficialWriteback: true,
   };
@@ -1226,7 +1226,7 @@ async function persistOpportunityJudgeArtifacts(input: {
       artifactType: "next_step_brief.md",
       title: `${input.source.meeting.opportunity?.title ?? input.source.meeting.title} next-step brief`,
       summary:
-        "下一步摘要 已生成，面向操作员/ 主管 / 销售负责人，仍保持仅内部姿态。",
+        "下一步摘要已生成，面向操作员 / 主管 / 销售负责人，仍保持仅内部姿态。",
       approvalTier: resolveApprovalRule("opportunity.shadow_update").tier,
       reviewPosture: "requires_shadow_review",
       artifactsJson: jsonStringify(input.artifacts.nextStepBrief),
@@ -1252,7 +1252,7 @@ async function persistOpportunityJudgeArtifacts(input: {
       artifactType: "opportunity_judgement_bundle.json",
       title: `${input.source.meeting.opportunity?.title ?? input.source.meeting.title} opportunity judgement bundle`,
       summary:
-        "机会判断套件 已就绪：stage差异、主管关注和下一步摘要 已进入独立复核。",
+        "机会判断套件已就绪：阶段差异、主管关注和下一步摘要已进入独立复核。",
       approvalTier: resolveApprovalRule("opportunity.shadow_update").tier,
       reviewPosture: "requires_shadow_review",
       artifactsJson: jsonStringify(input.artifacts.bundle),
@@ -1643,7 +1643,7 @@ async function consumeReviewedOpportunityJudgement(input: {
           .map((item) => item.detail)
           .slice(0, 2)
           .join("；")
-      : "当前没有新增 主管 升级信号。";
+      : "当前没有新增主管升级信号。";
 
   await db.opportunity.update({
     where: { id: input.meeting.opportunityId ?? undefined },

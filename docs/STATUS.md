@@ -58,6 +58,17 @@ it does not change event types, contract keys, request / response shapes,
 memory-layer keys, or promotion-rule logic, and does not claim full-repo
 bilingualization completion.
 
+Helm v2 opportunity judge runtime 的中文输出混写已继续清理；本批只改机会判断、主管关注、
+下一步摘要和内部复核提示文案，不改变阶段推断、正则匹配、artifact 文件名、正式 CRM 边界或阴影更新协议，
+也不声明全仓双语化完成。
+
+Mixed Chinese output copy in the Helm v2 opportunity judge runtime has also
+been further localized. This batch changes opportunity judgement,
+manager-attention, next-step summary, and internal-review prompt copy only; it
+does not change stage inference, regex matching, artifact filenames, formal CRM
+boundaries, or the shadow-update protocol, and does not claim full-repo
+bilingualization completion.
+
 | 类别 / Category | 状态 / Status | 证据 / Evidence |
 |---|---|---|
 | Apache-2.0 Core 仓库 / Apache-2.0 Core repository | 已为 public Core 开发成立；Established for public Core development | `LICENSE`, `NOTICE`, `package.json`, `README.md` |

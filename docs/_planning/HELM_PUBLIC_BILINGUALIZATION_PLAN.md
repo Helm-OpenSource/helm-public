@@ -75,6 +75,15 @@ descriptions, memory-load explanations, and promotion-reason copy only, without
 changing event types, contract keys, request / response shapes, memory-layer
 keys, or promotion-rule logic.
 
+本轮继续收口 Helm v2 opportunity judge runtime 的中文输出混写；只调整机会判断、主管关注、
+下一步摘要和内部复核提示文案，不改变阶段推断、正则匹配、artifact 文件名、正式 CRM 边界或阴影更新协议。
+
+This round further localizes mixed Chinese output copy in the Helm v2
+opportunity judge runtime. It changes opportunity judgement, manager-attention,
+next-step summary, and internal-review prompt copy only, without changing stage
+inference, regex matching, artifact filenames, formal CRM boundaries, or the
+shadow-update protocol.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

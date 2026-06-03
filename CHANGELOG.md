@@ -55,6 +55,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 role preset / starter skill 与 participant portal action 文案中的中文混写；本批只改角色定义、起步能力建议和门户校验提示，不改角色匹配、能力路由、门户访问或结算边界。
 - 继续收口 Helm v2 meeting action-pack runtime 的中文运行时摘要混写；本批只改会议动作资料、风险提示、未决问题和 artifact 摘要文案，不改 artifact 文件名、运行时状态机、记忆晋升或阴影更新边界。
 - 继续收口 Helm v2 event-flow 与 layered-memory catalog 的中文描述混写；本批只改事件摘要、API 合同描述、记忆加载说明和晋升原因文案，不改事件类型、contract key、request / response shape、记忆层 key 或晋升规则逻辑。
+- 继续收口 Helm v2 opportunity judge runtime 的中文输出混写；本批只改机会判断、主管关注、下一步摘要和内部复核提示文案，不改阶段推断、正则匹配、artifact 文件名、正式 CRM 边界或阴影更新协议。
 - 继续补齐 meeting runtime closeout / close server action 的 pre-session validation fallback；本批只改 action caller 可见错误文案，不改鉴权顺序、运行时状态机或执行边界。
 - 继续收口 public auth 表单密码确认 validation 文案；本批只改 action caller 可见错误文案，不改注册、登录、验证码或身份补全流程。
 - 继续收口 trial admin decision action 的复核权限、参数与更新失败文案；本批只改管理员可见错误文案，不改试用申请、复核权限或通知流程。
