@@ -97,7 +97,7 @@ export const CUSTOMER_SUCCESS_PACK: IndustryDemoPack = {
       explanation:
         "事实链：核心用户 LinkedIn 状态变更 0515 · 离职后该用户 last login 0514 · 客户其他 5 个用户访问量未变化 · 客户 IT 主管邮件 0521 询问账号转移流程 · 续约窗口 110 天。",
       whyNotAutoExecute:
-        "新对接人选择是客户内部决策 — Helm 给 onboarding 模板候选，但是否主动推动客户 IT 走转移流程由你判断。",
+        "新对接人选择是客户内部决策 — Helm 给入门接手模板候选，但是否主动推动客户 IT 走转移流程由你判断。",
       urgencyScore: 78,
       impactScore: 90,
       confidenceScore: 95,

@@ -291,7 +291,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Shows role, candidate, and feedback-chain context before an interview or candidate sync.",
         },
         activationCue: {
-          zh: "适用于初面、复面、offer 沟通或 hiring sync 会前。",
+          zh: "适用于初面、复面、录用沟通或招聘同步会前。",
           en: "Use before screening calls, panel interviews, offer discussions, or hiring syncs.",
         },
       },
@@ -375,7 +375,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Helps a delivery lead see scope, dependencies, and blockers before a key alignment meeting.",
         },
         activationCue: {
-          zh: "适用于 kickoff、走查、提案复核和风险 sync 会前。",
+          zh: "适用于启动会、走查、提案复核和风险同步会前。",
           en: "Use before kickoffs, walkthroughs, proposal reviews, and risk syncs.",
         },
       },

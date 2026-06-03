@@ -88,13 +88,13 @@ export const B2B_SAAS_PACK: IndustryDemoPack = {
     },
     {
       id: "b2b-saas-internal-handoff-blocked",
-      title: "新签鸿运科技交付负责人未指定，第 8 天卡 onboarding",
+      title: "新签鸿运科技交付负责人未指定，第 8 天卡入门交付",
       description:
-        "签约 8 天，交付经理还没正式接手。销售已交接但客户没收到正式 kickoff 邮件。客户 PM 主动问「下一步谁联系我」。",
+        "签约 8 天，交付经理还没正式接手。销售已交接但客户没收到正式启动邮件。客户 PM 主动问「下一步谁联系我」。",
       score: 78,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：合同签字 0512 · 销售交接邮件 0514 内部 · 客户 PM 询问邮件 0519 · 交付经理候选 2 人但未确认 · 客户 onboarding SLA 是 5 工作日（已逾期）。",
+        "事实链：合同签字 0512 · 销售交接邮件 0514 内部 · 客户 PM 询问邮件 0519 · 交付经理候选 2 人但未确认 · 客户入门交付 SLA 是 5 工作日（已逾期）。",
       whyNotAutoExecute:
         "团队分工是组织决策，Helm 不会替你点交付经理 — 候选 2 人附理由链等你拍板。",
       urgencyScore: 88,

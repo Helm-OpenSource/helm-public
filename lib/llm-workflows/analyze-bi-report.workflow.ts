@@ -52,7 +52,7 @@ export async function analyzeBiReportWithLLM(input: {
     promptVersion: llmPromptVersions.biReportAnalysis,
     systemPrompt: prompt.systemPrompt,
     userPrompt: prompt.userPrompt,
-    inputSummary: `${input.skillName} 的 BI report 解释`,
+    inputSummary: `${input.skillName} 的 BI 报表解释`,
     outputMode: "json",
     jsonSchema: biReportAnalysisSchema,
     fallbackOutput: input.fallback,

@@ -55,7 +55,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ recommend
     return Response.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "增强 recommendation 解释失败",
+        message: error instanceof Error ? error.message : "增强建议解释失败",
       },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );

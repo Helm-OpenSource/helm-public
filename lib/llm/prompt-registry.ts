@@ -22,21 +22,21 @@ export const llmPromptRegistry = {
     key: "recommendation-explanation",
     version: "recommendation-explanation-v1",
     taskTypes: ["RECOMMENDATION_EXPLANATION"],
-    description: "增强 recommendation 解释，但不改变排序和策略边界。",
+    description: "增强建议解释，但不改变排序和策略边界。",
   },
   biReportAnalysis: {
     key: "bi-report-analysis",
     version: "bi-report-analysis-v2",
     taskTypes: ["BI_REPORT_ANALYSIS"],
     description:
-      "解释 deterministic BI report result，但不重新判级或扩张执行权限。",
+      "解释确定性的 BI 报表结果，但不重新判级或扩张执行权限。",
   },
   biReportReview: {
     key: "bi-report-review",
     version: "bi-report-review-v1",
     taskTypes: ["BI_REPORT_REVIEW"],
     description:
-      "审查 BI report 解释，纠正越权归因和过度动作建议，但不改 deterministic 判断。",
+      "审查 BI 报表解释，纠正越权归因和过度动作建议，但不改确定性判断。",
   },
 } as const;
 
@@ -328,7 +328,7 @@ export function buildRecommendationExplanationPrompt(input: {
     promptKey: llmPromptRegistry.recommendationExplanation.key,
     promptVersion: llmPromptVersions.recommendationExplanation,
     systemPrompt:
-      "你是 Helm 经营推进控制台的判断解释引擎。你的任务不是重新排序动作，而是把已有 recommendation 的经营判断解释得更清楚、更可信、更适合审批和执行。只输出符合 schema 的 JSON。",
+      "你是 Helm 经营推进控制台的判断解释引擎。你的任务不是重新排序动作，而是把已有建议的经营判断解释得更清楚、更可信、更适合审批和执行。只输出符合 schema 的 JSON。",
     userPrompt: [
       `对象：${input.objectLabel}`,
       `推荐动作：${input.recommendationTitle}`,
@@ -378,7 +378,7 @@ export function buildBiReportAnalysisPrompt(input: {
     promptKey: llmPromptRegistry.biReportAnalysis.key,
     promptVersion: llmPromptVersions.biReportAnalysis,
     systemPrompt: [
-      "你是 Helm 的 BI 报表解释引擎。你的任务不是重新判级，也不是输出自动执行承诺，而是基于 deterministic 指标、命中规则和 top 发现 生成一段克制、可审计、可复盘的中文解释。只输出符合 schema 的 JSON。",
+      "你是 Helm 的 BI 报表解释引擎。你的任务不是重新判级，也不是输出自动执行承诺，而是基于确定性指标、命中规则和重点发现生成一段克制、可审计、可复盘的中文解释。只输出符合 schema 的 JSON。",
       skillPromptTemplate
         ? `当前 skill 的补充解释约束如下：\n${skillPromptTemplate}`
         : null,
@@ -391,7 +391,7 @@ export function buildBiReportAnalysisPrompt(input: {
       `时间窗口：${input.windowLabel}`,
       `核心指标：${input.summaryMetrics.map((item) => `${item.label} ${item.value}`).join("；") || "暂无"}`,
       `命中规则：${input.matchedRules.join("；") || "无"}`,
-      `deterministic 发现：${input.deterministicFindings.join("；") || "暂无"}`,
+      `确定性发现：${input.deterministicFindings.join("；") || "暂无"}`,
       `连续性状态：${input.recentRunContext?.continuityStatus ?? "first_seen"}`,
       `历史运行上下文：${input.recentRunContext?.historicalContext ?? "当前没有可用的历史运行记忆"}`,
       `人工反馈记忆：${input.recentFeedbackContext?.feedbackContext ?? "当前还没有可用的人工复盘反馈记忆"}`,
@@ -434,14 +434,14 @@ export function buildBiReportReviewPrompt(input: {
     promptKey: llmPromptRegistry.biReportReview.key,
     promptVersion: llmPromptVersions.biReportReview,
     systemPrompt:
-      "你是 Helm 的 BI 报表解释 reviewer。只检查解释层是否把猜测写成事实、是否超出报表证据范围、是否越过边界、是否给出过强动作建议。不要修改 severity、summary、continuity 或 boundary；也不要改连续性或边界。只输出符合 schema 的 JSON。",
+      "你是 Helm 的 BI 报表解释复核人。只检查解释层是否把猜测写成事实、是否超出报表证据范围、是否越过边界、是否给出过强动作建议。不要修改 severity、summary、continuity 或 boundary；也不要改连续性或边界。只输出符合 schema 的 JSON。",
     userPrompt: [
       `skill：${input.skillName}`,
       `等级：${input.severityLabel}`,
       `时间窗口：${input.windowLabel}`,
       `核心指标：${input.summaryMetrics?.map((item) => `${item.label} ${item.value}`).join("；") || "暂无"}`,
       `命中规则：${input.matchedRules?.join("；") || "无"}`,
-      `deterministic 发现：${input.deterministicFindings.join("；") || "暂无"}`,
+      `确定性发现：${input.deterministicFindings.join("；") || "暂无"}`,
       `边界：${input.boundaries.join("；") || "暂无"}`,
       `候选 headline：${input.candidate.headline}`,
       `候选 possibleCauses：${input.candidate.possibleCauses.join("；") || "暂无"}`,
@@ -449,7 +449,7 @@ export function buildBiReportReviewPrompt(input: {
       "issueCodes 只能从以下枚举里选：SPECULATION_AS_FACT、OUT_OF_EVIDENCE_SCOPE、BOUNDARY_VIOLATION、OVERSTRONG_ACTION。",
       "issueNotes 可选，用于补充人类可读说明；如果没有额外说明，返回空数组。",
       "如果解释层已经克制且没有越权，approved=true 并保持 rewritten 字段为 null。",
-      "候选内容只要没有超出核心指标、命中规则、deterministic 发现和边界，就不应判为 OUT_OF_EVIDENCE_SCOPE。",
+      "候选内容只要没有超出核心指标、命中规则、确定性发现和边界，就不应判为 OUT_OF_EVIDENCE_SCOPE。",
       "如果存在问题，只允许保守重写 headline / possibleCauses / recommendedActions，不能引入新的事实，也不能写成自动执行口吻。",
     ].join("\n"),
   };
