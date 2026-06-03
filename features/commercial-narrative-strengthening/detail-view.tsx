@@ -513,11 +513,11 @@ function formatStrengtheningLevel(
 ) {
   switch (level) {
     case "recommendation-only":
-      return english ? "Recommendation only" : "仅 recommendation";
+      return english ? "Recommendation only" : "仅建议";
     case "exploratory-strengthening":
-      return english ? "Exploratory strengthening" : "Exploratory 强化";
+      return english ? "Exploratory strengthening" : "探索型加固";
     case "pilot-strengthening":
-      return english ? "Pilot strengthening" : "Pilot 强化";
+      return english ? "Pilot strengthening" : "试点加固";
     case "customer-visible-light":
       return english ? "Customer-visible light" : "轻量客户可见";
     case "customer-visible-structured":
@@ -545,7 +545,7 @@ function formatIntent(
     case "warm-up-trust":
       return english ? "Warm up trust" : "升温信任";
     case "advance-pilot-story":
-      return english ? "Advance pilot story" : "推进 pilot 叙事";
+      return english ? "Advance pilot story" : "推进试点叙事";
     case "build-customer-confidence":
       return english ? "Build customer confidence" : "建立客户信心";
     case "hold-review-line":

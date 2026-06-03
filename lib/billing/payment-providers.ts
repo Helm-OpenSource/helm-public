@@ -267,7 +267,7 @@ export function getPaymentSubscriptionLabel(
   english: boolean,
 ) {
   if (!status) {
-    return english ? "No live subscription yet" : "当前还没有实时 payment state";
+    return english ? "No live subscription yet" : "当前还没有实时支付状态";
   }
 
   if (provider === PAYMENT_PROVIDER.ALIPAY) {

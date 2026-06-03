@@ -125,14 +125,14 @@ export function buildConversationDetailPageContract({
           : "如果任何人想在下一次对话里把 时点、结果或范围确定性说实，就先升级进复核，再允许这句话往外走。"
         : english
           ? "If trust pressure, dependency pressure or founder risk rises, step back from the current scene and return to package or offer review first."
-          : "如果信任压力、依赖压力或创始人风险开始上升，就先从当前场景退回，回到方案包或 offer 复核。",
+          : "如果信任压力、依赖压力或创始人风险开始上升，就先从当前场景退回，回到方案包或报价复核。",
     pageEvidenceLinks: [
       {
         label: english ? "Open package page" : "打开方案包页面",
         href: `/packages/${detail.id}`,
       },
       {
-        label: english ? "Open customer offer page" : "打开客户可见 offer 页面",
+        label: english ? "Open customer offer page" : "打开客户可见报价页面",
         href: `/offers/${detail.id}`,
       },
       {
@@ -356,7 +356,7 @@ function buildDeliveryCue(mode: ConversationDetailMode, english: boolean) {
     mode === "prerequisite-clarification" ||
     mode === "dependency-clarification"
     ? "交付这时最适合先把范围、前置和依赖注脚说清，再允许下一次对外对话。"
-    : "只要对话开始触碰预期，交付就该先保护范围 clarity 和 implementation 注脚。";
+    : "只要对话开始触碰预期，交付就该先保护范围清晰度和实施注脚。";
 }
 
 function buildNextActions({
@@ -378,7 +378,7 @@ function buildNextActions({
         mode === "founder-meeting" || mode === "founder-demo"
           ? english
             ? "Open customer-facing offer page"
-            : "打开客户可见 offer 页面"
+            : "打开客户可见报价页面"
           : english
             ? "Open package page"
             : "打开方案包页面",

@@ -91,7 +91,7 @@ export default async function TrialApplicationPage() {
               href="/programs"
               className="font-semibold text-[color:var(--accent)] underline-offset-4 hover:underline"
             >
-              {english ? "Or work with a Certified Delivery Partner" : "或找 Certified Delivery Partner"}
+              {english ? "Or work with a Certified Delivery Partner" : "或找认证交付伙伴"}
             </Link>
           </div>
         </section>

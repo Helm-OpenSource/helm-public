@@ -367,7 +367,7 @@ function buildUnifiedNavigation({
               : "客户面向报价详情",
             summary: english
               ? "Return to the customer-facing offer if the talk track still needs a lighter external-safe surface."
-              : "如果当前话术还需要更轻一点的 可对外表面，就回到客户可见 offer。",
+              : "如果当前话术还需要更轻一点的可对外表面，就回到客户可见报价。",
           }
         : {
             type: "package",
@@ -375,7 +375,7 @@ function buildUnifiedNavigation({
             label: english ? "Package detail" : "方案包详情",
             summary: english
               ? "Return to package shaping if the conversation still needs cleaner package boundary and next-step framing."
-              : "如果当前对话还需要更清楚的方案包边界和下一步措辞，就回到方案包 detail。",
+              : "如果当前对话还需要更清楚的方案包边界和下一步措辞，就回到方案包详情。",
           },
       detailNodeNext: {
         type: "external-narrative",
@@ -403,11 +403,11 @@ function buildUnifiedNavigation({
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
         handoffRisk: english
           ? "This handoff can still change trust and expectation, so boundary and non-commitment cues must stay visible."
-          : "这次切换仍会改变信任和 预期，所以边界与非承诺线索必须继续可见。",
+          : "这次切换仍会改变信任和预期，所以边界与非承诺线索必须继续可见。",
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction:
           protocol.pageNextAction[0]?.label ??
-          (english ? "Open conversation detail" : "打开对话 detail"),
+          (english ? "Open conversation detail" : "打开对话详情"),
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: "internal-only",
@@ -418,7 +418,7 @@ function buildUnifiedNavigation({
         handoffTarget: "conversation",
         handoffReason: english
           ? "The offer wording is coherent enough to choose the right spoken scene instead of reworking the same external-safe copy."
-          : "当前提案 措辞已经够连贯，可以直接选择最合适的 当面场景，而不是继续重写同一版 可对外文案。",
+          : "当前报价措辞已经够连贯，可以直接选择最合适的当面场景，而不是继续重写同一版可对外文案。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -428,7 +428,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction:
           protocol.pageNextAction[0]?.label ??
-          (english ? "Open conversation detail" : "打开对话 detail"),
+          (english ? "Open conversation detail" : "打开对话详情"),
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: customerFacing
@@ -470,7 +470,7 @@ function buildUnifiedNavigation({
         handoffTarget: "founder-conversation",
         handoffReason: english
           ? "Use the founder role page when the next move needs founder-owned trust framing rather than one shared talk track."
-          : "当下一步需要创始人亲自承接信任措辞，而不是继续停在共享 talk track 时，切到创始人 role 页面。",
+          : "当下一步需要创始人亲自承接信任措辞，而不是继续停在共享话术时，切到创始人角色页面。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -480,7 +480,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open founder conversation detail."
-          : "打开创始人对话 detail。",
+          : "打开创始人对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:
@@ -494,7 +494,7 @@ function buildUnifiedNavigation({
         handoffTarget: "sales-conversation",
         handoffReason: english
           ? "Use the sales role page when the next move needs sales-owned follow-up framing instead of one shared talk track."
-          : "当下一步需要销售亲自承接跟进措辞，而不是继续停在共享 talk track 时，切到销售 role 页面。",
+          : "当下一步需要销售亲自承接跟进措辞，而不是继续停在共享话术时，切到销售角色页面。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -504,7 +504,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open sales conversation detail."
-          : "打开销售对话 detail。",
+          : "打开销售对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: customerFacing
@@ -517,7 +517,7 @@ function buildUnifiedNavigation({
         handoffTarget: "delivery-conversation",
         handoffReason: english
           ? "Use the delivery role page when the next move needs scope, implementation or activation clarification rather than one shared talk track."
-          : "当下一步需要范围、implementation 或激活澄清，而不是继续停在共享 talk track 时，切到交付 role 页面。",
+          : "当下一步需要范围、实施或激活澄清，而不是继续停在共享话术时，切到交付角色页面。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -527,7 +527,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open delivery conversation detail."
-          : "打开交付对话 detail。",
+          : "打开交付对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:

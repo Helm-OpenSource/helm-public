@@ -464,7 +464,7 @@ export async function createWorkspaceCheckoutSession(input: {
         ? getChinaDuplicateCheckoutMessage({ english })
         : english
           ? "This organization already has active paid access. Use the current management path instead of starting duplicate checkout."
-          : "当前组织已经有 active paid access，请不要重复购买，先使用当前管理路径。",
+          : "当前组织已经有活跃付费访问权，请不要重复购买，先使用当前管理路径。",
     );
   }
 

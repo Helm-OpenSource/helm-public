@@ -88,7 +88,7 @@ export function getWorkspaceOrderDescription(input: {
   const english = input.locale === "en-US";
   return english
     ? `${input.organizationName} is purchasing Helm Team. Current seat posture is 1 included admin + ${input.additionalBillableSeats} additional active seats.`
-    : `${input.organizationName} 正在购买 Helm Team。当前 seat 结构为 1 个 included admin + ${input.additionalBillableSeats} 个额外 active seat。`;
+    : `${input.organizationName} 正在购买 Helm Team。当前席位结构为 1 个内含管理员席位 + ${input.additionalBillableSeats} 个额外活跃席位。`;
 }
 
 export function getChinaPaymentReturnUrl(input: {
