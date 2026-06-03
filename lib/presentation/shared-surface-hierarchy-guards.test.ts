@@ -2005,6 +2005,26 @@ describe("shared surface hierarchy guards", () => {
     expect(combined).not.toMatch(/CRM 阶段变更/);
   });
 
+  it("keeps public trial runbook Chinese copy free of recently fixed mixed operational fragments", () => {
+    const trialRunbook = read("docs/pilot/PUBLIC_TRIAL_RUNBOOK.md");
+
+    expect(trialRunbook).toContain("生成内部交接");
+    expect(trialRunbook).toContain("客户关系系统信号");
+    expect(trialRunbook).toContain("复核动作");
+    expect(trialRunbook).toContain("当前工作区的窄手机端经营推进入口");
+    expect(trialRunbook).toContain("统一用户可见追踪时间线仍是发布硬门禁");
+    expect(trialRunbook).toContain("连接器默认预演");
+    expect(trialRunbook).toContain("客户关系系统 / 邮箱 / 会议来源做预演导入");
+    expect(trialRunbook).toContain("受控租户路径");
+    expect(trialRunbook).toContain("值守人");
+    expect(trialRunbook).toContain("子处理方");
+    expect(trialRunbook).toContain("自动跨工作区检索或聚合");
+
+    expect(trialRunbook).not.toMatch(
+      /生成内部 handoff|CRM 信号|Review Action|当前 workspace|trace timeline|release hard gate|connector 默认 dry-run|live send|dry-run import|reserved tenant|oncall|Oncall|sub-processor|hard delete|active → grace|grace →|自动跨 workspace/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");

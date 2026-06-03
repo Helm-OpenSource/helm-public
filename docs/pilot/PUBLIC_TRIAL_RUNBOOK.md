@@ -24,14 +24,14 @@ settlement, no cross-workspace aggregation, no production-data recommendation,
 and no public claim that trial behavior proves Cloud or Enterprise readiness.
 
 更新时间：2026-05-02
-适用范围：`v0.1.0-trial` 公开试用版用户、Helm 团队 oncall 与 owner、试用邀请发起人
+适用范围：`v0.1.0-trial` 公开试用版用户、Helm 团队值守人与 owner、试用邀请发起人
 配套版本：与 [HELM_PUBLIC_ROADMAP.md](../roadmap/HELM_PUBLIC_ROADMAP.md) 与 [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md) 同期
 
 ---
 
 ## 一、本文件的定位
 
-这是 Helm 公开试用环境（云端）面向**用户与 oncall**的运行手册。
+这是 Helm 公开试用环境（云端）面向**用户与值守人**的运行手册。
 
 它**不**替代：
 
@@ -47,19 +47,19 @@ and no public claim that trial behavior proves Cloud or Enterprise readiness.
 
 ### 2.1 阶段定位
 
-- Helm **当前处于受控试点（Controlled Trial）阶段**，不是商业产品 GA
+- Helm **当前处于受控试点阶段**，不是商业产品正式可用版本
 - 服务水平**未承诺 SLA**：可用性、性能、恢复时点、停机窗口都不构成正式承诺
-- 我们会按工作日响应反馈，但**不**做 24×7 oncall 承诺
+- 我们会按工作日响应反馈，但**不**做 24×7 值守承诺
 - 公开试用**不**默认启用 OpenAI API 集成；启用前会显式 banner + 二次同意
 - 公开试用**不**默认启用支付能力
 
 ### 2.2 数据保留期
 
 - 正式保留期以工作区试用契约和生效数据政策为准，公开发布前必须完成法务最终对齐
-- 当前目标草案是 **30 天 active + 7 天 grace**，但在法务签署前不得作为对外承诺销售或宣传
-- Hard deletion、用户主动删除、撤回窗口和删除证明以生效数据政策为准
+- 当前目标草案是 **30 天活跃期 + 7 天宽限期**，但在法务签署前不得作为对外承诺销售或宣传
+- 硬删除、用户主动删除、撤回窗口和删除证明以生效数据政策为准
 
-### 2.3 数据驻留与 sub-processor
+### 2.3 数据驻留与子处理方
 
 公开试用环境部署在 **阿里云 cn-hangzhou**：
 
@@ -67,30 +67,30 @@ and no public claim that trial behavior proves Cloud or Enterprise readiness.
 - **默认关闭**：OpenAI API（启用前需用户二次同意）
 - **默认关闭**：Stripe / Alipay / WeChat Pay 支付能力
 
-详细 sub-processor 实名清单见 [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)。
+详细子处理方实名清单见 [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)。
 
 ### 2.4 你的工作区会做什么、不会做什么
 
 **会做**：
 
-- 把你导入的会议、邮箱、CRM 信号收敛成必须推进项 / Review Action / 经营记忆
-- 提供 Ask Helm 行动意图入口：回答、计划分解、起草草稿、生成内部 handoff
-- 在 `/mobile` 第一屏汇总当前 workspace 的窄手机端经营推进入口
-- 把每一条客户可见关键动作（DingTalk 邀请、客户关系系统阶段变更、外发草稿、记忆提升等）写成一条带 `traceId / requestId / parentEventId` 的 `AuditLog`；统一用户可见 trace timeline 仍是 release hard gate，未落地前不宣传“0 秒完整回放”
+- 把你导入的会议、邮箱、客户关系系统信号收敛成必须推进项 / 复核动作 / 经营记忆
+- 提供 Ask Helm 行动意图入口：回答、计划分解、起草草稿、生成内部交接
+- 在 `/mobile` 第一屏汇总当前工作区的窄手机端经营推进入口
+- 把每一条客户可见关键动作（DingTalk 邀请、客户关系系统阶段变更、外发草稿、记忆提升等）写成一条带 `traceId / requestId / parentEventId` 的 `AuditLog`；统一用户可见追踪时间线仍是发布硬门禁，未落地前不宣传“0 秒完整回放”
 
 **不会做**（也是 Helm 当前刻意不做的）：
 
-- 自动外发邮件 / 钉钉 / 企微 / 短信（DingTalk Directory 邀请等 connector 默认 dry-run，必须显式确认才能 live send）
+- 自动外发邮件 / 钉钉 / 企微 / 短信（DingTalk Directory 邀请等连接器默认预演，必须显式确认才能正式发送）
 - 自动审批、自动结算、自动付款
-- 自动跨 workspace 检索或聚合
+- 自动跨工作区检索或聚合
 - 多轮聊天历史持久化
 - 把 LLM 输出当作最终排序依据
 
 ### 2.5 不要在试用环境提交真实生产数据
 
 - 试用环境**不承诺 SLA**，请勿用于真实生产经营决策
-- 强烈建议使用 demo / 沙箱数据进行评估
-- 如需基于真实数据评估，请联系我们走受控的 reserved tenant 路径，**不**走公开试用入口
+- 强烈建议使用演示 / 沙箱数据进行评估
+- 如需基于真实数据评估，请联系我们走受控租户路径，**不**走公开试用入口
 
 ---
 
@@ -103,15 +103,15 @@ and no public claim that trial behavior proves Cloud or Enterprise readiness.
    - 邮箱 + 短信或邮箱验证码
    - 勾选「我已阅读并同意 [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)」
    - 选择中文 / 英文界面
-3. 系统创建你的 workspace；保留期倒计时以当次工作区契约和生效数据政策为准
+3. 系统创建你的工作区；保留期倒计时以当次工作区契约和生效数据政策为准
 
 ### 3.2 起步推荐路径
 
 **第一天（10 分钟内验证 Helm 是否对你有价值）**：
 
 1. `/setup` → 完成 onboarding
-2. `/mobile` → 看第一屏 Mobile Command Surface
-3. `/imports` → 选一个最熟悉的 CRM / 邮箱 / 会议来源做 dry-run import
+2. `/mobile` → 看第一屏移动指挥面
+3. `/imports` → 选一个最熟悉的客户关系系统 / 邮箱 / 会议来源做预演导入
 4. `/operating` → 看 Helm 怎么把信号收敛成判断 / 决策 / 边界
 
 **第一周**：
@@ -129,26 +129,26 @@ and no public claim that trial behavior proves Cloud or Enterprise readiness.
 
 ## 四、数据隔离声明
 
-### 4.1 Workspace-first 隔离
+### 4.1 工作区优先隔离
 
 - 你的所有写入数据按 `workspaceId` 隔离
-- 跨 workspace 自动聚合 / 自动检索 **没有授权**
-- Helm 团队成员**不能**默认访问你的 workspace；只有在你显式邀请的 reserved tenant 路径下才有访问能力（公开试用环境**不存在** reserved tenant 关联）
+- 跨工作区自动聚合 / 自动检索 **没有授权**
+- Helm 团队成员**不能**默认访问你的工作区；只有在你显式邀请的受控租户路径下才有访问能力（公开试用环境**不存在**受控租户关联）
 
-### 4.2 Audit log
+### 4.2 审计日志
 
 - 关键写路径都有审计事件
-- 你可在 `/settings?tab=permissions` 查看本 workspace 的管理审计摘要；完整事件流待 v0.1 GA 开放，当前可通过反馈渠道索取
+- 你可在 `/settings?tab=permissions` 查看本工作区的管理审计摘要；完整事件流待 v0.1 正式可用版本开放，当前可通过反馈渠道索取
 
-### 4.3 Sub-processor 与第三方数据流
+### 4.3 子处理方与第三方数据流
 
-启用某个连接器（DingTalk / HubSpot / Salesforce / WeCom / OpenAI 等）即同时同意该 sub-processor 处理对应数据。各连接器在 `/settings` 详情页都会显示数据流向说明。
+启用某个连接器（DingTalk / HubSpot / Salesforce / WeCom / OpenAI 等）即同时同意该子处理方处理对应数据。各连接器在 `/settings` 详情页都会显示数据流向说明。
 
 OpenAI API 默认关闭。启用时：
 
 - 触发明确 banner 二次同意
 - 仅在你打开 Ask Helm / 概要生成等 LLM 功能时才会向 OpenAI 发送数据
-- 不向 OpenAI 同步你的整个 workspace；只发当前任务需要的字段
+- 不向 OpenAI 同步你的整个工作区；只发当前任务需要的字段
 
 ### 4.4 删除与导出
 
@@ -178,7 +178,7 @@ OpenAI API 默认关闭。启用时：
 
 - 不含个人数据或敏感信息的公开问题：使用 [GitHub Issues](https://github.com/Helm-OpenSource/helm-public/issues)
 - 涉及个人数据、未公开安全信息或敏感合规材料：发邮件至 `Helm-security@zhaojiling.com`，主题标注 `[Privacy]`
-- 适用范围：GDPR / 个人信息保护法 / sub-processor 调整 / 数据保留延期等
+- 适用范围：GDPR / 个人信息保护法 / 子处理方调整 / 数据保留延期等
 
 ### 5.4 试用支持
 
@@ -204,9 +204,9 @@ OpenAI API 默认关闭。启用时：
 
 通过 `ALIYUN_MAIL_SYSTEM_EMAIL` 配置的系统邮箱发出（不可关闭，因为是治理通知）：
 
-- **数据保留阶段转换前提醒**：active → grace / grace → 物理删除按生效数据政策通知
+- **数据保留阶段转换前提醒**：活跃期 → 宽限期 / 宽限期 → 物理删除按生效数据政策通知
 - **物理删除完成**：删除证明邮件
-- **重大政策变更**：数据政策更新、sub-processor 调整、定价变更
+- **重大政策变更**：数据政策更新、子处理方调整、定价变更
 - **重大安全事件**：依据法律法规与本 runbook §5.2 时间线披露
 
 ### 6.3 我们不会主动发的
@@ -219,9 +219,9 @@ OpenAI API 默认关闭。启用时：
 
 ---
 
-## 七、Oncall 操作手册（内部）
+## 七、值守操作手册（内部）
 
-> 本节面向 Helm 团队 oncall。普通用户可跳过。
+> 本节面向 Helm 团队值守人。普通用户可跳过。
 
 ### 7.1 P0 / P1 触发条件
 
@@ -231,15 +231,15 @@ OpenAI API 默认关闭。启用时：
 ### 7.2 P0 响应链
 
 1. 触发：自动告警 / 用户报告 / dogfooding 团队发现
-2. 5 分钟内：oncall 主备 + Operations Lead 上线
+2. 5 分钟内：值守主备 + Operations Lead 上线
 3. 15 分钟内：判断是否需要回滚 `BUSINESS_ADVANCEMENT_RUNTIME_ENABLED` flag
 4. 30 分钟内：判断是否需要 incident 公告（站内 banner + 邮件）
 5. 完整链路：先按本 runbook 止血，再由 maintainer 在私有 incident 记录中补充完整回滚证据；私有运行时评审材料不进入 `helm-public`
 
 ### 7.3 数据保留阶段转换异常
 
-- **active → grace 自动迁移失败**：lib/billing/foundation.ts 派生逻辑出错时，工作区会停在 active；oncall 手动触发派生重算
-- **grace → 物理删除失败**：retention sweep 在 grace 结束当日物理删除；失败时进入 `delete-pending` 状态，oncall 24 小时内人工执行；超过 48 小时未删除 → 升级为 P0 数据保留事件
+- **活跃期 → 宽限期自动迁移失败**：lib/billing/foundation.ts 派生逻辑出错时，工作区会停在活跃期；值守人手动触发派生重算
+- **宽限期 → 物理删除失败**：retention sweep 在宽限期结束当日物理删除；失败时进入 `delete-pending` 状态，值守人 24 小时内人工执行；超过 48 小时未删除 → 升级为 P0 数据保留事件
 
 ### 7.4 删除证明邮件失败
 
@@ -255,24 +255,24 @@ OpenAI API 默认关闭。启用时：
 ## 八、试用结束后的目标状态机草案
 
 ```
-Active (duration from effective workspace contract)
+活跃期（以生效工作区契约为准）
    │
-   ├── 用户继续使用 → 联系 trial-support 申请延期 → 工作区可被升级到 reserved tenant 路径
+   ├── 用户继续使用 → 联系 trial-support 申请延期 → 工作区可被升级到受控租户路径
    │
-   ├── 用户主动结束 → 立即进入 Grace
+   ├── 用户主动结束 → 立即进入宽限期
    │
-   └── active 到期 → 自动进入 Grace
+   └── 活跃期到期 → 自动进入宽限期
         │
-        ├── (Grace duration from effective data policy, read-only)
-        │      ├── 用户撤回 → 回到 Active（剩余天数清零，重新计算）
+        ├── （宽限期长度以生效数据政策为准，只读）
+        │      ├── 用户撤回 → 回到活跃期（剩余天数清零，重新计算）
         │      ├── 用户导出 → 拿到 zip + 继续等待物理删除
-        │      └── 用户什么都不做 → 到期后进入 hard delete
+        │      └── 用户什么都不做 → 到期后进入硬删除
         │
-        └── Hard Deletion
+        └── 硬删除
              │
              ├── 物理数据删除 + 索引清理 + 备份滚动失效
              ├── 删除证明邮件发出（24 小时内）
-             └── audit log 保留 deletion attestation，业务数据不再保留
+             └── 审计日志保留删除证明，业务数据不再保留
 ```
 
 ---
@@ -281,11 +281,11 @@ Active (duration from effective workspace contract)
 
 **Q: 我能延长试用期吗？**
 
-A: 可以。在 GitHub Discussions 发起不含敏感信息的说明；如果需要包含个人数据、租户信息或未公开部署细节，请发邮件至 `Helm-security@zhaojiling.com`，主题标注 `[Trial Extension]`。延期会评估是否升级到 reserved tenant 路径（不再走公开试用环境）。
+A: 可以。在 GitHub Discussions 发起不含敏感信息的说明；如果需要包含个人数据、租户信息或未公开部署细节，请发邮件至 `Helm-security@zhaojiling.com`，主题标注 `[Trial Extension]`。延期会评估是否升级到受控租户路径（不再走公开试用环境）。
 
 **Q: 我的数据存在哪里？**
 
-A: 阿里云 cn-hangzhou region 的 RDS MySQL + OSS。详细 sub-processor 实名见 [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)。
+A: 阿里云 cn-hangzhou 区域的 RDS MySQL + OSS。详细子处理方实名见 [HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md](../legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)。
 
 **Q: 我可以在 GitHub 上私有部署 Helm 吗？**
 
@@ -307,4 +307,4 @@ A: 当前路线图明确**不做**。详见 [HELM_PUBLIC_ROADMAP.md](../roadmap/
 | --- | --- | --- |
 | V1 草稿 | 2026-04-27 | 初稿；v0.1.0-trial 公开发布前的 runbook 框架 |
 
-后续每次重大政策变更（数据保留期调整、sub-processor 增减、SLA 立场变化、反馈渠道变更）必须在本文件追加版本号并通过系统邮箱通知所有活跃试用用户。
+后续每次重大政策变更（数据保留期调整、子处理方增减、SLA 立场变化、反馈渠道变更）必须在本文件追加版本号并通过系统邮箱通知所有活跃试用用户。
