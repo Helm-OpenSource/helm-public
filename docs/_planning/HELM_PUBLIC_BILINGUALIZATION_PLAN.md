@@ -274,6 +274,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-04 | 继续收口 trial admin decision action 的复核权限、参数与更新失败文案；本批只改管理员可见错误文案，不改试用申请、复核权限或通知流程；Further localized trial admin decision action review-permission, payload, and update-failure copy; this batch changes admin-visible error copy only and leaves trial applications, review permissions, and notification flows unchanged |
 | 2026-06-04 | 继续收口 public auth 表单密码确认 validation 文案；本批只改 action caller 可见错误文案，不改注册、登录、验证码或身份补全流程；Further localized public-auth password confirmation validation copy; this batch changes action-caller-visible error copy only and leaves signup, login, verification-code, and identity-completion flows unchanged |
 | 2026-06-04 | 继续补齐 meeting runtime closeout / close server action 的 pre-session validation fallback；本批只改 action caller 可见错误文案，不改鉴权顺序、运行时状态机或执行边界；Further filled meeting runtime closeout / close server-action pre-session validation fallbacks; this batch changes action-caller-visible error copy only and leaves authorization order, runtime state machines, and execution boundaries unchanged |
 | 2026-06-03 | 继续收口 customer-facing offer / external proposal 与 proposal package 边界文案中的中文混写；本批只改中文可见文案，不改发送评估、提案层级或非承诺边界；Further localized Chinese visible mixed-language copy in customer-facing offer / external proposal and proposal package boundary copy; this batch changes visible copy only and leaves sendability evaluation, proposal layering, and non-commitment boundaries unchanged |
