@@ -171,7 +171,7 @@ export function BillingSettlementBatchPanels({
             <p className="mt-3 text-xs leading-6 text-[color:var(--muted-foreground)]">
               {english
                 ? "Only fully paid or reversed exported batches can move into closeout."
-                : "只有全部条目都进入已支付或已冲回姿态后，已导出的批次才能进入 closeout。"}
+                : "只有全部条目都进入已支付或已冲回姿态后，已导出的批次才能进入收口。"}
             </p>
           ) : null}
         </div>

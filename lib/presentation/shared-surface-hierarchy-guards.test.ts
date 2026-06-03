@@ -884,6 +884,32 @@ describe("shared surface hierarchy guards", () => {
     expect(detailModel).toContain("范围或上线节奏澄清");
   });
 
+  it("keeps billing and tenant resource readiness copy free of recently fixed mixed fragments", () => {
+    const settlementBatchPanels = read(
+      "features/settings/components/billing-settlement-batch-panels.tsx",
+    );
+    const tenantResourceReadinessPanel = read(
+      "features/settings/components/tenant-resource-readiness-panel.tsx",
+    );
+    const sources = `${settlementBatchPanels}\n${tenantResourceReadinessPanel}`;
+
+    for (const fragment of [
+      "进入 closeout",
+      "Optional 已确认 note",
+      "review / 已确认 seam",
+    ]) {
+      expect(sources).not.toContain(fragment);
+    }
+
+    expect(settlementBatchPanels).toContain("已导出的批次才能进入收口");
+    expect(tenantResourceReadinessPanel).toContain(
+      "Optional acknowledgement note.",
+    );
+    expect(tenantResourceReadinessPanel).toContain(
+      "local candidate / review / acknowledgement seam",
+    );
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 

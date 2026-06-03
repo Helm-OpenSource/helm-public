@@ -847,7 +847,7 @@ function TenantResourceGuardedWritePilotControls({
                   ? "Optional review note. Reject requires a short reason."
                   : "可填写复核备注；拒绝时需要简短原因。"
                 : english
-                  ? "Optional 已确认 note."
+                  ? "Optional acknowledgement note."
                   : "可填写确认备注。"
           }
           value={note}
@@ -937,7 +937,7 @@ function TenantResourceGuardedWritePilotControls({
       </div>
       <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">
         {english
-          ? "This pilot never writes to the external system. It only proves that accepted proof plus eligible evaluation can stay reviewable through a local candidate / review / 已确认 seam."
+          ? "This pilot never writes to the external system. It only proves that accepted proof plus eligible evaluation can stay reviewable through a local candidate / review / acknowledgement seam."
           : "这个试点不会写入外部系统。它只证明已接受证据与符合条件的评估可以进入本地候选、复核与确认链路，并持续保持可复核。"}
       </p>
     </div>
