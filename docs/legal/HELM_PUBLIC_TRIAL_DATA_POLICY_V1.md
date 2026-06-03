@@ -6,7 +6,22 @@ review_after: 2026-07-26
 # frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-19
 # rationale: default — no archive/dormant signal in path
 ---
-# Helm Public Trial Data Policy V1
+# Helm Public Trial Data Policy V1 / Helm 公开试点数据政策 V1
+
+> **语言 / Language**: **中文主文本** + **English reference summary**
+
+## English Reference Summary
+
+This draft data policy covers the controlled public cloud trial only. It does
+not replace future commercial ToS, DPA, or SLA documents. The current posture is
+no production SLA, no 24x7 support commitment, no compensation commitment, and a
+target 30-day active plus 7-day grace retention model that must not be treated as
+an external commitment until legal alignment is complete.
+
+The policy describes workspace lifecycle, export, user deletion, hard deletion,
+sub-processors, China-region data residency, OpenAI opt-in behavior, payment
+being off by default, and user consent recording. The effective public trial
+terms are the workspace agreement plus the legally approved policy.
 
 更新时间：2026-05-02
 状态：公开试点数据政策草案；30/7 retention 是当前目标口径，待法务最终对齐后才可作为对外承诺

@@ -5,7 +5,27 @@ created: 2026-06-02
 review_after: 2026-06-09
 public_safety: Public open-source growth operating plan. Uses public repository, docs, issues, discussions, and synthetic sample-pack signals only; no customer data, private deployment evidence, private contact lists, credentials, or automatic external commitments.
 ---
-# Helm Open Source Growth 7-Day Operating Plan - 2026-06-02
+# Helm Open Source Growth 7-Day Operating Plan / Helm 开源增长 7 日运营计划 - 2026-06-02
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文是 `helm-public` 在 2026-06-01 公开之后的第一份 public-Core growth
+operating plan。它是 awareness、activation、community intake 和 friction removal
+的执行计划，不是客户承诺、商业 launch approval、Cloud / Enterprise readiness
+statement、SLA、融资材料或自动 outbound campaign。
+
+7 日目标是把公开 launch 转成可度量的 delivery engineer activation loop：读者能在
+一屏理解 Helm 定位，能跑本地 Golden Path 并检查 synthetic sample pack，反馈能通过
+GitHub Issues / Discussions 带边界进入，维护者按 activation friction 而非 vanity
+metrics 排序增长工作。
+
+增长工作必须优先优化 comprehension、activation 和 contribution quality。Stars、
+forks、clones 只算 reach signal；不能用它们替代独立运行、fixture change、public-safe
+report 或可复现 blocker 这类 activation proof。
+
+## English Reference
 
 This is the first public-Core growth operating plan after `helm-public` became
 public on 2026-06-01. It is an execution plan for awareness, activation,

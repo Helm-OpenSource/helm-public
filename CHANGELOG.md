@@ -10,6 +10,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
 - 新增公开双语化计划，并把 GitHub issue / PR intake 入口改为中英文双语。
 - 为 product / boundary 文档增加中文主文本与 English reference 标记。
+- 为 operations / roadmap / launch / trial / legal 文档增加中文主文本或 English reference summary。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
 - 新增首份 public Core operating model，覆盖 mission、OKR、KPI 与 workstream boundary。
@@ -23,6 +24,7 @@ English reference:
 
 - Added the public bilingualization plan and bilingual GitHub issue / PR intake surfaces.
 - Added Chinese main text and English reference markers to product / boundary docs.
+- Added Chinese main text or English reference summaries to operations / roadmap / launch / trial / legal docs.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
 - Added the first public Core operating model with mission, OKRs, KPIs, and workstream boundaries.

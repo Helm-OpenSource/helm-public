@@ -5,7 +5,28 @@ created: 2026-06-02
 review_after: 2026-06-09
 public_safety: Public accessibility and evidence-routing packet for China-market delivery engineers. Use only public repository surfaces, synthetic sample-pack proof, public-safe GitHub evidence, and owner-approved redacted receipts. Do not include real organization data, credentials, private domains, private environment details, security vulnerability details, automatic outbound promises, paid-offer claims, or response-time commitments.
 ---
-# Helm China Accessibility And Evidence Routing Packet - 2026-06-02
+# Helm China Accessibility And Evidence Routing Packet / Helm 中国访问性与证据路由 Packet - 2026-06-02
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文记录 `helm-public` 如何让中国市场的 delivery engineers 更容易触达 public Core
+loop，同时让 activation evidence 保持可验证。它不是 public announcement、reply
+template、private runbook、paid-offer statement，也不是 response-time 或 roadmap
+commitment。
+
+面向中国市场时，primary activation proof 仍然必须回到 GitHub public-safe evidence：
+Golden Path result、first-change proof、blocker、docs friction 或 integration use case。
+WeChat、QR、community handoff 只能作为 assisted signal 或 reach/contact signal，不能
+单独当作 activation success、commercial intent、response obligation 或 roadmap demand。
+
+任何公开 channel 或 redacted receipt 都不得包含真实组织数据、真实姓名、私人联系方式、
+私有 domain、内网 IP、私有 URL、credential、token、cookie、QR credential、secret、
+private environment detail、production log、security vulnerability detail、paid-offer、
+response-time、roadmap、private implementation 或 obligation wording。
+
+## English Reference
 
 This packet records how `helm-public` should make its public Core loop easier
 to reach for China-market delivery engineers while keeping activation evidence

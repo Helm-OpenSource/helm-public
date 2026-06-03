@@ -5,7 +5,29 @@ created: 2026-06-02
 review_after: 2026-06-09
 public_safety: Public maintainer operating baseline. Records repository, release, CI, community, and governance status only; no private approval ids, credentials, customer data, or deployment evidence.
 ---
-# Helm Public Maintainer Status - 2026-06-02
+# Helm Public Maintainer Status / Helm 公开维护者状态 - 2026-06-02
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文是 `helm-public` 在 2026-06-01 公开后的第一份 maintainer operating
+baseline。它是 project-health snapshot，不是 release approval、commercial SLA、
+customer commitment 或 Cloud / Enterprise readiness statement。
+
+范围只包含公开 GitHub repository surface、release / tag posture、`main` 上的 CI /
+guard status、public docs / contribution entry points，以及当前 maintainer risks 和
+next operating queue。私有 Pack、Overlay、客户部署、control-plane readiness、私有
+owner approval record、credential rotation receipt、legal reviewer record，以及自动
+write / send / approval / settlement / customer commitment path 均不在本状态表内。
+
+该 baseline 的运营含义是：public Core repo、docs index、CI / Preflight、branch
+protection、prerelease tag、launch announcement 和 issue / PR templates 已成立；
+maintainer operating loop、issue triage、community onboarding、Golden Path external
+testing、release metadata hygiene、required-check drift monitoring 和 day-7 readout
+仍需下一层执行。
+
+## English Reference
 
 This note is the first maintainer operating baseline after `helm-public` became
 public on 2026-06-01. It is a project-health snapshot, not a release approval,

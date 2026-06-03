@@ -5,7 +5,28 @@ created: 2026-06-02
 review_after: 2026-07-02
 public_safety: Public Core operating model. This is not a release approval, commercial commitment, production SLA, customer deployment proof, or private delivery runbook.
 ---
-# Helm Public Open Source Operating Model
+# Helm Public Open Source Operating Model / Helm 公开开源运营模型
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文定义 `Helm-OpenSource/helm-public` 的 public Core mission、direction、
+operating method 和第一层 OKR / KPI loop。它只适用于 Apache-2.0 Core 仓库，
+不批准 Helm Cloud、Helm Enterprise、certified partner status、production SLA、
+customer deployment readiness、automatic external send、automatic approval、
+automatic settlement、marketplace 或 plugin sandbox。
+
+Helm Public Core 的 mission 是帮助交付工程师把企业 AI operations work 转成
+forkable、evidence-backed、review-first 的 operating loop。运营方式必须坚持：
+trust before scale、activation before reach、contribution before expansion、
+integration by evidence，以及 open-core with explicit boundary。
+
+所有公开运营变更默认通过小 PR、公开 guard、fixture evidence 或 activation receipt
+证明；高风险措辞、商业姿态、安全细节和外部承诺必须走 owner gate。KPI 是运营目标，
+不是 public SLA；reach metrics 不能替代 activation evidence。
+
+## English Reference
 
 This document defines the public Core mission, direction, operating method, and
 first OKR / KPI loop for `Helm-OpenSource/helm-public`.

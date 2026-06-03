@@ -5,7 +5,9 @@ created: 2026-06-01
 review_after: 2026-09-01
 public_safety: Public launch announcement. Gate-relative wording only — no launch-date promises, no time-bound delivery commitments, no commitment-shaped customer claims.
 ---
-# Helm Public Core — Launch Announcement V1
+# Helm Public Core Launch Announcement V1 / Helm Public Core 发布公告 V1
+
+> **语言 / Language**: **中文** + **English**；gate-relative wording only.
 
 Bilingual announcement for the open-source Core. Wording is gate-relative
 (Now / Next / Later, evidence gates) — do not add launch dates or time-bound

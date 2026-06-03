@@ -5,7 +5,28 @@ created: 2026-06-02
 review_after: 2026-07-02
 public_safety: Public OPC packet template. Use only public repository metadata, public issues, public discussions, synthetic sample-pack signals, and public-safe command receipts. Do not include customer data, private contacts, private deployment evidence, credentials, or automatic external commitments.
 ---
-# Helm OPC Weekly Packet Template
+# Helm OPC Weekly Packet Template / Helm OPC 周报 Packet 模板
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本模板把 `helm-public` 的公开运营转成 owner-gated、proof-first、
+controlled-execution loop。它不是 release approval、customer commitment、Cloud /
+Enterprise readiness statement、SLA、automatic outbound campaign、certification
+approval 或 private delivery runbook。
+
+OPC 周报必须把 owner gate、proof packet 和 controlled execution 分开：Codex 可以准备
+证据和 queue，但不能替 owner 做外部承诺；proof packet 只能收集 public-safe facts、
+command receipts、issue / PR state、activation blockers 和 contributor signals；执行
+只能转成小 PR，并且不能 direct push protected branch，也不能绕过 verification。
+
+中国访问性 receipt 只有在 owner-approved exact copy、channel、timing、responsible
+person 和 no-go confirmation 等字段齐全时才可记录。WeChat、QR 和 community contact
+仍然只是 reach / contact 或 assisted signal，除非后续产生 GitHub public-safe evidence
+或 owner-approved redacted receipt。
+
+## English Reference
 
 This template turns public `helm-public` operation into an owner-gated,
 proof-first, controlled-execution loop.

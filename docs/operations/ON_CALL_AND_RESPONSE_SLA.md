@@ -8,7 +8,20 @@ archive_trigger:
   - Helm 不再承诺公开试点人工响应目标
 ---
 
-# Helm 试点响应与值班机制
+# Helm 试点响应与值班机制 / Helm Trial Response And On-Call Posture
+
+> **语言 / Language**: **中文主文本** + **English reference summary**
+
+## English Reference Summary
+
+This document defines the response targets, on-call ownership, and degraded
+public wording allowed before `v0.1.0-trial`. It is not a commercial SLA, does
+not promise 24x7 coverage, and does not provide compensation or service credits.
+
+The response targets are operational goals for controlled trial surfaces such as
+trial applications, integration issues, public trial feedback, security routing,
+and P0/P1 escalation. If Helm misses a target window, public wording must say so
+honestly and keep the controlled-trial boundary.
 
 本文件定义 `v0.1.0-trial` 之前允许公开表达的响应目标、值班责任和失败降级口径。它不是商业 SLA，不承诺 24x7，不提供赔偿或服务额度。
 

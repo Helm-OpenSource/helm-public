@@ -5,7 +5,30 @@ created: 2026-04-27
 review_after: 2026-07-26
 public_safety: Public Core roadmap. This is gate-relative planning, not a release-date commitment.
 ---
-# Helm Public Roadmap
+# Helm Public Roadmap / Helm 公开路线图
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文描述 Helm public Core 面向 delivery engineers 的 gate-relative roadmap。它不是
+commercial release approval、production SLA、customer deployment commitment 或
+repository visibility approval。
+
+Helm public Core 的北极星是：帮助 AI 交付工程师把客户业务实施里的 judgement、
+evidence、review、boundary 和 delivery package work 转成可 fork 的工程结构。
+
+路线图原则：recommendation 不是 commitment；review packet 不是 approval、send、
+write-back、settlement 或 execution；public Core 必须保持 Apache-2.0、可独立构建、
+public-safe；Core 不能依赖 Pack 或 Overlay code；公开文案使用 evidence gates 与
+Now / Next / Later，不使用 launch-date promise。
+
+Now 是 public Core baseline 与当前工作面；Next 是 gate-relative 的 public-Core 改进；
+Later 必须经过独立 gate、repo routing 和 owner approval。Cloud / Enterprise readiness、
+industry Pack hardening、customer Overlay delivery、control-plane metadata 和额外
+connector readiness 都不能被 public Core roadmap 自动承诺。
+
+## English Reference
 
 This roadmap describes the public Core path for delivery engineers. It is not a
 commercial release approval, production SLA, customer deployment commitment, or

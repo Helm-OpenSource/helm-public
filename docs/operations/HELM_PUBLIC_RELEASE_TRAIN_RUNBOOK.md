@@ -5,7 +5,28 @@ created: 2026-06-03
 review_after: 2026-07-03
 public_safety: Public release train runbook. Lists public-safe cadence, gates, commands, and owner boundaries only; private receipts, credentials, customer evidence, and approval ids stay off-repo.
 ---
-# Helm Public Release Train Runbook
+# Helm Public Release Train Runbook / Helm 公开 Release Train Runbook
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本 runbook 定义 `Helm-OpenSource/helm-public` 在第一轮 public-Core launch 之后
+如何发布。它不是 release approval、commercial launch statement、production SLA、
+customer deployment proof 或 Cloud / Enterprise readiness claim。
+
+发布原则：public Core 通过小而可 review 的 PR 发布，不能直接 push 到 `main`；
+green checks 是必要条件但不等于 release approval；trial release 保持 prerelease 且
+非 latest，除非 owner 修改 version strategy；stable release 必须推进 stable semver line
+并需要 owner gate；所有 private receipt、credential、customer evidence 和 approval id
+都留在 repo 外。
+
+`npm run release:check` 打印的 release command 只是给人工 maintainer 的 guidance；
+命令本身不会创建 tag 或 GitHub Release。任何 release tag 前都必须重新跑 public safety
+gates、activation / quality gates，并在 release machine 上设置必要的 manual receipt
+变量。
+
+## English Reference
 
 This runbook defines how `Helm-OpenSource/helm-public` ships after the first
 public-Core launch. It is not a release approval, commercial launch statement,

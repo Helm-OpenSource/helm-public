@@ -6,7 +6,22 @@ review_after: 2026-07-26
 # frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-19
 # rationale: default — no archive/dormant signal in path
 ---
-# Helm Public Trial Runbook
+# Helm Public Trial Runbook / Helm 公开试点 Runbook
+
+> **语言 / Language**: **中文主文本** + **English reference summary**
+
+## English Reference Summary
+
+This runbook explains the public cloud trial experience for users and on-call
+operators. It does not replace the trial data policy, public roadmap, or
+architecture/boundary rules. It exists so a new trial user knows the expected
+boundaries, support posture, escalation path, data handling posture, and what to
+do when something breaks.
+
+Key boundaries: the public trial is a controlled trial, not GA; no production
+SLA, no 24x7 support, no automatic external send, no automatic approval, no
+settlement, no cross-workspace aggregation, no production-data recommendation,
+and no public claim that trial behavior proves Cloud or Enterprise readiness.
 
 更新时间：2026-05-02
 适用范围：`v0.1.0-trial` 公开试用版用户、Helm 团队 oncall 与 owner、试用邀请发起人
