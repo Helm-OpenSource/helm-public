@@ -11,18 +11,17 @@ public_safety: Public agent working entry. Private orchestration and review pack
 
 ## 中文主文本 / Chinese Main Text
 
-在 `helm-public` 中，agent 应作为 public Core 仓库的贡献者工作，而不是私有 source
-split 的 operator。开始前默认阅读 [AGENTS.md](../../AGENTS.md)、[README.md](../../README.md)
+在 `helm-public` 中，agent 应作为公开 Core 仓库的贡献者工作，而不是私有源仓拆分的执行者。
+开始前默认阅读 [AGENTS.md](../../AGENTS.md)、[README.md](../../README.md)
 和 [docs/README.md](../README.md)。
 
-公开仓规则：保持 Apache-2.0 Core 可独立构建；不要加入客户名称、私有 domain、
-contact、overlay、credential、私有部署证据或商业 Pack 实现细节；不要把广泛内部
-planning / review archive 加进 `docs/`；任何新 public doc 都必须显式列入
+公开仓规则：保持 Apache-2.0 Core 可独立构建；不要加入客户名称、私有域名、
+联系人、overlay、凭据、私有部署证据或商业 Pack 实现细节；不要把广泛内部
+规划 / 复核归档加进 `docs/`；任何新公开文档都必须显式列入
 [public-docs-manifest.json](../public-docs-manifest.json)，并在开 PR 前运行
 `npm run check:public-docs` 与 `npm run check:public-release`。
 
-私有 multi-agent handoff、review packet、release receipt 和客户 delivery runbook
-继续留在私有仓库。
+私有多代理交接、复核包、发布回执和客户交付作业手册继续留在私有仓库。
 
 ## English Reference
 

@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 Codex 工作入口的中文公开仓边界术语混写；本批只改公开 Core 贡献者、私有源仓拆分执行者、私有域名、联系人、凭据、内部规划 / 复核归档、公开文档、私有多代理交接、复核包、发布回执和客户交付作业手册文案及源码守卫，不改 public-docs manifest、公开文档收录流程、验证命令或私有交接资料不得进公开仓的边界。
 - 继续收口公开维护者状态文档的中文维护者运营术语混写，并补齐中文证据、四档、风险队列和下一步摘要；本批只改维护者运营基线、项目健康快照、发布批准、商业服务等级承诺、公开仓库表面、发布与标签姿态、维护者风险、运营队列、负责人批准记录、凭据轮换回执、法律复核记录、自动写入 / 发送 / 批准 / 结算 / 客户承诺路径、维护者运营闭环、issue 分诊、社区上手、外部测试、发布元数据卫生和必需检查漂移监控文案及源码守卫，不改英文参考表格、GitHub 证据、分支保护、发布姿态、仅负责人回执边界或 Cloud / Enterprise 非承诺边界。
 - 继续补齐 China accessibility / evidence routing packet 的中文表格摘要；本批新增目标人群、可触达面、双层证据、证据采集、负责人闸门和 24 小时观察中文摘要，覆盖 AI 交付工程师、平台工程师、AI 运营建设者、解决方案架构师、实施负责人、README 中文入口、GitHub Discussions / issue templates、WeChat / QR 辅助触达、主要证明、辅助信号、私聊 / 未链接截图 / 私有部署说明排除、Golden Path 夹具改动、issue template 路由、负责人批准脱敏回执和私有遥测排除文案及源码守卫，不改英文参考表格、GitHub / WeChat 路由边界、owner-approved receipt 规则或不自动外联边界。
 - 继续收口 China accessibility / evidence routing packet 的中文访问性与证据路由术语混写；本批只改交付工程师、公开 Core 闭环、激活证据、公开公告、回复模板、私有 runbook、付费报价声明、响应时间、路线图承诺、主要激活证明、GitHub 公开安全证据、首次改动证明、阻断项、文档摩擦、集成用例、辅助信号、触达 / 联系信号、激活成功、商业意向、响应义务、路线图需求、公开渠道、脱敏回执、凭据、令牌、QR 凭据、密钥、私有环境细节、生产日志和安全漏洞细节文案及源码守卫，不改 English reference、证据表格、GitHub / WeChat 路由边界或 owner-approved receipt 规则。

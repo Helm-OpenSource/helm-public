@@ -2084,6 +2084,30 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps Codex docs entry Chinese body localized for public repo boundary terminology", () => {
+    const codexReadme = read("docs/codex/README.md");
+    const chineseBody = codexReadme.slice(
+      codexReadme.indexOf("在 `helm-public` 中"),
+      codexReadme.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("公开 Core 仓库的贡献者");
+    expect(chineseBody).toContain("私有源仓拆分的执行者");
+    expect(chineseBody).toContain("私有域名");
+    expect(chineseBody).toContain("联系人");
+    expect(chineseBody).toContain("凭据");
+    expect(chineseBody).toContain("规划 / 复核归档");
+    expect(chineseBody).toContain("新公开文档");
+    expect(chineseBody).toContain("私有多代理交接");
+    expect(chineseBody).toContain("复核包");
+    expect(chineseBody).toContain("发布回执");
+    expect(chineseBody).toContain("客户交付作业手册");
+
+    expect(chineseBody).not.toMatch(
+      /public Core|source\s+split|operator|private domain|contact|credential|planning \/ review archive|new public doc|multi-agent handoff|review packet|release receipt|delivery runbook/,
+    );
+  });
+
   it("keeps public release train runbook Chinese body free of recently fixed mixed release-governance fragments", () => {
     const releaseTrainRunbook = read(
       "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",

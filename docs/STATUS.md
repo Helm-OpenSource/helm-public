@@ -16,6 +16,21 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：Codex 工作入口的中文公开仓边界术语混写已继续清理；本批只改公开 Core
+贡献者、私有源仓拆分执行者、私有域名、联系人、凭据、内部规划 / 复核归档、公开文档、
+私有多代理交接、复核包、发布回执和客户交付作业手册文案及源码守卫，不改变 public-docs
+manifest、公开文档收录流程、验证命令或私有交接资料不得进公开仓的边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese public-repo boundary terminology
+in the Codex working entry has been further localized. This batch changes
+public-Core contributor, private source-split operator, private domain,
+contact, credential, internal planning / review archive, public doc, private
+multi-agent handoff, review packet, release receipt, and customer-delivery
+runbook wording plus source guards only; it does not change the public-docs
+manifest, public-doc curation flow, validation commands, or the
+private-handoff-material exclusion boundary, and does not claim full-repo
+bilingualization completion.
+
 最新双语化收口：公开维护者状态文档的中文维护者运营术语混写已继续清理，并补齐中文证据、
 四档、风险队列和下一步摘要；本批只改维护者运营基线、项目健康快照、发布批准、商业服务等级承诺、
 公开仓库表面、发布与标签姿态、维护者风险、运营队列、负责人批准记录、凭据轮换回执、

@@ -38,6 +38,19 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 Codex 工作入口的中文公开仓边界术语混写；只调整公开 Core 贡献者、
+私有源仓拆分执行者、私有域名、联系人、凭据、内部规划 / 复核归档、公开文档、
+私有多代理交接、复核包、发布回执和客户交付作业手册文案，不改变 public-docs manifest、
+公开文档收录流程、验证命令或私有交接资料不得进公开仓的边界。
+
+This round further localizes mixed Chinese public-repo boundary terminology in
+the Codex working entry. It changes public-Core contributor, private
+source-split operator, private domain, contact, credential, internal planning /
+review archive, public doc, private multi-agent handoff, review packet, release
+receipt, and customer-delivery runbook wording only, without changing the
+public-docs manifest, public-doc curation flow, validation commands, or the
+private-handoff-material exclusion boundary.
+
 本轮继续收口公开维护者状态文档的中文维护者运营术语混写，并补齐中文证据、四档、
 风险队列和下一步摘要；只调整维护者运营基线、项目健康快照、发布批准、商业服务等级承诺、
 公开仓库表面、发布与标签姿态、维护者风险、运营队列、负责人批准记录、凭据轮换回执、
