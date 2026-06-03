@@ -25,7 +25,7 @@ describe("recordLLMCall outputSummary privacy boundary", () => {
     mocks.llmCallLogCreate.mockResolvedValue({ id: "log_1" });
   });
 
-  it("redacts detected PII before persisting generic LLM output summaries", async () => {
+  it("stores metadata only for generic LLM output summaries with detected PII", async () => {
     await recordLLMCall({
       workspaceId: "workspace_1",
       provider: "openai",
@@ -37,12 +37,14 @@ describe("recordLLMCall outputSummary privacy boundary", () => {
     });
 
     const data = mocks.llmCallLogCreate.mock.calls[0]?.[0]?.data;
-    expect(data.outputSummary).toContain("已脱敏");
+    expect(data.outputSummary).toContain("LLM 输出完成");
+    expect(data.outputSummary).toContain("检测到 PII 模式");
+    expect(data.outputSummary).toContain("原文未落库");
     expect(data.outputSummary).not.toContain("synthetic.user@sample.invalid");
     expect(data.outputSummary).not.toContain("13800138000");
   });
 
-  it("detects PII before truncating long non-ASR output summaries", async () => {
+  it("detects PII before storing non-ASR output metadata", async () => {
     await recordLLMCall({
       workspaceId: "workspace_1",
       provider: "openai",
@@ -54,7 +56,8 @@ describe("recordLLMCall outputSummary privacy boundary", () => {
     });
 
     const data = mocks.llmCallLogCreate.mock.calls[0]?.[0]?.data;
-    expect(data.outputSummary).toContain("已脱敏");
+    expect(data.outputSummary).toContain("LLM 输出完成");
+    expect(data.outputSummary).toContain("检测到 PII 模式");
     expect(data.outputSummary).not.toContain("synthetic.user@sample.invalid");
   });
 
@@ -77,7 +80,7 @@ describe("recordLLMCall outputSummary privacy boundary", () => {
     expect(data.outputSummary).not.toContain("样例方案");
   });
 
-  it("keeps clean non-ASR summaries useful", async () => {
+  it("stores metadata only for clean non-ASR summaries", async () => {
     await recordLLMCall({
       workspaceId: "workspace_1",
       provider: "openai",
@@ -90,7 +93,8 @@ describe("recordLLMCall outputSummary privacy boundary", () => {
 
     const data = mocks.llmCallLogCreate.mock.calls[0]?.[0]?.data;
     expect(data.outputSummary).toBe(
-      "Generated recommendation explanation without customer identifiers.",
+      "LLM 输出完成（66 字）；原文未落库。",
     );
+    expect(data.outputSummary).not.toContain("Generated recommendation explanation");
   });
 });

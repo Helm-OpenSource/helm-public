@@ -112,6 +112,8 @@ cp .env.example .env
 
 When missing, the UI does not crash; it shows an "LLM not configured" notice.
 
+LLM call logs keep only metadata such as output length, success state, and detected PII patterns. `LLMCallLog.outputSummary` does not persist raw LLM output or ASR transcript text.
+
 ### OPTIONAL_CONNECTORS (enable as needed)
 
 DingTalk · WeCom · HubSpot · Salesforce · Stripe · Alipay · WeChat Pay.

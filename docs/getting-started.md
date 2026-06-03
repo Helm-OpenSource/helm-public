@@ -112,6 +112,8 @@ cp .env.example .env
 
 缺失时 UI 不会崩，会显式标注「未配置 LLM」。
 
+LLM 调用日志只保留输出长度、成功状态和可检测 PII 模式等元数据；`LLMCallLog.outputSummary` 不落库原始 LLM 输出或 ASR 转写正文。
+
 ### OPTIONAL_CONNECTORS（可选，按需）
 
 DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支付。

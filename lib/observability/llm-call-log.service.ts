@@ -81,14 +81,11 @@ export function sanitizeLLMCallOutputSummary(input: {
     );
   }
 
-  if (piiTypes.length > 0) {
-    return trimText(
-      `输出摘要已脱敏（检测到 PII 模式：${piiTypes.join(", ")}）；原文未落库。`,
-      240,
-    );
-  }
-
-  return trimText(summary, 240);
+  const piiNote = piiTypes.length > 0 ? `；检测到 PII 模式：${piiTypes.join(", ")}` : "";
+  return trimText(
+    `LLM 输出完成（${summary.length} 字）${piiNote}；原文未落库。`,
+    240,
+  );
 }
 
 export async function getRecentLLMCallLogs(workspaceId: string, limit = 20) {
