@@ -2064,6 +2064,26 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps integration template Chinese body free of recently fixed mixed connector fragments", () => {
+    const integrationTemplate = read("docs/integrations/INTEGRATION_TEMPLATE.md");
+    const chineseBody = integrationTemplate.slice(integrationTemplate.indexOf("> 接你客户"));
+
+    expect(chineseBody).toContain("连接器 / 适配器");
+    expect(chineseBody).toContain("客户关系系统 / 即时消息 / 邮件 / 日历 / 会议 / 支付 / 大模型等");
+    expect(chineseBody).toContain("默认全部复核");
+    expect(chineseBody).toContain("测试夹具 + 预演模式");
+    expect(chineseBody).toContain("落地界面入口");
+    expect(chineseBody).toContain("失败降级 | <降级策略：空提示条 / 缓存 / 合成占位>");
+    expect(chineseBody).toContain("每个连接器必须显式声明");
+    expect(chineseBody).toContain("OAuth 范围最小化");
+    expect(chineseBody).toContain("审计追踪");
+    expect(chineseBody).toContain("基础连接器");
+
+    expect(chineseBody).not.toMatch(
+      /connector \/ adapter|CRM \/ IM \/ Mail|auto（自动）|默认全部 review|read-only 才能走 auto|connector README|auto \/ review \/ never|dry-run 模式|Connector 名称|OAuth provider|inbound only|on-demand|落地 surface|graceful degrade|trace 写入|read-only directory|sync 结果|AES-GCM with|哪些动作 auto|默认 auto|默认 review|默认 never|不能 auto|OAuth scope|metadata 不要 PII|plain text|client-side|callback handler|audit log|cache|hard-code customer-specific|config file|happy path|failure mode|fallback 模式|Test 覆盖|generic 表达|配置 inject|bilingual|connector 必须|first-party|原数据 stays|active \+ 7 天 grace|secret 历史|新 connector|dry-run 测试|OAuth-based connector|审计 trace|基础 connector|Certified Integration/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");
