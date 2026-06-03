@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口公开首页中文入口文案混写；本批只改 public home 的复用入口、黄金路径、投资回报、客户关系管理、人力系统、追踪编号与 Helm Cloud 说明文案及源码守卫，不改首页路由、demo 登录、GitHub 链接、Helm Cloud 仅邀请制或不自动外发边界。
 - 继续收口 worker / skill / resource presentation 的中文展示标签混写；本批只改交付激活清单、CRM上下文、工作区状态和成员身份状态标签及源码守卫，不改 worker / skill / resource 合同、控制面检查或页面装配逻辑。
 - 继续收口 Helm v2 human action execution runtime 的中文人工执行文案混写；本批只改人工动作状态、执行证明、排期、CRM/管线和正式CRM边界提示，不改人工执行状态机、回执、正式写回、外发或审批边界。
 - 新增公开双语化计划，并把 GitHub issue / PR intake 入口改为中英文双语。

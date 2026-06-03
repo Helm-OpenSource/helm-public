@@ -104,6 +104,17 @@ workspace-state, and membership-state labels plus source guards only, without
 changing worker / skill / resource contracts, control-plane checks, or page
 assembly logic.
 
+本轮继续收口公开首页中文入口文案混写；只调整 public home 的复用入口、黄金路径、
+投资回报、客户关系管理、人力系统、追踪编号与 Helm Cloud 说明文案及源码守卫，
+不改变首页路由、demo 登录、GitHub 链接、Helm Cloud 仅邀请制或不自动外发边界。
+
+This round further localizes mixed Chinese entry copy on the public home page.
+It changes public-home reuse-entry, golden-path, return-on-investment,
+customer-relationship-management, HR-system, trace-number, and Helm Cloud
+explanation copy plus source guards only, without changing home routing,
+demo sign-in, GitHub links, Helm Cloud invite-only posture, or no-auto-send
+boundaries.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

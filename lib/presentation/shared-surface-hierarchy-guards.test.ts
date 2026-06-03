@@ -1799,4 +1799,24 @@ describe("shared surface hierarchy guards", () => {
       /正式 CRM|Helm 已记录|CRM 步骤|CRM \/ 管线|人工 scheduling|新增 主管关注|Helm 自动正式写回/,
     );
   });
+
+  it("keeps public home Chinese entry copy localized for delivery engineers", () => {
+    const publicHome = read("app/page.tsx");
+
+    expect(publicHome).toContain("AI平台给你乐高积木");
+    expect(publicHome).toContain("可复用的Apache-2.0核心工程");
+    expect(publicHome).toContain("复用这套工具集");
+    expect(publicHome).toContain("复刻仓库，用黄金路径检查链");
+    expect(publicHome).toContain("投资回报材料今天不发");
+    expect(publicHome).toContain("客户关系管理阶段还停在");
+    expect(publicHome).toContain("这四条Helm都接住了");
+    expect(publicHome).toContain("关键写路径打追踪编号");
+    expect(publicHome).toContain("可复刻核心工程 · 先复核黄金路径");
+    expect(publicHome).toContain("客户关系管理和人力系统");
+    expect(publicHome).toContain("自己克隆仓库并跑黄金路径检查链");
+
+    expect(publicHome).not.toMatch(
+      /AI 平台|企业 AI|可 fork|Fork 这套|fork 仓库|Golden Path 检查链|ROI 材料|ROI 问题|CRM 阶段|关键写路径打 trace ID|Helm 已经|Helm 是|CRM 和 HR|clone 并跑/,
+    );
+  });
 });
