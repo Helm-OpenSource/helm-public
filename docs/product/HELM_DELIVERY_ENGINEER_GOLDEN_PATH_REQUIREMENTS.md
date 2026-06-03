@@ -110,6 +110,18 @@ npm run check:public-release
 7. Inspect the produced signal / review packet path and confirm that forbidden
    write, send, approve, execute, and cross-tenant paths stay blocked.
 
+The minimum public Core P0 chain is:
+
+```text
+public fixture evidence
+  -> operating signal with sourceRef / time / subject / confidence / gap fields
+  -> memory candidate only
+  -> review packet with evidence / recommendation / risks / boundaries / next steps / owner
+```
+
+This chain must never auto-send, auto-approve, execute, write CRM, or promote an
+official memory record.
+
 The README and sample documentation must provide a concrete "change this line ->
 run this command -> observe this change" walkthrough without adding a new route,
 page, package, or command.
@@ -207,6 +219,8 @@ Machine-checkable acceptance:
 - `pack:fixture-check` passes with zero failures.
 - HSI and operating-signal evals keep forbidden action, sensitive data,
   cross-tenant projection, and LLM commitment incidents at zero.
+- Case-management sample tests prove the signal -> memory candidate -> review
+  packet path remains review-first.
 - `check:public-release` reports zero blockers before any public visibility
   claim.
 
@@ -244,3 +258,4 @@ the R5 / R7 follow-up docs and must be described as Next, not as already done.
 | Date | Change |
 |---|---|
 | 2026-06-01 | Initial public Core Golden Path requirements created from DEF spec, repo truth, and Claude cross-check rounds. |
+| 2026-06-03 | Added the public Core P0 evidence -> signal -> memory candidate -> review packet acceptance chain and kept all customer-visible actions review-first. |

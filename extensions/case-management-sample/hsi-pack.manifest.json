@@ -6,6 +6,7 @@
   "verticalKind": "case_management",
   "sourceKinds": [
     "case_system",
+    "crm",
     "im",
     "meeting",
     "email"

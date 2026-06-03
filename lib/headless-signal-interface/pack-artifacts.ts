@@ -33,6 +33,7 @@ type ReviewPacketForbiddenKey = (typeof REVIEW_PACKET_FORBIDDEN_TRUE_KEYS)[numbe
 export interface HsiReviewPacketTemplate {
   readonly packId: string;
   readonly templateVersion: string;
+  readonly schema?: Record<string, unknown>;
   readonly defaults: {
     readonly humanReviewerRequired: true;
     readonly notForAutoSend: true;
@@ -46,6 +47,15 @@ export interface HsiReviewPacketTemplate {
     readonly forbiddenActions: readonly string[];
   };
 }
+
+const REQUIRED_REVIEW_PACKET_SCHEMA_FIELDS = [
+  "evidence",
+  "recommendation",
+  "risks",
+  "boundaries",
+  "nextSteps",
+  "owner",
+] as const;
 
 /**
  * Validates a review packet template. The HSI-04 invariants
@@ -68,6 +78,16 @@ export function validateHsiReviewPacketTemplate(
   if (!isRecord(raw.defaults)) {
     violations.push("review_packet_template_missing_defaults");
     return violations;
+  }
+
+  if (!isRecord(raw.schema)) {
+    violations.push("review_packet_template_missing_schema");
+  } else {
+    for (const field of REQUIRED_REVIEW_PACKET_SCHEMA_FIELDS) {
+      if (!(field in raw.schema)) {
+        violations.push(`review_packet_template_missing_schema_field:${field}`);
+      }
+    }
   }
 
   const defaults = raw.defaults;

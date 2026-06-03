@@ -4,6 +4,8 @@ This project follows a release-note-first changelog until the first public tag.
 
 ## Unreleased
 
+- Added the public Core P0 evidence -> signal -> memory candidate -> review packet sample chain, with CRM fixture coverage and review-first guards.
+- Added Golden Path doctor checks for Qwen / region / residency / npm registry posture, OpenAI-only ASR configuration, and connector token placeholder visibility.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
 - Added the first public Core operating model with mission, OKRs, KPIs, and workstream boundaries.
