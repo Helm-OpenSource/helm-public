@@ -145,6 +145,17 @@ demo, industry-template, full-readout, golden-path-check, and real-CRM boundary
 guidance copy plus source guards only, without changing the trial application
 form, demo login, industry pack data, GitHub links, or no-auto-send boundaries.
 
+本轮继续收口 conversation capture 中文混写；只调整现场记录页、录制面板和结果面板里的
+客户关系管理系统、Helm执行说明、浏览器录音最小可用版等中文文案及源码守卫，不改变录音、
+上传、语音转写、写回、推荐刷新或审批链逻辑。
+
+This round further localizes mixed Chinese copy in conversation capture. It
+changes customer-relationship-management-system, Helm execution guidance, and
+browser-audio minimum-viable-version wording on the capture page, recording
+panel, and result panel plus source guards only, without changing recording,
+upload, speech transcription, writeback, recommendation refresh, or
+approval-chain logic.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

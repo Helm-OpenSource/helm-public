@@ -1162,6 +1162,31 @@ describe("shared surface hierarchy guards", () => {
     expect(displayCopy).toContain("受控路由链路");
   });
 
+  it("keeps conversation capture Chinese copy localized without changing capture boundaries", () => {
+    const capturePage = read("app/(workspace)/capture/page.tsx");
+    const sessionPanel = read(
+      "features/conversation-capture/capture-session-panel.tsx",
+    );
+    const resultPanel = read(
+      "features/conversation-capture/capture-result-panel.tsx",
+    );
+    const combined = `${capturePage}\n${sessionPanel}\n${resultPanel}`;
+
+    expect(capturePage).toContain("改写客户关系管理系统");
+    expect(capturePage).toContain("Helm会在后台生成转写文本");
+    expect(capturePage).toContain("Helm会先把会话里的阻塞");
+    expect(sessionPanel).toContain("Helm会把转写文本转成事实");
+    expect(sessionPanel).toContain("浏览器录音最小可用版");
+    expect(sessionPanel).toContain("Helm会改用你输入的速记文本");
+    expect(resultPanel).toContain("Helm已经把转写文本里最重要的经营信号提出来");
+    expect(resultPanel).toContain("Helm会把这条动作继续送入受控路由链");
+    expect(resultPanel).toContain("Helm不会强行制造新的建议");
+
+    expect(combined).not.toMatch(
+      /改写 CRM|Helm 会|Helm 已经|Helm 不会|浏览器录音 MVP/,
+    );
+  });
+
   it("keeps the highest-traffic business surfaces focused on action before guidance and secondary explanation", () => {
     const operating = read(
       "features/internal-operating-workspace/internal-operating-home.tsx",

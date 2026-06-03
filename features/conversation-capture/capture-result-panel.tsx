@@ -157,7 +157,7 @@ export function CaptureResultPanel({
     emptyTitle: english ? "No capture result yet" : "还没有现场记录结果",
     emptyDescription: english
       ? "Start from dashboard, contact, company, opportunity or meeting pages. Helm will turn the transcript into facts, commitments, blockers and follow-up actions."
-      : "你可以从首页、联系人、公司、机会或会议页直接开始记录。Helm 会把转写文本转成事实、承诺、阻塞和后续动作。",
+      : "你可以从首页、联系人、公司、机会或会议页直接开始记录。Helm会把转写文本转成事实、承诺、阻塞和后续动作。",
     resultBadge: english ? "Capture result" : "会话捕获结果",
     durationPrefix: english ? "Duration" : "时长",
     durationPending: english ? "Duration pending" : "时长待计算",
@@ -181,7 +181,7 @@ export function CaptureResultPanel({
     approvals: english ? "Approvals created" : "进入审批",
     insightsDescription: english
       ? "Helm has already surfaced the most important operating signals from the transcript."
-      : "Helm 已经把转写文本里最重要的经营信号提出来。",
+      : "Helm已经把转写文本里最重要的经营信号提出来。",
     confidence: english ? "Confidence" : "置信度",
     noGroupPrefix: english ? "No" : "还没有",
     noGroupSuffix: english ? "yet" : "",
@@ -201,20 +201,20 @@ export function CaptureResultPanel({
     noTranscriptTitle: english ? "No transcript yet" : "还没有转写文本",
     noTranscriptDescription: english
       ? "Once the session ends, audio or note text will first be turned into a transcript and then move into the understanding chain."
-      : "结束记录后，Helm 会先把语音或速记转成转写文本，再进入理解链路。",
+      : "结束记录后，Helm会先把语音或速记转成转写文本，再进入理解链路。",
     actionTitle: english ? "Actions and approvals" : "动作与审批",
     actionDescription: english
       ? "Next steps extracted from the session do not stay as passive suggestions; they flow into the existing policy and approval chain."
       : "会话里识别出的下一步不会停在建议里，会先进入现有复核链路。",
     defaultActionDescription: english
       ? "The system will keep this action inside the governed routing chain."
-      : "Helm 会把这条动作继续送入受控路由链。",
+      : "Helm会把这条动作继续送入受控路由链。",
     affectedObject: english ? "Affected object:" : "影响对象：",
     currentWorkspace: english ? "Current workspace" : "当前工作区",
     noActionTitle: english ? "No action generated yet" : "还没有生成动作",
     noActionDescription: english
       ? "If the transcript contains clear next steps, Helm will route them into suggestions and review."
-      : "如果转写文本里出现明确下一步，Helm 会把它送进建议和复核。",
+      : "如果转写文本里出现明确下一步，Helm会把它送进建议和复核。",
     approvalTitle: english ? "Approval results" : "审批结果",
     approvalDescription: english
       ? "External or high-risk actions are routed into the review center first."
@@ -233,7 +233,7 @@ export function CaptureResultPanel({
       : "还没有刷新后的建议",
     noRecommendationDescription: english
       ? "If the session did not materially change object state or memory, Helm will not force new suggestions."
-      : "如果这次会话没有明显改变对象状态或记忆，Helm 不会强行制造新的建议。",
+      : "如果这次会话没有明显改变对象状态或记忆，Helm不会强行制造新的建议。",
   };
   if (!session) {
     return (

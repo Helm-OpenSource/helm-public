@@ -82,6 +82,17 @@ boundary guidance copy plus source guards only; it does not change the trial
 application form, demo login, industry pack data, GitHub links, or no-auto-send
 boundaries, and does not claim full-repo bilingualization completion.
 
+conversation capture 中文混写也已继续清理；本批只改现场记录页、录制面板和结果面板里的
+客户关系管理系统、Helm执行说明、浏览器录音最小可用版等中文文案及源码守卫，不改变录音、
+上传、语音转写、写回、推荐刷新或审批链逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese copy in conversation capture has also been further localized. This
+batch changes customer-relationship-management-system, Helm execution guidance,
+and browser-audio minimum-viable-version wording on the capture page, recording
+panel, and result panel plus source guards only; it does not change recording,
+upload, speech transcription, writeback, recommendation refresh, or
+approval-chain logic, and does not claim full-repo bilingualization completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。
