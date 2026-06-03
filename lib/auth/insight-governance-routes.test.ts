@@ -588,4 +588,46 @@ describe("insight governance write paths", () => {
       "suggestion-1",
     );
   });
+
+  it("uses workspace default locale for evolution suggestion fallback errors", async () => {
+    settingsGovernanceMock.canManageWorkspacePolicies.mockReturnValue(true);
+    skillSuggestionMock.acceptSkillSuggestion.mockRejectedValue(null);
+    skillSuggestionMock.queueSkillFormalReview.mockRejectedValue(null);
+    strategySuggestionMock.dismissStrategySuggestion.mockRejectedValue(null);
+
+    const acceptSkillResponse = await acceptSkillSuggestionRoute(
+      new Request("http://localhost/api/evolution/skill-suggestions/skill-1/accept", {
+        method: "POST",
+      }),
+      { params: Promise.resolve({ id: "skill-1" }) },
+    );
+    const queueFormalReviewResponse = await queueSkillFormalReviewRoute(
+      new Request("http://localhost/api/evolution/skill-suggestions/skill-1/queue-formal-review", {
+        method: "POST",
+      }),
+      { params: Promise.resolve({ id: "skill-1" }) },
+    );
+    const dismissStrategyResponse = await dismissStrategySuggestionRoute(
+      new Request("http://localhost/api/evolution/strategy-suggestions/suggestion-1/dismiss", {
+        method: "POST",
+      }),
+      { params: Promise.resolve({ id: "suggestion-1" }) },
+    );
+
+    expect(acceptSkillResponse.status).toBe(500);
+    await expect(acceptSkillResponse.json()).resolves.toMatchObject({
+      success: false,
+      message: "Failed to accept skill suggestion",
+    });
+    expect(queueFormalReviewResponse.status).toBe(500);
+    await expect(queueFormalReviewResponse.json()).resolves.toMatchObject({
+      success: false,
+      message: "Failed to queue skill formal review",
+    });
+    expect(dismissStrategyResponse.status).toBe(500);
+    await expect(dismissStrategyResponse.json()).resolves.toMatchObject({
+      success: false,
+      message: "Failed to dismiss strategy suggestion",
+    });
+  });
 });

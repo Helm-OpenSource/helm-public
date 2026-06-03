@@ -34,7 +34,11 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
     return successResponse({ suggestion }, "strategy suggestion accepted");
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "采纳策略建议失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to accept strategy suggestion"
+          : "采纳策略建议失败",
       isWorkspaceOwnershipError(error) ? "SUGGESTION_NOT_FOUND" : "ACCEPT_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

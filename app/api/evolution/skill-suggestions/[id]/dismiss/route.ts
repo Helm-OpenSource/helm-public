@@ -34,7 +34,11 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
     return successResponse({ suggestion }, "skill suggestion dismissed");
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "忽略候选能力建议失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to dismiss skill suggestion"
+          : "忽略候选能力建议失败",
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "DISMISS_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

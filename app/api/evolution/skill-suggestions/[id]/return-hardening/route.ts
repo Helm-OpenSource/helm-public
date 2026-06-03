@@ -37,7 +37,11 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
     return successResponse({ suggestion }, "skill formal review returned for hardening");
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "退回 hardening 失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to return skill formal review for hardening"
+          : "退回加固失败",
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "FORMAL_REVIEW_RETURN_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );
