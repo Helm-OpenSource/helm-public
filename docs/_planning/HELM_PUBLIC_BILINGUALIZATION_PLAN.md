@@ -301,6 +301,16 @@ writeback-boundary wording in industry demo packs and business-advancement
 fixtures plus source guards only, without changing fixture ids, sourceType,
 signalType, or eval contracts.
 
+本轮继续收口 Ask Helm / workspace story / trial runbook 里的中文 CRM 边界混写；只调整
+经营信号上报、复核队列和试点 runbook 中的客户关系系统正式状态 / 阶段变更文案及源码守卫，
+不改变 intent 分类、审计候选、trace 字段或写回权限。
+
+This round further localizes mixed Chinese CRM boundary copy in Ask Helm,
+workspace story, and the trial runbook. It changes customer-relationship-system
+formal-state / stage-change wording in business-signal submission, review-queue,
+and pilot-runbook copy plus source guards only, without changing intent
+classification, audit candidates, trace fields, or writeback permissions.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

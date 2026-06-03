@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 Ask Helm / workspace story / trial runbook 里的中文 CRM 边界混写；本批只改经营信号上报、复核队列和试点 runbook 中的客户关系系统正式状态 / 阶段变更文案及源码守卫，不改 intent 分类、审计候选、trace 字段或写回权限。
 - 继续收口 demo / signal fixture 里的中文 CRM 混写；本批只改行业 demo pack 与 business advancement fixture 的客户关系系统阶段、记录、承诺、写回边界文案及源码守卫，不改 fixture id、sourceType、signalType 或 eval 合约。
 - 继续收口 memory display copy 里的中文 CRM 混写；本批只改 `CRM_IMPORT_COMPLETED` 的客户关系系统导入完成显示标签及源码守卫，不改 audit action type、事件枚举或记忆数据。
 - 继续收口 imports 服务层里的中文 CRM 混写；本批只改客户关系系统导入预热 actor、任务导入记忆 / 审计摘要、导入来源缺失和失败 fallback 文案及源码守卫，不改导入编排、对象写入、审计字段或 warmup 逻辑。

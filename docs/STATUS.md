@@ -260,6 +260,18 @@ business-advancement fixtures plus source guards only; it does not change
 fixture ids, sourceType, signalType, or eval contracts, and does not claim
 full-repo bilingualization completion.
 
+Ask Helm / workspace story / trial runbook 里的中文 CRM 边界混写也已继续清理；本批只改
+经营信号上报、复核队列和试点 runbook 中的客户关系系统正式状态 / 阶段变更文案及源码守卫，
+不改变 intent 分类、审计候选、trace 字段或写回权限，也不声明全仓双语化完成。
+
+Mixed Chinese CRM boundary copy in Ask Helm, workspace story, and the trial
+runbook has also been further localized. This batch changes
+customer-relationship-system formal-state / stage-change wording in
+business-signal submission, review-queue, and pilot-runbook copy plus source
+guards only; it does not change intent classification, audit candidates, trace
+fields, or writeback permissions, and does not claim full-repo bilingualization
+completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或

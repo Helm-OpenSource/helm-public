@@ -76,7 +76,7 @@ and no public claim that trial behavior proves Cloud or Enterprise readiness.
 - 把你导入的会议、邮箱、CRM 信号收敛成必须推进项 / Review Action / 经营记忆
 - 提供 Ask Helm 行动意图入口：回答、计划分解、起草草稿、生成内部 handoff
 - 在 `/mobile` 第一屏汇总当前 workspace 的窄手机端经营推进入口
-- 把每一条客户可见关键动作（DingTalk 邀请、CRM 阶段变更、外发草稿、记忆提升等）写成一条带 `traceId / requestId / parentEventId` 的 `AuditLog`；统一用户可见 trace timeline 仍是 release hard gate，未落地前不宣传“0 秒完整回放”
+- 把每一条客户可见关键动作（DingTalk 邀请、客户关系系统阶段变更、外发草稿、记忆提升等）写成一条带 `traceId / requestId / parentEventId` 的 `AuditLog`；统一用户可见 trace timeline 仍是 release hard gate，未落地前不宣传“0 秒完整回放”
 
 **不会做**（也是 Helm 当前刻意不做的）：
 

@@ -1996,6 +1996,15 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps workspace story and pilot runbook CRM boundary copy localized", () => {
+    const workspaceStory = read("lib/presentation/workspace-story.ts");
+    const trialRunbook = read("docs/pilot/PUBLIC_TRIAL_RUNBOOK.md");
+    const combined = `${workspaceStory}\n${trialRunbook}`;
+
+    expect(combined).toContain("客户关系系统阶段变更");
+    expect(combined).not.toMatch(/CRM 阶段变更/);
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");

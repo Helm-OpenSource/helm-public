@@ -625,7 +625,7 @@ function buildBoundaryNote(
     return {
       type: "review_required",
       message:
-        "经营信号上报只会落成一条需先复核的草稿记录，不会自动通知客户、对接审批，也不写回 CRM 正式状态。",
+        "经营信号上报只会落成一条需先复核的草稿记录，不会自动通知客户、对接审批，也不写回客户关系系统正式状态。",
     };
   }
   if (classification.intentType === "review_required_execution") {
@@ -730,7 +730,7 @@ function buildAnswer(
     return {
       summary: "我会把它整理成一条待复核的经营信号草稿。",
       explanation:
-        "上报只会写入一条审计候选记录，不自动写回 CRM、不发送外部消息、不创建正式任务；负责人需要在复核入口确认后再继续。",
+        "上报只会写入一条审计候选记录，不自动写回客户关系系统、不发送外部消息、不创建正式任务；负责人需要在复核入口确认后再继续。",
       confidence: classification.confidence,
     };
   }

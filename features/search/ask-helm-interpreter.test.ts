@@ -290,6 +290,21 @@ describe("Ask Helm read-only interpreter", () => {
     expect(response.nextStep.primary.target).toBe("/settings");
   });
 
+  it("keeps business signal submission boundary copy localized and non-writable", () => {
+    const response = interpretAskHelmQuery({
+      rawQuery: "上报一条经营信号：客户等报价三天了",
+    });
+
+    expect(response.classification.intentType).toBe("submit_business_signal");
+    expect(response.boundaryNote?.message).toContain("客户关系系统正式状态");
+    expect(response.answer.explanation).toContain(
+      "不自动写回客户关系系统",
+    );
+    expect(response.boundaryNote?.message).not.toMatch(/CRM 正式状态|写回 CRM/);
+    expect(response.answer.explanation).not.toMatch(/CRM 正式状态|写回 CRM/);
+    expect(response.retrievalPlan.writePath).toBe(false);
+  });
+
   it("marks confirmed voice transcripts as checked", () => {
     const response = interpretAskHelmQuery({
       rawQuery: "帮我把 Atlas 续约拆成三步",
