@@ -173,10 +173,11 @@ export async function createAlipayCheckoutSession(
     sign_type: "RSA2",
     timestamp: formatTimestamp(),
     version: "1.0",
-    notify_url: getChinaPaymentNotifyUrl(PAYMENT_PROVIDER.ALIPAY),
+    notify_url: getChinaPaymentNotifyUrl(PAYMENT_PROVIDER.ALIPAY, input.locale),
     return_url: getChinaPaymentReturnUrl({
       provider: PAYMENT_PROVIDER.ALIPAY,
       status: "checkout-returned",
+      locale: input.locale,
     }),
     biz_content: bizContent,
   };

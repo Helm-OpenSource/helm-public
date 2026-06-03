@@ -59,6 +59,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 billing checkout 的 payment-rail 不可用 fallback 文案；本批只改 settings action 可见错误文案，不改支付通道解析、checkout 创建、结算或窄支付边界。
 - 继续收口 billing portal 的 customer-missing fallback 文案；本批只改 settings action 可见错误文案，不改 portal eligibility、Stripe portal 创建、支付通道解析或结算边界。
 - 继续收口 Stripe checkout missing-redirect fallback 文案；本批只改 settings action 可见错误文案，不改 Stripe checkout 创建、审计顺序、支付通道解析或结算边界。
+- 继续收口中国区支付 APP_URL 缺失 fallback 文案；本批只改 Alipay / WeChat Pay checkout URL 生成前的配置错误文案与 locale 透传，不改 URL path、支付参数或窄支付边界。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -122,6 +123,7 @@ English reference:
 - Further localized billing-checkout payment-rail unavailable fallback copy; this batch changes settings-action-visible error copy only and leaves payment-rail resolution, checkout creation, settlement, and the narrow-payment boundary unchanged.
 - Further localized billing-portal customer-missing fallback copy; this batch changes settings-action-visible error copy only and leaves portal eligibility, Stripe portal creation, payment-rail resolution, and settlement boundaries unchanged.
 - Further localized Stripe checkout missing-redirect fallback copy; this batch changes settings-action-visible error copy only and leaves Stripe checkout creation, audit ordering, payment-rail resolution, and settlement boundaries unchanged.
+- Further localized China payment APP_URL missing fallback copy; this batch changes config-error copy and locale propagation before Alipay / WeChat Pay checkout URL generation only, leaving URL paths, payment parameters, and the narrow-payment boundary unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

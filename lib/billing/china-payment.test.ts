@@ -1,12 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { PaymentProvider } from "@prisma/client";
 import {
   buildChinaPaymentOrderId,
   getChinaBillingPeriodUnix,
+  getChinaPaymentNotifyUrl,
+  getChinaPaymentReturnUrl,
   getWorkspaceOrderAmountCents,
 } from "@/lib/billing/china-payment";
 
 describe("china payment helpers", () => {
+  const appUrlSnapshot = process.env.APP_URL;
+
+  afterEach(() => {
+    if (appUrlSnapshot) {
+      process.env.APP_URL = appUrlSnapshot;
+    } else {
+      delete process.env.APP_URL;
+    }
+  });
+
   it("builds deterministic provider-specific order ids", () => {
     const orderId = buildChinaPaymentOrderId(
       PaymentProvider.ALIPAY,
@@ -32,5 +44,25 @@ describe("china payment helpers", () => {
         additionalBillableSeats: 2,
       }),
     ).toBe(39_700);
+  });
+
+  it("localizes missing APP_URL errors for Chinese payment return URLs", () => {
+    delete process.env.APP_URL;
+
+    expect(() =>
+      getChinaPaymentReturnUrl({
+        provider: PaymentProvider.ALIPAY,
+        status: "checkout-returned",
+        locale: "zh-CN",
+      }),
+    ).toThrow("中国区支付通道需要先配置 APP_URL。");
+  });
+
+  it("preserves missing APP_URL English copy for English payment notify URLs", () => {
+    delete process.env.APP_URL;
+
+    expect(() => getChinaPaymentNotifyUrl(PaymentProvider.WECHAT_PAY, "en-US")).toThrow(
+      "APP_URL is required for China payment rail",
+    );
   });
 });

@@ -146,11 +146,12 @@ async function wechatRequest<T>(input: {
   return json as T;
 }
 
-function appendWeChatRedirectUrl(url: string) {
+function appendWeChatRedirectUrl(url: string, locale?: string | null) {
   const redirect = encodeURIComponent(
     getChinaPaymentReturnUrl({
       provider: PAYMENT_PROVIDER.WECHAT_PAY,
       status: "checkout-returned",
+      locale,
     }),
   );
   return `${url}${url.includes("?") ? "&" : "?"}redirect_url=${redirect}`;
@@ -203,7 +204,7 @@ export async function createWeChatPayCheckoutSession(
   const outTradeNo = buildChinaPaymentOrderId(PAYMENT_PROVIDER.WECHAT_PAY, input.workspaceId);
   const description = getWorkspaceOrderDescription(input);
   const amount = getWorkspaceOrderAmountCents(input);
-  const notifyUrl = getChinaPaymentNotifyUrl(PAYMENT_PROVIDER.WECHAT_PAY);
+  const notifyUrl = getChinaPaymentNotifyUrl(PAYMENT_PROVIDER.WECHAT_PAY, input.locale);
   const clientIp = String(input.clientIp ?? "").split(",")[0].trim();
   const userAgent = String(input.userAgent ?? "").toLowerCase();
   const prefersH5 = Boolean(clientIp && /iphone|ipad|android|mobile|micromessenger/.test(userAgent));
@@ -239,7 +240,7 @@ export async function createWeChatPayCheckoutSession(
       provider: PAYMENT_PROVIDER.WECHAT_PAY,
       checkoutMode: "WECHAT_NATIVE_OR_H5",
       checkoutSessionId: outTradeNo,
-      url: appendWeChatRedirectUrl(payload.h5_url),
+      url: appendWeChatRedirectUrl(payload.h5_url, input.locale),
     };
   }
 
