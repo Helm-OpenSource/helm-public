@@ -207,6 +207,16 @@ it does not change the connector permission matrix, control-plane capabilities,
 or writeback authorization, and does not claim full-repo bilingualization
 completion.
 
+billing lifecycle 边界读数里的中文 CRM 混写也已继续清理；本批只改订阅暂停 / 只读说明中的
+客户关系系统预览与导入显示文案及源码守卫，不改变 lifecycle gating、usage ledger 或操作枚举，
+也不声明全仓双语化完成。
+
+Mixed Chinese CRM copy in billing lifecycle boundary readouts has also been
+further localized. This batch changes customer-relationship-system preview and
+import wording in subscription pause / read-only guidance plus source guards
+only; it does not change lifecycle gating, the usage ledger, or operation enums,
+and does not claim full-repo bilingualization completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或

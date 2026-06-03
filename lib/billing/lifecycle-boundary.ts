@@ -39,11 +39,11 @@ const OPERATION_LABELS: Record<HighCostProcessingOperationKey, { en: string; zh:
   },
   CRM_PREVIEW_RECOMPUTATION: {
     en: "CRM preview recomputation",
-    zh: "CRM 预演计算",
+    zh: "客户关系系统预演计算",
   },
   CRM_IMPORT_RUN: {
     en: "CRM import execution",
-    zh: "CRM 导入执行",
+    zh: "客户关系系统导入执行",
   },
   CSV_IMPORT_RUN: {
     en: "CSV import execution",
@@ -140,8 +140,8 @@ function getPausedOperations(english: boolean) {
         "会议记忆处理",
         "判断建议刷新",
         "简报刷新",
-        "新的 CRM 预演计算",
-        "CRM 导入执行",
+        "新的客户关系系统预演计算",
+        "客户关系系统导入执行",
         "CSV 导入执行",
         "导入预热重跑",
         "连接器同步",
@@ -162,7 +162,7 @@ export function getLifecycleBoundarySummary(
       pausedHighCostProcessing: getPausedOperations(english),
       scopeNote: english
         ? "CRM preview here means a new import preview recomputation. It does not mean ordinary surface browsing is blocked. Local CSV import preview remains allowed because it stays a local draft preview rather than a provider-side recomputation."
-        : "这里的 CRM 预览特指新的导入预演重算，不代表普通页面浏览被阻止。本地 CSV 导入预演仍然允许，因为它只是本地草稿预演，不会触发支付渠道或外部服务侧重算。",
+        : "这里的客户关系系统预览特指新的导入预演重算，不代表普通页面浏览被阻止。本地 CSV 导入预演仍然允许，因为它只是本地草稿预演，不会触发支付渠道或外部服务侧重算。",
     };
   }
 
@@ -175,7 +175,7 @@ export function getLifecycleBoundarySummary(
       pausedHighCostProcessing: getPausedOperations(english),
       scopeNote: english
         ? "Read-only is still lifecycle-based, not plan-based feature hiding. CRM preview still means a new import preview recomputation, while local CSV import preview remains allowed."
-        : "只读状态仍然是订阅边界，不是按套餐任意隐藏功能。这里的 CRM 预览仍特指新的导入预演重算，而本地 CSV 导入预览继续允许。",
+        : "只读状态仍然是订阅边界，不是按套餐任意隐藏功能。这里的客户关系系统预览仍特指新的导入预演重算，而本地 CSV 导入预览继续允许。",
     };
   }
 

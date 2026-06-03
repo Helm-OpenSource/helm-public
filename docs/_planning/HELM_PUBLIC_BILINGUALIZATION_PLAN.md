@@ -255,6 +255,14 @@ stage-write wording in the read-only permission panel plus source guards only,
 without changing the connector permission matrix, control-plane capabilities, or
 writeback authorization.
 
+本轮继续收口 billing lifecycle 边界读数里的中文 CRM 混写；只调整订阅暂停 / 只读说明中的
+客户关系系统预览与导入显示文案及源码守卫，不改变 lifecycle gating、usage ledger 或操作枚举。
+
+This round further localizes mixed Chinese CRM copy in billing lifecycle
+boundary readouts. It changes customer-relationship-system preview and import
+wording in subscription pause / read-only guidance plus source guards only,
+without changing lifecycle gating, the usage ledger, or operation enums.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成
