@@ -58,6 +58,9 @@ working surface:
   curated public docs.
 - Docker quickstart: `Dockerfile`, `docker-compose.yml`, and fresh-clone review
   receipts under `docs/reviews/`.
+- Mainland China / restricted-network local developer path: optional
+  `.npmrc.example`, Docker `NPM_REGISTRY` build arg, and docs that keep mirror
+  credentials local rather than committed.
 - Delivery engineer Golden Path requirements:
   [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md).
 - Headless Signal Interface requirements:
@@ -94,6 +97,9 @@ commitments.
   the public label at "provenance under review".
 - Add fork-and-rename guidance, a standalone "what Helm does not do" page, and a
   forker upgrade story.
+- Turn the current "not a production image" Docker boundary into a separate
+  production deployment runbook / image decision packet before any customer
+  deployment wording is allowed.
 - Keep public docs curated through `docs/public-docs-manifest.json` and
   `npm run check:public-docs`.
 - Coordinate a read-only split doctor in `helm-control-plane`; do not add

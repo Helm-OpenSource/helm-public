@@ -16,6 +16,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 workspace runtime 可见面板中的指标标签、加载策略和基准矩阵文案，直接 JSX 英文标签扫描降为 0。
 - 继续收口会议人工执行与正式写回运行时面板的中文标签，让交付工程师在复核、执行、回执和异常跟进链路中看到中文操作字段；全工程源码 / UI 双语化仍在 P2-C 推进。
 - 继续收口 meeting v2 runtime 主面板的中文标签，让接管、恢复、回放、关闭、收口、结算、人工输入、反思和整合队列在中文默认界面下可读；全工程启发式剩余候选项降为 313。
+- 修复开发者上手文档的 Prisma 与 MySQL 凭据不一致问题，并补充中国大陆 / 受限网络的 npm 与 Docker 镜像配置指引、微信支付 lifecycle env 示例。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
 - 新增首份 public Core operating model，覆盖 mission、OKR、KPI 与 workstream boundary。
@@ -35,6 +36,7 @@ English reference:
 - Further localized visible workspace runtime metric labels, loading strategy labels, and benchmark matrix copy; the direct JSX English-label scan now returns 0 hits.
 - Further localized the meeting human-execution and official-write runtime panels so delivery engineers see Chinese operation fields across review, execution, receipt, and exception follow-through paths; full source / UI bilingualization remains in P2-C.
 - Further localized the meeting v2 runtime main panel across takeover, recovery, replay, close, closeout, settlement, human-input, reflection, and consolidation queue labels; the whole-project heuristic candidate count is down to 313.
+- Fixed developer quickstart drift around Prisma generation and MySQL credentials, and added Mainland China / restricted-network npm and Docker mirror guidance plus WeChat Pay lifecycle env examples.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
 - Added the first public Core operating model with mission, OKRs, KPIs, and workstream boundaries.

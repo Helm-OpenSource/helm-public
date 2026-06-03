@@ -48,17 +48,57 @@ cd helm-public
 
 ---
 
+## 1.1 中国大陆 / 受限网络准备（可选）
+
+如果你的网络访问 Docker Hub 或 `registry.npmjs.org` 不稳定，先把镜像源作为**本地
+环境配置**处理，不要把私有 mirror、token 或凭据提交进仓库。
+
+本地 `npm install` 可复制模板：
+
+```bash
+cp .npmrc.example .npmrc
+```
+
+模板只设置：
+
+```ini
+registry=https://registry.npmmirror.com
+```
+
+Docker 构建里的 `npm ci` 可以用同一个镜像：
+
+```bash
+NPM_REGISTRY=https://registry.npmmirror.com docker compose up --build
+```
+
+这个 build arg 只影响镜像内的 npm 下载。`node:22-slim` 和 `mysql:8.4` 仍由你的
+Docker daemon 拉取；如果 Docker Hub 不稳定，请在 Docker Desktop / OrbStack /
+colima 或企业镜像网关里配置你们组织认可的 registry mirror，例如：
+
+```json
+{
+  "registry-mirrors": [
+    "https://<your-org-approved-dockerhub-mirror>"
+  ]
+}
+```
+
+镜像构建还会访问 Debian `apt` 源安装 OpenSSL / CA 证书；如果企业网络也拦截这条
+链路，请先配置 Docker / 企业网络代理，或在你的 fork 中替换为组织批准的基础镜像。
+
+需要恢复 npm 默认 registry 时，删除本地 `.npmrc` 即可。
+
+---
+
 ## 2. 安装依赖
 
 ```bash
 npm install
 ```
 
-`postinstall` 会自动跑 `prisma generate`。如果失败，单独跑：
-
-```bash
-npm run db:generate
-```
+`postinstall` 只运行本地 macOS lightningcss 签名修复 helper；它**不会**自动生成
+Prisma client。请在完成 MySQL 与 `.env` 配置后，按第 5 步显式运行
+`npm run db:generate`。
 
 ---
 
@@ -68,8 +108,8 @@ npm run db:generate
 
 ```bash
 docker run -d --name helm-mysql \
-  -e MYSQL_ROOT_PASSWORD=password \
-  -e MYSQL_DATABASE=helm \
+  -e MYSQL_ROOT_PASSWORD=root \
+  -e MYSQL_DATABASE=helm2026 \
   -p 3306:3306 \
   mysql:8.4
 ```
@@ -77,10 +117,11 @@ docker run -d --name helm-mysql \
 启动后默认 `DATABASE_URL`：
 
 ```
-mysql://root:password@127.0.0.1:3306/helm
+mysql://root:root@127.0.0.1:3306/helm2026?charset=utf8mb4
 ```
 
-如果你已有 MySQL，跳过这一步，把上面 URL 替换到 `.env` 即可。
+这与 `.env.example`、`docker-compose.yml` 保持一致。如果你已有 MySQL，跳过这一步，
+把对应 URL 替换到 `.env` 即可。
 
 ---
 
@@ -129,8 +170,10 @@ npm run db:seed        # 灌入开发示例数据
 如果迁移失败提示 extension SQL 相关，单独跑：
 
 ```bash
-npm run setup-db       # 自动应用 extension SQL
+npm run db:migrate     # 重新应用迁移入口
 ```
+
+如果仍失败，先确认 `.env` 里的 `DATABASE_URL` 与 MySQL 启动参数一致。
 
 需要重置时（**会删本地数据**）：
 

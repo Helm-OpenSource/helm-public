@@ -102,6 +102,8 @@ const connectorBlocks: ConnectorBlock[] = [
       "WECHAT_PAY_MERCHANT_ID",
       "WECHAT_PAY_MERCHANT_SERIAL_NO",
       "WECHAT_PAY_PRIVATE_KEY",
+      "WECHAT_PAY_PLATFORM_PUBLIC_KEY",
+      "WECHAT_PAY_API_V3_KEY",
     ],
     triggerKey: "WECHAT_PAY_APP_ID",
   },

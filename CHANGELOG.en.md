@@ -14,6 +14,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized visible workspace runtime metric labels, loading strategy labels, and benchmark matrix copy; the direct JSX English-label scan now returns 0 hits.
 - Further localized the meeting human-execution and official-write runtime panels so delivery engineers see Chinese operation fields across review, execution, receipt, and exception follow-through paths; full source / UI bilingualization remains in P2-C.
 - Further localized the meeting v2 runtime main panel across takeover, recovery, replay, close, closeout, settlement, human-input, reflection, and consolidation queue labels; the whole-project heuristic candidate count is down to 313.
+- Fixed developer quickstart drift around Prisma generation and MySQL credentials, and added Mainland China / restricted-network npm and Docker mirror guidance plus WeChat Pay lifecycle env examples.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
 - Added the first public Core operating model with mission, OKRs, KPIs, and workstream boundaries.

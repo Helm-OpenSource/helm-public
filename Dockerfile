@@ -15,6 +15,7 @@
 # ---------- deps ----------
 FROM node:22-slim AS deps
 WORKDIR /app
+ARG NPM_REGISTRY=""
 
 # Install OpenSSL — Prisma client requires it at runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,7 +28,8 @@ COPY prisma ./prisma
 COPY scripts/fix-local-lightningcss-signature.mjs ./scripts/fix-local-lightningcss-signature.mjs
 # `npm ci` runs postinstall; copy the local macOS lightningcss helper first so
 # Linux image builds can skip it cleanly instead of failing on a missing file.
-RUN npm ci --no-audit --no-fund
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi \
+ && npm ci --no-audit --no-fund
 
 # ---------- build ----------
 FROM node:22-slim AS build

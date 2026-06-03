@@ -93,7 +93,10 @@ This PR's source audit result:
    这些目标文件的 `english` 条件中文分支扫描为 0；全工程启发式扫描仍有 313 个
    候选项，后续集中在 detail / settings / billing surface。剩余品牌名、语言名、
    provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
-4. 后续如果新增 public-facing UI，必须优先接入 `resolveUiLocale` / `getUiMessages`
+4. 交付工程师上手文档已补齐中国大陆 / 受限网络 npm 与 Docker mirror 指引、Prisma
+   显式生成口径、MySQL 凭据对齐和微信支付 lifecycle env 示例；这些属于双语化的
+   delivery-engineer-friendly 维度，不代表生产部署 ready。
+5. 后续如果新增 public-facing UI，必须优先接入 `resolveUiLocale` / `getUiMessages`
    或对应 feature display-copy，而不是直接写单语长文案。
 
 1. `lib/i18n/config.ts` keeps `zh-CN` as the default UI locale and preserves the
@@ -111,7 +114,12 @@ This PR's source audit result:
    candidates, concentrated in detail / settings / billing surfaces. Remaining
    brand names, language labels, provider names, trace keys, and runtime enums
    are P3 rather than Chinese UI gaps.
-4. New public-facing UI must use `resolveUiLocale` / `getUiMessages` or the
+4. Developer onboarding docs now include Mainland China / restricted-network
+   npm and Docker mirror guidance, explicit Prisma generation wording, aligned
+   MySQL credentials, and WeChat Pay lifecycle env examples; this is part of
+   delivery-engineer-friendly bilingualization and is not a production
+   deployment readiness claim.
+5. New public-facing UI must use `resolveUiLocale` / `getUiMessages` or the
    relevant feature display-copy instead of embedding long single-language copy.
 
 ## 4. 本轮 P0 范围 / Current P0 Scope
@@ -200,6 +208,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-03 | 补齐中国大陆 / 受限网络上手指引，修复 Prisma 与 MySQL 凭据文档漂移，并补充微信支付 lifecycle env 示例；Added Mainland China / restricted-network onboarding guidance, fixed Prisma and MySQL credential doc drift, and added WeChat Pay lifecycle env examples |
 | 2026-06-03 | 继续收口 meeting v2 runtime 主面板中文操作字段，目标文件 `english` 条件中文分支扫描为 0，全工程启发式候选项降为 313；Further localized meeting v2 runtime main-panel operation fields; target-file `english` conditional scan now returns 0 hits, and whole-project heuristic candidates are down to 313 |
 | 2026-06-03 | 继续收口会议人工执行与正式写回运行时面板中文操作字段，目标文件 `english` 条件中文分支扫描为 0；Further localized meeting human-execution and official-write runtime operation fields; target-file `english` conditional scan now returns 0 hits |
 | 2026-06-03 | 继续收口 workspace runtime 可见面板中的指标标签、加载策略和基准矩阵文案，直接 JSX 英文标签扫描降为 0；Further localized visible workspace runtime metric labels, loading strategy labels, and benchmark matrix copy; direct JSX English-label scan now returns 0 hits |

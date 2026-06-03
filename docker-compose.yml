@@ -42,6 +42,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Optional for Mainland China or restricted networks. Set in `.env` or
+        # prefix the command:
+        #   NPM_REGISTRY=https://registry.npmmirror.com docker compose up --build
+        # Docker base images still depend on your Docker daemon registry mirror.
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
     image: helm-app:dev
     container_name: helm-app
     restart: unless-stopped
