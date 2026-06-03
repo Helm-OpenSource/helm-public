@@ -197,6 +197,16 @@ empty-state, identity-binding debt, and connected-source wording plus source
 guards only, without changing diagnostics data, pilot judgement, import jobs,
 or identity-review logic.
 
+本轮继续收口 settings setup / account 连接说明里的中文 CRM 混写；只调整初始化向导的
+客户关系系统连接标题、账户设置里的未命名客户关系系统来源文案和源码守卫，不改变设置保存、
+连接器优先级、认证配置或数据接入逻辑。
+
+This round further localizes mixed Chinese CRM copy in settings setup / account
+connection guidance. It changes the setup-wizard customer-relationship-system
+connection title, the account-settings unnamed customer-relationship-system
+source copy, and source guards only, without changing settings persistence,
+connector priority, auth configuration, or data-ingress logic.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

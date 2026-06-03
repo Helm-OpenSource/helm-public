@@ -141,6 +141,17 @@ source guards only; it does not change diagnostics data, pilot judgement,
 import jobs, or identity-review logic, and does not claim full-repo
 bilingualization completion.
 
+settings setup / account 连接说明里的中文 CRM 混写也已继续清理；本批只改初始化向导的
+客户关系系统连接标题、账户设置里的未命名客户关系系统来源文案和源码守卫，不改变设置保存、
+连接器优先级、认证配置或数据接入逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese CRM copy in settings setup / account connection guidance has also
+been further localized. This batch changes the setup-wizard
+customer-relationship-system connection title, the account-settings unnamed
+customer-relationship-system source copy, and source guards only; it does not
+change settings persistence, connector priority, auth configuration, or
+data-ingress logic, and does not claim full-repo bilingualization completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或

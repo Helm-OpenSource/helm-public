@@ -1996,4 +1996,17 @@ describe("shared surface hierarchy guards", () => {
       /CRM 和对象绑定|未命名 CRM|任何 CRM 来源|当 CRM-first|先清 CRM|已连接 CRM 来源|已连接 CRM"/,
     );
   });
+
+  it("keeps settings setup CRM source copy localized", () => {
+    const setupWizard = read("features/settings/setup-wizard.tsx");
+    const accountSettingsTab = read(
+      "features/settings/components/account-settings-tab.tsx",
+    );
+    const combined = `${setupWizard}\n${accountSettingsTab}`;
+
+    expect(setupWizard).toContain("优先使用客户关系系统连接");
+    expect(accountSettingsTab).toContain("未命名客户关系系统来源");
+
+    expect(combined).not.toMatch(/优先使用 CRM-first 连接|未命名 CRM 来源/);
+  });
 });
