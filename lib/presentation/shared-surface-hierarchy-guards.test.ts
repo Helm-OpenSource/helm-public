@@ -650,6 +650,36 @@ describe("shared surface hierarchy guards", () => {
       "Success 跟进",
       "当前对外姿态 ",
       "判断姿态 ",
+      "公司详情面 后面",
+      "客户成功验收 和拓展路由",
+      "交接 路由",
+      "扩大后的 负责人",
+      "更高 执行风险",
+      "内部 playbook",
+      "发送评估姿态 仍",
+      "复核话术 关闭",
+      "已经 agreed",
+      "复核姿态 仍",
+      "边界姿态 仍",
+      "非承诺优先 治理",
+      "缺失的 请求",
+      "边界话术 和判断姿态",
+      "可拓展 的措辞",
+      "交接 面",
+      "路由 线索",
+      "复核请求 或泛化",
+      "工作流 或",
+      "阶段模型 派生",
+      "新的 权威对象",
+      "诚实的 经营入口",
+      "路由和 负责人",
+      "当前证据 说得",
+      "交接 reason",
+      "回复 请求",
+      "禁用 对外发送",
+      "对外发送 和承诺",
+      "持守中 草稿",
+      "当前证据 更实",
     ]) {
       expect(sources).not.toContain(fragment);
     }
@@ -665,12 +695,16 @@ describe("shared surface hierarchy guards", () => {
     expect(detailModel).toContain("交接证据会继续保留");
     expect(detailModel).toContain("商业方案包线");
     expect(detailModel).toContain("客户成功收件箱线程");
+    expect(detailModel).toContain("交接路由已经收在这里");
+    expect(detailModel).toContain("非承诺优先治理约束");
     expect(queueModel).toContain("问题跟进闭环");
     expect(queueModel).toContain("普通客户成功路径上");
     expect(queueModel).toContain("当前沉默仍然不等于确认");
     expect(queueModel).toContain("派生客户成功队列");
     expect(queueModel).toContain("客户成功收件箱仍是派生面");
     expect(queueModel).toContain("最新入站回应正在要求澄清");
+    expect(queueModel).toContain("很薄的收件箱路线线索");
+    expect(queueModel).toContain("这一面仍继续禁用对外发送和承诺");
   });
 
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {

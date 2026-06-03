@@ -71,6 +71,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 commercial narrative strengthening detail 的中文 fallback 标签；本批只改可见 label / summary 与源码守卫，不改 sendability、proposal 或 non-commitment 边界。
 - 继续收口 customer success handoff detail / queue 中的中文混写；本批只改可见 judgement、post-send 与 queue 文案及源码守卫，不改 ownership、sendability、外发复核或非承诺边界。
 - 继续收口 customer success handoff detail / queue 的剩余中文术语混写；本批只改接手、分诊、建议、负责人归属、客户成功收件箱与商业交接文案及源码守卫，不改派生队列、外发禁用或审批边界。
+- 继续收口 customer success handoff detail / queue 的中文空格式与术语混写；本批只改交接路由、发送前复核、边界姿态、客户成功验收、队列派生与外发禁用文案及源码守卫，不改路由模型、队列派生或审批协议。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。

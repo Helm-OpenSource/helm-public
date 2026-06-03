@@ -373,7 +373,7 @@ export function buildCustomerSuccessQueueSurfaceModel({
         model.progressTraceItems[0] ??
         (english
           ? "A bounded handoff surface is already prepared."
-          : "当前已经准备好一张有边界的交接 面。"),
+          : "当前已经准备好一张有边界的交接面。"),
       internalActionStatusLabel: internalActionCue.statusLabel,
       internalActionStatusTone: internalActionCue.statusTone,
       internalActionResultLabel: internalActionCue.resultLabel,
@@ -554,10 +554,10 @@ export function buildCustomerSuccessQueueSurfaceModel({
             : attentionState === "waiting"
               ? english
                 ? "Waiting on the next reply or dependency while the routing cue stays prepared."
-                : "当前正在等待下一次回复或依赖，这条 路由 线索会继续保持可用。"
+                : "当前正在等待下一次回复或依赖，这条路线线索会继续保持可用。"
               : english
                 ? "A thin inbox routing cue is already prepared."
-                : "当前已经准备好一条很薄的收件箱 路由 线索。"),
+                : "当前已经准备好一条很薄的收件箱路线线索。"),
       internalActionStatusLabel: queueItem?.internalActionStatusLabel ?? null,
       internalActionStatusTone: queueItem?.internalActionStatusTone ?? null,
       internalActionResultLabel: queueItem?.internalActionResultLabel ?? null,
@@ -593,7 +593,7 @@ export function buildCustomerSuccessQueueSurfaceModel({
         inboxPostSendOutcomeFallback.blockedLabel,
       readinessLabel:
         queueItem?.readinessLabel ??
-        (english ? "Needs routing cue" : "需要 路由 线索"),
+        (english ? "Needs routing cue" : "需要路线线索"),
       readinessTone: queueItem?.readinessTone ?? ("sky" as const),
       nextActionLabel:
         queueItem?.nextActionLabel ??
@@ -639,13 +639,13 @@ export function buildCustomerSuccessQueueSurfaceModel({
     pageWhyItMatters: [
       english
         ? "Customer success should no longer inherit work only by opening company detail, review request or generic inbox in the right order."
-        : "客户成功不应再靠手动打开公司详情面、复核请求 或泛化收件箱来拼出接手顺序。",
+        : "客户成功不应再靠手动打开公司详情面、复核请求或泛化收件箱来拼出接手顺序。",
       english
         ? "Issue and escalation need to be explicit enough that repair pressure and widened intervention do not blur together."
         : "问题与升级必须足够显式，保证修复压力和扩大介入不会重新混成一团。",
       english
         ? "Queue and inbox stay derived and thin, so operational clarity can improve without turning this into a workflow or CS ops platform."
-        : "队列与收件箱会继续保持派生且很薄，保证这里只提高运营清晰度，而不会滑成工作流 或 客户成功运营平台。",
+        : "队列与收件箱会继续保持派生且很薄，保证这里只提高运营清晰度，而不会滑成工作流或客户成功运营平台。",
     ],
     pageActionSummary: [
       english
@@ -653,13 +653,13 @@ export function buildCustomerSuccessQueueSurfaceModel({
         : "当前已经排好实时客户成功条目、分好关联收件箱线程，并继续把它们挂回现有交接详情页。",
       english
         ? "Issue and escalation remain derived from the frozen customer success stage model instead of becoming new canonical objects."
-        : "问题与升级会继续从已冻结的客户成功阶段模型 派生，而不是变成新的 权威对象。",
+        : "问题与升级会继续从已冻结的客户成功阶段模型派生，而不是变成新的权威对象。",
       english
         ? "Contained issues can move back toward success check, while escalations may need to downgrade into review-before-send or blocked-by-boundary before any outward wording appears."
-        : "已收口问题可以回到 客户成功验收，而升级只要对外表达会夸大确定性，就必须先降回发送前复核或受阻于边界。",
+        : "已收口问题可以回到客户成功验收，而升级只要对外表达会夸大确定性，就必须先降回发送前复核或受阻于边界。",
       english
         ? "The queue does not replace review request, success check, expansion review or inbox detail; it only exposes the next honest operating entry point."
-        : "这张队列不会替代复核请求、客户成功验收、拓展复核或收件箱详情面；它只负责把下一条诚实的 经营入口 抬到前台。",
+        : "这张队列不会替代复核请求、客户成功验收、拓展复核或收件箱详情面；它只负责把下一条诚实的经营入口抬到前台。",
     ],
     pageDecisionRequest: [
       english
@@ -702,10 +702,10 @@ export function buildCustomerSuccessQueueSurfaceModel({
         : "客户成功队列和客户成功收件箱都是派生运营面，不是权威记录系统。",
       english
         ? "Issue and escalation can sharpen routing and ownership, but they still cannot convert review, boundary or non-commitment states into commitment."
-        : "问题与升级可以提高路由和 负责人清晰度，但它们仍不能把复核、边界或非承诺状态改写成承诺。",
+        : "问题与升级可以提高路由和负责人清晰度，但它们仍不能把复核、边界或非承诺状态改写成承诺。",
       english
         ? "Any customer-visible wording that risks sounding firmer than the current evidence must stay inside boundary, prerequisite, dependency or review-before-send framing."
-        : "任何可能比当前证据 说得更实的客户可见措辞，都必须继续降级到边界、前置、依赖或发送前复核结构里。",
+        : "任何可能比当前证据说得更实的客户可见措辞，都必须继续降级到边界、前置、依赖或发送前复核结构里。",
     ],
     pageEvidenceSummary: [
       english
@@ -713,7 +713,7 @@ export function buildCustomerSuccessQueueSurfaceModel({
         : `当前 ${queueItems.length} 条队列条目和 ${inboxItems.length} 条关联线程都已在下方收成一层很薄的运营附录。`,
       english
         ? "Review traces, handoff reasons, thread replay and risk pressure remain available without replacing the first-screen judgement."
-        : "复核轨迹、交接 reason、线程回放和风险压力都保留可看，但不会替代首屏判断。",
+        : "复核轨迹、交接原因、线程回放和风险压力都保留可看，但不会替代首屏判断。",
     ],
     pageWorkerSummary: [
       english
@@ -721,7 +721,7 @@ export function buildCustomerSuccessQueueSurfaceModel({
         : "客户成功执行会持续把复核、客户成功验收、拓展复核和收件箱线索对齐到同一套已冻结的交接基线上。",
       english
         ? "The queue only lifts the next operating entry point. It does not invent a new customer success object or a new review system."
-        : "这张队列只负责抬高下一条 经营入口，不会发明新的客户成功对象，也不会发明新的复核系统。",
+        : "这张队列只负责抬高下一条经营入口，不会发明新的客户成功对象，也不会发明新的复核系统。",
     ],
     pagePrioritySignal:
       escalationCount > 0
@@ -984,7 +984,7 @@ function buildInboxAdvisoryFallback({
         : "当前线程在任何客户成功回复说得更实之前，仍然需要显式复核。",
       playbookLabel: english
         ? "Keep review-before-send explicit, tighten the reply ask, and widen only internal visibility for now."
-        : "继续把发送前复核留在前台，收紧回复 请求，当前只扩大内部可见度。",
+        : "继续把发送前复核留在前台，收紧回复请求，当前只扩大内部可见度。",
     };
   }
 
@@ -1004,7 +1004,7 @@ function buildInboxAdvisoryFallback({
     categoryLabel: english ? "Missing decision" : "缺少判断",
     patternLabel: english
       ? "The next bounded routing decision is still the main limiter on honest thread handling."
-      : "当前最主要的限制项仍是下一条有边界的 路由 判断还没有说清。",
+      : "当前最主要的限制项仍是下一条有边界的 路线判断还没有说清。",
     playbookLabel: english
       ? "Request the bounded routing decision first and keep the thread inside thin customer success triage until it is explicit."
       : "先请求这条有边界的路线判断，并在它被明确前让线程继续停在很薄的客户成功分诊里。",
@@ -1054,10 +1054,10 @@ function buildInboxPolicyFallback({
       status === "WAITING_THEM"
         ? english
           ? "The thread is still waiting on an external dependency, while external send and commitment remain disabled on this surface."
-          : "当前线程仍在等待外部依赖，这一面 仍继续禁用 对外发送 和承诺。"
+          : "当前线程仍在等待外部依赖，这一面仍继续禁用对外发送和承诺。"
         : english
           ? "This thread remains internal-only on this surface, with external send and commitment still disabled."
-          : "这条线程在当前面 仍只允许仅内部动作，对外发送 和承诺继续禁用。",
+          : "这条线程在当前面 仍只允许仅内部动作，对外发送和承诺继续禁用。",
   };
 }
 
@@ -1245,7 +1245,7 @@ function buildInboxDraftFallback({
         : "当前已经准备好一条停在复核线上的外部草稿，让下一条客户可见表达在任何人回复前先被检查。"
       : english
         ? "A bounded holding draft is already prepared so the thread can progress without sounding firmer than the current evidence."
-        : "当前已经准备好一条有边界的 持守中 草稿，让线程继续推进，但不会说得比当前证据 更实。",
+        : "当前已经准备好一条有边界的持守中草稿，让线程继续推进，但不会说得比当前证据更实。",
     blockedLabel: boundaryLimited
       ? english
         ? "Draft remains blocked by dependency, boundary, or the next missing decision."
@@ -1424,7 +1424,7 @@ function buildQueueVariantSummary(
   if (variantStage === "escalation-follow-through") {
     return english
       ? "Escalation follow-through: progress is materially blocked by dependency, boundary, missing decision, widened ownership pressure, or elevated execution risk."
-      : "升级跟进闭环：当前进展已经被依赖、边界、缺失判断、扩大后的 负责人压力或更高 执行风险实质性阻塞。";
+      : "升级跟进闭环：当前进展已经被依赖、边界、缺失判断、扩大后的负责人压力或更高执行风险实质性阻塞。";
   }
 
   if (variantStage === "issue-follow-through") {

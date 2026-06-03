@@ -649,7 +649,7 @@ function buildPageModel({
       signals.pendingReview
         ? english
           ? "Pending review no longer has to hide behind company detail. Customer success can now inherit the account follow-through directly."
-          : "待复核已经不需要再躲在公司详情面 后面，客户成功现在可以直接继承账户跟进闭环。"
+          : "待复核已经不需要再躲在公司详情面后面，客户成功现在可以直接继承账户跟进闭环。"
         : english
           ? "Even without a pending review, this page keeps success follow-through, expansion pressure and the next accountable owner in one place."
           : "即使当前没有待复核条目，这页也会继续把客户成功跟进闭环、拓展压力和下一位负责人收在同一处。",
@@ -679,7 +679,7 @@ function buildPageModel({
     customerSuccessHandoffWorkerSummary: [
       english
         ? "Customer success worker keeps review follow-through, success check and expansion routing aligned to one judgement-first handoff surface."
-        : "客户成功执行会持续把复核跟进闭环、客户成功验收 和拓展路由对齐到同一张判断优先交接面上。",
+        : "客户成功执行会持续把复核跟进闭环、客户成功验收和拓展路由对齐到同一张判断优先交接面上。",
       english
         ? "Sales / delivery / founder cues remain attached here so the next owner can inherit the chain without restating the whole account."
         : "销售 / 交付 / 创始人线索会继续挂在这里，保证下一位负责人能在不重讲整条账户上下文的前提下接手。",
@@ -1418,7 +1418,7 @@ function buildWhyItMatters({
         : "方案包、提案和加固上下文已经准备好，所以这里剩下真正的价值是选对拓展负责人和边界。"
       : english
         ? "Account evidence, worker notes and the handoff route are already grouped here, so the remaining work is deciding who takes over and how firmly the chain can move."
-        : "账户依据、执行备注和交接 路由 已经收在这里，所以剩下真正的工作是决定由谁接手，以及这条链能说到多实。",
+        : "账户依据、执行备注和交接路由已经收在这里，所以剩下真正的工作是决定由谁接手，以及这条链能说到多实。",
   ];
 }
 
@@ -1507,7 +1507,7 @@ function buildDecisionSummary({
       : stage === "escalation-follow-through"
         ? english
           ? `Current decision posture: keep the chain at ${stageLabel} because progress is materially blocked by dependency, boundary, missing decision, widened ownership pressure, or elevated execution risk.`
-          : `当前判断姿态：先把这条链停在「${stageLabel}」，因为进展已经被依赖、边界、缺失判断、扩大后的 负责人压力或更高 执行风险实质性阻塞。`
+          : `当前判断姿态：先把这条链停在「${stageLabel}」，因为进展已经被依赖、边界、缺失判断、扩大后的负责人压力或更高执行风险实质性阻塞。`
         : stage === "issue-follow-through"
           ? english
             ? `Current decision posture: keep the chain at ${stageLabel} because the account has a real follow-through problem, but the repair path still remains within normal current-round coordination.`
@@ -1906,7 +1906,7 @@ function buildProcessAdvisory({
       playbookRecommendation: escalationAction
         ? english
           ? `Widen internal visibility, request the missing decision before external progression, and use "${escalationAction.title}" as the bounded internal playbook.`
-          : `扩大内部可见度，在外部推进前先请求缺失判断，并把「${escalationAction.title}」作为有边界的内部 playbook。`
+          : `扩大内部可见度，在外部推进前先请求缺失判断，并把「${escalationAction.title}」作为有边界的内部处理建议。`
         : english
           ? "Widen internal visibility, request the missing decision before external progression, and keep the escalation note internal-only."
           : "扩大内部可见度，在外部推进前先请求缺失判断，并把升级备注保持为仅内部。",
@@ -1965,10 +1965,10 @@ function buildProcessAdvisory({
           : `开放中的复核压力仍在生效，最近更新于 ${formatDateLabel(signals.pendingReview.updatedAt)}。`
         : english
           ? "The sendability posture is still review-before-send, so the next move must stay review-held."
-          : "当前发送评估姿态 仍是发送前复核，所以下一步必须继续停在复核挂起。",
+          : "当前发送评估姿态仍是发送前复核，所以下一步必须继续停在复核挂起。",
       playbookRecommendation: english
         ? "Keep review-before-send explicit, tighten the current decision ask, and only widen visibility internally until the review line closes."
-        : "继续把发送前复核留在前台，收紧当前判断请求，并在复核话术 关闭前只扩大内部可见度。",
+        : "继续把发送前复核留在前台，收紧当前判断请求，并在复核话术关闭前只扩大内部可见度。",
       unresolved: english
         ? `Unresolved review pressure: ${trimText(decisionRequest, 108)}`
         : `当前未解开的复核压力：${trimText(decisionRequest, 108)}`,
@@ -2000,7 +2000,7 @@ function buildProcessAdvisory({
         : `当前未解开的依赖：${blockerText}`,
       overstateRisk: english
         ? "Do not overstate a blocked dependency path as a clean next-step line or implied commitment."
-        : "不要把仍被依赖卡住的路径说成干净的下一步话术，或暗示成 隐含承诺。",
+        : "不要把仍被依赖卡住的路径说成干净的下一步话术，或暗示成隐含承诺。",
     };
   }
 
@@ -2025,7 +2025,7 @@ function buildProcessAdvisory({
       : `当前仍未解开的事项：${trimText(decisionRequest, 110)}`,
     overstateRisk: english
       ? "Do not overstate a missing-decision line as already agreed, externally safe or ready for stronger certainty."
-      : "不要把一条缺少判断的线路说成已经 agreed、可安全对外或已经准备好更强确定性表达。",
+      : "不要把一条缺少判断的线路说成已经同意、可安全对外或已经准备好更强确定性表达。",
   };
 }
 
@@ -2079,19 +2079,19 @@ function buildPolicySurface({
     sendabilityMode === "review-before-send"
       ? english
         ? "Current review-before-send posture still blocks any outward move from sounding customer-safe."
-        : "当前发送前复核姿态 仍会阻止任何对外动作被说成客户安全。"
+        : "当前发送前复核姿态仍会阻止任何对外动作被说成客户安全。"
       : sendabilityMode === "boundary-only" ||
           fallbackMode === "blocked-by-boundary"
         ? english
           ? "Current boundary posture still blocks outward certainty from widening beyond the evidence."
-          : "当前边界姿态 仍在阻止对外确定性超出证据支持范围。"
+          : "当前边界姿态仍在阻止对外确定性超出证据支持范围。"
         : attentionState === "blocked"
           ? english
             ? "Current blocker, dependency or missing decision still keeps the next move bounded."
             : "当前卡点、依赖或缺失判断仍在把下一步限制在有边界的范围里。"
           : english
             ? "Current customer success line still stays bounded by non-commitment-first governance."
-            : "当前客户成功线路仍受非承诺优先 治理约束。";
+            : "当前客户成功线路仍受非承诺优先治理约束。";
 
   return {
     activeCues,
@@ -2306,11 +2306,11 @@ function buildExternalDrafts({
       : kind === "boundary-aware-check-in"
         ? english
           ? `Boundary posture is still active: ${trimText(boundarySummary, 120)}`
-          : `当前边界姿态 仍在前台：${trimText(boundarySummary, 120)}`
+          : `当前边界姿态仍在前台：${trimText(boundarySummary, 120)}`
         : kind === "decision-dependency-clarification-request"
           ? english
             ? `The missing ask is still explicit: ${trimText(decisionRequest, 120)}`
-            : `当前缺失的 请求 仍然明确存在：${trimText(decisionRequest, 120)}`
+            : `当前缺失的请求仍然明确存在：${trimText(decisionRequest, 120)}`
           : kind === "non-commitment-status-update"
             ? english
               ? `The current issue line still needs bounded visibility before the next move: ${trimText(reason, 120)}`
@@ -2341,7 +2341,7 @@ function buildExternalDrafts({
           sendabilityMode === "review-before-send"
         ? english
           ? "Human review still needs to confirm the exact outward wording, boundary line and decision posture."
-          : "当前仍需要人工确认具体对外措辞、边界话术 和判断姿态。"
+          : "当前仍需要人工确认具体对外措辞、边界话术和判断姿态。"
         : fallbackMode === "blocked-by-boundary"
           ? english
             ? `Current boundary still limits any outward wording: ${trimText(boundarySummary, 120)}`
@@ -2358,7 +2358,7 @@ function buildExternalDrafts({
       : kind === "boundary-aware-check-in"
         ? english
           ? "Any wording that sounds as if the boundary is cleared, sendability is open, or the account is already expansion-ready would overstate reality."
-          : "任何把这条线说成边界已清、发送评估已开放或账户已经可拓展 的措辞，都会夸大现实状态。"
+          : "任何把这条线说成边界已清、发送评估已开放或账户已经可拓展的措辞，都会夸大现实状态。"
         : kind === "review-before-send-follow-up"
           ? english
             ? "Treating this draft as customer-sendable now would overstate the current review line and safe outward posture."
@@ -3436,7 +3436,7 @@ function buildProgressTrace({
   return compactStrings([
     english
       ? "A bounded handoff surface is already prepared."
-      : "当前已经准备好一张有边界的交接 面。",
+      : "当前已经准备好一张有边界的交接面。",
     watchState.lastBackedSummary
       ? watchState.lastBackedSummary
       : watchState.lastReviewedSummary,
@@ -4561,7 +4561,7 @@ function buildEvidenceGroups({
             : "复核请求现在会继续交给客户成功，而不再停在公司代理路由。"
           : english
             ? "Customer success now sits as a dedicated chain node between review, success check and expansion review."
-            : "客户成功现在已经是复核、客户成功验收 和拓展复核之间的 专属链路节点。",
+            : "客户成功现在已经是复核、客户成功验收和拓展复核之间的专属链路节点。",
         kind === "expansion-review"
           ? english
             ? "Expansion review can now reopen package, proposal, offer and reinforcement with the current account context intact."
@@ -4582,7 +4582,7 @@ function buildEvidenceGroups({
           ? `${detail.meetings[0].title} · ${formatDateLabel(detail.meetings[0].startsAt)}`
           : english
             ? "No latest success meeting."
-            : "当前没有最近 success meeting。",
+            : "当前没有最近客户成功会议。",
       ]),
     },
     {
@@ -4885,7 +4885,7 @@ function buildAuthoritySummary(
     case "user-reviewed":
       return english
         ? "The user has reviewed the current framing, but the next move still stays bounded and non-commitment-first."
-        : "用户已经复核过当前措辞，但下一步仍保持在有边界、非承诺优先 的范围内。";
+        : "用户已经复核过当前措辞，但下一步仍保持在有边界、非承诺优先的范围内。";
     case "user-backed":
       return english
         ? "The user is explicitly backing the current next-step line, and bounded follow-through stays prepared without implying commitment."
