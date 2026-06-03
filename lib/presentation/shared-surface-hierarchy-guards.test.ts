@@ -1976,6 +1976,26 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps demo and signal fixtures free of mixed Chinese CRM wording", () => {
+    const b2bSaasPack = read("lib/demo/industry-fixtures/b2b-saas.ts");
+    const customerSuccessPack = read(
+      "lib/demo/industry-fixtures/customer-success.ts",
+    );
+    const businessAdvancementFixtures = read(
+      "features/business-advancement/fixtures.ts",
+    );
+    const combined = `${b2bSaasPack}\n${customerSuccessPack}\n${businessAdvancementFixtures}`;
+
+    expect(combined).toContain("客户关系系统阶段仍停在");
+    expect(combined).toContain("客户关系系统显示客户内部");
+    expect(combined).toContain("客户关系系统记录：机会 14 天无活动");
+    expect(combined).toContain("自动改客户关系系统阶段");
+
+    expect(combined).not.toMatch(
+      /CRM 阶段|CRM 记录|CRM 承诺|CRM 显示|CRM 未更新|CRM 机会|写回 CRM|自动改 CRM/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");

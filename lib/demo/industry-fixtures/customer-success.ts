@@ -59,7 +59,7 @@ export const CUSTOMER_SUCCESS_PACK: IndustryDemoPack = {
       id: "cs-upsell-invitation-ignored",
       title: "鸿运科技升级邀约客户已读不回 9 天",
       description:
-        "上月发出 Premium 升级邀约（年价 +¥36 万），客户高管已读但无回复。CRM 显示客户内部已查看比价材料 2 次。",
+        "上月发出 Premium 升级邀约（年价 +¥36 万），客户高管已读但无回复。客户关系系统显示客户内部已查看比价材料 2 次。",
       score: 73,
       policyResult: "REQUIRES_APPROVAL",
       explanation:

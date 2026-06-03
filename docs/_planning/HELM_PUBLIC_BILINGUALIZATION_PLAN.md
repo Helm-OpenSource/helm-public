@@ -291,6 +291,16 @@ changes the `CRM_IMPORT_COMPLETED` customer-relationship-system import-completed
 display label plus source guards only, without changing audit action types,
 event enums, or memory data.
 
+本轮继续收口 demo / signal fixture 里的中文 CRM 混写；只调整行业 demo pack 与
+business advancement fixture 的客户关系系统阶段、记录、承诺、写回边界文案及源码守卫，
+不改变 fixture id、sourceType、signalType 或 eval 合约。
+
+This round further localizes mixed Chinese CRM copy in demo / signal fixtures.
+It changes customer-relationship-system stage, record, commitment, and
+writeback-boundary wording in industry demo packs and business-advancement
+fixtures plus source guards only, without changing fixture ids, sourceType,
+signalType, or eval contracts.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

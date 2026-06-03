@@ -26,11 +26,11 @@ export const B2B_SAAS_PACK: IndustryDemoPack = {
       id: "b2b-saas-roi-pack-overdue",
       title: "华东智造试点今天不发 ROI 材料，5 月窗口就要掉",
       description:
-        "采购会留下 ROI 问题，CFO 要结构化材料，CRM 阶段仍停在「商务评审」。会议结束 32 小时无人推进。",
+        "采购会留下 ROI 问题，CFO 要结构化材料，客户关系系统阶段仍停在「商务评审」。会议结束 32 小时无人推进。",
       score: 92,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：采购会纪要含「需要 ROI 材料」承诺 · CFO 邮件 0518 要求 3 项财务回报口径 · CRM 阶段 = 商务评审 · 外发草稿 v3 在复核中。",
+        "事实链：采购会纪要含「需要 ROI 材料」承诺 · CFO 邮件 0518 要求 3 项财务回报口径 · 客户关系系统阶段 = 商务评审 · 外发草稿 v3 在复核中。",
       whyNotAutoExecute:
         "对外发送对客户可见。Helm 不会替你点发送 — 草稿已就位，但客户收件箱由你拍板才进。",
       urgencyScore: 95,

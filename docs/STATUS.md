@@ -249,6 +249,17 @@ import-completed display label plus source guards only; it does not change audit
 action types, event enums, or memory data, and does not claim full-repo
 bilingualization completion.
 
+demo / signal fixture 里的中文 CRM 混写也已继续清理；本批只改行业 demo pack 与
+business advancement fixture 的客户关系系统阶段、记录、承诺、写回边界文案及源码守卫，
+不改变 fixture id、sourceType、signalType 或 eval 合约，也不声明全仓双语化完成。
+
+Mixed Chinese CRM copy in demo / signal fixtures has also been further
+localized. This batch changes customer-relationship-system stage, record,
+commitment, and writeback-boundary wording in industry demo packs and
+business-advancement fixtures plus source guards only; it does not change
+fixture ids, sourceType, signalType, or eval contracts, and does not claim
+full-repo bilingualization completion.
+
 search / reports / analytics 中文混写也已继续清理；本批只改 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议和
 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成或
