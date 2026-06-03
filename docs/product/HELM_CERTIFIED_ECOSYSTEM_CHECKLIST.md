@@ -8,7 +8,26 @@ archive_trigger:
   - 2026-07-31 之后若没有任何 certified connector、workflow pack、partner 或 deployment review 引用本文件则归档
 ---
 
-# Helm Certified Ecosystem Checklist
+# Helm Certified Ecosystem Checklist / Helm 认证生态清单
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本清单定义 connector、workflow pack、partner 和 deployment 的第一层人工认证
+gate。它不创建 marketplace、payout rail、reseller program、自动认证系统或客户
+outcome guarantee。
+
+所有认证候选都必须说明 owner、scope、supported / unsupported use case、version、
+evidence refs、review boundary、rollback / withdrawal path、customer-visible claim
+和 non-commitment note。任何候选都不得声称自动发送、广泛自动写入、自动审批、
+自动结算或保证商业结果。
+
+公开使用 **Helm Certified ...** 字样只能发生在 approval 之后。认证记录在 owner
+批准公开使用前应保留在内部；如果 scope、安全姿态、客户可见 claim 或
+review-first boundary 发生漂移，认证可以撤销。
+
+## English Reference
 
 ## 1. Purpose
 

@@ -8,7 +8,23 @@ archive_trigger:
   - 本文件被正式 launch readiness checklist 替代
 ---
 
-# Helm Release Reality Alignment
+# Helm Release Reality Alignment / Helm 发布现实对齐
+
+> **语言 / Language**: **中文主文本** + **English reference summary**
+
+## English Reference Summary
+
+This document closes the 2026-05-02 requirements audit into executable release
+decisions. Public commitments must be reduced to what the current system and
+operations can actually support; release hard gates must block uncontrolled
+release paths; process-heavy requirements should be simplified; real customer
+signals, degraded-mode experience, and extension boundaries must be handled
+before broader public claims.
+
+Key boundaries: `release:check` blocks on private owner receipts when they cannot
+be machine-verified; manual tagging remains a human maintainer step; public
+trial claims must not become production SLA, audit-replay, release-ready,
+customer-deployment, or roadmap commitments.
 
 本文件把 2026-05-02 的需求审计收口为可执行决策：公开承诺必须降到当前系统和运营能兑现的范围；release hard gates 必须阻断不可控发布；过程型需求必须减负；真实客户、降级体验和 extension 边界必须前置。
 

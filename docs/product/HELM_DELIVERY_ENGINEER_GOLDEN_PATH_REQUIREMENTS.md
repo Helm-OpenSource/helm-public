@@ -10,7 +10,39 @@ source_basis:
   - Claude cross-check rounds on 2026-06-01
   - Local repo truth from delivery:doctor, public docs manifest, HSI requirements, and case-management sample
 ---
-# Helm Delivery Engineer Golden Path Requirements
+# Helm Delivery Engineer Golden Path Requirements / Helm 交付工程师 Golden Path 要求
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文是 `Helm-OpenSource/helm-public` 中 delivery-engineer Golden Path 的 public
+Core requirements contract。它把北极星目标收敛成仓库可验证工作：帮助 AI 交付工程师
+把客户业务实施中的 judgement、evidence、review、boundary 和 delivery package 工作，
+组织成可 fork 的工程结构。
+
+第一版只覆盖已有 surface 的 requirements 与 verification contract，不新增产品面。
+`helm-public` 只承接 public Core、base SDK、public sample pack、public docs、
+public tests、Docker quickstart 和 offline evals。商业行业 Pack 属于
+`helm-packs`；客户 Overlay 属于 `helm-overlays`；BOM、授权、部署 registry、版本
+inventory、health heartbeat 与 usage metadata 属于 `helm-control-plane`。
+
+核心铁律：
+
+1. Zero new surface：优先复用 `/demo`、`extensions/case-management-sample`、
+   `delivery:doctor`、existing evals 和 existing public-release guards。
+2. Gate-relative wording only：公开文本只能使用 Now / Next / Later 和 evidence gates，
+   不写具体 launch date 或 version-date promise。
+3. Private until gate：visibility flip 是最终 owner action，不由本 workstream 自动完成。
+4. No overclaim：没有精确 evidence gate 和引用，不得写 `verified`、`clean SDK`、
+   `100% synthetic`、`release-ready` 或 `production-ready`。
+
+Golden Path 的最小链路是：clone public Core、用 Docker quickstart 或标准本地路径启动、
+查看 `/demo` 与 public sample pack、修改 synthetic fixture、运行既有检查、观察 signal /
+review packet path，并确认 forbidden write / send / approve / execute / cross-tenant path
+仍被阻断。
+
+## English Reference
 
 This document is the public Core requirements contract for the delivery-engineer
 Golden Path in `Helm-OpenSource/helm-public`.

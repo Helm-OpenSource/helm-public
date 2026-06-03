@@ -12,7 +12,35 @@ archive_trigger:
   - This document is misused to authorize production writes, hosted MCP, or auto-execution
 ---
 
-# Helm Headless Signal Interface Requirements
+# Helm Headless Signal Interface Requirements / Helm Headless Signal Interface 要求
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+Helm Headless Signal Interface（HSI）是公开、可 fork 的 contract，帮助交付工程师
+把既有业务系统转成 review-first operating signals。它不是 CRM replacement、hosted
+agent runtime、workflow engine、marketplace 或 execution plane。
+
+HSI 的公开 contract 只覆盖 pack manifests、synthetic / redacted fixtures、
+deterministic eval gates、review packet preparation，以及客户试点前可检查的
+boundary evidence。它的第一目标是让 delivery loop 可诊断：
+
+```text
+fork Helm
+  -> inspect sample pack
+  -> map source fields into safe fixtures
+  -> run HSI eval
+  -> inspect operating signal output
+  -> prepare review packet
+  -> decide whether a controlled pilot is ready
+```
+
+通过 HSI contract 是客户部署的必要但不充分条件。Phase 1 保持 offline-only，不授权
+runtime query、API route、schema migration、production connector、hosted MCP、official
+write、auto-send、auto-approve、auto-execute 或 LLM final ranking。
+
+## English Reference
 
 ## 0. Public Thesis
 

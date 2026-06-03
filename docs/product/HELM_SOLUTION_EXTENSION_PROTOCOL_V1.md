@@ -6,7 +6,26 @@ review_after: 2026-07-11
 # frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-19
 # rationale: default — no archive/dormant signal in path
 ---
-# Helm Solution Extension Protocol V1
+# Helm Solution Extension Protocol V1 / Helm Solution Extension 协议 V1
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文件是 Solution Extension protocol 的 public Core 版本。它定义公开、generic 的
+extension 如何与 Helm Core 发生关系，但不发布私有客户 overlay、商业 Pack 实现细节、
+settlement logic 或私有 delivery runbook。
+
+Solution Extension 是 review-first 的有界方案扩展层，可以在 Helm Core 之上组合
+domain-specific surfaces、fixtures、report assets 和 bounded runtime adapters。它不是
+marketplace、plugin sandbox、settlement rail、customer delivery project tracker 或自动
+external-send authority。
+
+公开 extension 必须使用 generic / synthetic 名称，使用 synthetic / redacted fixtures，
+声明 review-first boundaries，避免客户专属配置，并保持 Core 可独立构建。私有客户定制
+必须留在 `helm-public` 之外。
+
+## English Reference
 
 This is the public Core version of the Solution Extension protocol.
 

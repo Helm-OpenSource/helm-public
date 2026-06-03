@@ -5,7 +5,27 @@ created: 2026-06-01
 review_after: 2026-07-01
 public_safety: Public-safe Operating Signal Flow contract. Private review packets, customer receipts, and internal adoption evidence are excluded.
 ---
-# Helm Operating Signal Flow Map Requirements
+# Helm Operating Signal Flow Map Requirements / Helm Operating Signal Flow Map 要求
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+Operating Signal Flow Map 是 public Core contract，用来展示业务 signal 如何在
+Helm 内流转，同时不把 recommendation 变成 commitment。
+
+它只是 read-only projection，不是 runtime DAG、scheduler、retry queue、dispatcher、
+workflow engine、BI platform 或 automatic execution plane。第一屏应该让交付工程师
+看清当前 flow 是 smooth、backlogged 还是 blocked；source signal 如何进入 review
+packet、candidate action、report、memory candidate 或 rejected input；哪些部分是
+deterministic rules，哪些是 AI-assisted explanation，哪些必须 human review。
+
+所有公开 signal 都必须带 stable signal key、source family、object link 或 rejection
+reason、evidence posture、review state、owner / reviewer routing 和 boundary note。
+原始客户数据、客户专属标识、生产 URL、私有 domain 和私有部署 receipt 不属于本
+public Core contract。
+
+## English Reference
 
 The Operating Signal Flow Map is the public Core contract for showing how
 business signals move through Helm without turning recommendations into
