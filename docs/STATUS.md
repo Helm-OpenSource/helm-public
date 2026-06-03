@@ -47,6 +47,17 @@ open-question, and artifact-summary copy only; it does not change artifact
 filenames, runtime state machines, memory promotion, or shadow-update
 boundaries, and does not claim full-repo bilingualization completion.
 
+Helm v2 event-flow 与 layered-memory catalog 的中文描述混写已继续清理；本批只改事件摘要、
+API 合同描述、记忆加载说明和晋升原因文案，不改变事件类型、contract key、request / response shape、
+记忆层 key 或晋升规则逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese descriptions in Helm v2 event-flow and layered-memory catalogs
+have also been further localized. This batch changes event summaries, API
+contract descriptions, memory-load explanations, and promotion-reason copy only;
+it does not change event types, contract keys, request / response shapes,
+memory-layer keys, or promotion-rule logic, and does not claim full-repo
+bilingualization completion.
+
 | 类别 / Category | 状态 / Status | 证据 / Evidence |
 |---|---|---|
 | Apache-2.0 Core 仓库 / Apache-2.0 Core repository | 已为 public Core 开发成立；Established for public Core development | `LICENSE`, `NOTICE`, `package.json`, `README.md` |

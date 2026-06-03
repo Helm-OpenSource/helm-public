@@ -65,6 +65,16 @@ open-question, and artifact-summary copy only, without changing artifact
 filenames, runtime state machines, memory promotion, or shadow-update
 boundaries.
 
+本轮继续收口 Helm v2 event-flow 与 layered-memory catalog 的中文描述混写；只调整事件摘要、
+API 合同描述、记忆加载说明和晋升原因文案，不改变事件类型、contract key、request / response shape、
+记忆层 key 或晋升规则逻辑。
+
+This round further localizes mixed Chinese descriptions in Helm v2 event-flow
+and layered-memory catalogs. It changes event summaries, API contract
+descriptions, memory-load explanations, and promotion-reason copy only, without
+changing event types, contract keys, request / response shapes, memory-layer
+keys, or promotion-rule logic.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

@@ -1731,4 +1731,30 @@ describe("shared surface hierarchy guards", () => {
       /风险 alerts|meeting 动作资料|meeting \/ company|关联 company|明确 下一步|facts 与 推导|推导 默认不 晋升|Open questions|open question|确认 动作资料|动作资料 仍带有 未决问题|沿 meeting 动作资料|会议分析 已/,
     );
   });
+
+  it("keeps Helm v2 event-flow and layered-memory descriptions free of mixed Chinese fragments", () => {
+    const eventFlow = read("lib/helm-v2/event-flow.ts");
+    const layeredMemory = read("lib/helm-v2/layered-memory.ts");
+    const combined = `${eventFlow}\n${layeredMemory}`;
+
+    expect(eventFlow).toContain("草稿已形成，需要进入风险与承诺边界检查。");
+    expect(eventFlow).toContain("可继续低风险仅草稿行动层。");
+    expect(eventFlow).toContain("交接资料已生成，可进入交付或客户成功接手面。");
+    expect(eventFlow).toContain("人工确认会议事实，并触发对象经营记忆晋升。");
+    expect(eventFlow).toContain("生成主管关注标记。");
+    expect(eventFlow).toContain("交接资料和交付检查清单。");
+    expect(layeredMemory).toContain("当前工作区的经营摘要始终可见。");
+    expect(layeredMemory).toContain("已承诺范围、未决风险和前 14 天计划。");
+    expect(layeredMemory).toContain("权威系统边界、审批矩阵和最近确认记录。");
+    expect(layeredMemory).toContain("会议结束后加载相关会议 / 机会 / 客户摘要");
+    expect(layeredMemory).toContain("最近执行证明");
+    expect(layeredMemory).toContain("临时草稿只用于临时推理");
+    expect(layeredMemory).toContain("学习到的模式必须先经人工确认");
+    expect(layeredMemory).toContain("当前晋升规则为不晋升");
+    expect(layeredMemory).toContain("权威系统校验");
+
+    expect(combined).not.toMatch(
+      /draft 已形成|低风险 draft-only 行动层|交接 资料|CS 接手面|触发 Meeting Analyst|人工确认 meeting facts|object 经营记忆 晋升|主管关注 标记|对 draft 制品|交付 checklist|当前 workspace 的经营摘要|promised 范围|open risks|first 14 day plan|进入 正式write 意图阶段|system-of-record 边界|最近 acknowledgement|相关 meeting \/ 机会|正式write 意图创建|受控正式集成 边界|执行 proof|scratch 只用于|learned pattern 必须|晋升 rule 当前是 none|system-of-record 校验/,
+    );
+  });
 });
