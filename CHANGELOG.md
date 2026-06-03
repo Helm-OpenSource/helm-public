@@ -39,6 +39,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 meeting server action 的 pre-session validation fallback 文案；本批对校验先于 workspace session 的 action 使用中英并列 fallback，不改鉴权顺序、运行时状态机或执行边界。
 - 继续收口 blockers / commitments / memory API 的 validation 与失败 fallback 文案；本批只改 API caller 可见错误文案，不改权限、状态码、schema 或 memory/runtime 服务调用。
 - 继续收口 recommendations API 的 validation、success 与 failure fallback 文案；本批只改 API caller 可见 message，不改推荐生成、排序、埋点、反馈权限或 payload 结构。
+- 继续收口 memory timeline、evolution patterns 与 problem-spaces API 的低频 validation / source label 文案；本批只改 API caller 可见文案与默认 source label，不改查询、权限、runtime ownership 或 problem-space 创建逻辑。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -82,6 +83,7 @@ English reference:
 - Further localized meeting server-action pre-session validation fallback copy; this batch uses explicit zh/en fallback for actions that validate before loading workspace session and leaves authorization order, runtime state machines, and execution boundaries unchanged.
 - Further localized blockers / commitments / memory API validation and failure fallback copy; this batch changes API-caller-visible error copy only and leaves permissions, status codes, schemas, and memory / runtime service calls unchanged.
 - Further localized recommendations API validation, success, and failure fallback copy; this batch changes API-caller-visible messages only and leaves recommendation generation, ranking, tracking, feedback permissions, and payload structures unchanged.
+- Further localized low-frequency validation / source-label copy in the memory timeline, evolution patterns, and problem-spaces APIs; this batch changes API-caller-visible copy plus default source labels only and leaves queries, permissions, runtime ownership, and problem-space creation logic unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

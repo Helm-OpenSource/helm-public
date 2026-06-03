@@ -4,7 +4,7 @@ import {
   getInsightGovernanceDeniedMessage,
 } from "@/lib/auth/insight-governance";
 import { getActivePatternFacts } from "@/lib/evolution/evolution-insights.service";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import { isEnglishWorkspaceDefaultLocale, resolveApiWorkspaceMessage } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 
 export async function GET(request: Request) {
@@ -24,7 +24,12 @@ export async function GET(request: Request) {
   const limit = Number(searchParams.get("limit") ?? "12");
 
   if (searchParams.get("userScoped") === "true" && !userId) {
-    return errorResponse("userScoped=true 时需要传 userId");
+    return errorResponse(
+      resolveApiWorkspaceMessage(workspace.defaultLocale, {
+        zh: "userScoped=true 时需要传 userId",
+        en: "userId is required when userScoped=true",
+      }),
+    );
   }
 
   const patterns = await getActivePatternFacts({

@@ -47,6 +47,12 @@ describe("api message locale", () => {
 
   it("maps known Chinese validation issues to English without rewriting unknown Zod details", () => {
     expect(
+      resolveApiValidationIssueMessage("en-US", "missingSessionOrMeeting"),
+    ).toBe("Provide sessionId or meetingId");
+    expect(
+      resolveApiValidationIssueMessage("zh-CN", "missingSessionOrMeeting"),
+    ).toBe("需要 sessionId 或 meetingId");
+    expect(
       resolveApiValidationIssueMessage("en-US", "需要 sessionId 或 meetingId"),
     ).toBe("Provide sessionId or meetingId");
     expect(resolveApiValidationIssueMessage("en-US", "受众不合法")).toBe(

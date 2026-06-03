@@ -32,6 +32,10 @@ const apiValidationMessages = {
 
 export type ApiValidationMessageKey = keyof typeof apiValidationMessages;
 
+function isApiValidationMessageKey(value: string): value is ApiValidationMessageKey {
+  return Object.prototype.hasOwnProperty.call(apiValidationMessages, value);
+}
+
 const zhValidationMessageToKey = new Map<string, ApiValidationMessageKey>(
   Object.entries(apiValidationMessages).map(([key, message]) => [
     message.zh,
@@ -58,6 +62,10 @@ export function resolveApiValidationIssueMessage(
   issueMessage?: string,
   fallbackKey: ApiValidationMessageKey = "incompleteParameters",
 ) {
+  if (issueMessage && isApiValidationMessageKey(issueMessage)) {
+    return getApiValidationMessage(locale, issueMessage);
+  }
+
   if (
     issueMessage &&
     isEnglishWorkspaceDefaultLocale(locale) &&

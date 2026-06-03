@@ -33,7 +33,7 @@ const createProblemSpaceSchema = z
     status: z.enum(["DETECTED", "SCOPED", "WATCHING", "WAITING_ON_SIGNAL", "WAITING_ON_AUTHORITY"]).optional(),
   })
   .refine((value) => Boolean(value.sessionId || value.meetingId), {
-    message: "需要 sessionId 或 meetingId",
+    message: "missingSessionOrMeeting",
     path: ["sessionId"],
   });
 
