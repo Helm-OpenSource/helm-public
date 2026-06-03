@@ -115,7 +115,7 @@ This PR's source audit result:
    recommendations API 的 validation / success / failure fallback 文案、memory timeline /
    evolution patterns / problem-spaces API 的低频 validation / source label 文案、
    conversation capture 服务层的 fallback transcript / speaker label / audit summary 文案、
-   memory export API 的 text/plain 导出正文标签已继续收口。
+   memory export API 的 text/plain 导出正文标签、LLM / briefing API 的失败 fallback 文案已继续收口。
    这些目标文件的本批次严格可见残留已清理；全工程广义 ASCII 中文分支扫描与严格可见
    文案扫描尚未重新校准，后续仍需继续检查 billing surface 与其他低频 detail surfaces。
    剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
@@ -165,7 +165,8 @@ This PR's source audit result:
    fallback copy, plus low-frequency validation / source-label copy in the memory
    timeline, evolution patterns, and problem-spaces APIs, plus conversation-capture
    service fallback transcript / speaker-label / audit-summary copy, plus text/plain
-   export-body labels in the memory export API, have also been localized
+   export-body labels in the memory export API, plus LLM / briefing API failure
+   fallback copy, have also been localized
    for Chinese operation fields. This
    batch clears the target-file strict visible-copy leftovers; the
    whole-project broad ASCII zh-branch scan and strict visible-copy scan have
@@ -282,6 +283,7 @@ true:
 | 2026-06-03 | 继续收口 memory timeline、evolution patterns 与 problem-spaces API 的低频 validation / source label 文案；本批只改 API caller 可见文案与默认 source label，不改查询、权限、runtime ownership 或 problem-space 创建逻辑；Further localized low-frequency validation / source-label copy in the memory timeline, evolution patterns, and problem-spaces APIs; this batch changes API-caller-visible copy plus default source labels only and leaves queries, permissions, runtime ownership, and problem-space creation logic unchanged |
 | 2026-06-03 | 继续收口 conversation capture 服务层的 fallback transcript、speaker label 与审计摘要文案；本批只改 capture caller / audit 可见文案，不改权限、ASR、落库结构或处理流程；Further localized conversation-capture service fallback transcript, speaker-label, and audit-summary copy; this batch changes capture-caller / audit-visible copy only and leaves permissions, ASR, persistence structure, and processing flow unchanged |
 | 2026-06-03 | 继续收口 memory export API 的 text/plain 导出正文标签；本批只改导出文件内的 caller 可见文案，不改查询、权限、审计 payload、headers 或文件名；Further localized text/plain export-body labels in the memory export API; this batch changes caller-visible copy inside the exported file only and leaves queries, permissions, audit payloads, headers, and filenames unchanged |
+| 2026-06-03 | 继续收口 LLM / briefing API 的失败 fallback 文案；本批只改 API caller 可见失败文案，不改 insight / memory 权限、ownership 校验、LLM 调用或返回 payload 结构；Further localized LLM / briefing API failure fallback copy; this batch changes API-caller-visible failure copy only and leaves insight / memory permissions, ownership checks, LLM calls, and response payload structures unchanged |
 | 2026-06-03 | 继续收口 skill suggestion formal review、human action execution boundary 与 program invite issuance 文案中的中文混写；本批只改中文可见文案，不改能力晋升状态机、人工执行契约或邀请发放权限；Further localized Chinese visible mixed-language copy in skill suggestion formal review, human action execution boundary, and program invite issuance copy; this batch changes visible copy only and leaves capability-promotion state machines, human-execution contracts, and invite-issuance permissions unchanged |
 | 2026-06-03 | 继续收口 recommendation feedback、home surface arrival banner 与 billing program catalog 文案中的中文混写；本批只改中文可见文案，不改推荐反馈动作、首页路由或分成规则结构；Further localized Chinese visible mixed-language copy in recommendation feedback, home surface arrival banner, and billing program catalog surfaces; this batch changes visible copy only and leaves recommendation feedback actions, home routing, and revenue-rule structures unchanged |
 | 2026-06-03 | 继续收口 approval first-loop 复核卡片与步骤列表中的中文混写；本批只改中文 display model 文案，不改审批协议、状态机或执行边界；Further localized Chinese visible mixed-language copy in the approval first-loop review card and step list; this batch changes display-model copy only and leaves approval protocol, state machines, and execution boundaries unchanged |

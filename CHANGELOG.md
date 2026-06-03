@@ -42,6 +42,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 memory timeline、evolution patterns 与 problem-spaces API 的低频 validation / source label 文案；本批只改 API caller 可见文案与默认 source label，不改查询、权限、runtime ownership 或 problem-space 创建逻辑。
 - 继续收口 conversation capture 服务层的 fallback transcript、speaker label 与审计摘要文案；本批只改 capture caller / audit 可见文案，不改权限、ASR、落库结构或处理流程。
 - 继续收口 memory export API 的 text/plain 导出正文标签；本批只改导出文件内的 caller 可见文案，不改查询、权限、审计 payload、headers 或文件名。
+- 继续收口 LLM / briefing API 的失败 fallback 文案；本批只改 API caller 可见失败文案，不改 insight / memory 权限、ownership 校验、LLM 调用或返回 payload 结构。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -88,6 +89,7 @@ English reference:
 - Further localized low-frequency validation / source-label copy in the memory timeline, evolution patterns, and problem-spaces APIs; this batch changes API-caller-visible copy plus default source labels only and leaves queries, permissions, runtime ownership, and problem-space creation logic unchanged.
 - Further localized conversation-capture service fallback transcript, speaker-label, and audit-summary copy; this batch changes capture-caller / audit-visible copy only and leaves permissions, ASR, persistence structure, and processing flow unchanged.
 - Further localized text/plain export-body labels in the memory export API; this batch changes caller-visible copy inside the exported file only and leaves queries, permissions, audit payloads, headers, and filenames unchanged.
+- Further localized LLM / briefing API failure fallback copy; this batch changes API-caller-visible failure copy only and leaves insight / memory permissions, ownership checks, LLM calls, and response payload structures unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

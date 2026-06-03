@@ -340,6 +340,25 @@ describe("memory write governance routes", () => {
     });
   });
 
+  it("uses workspace default locale for legacy LLM meeting-memory fallback errors", async () => {
+    permissionsMock.canManageWorkspaceMemory.mockReturnValue(true);
+    meetingMemoryPipelineMock.processMeetingMemory.mockRejectedValue(null);
+
+    const response = await llmMeetingMemoryRoute(
+      new Request("http://localhost/api/llm/meetings/meeting-1/process-memory", { method: "POST" }),
+      {
+        params: Promise.resolve({ meetingId: "meeting-1" }),
+      },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      message: "Failed to process meeting memory",
+    });
+    expect(ownershipMock.assertWorkspaceMeetingOwnership).toHaveBeenCalledWith("workspace-1", "meeting-1");
+  });
+
   it("allows a write path once capability is present", async () => {
     permissionsMock.canManageWorkspaceMemory.mockReturnValue(true);
     memoryFactServiceMock.createMemoryFact.mockResolvedValue({
