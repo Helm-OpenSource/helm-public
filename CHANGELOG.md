@@ -19,6 +19,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 修复开发者上手文档的 Prisma 与 MySQL 凭据不一致问题，并补充中国大陆 / 受限网络的 npm 与 Docker 镜像配置指引、微信支付 lifecycle env 示例。
 - 继续收口 customer success handoff detail model 的中文可见标签；该目标文件的有效 ASCII 中文分支候选项降为 0，全工程校准扫描剩余 331。
 - 继续收口 settings client、conversation detail、external narrative detail 与 commitment reinforcement sendability detail model 的中文可见标签；目标文件严格可见候选扫描为 0，全工程广义 ASCII 中文分支候选降至 242，严格可见候选降至 129。
+- 继续收口 meeting opportunity judge、inbox follow-up review request、success check、customer-facing offer / external proposal 与 commercial narrative strengthening detail model 的中文可见标签；本批目标文件严格可见残留已清理，全工程剩余候选尚未重新校准。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -42,6 +43,7 @@ English reference:
 - Fixed developer quickstart drift around Prisma generation and MySQL credentials, and added Mainland China / restricted-network npm and Docker mirror guidance plus WeChat Pay lifecycle env examples.
 - Further localized customer success handoff detail-model labels; the target-file effective ASCII zh-branch candidate count is now 0, and the whole-project calibrated scan has 331 remaining candidates.
 - Further localized settings client, conversation detail, external narrative detail, and commitment reinforcement sendability detail-model labels; target-file strict visible-copy candidates now return 0 hits, whole-project broad ASCII zh-branch candidates are down to 242, and strict visible-copy candidates are down to 129.
+- Further localized meeting opportunity judge, inbox follow-up review request, success check, customer-facing offer / external proposal, and commercial narrative strengthening detail-model labels; this batch clears target-file strict visible-copy leftovers, while whole-project remaining candidates have not been recalibrated yet.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

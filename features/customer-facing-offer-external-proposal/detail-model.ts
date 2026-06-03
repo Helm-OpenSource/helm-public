@@ -36,14 +36,14 @@ export function buildCustomerFacingOfferPageContract({
     customerOfferPageActionSummary: [
       english
         ? "A customer-facing offer framing draft is already prepared, together with the current boundary, dependency and review-needed notes."
-        : "当前已经准备好一版客户可见 offer 措辞 draft，并把边界、依赖和复核-needed 备注一起收好。",
+        : "当前已经准备好一版客户可见报价措辞草稿，并把边界、依赖和待复核备注一起收好。",
       signals.pendingApprovalCount
         ? english
           ? `${signals.pendingApprovalCount} approval-sensitive actions are still holding the send gate, so this page is not pretending the wording is ready to leave review.`
-          : `当前仍有 ${signals.pendingApprovalCount} 条审批敏感动作卡在 send闸口 上，所以这页不会假装文案已经可以离开复核。`
+          : `当前仍有 ${signals.pendingApprovalCount} 条审批敏感动作卡在发送闸口上，所以这页不会假装文案已经可以离开复核。`
         : english
           ? "The offer-safe version, latest blocker summary and next-step context are already grouped into one decision page."
-          : "当前 offer-safe 版本、最新阻塞摘要和下一步上下文都已经被收进同一页决策面。",
+          : "当前对外安全版本、最新阻塞摘要和下一步上下文都已经被收进同一页决策面。",
       english
         ? "You do not need to read raw fields first; customer-facing wording and internal-only notes are already separated."
         : "你不需要先翻原始字段；客户可见措辞和仅内部备注已经分开了。",
@@ -59,11 +59,11 @@ export function buildCustomerFacingOfferPageContract({
     customerOfferPageBoundarySummary: [
       english
         ? "Only customer-facing wording can leave this page; internal-only shaping notes must stay inside review and evidence layers."
-        : "只有客户可见措辞可以离开这一页；仅内部的整形说明必须继续留在复核和 evidence 层。",
+        : "只有客户可见措辞可以离开这一页；仅内部的整形说明必须继续留在复核和依据层。",
       buildBoundaryLineForSendability(sendabilityMode, english),
       english
         ? "Recommendation, discussion-only and boundary notes still do not equal commitment."
-        : "recommendation、仅讨论 和边界备注仍然不等于承诺。",
+        : "建议、仅讨论和边界备注仍然不等于承诺。",
     ],
     customerOfferPageEvidenceSummary: [
       english
@@ -94,10 +94,10 @@ export function buildCustomerFacingOfferPageContract({
       : "当前只允许用对外价值措辞；范围和承诺语言都必须保持柔性。",
     customerOfferPageInternalOnlyCue: english
       ? "Scope negotiation notes, dependency cleanup and trust-sensitive review comments stay internal-only."
-      : "范围 negotiation 备注、依赖清理 和信任敏感 复核 comment 仍只适合仅内部。",
+      : "范围协商备注、依赖清理和信任敏感复核评论仍只适合仅内部。",
     customerOfferPageNonCommitmentCue: english
       ? "This offer version is still non-commitment wording until a human explicitly approves any stronger reinforcement."
-      : "当前这版 offer 仍属于非承诺措辞，除非人工明确批准更强加固。",
+      : "当前这版报价仍属于非承诺措辞，除非人工明确批准更强加固。",
     pageWhyItMatters: [
       english
         ? `The opportunity is already in a ${detail.stageLabel} window, so the outward wording now directly changes whether momentum keeps warming or falls back into internal hesitation.`
@@ -105,7 +105,7 @@ export function buildCustomerFacingOfferPageContract({
       signals.openCommitmentCount
         ? english
           ? `${signals.openCommitmentCount} open commitments are still shaping trust pressure, so the next offer wording cannot pretend certainty that has not been earned yet.`
-          : `当前仍有 ${signals.openCommitmentCount} 条开放承诺在影响信任压力，所以下一版 offer 措辞不能假装已经获得了还没被兑现的确定性。`
+          : `当前仍有 ${signals.openCommitmentCount} 条开放承诺在影响信任压力，所以下一版报价措辞不能假装已经获得了还没被兑现的确定性。`
         : english
           ? "There is no single open commitment dominating the page, so this is the right moment to decide how far the external-safe wording can go."
           : "当前没有单条开放承诺主导整个页面，所以现在正适合决定 可对外措辞能走到哪一步。",
@@ -121,7 +121,7 @@ export function buildCustomerFacingOfferPageContract({
           : "如果任何人想把承诺、时点或范围说实，就先升级进审批，再允许任何内容离开复核。"
         : english
           ? "If trust pressure or dependency pressure rises, step back from the customer-facing offer and return to package review first."
-          : "如果信任压力或依赖压力开始上升，就先从客户可见 offer 退回方案包复核。",
+          : "如果信任压力或依赖压力开始上升，就先从客户可见报价退回方案包复核。",
     pageEvidenceLinks: [
       {
         label: english ? "Open package page" : "打开方案包页面",
@@ -198,7 +198,7 @@ export function buildExternalProposalPageContract({
       buildBoundaryLineForSendability(sendabilityMode, english),
       english
         ? "Recommendation, discussion-only language and proposal reinforcement still do not equal commitment."
-        : "recommendation、仅讨论 语言和提案加固仍然不等于承诺。",
+        : "建议、仅讨论语言和提案加固仍然不等于承诺。",
     ],
     externalProposalPageEvidenceSummary: [
       english
@@ -258,7 +258,7 @@ export function buildExternalProposalPageContract({
       detail.ownerName ??
       (english
         ? "Sales owner + founder review"
-        : "Sales owner + founder review"),
+        : "销售负责人 + 创始人复核"),
     pageWhyItMatters: [
       english
         ? `The opportunity is already at ${detail.stageLabel}, so the external proposal wording now shapes whether the next commercial move builds trust or overreaches.`
@@ -287,7 +287,7 @@ export function buildExternalProposalPageContract({
       {
         label: english
           ? "Open customer offer page"
-          : "打开客户可见 offer 页面",
+          : "打开客户可见报价页面",
         href: `/offers/${detail.id}`,
       },
       {
@@ -409,36 +409,36 @@ function buildCustomerOfferJudgement(
   if (mode === "safe_to_send") {
     return english
       ? "This customer-facing offer is safe-to-send, but the non-commitment line must stay explicit."
-      : "当前客户可见 offer 已经 可发送，但非承诺线仍必须显式保留。";
+      : "当前客户可见报价已经可发送，但非承诺线仍必须显式保留。";
   }
   if (mode === "safe_with_boundary") {
     return english
       ? "This customer-facing offer can move outward only if the boundary note stays attached."
-      : "当前客户可见 offer 只有带着边界备注一起出现时，才适合继续向外。";
+      : "当前客户可见报价只有带着边界备注一起出现时，才适合继续向外。";
   }
   if (mode === "safe_with_prerequisite") {
     return english
       ? "This customer-facing offer still needs prerequisite confirmation before it can move outward safely."
-      : "当前客户可见 offer 仍需要先确认前置，才适合安全向外推进。";
+      : "当前客户可见报价仍需要先确认前置，才适合安全向外推进。";
   }
   if (mode === "safe_with_dependency") {
     return english
       ? "This customer-facing offer can only move with visible dependency notes, not as standalone wording."
-      : "当前客户可见 offer 只能带着依赖备注一起移动，不能作为独立文案单独外发。";
+      : "当前客户可见报价只能带着依赖备注一起移动，不能作为独立文案单独外发。";
   }
   if (mode === "discussion_only") {
     return english
       ? "This customer-facing offer is discussion-only and should not be treated as可发送 copy."
-      : "当前客户可见 offer 仍是仅讨论，不应被当成可直接外发文案。";
+      : "当前客户可见报价仍是仅讨论，不应被当成可直接外发文案。";
   }
   if (mode === "review_before_send") {
     return english
       ? "This customer-facing offer remains review-before-send and should not be sent yet."
-      : "当前客户可见 offer 仍然是发送前复核，还不能直接外发。";
+      : "当前客户可见报价仍然是发送前复核，还不能直接外发。";
   }
   return english
     ? "This customer-facing offer is not-safe-to-send and should stay in internal review."
-    : "当前客户可见 offer 仍然是 not-可发送，应继续停留在 internal 复核。";
+    : "当前客户可见报价仍然不可发送，应继续停留在内部复核。";
 }
 
 function buildExternalProposalJudgement(
@@ -447,8 +447,8 @@ function buildExternalProposalJudgement(
 ) {
   if (mode === "safe_to_send") {
     return english
-      ? "This external proposal can enter a可发送 review pass, but the non-commitment line still belongs to the visible boundary layer."
-      : "当前外部提案可以进入可发送 复核，但非承诺线仍必须留在可见边界层。";
+      ? "This external proposal can enter a sendable review pass, but the non-commitment line still belongs to the visible boundary layer."
+      : "当前外部提案可以进入可发送复核，但非承诺线仍必须留在可见边界层。";
   }
   if (mode === "safe_with_boundary") {
     return english
@@ -477,7 +477,7 @@ function buildExternalProposalJudgement(
   }
   return english
     ? "This external proposal is not-safe-to-send and must stay in internal review."
-    : "当前外部提案仍然是 not-可发送，必须继续停留在 internal 复核。";
+    : "当前外部提案仍然不可发送，必须继续停留在内部复核。";
 }
 
 function buildBoundaryLineForSendability(
@@ -516,7 +516,7 @@ function buildBoundaryLineForSendability(
   }
   return english
     ? "Not-safe-to-send means the current version must not leave internal review."
-    : "not-可发送 表示当前版本不能离开 internal 复核。";
+    : "不可发送表示当前版本不能离开内部复核。";
 }
 
 function buildCustomerOfferNextActions({
@@ -583,7 +583,7 @@ function buildExternalProposalNextActions({
         : "打开审批中心"
       : english
         ? "Open customer offer page"
-        : "打开客户可见 offer 页面";
+        : "打开客户可见报价页面";
 
   return [
     {
@@ -645,7 +645,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "记忆",
+      label: english ? "Memory" : "经营记忆",
       items:
         detail.memoryFacts.length > 0 || detail.memoryEntries.length > 0
           ? [
@@ -672,7 +672,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker 输出",
+      label: english ? "Worker output" : "执行输出",
       items:
         detail.actionItems.length > 0 ||
         Boolean(detail.briefingSnapshot?.payload.recommendedNextSteps?.length)
@@ -700,7 +700,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "边界痕迹",
+      label: english ? "Boundary trace" : "边界轨迹",
       items: [
         detail.blockers.length
           ? english
@@ -720,7 +720,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "可发送性痕迹",
+      label: english ? "Sendability trace" : "发送评估轨迹",
       items: [
         detail.actionItems.some(
           (item) => item.approvalTask?.status === "PENDING",
@@ -760,22 +760,22 @@ function labelForSendabilityMode(
   english: boolean,
 ) {
   if (mode === "safe_to_send") {
-    return english ? "safe-to-send" : "safe-to-send";
+    return english ? "safe-to-send" : "可安全发送";
   }
   if (mode === "safe_with_boundary") {
-    return english ? "safe-with-boundary" : "safe-with-boundary";
+    return english ? "safe-with-boundary" : "带边界可发送";
   }
   if (mode === "safe_with_prerequisite") {
-    return english ? "safe-with-prerequisite" : "safe-with-prerequisite";
+    return english ? "safe-with-prerequisite" : "补齐前置后可发送";
   }
   if (mode === "safe_with_dependency") {
-    return english ? "safe-with-dependency" : "safe-with-dependency";
+    return english ? "safe-with-dependency" : "带依赖说明可发送";
   }
   if (mode === "discussion_only") {
-    return english ? "discussion-only" : "discussion-only";
+    return english ? "discussion-only" : "仅适合讨论";
   }
   if (mode === "review_before_send") {
-    return english ? "review-before-send" : "review-before-send";
+    return english ? "review-before-send" : "发送前复核";
   }
-  return english ? "not-safe-to-send" : "not-safe-to-send";
+  return english ? "not-safe-to-send" : "不可发送";
 }

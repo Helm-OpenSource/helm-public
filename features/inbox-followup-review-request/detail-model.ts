@@ -268,7 +268,7 @@ export function buildInboxDetailPageModel({
         : "收件箱执行会持续把回应压力、绑定状态和下一条最可能的路线对齐到同一张判断优先线程视图上。",
       english
         ? "Commercial review keeps package, proposal and conversation boundary lines visible before the next outward move."
-        : "commercial 复核会在下一次对外动作前继续把方案包、提案和对话的边界线挂在前台。",
+        : "商业复核会在下一次对外动作前继续把方案包、提案和对话的边界线挂在前台。",
     ],
     inboxDetailNextAction: buildInboxActions({
       thread,
@@ -312,7 +312,7 @@ export function buildInboxDetailPageModel({
       sendabilityItems: [
         english
           ? `Current sendability stays at ${sendabilityMode}.`
-          : `当前发送评估停在 ${sendabilityMode}。`,
+          : `当前发送评估停在 ${formatSendabilityMode(sendabilityMode, false)}。`,
       ],
       handoffItems: [
         english
@@ -381,7 +381,7 @@ export function buildInboxDetailPageModel({
         ? {
             type: "follow-up-detail",
             href: `/follow-ups/${thread.opportunity.id}`,
-            label: english ? "Follow-up detail" : "Follow-up 详情",
+            label: english ? "Follow-up detail" : "跟进详情",
             summary: english
               ? "Move here once the thread context is clear and the team needs the next follow-up judgement."
               : "当线程上下文已经收住，而团队需要下一步跟进判断时，切到这里。",
@@ -551,7 +551,7 @@ export function buildFollowupDetailPageModel({
       pendingApproval
         ? english
           ? "A pending approval is already attached to one action item, so follow-up can no longer pretend to be a free draft."
-          : "当前已经有待审批动作挂在 动作item 上，所以跟进不能再假装只是自由草稿。"
+          : "当前已经有待审批动作挂在动作项上，所以跟进不能再假装只是自由草稿。"
         : english
           ? "There is still room to refine the next outbound move before it becomes a review request."
           : "在它升级成复核请求 之前，当前仍有空间先把下一次对外动作收清。",
@@ -573,7 +573,7 @@ export function buildFollowupDetailPageModel({
         : "跟进详情面 可以提高节奏、请求措辞和交接时点 的清晰度，但它仍然不能悄悄把 草稿压力写成承诺。",
       english
         ? "Any outward wording that touches scope, timing, pricing or outcome certainty must keep boundary, prerequisite, dependency or review cues visible."
-        : "任何触碰范围、时点、pricing 或结果确定性的对外措辞，都必须继续保留边界、前置、依赖或复核线索。",
+        : "任何触碰范围、时点、价格或结果确定性的对外措辞，都必须继续保留边界、前置、依赖或复核线索。",
       english
         ? "Internal-only preparation, fallback lines and approval-sensitive notes must never leak into customer-facing phrasing."
         : "仅内部的准备态、兜底话术和审批-敏感备注，不能直接漏进客户可见措辞。",
@@ -581,7 +581,7 @@ export function buildFollowupDetailPageModel({
     followupDetailEvidenceSummary: [
       english
         ? `${detail.actionItems.length} action items, ${detail.auditLogs.length} audit changes and follow-up traces are grouped below without interrupting the main narrative.`
-        : `当前 ${detail.actionItems.length} 条 动作item、${detail.auditLogs.length} 条审计变化和跟进轨迹都已经收在下面，不会打断主叙事。`,
+        : `当前 ${detail.actionItems.length} 条动作项、${detail.auditLogs.length} 条审计变化和跟进轨迹都已经收在下面，不会打断主叙事。`,
       english
         ? "Replay, audit, memory, worker output, sendability trace, handoff trace and historical changes stay available on demand."
         : "回放、审计、经营记忆、执行输出、发送评估轨迹、交接轨迹和历史变更都保留在附注层按需可看。",
@@ -592,7 +592,7 @@ export function buildFollowupDetailPageModel({
         : "销售与对话执行会持续把跟进措辞、复核压力和下一步 路由对齐到同一张判断优先页面上。",
       english
         ? "Commercial review keeps boundary, non-commitment and approval-sensitive wording from disappearing behind a stronger draft."
-        : "commercial 复核会持续防止边界、非承诺和审批-敏感措辞被更强的 draft 盖掉。",
+        : "商业复核会持续防止边界、非承诺和审批敏感措辞被更强的草稿盖掉。",
     ],
     followupDetailNextAction: buildFollowupActions({
       detail,
@@ -623,7 +623,7 @@ export function buildFollowupDetailPageModel({
       workerItems: [
         english
           ? `${detail.actionItems.length} action items and the current briefing snapshot are already grouped for the next follow-up decision.`
-          : `当前 ${detail.actionItems.length} 条 动作item 和简报 snapshot 已经被分组收好，供下一次跟进决策使用。`,
+          : `当前 ${detail.actionItems.length} 条动作项和简报快照已经被分组收好，供下一次跟进决策使用。`,
       ],
       boundaryItems: detail.blockers
         .slice(0, 3)
@@ -635,7 +635,7 @@ export function buildFollowupDetailPageModel({
       sendabilityItems: [
         english
           ? `Current follow-up sendability stays at ${sendabilityMode}.`
-          : `当前跟进发送评估停在 ${sendabilityMode}。`,
+          : `当前跟进发送评估停在 ${formatSendabilityMode(sendabilityMode, false)}。`,
       ],
       handoffItems: [
         pendingApproval
@@ -659,13 +659,13 @@ export function buildFollowupDetailPageModel({
       pendingApproval
         ? english
           ? "A review-sensitive action is already open, so follow-up wording can no longer behave like a harmless draft."
-          : "当前已经有复核-敏感动作打开，所以跟进措辞不能再被当成无害草稿。"
+          : "当前已经有复核敏感动作打开，所以跟进措辞不能再被当成无害草稿。"
         : english
           ? "There is still room to improve the next ask, but only if boundary and non-commitment stay visible."
-          : "当前仍有空间继续改进下一次 请求，但前提是边界和非承诺还挂在前台。",
+          : "当前仍有空间继续改进下一次请求，但前提是边界和非承诺还挂在前台。",
       english
         ? "The current page already groups package, offer, proposal and conversation context around this follow-up, so the remaining work is choosing the right next detail."
-        : "当前页已经把方案包、offer、提案和对话上下文挂在这次跟进周围，所以剩下真正的工作是选对下一张详情面。",
+        : "当前页已经把方案包、报价、提案和对话上下文挂在这次跟进周围，所以剩下真正的工作是选对下一张详情面。",
     ],
     pageEvidenceLinks: [
       {
@@ -723,13 +723,13 @@ export function buildFollowupDetailPageModel({
               : "客户面向报价详情",
             summary: english
               ? "Move here if the next follow-up is already stable enough to inherit the outward offer surface."
-              : "如果下一次跟进已经足够稳定，可以继承对外 offer 面，就切到这里。",
+              : "如果下一次跟进已经足够稳定，可以继承对外报价面，就切到这里。",
           },
       detailNodeCurrentReason: protocol.pageJudgementReason,
       detailNodePriority: priorityForRisk(riskSignal),
       detailNodeNavigationHint: english
         ? "Use follow-up detail when the team needs to decide whether the next outbound move is still a draft, already review-sensitive or ready for the next commercial surface."
-        : "当团队需要判断下一次对外动作仍是 draft、已经变成复核-敏感，还是已经能进入下一层商业表面时，停在跟进详情面。",
+        : "当团队需要判断下一次对外动作仍是草稿、已经变成复核敏感，还是已经能进入下一层商业表面时，停在跟进详情面。",
     },
     handoffs: buildFollowupHandoffs({
       detail,
@@ -743,7 +743,7 @@ export function buildFollowupDetailPageModel({
     kind: "follow-up-detail",
     eyebrow: english
       ? "Communication chain / Follow-up detail"
-      : "沟通链 / Follow-up 详情",
+      : "沟通链 / 跟进详情",
     title: english
       ? `${detail.title} follow-up detail`
       : `${detail.title} 跟进详情页`,
@@ -952,7 +952,7 @@ export function buildReviewRequestDetailPageModel({
       sendabilityItems: [
         english
           ? `Current review sendability stays at ${sendabilityMode}.`
-          : `当前发送边界停在 ${sendabilityMode}。`,
+          : `当前发送边界停在 ${formatSendabilityMode(sendabilityMode, false)}。`,
       ],
       handoffItems: [
         english
@@ -1002,10 +1002,10 @@ export function buildReviewRequestDetailPageModel({
         ? {
             type: "follow-up-detail",
             href: `/follow-ups/${task.actionItem.opportunity.id}`,
-            label: english ? "Follow-up detail" : "Follow-up 详情",
+            label: english ? "Follow-up detail" : "跟进详情",
             summary: english
               ? "Return to follow-up when the team still needs to rework the draft before review closes."
-              : "如果团队还需要先重做 draft，再关闭复核，就回到跟进。",
+              : "如果团队还需要先重做草稿，再关闭复核，就回到跟进。",
           }
         : {
             type: "conversation",
@@ -1145,14 +1145,14 @@ export function buildReviewRequestDetailPageModel({
           primaryOwner === "founder"
             ? english
               ? "Founder"
-              : "Founder"
+              : "创始人"
             : primaryOwner === "delivery"
               ? english
                 ? "Delivery"
-                : "Delivery"
+                : "交付"
               : english
                 ? "Sales"
-                : "Sales",
+                : "销售",
       },
       {
         label: english ? "Action type" : "动作类型",
@@ -1193,7 +1193,7 @@ function buildReviewRequestAgentSurface({
 }: {
   task: ReviewRequestDetail;
   primaryOwner: "sales" | "founder" | "delivery";
-  sendabilityMode: string;
+  sendabilityMode: ReviewRequestDetailReportingContract["reviewRequestDetailSendabilityMode"];
   english: boolean;
 }): ReviewRequestAgentSurfaceModel {
   const authorityState = deriveReviewRequestAuthorityState(task);
@@ -1268,7 +1268,7 @@ function buildReviewRequestAgentSurface({
           : `下一步现在属于 ${formatPrimaryOwner(primaryOwner, false)}，但这页仍然保持仅复核 和非承诺。`,
     english
       ? `Current review posture stays at ${sendabilityMode}, so external send remains disabled on this page.`
-      : `当前复核姿态 停在 ${sendabilityMode}，所以这页仍然禁止外部发送。`,
+      : `当前复核姿态停在 ${formatSendabilityMode(sendabilityMode, false)}，所以这页仍然禁止外部发送。`,
     english
       ? "Commitment remains disabled until the next owner reframes this outside raw review posture."
       : "在下一位负责人把这条线从原始复核姿态 中重新表述出来之前，承诺仍然保持禁用。",
@@ -1848,7 +1848,7 @@ function buildFollowupHandoffs({
           : "下一步现在需要先过复核，之后才能继续往外走。"
         : english
           ? "The follow-up is stable enough to inherit the lighter customer-facing offer surface."
-          : "当前跟进已经足够稳定，可以继承更轻的客户可见 offer 表面。",
+          : "当前跟进已经足够稳定，可以继承更轻的客户可见报价表面。",
       handoffBoundary: protocol.pageBoundarySummary[0],
       handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -1858,7 +1858,7 @@ function buildFollowupHandoffs({
           : "如果这里跳过复核，就可能把跟进压力直接滑成意外承诺。"
         : english
           ? "Offer wording can still overstate certainty if the boundary line disappears."
-          : "如果边界线消失，offer 措辞仍可能过度夸大确定性。",
+          : "如果边界线消失，报价措辞仍可能过度夸大确定性。",
       handoffDecisionRequest: protocol.pageDecisionRequest[0],
       handoffNextAction: pendingApprovalId
         ? english
@@ -2034,7 +2034,7 @@ function buildReviewRequestHandoffs({
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
       handoffRisk: english
         ? "Skipping this review can turn a draft into accidental commitment."
-        : "如果跳过这次复核，就可能把 draft 直接滑成意外承诺。",
+        : "如果跳过这次复核，就可能把草稿直接滑成意外承诺。",
       handoffDecisionRequest: protocol.pageDecisionRequest[0],
       handoffNextAction: english
         ? "Open review request detail."
@@ -2257,27 +2257,27 @@ function buildEvidenceGroups({
   return [
     {
       groupId: "replay",
-      label: english ? "Replay" : "Replay",
+      label: english ? "Replay" : "回放",
       items: replayItems,
     },
     {
       groupId: "audit",
-      label: english ? "Audit" : "Audit",
+      label: english ? "Audit" : "审计",
       items: auditItems,
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "Memory",
+      label: english ? "Memory" : "经营记忆",
       items: memoryItems,
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker output",
+      label: english ? "Worker output" : "执行输出",
       items: workerItems,
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "Boundary trace",
+      label: english ? "Boundary trace" : "边界轨迹",
       items: boundaryItems.length
         ? boundaryItems
         : [
@@ -2288,17 +2288,17 @@ function buildEvidenceGroups({
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "Sendability trace",
+      label: english ? "Sendability trace" : "发送评估轨迹",
       items: sendabilityItems,
     },
     {
       groupId: "handoff_trace",
-      label: english ? "Handoff trace" : "Handoff trace",
+      label: english ? "Handoff trace" : "交接轨迹",
       items: handoffItems,
     },
     {
       groupId: "historical_changes",
-      label: english ? "Historical changes" : "Historical changes",
+      label: english ? "Historical changes" : "历史变化",
       items: historyItems,
     },
   ];

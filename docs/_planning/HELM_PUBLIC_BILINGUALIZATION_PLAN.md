@@ -34,8 +34,9 @@ operations / roadmap / launch / trial / legal docs have landed in staged
 commits; P2 sample pack, review receipts, templates, report-skill, and
 contributor-facing surfaces are underway. On the source / UI side, the meeting
 human-execution, official-write runtime panels, meeting v2 runtime main panel,
-and customer success handoff detail model have been further localized, but
-whole-project scans still show remaining candidates.
+customer success handoff detail model, and the next batch of judgement /
+sendability detail surfaces have been further localized, but whole-project
+scans still show remaining candidates.
 
 ## 3. 双语标准 / Bilingual Standard
 
@@ -92,12 +93,12 @@ This PR's source audit result:
    可见面板中的指标标签、加载策略和基准矩阵文案继续收口，直接 JSX 英文标签扫描已降为 0。
    会议人工执行、正式写回、meeting v2 runtime 主面板、customer success handoff
    detail model、settings client、conversation detail、external narrative detail 与
-   commitment reinforcement sendability detail model 的中文操作字段已继续收口，这些
-   目标文件的严格可见文案候选扫描为 0。全工程广义 ASCII 中文分支扫描仍有 242 个
-   候选项，严格可见文案扫描仍有 129 个候选项，后续集中在 meeting opportunity judge、
-   inbox follow-up review request、success check、customer-facing offer 和 billing
-   surface。剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为
-   中文 UI 缺口。
+   commitment reinforcement sendability detail model、meeting opportunity judge、
+   inbox follow-up review request、success check、customer-facing offer / external
+   proposal 与 commercial narrative strengthening detail model 的中文操作字段已继续收口。
+   这些目标文件的本批次严格可见残留已清理；全工程广义 ASCII 中文分支扫描与严格可见
+   文案扫描尚未重新校准，后续仍需继续检查 billing surface 与其他低频 detail surfaces。
+   剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
 4. 交付工程师上手文档已补齐中国大陆 / 受限网络 npm 与 Docker mirror 指引、Prisma
    显式生成口径、MySQL 凭据对齐和微信支付 lifecycle env 示例；`delivery:doctor`
    也新增 `--region cn` 静态预检，用于提示 Qwen key fallback、region / residency、
@@ -117,14 +118,16 @@ This PR's source audit result:
    English-label scan now returns 0 hits. The meeting human-execution,
    official-write, meeting v2 runtime main panel, customer success handoff
    detail model, settings client, conversation detail, external narrative
-   detail, and commitment reinforcement sendability detail model have also been
-   localized for Chinese operation fields, and the target-file strict
-   visible-copy scans return 0 hits. Whole-project broad ASCII zh-branch scans
-   still show 242 remaining candidates, and the strict visible-copy scan shows
-   129 remaining candidates, concentrated in meeting opportunity judge, inbox
-   follow-up review request, success check, customer-facing offer, and billing
-   surfaces. Remaining brand names, language labels, provider names, trace keys,
-   and runtime enums are P3 rather than Chinese UI gaps.
+   detail, commitment reinforcement sendability detail model, meeting
+   opportunity judge, inbox follow-up review request, success check,
+   customer-facing offer / external proposal, and commercial narrative
+   strengthening detail model have also been localized for Chinese operation
+   fields. This batch clears the target-file strict visible-copy leftovers; the
+   whole-project broad ASCII zh-branch scan and strict visible-copy scan have
+   not been recalibrated yet, and billing plus other lower-frequency detail
+   surfaces still need follow-up review. Remaining brand names, language labels,
+   provider names, trace keys, and runtime enums are P3 rather than Chinese UI
+   gaps.
 4. Developer onboarding docs now include Mainland China / restricted-network
    npm and Docker mirror guidance, explicit Prisma generation wording, aligned
    MySQL credentials, and WeChat Pay lifecycle env examples; `delivery:doctor`
@@ -221,6 +224,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-03 | 继续收口 meeting opportunity judge、inbox follow-up review request、success check、customer-facing offer / external proposal 与 commercial narrative strengthening detail model 的中文可见标签；本批目标文件严格可见残留已清理，全工程剩余候选尚未重新校准；Further localized meeting opportunity judge, inbox follow-up review request, success check, customer-facing offer / external proposal, and commercial narrative strengthening detail-model labels; this batch clears target-file strict visible-copy leftovers, while whole-project remaining candidates have not been recalibrated yet |
 | 2026-06-03 | 继续收口 settings client、conversation detail、external narrative detail 与 commitment reinforcement sendability detail model 的中文可见标签；目标文件严格可见候选扫描为 0，全工程广义 ASCII 中文分支候选降至 242，严格可见候选降至 129；Further localized settings client, conversation detail, external narrative detail, and commitment reinforcement sendability detail-model labels; target-file strict visible-copy candidates now return 0 hits, whole-project broad ASCII zh-branch candidates are down to 242, and strict visible-copy candidates are down to 129 |
 | 2026-06-03 | 新增 `npm run delivery:doctor -- --region cn` 静态预检，并将 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见误配纳入交付工程师上手链路；Added `npm run delivery:doctor -- --region cn` static preflight and moved common Qwen credential, region / residency, npm mirror, and OpenAI-only ASR misconfigurations into the delivery-engineer onboarding path |
 | 2026-06-03 | 继续收口 customer success handoff detail model 中文可见标签，目标文件有效中文分支候选扫描为 0，全工程校准扫描剩余 331；Further localized customer success handoff detail-model labels; target-file effective zh-branch candidates now return 0 hits, and whole-project calibrated candidates are 331 |
