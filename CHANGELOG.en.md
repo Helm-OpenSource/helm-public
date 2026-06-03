@@ -67,6 +67,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized mixed Chinese empty-state and guidance copy in the runtime operator and meeting v2 runtime panels; this batch changes visible copy plus source guards only and leaves runtime queues, permissions, state machines, and control actions unchanged.
 - Further localized mixed Chinese meeting runtime action fallbacks, toasts, and operator-control button copy; this batch changes visible copy plus source guards only and leaves server-action permissions, runtime state machines, and control actions unchanged.
 - Further localized Chinese fallback labels in commercial narrative strengthening detail; this batch changes visible labels / summary plus source guards only and leaves sendability, proposal, and non-commitment boundaries unchanged.
+- Further localized mixed Chinese copy in customer-success handoff detail / queue surfaces; this batch changes visible judgement, post-send, and queue copy plus source guards only and leaves ownership, sendability, outbound review, and non-commitment boundaries unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

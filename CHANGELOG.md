@@ -69,6 +69,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 runtime operator 与 meeting v2 runtime 的中文空状态和操作说明混写；本批只改可见文案与源码守卫，不改运行时队列、权限、状态机或控制动作。
 - 继续收口 meeting runtime action fallback、toast 与 operator control 按钮中的中文混写；本批只改可见文案与源码守卫，不改 server action 权限、runtime 状态机或控制动作。
 - 继续收口 commercial narrative strengthening detail 的中文 fallback 标签；本批只改可见 label / summary 与源码守卫，不改 sendability、proposal 或 non-commitment 边界。
+- 继续收口 customer success handoff detail / queue 中的中文混写；本批只改可见 judgement、post-send 与 queue 文案及源码守卫，不改 ownership、sendability、外发复核或非承诺边界。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。

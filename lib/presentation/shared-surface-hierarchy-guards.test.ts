@@ -579,6 +579,46 @@ describe("shared surface hierarchy guards", () => {
     expect(runtimeOperatorPanel).toContain("终止（请求关闭）");
   });
 
+  it("keeps Chinese customer-success handoff copy free of recently fixed mixed English fragments", () => {
+    const detailModel = read("features/customer-success-handoff/detail-model.ts");
+    const queueModel = read("features/customer-success-handoff/queue-model.ts");
+    const sources = `${detailModel}\n${queueModel}`;
+
+    for (const fragment of [
+      "success 跟进闭环",
+      "拓展 read",
+      "普通客户成功 path 上",
+      "Issue 跟进闭环",
+      "meaningful post-send 结果",
+      "meaningful post-send 信号",
+      "当前 post-send",
+      "人工 send 交接",
+      "silence 或人工交接",
+      "拓展已 ready",
+      "复核-limited",
+      "commercial motion 时",
+      "intervention 压力",
+      "交接 evidence",
+      "ready-to-send、客户安全",
+      "当前已经足够 resolved / unblocked",
+      "已 backing",
+      "明确 backing",
+      "Outcome 已解除阻塞",
+      "Outcome 收紧了边界",
+    ]) {
+      expect(sources).not.toContain(fragment);
+    }
+
+    expect(detailModel).toContain("客户成功跟进闭环说成对外确定性");
+    expect(detailModel).toContain("值得进入拓展研判");
+    expect(detailModel).toContain("有意义的发送后结果");
+    expect(detailModel).toContain("显式介入压力");
+    expect(detailModel).toContain("交接证据会继续保留");
+    expect(queueModel).toContain("问题跟进闭环");
+    expect(queueModel).toContain("普通客户成功路径上");
+    expect(queueModel).toContain("当前沉默仍然不等于确认");
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 

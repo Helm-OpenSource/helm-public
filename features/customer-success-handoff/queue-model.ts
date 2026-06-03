@@ -1349,7 +1349,7 @@ function buildInboxPostSendOutcomeFallback({
         : "当前线程仍在等待最近一次对外动作之后的第一条可见的外部结果。",
       blockedLabel: english
         ? "Silence still does not count as confirmation, sendability, or commitment."
-        : "当前 silence 仍然不等于确认、可发送或承诺。",
+        : "当前沉默仍然不等于确认、可发送或承诺。",
     };
   }
 
@@ -1430,12 +1430,12 @@ function buildQueueVariantSummary(
   if (variantStage === "issue-follow-through") {
     return english
       ? "Issue follow-through: a real follow-through problem is visible, but the repair path still remains inside normal current-round coordination."
-      : "Issue 跟进闭环：当前已经出现真实跟进闭环问题，但修复路径仍停在正常这一轮协调范围内。";
+      : "问题跟进闭环：当前已经出现真实跟进闭环问题，但修复路径仍停在正常这一轮协调范围内。";
   }
 
   return english
     ? "Follow-through remains inside the normal customer success path until issue or escalation pressure needs to be made explicit."
-    : "在问题或升级压力需要被显式抬出来之前，当前仍停在普通客户成功 path 上。";
+    : "在问题或升级压力需要被显式抬出来之前，当前仍停在普通客户成功路径上。";
 }
 
 function buildQueueSubvariantSummary({
