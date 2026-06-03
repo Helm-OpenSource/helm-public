@@ -16,6 +16,23 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：公开文档索引的中文入口术语混写已继续清理；本批只改公开 Core、样板 Pack、
+Docker 快速启动、复核、检查 / 复刻 / 首次改动、验证命令、公开安全证据路径、首次改动证明、
+黄金路径、扩展目录、运营信号流图、作业手册、值守姿态、发布节奏、周报包、证据路由包和
+密钥修复回执文案及源码守卫，不改变 public-docs manifest、链接目标、公开文档收录流程或
+私有材料排除边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese wayfinding terminology in the
+public docs index has been further localized. This batch changes public Core,
+sample Pack, Docker quickstart, review, inspect / fork / first change,
+verification commands, public-safe evidence route, first-change proof, Golden
+Path, extension directory, operating signal flow map, runbook, on-call posture,
+release cadence, weekly packet, evidence-routing packet, and
+secret-remediation receipt wording plus source guards only; it does not change
+the public-docs manifest, link targets, public-doc curation flow, or
+private-material exclusion boundary, and does not claim full-repo
+bilingualization completion.
+
 最新双语化收口：Solution Extension 协议的中文公开扩展边界术语混写已继续清理；本批只改公开 Core
 版本、通用扩展、私有客户 overlay、结算逻辑、私有交付作业手册、复核优先、有界方案扩展层、
 领域特定界面、报告资产、有界运行时适配器、市场、插件沙箱、结算通道、客户交付项目跟踪器、

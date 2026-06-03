@@ -2108,6 +2108,54 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps public docs index Chinese entry copy localized for China-market wayfinding", () => {
+    const docsReadme = read("docs/README.md");
+    const chineseIntro = docsReadme.slice(
+      docsReadme.indexOf("本目录是 `helm-public`"),
+      docsReadme.indexOf("This directory is the curated documentation surface"),
+    );
+    const publicDocsBoundary = docsReadme.slice(
+      docsReadme.indexOf("公开文档面必须刻意保持小而可审计"),
+      docsReadme.indexOf("The public docs surface is intentionally small"),
+    );
+    const deliveryEngineerIntro = docsReadme.slice(
+      docsReadme.indexOf("交付工程师优先阅读"),
+      docsReadme.indexOf("Delivery-engineer-first reading"),
+    );
+
+    expect(chineseIntro).toContain("Apache-2.0 公开 Core");
+    expect(chineseIntro).toContain("样板 Pack");
+    expect(chineseIntro).toContain("Docker 快速启动");
+    expect(publicDocsBoundary).toContain("规划、复核、商业");
+    expect(deliveryEngineerIntro).toContain("检查 / 复刻 / 首次改动");
+    expect(deliveryEngineerIntro).toContain("验证命令 / 公开安全证据路径 / 边界");
+    expect(deliveryEngineerIntro).toContain("首次改动证明");
+    expect(docsReadme).toContain("交付工程师黄金路径要求 / Delivery engineer Golden Path requirements");
+    expect(docsReadme).toContain("扩展目录与命名协议 / Extension directory and naming protocol");
+    expect(docsReadme).toContain("运营信号流图要求 / Operating signal flow map requirements");
+    expect(docsReadme).toContain("公开试点作业手册 / Public trial runbook");
+    expect(docsReadme).toContain("试点响应与值守姿态 / Trial response and on-call posture");
+    expect(docsReadme).toContain("公开发布节奏作业手册 / Public release train runbook");
+    expect(docsReadme).toContain("OPC 周报包模板 / OPC weekly packet template");
+    expect(docsReadme).toContain(
+      "中国访问性与证据路由包 / China accessibility and evidence routing packet",
+    );
+    expect(docsReadme).toContain(
+      "密钥修复回执与私有部署证据 / Secret remediation receipts and private deployment evidence",
+    );
+
+    expect(chineseIntro).not.toMatch(
+      /Apache-2\.0 public Core|sample pack|Docker quickstart/,
+    );
+    expect(publicDocsBoundary).not.toMatch(/规划、review/);
+    expect(deliveryEngineerIntro).not.toMatch(
+      /inspect \/ fork \/ first change|verification commands|public-safe evidence route|first-change proof/,
+    );
+    expect(docsReadme).not.toMatch(
+      /交付工程师 Golden Path 要求|Extension 目录与命名协议|Operating signal flow map 要求|公开试点 runbook|试点响应与 on-call 姿态|公开 release train runbook|OPC 周报 packet 模板|中国访问性与证据路由 packet|secret remediation 回执/,
+    );
+  });
+
   it("keeps public release train runbook Chinese body free of recently fixed mixed release-governance fragments", () => {
     const releaseTrainRunbook = read(
       "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",
