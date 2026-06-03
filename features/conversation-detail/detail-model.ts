@@ -34,7 +34,7 @@ export function buildConversationDetailPageContract({
       detail.briefingSnapshot?.payload.summary ??
       (english
         ? "The current conversation surface already brings active deal pressure, role handoff pressure, boundary notes and the latest usable follow-up context together."
-        : "当前这张对话决策面已经把 机会压力、角色接力压力、边界备注和最近可用的跟进上下文收在一起。"),
+        : "当前这张对话决策面已经把机会压力、角色接力压力、边界备注和最近可用的跟进上下文收在一起。"),
     conversationDetailActionSummary: [
       english
         ? "The current conversation page already separates founder-, sales- and delivery-safe talk tracks."
@@ -61,7 +61,7 @@ export function buildConversationDetailPageContract({
     conversationDetailBoundarySummary: [
       english
         ? "Conversation guidance can change emphasis, pacing and scene fit, but it still cannot silently turn discussion-safe wording into commitment."
-        : "对话 guidance 可以改变重点、节奏和场景适配，但它仍然不能悄悄把仅讨论措辞变成承诺。",
+        : "对话指引可以改变重点、节奏和场景适配，但它仍然不能悄悄把仅讨论措辞变成承诺。",
       buildBoundaryLine(mode, sendabilityMode, english),
       english
         ? "Boundary, prerequisite, dependency and non-commitment cues must stay visible before anyone reuses this wording in a customer-facing moment."
@@ -70,10 +70,10 @@ export function buildConversationDetailPageContract({
     conversationDetailEvidenceSummary: [
       english
         ? `${detail.auditLogs.length} audit changes, ${detail.memoryFacts.length} memory facts and the full conversation trace are grouped below without interrupting the main narrative.`
-        : `当前 ${detail.auditLogs.length} 条审计变化、${detail.memoryFacts.length} 条经营记忆事实 和完整对话轨迹已经分组收在下面，不会打断主叙事。`,
+        : `当前 ${detail.auditLogs.length} 条审计变化、${detail.memoryFacts.length} 条经营记忆事实和完整对话轨迹已经分组收在下面，不会打断主叙事。`,
       english
         ? "Replay, audit, memory, worker output, boundary trace, sendability trace, conversation trace, scenario trace and historical changes remain available on demand."
-        : "回放、审计、经营记忆、执行输出、边界轨迹、发送评估轨迹、对话轨迹、scenario 轨迹和历史变更都保留在附注层按需可看。",
+        : "回放、审计、经营记忆、执行输出、边界轨迹、发送评估轨迹、对话轨迹、场景轨迹和历史变更都保留在附注层按需可看。",
     ],
     conversationDetailWorkerSummary: [
       english
@@ -112,7 +112,7 @@ export function buildConversationDetailPageContract({
           : `当前仍有 ${signals.openCommitmentCount} 条开放承诺在塑造信任压力，所以下一句不能假装已经获得了还没被兑现的确定性。`
         : english
           ? "There is room to keep the conversation warm, but only if the wording still keeps the non-commitment and boundary line visible."
-          : "当前确实存在继续升温对话的空间，但前提是措辞仍然把非承诺和边界话术 挂在前台。",
+          : "当前确实存在继续升温对话的空间，但前提是措辞仍然把非承诺和边界话术挂在前台。",
       english
         ? "The current page already separates founder-, sales- and delivery-safe talk tracks, so the remaining value is choosing the right scene, not rediscovering context."
         : "当前页已经把创始人、销售和交付可用的话术层分开了，所以现在真正的价值在于选对场景，而不是重新拼上下文。",
@@ -122,7 +122,7 @@ export function buildConversationDetailPageContract({
       sendabilityMode === "not-ready-for-customer"
         ? english
           ? "If anyone wants to harden timing, outcome or scope certainty in the next conversation, escalate into review before the wording travels outward."
-          : "如果任何人想在下一次对话里把 时点、结果或范围确定性说实，就先升级进复核，再允许这句话往外走。"
+          : "如果任何人想在下一次对话里把时点、结果或范围确定性说实，就先升级进复核，再允许这句话往外走。"
         : english
           ? "If trust pressure, dependency pressure or founder risk rises, step back from the current scene and return to package or offer review first."
           : "如果信任压力、依赖压力或创始人风险开始上升，就先从当前场景退回，回到方案包或报价复核。",
@@ -339,7 +339,7 @@ function buildSalesCue(mode: ConversationDetailMode, english: boolean) {
   }
 
   return mode === "sales-first-contact" || mode === "sales-follow-up"
-    ? "销售这时最适合继续升温、确认下一动作，并只复用边界安全 的客户可见措辞。"
+    ? "销售这时最适合继续升温、确认下一动作，并只复用边界安全的客户可见措辞。"
     : "销售应把当前判断翻成下一步安全跟进，而不是把它说成承诺。";
 }
 

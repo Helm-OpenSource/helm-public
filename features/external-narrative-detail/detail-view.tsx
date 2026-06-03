@@ -379,7 +379,7 @@ function buildUnifiedNavigation({
         label: english ? "Conversation detail" : "对话详情",
         summary: english
           ? "Return to the scene-specific talk track if the story still needs role or scene adjustment before reuse."
-          : "如果故事还需要按角色或场景继续调整，再回到 按场景 的对话 detail。",
+          : "如果故事还需要按角色或场景继续调整，再回到按场景组织的对话详情。",
       },
       detailNodeNext: {
         type: "reinforcement",
@@ -393,7 +393,7 @@ function buildUnifiedNavigation({
       detailNodePriority: priorityForRisk(contract.externalNarrativeDetailRiskSignal),
       detailNodeNavigationHint: english
         ? "Use this detail when the team is deciding how far the outward story may go, what fallback still applies, and which role should carry the next narrative pass."
-        : "当团队正在判断对外故事能走到多远、当前兜底还在什么位置、以及下一轮叙事 pass 该由谁来接时，停在这里。",
+        : "当团队正在判断对外故事能走到多远、当前兜底还在什么位置、以及下一轮叙事修订该由谁来接时，停在这里。",
     },
     handoffs: [
       {
@@ -413,7 +413,7 @@ function buildUnifiedNavigation({
           protocol.pageNextAction[0]?.label ??
           (english
             ? "Open external narrative detail"
-            : "打开 对外叙事详情面"),
+            : "打开对外叙事详情面"),
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:
@@ -440,7 +440,7 @@ function buildUnifiedNavigation({
           protocol.pageNextAction[0]?.label ??
           (english
             ? "Open external narrative detail"
-            : "打开 对外叙事详情面"),
+            : "打开对外叙事详情面"),
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: "internal-only",
@@ -461,7 +461,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open narrative fallback detail"
-          : "打开叙事兜底 detail",
+          : "打开叙事兜底详情",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:
@@ -485,7 +485,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open conversation detail"
-          : "打开对话 detail",
+          : "打开对话详情",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:

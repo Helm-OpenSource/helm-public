@@ -48,6 +48,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口 blockers / commitments / memory 写入 API 的成功 message；本批只改 API caller 可见成功文案，不改权限、ownership、状态码、schema、写入服务或状态机。
 - 继续收口 evolution skill / strategy suggestion API 的成功 message；本批只改 API caller 可见成功文案，不改 workspace policy 权限、ownership 校验、能力晋级、正式复核或策略建议状态机。
 - 继续收口 customer-facing offer / external proposal detail model 的中文空格残留与英文分支夹中文问题；本批只改可见文案，不改发送评估、对外发送、复核或非承诺边界。
+- 继续收口 conversation detail 与 external narrative detail 的中文空格和中英混写；本批只改可见 detail 文案，不改对话、叙事、发送评估、复核或非承诺边界。
 - 继续补齐 meeting runtime closeout / close server action 的 pre-session validation fallback；本批只改 action caller 可见错误文案，不改鉴权顺序、运行时状态机或执行边界。
 - 继续收口 public auth 表单密码确认 validation 文案；本批只改 action caller 可见错误文案，不改注册、登录、验证码或身份补全流程。
 - 继续收口 trial admin decision action 的复核权限、参数与更新失败文案；本批只改管理员可见错误文案，不改试用申请、复核权限或通知流程。

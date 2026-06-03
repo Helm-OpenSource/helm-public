@@ -397,7 +397,7 @@ function buildUnifiedNavigation({
         handoffTarget: "conversation",
         handoffReason: english
           ? "The package boundary is ready enough that the next useful move is scene-specific conversation guidance, not more raw package rows."
-          : "当前方案包边界已经足够清楚，下一步最有价值的是场景化对话 guidance，而不是继续翻原始方案包行。",
+          : "当前方案包边界已经足够清楚，下一步最有价值的是场景化对话指引，而不是继续翻原始方案包行。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -441,7 +441,7 @@ function buildUnifiedNavigation({
         handoffTarget: "external-narrative",
         handoffReason: english
           ? "The current talk track is stable enough to shape a reusable external narrative layer instead of staying in scene-only guidance."
-          : "当前话术 已经足够稳定，可以进一步整理成可复用的 对外叙事层，而不必继续停留在 场景层提示。",
+          : "当前话术已经足够稳定，可以进一步整理成可复用的对外叙事层，而不必继续停留在场景层提示。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -453,7 +453,7 @@ function buildUnifiedNavigation({
           protocol.pageNextAction[0]?.label ??
           (english
             ? "Open external narrative detail"
-            : "打开 对外叙事详情面"),
+            : "打开对外叙事详情面"),
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:

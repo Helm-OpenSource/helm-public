@@ -750,6 +750,68 @@ describe("shared surface hierarchy guards", () => {
     expect(detailModel).toContain("sendable copy");
   });
 
+  it("keeps conversation and external narrative detail copy free of recently fixed mixed fragments", () => {
+    const conversationDetailModel = read(
+      "features/conversation-detail/detail-model.ts",
+    );
+    const conversationDetailView = read(
+      "features/conversation-detail/detail-view.tsx",
+    );
+    const externalNarrativeDetailModel = read(
+      "features/external-narrative-detail/detail-model.ts",
+    );
+    const externalNarrativeDetailView = read(
+      "features/external-narrative-detail/detail-view.tsx",
+    );
+    const sources = [
+      conversationDetailModel,
+      conversationDetailView,
+      externalNarrativeDetailModel,
+      externalNarrativeDetailView,
+    ].join("\n");
+
+    for (const fragment of [
+      "把 机会压力",
+      "对话 guidance",
+      "经营记忆事实 和完整对话",
+      "scenario 轨迹",
+      "边界话术 挂在前台",
+      "把 时点",
+      "边界安全 的客户可见",
+      "对话 guidance",
+      "话术 已经",
+      "可复用的 对外叙事层",
+      "停留在 场景层提示",
+      "打开 对外叙事详情面",
+      "把 对外叙事压力",
+      "internal 措辞",
+      "探索性 叙事",
+      "script 和线索 资料",
+      "叙事 pass",
+      "经营记忆事实 和完整叙事",
+      "提案-supporting",
+      "提案 support",
+      "把 时点",
+      "回到 按场景 的对话 detail",
+      "打开叙事兜底 detail",
+      "打开对话 detail",
+    ]) {
+      expect(sources).not.toContain(fragment);
+    }
+
+    expect(conversationDetailModel).toContain("对话指引可以改变重点");
+    expect(conversationDetailModel).toContain("经营记忆事实和完整对话轨迹");
+    expect(conversationDetailModel).toContain("场景轨迹和历史变更");
+    expect(conversationDetailView).toContain("场景化对话指引");
+    expect(conversationDetailView).toContain("可复用的对外叙事层");
+    expect(externalNarrativeDetailModel).toContain("内部措辞、探索性叙事");
+    expect(externalNarrativeDetailModel).toContain("零散脚本和线索资料");
+    expect(externalNarrativeDetailModel).toContain("下一轮叙事修订");
+    expect(externalNarrativeDetailModel).toContain("提案支撑");
+    expect(externalNarrativeDetailView).toContain("按场景组织的对话详情");
+    expect(externalNarrativeDetailView).toContain("打开叙事兜底详情");
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 
