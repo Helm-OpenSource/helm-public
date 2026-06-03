@@ -2323,6 +2323,45 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps operating signal flow map Chinese body localized for read-only signal-flow terms", () => {
+    const signalFlowMap = read(
+      "docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md",
+    );
+    const chineseBody = signalFlowMap.slice(
+      signalFlowMap.indexOf("运营信号流图"),
+      signalFlowMap.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("运营信号流图");
+    expect(chineseBody).toContain("公开 Core 契约");
+    expect(chineseBody).toContain("业务信号");
+    expect(chineseBody).toContain("不把建议变成承诺");
+    expect(chineseBody).toContain("只读投影");
+    expect(chineseBody).toContain("重试队列");
+    expect(chineseBody).toContain("分发器");
+    expect(chineseBody).toContain("自动执行平面");
+    expect(chineseBody).toContain("流转是顺畅、积压还是阻塞");
+    expect(chineseBody).toContain("来源信号如何进入复核包");
+    expect(chineseBody).toContain("候选动作");
+    expect(chineseBody).toContain("记忆候选");
+    expect(chineseBody).toContain("被拒输入");
+    expect(chineseBody).toContain("确定性规则");
+    expect(chineseBody).toContain("AI 辅助解释");
+    expect(chineseBody).toContain("人工复核");
+    expect(chineseBody).toContain("稳定信号键");
+    expect(chineseBody).toContain("拒绝原因");
+    expect(chineseBody).toContain("证据姿态");
+    expect(chineseBody).toContain("复核状态");
+    expect(chineseBody).toContain("负责人 / 复核人路由");
+    expect(chineseBody).toContain("边界说明");
+    expect(chineseBody).toContain("私有域名");
+    expect(chineseBody).toContain("私有部署回执");
+
+    expect(chineseBody).not.toMatch(
+      /Operating Signal Flow Map|public Core contract|business signal|recommendation|commitment|read-only projection|runtime DAG|scheduler|retry queue|dispatcher|workflow engine|BI platform|automatic execution plane|current flow|smooth|backlogged|blocked|source signal|review packet|candidate action|report、memory candidate|rejected input|deterministic rules|AI-assisted explanation|human review|stable signal key|source family|object link|rejection reason|evidence posture|review state|owner \/ reviewer routing|boundary note|private domain|deployment receipt/,
+    );
+  });
+
   it("keeps OPC weekly packet Chinese body free of recently fixed mixed public-operations fragments", () => {
     const opcPacket = read("docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md");
     const chineseBody = opcPacket.slice(

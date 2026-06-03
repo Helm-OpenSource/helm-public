@@ -11,19 +11,16 @@ public_safety: Public-safe Operating Signal Flow contract. Private review packet
 
 ## 中文主文本 / Chinese Main Text
 
-Operating Signal Flow Map 是 public Core contract，用来展示业务 signal 如何在
-Helm 内流转，同时不把 recommendation 变成 commitment。
+运营信号流图是公开 Core 契约，用来展示业务信号如何在 Helm 内流转，同时不把建议变成承诺。
 
-它只是 read-only projection，不是 runtime DAG、scheduler、retry queue、dispatcher、
-workflow engine、BI platform 或 automatic execution plane。第一屏应该让交付工程师
-看清当前 flow 是 smooth、backlogged 还是 blocked；source signal 如何进入 review
-packet、candidate action、report、memory candidate 或 rejected input；哪些部分是
-deterministic rules，哪些是 AI-assisted explanation，哪些必须 human review。
+它只是只读投影，不是运行时 DAG、调度器、重试队列、分发器、工作流引擎、BI 平台或自动执行平面。
+第一屏应该让交付工程师看清当前流转是顺畅、积压还是阻塞；来源信号如何进入复核包、
+候选动作、报告、记忆候选或被拒输入；哪些部分是确定性规则，哪些是 AI 辅助解释，
+哪些必须人工复核。
 
-所有公开 signal 都必须带 stable signal key、source family、object link 或 rejection
-reason、evidence posture、review state、owner / reviewer routing 和 boundary note。
-原始客户数据、客户专属标识、生产 URL、私有 domain 和私有部署 receipt 不属于本
-public Core contract。
+所有公开信号都必须带稳定信号键、来源家族、对象链接或拒绝原因、证据姿态、复核状态、
+负责人 / 复核人路由和边界说明。原始客户数据、客户专属标识、生产 URL、私有域名和私有部署回执
+不属于本公开 Core 契约。
 
 ## English Reference
 
