@@ -2365,6 +2365,41 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps China accessibility packet Chinese table summaries covering target people, evidence, routing, gates, and watch", () => {
+    const chinaPacket = read(
+      "docs/operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md",
+    );
+    const chineseBody = chinaPacket.slice(
+      chinaPacket.indexOf("目标人群摘要："),
+      chinaPacket.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("目标人群摘要");
+    expect(chineseBody).toContain("AI 交付工程师、平台工程师、AI 运营建设者");
+    expect(chineseBody).toContain("解决方案架构师和实施负责人");
+    expect(chineseBody).toContain("公开 Core Golden Path");
+    expect(chineseBody).toContain("GitHub 公开安全证据路由");
+    expect(chineseBody).toContain("可触达面摘要");
+    expect(chineseBody).toContain("README 中文入口");
+    expect(chineseBody).toContain("GitHub Discussion #49");
+    expect(chineseBody).toContain("GitHub issue templates 是主要证据入口");
+    expect(chineseBody).toContain("WeChat 账号与社区 QR 只提供辅助触达");
+    expect(chineseBody).toContain("双层证据摘要");
+    expect(chineseBody).toContain("单独的私聊、未链接截图、私有部署说明");
+    expect(chineseBody).toContain("都不能算激活成功、商业意向、响应义务或路线图需求");
+    expect(chineseBody).toContain("证据采集摘要");
+    expect(chineseBody).toContain("修改合成夹具 `CASE-SAMPLE-002`");
+    expect(chineseBody).toContain("路由到对应 issue template 或 Discussion #41");
+    expect(chineseBody).toContain("负责人闸门摘要");
+    expect(chineseBody).toContain("不能绕过分支保护");
+    expect(chineseBody).toContain("24 小时观察摘要");
+    expect(chineseBody).toContain("不得把私有遥测");
+
+    expect(chineseBody).not.toMatch(
+      /Target People|Current Reachable Surfaces|Two-Tier Evidence Model|Proof Collection Route|Owner-Gated Decisions|24-Hour Watch|Target person|First useful proof|Evidence status|Primary proof|Assisted signal|Reach-only signal|Does Not Count Alone|unlinked screenshots|private deployment notes|owner-approved redacted receipt|Proof Collection|Owner Gate Needed|Track only public-safe fields|private telemetry/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");
