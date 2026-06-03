@@ -27,6 +27,16 @@ handoff, and commercial-strengthening labels only; it does not change
 sendability, external send, review, or non-commitment boundaries, and does not
 claim full-repo bilingualization completion.
 
+Role preset / starter skill 与 participant portal action 文案中的中文混写也已继续清理；
+本批只改角色定义、起步能力建议和门户校验提示，不改变角色匹配、能力路由、门户访问或结算边界，
+也不声明全仓双语化完成。
+
+Mixed Chinese copy in role preset / starter-skill and participant portal action
+messages has also been further localized. This batch changes role definitions,
+starter-skill suggestions, and portal validation prompts only; it does not
+change role matching, capability routing, portal access, or settlement
+boundaries, and does not claim full-repo bilingualization completion.
+
 | 类别 / Category | 状态 / Status | 证据 / Evidence |
 |---|---|---|
 | Apache-2.0 Core 仓库 / Apache-2.0 Core repository | 已为 public Core 开发成立；Established for public Core development | `LICENSE`, `NOTICE`, `package.json`, `README.md` |

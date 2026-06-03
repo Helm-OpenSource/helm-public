@@ -1671,4 +1671,42 @@ describe("shared surface hierarchy guards", () => {
       /仅讨论 表示|客户可见提案 详情页|复核闸口 前面|打开 对外叙事详情面|信任敏感 措辞|internal 异议|复核-bound|边界-led|客户可见-light|仅讨论 措辞|commercial 加固详情页/,
     );
   });
+
+  it("keeps role definition and participant portal copy free of mixed Chinese fragments", () => {
+    const rolePresets = read("lib/definitions/role-presets.ts");
+    const roleFoundations = read("lib/definitions/role-foundations.ts");
+    const participantActions = read("features/participant-portal/actions.ts");
+    const combined = [rolePresets, roleFoundations, participantActions].join(
+      "\n",
+    );
+
+    expect(rolePresets).toContain("把需复核的对外动作留在可见边界内");
+    expect(rolePresets).toContain("哪些动作需要先内部同步");
+    expect(rolePresets).toContain("招聘团队的推进节奏连续");
+    expect(rolePresets).toContain("候选人简报不等于正式录用通知");
+    expect(rolePresets).toContain("把后续跟进写回客户上下文");
+    expect(rolePresets).toContain("明确交付下一步和负责人");
+    expect(rolePresets).toContain("向客户成功说明上线后跟进");
+    expect(rolePresets).toContain("内部就绪度不等于对外可用");
+    expect(rolePresets).toContain("仍需保留复核和发布守卫");
+    expect(rolePresets).toContain("向负责人 / 管理员升级治理问题");
+    expect(rolePresets).toContain("向复核面补齐证据");
+    expect(roleFoundations).toContain("试点就绪度诊断");
+    expect(roleFoundations).toContain("这只是起步能力建议资料。");
+    expect(roleFoundations).toContain("本周优先动作");
+    expect(roleFoundations).toContain("提案澄清和异议处理");
+    expect(roleFoundations).toContain("帮助客户销售更快产出");
+    expect(roleFoundations).toContain("帮助客户成功在客户沉默");
+    expect(roleFoundations).toContain("季度业务回顾");
+    expect(roleFoundations).toContain("实施启动会");
+    expect(roleFoundations).toContain("拆动作项");
+    expect(roleFoundations).toContain("起步能力姿态仍需要继续");
+    expect(participantActions).toContain(
+      "Please complete profile, payout details, and contribution terms acknowledgement.",
+    );
+
+    expect(combined).not.toMatch(
+      /复核-required|哪些动作需要先 internal sync|哪些沟通要先 internal sync|hiring 判断|hiring team 的|hiring 负责人|正式 offer|issue 升级|把 follow-through|向 CS 说明上线后 follow-through|交付 下一步|识别 时间线|向运营说明 rollout 节奏|内部 就绪度|对外 ready|仍需保留复核和 rollout guard|负责人\/admin|复核面 补齐|试点 就绪度|starter skill suggestion 资料|候选 capability|正式 skill|top 动作|提案 clarifications|时间线 或|帮助 AE|帮助 CS|issue 等待|适用于 QBR|实施 kick-off|动作item|starter skills 已|starter skill姿态|contribution terms 已确认/,
+    );
+  });
 });

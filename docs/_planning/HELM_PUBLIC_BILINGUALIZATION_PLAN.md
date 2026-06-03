@@ -47,6 +47,15 @@ offer, external-narrative handoff, and commercial-strengthening labels only,
 without changing sendability, external send, review, or non-commitment
 boundaries.
 
+本轮也继续收口 role preset / starter skill 与 participant portal action 文案中的中文混写；
+只调整角色定义、起步能力建议和门户校验提示，不改变角色匹配、能力路由、门户访问或结算边界。
+
+This round also further localizes mixed Chinese copy in role preset /
+starter-skill and participant portal action messages. It changes role
+definitions, starter-skill suggestions, and portal validation prompts only,
+without changing role matching, capability routing, portal access, or settlement
+boundaries.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

@@ -98,13 +98,13 @@ const localizedOperatingSkillNames: Record<
     en: "Memory correction",
   },
   "pilot-readiness-diagnostics": {
-    zh: "试点 就绪度 诊断",
+    zh: "试点就绪度诊断",
     en: "Pilot readiness diagnostics",
   },
 };
 
 const sharedStarterBoundaryNote: LocalizedText = {
-  zh: "这只是 starter skill suggestion 资料。它最多应进入候选 capability / candidate capability 姿态，不自动授权、不过路由，也不等于 正式 skill / formal skill。",
+  zh: "这只是起步能力建议资料。它最多应进入候选能力姿态，不自动授权、不过路由，也不等于正式能力。",
   en: "This is only a starter skill suggestion pack. At most it should enter a candidate capability posture; it does not auto-grant authority, routing, or formal-skill status.",
 };
 
@@ -165,7 +165,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Helps leadership see the most valuable operating opportunity before getting fragmented by random tasks.",
         },
         activationCue: {
-          zh: "适用于需要收敛本周 top 动作、资源优先级或关键机会推进顺序的时候。",
+          zh: "适用于需要收敛本周优先动作、资源优先级或关键机会推进顺序的时候。",
           en: "Use when the team needs a top move, resource priority, or an order for key opportunity pushes.",
         },
       },
@@ -218,7 +218,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Turns customer context, blockers, and promises into a more reliable follow-up draft.",
         },
         activationCue: {
-          zh: "适用于会后跟进、提案 clarifications 和异议处理。",
+          zh: "适用于会后跟进、提案澄清和异议处理。",
           en: "Use for post-meeting follow-up, proposal clarifications, and objection handling.",
         },
       },
@@ -229,7 +229,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Ensures sales pressure does not push high-risk wording past the review boundary.",
         },
         activationCue: {
-          zh: "适用于客户催报价、催时间线 或需要解释商业条件时。",
+          zh: "适用于客户催报价、催时间线或需要解释商业条件时。",
           en: "Use when customers push for pricing, timeline, or commercial-condition explanations.",
         },
       },
@@ -245,7 +245,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
       {
         skillId: "external-followup-draft",
         rationale: {
-          zh: "帮助 AE 更快产出可审的对外跟进草稿。",
+          zh: "帮助客户销售更快产出可审的对外跟进草稿。",
           en: "Helps an AE produce reviewable outbound follow-up drafts faster.",
         },
         activationCue: {
@@ -267,7 +267,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
       {
         skillId: "opportunity-push",
         rationale: {
-          zh: "把单条机会的 下一步 绑回阶段、风险和承诺，而不是只做一次性跟进。",
+          zh: "把单条机会的下一步绑回阶段、风险和承诺，而不是只做一次性跟进。",
           en: "Binds the next step back to stage, risk, and promises instead of treating follow-up as one-off outreach.",
         },
         activationCue: {
@@ -321,7 +321,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
   },
   CUSTOMER_SUCCESS: {
     summary: {
-      zh: "先把客户风险、续约扩容线索和 follow-through 收顺，再谈更主动的经营动作。",
+      zh: "先把客户风险、续约扩容线索和后续跟进收顺，再谈更主动的经营动作。",
       en: "Keep customer risk, renewal-expansion signals, and follow-through coherent before more proactive commercial moves.",
     },
     boundaryNote: sharedStarterBoundaryNote,
@@ -329,7 +329,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
       {
         skillId: "relationship-revival",
         rationale: {
-          zh: "帮助 CS 在客户沉默、活跃度下降或 issue 等待我方时先恢复节奏。",
+          zh: "帮助客户成功在客户沉默、活跃度下降或问题等待我方时先恢复节奏。",
           en: "Helps CS restore tempo when customers go quiet, engagement drops, or an issue waits on us.",
         },
         activationCue: {
@@ -351,11 +351,11 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
       {
         skillId: "meeting-follow-through",
         rationale: {
-          zh: "把客户会后的负责人、时间窗口和 follow-through 写回统一上下文。",
+          zh: "把客户会后的负责人、时间窗口和后续跟进写回统一上下文。",
           en: "Writes owners, timing windows, and follow-through back into one customer context after a meeting.",
         },
         activationCue: {
-          zh: "适用于 QBR、问题复盘、续约评估和风险升级会后。",
+          zh: "适用于季度业务回顾、问题复盘、续约评估和风险升级会后。",
           en: "Use after QBRs, issue reviews, renewal evaluations, and risk-escalation meetings.",
         },
       },
@@ -382,7 +382,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
       {
         skillId: "meeting-follow-through",
         rationale: {
-          zh: "把会后的交付 下一步、责任人和时间窗口收成执行链。",
+          zh: "把会后的交付下一步、责任人和时间窗口收成执行链。",
           en: "Turns the next delivery step, owner, and timing window after a meeting into an execution chain.",
         },
         activationCue: {
@@ -417,7 +417,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Helps product and engineering see object state, unfinished commitments, and known blockers before discussion.",
         },
         activationCue: {
-          zh: "适用于需求澄清、设计评审、实施 kick-off 和问题复盘会前。",
+          zh: "适用于需求澄清、设计评审、实施启动会和问题复盘会前。",
           en: "Use before requirement clarification, design review, implementation kickoff, and issue review meetings.",
         },
       },
@@ -428,7 +428,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
           en: "Condenses discussion results into explicit actions, owners, and the next validation window.",
         },
         activationCue: {
-          zh: "适用于评审后需要拆 动作item、指派负责人或补审批入口的时候。",
+          zh: "适用于评审后需要拆动作项、指派负责人或补审批入口的时候。",
           en: "Use after reviews when action items, owners, or approval entry points need to be made explicit.",
         },
       },
@@ -447,7 +447,7 @@ const roleStarterSkillPacks: Record<RolePresetKey, RoleStarterSkillPackDefinitio
   },
   OPERATIONS_FINANCE: {
     summary: {
-      zh: "先把治理判断、就绪度 诊断和状态修正收顺，再扩大内部支持动作。",
+      zh: "先把治理判断、就绪度诊断和状态修正收顺，再扩大内部支持动作。",
       en: "Keep governance judgement, readiness diagnostics, and state correction coherent before widening internal support actions.",
     },
     boundaryNote: sharedStarterBoundaryNote,
@@ -614,13 +614,13 @@ function buildWorkspaceContext(
       focusAreas.length > 0
         ? english
           ? `Current focus areas: ${focusAreas.join(", ")}. Starter skills are ordered to help translate those threads into the next operating moves.`
-          : `当前关注重点：${focusAreas.join("、")}。下面的 starter skills 已按这些主线做了轻量排序，帮助把它们翻译成下一步经营动作。`
+          : `当前关注重点：${focusAreas.join("、")}。下面的起步能力已按这些主线做了轻量排序，帮助把它们翻译成下一步经营动作。`
         : null,
     adaptationNote:
       profileType && !profileMatchesPreset
         ? english
           ? "Because the workspace posture and preset are not a perfect match yet, keep editing the mission, handoff edges, and starter skill posture to fit how the team actually works."
-          : "由于当前工作区姿态和所选预设还不是完全贴合，这组使命、交接边缘和 starter skill姿态 仍需要继续按团队真实协作方式改写。"
+          : "由于当前工作区姿态和所选预设还不是完全贴合，这组使命、交接边缘和起步能力姿态仍需要继续按团队真实协作方式改写。"
         : null,
   };
 }
