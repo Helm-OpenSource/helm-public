@@ -2046,7 +2046,7 @@ export function RuntimeOperatorPanel({
               description={
                 english
                   ? "Recent promote / reject / defer decisions stay source-grounded and operator-readable instead of collapsing into silent memory writes."
-                  : "这里把最近的晋升 / 拒绝 / 推迟决策保持为基于源头、运营可读，而不是折叠成静默经营记忆 write。"
+                  : "这里把最近的晋升 / 拒绝 / 推迟决策保持为基于源头、运营可读，而不是折叠成静默写入经营记忆。"
               }
               emptyLabel={english ? "No promotion queue right now." : "当前没有晋升队列。"}
               english={english}
@@ -2082,7 +2082,7 @@ export function RuntimeOperatorPanel({
                   ? "Lead-to-worker and worker-to-worker handoffs stay explicit, typed, and reviewable instead of hiding inside conversational carry-over."
                   : "主管 → 执行和执行 → 执行的交接需要显式、可追踪、可复核，而不是藏在隐式上下文里。"
               }
-              emptyLabel={english ? "No handoff packet yet." : "当前还没有交接 资料et。"}
+              emptyLabel={english ? "No handoff packet yet." : "当前还没有交接资料。"}
               english={english}
               items={overview.handoffPackets.map((item) => ({
                 id: item.id,
@@ -2099,9 +2099,9 @@ export function RuntimeOperatorPanel({
               description={
                 english
                   ? "Bounded problem spaces become initiative runs with explicit target outcomes instead of expanding into a workflow engine."
-                  : "有边界的问题空间 会进入带目标结果的 主动跑动，但不会扩成 工作流引擎。"
+                  : "有边界的问题空间会进入带目标结果的主动运行，但不会扩成工作流引擎。"
               }
-              emptyLabel={english ? "No initiative run yet." : "当前还没有 主动跑动。"}
+              emptyLabel={english ? "No initiative run yet." : "当前还没有主动运行。"}
               english={english}
               items={overview.initiativeRuns.map((item) => ({
                 id: item.id,
@@ -2118,9 +2118,9 @@ export function RuntimeOperatorPanel({
               description={
                 english
                   ? "Open issues are expressed as bounded problem spaces with owner hints and next steps, not as a workflow engine."
-                  : "开放问题以 有边界的问题空间 的形式出现，带负责人提示和 下一步，但不会扩成 工作流引擎。"
+                  : "开放问题以有边界的问题空间形式出现，带负责人提示和下一步，但不会扩成工作流引擎。"
               }
-              emptyLabel={english ? "No open problem spaces right now." : "当前没有 open 问题空间。"}
+              emptyLabel={english ? "No open problem spaces right now." : "当前没有开放问题空间。"}
               english={english}
               items={overview.problemSpaces.map((item) => ({
                 id: item.id,
@@ -2130,7 +2130,7 @@ export function RuntimeOperatorPanel({
                 tertiarySummary: [item.groundingSummary, item.driSummary, item.conflictSummary].filter(Boolean).join(" "),
                 status: item.status,
                 href: item.href,
-                meta: item.ownerHint ? (english ? `owner hint ${item.ownerHint}` : `owner hint ${item.ownerHint}`) : null,
+                meta: item.ownerHint ? (english ? `owner hint ${item.ownerHint}` : `负责人提示 ${item.ownerHint}`) : null,
                 timestamp: item.updatedAt,
               }))}
             />
@@ -2140,9 +2140,9 @@ export function RuntimeOperatorPanel({
               description={
                 english
                   ? "These briefs stay internal and operator-facing. They help a lead coach the next move without becoming an external commitment surface."
-                  : "这些摘要保持仅内部、面向运营，用来帮助主管教练下一步，不会变成对外承诺 面。"
+                  : "这些摘要保持仅内部、面向运营，用来帮助主管教练下一步，不会变成对外承诺界面。"
               }
-              emptyLabel={english ? "No player-coach briefs right now." : "当前没有 player-coach 摘要。"}
+              emptyLabel={english ? "No player-coach briefs right now." : "当前没有陪跑教练摘要。"}
               english={english}
               items={overview.playerCoachQueue.map((item) => ({
                 id: item.id,
@@ -2163,7 +2163,7 @@ export function RuntimeOperatorPanel({
                   ? "This queue shows whether a verified coordination item is still waiting, has entered human execution, or has reached official follow-through on the same operating thread."
                   : "这条队列展示已校验协同事项现在是仍在等待、已经进入人工执行，还是已经进入同一条经营链上的官方跟进。"
               }
-              emptyLabel={english ? "No coordination trace bridge right now." : "当前没有协同轨迹 bridge。"}
+              emptyLabel={english ? "No coordination trace bridge right now." : "当前没有协同轨迹桥。"}
               english={english}
               items={overview.coordinationTraceQueue.map((item) => ({
                 id: item.id,
@@ -2181,7 +2181,7 @@ export function RuntimeOperatorPanel({
           <Card className="workspace-shell-panel border-[color:var(--mode-card-border)]">
             <CardHeader>
               <CardTitle className="text-lg tracking-tight text-[color:var(--foreground)]">
-                {english ? "Reflection 延续" : "reflection 延续"}
+                {english ? "Reflection carry-forward" : "反思延续"}
               </CardTitle>
               <CardDescription className="text-sm leading-7 text-[color:var(--muted-foreground)]">
                 {english
@@ -2267,8 +2267,8 @@ export function RuntimeOperatorPanel({
               {!overview.reflectionCandidates.length ? (
                 <div className="rounded-2xl border border-dashed border-[color:var(--border)] px-3 py-5 text-sm text-[color:var(--muted-foreground)]">
                   {english
-                    ? "No reflection 延续 candidate right now."
-                    : "当前没有反思 延续 候选。"}
+                    ? "No reflection carry-forward candidate right now."
+                    : "当前没有反思延续候选。"}
                 </div>
               ) : null}
             </CardContent>
@@ -2281,7 +2281,7 @@ export function RuntimeOperatorPanel({
                 ? "Compacts trusted state into reviewable summaries. Candidates only — no auto-promote."
                 : "把可信状态压成可复核的摘要。仅候选，不自动晋升。"
             }
-            emptyLabel={english ? "No reflection job queued." : "当前没有反思 job。"}
+            emptyLabel={english ? "No reflection job queued." : "当前没有反思任务。"}
             english={english}
             items={overview.reflectionJobs.map((item) => ({
               id: item.id,
@@ -2300,7 +2300,7 @@ export function RuntimeOperatorPanel({
             description={
               overview.consolidationAuditSummary.summary
             }
-            emptyLabel={english ? "No consolidation job queued." : "当前没有 整合 job。"}
+            emptyLabel={english ? "No consolidation job queued." : "当前没有整合任务。"}
             english={english}
             items={overview.consolidationJobs.map((item) => ({
               id: item.id,
@@ -2406,7 +2406,7 @@ export function RuntimeOperatorPanel({
                 ? "One coarse cue first, before comparing work / review / control cards by hand."
                 : "先看一条粗粒度线索，再去手工对比工作、复核、控制三张卡。"
             }
-            emptyLabel={english ? "No operator cue summary yet." : "当前还没有操作员线索 summary。"}
+            emptyLabel={english ? "No operator cue summary yet." : "当前还没有操作员线索摘要。"}
             english={english}
             items={[
               {
@@ -2447,7 +2447,7 @@ export function RuntimeOperatorPanel({
                 : "顶层线索明确后，工作区还需要先回答一条有边界的下一动作，避免继续手工扫多张操作员卡片。"
             }
             emptyLabel={
-              english ? "No operator next move summary yet." : "当前还没有操作员下一动作 summary。"
+              english ? "No operator next move summary yet." : "当前还没有操作员下一动作摘要。"
             }
             english={english}
             items={[
@@ -2559,7 +2559,7 @@ export function RuntimeOperatorPanel({
                 : "工作区级操作员扫描应该先压成一条主有边界动作加一条次级兜底，再决定是否展开整张运营面。"
             }
             emptyLabel={
-              english ? "No operator start point yet." : "当前还没有操作员start point。"
+              english ? "No operator start point yet." : "当前还没有操作员起点。"
             }
             english={english}
             items={[
@@ -2595,7 +2595,7 @@ export function RuntimeOperatorPanel({
                 ? "Verification, promotion, reflection and consolidation queues — in one place."
                 : "验证、晋升、反思、整合——一处看完。"
             }
-            emptyLabel={english ? "No operator review summary yet." : "当前还没有操作员复核 summary。"}
+            emptyLabel={english ? "No operator review summary yet." : "当前还没有操作员复核摘要。"}
             english={english}
             items={[
               {
@@ -2608,11 +2608,21 @@ export function RuntimeOperatorPanel({
                 href: overview.operatorReviewSummary.focusHref ?? "/operating",
                 meta: [
                   overview.operatorReviewSummary.focusTitle,
-                  `${overview.operatorReviewSummary.counts.verificationQueue} verification`,
-                  `${overview.operatorReviewSummary.counts.promotionQueue} promotion`,
-                  `${overview.operatorReviewSummary.counts.reflectionCandidates} reflection candidate`,
-                  `${overview.operatorReviewSummary.counts.reflectionJobs} reflection job`,
-                  `${overview.operatorReviewSummary.counts.consolidationJobs} consolidation job`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.verificationQueue} verification`
+                    : `${overview.operatorReviewSummary.counts.verificationQueue} 个验证项`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.promotionQueue} promotion`
+                    : `${overview.operatorReviewSummary.counts.promotionQueue} 个晋升项`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.reflectionCandidates} reflection candidate`
+                    : `${overview.operatorReviewSummary.counts.reflectionCandidates} 个反思候选`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.reflectionJobs} reflection job`
+                    : `${overview.operatorReviewSummary.counts.reflectionJobs} 个反思任务`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.consolidationJobs} consolidation job`
+                    : `${overview.operatorReviewSummary.counts.consolidationJobs} 个整合任务`,
                   overview.operatorReviewSummary.latestUpdatedAt
                     ? formatPanelTime(overview.operatorReviewSummary.latestUpdatedAt, english)
                     : null,
@@ -2646,11 +2656,21 @@ export function RuntimeOperatorPanel({
                 meta: [
                   overview.operatorReviewActionSummary.reviewState,
                   overview.operatorReviewActionSummary.focusTitle,
-                  `${overview.operatorReviewActionSummary.counts.verificationQueue} verification`,
-                  `${overview.operatorReviewActionSummary.counts.promotionQueue} promotion`,
-                  `${overview.operatorReviewActionSummary.counts.reflectionCandidates} reflection candidate`,
-                  `${overview.operatorReviewActionSummary.counts.reflectionJobs} reflection job`,
-                  `${overview.operatorReviewActionSummary.counts.consolidationJobs} consolidation job`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.verificationQueue} verification`
+                    : `${overview.operatorReviewActionSummary.counts.verificationQueue} 个验证项`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.promotionQueue} promotion`
+                    : `${overview.operatorReviewActionSummary.counts.promotionQueue} 个晋升项`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.reflectionCandidates} reflection candidate`
+                    : `${overview.operatorReviewActionSummary.counts.reflectionCandidates} 个反思候选`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.reflectionJobs} reflection job`
+                    : `${overview.operatorReviewActionSummary.counts.reflectionJobs} 个反思任务`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.consolidationJobs} consolidation job`
+                    : `${overview.operatorReviewActionSummary.counts.consolidationJobs} 个整合任务`,
                   overview.operatorReviewActionSummary.latestUpdatedAt
                     ? formatPanelTime(overview.operatorReviewActionSummary.latestUpdatedAt, english)
                     : null,
@@ -2668,7 +2688,7 @@ export function RuntimeOperatorPanel({
                 ? "Workspace-level operator work should collapse continuity attention, control posture, review queues, and critical operating gaps into one bounded next-work summary."
                 : "工作区级操作员工作需要把连续性关注、控制姿态、复核队列和关键经营缺口压成一份有边界的下一步工作摘要。"
             }
-            emptyLabel={english ? "No operator work summary yet." : "当前还没有操作员work summary。"}
+            emptyLabel={english ? "No operator work summary yet." : "当前还没有操作员工作摘要。"}
             english={english}
             items={[
               {
@@ -2685,13 +2705,27 @@ export function RuntimeOperatorPanel({
                   overview.operatorWorkSummary.reviewState,
                   overview.operatorWorkSummary.reviewActionState,
                   overview.operatorWorkSummary.focusTitle,
-                  `${overview.operatorWorkSummary.counts.continuityAttention} continuity attention`,
-                  `${overview.operatorWorkSummary.counts.reviewQueue} review queue`,
-                  `${overview.operatorWorkSummary.counts.promotionQueue} promotion queue`,
-                  `${overview.operatorWorkSummary.counts.reflectionCandidates} reflection candidate`,
-                  `${overview.operatorWorkSummary.counts.reflectionJobs} reflection job`,
-                  `${overview.operatorWorkSummary.counts.consolidationJobs} consolidation job`,
-                  `${overview.operatorWorkSummary.counts.criticalOperatingGaps} critical gap`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.continuityAttention} continuity attention`
+                    : `${overview.operatorWorkSummary.counts.continuityAttention} 个连续性关注项`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.reviewQueue} review queue`
+                    : `${overview.operatorWorkSummary.counts.reviewQueue} 个复核队列项`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.promotionQueue} promotion queue`
+                    : `${overview.operatorWorkSummary.counts.promotionQueue} 个晋升队列项`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.reflectionCandidates} reflection candidate`
+                    : `${overview.operatorWorkSummary.counts.reflectionCandidates} 个反思候选`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.reflectionJobs} reflection job`
+                    : `${overview.operatorWorkSummary.counts.reflectionJobs} 个反思任务`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.consolidationJobs} consolidation job`
+                    : `${overview.operatorWorkSummary.counts.consolidationJobs} 个整合任务`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.criticalOperatingGaps} critical gap`
+                    : `${overview.operatorWorkSummary.counts.criticalOperatingGaps} 个关键经营缺口`,
                   overview.operatorWorkSummary.latestUpdatedAt
                     ? formatPanelTime(overview.operatorWorkSummary.latestUpdatedAt, english)
                     : null,
@@ -2750,7 +2784,7 @@ export function RuntimeOperatorPanel({
             emptyLabel={
               english
                 ? "No swarm operator control surface is visible yet."
-                : "当前还没有可见的 正在加温的操作员控制 面。"
+                : "当前还没有可见的操作员控制面。"
             }
             english={english}
             items={[
@@ -2805,7 +2839,7 @@ export function RuntimeOperatorPanel({
                 ? "Environment authority, latest execution seam, and benchmark workflow should collapse into one operator-facing control posture before anyone treats this substrate slice as settled."
                 : "环境权限、最新执行接缝与基准工作流需要先压成一份面向运营的控制姿态，避免不同面各自拼接后再把这条底座切片当成已收口。"
             }
-            emptyLabel={english ? "No operator control summary yet." : "当前还没有操作员控制 summary。"}
+            emptyLabel={english ? "No operator control summary yet." : "当前还没有操作员控制摘要。"}
             english={english}
             items={[
               {
@@ -2950,9 +2984,9 @@ export function RuntimeOperatorPanel({
             description={
               english
                 ? "Context misses, verification failures and policy blocks stay visible so operators can fix the runtime path instead of silently retrying."
-                : "context miss、验证 fail 和 policy block 都要保持可见，这样操作员修的是运行时 path，而不是静默重试。"
+                : "上下文缺失、验证失败和策略阻断都要保持可见，这样操作员修的是运行时路径，而不是静默重试。"
             }
-            emptyLabel={english ? "No composition failures recorded." : "当前没有 composition failure。"}
+            emptyLabel={english ? "No composition failures recorded." : "当前没有组合失败记录。"}
             english={english}
             items={overview.compositionFailures.map((item) => ({
               id: item.id,

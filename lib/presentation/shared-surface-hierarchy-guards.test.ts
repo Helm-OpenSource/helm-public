@@ -470,6 +470,42 @@ describe("shared surface hierarchy guards", () => {
     expect(reinforcementView).toContain('text("仅内部话术")');
   });
 
+  it("keeps Chinese runtime operator empty-state copy free of mixed English fragments", () => {
+    const runtimeOperatorPanel = read("features/internal-operating-workspace/runtime-operator-panel.tsx");
+
+    for (const fragment of [
+      "当前还没有交接 资料et",
+      "经营记忆 write",
+      "当前还没有 主动跑动",
+      "当前没有 open 问题空间",
+      "当前没有 player-coach 摘要",
+      "当前没有协同轨迹 bridge",
+      "Reflection 延续",
+      "reflection 延续",
+      "当前没有反思 job",
+      "当前没有 整合 job",
+      "当前还没有操作员线索 summary",
+      "当前还没有操作员下一动作 summary",
+      "当前还没有操作员start point",
+      "当前还没有操作员复核 summary",
+      "当前还没有操作员work summary",
+      "当前还没有操作员控制 summary",
+      "context miss、验证 fail 和 policy block",
+      "运行时 path",
+      "当前没有 composition failure",
+    ]) {
+      expect(runtimeOperatorPanel).not.toContain(fragment);
+    }
+
+    expect(runtimeOperatorPanel).toContain("当前还没有交接资料。");
+    expect(runtimeOperatorPanel).toContain("当前没有开放问题空间。");
+    expect(runtimeOperatorPanel).toContain("负责人提示 ${item.ownerHint}");
+    expect(runtimeOperatorPanel).toContain("当前没有陪跑教练摘要。");
+    expect(runtimeOperatorPanel).toContain("当前没有协同轨迹桥。");
+    expect(runtimeOperatorPanel).toContain("当前没有反思任务。");
+    expect(runtimeOperatorPanel).toContain("当前没有组合失败记录。");
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 

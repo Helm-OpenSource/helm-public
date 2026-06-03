@@ -65,6 +65,7 @@ This project follows a release-note-first changelog until the first public tag.
 - 继续收口企业微信 / 飞书 / 钉钉 OAuth callback state fallback 文案；本批只改 settings redirect 可见缺 state 文案质量，不改 OAuth、session、connector 写入或 public-login fallback。
 - 继续收口 CRM import 动态显示文案中的中文混写；本批只改中文显示清洗规则，不改连接器接入、导入预览、预热或冲突处理逻辑。
 - 继续收口 external narrative 与 commitment reinforcement / sendability detail view 的中文 fallback 标签；本批只改可见标签与源码守卫，不改发送评估、加固、叙事或非承诺协议。
+- 继续收口 runtime operator panel 的中文空状态、描述与计数标签；本批只改 `/operating` 可见文案与源码守卫，不改运行时队列、权限、状态机或控制动作。
 - 新增 `npm run delivery:doctor -- --region cn` 静态预检，用于提示 Qwen credential、region / residency、npm mirror 与 OpenAI-only ASR 常见中国交付误配。
 - 为后续 trial 与 stable release trains 参数化 `npm run release:check`。
 - 新增 public release train runbook，并刷新 maintainer status baseline。
@@ -134,6 +135,7 @@ English reference:
 - Further localized WeCom / Feishu / DingTalk OAuth callback-state fallback copy; this batch changes settings-redirect-visible missing-state copy quality only and leaves OAuth, sessions, connector writes, and public-login fallback unchanged.
 - Further localized mixed Chinese copy in CRM import dynamic display text; this batch changes Chinese display-cleanup rules only and leaves connector onboarding, import preview, warmup, and conflict handling unchanged.
 - Further localized Chinese fallback labels in external narrative and commitment reinforcement / sendability detail views; this batch changes visible labels plus a source guard only and leaves sendability evaluation, strengthening, narrative, and non-commitment protocols unchanged.
+- Further localized Chinese empty-state, description, and count labels in the runtime operator panel; this batch changes `/operating` visible copy plus a source guard only and leaves runtime queues, permissions, state machines, and control actions unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
