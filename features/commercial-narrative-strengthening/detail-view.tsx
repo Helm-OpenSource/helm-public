@@ -117,7 +117,7 @@ export function CommercialNarrativeStrengtheningDetailView({
               <Link href={`/reinforcement-variants/${detail.id}`}>
                 {english
                   ? "Open reinforcement variants page"
-                  : text("打开加固变体s 页面")}
+                  : text("打开加固变体页面")}
               </Link>
             </Button>
             <Button variant="secondary" asChild>
@@ -150,7 +150,7 @@ export function CommercialNarrativeStrengtheningDetailView({
           label:
             english
               ? "Commercial narrative strengthening judgement"
-              : text("Commercial 叙事加固判断"),
+              : text("商业叙事加固判断"),
           headline: protocol.pageJudgement,
           summary: protocol.pageJudgementReason,
         }}
@@ -374,7 +374,7 @@ function buildUnifiedNavigation({
           : "加固变体详情",
         summary: english
           ? "Return to reinforcement variants before deciding which strengthening layer should carry the narrative."
-          : "回到加固变体s，再确认当前到底由哪一层加固承载商业叙事。",
+          : "回到加固变体，再确认当前到底由哪一层加固承载商业叙事。",
       },
       detailNodeNext: {
         type: "sendability",

@@ -147,7 +147,7 @@ export function buildCommercialNarrativeStrengtheningPageContract({
       {
         label: english
           ? "Open reinforcement variants page"
-          : "打开加固变体s 页面",
+          : "打开加固变体页面",
         href: `/reinforcement-variants/${detail.id}`,
       },
       {
@@ -421,7 +421,7 @@ function buildNextActions({
             : "打开审批并守住加固边界"
           : english
             ? "Open reinforcement variants and confirm the next layer"
-            : "打开加固变体s 并确认下一层加固",
+            : "打开加固变体并确认下一层加固",
       href:
         sendabilityMode === "review-before-send" ||
         sendabilityMode === "not-safe-to-send"

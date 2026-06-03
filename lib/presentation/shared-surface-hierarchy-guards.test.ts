@@ -452,6 +452,14 @@ describe("shared surface hierarchy guards", () => {
   it("keeps Chinese commercial detail labels free of English fallback cue labels", () => {
     const externalNarrativeView = read("features/external-narrative-detail/detail-view.tsx");
     const reinforcementView = read("features/commitment-reinforcement-sendability/detail-view.tsx");
+    const commercialStrengtheningView = read("features/commercial-narrative-strengthening/detail-view.tsx");
+    const commercialStrengtheningModel = read("features/commercial-narrative-strengthening/detail-model.ts");
+    const commercialSources = [
+      externalNarrativeView,
+      reinforcementView,
+      commercialStrengtheningView,
+      commercialStrengtheningModel,
+    ].join("\n");
 
     for (const fragment of [
       'text("founder cue")',
@@ -459,8 +467,13 @@ describe("shared surface hierarchy guards", () => {
       'text("delivery cue")',
       'text("customer-visible strengthening")',
       'text("internal-only wording")',
+      'text("打开加固变体s 页面")',
+      'text("Commercial 叙事加固判断")',
+      '"打开加固变体s 页面"',
+      "打开加固变体s 并确认下一层加固",
+      "回到加固变体s",
     ]) {
-      expect(`${externalNarrativeView}\n${reinforcementView}`).not.toContain(fragment);
+      expect(commercialSources).not.toContain(fragment);
     }
 
     expect(externalNarrativeView).toContain('text("创始人提示")');
@@ -468,6 +481,10 @@ describe("shared surface hierarchy guards", () => {
     expect(externalNarrativeView).toContain('text("交付提示")');
     expect(reinforcementView).toContain('text("客户可见加固")');
     expect(reinforcementView).toContain('text("仅内部话术")');
+    expect(commercialStrengtheningView).toContain('text("打开加固变体页面")');
+    expect(commercialStrengtheningView).toContain('text("商业叙事加固判断")');
+    expect(commercialStrengtheningModel).toContain('"打开加固变体页面"');
+    expect(commercialStrengtheningModel).toContain("打开加固变体并确认下一层加固");
   });
 
   it("keeps Chinese runtime operator empty-state copy free of mixed English fragments", () => {

@@ -278,6 +278,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-04 | 继续收口 commercial narrative strengthening detail 的中文 fallback 标签；本批只改可见 label / summary 与源码守卫，不改 sendability、proposal 或 non-commitment 边界；Further localized Chinese fallback labels in commercial narrative strengthening detail; this batch changes visible labels / summary plus source guards only and leaves sendability, proposal, and non-commitment boundaries unchanged |
 | 2026-06-04 | 继续收口 meeting runtime action fallback、toast 与 operator control 按钮中的中文混写；本批只改可见文案与源码守卫，不改 server action 权限、runtime 状态机或控制动作；Further localized mixed Chinese meeting runtime action fallbacks, toasts, and operator-control button copy; this batch changes visible copy plus source guards only and leaves server-action permissions, runtime state machines, and control actions unchanged |
 | 2026-06-04 | 继续收口 runtime operator 与 meeting v2 runtime 的中文空状态和操作说明混写；本批只改可见文案与源码守卫，不改运行时队列、权限、状态机或控制动作；Further localized mixed Chinese empty-state and guidance copy in the runtime operator and meeting v2 runtime panels; this batch changes visible copy plus source guards only and leaves runtime queues, permissions, state machines, and control actions unchanged |
 | 2026-06-04 | 继续收口 runtime operator panel 的中文空状态、描述与计数标签；本批只改 `/operating` 可见文案与源码守卫，不改运行时队列、权限、状态机或控制动作；Further localized Chinese empty-state, description, and count labels in the runtime operator panel; this batch changes `/operating` visible copy plus a source guard only and leaves runtime queues, permissions, state machines, and control actions unchanged |
