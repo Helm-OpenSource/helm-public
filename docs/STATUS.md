@@ -93,6 +93,19 @@ panel, and result panel plus source guards only; it does not change recording,
 upload, speech transcription, writeback, recommendation refresh, or
 approval-chain logic, and does not claim full-repo bilingualization completion.
 
+imports / CRM ingress 中文混写也已继续清理；本批只改导入主入口与客户关系系统连接向导里的
+客户关系系统来源、导入预览、同步完成、只读入口、操作摘要和预热说明文案及源码守卫，
+不改变 CSV 解析、OAuth、连接器 action、导入 API、warmup 或冲突复核逻辑，也不声明全仓
+双语化完成。
+
+Mixed Chinese copy in imports / CRM ingress has also been further localized.
+This batch changes customer-relationship-system source, import-preview,
+sync-completion, read-only-ingress, operating-summary, and warmup-explanation
+wording in the import entry and CRM connection wizard plus source guards only;
+it does not change CSV parsing, OAuth, connector actions, import APIs, warmup,
+or conflict-review logic, and does not claim full-repo bilingualization
+completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。

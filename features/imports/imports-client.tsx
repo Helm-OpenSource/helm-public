@@ -442,7 +442,7 @@ export function ImportsClient({
       <PageHeader
         eyebrow={english ? "Customer records" : "客户台账"}
         title={english ? "Bring in accounts, contacts, deals and meetings first" : "先接入客户、联系人、机会和会议"}
-        description={english ? "CRM first; CSV is a one-time fallback." : "优先接 CRM；CSV 只做一次性补救。"}
+        description={english ? "CRM first; CSV is a one-time fallback." : "优先接客户关系系统；CSV 只做一次性补救。"}
         actions={
           <>
             <Button variant="secondary" onClick={resetCurrent}>

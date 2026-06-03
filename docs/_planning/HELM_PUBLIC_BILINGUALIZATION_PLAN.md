@@ -156,6 +156,17 @@ panel, and result panel plus source guards only, without changing recording,
 upload, speech transcription, writeback, recommendation refresh, or
 approval-chain logic.
 
+本轮继续收口 imports / CRM ingress 中文混写；只调整导入主入口与客户关系系统连接向导里的
+客户关系系统来源、导入预览、同步完成、只读入口、操作摘要和预热说明文案及源码守卫，
+不改变 CSV 解析、OAuth、连接器 action、导入 API、warmup 或冲突复核逻辑。
+
+This round further localizes mixed Chinese copy in imports / CRM ingress. It
+changes customer-relationship-system source, import-preview, sync-completion,
+read-only-ingress, operating-summary, and warmup-explanation wording in the
+import entry and CRM connection wizard plus source guards only, without changing
+CSV parsing, OAuth, connector actions, import APIs, warmup, or conflict-review
+logic.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |
