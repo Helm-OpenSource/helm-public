@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 China accessibility / evidence routing packet 的中文访问性与证据路由术语混写；本批只改交付工程师、公开 Core 闭环、激活证据、公开公告、回复模板、私有 runbook、付费报价声明、响应时间、路线图承诺、主要激活证明、GitHub 公开安全证据、首次改动证明、阻断项、文档摩擦、集成用例、辅助信号、触达 / 联系信号、激活成功、商业意向、响应义务、路线图需求、公开渠道、脱敏回执、凭据、令牌、QR 凭据、密钥、私有环境细节、生产日志和安全漏洞细节文案及源码守卫，不改 English reference、证据表格、GitHub / WeChat 路由边界或 owner-approved receipt 规则。
 - 继续补齐 open-source growth 7-day plan 的中文表格摘要；本批新增角色、指标、7 日计划、渠道与 backlog 中文摘要，覆盖增长负责人、维护者、文档负责人、验证负责人、公开安全复核、独立本地运行、社区路由、首批贡献准备度、首次运行歧义、结构化反馈、负责人闸门公开叙事、公开安全读数、GitHub Discussions / Issues、WeChat 触达、开发者社交发布和复刻改名指南文案及源码守卫，不改英文参考表格、指标定义、验证命令、Cloud / Enterprise 非承诺边界或 GitHub intake 路径。
 - 继续收口 open-source growth 7-day plan 的中文增长运营术语混写；本批只改公开 Core 增长运营计划、认知、激活、社区接入、摩擦移除、商业发布批准、服务等级承诺、自动外联活动、公开发布、交付工程师激活闭环、合成样板包、激活摩擦、虚荣指标、理解 / 激活 / 贡献质量、触达信号、夹具改动、公开安全报告、可复现阻断项和激活证明文案及源码守卫，不改 7 日计划表、渠道表、指标定义、验证命令、Cloud / Enterprise 非承诺边界或 GitHub intake 路径。
 - 继续补齐 public open source operating model 的中文表格摘要；本批新增方向、OKR 与协作分工中文摘要，覆盖先信任后规模、激活优先于触达、贡献优先于扩张、证据推进集成、商业路径边界、PR 队列、激活证据、风险、请求决策、受控执行队列和工作流分工文案及源码守卫，不改英文参考表格、OKR 指标、工作流职责、验证命令、Cloud / Enterprise 非承诺边界或 owner-only 决策边界。

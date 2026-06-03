@@ -5,26 +5,25 @@ created: 2026-06-02
 review_after: 2026-06-09
 public_safety: Public accessibility and evidence-routing packet for China-market delivery engineers. Use only public repository surfaces, synthetic sample-pack proof, public-safe GitHub evidence, and owner-approved redacted receipts. Do not include real organization data, credentials, private domains, private environment details, security vulnerability details, automatic outbound promises, paid-offer claims, or response-time commitments.
 ---
-# Helm China Accessibility And Evidence Routing Packet / Helm 中国访问性与证据路由 Packet - 2026-06-02
+# Helm China Accessibility And Evidence Routing Packet / Helm 中国访问性与证据路由包 - 2026-06-02
 
 > **语言 / Language**: **中文主文本** + **English reference**
 
 ## 中文主文本 / Chinese Main Text
 
-本文记录 `helm-public` 如何让中国市场的 delivery engineers 更容易触达 public Core
-loop，同时让 activation evidence 保持可验证。它不是 public announcement、reply
-template、private runbook、paid-offer statement，也不是 response-time 或 roadmap
-commitment。
+本文记录 `helm-public` 如何让中国市场的交付工程师更容易触达公开 Core
+闭环，同时让激活证据保持可验证。它不是公开公告、回复模板、私有 runbook、
+付费报价声明，也不是响应时间或路线图承诺。
 
-面向中国市场时，primary activation proof 仍然必须回到 GitHub public-safe evidence：
-Golden Path result、first-change proof、blocker、docs friction 或 integration use case。
-WeChat、QR、community handoff 只能作为 assisted signal 或 reach/contact signal，不能
-单独当作 activation success、commercial intent、response obligation 或 roadmap demand。
+面向中国市场时，主要激活证明仍然必须回到 GitHub 公开安全证据：
+Golden Path 结果、首次改动证明、阻断项、文档摩擦或集成用例。
+WeChat、QR 和社区交接只能作为辅助信号或触达 / 联系信号，不能
+单独当作激活成功、商业意向、响应义务或路线图需求。
 
-任何公开 channel 或 redacted receipt 都不得包含真实组织数据、真实姓名、私人联系方式、
-私有 domain、内网 IP、私有 URL、credential、token、cookie、QR credential、secret、
-private environment detail、production log、security vulnerability detail、paid-offer、
-response-time、roadmap、private implementation 或 obligation wording。
+任何公开渠道或脱敏回执都不得包含真实组织数据、真实姓名、私人联系方式、
+私有域名、内网 IP、私有 URL、凭据、令牌、cookie、QR 凭据、密钥、
+私有环境细节、生产日志、安全漏洞细节、付费报价、响应时间、路线图、
+私有实现或义务措辞。
 
 ## English Reference
 

@@ -2332,6 +2332,39 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps China accessibility packet Chinese body free of recently fixed mixed evidence-routing fragments", () => {
+    const chinaPacket = read(
+      "docs/operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md",
+    );
+    const chineseBody = chinaPacket.slice(
+      chinaPacket.indexOf("本文记录 `helm-public`"),
+      chinaPacket.indexOf("## English Reference"),
+    );
+
+    expect(chinaPacket).toContain("Helm 中国访问性与证据路由包");
+    expect(chineseBody).toContain("中国市场的交付工程师");
+    expect(chineseBody).toContain("公开 Core");
+    expect(chineseBody).toContain("激活证据保持可验证");
+    expect(chineseBody).toContain("公开公告");
+    expect(chineseBody).toContain("回复模板");
+    expect(chineseBody).toContain("付费报价声明");
+    expect(chineseBody).toContain("响应时间或路线图承诺");
+    expect(chineseBody).toContain("主要激活证明");
+    expect(chineseBody).toContain("GitHub 公开安全证据");
+    expect(chineseBody).toContain("首次改动证明");
+    expect(chineseBody).toContain("文档摩擦");
+    expect(chineseBody).toContain("集成用例");
+    expect(chineseBody).toContain("辅助信号或触达 / 联系信号");
+    expect(chineseBody).toContain("激活成功、商业意向、响应义务或路线图需求");
+    expect(chineseBody).toContain("公开渠道或脱敏回执");
+    expect(chineseBody).toContain("凭据、令牌、cookie、QR 凭据、密钥");
+    expect(chineseBody).toContain("私有环境细节、生产日志、安全漏洞细节");
+
+    expect(chineseBody).not.toMatch(
+      /delivery engineers|public Core\s+loop|activation evidence|public announcement|reply\s+template|private runbook|paid-offer statement|response-time|roadmap\s+commitment|primary activation proof|public-safe evidence|first-change proof|docs friction|integration use case|assisted signal|reach\/contact signal|activation success|commercial intent|response obligation|roadmap demand|公开 channel|redacted receipt|private domain|credential|token|QR credential|secret|private environment detail|production log|security vulnerability detail|paid-offer|obligation wording/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");
