@@ -1981,4 +1981,19 @@ describe("shared surface hierarchy guards", () => {
       /CRM 信号|新的 CRM|导入 CRM|连接 CRM 数据|CRM 变化/,
     );
   });
+
+  it("keeps diagnostics CRM readiness copy localized", () => {
+    const diagnosticsClient = read("features/diagnostics/diagnostics-client.tsx");
+
+    expect(diagnosticsClient).toContain("客户关系系统和对象绑定是否已经足够稳定");
+    expect(diagnosticsClient).toContain("未命名客户关系系统账号");
+    expect(diagnosticsClient).toContain("还没有连接任何客户关系系统来源");
+    expect(diagnosticsClient).toContain("客户关系系统优先迁移");
+    expect(diagnosticsClient).toContain("先清客户关系系统与身份绑定债");
+    expect(diagnosticsClient).toContain("已连接客户关系系统");
+
+    expect(diagnosticsClient).not.toMatch(
+      /CRM 和对象绑定|未命名 CRM|任何 CRM 来源|当 CRM-first|先清 CRM|已连接 CRM 来源|已连接 CRM"/,
+    );
+  });
 });

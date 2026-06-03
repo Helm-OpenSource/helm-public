@@ -187,6 +187,16 @@ prompt wording, and tenant-resource empty-state customer-relationship-system
 import copy plus source guards only, without changing health data, settings
 actions, connectors, or permission boundaries.
 
+本轮继续收口 diagnostics 试点诊断页里的中文 CRM 混写；只调整客户关系系统稳定性、
+来源空状态、身份绑定债和已连接来源文案及源码守卫，不改变诊断数据、试点判断、导入任务或
+身份复核逻辑。
+
+This round further localizes mixed Chinese CRM copy in the diagnostics
+pilot-readiness page. It changes customer-relationship-system stability, source
+empty-state, identity-binding debt, and connected-source wording plus source
+guards only, without changing diagnostics data, pilot judgement, import jobs,
+or identity-review logic.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成

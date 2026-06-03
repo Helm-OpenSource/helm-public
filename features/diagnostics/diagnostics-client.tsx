@@ -820,12 +820,12 @@ export function DiagnosticsClient({
       : "判断建议与记忆的黄金样本、执行质量，会决定试点是否可以继续放量。",
     integrationDescription: english
       ? "CRM and identity-binding stability is the main trial-readiness signal for Salesforce / HubSpot customers."
-      : "CRM 和对象绑定是否已经足够稳定，是 Salesforce / HubSpot 客户试点能否顺滑推进的关键。",
-    unnamedCrm: english ? "Unnamed CRM account" : "未命名 CRM 账号",
+      : "客户关系系统和对象绑定是否已经足够稳定，是 Salesforce / HubSpot 客户试点能否顺滑推进的关键。",
+    unnamedCrm: english ? "Unnamed CRM account" : "未命名客户关系系统账号",
     lastSync: english ? "Last sync" : "最近同步",
     noCrmTitle: english
       ? "No CRM source connected yet"
-      : "还没有连接任何 CRM 来源",
+      : "还没有连接任何客户关系系统来源",
     noCrmDescription: english
       ? "Connect HubSpot or Salesforce first so the pilot has enough real operating data."
       : "先连接 HubSpot 或 Salesforce，让试点拥有足够真实的经营数据。",
@@ -870,7 +870,7 @@ export function DiagnosticsClient({
     noImportJobTitle: english ? "No import job yet" : "还没有导入任务",
     noImportJobDescription: english
       ? "Once CRM-first migration runs, this becomes the main operating evidence for the pilot."
-      : "当 CRM-first 迁移开始运行后，这里会成为试点最重要的运营证据之一。",
+      : "当客户关系系统优先迁移开始运行后，这里会成为试点最重要的运营证据之一。",
     recentCaptureFailures: english
       ? "Recent capture failures"
       : "最近的采集失败",
@@ -1121,10 +1121,10 @@ export function DiagnosticsClient({
       ? {
           title: english
             ? "Clear CRM and identity binding debt before widening the pilot"
-            : "先清 CRM 与身份绑定债，再扩大试点",
+            : "先清客户关系系统与身份绑定债，再扩大试点",
           body: english
             ? `There are ${data.identityReviewCount} identity-review items and ${data.crmSources.length} connected CRM sources visible. Fix the binding debt before reading the pilot as more stable than it is.`
-            : `当前可见 ${data.identityReviewCount} 条身份复核项，以及 ${data.crmSources.length} 个已连接 CRM 来源。先清绑定债，再把试点读成更稳定的系统。`,
+            : `当前可见 ${data.identityReviewCount} 条身份复核项，以及 ${data.crmSources.length} 个已连接客户关系系统来源。先清绑定债，再把试点读成更稳定的系统。`,
           href: "/imports/crm",
           meta: english ? "Ingress / identity debt" : "接入 / 身份债",
         }
@@ -1253,7 +1253,7 @@ export function DiagnosticsClient({
       description: diagnosticsText(
         english
           ? `${data.crmSources.length} connected CRM sources still shape readiness posture.`
-          : `${data.crmSources.length} 个已连接 CRM 来源仍在影响就绪姿态。`,
+          : `${data.crmSources.length} 个已连接客户关系系统来源仍在影响就绪姿态。`,
       ),
       href: "/imports/crm",
     },
@@ -1902,7 +1902,7 @@ export function DiagnosticsClient({
           <CardContent className="space-y-3">
             <div className="grid gap-4 md:grid-cols-2">
               <Metric
-                label={english ? "Connected CRM" : "已连接 CRM"}
+                label={english ? "Connected CRM" : "已连接客户关系系统"}
                 value={String(data.crmSources.length)}
               />
               <Metric
