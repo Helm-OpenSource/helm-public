@@ -169,7 +169,7 @@ export async function POST(request: Request) {
         title: created.title,
         status: created.status,
       },
-      "memory fact created",
+      english ? "Memory fact created" : "记忆事实已创建",
     );
   } catch (error) {
     return errorResponse(

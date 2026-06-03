@@ -111,7 +111,7 @@ This PR's source audit result:
    草稿摘要和风险守卫文案、contrast-test / dark-mode-test 低频公开测试 route
    说明文案、weekly report 生成服务的 summary / audit copy、Helm v2/runtime API
    validation fallback 文案、meeting server action 的 pre-session validation fallback
-   文案、blockers / commitments / memory API 的 validation 与失败 fallback 文案、
+   文案、blockers / commitments / memory API 的 validation / success / failure 文案、
    recommendations API 的 validation / success / failure fallback 文案、memory timeline /
    evolution patterns / problem-spaces API 的低频 validation / source label 文案、
    conversation capture 服务层的 fallback transcript / speaker label / audit summary 文案、
@@ -161,8 +161,8 @@ This PR's source audit result:
    dark-mode-test low-frequency public test-route explanatory copy, and
    weekly-report service summary / audit copy, and Helm v2/runtime API
    validation fallback copy, and meeting server-action pre-session validation
-   fallback copy, plus blockers / commitments / memory API validation and
-   failure fallback copy, plus recommendations API validation / success / failure
+   fallback copy, plus blockers / commitments / memory API validation / success /
+   failure copy, plus recommendations API validation / success / failure
    fallback copy, plus low-frequency validation / source-label copy in the memory
    timeline, evolution patterns, and problem-spaces APIs, plus conversation-capture
    service fallback transcript / speaker-label / audit-summary copy, plus text/plain
@@ -287,6 +287,7 @@ true:
 | 2026-06-03 | 继续收口 memory export API 的 text/plain 导出正文标签；本批只改导出文件内的 caller 可见文案，不改查询、权限、审计 payload、headers 或文件名；Further localized text/plain export-body labels in the memory export API; this batch changes caller-visible copy inside the exported file only and leaves queries, permissions, audit payloads, headers, and filenames unchanged |
 | 2026-06-03 | 继续收口 LLM / briefing API 的失败 fallback 文案；本批只改 API caller 可见失败文案，不改 insight / memory 权限、ownership 校验、LLM 调用或返回 payload 结构；Further localized LLM / briefing API failure fallback copy; this batch changes API-caller-visible failure copy only and leaves insight / memory permissions, ownership checks, LLM calls, and response payload structures unchanged |
 | 2026-06-04 | 继续收口 evolution skill / strategy suggestion API 的失败 fallback 文案；本批只改 API caller 可见失败文案，不改 workspace policy 权限、ownership 校验、能力晋级、正式复核或策略建议状态机；Further localized evolution skill / strategy suggestion API failure fallback copy; this batch changes API-caller-visible failure copy only and leaves workspace-policy permissions, ownership checks, capability promotion, formal review, and strategy-suggestion state machines unchanged |
+| 2026-06-04 | 继续收口 blockers / commitments / memory 写入 API 的成功 message；本批只改 API caller 可见成功文案，不改权限、ownership、状态码、schema、写入服务或状态机；Further localized blockers / commitments / memory write API success messages; this batch changes API-caller-visible success copy only and leaves permissions, ownership checks, status codes, schemas, write services, and state machines unchanged |
 | 2026-06-03 | 继续收口 skill suggestion formal review、human action execution boundary 与 program invite issuance 文案中的中文混写；本批只改中文可见文案，不改能力晋升状态机、人工执行契约或邀请发放权限；Further localized Chinese visible mixed-language copy in skill suggestion formal review, human action execution boundary, and program invite issuance copy; this batch changes visible copy only and leaves capability-promotion state machines, human-execution contracts, and invite-issuance permissions unchanged |
 | 2026-06-03 | 继续收口 recommendation feedback、home surface arrival banner 与 billing program catalog 文案中的中文混写；本批只改中文可见文案，不改推荐反馈动作、首页路由或分成规则结构；Further localized Chinese visible mixed-language copy in recommendation feedback, home surface arrival banner, and billing program catalog surfaces; this batch changes visible copy only and leaves recommendation feedback actions, home routing, and revenue-rule structures unchanged |
 | 2026-06-03 | 继续收口 approval first-loop 复核卡片与步骤列表中的中文混写；本批只改中文 display model 文案，不改审批协议、状态机或执行边界；Further localized Chinese visible mixed-language copy in the approval first-loop review card and step list; this batch changes display-model copy only and leaves approval protocol, state machines, and execution boundaries unchanged |

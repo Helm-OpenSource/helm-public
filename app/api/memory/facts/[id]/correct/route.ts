@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         correctionId: result.correction.id,
         updatedContent: result.fact.content,
       },
-      "memory fact corrected",
+      english ? "Memory fact corrected" : "记忆事实已修正",
     );
   } catch (error) {
     return errorResponse(

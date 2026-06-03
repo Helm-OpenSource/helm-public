@@ -37,7 +37,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         confirmedByUser: result.fact.confirmedByUser,
         status: result.fact.status,
       },
-      "memory fact confirmed",
+      english ? "Memory fact confirmed" : "记忆事实已确认",
     );
   } catch (error) {
     return errorResponse(

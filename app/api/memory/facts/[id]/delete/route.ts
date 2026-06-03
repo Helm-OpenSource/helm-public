@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         id: result.fact.id,
         status: result.fact.status,
       },
-      "memory fact deleted",
+      english ? "Memory fact deleted" : "记忆事实已删除",
     );
   } catch (error) {
     return errorResponse(

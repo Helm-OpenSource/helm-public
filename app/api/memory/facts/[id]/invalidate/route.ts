@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         id: result.fact.id,
         status: result.fact.status,
       },
-      "memory fact invalidated",
+      english ? "Memory fact invalidated" : "记忆事实已失效",
     );
   } catch (error) {
     return errorResponse(

@@ -46,7 +46,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: updated.status,
         fulfilledAt: updated.fulfilledAt,
       },
-      "commitment status updated",
+      english ? "Commitment status updated" : "承诺状态已更新",
     );
   } catch (error) {
     return errorResponse(

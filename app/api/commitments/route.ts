@@ -73,7 +73,7 @@ export async function POST(request: Request) {
         id: created.id,
         status: created.status,
       },
-      "commitment created",
+      english ? "Commitment created" : "承诺已创建",
     );
   } catch (error) {
     return errorResponse(

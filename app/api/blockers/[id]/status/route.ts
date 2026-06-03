@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: updated.status,
         resolvedAt: updated.resolvedAt,
       },
-      "blocker status updated",
+      english ? "Blocker status updated" : "阻塞状态已更新",
     );
   } catch (error) {
     return errorResponse(
