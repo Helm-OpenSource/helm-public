@@ -663,11 +663,11 @@ function buildPageModel({
       customerSuccessHandoffStage === "issue-follow-through"
         ? english
           ? "A contained issue can move back toward success check once the repair path is explicit, but it should only widen into expansion review when commercial readiness stays clean."
-          : "只有当修复路径已经说清时，已收口问题才应回到 客户成功验收；也只有在商业 就绪度没有被扭曲时，它才适合继续进入拓展复核。"
+          : "只有当修复路径已经说清时，已收口问题才应回到客户成功验收；也只有在商业就绪度没有被扭曲时，它才适合继续进入拓展复核。"
         : customerSuccessHandoffStage === "escalation-follow-through"
           ? english
             ? "Escalation can widen ownership pressure, but if external wording would overstate certainty it must still downgrade into review-before-send or blocked-by-boundary first."
-            : "升级可以扩大 负责人压力，但只要外部表达会夸大确定性，它就仍必须先降回发送前复核或受阻于边界。"
+            : "升级可以扩大负责人压力，但只要外部表达会夸大确定性，它就仍必须先降回发送前复核或受阻于边界。"
           : null,
     ].filter((item): item is string => Boolean(item)),
     customerSuccessHandoffBoundary: buildBoundarySummary({
@@ -870,7 +870,7 @@ function buildPageModel({
     kind === "customer-success"
       ? english
         ? "Customer success handoff"
-        : "Customer success 接手面"
+        : "客户成功接手面"
       : kind === "success-check"
         ? english
           ? "Success check"
@@ -895,7 +895,7 @@ function buildPageModel({
     opportunityId: detail.id,
     eyebrow: english
       ? `Customer success chain / ${titlePrefix}`
-      : `Customer success 链 / ${titlePrefix}`,
+      : `客户成功链 / ${titlePrefix}`,
     title: `${detail.title} · ${titlePrefix}`,
     description: english
       ? `${detail.company?.name ?? "No company"} · ${stageLabel} · ${stageText}`
@@ -1322,19 +1322,19 @@ function buildJudgement({
   if (kind === "expansion-review") {
     return english
       ? `Use expansion review as the current customer success decision layer, keep the work at ${stageLabel}, and do not let the account drift back into generic company follow-through.`
-      : `当前应把拓展复核当作客户成功的判断层，先停在「${stageLabel}」，不要让这条链重新退回泛化的 company 跟进闭环。`;
+      : `当前应把拓展复核当作客户成功的判断层，先停在「${stageLabel}」，不要让这条链重新退回泛化的公司跟进闭环。`;
   }
 
   if (kind === "success-check") {
     return english
       ? `Use success check as the current customer success verification layer, keep the work at ${stageLabel}, and only widen the story after the boundary is explicit.`
-      : `当前应把 客户成功验收 当作客户成功的校验层，先停在「${stageLabel}」，只有在边界说清后才继续扩大叙事。`;
+      : `当前应把客户成功验收当作客户成功的校验层，先停在「${stageLabel}」，只有在边界说清后才继续扩大叙事。`;
   }
 
   if (stage === "escalation-follow-through") {
     return english
       ? `Use customer success handoff as the current escalation layer, keep the work at ${stageLabel}, and widen ownership before anyone speaks more firmly than the evidence allows.`
-      : `当前应把客户成功交接当作升级接手层，先停在「${stageLabel}」，并在任何人说得比现有证据更实之前先扩大 ownership。`;
+      : `当前应把客户成功交接当作升级接手层，先停在「${stageLabel}」，并在任何人说得比现有证据更实之前先扩大负责人归属。`;
   }
 
   if (stage === "issue-follow-through") {
@@ -1345,7 +1345,7 @@ function buildJudgement({
 
   return english
     ? `Use customer success handoff as the current follow-through layer, keep the work at ${stageLabel}, and make the next owner, boundary and review line explicit before anyone speaks more firmly.`
-    : `当前应把客户成功交接当作跟进闭环判断层，先停在「${stageLabel}」，并在任何人说得更实之前，把下一位负责人、边界和复核话术 说清楚。`;
+    : `当前应把客户成功交接当作跟进闭环判断层，先停在「${stageLabel}」，并在任何人说得更实之前，把下一位负责人、边界和复核话术说清楚。`;
 }
 
 function buildReason(
@@ -1366,13 +1366,13 @@ function buildReason(
   if (kind === "success-check") {
     return english
       ? `${companyName} now needs an honest success check that keeps adoption, blocker and review pressure on one page before the next promise-like move appears.`
-      : `${companyName} 当前需要一张诚实的 客户成功验收 页面，把 adoption、阻塞和复核压力收到同一页，再决定下一步会不会滑向承诺-like 动作。`;
+      : `${companyName} 当前需要一张诚实的客户成功验收页面，把采用情况、阻塞和复核压力收到同一页，再决定下一步会不会滑向承诺式动作。`;
   }
 
   if (signals.blockerNeedsEscalation) {
     return english
       ? `${companyName} has already crossed the normal follow-through threshold, so customer success now needs to widen ownership and carry the blocker explicitly as escalation instead of hiding it in generic account progress.`
-      : `${companyName} 当前已经越过普通跟进闭环阈值，所以客户成功现在需要显式扩大 ownership，把阻塞作为升级接住，而不是继续把它藏在泛化账户进度里。`;
+      : `${companyName} 当前已经越过普通跟进闭环阈值，所以客户成功现在需要显式扩大负责人归属，把阻塞作为升级接住，而不是继续把它藏在泛化账户进度里。`;
   }
 
   if (signals.overdueCommitment) {
@@ -1387,7 +1387,7 @@ function buildReason(
       : `${companyName} 当前已经存在待复核路径，所以客户成功应直接继承后续跟进，而不是继续躲在公司详情面的代理路由后面。`
     : english
       ? `${companyName} now needs a dedicated success handoff because the next motion is no longer generic account context; it is ownership, follow-through and expansion judgement.`
-      : `${companyName} 当前已经需要 dedicated success 交接，因为接下来的动作不再只是泛化账户上下文，而是负责人归属、跟进闭环和拓展判断。`;
+      : `${companyName} 当前已经需要专属客户成功交接，因为接下来的动作不再只是泛化账户上下文，而是负责人归属、跟进闭环和拓展判断。`;
 }
 
 function buildWhyItMatters({
@@ -1462,7 +1462,7 @@ function buildDecisionRequests({
     return [
       english
         ? "Confirm whether this account should remain in issue follow-through, or whether it can safely move back into ordinary success verification first."
-        : "确认这条账户当前是否继续停在问题跟进闭环，还是已经可以先安全退回普通 success 验证。",
+        : "确认这条账户当前是否继续停在问题跟进闭环，还是已经可以先安全退回普通客户成功验收。",
       english
         ? `Confirm whether ${ownerLabel} should carry the repair move now, or whether review / delivery / sales clarification still has to happen first.`
         : `确认当前是否真的应由「${ownerLabel}」先承担修复动作，还是仍要先补复核 / 交付 / 销售澄清。`,
@@ -1523,7 +1523,7 @@ function buildDecisionSummary({
         : `当前对外姿态停在「${sendabilityLabel}」，任何更实的表达仍然需要先补齐复核、边界和证据，才能接近客户安全。`
       : english
         ? `Current outward posture stays at ${sendabilityLabel} with ${fallbackLabel}, so the next move must not imply certainty that the current boundary does not support.`
-        : `当前对外姿态 停在「${sendabilityLabel}」，并继续保留「${fallbackLabel}」，所以下一步不能暗示任何超出当前边界支持范围的确定性。`;
+        : `当前对外姿态停在「${sendabilityLabel}」，并继续保留「${fallbackLabel}」，所以下一步不能暗示任何超出当前边界支持范围的确定性。`;
 
   return [postureLine, safetyLine];
 }
@@ -1687,7 +1687,7 @@ function buildRecentChanges({
           signals.recentThread && signals.recentThread.updatedAt > lastSeenAt
             ? english
               ? `The linked success inbox thread changed on ${formatDateLabel(signals.recentThread.updatedAt)}.`
-              : `关联 success 收件箱线程在 ${formatDateLabel(signals.recentThread.updatedAt)} 后出现变化。`
+              : `关联客户成功收件箱线程在 ${formatDateLabel(signals.recentThread.updatedAt)} 后出现变化。`
             : null,
           detail.briefingSnapshot?.generatedAt &&
           detail.briefingSnapshot.generatedAt > lastSeenAt
@@ -1760,7 +1760,7 @@ function buildResurfaceReasons({
     stage === "escalation-follow-through"
       ? english
         ? `This is back because the work now needs ${stageLabel}: progress is materially blocked by dependency, boundary, missing decision, widened ownership pressure, or elevated risk.`
-        : `Helm 重新抬出这条线，是因为工作已经需要「${stageLabel}」：当前进展已被依赖、边界、缺失判断、扩大 负责人压力或更高风险实质阻塞。`
+        : `Helm 重新抬出这条线，是因为工作已经需要「${stageLabel}」：当前进展已被依赖、边界、缺失判断、扩大后的负责人压力或更高风险实质阻塞。`
       : stage === "issue-follow-through"
         ? english
           ? `This is back because a real follow-through issue is now shaping what customer success can honestly say next.`
@@ -1794,7 +1794,7 @@ function buildResurfaceReasons({
       (signals.latestAudit?.createdAt ?? new Date(0)) > lastSeenAt)
       ? english
         ? `The current outward posture tightened to ${formatSendabilityMode(sendabilityMode, true)}.`
-        : `当前对外姿态 已收紧到「${formatSendabilityMode(sendabilityMode, false)}」。`
+        : `当前对外姿态已收紧到「${formatSendabilityMode(sendabilityMode, false)}」。`
       : null,
     lastSeenAt != null &&
     !signals.topBlocker &&
@@ -1807,7 +1807,7 @@ function buildResurfaceReasons({
       : null,
     english
       ? "This is back to keep the current boundary, decision posture and next accountable move explicit."
-      : "Helm 重新抬出这条线，是为了继续把当前边界、判断姿态 和下一条 accountable 动作说清楚。",
+      : "Helm 重新抬出这条线，是为了继续把当前边界、判断姿态和下一条负责动作说清楚。",
   ]).slice(0, 3);
 }
 
@@ -1861,7 +1861,7 @@ function buildProcessAdvisory({
       category: "expansion-readiness-distorted",
       categoryLabel: english
         ? "Expansion readiness distorted"
-        : "扩展 就绪度 被扭曲",
+        : "拓展就绪度被扭曲",
       patternLabel: english
         ? "Commercial readiness is visible, but current blocker or review pressure still distorts what can honestly be framed as expansion-ready."
         : "商业准备度已经可见，但当前卡点或复核压力仍在扭曲这条线到底能否诚实地被说成可扩展。",
@@ -1875,16 +1875,16 @@ function buildProcessAdvisory({
       playbookRecommendation: internalActionCue
         ? english
           ? `Keep blocked-by-boundary visible, request the missing decision first, and use "${internalActionCue.title}" only as internal preparation.`
-          : `继续把受阻于边界 留在前台，先请求缺失判断，并把「${internalActionCue.title}」只作为内部准备动作。`
+          : `继续把受阻于边界留在前台，先请求缺失判断，并把「${internalActionCue.title}」只作为内部准备动作。`
         : english
           ? "Keep blocked-by-boundary visible, request the missing decision first, and do not frame this as expansion-ready yet."
-          : "继续把受阻于边界 留在前台，先请求缺失判断，不要急着把这条线说成可拓展。",
+          : "继续把受阻于边界留在前台，先请求缺失判断，不要急着把这条线说成可拓展。",
       unresolved: english
         ? `Unresolved readiness distortion: ${blockerText}`
-        : `当前尚未解决的 就绪度 distortion：${blockerText}`,
+        : `当前尚未解决的就绪度扭曲：${blockerText}`,
       overstateRisk: english
         ? "Do not overstate this as expansion-ready, commercial-safe or ready for stronger outward certainty."
-        : "不要把这条线说成已经可拓展、commercial-safe，或已经适合更强的对外确定性表达。",
+        : "不要把这条线说成已经可拓展、商业安全，或已经适合更强的对外确定性表达。",
     };
   }
 
@@ -1902,7 +1902,7 @@ function buildProcessAdvisory({
         : "这条条目已经不再适合普通客户成功处理，需要扩大负责人压力才能把路线说诚实。",
       whyNow: english
         ? `Escalation follow-through is active because current pressure would be understated without widened ownership.`
-        : `当前已经进入升级跟进闭环；如果不扩大 ownership，现有压力就会被说轻。`,
+        : `当前已经进入升级跟进闭环；如果不扩大负责人归属，现有压力就会被说轻。`,
       playbookRecommendation: escalationAction
         ? english
           ? `Widen internal visibility, request the missing decision before external progression, and use "${escalationAction.title}" as the bounded internal playbook.`
@@ -1932,16 +1932,16 @@ function buildProcessAdvisory({
         : "当前主限制项已经是边界姿态，而不是执行意愿；这条链需要诚实收口，而不是更强的对外措辞。",
       whyNow: english
         ? `The current outward posture is ${formatSendabilityMode(sendabilityMode, true)}, so boundary is now the operative constraint.`
-        : `当前对外姿态 已停在「${formatSendabilityMode(sendabilityMode, false)}」，所以边界已经成为主要约束。`,
+        : `当前对外姿态已停在「${formatSendabilityMode(sendabilityMode, false)}」，所以边界已经成为主要约束。`,
       playbookRecommendation: english
         ? "Keep blocked-by-boundary visible, make prerequisite and dependency notes explicit, and keep any next move inside internal or review-held wording."
-        : "继续把受阻于边界 留在前台，把前置和依赖备注说清，并让下一步停在 仅内部或复核挂起措辞里。",
+        : "继续把受阻于边界留在前台，把前置和依赖备注说清，并让下一步停在仅内部或复核挂起措辞里。",
       unresolved: english
         ? `Unresolved boundary line: ${blockerText}`
         : `当前未解开的边界线：${blockerText}`,
       overstateRisk: english
         ? "Do not overstate boundary-limited work as customer-visible certainty, sendability or readiness."
-        : "不要把受边界限制的工作说成客户可见确定性、发送评估或 就绪度。",
+        : "不要把受边界限制的工作说成客户可见确定性、发送评估或就绪度。",
     };
   }
 
@@ -1991,10 +1991,10 @@ function buildProcessAdvisory({
       playbookRecommendation: internalActionCue
         ? english
           ? `Keep the dependency visible, request the missing decision or unblocker, and use "${internalActionCue.title}" only to coordinate internally.`
-          : `继续把依赖留在前台，先请求缺失判断或 unblocker，并把「${internalActionCue.title}」只用于内部协同。`
+          : `继续把依赖留在前台，先请求缺失判断或解除阻塞事项，并把「${internalActionCue.title}」只用于内部协同。`
         : english
           ? "Keep the dependency visible, request the missing decision or unblocker, and avoid widening certainty until the dependency clears."
-          : "继续把依赖留在前台，先请求缺失判断或 unblocker，并在依赖清除前避免扩大确定性表达。",
+          : "继续把依赖留在前台，先请求缺失判断或解除阻塞事项，并在依赖清除前避免扩大确定性表达。",
       unresolved: english
         ? `Unresolved dependency: ${blockerText}`
         : `当前未解开的依赖：${blockerText}`,
@@ -2039,7 +2039,7 @@ function buildProcessAdvisoryItems({
   return [
     `${english ? "Detected pattern" : "当前模式"}: ${processAdvisory.categoryLabel}`,
     `${english ? "Why Helm thinks this applies now" : "Helm 为什么判断它现在适用"}: ${processAdvisory.whyNow}`,
-    `${english ? "Safe playbook" : "安全 playbook"}: ${processAdvisory.playbookRecommendation}`,
+    `${english ? "Safe playbook" : "安全处理建议"}: ${processAdvisory.playbookRecommendation}`,
     `${english ? "What remains unresolved" : "当前仍未解决"}: ${processAdvisory.unresolved}`,
     `${english ? "What would overstate certainty" : "什么会夸大确定性"}: ${processAdvisory.overstateRisk}`,
   ];
@@ -2105,7 +2105,7 @@ function buildPolicySurface({
           : "需要批准"
         : english
           ? "Advisory only"
-          : "仅 advisory",
+          : "仅建议",
     primaryTone: hasExecutionAllowed
       ? "emerald"
       : hasApprovalRequired
@@ -2120,8 +2120,8 @@ function buildPolicySurface({
           ? "The current bounded move can be prepared and recommended here, and low-risk internal actions can execute only after your explicit approval."
           : "这里可以先准备并建议这条有边界的下一动作；只有在你显式批准后，低风险内部动作才可执行。"
         : english
-          ? "The current line can stay prepared, recommended and visible here, but it remains advisory-only until a user 审批路径 becomes explicit."
-          : "这条线当前可以继续保持已准备、可建议且可见，但在用户批准路径明确前，它仍保持 advisory-only。",
+          ? "The current line can stay prepared, recommended and visible here, but it remains advisory-only until a user approval path becomes explicit."
+          : "这条线当前可以继续保持已准备、可建议且可见，但在用户批准路径明确前，它仍保持仅建议。",
     approvalRequirement: hasExecutionAllowed
       ? english
         ? "Any additional internal action beyond the approved set still needs explicit per-action approval."
@@ -2139,7 +2139,7 @@ function buildPolicySurface({
     whatRemainsBlocked: blockedBy,
     overstateRisk: english
       ? `Do not overstate this surface as customer-sendable, commitment-capable, or safe for stronger certainty while the current policy line remains ${processAdvisory.categoryLabel.toLowerCase()}.`
-      : `在当前 policy 线仍停在「${processAdvisory.categoryLabel}」期间，不要把这一面 说成可对外发送、可形成承诺，或适合更强确定性表达。`,
+      : `在当前治理线仍停在「${processAdvisory.categoryLabel}」期间，不要把这一面说成可对外发送、可形成承诺，或适合更强确定性表达。`,
     queueSummary: hasExecutionAllowed
       ? english
         ? "An approved low-risk internal step is available, but external send remains disabled."
@@ -2150,10 +2150,10 @@ function buildPolicySurface({
           : "这里可以先准备低风险内部动作，但执行仍需要用户批准。"
         : english
           ? "This line is still advisory-only; it can prepare and recommend, not execute."
-          : "当前这条线仍是 advisory-only；这里只能准备和建议，不能直接执行。",
+          : "当前这条线仍是仅建议；这里只能准备和建议，不能直接执行。",
     queueBlockedSummary: english
       ? `${blockedBy} External send stays disabled and commitment stays disabled on this surface.`
-      : `${blockedBy} 这一面 仍然禁用 对外发送，并继续禁用承诺。`,
+      : `${blockedBy} 这一面仍然禁用对外发送，并继续禁用承诺。`,
     approvalRequiredLabel: hasApprovalRequired
       ? english
         ? "Requires your approval"
@@ -2264,7 +2264,7 @@ function buildExternalDrafts({
       : kind === "boundary-aware-check-in"
         ? english
           ? "A boundary-aware check-in draft is already prepared, so the customer can stay informed without widening certainty."
-          : "当前已准备一条边界感知 check-in 草稿，可以继续向客户同步，但不会扩大确定性。"
+          : "当前已准备一条边界感知确认草稿，可以继续向客户同步，但不会扩大确定性。"
         : kind === "decision-dependency-clarification-request"
           ? english
             ? "A clarification draft is already prepared and asks only for the missing decision or dependency needed to move honestly."
@@ -2273,9 +2273,9 @@ function buildExternalDrafts({
             ? english
               ? "A non-commitment status update is already prepared and keeps follow-through visible without sounding like a promise."
               : "当前已准备一条非承诺状态更新，可以继续保持跟进闭环可见，但不会说得像承诺。"
-            : english
-              ? "A holding reply draft is already prepared so the customer line can move without sounding firmer than the evidence."
-              : "当前已准备一条 持守中 回应草稿，让客户线继续推进，但不会说得比现有证据更实。";
+        : english
+          ? "A holding reply draft is already prepared so the customer line can move without sounding firmer than the evidence."
+          : "当前已准备一条持守中回应草稿，让客户线继续推进，但不会说得比现有证据更实。";
 
   const intent =
     kind === "review-before-send-follow-up"
@@ -2289,14 +2289,14 @@ function buildExternalDrafts({
         : kind === "decision-dependency-clarification-request"
           ? english
             ? "Ask only for the missing decision or dependency instead of sounding as if the path is already settled."
-            : "只请求缺失的判断或依赖，而不是把这条路径说得像已经 settle。"
+            : "只请求缺失的判断或依赖，而不是把这条路径说得像已经落定。"
           : kind === "non-commitment-status-update"
             ? english
               ? "Show motion on the work while keeping the next ask, current risk and non-commitment posture explicit."
-              : "继续展示这条工作的推进，同时把下一条 请求、当前风险和非承诺姿态 说清楚。"
+              : "继续展示这条工作的推进，同时把下一条请求、当前风险和非承诺姿态说清楚。"
             : english
               ? "Acknowledge the current state, keep the next move warm, and avoid over-speaking beyond the current evidence."
-              : "确认当前状态、保持下一步 加温，但避免说到超出当前证据 的范围。";
+              : "确认当前状态、保持下一步预热，但避免说到超出当前证据的范围。";
 
   const whyNow =
     kind === "review-before-send-follow-up"
@@ -2354,7 +2354,7 @@ function buildExternalDrafts({
     kind === "decision-dependency-clarification-request"
       ? english
         ? "Sending this as if the route were already settled would overstate certainty while the missing decision or dependency stays open."
-        : "如果把这条草稿按“路线已 settle”去发送，就会在缺失判断或依赖仍未解决时夸大确定性。"
+        : "如果把这条草稿按“路线已落定”去发送，就会在缺失判断或依赖仍未解决时夸大确定性。"
       : kind === "boundary-aware-check-in"
         ? english
           ? "Any wording that sounds as if the boundary is cleared, sendability is open, or the account is already expansion-ready would overstate reality."
@@ -2776,7 +2776,7 @@ function buildExternalDraftPostSendOutcome({
   const whatChanged = clarificationRequested
     ? english
       ? `Judgement now shifts into clarification-first follow-through. Decision posture tightens around ${trimText(decisionRequest, 120)}, and the next action now centers on ${trimText(nextActionLabel, 120)}.`
-      : `当前判断已转到澄清优先 跟进闭环。判断姿态 会继续收紧在「${trimText(decisionRequest, 120)}」上，下一步也转成「${trimText(nextActionLabel, 120)}」。`
+      : `当前判断已转到澄清优先跟进闭环。判断姿态会继续收紧在「${trimText(decisionRequest, 120)}」上，下一步也转成「${trimText(nextActionLabel, 120)}」。`
     : boundaryTightened
       ? english
         ? `Judgement and boundary posture both tighten after the post-send signal: ${trimText(boundarySummary, 120)} The next action stays ${trimText(nextActionLabel, 120)}.`
@@ -3583,7 +3583,7 @@ function buildInternalActionPolicyLabels({
         }
       : state === "executed-internally"
         ? {
-            label: english ? "Advisory only" : "仅 advisory",
+            label: english ? "Advisory only" : "仅建议",
             tone: "sky" as const,
           }
         : {
@@ -3958,7 +3958,7 @@ function buildNavigation({
             label: english ? "Package detail" : "方案包详情",
             summary: english
               ? "Move here once expansion review needs to turn back into the narrower commercial package line."
-              : "当拓展复核需要重新落回更窄的 commercial 方案包线时，就切到这里。",
+              : "当拓展复核需要重新落回更窄的商业方案包线时，就切到这里。",
           };
   const currentNode =
     kind === "customer-success"
@@ -4019,7 +4019,7 @@ function buildNavigation({
             detailNodePriority: priority,
             detailNodeNavigationHint: english
               ? "Use success check when the team has already agreed customer success owns follow-through and now needs to judge readiness honestly."
-              : "当团队已经确认由客户成功接手，而下一步需要诚实判断 就绪度时，停在 客户成功验收。",
+              : "当团队已经确认由客户成功接手，而下一步需要诚实判断就绪度时，停在客户成功验收。",
           }
         : {
             detailNodeType: "expansion-review" as const,
@@ -4161,7 +4161,7 @@ function buildHandoffs({
       handoffTarget: "success-check",
       handoffReason: english
         ? "The next question is no longer just who owns the follow-through, but whether success issue repair is actually clean enough to keep moving."
-        : "下一步的问题已经不再只是由谁接手，而是 success 问题修复是否已经足够干净，真的可以继续推进。",
+        : "下一步的问题已经不再只是由谁接手，而是客户成功问题修复是否已经足够干净，真的可以继续推进。",
       handoffBoundary: boundary,
       handoffPrerequisite: prerequisite,
       handoffDependency: dependency,
@@ -4184,13 +4184,13 @@ function buildHandoffs({
         handoffTarget: "inbox-detail",
         handoffReason: english
           ? "Route into success inbox only when the next move needs the live thread context, not just the handoff summary."
-          : "只有当下一步真正需要实时线程上下文，而不只是交接摘要 时，才切进 success 收件箱。",
+          : "只有当下一步真正需要实时线程上下文，而不只是交接摘要时，才切进客户成功收件箱。",
         handoffBoundary: boundary,
         handoffPrerequisite: prerequisite,
         handoffDependency: dependency,
         handoffRisk: english
           ? "If the team answers from raw thread pressure without carrying the current success boundary, issue or escalation can be mistaken for commitment."
-          : "如果团队从原始线程压力直接作答，却没带着当前 success 边界，就可能把问题或升级误讲成承诺。",
+          : "如果团队从原始线程压力直接作答，却没带着当前客户成功边界，就可能把问题或升级误讲成承诺。",
         handoffDecisionRequest:
           protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
         handoffNextAction: english
@@ -4265,7 +4265,7 @@ function buildHandoffs({
           : target.handoffTarget === "sales-conversation"
             ? english
               ? "Use customer success → sales handoff when renewal risk, blocked expansion, or customer-visible clarification now needs sales-owned commercial follow-through."
-              : "当续约风险、拓展受阻或客户可见澄清已经需要销售-owned commercial 跟进闭环时，使用客户成功 → 销售交接。"
+              : "当续约风险、拓展受阻或客户可见澄清已经需要销售负责的商业跟进闭环时，使用客户成功 → 销售交接。"
             : target.handoffTarget === "delivery-conversation"
               ? english
                 ? "Use customer success → delivery handoff when the next move is delivery-escalated issue repair, walkthrough clarification, or dependency cleanup rather than more success wording."
@@ -4281,7 +4281,7 @@ function buildHandoffs({
           : target.handoffTarget === "sales-conversation"
             ? english
               ? "If sales inherits this without the current success boundary, renewal or expansion pressure can overstate certainty."
-              : "如果销售接手时漏掉当前 success 边界，续约或拓展压力就可能把确定性说过头。"
+              : "如果销售接手时漏掉当前客户成功边界，续约或拓展压力就可能把确定性说过头。"
             : target.handoffTarget === "delivery-conversation"
               ? english
                 ? "If delivery inherits this without the current issue / escalation boundary, repair work can be mistaken for delivery commitment."
@@ -4355,7 +4355,7 @@ function buildHandoffs({
       handoffDependency: dependency,
       handoffRisk: english
         ? "Expansion pressure should not erase the current success boundary."
-        : "拓展压力不应抹掉当前 success 边界。",
+        : "拓展压力不应抹掉当前客户成功边界。",
       handoffDecisionRequest:
         protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
       handoffNextAction: english
@@ -4372,13 +4372,13 @@ function buildHandoffs({
       handoffTarget: "expansion-review",
       handoffReason: english
         ? "Expansion review should inherit the account only after success check has made the current follow-through honest."
-        : "只有在 客户成功验收 已经把当前跟进闭环说诚实后，拓展复核才应该接手这个账户。",
+        : "只有在客户成功验收已经把当前跟进闭环说诚实后，拓展复核才应该接手这个账户。",
       handoffBoundary: boundary,
       handoffPrerequisite: prerequisite,
       handoffDependency: dependency,
       handoffRisk: english
         ? "Expansion review that skips the success picture can overstate readiness."
-        : "如果拓展复核跳过 success 画面，就容易把 就绪度 说过头。",
+        : "如果拓展复核跳过客户成功画面，就容易把就绪度说过头。",
       handoffDecisionRequest: protocol.pageDecisionRequest[0],
       handoffNextAction: english
         ? "Open expansion review."
@@ -4412,7 +4412,7 @@ function buildHandoffs({
         handoffDependency: dependency,
         handoffRisk: english
           ? "Commercial detail still cannot inherit expansion optimism as if it were already approved."
-          : "商业详情面 仍然不能把拓展乐观估计 直接继承成“已批准的确定性”。",
+          : "商业详情面仍然不能把拓展乐观估计直接继承成“已批准的确定性”。",
         handoffDecisionRequest:
           protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
         handoffNextAction: english
@@ -4432,13 +4432,13 @@ function buildHandoffs({
       handoffTarget: "company-detail",
       handoffReason: english
         ? "Return to company detail only when the team needs the broader account context, not when it needs the customer success decision itself."
-        : "只有在团队需要更宽的账户上下文时才回到 公司详情面，而不是把它继续当作客户成功决策本身。",
+        : "只有在团队需要更宽的账户上下文时才回到公司详情面，而不是把它继续当作客户成功决策本身。",
       handoffBoundary: boundary,
       handoffPrerequisite: prerequisite,
       handoffDependency: dependency,
       handoffRisk: english
         ? "Company detail should remain context, not become a weak alias for customer success handoff."
-        : "company detail 应继续是上下文页，而不是客户成功交接的弱别名。",
+        : "公司详情面应继续是上下文页，而不是客户成功交接的弱别名。",
       handoffDecisionRequest: protocol.pageDecisionRequest[0],
       handoffNextAction: english
         ? "Open company detail."
@@ -4966,7 +4966,7 @@ function formatOwnershipPressure(
   if (stage === "issue-follow-through") {
     return english
       ? "Still within normal current-round coordination; widened ownership pressure is not yet required."
-      : "当前仍在正常这一轮协调范围内，还不需要扩大 负责人压力。";
+      : "当前仍在正常这一轮协调范围内，还不需要扩大负责人压力。";
   }
 
   if (stage === "review-follow-through" || stage === "review-before-send") {
@@ -4989,13 +4989,13 @@ function formatRouteCue(
   if (stage === "escalation-follow-through") {
     return english
       ? "Blocked until widened decision or downgrade path is explicit."
-      : "在 widened 判断或降级 path 说清前，当前先按受阻处理。";
+      : "在扩大判断或降级路径说清前，当前先按受阻处理。";
   }
 
   if (stage === "issue-follow-through") {
     return english
       ? "Contained if repair closes; only widen once readiness stays clean."
-      : "只有修复收口后才算 contained；也只有在 就绪度 仍然干净时才继续扩大。";
+      : "只有修复收口后才算已收口；也只有在就绪度仍然干净时才继续扩大。";
   }
 
   if (

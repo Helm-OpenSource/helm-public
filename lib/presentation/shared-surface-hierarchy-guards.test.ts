@@ -605,18 +605,72 @@ describe("shared surface hierarchy guards", () => {
       "明确 backing",
       "Outcome 已解除阻塞",
       "Outcome 收紧了边界",
+      "Customer success 接手面",
+      "Customer success 链",
+      "company 跟进闭环",
+      "当前应把 客户成功验收 当作",
+      "扩大 ownership",
+      "把 adoption、阻塞",
+      "承诺-like 动作",
+      "dedicated success 交接",
+      "success 验证",
+      "扩大 负责人压力",
+      "accountable 动作",
+      "commercial-safe，",
+      "或 unblocker",
+      "安全 playbook",
+      "仅 advisory",
+      "user 审批路径",
+      "policy 线",
+      "这一面 仍然禁用",
+      "check-in 草稿",
+      "已经 settle",
+      "下一条 请求",
+      "下一步 加温",
+      "commercial 方案包线",
+      "success 问题修复",
+      "success 收件箱",
+      "sales-owned commercial 跟进",
+      "当前 success 边界",
+      "跳过 success 画面",
+      "company detail 应",
+      "客户成功 路由",
+      "客户成功 triage",
+      "widened 压力",
+      "收件箱 triage",
+      "派生 success",
+      "复核 持守",
+      "active 升级",
+      "Queue 项",
+      "Issue 跟进",
+      "Success 收件箱线程",
+      "advisory 路由",
+      "inbound 回应",
+      "widened 判断",
+      "Success 跟进",
+      "当前对外姿态 ",
+      "判断姿态 ",
     ]) {
       expect(sources).not.toContain(fragment);
     }
 
+    expect(detailModel).toContain("客户成功接手面");
+    expect(detailModel).toContain("客户成功链 /");
+    expect(detailModel).toContain("负责人归属");
+    expect(detailModel).toContain("仅建议");
     expect(detailModel).toContain("客户成功跟进闭环说成对外确定性");
     expect(detailModel).toContain("值得进入拓展研判");
     expect(detailModel).toContain("有意义的发送后结果");
     expect(detailModel).toContain("显式介入压力");
     expect(detailModel).toContain("交接证据会继续保留");
+    expect(detailModel).toContain("商业方案包线");
+    expect(detailModel).toContain("客户成功收件箱线程");
     expect(queueModel).toContain("问题跟进闭环");
     expect(queueModel).toContain("普通客户成功路径上");
     expect(queueModel).toContain("当前沉默仍然不等于确认");
+    expect(queueModel).toContain("派生客户成功队列");
+    expect(queueModel).toContain("客户成功收件箱仍是派生面");
+    expect(queueModel).toContain("最新入站回应正在要求澄清");
   });
 
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {

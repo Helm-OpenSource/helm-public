@@ -345,7 +345,7 @@ export function buildCustomerSuccessQueueSurfaceModel({
         model.resurfaceReasonItems[0] ??
         (english
           ? "This is back to keep the current boundary, risk and next accountable move explicit."
-          : "这条线重新回到这里，是为了继续把当前边界、风险和下一条 accountable 动作说清楚。"),
+          : "这条线重新回到这里，是为了继续把当前边界、风险和下一条负责动作说清楚。"),
       stillWaitingLabel: buildStillWaitingLabel({
         attentionState: model.attentionState,
         stageKey: model.stageKey,
@@ -463,12 +463,12 @@ export function buildCustomerSuccessQueueSurfaceModel({
         queueItem?.judgementLabel ??
         (english
           ? "Use this thread as a thin customer success routing cue until the next handoff surface is explicit."
-          : "当前先把这条线程当作很薄的客户成功 路由 线索，直到下一张交接面 说清为止。"),
+          : "当前先把这条线程当作很薄的客户成功路线线索，直到下一张交接面说清为止。"),
       variantSummary:
         queueItem?.variantSummary ??
         (english
           ? "Current thread pressure is visible, but it still sits inside ordinary customer success triage until issue or escalation is explicit."
-          : "当前线程压力已经可见，但在问题或升级被明确抬出来之前，它仍停在普通的客户成功 triage 里。"),
+          : "当前线程压力已经可见，但在问题或升级被明确抬出来之前，它仍停在普通的客户成功分诊里。"),
       subvariantSummary: queueItem?.subvariantSummary ?? null,
       advisoryCategoryLabel:
         queueItem?.advisoryCategoryLabel ?? inboxAdvisoryFallback.categoryLabel,
@@ -524,7 +524,7 @@ export function buildCustomerSuccessQueueSurfaceModel({
         (thread.status === "WAITING_US" && !thread.shouldReply
           ? english
             ? "Still blocked until the next routing decision becomes explicit."
-            : "在下一条 路由 判断被说清楚之前，当前仍保持阻塞。"
+            : "在下一条路线判断被说清楚之前，当前仍保持阻塞。"
           : null),
       stageLabel:
         queueItem?.stageLabel ?? fallbackCustomerSuccessStageLabel(english),
@@ -535,18 +535,18 @@ export function buildCustomerSuccessQueueSurfaceModel({
         queueItem?.ownershipPressureLabel ??
         (english
           ? "Normal customer success handling remains active until widened pressure is explicit."
-          : "在 widened 压力被显式抬出来之前，当前仍按普通客户成功处理处理。"),
+          : "在扩大压力被显式抬出来之前，当前仍按普通客户成功处理。"),
       decisionPostureLabel:
         queueItem?.decisionPostureLabel ??
         (english
           ? "Current decision posture: keep the thread inside thin inbox triage until the next customer success route is explicit."
-          : "当前判断姿态：先把这条线程留在很薄的收件箱 triage 里，直到下一条客户成功 路由 被明确说出来。"),
+          : "当前判断姿态：先把这条线程留在很薄的收件箱分诊里，直到下一条客户成功路线被明确说出来。"),
       progressLabel:
         queueItem?.progressLabel ??
         (attentionState === "blocked"
           ? english
             ? "Blocked by dependency, boundary, or missing decision until the next customer success route is explicit."
-            : "当前被依赖、边界或缺失判断阻塞，直到下一条客户成功 路由 被明确说出来。"
+            : "当前被依赖、边界或缺失判断阻塞，直到下一条客户成功路线被明确说出来。"
           : attentionState === "review-before-send"
             ? english
               ? "Moved into review-before-send before anyone answers from the raw thread."
@@ -608,7 +608,7 @@ export function buildCustomerSuccessQueueSurfaceModel({
         queueItem?.boundaryLabel ??
         (english
           ? "Success inbox is still a derived surface. Thread pressure cannot silently become commitment."
-          : "success 收件箱仍是派生面。线程压力不能悄悄变成承诺。"),
+          : "客户成功收件箱仍是派生面。线程压力不能悄悄变成承诺。"),
       evidenceLabel: thread.latestMessage
         ? trimText(thread.latestMessage.body, 120)
         : english
@@ -849,11 +849,11 @@ export function buildCustomerSuccessQueueSurfaceModel({
         tone: "sky",
       },
       {
-        label: english ? "Derived success queue" : "派生 success 队列",
+        label: english ? "Derived success queue" : "派生客户成功队列",
         tone: "sky",
       },
       {
-        label: english ? "Derived success inbox" : "派生 success 收件箱",
+        label: english ? "Derived success inbox" : "派生客户成功收件箱",
         tone: "violet",
       },
       {
@@ -865,20 +865,20 @@ export function buildCustomerSuccessQueueSurfaceModel({
             : reviewHoldCount > 0
               ? english
                 ? `${reviewHoldCount} review holds`
-                : `${reviewHoldCount} 条复核 持守`
+                : `${reviewHoldCount} 条复核持守`
               : english
                 ? "No active escalation"
-                : "当前无 active 升级",
+                : "当前无活跃升级",
         tone: escalationCount > 0 ? "amber" : "emerald",
       },
     ],
     secondarySummaryItems: [
       {
-        label: english ? "Queue items" : "Queue 项",
+        label: english ? "Queue items" : "队列项",
         value: `${queueItems.length}`,
       },
       {
-        label: english ? "Issue follow-through" : "Issue 跟进",
+        label: english ? "Issue follow-through" : "问题跟进",
         value: `${issueCount}`,
       },
       {
@@ -886,11 +886,11 @@ export function buildCustomerSuccessQueueSurfaceModel({
         value: `${escalationCount}`,
       },
       {
-        label: english ? "Review holds" : "Review hold",
+        label: english ? "Review holds" : "复核持守",
         value: `${reviewHoldCount}`,
       },
       {
-        label: english ? "Success inbox threads" : "Success 收件箱线程",
+        label: english ? "Success inbox threads" : "客户成功收件箱线程",
         value: `${inboxItems.length}`,
       },
     ],
@@ -921,7 +921,7 @@ function readSummaryValue(
 }
 
 function fallbackCustomerSuccessStageLabel(english: boolean) {
-  return english ? "Success follow-through" : "Success 跟进";
+  return english ? "Success follow-through" : "客户成功跟进";
 }
 
 function formatThreadDateLabel(date: Date) {
@@ -1007,7 +1007,7 @@ function buildInboxAdvisoryFallback({
       : "当前最主要的限制项仍是下一条有边界的 路由 判断还没有说清。",
     playbookLabel: english
       ? "Request the bounded routing decision first and keep the thread inside thin customer success triage until it is explicit."
-      : "先请求这条有边界的 路由 判断，并在它被明确前让线程继续停在很薄的客户成功 triage 里。",
+      : "先请求这条有边界的路线判断，并在它被明确前让线程继续停在很薄的客户成功分诊里。",
   };
 }
 
@@ -1029,7 +1029,7 @@ function buildInboxPolicyFallback({
         : "需要批准"
       : english
         ? "Advisory only"
-        : "仅 advisory",
+        : "仅建议",
     primaryTone: approvalRequired ? ("amber" as const) : ("sky" as const),
     approvalRequiredLabel: approvalRequired
       ? english
@@ -1049,7 +1049,7 @@ function buildInboxPolicyFallback({
         : "这里可以先准备下一条回复路径，但任何内部执行仍需要你显式批准。"
       : english
         ? "This thread remains a thin advisory routing cue; it can prepare and recommend, not send."
-        : "当前线程仍是很薄的 advisory 路由 线索；这里只能准备和建议，不能发送。",
+        : "当前线程仍是很薄的建议路线线索；这里只能准备和建议，不能发送。",
     queueBlockedSummary:
       status === "WAITING_THEM"
         ? english
@@ -1171,7 +1171,7 @@ function buildExternalDraftReviewQueueCue(
       draft.reviewOutcome.queueHandoffSummary ??
       (english
         ? "External send still stays disabled on this surface."
-        : "这一面 仍然禁用对外发送。"),
+        : "这一面仍然禁用对外发送。"),
   };
 }
 
@@ -1286,7 +1286,7 @@ function buildInboxDraftReviewFallback({
       : "在任何手动交接被考虑之前，这条草稿仍需要显式人工复核。",
     handoffLabel: english
       ? "No human send handoff is recorded yet, and external send still stays disabled on this surface."
-      : "当前还没有记录到人工发送交接，而且这一面 仍然禁用对外发送。",
+      : "当前还没有记录到人工发送交接，而且这一面仍然禁用对外发送。",
   };
 }
 
@@ -1326,10 +1326,10 @@ function buildInboxPostSendOutcomeFallback({
       summaryLabel: clarificationRequested
         ? english
           ? `The latest inbound reply asks for clarification: ${trimText(latestMessage.body, 118)}`
-          : `最新 inbound 回应正在要求澄清：${trimText(latestMessage.body, 118)}`
+          : `最新入站回应正在要求澄清：${trimText(latestMessage.body, 118)}`
         : english
           ? `A new inbound reply surfaced after the last outward move: ${trimText(latestMessage.body, 118)}`
-          : `在最近一次对外动作之后，当前出现了新的 inbound 回应：${trimText(latestMessage.body, 118)}`,
+          : `在最近一次对外动作之后，当前出现了新的入站回应：${trimText(latestMessage.body, 118)}`,
       blockedLabel: clarificationRequested
         ? english
           ? "The line still needs a bounded clarification response and remains non-commitment."
@@ -1500,7 +1500,7 @@ function buildQueueReadinessCue(
     return {
       label: english
         ? "Blocked until widened decision"
-        : "在 widened 判断前保持阻塞",
+        : "在扩大判断前保持阻塞",
       tone: "amber" as const,
     };
   }
