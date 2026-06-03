@@ -534,6 +534,34 @@ describe("shared surface hierarchy guards", () => {
     expect(meetingRuntimeCard).toContain("当前还没有整合任务。");
   });
 
+  it("keeps Chinese meeting runtime action copy free of mixed English fragments", () => {
+    const meetingActions = read("features/meetings/actions.ts");
+    const meetingRuntimeCard = read("features/meetings/meeting-v2-runtime-card.tsx");
+    const runtimeOperatorPanel = read("features/internal-operating-workspace/runtime-operator-panel.tsx");
+    const sources = `${meetingActions}\n${meetingRuntimeCard}\n${runtimeOperatorPanel}`;
+
+    for (const fragment of [
+      "整合 job 不存在",
+      "human input 检查点 request",
+      "请求 human input 检查点失败",
+      "接管跟进闭环 request 参数错误",
+      "操作员接管 follow-through",
+      "接管跟进闭环 resolve 参数错误",
+      "human input 检查点 已确认",
+      "Human input checkpoint 已确认",
+      "Artifact复核 记录",
+      "Kill（close request）",
+    ]) {
+      expect(sources).not.toContain(fragment);
+    }
+
+    expect(meetingActions).toContain("整合任务不存在");
+    expect(meetingActions).toContain("人工输入检查点请求参数错误");
+    expect(meetingRuntimeCard).toContain("人工输入检查点确认已记录");
+    expect(meetingRuntimeCard).toContain("产物复核记录");
+    expect(runtimeOperatorPanel).toContain("终止（请求关闭）");
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 

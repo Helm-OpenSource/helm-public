@@ -141,7 +141,7 @@ async function getConsolidationJobOwnershipError(workspaceId: string, jobId: str
     await assertWorkspaceConsolidationJobOwnership(workspaceId, jobId);
     return null;
   } catch (error) {
-    return error instanceof Error ? error.message : english ? "Consolidation job not found" : "整合 job 不存在";
+    return error instanceof Error ? error.message : english ? "Consolidation job not found" : "整合任务不存在";
   }
 }
 
@@ -1750,7 +1750,7 @@ export async function requestMeetingRuntimeHumanInputCheckpointAction(input: {
       ok: false,
       error:
         payload.error.issues[0]?.message ??
-        (english ? "Invalid human input checkpoint request input" : "human input 检查点 request 参数错误"),
+        (english ? "Invalid human input checkpoint request input" : "人工输入检查点请求参数错误"),
     };
   }
 
@@ -1805,7 +1805,7 @@ export async function requestMeetingRuntimeHumanInputCheckpointAction(input: {
           ? error.message
           : english
             ? "Failed to request human input checkpoint"
-            : "请求 human input 检查点失败",
+            : "请求人工输入检查点失败",
     };
   }
 }
@@ -2053,7 +2053,7 @@ export async function requestMeetingRuntimeTakeoverFollowThroughAction(input: {
       ok: false,
       error:
         payload.error.issues[0]?.message ??
-        (english ? "Invalid takeover follow-through request input" : "接管跟进闭环 request 参数错误"),
+        (english ? "Invalid takeover follow-through request input" : "接管跟进闭环请求参数错误"),
     };
   }
 
@@ -2102,7 +2102,7 @@ export async function requestMeetingRuntimeTakeoverFollowThroughAction(input: {
           ? error.message
           : english
             ? "Failed to request operator takeover follow-through"
-            : "请求 操作员接管 follow-through 失败",
+            : "请求操作员接管跟进闭环失败",
     };
   }
 }
@@ -2126,7 +2126,7 @@ export async function resolveMeetingRuntimeTakeoverFollowThroughAction(input: {
       ok: false,
       error:
         payload.error.issues[0]?.message ??
-        (english ? "Invalid takeover follow-through resolve input" : "接管跟进闭环 resolve 参数错误"),
+        (english ? "Invalid takeover follow-through resolve input" : "接管跟进闭环解决参数错误"),
     };
   }
 
@@ -2175,7 +2175,7 @@ export async function resolveMeetingRuntimeTakeoverFollowThroughAction(input: {
           ? error.message
           : english
             ? "Failed to resolve operator takeover follow-through"
-            : "解决 操作员接管 follow-through 失败",
+            : "解决操作员接管跟进闭环失败",
     };
   }
 }
@@ -2786,8 +2786,8 @@ export async function acknowledgeMeetingRuntimeHumanInputCheckpointAction(input:
       error:
         payload.error.issues[0]?.message ??
         (english
-          ? "Invalid human input checkpoint 已确认 input"
-          : "human input 检查点 已确认 参数错误"),
+          ? "Invalid human input checkpoint acknowledgement input"
+          : "人工输入检查点确认参数错误"),
     };
   }
 
@@ -2835,7 +2835,7 @@ export async function acknowledgeMeetingRuntimeHumanInputCheckpointAction(input:
           ? error.message
           : english
             ? "Failed to acknowledge human input checkpoint request"
-            : "确认 human input 检查点 request 失败",
+            : "确认人工输入检查点请求失败",
     };
   }
 }

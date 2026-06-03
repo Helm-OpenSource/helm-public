@@ -630,7 +630,7 @@ function buildSwarmOperatorControlActions(input: {
         }}
       >
         <Button size="sm" type="submit" variant="secondary">
-          {english ? "Kill (close request)" : "Kill（close request）"}
+          {english ? "Kill (close request)" : "终止（请求关闭）"}
         </Button>
       </form>,
     );

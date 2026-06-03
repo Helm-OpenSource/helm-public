@@ -781,7 +781,7 @@ export function MeetingV2RuntimeCard({
       if (!result.ok) {
         toast.error(
           result.error ??
-            (english ? "Human input checkpoint request failed" : "human input 检查点请求失败"),
+            (english ? "Human input checkpoint request failed" : "人工输入检查点请求失败"),
         );
         return;
       }
@@ -790,10 +790,10 @@ export function MeetingV2RuntimeCard({
         result.reused
           ? english
             ? "Human input checkpoint request already recorded"
-            : "human input 检查点 request 已存在"
+            : "人工输入检查点请求已存在"
           : english
             ? "Human input checkpoint request recorded"
-            : "human input 检查点 request 已记录",
+            : "人工输入检查点请求已记录",
       );
       setHumanInputRequestStateOverride("requested");
       setRequestPostureHumanInputStateOverride("requested");
@@ -922,7 +922,7 @@ export function MeetingV2RuntimeCard({
           result.error ??
             (english
               ? "Operator takeover follow-through request failed"
-              : "操作员接管 跟进闭环请求失败"),
+              : "操作员接管跟进闭环请求失败"),
         );
         return;
       }
@@ -931,10 +931,10 @@ export function MeetingV2RuntimeCard({
         result.reused
           ? english
             ? "Operator takeover follow-through already recorded"
-            : "操作员接管 跟进闭环已存在"
+            : "操作员接管跟进闭环已存在"
           : english
             ? "Operator takeover follow-through recorded"
-            : "操作员接管 跟进闭环已记录",
+            : "操作员接管跟进闭环已记录",
       );
       router.refresh();
     });
@@ -955,7 +955,7 @@ export function MeetingV2RuntimeCard({
           result.error ??
             (english
               ? "Operator takeover follow-through resolve failed"
-              : "操作员接管 跟进闭环解决失败"),
+              : "操作员接管跟进闭环解决失败"),
         );
         return;
       }
@@ -964,10 +964,10 @@ export function MeetingV2RuntimeCard({
         result.reused
           ? english
             ? "Operator takeover follow-through already resolved"
-            : "操作员接管 跟进闭环已解决"
+            : "操作员接管跟进闭环已解决"
           : english
             ? "Operator takeover follow-through resolved"
-            : "操作员接管 跟进闭环已解决",
+            : "操作员接管跟进闭环已解决",
       );
       router.refresh();
     });
@@ -1254,7 +1254,7 @@ export function MeetingV2RuntimeCard({
       if (!result.ok) {
         toast.error(
           result.error ??
-            (english ? "Human input checkpoint 已确认 failed" : "人工输入检查点确认失败"),
+            (english ? "Human input checkpoint acknowledgement failed" : "人工输入检查点确认失败"),
         );
         return;
       }
@@ -1262,11 +1262,11 @@ export function MeetingV2RuntimeCard({
       toast.success(
         result.reused
           ? english
-            ? "Human input checkpoint 已确认 already recorded"
-            : "human input 检查点 已确认 已存在"
+            ? "Human input checkpoint acknowledgement already recorded"
+            : "人工输入检查点确认已存在"
           : english
-            ? "Human input checkpoint 已确认 recorded"
-            : "human input 检查点 已确认 已记录",
+            ? "Human input checkpoint acknowledgement recorded"
+            : "人工输入检查点确认已记录",
       );
       setHumanInputRequestStateOverride("acknowledged");
       setRequestPostureHumanInputStateOverride("acknowledged");
@@ -4922,7 +4922,7 @@ export function MeetingV2RuntimeCard({
           <div className="theme-surface-panel rounded-2xl px-4 py-5 text-sm leading-6 text-[color:var(--muted)]">
             {english
               ? "This meeting has not entered the Helm v2 runtime yet. Starting the runtime will create RuntimeEvent, WorkerRun, ArtifactBundle, MemoryItem, ApprovalRequest and ArtifactReview records."
-              : "当前会议还没有进入 Helm v2 运行时。启动后会创建 RuntimeEvent、WorkerRun、ArtifactBundle、MemoryItem、ApprovalRequest 和 Artifact复核 记录。"}
+              : "当前会议还没有进入 Helm v2 运行时。启动后会创建 RuntimeEvent、WorkerRun、ArtifactBundle、MemoryItem、ApprovalRequest 和产物复核记录。"}
           </div>
         )}
       </CardContent>
