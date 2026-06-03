@@ -7,9 +7,9 @@ public_safety: Public AI recommendation governance contract. Describes recommend
 archive_trigger:
   - A successor governance document is merged, validated, and linked from docs/STATUS.md.
 ---
-# Helm AI Recommendation Governance
+# Helm AI Recommendation Governance / Helm AI 推荐治理契约
 
-> 语言：中文（权威版）。英文版：暂未发布。
+> 语言 / Language：中文（权威版） · English reference follows.
 
 Helm 把 AI 生成内容视为进入人工经营复核流程的建议输入。本文件说明
 public Core 如何让这些建议保持可追踪、可复核、可约束，并且只作为公开
@@ -129,3 +129,139 @@ AI 交付工程师把建议、gate 或 demo fixture 误认为已经完成的客�
 | 日期 | 变化 |
 |---|---|
 | 2026-06-03 | 建立 Helm public Core 的 AI 推荐治理契约。 |
+
+---
+
+## English Reference
+
+Helm treats AI-generated content as suggestion input into a human-held operating
+review process. This document explains how public Core keeps those suggestions
+traceable, reviewable, and bounded as a public governance contract.
+
+This document is not a release approval, commercial launch statement, production
+SLA, customer deployment proof, or owner Go/No-Go record.
+
+## Positioning And Boundary
+
+Helm is a public Core reference implementation for AI delivery engineers. It
+helps them organize business signals, system suggestions, review gates, and
+delivery packets into a forkable, inspectable, and explainable engineering
+structure.
+
+Helm is not:
+
+- a general AI runtime;
+- a task or process management suite;
+- a replacement for human approval;
+- a production identity, audit, or tenant administration platform;
+- a system that turns suggestions directly into customer-visible business
+  obligations.
+
+This document applies to public Core suggestion surfaces, review packets, sample
+packs, eval gates, and public-safe operating docs. Industry Packs, customer
+Overlays, private deployment evidence, and customer-site records should remain
+in the appropriate private repositories or private records.
+
+## AI Suggestion Principles
+
+AI output in Helm remains a suggestion until a human reviewer accepts, edits,
+rejects, or escalates it. Recommendation is not Commitment; explanation is not
+approval; a prepared action packet is not an executed business action.
+
+Every suggestion surface should preserve enough context for a reviewer to answer
+why the suggestion appeared:
+
+- source signals or fixture records;
+- available evidence references or `traceId`;
+- confidence, uncertainty, or known missing inputs;
+- the boundary that keeps the suggestion review-first.
+
+When evidence is incomplete, the correct state is an explicit gap, not a
+stronger conclusion. Public docs may describe the intended governance posture,
+but they do not replace code, tests, receipts, reviewer approval, or owner
+Go/No-Go.
+
+## Human-Held Review Loop
+
+Human review is a Helm design requirement, not a temporary implementation gap.
+High-risk or customer-visible outcomes must remain in review, draft, or
+escalation state until the responsible human actor approves the next step.
+
+The reviewer must retain:
+
+- the right to edit a suggestion before it becomes a customer-visible action;
+- the right to reject, hold, or downgrade the suggestion;
+- the responsibility to confirm prerequisites, dependencies, and risk notes;
+- the responsibility to record any owner-held Go/No-Go step.
+
+Helm public Core may prepare a review packet, draft, checklist, or evidence map.
+It must not represent those materials as completed approval, final contract,
+customer deployment receipt, credential-rotation receipt, or production release
+decision.
+
+## Auditability And Traceability
+
+Governance depends on evidence that can be reviewed later. Suggestion surfaces
+should prefer stable references such as `traceId`, source object id, evaluation
+fixture id, command receipt, PR link, issue link, and review record over
+prose-only claims.
+
+Auditability means a reviewer can answer:
+
+- which signal or record produced the suggestion;
+- which rule, gate, or evaluator constrained it;
+- who has reviewed it and who still needs to review it;
+- which evidence is missing;
+- what changed after review.
+
+This document does not claim complete trace coverage or complete historical
+replay. When a trace, receipt, or review record is missing, Helm should label it
+as a known gap and route it to the appropriate owner-held follow-up.
+
+## Governance Enforcement
+
+Public Core makes governance enforceable through repository gates, review
+discipline, and public/private separation.
+
+Minimum public Core enforcement includes, where applicable:
+
+- run `npm run check:boundaries` before feature submission;
+- run `npm run check:public-release` for public-safety scanning;
+- run `npm run check:public-docs` to keep public docs on an explicit allowlist;
+- add targeted tests or evals for changed suggestion behavior;
+- require PR review before merging a protected branch.
+
+Where the repository already provides the mechanism, policy boundaries should be
+encoded as closed sets, typed contracts, fixtures, guards, or evals. Prose can
+explain the boundary, but mergeable evidence should come from code, tests,
+guards, receipts, or review records.
+
+External tools, LLM providers, connectors, and AI operation surfaces are outside
+the public Core trust boundary by default unless the relevant code, permissions,
+and review contract are present in this repository. A successful command, a
+generated draft, or green automated checks do not by themselves establish
+release readiness.
+
+## Known Limits And Deliberately Not Done
+
+Helm public Core deliberately does not claim:
+
+- production-grade authentication or complete enterprise administration;
+- third-party plugin sandboxing;
+- complete immutable audit infrastructure;
+- customer deployment readiness;
+- production SLA;
+- Cloud or Enterprise readiness from public Core alone;
+- customer-visible sending, settlement, approval, or business obligation without
+  human review.
+
+Some of these capabilities may exist only as private receipts, commercial
+extensions, owner-held procedures, or future work. Public Core must keep those
+layers explicit so contributors and AI delivery engineers do not confuse a
+suggestion, gate, or demo fixture with a completed customer obligation.
+
+## Change Log
+
+| Date | Change |
+|---|---|
+| 2026-06-03 | Established the Helm public Core AI recommendation governance contract. |
