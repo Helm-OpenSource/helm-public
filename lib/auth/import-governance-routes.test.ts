@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -86,6 +88,10 @@ import { POST as runCrmImportRoute } from "@/app/api/imports/crm/run/route";
 import { POST as syncCrmImportRoute } from "@/app/api/imports/crm/sync/route";
 import { POST as warmupImportJobRoute } from "@/app/api/imports/jobs/[jobId]/warmup/route";
 import { POST as resolveImportConflictRoute } from "@/app/api/imports/conflicts/[id]/resolve/route";
+
+function readRouteSource(relativePath: string) {
+  return readFileSync(path.join(process.cwd(), relativePath), "utf8");
+}
 
 describe("import governance routes", () => {
   beforeEach(() => {
@@ -322,5 +328,20 @@ describe("import governance routes", () => {
       "match-1",
     );
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/imports/conflicts");
+  });
+
+  it("keeps CRM import API Chinese fallback copy localized", () => {
+    const combinedSource = [
+      "app/api/imports/crm/preview/route.ts",
+      "app/api/imports/crm/run/route.ts",
+      "app/api/imports/crm/sync/route.ts",
+    ]
+      .map(readRouteSource)
+      .join("\n");
+
+    expect(combinedSource).toContain("客户关系系统预览失败");
+    expect(combinedSource).toContain("客户关系系统导入失败");
+    expect(combinedSource).toContain("客户关系系统增量同步失败");
+    expect(combinedSource).not.toMatch(/CRM 预览失败|CRM 导入失败|CRM 增量同步失败/);
   });
 });
