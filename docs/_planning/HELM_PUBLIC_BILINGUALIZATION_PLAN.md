@@ -274,6 +274,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-04 | 继续收口 Alipay / WeChat Pay checkout 未配置 fallback 文案；本批只改中国区支付 checkout 配置错误文案，不改签名、notify、query、支付请求或窄支付边界；Further localized Alipay / WeChat Pay checkout-not-configured fallback copy; this batch changes China-payment checkout config-error copy only and leaves signing, notify, query, payment requests, and the narrow-payment boundary unchanged |
 | 2026-06-04 | 继续收口中国区支付 APP_URL 缺失 fallback 文案；本批只改 Alipay / WeChat Pay checkout URL 生成前的配置错误文案与 locale 透传，不改 URL path、支付参数或窄支付边界；Further localized China payment APP_URL missing fallback copy; this batch changes config-error copy and locale propagation before Alipay / WeChat Pay checkout URL generation only, leaving URL paths, payment parameters, and the narrow-payment boundary unchanged |
 | 2026-06-04 | 继续收口 Stripe checkout missing-redirect fallback 文案；本批只改 settings action 可见错误文案，不改 Stripe checkout 创建、审计顺序、支付通道解析或结算边界；Further localized Stripe checkout missing-redirect fallback copy; this batch changes settings-action-visible error copy only and leaves Stripe checkout creation, audit ordering, payment-rail resolution, and settlement boundaries unchanged |
 | 2026-06-04 | 继续收口 billing portal 的 customer-missing fallback 文案；本批只改 settings action 可见错误文案，不改 portal eligibility、Stripe portal 创建、支付通道解析或结算边界；Further localized billing-portal customer-missing fallback copy; this batch changes settings-action-visible error copy only and leaves portal eligibility, Stripe portal creation, payment-rail resolution, and settlement boundaries unchanged |

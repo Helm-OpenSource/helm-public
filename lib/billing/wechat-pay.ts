@@ -193,12 +193,18 @@ export function isWeChatPayLifecycleConfigured() {
   );
 }
 
+function getWeChatCheckoutNotConfiguredMessage(locale?: string | null) {
+  return locale === "en-US"
+    ? "WeChat Pay checkout is not configured yet"
+    : "微信支付购买入口还没有配置完成。";
+}
+
 export async function createWeChatPayCheckoutSession(
   input: ChinaPaymentCheckoutInput & { provider: PaymentProvider },
 ): Promise<ChinaPaymentCheckoutResult> {
   const config = getWeChatPayConfig();
   if (!config.appId || !config.merchantId) {
-    throw new Error("WeChat Pay checkout is not configured yet");
+    throw new Error(getWeChatCheckoutNotConfiguredMessage(input.locale));
   }
 
   const outTradeNo = buildChinaPaymentOrderId(PAYMENT_PROVIDER.WECHAT_PAY, input.workspaceId);
