@@ -99,8 +99,9 @@ This PR's source audit result:
    detail surfaces、billing / participant portal surface、trial CTA、Helm v2 action
    pack、opportunity judge、human action execution、worker registry、企业微信 / 飞书 /
    钉钉 OAuth 回调与只读连接器排错文案、demo 行业包、角色基础、Ask Helm
-   解释器、推荐展示、recommendation action、LLM 建议解释、BI 报表解释 / 复核
-   与 i18n 事件标签的中文操作字段已继续收口。
+   解释器、推荐展示、recommendation action、LLM 建议解释、BI 报表解释 / 复核、
+   i18n 事件标签、internal commercialization、GTM customer demand brief 与 settings
+   custom engagement / tenant resource readiness 文案的中文操作字段已继续收口。
    这些目标文件的本批次严格可见残留已清理；全工程广义 ASCII 中文分支扫描与严格可见
    文案扫描尚未重新校准，后续仍需继续检查 billing surface 与其他低频 detail surfaces。
    剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
@@ -132,8 +133,9 @@ This PR's source audit result:
    OAuth callback plus read-only connector troubleshooting copy, demo industry
    packs, role foundations, the Ask Helm interpreter, recommendation
    presentation, recommendation actions, LLM recommendation explanation, BI
-   report analysis / review, and i18n event labels have also been localized for
-   Chinese operation fields. This
+   report analysis / review, i18n event labels, internal commercialization, GTM
+   customer demand brief, and settings custom engagement / tenant resource
+   readiness copy have also been localized for Chinese operation fields. This
    batch clears the target-file strict visible-copy leftovers; the
    whole-project broad ASCII zh-branch scan and strict visible-copy scan have
    not been recalibrated yet, and billing plus other lower-frequency detail
@@ -236,6 +238,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-03 | 继续收口 internal commercialization、GTM customer demand brief 与 settings custom engagement / tenant resource readiness 文案中的中文混写；本批只改中文可见文案，不改内部 GTM 状态机、设置动作契约或资源 readiness 结构；Further localized Chinese visible mixed-language copy in internal commercialization, GTM customer demand brief, and settings custom engagement / tenant resource readiness surfaces; this batch changes visible copy only and leaves internal GTM state machines, settings action contracts, and resource readiness structures unchanged |
 | 2026-06-03 | 继续收口 recommendation action、LLM 建议解释、BI 报表解释 / 复核、i18n 事件标签与 demo 入门交付文案中的中文混写；本批只改中文可见文案与 LLM 输入摘要，不改事件 key、状态机或 JSON schema；Further localized Chinese visible mixed-language copy in recommendation actions, LLM recommendation explanation, BI report analysis / review, i18n event labels, and demo onboarding copy; this batch changes visible copy and LLM input summaries only and leaves event keys, state machines, and JSON schema unchanged |
 | 2026-06-03 | 继续收口 demo 行业包、角色基础、Ask Helm 解释器与推荐展示文案中的中文混写；本批只改中文用户可见文案，不改 demo 数据结构、状态机或推荐逻辑；Further localized Chinese visible mixed-language copy in demo industry packs, role foundations, the Ask Helm interpreter, and recommendation presentation; this batch changes visible copy only and leaves demo data structures, state machines, and recommendation logic unchanged |
 | 2026-06-03 | 继续收口企业微信、飞书、钉钉 OAuth 回调与只读连接器排错文案中的中文混写；本批只改中文用户可见状态 / 审计摘要，不改 OAuth、采集或连接器协议；Further localized Chinese visible OAuth callback and read-only connector troubleshooting copy for WeCom, Feishu, and DingTalk; this batch changes status / audit summaries only and leaves OAuth, ingestion, and connector protocols unchanged |

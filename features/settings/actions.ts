@@ -2147,7 +2147,7 @@ export async function createCustomEngagementAction(input: z.infer<typeof customE
   if (!parsed.success) {
     return {
       ok: false,
-      error: english ? "Please provide valid custom engagement details" : "请填写有效的 custom engagement 信息",
+      error: english ? "Please provide valid custom engagement details" : "请填写有效的定制服务信息",
     };
   }
 
@@ -2206,7 +2206,7 @@ export async function createCustomEngagementAction(input: z.infer<typeof customE
       targetId: engagement.id,
       summary: english
         ? `Created custom engagement: ${engagement.label}`
-        : `已创建 custom engagement：${engagement.label}`,
+        : `已创建定制服务：${engagement.label}`,
       payload: {
         engagementKey: engagement.engagementKey,
         engagementType: engagement.engagementType,
@@ -2240,7 +2240,7 @@ export async function createCustomEngagementAction(input: z.infer<typeof customE
           ? error.message
           : english
             ? "Failed to create the custom engagement"
-            : "创建 custom engagement 失败",
+            : "创建定制服务失败",
     };
   }
 }
@@ -2255,7 +2255,7 @@ export async function updateCustomEngagementStatusAction(
   const parsed = customEngagementStatusSchema.safeParse(input);
 
   if (!parsed.success) {
-    return { ok: false, error: english ? "Invalid engagement status update" : "custom engagement 状态参数错误" };
+    return { ok: false, error: english ? "Invalid engagement status update" : "定制服务状态参数错误" };
   }
 
   if (!canManageContributionRegistry(membership.role)) {
@@ -2282,7 +2282,7 @@ export async function updateCustomEngagementStatusAction(
   });
 
   if (!engagement) {
-    return { ok: false, error: english ? "Custom engagement not found" : "没有找到该 custom engagement" };
+    return { ok: false, error: english ? "Custom engagement not found" : "没有找到该定制服务" };
   }
 
   const updated = await db.customEngagement.update({
@@ -2300,7 +2300,7 @@ export async function updateCustomEngagementStatusAction(
     targetId: updated.id,
     summary: english
       ? `Updated custom engagement status: ${updated.label} -> ${updated.status.toLowerCase()}`
-      : `已更新 custom engagement 状态：${updated.label} -> ${updated.status}`,
+      : `已更新定制服务状态：${updated.label} -> ${updated.status}`,
     payload: {
       status: updated.status,
     },

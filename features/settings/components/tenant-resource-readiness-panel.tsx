@@ -438,7 +438,7 @@ function TenantResourceEvidenceDisclosure({
       <p className="mt-4 rounded-2xl border border-dashed border-[color:var(--border)] px-4 py-3 text-sm text-[color:var(--muted-foreground)]">
         {english
           ? "Evidence detail has not been generated for this resource yet."
-          : "这条资源还没有生成 evidence detail。"}
+          : "这条资源还没有生成证据详情。"}
       </p>
     );
   }
