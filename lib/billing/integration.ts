@@ -93,13 +93,23 @@ function getWorkspacePaymentRail(
   });
 }
 
-function assertRequestedRailAllowed(rail: PaymentRailResolution, requestedProvider: PaymentProvider | undefined) {
+function getRequestedRailUnavailableMessage(english: boolean) {
+  return english
+    ? "This organization cannot use the requested payment rail"
+    : "当前组织不能使用所请求的支付通道";
+}
+
+function assertRequestedRailAllowed(
+  rail: PaymentRailResolution,
+  requestedProvider: PaymentProvider | undefined,
+  english: boolean,
+) {
   if (!requestedProvider) {
     return;
   }
 
   if (!rail.availableProviders.includes(requestedProvider)) {
-    throw new Error("This organization cannot use the requested payment rail");
+    throw new Error(getRequestedRailUnavailableMessage(english));
   }
 }
 
@@ -451,7 +461,7 @@ export async function createWorkspaceCheckoutSession(input: {
   const rail = getWorkspacePaymentRail(workspace, input.paymentProvider);
   const english = isEnglishLocale(input.locale);
 
-  assertRequestedRailAllowed(rail, input.paymentProvider);
+  assertRequestedRailAllowed(rail, input.paymentProvider, english);
 
   if (
     !canStartCheckout({

@@ -54,6 +54,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized runtime signal collection cron API auth / method / job fallback copy; this batch changes API-caller-visible error copy only and leaves cron-token validation, jobKey parsing, and signal-collection dispatch unchanged.
 - Further localized extension API catch-all dispatcher not-found / method fallback copy; this batch changes API-caller-visible error copy only and leaves the route registry, handler delegation, HEAD parity, and Allow-header semantics unchanged.
 - Further localized runtime dispatch-notifications and DingTalk hourly-sync cron API auth / validation fallback copy; this batch changes API-caller-visible error copy only and leaves cron-token validation, DingTalk ingest, and signal-notification dispatch unchanged.
+- Further localized billing-checkout payment-rail unavailable fallback copy; this batch changes settings-action-visible error copy only and leaves payment-rail resolution, checkout creation, settlement, and the narrow-payment boundary unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.
