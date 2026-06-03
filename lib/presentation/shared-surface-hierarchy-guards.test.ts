@@ -1833,4 +1833,20 @@ describe("shared surface hierarchy guards", () => {
       /你的 Helm 组织|Helm 已经|开通你的 Helm 试点工作区|回到你的 Helm 工作区|申请 Helm Cloud 试用/,
     );
   });
+
+  it("keeps global metadata and database banner Chinese copy localized", () => {
+    const rootLayout = read("app/layout.tsx");
+    const databaseBanner = read("components/shared/database-connection-banner.tsx");
+
+    expect(rootLayout).toContain("面向企业AI交付工程师");
+    expect(rootLayout).toContain("可复刻");
+    expect(rootLayout).toContain("行业样板、连接器、评估门禁和商业智能制品");
+    expect(databaseBanner).toContain("先连上公司VPN");
+    expect(databaseBanner).toContain("VPN连接");
+    expect(databaseBanner).toContain("请先连接公司VPN");
+
+    expect(`${rootLayout}\n${databaseBanner}`).not.toMatch(
+      /企业 AI|可 fork|vertical 样板|BI artefacts|先连上 VPN|VPN 连接|公司 VPN/,
+    );
+  });
 });

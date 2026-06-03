@@ -125,6 +125,16 @@ return-workspace, and Helm Cloud trial-entry copy plus source guards only,
 without changing authentication, SSO, invite prefill, trial application, or
 login redirect flows.
 
+本轮继续收口全局 metadata 与数据库连接提示中文混写；只调整默认页面元信息、公开工程能力摘要
+和数据库断连 / 公司VPN提示文案及源码守卫，不改变 root layout 结构、离线模式、重试按钮
+或数据库连接逻辑。
+
+This round further localizes mixed Chinese copy in global metadata and
+database-connection guidance. It changes default page metadata, public
+engineering-capability summary, and database-disconnected / corporate-VPN
+guidance copy plus source guards only, without changing root layout structure,
+offline mode, retry buttons, or database connection logic.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |

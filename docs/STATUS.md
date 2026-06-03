@@ -60,6 +60,17 @@ return-workspace, and Helm Cloud trial-entry copy plus source guards only; it
 does not change authentication, SSO, invite prefill, trial application, or
 login redirect flows, and does not claim full-repo bilingualization completion.
 
+全局 metadata 与数据库连接提示中文混写也已继续清理；本批只改默认页面元信息、公开工程能力摘要
+和数据库断连 / 公司VPN提示文案及源码守卫，不改变 root layout 结构、离线模式、重试按钮或
+数据库连接逻辑，也不声明全仓双语化完成。
+
+Mixed Chinese copy in global metadata and database-connection guidance has also
+been further localized. This batch changes default page metadata, public
+engineering-capability summary, and database-disconnected / corporate-VPN
+guidance copy plus source guards only; it does not change root layout
+structure, offline mode, retry buttons, or database connection logic, and does
+not claim full-repo bilingualization completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。
