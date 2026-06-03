@@ -507,7 +507,7 @@ function buildBoundaryLineForSendability(
   if (mode === "discussion_only") {
     return english
       ? "Discussion-only means the page can support discussion, but not promise, reinforcement or implied commitment."
-      : "仅讨论 表示当前页面只适合讨论，不适合承诺、强化预期或暗示承诺。";
+      : "仅讨论表示当前页面只适合讨论，不适合承诺、强化预期或暗示承诺。";
   }
   if (mode === "review_before_send") {
     return english

@@ -98,7 +98,7 @@ export function CommercialNarrativeStrengtheningDetailView({
         title={
           english
             ? `${detail.title} commercial strengthening detail`
-            : text(`${detail.title} commercial 加固详情页`)
+            : text(`${detail.title} 商业叙事加固详情页`)
         }
         description={
           english

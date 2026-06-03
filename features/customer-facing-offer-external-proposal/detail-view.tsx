@@ -67,7 +67,7 @@ export function CustomerFacingOfferExternalProposalDetailView(
     mode === "customer-offer"
       ? english
         ? `${detail.title} customer-facing offer detail`
-        : `${detail.title} 客户可见提案 详情页`
+        : `${detail.title} 客户可见提案详情页`
       : english
         ? `${detail.title} external proposal detail`
         : `${detail.title} 外部提案详情页`;
@@ -619,11 +619,11 @@ function buildUnifiedNavigation({
               handoffDependency: protocol.pageBoundarySummary[2] ?? null,
               handoffRisk: english
                 ? "If the narrative outruns boundary or review gates, it can still be misread as commitment."
-                : "如果叙事跑在边界或复核闸口 前面，仍可能被误读成承诺。",
+                : "如果叙事跑在边界或复核闸口前面，仍可能被误读成承诺。",
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction: english
                 ? "Open external narrative detail"
-                : "打开 对外叙事详情面",
+                : "打开对外叙事详情面",
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode:

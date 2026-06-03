@@ -16,6 +16,17 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：customer-facing offer 与 commercial narrative detail surface
+的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
+不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese boundary copy in
+customer-facing offer and commercial narrative detail surfaces has been further
+localized. This batch changes customer-facing offer, external-narrative
+handoff, and commercial-strengthening labels only; it does not change
+sendability, external send, review, or non-commitment boundaries, and does not
+claim full-repo bilingualization completion.
+
 | 类别 / Category | 状态 / Status | 证据 / Evidence |
 |---|---|---|
 | Apache-2.0 Core 仓库 / Apache-2.0 Core repository | 已为 public Core 开发成立；Established for public Core development | `LICENSE`, `NOTICE`, `package.json`, `README.md` |

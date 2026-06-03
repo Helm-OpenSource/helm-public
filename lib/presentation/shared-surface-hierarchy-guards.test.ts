@@ -1630,4 +1630,45 @@ describe("shared surface hierarchy guards", () => {
     expect(alertDisplayCopy).toContain('[/meeting_followup/g, "会后跟进"]');
     expect(seededBusinessCopy).toContain('[/\\bchampion\\b/gi, "支持人"]');
   });
+
+  it("keeps customer offer and commercial narrative Chinese boundary copy free of mixed spacing", () => {
+    const customerOfferModel = read(
+      "features/customer-facing-offer-external-proposal/detail-model.ts",
+    );
+    const customerOfferView = read(
+      "features/customer-facing-offer-external-proposal/detail-view.tsx",
+    );
+    const commercialModel = read(
+      "features/commercial-narrative-strengthening/detail-model.ts",
+    );
+    const commercialView = read(
+      "features/commercial-narrative-strengthening/detail-view.tsx",
+    );
+    const combined = [
+      customerOfferModel,
+      customerOfferView,
+      commercialModel,
+      commercialView,
+    ].join("\n");
+
+    expect(customerOfferModel).toContain(
+      "仅讨论表示当前页面只适合讨论，不适合承诺、强化预期或暗示承诺。",
+    );
+    expect(customerOfferView).toContain("客户可见提案详情页");
+    expect(customerOfferView).toContain("复核闸口前面");
+    expect(customerOfferView).toContain("打开对外叙事详情面");
+    expect(commercialModel).toContain("信任敏感措辞");
+    expect(commercialModel).toContain(
+      "内部异议、依赖修复和未解决的信任备注仍然只适合仅内部。",
+    );
+    expect(commercialModel).toContain("受复核约束");
+    expect(commercialModel).toContain("边界优先复核");
+    expect(commercialModel).toContain("轻量客户可见措辞");
+    expect(commercialModel).toContain("仅讨论措辞");
+    expect(commercialView).toContain("商业叙事加固详情页");
+
+    expect(combined).not.toMatch(
+      /仅讨论 表示|客户可见提案 详情页|复核闸口 前面|打开 对外叙事详情面|信任敏感 措辞|internal 异议|复核-bound|边界-led|客户可见-light|仅讨论 措辞|commercial 加固详情页/,
+    );
+  });
 });

@@ -89,7 +89,7 @@ export function buildCommercialNarrativeStrengtheningPageContract({
         : "销售执行会持续把仅建议、试点加固和客户可见的叙事层对齐到同一条商业推进线上。",
       english
         ? "Founder / delivery review keeps sendability, promise pressure and trust-sensitive wording from being overstated too early."
-        : "创始人 / 交付复核会持续防止发送评估、承诺压力和信任敏感 措辞被过早说实。",
+        : "创始人 / 交付复核会持续防止发送评估、承诺压力和信任敏感措辞被过早说实。",
     ],
     strengtheningNextAction: buildNextActions({
       id: detail.id,
@@ -114,7 +114,7 @@ export function buildCommercialNarrativeStrengtheningPageContract({
       : "只有仍然保持范围、时点和结果措辞可回退的加固，才允许继续变成客户可见。",
     strengtheningInternalOnlyCue: english
       ? "Internal objections, dependency repair and unresolved trust notes remain internal-only."
-      : "internal 异议、依赖修复和未解决的信任备注仍然只适合仅内部。",
+      : "内部异议、依赖修复和未解决的信任备注仍然只适合仅内部。",
     strengtheningFallbackCue: english
       ? "When strengthening pressure runs ahead of evidence or boundary clarity, Helm falls back to non-commitment or boundary-only wording first."
       : "一旦加固压力跑在证据或边界清晰度前面，Helm 会先退回非承诺或仅边界措辞。",
@@ -131,7 +131,7 @@ export function buildCommercialNarrativeStrengtheningPageContract({
           : "当前确实存在强化商业叙事的空间，但前提是发送评估和非承诺必须持续显式可见。",
       english
         ? "The current page already separates what can get stronger from what must remain soft, review-bound or fallback-safe, so the remaining value is choosing the right layer rather than rediscovering context."
-        : "当前页已经把哪些可以更强、哪些必须继续保持柔性、复核-bound 或兜底安全分开了，所以现在真正的价值在于选对层级，而不是重新拼上下文。",
+        : "当前页已经把哪些可以更强、哪些必须继续保持柔性、受复核约束或兜底安全分开了，所以现在真正的价值在于选对层级，而不是重新拼上下文。",
     ],
     pageEscalationHint:
       strengtheningLevel === "blocked-strengthening" ||
@@ -142,7 +142,7 @@ export function buildCommercialNarrativeStrengtheningPageContract({
           : "如果任何人想把承诺、时点或结果确定性说实，就先升级进审批，再允许下一步加固动作变成客户可见。"
         : english
           ? "If trust pressure or dependency pressure rises, step back from strengthening and return to boundary-led review first."
-          : "如果信任压力或依赖压力开始上升，就先从加固退回边界-led 复核。",
+          : "如果信任压力或依赖压力开始上升，就先从加固退回边界优先复核。",
     pageEvidenceLinks: [
       {
         label: english
@@ -339,7 +339,7 @@ function buildJudgement(
     case "customer-visible-light":
       return english
         ? "This commercial narrative can move into customer-visible-light wording, while still keeping non-commitment explicit."
-        : "当前商业叙事可以进入客户可见-light 措辞，但非承诺仍必须显式可见。";
+        : "当前商业叙事可以进入轻量客户可见措辞，但非承诺仍必须显式可见。";
     case "customer-visible-structured":
       return english
         ? "This commercial narrative can move into customer-visible-structured wording, while still keeping sendability and non-commitment visible."
@@ -381,7 +381,7 @@ function buildBoundaryLine(
     case "exploratory-strengthening":
       return english
         ? "Exploratory strengthening may warm up the story, but it still belongs to discussion-only wording."
-        : "探索性加固可以帮助升温叙事，但它仍属于仅讨论 措辞。";
+        : "探索性加固可以帮助升温叙事，但它仍属于仅讨论措辞。";
     case "review-before-send":
       return english
         ? "The narrative may already look stronger, but sendability is still gated by review-before-send."

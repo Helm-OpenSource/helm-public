@@ -38,6 +38,15 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 customer-facing offer 与 commercial narrative detail surface 的中文边界文案混写，
+只调整客户可见提案、对外叙事交接与商业叙事加固标签，不改变发送评估、外发、复核或非承诺边界。
+
+This round further localizes mixed Chinese boundary copy in customer-facing
+offer and commercial narrative detail surfaces. It changes customer-facing
+offer, external-narrative handoff, and commercial-strengthening labels only,
+without changing sendability, external send, review, or non-commitment
+boundaries.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |
