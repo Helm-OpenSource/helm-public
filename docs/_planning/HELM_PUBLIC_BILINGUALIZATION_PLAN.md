@@ -274,6 +274,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-04 | 继续补齐 meeting runtime closeout / close server action 的 pre-session validation fallback；本批只改 action caller 可见错误文案，不改鉴权顺序、运行时状态机或执行边界；Further filled meeting runtime closeout / close server-action pre-session validation fallbacks; this batch changes action-caller-visible error copy only and leaves authorization order, runtime state machines, and execution boundaries unchanged |
 | 2026-06-03 | 继续收口 customer-facing offer / external proposal 与 proposal package 边界文案中的中文混写；本批只改中文可见文案，不改发送评估、提案层级或非承诺边界；Further localized Chinese visible mixed-language copy in customer-facing offer / external proposal and proposal package boundary copy; this batch changes visible copy only and leaves sendability evaluation, proposal layering, and non-commitment boundaries unchanged |
 | 2026-06-03 | 继续收口 billing settlement 与 payout readiness 面板中的中文结算术语；本批只改中文可见文案，不改手工结算、站外付款、支付执行或 SLA 边界；Further localized Chinese settlement terminology in billing settlement and payout-readiness panels; this batch changes visible copy only and leaves manual settlement, off-platform payment, payout execution, and SLA boundaries unchanged |
 | 2026-06-03 | 继续收口 customer-facing offer 与 commercial narrative detail view 的中文边界标签；本批只改可见标签，不改客户可见 / 仅内部 / 非承诺边界协议；Further localized Chinese boundary labels in customer-facing offer and commercial narrative detail views; this batch changes visible labels only and leaves customer-visible, internal-only, and non-commitment boundary protocols unchanged |

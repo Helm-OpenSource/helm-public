@@ -45,6 +45,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized evolution skill / strategy suggestion API failure fallback copy; this batch changes API-caller-visible failure copy only and leaves workspace-policy permissions, ownership checks, capability promotion, formal review, and strategy-suggestion state machines unchanged.
 - Further localized blockers / commitments / memory write API success messages; this batch changes API-caller-visible success copy only and leaves permissions, ownership checks, status codes, schemas, write services, and state machines unchanged.
 - Further localized evolution skill / strategy suggestion API success messages; this batch changes API-caller-visible success copy only and leaves workspace-policy permissions, ownership checks, capability promotion, formal review, and strategy-suggestion state machines unchanged.
+- Further filled meeting runtime closeout / close server-action pre-session validation fallbacks; this batch changes action-caller-visible error copy only and leaves authorization order, runtime state machines, and execution boundaries unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

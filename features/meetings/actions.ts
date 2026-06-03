@@ -2337,7 +2337,10 @@ export async function confirmMeetingRuntimeCloseoutAction(input: {
 }) {
   const payload = confirmMeetingRuntimeCloseoutSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2393,7 +2396,10 @@ export async function requestMeetingRuntimeCloseoutRefreshAction(input: {
 }) {
   const payload = requestMeetingRuntimeCloseoutRefreshSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2451,7 +2457,10 @@ export async function recordMeetingRuntimeCloseoutResolutionAction(input: {
 }) {
   const payload = recordMeetingRuntimeCloseoutResolutionSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2508,7 +2517,10 @@ export async function requestMeetingRuntimeCloseoutResolutionFollowThroughAction
 }) {
   const payload = requestMeetingRuntimeCloseoutResolutionFollowThroughSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2564,7 +2576,10 @@ export async function resolveMeetingRuntimeCloseoutResolutionFollowThroughAction
 }) {
   const payload = resolveMeetingRuntimeCloseoutResolutionFollowThroughSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2622,7 +2637,10 @@ export async function requestMeetingRuntimeCloseAction(input: {
 }) {
   const payload = requestMeetingRuntimeCloseSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
