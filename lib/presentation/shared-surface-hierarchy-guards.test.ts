@@ -1782,4 +1782,21 @@ describe("shared surface hierarchy guards", () => {
       /decision criteria|champion \/ 负责人|主管 复核|主管 \/操作员|额外 主管|仅阴影 复核|历史 timeline|object 经营记忆|判断 消费进阴影摘要|下一步摘要 已生成|操作员\/ 主管|stage差异|套件 已就绪|新增 主管 升级/,
     );
   });
+
+  it("keeps human action execution runtime Chinese boundary copy free of mixed CRM spacing", () => {
+    const humanAction = read("lib/helm-v2/human-action-execution-runtime.ts");
+
+    expect(humanAction).toContain("正式CRM已更新");
+    expect(humanAction).toContain("Helm已记录人工动作");
+    expect(humanAction).toContain("已人工完成CRM/管线步骤");
+    expect(humanAction).toContain("未自动替你写正式CRM");
+    expect(humanAction).toContain("人工CRM/管线步骤");
+    expect(humanAction).toContain("不是Helm自动正式写回");
+    expect(humanAction).toContain("当前没有新增主管关注");
+    expect(humanAction).toContain("正式CRM写回权限");
+
+    expect(humanAction).not.toMatch(
+      /正式 CRM|Helm 已记录|CRM 步骤|CRM \/ 管线|人工 scheduling|新增 主管关注|Helm 自动正式写回/,
+    );
+  });
 });

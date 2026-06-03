@@ -16,6 +16,17 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：Helm v2 human action execution runtime 的中文人工执行文案混写已继续清理；
+本批只改人工动作状态、执行证明、排期、CRM/管线和正式CRM边界提示，不改变人工执行状态机、
+回执、正式写回、外发或审批边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese copy in the Helm v2 human action
+execution runtime has been further localized. This batch changes manual-action
+status, execution-proof, scheduling, CRM/pipeline, and formal-CRM boundary
+prompts only; it does not change the human-execution state machine, receipts,
+official writeback, external send, or approval boundaries, and does not claim
+full-repo bilingualization completion.
+
 最新双语化收口：customer-facing offer 与 commercial narrative detail surface
 的中文边界文案混写已继续清理；本批只改客户可见提案、对外叙事交接与商业叙事加固标签，
 不改变发送评估、外发、复核或非承诺边界，也不声明全仓双语化完成。

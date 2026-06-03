@@ -84,6 +84,16 @@ next-step summary, and internal-review prompt copy only, without changing stage
 inference, regex matching, artifact filenames, formal CRM boundaries, or the
 shadow-update protocol.
 
+本轮继续收口 Helm v2 human action execution runtime 的中文人工执行文案混写；只调整
+人工动作状态、执行证明、排期、CRM/管线和正式CRM边界提示，不改变人工执行状态机、回执、
+正式写回、外发或审批边界。
+
+This round further localizes mixed Chinese copy in the Helm v2 human action
+execution runtime. It changes manual-action status, execution-proof,
+scheduling, CRM/pipeline, and formal-CRM boundary prompts only, without
+changing the human-execution state machine, receipts, official writeback,
+external send, or approval boundaries.
+
 ## 3. 双语标准 / Bilingual Standard
 
 | 层级 / Tier | 标准 / Standard | 适用范围 / Applies To |
