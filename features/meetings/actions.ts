@@ -39,6 +39,7 @@ import {
   getRuntimeReviewDeniedMessage,
   getRuntimeManagementDeniedMessage,
 } from "@/lib/auth/capture-runtime-governance";
+import { resolveBilingualApiValidationIssueMessage } from "@/lib/i18n/api-message-locale";
 import {
   acknowledgeRuntimeHumanInputCheckpointRequest,
   acknowledgeRuntimeOperatorTakeoverRequest,
@@ -569,7 +570,7 @@ export async function reviewMeetingActionPackRuntimeAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -694,7 +695,7 @@ export async function queueMeetingRuntimeConsolidationAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -927,7 +928,7 @@ export async function updateMeetingRuntimeConsolidationAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -998,7 +999,7 @@ export async function runMeetingRuntimeContinuityRemediationAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -2881,7 +2882,7 @@ export async function reviewMeetingOpportunityJudgeRuntimeAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -2974,7 +2975,7 @@ export async function reviewMeetingDraftCommsRuntimeAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3118,7 +3119,7 @@ export async function acknowledgeMeetingHumanActionExecutionAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3350,7 +3351,7 @@ export async function reviewMeetingOfficialWriteIntentAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3417,7 +3418,7 @@ export async function attemptMeetingOfficialWriteIntentAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3495,7 +3496,7 @@ export async function acknowledgeMeetingOfficialWriteIntentAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3566,7 +3567,7 @@ export async function reviewMeetingLimitedAutoIntentAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3655,7 +3656,7 @@ export async function updateMeetingOfficialFollowThroughAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 

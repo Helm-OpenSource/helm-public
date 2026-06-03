@@ -46,6 +46,13 @@ export function getApiValidationMessage(
   return resolveApiWorkspaceMessage(locale, apiValidationMessages[key]);
 }
 
+export function getBilingualApiValidationMessage(
+  key: ApiValidationMessageKey = "incompleteParameters",
+) {
+  const message = apiValidationMessages[key];
+  return `${message.zh} / ${message.en}`;
+}
+
 export function resolveApiValidationIssueMessage(
   locale: string | null | undefined,
   issueMessage?: string,
@@ -60,4 +67,15 @@ export function resolveApiValidationIssueMessage(
   }
 
   return issueMessage ?? getApiValidationMessage(locale, fallbackKey);
+}
+
+export function resolveBilingualApiValidationIssueMessage(
+  issueMessage?: string,
+  fallbackKey: ApiValidationMessageKey = "incompleteParameters",
+) {
+  if (issueMessage && zhValidationMessageToKey.has(issueMessage)) {
+    return getBilingualApiValidationMessage(zhValidationMessageToKey.get(issueMessage));
+  }
+
+  return issueMessage ?? getBilingualApiValidationMessage(fallbackKey);
 }

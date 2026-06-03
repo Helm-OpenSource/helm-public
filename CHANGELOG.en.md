@@ -34,6 +34,7 @@ This project follows a release-note-first changelog until the first public tag.
 - Further localized contrast-test and dark-mode-test low-frequency public test routes; this batch changes visible explanatory copy and locale reading only, and leaves palettes, theme switching, and accessibility-test semantics unchanged.
 - Further localized weekly-report service summaries and audit copy; this batch uses the existing workspace-locale input for bilingual summary / audit copy and leaves report metrics, permissions, and data structures unchanged.
 - Further localized Helm v2/runtime API validation fallback copy; this batch resolves common parameter, audience, and session / meeting missing errors from workspace default locale and leaves route permissions, status codes, and payload structures unchanged.
+- Further localized meeting server-action pre-session validation fallback copy; this batch uses explicit zh/en fallback for actions that validate before loading workspace session and leaves authorization order, runtime state machines, and execution boundaries unchanged.
 - Added `npm run delivery:doctor -- --region cn` static preflight for common China-delivery misconfigurations around Qwen credentials, region / residency, npm mirrors, and the OpenAI-only ASR path.
 - Parameterized `npm run release:check` for later trial and stable release trains.
 - Added the public release train runbook and refreshed the maintainer status baseline.

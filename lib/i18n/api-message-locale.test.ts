@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  getBilingualApiValidationMessage,
   getApiValidationMessage,
   isEnglishWorkspaceDefaultLocale,
+  resolveBilingualApiValidationIssueMessage,
   resolveApiValidationIssueMessage,
   resolveApiWorkspaceMessage,
 } from "@/lib/i18n/api-message-locale";
@@ -55,6 +57,21 @@ describe("api message locale", () => {
     );
     expect(
       resolveApiValidationIssueMessage("en-US", "Invalid input: expected string"),
+    ).toBe("Invalid input: expected string");
+  });
+
+  it("keeps pre-session validation fallbacks explicitly bilingual", () => {
+    expect(getBilingualApiValidationMessage()).toBe(
+      "参数不完整 / Incomplete parameters",
+    );
+    expect(
+      resolveBilingualApiValidationIssueMessage("需要 sessionId 或 meetingId"),
+    ).toBe("需要 sessionId 或 meetingId / Provide sessionId or meetingId");
+    expect(resolveBilingualApiValidationIssueMessage(undefined)).toBe(
+      "参数不完整 / Incomplete parameters",
+    );
+    expect(
+      resolveBilingualApiValidationIssueMessage("Invalid input: expected string"),
     ).toBe("Invalid input: expected string");
   });
 });
