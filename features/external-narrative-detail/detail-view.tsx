@@ -254,15 +254,15 @@ export function ExternalNarrativeDetailView({
                   )),
                 },
                 {
-                  label: english ? "Founder cue" : text("founder cue"),
+                  label: english ? "Founder cue" : text("创始人提示"),
                   value: text(contract.externalNarrativeDetailFounderCue),
                 },
                 {
-                  label: english ? "Sales cue" : text("sales cue"),
+                  label: english ? "Sales cue" : text("销售提示"),
                   value: text(contract.externalNarrativeDetailSalesCue),
                 },
                 {
-                  label: english ? "Delivery cue" : text("delivery cue"),
+                  label: english ? "Delivery cue" : text("交付提示"),
                   value: text(contract.externalNarrativeDetailDeliveryCue),
                 },
                 {

@@ -449,6 +449,27 @@ describe("shared surface hierarchy guards", () => {
     expect(model).not.toContain("contact.relationshipStage ??");
   });
 
+  it("keeps Chinese commercial detail labels free of English fallback cue labels", () => {
+    const externalNarrativeView = read("features/external-narrative-detail/detail-view.tsx");
+    const reinforcementView = read("features/commitment-reinforcement-sendability/detail-view.tsx");
+
+    for (const fragment of [
+      'text("founder cue")',
+      'text("sales cue")',
+      'text("delivery cue")',
+      'text("customer-visible strengthening")',
+      'text("internal-only wording")',
+    ]) {
+      expect(`${externalNarrativeView}\n${reinforcementView}`).not.toContain(fragment);
+    }
+
+    expect(externalNarrativeView).toContain('text("创始人提示")');
+    expect(externalNarrativeView).toContain('text("销售提示")');
+    expect(externalNarrativeView).toContain('text("交付提示")');
+    expect(reinforcementView).toContain('text("客户可见加固")');
+    expect(reinforcementView).toContain('text("仅内部话术")');
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 
