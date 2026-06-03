@@ -230,7 +230,7 @@ export function buildInboxDetailPageModel({
           : "当前已经存在关联机会，所以收件箱不该再像中性的消息容器。"
         : english
           ? "The thread still lacks a full opportunity frame, so this page keeps the account and boundary context visible before any outward move."
-          : "当前线程还没有完整机会 框架，所以这页会先把账户和边界上下文挂在前台，再决定是否对外动作。",
+          : "当前线程还没有完整机会框架，所以这页会先把账户和边界上下文挂在前台，再决定是否对外动作。",
       english
         ? "The coordination handoff, boundary note and next likely handoff already sit here before the team re-opens raw messages."
         : "在团队重新翻原始消息前，协作分工、边界备注和下一步交接已经先挂在这里。",
@@ -343,7 +343,7 @@ export function buildInboxDetailPageModel({
     pageEvidenceLinks: buildInboxEvidenceLinks({ thread, english }),
     pageEscalationHint: english
       ? "If the thread starts touching scope, price, timing or outcome certainty, step back into package / proposal / review before any outward reply."
-      : "如果这条线程开始触碰范围、price、时点 或结果确定性，就先退回方案包 / 提案 / 复核，再决定是否对外回复。",
+      : "如果这条线程开始触碰范围、价格、时点或结果确定性，就先退回方案包 / 提案 / 复核，再决定是否对外回复。",
   });
   const protocol = toInboxDetailPageReportingProtocol(contract);
   const navigation = createUnifiedDetailNavigationModel({
@@ -393,7 +393,7 @@ export function buildInboxDetailPageModel({
               label: english ? "Contact detail" : "联系人详情",
               summary: english
                 ? "Move here when contact ownership still matters more than reply drafting."
-                : "如果 contact 负责人比回复草拟更重要，就切到联系人详情。",
+                : "如果联系人负责人比回复草拟更重要，就切到联系人详情。",
             }
           : null,
       detailNodeCurrentReason: protocol.pageJudgementReason,
@@ -543,18 +543,18 @@ export function buildFollowupDetailPageModel({
       detail.briefingSnapshot?.payload.summary ??
       (english
         ? "The current follow-up surface already separates follow-up drafting, review gates, package boundary and the next likely review request."
-        : "当前这张跟进面已经把跟进起草、复核闸口、方案包边界和下一条最可能的复核请求 分开了。"),
+        : "当前这张跟进面已经把跟进起草、复核闸口、方案包边界和下一条最可能的复核请求分开了。"),
     followupDetailActionSummary: [
       english
         ? "The current detail page already groups follow-up copy pressure, package boundary and the approval-sensitive next step."
-        : "当前详情页已经把跟进文案 压力、方案包边界和审批-敏感的下一步动作收在一起。",
+        : "当前详情页已经把跟进文案压力、方案包边界和审批敏感的下一步动作收在一起。",
       pendingApproval
         ? english
           ? "A pending approval is already attached to one action item, so follow-up can no longer pretend to be a free draft."
           : "当前已经有待审批动作挂在动作项上，所以跟进不能再假装只是自由草稿。"
         : english
           ? "There is still room to refine the next outbound move before it becomes a review request."
-          : "在它升级成复核请求 之前，当前仍有空间先把下一次对外动作收清。",
+          : "在它升级成复核请求之前，当前仍有空间先把下一次对外动作收清。",
       english
         ? "The coordination handoff, sendability, fallback and the next review handoff are already visible before anyone reopens raw copy."
         : "协作分工、发送评估、兜底和下一条复核交接已经先可见，不需要先回去翻原始文案。",
@@ -570,13 +570,13 @@ export function buildFollowupDetailPageModel({
     followupDetailBoundarySummary: [
       english
         ? "Follow-up detail can sharpen pacing, ask framing and handoff timing, but it still cannot quietly turn draft pressure into commitment."
-        : "跟进详情面 可以提高节奏、请求措辞和交接时点 的清晰度，但它仍然不能悄悄把 草稿压力写成承诺。",
+        : "跟进详情面可以提高节奏、请求措辞和交接时点的清晰度，但它仍然不能悄悄把草稿压力写成承诺。",
       english
         ? "Any outward wording that touches scope, timing, pricing or outcome certainty must keep boundary, prerequisite, dependency or review cues visible."
         : "任何触碰范围、时点、价格或结果确定性的对外措辞，都必须继续保留边界、前置、依赖或复核线索。",
       english
         ? "Internal-only preparation, fallback lines and approval-sensitive notes must never leak into customer-facing phrasing."
-        : "仅内部的准备态、兜底话术和审批-敏感备注，不能直接漏进客户可见措辞。",
+        : "仅内部的准备态、兜底话术和审批敏感备注，不能直接漏进客户可见措辞。",
     ],
     followupDetailEvidenceSummary: [
       english
@@ -589,7 +589,7 @@ export function buildFollowupDetailPageModel({
     followupDetailWorkerSummary: [
       english
         ? "Sales and conversation workers keep follow-up framing, review pressure and next-step routing aligned to the same judgement-first page."
-        : "销售与对话执行会持续把跟进措辞、复核压力和下一步 路由对齐到同一张判断优先页面上。",
+        : "销售与对话执行会持续把跟进措辞、复核压力和下一步路由对齐到同一张判断优先页面上。",
       english
         ? "Commercial review keeps boundary, non-commitment and approval-sensitive wording from disappearing behind a stronger draft."
         : "商业复核会持续防止边界、非承诺和审批敏感措辞被更强的草稿盖掉。",
@@ -683,7 +683,7 @@ export function buildFollowupDetailPageModel({
     ],
     pageEscalationHint: english
       ? "If the next follow-up starts hardening certainty, scope or timing, step into review request before the wording travels outward."
-      : "如果下一次跟进开始把确定性、范围或时点 说硬，就先升级进复核请求，再允许措辞往外走。",
+      : "如果下一次跟进开始把确定性、范围或时点说硬，就先升级进复核请求，再允许措辞往外走。",
   });
   const protocol = toFollowupDetailPageReportingProtocol(contract);
   const navigation = createUnifiedDetailNavigationModel({
@@ -759,7 +759,7 @@ export function buildFollowupDetailPageModel({
         : `/offers/${detail.id}`,
       evidenceHref: `/memory?objectType=OPPORTUNITY&objectId=${detail.id}`,
     }),
-    briefingLabel: english ? "Follow-up judgement" : "Follow-up 判断",
+    briefingLabel: english ? "Follow-up judgement" : "跟进判断",
     navigation,
     protocol,
     chips: [
@@ -791,7 +791,7 @@ export function buildFollowupDetailPageModel({
         value: detail.ownerName ?? (english ? "Unassigned" : "未分配"),
       },
       {
-        label: english ? "Next action" : "当前 下动作",
+        label: english ? "Next action" : "当前下一步动作",
         value: detail.nextAction ?? (english ? "Not set" : "未设置"),
       },
       {
@@ -968,7 +968,7 @@ export function buildReviewRequestDetailPageModel({
     pageWhyItMatters: [
       english
         ? "Review request should not read like a raw approval shell. It should first tell the team why this request exists and who should take over next."
-        : "复核请求 不应该先像原始审批壳层；它应该先告诉团队为什么这条请求存在，以及下一步该由谁接手。",
+        : "复核请求不应该先像原始审批壳层；它应该先告诉团队为什么这条请求存在，以及下一步该由谁接手。",
       task.isHighRisk
         ? english
           ? "The request is already high-risk, so weak review framing here will directly spill into trust, sendability and role handoff mistakes."
@@ -983,7 +983,7 @@ export function buildReviewRequestDetailPageModel({
     pageEvidenceLinks: buildReviewEvidenceLinks({ task, english }),
     pageEscalationHint: english
       ? "If anyone wants to skip review and speak as if approval already happened, step back into boundary-first handling immediately."
-      : "如果任何人想跳过复核，直接按“已批准”去说，就立刻退回边界优先 处理。",
+      : "如果任何人想跳过复核，直接按“已批准”去说，就立刻退回边界优先处理。",
   });
   const protocol = toReviewRequestDetailPageReportingProtocol(contract);
   const navigation = createUnifiedDetailNavigationModel({
@@ -1077,7 +1077,7 @@ export function buildReviewRequestDetailPageModel({
       : "沟通链 / 复核请求详情",
     title: english
       ? `${task.actionItem.title} review request detail`
-      : `${task.actionItem.title} 复核请求 详情页`,
+      : `${task.actionItem.title} 复核请求详情页`,
     description: english
       ? `${task.actionItem.opportunity?.title ?? "No linked opportunity"} · ${formatReviewScene(scene, true)}`
       : `${task.actionItem.opportunity?.title ?? "未关联机会"} · ${formatReviewScene(scene, false)}`,
@@ -1216,7 +1216,7 @@ function buildReviewRequestAgentSurface({
             : `上一条复核路径在 ${formatDateLabel(task.updatedAt)} 被撤回，当前需要一条更窄的下一步交接。`
           : english
             ? `This review request is still waiting for explicit human review as of ${formatDateLabel(task.updatedAt)}.`
-            : `截至 ${formatDateLabel(task.updatedAt)}，这条复核请求 仍在等待显式人工复核。`,
+            : `截至 ${formatDateLabel(task.updatedAt)}，这条复核请求仍在等待显式人工复核。`,
     task.resultPreview
       ? english
         ? "A bounded result preview is already prepared so the reviewer can judge the next move without reopening raw payloads."
@@ -1247,7 +1247,7 @@ function buildReviewRequestAgentSurface({
     task.isHighRisk
       ? english
         ? "High-risk wording still needs boundary-first handling here; this page cannot quietly act like approval equals commitment."
-        : "当前高风险措辞仍需要边界优先 处理；这页不能悄悄把审批讲成承诺。"
+        : "当前高风险措辞仍需要边界优先处理；这页不能悄悄把审批讲成承诺。"
       : null,
   ]);
 
@@ -1265,19 +1265,19 @@ function buildReviewRequestAgentSurface({
           : "在这条请求能够诚实回到跟进闭环之前，当前仍必须先完成修改。"
         : english
           ? `The next move now belongs to ${formatPrimaryOwner(primaryOwner, true)}, but this page still remains review-only and non-commitment.`
-          : `下一步现在属于 ${formatPrimaryOwner(primaryOwner, false)}，但这页仍然保持仅复核 和非承诺。`,
+          : `下一步现在属于 ${formatPrimaryOwner(primaryOwner, false)}，但这页仍然保持仅复核和非承诺。`,
     english
       ? `Current review posture stays at ${sendabilityMode}, so external send remains disabled on this page.`
       : `当前复核姿态停在 ${formatSendabilityMode(sendabilityMode, false)}，所以这页仍然禁止外部发送。`,
     english
       ? "Commitment remains disabled until the next owner reframes this outside raw review posture."
-      : "在下一位负责人把这条线从原始复核姿态 中重新表述出来之前，承诺仍然保持禁用。",
+      : "在下一位负责人把这条线从原始复核姿态中重新表述出来之前，承诺仍然保持禁用。",
   ]);
 
   const progressTraceItems = compactItems([
     english
       ? "A bounded review request surface is already prepared."
-      : "当前已经准备好一张有边界的复核请求 面。",
+      : "当前已经准备好一张有边界的复核请求面。",
     task.status === "EXECUTED"
       ? english
         ? `${reviewerName ?? "A reviewer"} reviewed this and released the next bounded handoff to ${formatPrimaryOwner(primaryOwner, true)}.`
@@ -1641,13 +1641,13 @@ function buildInboxHandoffs({
         handoffTarget: "customer-success" as const,
         handoffReason: english
           ? "Route back to customer success when the thread is only one part of the current success follow-through, issue or escalation picture."
-          : "当线程只是当前 success 跟进闭环、问题或升级画面中的一部分时，就回到客户成功。",
+          : "当线程只是当前客户成功跟进闭环、问题或升级画面中的一部分时，就回到客户成功。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
         handoffRisk: english
           ? "If the team keeps reading the thread as the whole story, it can lose the wider success boundary and overstate certainty."
-          : "如果团队把线程本身当成全部故事，就可能丢失更宽的 success 边界，并把确定性说过头。",
+          : "如果团队把线程本身当成全部故事，就可能丢失更宽的客户成功边界，并把确定性说过头。",
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open customer success handoff."
@@ -1697,7 +1697,7 @@ function buildInboxHandoffs({
           protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open package detail."
-          : "打开方案包 detail。",
+          : "打开方案包详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: "internal-only",
@@ -1719,7 +1719,7 @@ function buildInboxHandoffs({
           protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open external narrative detail."
-          : "打开 对外叙事详情面。",
+          : "打开对外叙事详情面。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:
@@ -1821,7 +1821,7 @@ function buildFollowupHandoffs({
       handoffTarget: "follow-up-detail" as const,
       handoffReason: english
         ? "The shared conversation scene is stable enough to decide the concrete follow-up move."
-        : "当前共享对话场景 已经足够稳定，可以进一步决定具体跟进动作。",
+        : "当前共享对话场景已经足够稳定，可以进一步决定具体跟进动作。",
       handoffBoundary: protocol.pageBoundarySummary[0],
       handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -1881,13 +1881,13 @@ function buildFollowupHandoffs({
       handoffTarget: "proposal" as const,
       handoffReason: english
         ? "Route back to proposal when the next follow-up still depends on clearer scope, terms or next-phase framing."
-        : "如果下一次跟进仍依赖更清楚的范围、terms 或下一阶段措辞，就回到提案。",
+        : "如果下一次跟进仍依赖更清楚的范围、条款或下一阶段措辞，就回到提案。",
       handoffBoundary: protocol.pageBoundarySummary[0],
       handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
       handoffRisk: english
         ? "If proposal ambiguity is answered inside follow-up copy, the team can over-promise without noticing."
-        : "如果提案歧义被塞进跟进文案 里回答，团队就可能在不知不觉中 过度承诺。",
+        : "如果提案歧义被塞进跟进文案里回答，团队就可能在不知不觉中过度承诺。",
       handoffDecisionRequest:
         protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
       handoffNextAction: english
@@ -1914,7 +1914,7 @@ function buildFollowupHandoffs({
         protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
       handoffNextAction: english
         ? "Open external narrative detail."
-        : "打开 对外叙事详情面。",
+        : "打开对外叙事详情面。",
       handoffWorkerSummary: protocol.pageWorkerSummary,
       handoffEvidenceSummary: protocol.pageEvidenceSummary,
       handoffVisibilityMode: visibilityMode,
@@ -2028,7 +2028,7 @@ function buildReviewRequestHandoffs({
       handoffTarget: "review-request-detail" as const,
       handoffReason: english
         ? "The next move is approval-sensitive enough that follow-up should pass into review request instead of traveling outward directly."
-        : "当前下一步已经足够审批-敏感，所以跟进应先交给复核请求，而不是直接对外。",
+        : "当前下一步已经足够审批敏感，所以跟进应先交给复核请求，而不是直接对外。",
       handoffBoundary: protocol.pageBoundarySummary[0],
       handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -2051,7 +2051,7 @@ function buildReviewRequestHandoffs({
         handoffTarget: "founder-conversation" as const,
         handoffReason: english
           ? "Founder should now take the next trust-sensitive framing."
-          : "下一步现在应由创始人接手信任敏感 措辞。",
+          : "下一步现在应由创始人接手信任敏感措辞。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -2061,7 +2061,7 @@ function buildReviewRequestHandoffs({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open founder conversation detail."
-          : "打开创始人对话 detail。",
+          : "打开创始人对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: "review-before-send",
@@ -2073,7 +2073,7 @@ function buildReviewRequestHandoffs({
         handoffTarget: "delivery-conversation" as const,
         handoffReason: english
           ? "Delivery should now take the next scope or rollout clarification."
-          : "下一步现在应由交付接手范围或 rollout 澄清。",
+          : "下一步现在应由交付接手范围或上线节奏澄清。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -2083,7 +2083,7 @@ function buildReviewRequestHandoffs({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open delivery conversation detail."
-          : "打开交付对话 detail。",
+          : "打开交付对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: "review-before-send",
@@ -2105,7 +2105,7 @@ function buildReviewRequestHandoffs({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open sales conversation detail."
-          : "打开销售对话 detail。",
+          : "打开销售对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: "review-before-send",
@@ -2118,7 +2118,7 @@ function buildReviewRequestHandoffs({
       handoffTarget: "customer-success" as const,
       handoffReason: english
         ? "This review request now belongs on a dedicated customer success handoff surface instead of hiding behind company-level proxy routing."
-        : "这条复核请求 现在应该进入 dedicated 客户成功交接 面，而不是继续躲在 company 级 proxy 路由 后面。",
+        : "这条复核请求现在应该进入专门的客户成功交接面，而不是继续躲在公司级代理路由后面。",
       handoffBoundary: protocol.pageBoundarySummary[0],
       handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -2147,7 +2147,7 @@ function buildReviewRequestHandoffs({
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
       handoffRisk: english
         ? "Company detail must stay account context. If it takes over the success judgement again, the real handoff owner becomes implicit."
-        : "company detail 必须继续只是账户上下文。如果它再次接管 success 判断，真正的交接负责人就会重新变成隐式。",
+        : "公司详情必须继续只是账户上下文。如果它再次接管客户成功判断，真正的交接负责人就会重新变成隐式。",
       handoffDecisionRequest:
         protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
       handoffNextAction: english
@@ -2166,7 +2166,7 @@ function buildReviewRequestHandoffs({
       handoffTarget: "proposal" as const,
       handoffReason: english
         ? "Return to proposal when review exposes unresolved scope, terms or next-phase framing."
-        : "如果复核暴露出未解决的范围、terms 或下一阶段措辞，就回到提案。",
+        : "如果复核暴露出未解决的范围、条款或下一阶段措辞，就回到提案。",
       handoffBoundary: protocol.pageBoundarySummary[0],
       handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -2195,12 +2195,12 @@ function buildReviewRequestHandoffs({
       handoffDependency: protocol.pageBoundarySummary[2] ?? null,
       handoffRisk: english
         ? "Narrative can still be overstated if the review request is mistaken for approval-complete status."
-        : "如果把复核请求 误当成“审批已完成”，叙事仍可能被说过头。",
+        : "如果把复核请求误当成“审批已完成”，叙事仍可能被说过头。",
       handoffDecisionRequest:
         protocol.pageDecisionRequest[1] ?? protocol.pageDecisionRequest[0],
       handoffNextAction: english
         ? "Open external narrative detail."
-        : "打开 对外叙事详情面。",
+        : "打开对外叙事详情面。",
       handoffWorkerSummary: protocol.pageWorkerSummary,
       handoffEvidenceSummary: protocol.pageEvidenceSummary,
       handoffVisibilityMode: "review-before-send",

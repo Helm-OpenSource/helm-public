@@ -812,6 +812,78 @@ describe("shared surface hierarchy guards", () => {
     expect(externalNarrativeDetailView).toContain("打开叙事兜底详情");
   });
 
+  it("keeps inbox follow-up review request copy free of recently fixed mixed fragments", () => {
+    const detailModel = read(
+      "features/inbox-followup-review-request/detail-model.ts",
+    );
+
+    for (const fragment of [
+      "完整机会 框架",
+      "范围、price",
+      "时点 或结果",
+      "contact 负责人",
+      "复核请求 分开了",
+      "跟进文案 压力",
+      "审批-敏感",
+      "复核请求 之前",
+      "跟进详情面 可以",
+      "交接时点 的清晰度",
+      "把 草稿压力",
+      "下一步 路由",
+      "Follow-up 判断",
+      "当前 下动作",
+      "复核请求 不应该",
+      "边界优先 处理",
+      "复核请求 仍",
+      "仅复核 和非承诺",
+      "原始复核姿态 中",
+      "复核请求 面",
+      "success 跟进闭环",
+      "success 边界",
+      "打开方案包 detail",
+      "打开 对外叙事详情面",
+      "共享对话场景 已经",
+      "范围、terms",
+      "文案 里回答",
+      "信任敏感 措辞",
+      "打开创始人对话 detail",
+      "rollout 澄清",
+      "打开交付对话 detail",
+      "打开销售对话 detail",
+      "dedicated 客户成功交接",
+      "company 级 proxy",
+      "company detail 必须",
+      "success 判断",
+      "复核请求 误当成",
+      "更宽的 客户成功边界",
+      "不知不觉中 过度承诺",
+      "范围或 上线节奏澄清",
+      "进入 专门的客户成功交接面",
+      "躲在 公司级代理路由后面",
+      "接管 客户成功判断",
+    ]) {
+      expect(detailModel).not.toContain(fragment);
+    }
+
+    expect(detailModel).toContain("完整机会框架");
+    expect(detailModel).toContain("范围、价格、时点或结果确定性");
+    expect(detailModel).toContain("联系人负责人");
+    expect(detailModel).toContain("跟进文案压力");
+    expect(detailModel).toContain("跟进详情面可以提高节奏");
+    expect(detailModel).toContain("跟进判断");
+    expect(detailModel).toContain("当前下一步动作");
+    expect(detailModel).toContain("复核请求不应该");
+    expect(detailModel).toContain("仅复核和非承诺");
+    expect(detailModel).toContain("客户成功跟进闭环");
+    expect(detailModel).toContain("打开方案包详情");
+    expect(detailModel).toContain("打开对外叙事详情面");
+    expect(detailModel).toContain("专门的客户成功交接面");
+    expect(detailModel).toContain("公司详情必须继续只是账户上下文");
+    expect(detailModel).toContain("更宽的客户成功边界");
+    expect(detailModel).toContain("不知不觉中过度承诺");
+    expect(detailModel).toContain("范围或上线节奏澄清");
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 
