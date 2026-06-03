@@ -4598,7 +4598,7 @@ export function SettingsClient({
                       variant="secondary"
                       onClick={() =>
                         runConnectorAction(
-                          () => connectAliyunFounderDefaultAction(),
+                          () => connectAliyunFounderDefaultAction({ locale }),
                           english
                             ? "Founder default account applied"
                             : "已应用创始人默认账号",
