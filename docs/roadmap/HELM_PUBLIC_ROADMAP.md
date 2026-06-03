@@ -11,22 +11,20 @@ public_safety: Public Core roadmap. This is gate-relative planning, not a releas
 
 ## 中文主文本 / Chinese Main Text
 
-本文描述 Helm public Core 面向 delivery engineers 的 gate-relative roadmap。它不是
-commercial release approval、production SLA、customer deployment commitment 或
-repository visibility approval。
+本文描述 Helm 公开 Core 面向 AI 交付工程师的相对门禁路线图。它不是
+商业发布批准、生产服务等级承诺、客户部署承诺或仓库可见性批准。
 
-Helm public Core 的北极星是：帮助 AI 交付工程师把客户业务实施里的 judgement、
-evidence、review、boundary 和 delivery package work 转成可 fork 的工程结构。
+Helm 公开 Core 的北极星是：帮助 AI 交付工程师把客户业务实施里的判断、
+证据、复核、边界和交付包工作转成可复刻的工程结构。
 
-路线图原则：recommendation 不是 commitment；review packet 不是 approval、send、
-write-back、settlement 或 execution；public Core 必须保持 Apache-2.0、可独立构建、
-public-safe；Core 不能依赖 Pack 或 Overlay code；公开文案使用 evidence gates 与
-Now / Next / Later，不使用 launch-date promise。
+路线图原则：建议不是承诺；复核包不是批准、发送、写回、结算或执行；
+public Core 必须保持 Apache-2.0、可独立构建且公开安全；Core 不能依赖 Pack 或
+Overlay 代码；公开文案使用证据门禁与“现在 / 下一步 / 以后”，不使用发布日期承诺。
 
-Now 是 public Core baseline 与当前工作面；Next 是 gate-relative 的 public-Core 改进；
-Later 必须经过独立 gate、repo routing 和 owner approval。Cloud / Enterprise readiness、
-industry Pack hardening、customer Overlay delivery、control-plane metadata 和额外
-connector readiness 都不能被 public Core roadmap 自动承诺。
+“现在”是 public Core 基线与当前工作面；“下一步”是相对门禁推进的 public-Core 改进；
+“以后”必须经过独立门禁、仓库路由和负责人批准。Helm Cloud / Helm Enterprise 已就绪、
+行业 Pack 加固、客户 Overlay 交付、control-plane 元数据和额外连接器就绪，
+都不能被 public Core 路线图自动承诺。
 
 ## English Reference
 

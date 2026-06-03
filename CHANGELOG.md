@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 public roadmap 的中文路线图边界术语混写；本批只改相对门禁路线图、AI 交付工程师、判断 / 证据 / 复核 / 边界 / 交付包工作、商业发布批准、生产服务等级承诺、客户部署承诺、仓库可见性批准、建议 / 承诺、复核包、证据门禁、发布日期承诺、仓库路由和负责人批准文案及源码守卫，不改 roadmap 分期、Pack / Overlay / control-plane 路由或 Cloud / Enterprise 非承诺边界。
 - 继续收口 public release train runbook 的中文发布治理术语混写；本批只改发布批准、商业发布声明、生产服务等级承诺、负责人闸门、稳定语义化版本线、私有回执、发布命令和公开安全门禁文案及源码守卫，不改 release gate、GitHub Release、版本策略、人工回执变量或非 SLA 边界。
 - 继续收口 integration template 的中文连接器术语混写；本批只改连接器 / 适配器、自动 / 复核 / 永远手动、预演、只读、提示条、追踪、OAuth 范围、退出与数据保留说明及源码守卫，不改连接器安全清单、测试要求、`authMode=MOCK` 默认或可接受 PR 边界。
 - 继续收口 trial response / on-call 文档里的中文运营术语混写；本批只改首次响应人、值守维护者、普通试用反馈、跨工作区、数据保留 / 删除、审计链、发布硬门禁、集成请求和尽力响应文案及源码守卫，不改响应目标、P0/P1 升级规则、`release:check` 变量或非 SLA 边界。

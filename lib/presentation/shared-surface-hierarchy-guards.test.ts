@@ -2110,6 +2110,34 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps public roadmap Chinese body free of recently fixed mixed roadmap-boundary fragments", () => {
+    const publicRoadmap = read("docs/roadmap/HELM_PUBLIC_ROADMAP.md");
+    const chineseBody = publicRoadmap.slice(
+      publicRoadmap.indexOf("本文描述 Helm 公开 Core"),
+      publicRoadmap.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("相对门禁路线图");
+    expect(chineseBody).toContain("AI 交付工程师");
+    expect(chineseBody).toContain("判断");
+    expect(chineseBody).toContain("证据、复核、边界和交付包工作");
+    expect(chineseBody).toContain("商业发布批准");
+    expect(chineseBody).toContain("生产服务等级承诺");
+    expect(chineseBody).toContain("客户部署承诺");
+    expect(chineseBody).toContain("仓库可见性批准");
+    expect(chineseBody).toContain("可复刻的工程结构");
+    expect(chineseBody).toContain("建议不是承诺");
+    expect(chineseBody).toContain("复核包不是批准、发送、写回、结算或执行");
+    expect(chineseBody).toContain("证据门禁");
+    expect(chineseBody).toContain("发布日期承诺");
+    expect(chineseBody).toContain("独立门禁、仓库路由和负责人批准");
+    expect(chineseBody).toContain("额外连接器就绪");
+
+    expect(chineseBody).not.toMatch(
+      /commercial release approval|production SLA|customer deployment commitment|repository visibility approval|delivery engineers|gate-relative|gate-relative roadmap|judgement|evidence、review|boundary 和 delivery package work|可 fork|recommendation 不是 commitment|review packet|不是 approval|send、|write-back|settlement 或 execution|public-safe|evidence gates|launch-date promise|Now 是|Next 是|Later 必须|独立 gate|repo routing|owner approval|Enterprise readiness|industry Pack hardening|customer Overlay delivery|connector readiness/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");
