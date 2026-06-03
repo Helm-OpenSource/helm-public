@@ -391,7 +391,7 @@ npm run release:check
 | **💬 [GitHub Discussions](https://github.com/Helm-OpenSource/helm-public/discussions)** | 社区问答、vertical 共建、卡点求助 |
 | **📮 微信 `ffjw0821`** | 联系我们、合作沟通、获取当期社群邀请二维码（二维码按周期更新） |
 | **🛠 [GitHub Issues](https://github.com/Helm-OpenSource/helm-public/issues)** | 提出问题 / 反馈 bug / 提交改进建议 |
-| **📣 社交媒体 / 公众号** | 待补充（当前不作为发布承诺入口） |
+| **📣 微信公众号** | `Helm开源经营系统` · 微信号 `HelmCoreCN`（信息发布入口，非默认支持工单入口） |
 | **🎯 [Certified Delivery Partner](docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md)** | 交付商认证、品牌背书、案例共建 |
 | **☁️ Helm Cloud（托管版）** | 可选，不替代开源；适合不想自部署的交付商 / 客户 |
 
