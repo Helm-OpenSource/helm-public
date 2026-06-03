@@ -59,6 +59,36 @@ import {
 } from "@/lib/auth/first-login-identity-completion";
 
 const codeSchema = z.string().trim().regex(/^\d{6}$/);
+const authValidationMessages = {
+  passwordConfirmationIncomplete: {
+    zh: "请完整填写密码和确认密码",
+    en: "Password confirmation is incomplete",
+  },
+  passwordsMustMatch: {
+    zh: "两次输入的密码必须一致",
+    en: "Passwords must match",
+  },
+} as const;
+
+type AuthValidationMessageKey = keyof typeof authValidationMessages;
+
+function getAuthValidationMessage(locale: UiLocale, key: AuthValidationMessageKey) {
+  const message = authValidationMessages[key];
+  return locale === "en-US" ? message.en : message.zh;
+}
+
+function resolveAuthValidationIssueMessage(
+  locale: UiLocale,
+  issueMessage?: string,
+  fallback?: string,
+) {
+  if (issueMessage && issueMessage in authValidationMessages) {
+    return getAuthValidationMessage(locale, issueMessage as AuthValidationMessageKey);
+  }
+
+  return issueMessage ?? fallback;
+}
+
 const passwordSchema = z
   .string()
   .min(8)
@@ -84,7 +114,7 @@ const trialSignupSchema = z
     locale: z.enum(["zh-CN", "en-US"]).optional(),
   })
   .refine((value) => value.password === value.confirmPassword, {
-    message: "Passwords must match",
+    message: "passwordsMustMatch",
     path: ["confirmPassword"],
   });
 
@@ -129,7 +159,7 @@ const firstLoginIdentityCompletionSchema = z
     if (!value.password || !value.confirmPassword) {
       ctx.addIssue({
         code: "custom",
-        message: "Password confirmation is incomplete",
+        message: "passwordConfirmationIncomplete",
         path: ["confirmPassword"],
       });
       return;
@@ -137,7 +167,7 @@ const firstLoginIdentityCompletionSchema = z
     if (value.password !== value.confirmPassword) {
       ctx.addIssue({
         code: "custom",
-        message: "Passwords must match",
+        message: "passwordsMustMatch",
         path: ["confirmPassword"],
       });
       return;
@@ -730,7 +760,7 @@ export async function startTrialSignupAction(input: z.infer<typeof trialSignupSc
     return {
       ok: false,
       error:
-        parsed.error.issues[0]?.message ??
+        resolveAuthValidationIssueMessage(locale, parsed.error.issues[0]?.message) ??
         (english
           ? "Please complete your name, work email, phone number, organization name, and password"
           : "请完整填写姓名、工作邮箱、手机号、组织名称和密码"),
@@ -1436,7 +1466,9 @@ export async function completeFirstLoginIdentityCompletionAction(
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? (english ? "Please complete required fields." : "请完成必填项。"),
+      error:
+        resolveAuthValidationIssueMessage(locale, parsed.error.issues[0]?.message) ??
+        (english ? "Please complete required fields." : "请完成必填项。"),
     };
   }
 
