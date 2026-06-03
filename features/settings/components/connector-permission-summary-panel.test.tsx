@@ -39,6 +39,7 @@ describe("ConnectorPermissionSummaryPanel", () => {
     expect(screen.getByText("连接器权限摘要")).toBeInTheDocument();
     expect(screen.getByText("只读治理")).toBeInTheDocument();
     expect(screen.getByText(/这里不是连接器控制面/)).toBeInTheDocument();
-    expect(screen.getByText(/客户可见发送、CRM 阶段写回/)).toBeInTheDocument();
+    expect(screen.getByText(/客户可见发送、客户关系系统阶段写回/)).toBeInTheDocument();
+    expect(screen.queryByText(/CRM 阶段写回/)).not.toBeInTheDocument();
   });
 });

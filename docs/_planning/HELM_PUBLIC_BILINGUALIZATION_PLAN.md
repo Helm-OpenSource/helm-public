@@ -246,6 +246,15 @@ entry. It changes customer-relationship-system write / writeback wording in the
 demo page and loading boundary notes plus source guards only, without changing
 demo routing, sessions, audit logging, or no-auto-send boundaries.
 
+本轮继续收口 settings connector 权限摘要里的中文 CRM 边界混写；只调整只读权限面板中的
+客户关系系统阶段写回文案及源码守卫，不改变连接器权限矩阵、控制面能力或写回授权。
+
+This round further localizes mixed Chinese CRM boundary copy in the settings
+connector permission summary. It changes customer-relationship-system
+stage-write wording in the read-only permission panel plus source guards only,
+without changing the connector permission matrix, control-plane capabilities, or
+writeback authorization.
+
 本轮继续收口 search / reports / analytics 中文混写；只调整 Ask Helm 边界说明、
 客户关系系统字段、正式必推事项、大模型上下文层、原始提示词 / 音频保留说明、周报建议
 和 AI工作姿态文案及源码守卫，不改变 Ask Helm 表单 action、审计候选、上下文包、报表生成
