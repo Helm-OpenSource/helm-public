@@ -2138,6 +2138,37 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps OPC weekly packet Chinese body free of recently fixed mixed public-operations fragments", () => {
+    const opcPacket = read("docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md");
+    const chineseBody = opcPacket.slice(
+      opcPacket.indexOf("本模板把 `helm-public`"),
+      opcPacket.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("负责人闸门");
+    expect(chineseBody).toContain("证据优先");
+    expect(chineseBody).toContain("受控执行闭环");
+    expect(chineseBody).toContain("发布批准");
+    expect(chineseBody).toContain("客户承诺");
+    expect(chineseBody).toContain("服务等级承诺");
+    expect(chineseBody).toContain("自动外联活动");
+    expect(chineseBody).toContain("认证批准");
+    expect(chineseBody).toContain("证据包");
+    expect(chineseBody).toContain("公开安全事实");
+    expect(chineseBody).toContain("命令回执");
+    expect(chineseBody).toContain("激活阻断项");
+    expect(chineseBody).toContain("贡献者信号");
+    expect(chineseBody).toContain("受保护分支");
+    expect(chineseBody).toContain("中国访问性回执");
+    expect(chineseBody).toContain("负责人批准的逐字文案");
+    expect(chineseBody).toContain("触达 / 联系或辅助信号");
+    expect(chineseBody).toContain("负责人批准的脱敏回执");
+
+    expect(chineseBody).not.toMatch(
+      /owner-gated|proof-first|controlled-execution loop|release approval|customer commitment|readiness statement|automatic outbound campaign|certification approval|private delivery runbook|owner gate|proof packet|controlled execution|证据和 queue|public-safe facts|command receipts|issue \/ PR state|activation blockers|contributor signals|direct push protected branch|verification|中国访问性 receipt|owner-approved exact copy|channel、timing|responsible person|no-go confirmation|community contact|reach \/ contact|assisted signal|public-safe evidence|owner-approved redacted receipt/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");

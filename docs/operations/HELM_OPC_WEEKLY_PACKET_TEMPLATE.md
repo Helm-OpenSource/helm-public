@@ -11,20 +11,19 @@ public_safety: Public OPC packet template. Use only public repository metadata, 
 
 ## 中文主文本 / Chinese Main Text
 
-本模板把 `helm-public` 的公开运营转成 owner-gated、proof-first、
-controlled-execution loop。它不是 release approval、customer commitment、Cloud /
-Enterprise readiness statement、SLA、automatic outbound campaign、certification
-approval 或 private delivery runbook。
+本模板把 `helm-public` 的公开运营转成负责人闸门、证据优先、
+受控执行闭环。它不是发布批准、客户承诺、Helm Cloud / Helm Enterprise 已就绪声明、
+服务等级承诺、自动外联活动、认证批准或私有交付 runbook。
 
-OPC 周报必须把 owner gate、proof packet 和 controlled execution 分开：Codex 可以准备
-证据和 queue，但不能替 owner 做外部承诺；proof packet 只能收集 public-safe facts、
-command receipts、issue / PR state、activation blockers 和 contributor signals；执行
-只能转成小 PR，并且不能 direct push protected branch，也不能绕过 verification。
+OPC 周报必须把负责人闸门、证据包和受控执行分开：Codex 可以准备
+证据和队列，但不能替负责人做外部承诺；证据包只能收集公开安全事实、
+命令回执、issue / PR 状态、激活阻断项和贡献者信号；执行
+只能转成小 PR，并且不能直接推送到受保护分支，也不能绕过验证。
 
-中国访问性 receipt 只有在 owner-approved exact copy、channel、timing、responsible
-person 和 no-go confirmation 等字段齐全时才可记录。WeChat、QR 和 community contact
-仍然只是 reach / contact 或 assisted signal，除非后续产生 GitHub public-safe evidence
-或 owner-approved redacted receipt。
+中国访问性回执只有在负责人批准的逐字文案、渠道、时间窗口、责任人
+和禁行确认等字段齐全时才可记录。WeChat、QR 和社区联系方式
+仍然只是触达 / 联系或辅助信号，除非后续产生 GitHub 公开安全证据
+或负责人批准的脱敏回执。
 
 ## English Reference
 
