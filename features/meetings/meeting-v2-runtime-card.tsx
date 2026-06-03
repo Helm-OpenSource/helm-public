@@ -1959,7 +1959,7 @@ export function MeetingV2RuntimeCard({
                           <p className="text-sm text-[color:var(--muted-foreground)]">
                             {english
                               ? "No coordination trace bridge is visible yet."
-                              : "当前还没有可见的协同轨迹 bridge。"}
+                              : "当前还没有可见的协同轨迹桥。"}
                           </p>
                         ) : null}
                       </div>
@@ -4776,7 +4776,7 @@ export function MeetingV2RuntimeCard({
                         ))}
                         {!runtime.v21.reflection.recentJobs.length ? (
                           <p className="text-sm text-[color:var(--muted-foreground)]">
-                            {english ? "No reflection job yet." : "当前还没有反思 job。"}
+                            {english ? "No reflection job yet." : "当前还没有反思任务。"}
                           </p>
                         ) : null}
                       </div>
@@ -4837,8 +4837,8 @@ export function MeetingV2RuntimeCard({
                         {!runtime.v21.reflection.recentCandidates.length ? (
                           <p className="text-sm text-[color:var(--muted-foreground)]">
                             {english
-	                              ? "No reflection carry-forward candidate yet."
-	                              : "当前还没有反思 延续 候选。"}
+                              ? "No reflection carry-forward candidate yet."
+                              : "当前还没有反思延续候选。"}
                           </p>
                         ) : null}
                       </div>
@@ -4908,7 +4908,7 @@ export function MeetingV2RuntimeCard({
                         ))}
                         {!runtime.v21.consolidation.recentJobs.length ? (
                           <p className="text-sm text-[color:var(--muted-foreground)]">
-                            {english ? "No consolidation job yet." : "当前还没有 整合 job。"}
+                            {english ? "No consolidation job yet." : "当前还没有整合任务。"}
                           </p>
                         ) : null}
                       </div>

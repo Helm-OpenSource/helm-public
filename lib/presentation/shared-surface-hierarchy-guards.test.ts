@@ -493,6 +493,14 @@ describe("shared surface hierarchy guards", () => {
       "context miss、验证 fail 和 policy block",
       "运行时 path",
       "当前没有 composition failure",
+      "pilot 连续性 失败类型",
+      "当前还没有 expanded cohort family",
+      "当前还没有可用的 SOP highlight",
+      "当前还没有可用的 SOP highlight，需要等待更多 pilot 失败类型",
+      "recovery state、remediation analytics",
+      "repeat-pattern evidence，以及 有边界的runbook 指引",
+      "execution权限",
+      "当前没有 连续性 队列",
     ]) {
       expect(runtimeOperatorPanel).not.toContain(fragment);
     }
@@ -504,6 +512,26 @@ describe("shared surface hierarchy guards", () => {
     expect(runtimeOperatorPanel).toContain("当前没有协同轨迹桥。");
     expect(runtimeOperatorPanel).toContain("当前没有反思任务。");
     expect(runtimeOperatorPanel).toContain("当前没有组合失败记录。");
+    expect(runtimeOperatorPanel).toContain("当前还没有扩展队列族。");
+    expect(runtimeOperatorPanel).toContain("当前没有连续性队列。");
+  });
+
+  it("keeps Chinese meeting runtime empty-state copy free of mixed English fragments", () => {
+    const meetingRuntimeCard = read("features/meetings/meeting-v2-runtime-card.tsx");
+
+    for (const fragment of [
+      "当前还没有可见的协同轨迹 bridge",
+      "当前还没有反思 job",
+      "当前还没有反思 延续 候选",
+      "当前还没有 整合 job",
+    ]) {
+      expect(meetingRuntimeCard).not.toContain(fragment);
+    }
+
+    expect(meetingRuntimeCard).toContain("当前还没有可见的协同轨迹桥。");
+    expect(meetingRuntimeCard).toContain("当前还没有反思任务。");
+    expect(meetingRuntimeCard).toContain("当前还没有反思延续候选。");
+    expect(meetingRuntimeCard).toContain("当前还没有整合任务。");
   });
 
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {

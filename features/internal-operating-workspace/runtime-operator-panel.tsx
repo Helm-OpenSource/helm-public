@@ -1198,7 +1198,7 @@ export function RuntimeOperatorPanel({
                     </div>
                   ))}
                   {!overview.continuityPilotReview.topFailureClasses.length ? (
-                    <p>{english ? "No pilot continuity failure class has been grouped yet." : "当前还没有被分组的 pilot 连续性 失败类型。"}</p>
+                    <p>{english ? "No pilot continuity failure class has been grouped yet." : "当前还没有被分组的试点连续性失败类型。"}</p>
                   ) : null}
                 </div>
               </CardContent>
@@ -1230,7 +1230,7 @@ export function RuntimeOperatorPanel({
                     </div>
                   ))}
                   {!overview.continuityPilotReview.cohortFamilies.length ? (
-                    <p>{english ? "No expanded cohort family is available yet." : "当前还没有 expanded cohort family。"}</p>
+                    <p>{english ? "No expanded cohort family is available yet." : "当前还没有扩展队列族。"}</p>
                   ) : null}
                 </div>
                 <div className="space-y-2 text-sm text-[color:var(--muted-foreground)]">
@@ -1765,7 +1765,7 @@ export function RuntimeOperatorPanel({
                 <CardDescription className="text-sm leading-7 text-[color:var(--muted-foreground)]">
                   {english
                     ? "SOP stays as bounded operator guidance: evidence-first, escalation-aware, and explicitly outside execution-authority expansion."
-                    : "SOP 保持为 有边界的操作员 指引：evidence-first、带升级规则，并且明确不扩 execution权限。"}
+                    : "SOP 保持为有边界的操作员指引：证据优先、带升级规则，并且明确不扩大执行权限。"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -1777,7 +1777,7 @@ export function RuntimeOperatorPanel({
                     <li key={`${item}-${index}`}>- {item}</li>
                   ))}
                   {!overview.continuityPilotReview.sopHighlights.length ? (
-                    <li>- {english ? "No SOP highlight is available until pilot failure classes accumulate." : "当前还没有可用的 SOP highlight，需要等待更多 pilot 失败类型。"}</li>
+                    <li>- {english ? "No SOP highlight is available until pilot failure classes accumulate." : "当前还没有可用的 SOP 要点，需要等待更多试点失败类型。"}</li>
                   ) : null}
                 </ul>
               </CardContent>
@@ -1790,9 +1790,9 @@ export function RuntimeOperatorPanel({
               description={
                 english
                   ? "Sessions should show posture, replay risk, recovery state, remediation analytics, repeat-pattern evidence, and bounded runbook guidance without widening execution authority."
-                  : "session 需要同时展示姿态、回放风险、recovery state、remediation analytics、repeat-pattern evidence，以及 有边界的runbook 指引，而不是放大 execution权限。"
+                  : "会话需要同时展示姿态、回放风险、恢复状态、补救分析、重复模式证据，以及有边界的运行手册指引，而不是放大执行权限。"
               }
-              emptyLabel={english ? "No continuity queue right now." : "当前没有 连续性 队列。"}
+              emptyLabel={english ? "No continuity queue right now." : "当前没有连续性队列。"}
               english={english}
               items={overview.continuityQueue.map((item) => {
                 const persistedLifecycleTraceReadout = buildPersistedLifecycleTraceReadout(

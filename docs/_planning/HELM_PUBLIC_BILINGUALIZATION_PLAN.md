@@ -278,6 +278,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-04 | 继续收口 runtime operator 与 meeting v2 runtime 的中文空状态和操作说明混写；本批只改可见文案与源码守卫，不改运行时队列、权限、状态机或控制动作；Further localized mixed Chinese empty-state and guidance copy in the runtime operator and meeting v2 runtime panels; this batch changes visible copy plus source guards only and leaves runtime queues, permissions, state machines, and control actions unchanged |
 | 2026-06-04 | 继续收口 runtime operator panel 的中文空状态、描述与计数标签；本批只改 `/operating` 可见文案与源码守卫，不改运行时队列、权限、状态机或控制动作；Further localized Chinese empty-state, description, and count labels in the runtime operator panel; this batch changes `/operating` visible copy plus a source guard only and leaves runtime queues, permissions, state machines, and control actions unchanged |
 | 2026-06-04 | 继续收口 external narrative 与 commitment reinforcement / sendability detail view 的中文 fallback 标签；本批只改可见标签与源码守卫，不改发送评估、加固、叙事或非承诺协议；Further localized Chinese fallback labels in external narrative and commitment reinforcement / sendability detail views; this batch changes visible labels plus a source guard only and leaves sendability evaluation, strengthening, narrative, and non-commitment protocols unchanged |
 | 2026-06-04 | 继续收口 CRM import 动态显示文案中的中文混写；本批只改中文显示清洗规则，不改连接器接入、导入预览、预热或冲突处理逻辑；Further localized mixed Chinese copy in CRM import dynamic display text; this batch changes Chinese display-cleanup rules only and leaves connector onboarding, import preview, warmup, and conflict handling unchanged |
