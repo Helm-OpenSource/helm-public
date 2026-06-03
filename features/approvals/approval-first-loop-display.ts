@@ -1,13 +1,46 @@
 import type {
+  WorkspaceFirstLoopItem,
   WorkspaceFirstLoopModel,
   WorkspaceFirstLoopPrimaryAction,
   WorkspaceFirstLoopReturnReadback,
   WorkspaceFirstLoopStage,
 } from "@/lib/operating-system/first-loop";
+import { formatSeededBusinessCopy } from "@/lib/presentation/seeded-business-copy";
+
+function sanitizeApprovalLoopText(text: string, english: boolean) {
+  const cleaned = text
+    .replace(
+      /review-before-commitment\s+gate/gi,
+      english ? "review boundary" : "复核边界",
+    )
+    .replace(
+      /review-before-commitment/gi,
+      english ? "review before commitment" : "先复核再承诺",
+    )
+    .replace(
+      /review-before-send/gi,
+      english ? "review before send" : "先复核再外发",
+    )
+    .replace(/first-loop\s+checkpoint/gi, english ? "review step" : "复核环节")
+    .replace(/first loop\s+checkpoint/gi, english ? "review step" : "复核环节")
+    .replace(/\bfirst-loop\b/gi, english ? "first review" : "首轮复核")
+    .replace(/\bfirst loop\b/gi, english ? "first review" : "首轮复核")
+    .replace(/review\s*gate/gi, english ? "review panel" : "复核入口")
+    .replace(/review\s*区块/gi, english ? "review block" : "复核区块")
+    .replace(/review\s*block/gi, english ? "review block" : "复核区块")
+    .replace(/\brecommendation\b/gi, english ? "recommendation" : "建议")
+    .replace(/\bcommitment\b/gi, english ? "commitment" : "承诺")
+    .replace(/\bworkspace\b/gi, english ? "workspace" : "工作区")
+    .replace(/\breview\b/gi, english ? "review" : "复核")
+    .replace(/\bdraft\b/gi, english ? "draft" : "草稿")
+    .trim();
+
+  return formatSeededBusinessCopy(cleaned, english);
+}
 
 function stripReviewPrefix(label: string, english: boolean) {
-  const normalized = label
-    .replace(/^先\s*review\s*/i, "")
+  const normalized = sanitizeApprovalLoopText(label, english)
+    .replace(/^先\s*复核\s*/i, "")
     .replace(/^review\s+/i, "")
     .replace(/^复核[:：]?\s*/i, "")
     .trim();
@@ -20,13 +53,7 @@ function stripReviewPrefix(label: string, english: boolean) {
     return normalized;
   }
 
-  return normalized
-    .replace(/review\s*区块/gi, "复核区块")
-    .replace(/review\s*block/gi, "复核区块")
-    .replace(/\breview\b/gi, "复核")
-    .replace(/\bworkspace\b/gi, "工作区")
-    .replace(/\bdraft\b/gi, "草稿")
-    .replace(/\s+复核区块/g, "复核区块");
+  return normalized.replace(/\s+复核区块/g, "复核区块");
 }
 
 function getApprovalStageLabel(
@@ -77,6 +104,29 @@ function buildApprovalPrimaryAction(
   };
 }
 
+function buildApprovalLoopItem(
+  item: WorkspaceFirstLoopItem,
+  english: boolean,
+): WorkspaceFirstLoopItem {
+  if (item.id === "review") {
+    const subject = stripReviewPrefix(item.label, english);
+    return {
+      ...item,
+      label: english ? `Review ${subject}` : `复核：${subject}`,
+      summary: sanitizeApprovalLoopText(item.summary, english),
+    };
+  }
+
+  return {
+    ...item,
+    label: sanitizeApprovalLoopText(item.label, english).replace(
+      /复核\s+后/g,
+      "复核后",
+    ).replace(/推进\s+发送/g, "推进发送"),
+    summary: sanitizeApprovalLoopText(item.summary, english),
+  };
+}
+
 function buildApprovalReturnReadback(
   readback: WorkspaceFirstLoopReturnReadback,
   model: WorkspaceFirstLoopModel,
@@ -98,6 +148,28 @@ export function buildApprovalFirstLoopDisplayModel(
   model: WorkspaceFirstLoopModel,
   english: boolean,
 ): WorkspaceFirstLoopModel {
+  const roleGoal = buildApprovalLoopItem(model.roleGoal, english);
+  const firstSignal = buildApprovalLoopItem(model.firstSignal, english);
+  const firstSuggestion = buildApprovalLoopItem(model.firstSuggestion, english);
+  const reviewCheckpoint = buildApprovalLoopItem(
+    model.reviewCheckpoint,
+    english,
+  );
+  const followThrough = buildApprovalLoopItem(model.followThrough, english);
+  const memoryWriteBack = buildApprovalLoopItem(model.memoryWriteBack, english);
+  const nextAnchor = buildApprovalLoopItem(model.nextAnchor, english);
+  const itemById = new Map(
+    [
+      roleGoal,
+      firstSignal,
+      firstSuggestion,
+      reviewCheckpoint,
+      followThrough,
+      memoryWriteBack,
+      nextAnchor,
+    ].map((item) => [item.id, item]),
+  );
+
   return {
     ...model,
     stageLabel: getApprovalStageLabel(model.stage, english),
@@ -118,6 +190,16 @@ export function buildApprovalFirstLoopDisplayModel(
       model.returnReadback,
       model,
       english,
+    ),
+    roleGoal,
+    firstSignal,
+    firstSuggestion,
+    reviewCheckpoint,
+    followThrough,
+    memoryWriteBack,
+    nextAnchor,
+    steps: model.steps.map(
+      (item) => itemById.get(item.id) ?? buildApprovalLoopItem(item, english),
     ),
   };
 }
