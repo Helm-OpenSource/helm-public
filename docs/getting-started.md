@@ -99,6 +99,8 @@ cp .env.example .env
 | `DATABASE_URL` | MySQL 连接串 |
 | `APP_URL` | 本地通常填 `http://localhost:3000` |
 | `CONNECTOR_TOKEN_SECRET` | 至少 32 字节随机字符串，用 `openssl rand -hex 32` 生成 |
+| `CONNECTOR_TOKEN_SECRET_ID` | 当前连接器 token 加密密钥版本；轮换时改成新版本号 |
+| `CONNECTOR_TOKEN_SECRET_PREVIOUS` / `CONNECTOR_TOKEN_SECRET_PREVIOUS_ID` | 轮换窗口内保留旧密钥和值对应版本，确认旧 token 重写后再清空 |
 
 ### OPTIONAL_AI（可选，缺失时走 placeholder）
 
