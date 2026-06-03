@@ -34,15 +34,15 @@ import { jsonStringify, safeParseJson, trimText } from "@/lib/utils";
 
 const OPPORTUNITY_JUDGE_AGENT = "opportunity-judge";
 const DEFAULT_WORKSPACE_SUMMARY =
-  "当前 workspace 以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
+  "当前工作区以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
 const SHADOW_ONLY_BOUNDARY_NOTE =
   "This layer only updates shadow opportunity posture after explicit review. Official CRM state stays unchanged.";
 const SHADOW_APPROVAL_NOTE =
-  "confirmed 只表示允许把 judgement consume 到 shadow summary / 判断消费进阴影摘要，不代表 正式 CRM 已写回，也不代表形成外部承诺。";
+  "已确认只表示允许把判断消费进阴影摘要，不代表正式 CRM 已写回，也不代表形成外部承诺。";
 const SHADOW_APPROVED_DOES_NOT_MEAN_NOTE =
-  "Confirmed does not mean 正式 CRM writeback. 不代表 正式 CRM 已更新，也不代表形成对外承诺。";
+  "已确认不等于正式 CRM 写回，不代表正式 CRM 已更新，也不代表形成对外承诺。";
 const INSUFFICIENT_EVIDENCE_NOTE =
-  "当前证据 仍不足以支持 阶段跨越，需要补足证据后再确认。";
+  "当前证据仍不足以支持阶段跨越，需要补足证据后再确认。";
 
 type OpportunityJudgeMeeting = NonNullable<
   Awaited<ReturnType<typeof loadOpportunityJudgeMeeting>>
@@ -380,13 +380,13 @@ function resolveOpportunityJudgeNextAction(input: {
   fallback: string;
 }) {
   if (/ROI/.test(input.allTexts) && /联合评审/.test(input.allTexts)) {
-    return "先发 ROI follow-up，并锁定联合评审时间建议。";
+    return "先发送 ROI 跟进内容，并锁定联合评审时间建议。";
   }
   if (/等待对方|等待客户|回去确认|采购评估/.test(input.allTexts)) {
     return "等待对方确认预算与采购优先级，再约下一次会。";
   }
   if (/内部对齐|法务|资源协调|交付评审/.test(input.allTexts)) {
-    return "先整理内部 blocker / 阻塞，再决定是否对客户提供时间建议。";
+    return "先整理内部阻塞，再决定是否对客户提供时间建议。";
   }
   return input.fallback;
 }
@@ -533,7 +533,7 @@ function buildBlockers(input: {
     blockers.push({
       label:
         input.riskFlags.flags[0]?.reason ??
-        "当前判断仍缺少足够阻塞 evidence。",
+        "当前判断仍缺少足够阻塞证据。",
       severity: input.riskFlags.flags[0]?.severity ?? "medium",
       source: "inferred",
       evidenceRefs: input.evidenceRefs,
@@ -680,7 +680,7 @@ function buildManagerAttentionFlags(input: {
     flags.push({
       key: "dependency_risk",
       severity: "medium",
-      detail: "当前存在多重依赖阻塞，单靠 seller follow-up 可能无法收口。",
+      detail: "当前存在多重依赖阻塞，单靠销售负责人跟进可能无法收口。",
       evidenceRefs: input.evidenceRefs,
     });
   }
@@ -771,19 +771,19 @@ function buildNextStepBrief(input: {
       "## 当前卡点",
       ...(input.deltaArtifact.blockers.length > 0
         ? input.deltaArtifact.blockers.map((item) => `- ${item.label}`)
-        : ["- 当前没有新增阻塞，但 evidence 仍需继续累积。"]),
+        : ["- 当前没有新增阻塞，但证据仍需继续累积。"]),
       "",
       "## 当前最值得推进的下一步",
       `- ${input.deltaArtifact.nextBestAction}`,
       "",
-      "## operator / manager / seller-owner",
+      "## 操作员 / 管理者 / 销售负责人",
       `- 操作员：先确认阻塞是否需要跨团队解除。`,
-      `- manager：${managerSummary}`,
-      `- seller / 负责人：由 ${ownerName} 继续推进，但不得越过 正式承诺边界。`,
+      `- 管理者：${managerSummary}`,
+      `- 销售负责人：由 ${ownerName} 继续推进，但不得越过正式承诺边界。`,
       "",
       "## 边界",
       `- ${SHADOW_ONLY_BOUNDARY_NOTE}`,
-      "- 这份摘要 只服务于内部判断和下一步安排，不代表 正式 CRM 已更新。",
+      "- 这份摘要只服务于内部判断和下一步安排，不代表正式 CRM 已更新。",
     ].join("\n"),
     audiences: ["operator", "manager", "seller_owner"] as Array<
       "operator" | "manager" | "seller_owner"
@@ -913,14 +913,14 @@ export function buildOpportunityJudgeArtifacts(input: {
   const boundaryNotes = [
     SHADOW_ONLY_BOUNDARY_NOTE,
     SHADOW_APPROVAL_NOTE,
-    "主管关注只是 attention，不是 final decision。",
+    "主管关注只是注意力提示，不是最终决策。",
     ...(riskFlags.some((item) =>
       /price|pricing|交付|日期|contract|承诺/i.test(
         `${item.label} ${item.reason}`,
       ),
     )
       ? [
-          "当前仍处在 formal commitment boundary / 正式承诺边界之内，任何交付日期、价格或合同相关判断都不能上升为正式承诺。",
+          "当前仍处在正式承诺边界之内，任何交付日期、价格或合同相关判断都不能上升为正式承诺。",
         ]
       : []),
   ];
@@ -1239,7 +1239,7 @@ async function persistOpportunityJudgeArtifacts(input: {
       artifactType: "manager_attention_flags.json",
       title: `${input.source.meeting.opportunity?.title ?? input.source.meeting.title} manager attention flags`,
       summary:
-        "主管关注 标记 已生成，但关注仍不等于 final decision。",
+        "主管关注标记已生成，但关注仍不等于最终决策。",
       approvalTier: resolveApprovalRule("opportunity.shadow_update").tier,
       reviewPosture: "requires_shadow_review",
       artifactsJson: jsonStringify(input.artifacts.managerAttentionFlags),
@@ -1635,7 +1635,7 @@ async function consumeReviewedOpportunityJudgement(input: {
           .map((item) => item.label)
           .slice(0, 3)
           .join("；")
-      : "当前没有新增阻塞，但仍需继续收集 evidence。";
+      : "当前没有新增阻塞，但仍需继续收集证据。";
 
   const managerAttentionSummary =
     input.managerAttentionFlags.flags.length > 0
@@ -1656,7 +1656,7 @@ async function consumeReviewedOpportunityJudgement(input: {
         input.opportunityDelta.managerAttentionRequired,
       shadowStageConfidence: input.opportunityDelta.confidence,
       shadowUpdatedAt: now,
-      nextStepSummary: `当前判断：${input.opportunityDelta.stageRationale} 下一步：${input.opportunityDelta.nextBestAction}。主管 关注：${managerAttentionSummary}`,
+      nextStepSummary: `当前判断：${input.opportunityDelta.stageRationale} 下一步：${input.opportunityDelta.nextBestAction}。主管关注：${managerAttentionSummary}`,
       lastProgressAt: now,
     },
   });
@@ -1831,7 +1831,7 @@ export async function reviewOpportunityJudgeRuntime(input: {
       nextBestAction:
         meeting.opportunity.shadowNextAction ??
         meeting.opportunity.nextAction ??
-        "先补足 evidence，再决定下一步。",
+        "先补足证据，再决定下一步。",
       managerAttentionRequired: false,
       factDerived: [],
       inferredAssumptions: [],

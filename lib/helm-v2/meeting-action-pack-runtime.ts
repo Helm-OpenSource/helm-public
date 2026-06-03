@@ -33,8 +33,8 @@ import { jsonStringify, safeParseJson, trimText } from "@/lib/utils";
 
 const MEETING_ANALYST_AGENT = "meeting-analyst";
 const OPPORTUNITY_JUDGE_AGENT = "opportunity-judge";
-const DEFAULT_WORKSPACE_SUMMARY = "当前 workspace 以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
-const ACTION_PACK_BOUNDARY_NOTE_CN = "这份 动作资料 仍然只是 draft recommendation套件，不会自动外发、不会形成对外承诺，也不会写入 正式 CRM 状态。";
+const DEFAULT_WORKSPACE_SUMMARY = "当前工作区以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
+const ACTION_PACK_BOUNDARY_NOTE_CN = "这份动作资料仍然只是草稿建议套件，不会自动外发、不会形成对外承诺，也不会写入正式 CRM 状态。";
 const SHADOW_BOUNDARY_NOTE = "Only shadow fields are updated in Sprint 2. Official opportunity state stays unchanged.";
 
 type MeetingRuntimeMeeting = NonNullable<Awaited<ReturnType<typeof loadMeetingRuntimeMeeting>>>;
@@ -444,7 +444,7 @@ function buildRiskFlags(meeting: MeetingRuntimeMeeting, facts: MeetingFactItem[]
   }
 
   if (facts.some((fact) => /预算|采购|法务|审批/.test(fact.content))) {
-    pushRisk("存在预算 / 采购 / 法务类外部依赖。", "high", "会议事实已经指向外部依赖，不应把 recommendation 误读成承诺。", true);
+    pushRisk("存在预算 / 采购 / 法务类外部依赖。", "high", "会议事实已经指向外部依赖，不应把建议误读成承诺。", true);
   }
 
   return risks.filter((risk, index, list) => list.findIndex((candidate) => candidate.label === risk.label) === index);
@@ -466,7 +466,7 @@ function buildOwnerMap(meeting: MeetingRuntimeMeeting, nextActions: string[]) {
 
 function buildFollowupDeadlines(meeting: MeetingRuntimeMeeting, nextActions: string[]) {
   if (!nextActions.length) return [];
-  const within24h = meeting.opportunity ? "24 小时内完成第一轮 follow-up 草稿" : "24 小时内补全会议事实确认";
+  const within24h = meeting.opportunity ? "24 小时内完成第一轮跟进草稿" : "24 小时内补全会议事实确认";
   return [within24h, "确认负责人与截止时间后再进入下一层执行消费。"];
 }
 
@@ -717,7 +717,7 @@ async function createRuntimeArtifacts(input: {
       ...common,
       artifactType: "risk_flags.json",
       title: `${input.meeting.title} risk flags`,
-      summary: "潜在承诺、边界风险和 未决问题 已被抽出，但仍保持 draft姿态。",
+      summary: "潜在承诺、边界风险和未决问题已被抽出，但仍保持草稿姿态。",
       approvalTier: resolveApprovalRule("meeting.parse").tier,
       reviewPosture: "draft_risk_only",
       artifactsJson: jsonStringify({
@@ -732,7 +732,7 @@ async function createRuntimeArtifacts(input: {
       ...common,
       artifactType: "action_pack.md",
       title: `${input.meeting.title} action pack`,
-      summary: "draft 动作资料 已生成，但仍需人工确认才能触发经营记忆 晋升 和阴影更新。",
+      summary: "草稿动作资料已生成，但仍需人工确认才能触发经营记忆晋升和阴影更新。",
       approvalTier: resolveApprovalRule("memory.write_draft").tier,
       reviewPosture: "requires_human_confirm",
       artifactsJson: jsonStringify(input.analyst.actionPack),
@@ -744,7 +744,7 @@ async function createRuntimeArtifacts(input: {
       ...common,
       artifactType: "memory_draft.jsonl",
       title: `${input.meeting.title} memory draft`,
-      summary: "会议分析 生成的 draft 经营记忆话术s；facts / 推导 / 检查点已分层。",
+      summary: "会议分析生成的草稿经营记忆话术；事实 / 推导 / 检查点已分层。",
       approvalTier: resolveApprovalRule("memory.write_draft").tier,
       reviewPosture: "draft_only",
       artifactsJson: jsonStringify({

@@ -37,9 +37,9 @@ import { jsonStringify, safeParseJson, trimText } from "@/lib/utils";
 const EXECUTION_SURFACE_BOUNDARY_NOTE =
   "This is a human execution entry only. Helm still has no send authority, no auto booking, and no official CRM write authority.";
 const EXECUTION_APPROVED_NOTE =
-  "approved 只表示允许你人工执行下一步，不代表系统已发送、已预约、已 committed，或 正式 CRM 已更新。";
+  "已批准只表示允许你人工执行下一步，不代表系统已发送、已预约、已承诺，或正式 CRM 已更新。";
 const EXECUTION_PROOF_NOTE =
-  "execution proof 只表示 Helm 已记录人工动作与 acknowledgement；除非另有明确回执，它不自动代表外部结果已经发生。";
+  "执行证明只表示 Helm 已记录人工动作与确认；除非另有明确回执，它不自动代表外部结果已经发生。";
 const EXECUTION_HUMAN_ONLY_NOTE = "这是人工执行入口，不是自动执行入口。";
 const EXECUTION_HUMAN_WRITER = "human-action-execution";
 
@@ -287,14 +287,14 @@ function formatExecutionLine(action: HumanActionExecutionRuntimeAction) {
         : action.actionType === "manual_calendar_send"
           ? "已人工发送时间建议"
           : action.actionType === "manual_crm_step"
-            ? "已人工完成 CRM step"
+            ? "已人工完成 CRM 步骤"
             : action.actionType === "manual_handoff_delivery" || action.actionType === "manual_handoff_customer_success"
               ? "已人工完成交接"
               : "已人工完成内部共享"
       : action.status === HumanActionExecutionStatus.BLOCKED
         ? "已人工标记为受阻"
         : action.status === HumanActionExecutionStatus.DEFERRED
-          ? "已人工标记为 deferred"
+          ? "已人工标记为暂缓"
           : "待人工执行";
   const tail =
     action.status === HumanActionExecutionStatus.EXECUTED
@@ -355,23 +355,23 @@ function buildExecutionWritebackSummary(input: {
 }) {
   const actor = input.executedByName;
   const when = input.acknowledgedAt.toISOString();
-  const statusLine = input.followThroughStatus?.trim() ? `当前 follow-through：${input.followThroughStatus?.trim()}。` : "";
+  const statusLine = input.followThroughStatus?.trim() ? `当前跟进状态：${input.followThroughStatus?.trim()}。` : "";
 
   switch (input.mode) {
     case "mark_sent_manually":
-      return `[${when}] ${actor} 已人工发送这条客户可见 draft。${statusLine}仅表示人工发送动作已记录，不自动代表客户已回复或已接受。`;
+      return `[${when}] ${actor} 已人工发送这条客户可见草稿。${statusLine}仅表示人工发送动作已记录，不自动代表客户已回复或已接受。`;
     case "mark_scheduled_manually":
-      return `[${when}] ${actor} 已人工发送时间建议 / scheduling step。${statusLine}仅表示人工 scheduling 动作已记录，不自动代表外部日程已创建成功。`;
+      return `[${when}] ${actor} 已人工发送时间建议 / 排期步骤。${statusLine}仅表示人工排期动作已记录，不自动代表外部日程已创建成功。`;
     case "mark_shared_internally":
-      return `[${when}] ${actor} 已人工完成 internal share。${statusLine}仅表示内部协同动作已记录，不代表任何外部承诺已形成。`;
+      return `[${when}] ${actor} 已人工完成内部共享。${statusLine}仅表示内部协同动作已记录，不代表任何外部承诺已形成。`;
     case "mark_crm_step_done":
-      return `[${when}] ${actor} 已人工完成 CRM / pipeline step。${statusLine}仅表示人工步骤已记录，不自动代表 正式 CRM 已同步成功。`;
+      return `[${when}] ${actor} 已人工完成 CRM / 管线步骤。${statusLine}仅表示人工步骤已记录，不自动代表正式 CRM 已同步成功。`;
     case "mark_handoff_done":
-      return `[${when}] ${actor} 已人工完成 handoff / 交接。${statusLine}仅表示交接动作已记录，不自动代表下游已完全接收或 external 结果已成立。`;
+      return `[${when}] ${actor} 已人工完成交接。${statusLine}仅表示交接动作已记录，不自动代表下游已完全接收或外部结果已成立。`;
     case "mark_blocked":
       return `[${when}] ${actor} 将该动作标记为受阻。${statusLine}仍停在人工执行前，不代表系统已替你完成任何动作。`;
     case "mark_deferred":
-      return `[${when}] ${actor} 将该动作标记为 deferred。${statusLine}仍停在人工执行前，不代表系统已替你完成任何动作。`;
+      return `[${when}] ${actor} 将该动作标记为暂缓。${statusLine}仍停在人工执行前，不代表系统已替你完成任何动作。`;
   }
 }
 
@@ -652,8 +652,8 @@ function buildDraftExecutionContracts(input: {
       audience: "customer",
       executionOwnerId: ownerId,
       executionOwnerName: ownerName,
-      executionIntent: "按已复核的 email draft 进行人工发送。",
-      executionBoundary: "这仍然是人工发送，不是系统代发；approved 不等于已发送，也不等于形成正式承诺。",
+      executionIntent: "按已复核的邮件草稿进行人工发送。",
+      executionBoundary: "这仍然是人工发送，不是系统代发；已批准不等于已发送，也不等于形成正式承诺。",
       executionPrerequisite: prerequisite,
       executionDependency: dependency,
       executionRiskLevel: riskLevelToLabel(input.draftSource.bundle.riskLevel),
@@ -675,8 +675,8 @@ function buildDraftExecutionContracts(input: {
       audience: "customer",
       executionOwnerId: ownerId,
       executionOwnerName: ownerName,
-      executionIntent: "用已复核的非承诺措辞进行人工对外 follow-up。",
-      executionBoundary: "这仍然只是人工 follow-up 措辞，不是系统自动对外发送，也不是正式承诺。",
+      executionIntent: "用已复核的非承诺措辞进行人工对外跟进。",
+      executionBoundary: "这仍然只是人工跟进措辞，不是系统自动对外发送，也不是正式承诺。",
       executionPrerequisite: prerequisite,
       executionDependency: dependency,
       executionRiskLevel: riskLevelToLabel(input.draftSource.bundle.riskLevel),
@@ -725,9 +725,9 @@ function buildDraftExecutionContracts(input: {
       audience: "internal",
       executionOwnerId: ownerId,
       executionOwnerName: ownerName,
-      executionIntent: "把 internal collab摘要 共享给相关负责人 / reviewer。",
+      executionIntent: "把内部协同摘要共享给相关负责人 / 复核人。",
       executionBoundary: "仅内部交接；不会自动对外可见，也不会形成客户承诺。",
-      executionPrerequisite: "draft 已通过复核-before-send，当前只允许内部共享。",
+      executionPrerequisite: "草稿已通过发送前复核，当前只允许内部共享。",
       executionDependency: dependency,
       executionRiskLevel: riskLevelToLabel(input.draftSource.bundle.riskLevel),
       approvalContext: buildApprovalContextForDraft(input.draftSource.bundle.reviewStatus),
@@ -736,7 +736,7 @@ function buildDraftExecutionContracts(input: {
       executionWritebackTarget: ["audit_trail", "object_summary", "checkpoint_memory"],
       evidenceRefs: input.draftSource.internalCollabBrief.evidenceRefs,
       sourceProvenance: input.draftSource.internalCollabBrief.sourceProvenance,
-      boundaryTrace: listUniqueStrings([...baseBoundary, "internal摘要 只允许仅内部 human execution。"]),
+      boundaryTrace: listUniqueStrings([...baseBoundary, "内部摘要只允许人工内部执行。"]),
     });
   }
 
@@ -750,9 +750,9 @@ function buildDraftExecutionContracts(input: {
       audience: "executive",
       executionOwnerId: ownerId,
       executionOwnerName: ownerName,
-      executionIntent: "把 exec摘要 共享给 主管 / leadership。",
-      executionBoundary: "这仍然只是内部摘要 share，不是对外发送，也不会触发 正式系统写回。",
-      executionPrerequisite: "draft 已通过复核-before-send，当前只允许内部共享。",
+      executionIntent: "把管理层摘要共享给主管 / 管理层。",
+      executionBoundary: "这仍然只是内部摘要共享，不是对外发送，也不会触发正式系统写回。",
+      executionPrerequisite: "草稿已通过发送前复核，当前只允许内部共享。",
       executionDependency: dependency,
       executionRiskLevel: riskLevelToLabel(input.draftSource.bundle.riskLevel),
       approvalContext: buildApprovalContextForDraft(input.draftSource.bundle.reviewStatus),
@@ -761,7 +761,7 @@ function buildDraftExecutionContracts(input: {
       executionWritebackTarget: ["audit_trail", "object_summary", "checkpoint_memory"],
       evidenceRefs: input.draftSource.execBrief.evidenceRefs,
       sourceProvenance: input.draftSource.execBrief.sourceProvenance,
-      boundaryTrace: listUniqueStrings([...baseBoundary, "exec摘要 只允许仅内部 human execution。"]),
+      boundaryTrace: listUniqueStrings([...baseBoundary, "管理层摘要只允许人工内部执行。"]),
     });
   }
 
@@ -790,8 +790,8 @@ function buildShadowExecutionContracts(input: {
       audience: "pipeline",
       executionOwnerId: ownerId,
       executionOwnerName: ownerName,
-      executionIntent: `按已确认阴影判断手工推进 CRM / pipeline 下一步：${delta.nextBestAction}`,
-      executionBoundary: "这仍然只是人工 CRM / pipeline step，不是 Helm 自动 正式writeback。",
+      executionIntent: `按已确认阴影判断手工推进 CRM / 管线下一步：${delta.nextBestAction}`,
+      executionBoundary: "这仍然只是人工 CRM / 管线步骤，不是 Helm 自动正式写回。",
       executionPrerequisite: delta.openQuestions.length
         ? delta.openQuestions.slice(0, 3).join("；")
         : "阴影判断已确认；当前仍需人工决定是否以及如何反映到外部系统。",
@@ -806,7 +806,7 @@ function buildShadowExecutionContracts(input: {
       boundaryTrace: listUniqueStrings([
         EXECUTION_SURFACE_BOUNDARY_NOTE,
         EXECUTION_APPROVED_NOTE,
-        "confirmed shadow difference only enters shadow summary; it does not grant official CRM writeback.",
+        "已确认的阴影差异只进入阴影摘要，不授予正式 CRM 写回权限。",
       ]),
     },
   ];
@@ -832,13 +832,13 @@ function buildHandoffExecutionContracts(input: {
     executionOwnerName: ownerName,
     executionIntent:
       source.targetAudience === "customer_success"
-        ? "按已准备好的交接 制品 手工把上下文交给 Customer Success。"
-        : "按已准备好的交接 制品 手工把上下文交给 交付 / 实施。",
+        ? "按已准备好的交接制品，手工把上下文交给客户成功。"
+        : "按已准备好的交接制品，手工把上下文交给交付 / 实施。",
     executionBoundary: "这仍然只是人工交接，不是系统自动完成交接、也不是下游已自动接收。",
-    executionPrerequisite: "交接 制品 已 ready；仍需人工确认接手对象、时间和责任边界。",
-    executionDependency: "当前交接仍依赖人工交接确认，不自动形成 downstream 承诺。",
+    executionPrerequisite: "交接制品已就绪；仍需人工确认接手对象、时间和责任边界。",
+    executionDependency: "当前交接仍依赖人工交接确认，不自动形成下游承诺。",
     executionRiskLevel: "medium",
-    approvalContext: "交接 制品 已 ready for manual 交接；仍由人工完成交接动作。",
+    approvalContext: "交接制品已准备好进入人工交接；仍由人工完成交接动作。",
     riskReviewSummary: "handoff remains human-confirmed and internal-only",
     executionAcknowledgementStatus: "pending",
     executionWritebackTarget: ["audit_trail", "object_summary", "checkpoint_memory", "role_handoff_summary"],
@@ -847,7 +847,7 @@ function buildHandoffExecutionContracts(input: {
     boundaryTrace: listUniqueStrings([
       EXECUTION_SURFACE_BOUNDARY_NOTE,
       EXECUTION_APPROVED_NOTE,
-      "handoff done / 交接 done 只表示人工完成交接，不自动代表下游已经 fully accepted。",
+      "交接完成只表示人工完成交接，不自动代表下游已经完全接收。",
     ]),
   }));
 }
@@ -884,14 +884,14 @@ function buildBundleFromActions(actions: HumanActionExecutionBundleInput[]) {
       ...actions.flatMap((item) => item.boundaryTrace),
     ]),
     approvedMeans: EXECUTION_APPROVED_NOTE,
-    approvedDoesNotMean: "approved 不等于 executed，不等于 sent / booked / committed，也不等于 正式 CRM updated。",
+    approvedDoesNotMean: "已批准不等于已执行，不等于已发送、已预约或已承诺，也不等于正式 CRM 已更新。",
     humanOnly: EXECUTION_HUMAN_ONLY_NOTE,
     proofDoesNotMean: EXECUTION_PROOF_NOTE,
     readyCount: actions.length,
     executedCount: 0,
     blockedCount: 0,
     deferredCount: 0,
-    recommendedNextAction: actions[0]?.executionIntent ?? "先选择一条已通过action，再由人工执行并留下 proof。",
+    recommendedNextAction: actions[0]?.executionIntent ?? "先选择一条已通过动作，再由人工执行并留下证明。",
   } satisfies HumanActionExecutionBundle;
 }
 

@@ -96,7 +96,8 @@ This PR's source audit result:
    commitment reinforcement sendability detail model、meeting opportunity judge、
    inbox follow-up review request、success check、customer-facing offer / external
    proposal、commercial narrative strengthening detail model、proposal package
-   detail surfaces、billing / participant portal surface 与 trial CTA 的中文操作字段已继续收口。
+   detail surfaces、billing / participant portal surface、trial CTA、Helm v2 action
+   pack、opportunity judge、human action execution 与 worker registry 的中文操作字段已继续收口。
    这些目标文件的本批次严格可见残留已清理；全工程广义 ASCII 中文分支扫描与严格可见
    文案扫描尚未重新校准，后续仍需继续检查 billing surface 与其他低频 detail surfaces。
    剩余品牌名、语言名、provider 名、trace key 和 runtime enum 列为 P3，不作为中文 UI 缺口。
@@ -123,7 +124,8 @@ This PR's source audit result:
    opportunity judge, inbox follow-up review request, success check,
    customer-facing offer / external proposal, commercial narrative
    strengthening detail model, proposal package detail surfaces, billing /
-   participant portal surface, and trial CTA have also been localized for
+   participant portal surface, trial CTA, Helm v2 action pack, opportunity
+   judge, human action execution, and worker registry have also been localized for
    Chinese operation fields. This batch clears the target-file strict visible-copy leftovers; the
    whole-project broad ASCII zh-branch scan and strict visible-copy scan have
    not been recalibrated yet, and billing plus other lower-frequency detail
@@ -226,6 +228,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-03 | 继续收口 Helm v2 action pack、opportunity judge、human action execution 与 worker registry 的中文运行时文案；本批仅修改可见文案，不改 artifact 文件名、enum 或状态机；Further localized Helm v2 action-pack, opportunity-judge, human-action-execution, and worker-registry runtime copy; this batch changes visible copy only and leaves artifact filenames, enums, and state machines unchanged |
 | 2026-06-03 | 继续收口 billing / participant portal、proposal package detail surfaces、conversation detail view 与 trial CTA 的中文可见标签；本批目标文件扫描未发现新的明确英文残留，全工程剩余候选尚未重新校准；Further localized billing / participant portal, proposal package detail surfaces, conversation detail view, and trial CTA labels; this batch's target-file scan found no new explicit English leftovers, while whole-project remaining candidates have not been recalibrated yet |
 | 2026-06-03 | 继续收口 meeting opportunity judge、inbox follow-up review request、success check、customer-facing offer / external proposal 与 commercial narrative strengthening detail model 的中文可见标签；本批目标文件严格可见残留已清理，全工程剩余候选尚未重新校准；Further localized meeting opportunity judge, inbox follow-up review request, success check, customer-facing offer / external proposal, and commercial narrative strengthening detail-model labels; this batch clears target-file strict visible-copy leftovers, while whole-project remaining candidates have not been recalibrated yet |
 | 2026-06-03 | 继续收口 settings client、conversation detail、external narrative detail 与 commitment reinforcement sendability detail model 的中文可见标签；目标文件严格可见候选扫描为 0，全工程广义 ASCII 中文分支候选降至 242，严格可见候选降至 129；Further localized settings client, conversation detail, external narrative detail, and commitment reinforcement sendability detail-model labels; target-file strict visible-copy candidates now return 0 hits, whole-project broad ASCII zh-branch candidates are down to 242, and strict visible-copy candidates are down to 129 |
