@@ -2267,6 +2267,35 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps open-source growth plan Chinese body free of recently fixed mixed growth-operations fragments", () => {
+    const growthPlan = read(
+      "docs/operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md",
+    );
+    const chineseBody = growthPlan.slice(
+      growthPlan.indexOf("本文是 `helm-public`"),
+      growthPlan.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("公开 Core 增长");
+    expect(chineseBody).toContain("认知、激活、社区接入和摩擦移除");
+    expect(chineseBody).toContain("商业发布批准");
+    expect(chineseBody).toContain("服务等级承诺");
+    expect(chineseBody).toContain("自动外联活动");
+    expect(chineseBody).toContain("公开发布转成可度量的交付工程师激活闭环");
+    expect(chineseBody).toContain("合成样板包");
+    expect(chineseBody).toContain("激活摩擦而非虚荣指标");
+    expect(chineseBody).toContain("理解、激活和贡献质量");
+    expect(chineseBody).toContain("触达信号");
+    expect(chineseBody).toContain("夹具改动");
+    expect(chineseBody).toContain("公开安全");
+    expect(chineseBody).toContain("可复现阻断项");
+    expect(chineseBody).toContain("激活证明");
+
+    expect(chineseBody).not.toMatch(
+      /public-Core growth|operating plan|awareness|community intake|friction removal|launch approval|readiness\s+statement|SLA|outbound campaign|公开 launch|delivery engineer activation loop|synthetic sample pack|activation friction|vanity\s+metrics|comprehension|contribution quality|Stars、\s*forks、\s*clones|reach signal|fixture change|public-safe\s+report|blocker 这类 activation proof/,
+    );
+  });
+
   it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
     const searchPage = read("app/(workspace)/search/page.tsx");
     const reportsClient = read("features/reports/reports-client.tsx");

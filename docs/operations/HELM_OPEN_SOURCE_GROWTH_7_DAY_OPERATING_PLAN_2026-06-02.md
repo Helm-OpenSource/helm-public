@@ -11,19 +11,19 @@ public_safety: Public open-source growth operating plan. Uses public repository,
 
 ## 中文主文本 / Chinese Main Text
 
-本文是 `helm-public` 在 2026-06-01 公开之后的第一份 public-Core growth
-operating plan。它是 awareness、activation、community intake 和 friction removal
-的执行计划，不是客户承诺、商业 launch approval、Cloud / Enterprise readiness
-statement、SLA、融资材料或自动 outbound campaign。
+本文是 `helm-public` 在 2026-06-01 公开之后的第一份公开 Core 增长
+运营计划。它是认知、激活、社区接入和摩擦移除的执行计划，
+不是客户承诺、商业发布批准、Helm Cloud / Helm Enterprise 已就绪声明、
+服务等级承诺、融资材料或自动外联活动。
 
-7 日目标是把公开 launch 转成可度量的 delivery engineer activation loop：读者能在
-一屏理解 Helm 定位，能跑本地 Golden Path 并检查 synthetic sample pack，反馈能通过
-GitHub Issues / Discussions 带边界进入，维护者按 activation friction 而非 vanity
-metrics 排序增长工作。
+7 日目标是把公开发布转成可度量的交付工程师激活闭环：读者能在
+一屏理解 Helm 定位，能跑本地 Golden Path 并检查合成样板包，反馈能通过
+GitHub Issues / Discussions 带边界进入，维护者按激活摩擦而非虚荣指标
+排序增长工作。
 
-增长工作必须优先优化 comprehension、activation 和 contribution quality。Stars、
-forks、clones 只算 reach signal；不能用它们替代独立运行、fixture change、public-safe
-report 或可复现 blocker 这类 activation proof。
+增长工作必须优先优化理解、激活和贡献质量。星标、
+复刻和克隆数只算触达信号；不能用它们替代独立运行、夹具改动、公开安全
+报告或可复现阻断项这类激活证明。
 
 ## English Reference
 
