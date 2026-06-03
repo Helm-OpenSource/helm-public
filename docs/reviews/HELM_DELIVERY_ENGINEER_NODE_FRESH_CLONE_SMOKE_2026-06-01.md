@@ -17,18 +17,16 @@ archive_trigger:
 
 ## 中文主文本 / Chinese Main Text
 
-本回执证明已合并的 `helm-public` main branch 可以 clone 到 clean directory，并通过
-Node-based Golden Path checks、offline evals、public guards、production build 和本地
-`next start` HTTP smoke。
+本回执证明已合并的 `helm-public` 主分支可以克隆到干净目录，并通过基于 Node 的黄金路径检查、
+离线评测、公开守卫、生产构建和本地 `next start` HTTP 冒烟验证。
 
-它不是 D2 Docker fresh-clone smoke receipt，且刻意不匹配
-`HELM_DELIVERY_ENGINEER_D2_SMOKE*.md` 文件模式。记录时 Node fresh-clone path 为 PASS，
-D2 Docker fresh-clone path 因本地环境缺少 `docker` / `colima` / `orb` / `podman` 而
-BLOCKED；后续 D2 回执已关闭该 blocker。
+它不是 D2 Docker 全新克隆冒烟回执，且刻意不匹配
+`HELM_DELIVERY_ENGINEER_D2_SMOKE*.md` 文件模式。记录时 Node 全新克隆路径为 PASS，
+D2 Docker 全新克隆路径因本地环境缺少 `docker` / `colima` / `orb` / `podman` 而
+阻塞；后续 D2 回执已关闭该阻断项。
 
-本回执不证明 Docker Compose onboarding、MySQL-backed local workspace setup、30-minute
-onboarding claim、D2 smoke completion、customer deployment readiness、production
-connector readiness 或 commercial release Go/No-Go approval。
+本回执不证明 Docker Compose 上手路径、基于 MySQL 的本地工作区设置、30 分钟上手声明、
+D2 冒烟完成、客户部署就绪、生产连接器就绪或商业发布 Go/No-Go 批准。
 
 ## English Reference
 

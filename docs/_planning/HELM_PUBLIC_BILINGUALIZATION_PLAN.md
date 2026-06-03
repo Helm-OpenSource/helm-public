@@ -38,6 +38,23 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 Node 全新克隆冒烟回执的中文证明范围术语混写；只调整主分支、干净目录、
+基于 Node 的黄金路径检查、离线评测、公开守卫、生产构建、本地 HTTP 冒烟验证、D2 Docker
+全新克隆冒烟回执、Node / D2 全新克隆路径、阻断项、Docker Compose 上手路径、基于 MySQL
+的本地工作区设置、30 分钟上手声明、D2 冒烟完成、客户部署就绪、生产连接器就绪和商业发布
+Go/No-Go 批准文案，不改变命令表、HTTP smoke 结果、Docker 阻断历史或 D2 回执已关闭阻断项
+的结论。
+
+This round further localizes mixed Chinese proof-scope terminology in the Node
+fresh-clone smoke receipt. It changes main branch, clean directory, Node-based
+Golden Path checks, offline evals, public guards, production build, local HTTP
+smoke, D2 Docker fresh-clone smoke receipt, Node / D2 fresh-clone paths,
+blocker, Docker Compose onboarding, MySQL-backed local workspace setup,
+30-minute onboarding claim, D2 smoke completion, customer deployment readiness,
+production connector readiness, and commercial release Go/No-Go approval
+wording only, without changing command tables, HTTP smoke results, Docker
+blocker history, or the D2 receipt supersession conclusion.
+
 本轮继续收口 AI 原生企业 AI 工件模板收口回执的中文证明范围术语混写；只调整收口回执、
 公开安全 Pack 交付工件模板、AI 原生企业 AI 用户体验参考工作、公开可审查工件、上下文包、
 Pack Studio 安全样例、证据矩阵、待复核工作包、证明闭环、黄金路径诊断 / 评测 / 公开守卫验证、

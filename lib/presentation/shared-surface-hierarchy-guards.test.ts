@@ -2187,6 +2187,39 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps Node fresh-clone smoke receipt Chinese scope copy localized", () => {
+    const nodeSmokeReceipt = read(
+      "docs/reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md",
+    );
+    const chineseBody = nodeSmokeReceipt.slice(
+      nodeSmokeReceipt.indexOf("本回执证明已合并"),
+      nodeSmokeReceipt.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("主分支可以克隆到干净目录");
+    expect(chineseBody).toContain("基于 Node 的黄金路径检查");
+    expect(chineseBody).toContain("离线评测");
+    expect(chineseBody).toContain("公开守卫");
+    expect(chineseBody).toContain("生产构建");
+    expect(chineseBody).toContain("HTTP 冒烟验证");
+    expect(chineseBody).toContain("D2 Docker 全新克隆冒烟回执");
+    expect(chineseBody).toContain("Node 全新克隆路径为 PASS");
+    expect(chineseBody).toContain("D2 Docker 全新克隆路径");
+    expect(chineseBody).toContain("阻塞");
+    expect(chineseBody).toContain("阻断项");
+    expect(chineseBody).toContain("Docker Compose 上手路径");
+    expect(chineseBody).toContain("基于 MySQL 的本地工作区设置");
+    expect(chineseBody).toContain("30 分钟上手声明");
+    expect(chineseBody).toContain("D2 冒烟完成");
+    expect(chineseBody).toContain("客户部署就绪");
+    expect(chineseBody).toContain("生产连接器就绪");
+    expect(chineseBody).toContain("商业发布 Go/No-Go 批准");
+
+    expect(chineseBody).not.toMatch(
+      /main branch|clone 到 clean directory|Node-based Golden Path checks|offline evals|public guards|production build|HTTP smoke|fresh-clone smoke receipt|Node fresh-clone path|D2 Docker fresh-clone path|BLOCKED|blocker|Docker Compose onboarding|MySQL-backed local workspace setup|30-minute onboarding claim|D2 smoke completion|customer deployment readiness|production connector readiness|commercial release Go\/No-Go approval/,
+    );
+  });
+
   it("keeps clean-history receipt Chinese safety-scope copy localized", () => {
     const cleanHistoryReceipt = read(
       "docs/reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md",
