@@ -301,9 +301,9 @@ function formatExecutionLine(action: HumanActionExecutionRuntimeAction) {
       ? "仅表示人工动作已被 Helm 记录，不自动代表外部结果已经发生。"
       : action.status === HumanActionExecutionStatus.BLOCKED
         ? "当前仍停在人工执行前，不代表系统已执行。"
-        : action.status === HumanActionExecutionStatus.DEFERRED
-          ? "当前仍停在人工执行前，不代表系统已执行。"
-          : "approved 只表示允许人工下一步，不代表系统已发送、已预约或已写 正式 CRM。";
+      : action.status === HumanActionExecutionStatus.DEFERRED
+        ? "当前仍停在人工执行前，不代表系统已执行。"
+        : "已批准只表示允许人工下一步，不代表系统已发送、已预约或已写正式 CRM。";
   return `- [${when}] ${subject} · ${statusLabel} · ${action.followThroughStatus ?? action.status}。${tail}`;
 }
 
@@ -315,9 +315,9 @@ function buildDefaultWhatWasNotDone(actionType: HumanActionExecutionActionType) 
     case "manual_calendar_send":
       return "未自动替你创建外部日程，仅记录已人工发送时间建议。";
     case "manual_crm_step":
-      return "未自动替你写 正式 CRM；如果外部系统已更新，仍需明确回执。";
+      return "未自动替你写正式 CRM；如果外部系统已更新，仍需明确回执。";
     default:
-      return "未自动触发任何外部发送、外部预约或 正式系统写回。";
+      return "未自动触发任何外部发送、外部预约或正式系统写回。";
   }
 }
 
@@ -385,12 +385,12 @@ function actionTypeToPrisma(value: HumanActionExecutionActionType): HumanActionE
 
 function buildApprovalContextForDraft(reviewStatus: DraftCommsBundleArtifact["reviewStatus"]) {
   return reviewStatus === "fallback_non_commitment"
-    ? "draft 已通过复核-before-send，并切到非承诺兜底；仅允许人工下一步。"
-    : "draft 已通过复核-before-send；仅允许人工下一步。";
+    ? "草稿已通过发送前复核，并切到非承诺兜底；仅允许人工下一步。"
+    : "草稿已通过发送前复核；仅允许人工下一步。";
 }
 
 function buildApprovalContextForShadow() {
-  return "manual shadow 判断已确认并 消费进阴影摘要；这仍然不代表 正式 CRM 已写回。";
+  return "人工阴影判断已确认并消费进阴影摘要；这仍然不代表正式 CRM 已写回。";
 }
 
 async function loadExecutionMeeting(workspaceId: string, meetingId: string) {
@@ -631,7 +631,7 @@ function buildDraftExecutionContracts(input: {
   ]);
   const prerequisite = input.draftSource.bundle.openQuestions.length
     ? input.draftSource.bundle.openQuestions.slice(0, 3).join("；")
-    : "复核-before-send 已通过，仍需人工决定具体时点、对象和渠道。";
+    : "发送前复核已通过，仍需人工决定具体时点、对象和渠道。";
   const dependency = input.draftSource.riskReview?.checks
     ?.filter((item) => item.status !== "pass")
     .map((item) => item.detail)

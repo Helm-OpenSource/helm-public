@@ -297,7 +297,7 @@ describe("skill suggestion service", () => {
       expect.objectContaining({
         where: { id: "skill-1" },
         data: expect.objectContaining({
-          appliedEffectSummary: expect.stringContaining("probationary capability"),
+          appliedEffectSummary: expect.stringContaining("观察期能力"),
         }),
       }),
     );
