@@ -28,7 +28,7 @@ check:public-docs` fails when a new doc appears without that review.
 - [Open source and commercial boundary](product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)
 - [Open source and cloud trial launch posture](product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md)
 - [Release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md)
-- [AI recommendation governance](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md)
+- [AI 推荐治理契约](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md)
 - [Certified ecosystem checklist](product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md)
 - [Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
 - [Solution extension protocol](product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)
