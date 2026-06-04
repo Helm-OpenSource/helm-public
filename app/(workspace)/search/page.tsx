@@ -135,6 +135,7 @@ export default async function SearchPage({
   const workspaceBusinessSignals = shouldLoadAskBusinessContext
     ? buildAskHelmBusinessSignalsFromRecords({
         workspaceId: workspace.id,
+        locale,
         opportunities: businessContextReadModel.data.opportunities,
         pendingApprovals: businessContextReadModel.data.pendingApprovals,
         memoryFacts: businessContextReadModel.data.memoryFacts,
