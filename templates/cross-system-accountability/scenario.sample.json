@@ -5,7 +5,8 @@
     "ruleId": "won-deal-needs-delivery-handoff",
     "version": "1.0.0",
     "description": "A won CRM deal should have a delivery/handoff project in the PM system within N days.",
-    "trigger": { "system": "crm", "entity": "deal", "condition": "stage=won" },
+    "trigger": { "system": "crm", "entity": "deal" },
+    "triggerSlice": { "scopeRef": "deal" },
     "expectation": { "system": "pm", "entity": "delivery_project", "withinDays": 7, "matchKey": "dealId" },
     "requiredCoverage": [{ "system": "crm", "scope": "deal" }, { "system": "pm", "scope": "delivery_project" }],
     "ownerPolicyRef": "policy:delivery-owner",
@@ -22,13 +23,13 @@
         { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_project", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "complete", "evidence": ["backfill_checkpoint=2026-04-01", "webhook_live", "no_gap"], "asOf": "2026-06-04T00:00:00Z" }
       ],
       "triggerFacts": [
-        { "system": "crm", "entity": "deal", "factId": "deal-A", "matchValue": "deal-A", "occurredAt": "2026-05-01T00:00:00Z" },
-        { "system": "crm", "entity": "deal", "factId": "deal-B", "matchValue": "deal-B", "occurredAt": "2026-05-10T00:00:00Z", "ownerCandidates": [ { "id": "user:alex-alias", "kind": "user", "active": true, "roleEvidence": ["crm:deal-owner", "hr:active-tenure"] } ] },
-        { "system": "crm", "entity": "deal", "factId": "deal-C", "matchValue": "deal-C", "occurredAt": "2026-05-12T00:00:00Z", "ownerCandidates": [ { "id": "group:sales-team", "kind": "group", "active": true }, { "id": "user:departed-alias", "kind": "user", "active": false }, { "id": "bot:sync", "kind": "bot", "active": true } ] },
-        { "system": "crm", "entity": "deal", "factId": "deal-E", "matchValue": "deal-E", "occurredAt": "2026-06-02T00:00:00Z", "ownerCandidates": [ { "id": "user:robin-alias", "kind": "user", "active": true, "roleEvidence": ["crm:deal-owner"] } ] }
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-A", "matchValue": "deal-A", "occurredAt": "2026-05-01T00:00:00Z" },
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-B", "matchValue": "deal-B", "occurredAt": "2026-05-10T00:00:00Z", "ownerCandidates": [ { "id": "user:alex-alias", "kind": "user", "active": true, "roleEvidence": ["crm:deal-owner", "hr:active-tenure"] } ] },
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-C", "matchValue": "deal-C", "occurredAt": "2026-05-12T00:00:00Z", "ownerCandidates": [ { "id": "group:sales-team", "kind": "group", "active": true }, { "id": "user:departed-alias", "kind": "user", "active": false }, { "id": "bot:sync", "kind": "bot", "active": true } ] },
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-E", "matchValue": "deal-E", "occurredAt": "2026-06-02T00:00:00Z", "ownerCandidates": [ { "id": "user:robin-alias", "kind": "user", "active": true, "roleEvidence": ["crm:deal-owner"] } ] }
       ],
       "expectationFacts": [
-        { "system": "pm", "entity": "delivery_project", "factId": "proj-A", "matchValue": "deal-A", "occurredAt": "2026-05-03T00:00:00Z" }
+        { "system": "pm", "entity": "delivery_project", "sliceRef": "delivery_project", "factId": "proj-A", "matchValue": "deal-A", "occurredAt": "2026-05-03T00:00:00Z" }
       ],
       "expected": {
         "deal-A": "satisfied (no finding)",
@@ -44,7 +45,7 @@
         { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_project", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "partial", "evidence": ["backfill_incomplete", "pagination_gap_detected"], "asOf": "2026-06-04T00:00:00Z" }
       ],
       "triggerFacts": [
-        { "system": "crm", "entity": "deal", "factId": "deal-D", "matchValue": "deal-D", "occurredAt": "2026-05-15T00:00:00Z" }
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-D", "matchValue": "deal-D", "occurredAt": "2026-05-15T00:00:00Z" }
       ],
       "expectationFacts": [],
       "expected": { "deal-D": "unknown (PM coverage not provable -> never 'missing')" }

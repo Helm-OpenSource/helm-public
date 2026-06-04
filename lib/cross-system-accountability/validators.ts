@@ -26,8 +26,11 @@ export function validateExpectationRule(rule: ExpectationRule): ValidationResult
   // Field shape (untrusted JSON).
   if (!nonEmptyString(rule.ruleId)) errors.push("missing_rule_id");
   if (!nonEmptyString(rule.version)) errors.push("missing_version");
-  for (const f of ["system", "entity", "condition"] as const) {
+  for (const f of ["system", "entity"] as const) {
     if (!rule.trigger || !nonEmptyString(rule.trigger[f])) errors.push(`bad_trigger_${f}`);
+  }
+  if (!rule.triggerSlice || !nonEmptyString(rule.triggerSlice.scopeRef)) {
+    errors.push("bad_trigger_slice_scope_ref");
   }
   for (const f of ["system", "entity", "matchKey"] as const) {
     if (!rule.expectation || !nonEmptyString(rule.expectation[f])) errors.push(`bad_expectation_${f}`);
@@ -54,8 +57,8 @@ export function validateExpectationRule(rule: ExpectationRule): ValidationResult
   if (!rule.requiredCoverage || rule.requiredCoverage.length === 0) {
     errors.push("missing_required_coverage");
   } else {
-    if (rule.trigger && !reqKeys.has(`${rule.trigger.system}:${rule.trigger.entity}`)) {
-      errors.push("required_coverage_missing_trigger_scope");
+    if (rule.trigger && rule.triggerSlice && !reqKeys.has(`${rule.trigger.system}:${rule.triggerSlice.scopeRef}`)) {
+      errors.push("required_coverage_missing_trigger_slice");
     }
     if (rule.expectation && !reqKeys.has(`${rule.expectation.system}:${rule.expectation.entity}`)) {
       errors.push("required_coverage_missing_expectation_scope");

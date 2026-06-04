@@ -7,7 +7,8 @@
 
 Deterministic, read-only, review-first detection of cross-system accountability gaps. No AI
 synthesis, no connectors, no auto-create/dispatch/chase/write/send/approve. All data synthetic.
-`trigger.condition` is non-operative metadata in v0.1; callers must pre-filter trigger facts.
+The public Core is predicate-blind: callers provide deterministic `sliceRef` and `matchValue`;
+the Core performs no fuzzy, embedding, or LLM-based joins.
 
 ## 核心不变量 / Core invariants
 - **coverage 是整数核心**:所需源系统无法证明完整 → verdict `unknown`,**绝不** `missing`。
@@ -15,6 +16,7 @@ synthesis, no connectors, no auto-create/dispatch/chase/write/send/approve. All 
 - **append-only ledger**:`prevEntryHash` 哈希链,tamper-evident。
 - **advice-only / read-only**:每条命中只进 review-first decision request。
 - **declared system count only**:`distinctSystemsDeclared` 是中性结构字段,不是护城河证明。
+- **stable gap identity**:`gapId` / `requestId` 不随 `verdict` 改变。
 
 ## 跑法 / Run
 ```bash
