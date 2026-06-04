@@ -38,6 +38,17 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口公开 Core 发布公告的中文边界术语混写；只调整可复刻工程结构、只读黄金路径诊断、
+合成公开样板包、来源复核、智能体平台、大模型框架和复核优先文案，不改变命令、路径、英文公告、
+社区入口、开源许可或不自动外发 / 审批 / 结算边界。
+
+This round further localizes mixed Chinese announcement-boundary terminology in
+the public Core launch announcement. It changes forkable engineering structure,
+read-only Golden Path doctor, synthetic public sample pack, provenance review,
+agent platform, large-model framework, and review-first wording only, without
+changing commands, paths, the English announcement, community entry points, the
+open-source license, or no-auto-send / approve / settle boundaries.
+
 本轮继续收口公开发布节奏作业手册的中文发布路径术语混写；只调整作业手册、公开 Core 发布、
 可复核 PR 和不得直接推送主干文案，不改变 PR 路径、`main` 保护、release gate、GitHub Release、
 版本策略、人工回执变量或非 SLA 边界。

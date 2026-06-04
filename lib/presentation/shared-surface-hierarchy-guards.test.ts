@@ -2458,6 +2458,26 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps public Core launch announcement Chinese body localized for announcement-boundary terminology", () => {
+    const launchAnnouncement = read(
+      "docs/launch/HELM_PUBLIC_CORE_LAUNCH_ANNOUNCEMENT_V1.md",
+    );
+    const chineseBody = launchAnnouncement.slice(
+      launchAnnouncement.indexOf("## 中文"),
+    );
+
+    expect(chineseBody).toContain("可复刻的工程结构");
+    expect(chineseBody).toContain("只读黄金路径诊断");
+    expect(chineseBody).toContain("合成公开样板包");
+    expect(chineseBody).toContain("来源复核中");
+    expect(chineseBody).toContain("智能体平台 / 大模型框架");
+    expect(chineseBody).toContain("全程复核优先");
+
+    expect(chineseBody).not.toMatch(
+      /可 fork|Golden Path|synthetic public|sample pack|provenance under review|agent 平台|LLM framework|review-first/,
+    );
+  });
+
   it("keeps open-source and Cloud Trial launch posture Chinese body localized for release-governance terminology", () => {
     const launchPosture = read(
       "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
