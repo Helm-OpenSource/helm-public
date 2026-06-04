@@ -123,15 +123,18 @@ Issues link targets, WeChat entry points, social-media placeholders, or the
 SECURITY.md private disclosure path.
 
 本轮继续收口 Helm Pack 模板的中文交付工件术语混写；只调整上下文包、Pack Studio 安全样例、
-证据矩阵、待复核工作包、证明闭环收口、复核优先工件、工作流引擎、公开声明和静默写入客户关系
-系统文案，不改变模板文件名、英文参考、自动执行禁止边界或客户授权 / 专业复核边界。
+证据矩阵、待复核工作包、证明闭环收口、复核优先工件、工作流引擎、公开声明、静默写入客户关系
+系统、外部复刻者、公开安全证据门禁、负责人抽取门和工件目录说明文案，不改变目录路径、
+模板文件名、英文参考、自动执行禁止边界或客户授权 / 专业复核边界。
 
 This round further localizes mixed Chinese delivery-artifact terminology in the
 Helm Pack template. It changes context packet, Pack Studio safe sample, evidence
 matrix, review-ready work pack, proof-loop closeout, review-first artifact,
-workflow engine, public claim, and silent CRM write wording only, without
-changing template file names, English reference text, no-auto-execution
-boundaries, or customer-authorization / professional-review boundaries.
+workflow engine, public claim, silent CRM write, external forker, public-safe
+evidence gate, owner extraction gate, and artifact-directory guidance wording
+only, without changing directory paths, template file names, English reference
+text, no-auto-execution boundaries, or customer-authorization /
+professional-review boundaries.
 
 本轮继续收口公开试点作业手册的中文试用支持术语混写；只调整不承诺服务等级协议、GitHub 议题、
 公开议题或 PR、试用支持申请延期、运行时市场和服务等级协议立场变化文案，不改变反馈渠道、
@@ -1095,6 +1098,7 @@ true:
 
 | 日期 / Date | 变更 / Change |
 |---|---|
+| 2026-06-04 | 继续收口 Helm Pack 模板的中文抽取 / 工件目录术语混写；本批只改外部复刻者、公开安全证据门禁、负责人抽取门和工件目录说明文案及源码守卫，不改目录路径、模板文件名、英文参考、自动执行禁止边界或客户授权 / 专业复核边界；Further localized mixed Chinese extraction and artifact-directory terminology in the Helm Pack template; this batch changes external forker, public-safe evidence gate, owner extraction gate, and artifact-directory guidance plus source guards only and leaves directory paths, template file names, English reference text, no-auto-execution boundaries, and customer-authorization / professional-review boundaries unchanged |
 | 2026-06-04 | 继续收口 Solution Extension 协议的中文复核 / 交付判断术语混写；本批只改复核姿态、工程交付复核和邀请 / 复核判断文案及源码守卫，不改扩展协议、目录命名规则、私有客户定制边界或 Core / Pack / Overlay 依赖方向；Further localized mixed Chinese review and delivery-judgement terminology in the Solution Extension protocol; this batch changes review-posture, engineering-delivery-review, and invite / review judgement wording plus source guards only and leaves the extension protocol, directory naming rules, private customer customization boundary, and Core / Pack / Overlay dependency direction unchanged |
 | 2026-06-04 | 继续收口开源与商业边界文档的中文认证 / 服务等级协议术语混写；本批只改认证字样和服务等级协议文案及源码守卫，不改 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、依赖方向、公开 Helm Certified 品牌短语或认证品牌边界；Further localized mixed Chinese certification and service-level terminology in the open-source and commercial boundary doc; this batch changes certification-wording and service-level-agreement copy plus source guards only and leaves Apache-2.0, commercial Pack / customer Overlay / control-plane routing, dependency direction, public Helm Certified brand phrases, and certification-brand boundaries unchanged |
 | 2026-06-04 | 继续收口 integration template 的中文连接器术语混写；本批只改连接器 / 适配器、自动 / 复核 / 永远手动、预演、只读、提示条、追踪、OAuth 范围、退出与数据保留说明及源码守卫，不改连接器安全清单、测试要求、`authMode=MOCK` 默认或可接受 PR 边界；Further localized mixed Chinese connector terminology in the integration template; this batch changes connector / adapter, auto / review / never, dry-run, read-only, banner, trace, OAuth-scope, disconnect, and data-retention wording plus source guards only and leaves connector security checklists, test requirements, the `authMode=MOCK` default, and acceptable-PR boundaries unchanged |

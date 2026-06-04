@@ -2401,6 +2401,7 @@ describe("shared surface hierarchy guards", () => {
     const packTemplateDocs = [
       read("templates/helm-pack-template/README.md"),
       read("templates/helm-pack-template/docs/GETTING_STARTED.md"),
+      read("templates/helm-pack-template/EXTRACTION_NOTES.md"),
       read("templates/helm-pack-template/pack-template/PACK.md"),
       read("templates/helm-pack-template/pack-template/artifacts/README.md"),
       read("templates/helm-pack-template/pack-template/artifacts/work-pack.template.md"),
@@ -2416,6 +2417,10 @@ describe("shared surface hierarchy guards", () => {
     expect(packTemplateDocs).toContain("证据矩阵");
     expect(packTemplateDocs).toContain("待复核工作包");
     expect(packTemplateDocs).toContain("证明闭环收口");
+    expect(packTemplateDocs).toContain("外部复刻者验证");
+    expect(packTemplateDocs).toContain("公开安全证据门禁");
+    expect(packTemplateDocs).toContain("负责人抽取门");
+    expect(packTemplateDocs).toContain("工件目录");
     expect(packTemplateDocs).toContain("准备负责人复核");
     expect(packTemplateDocs).toContain("不是工作流引擎");
     expect(packTemplateDocs).toContain("静默写入客户关系系统");
@@ -2424,7 +2429,7 @@ describe("shared surface hierarchy guards", () => {
     expect(packTemplateDocs).toContain("不把内部学习直接变成公开声明");
 
     expect(packTemplateDocs).not.toMatch(
-      /review-first artifact|public-safe 交付 artifact|Review-first 交付 artifacts|准备 review-first 交付 artifacts|review gate 和 outcome|准备 owner review|不是 workflow engine|用于准备 review 的静态 Pack artifact|准备 review packet|推荐下一步 review-safe action|自动发送 customer-visible messages|silent write CRM|创建 public claim|7-day Run，但不把内部学习直接变成 public claim|closeout 默认 internal-only|Public 或 customer-visible claims/,
+      /review-first artifact|public-safe 交付 artifact|Review-first 交付 artifacts|准备 review-first 交付 artifacts|review gate 和 outcome|准备 owner review|不是 workflow engine|用于准备 review 的静态 Pack artifact|准备 review packet|推荐下一步 review-safe action|自动发送 customer-visible messages|silent write CRM|创建 public claim|7-day Run，但不把内部学习直接变成 public claim|closeout 默认 internal-only|Public 或 customer-visible claims|外部 forker|public-safe evidence gate|owner 抽取门|模板见 `artifacts\/`。|从 `pack-template\/artifacts\/` 复制并填写/,
     );
   });
 

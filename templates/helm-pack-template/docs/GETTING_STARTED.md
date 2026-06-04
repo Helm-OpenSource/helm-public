@@ -35,7 +35,7 @@ cd ../my-helm-pack
 让 Day-1 看板有真实可读内容。
 
 ### 7. 准备复核优先交付工件
-从 `pack-template/artifacts/` 复制并填写：
+从 `pack-template/artifacts/` 工件目录复制并填写：
 
 - `context-packet.template.json`
 - `pack-studio.sample.csv`
