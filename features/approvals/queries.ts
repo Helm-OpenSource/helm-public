@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { safeParseJson } from "@/lib/utils";
 import { buildBiReportSourceDetailHref } from "@/features/approvals/approval-object-detail-link";
 
-export async function getApprovalTasksData(workspaceId: string) {
+export async function getApprovalTasksData(workspaceId: string, english = false) {
   const tasks = await db.approvalTask.findMany({
     where: { workspaceId },
     include: {
@@ -110,7 +110,7 @@ export async function getApprovalTasksData(workspaceId: string) {
         signalId,
         signalKey,
         skillKey,
-        skillLabel: getBiSkillLabel(skillKey),
+        skillLabel: getBiSkillLabel(skillKey, english),
         handoffTargetType,
         detailHref: buildBiReportSourceDetailHref({ skillKey, signalId }),
       };
@@ -168,17 +168,17 @@ export function normalizeActionItemMetadata(
   return null;
 }
 
-function getBiSkillLabel(skillKey: string | null): string {
+export function getBiSkillLabel(skillKey: string | null, english = false): string {
   switch (skillKey) {
     case "bi_business_income_expense_monthly":
-      return "业务收支月报";
+      return english ? "Business income and expense monthly report" : "业务收支月报";
     case "bi_repay_daily":
-      return "回款日报";
+      return english ? "Repayment daily report" : "回款日报";
     case "bi_mtype_repay_monthly":
-      return "账龄回款月报";
+      return english ? "Aging repayment monthly report" : "账龄回款月报";
     case "bi_revenue_daily":
-      return "营收日报（兼容）";
+      return english ? "Revenue daily report (compatibility)" : "营收日报（兼容）";
     default:
-      return "BI经营信号";
+      return english ? "BI operating signal" : "BI经营信号";
   }
 }
