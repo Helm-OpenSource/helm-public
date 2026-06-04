@@ -92,4 +92,41 @@ describe("meeting display copy", () => {
     expect(detailSource).toContain("content={text(briefing.previousConclusion)}");
     expect(detailSource).toContain("content={text(briefing.relationshipSummary)}");
   });
+
+  it("converts persisted Chinese meeting runtime copy for the English surface", () => {
+    const display = formatMeetingDisplayText(
+      "当前阶段是 INTERNAL_SYNC。来源是 SYSTEM_INFERENCE。仍需关注的阻碍是：暂无明显阻碍。",
+      true,
+    );
+
+    expect(display).toBe(
+      "Current stage is internal sync needed. Source is system inference. Remaining blockers: no obvious blockers.",
+    );
+    expect(display).not.toMatch(/[一-龥]|INTERNAL_SYNC|SYSTEM_INFERENCE|阻碍|阻塞/);
+  });
+
+  it("extracts JSON summaries before rendering English meeting copy", () => {
+    const display = formatMeetingDisplayText(
+      JSON.stringify({
+        summary: "会议推进链路已接入：Acme Discovery recap。",
+        recommendedNextSteps: ["检查阻塞、决策、下一步、负责人、到期时间和边界说明是否仍在后台记录中。"],
+      }),
+      true,
+    );
+
+    expect(display).toBe("Meeting-to-action runtime ingested Acme Discovery recap.");
+    expect(display).not.toMatch(/[一-龥]|summary|recommendedNextSteps|会议推进链路/);
+  });
+
+  it("keeps meeting boundary language clear in English mixed-source prompts", () => {
+    const display = formatMeetingDisplayText(
+      "当前阶段是 WAITING_THEM，风险是 HIGH。Contact 详情需要判断 review、walkthrough 还是 accountable conversation；Founder 接手面负责 follow-up 邮件。",
+      true,
+    );
+
+    expect(display).toBe(
+      "Current stage is waiting on the other side; risk is high risk. Contact detail needs a judgement on whether this is review, walkthrough, or accountable conversation; Founder handoff surface owns the follow-up email.",
+    );
+    expect(display).not.toMatch(/[一-龥]|WAITING_THEM|HIGH|Contact 详情|Founder 接手面|邮件/);
+  });
 });
