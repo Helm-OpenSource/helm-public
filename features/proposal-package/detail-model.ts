@@ -10,6 +10,8 @@ import {
   createProposalPageDetailReportingContract,
 } from "@/lib/presentation/proposal-package-detail-contract";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
+import { format, formatDistanceToNowStrict } from "date-fns";
+import { enUS } from "date-fns/locale";
 import { formatDateLabel, formatRelative, trimText } from "@/lib/utils";
 
 type CommercialDetailSource = {
@@ -502,7 +504,7 @@ function buildEvidenceGroups(
               .slice(0, 2)
               .map((log) =>
                 english
-                  ? `${log.actor} · ${log.summary} · ${formatRelative(log.createdAt)}`
+                  ? `${log.actor} · ${log.summary} · ${formatEvidenceRelative(log.createdAt, true)}`
                   : `${log.actor} · ${log.summary} · ${formatRelative(log.createdAt)}`,
               )
           : [
@@ -591,12 +593,37 @@ function buildEvidenceGroups(
       label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `Last updated ${formatRelative(detail.updatedAt)}`
+          ? `Last updated ${formatEvidenceRelative(detail.updatedAt, true)}`
           : `最后更新于 ${formatRelative(detail.updatedAt)}`,
         english
-          ? `Current due date: ${formatDateLabel(detail.dueDate)}`
+          ? `Current due date: ${formatEvidenceDateLabel(detail.dueDate, true)}`
           : `当前截止时间：${formatDateLabel(detail.dueDate)}`,
       ],
     },
   ];
+}
+
+function formatEvidenceRelative(
+  value: Date | string | null | undefined,
+  english: boolean,
+) {
+  if (!english) return formatRelative(value);
+  if (!value) return "No date";
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  return formatDistanceToNowStrict(date, {
+    addSuffix: true,
+    locale: enUS,
+  });
+}
+
+function formatEvidenceDateLabel(
+  value: Date | string | null | undefined,
+  english: boolean,
+) {
+  if (!english) return formatDateLabel(value);
+  if (!value) return "Not set";
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  return format(date, "MMM d HH:mm", { locale: enUS });
 }
