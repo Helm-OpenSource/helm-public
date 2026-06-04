@@ -1,5 +1,31 @@
-import { ActorType, RecommendationFeedbackType, RecommendationStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@prisma/client", () => ({
+  ActorType: {
+    SYSTEM: "SYSTEM",
+    USER: "USER",
+  },
+  PreferenceSignalType: {
+    APPROVAL_PREFERENCE: "APPROVAL_PREFERENCE",
+  },
+  RecommendationFeedbackType: {
+    APPROVED: "APPROVED",
+    AUTO_EXECUTED: "AUTO_EXECUTED",
+    EDITED_AND_APPROVED: "EDITED_AND_APPROVED",
+    FAILED: "FAILED",
+    IGNORED: "IGNORED",
+    REJECTED: "REJECTED",
+  },
+  RecommendationStatus: {
+    ACCEPTED: "ACCEPTED",
+    EXECUTED: "EXECUTED",
+    EXPIRED: "EXPIRED",
+    IGNORED: "IGNORED",
+    REJECTED: "REJECTED",
+  },
+}));
+
+import { ActorType, RecommendationFeedbackType, RecommendationStatus } from "@prisma/client";
 
 const {
   serviceGovernanceMock,
@@ -119,5 +145,38 @@ describe("recommendation feedback seed batch suppression", () => {
 
     expect(deltaMock.recordRecommendationFeedbackDelta).toHaveBeenCalled();
     expect(evolutionMock.refreshEvolutionState).not.toHaveBeenCalled();
+  });
+
+  it("keeps Chinese audit summaries by default", async () => {
+    await submitRecommendationFeedback({
+      workspaceId: "workspace-1",
+      recommendationId: "rec-1",
+      userId: "user-1",
+      actorName: "Reviewer",
+      feedbackType: RecommendationFeedbackType.REJECTED,
+      sourcePage: "/recommendations",
+    });
+
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summary: "用户拒绝了判断建议：Send follow-up",
+      }),
+    );
+  });
+
+  it("localizes recommendation feedback audit summaries for English workspaces", async () => {
+    await submitRecommendationFeedback({
+      workspaceId: "workspace-1",
+      recommendationId: "rec-1",
+      userId: "user-1",
+      actorName: "Reviewer",
+      english: true,
+      feedbackType: RecommendationFeedbackType.APPROVED,
+      sourcePage: "/recommendations",
+    });
+
+    const summary = auditMock.writeAuditLog.mock.calls.at(-1)?.[0]?.summary;
+    expect(summary).toBe("User accepted the recommendation: Send follow-up");
+    expect(summary).not.toMatch(/[\u3400-\u9fff]/u);
   });
 });

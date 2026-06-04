@@ -44,20 +44,33 @@ function getPreferenceSignalValue(feedbackType: RecommendationFeedbackType) {
 function getFeedbackSummary(
   feedbackType: RecommendationFeedbackType,
   title: string,
+  english: boolean,
 ) {
   switch (feedbackType) {
     case RecommendationFeedbackType.APPROVED:
-      return `用户采纳了判断建议：${title}`;
+      return english
+        ? `User accepted the recommendation: ${title}`
+        : `用户采纳了判断建议：${title}`;
     case RecommendationFeedbackType.EDITED_AND_APPROVED:
-      return `用户编辑后采纳了判断建议：${title}`;
+      return english
+        ? `User edited and accepted the recommendation: ${title}`
+        : `用户编辑后采纳了判断建议：${title}`;
     case RecommendationFeedbackType.AUTO_EXECUTED:
-      return `系统按策略自动执行了判断建议：${title}`;
+      return english
+        ? `System executed the recommendation under policy: ${title}`
+        : `系统按策略自动执行了判断建议：${title}`;
     case RecommendationFeedbackType.REJECTED:
-      return `用户拒绝了判断建议：${title}`;
+      return english
+        ? `User rejected the recommendation: ${title}`
+        : `用户拒绝了判断建议：${title}`;
     case RecommendationFeedbackType.IGNORED:
-      return `判断建议被忽略：${title}`;
+      return english
+        ? `Recommendation was ignored: ${title}`
+        : `判断建议被忽略：${title}`;
     case RecommendationFeedbackType.FAILED:
-      return `判断建议执行失败：${title}`;
+      return english
+        ? `Recommendation execution failed: ${title}`
+        : `判断建议执行失败：${title}`;
   }
 }
 
@@ -167,7 +180,11 @@ export async function submitRecommendationFeedback(
     relatedObjectType: recommendation.objectType,
     relatedObjectId: recommendation.objectId,
     sourcePage: input.sourcePage ?? undefined,
-    summary: getFeedbackSummary(input.feedbackType, recommendation.title),
+    summary: getFeedbackSummary(
+      input.feedbackType,
+      recommendation.title,
+      input.english ?? false,
+    ),
     payload: {
       feedbackType: input.feedbackType,
       edited: input.edited ?? false,

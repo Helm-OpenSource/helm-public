@@ -5,6 +5,7 @@ import {
   RiskLevel,
 } from "@prisma/client";
 import { actionModeLabels, actionTypeLabels } from "@/data/constants";
+import { isEnglishLocale, type UiLocale } from "@/lib/i18n/config";
 import type { MemoryRetrievalPackSurfaceTrace } from "@/lib/memory/retrieval-pack-adapter";
 import { compactText, safeParseJson, trimText } from "@/lib/utils";
 import type {
@@ -61,6 +62,29 @@ type RecommendationLike = {
   blockerIds?: string[] | string | null;
   commitmentIds?: string[] | string | null;
 };
+
+type RecommendationPresentationReadOptions = {
+  locale?: UiLocale;
+};
+
+const actionModeEnglishLabels: Record<string, string> = {
+  SUGGEST_ONLY: "Suggest only",
+  REQUIRES_APPROVAL: "Requires approval",
+  AUTO_WITHIN_THRESHOLD: "Auto within threshold",
+  FORBIDDEN: "Forbidden",
+};
+
+function policyResultLabel(policyResult: ActionExecutionMode | string, english: boolean) {
+  if (english) {
+    return actionModeEnglishLabels[String(policyResult)] ?? String(policyResult);
+  }
+
+  return (
+    actionModeLabels[
+      policyResult as keyof typeof actionModeLabels
+    ] ?? String(policyResult)
+  );
+}
 
 function buildWhyNow(
   context: RecommendationObjectContext,
@@ -371,7 +395,9 @@ export function buildRecommendationPresentationPayload(input: {
 
 export function readRecommendationPresentation(
   recommendation: RecommendationLike,
+  options: RecommendationPresentationReadOptions = {},
 ): RecommendationPresentationModel {
+  const english = options.locale ? isEnglishLocale(options.locale) : false;
   const payload =
     typeof recommendation.recommendationPayload === "string"
       ? safeParseJson<Record<string, unknown>>(
@@ -402,11 +428,15 @@ export function readRecommendationPresentation(
     decisionLabel:
       typeof payload.decisionLabel === "string"
         ? payload.decisionLabel
-        : "首选动作",
+        : english
+          ? "Primary move"
+          : "首选动作",
     tradeoffSummary:
       typeof payload.tradeoffSummary === "string"
         ? payload.tradeoffSummary
-        : "当前判断建议仍然主要基于记忆、阻塞、承诺和策略边界做排序。",
+        : english
+          ? "This recommendation is still ranked by memory, blockers, commitments, and policy boundaries."
+          : "当前判断建议仍然主要基于记忆、阻塞、承诺和策略边界做排序。",
     alternativeActionTitle:
       typeof payload.alternativeActionTitle === "string"
         ? payload.alternativeActionTitle
@@ -414,11 +444,15 @@ export function readRecommendationPresentation(
     whyNow:
       typeof payload.whyNow === "string"
         ? payload.whyNow
-        : recommendation.explanation,
+        : english
+          ? "This recommendation is ready for review because the current evidence points to a concrete next move."
+          : recommendation.explanation,
     evidenceLead:
       typeof payload.evidenceLead === "string"
         ? payload.evidenceLead
-        : "当前判断主要基于最近互动、结构化记忆和风险窗口。",
+        : english
+          ? "This judgement is based on recent activity, structured memory, and the current risk window."
+          : "当前判断主要基于最近互动、结构化记忆和风险窗口。",
     currentBlocker:
       typeof payload.currentBlocker === "string"
         ? payload.currentBlocker
@@ -430,11 +464,15 @@ export function readRecommendationPresentation(
     expectedImpact:
       typeof payload.expectedImpact === "string"
         ? payload.expectedImpact
-        : "这条动作会帮助你把下一步收口，而不是继续停留在判断层。",
+        : english
+          ? "This move helps turn the next step into reviewed follow-through instead of leaving it at the judgement layer."
+          : "这条动作会帮助你把下一步收口，而不是继续停留在判断层。",
     ifNoAction:
       typeof payload.ifNoAction === "string"
         ? payload.ifNoAction
-        : "如果继续不推进，当前对象的阻力和不确定性都会继续累积。",
+        : english
+          ? "If no action is taken, resistance and uncertainty around this object will keep accumulating."
+          : "如果继续不推进，当前对象的阻力和不确定性都会继续累积。",
     personalizationHint:
       typeof payload.personalizationHint === "string"
         ? payload.personalizationHint
@@ -456,28 +494,35 @@ export function readRecommendationPresentation(
     evidenceSummary:
       typeof payload.evidenceSummary === "string"
         ? payload.evidenceSummary
-        : `已引用 ${parseIdArray(recommendation.supportingFactIds).length} 条事实、${parseIdArray(recommendation.blockerIds).length} 个阻塞、${parseIdArray(recommendation.commitmentIds).length} 个承诺。`,
+        : english
+          ? `References ${parseIdArray(recommendation.supportingFactIds).length} fact(s), ${parseIdArray(recommendation.blockerIds).length} blocker(s), and ${parseIdArray(recommendation.commitmentIds).length} commitment(s).`
+          : `已引用 ${parseIdArray(recommendation.supportingFactIds).length} 条事实、${parseIdArray(recommendation.blockerIds).length} 个阻塞、${parseIdArray(recommendation.commitmentIds).length} 个承诺。`,
     memoryRetrievalPack:
       payload.memoryRetrievalPack &&
       typeof payload.memoryRetrievalPack === "object"
         ? (payload.memoryRetrievalPack as MemoryRetrievalPackSurfaceTrace)
         : null,
     explanation: recommendation.explanation,
-    policyResultLabel:
-      actionModeLabels[
-        recommendation.policyResult as keyof typeof actionModeLabels
-      ] ?? String(recommendation.policyResult),
+    policyResultLabel: policyResultLabel(recommendation.policyResult, english),
     policyHint,
     appliedPolicyReason,
     llmEnhanced: Boolean(payload.llmEnhanced),
     llmHint: llmMeta
-      ? `已由 LLM 增强解释层处理：${typeof llmMeta.promptKey === "string" ? llmMeta.promptKey : "未标记提示"} / ${
-          typeof llmMeta.modelVersion === "string"
-            ? llmMeta.modelVersion
-            : typeof llmMeta.model === "string"
-              ? llmMeta.model
-              : "未标记模型"
-        }。${typeof llmMeta.fallbackReason === "string" ? ` 当前走了回退：${llmMeta.fallbackReason}。` : " 保留原有策略与排序边界。"}`
+      ? english
+        ? `LLM explanation layer applied: ${typeof llmMeta.promptKey === "string" ? llmMeta.promptKey : "unlabeled prompt"} / ${
+            typeof llmMeta.modelVersion === "string"
+              ? llmMeta.modelVersion
+              : typeof llmMeta.model === "string"
+                ? llmMeta.model
+                : "unlabeled model"
+          }.${typeof llmMeta.fallbackReason === "string" ? ` Fallback used: ${llmMeta.fallbackReason}.` : " Original policy and ranking boundaries are preserved."}`
+        : `已由 LLM 增强解释层处理：${typeof llmMeta.promptKey === "string" ? llmMeta.promptKey : "未标记提示"} / ${
+            typeof llmMeta.modelVersion === "string"
+              ? llmMeta.modelVersion
+              : typeof llmMeta.model === "string"
+                ? llmMeta.model
+                : "未标记模型"
+          }。${typeof llmMeta.fallbackReason === "string" ? ` 当前走了回退：${llmMeta.fallbackReason}。` : " 保留原有策略与排序边界。"}`
       : null,
   };
 }

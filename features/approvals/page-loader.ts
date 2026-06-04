@@ -117,6 +117,7 @@ export async function loadApprovalsPageData(
         workspaceId: workspace.id,
         userId: user.id,
         actionTypes,
+        locale,
       }),
       {},
     ),
