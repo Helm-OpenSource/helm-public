@@ -18,6 +18,7 @@ import {
   formatAnalyticsTechnicalKey,
   formatAnalyticsVisibleText,
 } from "@/features/analytics/display-copy";
+import { formatAnalyticsDateLabel } from "@/features/analytics/date-labels";
 import {
   getLocalizedActionTypeLabels,
   getLocalizedEventLabels,
@@ -1331,7 +1332,11 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
                     </Badge>
                   </div>
                   <p className="text-xs text-[color:var(--muted-foreground)]">
-                    {formatDateLabel(event.createdAt)}
+                    {formatAnalyticsDateLabel(
+                      event.createdAt,
+                      english,
+                      formatDateLabel,
+                    )}
                   </p>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-sm text-[color:var(--muted-foreground)]">
@@ -1450,7 +1455,11 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
                       </Badge>
                     </div>
                     <p className="text-xs text-[color:var(--muted-foreground)]">
-                      {formatDateLabel(item.createdAt)}
+                      {formatAnalyticsDateLabel(
+                        item.createdAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     </p>
                   </div>
                   <div className="mt-2 text-sm text-[color:var(--muted-foreground)]">
