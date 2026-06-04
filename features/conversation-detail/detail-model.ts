@@ -12,6 +12,7 @@ import {
   createConversationDetailReportingContract,
 } from "@/lib/presentation/conversation-detail-contract";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
+import { formatConversationRelativeLabel } from "./date-labels";
 import { formatRelative, trimText } from "@/lib/utils";
 
 export function buildConversationDetailPageContract({
@@ -474,7 +475,7 @@ function buildEvidenceGroups(
       label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `${topCommitment} · updated ${formatRelative(detail.updatedAt)}`
+          ? `${topCommitment} · updated ${formatConversationRelativeLabel(detail.updatedAt, true)}`
           : `${topCommitment} · 最近更新于 ${formatRelative(detail.updatedAt)}`,
       ],
     },
