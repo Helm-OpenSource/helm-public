@@ -4,6 +4,7 @@ import path from "node:path";
 import { scanForSensitiveMarkers } from "./sensitive-markers";
 
 export type DeliveryDoctorStatus = "pass" | "warn" | "fail";
+export type DeliveryDoctorRegionProfile = "global" | "cn";
 
 export type DeliveryDoctorCheck = {
   id: string;
@@ -16,6 +17,7 @@ export type DeliveryDoctorCheck = {
 export type DeliveryDoctorSummary = {
   version: "delivery_engineer_golden_path_doctor_v1";
   boundary: "read_only_local_repo_static_check";
+  regionProfile: DeliveryDoctorRegionProfile;
   passed: boolean;
   counts: Record<DeliveryDoctorStatus, number>;
   checks: DeliveryDoctorCheck[];
@@ -29,6 +31,7 @@ type PackageJson = {
 type FileReader = (absolutePath: string) => string;
 type FileExists = (absolutePath: string) => boolean;
 type DirectoryLister = (absoluteDir: string) => readonly string[];
+type DoctorEnv = Record<string, string | undefined>;
 
 export type RunDeliveryDoctorOptions = {
   /**
@@ -37,6 +40,8 @@ export type RunDeliveryDoctorOptions = {
    * absolute path outside the current repo is unsupported.
    */
   rootDir?: string;
+  regionProfile?: DeliveryDoctorRegionProfile;
+  env?: DoctorEnv;
   exists?: FileExists;
   readFile?: FileReader;
   listDirectory?: DirectoryLister;
@@ -99,6 +104,7 @@ const SAMPLE_TEST_PATHS = [
 
 const FRESH_CLONE_RECEIPT_DIRECTORY = "docs/reviews";
 const FRESH_CLONE_RECEIPT_PATTERN = /^HELM_DELIVERY_ENGINEER_D2_SMOKE.*\.md$/;
+const ROOT_ENV_FILE_ORDER = [".env.example", ".env", ".env.local"] as const;
 const ENV_EXAMPLE_PATH = ".env.example";
 
 function helmEnvKey(...parts: readonly string[]) {
@@ -115,6 +121,82 @@ function defaultListDirectory(absoluteDir: string): readonly string[] {
   } catch {
     return [];
   }
+}
+
+function stripEnvQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function parseEnvFileContent(content: string): DoctorEnv {
+  const values: DoctorEnv = {};
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const normalized = trimmed.startsWith("export ") ? trimmed.slice("export ".length).trim() : trimmed;
+    const separatorIndex = normalized.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = normalized.slice(0, separatorIndex).trim();
+    if (!/^[A-Z0-9_]+$/.test(key)) {
+      continue;
+    }
+
+    values[key] = stripEnvQuotes(normalized.slice(separatorIndex + 1));
+  }
+
+  return values;
+}
+
+function loadDoctorEnv(
+  rootDir: string,
+  exists: FileExists,
+  readFile: FileReader,
+  runtimeEnv: DoctorEnv,
+): DoctorEnv {
+  const loaded: DoctorEnv = {};
+
+  for (const fileName of ROOT_ENV_FILE_ORDER) {
+    const absolutePath = path.join(rootDir, fileName);
+    if (!exists(absolutePath)) {
+      continue;
+    }
+
+    try {
+      Object.assign(loaded, parseEnvFileContent(readFile(absolutePath)));
+    } catch {
+      // A malformed local env file should not make the static doctor crash.
+      // Specific config checks below will surface missing values as warnings.
+    }
+  }
+
+  for (const [key, value] of Object.entries(runtimeEnv)) {
+    if (typeof value === "string") {
+      loaded[key] = value;
+    }
+  }
+
+  return loaded;
+}
+
+function envValue(env: DoctorEnv, key: string): string {
+  return env[key]?.trim() ?? "";
+}
+
+function isEnvTrue(value: string): boolean {
+  return value.trim().toLowerCase() === "true";
 }
 
 function fileStatus(rootDir: string, relativePath: string, exists: FileExists): DeliveryDoctorCheck {
@@ -233,6 +315,181 @@ function freshCloneStatus(
       ? `${matchingReceipts.length} D2 smoke receipt file(s) found: ${matchingReceipts.join(", ")}`
       : "no fresh-clone smoke receipt found under docs/reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE*.md; 30-minute onboarding remains a target, not a verified promise",
     nextAction: hasReceipt ? undefined : "run D2 smoke in a clean checkout before publishing time claims",
+  };
+}
+
+function qwenCredentialStatus(env: DoctorEnv): DeliveryDoctorCheck {
+  const llmEnabled = isEnvTrue(envValue(env, "LLM_ENABLED"));
+  const provider = envValue(env, "LLM_DEFAULT_PROVIDER").toLowerCase() || "qwen";
+  const hasDashScopeKey = Boolean(envValue(env, "DASHSCOPE_API_KEY"));
+  const hasOpenAIKey = Boolean(envValue(env, "OPENAI_API_KEY"));
+
+  if (!llmEnabled) {
+    return {
+      id: "config:qwen-dashscope-key",
+      title: "Qwen / DashScope credential alignment",
+      status: "pass",
+      detail: "LLM_ENABLED is not true; Qwen credential alignment is not active for this checkout",
+    };
+  }
+
+  if (provider !== "qwen") {
+    return {
+      id: "config:qwen-dashscope-key",
+      title: "Qwen / DashScope credential alignment",
+      status: "pass",
+      detail: `LLM_DEFAULT_PROVIDER=${provider}; Qwen credential alignment is not active`,
+    };
+  }
+
+  if (hasDashScopeKey) {
+    return {
+      id: "config:qwen-dashscope-key",
+      title: "Qwen / DashScope credential alignment",
+      status: "pass",
+      detail: "LLM_DEFAULT_PROVIDER=qwen and DASHSCOPE_API_KEY is present",
+    };
+  }
+
+  if (hasOpenAIKey) {
+    return {
+      id: "config:qwen-dashscope-key",
+      title: "Qwen / DashScope credential alignment",
+      status: "warn",
+      detail:
+        "LLM_DEFAULT_PROVIDER=qwen but only OPENAI_API_KEY is present; the runtime Qwen key helper can fall back to OPENAI_API_KEY, which is usually a provider mismatch for DashScope",
+      nextAction:
+        "set DASHSCOPE_API_KEY for Qwen, or switch LLM_DEFAULT_PROVIDER=openai with an approved OpenAI-compatible endpoint",
+    };
+  }
+
+  return {
+    id: "config:qwen-dashscope-key",
+    title: "Qwen / DashScope credential alignment",
+    status: "warn",
+    detail: "LLM_ENABLED=true and LLM_DEFAULT_PROVIDER=qwen, but DASHSCOPE_API_KEY is empty",
+    nextAction: "set DASHSCOPE_API_KEY or set LLM_ENABLED=false for offline / placeholder-only runs",
+  };
+}
+
+function chinaRegionResidencyStatus(
+  regionProfile: DeliveryDoctorRegionProfile,
+  env: DoctorEnv,
+): DeliveryDoctorCheck {
+  if (regionProfile !== "cn") {
+    return {
+      id: "config:china-region-residency",
+      title: "China deployment profile",
+      status: "pass",
+      detail: "global profile selected; run `npm run delivery:doctor -- --region cn` for China deployment preflight",
+    };
+  }
+
+  const deploymentRegion = envValue(env, "HELM_DEPLOYMENT_REGION");
+  const dataResidency = envValue(env, "HELM_DATA_RESIDENCY");
+  const ready = deploymentRegion === "cn" && dataResidency === "cn";
+
+  return {
+    id: "config:china-region-residency",
+    title: "China deployment profile",
+    status: ready ? "pass" : "warn",
+    detail: ready
+      ? "HELM_DEPLOYMENT_REGION=cn and HELM_DATA_RESIDENCY=cn are aligned"
+      : `China profile requested but HELM_DEPLOYMENT_REGION=${deploymentRegion || "<empty>"} and HELM_DATA_RESIDENCY=${dataResidency || "<empty>"}`,
+    nextAction: ready
+      ? undefined
+      : "set HELM_DEPLOYMENT_REGION=cn and HELM_DATA_RESIDENCY=cn before claiming China-region delivery readiness",
+  };
+}
+
+function chinaNpmRegistryStatus(
+  regionProfile: DeliveryDoctorRegionProfile,
+  rootDir: string,
+  exists: FileExists,
+  env: DoctorEnv,
+): DeliveryDoctorCheck {
+  if (regionProfile !== "cn") {
+    return {
+      id: "network:china-npm-registry",
+      title: "Mainland China npm registry hint",
+      status: "pass",
+      detail: "global profile selected; npm mirror preflight is skipped",
+    };
+  }
+
+  const hasNpmRegistry = Boolean(envValue(env, "NPM_REGISTRY"));
+  const hasLocalNpmrc = exists(path.join(rootDir, ".npmrc"));
+  const ready = hasNpmRegistry || hasLocalNpmrc;
+
+  return {
+    id: "network:china-npm-registry",
+    title: "Mainland China npm registry hint",
+    status: ready ? "pass" : "warn",
+    detail: ready
+      ? "local npm mirror hint is present through NPM_REGISTRY or .npmrc"
+      : "China profile requested but neither NPM_REGISTRY nor local .npmrc is present",
+    nextAction: ready
+      ? undefined
+      : "run `cp .npmrc.example .npmrc` for local npm, or prefix Docker builds with `NPM_REGISTRY=https://registry.npmmirror.com`",
+  };
+}
+
+function chinaDockerMirrorGuidanceStatus(
+  rootDir: string,
+  exists: FileExists,
+  readFile: FileReader,
+): DeliveryDoctorCheck {
+  const docsToCheck = ["docs/getting-started.md", "docs/getting-started.en.md"];
+  const missingGuidance = docsToCheck.filter((relativePath) => {
+    const absolutePath = path.join(rootDir, relativePath);
+    if (!exists(absolutePath)) {
+      return true;
+    }
+    const content = readFile(absolutePath);
+    return !content.includes("registry-mirrors") || !content.includes("NPM_REGISTRY");
+  });
+
+  return {
+    id: "network:china-docker-mirror-guidance",
+    title: "Mainland China Docker / npm mirror guidance",
+    status: missingGuidance.length === 0 ? "pass" : "warn",
+    detail:
+      missingGuidance.length === 0
+        ? "bilingual getting-started docs include Docker registry mirror and NPM_REGISTRY guidance"
+        : `mirror guidance missing or incomplete in: ${missingGuidance.join(", ")}`,
+    nextAction:
+      missingGuidance.length === 0
+        ? undefined
+        : "document Docker daemon registry-mirrors and Docker build NPM_REGISTRY before promoting the 90-second demo path in restricted networks",
+  };
+}
+
+function asrChinaBoundaryStatus(
+  regionProfile: DeliveryDoctorRegionProfile,
+  env: DoctorEnv,
+): DeliveryDoctorCheck {
+  const asrEnabled = isEnvTrue(envValue(env, "ASR_ENABLED"));
+
+  if (regionProfile !== "cn" || !asrEnabled) {
+    return {
+      id: "config:asr-openai-china-boundary",
+      title: "ASR China boundary",
+      status: "pass",
+      detail:
+        regionProfile !== "cn"
+          ? "global profile selected; China ASR boundary preflight is skipped"
+          : "ASR_ENABLED is not true; OpenAI-only ASR path is disabled for this China preflight",
+    };
+  }
+
+  return {
+    id: "config:asr-openai-china-boundary",
+    title: "ASR China boundary",
+    status: "warn",
+    detail:
+      "China profile requested and ASR_ENABLED=true, but the current capture ASR implementation is OpenAI-only",
+    nextAction:
+      "keep ASR_ENABLED=false for China customer delivery unless an approved ASR provider, outbound consent, and PII handling path are implemented",
   };
 }
 
@@ -358,10 +615,12 @@ export function runDeliveryEngineerGoldenPathDoctor(
   options: RunDeliveryDoctorOptions = {},
 ): DeliveryDoctorSummary {
   const rootDir = options.rootDir ?? process.cwd();
+  const regionProfile = options.regionProfile ?? "global";
   const exists = options.exists ?? existsSync;
   const readFile = options.readFile ?? defaultReadFile;
   const listDirectory = options.listDirectory ?? defaultListDirectory;
   const packageJson = parsePackageJson(rootDir, readFile);
+  const doctorEnv = loadDoctorEnv(rootDir, exists, readFile, options.env ?? process.env);
   const envExample = parseEnvExample(rootDir, exists, readFile);
 
   const checks: DeliveryDoctorCheck[] = [
@@ -371,6 +630,11 @@ export function runDeliveryEngineerGoldenPathDoctor(
     sampleTestStatus(rootDir, exists),
     sensitiveSampleStatus(rootDir, exists, readFile),
     freshCloneStatus(rootDir, listDirectory),
+    qwenCredentialStatus(doctorEnv),
+    chinaRegionResidencyStatus(regionProfile, doctorEnv),
+    chinaNpmRegistryStatus(regionProfile, rootDir, exists, doctorEnv),
+    chinaDockerMirrorGuidanceStatus(rootDir, exists, readFile),
+    asrChinaBoundaryStatus(regionProfile, doctorEnv),
     chinaProfileStatus(envExample),
     asrOpenAIOnlyStatus(envExample),
     connectorTokenSecretStatus(envExample),
@@ -381,11 +645,13 @@ export function runDeliveryEngineerGoldenPathDoctor(
   return {
     version: "delivery_engineer_golden_path_doctor_v1",
     boundary: "read_only_local_repo_static_check",
+    regionProfile,
     passed: counts.fail === 0,
     counts,
     checks,
     nextCommands: [
       "npm run delivery:doctor",
+      "npm run delivery:doctor -- --region cn",
       "npm run pack:fixture-check",
       "npm run eval:headless-signal-interface",
       "npm run eval:operating-signal-flow",

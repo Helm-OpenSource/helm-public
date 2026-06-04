@@ -96,6 +96,26 @@ describe("signal collection cron route", () => {
     expect(mocks.registry.runRegisteredSignalCollectionJobs).not.toHaveBeenCalled();
   });
 
+  it("localizes unknown job errors from Accept-Language", async () => {
+    const response = await postSignalCollectionRoute(
+      new Request(
+        "http://localhost:3000/api/runtime/signals/collect?jobKey=tenant-alpha.unknown.daily",
+        {
+          headers: {
+            "accept-language": "zh-CN",
+            "x-helm-cron-token": "cron-token",
+          },
+        },
+      ),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(payload.error).toBe("未知的信号采集任务。");
+    expect(payload.unknownJobKeys).toEqual(["tenant-alpha.unknown.daily"]);
+    expect(mocks.registry.runRegisteredSignalCollectionJobs).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid cron tokens", async () => {
     const response = await postSignalCollectionRoute(
       new Request("http://localhost:3000/api/runtime/signals/collect", {
@@ -123,12 +143,52 @@ describe("signal collection cron route", () => {
     expect(mocks.registry.runRegisteredSignalCollectionJobs).not.toHaveBeenCalled();
   });
 
+  it("localizes missing cron token configuration errors from Accept-Language", async () => {
+    delete process.env.SIGNAL_COLLECTION_CRON_TOKEN;
+
+    const response = await postSignalCollectionRoute(
+      new Request("http://localhost:3000/api/runtime/signals/collect", {
+        headers: {
+          "accept-language": "zh-CN",
+          "x-helm-cron-token": "cron-token",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "SIGNAL_COLLECTION_CRON_TOKEN 尚未配置。",
+    });
+    expect(mocks.registry.runRegisteredSignalCollectionJobs).not.toHaveBeenCalled();
+  });
+
   it("rejects GET dispatch to avoid accidental replay", async () => {
-    const response = await getSignalCollectionRoute();
+    const response = await getSignalCollectionRoute(
+      new Request("http://localhost:3000/api/runtime/signals/collect", {
+        headers: { "accept-language": "en-US" },
+      }),
+    );
     expect((await response.json()).entrypoint).toMatchObject({
       class: "registered_signal_collection",
       method: "POST",
     });
     expect(response.status).toBe(405);
+  });
+
+  it("localizes GET dispatch guidance from Accept-Language", async () => {
+    const response = await getSignalCollectionRoute(
+      new Request("http://localhost:3000/api/runtime/signals/collect", {
+        headers: { "accept-language": "zh-CN" },
+      }),
+    );
+
+    expect(response.status).toBe(405);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "请使用 POST 触发信号采集 cron dispatch。",
+      entrypoint: {
+        class: "registered_signal_collection",
+        method: "POST",
+      },
+    });
   });
 });

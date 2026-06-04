@@ -20,7 +20,7 @@ export async function previewCrmImportSource(sourceId: string) {
     return previewSalesforceImport(source.id);
   }
 
-  throw new Error(`当前来源 ${source.sourceType} 还不支持 CRM 预览`);
+  throw new Error(`当前来源 ${source.sourceType} 还不支持客户关系系统预览`);
 }
 
 export async function runCrmImportSource(input: {
@@ -55,7 +55,7 @@ export async function runCrmImportSource(input: {
     });
   }
 
-  throw new Error(`当前来源 ${source.sourceType} 还不支持 CRM 导入`);
+  throw new Error(`当前来源 ${source.sourceType} 还不支持客户关系系统导入`);
 }
 
 export async function rerunImportWarmup(input: {

@@ -144,6 +144,12 @@ export function isAlipayLifecycleConfigured() {
   return Boolean(config.appId && config.merchantPrivateKey && config.alipayPublicKey && config.appUrl);
 }
 
+function getAlipayCheckoutNotConfiguredMessage(locale?: string | null) {
+  return locale === "en-US"
+    ? "Alipay checkout is not configured yet"
+    : "支付宝购买入口还没有配置完成。";
+}
+
 export async function createAlipayCheckoutSession(
   input: ChinaPaymentCheckoutInput & { provider: PaymentProvider },
 ): Promise<ChinaPaymentCheckoutResult> {
@@ -151,7 +157,7 @@ export async function createAlipayCheckoutSession(
   const privateKey = normalizePem(config.merchantPrivateKey, "PRIVATE KEY");
 
   if (!config.appId || !privateKey) {
-    throw new Error("Alipay checkout is not configured yet");
+    throw new Error(getAlipayCheckoutNotConfiguredMessage(input.locale));
   }
 
   const outTradeNo = buildChinaPaymentOrderId(PAYMENT_PROVIDER.ALIPAY, input.workspaceId);
@@ -173,10 +179,11 @@ export async function createAlipayCheckoutSession(
     sign_type: "RSA2",
     timestamp: formatTimestamp(),
     version: "1.0",
-    notify_url: getChinaPaymentNotifyUrl(PAYMENT_PROVIDER.ALIPAY),
+    notify_url: getChinaPaymentNotifyUrl(PAYMENT_PROVIDER.ALIPAY, input.locale),
     return_url: getChinaPaymentReturnUrl({
       provider: PAYMENT_PROVIDER.ALIPAY,
       status: "checkout-returned",
+      locale: input.locale,
     }),
     biz_content: bizContent,
   };

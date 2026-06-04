@@ -257,7 +257,7 @@ function buildMeetingCandidates(context: RecommendationObjectContext, evidence: 
     {
       actionType: ActionType.CREATE_MEETING,
       title: `创建《${context.objectLabel}》后续会议`,
-      description: "如果今天结论还没有收口，先把 follow-up 时间占住。",
+      description: "如果今天结论还没有收口，先把后续跟进时间占住。",
       aiReason: "很多会议不是信息不够，而是结束后没有下一次明确触点。",
       metadata: {
         createMeetingTitle: `${context.objectLabel} Follow-up`,

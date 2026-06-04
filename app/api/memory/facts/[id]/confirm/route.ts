@@ -37,11 +37,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         confirmedByUser: result.fact.confirmedByUser,
         status: result.fact.status,
       },
-      "memory fact confirmed",
+      english ? "Memory fact confirmed" : "记忆事实已确认",
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "记忆确认失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to confirm memory fact"
+          : "记忆确认失败",
       isWorkspaceOwnershipError(error) ? "FACT_NOT_FOUND" : "CONFIRM_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

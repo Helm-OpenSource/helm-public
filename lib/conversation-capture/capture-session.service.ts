@@ -65,7 +65,9 @@ export async function startCaptureSession(input: StartCaptureSessionInput) {
     actionType: "CAPTURE_STARTED",
     targetType: "CaptureSession",
     targetId: created.id,
-    summary: `开始现场记录：${created.title ?? "未命名会话"}`,
+    summary: input.english
+      ? `Started field capture: ${created.title ?? "Untitled session"}`
+      : `开始现场记录：${created.title ?? "未命名会话"}`,
     payload: {
       objectType: created.objectType,
       objectId: created.objectId,
@@ -146,7 +148,9 @@ export async function stopCaptureSession(
     actionType: "CAPTURE_STOPPED",
     targetType: "CaptureSession",
     targetId: updated.id,
-    summary: `结束现场记录：${updated.title ?? "未命名会话"}`,
+    summary: input.english
+      ? `Stopped field capture: ${updated.title ?? "Untitled session"}`
+      : `结束现场记录：${updated.title ?? "未命名会话"}`,
     payload: {
       durationSeconds: updated.durationSeconds,
       objectType: updated.objectType,

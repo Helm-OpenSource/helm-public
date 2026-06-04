@@ -67,6 +67,11 @@ First screen: `/operating` (operating signal flow map), `/approvals` (review gat
 > **⚠️ Phase 2 fixture demo**: `/operating` currently shows synthetic fixture data and does not represent live tenant business flow. DPO review and founder-attested 5-role signoff are recorded, but route adoption is still locked until Engineering / Product / Security / Operations per-role receipts are attached. The current shadow probe is Phase 1.5 day-2 dogfood proxy only. See [`docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md`](docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md).
 
 > Requires local Docker Desktop / OrbStack / colima. Boots the minimal set (no connectors, no AI, no payments).
+> Mainland China / restricted-network environments can configure local npm and
+> Docker mirrors first: `cp .npmrc.example .npmrc`, then run
+> `NPM_REGISTRY=https://registry.npmmirror.com docker compose up --build`.
+> Docker Hub base images still require an organization-approved registry mirror
+> in your Docker daemon. See [getting-started.en.md §1.1](docs/getting-started.en.md#11-mainland-china--restricted-network-setup-optional).
 
 Golden Path acceptance: see [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md). `extensions/case-management-sample/` provides a readable / editable public sample pack. Docker / fresh-clone evidence is governed by review receipts and gates, not date promises.
 
@@ -76,6 +81,7 @@ This path answers three questions: can I trust the boundaries, where do I make t
 
 ```bash
 npm run delivery:doctor
+npm run delivery:doctor -- --region cn   # local static preflight before China customer delivery
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run check:public-release
@@ -246,14 +252,14 @@ Details: [AGENTS.md §6-§7](AGENTS.md), [lib/operating-signal-flow/contract.ts]
 - Public Core, Docker quickstart, case-management sample pack, Golden Path doctor, offline evals, public-release guard.
 - Repo split boundary: Core stays in this repository; industry Packs, customer Overlays, and BOM / authorization / deployment metadata move through their corresponding private target repositories, not Public Core.
 - Repository visibility is public after the owner Go/No-Go; future release, tag, and announcement changes remain owner-gated.
-- README, governance docs, `.env.example` tiers, and `docker-compose.yml`.
+- README, governance docs, `.env.example` tiers, `docker-compose.yml`, and local mirror guidance for Mainland China / restricted networks.
 
 **Next**
 - Remove frozen legacy repository links and date-style release copy from public entry points.
 - Document the Builder walkthrough as "change this line -> run this command -> observe this change".
 - Complete the sample provenance gate, fork-and-rename guide, "what Helm does not do", and forker upgrade story.
 - Add a read-only split doctor in the corresponding governance repository, aggregating Core / Pack / Overlay / BOM readiness.
-- Continue degraded-mode health surface, Required Reviewer review, and redacted live DB calibration.
+- Continue degraded-mode health surface, Required Reviewer review, redacted live DB calibration, and production deployment runbook / image boundaries.
 
 **Later**
 - Community-contributed vertical pack collaboration (open-source vertical vs tenant-private boundary)

@@ -31,10 +31,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: english
       ? "Helm | Open-source AI operating toolkit for enterprise AI delivery engineers"
-      : "Helm | 面向企业 AI 交付工程师的开源经营推进工具集",
+      : "Helm | 面向企业AI交付工程师的开源经营推进工具集",
     description: english
       ? "AI agent platforms give you Lego bricks. Helm turns judgement, evidence, review, boundaries, and delivery packages into a forkable Apache-2.0 Core for enterprise AI delivery engineers."
-      : "AI 平台给你乐高积木。Helm 把判断、证据、复核、边界、交付包做成可 fork 的 Apache-2.0 Core，给企业 AI 交付工程师复用。",
+      : "AI平台给你乐高积木。Helm把判断、证据、复核、边界、交付包做成可复用的Apache-2.0核心工程，给企业AI交付工程师复用。",
   };
 }
 
@@ -96,10 +96,10 @@ export default async function Home({
       key: "fork",
       icon: Sparkles,
       eyebrow: english ? "Apache-2.0 · GitHub" : "Apache-2.0 · GitHub",
-      title: english ? "Fork the toolkit" : "Fork 这套工具集",
+      title: english ? "Fork the toolkit" : "复用这套工具集",
       body: english
         ? "Read the source, fork the repo, and use the Golden Path checks to keep judgement, evidence, review, and boundaries visible. Apache-2.0, no royalty, no platform tax."
-        : "看源码、fork 仓库，用 Golden Path 检查链把判断、证据、复核、边界看清楚。Apache-2.0，不抽成，不锁渠道。",
+        : "看源码、复刻仓库，用黄金路径检查链把判断、证据、复核、边界看清楚。Apache-2.0，不抽成，不锁渠道。",
       href: "https://github.com/Helm-OpenSource/helm-public",
       cta: english ? "View on GitHub" : "去 GitHub 看源码",
       testId: "home-path-fork",
@@ -134,12 +134,14 @@ export default async function Home({
     eyebrow: english ? "Today · Huadong Intelligent Mfg pilot" : "今天 · 华东智造试点",
     headline: english
       ? "If the ROI pack doesn't go out today, the May window is gone."
-      : "ROI 材料今天不发，5 月窗口就要掉。",
+      : "投资回报材料今天不发，5 月窗口就要掉。",
     body: english
       ? "Procurement left ROI questions on the table. The CFO asked for a structured pack. CRM is still parked at \"business review\". The draft is sitting in someone's review queue. Helm has caught all four — and stopped there. No email left the building."
-      : "采购会留下了 ROI 问题，财务要结构化材料，CRM 阶段还停在「商务评审」，外发草稿还在别人的复核框里。这四条 Helm 都接住了，但邮件没发出去，CRM 也没动。",
-    actionLabel: english ? "Send ROI pack · today" : "发送 ROI 材料 · 今天",
-    metaTrace: "trace · ops-judgement-pilot-2026-04-30",
+      : "采购会留下了投资回报问题，财务要结构化材料，客户关系管理阶段还停在「商务评审」，外发草稿还在别人的复核框里。这四条Helm都接住了，但邮件没发出去，客户关系管理系统也没动。",
+    actionLabel: english ? "Send ROI pack · today" : "发送投资回报材料 · 今天",
+    metaTrace: english
+      ? "trace · ops-judgement-pilot-2026-04-30"
+      : "追踪 · ops-judgement-pilot-2026-04-30",
   };
 
   const boundaryRows = [
@@ -150,7 +152,7 @@ export default async function Home({
     },
     {
       auto: english ? "Flag 3 stalled deals before stand-up" : "晨会前标出 3 个停滞机会",
-      review: english ? "Open an approval to move CRM stage" : "起一个审批，把 CRM 阶段往前推",
+      review: english ? "Open an approval to move CRM stage" : "起一个审批，把客户关系管理阶段往前推",
       manual: english ? "Pay an invoice" : "财务结算",
     },
     {
@@ -159,7 +161,7 @@ export default async function Home({
       manual: english ? "Hire, fire, or commit a number" : "录用、解雇、对外承诺数字",
     },
     {
-      auto: english ? "Stamp critical write paths with trace IDs" : "关键写路径打 trace ID",
+      auto: english ? "Stamp critical write paths with trace IDs" : "关键写路径打追踪编号",
       review: english ? "Land an audit row before any customer-visible draft goes out" : "客户可见草稿外发前先落一条审计",
       manual: english ? "Decide what \"send\" actually means" : "决定真正的「发送」意味着什么",
     },
@@ -173,7 +175,7 @@ export default async function Home({
       title: english ? "Sales / BD" : "销售 / 商务拓展",
       summary: english
         ? "A key enterprise pilot, a recovery deal and a security-review stall — Helm has already picked which one moves first today. The demo landed well; ROI, legal and delivery are split across three threads, and you'll see exactly where to push."
-        : "一个大客户试点、一个恢复单、一个安全评审卡点——今天先推哪个 Helm 已经替你排好。演示反馈不错，但 ROI、法务、交付分在三条线上，进去就看到该推哪一头。",
+        : "一个大客户试点、一个恢复单、一个安全评审卡点——今天先推哪个，Helm已经替你排好。演示反馈不错，但投资回报、法务、交付分在三条线上，进去就看到该推哪一头。",
       accountEmail: demoProfiles.sales.accountEmail,
       targetPath: "/dashboard",
     },
@@ -229,7 +231,7 @@ export default async function Home({
           <p className="max-w-[24rem] text-xs text-[color:var(--muted-foreground)]">
             {english
               ? "Open-source AI operating toolkit · for enterprise AI delivery engineers"
-              : "面向企业 AI 交付工程师的开源经营推进工具集"}
+              : "面向企业AI交付工程师的开源经营推进工具集"}
           </p>
         </div>
         <nav
@@ -277,17 +279,17 @@ export default async function Home({
             <p className="inline-flex rounded-full border border-[color:var(--border)] bg-[color:var(--accent-soft)] px-3 py-1 text-xs font-medium text-[color:var(--accent)]">
               {english
                 ? "For AI delivery engineers · Apache-2.0"
-                : "面向 AI 交付工程师 · Apache-2.0"}
+                : "面向AI交付工程师 · Apache-2.0"}
             </p>
             <h1 className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
               {english
                 ? "Stop rebuilding the boring scaffolding for every enterprise AI delivery."
-                : "别为每个企业 AI 交付项目重写同一套无聊的脚手架。"}
+                : "别为每个企业AI交付项目重写同一套无聊的脚手架。"}
             </h1>
             <p className="max-w-2xl text-base leading-7 text-[color:var(--muted)] md:text-lg md:leading-8">
               {english
                 ? "Helm is the assembled operating loop for turning customer implementation work into judgement, evidence, review, boundary, and delivery-package artifacts your team can fork and verify."
-                : "Helm 是已经搭好的经营推进闭环，把客户业务落地里的判断、证据、复核、边界、交付包做成可 fork、可验证的工程结构。"}
+                : "Helm是已经搭好的经营推进闭环，把客户业务落地里的判断、证据、复核、边界、交付包做成可复用、可验证的工程结构。"}
             </p>
             <div
               className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-1.5 text-xs leading-5 text-[color:var(--muted)]"
@@ -297,7 +299,7 @@ export default async function Home({
               <span>
                 {english
                   ? "Apache-2.0 · Forkable Core · Review-first Golden Path"
-                  : "Apache-2.0 · 可 fork Core · Review-first Golden Path"}
+                  : "Apache-2.0 · 可复刻核心工程 · 先复核黄金路径"}
               </span>
             </div>
           </div>
@@ -362,7 +364,7 @@ export default async function Home({
             <h2 className="text-balance text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
               {english
                 ? "Your meetings, mail, CRM and HR systems already know which deal is dying. They just never tell you in time."
-                : "你的会议、邮件、CRM 和 HR 系统其实早就知道哪一单要黄了。它们只是从来没把这件事在第一时间告诉过你。"}
+                : "你的会议、邮件、客户关系管理和人力系统其实早就知道哪一单要黄了。它们只是从来没把这件事在第一时间告诉过你。"}
             </h2>
             <p className="max-w-xl text-base leading-7 text-[color:var(--muted)]">
               {english
@@ -465,7 +467,7 @@ export default async function Home({
             <p className="text-base leading-7 text-[color:var(--muted)]">
               {english
                 ? "Each one is a real workspace with seeded enterprise blockers — the same shape your delivery team would fork and ship."
-                : "每个都是真工作区，里面铺好了真实的卡点——你的交付团队就是这样 fork 一份交付出去的。"}
+                : "每个都是真工作区，里面铺好了真实的卡点——你的交付团队就是这样复刻一份交付出去的。"}
             </p>
           </div>
 
@@ -519,7 +521,7 @@ export default async function Home({
               <p className="text-sm leading-6 text-[color:var(--muted)]">
                 {english
                   ? "Clone it and run the Golden Path checks, or apply for Helm Cloud — managed, invite-only."
-                  : "自己 clone 并跑 Golden Path 检查链，或申请 Helm Cloud（托管版，仅邀请制）。"}
+                  : "自己克隆仓库并跑黄金路径检查链，或申请 Helm Cloud（托管版，仅邀请制）。"}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -559,7 +561,7 @@ export default async function Home({
             <p className="leading-5">
               {english
                 ? "Helm is Apache-2.0 open source. Helm Cloud (managed) is invite-only — self-serve signup is off on purpose."
-                : "Helm 是 Apache-2.0 开源工具集。Helm Cloud（托管版）仅邀请制——不开放公开自助注册是有意为之。"}
+                : "Helm是Apache-2.0开源工具集。Helm Cloud（托管版）仅邀请制——不开放公开自助注册是有意为之。"}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-4">

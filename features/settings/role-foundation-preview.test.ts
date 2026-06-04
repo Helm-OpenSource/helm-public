@@ -18,8 +18,8 @@ describe("RoleFoundationPreview", () => {
     expect(markup).toContain("外部跟进草稿");
     expect(markup).toContain("当前工作区贴合度");
     expect(markup).toContain("客户跟进");
-    expect(markup).toContain("candidate capability");
-    expect(markup).toContain("formal skill");
+    expect(markup).toContain("候选能力姿态");
+    expect(markup).toContain("正式能力");
   });
 
   it("renders the fuller role foundation variant with main judgements", () => {

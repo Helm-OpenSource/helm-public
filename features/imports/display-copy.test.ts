@@ -31,6 +31,15 @@ describe("CRM import display copy", () => {
     expect(display).not.toMatch(/memory|today focus|conflict|readiness|writeback|rerun|meeting\/note/i);
   });
 
+  it("localizes standalone CRM surface language for Chinese readers", () => {
+    const display = formatCrmImportDisplayText(
+      "CRM ingress · CRM import · CRM warmup",
+      false,
+    );
+
+    expect(display).toBe("客户关系系统入口 · 客户关系系统导入 · 客户关系系统预热");
+  });
+
   it("formats import job statuses before they reach the page", () => {
     expect(formatCrmImportDisplayText("COMPLETED_WITH_WARNINGS", false)).toBe(
       "已完成，有警告",

@@ -60,7 +60,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ mee
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "生成简报失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to generate briefing"
+          : "生成简报失败",
       isWorkspaceOwnershipError(error) ? "MEETING_NOT_FOUND" : "BRIEFING_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

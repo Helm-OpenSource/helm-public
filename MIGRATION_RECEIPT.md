@@ -1,4 +1,24 @@
-# Helm Public Migration Receipt
+# Helm Public Migration Receipt / Helm 公开迁移回执
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本回执是 2026-05-30 `helm-public` sanitized public mirror staging output 的历史记录。
+当前仓库定位已经是 `Helm-OpenSource/helm-public` open-source Core，而不是 mirror
+staging repository。
+
+它记录了从 `Helm-Developers/helm2026` 生成 public-safe snapshot、复制到目标仓、
+运行 target verification、确认 history / leak verification、以及后续 candidate check 的
+过程。该回执对交付工程师的意义是：说明 public Core 是一个经过过滤和验证的可 fork
+仓库，不包含 private Pack / Overlay source、tenant-private source、pending
+implementation-console source 或 control-plane metadata。
+
+本文件不是当前 release approval，不替代最新 `docs/STATUS.md`，也不授权把 private
+history、customer data、credential、deployment receipt 或 commercial-private logic 带入
+`helm-public`。
+
+## English Reference
 
 Date: 2026-05-30
 

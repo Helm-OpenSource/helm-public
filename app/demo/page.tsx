@@ -28,10 +28,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: english
       ? "60-second demo | See the vertical your team can fork"
-      : "60 秒演示 | 看看你的团队 day-1 能 fork 的 vertical",
+      : "60 秒演示 | 看看你的团队第一天可复刻的行业样板",
     description: english
       ? "Three pre-loaded role workspaces — each a generic vertical your delivery engineering team can fork, customize and ship to an enterprise customer. Real product, real cards. No email required."
-      : "3 个预置角色工作区——每个都是通用 vertical 样板，你的交付工程团队可以 fork、改造、交付给企业客户。真产品、真判断卡。不要求留邮箱。",
+      : "3 个预置角色工作区——每个都是通用行业样板，你的交付工程团队可以复刻、改造、交付给企业客户。真产品、真判断卡。不要求留邮箱。",
   };
 }
 
@@ -59,7 +59,7 @@ const ROLE_LENS: Record<DemoMode, { zh: string; en: string }> = {
     en: "Sales, delivery and finance each hold a piece. Helm stitches them and surfaces what only you can call today.",
   },
   sales: {
-    zh: "一个大客户试点、一个恢复单、一个安全评审卡点——今天先推哪个 Helm 已经排好。",
+    zh: "一个大客户试点、一个恢复单、一个安全评审卡点——今天先推哪个 Helm已经排好。",
     en: "A warming pilot, a recovery deal and a security-review stall — Helm has already picked which moves first today.",
   },
   recruiter: {
@@ -140,7 +140,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
           <p className="max-w-2xl text-base leading-7 text-[color:var(--muted)]">
             {english
               ? "Real workspace, seeded blockers — meetings, CRM imports, drafts waiting for review, overdue commitments. Click through anything; nothing leaves the building."
-              : "真工作区，铺好了真实卡点——会议、CRM 导入、等复核的草稿、过期承诺。随便点，不会发出任何东西。"}
+              : "真工作区，铺好了真实卡点——会议、客户关系管理导入、等复核的草稿、过期承诺。随便点，不会发出任何东西。"}
           </p>
         </section>
 
@@ -217,7 +217,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
                   : pack.deeperReadoutCtaLabel.zh
                 : english
                   ? "Open full readout"
-                  : "打开完整 readout";
+                  : "打开完整读数";
               return (
                 <Card
                   key={pack.industryKey}
@@ -271,7 +271,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
             <p className="text-sm leading-6 text-[color:var(--muted)]">
               {english
                 ? "Advice ≠ commitment. Nothing leaves the building: seeded data, no emails to real customers, no CRM writes. Every click still lands an audit row, same as production."
-                : "建议 ≠ 承诺。不会对外发送任何内容：数据是预置的，不会发邮件、不会写 CRM。每一步动作仍会落一条审计——和真实环境一样。"}
+                : "建议 ≠ 承诺。不会对外发送任何内容：数据是预置的，不会发邮件、不会写入客户关系系统。每一步动作仍会落一条审计——和真实环境一样。"}
             </p>
           </div>
         </section>
@@ -287,7 +287,7 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
             <p className="text-sm leading-6 text-[color:var(--muted)]">
               {english
                 ? "Clone it and run the Golden Path checks, or apply for Helm Cloud — managed, invite-only."
-                : "自己 clone 并跑 Golden Path 检查链，或申请 Helm Cloud（托管版，仅邀请制）。"}
+                : "自己克隆仓库并跑黄金路径检查链，或申请 Helm Cloud（托管版，仅邀请制）。"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

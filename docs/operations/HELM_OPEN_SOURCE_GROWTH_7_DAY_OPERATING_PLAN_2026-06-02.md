@@ -5,7 +5,46 @@ created: 2026-06-02
 review_after: 2026-06-09
 public_safety: Public open-source growth operating plan. Uses public repository, docs, issues, discussions, and synthetic sample-pack signals only; no customer data, private deployment evidence, private contact lists, credentials, or automatic external commitments.
 ---
-# Helm Open Source Growth 7-Day Operating Plan - 2026-06-02
+# Helm Open Source Growth 7-Day Operating Plan / Helm 开源增长 7 日运营计划 - 2026-06-02
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文是 `helm-public` 在 2026-06-01 公开之后的第一份公开 Core 增长
+运营计划。它是认知、激活、社区接入和摩擦移除的执行计划，
+不是客户承诺、商业发布批准、Helm Cloud / Helm Enterprise 已就绪声明、
+服务等级承诺、融资材料或自动外联活动。
+
+7 日目标是把公开发布转成可度量的交付工程师激活闭环：读者能在
+一屏理解 Helm 定位，能跑本地黄金路径并检查合成样板包，反馈能通过
+GitHub 议题 / 讨论带边界进入，维护者按激活摩擦而非虚荣指标
+排序增长工作。
+
+增长工作必须优先优化理解、激活和贡献质量。星标、
+复刻和克隆数只算触达信号；不能用它们替代独立运行、夹具改动、公开安全
+报告或可复现阻断项这类激活证明。
+
+角色摘要：增长负责人负责信息、渠道计划、指标读数和优先级；维护者负责公开
+议题 / 讨论分诊与边界执行；文档负责人负责 README 与文档转化修正；
+验证负责人负责黄金路径与公开守卫检查；复核者负责公开安全和非承诺复核。
+
+指标摘要：首要指标是独立本地运行、具体可复现阻断项、社区路由质量和
+首批贡献准备度；次要指标是 README 首屏理解反馈、讨论参与、星标、复刻和克隆数。
+不要优化无资格星标增长、没有可运行激活路径的泛社交发布、客户标识或私有部署
+证明，也不要优化有时间边界的商业承诺。
+
+7 日计划摘要：第 1 天建立增长控制闭环；第 2 天移除首次运行歧义；第 3 天把关注
+转成结构化反馈；第 4 天准备负责人闸门下的公开叙事；第 5 天让第一个好议题
+可信；第 6 天把摩擦转成小修复；第 7 天用公开安全读数决定下一轮运营队列。
+
+渠道与待办队列摘要：GitHub 讨论是标准公开发布对话，GitHub 议题承接
+bug、文档修复和集成请求；WeChat 只做人带人的社区 / 合作触达；开发者社交发布
+只放定位和可运行命令；交付工程师社区强调复刻路径、样板包和复核优先纪律。
+待办队列优先补议题 / PR 模板、README 首次改动演练、集成请求模板、
+发布讨论路由、7 日增长读数和复刻改名指南。
+
+## English Reference
 
 This is the first public-Core growth operating plan after `helm-public` became
 public on 2026-06-01. It is an execution plan for awareness, activation,

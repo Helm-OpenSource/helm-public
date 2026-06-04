@@ -607,7 +607,7 @@ export async function syncFeishuReadonlyConnector(input: {
   const pendingQuestions: string[] = [
     input.english
       ? "Current Feishu Bitable binding is env-backed and review-first; widen to workspace-managed binding only after a dedicated registry slice lands."
-      : "当前飞书多维表格绑定仍是 env-backed 且 review-first；只有在后续 registry slice 落地后，才进入工作区内可管理绑定。",
+      : "当前飞书多维表格绑定仍由环境变量支撑且先复核；只有在后续注册表切片落地后，才进入工作区内可管理绑定。",
   ];
   const boundAppToken = bitableConfig.appToken;
   const boundTableId = bitableConfig.tableId;

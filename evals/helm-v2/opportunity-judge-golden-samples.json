@@ -33,7 +33,7 @@
       "expectedTopBlockerIncludes": "预算",
       "expectedNextActionIncludes": ["ROI", "联合评审"],
       "expectedAttentionFlagKeys": ["budget_uncertainty", "missing_champion", "escalation_candidate"],
-      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "confirmed 只表示允许把 judgement consume 到 shadow summary"]
+      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "已确认只表示允许把判断消费进阴影摘要"]
     }
   },
   {
@@ -70,7 +70,7 @@
       "expectedTopBlockerIncludes": "采购",
       "expectedNextActionIncludes": ["确认", "下一次会"],
       "expectedAttentionFlagKeys": ["budget_uncertainty", "timeline_risk"],
-      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "attention，不是 final decision"]
+      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "注意力提示，不是最终决策"]
     }
   },
   {
@@ -105,9 +105,9 @@
     "expected": {
       "expectedShadowStage": "INTERNAL_SYNC",
       "expectedTopBlockerIncludes": "法务",
-      "expectedNextActionIncludes": ["内部", "blocker"],
+      "expectedNextActionIncludes": ["内部", "阻塞"],
       "expectedAttentionFlagKeys": ["dependency_risk", "commitment_risk", "escalation_candidate"],
-      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "formal commitment boundary"]
+      "requiredBoundaryNotes": ["Official CRM state stays unchanged", "正式承诺边界"]
     }
   }
 ]

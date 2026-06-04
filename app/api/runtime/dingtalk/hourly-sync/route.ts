@@ -7,13 +7,31 @@ import { syncDingTalkReadonlyConnector } from "@/lib/connectors/dingtalk-ingesti
 import { db } from "@/lib/db";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 
+function isEnglishRequest(request: Request) {
+  return request.headers.get("accept-language")?.toLowerCase().startsWith("en") ?? false;
+}
+
+function getDingTalkHourlySyncMessage(
+  request: Request,
+  key: "tokenNotConfigured" | "unauthorizedToken",
+) {
+  const english = isEnglishRequest(request);
+  const messages = {
+    tokenNotConfigured: english
+      ? "DINGTALK_SYNC_CRON_TOKEN is not configured."
+      : "DINGTALK_SYNC_CRON_TOKEN 尚未配置。",
+    unauthorizedToken: english ? "Unauthorized cron token." : "cron token 未授权。",
+  } as const;
+  return messages[key];
+}
+
 function isAuthorized(request: Request) {
   const expected = process.env.DINGTALK_SYNC_CRON_TOKEN?.trim() || "";
   if (!expected) {
     return {
       ok: false,
       status: 503,
-      error: "DINGTALK_SYNC_CRON_TOKEN is not configured.",
+      error: getDingTalkHourlySyncMessage(request, "tokenNotConfigured"),
     } as const;
   }
 
@@ -22,7 +40,7 @@ function isAuthorized(request: Request) {
     return {
       ok: false,
       status: 401,
-      error: "Unauthorized cron token.",
+      error: getDingTalkHourlySyncMessage(request, "unauthorizedToken"),
     } as const;
   }
 

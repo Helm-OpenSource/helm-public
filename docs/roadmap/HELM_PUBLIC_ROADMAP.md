@@ -5,7 +5,28 @@ created: 2026-04-27
 review_after: 2026-07-26
 public_safety: Public Core roadmap. This is gate-relative planning, not a release-date commitment.
 ---
-# Helm Public Roadmap
+# Helm Public Roadmap / Helm 公开路线图
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文描述 Helm 公开 Core 面向 AI 交付工程师的相对门禁路线图。它不是
+商业发布批准、生产服务等级承诺、客户部署承诺或仓库可见性批准。
+
+Helm 公开 Core 的北极星是：帮助 AI 交付工程师把客户业务实施里的判断、
+证据、复核、边界和交付包工作转成可复刻的工程结构。
+
+路线图原则：建议不是承诺；复核包不是批准、发送、写回、结算或执行；
+public Core 必须保持 Apache-2.0、可独立构建且公开安全；Core 不能依赖 Pack 或
+Overlay 代码；公开文案使用证据门禁与“现在 / 下一步 / 以后”，不使用发布日期承诺。
+
+“现在”是 public Core 基线与当前工作面；“下一步”是相对门禁推进的 public-Core 改进；
+“以后”必须经过独立门禁、仓库路由和负责人批准。Helm Cloud / Helm Enterprise 已就绪、
+行业 Pack 加固、客户 Overlay 交付、control-plane 元数据和额外连接器就绪，
+都不能被 public Core 路线图自动承诺。
+
+## English Reference
 
 This roadmap describes the public Core path for delivery engineers. It is not a
 commercial release approval, production SLA, customer deployment commitment, or
@@ -35,6 +56,9 @@ working surface:
   curated public docs.
 - Docker quickstart: `Dockerfile`, `docker-compose.yml`, and fresh-clone review
   receipts under `docs/reviews/`.
+- Mainland China / restricted-network local developer path: optional
+  `.npmrc.example`, Docker `NPM_REGISTRY` build arg, and docs that keep mirror
+  credentials local rather than committed.
 - Delivery engineer Golden Path requirements:
   [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](../product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md).
 - Headless Signal Interface requirements:
@@ -71,6 +95,9 @@ commitments.
   the public label at "provenance under review".
 - Add fork-and-rename guidance, a standalone "what Helm does not do" page, and a
   forker upgrade story.
+- Turn the current "not a production image" Docker boundary into a separate
+  production deployment runbook / image decision packet before any customer
+  deployment wording is allowed.
 - Keep public docs curated through `docs/public-docs-manifest.json` and
   `npm run check:public-docs`.
 - Coordinate a read-only split doctor in `helm-control-plane`; do not add

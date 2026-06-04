@@ -1,6 +1,9 @@
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { assertWorkspaceMemoryFactOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+} from "@/lib/i18n/api-message-locale";
 import { correctMemoryFact } from "@/lib/memory/correction.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { correctMemoryFactSchema } from "@/lib/memory/schemas";
@@ -14,7 +17,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const payload = correctMemoryFactSchema.safeParse(await request.json());
 
   if (!payload.success) {
-    return errorResponse(payload.error.issues[0]?.message ?? "参数不完整");
+    return errorResponse(
+      resolveApiValidationIssueMessage(workspace.defaultLocale, payload.error.issues[0]?.message),
+    );
   }
 
   if (!canManageMemoryFacts(membership.role)) {
@@ -46,11 +51,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         correctionId: result.correction.id,
         updatedContent: result.fact.content,
       },
-      "memory fact corrected",
+      english ? "Memory fact corrected" : "记忆事实已修正",
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "记忆修正失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to correct memory fact"
+          : "记忆修正失败",
       isWorkspaceOwnershipError(error) ? "FACT_NOT_FOUND" : "CORRECTION_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

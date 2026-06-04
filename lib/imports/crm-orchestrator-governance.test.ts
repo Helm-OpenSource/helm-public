@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { ImportJobType } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +41,10 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { resolveImportConflict, runCrmImport } from "@/lib/imports/crm-orchestrator.service";
+
+function read(relativePath: string) {
+  return readFileSync(path.join(process.cwd(), relativePath), "utf8");
+}
 
 describe("crm orchestrator service governance", () => {
   beforeEach(() => {
@@ -175,5 +181,24 @@ describe("crm orchestrator service governance", () => {
       "item-1",
     );
     expect(dbMock.importItem.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("keeps CRM import service Chinese operational copy localized", () => {
+    const combinedSource = [
+      "lib/imports/crm-entry.service.ts",
+      "lib/imports/warmup.service.ts",
+      "lib/imports/crm-orchestrator.service.ts",
+      "features/imports/crm-actions.ts",
+    ]
+      .map(read)
+      .join("\n");
+
+    expect(combinedSource).toContain("客户关系系统导入预热");
+    expect(combinedSource).toContain("从客户关系系统任务导入");
+    expect(combinedSource).toContain("客户关系系统导入来源不存在");
+    expect(combinedSource).toContain("客户关系系统导入失败");
+    expect(combinedSource).not.toMatch(
+      /CRM 导入|CRM 预热|从 CRM|导入 CRM|CRM 任务|T请求/,
+    );
   });
 });

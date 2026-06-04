@@ -32,6 +32,21 @@ function allowHeader(methods: string[]): string {
   return [...set].join(", ");
 }
 
+function isEnglishRequest(request: Request) {
+  return request.headers.get("accept-language")?.toLowerCase().startsWith("en") ?? false;
+}
+
+function getExtensionDispatcherMessage(
+  request: Request,
+  key: "methodNotAllowed" | "notFound",
+) {
+  const english = isEnglishRequest(request);
+  if (key === "methodNotAllowed") {
+    return english ? "Method Not Allowed" : "该扩展 API 不支持当前方法";
+  }
+  return english ? "Not found" : "未找到该扩展 API";
+}
+
 async function dispatch(
   request: Request,
   ctx: { params: Promise<{ slug: string[] }> },
@@ -65,11 +80,14 @@ async function dispatch(
     const allowed = methodsForPath(slug);
     if (allowed.length > 0) {
       return Response.json(
-        { error: "Method Not Allowed" },
+        { error: getExtensionDispatcherMessage(request, "methodNotAllowed") },
         { status: 405, headers: { Allow: allowHeader(allowed) } },
       );
     }
-    return Response.json({ error: "Not found" }, { status: 404 });
+    return Response.json(
+      { error: getExtensionDispatcherMessage(request, "notFound") },
+      { status: 404 },
+    );
   }
   return resolved.handler(request, { params: resolved.params });
 }

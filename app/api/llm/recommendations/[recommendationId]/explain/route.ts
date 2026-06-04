@@ -9,10 +9,12 @@ import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { refreshRecommendationExplanationWithLLM } from "@/lib/recommendations/recommendation.service";
 
 export async function POST(_: Request, { params }: { params: Promise<{ recommendationId: string }> }) {
+  let english = false;
+
   try {
     const { user, membership, workspace } = await getCurrentWorkspaceSession();
     const { recommendationId } = await params;
-    const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
+    english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
 
     if (!canManageWorkspaceInsights(membership.role)) {
       return Response.json(
@@ -55,7 +57,11 @@ export async function POST(_: Request, { params }: { params: Promise<{ recommend
     return Response.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "增强 recommendation 解释失败",
+        message: error instanceof Error
+          ? error.message
+          : english
+            ? "Failed to enhance recommendation explanation"
+            : "增强建议解释失败",
       },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );

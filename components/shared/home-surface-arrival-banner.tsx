@@ -44,17 +44,17 @@ function getArrivalCopy(
   switch (kind) {
     case "detail":
       return {
-        eyebrow: english ? "Home → detail" : "Home → detail",
+        eyebrow: english ? "Home → detail" : "首页 → 详情",
         title: english
           ? focus
             ? `Home routed you here to explain "${focus}".`
             : "Home routed you here to explain the current object or chain."
           : focus
-            ? `Home 把你送到这里，是为了把“${focus}”解释清楚。`
-            : "Home 把你送到这里，是为了把当前对象或推进链解释清楚。",
+            ? `首页把你送到这里，是为了把“${focus}”解释清楚。`
+            : "首页把你送到这里，是为了把当前对象或推进链解释清楚。",
         summary: english
           ? "Detail owns state, evidence and handling options. Home should only rank the move and send you here."
-          : "Detail 负责状态、证据和处理选项；Home 只负责排序并把你送过来。",
+          : "详情页负责状态、证据和处理选项；首页只负责排序并把你送过来。",
       };
     case "approvals":
       return {
@@ -72,17 +72,17 @@ function getArrivalCopy(
       };
     case "memory":
       return {
-        eyebrow: english ? "Home → memory" : "Home → memory",
+        eyebrow: english ? "Home → memory" : "首页 → 经营记忆",
         title: english
           ? focus
             ? `Home routed you here to stabilize "${focus}" into readable memory and replay.`
             : "Home routed you here to stabilize the current context into readable memory and replay."
           : focus
-            ? `Home 把你送到这里，是为了把“${focus}”沉淀成可读的记忆与回放。`
-            : "Home 把你送到这里，是为了把当前上下文沉淀成可读的记忆与回放。",
+            ? `首页把你送到这里，是为了把“${focus}”沉淀成可读的记忆与回放。`
+            : "首页把你送到这里，是为了把当前上下文沉淀成可读的记忆与回放。",
         summary: english
           ? "Memory owns durable context, correction and replay. Home should not turn into a memory browser."
-          : "经营记忆负责稳定上下文、修正和回放；Home 不应该变成记忆浏览器。",
+          : "经营记忆负责稳定上下文、修正和回放；首页不应该变成记忆浏览器。",
       };
   }
 }

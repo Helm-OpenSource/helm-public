@@ -291,10 +291,10 @@ export function buildSuccessCheckDetailPageModel({
     },
     eyebrow: english
       ? "Success check / Review surface"
-      : "Success check / 复核面",
+      : "成功检查 / 复核面",
     title: english
       ? `${detail.title} · Success check`
-      : `${detail.title} · Success check`,
+      : `${detail.title} · 成功检查`,
     description: english
       ? `${detail.company?.name ?? "No company"} · ${stageLabel} · ${reviewPosture}`
       : `${detail.company?.name ?? "暂无公司"} · ${stageLabel} · ${reviewPosture}`,
@@ -382,7 +382,7 @@ export function buildSuccessCheckDetailPageModel({
     evidenceGroups,
     stageBadge: english
       ? `Success check · ${formatRisk(detail.riskLevel, true)}`
-      : `Success check · ${formatRisk(detail.riskLevel, false)}`,
+      : `成功检查 · ${formatRisk(detail.riskLevel, false)}`,
   };
 }
 
@@ -861,7 +861,7 @@ function buildEvidenceGroups({
   return [
     {
       groupId: "readiness-pressure",
-      label: english ? "Readiness pressure" : "Readiness 压力",
+      label: english ? "Readiness pressure" : "准备度压力",
       items: compactItems([
         ...detail.blockers
           .slice(0, 3)
@@ -923,7 +923,7 @@ function buildEvidenceGroups({
         company?.briefingSnapshot?.payload.summary
           ? english
             ? `Company briefing: ${trimText(company.briefingSnapshot.payload.summary, 120)}`
-            : `Company briefing：${trimText(company.briefingSnapshot.payload.summary, 120)}`
+            : `公司简报：${trimText(company.briefingSnapshot.payload.summary, 120)}`
           : null,
         signals.latestAudit
           ? english
@@ -1142,18 +1142,18 @@ function describeReviewPosture(
   english: boolean,
 ) {
   if (attentionState === "review-before-send") {
-    return english ? "Review-limited" : "Review-limited";
+    return english ? "Review-limited" : "受复核限制";
   }
 
   if (attentionState === "blocked") {
-    return english ? "Boundary-limited" : "Boundary-limited";
+    return english ? "Boundary-limited" : "受边界限制";
   }
 
   if (signals.recentThread?.status.includes("WAITING")) {
     return english ? "Waiting for reply" : "等待回复";
   }
 
-  return english ? "Readiness watch" : "Readiness watch";
+  return english ? "Readiness watch" : "准备度观察";
 }
 
 function formatRisk(

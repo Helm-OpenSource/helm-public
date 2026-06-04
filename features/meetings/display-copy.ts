@@ -183,7 +183,7 @@ const meetingChineseReplacements: Array<[RegExp, string]> = [
   [/\bshadow update\b/gi, "影子更新"],
   [/\bshadow-only\b/gi, "仅影子态"],
   [/\bshadow\b/gi, "影子态"],
-  [/\bofficial CRM state\b/gi, "正式 CRM 状态"],
+  [/\bofficial CRM state\b/gi, "正式客户关系系统状态"],
   [/\bofficial-write\b/gi, "正式写入"],
   [/\bofficial write authority\b/gi, "正式写入权限"],
   [/\bofficial write\b/gi, "正式写入"],

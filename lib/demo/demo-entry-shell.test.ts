@@ -37,14 +37,18 @@ describe("demo entry shell", () => {
 
     expect(demoEntrySource).toContain("建议 ≠ 承诺");
     expect(demoEntrySource).toContain("不会对外发送任何内容");
+    expect(demoEntrySource).toContain("不会写入客户关系系统");
     expect(demoEntrySource).not.toContain("自动获得发送");
     expect(demoEntrySource).not.toContain("默认拥有对外发送权限");
+    expect(demoEntrySource).not.toContain("写入CRM");
     expect(demoEntrySource).not.toContain("转化话术");
     expect(demoEntrySource).not.toContain("Commercial framing");
     expect(demoEntrySource).not.toContain("30 天免费");
     expect(demoEntrySource).not.toContain("30-day free trial");
     expect(demoLoadingSource).toContain("不会对外发送任何内容");
+    expect(demoLoadingSource).toContain("不会写回真实客户关系系统");
     expect(demoLoadingSource).not.toContain("自动获得发送");
+    expect(demoLoadingSource).not.toContain("真实CRM");
   });
 
   it("keeps the demo workspace shell from creating desktop horizontal overflow", () => {

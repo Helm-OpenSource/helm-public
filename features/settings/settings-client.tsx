@@ -856,7 +856,7 @@ export function SettingsClient({
     data.billingOverview.paymentRailStage === "LIVE"
       ? english
         ? "Live integration"
-        : "live integration"
+        : "真实接入"
       : english
         ? "Foundation only"
         : "基础层已冻结";
@@ -4598,7 +4598,7 @@ export function SettingsClient({
                       variant="secondary"
                       onClick={() =>
                         runConnectorAction(
-                          () => connectAliyunFounderDefaultAction(),
+                          () => connectAliyunFounderDefaultAction({ locale }),
                           english
                             ? "Founder default account applied"
                             : "已应用创始人默认账号",
@@ -4817,7 +4817,7 @@ export function SettingsClient({
                             label={
                               english
                                 ? "Resolved provider email"
-                                : "解析到的 provider 邮箱"
+                                : "解析到的服务商邮箱"
                             }
                             value={
                               dingtalkConnector?.lastCallbackResult
@@ -5232,7 +5232,7 @@ export function SettingsClient({
                           />
                           <Info
                             label={
-                              english ? "Resolved provider email" : "解析到的 provider 邮箱"
+                              english ? "Resolved provider email" : "解析到的服务商邮箱"
                             }
                             value={
                               feishuConnector?.lastCallbackResult?.providerEmail ??
@@ -5308,7 +5308,7 @@ export function SettingsClient({
                             value={
                               english
                                 ? "Message draft(review-first) pending"
-                                : "消息草稿（review-first）待落地"
+                                : "消息草稿（先复核）待落地"
                             }
                           />
                         </div>
@@ -5708,7 +5708,7 @@ export function SettingsClient({
                               label={
                                 english
                                   ? "Resolved provider email"
-                                  : "解析到的 provider 邮箱"
+                                  : "解析到的服务商邮箱"
                               }
                               value={
                                 wecomConnector?.lastCallbackResult

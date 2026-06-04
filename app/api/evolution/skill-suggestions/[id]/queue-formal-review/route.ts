@@ -34,10 +34,17 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "skill formal review queued");
+    return successResponse(
+      { suggestion },
+      english ? "Skill formal review queued" : "正式评审已加入队列",
+    );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "加入正式评审队列失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to queue skill formal review"
+          : "加入正式评审队列失败",
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "FORMAL_REVIEW_QUEUE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

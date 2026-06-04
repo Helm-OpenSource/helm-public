@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/analytics";
 import { writeAuditLog } from "@/lib/audit";
 import {
+  getAliyunFounderDefaultCredentialsMissingMessage,
+  getDingTalkAgentIdMissingMessage,
+} from "@/features/connectors/action-copy";
+import {
   canManageWorkspaceConnectors,
   getConnectorManagementDeniedMessage,
 } from "@/lib/auth/import-governance";
@@ -301,13 +305,14 @@ export async function connectAliyunMailConnectorAction(input: {
   };
 }
 
-export async function connectAliyunFounderDefaultAction() {
+export async function connectAliyunFounderDefaultAction(input?: { locale?: string | null }) {
   const defaults = getAliyunFounderDefaultCredentials();
+  const english = input?.locale === "en-US";
 
   if (!defaults.email || !defaults.password) {
     return {
       ok: false,
-      error: "ALIYUN_MAIL_FOUNDER_EMAIL / ALIYUN_MAIL_FOUNDER_PASSWORD is not configured.",
+      error: getAliyunFounderDefaultCredentialsMissingMessage(english),
     };
   }
 
@@ -1013,7 +1018,7 @@ export async function inviteDingTalkDirectoryUsersAction(input: {
     if (!config.agentId) {
       return {
         ok: false,
-        error: "DINGTALK_AGENT_ID is not configured",
+        error: getDingTalkAgentIdMissingMessage(english),
       };
     }
 

@@ -5,7 +5,22 @@ created: 2026-06-01
 review_after: 2026-09-01
 public_safety: Public-safe history-scan receipt. Records scan evidence and classification only. Contains no real credentials; all referenced strings are checked-in placeholders or test fixtures already present in the public tree.
 ---
-# Helm Public Clean History Receipt V1
+# Helm Public Clean History Receipt V1 / Helm 公开 Clean History 回执 V1
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文件是仓库可见性门禁中历史级步骤的公开安全回执：公开 Core 历史不包含真实密钥，
+完整历史扫描已确认。它不轮换凭据、不批准发布，也不切换仓库可见性；这些仍是负责人动作。
+
+公开 Core 历史是清洗后的快照，不是完整私有单体仓库历史。已知的私有源仓受损提交不在本仓，
+且从任何引用都不可达。`gitleaks` 报告的 6 个发现均已被分类为非密钥或刻意构造的假夹具，
+用于测试密钥检测器；没有真实凭据。
+
+未来如果历史被重写，或新提交增加形似凭据的内容，必须重新扫描。
+
+## English Reference
 
 ## Purpose
 

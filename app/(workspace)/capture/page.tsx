@@ -109,7 +109,7 @@ export default async function CapturePage({
             label: english ? "What it never does" : "绝不做什么",
             value: english
               ? "Send messages to your customer. Modify CRM without your click. Decide for you."
-              : "向客户发送任何消息。未经你点击就改写 CRM。替你决策。",
+              : "向客户发送任何消息。未经你点击就改写客户关系管理系统。替你决策。",
           },
           {
             label: english ? "After the meeting" : "会后",
@@ -247,7 +247,7 @@ export default async function CapturePage({
                         session.transcript?.fullText ??
                           (english
                             ? "After capture stops, the system will generate a transcript and move into the operating-understanding pipeline."
-                            : "结束记录后，Helm 会在后台生成转写文本并进入经营理解链路。"),
+                            : "结束记录后，Helm会在后台生成转写文本并进入经营理解链路。"),
                         english,
                       ),
                       88,
@@ -302,7 +302,7 @@ export default async function CapturePage({
                 <p>
                   {english
                     ? "1. The transcript is only a middle layer; Helm first surfaces blockers, commitments and next steps you can act on."
-                    : "1. 转写文本只是中间层，Helm 会先把会话里的阻塞、承诺和推进动作提出来。"}
+                    : "1. 转写文本只是中间层，Helm会先把会话里的阻塞、承诺和推进动作提出来。"}
                 </p>
                 <p>
                   {english

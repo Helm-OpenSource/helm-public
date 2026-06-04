@@ -21,7 +21,8 @@ const hoistedMocks = vi.hoisted(() => {
       workspace: {
         workspaceClass: "HELM_RESERVED",
         systemKey: "helm_reserved_primary",
-      } as { workspaceClass: string; systemKey: string },
+        defaultLocale: "en-US",
+      } as { workspaceClass: string; systemKey: string; defaultLocale?: string },
     },
   };
   return { trialApplicationDelegate, sessionStub };
@@ -72,6 +73,7 @@ afterEach(() => {
   sessionStub.session.workspace = {
     workspaceClass: "HELM_RESERVED",
     systemKey: "helm_reserved_primary",
+    defaultLocale: "en-US",
   };
 });
 
@@ -139,10 +141,34 @@ describe("recordTrialDecisionAction", () => {
     sessionStub.session.workspace = {
       workspaceClass: "CUSTOMER",
       systemKey: "customer-demo",
+      defaultLocale: "en-US",
     };
     const result = await recordTrialDecisionAction(validDecision);
     expect(result.ok).toBe(false);
     expect(trialApplicationDelegate.update).not.toHaveBeenCalled();
+  });
+
+  it("localizes reserved-workspace and update-failure errors from workspace default locale", async () => {
+    sessionStub.session.workspace = {
+      workspaceClass: "CUSTOMER",
+      systemKey: "customer-demo",
+      defaultLocale: "zh-CN",
+    };
+
+    const reservedResult = await recordTrialDecisionAction(validDecision);
+    expect(reservedResult.ok).toBe(false);
+    expect(reservedResult.error).toBe("试用申请复核仅限 Helm reserved 工作区。");
+
+    sessionStub.session.workspace = {
+      workspaceClass: "HELM_RESERVED",
+      systemKey: "helm_reserved_primary",
+      defaultLocale: "zh-CN",
+    };
+    trialApplicationDelegate.update.mockRejectedValueOnce(new Error("gone"));
+
+    const updateResult = await recordTrialDecisionAction(validDecision);
+    expect(updateResult.ok).toBe(false);
+    expect(updateResult.error).toBe("无法更新该试用申请；它可能已被移除。");
   });
 
   it("updates the application when the operator is in the reserved workspace", async () => {

@@ -27,7 +27,7 @@ git push -u origin main
 - 如删除：在 docs/brand/HELM_OPEN_SOURCE_COMMUNITY_DISTRIBUTION_PLAN_V1.md §4.1 仓库结构表更新链接
 
 ## 抽取时机建议
-- ✅ 外部 forker 验证、public-safe evidence gate 与 owner 抽取门通过时
+- ✅ 外部复刻者验证、公开安全证据门禁与负责人抽取门通过时
 - ❌ 不要在 Pack A 开发期间过早抽出（避免主仓与子仓双轨修改）
 
 ## 与 helm-cookbook、helm-core 的关系

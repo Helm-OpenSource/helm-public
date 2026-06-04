@@ -1,15 +1,21 @@
-# Case Management Sample · Workers
+# Case Management Sample Workers / Case Management Sample Workers
 
-> Worker cookbook with pure rule-based decision functions. Runtime drivers are intentionally not enabled in the public reference.
+> **语言 / Language**: **中文主文本** + **English reference**
 
-## Current content
+> 纯 rule-based decision functions 的 worker cookbook。public reference 中刻意不启用
+> runtime drivers。
+>
+> Worker cookbook with pure rule-based decision functions. Runtime drivers are
+> intentionally not enabled in the public reference.
+
+## 当前内容 / Current Content
 
 - `worker-modes.ts` — observer / shadow / active mode invariants
 - `lifecycle-objectives.ts` — simple recovery / effort / speed objective helper
 - `case-allocation-driver/` — assignment recommendation cookbook
 - `case-stewardship-driver/` — active-case roster and follow-through cookbook
 
-## Boundaries (hard invariants per driver)
+## 边界 / Boundaries (hard invariants per driver)
 
 1. `commitment: "suggestion_only"` — always true; never overridable
 2. Executable `propose_*_recommendation` outputs require approval; observer-mode copies are suppressed and never enter an approval queue
@@ -20,13 +26,13 @@
 
 These are enforced by unit tests, not policy comments.
 
-## What this is not
+## 不是什么 / What This Is Not
 
-- Not a production driver framework
-- Not an LLM-as-final-ranker layer (LLM forbidden on commitment paths)
-- Not an auto-execute system (every proposal requires explicit human approval)
+- 不是 production driver framework / Not a production driver framework
+- 不是 LLM-as-final-ranker layer（commitment path 禁用 LLM）/ Not an LLM-as-final-ranker layer
+- 不是 auto-execute system（每个 proposal 都需要明确人工 approval）/ Not an auto-execute system
 
-## Validation
+## 验证 / Validation
 
 ```bash
 npx vitest run \
@@ -37,4 +43,4 @@ npx vitest run \
   extensions/case-management-sample/workers/case-stewardship-driver/decide.test.ts
 ```
 
-See: [`../README.md`](../README.md) · [extraction spec](../../../docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md)
+See / 参见: [`../README.md`](../README.md) · [extraction spec](../../../docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md)

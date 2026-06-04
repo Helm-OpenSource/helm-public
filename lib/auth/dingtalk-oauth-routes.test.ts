@@ -621,6 +621,51 @@ describe("dingtalk oauth routes", () => {
     expect(oauthCallbackGovernanceMock.resolveWorkspaceOauthCallbackContext).not.toHaveBeenCalled();
   });
 
+  it("localizes unresolved workspace callback context from request locale before exchange", async () => {
+    const cookieStore = createCookieStore({
+      "helm-dingtalk-oauth-state": JSON.stringify({
+        state: "state-1",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+        provider: "dingtalk",
+      }),
+      "helm-ui-locale": "zh-CN",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+    dbMock.workspace.findUnique.mockResolvedValue(null);
+
+    const response = await dingtalkCallbackRoute(
+      new Request("http://localhost/api/auth/dingtalk/callback?authCode=code-1&state=state-1"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(decodeURIComponent(response.headers.get("location") ?? "")).toContain(
+      "无法解析工作区回调上下文。",
+    );
+    expect(oauthCallbackGovernanceMock.resolveWorkspaceOauthCallbackContext).toHaveBeenCalledWith(
+      expect.objectContaining({ english: false }),
+    );
+    expect(dingtalkMock.exchangeDingTalkAuthCode).not.toHaveBeenCalled();
+  });
+
+  it("localizes missing callback state from request locale before exchange", async () => {
+    const cookieStore = createCookieStore({
+      "helm-ui-locale": "zh-CN",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+
+    const response = await dingtalkCallbackRoute(
+      new Request("http://localhost/api/auth/dingtalk/callback?authCode=code-1"),
+    );
+
+    expect(response.status).toBe(307);
+    const location = decodeURIComponent(response.headers.get("location") ?? "");
+    expect(location).toContain("status=missing-state");
+    expect(location).toContain("钉钉回调状态缺失或已过期。");
+    expect(oauthCallbackGovernanceMock.resolveWorkspaceOauthCallbackContext).not.toHaveBeenCalled();
+    expect(dingtalkMock.exchangeDingTalkAuthCode).not.toHaveBeenCalled();
+  });
+
   it("recovers public callback when state cookie is missing but snapshot exists", async () => {
     const cookieStore = createCookieStore();
     cookiesMock.mockResolvedValue(cookieStore);

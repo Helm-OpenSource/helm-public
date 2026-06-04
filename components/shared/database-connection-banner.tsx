@@ -31,7 +31,7 @@ export function DatabaseConnectionBanner({
   const summary = isNetworkError
     ? english
       ? "We can't reach the database server. You may be off the corporate network — connect to the office VPN, or wait while we retry."
-      : "无法连接到数据库服务器。你可能不在公司网络里——先连上 VPN，或者稍候我们会再试一次。"
+      : "无法连接到数据库服务器。你可能不在公司网络里——先连上公司VPN，或者稍候我们会再试一次。"
     : english
       ? "The database returned an error. Please retry in a moment."
       : "数据库连接出现问题，请稍后重试。";
@@ -49,7 +49,7 @@ export function DatabaseConnectionBanner({
         ["Support", "If the issue persists, contact technical support."],
       ]
     : [
-        ["VPN 连接", "如果你在家工作，请先连接公司 VPN。"],
+        ["VPN连接", "如果你在家工作，请先连接公司VPN。"],
         ["网络检查", "确认网络连接正常。"],
         ["稍后重试", "数据库可能暂时不可用，稍候再试一次。"],
         ["联系支持", "如果问题持续存在，请联系技术支持。"],

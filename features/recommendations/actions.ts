@@ -59,7 +59,7 @@ export async function createActionFromRecommendationAction(recommendationId: str
 
     return { ok: true as const, result };
   } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : english ? "Failed to create an action from the recommendation" : "按 recommendation 生成动作失败" };
+    return { ok: false as const, error: error instanceof Error ? error.message : english ? "Failed to create an action from the recommendation" : "按建议生成动作失败" };
   }
 }
 
@@ -115,7 +115,7 @@ export async function enhanceRecommendationExplanationAction(recommendationId: s
           ? error.message
           : english
             ? "Failed to enhance recommendation with LLM"
-            : "使用 LLM 增强 recommendation 失败",
+            : "使用 LLM 增强建议解释失败",
     };
   }
 }
@@ -177,6 +177,6 @@ export async function submitRecommendationFeedbackAction(input: z.infer<typeof f
 
     return { ok: true as const };
   } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : workspace.defaultLocale === "en-US" ? "Failed to record recommendation feedback" : "记录 recommendation 反馈失败" };
+    return { ok: false as const, error: error instanceof Error ? error.message : workspace.defaultLocale === "en-US" ? "Failed to record recommendation feedback" : "记录建议反馈失败" };
   }
 }

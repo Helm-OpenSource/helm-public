@@ -7,13 +7,21 @@ const mocks = vi.hoisted(() => ({
   canManageWorkspaceMembers: vi.fn(),
   getMembershipManagementDeniedMessage: vi.fn(),
   findFirstMembershipWithExistingUser: vi.fn(),
+  findUniqueMembership: vi.fn(),
   updateMembership: vi.fn(),
   writeAuditLog: vi.fn(),
   revalidatePath: vi.fn(),
+  cookies: vi.fn(),
+  setActiveWorkspace: vi.fn(),
+  ensureWorkspaceCommercialFoundation: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
   revalidatePath: mocks.revalidatePath,
+}));
+
+vi.mock("next/headers", () => ({
+  cookies: mocks.cookies,
 }));
 
 vi.mock("@/lib/auth/session", async (importOriginal) => {
@@ -23,6 +31,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => {
     requireCurrentUser: mocks.requireCurrentUser,
     getCurrentWorkspace: mocks.getCurrentWorkspace,
     getCurrentMembership: mocks.getCurrentMembership,
+    setActiveWorkspace: mocks.setActiveWorkspace,
   };
 });
 
@@ -42,6 +51,7 @@ vi.mock("@/lib/auth/membership-with-user", () => ({
 vi.mock("@/lib/db", () => ({
   db: {
     membership: {
+      findUnique: mocks.findUniqueMembership,
       update: mocks.updateMembership,
     },
   },
@@ -51,7 +61,14 @@ vi.mock("@/lib/audit", () => ({
   writeAuditLog: mocks.writeAuditLog,
 }));
 
-import { updateOrganizationMemberGoalProfileAction } from "@/features/settings/actions";
+vi.mock("@/lib/billing/foundation", () => ({
+  ensureWorkspaceCommercialFoundation: mocks.ensureWorkspaceCommercialFoundation,
+}));
+
+import {
+  switchOrganizationAction,
+  updateOrganizationMemberGoalProfileAction,
+} from "@/features/settings/actions";
 
 describe("updateOrganizationMemberGoalProfileAction", () => {
   beforeEach(() => {
@@ -77,6 +94,15 @@ describe("updateOrganizationMemberGoalProfileAction", () => {
       jobResponsibilities: "职责A",
     });
     mocks.writeAuditLog.mockResolvedValue(undefined);
+    mocks.findUniqueMembership.mockResolvedValue({
+      id: "m-target",
+      workspaceId: "ws_2",
+      status: "ACTIVE",
+      workspace: { id: "ws_2", defaultLocale: "zh-CN" },
+    });
+    mocks.cookies.mockResolvedValue({ set: vi.fn() });
+    mocks.setActiveWorkspace.mockResolvedValue(undefined);
+    mocks.ensureWorkspaceCommercialFoundation.mockResolvedValue(undefined);
   });
 
   it("rejects caller without member management permission", async () => {
@@ -165,5 +191,22 @@ describe("updateOrganizationMemberGoalProfileAction", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("参数错误");
     expect(mocks.updateMembership).not.toHaveBeenCalled();
+  });
+
+  it("localizes invalid workspace switch input from current workspace locale", async () => {
+    const result = await switchOrganizationAction({ workspaceId: "" });
+
+    expect(result).toEqual({ ok: false, error: "工作区参数无效" });
+    expect(mocks.findUniqueMembership).not.toHaveBeenCalled();
+    expect(mocks.setActiveWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("localizes unavailable workspace switch target from current workspace locale", async () => {
+    mocks.findUniqueMembership.mockResolvedValue(null);
+
+    const result = await switchOrganizationAction({ workspaceId: "ws_2" });
+
+    expect(result).toEqual({ ok: false, error: "当前无法切换到该工作区" });
+    expect(mocks.setActiveWorkspace).not.toHaveBeenCalled();
   });
 });

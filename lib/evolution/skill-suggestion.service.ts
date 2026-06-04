@@ -253,8 +253,8 @@ function createCandidateSpec(blueprint: CandidateBlueprint, patterns: PatternLik
     operatorReviewChecklist: [
       "确认这条能力仍然只是复核优先 / 非承诺的候选层。",
       "确认写入范围仍然只覆盖草稿、内部记录或审批入口。",
-      "确认它还不需要进入正式静态 skill catalog。",
-      "确认默认面 与当前操作员 工作流一致。",
+      "确认它还不需要进入正式静态能力目录。",
+      "确认默认面与当前操作员工作流一致。",
     ],
   });
 }
@@ -495,37 +495,37 @@ async function getPromotionSignal(
 }
 
 function getStageLabel(stage: CapabilityStage) {
-  return stage === "probationary_skill" ? "probationary capability" : "candidate capability";
+  return stage === "probationary_skill" ? "观察期能力" : "候选能力";
 }
 
 function buildCapabilityDescription(suggestion: AcceptedSkillSuggestionLike, signal: PromotionSignal) {
-  return `${suggestion.reason} 当前按 ${getStageLabel(signal.stage)} 方式沉淀，类别 ${suggestion.candidateCategory}，默认面 为 ${suggestion.candidateDefaultSurface}。校准分 ${signal.calibrationScore}，证据 ${signal.evidenceCount}，持续复现 ${signal.revalidationCount}。`;
+  return `${suggestion.reason} 当前按${getStageLabel(signal.stage)}方式沉淀，类别 ${suggestion.candidateCategory}，默认面为 ${suggestion.candidateDefaultSurface}。校准分 ${signal.calibrationScore}，证据 ${signal.evidenceCount}，持续复现 ${signal.revalidationCount}。`;
 }
 
 function buildCapabilityBoundaryNote(suggestion: AcceptedSkillSuggestionLike, signal: PromotionSignal) {
   const stageLine =
     signal.stage === "probationary_skill"
-      ? "这条能力已经进入 probationary capability 观察层，会继续积累证据和复核备注。"
-      : "这条能力目前仍停留在候选 capability 层，只作为复核优先 的候选能力观察。";
-  const calibrationLine = `当前校准信号：accept ${signal.adoptionCount}、dismiss ${signal.dismissalCount}、边界 incident ${signal.boundaryIncidentCount}。`;
+      ? "这条能力已经进入观察期能力层，会继续积累证据和复核备注。"
+      : "这条能力目前仍停留在候选能力层，只作为复核优先的候选能力观察。";
+  const calibrationLine = `当前校准信号：采纳 ${signal.adoptionCount}、驳回 ${signal.dismissalCount}、边界事件 ${signal.boundaryIncidentCount}。`;
   const decision = normalizeFormalReviewDecision(suggestion.formalReviewDecision);
   const reviewLine =
     decision === "APPROVED_PENDING_PROMOTION"
-      ? "它已经通过 正式复核，但仍只是 approved-pending-晋升，必须人工补静态 skill catalog、tests、guards 和 docs 后才可能成为 正式skill。"
+      ? "它已经通过正式复核，但仍只是待晋升批准状态，必须人工补静态能力目录、测试、守卫和文档后才可能成为正式能力。"
       : decision === "DEFERRED"
-        ? "它已被 正式复核 defer，当前仍停留在人工治理层，等待 reviewer 重新入队或补充前置材料。"
+        ? "它已被正式复核暂缓，当前仍停留在人工治理层，等待复核人重新入队或补充前置材料。"
         : decision === "REJECTED"
-          ? "它已被 正式复核 reject，当前不会自动进入 正式晋升，也不会因此获得任何 execution权限。"
+          ? "它已被正式复核拒绝，当前不会自动进入正式晋升，也不会因此获得任何执行权限。"
       : signal.formalReviewStatus === "QUEUED"
-      ? "它已经进入 正式复核队列，但仍然只是人工评审项，不代表已经成为正式系统能力。"
+      ? "它已经进入正式复核队列，但仍然只是人工评审项，不代表已经成为正式系统能力。"
       : signal.formalReviewStatus === "HARDENING_REQUIRED"
-        ? "它曾被 正式复核退回 hardening，会继续在候选/观察层积累证据与边界说明。"
+        ? "它曾被正式复核退回加固，会继续在候选/观察层积累证据与边界说明。"
         : signal.formalReviewReady
-          ? "它已达到 正式复核 ready 状态，但仍需要人工补静态 skill catalog、tests、guards 和 docs 后才能成为正式系统能力。"
-          : "它还没有进入 正式复核队列，也不会自动获得 路由、send、承诺或 正式write权限。";
+          ? "它已达到正式复核就绪状态，但仍需要人工补静态能力目录、测试、守卫和文档后才能成为正式系统能力。"
+          : "它还没有进入正式复核队列，也不会自动获得路由、发送、承诺或正式写入权限。";
   const formalLine = signal.formalReviewReady
     ? `当前已达到 ${FORMAL_REVIEW_READY_MARKER} 判断阈值。`
-    : "当前仍未达到 正式复核 ready 阈值。";
+    : "当前仍未达到正式复核就绪阈值。";
 
   return `${stageLine} ${calibrationLine} ${suggestion.nonCommitmentNote} ${reviewLine} ${formalLine}`;
 }
@@ -533,12 +533,12 @@ function buildCapabilityBoundaryNote(suggestion: AcceptedSkillSuggestionLike, si
 function buildAppliedEffectSummary(skillName: string, signal: PromotionSignal) {
   const base =
     signal.stage === "probationary_skill"
-      ? `已把“${skillName}”提升为 probationary capability，会继续积累证据但仍不进入正式 skill catalog 或 execution 路由。`
-      : `已把“${skillName}”收口为复核优先 的候选 capability，会继续积累证据但不会自动变成 正式skill。`;
+      ? `已把“${skillName}”提升为观察期能力，会继续积累证据但仍不进入正式能力目录或执行路由。`
+      : `已把“${skillName}”收口为复核优先的候选能力，会继续积累证据但不会自动变成正式能力。`;
 
-  const calibration = `当前校准分 ${signal.calibrationScore}，复现 ${signal.revalidationCount} 次，边界 incident ${signal.boundaryIncidentCount} 次。`;
+  const calibration = `当前校准分 ${signal.calibrationScore}，复现 ${signal.revalidationCount} 次，边界事件 ${signal.boundaryIncidentCount} 次。`;
   return signal.formalReviewReady
-    ? `${base} ${calibration} 当前已达到 ${FORMAL_REVIEW_READY_MARKER} 状态，但仍需要人工写入静态 skill catalog、tests 和 docs。`
+    ? `${base} ${calibration} 当前已达到 ${FORMAL_REVIEW_READY_MARKER} 状态，但仍需要人工写入静态能力目录、测试和文档。`
     : `${base} ${calibration}`;
 }
 
@@ -548,24 +548,24 @@ function buildFormalReviewSummary(
   decision: FormalReviewDecision = "NONE",
 ) {
   if (decision === "APPROVED_PENDING_PROMOTION") {
-    return `“${skillName}”已通过 正式复核，当前只进入 approved-pending-晋升 状态，仍需人工补静态 catalog、tests、guards 和 docs。`;
+    return `“${skillName}”已通过正式复核，当前只进入待晋升批准状态，仍需人工补静态能力目录、测试、守卫和文档。`;
   }
   if (decision === "DEFERRED") {
-    return `“${skillName}”已被 正式复核 defer，当前保留在人工治理层，等待 reviewer 重新入队或补充说明。`;
+    return `“${skillName}”已被正式复核暂缓，当前保留在人工治理层，等待复核人重新入队或补充说明。`;
   }
   if (decision === "REJECTED") {
-    return `“${skillName}”已被 正式复核 reject，当前不会进入 正式skill 晋升，需要后续重新判断是否值得再入队。`;
+    return `“${skillName}”已被正式复核拒绝，当前不会进入正式能力晋升，需要后续重新判断是否值得再入队。`;
   }
   if (signal.formalReviewStatus === "QUEUED") {
-    return `“${skillName}”已进入 正式复核队列，下一步仍是人工决定是否补 catalog、tests、guards 和 docs。`;
+    return `“${skillName}”已进入正式复核队列，下一步仍是人工决定是否补能力目录、测试、守卫和文档。`;
   }
   if (signal.formalReviewStatus === "HARDENING_REQUIRED") {
-    return `“${skillName}”已从 正式复核返回 hardening，会继续记录边界 incident 并在证据更稳后重新进入队列。`;
+    return `“${skillName}”已从正式复核返回加固，会继续记录边界事件并在证据更稳后重新进入队列。`;
   }
   if (signal.formalReviewReady) {
-    return `“${skillName}”已达到 ${FORMAL_REVIEW_READY_MARKER}，可以进入人工 正式复核队列，但仍不是 正式skill。`;
+    return `“${skillName}”已达到 ${FORMAL_REVIEW_READY_MARKER}，可以进入人工正式复核队列，但仍不是正式能力。`;
   }
-  return `“${skillName}”当前仍在 ${getStageLabel(signal.stage)} 校准期，暂未进入 正式复核队列。`;
+  return `“${skillName}”当前仍在${getStageLabel(signal.stage)}校准期，暂未进入正式复核队列。`;
 }
 
 async function reconcileAcceptedSkillCapability(input: {
@@ -1329,14 +1329,14 @@ function buildFormalReviewDecisionSummary(input: {
   const noteLine = input.note ? ` 说明：${input.note}` : "";
 
   if (input.decision === "APPROVED_PENDING_PROMOTION") {
-    return `“${input.skillName}”已通过 正式复核，并进入 approved-pending-晋升 状态。当前 checklist：${checklistSummary}。它仍不是 正式skill，下一步仍需人工补 catalog、tests、guards 和 docs。${noteLine}`;
+    return `“${input.skillName}”已通过正式复核，并进入待晋升批准状态。当前清单：${checklistSummary}。它仍不是正式能力，下一步仍需人工补能力目录、测试、守卫和文档。${noteLine}`;
   }
 
   if (input.decision === "DEFERRED") {
-    return `“${input.skillName}”已被 正式复核 defer。当前 checklist：${checklistSummary}。这代表仍保留在人工治理层，等待后续补充说明或重新入队。${noteLine}`;
+    return `“${input.skillName}”已被正式复核暂缓。当前清单：${checklistSummary}。这代表仍保留在人工治理层，等待后续补充说明或重新入队。${noteLine}`;
   }
 
-  return `“${input.skillName}”已被 正式复核 reject。当前 checklist：${checklistSummary}。它不会自动进入 正式晋升，后续只能在重新判断后再次入队。${noteLine}`;
+  return `“${input.skillName}”已被正式复核拒绝。当前清单：${checklistSummary}。它不会自动进入正式晋升，后续只能在重新判断后再次入队。${noteLine}`;
 }
 
 export async function queueSkillFormalReview(input: {
@@ -1349,11 +1349,11 @@ export async function queueSkillFormalReview(input: {
 
   const signal = await getPromotionSignal(suggestion);
   if (!signal.formalReviewReady) {
-    throw new Error("这条能力还没有达到 正式复核 ready 条件");
+    throw new Error("这条能力还没有达到正式复核就绪条件");
   }
 
   if (normalizeFormalReviewDecision(suggestion.formalReviewDecision) === "APPROVED_PENDING_PROMOTION") {
-    throw new Error("这条能力已经通过 正式复核，当前等待人工 正式晋升");
+    throw new Error("这条能力已经通过正式复核，当前等待人工正式晋升");
   }
 
   if (normalizeFormalReviewStatus(suggestion.formalReviewStatus) === "QUEUED") {
@@ -1361,7 +1361,7 @@ export async function queueSkillFormalReview(input: {
   }
 
   const queuedAt = new Date();
-  const summary = `“${suggestion.candidateSkillName}”已进入 正式复核队列，后续仍需人工决定是否补 catalog、tests、guards 和 docs。`;
+  const summary = `“${suggestion.candidateSkillName}”已进入正式复核队列，后续仍需人工决定是否补能力目录、测试、守卫和文档。`;
   const updated = await db.skillSuggestion.update({
     where: { id: suggestion.id },
     data: {
@@ -1383,7 +1383,7 @@ export async function queueSkillFormalReview(input: {
       workspaceId: input.workspaceId,
       userId: input.userId,
       type: NotificationType.UPDATE,
-      title: "候选能力已进入 正式复核队列",
+      title: "候选能力已进入正式复核队列",
       body: summary,
       url: "/settings?tab=policies",
     },
@@ -1439,10 +1439,10 @@ export async function returnSkillFormalReviewForHardening(input: {
   const suggestion = await getAcceptedSkillSuggestionOrThrow(input);
 
   if (normalizeFormalReviewStatus(suggestion.formalReviewStatus) !== "QUEUED") {
-    throw new Error("只有已入队的 正式复核 item 才能退回 hardening");
+    throw new Error("只有已入队的正式复核项才能退回加固");
   }
 
-  const summary = `“${suggestion.candidateSkillName}”已从 正式复核队列返回 hardening，会继续记录边界 incident 并等待更稳的证据。`;
+  const summary = `“${suggestion.candidateSkillName}”已从正式复核队列返回加固，会继续记录边界事件并等待更稳的证据。`;
   const updated = await db.skillSuggestion.update({
     where: { id: suggestion.id },
     data: {
@@ -1494,7 +1494,7 @@ export async function returnSkillFormalReviewForHardening(input: {
       workspaceId: input.workspaceId,
       userId: input.userId,
       type: NotificationType.UPDATE,
-      title: "候选能力已返回 hardening",
+      title: "候选能力已返回加固",
       body: summary,
       url: "/settings?tab=policies",
     },
@@ -1520,10 +1520,10 @@ export async function approveSkillFormalReview(input: {
 }) {
   const suggestion = await getAcceptedSkillSuggestionOrThrow(input);
   if (normalizeFormalReviewStatus(suggestion.formalReviewStatus) !== "QUEUED") {
-    throw new Error("只有已入队的 正式复核 item 才能批准");
+    throw new Error("只有已入队的正式复核项才能批准");
   }
   if (!isFormalReviewChecklistComplete(input.checklist)) {
-    throw new Error("批准 正式复核前必须完成 catalog、tests、guards、docs 和边界 checklist");
+    throw new Error("批准正式复核前必须完成能力目录、测试、守卫、文档和边界清单");
   }
 
   const decidedAt = new Date();
@@ -1552,7 +1552,7 @@ export async function approveSkillFormalReview(input: {
       workspaceId: input.workspaceId,
       userId: input.userId,
       type: NotificationType.UPDATE,
-      title: "候选能力已通过 正式复核",
+      title: "候选能力已通过正式复核",
       body: summary,
       url: "/settings?tab=policies",
     },
@@ -1612,10 +1612,10 @@ export async function deferSkillFormalReview(input: {
 }) {
   const suggestion = await getAcceptedSkillSuggestionOrThrow(input);
   if (normalizeFormalReviewStatus(suggestion.formalReviewStatus) !== "QUEUED") {
-    throw new Error("只有已入队的 正式复核 item 才能 defer");
+    throw new Error("只有已入队的正式复核项才能暂缓");
   }
   if (!input.reviewNote?.trim()) {
-    throw new Error("defer 正式复核时必须填写复核备注");
+    throw new Error("暂缓正式复核时必须填写复核备注");
   }
 
   const decidedAt = new Date();
@@ -1644,7 +1644,7 @@ export async function deferSkillFormalReview(input: {
       workspaceId: input.workspaceId,
       userId: input.userId,
       type: NotificationType.UPDATE,
-      title: "候选能力 正式复核已 defer",
+      title: "候选能力正式复核已暂缓",
       body: summary,
       url: "/settings?tab=policies",
     },
@@ -1704,10 +1704,10 @@ export async function rejectSkillFormalReview(input: {
 }) {
   const suggestion = await getAcceptedSkillSuggestionOrThrow(input);
   if (normalizeFormalReviewStatus(suggestion.formalReviewStatus) !== "QUEUED") {
-    throw new Error("只有已入队的 正式复核 item 才能 reject");
+    throw new Error("只有已入队的正式复核项才能拒绝");
   }
   if (!input.reviewNote?.trim()) {
-    throw new Error("reject 正式复核时必须填写复核备注");
+    throw new Error("拒绝正式复核时必须填写复核备注");
   }
 
   const decidedAt = new Date();
@@ -1736,7 +1736,7 @@ export async function rejectSkillFormalReview(input: {
       workspaceId: input.workspaceId,
       userId: input.userId,
       type: NotificationType.UPDATE,
-      title: "候选能力 正式复核已 reject",
+      title: "候选能力正式复核已拒绝",
       body: summary,
       url: "/settings?tab=policies",
     },

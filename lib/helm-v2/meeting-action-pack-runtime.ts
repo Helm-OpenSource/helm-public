@@ -33,8 +33,8 @@ import { jsonStringify, safeParseJson, trimText } from "@/lib/utils";
 
 const MEETING_ANALYST_AGENT = "meeting-analyst";
 const OPPORTUNITY_JUDGE_AGENT = "opportunity-judge";
-const DEFAULT_WORKSPACE_SUMMARY = "当前 workspace 以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
-const ACTION_PACK_BOUNDARY_NOTE_CN = "这份 动作资料 仍然只是 draft recommendation套件，不会自动外发、不会形成对外承诺，也不会写入 正式 CRM 状态。";
+const DEFAULT_WORKSPACE_SUMMARY = "当前工作区以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
+const ACTION_PACK_BOUNDARY_NOTE_CN = "这份动作资料仍然只是草稿建议套件，不会自动外发、不会形成对外承诺，也不会写入正式客户关系系统状态。";
 const SHADOW_BOUNDARY_NOTE = "Only shadow fields are updated in Sprint 2. Official opportunity state stays unchanged.";
 
 type MeetingRuntimeMeeting = NonNullable<Awaited<ReturnType<typeof loadMeetingRuntimeMeeting>>>;
@@ -402,7 +402,7 @@ function buildInferenceItems(meeting: MeetingRuntimeMeeting, evidenceRefs: strin
   };
 
   for (const line of listLines(note.riskAlerts).slice(0, 2)) {
-    pushInference(line, "从风险 alerts 或会中风险提醒里抽出的推断，仍需人工确认后才能提升。", 62);
+    pushInference(line, "从风险提醒或会中风险提示里抽出的推断，仍需人工确认后才能提升。", 62);
   }
 
   if (note.relationshipSummary) {
@@ -414,7 +414,7 @@ function buildInferenceItems(meeting: MeetingRuntimeMeeting, evidenceRefs: strin
   }
 
   if (meeting.opportunity?.riskLevel === RiskLevel.HIGH || meeting.opportunity?.riskLevel === RiskLevel.CRITICAL) {
-    pushInference("当前机会风险需要管理者关注。", "机会原始风险等级较高，meeting 动作资料 需要更强人工确认。", 68);
+    pushInference("当前机会风险需要管理者关注。", "机会原始风险等级较高，会议动作资料需要更强人工确认。", 68);
   }
 
   return inferred.filter((item, index, list) => list.findIndex((candidate) => candidate.summary === item.summary) === index);
@@ -444,7 +444,7 @@ function buildRiskFlags(meeting: MeetingRuntimeMeeting, facts: MeetingFactItem[]
   }
 
   if (facts.some((fact) => /预算|采购|法务|审批/.test(fact.content))) {
-    pushRisk("存在预算 / 采购 / 法务类外部依赖。", "high", "会议事实已经指向外部依赖，不应把 recommendation 误读成承诺。", true);
+    pushRisk("存在预算 / 采购 / 法务类外部依赖。", "high", "会议事实已经指向外部依赖，不应把建议误读成承诺。", true);
   }
 
   return risks.filter((risk, index, list) => list.findIndex((candidate) => candidate.label === risk.label) === index);
@@ -466,7 +466,7 @@ function buildOwnerMap(meeting: MeetingRuntimeMeeting, nextActions: string[]) {
 
 function buildFollowupDeadlines(meeting: MeetingRuntimeMeeting, nextActions: string[]) {
   if (!nextActions.length) return [];
-  const within24h = meeting.opportunity ? "24 小时内完成第一轮 follow-up 草稿" : "24 小时内补全会议事实确认";
+  const within24h = meeting.opportunity ? "24 小时内完成第一轮跟进草稿" : "24 小时内补全会议事实确认";
   return [within24h, "确认负责人与截止时间后再进入下一层执行消费。"];
 }
 
@@ -494,9 +494,9 @@ export function buildMeetingAnalystArtifacts(meeting: MeetingRuntimeMeeting): Me
   const risks = buildRiskFlags(meeting, facts, inferred);
   const promisesDetected = detectPromises(meeting, facts, risks);
   const openQuestions = [
-    ...(meeting.opportunityId ? [] : ["当前会议还没有关联机会，阴影判断只能停在 meeting / company 层。"]),
-    ...(meeting.companyId ? [] : ["当前会议还没有关联 company，客户目标需要人工补足。"]),
-    ...(nextActions.length ? [] : ["当前还没有形成明确 下一步，需要人工补写。"]),
+    ...(meeting.opportunityId ? [] : ["当前会议还没有关联机会，阴影判断只能停在会议 / 公司层。"]),
+    ...(meeting.companyId ? [] : ["当前会议还没有关联公司，客户目标需要人工补足。"]),
+    ...(nextActions.length ? [] : ["当前还没有形成明确下一步，需要人工补写。"]),
   ];
   const ownerMap = buildOwnerMap(meeting, nextActions);
   const followupDeadlines = buildFollowupDeadlines(meeting, nextActions);
@@ -515,7 +515,7 @@ export function buildMeetingAnalystArtifacts(meeting: MeetingRuntimeMeeting): Me
   };
   const riskArtifact: RiskFlagsArtifact = {
     flags: risks,
-    boundaryNotes: [ACTION_PACK_BOUNDARY_NOTE_CN, "facts 与 推导 继续分层保存；推导 默认不 晋升。"],
+    boundaryNotes: [ACTION_PACK_BOUNDARY_NOTE_CN, "事实与推导继续分层保存；推导默认不晋升。"],
     requiresPromiseGuardReview: risks.some((risk) => risk.promiseRisk),
   };
   const recommendedNextAction = nextActions[0] ?? meeting.opportunity?.nextAction ?? "先由人工确认会议事实，再决定下一步。";
@@ -536,8 +536,8 @@ export function buildMeetingAnalystArtifacts(meeting: MeetingRuntimeMeeting): Me
     `- ${ACTION_PACK_BOUNDARY_NOTE_CN}`,
     `- ${SHADOW_BOUNDARY_NOTE}`,
     "",
-    "## Open questions",
-    ...(openQuestions.length ? openQuestions.map((item) => `- ${item}`) : ["- 暂无额外 open question。"]),
+    "## 未决问题",
+    ...(openQuestions.length ? openQuestions.map((item) => `- ${item}`) : ["- 暂无额外未决问题。"]),
   ].join("\n");
 
   const memoryDraftLines: MemoryDraftLine[] = [
@@ -612,7 +612,7 @@ function parseActionPackMarkdown(markdown: string) {
     .map((line) => line.trim())
     .filter((line) => line.startsWith("- "))
     .map((line) => line.replace(/^- /, "").trim());
-  return bullets[0] ?? "先由人工确认 动作资料，再决定下一步。";
+  return bullets[0] ?? "先由人工确认动作资料，再决定下一步。";
 }
 
 export function deriveShadowOpportunityUpdate(input: {
@@ -662,7 +662,7 @@ export function deriveShadowOpportunityUpdate(input: {
   const managerAttentionReasons = [
     ...(shadowRiskLevel === RiskLevel.HIGH || shadowRiskLevel === RiskLevel.CRITICAL ? ["风险等级仍然偏高。"] : []),
     ...(input.factsArtifact.blockers.length >= 2 ? ["阻塞项已超过 2 个，需要经理关注。"] : []),
-    ...(input.actionPack.openQuestions.length > 0 ? ["动作资料 仍带有 未决问题。"] : []),
+    ...(input.actionPack.openQuestions.length > 0 ? ["动作资料仍带有未决问题。"] : []),
   ];
 
   return {
@@ -670,7 +670,7 @@ export function deriveShadowOpportunityUpdate(input: {
     shadowRiskLevel,
     shadowNextAction,
     shadowBlockersSummary:
-      input.factsArtifact.blockers.slice(0, 3).join("；") || riskSignals.riskHints[0] || "暂无新增阻塞，总体继续沿 meeting 动作资料 推进。",
+      input.factsArtifact.blockers.slice(0, 3).join("；") || riskSignals.riskHints[0] || "暂无新增阻塞，总体继续沿会议动作资料推进。",
     shadowManagerAttentionFlag: managerAttentionReasons.length > 0,
     shadowStageConfidence: Math.max(68, Math.min(90, 72 + input.factsArtifact.decisions.length * 4)),
     managerAttentionReasons,
@@ -702,7 +702,7 @@ async function createRuntimeArtifacts(input: {
       ...common,
       artifactType: "meeting_facts.json",
       title: `${input.meeting.title} structured meeting facts`,
-      summary: "会议分析 已把会议摘要、决策、阻塞、客户目标和下一步拆成结构化事实 / 推导。",
+      summary: "会议分析已把会议摘要、决策、阻塞、客户目标和下一步拆成结构化事实 / 推导。",
       approvalTier: resolveApprovalRule("meeting.parse").tier,
       reviewPosture: "human_confirm_required",
       artifactsJson: jsonStringify({
@@ -717,7 +717,7 @@ async function createRuntimeArtifacts(input: {
       ...common,
       artifactType: "risk_flags.json",
       title: `${input.meeting.title} risk flags`,
-      summary: "潜在承诺、边界风险和 未决问题 已被抽出，但仍保持 draft姿态。",
+      summary: "潜在承诺、边界风险和未决问题已被抽出，但仍保持草稿姿态。",
       approvalTier: resolveApprovalRule("meeting.parse").tier,
       reviewPosture: "draft_risk_only",
       artifactsJson: jsonStringify({
@@ -732,7 +732,7 @@ async function createRuntimeArtifacts(input: {
       ...common,
       artifactType: "action_pack.md",
       title: `${input.meeting.title} action pack`,
-      summary: "draft 动作资料 已生成，但仍需人工确认才能触发经营记忆 晋升 和阴影更新。",
+      summary: "草稿动作资料已生成，但仍需人工确认才能触发经营记忆晋升和阴影更新。",
       approvalTier: resolveApprovalRule("memory.write_draft").tier,
       reviewPosture: "requires_human_confirm",
       artifactsJson: jsonStringify(input.analyst.actionPack),
@@ -744,7 +744,7 @@ async function createRuntimeArtifacts(input: {
       ...common,
       artifactType: "memory_draft.jsonl",
       title: `${input.meeting.title} memory draft`,
-      summary: "会议分析 生成的 draft 经营记忆话术s；facts / 推导 / 检查点已分层。",
+      summary: "会议分析生成的草稿经营记忆话术；事实 / 推导 / 检查点已分层。",
       approvalTier: resolveApprovalRule("memory.write_draft").tier,
       reviewPosture: "draft_only",
       artifactsJson: jsonStringify({
@@ -1291,7 +1291,7 @@ export async function confirmMeetingFactsRuntime(input: {
     artifactId: "action_pack.md",
     markdown: "",
     boundary: ACTION_PACK_BOUNDARY_NOTE_CN,
-    recommendedNextAction: "先由人工确认 动作资料，再决定下一步。",
+    recommendedNextAction: "先由人工确认动作资料，再决定下一步。",
     openQuestions: [],
   });
 
