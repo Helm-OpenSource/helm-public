@@ -20,6 +20,7 @@ import {
   createUnifiedDetailNavigationModel,
   type UnifiedDetailNavigationModel,
 } from "@/lib/presentation/unified-detail-navigation";
+import { formatExpansionReviewDateLabel } from "@/features/expansion-review/expansion-review-date-labels";
 import { formatDateLabel, trimText } from "@/lib/utils";
 
 type HeaderLink = {
@@ -491,27 +492,36 @@ function buildWatchState({
     reviewCandidate &&
     (!approvalCandidate || reviewCandidate >= approvalCandidate)
   ) {
+    const reviewDateLabel = expansionReviewDateLabel(reviewCandidate, english);
+
     return {
       lastTouchAt: reviewCandidate,
       lastTouchSummary: english
-        ? `${explicitReview?.reviewedBy?.name ?? "A reviewer"} reviewed this on ${formatDateLabel(reviewCandidate)}`
+        ? `${explicitReview?.reviewedBy?.name ?? "A reviewer"} reviewed this on ${reviewDateLabel}`
         : `${explicitReview?.reviewedBy?.name ?? "有复核人"} 在 ${formatDateLabel(reviewCandidate)} 复核了这条扩展审查`,
     };
   }
 
   if (approvalCandidate) {
+    const approvalDateLabel = expansionReviewDateLabel(
+      approvalCandidate,
+      english,
+    );
+
     return {
       lastTouchAt: approvalCandidate,
       lastTouchSummary: english
-        ? `A human reviewed the linked approval on ${formatDateLabel(approvalCandidate)}`
+        ? `A human reviewed the linked approval on ${approvalDateLabel}`
         : `在 ${formatDateLabel(approvalCandidate)} 有人复核了相关审批`,
     };
   }
 
+  const preparedDateLabel = expansionReviewDateLabel(detail.updatedAt, english);
+
   return {
     lastTouchAt: null,
     lastTouchSummary: english
-      ? `No explicit user touch yet. The current commercial review read was prepared on ${formatDateLabel(detail.updatedAt)}.`
+      ? `No explicit user touch yet. The current commercial review read was prepared on ${preparedDateLabel}.`
       : `当前还没有显式用户触点。这条 commercial 复核判断准备于 ${formatDateLabel(detail.updatedAt)}。`,
   };
 }
@@ -540,24 +550,27 @@ function buildExpansionReviewAgentSurface({
     "external-send-disabled",
     "commitment-disabled",
   ]);
+  const lastTouchDateLabel = watchState.lastTouchAt
+    ? expansionReviewDateLabel(watchState.lastTouchAt, english)
+    : null;
 
   const recentChangesItems = compactItems([
     watchState.lastTouchAt != null && detail.updatedAt > watchState.lastTouchAt
       ? signals.pendingReview
         ? english
-          ? `Since ${formatDateLabel(watchState.lastTouchAt)}, explicit human commercial review is still open and keeps this line bounded.`
+          ? `Since ${lastTouchDateLabel}, explicit human commercial review is still open and keeps this line bounded.`
           : `自 ${formatDateLabel(watchState.lastTouchAt)} 以来，显式人工 commercial 复核仍未关闭，所以这条线仍保持有边界。`
         : signals.topBlocker
           ? english
-            ? `Since ${formatDateLabel(watchState.lastTouchAt)}, blocker "${signals.topBlocker.title}" still keeps the commercial story from widening honestly.`
+            ? `Since ${lastTouchDateLabel}, blocker "${signals.topBlocker.title}" still keeps the commercial story from widening honestly.`
             : `自 ${formatDateLabel(watchState.lastTouchAt)} 以来，阻塞点「${signals.topBlocker.title}」仍然让这条商业叙事不能诚实地继续扩大。`
           : signals.recentThread &&
               signals.recentThread.updatedAt > watchState.lastTouchAt
             ? english
-              ? `Since ${formatDateLabel(watchState.lastTouchAt)}, the latest external thread changed and the commercial posture now needs a fresh expansion review.`
+              ? `Since ${lastTouchDateLabel}, the latest external thread changed and the commercial posture now needs a fresh expansion review.`
               : `自 ${formatDateLabel(watchState.lastTouchAt)} 以来，最近一条外部线程已经变化，当前商业状态需要重新做一次扩展审查。`
             : english
-              ? `Since ${formatDateLabel(watchState.lastTouchAt)}, this expansion review has stayed aligned to ${stageLabel} without widening the story prematurely.`
+              ? `Since ${lastTouchDateLabel}, this expansion review has stayed aligned to ${stageLabel} without widening the story prematurely.`
               : `自 ${formatDateLabel(watchState.lastTouchAt)} 以来，这条扩展审查一直对齐在「${stageLabel}」，没有提前把叙事抬大。`
       : watchState.lastTouchAt == null
         ? english
@@ -1176,6 +1189,13 @@ function formatRisk(
 
 function compactItems(items: Array<string | null>) {
   return items.filter((item): item is string => item != null);
+}
+
+function expansionReviewDateLabel(
+  value: Date | string | null | undefined,
+  english: boolean,
+) {
+  return formatExpansionReviewDateLabel(value, english, formatDateLabel);
 }
 
 function compactLinks(items: Array<{ label: string; href: string } | null>) {
