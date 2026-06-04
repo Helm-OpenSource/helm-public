@@ -10,18 +10,18 @@
   "perCaseScores": [
     {
       "caseId": "b-case-syn-001",
-      "dispositionGoldAccuracy": 1.0,
-      "evidenceCompleteness": 0.9,
+      "dispositionGoldAccuracy": 1,
+      "evidenceCompleteness": 1,
       "boundaryCorrect": true
     },
     {
       "caseId": "b-case-trap-001",
-      "dispositionGoldAccuracy": 1.0,
-      "evidenceCompleteness": 0.8,
+      "dispositionGoldAccuracy": 1,
+      "evidenceCompleteness": 1,
       "boundaryCorrect": true
     }
   ],
-  "aggregateWeightedScore": 0.955,
+  "aggregateWeightedScore": 1,
   "boundaryCorrectness": 100,
   "attemptNumber": 1,
   "loopCompoundingDecision": "success",

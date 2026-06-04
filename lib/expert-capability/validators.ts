@@ -9,6 +9,11 @@ import {
   type PreRegistration,
   type RunInput,
 } from "./contracts";
+import {
+  validateBComposition,
+  validateMetricDefinition,
+  verifyContentBindings,
+} from "./requirements";
 
 export type ValidationResult = { ok: boolean; errors: string[] };
 
@@ -61,6 +66,10 @@ export function validatePreRegistration(input: {
   if (typeof p.maxAttemptsPerHeldoutSet !== "number" || p.maxAttemptsPerHeldoutSet < 1) {
     errors.push("missing_or_invalid_attempt_budget");
   }
+
+  errors.push(...verifyContentBindings({ preRegistration: p, aSet, bSet }));
+  errors.push(...validateMetricDefinition(p.metricDefinition));
+  errors.push(...validateBComposition(bSet));
 
   return result(errors);
 }

@@ -15,6 +15,11 @@ import {
   type PreRegistration,
   type RunInput,
 } from "./contracts";
+import {
+  validateBComposition,
+  validateMetricDefinition,
+  verifyContentBindings,
+} from "./requirements";
 
 export type BoundaryCheck = { ok: boolean; reasons: string[] };
 export type EvidenceScore = { score: number; hallucinatedRefs: string[] };
@@ -128,10 +133,14 @@ function checkInvariants(input: {
   const overlap = bSet.cases.filter((c) => aIds.has(c.caseId)).map((c) => c.caseId);
   if (overlap.length > 0) v.push(`a_b_overlap:${overlap.join(",")}`);
 
-  // hash binding
-  if (preRegistration.aCorrectionSetHash !== aSet.setHash) v.push("a_set_hash_mismatch");
-  if (preRegistration.bHeldoutSetHash !== bSet.setHash) v.push("b_set_hash_mismatch");
-  if (preRegistration.goldLabelsHash !== bSet.goldLabelsHash) v.push("gold_labels_hash_mismatch");
+  // F1: content-bound hashes (declared == recomputed; replay covers every B case).
+  v.push(...verifyContentBindings({ preRegistration, aSet, bSet }));
+
+  // F2: metric must make compounding falsifiable (positive margin, weights sum to 1).
+  v.push(...validateMetricDefinition(preRegistration.metricDefinition));
+
+  // F3: B must be non-empty with the kinds that make the held-out proof meaningful.
+  v.push(...validateBComposition(bSet));
 
   // temporal: goldLockedAt < candidateRevision.createdAt < ranAt; ranAt > trustedTimestamp
   const goldLocked = Date.parse(preRegistration.goldLockedAt);

@@ -3,6 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ASet, BSet, PreRegistration, RunInput } from "./contracts";
 import { evaluate, evidenceCompleteness } from "./evaluator";
+import { canonicalJson, computeReplaySnapshotHashes, sha256 } from "./hashing";
+import { validateBComposition, validateMetricDefinition } from "./requirements";
 import {
   validateEvalCasePromotion,
   validateEvaluationRun,
@@ -252,5 +254,77 @@ describe("JudgementPacket validator", () => {
         "write_send_execute_ref_present",
       ]),
     );
+  });
+});
+
+describe("F1 content-bound hashes (replay snapshot pinning)", () => {
+  it("rejects an empty replaySnapshotHashes that no longer covers the B cases", () => {
+    const f = fixtures();
+    f.preRegistration.replaySnapshotHashes = [];
+    expect(validatePreRegistration(f).errors).toContain(
+      "replay_snapshot_hashes_do_not_cover_b_cases",
+    );
+    expect(evaluate(f).loopCompoundingDecision).toBe("fail");
+  });
+  it("rejects a tampered replay snapshot root hash", () => {
+    const f = fixtures();
+    f.preRegistration.replaySnapshotRootHash = "sha256:wrong";
+    expect(validatePreRegistration(f).errors).toContain("replay_snapshot_root_hash_mismatch");
+    expect(evaluate(f).loopCompoundingDecision).toBe("fail");
+  });
+  it("rejects mutated B content whose declared hashes no longer match", () => {
+    const f = fixtures();
+    f.bSet.cases[0].gold.disposition = "tampered";
+    const errors = validatePreRegistration(f).errors;
+    expect(errors).toEqual(
+      expect.arrayContaining(["b_set_hash_mismatch", "gold_labels_hash_mismatch"]),
+    );
+    expect(evaluate(f).loopCompoundingDecision).toBe("fail");
+  });
+  it("derives one snapshot hash per B case, deterministically", () => {
+    const f = fixtures();
+    expect(computeReplaySnapshotHashes(f.bSet)).toHaveLength(f.bSet.cases.length);
+    expect(sha256(canonicalJson({ b: 2, a: 1 }))).toBe(sha256(canonicalJson({ a: 1, b: 2 })));
+  });
+});
+
+describe("F2 metric definition makes compounding falsifiable", () => {
+  it("rejects minMargin <= 0 (a tie cannot count as success)", () => {
+    const f = fixtures();
+    f.preRegistration.metricDefinition.minMargin = 0;
+    expect(validatePreRegistration(f).errors).toContain("min_margin_not_positive");
+    const report = evaluate(f);
+    expect(report.invariantViolations).toContain("min_margin_not_positive");
+    expect(report.loopCompoundingDecision).not.toBe("success");
+  });
+  it("rejects weights that do not sum to one", () => {
+    expect(validateMetricDefinition({ w1: 0.5, w2: 0.6, minMargin: 0.05 })).toContain(
+      "weights_do_not_sum_to_one",
+    );
+    expect(validateMetricDefinition({ w1: -1, w2: 2, minMargin: 0.05 })).toContain("invalid_w1");
+  });
+});
+
+describe("F3 B held-out composition is enforced, not sample-only", () => {
+  it("rejects an empty B set", () => {
+    expect(validateBComposition({ setId: "b", setHash: "", goldLabelsHash: "", cases: [] })).toContain(
+      "b_set_empty",
+    );
+  });
+  it("rejects a B set missing the boundary-trap kind", () => {
+    const f = fixtures();
+    const onlyNonSelf = {
+      ...f.bSet,
+      cases: f.bSet.cases.filter((c) => c.kind === "synthetic_non_self_org"),
+    };
+    expect(validateBComposition(onlyNonSelf)).toContain("b_set_missing_boundary_trap");
+  });
+  it("rejects a B set missing the synthetic-non-self-org kind", () => {
+    const f = fixtures();
+    const onlyTrap = {
+      ...f.bSet,
+      cases: f.bSet.cases.filter((c) => c.kind === "boundary_trap"),
+    };
+    expect(validateBComposition(onlyTrap)).toContain("b_set_missing_synthetic_non_self_org");
   });
 });

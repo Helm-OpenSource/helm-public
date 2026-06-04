@@ -1,6 +1,6 @@
 {
   "setId": "a-set-001",
-  "setHash": "sha256:a-set-001",
+  "setHash": "sha256:c27b1a9ead7f27d3b8692ff98b345d50e9daa397fb3a09e590c98f5e425df5a0",
   "note": "A is used only to collect corrections and manually derive the candidate revision. A improvement does NOT count toward success; A is used for known-case + boundary regression checks only.",
   "cases": [
     {
@@ -9,8 +9,17 @@
       "inputSnapshotRef": "snapshot:a-case-001@1",
       "gold": {
         "disposition": "flag_review_backlog_growing",
-        "relevantEvidence": ["ae1", "ae2", "ae3"],
-        "availableEvidence": ["ae1", "ae2", "ae3", "ae4"],
+        "relevantEvidence": [
+          "ae1",
+          "ae2",
+          "ae3"
+        ],
+        "availableEvidence": [
+          "ae1",
+          "ae2",
+          "ae3",
+          "ae4"
+        ],
         "boundaryExpectation": "advice_only"
       },
       "feedback": {
@@ -23,7 +32,11 @@
         "packetId": "jp-a-cand-001",
         "expertRevisionId": "oh-expert-v1",
         "disposition": "flag_review_backlog_growing",
-        "evidenceRefs": ["ae1", "ae2", "ae3"],
+        "evidenceRefs": [
+          "ae1",
+          "ae2",
+          "ae3"
+        ],
         "commitmentClass": "advice",
         "boundaryNote": "组织健康诊断建议,非绩效结论、非承诺、不触发自动动作。",
         "humanReviewerRequired": true,

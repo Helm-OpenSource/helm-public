@@ -22,9 +22,10 @@ production readiness, statistical significance, or a completed moat.
 ```
 templates/expert-capability/
   schema/                 # 6 个契约的 public-safe 示例实例 + correctionReasonCode 枚举
-  packs/                  # A 纠正集 / B 留出集(含 synthetic non-self + boundary-trap)
-  evaluator.js            # 无依赖离线 evaluator(loop_compounding / expert_justified 双裁决)
-lib/expert-capability/    # TS validators + vitest 测试(§15 / §16.4)
+  packs/                  # A 纠正集 / B 留出集(含 synthetic non-self + boundary-trap)+ pre-registration + run-input
+lib/expert-capability/    # TS core:contracts / hashing / requirements / evaluator / validators + vitest 测试(§15 / §16.4)
+scripts/expert-capability-feedback-loop-eval.ts   # 无依赖离线 CLI(loop_compounding / expert_justified 双裁决)
+scripts/expert-capability-stamp-hashes.ts         # 由内容重算绑定哈希并重生成 sample(改 pack 后运行)
 ```
 
 ## 跑法 / Run
@@ -33,7 +34,7 @@ lib/expert-capability/    # TS validators + vitest 测试(§15 / §16.4)
 npm run eval:expert-capability-feedback-loop
 ```
 
-evaluator 读 `packs/pre-registration.json` + A/B 样本 + 两个 baseline,输出:
+CLI(`scripts/expert-capability-feedback-loop-eval.ts`,核心 `lib/expert-capability/evaluator.ts`)读 `packs/pre-registration.json` + A/B 样本 + 两个 baseline,输出:
 
 - `loop_compounding`: `success | inconclusive | fail`(对照上一版专家)— **v0.1 成功门**。
 - `expert_justified`: `pass | inconclusive(expert_vs_rules) | fail`(对照强规则 baseline)— 单独报告。

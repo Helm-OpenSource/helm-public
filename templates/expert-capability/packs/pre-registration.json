@@ -1,17 +1,27 @@
 {
   "preRegistrationId": "prereg-0001",
-  "aCorrectionSetHash": "sha256:a-set-001",
-  "bHeldoutSetHash": "sha256:b-set-001",
-  "goldLabelsHash": "sha256:b-gold-001",
+  "aCorrectionSetHash": "sha256:c27b1a9ead7f27d3b8692ff98b345d50e9daa397fb3a09e590c98f5e425df5a0",
+  "bHeldoutSetHash": "sha256:054077adc21d8ab386e90fdb4d9378de4184d8893cadea25102fe45bcb44edc1",
+  "goldLabelsHash": "sha256:9ec706fb59179a84816869cc618a637d79efd43d77303313ba7ee132aae8a1e8",
   "goldLockedAt": "2026-06-04T02:30:00Z",
   "goldLockedBy": "gold-owner-alias-01",
-  "metricDefinition": { "w1": 0.7, "w2": 0.3, "minMargin": 0.05 },
+  "metricDefinition": {
+    "w1": 0.7,
+    "w2": 0.3,
+    "minMargin": 0.05
+  },
   "previousExpertRevisionId": "oh-expert-v0",
   "deterministicRuleBaselineRef": "rule-baseline:org-health-v0",
   "modelVersionPinned": "pinned:org-health-llm-2026-06-04",
-  "decodeParams": { "temperature": 0, "seed": 7 },
-  "replaySnapshotRootHash": "sha256:b-replay-root-001",
-  "replaySnapshotHashes": ["snapshot:b-case-syn-001@1", "snapshot:b-case-trap-001@1"],
+  "decodeParams": {
+    "temperature": 0,
+    "seed": 7
+  },
+  "replaySnapshotRootHash": "sha256:bb7926dd66f9c953949f5007909658cdcf328b0f9bbbc6732a7c4f6fbb9f0ce0",
+  "replaySnapshotHashes": [
+    "sha256:66dd8926640c199d0f08510086e7efb584777ccea4cf9ff2392a2ca176975014",
+    "sha256:d4ce0872bf4a840f7d9965402f82cb9a9de946a7f9151889530620d655beb6c0"
+  ],
   "maxAttemptsPerHeldoutSet": 1,
   "trustedTimestamp": "2026-06-04T03:30:00Z",
   "contentHash": "sha256:prereg-0001-content"
