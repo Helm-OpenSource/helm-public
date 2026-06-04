@@ -161,6 +161,7 @@ describe("evolution read routes insight governance", () => {
       workspaceId: "workspace-1",
       userId: "user-1",
       limit: 3,
+      locale: "en-US",
     });
     expect(evolutionInsightsMock.getActivePatternFacts).toHaveBeenCalledWith({
       workspaceId: "workspace-1",

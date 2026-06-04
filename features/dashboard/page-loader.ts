@@ -66,6 +66,7 @@ export async function loadDashboardPageData() {
       workspaceId: workspace.id,
       userId: user.id,
       limit: 3,
+      locale,
     }),
     getInternalOperatingWorkspaceData(workspace.id, english, {
       workspace,

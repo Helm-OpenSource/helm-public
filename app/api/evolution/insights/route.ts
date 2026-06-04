@@ -26,6 +26,7 @@ export async function GET(request: Request) {
     workspaceId: workspace.id,
     userId: user.id,
     limit: Number.isFinite(limit) ? limit : 4,
+    locale: english ? "en-US" : "zh-CN",
   });
 
   return successResponse(insights, "ok");
