@@ -37,8 +37,8 @@ describe("role foundations", () => {
     expect(founder.soulLite.boundaryNotes.some((item) => item.includes("承诺"))).toBe(
       true,
     );
-    expect(founder.starterSkillPack.boundaryNote).toContain("candidate capability");
-    expect(founder.starterSkillPack.boundaryNote).toContain("formal skill");
+    expect(founder.starterSkillPack.boundaryNote).toContain("候选能力姿态");
+    expect(founder.starterSkillPack.boundaryNote).toContain("正式能力");
   });
 
   it("uses focus areas to reorder starter skills and explain the workspace fit", () => {

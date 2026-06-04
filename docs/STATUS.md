@@ -16,6 +16,21 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：公开维护者状态文档的中文维护者运营术语混写已继续清理，并对齐登录与角色基础
+测试里的中文断言；本批只改议题 / PR 模板、议题分诊、黄金路径外部测试、最新版本标识姿态、
+议题 #39、候选能力姿态和正式能力文案及源码守卫，不改变 GitHub 证据、分支保护、tag 名称、
+发布姿态、风险队列事实或 Cloud / Enterprise 非承诺边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese maintainer-operations
+terminology in the public maintainer status doc has been further localized.
+Chinese assertions in login and role-foundation tests have also been aligned.
+This batch changes issue / PR templates, issue triage, Golden Path external
+testing, latest-version marker posture, issue #39, candidate-capability
+posture, and formal-skill wording plus source guards only; it does not change
+GitHub evidence, branch protection, tag names, release posture, risk-queue
+facts, or Cloud / Enterprise non-commitment boundaries, and does not claim
+full-repo bilingualization completion.
+
 最新双语化收口：开源与 Cloud Trial 发布姿态文档的中文服务等级协议术语混写已继续清理；本批只改
 无服务等级协议试用姿态和企业级服务等级协议文案及源码守卫，不改变 release check、GitHub
 Release、人工打标签流程、Cloud Trial 可选路径或非服务等级协议边界，也不声明全仓双语化完成。

@@ -38,6 +38,19 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口公开维护者状态文档的中文维护者运营术语混写，并对齐登录与角色基础测试里的中文
+断言；只调整议题 / PR 模板、议题分诊、黄金路径外部测试、最新版本标识姿态、议题 #39、候选
+能力姿态和正式能力文案，不改变 GitHub 证据、分支保护、tag 名称、发布姿态、风险队列事实或
+Cloud / Enterprise 非承诺边界。
+
+This round further localizes mixed Chinese maintainer-operations terminology in
+the public maintainer status doc and aligns Chinese assertions in login and
+role-foundation tests. It changes issue / PR templates, issue triage, Golden
+Path external testing, latest-version marker posture, issue #39,
+candidate-capability posture, and formal-skill wording only, without changing
+GitHub evidence, branch protection, tag names, release posture, risk-queue
+facts, or Cloud / Enterprise non-commitment boundaries.
+
 本轮继续收口开源与 Cloud Trial 发布姿态文档的中文服务等级协议术语混写；只调整无服务等级协议
 试用姿态和企业级服务等级协议文案，不改变 release check、GitHub Release、人工打标签流程、
 Cloud Trial 可选路径或非服务等级协议边界。

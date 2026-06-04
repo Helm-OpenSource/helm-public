@@ -3039,18 +3039,20 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("法律复核记录");
     expect(chineseBody).toContain("自动写入 / 发送 / 批准 /");
     expect(chineseBody).toContain("维护者运营闭环");
-    expect(chineseBody).toContain("issue 分诊");
+    expect(chineseBody).toContain("议题分诊");
     expect(chineseBody).toContain("社区上手");
-    expect(chineseBody).toContain("外部测试");
+    expect(chineseBody).toContain("黄金路径外部测试");
     expect(chineseBody).toContain("发布元数据卫生");
     expect(chineseBody).toContain("必需检查漂移监控");
+    expect(chineseBody).toContain("最新版本标识姿态");
+    expect(chineseBody).toContain("议题 #39");
     expect(chineseBody).toContain("证据摘要");
     expect(chineseBody).toContain("四档摘要");
     expect(chineseBody).toContain("风险队列摘要");
     expect(chineseBody).toContain("下一步摘要");
 
     expect(chineseBody).not.toMatch(
-      /maintainer operating baseline|project-health snapshot|release approval|commercial SLA|customer commitment|readiness statement|repository surface|tag posture|guard status|public docs|contribution entry points|maintainer risks|next operating queue|control-plane readiness|owner approval record|credential rotation receipt|legal reviewer record|customer commitment path|public Core repo|docs index|branch protection|prerelease tag|launch announcement|maintainer operating loop|issue triage|community onboarding|external testing|release metadata hygiene|required-check drift monitoring|day-7 readout|repository metadata|post-launch|workflow job/,
+      /maintainer operating baseline|project-health snapshot|release approval|commercial SLA|customer commitment|readiness statement|repository surface|tag posture|guard status|public docs|contribution entry points|maintainer risks|next operating queue|control-plane readiness|owner approval record|credential rotation receipt|legal reviewer record|customer commitment path|public Core repo|docs index|branch protection|prerelease tag|launch announcement|maintainer operating loop|issue 分诊|issue 队列|issue 模板|issue #39|community onboarding|Golden Path 外部测试|Golden Path 测试|Latest 标识|仓库 Latest|external testing|release metadata hygiene|required-check drift monitoring|day-7 readout|repository metadata|post-launch|workflow job/,
     );
   });
 

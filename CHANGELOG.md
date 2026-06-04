@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口公开维护者状态文档的中文维护者运营术语混写，并对齐登录与角色基础测试里的中文断言；本批只改议题 / PR 模板、议题分诊、黄金路径外部测试、最新版本标识姿态、议题 #39、候选能力姿态和正式能力文案及源码守卫，不改 GitHub 证据、分支保护、tag 名称、发布姿态、风险队列事实或 Cloud / Enterprise 非承诺边界。
 - 继续收口开源与 Cloud Trial 发布姿态文档的中文服务等级协议术语混写；本批只改无服务等级协议试用姿态和企业级服务等级协议文案及源码守卫，不改 release check、GitHub Release、人工打标签流程、Cloud Trial 可选路径或非服务等级协议边界。
 - 继续收口试点响应与值守姿态文档的中文响应边界术语混写；本批只改商业服务等级协议、创始人响应人、大模型路径文案及源码守卫，不改响应目标、P0/P1 升级规则、`release:check` 变量或非商业服务等级协议边界。
 - 继续收口 HSI 要求文档的中文离线边界术语混写；本批只改托管智能体运行时和数据模式迁移文案及源码守卫，不改 HSI 英文参考、评测命令、仅离线阶段门禁、生产连接器或不自动执行边界。
