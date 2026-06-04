@@ -73,7 +73,7 @@ export function RecommendationJudgementCard({
 }) {
   const { locale, demoMode } = useWorkspaceUi();
   const english = locale === "en-US";
-  const presentation = readRecommendationPresentation(recommendation);
+  const presentation = readRecommendationPresentation(recommendation, { locale });
   const text = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
   const resolvedSummaryLabel =

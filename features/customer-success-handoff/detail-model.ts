@@ -756,7 +756,10 @@ function buildPageModel({
     pageEscalationHint: surfaceContract.pageEscalationHint,
   });
 
-  const protocol = toCustomerSuccessDetailPageReportingProtocol(detailContract);
+  const protocol = toCustomerSuccessDetailPageReportingProtocol(
+    detailContract,
+    english,
+  );
   const internalActions = buildCustomerSuccessInternalActions({
     detail,
     stage: customerSuccessHandoffStage,
