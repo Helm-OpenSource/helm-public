@@ -72,7 +72,7 @@ public_safety: Intended for the public mirror. No tenant-private references.
 | 落地对象 | Workspace member directory + Meeting capture metadata |
 | 落地 surface | /settings?tab=connectors · /meetings |
 | 失败降级 | 显示 banner "DingTalk 临时不可用"，缓存最近一次成功 sync 结果 |
-| 凭据持久化 | `connector_credential.encryptedToken`，AES-GCM with CONNECTOR_TOKEN_SECRET |
+| 凭据持久化 | `connector_credential.encryptedToken`，通过 `storeConnectorToken()` 写入；版本化 AES-GCM + `CONNECTOR_TOKEN_SECRET_ID`，轮换期配置 previous secret |
 | trace 写入 | 目录同步 / 邀请审批通过 |
 ```
 
@@ -117,9 +117,10 @@ public_safety: Intended for the public mirror. No tenant-private references.
 - [ ] state 参数防 CSRF（每次 OAuth flow 随机生成）
 - [ ] PKCE 启用（mobile / SPA 场景必须）
 - [ ] redirect_uri 写死在 server side，不允许 query 注入
-- [ ] access_token 加密存储（不写 plain text，不写 client-side）
-- [ ] refresh_token 加密存储（如适用）
-- [ ] 凭据持久化字段加密 key 走 `process.env.CONNECTOR_TOKEN_SECRET`
+- [ ] access_token 通过 `storeConnectorToken()` 加密存储（不写 plain text，不写 client-side）
+- [ ] refresh_token 通过 `storeConnectorToken()` 加密存储（如适用）
+- [ ] 凭据持久化字段加密 key 走 `process.env.CONNECTOR_TOKEN_SECRET`，密钥版本走 `CONNECTOR_TOKEN_SECRET_ID`
+- [ ] 密钥轮换时先配置 `CONNECTOR_TOKEN_SECRET_PREVIOUS` / `CONNECTOR_TOKEN_SECRET_PREVIOUS_ID`，确认旧 token 重写后再清空
 - [ ] 凭据失效时显式降级，banner 给用户重新授权入口
 - [ ] OAuth callback handler 写 audit log（含 traceId）
 - [ ] 撤销 OAuth 时清理凭据 + 相关 cache

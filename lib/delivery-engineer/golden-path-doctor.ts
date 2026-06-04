@@ -64,6 +64,7 @@ const REQUIRED_FILES = [
   "extensions/case-management-sample/hsi-pack.manifest.json",
   "extensions/case-management-sample/fixtures/case.sample.json",
   "extensions/case-management-sample/signals/case/case-mapper.ts",
+  "extensions/case-management-sample/signals/review-packet.ts",
   "extensions/case-management-sample/workers/case-allocation-driver/decide.ts",
   "extensions/case-management-sample/workers/case-stewardship-driver/decide.ts",
   "lib/headless-signal-interface/pack-manifest.ts",
@@ -98,6 +99,11 @@ const SAMPLE_TEST_PATHS = [
 
 const FRESH_CLONE_RECEIPT_DIRECTORY = "docs/reviews";
 const FRESH_CLONE_RECEIPT_PATTERN = /^HELM_DELIVERY_ENGINEER_D2_SMOKE.*\.md$/;
+const ENV_EXAMPLE_PATH = ".env.example";
+
+function helmEnvKey(...parts: readonly string[]) {
+  return ["HELM", ...parts].join("_");
+}
 
 function defaultReadFile(absolutePath: string) {
   return readFileSync(absolutePath, "utf8");
@@ -230,6 +236,114 @@ function freshCloneStatus(
   };
 }
 
+function parseEnvExample(rootDir: string, exists: FileExists, readFile: FileReader) {
+  const absolutePath = path.join(rootDir, ENV_EXAMPLE_PATH);
+  if (!exists(absolutePath)) return null;
+
+  const env: Record<string, string> = {};
+  for (const line of readFile(absolutePath).split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = /^([A-Z0-9_]+)=(.*)$/u.exec(trimmed);
+    if (!match) continue;
+    env[match[1] as string] = match[2]?.trim().replace(/^"|"$/gu, "") ?? "";
+  }
+  return env;
+}
+
+function chinaProfileStatus(env: Record<string, string> | null): DeliveryDoctorCheck {
+  if (!env) {
+    return {
+      id: "china-profile:public-env-defaults",
+      title: "China delivery profile public env defaults",
+      status: "fail",
+      detail: ".env.example is missing; Qwen, region / residency, and npm registry posture cannot be checked",
+      nextAction: "restore .env.example with public-safe profile defaults",
+    };
+  }
+
+  const missing = [
+    helmEnvKey("DEPLOYMENT", "REGION"),
+    helmEnvKey("DATA", "RESIDENCY"),
+    "NPM_CONFIG_REGISTRY",
+    "DASHSCOPE_BASE_URL",
+    "LLM_DEFAULT_PROVIDER",
+  ].filter((key) => !env[key]);
+  const qwenDefault = env.LLM_DEFAULT_PROVIDER === "qwen";
+
+  return {
+    id: "china-profile:public-env-defaults",
+    title: "China delivery profile public env defaults",
+    status: missing.length === 0 && qwenDefault ? "pass" : "fail",
+    detail:
+      missing.length === 0 && qwenDefault
+        ? "Qwen, region / residency, and npm registry override defaults are visible in .env.example"
+        : `profile default issue(s): ${[
+            ...missing.map((key) => `missing ${key}`),
+            qwenDefault ? null : "LLM_DEFAULT_PROVIDER must default to qwen",
+          ]
+            .filter(Boolean)
+            .join(", ")}`,
+    nextAction:
+      missing.length === 0 && qwenDefault
+        ? undefined
+        : "restore public-safe China profile defaults without claiming production compliance",
+  };
+}
+
+function asrOpenAIOnlyStatus(env: Record<string, string> | null): DeliveryDoctorCheck {
+  if (!env) {
+    return {
+      id: "asr:openai-only-precheck",
+      title: "OpenAI-only ASR precheck",
+      status: "fail",
+      detail: ".env.example is missing; ASR provider posture cannot be checked",
+      nextAction: "restore .env.example with ASR_OPENAI_MODEL and ASR_ENABLED defaults",
+    };
+  }
+
+  const issues: string[] = [];
+  if ("ASR_PROVIDER" in env) {
+    issues.push("ASR_PROVIDER must not be declared; ASR is OpenAI-only in public Core");
+  }
+  if (!env.ASR_OPENAI_MODEL) {
+    issues.push("ASR_OPENAI_MODEL is required for the OpenAI-only ASR path");
+  }
+  if (!("ASR_ENABLED" in env)) {
+    issues.push("ASR_ENABLED is required so forks can keep ASR disabled by default");
+  }
+
+  return {
+    id: "asr:openai-only-precheck",
+    title: "OpenAI-only ASR precheck",
+    status: issues.length === 0 ? "pass" : "fail",
+    detail:
+      issues.length === 0
+        ? "ASR is explicitly OpenAI-only and disabled-by-default in .env.example"
+        : issues.join("; "),
+    nextAction:
+      issues.length === 0
+        ? undefined
+        : "remove generic / Qwen ASR provider wiring and keep ASR behind OpenAI configuration",
+  };
+}
+
+function connectorTokenSecretStatus(env: Record<string, string> | null): DeliveryDoctorCheck {
+  const hasPlaceholder = Boolean(env?.CONNECTOR_TOKEN_SECRET);
+
+  return {
+    id: "connector-token:minimal-secret-placeholder",
+    title: "connector token minimal persistence placeholder",
+    status: hasPlaceholder ? "pass" : "fail",
+    detail: hasPlaceholder
+      ? "CONNECTOR_TOKEN_SECRET placeholder exists; connector tokens are not stored as raw public fixtures"
+      : "CONNECTOR_TOKEN_SECRET is missing from .env.example",
+    nextAction: hasPlaceholder
+      ? undefined
+      : "restore CONNECTOR_TOKEN_SECRET placeholder and keep real connector secrets out of the repo",
+  };
+}
+
 function countStatuses(checks: DeliveryDoctorCheck[]): Record<DeliveryDoctorStatus, number> {
   return checks.reduce<Record<DeliveryDoctorStatus, number>>(
     (counts, check) => {
@@ -248,6 +362,7 @@ export function runDeliveryEngineerGoldenPathDoctor(
   const readFile = options.readFile ?? defaultReadFile;
   const listDirectory = options.listDirectory ?? defaultListDirectory;
   const packageJson = parsePackageJson(rootDir, readFile);
+  const envExample = parseEnvExample(rootDir, exists, readFile);
 
   const checks: DeliveryDoctorCheck[] = [
     ...REQUIRED_FILES.map((relativePath) => fileStatus(rootDir, relativePath, exists)),
@@ -256,6 +371,9 @@ export function runDeliveryEngineerGoldenPathDoctor(
     sampleTestStatus(rootDir, exists),
     sensitiveSampleStatus(rootDir, exists, readFile),
     freshCloneStatus(rootDir, listDirectory),
+    chinaProfileStatus(envExample),
+    asrOpenAIOnlyStatus(envExample),
+    connectorTokenSecretStatus(envExample),
   ];
 
   const counts = countStatuses(checks);

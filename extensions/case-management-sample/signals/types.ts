@@ -27,6 +27,7 @@ export type SignalSeverity = "info" | "warning" | "breach" | "critical";
  * not enumerated here — the sample stays connector-agnostic.
  */
 export type SignalSource = "external_case_backend" | "helm-internal" | "mixed";
+export type SignalSourceKind = "case_system" | "crm" | "meeting" | "email" | "im";
 
 export type SignalFreshness = "fresh" | "aging" | "stale";
 export type SignalConfidence = "trusted" | "upstream" | "degraded";
@@ -66,6 +67,29 @@ export type SignalTrace = {
   upstreamTraceId?: string;
 };
 
+export type SignalSourceRef = {
+  sourceKind: SignalSourceKind;
+  sourceId: string;
+  sourceRef: string;
+};
+
+export type SignalSubject = {
+  kind: "case" | "customer_account" | "commitment" | "approval" | "risk";
+  refId: string;
+  label: string;
+};
+
+export type SignalGapField = {
+  field:
+    | "evidence"
+    | "owner"
+    | "boundary_review"
+    | "followup"
+    | "status_alignment";
+  severity: SignalSeverity;
+  detail: string;
+};
+
 /**
  * Mapper output shape. Mappers MUST return SignalCandidate<T>[] and MUST NOT
  * call any IO (no fetch, no DB INSERT, no time other than the injected
@@ -78,10 +102,13 @@ export type SignalCandidate<T> = {
   identity: SignalIdentity;
   scope: SignalScope;
   source: SignalSource;
+  sourceRef: SignalSourceRef;
+  subject: SignalSubject;
   resourceId: string;
   payload: T;
   observedAt: Date;
   confidence: SignalConfidence;
+  gapFields: readonly SignalGapField[];
   trace: SignalTrace;
 };
 

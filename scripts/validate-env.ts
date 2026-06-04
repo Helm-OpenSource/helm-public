@@ -209,6 +209,21 @@ function validateMust(result: ValidationResult): void {
       );
     }
   }
+  if (
+    process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS &&
+    process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS.length < 32
+  ) {
+    if (process.env.NODE_ENV === "production") {
+      result.valid = false;
+      result.errors.push(
+        "MUST: CONNECTOR_TOKEN_SECRET_PREVIOUS must be at least 32 characters in production",
+      );
+    } else {
+      result.warnings.push(
+        "MUST: CONNECTOR_TOKEN_SECRET_PREVIOUS should be at least 32 characters for safer token rotation",
+      );
+    }
+  }
 
   // Database URL sanity
   if (process.env.DATABASE_URL?.includes("file:")) {
@@ -339,6 +354,14 @@ function validateEnvironment(): ValidationResult {
     ) {
       result.recommendations.push(
         "Production CONNECTOR_TOKEN_SECRET should be at least 64 characters",
+      );
+    }
+    if (
+      process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS &&
+      process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS.length < 64
+    ) {
+      result.recommendations.push(
+        "Production CONNECTOR_TOKEN_SECRET_PREVIOUS should be at least 64 characters during rotation",
       );
     }
   }
