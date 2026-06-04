@@ -2,9 +2,8 @@
 
 > **语言 / Language**: **中文主文本** + **English reference**
 
-> 用于准备 review 的静态 Pack artifact。它不是 workflow engine、agent orchestration
-> layer、execution plan、legal advice、financial advice、medical advice 或 customer
-> commitment。
+> 用于准备复核的静态 Pack 工件。它不是工作流引擎、智能体编排层、执行计划、
+> 法律建议、财务建议、医疗建议或客户承诺。
 >
 > Static Pack artifact for preparing review. This is not a workflow engine,
 > agent orchestration layer, execution plan, legal advice, financial advice,
@@ -12,7 +11,7 @@
 
 ## 1. Goal
 
-交付工程师先填写本节，确保 Pack 只准备一个窄判断，不扩成 workflow 或执行计划。
+交付工程师先填写本节，确保 Pack 只准备一个窄判断，不扩成工作流或执行计划。
 
 - Pack ID:
 - Work Pack ID:
@@ -40,10 +39,10 @@
 
 ## 4. Allowed Actions
 
-- 准备 review packet。
-- 向 owner 索取缺失的 redacted samples。
-- 把 claim 标为 insufficient / contradicted / stale / sensitive / supported。
-- 推荐下一步 review-safe action。
+- 准备复核包。
+- 向负责人索取缺失的脱敏样本。
+- 把声明标为证据不足 / 相互矛盾 / 已过期 / 敏感 / 已支撑。
+- 推荐下一步复核安全动作。
 
 - Prepare a review packet.
 - Ask the owner for missing redacted samples.
@@ -52,12 +51,12 @@
 
 ## 5. Never Actions
 
-- 不自动发送 customer-visible messages。
+- 不自动发送客户可见消息。
 - 不自动审批。
 - 不自动执行。
-- 不 silent write CRM 或客户系统字段。
-- 不从本 artifact 创建 public claims。
-- 不包含 raw customer data、secrets、private domains、intranet IPs 或 deployment details。
+- 不静默写入客户关系系统或客户系统字段。
+- 不从本工件创建公开声明。
+- 不包含原始客户数据、密钥、私有域名、内网 IP 或部署细节。
 
 - Do not auto-send customer-visible messages.
 - Do not auto-approve.

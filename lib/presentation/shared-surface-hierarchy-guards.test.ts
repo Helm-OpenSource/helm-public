@@ -2381,6 +2381,37 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps Helm pack template Chinese artifact guidance localized", () => {
+    const packTemplateDocs = [
+      read("templates/helm-pack-template/README.md"),
+      read("templates/helm-pack-template/docs/GETTING_STARTED.md"),
+      read("templates/helm-pack-template/pack-template/PACK.md"),
+      read("templates/helm-pack-template/pack-template/artifacts/README.md"),
+      read("templates/helm-pack-template/pack-template/artifacts/work-pack.template.md"),
+      read(
+        "templates/helm-pack-template/pack-template/artifacts/proof-loop-closeout.template.md",
+      ),
+    ].join("\n");
+
+    expect(packTemplateDocs).toContain("复核优先工件");
+    expect(packTemplateDocs).toContain("公开安全交付工件模板");
+    expect(packTemplateDocs).toContain("上下文包");
+    expect(packTemplateDocs).toContain("Pack Studio 安全样例");
+    expect(packTemplateDocs).toContain("证据矩阵");
+    expect(packTemplateDocs).toContain("待复核工作包");
+    expect(packTemplateDocs).toContain("证明闭环收口");
+    expect(packTemplateDocs).toContain("准备负责人复核");
+    expect(packTemplateDocs).toContain("不是工作流引擎");
+    expect(packTemplateDocs).toContain("静默写入客户关系系统");
+    expect(packTemplateDocs).toContain("公开或客户可见声明");
+    expect(packTemplateDocs).toContain("合格专业人士复核");
+    expect(packTemplateDocs).toContain("不把内部学习直接变成公开声明");
+
+    expect(packTemplateDocs).not.toMatch(
+      /review-first artifact|public-safe 交付 artifact|Review-first 交付 artifacts|准备 review-first 交付 artifacts|review gate 和 outcome|准备 owner review|不是 workflow engine|用于准备 review 的静态 Pack artifact|准备 review packet|推荐下一步 review-safe action|自动发送 customer-visible messages|silent write CRM|创建 public claim|7-day Run，但不把内部学习直接变成 public claim|closeout 默认 internal-only|Public 或 customer-visible claims/,
+    );
+  });
+
   it("keeps public release train runbook Chinese body free of recently fixed mixed release-governance fragments", () => {
     const releaseTrainRunbook = read(
       "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",

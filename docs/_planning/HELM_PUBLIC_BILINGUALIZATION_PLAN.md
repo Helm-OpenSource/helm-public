@@ -38,6 +38,17 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 Helm Pack 模板的中文交付工件术语混写；只调整上下文包、Pack Studio 安全样例、
+证据矩阵、待复核工作包、证明闭环收口、复核优先工件、工作流引擎、公开声明和静默写入客户关系
+系统文案，不改变模板文件名、英文参考、自动执行禁止边界或客户授权 / 专业复核边界。
+
+This round further localizes mixed Chinese delivery-artifact terminology in the
+Helm Pack template. It changes context packet, Pack Studio safe sample, evidence
+matrix, review-ready work pack, proof-loop closeout, review-first artifact,
+workflow engine, public claim, and silent CRM write wording only, without
+changing template file names, English reference text, no-auto-execution
+boundaries, or customer-authorization / professional-review boundaries.
+
 本轮继续收口公开试点作业手册的中文试用支持术语混写；只调整不承诺服务等级协议、GitHub 议题、
 公开议题或 PR、试用支持申请延期、运行时市场和服务等级协议立场变化文案，不改变反馈渠道、
 邮件主题标签、试用状态机、响应窗口或自动执行 / 自动审批边界。

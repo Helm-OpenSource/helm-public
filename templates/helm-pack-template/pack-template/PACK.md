@@ -35,16 +35,16 @@
 - 不替业务方做"承诺类"对外措辞
 - 不替管理者做评分类决策
 
-## Review-first 交付 artifacts
-每个 Pack 在进入客户试跑或 proof candidate 前，应至少准备：
+## 复核优先交付工件
+每个 Pack 在进入客户试跑或证明候选前，应至少准备：
 
-| Artifact | 作用 | 默认边界 |
+| 工件 | 作用 | 默认边界 |
 |---|---|---|
-| Context Packet | 收集 synthetic / redacted 上下文行 | 不含 raw customer data |
-| Pack Studio safe sample | 表格化样本、信号、review gate 和 outcome | 不自动批量运行 |
-| Evidence Matrix | 把 claim 压到 source-backed cell | AI 输出不是事实 |
-| Review-Ready Work Pack | 准备 owner review | 不是 workflow engine |
-| Proof Loop closeout | 关闭 7-day Run，记录 action-level 72h outcome | proof candidate 不等于 public proof |
+| 上下文包 | 收集合成 / 脱敏上下文行 | 不含原始客户数据 |
+| Pack Studio 安全样例 | 表格化样本、信号、复核闸门和结果 | 不自动批量运行 |
+| 证据矩阵 | 把声明压到有来源支撑的单元格 | AI 输出不是事实 |
+| 待复核工作包 | 准备负责人复核 | 不是工作流引擎 |
+| 证明闭环收口 | 关闭 7 日运行，记录动作级 72 小时结果 | 证明候选不等于公开证明 |
 
 模板见 `artifacts/`。
 
