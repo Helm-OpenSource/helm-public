@@ -2867,6 +2867,36 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseMainText).toContain("复核姿态");
     expect(chineseMainText).toContain("工程交付复核");
     expect(chineseMainText).toContain("交付 / 结算 / 邀请 / 复核");
+    expect(chineseMainText).toContain("连接器 / 浏览器运行时");
+    expect(chineseMainText).toContain("输入输出契约");
+    expect(chineseMainText).toContain("复核 / 批准姿态");
+    expect(chineseMainText).toContain("客户可见");
+    expect(chineseMainText).toContain("认证模式");
+    expect(chineseMainText).toContain("审计 / 回放提示");
+    expect(chineseMainText).toContain("额外领域对象");
+    expect(chineseMainText).toContain("租户 / 保留工作区数据归属");
+    expect(chineseMainText).toContain("分润 / 冲回逻辑");
+    expect(chineseMainText).toContain("条款 / 申请 / 邀请边界");
+    expect(chineseMainText).toContain("受益方");
+    expect(chineseMainText).toContain("能力目录");
+    expect(chineseMainText).toContain("宿主工作区");
+    expect(chineseMainText).toContain("一方场景");
+    expect(chineseMainText).toContain("扩展边界");
+    expect(chineseMainText).toContain("角色身份稳定");
+    expect(chineseMainText).toContain("责任边界稳定");
+    expect(chineseMainText).toContain("临时操作员壳层");
+    expect(chineseMainText).toContain("工程复核");
+    expect(chineseMainText).toContain("系统集成交付项目系统");
+    expect(chineseMainText).toContain("测试 / 守卫已稳定");
+    expect(chineseMainText).toContain("文档 / 边界措辞已稳定");
+    expect(chineseMainText).toContain("输入输出契约稳定");
+    expect(chineseMainText).toContain("一方保留扩展");
+    expect(chineseMainText).toContain("共享核心");
+    expect(chineseMainText).toContain("怎么复核");
+    expect(chineseMainText).toContain("怎么邀请");
+    expect(chineseMainText).toContain("新工作流 / 操作员界面");
+    expect(chineseMainText).toContain("新结算 / 归因 / 邀请规则");
+    expect(chineseMainText).toContain("新角色姿态");
     expect(chineseBody).toContain("不是市场");
     expect(chineseBody).toContain("插件沙箱");
     expect(chineseBody).toContain("结算通道");
@@ -2880,7 +2910,7 @@ describe("shared surface hierarchy guards", () => {
       /Solution Extension protocol|public Core version|generic 的|extension 如何|settlement logic|delivery runbook|review-first|domain-specific surfaces|fixtures、report assets|bounded runtime adapters|marketplace|plugin sandbox|settlement rail|customer delivery project tracker|external-send authority|generic \/ synthetic|synthetic \/ redacted fixtures|review-first boundaries/,
     );
     expect(chineseMainText).not.toMatch(
-      /review posture|engineering delivery review|invite \/ review/,
+      /review posture|engineering delivery review|invite \/ review|connector \/ browser runtime|怎么 review|怎么 invite|domain objects|operator surfaces|tenant \/ reserved workspace data ownership|review \/ policy \/ reporting \/ settlement boundary|query \/ report|workflow \/ operator surface|settlement \/ attribution \/ invite|role posture|输入输出 contract|tests \/ guards|docs \/ boundary wording|approval posture|customer-facing|auth mode|workspace scope|audit \/ replay hint|beneficiary|split \/ reversal|terms \/ application \/ invite|settlement \/ payout posture|Worker` catalog|capability catalog|capability metadata|core 升级|host data|public-readable|host workspace|operator data|internal readout|data ownership|tenant workspace|shared core|first-party scenario|first-party 经营特例|first-party reserved extension|extension 边界|responsibility boundary|escalation mode|temporary operator shell|application \/ terms \/ review|first-party surfaces|generic core report module|Prisma schema|extension registry UI|marketplace taxonomy|SI project system|custom extension|core product|抽成 core|导致 schema/,
     );
   });
 

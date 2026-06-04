@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 Solution Extension 协议的中文资源、商业线、等级与升级规则术语混写；本批只改契约、复核 / 批准姿态、客户可见、认证模式、工作区范围、审计 / 回放提示、领域对象、操作员界面、数据归属、复核 / 策略 / 报告 / 结算边界、受益方、分润 / 冲回、条款 / 申请 / 邀请、结算 / 付款姿态、能力目录、宿主工作区、共享核心、一方场景、责任边界、升级模式、系统集成交付项目系统和核心产品文案及源码守卫，不改扩展协议、目录命名规则、私有客户定制边界或 Core / Pack / Overlay 依赖方向。
 - 继续收口 Helm Pack 模板的中文抽取 / 工件目录术语混写；本批只改外部复刻者、公开安全证据门禁、负责人抽取门和工件目录说明文案及源码守卫，不改目录路径、模板文件名、英文参考、自动执行禁止边界或客户授权 / 专业复核边界。
 - 继续收口 Solution Extension 协议的中文复核 / 交付判断术语混写；本批只改复核姿态、工程交付复核和邀请 / 复核判断文案及源码守卫，不改扩展协议、目录命名规则、私有客户定制边界或 Core / Pack / Overlay 依赖方向。
 - 继续收口开源与商业边界文档的中文认证 / 服务等级协议术语混写；本批只改认证字样和服务等级协议文案及源码守卫，不改 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、依赖方向、公开 Helm Certified 品牌短语或认证品牌边界。
