@@ -194,6 +194,10 @@ describe("customer success handoff surface contract", () => {
     expect(surfaceProtocol.pageJudgement).toContain("customer success handoff");
     expect(detailProtocol.pageBoundarySummary[0]).toContain("承诺");
     expect(detailProtocol.pageNextAction).toHaveLength(1);
+    expect(
+      toCustomerSuccessDetailPageReportingProtocol(detailContract, true)
+        .pagePrioritySignal,
+    ).toBe("Follow up with caution");
     expect(detailContract.customerSuccessDetailDecision).not.toEqual(
       detailContract.customerSuccessDetailDecisionRequest,
     );

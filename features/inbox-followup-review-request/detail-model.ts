@@ -345,7 +345,7 @@ export function buildInboxDetailPageModel({
       ? "If the thread starts touching scope, price, timing or outcome certainty, step back into package / proposal / review before any outward reply."
       : "如果这条线程开始触碰范围、价格、时点或结果确定性，就先退回方案包 / 提案 / 复核，再决定是否对外回复。",
   });
-  const protocol = toInboxDetailPageReportingProtocol(contract);
+  const protocol = toInboxDetailPageReportingProtocol(contract, english);
   const navigation = createUnifiedDetailNavigationModel({
     currentNode: {
       detailNodeType: "inbox-detail",
@@ -685,7 +685,7 @@ export function buildFollowupDetailPageModel({
       ? "If the next follow-up starts hardening certainty, scope or timing, step into review request before the wording travels outward."
       : "如果下一次跟进开始把确定性、范围或时点说硬，就先升级进复核请求，再允许措辞往外走。",
   });
-  const protocol = toFollowupDetailPageReportingProtocol(contract);
+  const protocol = toFollowupDetailPageReportingProtocol(contract, english);
   const navigation = createUnifiedDetailNavigationModel({
     currentNode: {
       detailNodeType: "follow-up-detail",
@@ -985,7 +985,7 @@ export function buildReviewRequestDetailPageModel({
       ? "If anyone wants to skip review and speak as if approval already happened, step back into boundary-first handling immediately."
       : "如果任何人想跳过复核，直接按“已批准”去说，就立刻退回边界优先处理。",
   });
-  const protocol = toReviewRequestDetailPageReportingProtocol(contract);
+  const protocol = toReviewRequestDetailPageReportingProtocol(contract, english);
   const navigation = createUnifiedDetailNavigationModel({
     currentNode: {
       detailNodeType: "review-request-detail",
