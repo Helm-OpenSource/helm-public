@@ -86,6 +86,24 @@ Raw customer data, customer-specific identifiers, production URLs, private
 domains, and private deployment receipts do not belong in the public Core
 contract.
 
+## Source Governance Matrix
+
+The flow map must distinguish source governance before it displays a signal as a
+learning candidate, review packet, or operator risk:
+
+| Source class | Allowed surface | Forbidden surface | Required gate |
+|---|---|---|---|
+| `fleet_customer_health` | Internal operator triage, support readiness, advice-only risk review | Expert eval, model improvement, memory promotion, training, automatic customer-facing action | Reversible alias salt lifecycle, role access, decode audit, `customerConsentScopeRef` |
+| `self_dogfood_health` | Dogfood review and candidate improvement material | HR / performance evaluation, person-level promotion | Technical de-identification plus `EvalCasePromotion` scanner + human signoff |
+| `synthetic_public` | Public fixtures, public eval, demo validation | Real-customer evidence claims | Fixture marker and public-release scan |
+| `deidentified_promoted_case` | Held-out eval, regression eval | Any use without human-reviewed de-identification | Passing `EvalCasePromotion` |
+| `oss_governance` | GitHub / docs governance | Helm tenant ingestion, customer diagnosis, expert improvement | Explicit non-goal routing |
+
+Operator intervention stays advice-only. If Helm sees a customer fleet risk, the
+operator view may prepare an internal review note or support readiness task, but any
+customer-visible action must still go through the normal tenant approval path. The
+flow map must not let operator access bypass `recommendation != commitment`.
+
 ## Current Public Status
 
 `helm-public` may include the Core contract, fixtures, and public-safe tests for

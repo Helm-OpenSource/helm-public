@@ -41,8 +41,27 @@ function seedProjectedMirror(): void {
     private: false,
     license: "Apache-2.0",
     scripts: {
-      "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
-      "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+      "check:boundaries": "npm run public:smoke:static",
+      "check:public-commit-metadata":
+        "node --import tsx scripts/public-commit-metadata-check.ts",
+      "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "check:public-release":
+        "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
+      "db:prepare":
+        "node -e \"console.log('public mirror: database prepare is not required')\"",
+      e2e: "npm run public:e2e:smoke",
+      "public:e2e:smoke": "npm run public:smoke:static",
+      "public:smoke:static":
+        "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+      "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+      "quality:regression":
+        "npm run test:public:guards && npm run public:smoke:static",
+      "release:check": "node --import tsx scripts/release-readiness-check.ts",
+      "self-check": "npm run public:smoke:static",
+      test: "vitest run --config vitest.public.config.ts",
+      "test:public:guards":
+        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+      typecheck: "tsc --noEmit --project tsconfig.public.json",
     },
   });
   writeText("LICENSE", "Apache License\nVersion 2.0, January 2004\n");

@@ -184,8 +184,8 @@ describe("public mirror tree builder", () => {
         e2e: "npm run public:e2e:smoke",
         "public:e2e:smoke": "npm run public:smoke:static",
         "public:smoke:static":
-          "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
-        "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+          "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+        "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
         "quality:regression":
           "npm run test:public:guards && npm run public:smoke:static",
         "release:check": "node --import tsx scripts/release-readiness-check.ts",

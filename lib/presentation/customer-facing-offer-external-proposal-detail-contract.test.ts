@@ -55,6 +55,7 @@ describe("customer-facing offer / external proposal detail reporting contract", 
     expect(protocol.pageJudgement).toContain("offer");
     expect(protocol.pageBoundarySummary[0]).toContain("commitment");
     expect(protocol.pageNextAction).toHaveLength(1);
+    expect(protocol.pagePrioritySignal).toBe("谨慎外发");
   });
 
   it("requires the full evidence grouping on external proposal detail pages", () => {
@@ -148,5 +149,103 @@ describe("customer-facing offer / external proposal detail reporting contract", 
     const protocol = toExternalProposalPageReportingProtocol(contract);
     expect(protocol.pagePrioritySignal).toBe("谨慎外发");
     expect(protocol.pageEvidenceSummary[0]).toContain("Evidence drawer");
+  });
+
+  it("localizes priority signals for English offer and proposal detail protocols", () => {
+    const customerOfferContract =
+      createCustomerFacingOfferPageDetailReportingContract({
+        customerOfferPageJudgement:
+          "This customer-facing offer still needs boundary wording.",
+        customerOfferPageJudgementReason:
+          "Open commitment pressure is still visible.",
+        customerOfferPageActionSummary: [
+          "Helm prepared the outward-safe wording and current boundary notes.",
+        ],
+        customerOfferPageDecisionRequest: [
+          "Confirm whether this remains safe-with-boundary.",
+        ],
+        customerOfferPageBoundarySummary: [
+          "Recommendation still does not equal commitment.",
+        ],
+        customerOfferPageEvidenceSummary: [
+          "The evidence drawer keeps replay, audit and sendability trace visible.",
+        ],
+        customerOfferPageWorkerSummary: [
+          "Sales worker prepared the next outward-safe wording.",
+        ],
+        customerOfferPageNextAction: [
+          { label: "Open external proposal page", href: "/external-proposals/test" },
+        ],
+        customerOfferPageRiskSignal: "high",
+        customerOfferPageSendabilityMode: "review_before_send",
+        customerOfferPageEvidenceGroups: baseEvidenceGroups,
+        customerOfferPageCustomerFacingCue:
+          "Use customer-facing value framing only.",
+        customerOfferPageInternalOnlyCue:
+          "Scope negotiation notes stay internal-only.",
+        customerOfferPageNonCommitmentCue:
+          "This offer remains non-commitment wording.",
+        pageWhyItMatters: [
+          "The current window is trust-sensitive.",
+          "Sendability still needs human confirmation.",
+        ],
+      });
+    const externalProposalContract =
+      createExternalProposalPageDetailReportingContract({
+        externalProposalPageJudgement:
+          "This external proposal can move only with visible boundary wording.",
+        externalProposalPageJudgementReason:
+          "The proposal still has dependency pressure.",
+        externalProposalPageActionSummary: [
+          "Helm prepared external-safe wording and boundary notes.",
+        ],
+        externalProposalPageDecisionRequest: [
+          "Decide whether this remains safe-with-boundary.",
+        ],
+        externalProposalPageBoundarySummary: [
+          "Proposal reinforcement still does not equal commitment.",
+        ],
+        externalProposalPageEvidenceSummary: [
+          "The evidence drawer keeps boundary trace visible.",
+        ],
+        externalProposalPageWorkerSummary: [
+          "Sales and delivery review prepared the next expression.",
+        ],
+        externalProposalPageNextAction: [
+          { label: "Open customer offer page", href: "/offers/test" },
+        ],
+        externalProposalPageRiskSignal: "watch",
+        externalProposalPageSendabilityMode: "safe_with_boundary",
+        externalProposalPageEvidenceGroups: baseEvidenceGroups,
+        externalProposalPageCustomerFacingCue:
+          "Use external-safe proposal wording only.",
+        externalProposalPageInternalOnlyCue:
+          "Scope tension and dependency repair notes stay internal-only.",
+        externalProposalPageNonCommitmentCue:
+          "This proposal remains non-commitment wording.",
+        externalProposalPageCollaborationMode: "helm_prepares_human_decides",
+        externalProposalPageCollaborationSummary:
+          "The sendability review surface is prepared.",
+        externalProposalPageCollaborationRequest:
+          "Decide sendability before anything customer-visible leaves the system.",
+        externalProposalPageCollaborationNextStep: [
+          "Confirm whether founder, sales or delivery must co-sign.",
+        ],
+        externalProposalPageCollaborationOwner:
+          "Sales owner + founder review",
+        pageWhyItMatters: [
+          "The current opportunity is warming.",
+          "External expression can now affect trust.",
+        ],
+      });
+
+    expect(
+      toCustomerFacingOfferPageReportingProtocol(customerOfferContract, true)
+        .pagePrioritySignal,
+    ).toBe("High risk");
+    expect(
+      toExternalProposalPageReportingProtocol(externalProposalContract, true)
+        .pagePrioritySignal,
+    ).toBe("Keep watching");
   });
 });
