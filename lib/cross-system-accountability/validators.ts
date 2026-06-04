@@ -35,6 +35,9 @@ export function validateExpectationRule(rule: ExpectationRule): ValidationResult
   for (const f of ["system", "entity", "matchKey"] as const) {
     if (!rule.expectation || !nonEmptyString(rule.expectation[f])) errors.push(`bad_expectation_${f}`);
   }
+  if (!rule.expectationSlice || !nonEmptyString(rule.expectationSlice.scopeRef)) {
+    errors.push("bad_expectation_slice_scope_ref");
+  }
   if (!rule.expectation || typeof rule.expectation.withinDays !== "number" || !Number.isFinite(rule.expectation.withinDays) || rule.expectation.withinDays <= 0) {
     errors.push("within_days_not_positive");
   }
@@ -60,7 +63,11 @@ export function validateExpectationRule(rule: ExpectationRule): ValidationResult
     if (rule.trigger && rule.triggerSlice && !reqKeys.has(`${rule.trigger.system}:${rule.triggerSlice.scopeRef}`)) {
       errors.push("required_coverage_missing_trigger_slice");
     }
-    if (rule.expectation && !reqKeys.has(`${rule.expectation.system}:${rule.expectation.entity}`)) {
+    if (
+      rule.expectation &&
+      rule.expectationSlice &&
+      !reqKeys.has(`${rule.expectation.system}:${rule.expectationSlice.scopeRef}`)
+    ) {
       errors.push("required_coverage_missing_expectation_scope");
     }
     for (const c of rule.requiredCoverage) {

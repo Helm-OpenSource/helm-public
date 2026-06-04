@@ -65,6 +65,7 @@ type ExpectationRule = {
   trigger: { system: string; entity: string };
   triggerSlice: { scopeRef: string };  // SourceFact.sliceRef must match this scope
   expectation: { system: string; entity: string; withinDays: number; matchKey: string }; // PM, delivery_project, 7, dealId
+  expectationSlice: { scopeRef: string }; // expectation SourceFact.sliceRef must match this scope
   requiredCoverage: CoverageRequirement[]; // (system, scope) pairs that must be coverage-complete;缺一即 unknown
   ownerPolicyRef: string;              // -> EffectiveOwner 策略
   commitmentClass: "advice";
@@ -75,7 +76,11 @@ type ExpectationRule = {
 
 public Core 不解析业务谓词或表达式。调用方必须先把事实确定性投影到 `SourceFact`,并用
 `sliceRef` 声明该事实属于哪个 closed-world slice。Core 只处理 `system` / `entity` /
-`sliceRef` 与规则匹配的 trigger facts。
+`sliceRef` 与规则匹配的 trigger facts。Expectation facts 也必须同时匹配
+`expectation.system` / `expectation.entity` / `expectationSlice.scopeRef`。
+
+`scopeRef` 与 `entity` 可以不同:例如 PM 的 `entity=delivery_project`,但可审计 closed-world
+slice 是 `delivery_handoff`。public Core 不要求也不推断 `scope == entity`。
 
 ```ts
 type SourceFact = {
@@ -105,6 +110,8 @@ type CoverageAssertion = {
 };
 // 硬规则:只有当 requiredCoverage 中每个 (system, scope) 在该 window 内 completeness === "complete",
 // 才允许 emit "missing";否则 verdict 必为 "unknown"。闭世界假设不成立即 unknown。
+// requiredCoverage.scope 必须等于对应 triggerSlice.scopeRef / expectationSlice.scopeRef;
+// 更宽或更窄的同系统 coverage assertion 不能替代该 slice。
 ```
 
 ### 4.3 `EffectiveOwner`(确定性 + 无主升级)
@@ -164,6 +171,9 @@ type AccountabilityLedgerEntry = {
 
 "声称某记录 missing" = 闭世界假设:必须**已摄入全部**才能把"缺失"当真。跨连接器很难天然满足(分页缺口、权限盲区、归档/删除、最终一致性)。因此:
 - **诚实默认是 `unknown`**;`missing` 是需被 `CoverageAssertion.complete` 证明出来的特例。
+- **coverage assertion 粒度必须等于 slice 粒度**:`triggerSlice.scopeRef` /
+  `expectationSlice.scopeRef` 与 `CoverageAssertion.scope` / `requiredCoverage.scope`
+  必须逐项对齐。更宽、更窄或仅同名 entity 的 scope 都不能替代。
 - **MVP 连接器对的选择 = 最大产品风险**:必须选 coverage **可被证明完整**的源系统对(如 CRM 完整分页导出 + PM webhook+backfill 可证零缺口)。选错连接器对,产品在接触点即判死(见红线 1)。
 
 ## 6. EffectiveOwner:无确定性 owner 是常态,不是异常
@@ -225,6 +235,7 @@ type AccountabilityLedgerEntry = {
 | Validator | 必拒 / Must reject |
 |---|---|
 | `ExpectationRule` | 缺 requiredCoverage、含 forbiddenActions、effectMode ≠ read_only |
+| `Coverage grain` | requiredCoverage 未覆盖 triggerSlice / expectationSlice,或用非 slice 粒度 scope 偷换 |
 | `CoverageAssertion` | completeness 非 complete 却用于 emit missing |
 | `DecisionRequest` | coverage 不全却 verdict=missing、缺 boundaryNote、非 advice、无人审、含 auto-* |
 | `EffectiveOwner` | 输出 group/default-admin/bot/departed、无主却给具体人 |
@@ -263,7 +274,7 @@ coverage assertion、effective-owner 判定、复核后的 FP 证据、append-on
 - escalation/triage 角色如何 deterministic 配置(避免猜测责任人)?
 - ledger 哈希链锚定:签名 / append-only store / 外部时间戳?
 - FP 标注的最小样本量门槛(避免小 n 误判 <10%)?
-- 如何在后续 PR 中允许 `scope` 与 `entity` 解耦,同时保持 coverage assertion 粒度不可偷换?
+- 多 expectation slice / 多 trigger slice 的规则如何表达,同时保持 public Core 仍 predicate-blind?
 
 ## English Reference
 
@@ -277,7 +288,9 @@ never `missing`. Owners are resolved deterministically; an unassigned gap routes
 configured escalation role, never a guessed person. Everything is read-only, review-first,
 advice-only — no auto-create, dispatch, chase, write-back, send, or approval. The Core is
 predicate-blind: callers must provide deterministic `SourceFact.sliceRef` and `matchValue`,
-and the Core performs no fuzzy, embedding, or LLM-based joins.
+and the Core performs no fuzzy, embedding, or LLM-based joins. `scopeRef` may differ from
+`entity`; coverage assertions must prove the exact trigger and expectation slices, not a
+broader, narrower, or entity-named substitute.
 Passing this MVP proves a bounded public-safe reference kernel, not a stable pack/overlay API,
 not a cross-enterprise flywheel, and not production readiness. Kill-lines are explicit; moat
 evidence must come from later overlay audits, not from the public Core's declared system count.

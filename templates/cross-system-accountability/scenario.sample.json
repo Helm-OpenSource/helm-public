@@ -8,7 +8,8 @@
     "trigger": { "system": "crm", "entity": "deal" },
     "triggerSlice": { "scopeRef": "deal" },
     "expectation": { "system": "pm", "entity": "delivery_project", "withinDays": 7, "matchKey": "dealId" },
-    "requiredCoverage": [{ "system": "crm", "scope": "deal" }, { "system": "pm", "scope": "delivery_project" }],
+    "expectationSlice": { "scopeRef": "delivery_handoff" },
+    "requiredCoverage": [{ "system": "crm", "scope": "deal" }, { "system": "pm", "scope": "delivery_handoff" }],
     "ownerPolicyRef": "policy:delivery-owner",
     "commitmentClass": "advice",
     "effectMode": "read_only",
@@ -20,7 +21,7 @@
       "name": "covered",
       "coverageAssertions": [
         { "assertionId": "cov:crm", "system": "crm", "scope": "deal", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "paginated_complete", "completeness": "complete", "evidence": ["expected=ingested=412", "no_pagination_gap"], "asOf": "2026-06-04T00:00:00Z" },
-        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_project", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "complete", "evidence": ["backfill_checkpoint=2026-04-01", "webhook_live", "no_gap"], "asOf": "2026-06-04T00:00:00Z" }
+        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_handoff", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "complete", "evidence": ["backfill_checkpoint=2026-04-01", "webhook_live", "no_gap"], "asOf": "2026-06-04T00:00:00Z" }
       ],
       "triggerFacts": [
         { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-A", "matchValue": "deal-A", "occurredAt": "2026-05-01T00:00:00Z" },
@@ -29,7 +30,7 @@
         { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-E", "matchValue": "deal-E", "occurredAt": "2026-06-02T00:00:00Z", "ownerCandidates": [ { "id": "user:robin-alias", "kind": "user", "active": true, "roleEvidence": ["crm:deal-owner"] } ] }
       ],
       "expectationFacts": [
-        { "system": "pm", "entity": "delivery_project", "sliceRef": "delivery_project", "factId": "proj-A", "matchValue": "deal-A", "occurredAt": "2026-05-03T00:00:00Z" }
+        { "system": "pm", "entity": "delivery_project", "sliceRef": "delivery_handoff", "factId": "proj-A", "matchValue": "deal-A", "occurredAt": "2026-05-03T00:00:00Z" }
       ],
       "expected": {
         "deal-A": "satisfied (no finding)",
@@ -42,7 +43,7 @@
       "name": "pm_unproven",
       "coverageAssertions": [
         { "assertionId": "cov:crm", "system": "crm", "scope": "deal", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "paginated_complete", "completeness": "complete", "evidence": ["expected=ingested=412"], "asOf": "2026-06-04T00:00:00Z" },
-        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_project", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "partial", "evidence": ["backfill_incomplete", "pagination_gap_detected"], "asOf": "2026-06-04T00:00:00Z" }
+        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_handoff", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "partial", "evidence": ["backfill_incomplete", "pagination_gap_detected"], "asOf": "2026-06-04T00:00:00Z" }
       ],
       "triggerFacts": [
         { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-D", "matchValue": "deal-D", "occurredAt": "2026-05-15T00:00:00Z" }

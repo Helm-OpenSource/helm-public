@@ -99,7 +99,7 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
       (e) =>
         e.system === rule.expectation.system &&
         e.entity === rule.expectation.entity &&
-        e.sliceRef === rule.expectation.entity &&
+        e.sliceRef === rule.expectationSlice.scopeRef &&
         e.matchValue === trigger.matchValue,
     );
     if (satisfied) continue; // handoff exists -> no finding

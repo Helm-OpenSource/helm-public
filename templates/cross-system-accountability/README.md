@@ -17,6 +17,9 @@ the Core performs no fuzzy, embedding, or LLM-based joins.
 - **advice-only / read-only**:每条命中只进 review-first decision request。
 - **declared system count only**:`distinctSystemsDeclared` 是中性结构字段,不是护城河证明。
 - **stable gap identity**:`gapId` / `requestId` 不随 `verdict` 改变。
+- **slice-grain coverage**:`triggerSlice.scopeRef` / `expectationSlice.scopeRef` 可不同于
+  `entity`,但 `CoverageAssertion.scope` 必须精确证明对应 slice,不能用更宽、更窄或同名
+  entity scope 替代。
 
 ## 跑法 / Run
 ```bash
