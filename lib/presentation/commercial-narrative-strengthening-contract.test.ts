@@ -61,6 +61,10 @@ describe("commercial narrative strengthening detail reporting contract", () => {
     expect(protocol.pageJudgement).toContain("pilot-strengthening");
     expect(protocol.pageBoundarySummary[0]).toContain("commitment");
     expect(protocol.pageNextAction).toHaveLength(1);
+    expect(
+      toCommercialNarrativeStrengtheningPageReportingProtocol(contract, true)
+        .pagePrioritySignal,
+    ).toBe("Strengthen with caution");
   });
 
   it("requires the full evidence grouping on commercial strengthening pages", () => {

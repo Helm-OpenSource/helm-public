@@ -137,6 +137,9 @@ describe("commitment reinforcement / sendability detail reporting contract", () 
 
     const protocol = toSendabilityPageReportingProtocol(contract);
     expect(protocol.pagePrioritySignal).toBe("谨慎强化");
+    expect(toSendabilityPageReportingProtocol(contract, true).pagePrioritySignal).toBe(
+      "Strengthen with caution",
+    );
     expect(protocol.pageEvidenceSummary[0]).toContain("Evidence drawer");
   });
 });

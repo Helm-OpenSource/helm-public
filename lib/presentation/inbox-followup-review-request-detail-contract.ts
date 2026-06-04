@@ -185,6 +185,7 @@ export function createReviewRequestDetailReportingContract(
 
 export function toInboxDetailPageReportingProtocol(
   contract: InboxDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.inboxDetailJudgement,
@@ -196,7 +197,7 @@ export function toInboxDetailPageReportingProtocol(
     pageBoundarySummary: contract.inboxDetailBoundarySummary,
     pageEvidenceSummary: contract.inboxDetailEvidenceSummary,
     pageWorkerSummary: contract.inboxDetailWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.inboxDetailRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(contract.inboxDetailRiskSignal, english),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -204,6 +205,7 @@ export function toInboxDetailPageReportingProtocol(
 
 export function toFollowupDetailPageReportingProtocol(
   contract: FollowupDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.followupDetailJudgement,
@@ -215,7 +217,7 @@ export function toFollowupDetailPageReportingProtocol(
     pageBoundarySummary: contract.followupDetailBoundarySummary,
     pageEvidenceSummary: contract.followupDetailEvidenceSummary,
     pageWorkerSummary: contract.followupDetailWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.followupDetailRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(contract.followupDetailRiskSignal, english),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -223,6 +225,7 @@ export function toFollowupDetailPageReportingProtocol(
 
 export function toReviewRequestDetailPageReportingProtocol(
   contract: ReviewRequestDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.reviewRequestDetailJudgement,
@@ -234,7 +237,10 @@ export function toReviewRequestDetailPageReportingProtocol(
     pageBoundarySummary: contract.reviewRequestDetailBoundarySummary,
     pageEvidenceSummary: contract.reviewRequestDetailEvidenceSummary,
     pageWorkerSummary: contract.reviewRequestDetailWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.reviewRequestDetailRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(
+      contract.reviewRequestDetailRiskSignal,
+      english,
+    ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -299,8 +305,11 @@ function validateContract({
   }
 }
 
-function labelForRiskSignal(signal: InboxFollowupReviewRequestRiskSignal) {
-  if (signal === "high") return "高风险";
-  if (signal === "caution") return "谨慎处理";
-  return "继续观察";
+function labelForRiskSignal(
+  signal: InboxFollowupReviewRequestRiskSignal,
+  english: boolean,
+) {
+  if (signal === "high") return english ? "High risk" : "高风险";
+  if (signal === "caution") return english ? "Handle with caution" : "谨慎处理";
+  return english ? "Keep watching" : "继续观察";
 }

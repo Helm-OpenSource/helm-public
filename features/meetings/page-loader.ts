@@ -131,6 +131,7 @@ export async function loadMeetingDetailPageData(meetingId: string) {
       sourcePage: `/meetings/${meeting.id}`,
       objectType: "MEETING",
       objectId: meeting.id,
+      english,
       // Keep detail-page SSR responsive even when external/local LLM endpoints are slow.
       llmEnhancement: false,
     }).catch((error) => {

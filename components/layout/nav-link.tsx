@@ -26,7 +26,6 @@ export function NavLink({
       href={href}
       className={cn(
         "nav-link group flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-sm font-medium transition-all duration-200",
-        // 浅色模式下的选中状态
         active
           ? "nav-active bg-gradient-to-r from-[color:var(--accent)] to-[color:var(--accent-hover)] text-white shadow-md"
           : "text-[color:var(--foreground)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[color:var(--foreground)]",

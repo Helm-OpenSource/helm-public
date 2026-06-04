@@ -180,7 +180,7 @@ Details: [AGENTS.md §6-§7](../../AGENTS.md).
 | Apply for Certified Delivery Partner | [`docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md`](../product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) |
 | Commercial partnerships / contact | WeChat `ffjw0821` (human-routed, controlled) |
 | Join community | WeChat invite QR (add WeChat `ffjw0821` to get the currently valid QR) |
-| Social media / official account | TBD (not a committed channel yet) |
+| WeChat Official Account | `Helm开源经营系统` · WeChat ID `HelmCoreCN` (announcement channel, not the default support queue) |
 
 ---
 
