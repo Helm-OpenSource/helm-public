@@ -923,6 +923,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "eval:internal-commercialization",
   "eval:operating-signal-flow",
   "eval:expert-capability-feedback-loop",
+  "eval:cross-system-accountability-gap",
   "kit:dry-run",
   "pack:fixture-check",
   "db:generate",
