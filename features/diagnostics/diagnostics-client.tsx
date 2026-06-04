@@ -24,6 +24,7 @@ import {
 import type { BusinessLoopGapSummary } from "@/lib/operating-system/operating-gap";
 import { buildBusinessLoopGapReadout } from "@/lib/presentation/business-loop-gap-readout";
 import { formatDateLabel } from "@/lib/utils";
+import { formatDiagnosticsDateLabel } from "@/features/diagnostics/diagnostics-date-labels";
 import { buildFirstLoopAdoptionReadout } from "@/features/diagnostics/first-loop-adoption";
 import {
   buildDiagnosticsFirstLoopDisplayModel,
@@ -573,6 +574,8 @@ export function DiagnosticsClient({
 }: DiagnosticsClientProps) {
   const { messages, locale } = useWorkspaceUi();
   const english = locale === "en-US";
+  const dateLabel = (value: Date | string | null | undefined) =>
+    formatDiagnosticsDateLabel(value, english, formatDateLabel);
   const diagnosticsText = (value: string | null | undefined) =>
     formatDiagnosticsVisibleText(value, english);
   const diagnosticsKey = (value: string | null | undefined) =>
@@ -960,7 +963,7 @@ export function DiagnosticsClient({
     data.memoryObservability.memoryWriteFailureReview.recentFailures.map(
       (item) =>
         english
-          ? `${formatDateLabel(item.createdAt)} · ${item.batchStatus} · ${item.targetType}:${item.targetId} · ${item.firstFailureReason ?? "unknown"} · ${item.reviewPosture}`
+          ? `${dateLabel(item.createdAt)} · ${item.batchStatus} · ${item.targetType}:${item.targetId} · ${item.firstFailureReason ?? "unknown"} · ${item.reviewPosture}`
           : `${formatDateLabel(item.createdAt)} · ${diagnosticsKey(item.batchStatus)} · ${diagnosticsKey(item.targetType)}:${diagnosticsKey(item.targetId)} · ${diagnosticsKey(item.firstFailureReason ?? "unknown")} · ${diagnosticsKey(item.reviewPosture)}`,
     );
   const memoryWriteFailureBoundaryItems = [
@@ -982,7 +985,7 @@ export function DiagnosticsClient({
     data.memoryObservability.memoryWriteFailureReview.operatorQueue.items.map(
       (item) =>
         english
-          ? `${formatDateLabel(item.createdAt)} · ${item.reviewPosture} · ${item.nextAction} · ${item.payloadStatus} · ${item.reason} · ${item.objectType ?? item.targetType}:${item.objectId ?? item.targetId}`
+          ? `${dateLabel(item.createdAt)} · ${item.reviewPosture} · ${item.nextAction} · ${item.payloadStatus} · ${item.reason} · ${item.objectType ?? item.targetType}:${item.objectId ?? item.targetId}`
           : `${formatDateLabel(item.createdAt)} · ${diagnosticsKey(item.reviewPosture)} · ${diagnosticsKey(item.nextAction)} · ${diagnosticsKey(item.payloadStatus)} · ${diagnosticsKey(item.reason)} · ${diagnosticsKey(item.objectType ?? item.targetType)}:${diagnosticsKey(item.objectId ?? item.targetId)}`,
     );
   const memoryWriteOperatorQueueBoundaryItems = [
@@ -1797,7 +1800,7 @@ export function DiagnosticsClient({
                     </div>
                     <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
                       {english
-                        ? `Last touched ${formatDateLabel(item.lastTouchedAt)}`
+                        ? `Last touched ${dateLabel(item.lastTouchedAt)}`
                         : `最近一次动作：${formatDateLabel(item.lastTouchedAt)}`}
                     </p>
                   </div>
@@ -1938,7 +1941,7 @@ export function DiagnosticsClient({
                     </Badge>
                   </div>
                   <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                    {copy.lastSync} {formatDateLabel(source.lastSyncedAt)}
+                    {copy.lastSync} {dateLabel(source.lastSyncedAt)}
                   </p>
                 </div>
               ))
@@ -2399,7 +2402,7 @@ export function DiagnosticsClient({
                       <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
                         {job.source.externalAccountLabel ??
                           (english ? "Unnamed source" : "未命名来源")}{" "}
-                        · {formatDateLabel(job.startedAt)}
+                        · {dateLabel(job.startedAt)}
                       </p>
                     </div>
                     <Badge
