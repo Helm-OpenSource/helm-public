@@ -163,7 +163,7 @@ function cleanHandoffChecks(english: boolean) {
         "internalSalesNotes 只保留在 reserved 内部",
         "customerVisibleSummary 必须先人工复核",
         "trialInitializationPayload 不夹带转介绍、结算或贡献归因",
-        "草稿候选不创建 workspace、不外发材料、不写客户系统",
+        "草稿候选不创建工作区、不外发材料、不写客户系统",
       ];
 }
 
@@ -225,7 +225,7 @@ function draftLines(input: {
     `来源追踪：${trace.join(" / ")}`,
     `Clean handoff：${checks.join(" / ")}`,
     internalNotes ? `Reserved 内部备注：${internalNotes}` : null,
-    "边界：这只是内部草稿候选，不创建 workspace、不外发材料、不写客户系统、不启动试用初始化，也不把 referral / settlement / contribution attribution 带入客户 workspace。",
+    "边界：这只是内部草稿候选，不创建工作区、不外发材料、不写客户系统、不启动试用初始化，也不把转介绍、结算或贡献归因带入客户工作区。",
   ].filter((line): line is string => Boolean(line));
 }
 
@@ -278,17 +278,17 @@ export function buildGtmCustomerDemandBriefDraft(
       : `CustomerDemandBrief 草稿：${customer}`,
     description: input.english
       ? "Reserved-only CustomerDemandBrief draft candidate generated from a program application. Review is required before trial initialization."
-      : "从 ProgramApplication 生成的 reserved-only CustomerDemandBrief 草稿候选。进入试用初始化前必须人工复核。",
+      : "从项目申请生成的内部专用客户需求简报草稿候选。进入试用初始化前必须人工复核。",
     aiReason: input.english
       ? "The program application contains enough source context to prepare an internal demand brief candidate, but clean handoff and customer-visible material remain review-bound."
-      : "ProgramApplication 已具备生成内部需求简报候选的来源上下文，但 clean 交接与客户可见材料仍必须先复核。",
+      : "项目申请已具备生成内部需求简报候选的来源上下文，但干净交接与客户可见材料仍必须先复核。",
     draftContent,
     resultPreview: input.english
       ? "Approval keeps the brief as an internal reviewed candidate only; it still does not create workspace, send material or write customer systems."
-      : "审批通过后仍只是内部已复核候选；不会创建 workspace、外发材料或写客户系统。",
+      : "审批通过后仍只是内部已复核候选；不会创建工作区、外发材料或写客户系统。",
     approvalReasoning: input.english
       ? "Review whether this CustomerDemandBrief candidate is clean enough for later trial initialization planning."
-      : "复核这份 CustomerDemandBrief 候选是否足够干净，可进入后续试用初始化规划。",
+      : "复核这份客户需求简报候选是否足够干净，可进入后续试用初始化规划。",
     approvalChannel: input.english ? "Reserved GTM demand brief" : "Reserved GTM 需求简报",
     metadata,
   };

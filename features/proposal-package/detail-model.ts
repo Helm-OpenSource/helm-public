@@ -129,11 +129,11 @@ export function buildProposalPageContract({
     proposalPageJudgement: signals.internalReviewOnly
       ? english
         ? "This proposal is still internal-review only and should not be hardened into external wording yet."
-        : "当前提案仍只适合 internal 复核，还不能直接固化成对外措辞。"
+        : "当前提案仍只适合内部复核，还不能直接固化成对外措辞。"
       : signals.customerSafeReady
         ? english
           ? "This proposal can move into a customer-safe review pass, but it is still a non-commitment draft."
-          : "当前提案可以进入客户安全 复核，但它仍然只是非承诺 draft。"
+          : "当前提案可以进入客户安全复核，但它仍然只是非承诺草稿。"
         : english
           ? "This proposal is worth shaping now, but it still needs boundary and dependency cleanup before it leaves the review layer."
           : "当前提案值得继续整形，但在离开复核层之前，仍要先收口边界和依赖。",
@@ -157,25 +157,25 @@ export function buildProposalPageContract({
       signals.internalReviewOnly
         ? english
           ? "Confirm whether the proposal should stay in internal review until blockers, approvals and trust-sensitive wording are closed."
-          : "确认这版提案是否继续停留在 internal 复核，直到阻塞、审批和信任敏感措辞收口。"
+          : "确认这版提案是否继续停留在内部复核，直到阻塞、审批和信任敏感措辞收口。"
         : english
           ? "Confirm whether the next pass should stay internal, or move into a customer-safe review version."
-          : "确认下一版到底继续 internal 复核，还是进入客户安全 复核版本。",
+          : "确认下一版到底继续内部复核，还是进入客户安全复核版本。",
       english
         ? "Confirm who owns the next external-safe move, and whether it needs approval before anyone sends or promises anything."
-        : "确认下一步 可对外动作由谁接，以及在任何人发送或承诺之前是否必须先过审批。",
+        : "确认下一步可对外动作由谁接，以及在任何人发送或承诺之前是否必须先过审批。",
     ],
     proposalPageBoundarySummary: [
       english
         ? "Recommendation still does not equal commitment; final proposal wording remains with the human owner."
-        : "recommendation 仍不等于承诺；最终提案措辞仍属于人工负责人。",
+        : "建议仍不等于承诺；最终提案措辞仍属于人工负责人。",
       signals.blockerCount
         ? english
           ? "Current blockers and dependency notes must stay visible before anyone upgrades this into a customer-facing promise."
           : "在任何人把它升级成客户可见承诺之前，当前卡点和依赖说明必须保持可见。"
         : english
           ? "The current version is still a proposal draft, not a package or contract promise."
-          : "当前这一版仍是提案 draft，不是方案包或 contract 承诺。",
+          : "当前这一版仍是提案草稿，不是方案包或合同承诺。",
       signals.pendingApprovalCount
         ? english
           ? "Approval-sensitive moves must stay behind review before wording hardens."
@@ -198,7 +198,7 @@ export function buildProposalPageContract({
         : "销售执行会持续把措辞、跟进方向和异议安全叙事准备好。",
       english
         ? "Delivery-facing boundary logic keeps prerequisite, dependency and scope caution visible."
-        : "交付-facing 边界逻辑会持续把前置、依赖和范围 caution 挂在前台。",
+        : "面向交付的边界逻辑会持续把前置、依赖和范围谨慎提示挂在前台。",
     ],
     proposalPageNextAction: [
       {
@@ -222,7 +222,7 @@ export function buildProposalPageContract({
     pageWhyItMatters: [
       english
         ? `The opportunity is currently at ${detail.stageLabel}, so wording and timing now directly shape whether momentum keeps heating or drifts back into internal notes.`
-        : `当前机会处在「${detail.stageLabel}」窗口，所以措辞和时机已经会直接影响它是继续升温，还是重新退回 internal 备注。`,
+        : `当前机会处在「${detail.stageLabel}」窗口，所以措辞和时机会直接影响它是继续升温，还是重新退回内部备注。`,
       signals.openCommitmentCount
         ? english
           ? `${signals.openCommitmentCount} open commitments still shape the trust boundary, so the next proposal move cannot pretend the work is already closed.`
@@ -232,15 +232,15 @@ export function buildProposalPageContract({
           : "当前没有单条逾期承诺主导视野，正适合谨慎整形下一版。",
       english
         ? "The draft context is already prepared, so the real value now is deciding whether this stays internal or becomes customer-safe."
-        : "当前草稿上下文已经准备好，所以现在真正的价值在于决定它继续 internal，还是进入客户安全 化。",
+        : "当前草稿上下文已经准备好，所以现在真正的价值在于决定它继续内部复核，还是进入客户安全版本。",
     ],
     pageEscalationHint: signals.internalReviewOnly
       ? english
         ? "If the next move starts hardening scope, promise or external expectation, route it into approvals before anyone sends it."
-        : "如果下一步开始固化范围、承诺或 对外预期，就先把它送进审批，再让任何人发出去。"
+        : "如果下一步开始固化范围、承诺或对外预期，就先把它送进审批，再让任何人发出去。"
       : english
         ? "If customer-facing trust risk rises, step back from customer-safe review and return this to internal review first."
-        : "如果客户可见信任风险开始上升，就先从客户安全 复核退回 internal 复核。",
+        : "如果客户可见信任风险开始上升，就先从客户安全复核退回内部复核。",
     pageEvidenceLinks: [
       {
         label: english ? "Open opportunity memory" : "打开机会记忆",
@@ -284,7 +284,7 @@ export function buildPackagePageContract({
           : "当前方案包已适合进入销售 / 交付复核，但还不能被当成客户承诺。"
         : english
           ? "This package can move into a customer-safe version, while still keeping the non-commitment boundary explicit."
-          : "当前方案包可以整理成客户安全 版本，但仍要把非承诺边界写明。",
+          : "当前方案包可以整理成客户安全版本，但仍要把非承诺边界写明。",
     packagePageJudgementReason:
       detail.briefingSnapshot?.payload.summary ??
       (english
@@ -293,7 +293,7 @@ export function buildPackagePageContract({
     packagePageActionSummary: [
       english
         ? "The current package view already groups scope pressure, dependency pressure and the latest review-ready summary."
-        : "当前方案包视图已经把范围压力、依赖压力和最新复核-ready 摘要收在一起。",
+        : "当前方案包视图已经把范围压力、依赖压力和最新待复核摘要收在一起。",
       signals.pendingApprovalCount
         ? english
           ? `${signals.pendingApprovalCount} approval-sensitive actions are already intercepted, so this page is not pretending risk does not exist.`
@@ -308,7 +308,7 @@ export function buildPackagePageContract({
     packagePageDecisionRequest: [
       english
         ? "Decide whether this package should stay internal, move into a customer-safe version, or stop until prerequisites are closed."
-        : "决定这版方案包是继续 internal、进入客户安全 版本，还是先停住等前置收口。",
+        : "决定这版方案包是继续内部复核、进入客户安全版本，还是先停住等前置收口。",
       english
         ? "Decide whether the next move should be led by sales, delivery or a joint review."
         : "决定下一步动作应该由销售、交付还是联合复核主导。",
@@ -316,14 +316,14 @@ export function buildPackagePageContract({
     packagePageBoundarySummary: [
       english
         ? "Package wording is still a commercial framing artifact, not a customer commitment or contract promise."
-        : "方案包措辞仍只是商业整形产物，不是客户承诺或 contract 承诺。",
+        : "方案包措辞仍只是商业整形产物，不是客户承诺或合同承诺。",
       signals.blockerCount
         ? english
           ? "Prerequisite and dependency notes must stay in front of any external-safe version."
-          : "任何 可对外版本之前，都必须把前置和依赖备注放在前台。"
+          : "任何可对外版本之前，都必须把前置和依赖备注放在前台。"
         : english
           ? "Even in the customer-safe window, final delivery boundary still belongs to human review."
-          : "即使进入客户安全 窗口，最终交付边界仍属于人工复核。",
+          : "即使进入客户安全窗口，最终交付边界仍属于人工复核。",
       english
         ? "Internal-only scope notes cannot be flattened into customer-facing copy."
         : "仅内部的范围备注不能被直接摊平成客户可见文案。",
@@ -331,7 +331,7 @@ export function buildPackagePageContract({
     packagePageEvidenceSummary: [
       english
         ? `${detail.actionItems.length} linked actions, ${detail.auditLogs.length} audit logs and the latest memory / blocker bundle are already grouped below.`
-        : `当前 ${detail.actionItems.length} 条关联动作、${detail.auditLogs.length} 条审计变化和最新经营记忆 / 阻塞套件 都已经分组收在下面。`,
+        : `当前 ${detail.actionItems.length} 条关联动作、${detail.auditLogs.length} 条审计变化和最新经营记忆 / 阻塞套件都已经分组收在下面。`,
       english
         ? "Evidence stays grouped by replay, audit, memory, worker output, boundary trace and historical changes."
         : "证据层按回放、审计、经营记忆、执行输出、边界轨迹和历史变更分组，不会打断主叙事。",
@@ -339,10 +339,10 @@ export function buildPackagePageContract({
     packagePageWorkerSummary: [
       english
         ? "Sales worker keeps the package framing, objection-safe language and next-step options visible."
-        : "销售执行会持续把方案包措辞、异议安全语言 和下一步选项挂在前台。",
+        : "销售执行会持续把方案包措辞、异议安全语言和下一步选项挂在前台。",
       english
         ? "Delivery worker keeps scope, dependency and review-needed notes from being buried."
-        : "交付执行会持续防止范围、依赖和复核-needed 备注被埋掉。",
+        : "交付执行会持续防止范围、依赖和待复核备注被埋掉。",
     ],
     packagePageNextAction: [
       {
@@ -379,20 +379,20 @@ export function buildPackagePageContract({
     packagePageCollaborationNextStep: [
       english
         ? "Confirm whether the package should stay internal or move into a customer-safe review version."
-        : "确认这版方案包是继续 internal，还是进入客户安全 复核版本。",
+        : "确认这版方案包是继续内部复核，还是进入客户安全复核版本。",
       english
         ? "Confirm whether the next move is a review meeting, a scoped follow-up or a hold."
-        : "确认下一步到底是开评审会、做 scoped 跟进，还是先 持守 住。",
+        : "确认下一步到底是开评审会、做限定范围的跟进，还是先守住。",
     ],
     packagePageCollaborationOwner:
       detail.ownerName ??
       (english
         ? "Sales owner + delivery review"
-        : "Sales owner + delivery review"),
+        : "销售负责人 + 交付复核"),
     pageWhyItMatters: [
       english
         ? `The package view is now in a ${detail.stageLabel} window, so scope, trust and delivery expectation should not be left in raw rows.`
-        : `当前方案包已进入「${detail.stageLabel}」窗口，所以范围、信任和交付 预期 不能继续留在原始行里。`,
+        : `当前方案包已进入「${detail.stageLabel}」窗口，所以范围、信任和交付预期不能继续留在原始行里。`,
       signals.blockerCount
         ? english
           ? `${signals.blockerCount} blockers and ${signals.openCommitmentCount} open commitments are still shaping whether this can safely move.`
@@ -410,7 +410,7 @@ export function buildPackagePageContract({
         : "如果方案包开始触碰最终报价、交付承诺或客户预期，就先升级进审批，再允许任何对外动作。"
       : english
         ? "If scope or delivery dependency expands, step back into internal review before the package goes outward."
-        : "如果范围或交付依赖开始扩张，就先退回 internal 复核，再考虑对外。",
+        : "如果范围或交付依赖开始扩张，就先退回内部复核，再考虑对外。",
     pageEvidenceLinks: [
       {
         label: english ? "Open opportunity desk" : "打开机会工作台",
@@ -540,7 +540,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker 输出",
+      label: english ? "Worker output" : "执行输出",
       items:
         detail.actionItems.length > 0 ||
         Boolean(detail.briefingSnapshot?.payload.recommendedNextSteps?.length)

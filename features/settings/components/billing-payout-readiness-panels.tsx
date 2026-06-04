@@ -107,7 +107,7 @@ export function BillingPayoutReadinessPanels({
           <CardDescription>
             {english
               ? "Coverage, history, audit pressure, next manual steps — for operator review."
-              : "资料覆盖、历史、审计压力、下一步手工动作——供运营复核。"}
+              : "结算资料覆盖、历史、审计压力、下一步手工动作——供运营复核。"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -121,7 +121,7 @@ export function BillingPayoutReadinessPanels({
               }
             />
             <Info
-              label={english ? "Profile covered" : "资料已覆盖"}
+              label={english ? "Profile covered" : "结算资料已覆盖"}
               value={
                 english
                   ? `${data.settlementOpsProofPack.coveredByActivePayoutProfileCount}`
@@ -129,7 +129,7 @@ export function BillingPayoutReadinessPanels({
               }
             />
             <Info
-              label={english ? "Profile missing" : "缺少资料"}
+              label={english ? "Profile missing" : "缺少结算资料"}
               value={
                 english
                   ? `${data.settlementOpsProofPack.missingPayoutProfileCount}`
@@ -370,7 +370,7 @@ export function BillingPayoutReadinessPanels({
               }
             />
             <Info
-              label={english ? "Current missing profiles" : "当前缺少资料"}
+              label={english ? "Current missing profiles" : "当前缺少结算资料"}
               value={
                 english
                   ? `${data.payoutRailReadiness.currentBatchMissingProfileCount}`
@@ -639,7 +639,7 @@ export function BillingPayoutReadinessPanels({
                     <p>
                       {english
                         ? `Profiles covered: ${cohort.coveredByActivePayoutProfileCount}/${cohort.beneficiaryCount}`
-                        : `资料覆盖：${cohort.coveredByActivePayoutProfileCount}/${cohort.beneficiaryCount}`}
+                        : `结算资料覆盖：${cohort.coveredByActivePayoutProfileCount}/${cohort.beneficiaryCount}`}
                     </p>
                     <p>
                       {english
@@ -654,7 +654,7 @@ export function BillingPayoutReadinessPanels({
                     <p>
                       {english
                         ? `Methods: ${cohort.payoutMethodLabels.join(", ") || "none yet"}`
-                        : `方式：${cohort.payoutMethodLabels.map((label) => formatSettingsCommercialText(label, english)).join("、") || "尚未形成"}`}
+                        : `结算方式：${cohort.payoutMethodLabels.map((label) => formatSettingsCommercialText(label, english)).join("、") || "尚未形成"}`}
                     </p>
                     <p>
                       {english

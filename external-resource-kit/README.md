@@ -1,4 +1,17 @@
-# external-resource-kit
+# external-resource-kit / 外部资源 Kit
+
+> **语言 / Language**: **中文主文本** + **English reference summary**
+
+## English Reference Summary
+
+This directory contains public-safe planning contract templates and dry-run
+fixtures for external resource intake. It is a companion to the public Core
+Headless Signal Interface and Golden Path requirements. It has no runtime, no
+DB write, no external provider access, and no UI surface.
+
+It must not contain tenant-specific connectors, SQL, credentials, field maps, or
+customer source-system assumptions. Phase 3+ adoption is outside this directory
+and requires independent review.
 
 > 状态：Phase 1 contract templates only. No runtime, no DB write, no external provider access, no UI surface.
 

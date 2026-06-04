@@ -473,7 +473,7 @@ export async function reviewProgramApplicationAction(
       ok: false,
       error: english
         ? "Use invite issuance to move an application into invited status."
-        : "请通过 invite issuance 把申请推进到 invited 状态。",
+        : "请通过邀请发放把申请推进到已邀请状态。",
       capabilityDecisionTrace,
     };
   }
@@ -551,7 +551,7 @@ export async function issueProgramApplicationInviteAction(
   if (!parsed.success) {
     return {
       ok: false,
-      error: english ? "Invalid invite issuance payload." : "invite issuance 参数错误。",
+      error: english ? "Invalid invite issuance payload." : "邀请发放参数错误。",
     };
   }
 
@@ -615,7 +615,7 @@ export async function issueProgramApplicationInviteAction(
       ok: false,
       error: english
         ? "Only accepted applications can move into invite issuance."
-        : "只有已接受的申请才能进入 invite issuance。",
+        : "只有已接受的申请才能进入邀请发放。",
       capabilityDecisionTrace,
     };
   }
@@ -636,7 +636,7 @@ export async function issueProgramApplicationInviteAction(
       ok: false,
       error: english
         ? "Set a recommended beneficiary line before issuing the invite."
-        : "请先给申请设置推荐收益线，再发放 invite。",
+        : "请先给申请设置推荐收益线，再发放邀请。",
       capabilityDecisionTrace,
     };
   }
@@ -656,7 +656,7 @@ export async function issueProgramApplicationInviteAction(
     application.internalNotes ??
     (english
       ? `Invite issued from ${application.partnerProgram.title} application review queue.`
-      : `这个 invite 来自 ${application.partnerProgram.title} 的申请审核队列。`);
+      : `这个邀请来自 ${application.partnerProgram.title} 的申请审核队列。`);
   const now = new Date();
   const { access, inviteToken, issuanceState } = await issueParticipantPortalInvite({
     workspaceId: workspace.id,

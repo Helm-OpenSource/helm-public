@@ -30,6 +30,7 @@ const {
     recordUsageLedgerEntry: vi.fn(),
   },
   captureServiceMock: {
+    ingestConversationCapture: vi.fn(),
     startCaptureSession: vi.fn(),
   },
   runtimeMock: {
@@ -65,6 +66,7 @@ vi.mock("@/lib/billing/foundation", () => ({
 }));
 
 vi.mock("@/lib/conversation-capture/capture-session.service", () => ({
+  ingestConversationCapture: captureServiceMock.ingestConversationCapture,
   startCaptureSession: captureServiceMock.startCaptureSession,
 }));
 
@@ -77,6 +79,7 @@ vi.mock("@/lib/helm-v2/runtime-upgrade", () => ({
   dismissReflectionCandidate: runtimeMock.dismissReflectionCandidate,
 }));
 
+import { POST as ingestCaptureRoute } from "@/app/api/conversation-capture/ingest/route";
 import { POST as startCaptureRoute } from "@/app/api/conversation-capture/start/route";
 import { POST as acceptReflectionCandidateRoute } from "@/app/api/helm-v2/runtime/reflection/candidates/[id]/accept/route";
 import { POST as dismissReflectionCandidateRoute } from "@/app/api/helm-v2/runtime/reflection/candidates/[id]/dismiss/route";
@@ -108,6 +111,10 @@ describe("capture/runtime governance routes", () => {
     );
     billingMock.ensureWorkspaceProcessingAllowed.mockResolvedValue(undefined);
     billingMock.recordUsageLedgerEntry.mockResolvedValue(undefined);
+    captureServiceMock.ingestConversationCapture.mockResolvedValue({
+      sessionId: "capture-1",
+      memoryCandidateCount: 1,
+    });
   });
 
   it("rejects capture start without capture capability", async () => {
@@ -155,6 +162,49 @@ describe("capture/runtime governance routes", () => {
       message: "contact not found in active workspace",
     });
     expect(captureServiceMock.startCaptureSession).not.toHaveBeenCalled();
+  });
+
+  it("uses workspace default locale for capture ingest success messages", async () => {
+    sessionMock.getCurrentWorkspaceSession.mockResolvedValue({
+      user: { id: "user-1", name: "Owner" },
+      membership: { role: "MEMBER" },
+      workspace: { id: "workspace-1", defaultLocale: "zh-CN" },
+    });
+    governanceMock.canManageWorkspaceCaptureSessions.mockReturnValue(true);
+
+    const response = await ingestCaptureRoute(
+      new Request("http://localhost/api/conversation-capture/ingest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "客户会议纪要",
+          transcriptText: "这是一段足够长的外部会话转写文本，用于导入复核。",
+          objectType: "CONTACT",
+          objectId: "contact-1",
+          sourceType: "MANUAL_CAPTURE",
+          sourceId: "note-1",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      message: "外部会话已导入",
+    });
+    expect(captureServiceMock.ingestConversationCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        actorUserId: "user-1",
+        english: false,
+        sourcePage: "/capture",
+      }),
+    );
+    expect(ownershipMock.assertWorkspaceObjectOwnership).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      objectType: "CONTACT",
+      objectId: "contact-1",
+    });
   });
 
   it("rejects runtime ingest without runtime capability", async () => {

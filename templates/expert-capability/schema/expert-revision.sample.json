@@ -1,0 +1,15 @@
+{
+  "revisionId": "oh-expert-v1",
+  "parentRevisionId": "oh-expert-v0",
+  "derivedFromFeedbackIds": ["fb-0001"],
+  "status": "active",
+  "fallbackRevisionId": "oh-expert-v0",
+  "configRef": "config:org-health-expert-v1",
+  "promptRef": "prompt:org-health-expert-v1",
+  "modelRef": "pinned:org-health-llm-2026-06-04",
+  "createdAt": "2026-06-04T03:00:00Z",
+  "killedAt": null,
+  "killedBy": null,
+  "killedReason": null,
+  "_note": "createdAt must be after the B gold lock time (goldLockedAt) used for candidate evaluation."
+}

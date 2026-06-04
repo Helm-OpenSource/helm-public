@@ -40,6 +40,14 @@ Helm is:
 - `delivery-engineer-facing` (since 2026-05-18: the audience layer is AI-ecosystem delivery engineers, not direct SaaS sales to end customers)
 - `open-source-first` (Apache-2.0; commercial editions do not replace open source; see [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md))
 
+All public entry points, docs, templates, and sample packs must default to being
+delivery-engineer-friendly: a reader should quickly understand what to inspect,
+what to fork, which small change to make, which commands to run, and what
+public-safe evidence to submit. Bilingualization is not just text translation; it
+must let China-market delivery engineers complete an independent first-change
+proof while preserving recommendation / commitment, review-first, and
+public/private boundaries.
+
 Helm currently is **not**:
 
 - A complete enterprise multi-org / multi-permission / multi-tenant platform
@@ -178,6 +186,12 @@ Default expectations:
 All subsequent Codex / Claude / other-agent parallel tasks must establish
 workspace ownership before editing files.
 
+A shared primary checkout, such as `/Users/tommyqian/Documents/helm-public`, is
+for inspection, sync, audit, or short rescue work by default; it is not a
+long-lived implementation WIP area. Any non-trivial implementation, task that
+needs multiple validation rounds, or task likely to span more than one work turn
+defaults to a dedicated worktree + branch from the intended base.
+
 Before any implementation, commit, or PR, run and record:
 
 ```bash
@@ -188,12 +202,20 @@ git rev-parse --show-toplevel
 
 Mandatory rules:
 
+- If the shared primary checkout already has uncommitted WIP, new
+  implementation threads must route around it. Do not keep layering changes in
+  that directory for convenience, and do not make other threads sort the current
+  thread's WIP.
 - A task stream may only implement in its own worktree + branch. Do not keep
   layering changes into a directory where another agent already has uncommitted
   WIP.
 - If the current directory is not the worktree explicitly owned by this task, or
   if it contains uncommitted changes that do not belong to this task, stop
   implementation and create a separate worktree / branch from the intended base.
+- WIP inside a worktree must be explainable by one explicit task. WIP that
+  remains open beyond one work turn must be promptly turned into an atomic
+  commit, pushed to the corresponding PR, or migrated into a dedicated isolated
+  worktree.
 - Different concerns must use separate commits / PRs. For example,
   bilingualization, security hardening, capability development, and governance
   docs must not be mixed into one commit.
@@ -205,9 +227,9 @@ Mandatory rules:
   thread / worktree; do not edit files across repository boundaries from the
   current repository.
 - If an agent discovers that it has affected another parallel workstream, the
-  first action is not to keep implementing. First turn the current WIP into an
-  atomic commit or move it into an isolated worktree, then record the recovery
-  action.
+  first action is not to keep implementing. First stop implementation, inventory
+  the affected worktrees / branches / files, turn the current WIP into an atomic
+  commit or move it into an isolated worktree, then record the recovery action.
 
 ## 10. Unified Verification Commands
 

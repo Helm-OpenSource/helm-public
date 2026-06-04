@@ -5,13 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Bell, CheckCircle2 } from "lucide-react";
+import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 
-/**
- * 系统说明偏好设置
- *
- * 让用户可以控制各种系统说明和引导的显示
- */
 export function GuidancePreferencesControl() {
+  const { locale } = useWorkspaceUi();
+  const english = locale === "en-US";
   const [preferences, setPreferences] = useState(() => {
     const defaultPreferences = {
       demoGuide: false,
@@ -49,12 +47,10 @@ export function GuidancePreferencesControl() {
     setPreferences(newPrefs);
     localStorage.setItem("helm-guidance-preferences", JSON.stringify(newPrefs));
 
-    // 立即应用更改
     applyPreferences(newPrefs);
   };
 
   const applyPreferences = (prefs: typeof preferences) => {
-    // 应用各种偏好设置
     if (!prefs.demoGuide) {
       localStorage.setItem("helm-demo-guide-dismissed", "true");
     }
@@ -87,82 +83,108 @@ export function GuidancePreferencesControl() {
   };
 
   const allDisabled = Object.values(preferences).every(v => v === false);
+  const preferenceItems = [
+    {
+      id: "demo-guide",
+      key: "demoGuide" as const,
+      label: english ? "Demo guidance" : "演示引导",
+      description: english
+        ? "Guidance and notes shown in demo mode"
+        : "演示模式的引导和说明",
+    },
+    {
+      id: "workspace-guidance",
+      key: "workspaceGuidance" as const,
+      label: english ? "Workspace guidance" : "工作区引导",
+      description: english
+        ? "In-workspace operating suggestions and prompts"
+        : "工作区内的操作建议和提示",
+    },
+    {
+      id: "form-assist",
+      key: "formAssist" as const,
+      label: english ? "Form assist" : "表单辅助",
+      description: english
+        ? "Help text and hints while filling forms"
+        : "表单填写时的帮助和提示",
+    },
+    {
+      id: "proactive-tips",
+      key: "proactiveTips" as const,
+      label: english ? "Proactive tips" : "主动提示",
+      description: english
+        ? "Suggestions and reminders proactively shown by Helm"
+        : "系统主动提供的建议和提醒",
+    },
+  ];
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bell className="h-5 w-5" />
-          系统说明偏好设置
+          {english ? "System guidance preferences" : "系统说明偏好设置"}
         </CardTitle>
         <CardDescription>
-          控制系统引导、说明和提示的显示，减少界面烦扰
+          {english
+            ? "Control system guidance, explanatory notes, and tips so the workspace stays focused."
+            : "控制系统引导、说明和提示的显示，减少界面烦扰。"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* 当前状态 */}
         {allDisabled && (
           <div className="flex items-center gap-2 rounded-lg bg-[color:var(--status-success-bg)] dark:bg-[color:var(--accent-success)]/20 p-3">
             <CheckCircle2 className="h-5 w-5 text-[color:var(--status-success-text)] dark:text-[color:var(--status-success-text)]" />
             <span className="text-sm font-medium text-[color:var(--status-success-text)] dark:text-[color:var(--status-success-text)]">
-              已简化：所有系统说明都已关闭
+              {english
+                ? "Simplified: all system guidance is turned off"
+                : "已简化：所有系统说明都已关闭"}
             </span>
           </div>
         )}
 
-        {/* 偏好选项 */}
         <div className="space-y-4">
-          <PreferenceItem
-            id="demo-guide"
-            label="演示引导"
-            description="演示模式的引导和说明"
-            checked={preferences.demoGuide}
-            onChange={() => handleToggle("demoGuide")}
-          />
-          <PreferenceItem
-            id="workspace-guidance"
-            label="工作区引导"
-            description="工作区内的操作建议和提示"
-            checked={preferences.workspaceGuidance}
-            onChange={() => handleToggle("workspaceGuidance")}
-          />
-          <PreferenceItem
-            id="form-assist"
-            label="表单辅助"
-            description="表单填写时的帮助和提示"
-            checked={preferences.formAssist}
-            onChange={() => handleToggle("formAssist")}
-          />
-          <PreferenceItem
-            id="proactive-tips"
-            label="主动提示"
-            description="系统主动提供的建议和提醒"
-            checked={preferences.proactiveTips}
-            onChange={() => handleToggle("proactiveTips")}
-          />
+          {preferenceItems.map((item) => (
+            <PreferenceItem
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              description={item.description}
+              checked={preferences[item.key]}
+              onChange={() => handleToggle(item.key)}
+            />
+          ))}
         </div>
 
-        {/* 操作按钮 */}
         <div className="flex gap-3 pt-4 border-t">
           <Button onClick={handleSave} className="flex-1">
             {saved ? (
               <>
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                已保存
+                {english ? "Saved" : "已保存"}
               </>
             ) : (
-              "保存设置"
+              english ? "Save settings" : "保存设置"
             )}
           </Button>
           <Button variant="outline" onClick={resetToDefault}>
-            全部关闭
+            {english ? "Turn all off" : "全部关闭"}
           </Button>
         </div>
 
-        {/* 说明文字 */}
         <div className="text-xs text-[color:var(--muted-foreground)] dark:text-[color:var(--muted-foreground)] space-y-1 pt-4 border-t">
-          <p>💡 <strong>建议</strong>：关闭不必要的系统说明可以让界面更清爽，操作更专注。</p>
-          <p>⚠️ <strong>注意</strong>：如果需要帮助，可以随时重新开启这些说明。</p>
+          <p>
+            <strong>{english ? "Suggestion" : "建议"}</strong>
+            {english
+              ? ": Turn off unnecessary system guidance to keep the interface cleaner and the work more focused."
+              : "：关闭不必要的系统说明可以让界面更清爽，操作更专注。"}
+          </p>
+          <p>
+            <strong>{english ? "Note" : "注意"}</strong>
+            {english
+              ? ": You can turn these guidance notes back on whenever help is needed."
+              : "：如果需要帮助，可以随时重新开启这些说明。"}
+          </p>
         </div>
       </CardContent>
     </Card>

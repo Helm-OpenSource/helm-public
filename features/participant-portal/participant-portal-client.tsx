@@ -38,7 +38,7 @@ const payoutProfileStatusLabels: Record<PayoutProfileStatus, { zh: string; en: s
 
 const sourceLabels: Record<RevenueSourceType, { zh: string; en: string }> = {
   ORGANIZATION_BASE_FEE: { zh: "组织基础费", en: "Organization base fee" },
-  ACTIVE_SEAT: { zh: "额外 active seat", en: "Additional active seat" },
+  ACTIVE_SEAT: { zh: "额外活跃席位", en: "Additional active seat" },
   ADD_ON_WORKER: { zh: "能力贡献收入", en: "Worker revenue" },
   CUSTOM_IMPLEMENTATION: { zh: "定制实施", en: "Custom implementation" },
   CUSTOM_MAINTENANCE: { zh: "定制维护", en: "Custom maintenance" },

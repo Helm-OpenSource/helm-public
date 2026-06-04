@@ -625,7 +625,7 @@ function buildBoundaryNote(
     return {
       type: "review_required",
       message:
-        "经营信号上报只会落成一条需先复核的草稿记录，不会自动通知客户、对接审批，也不写回 CRM 正式状态。",
+        "经营信号上报只会落成一条需先复核的草稿记录，不会自动通知客户、对接审批，也不写回客户关系系统正式状态。",
     };
   }
   if (classification.intentType === "review_required_execution") {
@@ -730,7 +730,7 @@ function buildAnswer(
     return {
       summary: "我会把它整理成一条待复核的经营信号草稿。",
       explanation:
-        "上报只会写入一条审计候选记录，不自动写回 CRM、不发送外部消息、不创建正式任务；负责人需要在复核入口确认后再继续。",
+        "上报只会写入一条审计候选记录，不自动写回客户关系系统、不发送外部消息、不创建正式任务；负责人需要在复核入口确认后再继续。",
       confidence: classification.confidence,
     };
   }
@@ -1256,7 +1256,7 @@ function buildActionPacketMissingInfo(
       id: "missing_reviewed_memory",
       label: "缺少已复核记忆",
       reason:
-        "这个意图需要经营记忆辅助判断，但当前没有可用的 reviewed-active 摘要。",
+        "这个意图需要经营记忆辅助判断，但当前没有可用的已复核且活跃摘要。",
       blocksExecution: false,
     });
   }
@@ -1399,7 +1399,7 @@ function buildActionPacketReviewChecklist(input: {
   const { classification, missingInfo } = input;
   const checklist = [
     "确认所有对象、经营信号和记忆都来自当前工作区。",
-    "核对建议是否仍符合 recommendation 不等于 commitment 的边界。",
+    "核对建议是否仍符合建议不等于承诺的边界。",
     "确认负责人、复核人和截止时间后，再进入对应页面承接。",
     "确认本入口没有发送、审批、付款、承诺或正式写回权限。",
   ];
@@ -1409,7 +1409,7 @@ function buildActionPacketReviewChecklist(input: {
   }
 
   if (missingInfo.some((item) => item.id === "missing_reviewed_memory")) {
-    checklist.push("补齐 reviewed-active 经营记忆后再升级为正式复核依据。");
+    checklist.push("补齐已复核且活跃的经营记忆后再升级为正式复核依据。");
   }
 
   if (

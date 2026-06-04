@@ -39,6 +39,7 @@ import {
   getRuntimeReviewDeniedMessage,
   getRuntimeManagementDeniedMessage,
 } from "@/lib/auth/capture-runtime-governance";
+import { resolveBilingualApiValidationIssueMessage } from "@/lib/i18n/api-message-locale";
 import {
   acknowledgeRuntimeHumanInputCheckpointRequest,
   acknowledgeRuntimeOperatorTakeoverRequest,
@@ -140,7 +141,7 @@ async function getConsolidationJobOwnershipError(workspaceId: string, jobId: str
     await assertWorkspaceConsolidationJobOwnership(workspaceId, jobId);
     return null;
   } catch (error) {
-    return error instanceof Error ? error.message : english ? "Consolidation job not found" : "整合 job 不存在";
+    return error instanceof Error ? error.message : english ? "Consolidation job not found" : "整合任务不存在";
   }
 }
 
@@ -569,7 +570,7 @@ export async function reviewMeetingActionPackRuntimeAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -694,7 +695,7 @@ export async function queueMeetingRuntimeConsolidationAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -927,7 +928,7 @@ export async function updateMeetingRuntimeConsolidationAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -998,7 +999,7 @@ export async function runMeetingRuntimeContinuityRemediationAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -1749,7 +1750,7 @@ export async function requestMeetingRuntimeHumanInputCheckpointAction(input: {
       ok: false,
       error:
         payload.error.issues[0]?.message ??
-        (english ? "Invalid human input checkpoint request input" : "human input 检查点 request 参数错误"),
+        (english ? "Invalid human input checkpoint request input" : "人工输入检查点请求参数错误"),
     };
   }
 
@@ -1804,7 +1805,7 @@ export async function requestMeetingRuntimeHumanInputCheckpointAction(input: {
           ? error.message
           : english
             ? "Failed to request human input checkpoint"
-            : "请求 human input 检查点失败",
+            : "请求人工输入检查点失败",
     };
   }
 }
@@ -2052,7 +2053,7 @@ export async function requestMeetingRuntimeTakeoverFollowThroughAction(input: {
       ok: false,
       error:
         payload.error.issues[0]?.message ??
-        (english ? "Invalid takeover follow-through request input" : "接管跟进闭环 request 参数错误"),
+        (english ? "Invalid takeover follow-through request input" : "接管跟进闭环请求参数错误"),
     };
   }
 
@@ -2101,7 +2102,7 @@ export async function requestMeetingRuntimeTakeoverFollowThroughAction(input: {
           ? error.message
           : english
             ? "Failed to request operator takeover follow-through"
-            : "请求 操作员接管 follow-through 失败",
+            : "请求操作员接管跟进闭环失败",
     };
   }
 }
@@ -2125,7 +2126,7 @@ export async function resolveMeetingRuntimeTakeoverFollowThroughAction(input: {
       ok: false,
       error:
         payload.error.issues[0]?.message ??
-        (english ? "Invalid takeover follow-through resolve input" : "接管跟进闭环 resolve 参数错误"),
+        (english ? "Invalid takeover follow-through resolve input" : "接管跟进闭环解决参数错误"),
     };
   }
 
@@ -2174,7 +2175,7 @@ export async function resolveMeetingRuntimeTakeoverFollowThroughAction(input: {
           ? error.message
           : english
             ? "Failed to resolve operator takeover follow-through"
-            : "解决 操作员接管 follow-through 失败",
+            : "解决操作员接管跟进闭环失败",
     };
   }
 }
@@ -2336,7 +2337,10 @@ export async function confirmMeetingRuntimeCloseoutAction(input: {
 }) {
   const payload = confirmMeetingRuntimeCloseoutSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2392,7 +2396,10 @@ export async function requestMeetingRuntimeCloseoutRefreshAction(input: {
 }) {
   const payload = requestMeetingRuntimeCloseoutRefreshSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2450,7 +2457,10 @@ export async function recordMeetingRuntimeCloseoutResolutionAction(input: {
 }) {
   const payload = recordMeetingRuntimeCloseoutResolutionSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2507,7 +2517,10 @@ export async function requestMeetingRuntimeCloseoutResolutionFollowThroughAction
 }) {
   const payload = requestMeetingRuntimeCloseoutResolutionFollowThroughSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2563,7 +2576,10 @@ export async function resolveMeetingRuntimeCloseoutResolutionFollowThroughAction
 }) {
   const payload = resolveMeetingRuntimeCloseoutResolutionFollowThroughSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2621,7 +2637,10 @@ export async function requestMeetingRuntimeCloseAction(input: {
 }) {
   const payload = requestMeetingRuntimeCloseSchema.safeParse(input);
   if (!payload.success) {
-    return { ok: false, error: "Invalid request." };
+    return {
+      ok: false,
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
+    };
   }
 
   const session = await getCurrentWorkspaceSession();
@@ -2767,8 +2786,8 @@ export async function acknowledgeMeetingRuntimeHumanInputCheckpointAction(input:
       error:
         payload.error.issues[0]?.message ??
         (english
-          ? "Invalid human input checkpoint 已确认 input"
-          : "human input 检查点 已确认 参数错误"),
+          ? "Invalid human input checkpoint acknowledgement input"
+          : "人工输入检查点确认参数错误"),
     };
   }
 
@@ -2816,7 +2835,7 @@ export async function acknowledgeMeetingRuntimeHumanInputCheckpointAction(input:
           ? error.message
           : english
             ? "Failed to acknowledge human input checkpoint request"
-            : "确认 human input 检查点 request 失败",
+            : "确认人工输入检查点请求失败",
     };
   }
 }
@@ -2881,7 +2900,7 @@ export async function reviewMeetingOpportunityJudgeRuntimeAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -2974,7 +2993,7 @@ export async function reviewMeetingDraftCommsRuntimeAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3118,7 +3137,7 @@ export async function acknowledgeMeetingHumanActionExecutionAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3350,7 +3369,7 @@ export async function reviewMeetingOfficialWriteIntentAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3417,7 +3436,7 @@ export async function attemptMeetingOfficialWriteIntentAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3495,7 +3514,7 @@ export async function acknowledgeMeetingOfficialWriteIntentAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3566,7 +3585,7 @@ export async function reviewMeetingLimitedAutoIntentAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 
@@ -3655,7 +3674,7 @@ export async function updateMeetingOfficialFollowThroughAction(input: {
   if (!payload.success) {
     return {
       ok: false,
-      error: payload.error.issues[0]?.message ?? "参数不完整",
+      error: resolveBilingualApiValidationIssueMessage(payload.error.issues[0]?.message),
     };
   }
 

@@ -1,5 +1,10 @@
 name: Docs Lifecycle — Monthly Packet
 
+# 语言 / Language: workflow job names intentionally remain English because
+# automation and branch protection may depend on them.
+# 中文说明：这是每月 docs owner review packet 生成链。它帮助交付工程师和维护者
+# 发现文档漂移，但不会自动改变产品承诺或 public Core 边界。
+#
 # Step 1 of HELM_DOC_LIFECYCLE_POLICY_V1 §1.4.
 #
 # Runs at the start of each month, regenerates the docs reference graph,

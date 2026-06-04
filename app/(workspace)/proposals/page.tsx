@@ -154,7 +154,7 @@ export default async function ProposalsListPage() {
             <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
               {english
                 ? "Once a CRM signal or meeting commitment surfaces, the related draft will wait here for review."
-                : "一旦 CRM 信号或会议承诺出现，对应草稿会在这里等你复核。"}
+                : "一旦客户关系系统信号或会议承诺出现，对应草稿会在这里等你复核。"}
             </p>
           </CardContent>
         </Card>

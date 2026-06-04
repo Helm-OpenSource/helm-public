@@ -1,6 +1,9 @@
 import { getCurrentWorkspace, getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { assertWorkspaceRelatedObjectOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+} from "@/lib/i18n/api-message-locale";
 import { createCommitment, getCommitments } from "@/lib/memory/commitment.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { createCommitmentSchema } from "@/lib/memory/schemas";
@@ -40,7 +43,9 @@ export async function POST(request: Request) {
   const payload = createCommitmentSchema.safeParse(await request.json().catch(() => null));
 
   if (!payload.success) {
-    return errorResponse(payload.error.issues[0]?.message ?? "参数不完整");
+    return errorResponse(
+      resolveApiValidationIssueMessage(workspace.defaultLocale, payload.error.issues[0]?.message),
+    );
   }
 
   try {
@@ -68,11 +73,15 @@ export async function POST(request: Request) {
         id: created.id,
         status: created.status,
       },
-      "commitment created",
+      english ? "Commitment created" : "承诺已创建",
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "创建承诺失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to create commitment"
+          : "创建承诺失败",
       isWorkspaceOwnershipError(error) ? "RELATED_OBJECT_NOT_FOUND" : "CREATE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

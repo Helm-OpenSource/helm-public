@@ -741,7 +741,7 @@ export async function createActionFromRecommendation(input: MemoryActorContext &
     relatedObjectType: log.objectType,
     relatedObjectId: log.objectId,
     sourcePage: input.sourcePage ?? undefined,
-    summary: `已按 recommendation 生成动作：${trimText(log.title, 32)}`,
+    summary: `已按建议生成动作：${trimText(log.title, 32)}`,
     payload: {
       actionItemId: result.actionItemId,
       approvalTaskId: result.approvalTaskId ?? null,

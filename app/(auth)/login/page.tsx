@@ -67,15 +67,15 @@ function getLoginPageCopy(
         eyebrow: english ? "DingTalk invite recognized" : "钉钉邀请已识别",
         title: english
           ? `Confirm your invitation${organizationName ? ` to ${organizationName}` : ""}.`
-          : `确认加入${organizationName ? `「${organizationName}」` : "你的 Helm 组织"}。`,
+          : `确认加入${organizationName ? `「${organizationName}」` : "你的Helm组织"}。`,
         description: english
           ? "Helm already knows who invited you and which organization you are joining. Confirm the identity below and set your login password."
-          : "Helm 已经知道你是谁、要加入哪个组织。确认身份，补齐工作邮箱和密码即可进入。",
+          : "Helm已经知道你是谁、要加入哪个组织。确认身份，补齐工作邮箱和密码即可进入。",
       };
     case "new-trial":
       return {
         eyebrow: english ? "New trial setup" : "新试点开通",
-        title: english ? "Create your Helm trial workspace." : "开通你的 Helm 试点工作区。",
+        title: english ? "Create your Helm trial workspace." : "开通你的Helm试点工作区。",
         description: english
           ? "Verify your work email and phone, set a password, and Helm will create the trial workspace in one path."
           : "验证工作邮箱和手机号，设置密码，然后直接创建试点工作区。",
@@ -99,7 +99,7 @@ function getLoginPageCopy(
     case "returning":
       return {
         eyebrow: english ? "Workspace sign-in" : "工作区登录",
-        title: english ? "Return to your Helm workspace." : "回到你的 Helm 工作区。",
+        title: english ? "Return to your Helm workspace." : "回到你的Helm工作区。",
         description: english
           ? "Use your email, phone, DingTalk, or Feishu to continue."
           : "使用邮箱、手机号、钉钉或飞书继续。",
@@ -131,7 +131,7 @@ function LoginInvitationOrientationCard({
   title?: string;
 }) {
   const organizationLabel =
-    organizationName?.trim() || (english ? "your Helm organization" : "你的 Helm 组织");
+    organizationName?.trim() || (english ? "your Helm organization" : "你的Helm组织");
   const titleLabel = title?.trim() || (english ? "member" : "成员");
   const steps = getInvitationNextSteps(english);
 
@@ -334,7 +334,7 @@ export default async function LoginPage({
                   className="font-semibold text-[color:var(--accent)] underline-offset-4 hover:underline"
                   data-testid="login-link-trial"
                 >
-                  {english ? "Apply for Helm Cloud trial." : "申请 Helm Cloud 试用。"}
+                  {english ? "Apply for Helm Cloud trial." : "申请Helm Cloud试用。"}
                 </Link>
               </>
             ) : (

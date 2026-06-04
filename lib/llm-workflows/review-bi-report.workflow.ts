@@ -54,7 +54,7 @@ export async function reviewBiReportAnalysisWithLLM(input: {
     promptVersion: llmPromptVersions.biReportReview,
     systemPrompt: prompt.systemPrompt,
     userPrompt: prompt.userPrompt,
-    inputSummary: `${input.skillName} 的 BI report 复核`,
+    inputSummary: `${input.skillName} 的 BI 报表复核`,
     outputMode: "json",
     jsonSchema: biReportReviewSchema,
     fallbackOutput: fallback,

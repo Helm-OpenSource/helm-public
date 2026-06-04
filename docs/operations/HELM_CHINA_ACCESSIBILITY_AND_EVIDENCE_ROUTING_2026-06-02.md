@@ -5,7 +5,53 @@ created: 2026-06-02
 review_after: 2026-06-09
 public_safety: Public accessibility and evidence-routing packet for China-market delivery engineers. Use only public repository surfaces, synthetic sample-pack proof, public-safe GitHub evidence, and owner-approved redacted receipts. Do not include real organization data, credentials, private domains, private environment details, security vulnerability details, automatic outbound promises, paid-offer claims, or response-time commitments.
 ---
-# Helm China Accessibility And Evidence Routing Packet - 2026-06-02
+# Helm China Accessibility And Evidence Routing Packet / Helm 中国访问性与证据路由包 - 2026-06-02
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文记录 `helm-public` 如何让中国市场的交付工程师更容易触达公开 Core
+闭环，同时让激活证据保持可验证。它不是公开公告、回复模板、私有 runbook、
+付费报价声明，也不是响应时间或路线图承诺。
+
+面向中国市场时，主要激活证明仍然必须回到 GitHub 公开安全证据：
+黄金路径结果、首次改动证明、阻断项、文档摩擦或集成用例。
+WeChat、QR 和社区交接只能作为辅助信号或触达 / 联系信号，不能
+单独当作激活成功、商业意向、响应义务或路线图需求。
+
+任何公开渠道或脱敏回执都不得包含真实组织数据、真实姓名、私人联系方式、
+私有域名、内网 IP、私有 URL、凭据、令牌、cookie、QR 凭据、密钥、
+私有环境细节、生产日志、安全漏洞细节、付费报价、响应时间、路线图、
+私有实现或义务措辞。
+
+目标人群摘要：中国市场的 AI 交付工程师、平台工程师、AI 运营建设者、
+解决方案架构师和实施负责人，都应被引导到公开 Core 黄金路径、首次改动证明
+和 GitHub 公开安全证据路由，而不是被引到私有部署证明或商业承诺。
+
+可触达面摘要：README 中文入口、GitHub 讨论 #49、GitHub 讨论 #41
+和 GitHub 议题模板是主要证据入口；WeChat 账号与社区 QR 只提供辅助触达，
+除非后续产出 GitHub 公开安全链接或负责人批准的脱敏回执。
+
+双层证据摘要：主要证明必须是 GitHub 议题 / 讨论中的黄金路径结果、
+首次改动证明、阻断项、文档摩擦或集成用例；辅助信号可以是 WeChat / QR / 社区交接
+之后产生 GitHub 证据；单独的私聊、未链接截图、私有部署说明、触达发现或社区进入
+都不能算激活成功、商业意向、响应义务或路线图需求。
+
+证据采集摘要：先指向 README 黄金路径，再修改合成夹具 `CASE-SAMPLE-002` 的
+`priorityScore`，重跑 README 检查，并把成功、阻断、文档歧义、集成想法或更广泛问题
+分别路由到对应议题模板或讨论 #41。经 WeChat 进入的人，在产出 GitHub
+链接或负责人批准的脱敏回执前，都只算辅助访问。
+
+负责人闸门摘要：中文公开跟进、通过 WeChat / 社区转发行动入口、把 WeChat 交接计为成功、
+修改议题模板语言或给真实报告打标签，都必须保留负责人闸门或 PR 路径，
+不能绕过分支保护，也不能让标签变化暗示负责人决策。
+
+24 小时观察摘要：只跟踪讨论 #49 / #41 新回复、黄金路径报告、文档摩擦、
+集成请求、WeChat / QR 交接数量，以及辅助访问后产生的 GitHub 证据；不得把私有遥测
+或私聊内容当成公开激活证明。
+
+## English Reference
 
 This packet records how `helm-public` should make its public Core loop easier
 to reach for China-market delivery engineers while keeping activation evidence

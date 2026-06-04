@@ -2,7 +2,7 @@
  * Customer Success 行业 demo fixture pack
  *
  * 共情锚点：续约前 30 天客户冷淡 / NPS 下滑 / 关键用户离职 — 客户已经
- * 在看竞品，但 CSM 还没正式 escalate。这是「会后 48 小时」普遍痛点在
+ * 在看竞品，但 CSM 还没正式升级处理。这是「会后 48 小时」普遍痛点在
  * 客户成功语境下的具体形状。
  *
  * 数据全部 fictional，情节贴 SaaS / 服务交付公开 benchmark。
@@ -15,25 +15,25 @@ export const CUSTOMER_SUCCESS_PACK: IndustryDemoPack = {
   displayNameZh: "客户成功",
   displayNameEn: "Customer Success",
   persona: {
-    zh: "客户成功负责人 / 续约 owner / 服务团队",
+    zh: "客户成功负责人 / 续约负责人 / 服务团队",
     en: "Customer Success lead / renewal owner / service team",
   },
   pitch: {
-    zh: "续约前 30 天客户突然冷淡的那 48 小时——CSM 还没想起来 escalate 时，竞品的销售已经在客户内部聊上了。",
+    zh: "续约前 30 天客户突然冷淡的那 48 小时——CSM 还没想起来升级处理时，竞品的销售已经在客户内部聊上了。",
     en: "The 48 hours when a renewal account quietly cools — by the time the CSM thinks about escalating, the competitor's sales rep is already in the room.",
   },
   judgementCards: [
     {
       id: "cs-renewal-cooldown-escalate",
-      title: "鲸落咨询续约前 28 天连续取消 1:1，今天必须 escalate",
+      title: "鲸落咨询续约前 28 天连续取消 1:1，今天必须升级处理",
       description:
-        "主联系人取消 3 次 1:1，平台活跃度从 9.2/10 滑到 5.4/10，续约 owner 邮件未回。合同价值 ¥120 万。",
+        "主联系人取消 3 次 1:1，平台活跃度从 9.2/10 滑到 5.4/10，续约负责人邮件未回。合同价值 ¥120 万。",
       score: 91,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：1:1 取消 0509 / 0514 / 0520 · 平台 DAU 从 18 → 7 · 续约 owner 邮件 0518 未回 · 上次合同金额 ¥120 万。",
+        "事实链：1:1 取消 0509 / 0514 / 0520 · 平台 DAU 从 18 → 7 · 续约负责人邮件 0518 未回 · 上次合同金额 ¥120 万。",
       whyNotAutoExecute:
-        "客户成功 escalate 的口径需要由你定 — Helm 给三种模板（高管对接 / 缩小续约 / 主动暂停）候选，不替你 click 任何对客邮件。",
+        "客户成功升级处理的口径需要由你定 — Helm 给三种模板（高管对接 / 缩小续约 / 主动暂停）候选，不替你点击任何对客邮件。",
       urgencyScore: 92,
       impactScore: 95,
       confidenceScore: 75,
@@ -41,13 +41,13 @@ export const CUSTOMER_SUCCESS_PACK: IndustryDemoPack = {
     },
     {
       id: "cs-nps-drop-no-rootcause",
-      title: "天权信息 NPS 从 9 滑到 6，3 周内无 root cause",
+      title: "天权信息 NPS 从 9 滑到 6，3 周内无根因分析",
       description:
-        "NPS 评分连续 3 周下滑，多个用户提到「响应慢」与「升级流程不清楚」。CSM 平台还没生成 root cause 报告。",
+        "NPS 评分连续 3 周下滑，多个用户提到「响应慢」与「升级流程不清楚」。CSM 平台还没生成根因分析报告。",
       score: 79,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：NPS 0429（9）→ 0506（7）→ 0517（6）· 8 条用户反馈含关键词「响应慢」/「升级不清」· support ticket 平均响应时间从 2.4h 上升至 6.8h · root cause 分析未启动。",
+        "事实链：NPS 0429（9）→ 0506（7）→ 0517（6）· 8 条用户反馈含关键词「响应慢」/「升级不清」· 支持工单平均响应时间从 2.4h 上升至 6.8h · 根因分析未启动。",
       whyNotAutoExecute:
         "下一步是组织决策（加人 / 改流程 / 改 SLA） — Helm 提供 3 种诊断切片，建议人审后决定优先级。",
       urgencyScore: 75,
@@ -59,7 +59,7 @@ export const CUSTOMER_SUCCESS_PACK: IndustryDemoPack = {
       id: "cs-upsell-invitation-ignored",
       title: "鸿运科技升级邀约客户已读不回 9 天",
       description:
-        "上月发出 Premium 升级邀约（年价 +¥36 万），客户高管已读但无回复。CRM 显示客户内部已查看比价材料 2 次。",
+        "上月发出 Premium 升级邀约（年价 +¥36 万），客户高管已读但无回复。客户关系系统显示客户内部已查看比价材料 2 次。",
       score: 73,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
@@ -97,7 +97,7 @@ export const CUSTOMER_SUCCESS_PACK: IndustryDemoPack = {
       explanation:
         "事实链：核心用户 LinkedIn 状态变更 0515 · 离职后该用户 last login 0514 · 客户其他 5 个用户访问量未变化 · 客户 IT 主管邮件 0521 询问账号转移流程 · 续约窗口 110 天。",
       whyNotAutoExecute:
-        "新对接人选择是客户内部决策 — Helm 给 onboarding 模板候选，但是否主动推动客户 IT 走转移流程由你判断。",
+        "新对接人选择是客户内部决策 — Helm 给入门接手模板候选，但是否主动推动客户 IT 走转移流程由你判断。",
       urgencyScore: 78,
       impactScore: 90,
       confidenceScore: 95,
@@ -113,7 +113,7 @@ export const CUSTOMER_SUCCESS_PACK: IndustryDemoPack = {
       explanation:
         "事实链：5 维流失信号全部触发（活跃度 / feature 启用率 / NPS / 谈判节奏 / 联系人响应）· 历史相似案例 12 个，最终流失率 75% · 续约金额 ¥240 万。",
       whyNotAutoExecute:
-        "「高管 escalate vs 缩小续约 vs 友好暂停」三选一是经营决策 — Helm 给 3 个剧本草稿，每个含目标 + 风险 + 边界，由你选。",
+        "「高管升级处理 vs 缩小续约 vs 友好暂停」三选一是经营决策 — Helm 给 3 个剧本草稿，每个含目标 + 风险 + 边界，由你选。",
       urgencyScore: 95,
       impactScore: 95,
       confidenceScore: 88,

@@ -91,7 +91,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "Revenue currently comes from attributed worker add-on monthly or per-use lines, not public marketplace sales.",
     },
     splitLogicSummary: {
-      zh: "分成逻辑挂在内部 RevenueRule 上，可按固定比例、固定金额、一次性或持续型规则执行。",
+      zh: "分成逻辑挂在内部收益规则上，可按固定比例、固定金额、一次性或持续型规则执行。",
       en: "Split logic is attached to internal RevenueRule objects and can run as fixed percent, fixed amount, one-time, or recurring rules.",
     },
     reversalRuleSummary: {
@@ -107,7 +107,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "Payout remains manual and off-platform; the portal shows earnings posture but does not execute payouts.",
     },
     platformRightsSummary: {
-      zh: "平台保留审核、停用、暂停、等待名单与不发 invite 的权利。",
+      zh: "平台保留审核、停用、暂停、等待名单与不发邀请的权利。",
       en: "The platform retains the right to review, disable, suspend, waitlist, or decline invite issuance.",
     },
   },
@@ -117,11 +117,11 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
     programType: PartnerProgramType.CUSTOM_PARTNER,
     beneficiaryType: RevenueBeneficiaryType.CUSTOM_SERVICES,
     title: {
-      zh: "Custom Partner Program",
+      zh: "定制交付伙伴计划",
       en: "Custom Partner Program",
     },
     summary: {
-      zh: "面向能提供 custom integration、实施、维护或联合交付的服务伙伴。",
+      zh: "面向能提供定制集成、实施、维护或联合交付的服务伙伴。",
       en: "For service partners who can deliver custom integration, implementation, maintenance, or joint delivery.",
     },
     audienceSummary: {
@@ -129,7 +129,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "Best for partners who can handle implementation, maintenance, delivery coordination, or enterprise system integration.",
     },
     contributionSummary: {
-      zh: "可以参与 custom implementation、custom maintenance、联合交付和窄 connector/adapter 落地。",
+      zh: "可以参与定制实施、定制维护、联合交付和窄连接器 / 适配器落地。",
       en: "Partners can contribute to custom implementation, custom maintenance, joint delivery, and narrow connector/adapter rollouts.",
     },
     revenueSummary: {
@@ -141,12 +141,12 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "Settlement follows the internal monthly manual-settlement cycle with payable-later visibility and no automatic payout.",
     },
     boundarySummary: {
-      zh: "当前不是公开伙伴市场，不开放公开排名或发现页，也不承诺 finance-console 级对账。",
+      zh: "当前不是公开伙伴市场，不开放公开排名或发现页，也不承诺财务控制台级对账。",
       en: "This is not a public partner marketplace, ranking surface, discovery page, or finance-console-grade reconciliation layer.",
     },
     termsVersionKey: "v1",
     termsTitle: {
-      zh: "Custom Partner Program Terms v1",
+      zh: "定制交付伙伴计划条款 v1",
       en: "Custom Partner Program Terms v1",
     },
     termsSummary: {
@@ -154,11 +154,11 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "This version freezes the custom partner revenue source, review posture, reversal boundary, and manual-settlement reality.",
     },
     revenueDefinition: {
-      zh: "当前收益线来自 custom implementation 和 custom maintenance 的归因收入，不等于完整服务市场。",
+      zh: "当前收益线来自定制实施和定制维护的归因收入，不等于完整服务市场。",
       en: "Revenue currently comes from attributed custom implementation and maintenance lines, not a full service marketplace.",
     },
     splitLogicSummary: {
-      zh: "分成逻辑沿用内部 RevenueRule，可按一次性或持续型规则、比例或固定金额表达。",
+      zh: "分成逻辑沿用内部收益规则，可按一次性或持续型规则、比例或固定金额表达。",
       en: "Split logic follows internal RevenueRule objects with one-time or recurring, percentage or fixed-amount rules.",
     },
     reversalRuleSummary: {
@@ -184,7 +184,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
     programType: PartnerProgramType.SALES_REFERRAL,
     beneficiaryType: RevenueBeneficiaryType.SALES_REFERRAL,
     title: {
-      zh: "Sales Referral Program",
+      zh: "销售转介绍计划",
       en: "Sales Referral Program",
     },
     summary: {
@@ -213,7 +213,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
     },
     termsVersionKey: "v1",
     termsTitle: {
-      zh: "Sales Referral Program Terms v1",
+      zh: "销售转介绍计划条款 v1",
       en: "Sales Referral Program Terms v1",
     },
     termsSummary: {
@@ -241,7 +241,7 @@ export const PROGRAM_CATALOG_SEEDS: ProgramCatalogSeed[] = [
       en: "Payout remains manual and off-platform; the portal shows status only and does not execute disbursement.",
     },
     platformRightsSummary: {
-      zh: "平台保留审核、暂停、拒绝 invite、等待名单和后续停用权。",
+      zh: "平台保留审核、暂停、拒绝邀请、等待名单和后续停用权。",
       en: "The platform retains the right to review, suspend, reject invites, waitlist, and disable later participation.",
     },
   },

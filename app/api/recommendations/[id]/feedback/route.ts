@@ -11,7 +11,11 @@ import {
   assertWorkspaceRecommendationOwnership,
   isWorkspaceOwnershipError,
 } from "@/lib/auth/tenant-ownership";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+  resolveApiWorkspaceMessage,
+} from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { submitRecommendationFeedback } from "@/lib/recommendations/recommendation-feedback.service";
 
@@ -27,8 +31,11 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let workspaceLocale: string | null | undefined;
+
   try {
     const { user, membership, workspace } = await getCurrentWorkspaceSession();
+    workspaceLocale = workspace.defaultLocale;
     const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
     if (!canManageWorkspaceInsights(membership.role)) {
       return errorResponse(
@@ -42,7 +49,12 @@ export async function POST(
     const parsed = feedbackSchema.safeParse(body);
 
     if (!parsed.success) {
-      return errorResponse(parsed.error.issues[0]?.message ?? "反馈参数错误");
+      return errorResponse(
+        resolveApiValidationIssueMessage(
+          workspace.defaultLocale,
+          parsed.error.issues[0]?.message,
+        ),
+      );
     }
 
     const { id } = await params;
@@ -67,10 +79,21 @@ export async function POST(
       sourcePage: request.url,
     });
 
-    return successResponse(data, "反馈已记录");
+    return successResponse(
+      data,
+      resolveApiWorkspaceMessage(workspace.defaultLocale, {
+        zh: "反馈已记录",
+        en: "Feedback recorded",
+      }),
+    );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "提交 recommendation feedback 失败",
+      error instanceof Error
+        ? error.message
+        : resolveApiWorkspaceMessage(workspaceLocale, {
+          zh: "提交 recommendation feedback 失败",
+          en: "Failed to submit recommendation feedback",
+        }),
       isWorkspaceOwnershipError(error) ? "RELATED_OBJECT_NOT_FOUND" : "RECOMMENDATION_FEEDBACK_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

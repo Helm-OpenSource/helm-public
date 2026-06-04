@@ -12,7 +12,34 @@ archive_trigger:
   - This document is misused to authorize production writes, hosted MCP, or auto-execution
 ---
 
-# Helm Headless Signal Interface Requirements
+# Helm Headless Signal Interface Requirements / Helm Headless Signal Interface 要求
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+Helm 无头信号接口（HSI）是公开、可复刻的契约，帮助交付工程师把既有业务系统转成
+复核优先的运营信号。它不是客户关系系统替代品、托管智能体运行时、工作流引擎、市场
+或执行平面。
+
+HSI 的公开契约只覆盖包清单、合成 / 脱敏夹具、确定性评测门禁、复核包准备，
+以及客户试点前可检查的边界证据。它的第一目标是让交付闭环可诊断：
+
+```text
+复刻 Helm
+  -> 检查样板包
+  -> 把来源字段映射到安全夹具
+  -> 运行 HSI 评测
+  -> 检查运营信号输出
+  -> 准备复核包
+  -> 判断是否已经可以进入受控试点
+```
+
+通过 HSI 契约是客户部署的必要但不充分条件。第一阶段保持仅离线，不授权运行时查询、
+API 路由、数据模式迁移、生产连接器、托管 MCP、正式写入、自动发送、自动批准、自动执行
+或大模型最终排名。
+
+## English Reference
 
 ## 0. Public Thesis
 

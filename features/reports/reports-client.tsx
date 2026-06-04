@@ -276,10 +276,10 @@ export function ReportsClient({
         id: "binding",
         title: english
           ? "Attach loose threads before widening CRM input"
-          : "先补信息归属，再扩大 CRM 接入",
+          : "先补信息归属，再扩大客户关系系统接入",
         body: english
           ? "Some real threads are still not attached to a customer, company, or opportunity. Reserve one block next week to clear them before widening CRM-first usage."
-          : "当前仍有真实线程未绑定。建议下周先留一个时间块清理绑定债，再继续扩大 CRM 优先使用范围。",
+          : "当前仍有真实线程未绑定。建议下周先留一个时间块清理绑定债，再继续扩大客户关系系统优先使用范围。",
         variant: "warning",
       });
     }
@@ -775,7 +775,7 @@ export function ReportsClient({
                           description={
                             english
                               ? "After the current report is generated, this view can derive a practical plan suggestion for next week from real movement and risk."
-                              : "先生成本周周报，Helm 会基于真实推进和风险给出更实用的下周计划建议。"
+                              : "先生成本周周报，Helm会基于真实推进和风险给出更实用的下周计划建议。"
                           }
                         />
                       )}

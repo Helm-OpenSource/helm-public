@@ -20,6 +20,7 @@ export function BillingSettlementOverviewPanels({
   english,
 }: BillingSettlementOverviewPanelsProps) {
   const currentSettlementBatch = data.currentSettlementBatch;
+  const localeKey = english ? "en" : "zh";
 
   return (
     <>
@@ -45,7 +46,7 @@ export function BillingSettlementOverviewPanels({
           value={english ? `${data.settlementSummary.paidCount}` : `${data.settlementSummary.paidCount} 条`}
         />
         <Info
-          label={english ? "Missing profiles" : "缺少资料"}
+          label={english ? "Missing profiles" : "缺少结算资料"}
           value={english ? `${data.settlementSummary.missingProfileCount}` : `${data.settlementSummary.missingProfileCount} 条`}
         />
       </div>
@@ -53,10 +54,10 @@ export function BillingSettlementOverviewPanels({
       <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
         {english
           ? currentSettlementBatch
-            ? `${formatSettlementBatchReference(currentSettlementBatch.batchKey, currentSettlementBatch.periodLabel, english)} is in ${settlementBatchStatusLabels[currentSettlementBatch.status].en.toLowerCase()} posture. It keeps ${data.settlementSummary.beneficiaryCount} beneficiaries and ${data.settlementSummary.sourceTypeCount} source types readable before any off-platform payment happens.`
+            ? `${formatSettlementBatchReference(currentSettlementBatch.batchKey, currentSettlementBatch.periodLabel, english)} is in ${settlementBatchStatusLabels[currentSettlementBatch.status][localeKey].toLowerCase()} posture. It keeps ${data.settlementSummary.beneficiaryCount} beneficiaries and ${data.settlementSummary.sourceTypeCount} source types readable before any off-platform payment happens.`
             : "No settlement batch exists yet. Create a monthly batch once payable-later lines are ready, then review it internally, export CSV, and update paid / reversed posture manually."
           : currentSettlementBatch
-            ? `${formatSettlementBatchReference(currentSettlementBatch.batchKey, currentSettlementBatch.periodLabel, english)} 处于 ${settlementBatchStatusLabels[currentSettlementBatch.status].zh} 姿态，覆盖 ${data.settlementSummary.beneficiaryCount} 个受益方和 ${data.settlementSummary.sourceTypeCount} 类来源，方便在站外付款前先做内部复核。`
+            ? `${formatSettlementBatchReference(currentSettlementBatch.batchKey, currentSettlementBatch.periodLabel, english)} 处于 ${settlementBatchStatusLabels[currentSettlementBatch.status][localeKey]} 姿态，覆盖 ${data.settlementSummary.beneficiaryCount} 个受益方和 ${data.settlementSummary.sourceTypeCount} 类来源，方便在站外付款前先做内部复核。`
             : "当前还没有结算批次。等待后续结算条目进入可结算姿态后，再创建月度批次、做内部复核、导出 CSV，并手动更新已支付 / 已冲回状态。"}
       </div>
     </>

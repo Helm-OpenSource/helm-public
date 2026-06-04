@@ -167,7 +167,7 @@ const flowLabels = {
   },
   "delivery-activation-checklist": {
     english: "Delivery activation checklist path",
-    chinese: "交付激活 checklist 路径",
+    chinese: "交付激活清单路径",
   },
   "success-expansion-review": {
     english: "Success expansion review path",
@@ -194,7 +194,7 @@ const flowLabels = {
 const resourceLabels = {
   crm_connector: {
     english: "CRM context",
-    chinese: "CRM 上下文",
+    chinese: "CRM上下文",
   },
   email_draft: {
     english: "email drafting",
@@ -210,11 +210,11 @@ const resourceLabels = {
   },
   workspace_state: {
     english: "workspace state",
-    chinese: "workspace 状态",
+    chinese: "工作区状态",
   },
   membership_state: {
     english: "membership state",
-    chinese: "membership 状态",
+    chinese: "成员身份状态",
   },
   callback_status: {
     english: "callback status",

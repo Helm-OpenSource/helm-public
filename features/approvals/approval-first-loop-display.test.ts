@@ -131,7 +131,7 @@ describe("approval first loop display model", () => {
 
     expect(display.stageLabel).toBe("先做复核");
     expect(display.progressLabel).toBe("6/7 环节已就绪");
-    expect(display.primaryAction.label).toBe("复核：发送 Atlas 合作 brief");
+    expect(display.primaryAction.label).toBe("复核：发送 Atlas 合作摘要");
     expect(display.primaryAction.summary).toContain("先读草稿、证据和影响");
     expect(display.primaryAction.summary).not.toMatch(
       /first loop|review-before|gate/i,
@@ -142,6 +142,13 @@ describe("approval first loop display model", () => {
     expect(display.returnReadback.summary).toContain("不要重新扫全工作区");
     expect(display.returnReadback.summary).not.toMatch(/review|workspace/i);
     expect(display.boundary).toContain("建议仍不等于承诺");
+    expect(display.firstSignal.label).toBe("发送 Atlas 合作摘要");
+    expect(display.reviewCheckpoint.label).toBe("复核：发送 Atlas 合作摘要");
+    expect(display.reviewCheckpoint.summary).toContain("复核边界");
+    expect(display.followThrough.label).toBe("复核后推进发送 Atlas 合作摘要");
+    expect(JSON.stringify(display)).not.toMatch(
+      /review-before|first loop|review 区块|workspace|brief|commitment|recommendation/i,
+    );
   });
 
   it("keeps the review action explicit in English without showing the old gate label", () => {

@@ -35,7 +35,7 @@ export const CROSS_BORDER_ECOMMERCE_PACK: IndustryDemoPack = {
       explanation:
         "事实链：亚马逊 SKU 广告报表（ROI 4.2 → 2.1，3 天）· Shopee 同 SKU 广告报表（ROI 3.5 → 5.8，3 天）· 平台预算分配 2 周未调整 · 历史相似异动 9 次，提前 24h 调整可降低损失 $3-7K/SKU。",
       whyNotAutoExecute:
-        "广告预算调整涉及多平台账号操作 + 商务规则 — Helm 给 3 种调整方案候选（保守 5% 移仓 / 中等 15% / 激进 30%），由运营 click 平台后台执行。",
+        "广告预算调整涉及多平台账号操作 + 商务规则 — Helm 给 3 种调整方案候选（保守 5% 移仓 / 中等 15% / 激进 30%），由运营确认后在平台后台执行。",
       urgencyScore: 90,
       impactScore: 85,
       confidenceScore: 82,
@@ -49,7 +49,7 @@ export const CROSS_BORDER_ECOMMERCE_PACK: IndustryDemoPack = {
       score: 89,
       policyResult: "REQUIRES_APPROVAL",
       explanation:
-        "事实链：美西仓延误率（基线 3% / 本周 12%）· 47 封客户 ETA 询问邮件 0517-0521 · 客服模板回复但未触发 escalation · 历史延误率 > 10% 案例 5 个，最终差评率 +2.4% / 退货率 +5%。",
+        "事实链：美西仓延误率（基线 3% / 本周 12%）· 47 封客户 ETA 询问邮件 0517-0521 · 客服模板回复但未触发升级 · 历史延误率 > 10% 案例 5 个，最终差评率 +2.4% / 退货率 +5%。",
       whyNotAutoExecute:
         "「主动告知客户 vs 改用备用物流 vs 暂停广告」三选一是经营决策 — Helm 给 3 路径剧本含成本 / 时效 / 客户感知影响估算。",
       urgencyScore: 92,
@@ -83,7 +83,7 @@ export const CROSS_BORDER_ECOMMERCE_PACK: IndustryDemoPack = {
       explanation:
         "事实链：上架 21 天订单 117 单 · 评论 4 条（4★ × 1 / 2★ × 3）· 2 星评论关键词「包装破损 × 2 / 说明书不全 × 1」· BSR 排名 0501 → 0521（#4500 → #18000）· 历史相似案例 6 个，3 个 90 天内被永久降权。",
       whyNotAutoExecute:
-        "客户挽回 / 联系老客户邀评 / 包装设计返工三选一涉及法律（亚马逊不允许诱导评论） + 供应链 — Helm 给合规路径草稿，由你 click。",
+        "客户挽回 / 联系老客户邀评 / 包装设计返工三选一涉及法律（亚马逊不允许诱导评论） + 供应链 — Helm 给合规路径草稿，由你确认。",
       urgencyScore: 82,
       impactScore: 75,
       confidenceScore: 78,
@@ -99,7 +99,7 @@ export const CROSS_BORDER_ECOMMERCE_PACK: IndustryDemoPack = {
       explanation:
         "事实链：曝光从 18000 → 6300（7 天）· listing 内容 / 评分 / 价格无变化 · 同行业近 6 个月类似案例 3 个 · 客户成功经理（亚马逊侧）邮件 0518 未回 · 当前年化损失估算 ¥240 万。",
       whyNotAutoExecute:
-        "「亚马逊客户成功 escalation vs 多账号备份 vs 引流到独立站」三选一涉及商务关系 + 法律 — Helm 给 3 路径剧本，由经营负责人 click。",
+        "「亚马逊客户成功升级处理 vs 多账号备份 vs 引流到独立站」三选一涉及商务关系 + 法律 — Helm 给 3 路径剧本，由经营负责人确认。",
       urgencyScore: 92,
       impactScore: 95,
       confidenceScore: 70,
@@ -115,7 +115,7 @@ export const CROSS_BORDER_ECOMMERCE_PACK: IndustryDemoPack = {
       explanation:
         "事实链：德国市场退货率（5 月 11% / 基线 3%）· 退货原因分布（尺码偏小 60% / 颜色不符 18% / 其他 22%）· listing 描述 5 月未变 · 同期英国 / 法国市场退货率正常 · 历史德国市场尺码问题 4 次，最终调整 listing 平均节省 ¥80K/月。",
       whyNotAutoExecute:
-        "listing 修改 / 退货政策调整 / 客户主动通知三选一影响多市场 — Helm 给 3 路径影响评估，由市场负责人 + 运营总监联合 click。",
+        "listing 修改 / 退货政策调整 / 客户主动通知三选一影响多市场 — Helm 给 3 路径影响评估，由市场负责人 + 运营总监联合确认。",
       urgencyScore: 80,
       impactScore: 82,
       confidenceScore: 88,

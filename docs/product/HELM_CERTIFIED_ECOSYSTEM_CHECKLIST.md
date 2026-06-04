@@ -5,10 +5,28 @@ created: 2026-04-28
 review_after: 2026-05-28
 archive_trigger:
   - HELM_CERTIFIED_ECOSYSTEM_IMPLEMENTATION_REPORT 落地并完成 docs/README.md 索引切换后 30 天归档
-  - 2026-07-31 之后若没有任何 certified connector、workflow pack、partner 或 deployment review 引用本文件则归档
+  - 2026-07-31 之后若没有任何认证连接器、工作流包、伙伴或部署复核引用本文件则归档
 ---
 
-# Helm Certified Ecosystem Checklist
+# Helm Certified Ecosystem Checklist / Helm 认证生态清单
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本清单定义连接器、工作流包、伙伴和部署的第一层人工认证门禁。它不创建市场、
+结算通道、转售计划、自动认证系统或客户结果保证。
+
+所有认证候选都必须说明负责人、范围、支持 / 不支持的用例、版本、
+证据引用、复核边界、回滚 / 撤回路径、客户可见声明
+和非承诺说明。任何候选都不得声称自动发送、广泛自动写入、自动审批、
+自动结算或保证商业结果。
+
+公开使用 **Helm Certified ...** 字样只能发生在批准之后。认证记录在负责人
+批准公开使用前应保留在内部；如果范围、安全姿态、客户可见声明或
+复核优先边界发生漂移，认证可以撤销。
+
+## English Reference
 
 ## 1. Purpose
 

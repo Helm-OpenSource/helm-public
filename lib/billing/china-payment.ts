@@ -88,16 +88,23 @@ export function getWorkspaceOrderDescription(input: {
   const english = input.locale === "en-US";
   return english
     ? `${input.organizationName} is purchasing Helm Team. Current seat posture is 1 included admin + ${input.additionalBillableSeats} additional active seats.`
-    : `${input.organizationName} 正在购买 Helm Team。当前 seat 结构为 1 个 included admin + ${input.additionalBillableSeats} 个额外 active seat。`;
+    : `${input.organizationName} 正在购买 Helm Team。当前席位结构为 1 个内含管理员席位 + ${input.additionalBillableSeats} 个额外活跃席位。`;
+}
+
+function getMissingAppUrlMessage(locale?: string | null) {
+  return locale === "en-US"
+    ? "APP_URL is required for China payment rail"
+    : "中国区支付通道需要先配置 APP_URL。";
 }
 
 export function getChinaPaymentReturnUrl(input: {
   provider: PaymentProvider;
   status: "checkout-returned" | "checkout-canceled";
+  locale?: string | null;
 }) {
   const appUrl = process.env.APP_URL?.trim();
   if (!appUrl) {
-    throw new Error("APP_URL is required for China payment rail");
+    throw new Error(getMissingAppUrlMessage(input.locale));
   }
 
   const url = new URL("/settings", appUrl);
@@ -115,10 +122,13 @@ export function getChinaPaymentReturnUrl(input: {
   return url.toString();
 }
 
-export function getChinaPaymentNotifyUrl(provider: PaymentProvider) {
+export function getChinaPaymentNotifyUrl(
+  provider: PaymentProvider,
+  locale?: string | null,
+) {
   const appUrl = process.env.APP_URL?.trim();
   if (!appUrl) {
-    throw new Error("APP_URL is required for China payment rail");
+    throw new Error(getMissingAppUrlMessage(locale));
   }
 
   const pathname =

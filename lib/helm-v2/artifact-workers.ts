@@ -24,7 +24,7 @@ export const HELM_V2_WORKER_REGISTRY: Record<HelmV2AgentId, HelmV2WorkerDefiniti
   "lead-orchestrator": {
     id: "lead-orchestrator",
     label: "Lead Orchestrator",
-    description: "接收事件、拉取最小必要上下文、分配执行并汇总 execution套件。",
+    description: "接收事件、拉取最小必要上下文、分配执行并汇总执行套件。",
     triggers: ["meeting.ended", "proposal.requested" as HelmV2EventType, "handoff.requested"],
     allowedTools: ["read_workspace_summary", "read_object_graph", "dispatch_worker", "write_execution_bundle"],
     inputSchema: "lead_orchestrator_input.v1",
@@ -101,7 +101,7 @@ export const HELM_V2_WORKER_REGISTRY: Record<HelmV2AgentId, HelmV2WorkerDefiniti
   "verification-agent": {
     id: "verification-agent",
     label: "Verification Agent",
-    description: "在 晋升、problem-space 和下游建议前生成源头-grounded 验证 report。",
+    description: "在晋升、问题空间和下游建议前生成基于来源的验证报告。",
     triggers: ["meeting.facts_created", "approval.requested", "followup.requested"],
     allowedTools: ["read_artifact", "read_source_provenance", "read_policy_memory", "write_artifact", "write_trace"],
     inputSchema: "verification_agent_input.v1",
@@ -112,7 +112,7 @@ export const HELM_V2_WORKER_REGISTRY: Record<HelmV2AgentId, HelmV2WorkerDefiniti
   "swarm-search-worker": {
     id: "swarm-search-worker",
     label: "Swarm Search Worker",
-    description: "执行只读搜索，返回命中列表与 制品优先 发现套件，不合并长对话记录。",
+    description: "执行只读搜索，返回命中列表与制品优先的发现套件，不合并长对话记录。",
     triggers: [],
     allowedTools: ["read_artifact", "read_workspace_summary", "write_artifact"],
     inputSchema: "swarm_search_worker_input.v1",
@@ -123,7 +123,7 @@ export const HELM_V2_WORKER_REGISTRY: Record<HelmV2AgentId, HelmV2WorkerDefiniti
   "swarm-grep-worker": {
     id: "swarm-grep-worker",
     label: "Swarm Grep Worker",
-    description: "执行只读 grep-style 证据检索，返回结构化命中和 发现套件。",
+    description: "执行只读 grep 风格证据检索，返回结构化命中和发现套件。",
     triggers: [],
     allowedTools: ["read_artifact", "read_workspace_summary", "write_artifact"],
     inputSchema: "swarm_grep_worker_input.v1",
@@ -134,7 +134,7 @@ export const HELM_V2_WORKER_REGISTRY: Record<HelmV2AgentId, HelmV2WorkerDefiniti
   "swarm-evidence-miner": {
     id: "swarm-evidence-miner",
     label: "Swarm Evidence Miner",
-    description: "执行只读证据挖掘，返回 evidence 候选s 与 发现套件。",
+    description: "执行只读证据挖掘，返回证据候选与发现套件。",
     triggers: [],
     allowedTools: ["read_artifact", "read_workspace_summary", "write_artifact"],
     inputSchema: "swarm_evidence_miner_input.v1",

@@ -1,0 +1,10 @@
+{
+  "feedbackId": "fb-0001",
+  "caseId": "a-case-001",
+  "targetPacketHash": "sha256:jp-oh-0001-content",
+  "correctionType": "edit",
+  "correctionReasonCode": "commitment_wording",
+  "correctionNote": "原判断把'建议关注'写成了'将解决复核积压',越过 advice 边界;改回 review-first 措辞。",
+  "authorId": "reviewer-alias-01",
+  "createdAt": "2026-06-04T02:00:00Z"
+}

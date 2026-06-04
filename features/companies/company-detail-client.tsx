@@ -652,7 +652,7 @@ export function CompanyDetailClient({
         >
           {demoMode ? (
             <div className="space-y-2">
-              <Badge variant="approval">Account Intelligence</Badge>
+              <Badge variant="approval">{english ? "Account Intelligence" : "账户判断"}</Badge>
               <p className="text-lg font-semibold text-[color:var(--foreground)]">
                 {english
                   ? "The company page compresses key contacts, momentum path and the last 30 days of activity into one account view."

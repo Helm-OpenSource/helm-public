@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Helm Signal First Mile Example</title>
+    <script src="./helm-signal-first-mile.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Signal First Mile Example</h1>
+
+      <button
+        data-helm-signal
+        data-helm-source-family="crm"
+        data-helm-collection-mode="crm_snapshot"
+        data-helm-disposition-mode="assign_reviewer"
+        data-helm-object-kind="Deal"
+        data-helm-object-ref="Deal-Alias-001"
+        data-helm-signal-family="risk"
+        data-helm-evidence-ref="crm-row-17"
+        data-helm-what-changed="Decision date moved twice; reviewer missing"
+        data-helm-owner="delivery-owner"
+        data-helm-reviewer="customer-reviewer"
+        data-helm-data-posture="redacted"
+        data-helm-allowed-next-surface="/approvals"
+      >
+        Mark Signal
+      </button>
+
+      <button id="export-ledger">Export Ledger To Console</button>
+    </main>
+
+    <script>
+      HelmSignalFirstMile.configure({
+        workspaceAlias: "diagnostic-workspace",
+        defaultReviewer: "customer-reviewer"
+      });
+
+      document.addEventListener("click", function (event) {
+        var target = event.target.closest("[data-helm-signal]");
+        if (!target) return;
+        HelmSignalFirstMile.collectFromElement(target);
+      });
+
+      document.getElementById("export-ledger").addEventListener("click", function () {
+        console.log(HelmSignalFirstMile.exportLedger());
+      });
+    </script>
+  </body>
+</html>

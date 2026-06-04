@@ -1,5 +1,10 @@
 name: CI
 
+# 语言 / Language: workflow job names intentionally remain English because
+# branch protection required-check contexts depend on them.
+# 中文说明：这是完整 CI 链。交付工程师提交 PR 时应先看失败 job，再回到本地运行
+# 对应 npm 命令；不要把绿色 CI 解读为 release approval 或客户部署 ready。
+
 on:
   push:
     branches: [main, develop]

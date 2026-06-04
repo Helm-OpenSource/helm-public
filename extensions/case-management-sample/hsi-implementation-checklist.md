@@ -7,7 +7,20 @@ hsi_artifact: implementation_checklist
 hsi_requirement: ../../docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md#hsi-01
 ---
 
-# Case Management Sample — HSI Implementation Checklist
+# Case Management Sample HSI Implementation Checklist / Case Management Sample HSI 实施清单
+
+> **语言 / Language**: **中文主文本** + **English reference summary**
+
+## English Reference Summary
+
+This checklist fills the HSI-01 `implementation_checklist` for the public
+`case-management-sample` reference pack. Phase 1 is offline only: each item
+either records the current public-pack status or notes what the delivery
+engineer must redo after forking.
+
+The public pack uses synthetic fixtures only, has no production credentials, and
+does not authorize hosted MCP, production connectors, official writes,
+auto-send, auto-approve, auto-execute, or LLM final ranking.
 
 本文件是 HSI-01 `implementation_checklist` 在公开参考包 `case-management-sample` 上的具体填写。Phase 1 OFFLINE 范围：每一项要么标注当前状态，要么记录"该 vertical 在 fork 时由交付工程师补齐"。
 

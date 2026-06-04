@@ -93,13 +93,23 @@ function getWorkspacePaymentRail(
   });
 }
 
-function assertRequestedRailAllowed(rail: PaymentRailResolution, requestedProvider: PaymentProvider | undefined) {
+function getRequestedRailUnavailableMessage(english: boolean) {
+  return english
+    ? "This organization cannot use the requested payment rail"
+    : "当前组织不能使用所请求的支付通道";
+}
+
+function assertRequestedRailAllowed(
+  rail: PaymentRailResolution,
+  requestedProvider: PaymentProvider | undefined,
+  english: boolean,
+) {
   if (!requestedProvider) {
     return;
   }
 
   if (!rail.availableProviders.includes(requestedProvider)) {
-    throw new Error("This organization cannot use the requested payment rail");
+    throw new Error(getRequestedRailUnavailableMessage(english));
   }
 }
 
@@ -131,6 +141,18 @@ function getPortalAvailabilityMessage(rail: PaymentRailResolution, english: bool
   return english
     ? "China payment rails do not provide full portal parity in Sprint 1. Subscription management remains a narrow billing overview plus provider-specific checkout / restore flow."
     : "中国区支付通道当前不提供完整订阅门户能力。订阅管理仍保持为一层窄订阅概览，加上对应支付渠道的购买 / 恢复路径。";
+}
+
+function getMissingBillingCustomerMessage(english: boolean) {
+  return english
+    ? "This organization does not have a live billing customer yet. Start checkout first."
+    : "当前组织还没有可管理的付费客户，请先完成订阅购买。";
+}
+
+function getStripeCheckoutMissingRedirectMessage(english: boolean) {
+  return english
+    ? "Stripe checkout session did not return a redirect URL"
+    : "Stripe checkout session 未返回跳转 URL";
 }
 
 function getRefreshAvailabilityMessage(rail: PaymentRailResolution, english: boolean) {
@@ -451,7 +473,7 @@ export async function createWorkspaceCheckoutSession(input: {
   const rail = getWorkspacePaymentRail(workspace, input.paymentProvider);
   const english = isEnglishLocale(input.locale);
 
-  assertRequestedRailAllowed(rail, input.paymentProvider);
+  assertRequestedRailAllowed(rail, input.paymentProvider, english);
 
   if (
     !canStartCheckout({
@@ -464,7 +486,7 @@ export async function createWorkspaceCheckoutSession(input: {
         ? getChinaDuplicateCheckoutMessage({ english })
         : english
           ? "This organization already has active paid access. Use the current management path instead of starting duplicate checkout."
-          : "当前组织已经有 active paid access，请不要重复购买，先使用当前管理路径。",
+          : "当前组织已经有活跃付费访问权，请不要重复购买，先使用当前管理路径。",
     );
   }
 
@@ -530,7 +552,7 @@ export async function createWorkspaceCheckoutSession(input: {
     });
 
     if (!checkout.url) {
-      throw new Error("Stripe checkout session did not return a redirect URL");
+      throw new Error(getStripeCheckoutMissingRedirectMessage(english));
     }
 
     return checkout.url;
@@ -643,7 +665,7 @@ export async function createWorkspaceBillingPortalSession(input: {
       billingPortalMode: rail.billingPortalMode,
     })
   ) {
-    throw new Error("This organization does not have a live billing customer yet. Start checkout first.");
+    throw new Error(getMissingBillingCustomerMessage(english));
   }
 
   const portal = await createStripeBillingPortalSession({
