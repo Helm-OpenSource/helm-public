@@ -18,6 +18,7 @@ import {
 } from "@/features/settings/formatters/labels";
 import { formatSettingsCommercialText } from "@/features/settings/display-copy";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
+import { formatAttributionDetailDateLabel } from "./billing-attribution-detail-date-labels";
 import { Info } from "./settings-display";
 
 type BillingAttributionDetailData = Pick<
@@ -240,7 +241,7 @@ export function BillingAttributionDetailPanels({
                   />
                   <Info
                     label={english ? "Effective from" : "生效起点"}
-                    value={formatDateLabel(rule.effectiveFrom)}
+                    value={formatAttributionDetailDateLabel(rule.effectiveFrom, english, formatDateLabel)}
                   />
                 </div>
                 <p className="mt-3 text-xs leading-6 text-[color:var(--muted-foreground)]">
@@ -400,7 +401,7 @@ export function BillingAttributionDetailPanels({
                     />
                     <Info
                       label={english ? "Recognized at" : "入账时间"}
-                      value={formatDateLabel(entry.recognizedAt)}
+                      value={formatAttributionDetailDateLabel(entry.recognizedAt, english, formatDateLabel)}
                     />
                     <Info
                       label={english ? "Rule applied" : "应用规则"}
@@ -530,15 +531,15 @@ export function BillingAttributionDetailPanels({
                     />
                     <Info
                       label={english ? "Payable after" : "最早可结算"}
-                      value={formatDateLabel(entry.payableAfter)}
+                      value={formatAttributionDetailDateLabel(entry.payableAfter, english, formatDateLabel)}
                     />
                     <Info
                       label={english ? "Approved at" : "批准时间"}
-                      value={formatDateLabel(entry.approvedAt)}
+                      value={formatAttributionDetailDateLabel(entry.approvedAt, english, formatDateLabel)}
                     />
                     <Info
                       label={english ? "Paid at" : "支付时间"}
-                      value={formatDateLabel(entry.paidAt)}
+                      value={formatAttributionDetailDateLabel(entry.paidAt, english, formatDateLabel)}
                     />
                     <Info
                       label={english ? "Source type" : "来源类型"}
