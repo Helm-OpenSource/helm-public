@@ -7,6 +7,7 @@ import {
   computeASetHash,
   computeBSetHash,
   computeGoldLabelsHash,
+  computePreRegistrationContentHash,
   computeReplaySnapshotHashes,
   computeReplaySnapshotRootHash,
 } from "./hashing";
@@ -43,6 +44,11 @@ export function verifyContentBindings(input: {
   }
   if (p.replaySnapshotRootHash !== computeReplaySnapshotRootHash(p.replaySnapshotHashes)) {
     errors.push("replay_snapshot_root_hash_mismatch");
+  }
+
+  // pre-registration self-hash: metric/baselines/timestamps/refs are tamper-evident.
+  if (p.contentHash !== computePreRegistrationContentHash(p)) {
+    errors.push("pre_registration_content_hash_mismatch");
   }
 
   return errors;

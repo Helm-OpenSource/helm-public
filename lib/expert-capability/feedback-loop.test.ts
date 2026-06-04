@@ -17,9 +17,6 @@ const packsDir = path.resolve(__dirname, "..", "..", "templates", "expert-capabi
 function loadJson<T>(name: string): T {
   return JSON.parse(readFileSync(path.join(packsDir, name), "utf8")) as T;
 }
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
 
 function fixtures() {
   return {
@@ -285,6 +282,18 @@ describe("F1 content-bound hashes (replay snapshot pinning)", () => {
     const f = fixtures();
     expect(computeReplaySnapshotHashes(f.bSet)).toHaveLength(f.bSet.cases.length);
     expect(sha256(canonicalJson({ b: 2, a: 1 }))).toBe(sha256(canonicalJson({ a: 1, b: 2 })));
+  });
+  it("rejects a post-registration edit of a metric field (contentHash no longer matches)", () => {
+    const f = fixtures();
+    f.preRegistration.metricDefinition.minMargin = 0.01; // valid value, but edited after lock
+    expect(validatePreRegistration(f).errors).toContain("pre_registration_content_hash_mismatch");
+    expect(evaluate(f).loopCompoundingDecision).toBe("fail");
+  });
+  it("rejects a tampered pre-registration contentHash", () => {
+    const f = fixtures();
+    f.preRegistration.contentHash = "sha256:wrong";
+    expect(validatePreRegistration(f).errors).toContain("pre_registration_content_hash_mismatch");
+    expect(evaluate(f).loopCompoundingDecision).toBe("fail");
   });
 });
 

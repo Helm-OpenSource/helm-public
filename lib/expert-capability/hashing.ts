@@ -4,7 +4,7 @@
 // hash fields (spec §6 — "replay snapshot must be pinned").
 
 import { createHash } from "node:crypto";
-import type { ASet, BSet } from "./contracts";
+import type { ASet, BSet, PreRegistration } from "./contracts";
 
 // Stable JSON: object keys sorted recursively so equal content hashes equally.
 export function canonicalJson(value: unknown): string {
@@ -42,4 +42,12 @@ export function computeReplaySnapshotHashes(bSet: BSet): string[] {
 
 export function computeReplaySnapshotRootHash(snapshotHashes: string[]): string {
   return sha256(canonicalJson(snapshotHashes));
+}
+
+// Self-hash over every pre-registration field except `contentHash`, so that metric,
+// baselines, timestamps, model/decode refs, the A/B/gold/replay hashes, and the attempt
+// budget become tamper-evident: any post-registration edit breaks this hash.
+export function computePreRegistrationContentHash(preRegistration: PreRegistration): string {
+  const { contentHash: _omit, ...rest } = preRegistration;
+  return sha256(canonicalJson(rest));
 }

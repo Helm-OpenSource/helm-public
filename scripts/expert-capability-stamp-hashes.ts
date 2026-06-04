@@ -15,6 +15,7 @@ import {
   computeASetHash,
   computeBSetHash,
   computeGoldLabelsHash,
+  computePreRegistrationContentHash,
   computeReplaySnapshotHashes,
   computeReplaySnapshotRootHash,
 } from "@/lib/expert-capability/hashing";
@@ -55,6 +56,8 @@ function main() {
   preRegistration.goldLabelsHash = goldHash;
   preRegistration.replaySnapshotHashes = snapshotHashes;
   preRegistration.replaySnapshotRootHash = rootHash;
+  // contentHash last: it self-hashes every other pre-registration field.
+  preRegistration.contentHash = computePreRegistrationContentHash(preRegistration);
 
   write(aPath, aSet);
   write(bPath, bSet);
