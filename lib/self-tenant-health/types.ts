@@ -20,14 +20,16 @@ export const TENANT_HEALTH_BUDGET_STATES = [
 ] as const;
 export type TenantHealthBudgetState = (typeof TENANT_HEALTH_BUDGET_STATES)[number];
 
-export type TenantHealthSafeSourceType =
-  | "ask_helm"
-  | "meeting"
-  | "crm"
-  | "email_im"
-  | "external_agent"
-  | "resource_state"
-  | "other";
+export const TENANT_HEALTH_SAFE_SOURCE_TYPES = [
+  "ask_helm",
+  "meeting",
+  "crm",
+  "email_im",
+  "external_agent",
+  "resource_state",
+  "other",
+] as const;
+export type TenantHealthSafeSourceType = (typeof TENANT_HEALTH_SAFE_SOURCE_TYPES)[number];
 
 export type TenantHealthSignalTelemetryInput = {
   workspaceId: string;

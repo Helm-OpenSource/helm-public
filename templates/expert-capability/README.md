@@ -22,8 +22,9 @@ production readiness, statistical significance, or a completed moat.
 ```
 templates/expert-capability/
   schema/                 # 6 个契约的 public-safe 示例实例 + correctionReasonCode 枚举
-  packs/                  # A 纠正集 / B 留出集(含 synthetic non-self + boundary-trap)+ pre-registration + run-input
+  packs/                  # A/B 留出集 + self-tenant monthly diagnosis synthetic companion fixture
 lib/expert-capability/    # TS core:contracts / hashing / requirements / evaluator / validators + vitest 测试(§15 / §16.4)
+lib/self-tenant-health/    # deterministic public reference bridge from safe health rollup to JudgementPacket
 scripts/expert-capability-feedback-loop-eval.ts   # 无依赖离线 CLI(loop_compounding / expert_justified 双裁决)
 scripts/expert-capability-stamp-hashes.ts         # 由内容重算绑定哈希并重生成 sample(改 pack 后运行)
 ```
@@ -44,6 +45,14 @@ CLI(`scripts/expert-capability-feedback-loop-eval.ts`,核心 `lib/expert-capabil
 
 evaluator 与 validators 强制:`A ∩ B = ∅`;`goldLockedAt < candidateRevision.createdAt < evaluationRun.ranAt`;
 attempt budget;consumed-B 不得跨候选复用;`evidenceCompleteness` 独立计算、禁 ref 灌水。
+
+## Self-Tenant Companion Bridge
+
+`packs/self-tenant-monthly-diagnosis.sample.json` 是 public-safe companion fixture。它使用
+`TenantHealthDashboardRow` 的现有 rollup 形状,通过 deterministic reference producer 生成
+advice-only `JudgementPacket`,并复用 `FeedbackRecord` 与 `EvalCasePromotion`。真实
+LLM-backed self-tenant monthly run、consent、usage / health metadata 不属于本 public pack,
+后续应在 `helm-control-plane` 实现。
 
 ## Source governance before promotion / 晋升前来源治理
 

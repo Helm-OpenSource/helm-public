@@ -4,17 +4,18 @@ import {
   sumEstimatedLLMCostMinorUnit,
 } from "@/lib/self-tenant-health/cost";
 import { createTenantAlias } from "@/lib/self-tenant-health/privacy";
-import type {
-  TenantHealthAuditTelemetryInput,
-  TenantHealthApprovalTelemetryInput,
-  TenantHealthBudgetState,
-  TenantHealthDashboardData,
-  TenantHealthLLMUsageInput,
-  TenantHealthRollupRow,
-  TenantHealthSafeSourceType,
-  TenantHealthSignalTelemetryInput,
-  TenantHealthState,
-  TenantHealthWorkspaceInput,
+import {
+  TENANT_HEALTH_SAFE_SOURCE_TYPES,
+  type TenantHealthAuditTelemetryInput,
+  type TenantHealthApprovalTelemetryInput,
+  type TenantHealthBudgetState,
+  type TenantHealthDashboardData,
+  type TenantHealthLLMUsageInput,
+  type TenantHealthRollupRow,
+  type TenantHealthSafeSourceType,
+  type TenantHealthSignalTelemetryInput,
+  type TenantHealthState,
+  type TenantHealthWorkspaceInput,
 } from "@/lib/self-tenant-health/types";
 
 export type TenantHealthBudgetRuleInput = {
@@ -23,15 +24,7 @@ export type TenantHealthBudgetRuleInput = {
   warningThreshold: number;
 };
 
-const SAFE_SOURCE_TYPES = new Set<TenantHealthSafeSourceType>([
-  "ask_helm",
-  "meeting",
-  "crm",
-  "email_im",
-  "external_agent",
-  "resource_state",
-  "other",
-]);
+const SAFE_SOURCE_TYPES = new Set<TenantHealthSafeSourceType>(TENANT_HEALTH_SAFE_SOURCE_TYPES);
 
 function normalizeActionType(value: string) {
   return value.trim().toUpperCase();

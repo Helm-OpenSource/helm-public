@@ -86,6 +86,17 @@ export type ACorrectionCase = {
   candidate: ExpertOutput;
 };
 
+export type FeedbackRecord = {
+  feedbackId: string;
+  caseId: string;
+  targetPacketHash: string;
+  correctionType: "edit" | "reject" | "defer";
+  correctionReasonCode: CorrectionReasonCode;
+  correctionNote: string;
+  authorId: string;
+  createdAt: string;
+};
+
 export type MetricDefinition = { w1: number; w2: number; minMargin: number };
 
 export type PreRegistration = {
