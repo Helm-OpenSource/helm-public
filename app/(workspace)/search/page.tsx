@@ -180,6 +180,7 @@ export default async function SearchPage({
     askMode && q
       ? interpretAskHelmQuery({
           rawQuery: q,
+          english,
           currentPage: "/search",
           relatedObjects,
           memorySummary: memorySummaries

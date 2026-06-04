@@ -124,6 +124,7 @@ export default async function MobilePage({ searchParams }: MobilePageProps) {
     // Interpret query
     const response = interpretAskHelmQuery({
       rawQuery: q,
+      english,
       currentPage: "/mobile",
       relatedObjects,
       inputMode: "typed",
