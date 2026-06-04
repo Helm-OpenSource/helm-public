@@ -2,10 +2,12 @@
 // Pure, fail-closed. Each validator returns the list of rejection reasons (empty = valid).
 
 import {
+  CORRECTION_REASON_CODES,
   FORBIDDEN_REF_PATTERNS,
   type ASet,
   type BSet,
   type ExpertOutput,
+  type FeedbackRecord,
   type PreRegistration,
   type RunInput,
 } from "./contracts";
@@ -31,6 +33,69 @@ export function validateJudgementPacket(packet: ExpertOutput): ValidationResult 
   if (packet.evidenceRefs.some((r) => FORBIDDEN_REF_PATTERNS.some((re) => re.test(r)))) {
     errors.push("write_send_execute_ref_present");
   }
+  return result(errors);
+}
+
+export function validateFeedbackRecord(
+  record: Partial<FeedbackRecord> & Record<string, unknown>,
+): ValidationResult {
+  const errors: string[] = [];
+
+  if (typeof record.feedbackId !== "string" || !record.feedbackId.trim()) {
+    errors.push("missing_feedback_id");
+  }
+  if (typeof record.caseId !== "string" || !record.caseId.trim()) {
+    errors.push("missing_case_id");
+  }
+  if (typeof record.targetPacketHash !== "string" || !record.targetPacketHash.trim()) {
+    errors.push("missing_target_packet_hash");
+  }
+  if (
+    typeof record.correctionType !== "string" ||
+    !["edit", "reject", "defer"].includes(record.correctionType)
+  ) {
+    errors.push("invalid_correction_type");
+  }
+  if (
+    typeof record.correctionReasonCode !== "string" ||
+    !CORRECTION_REASON_CODES.includes(
+      record.correctionReasonCode as (typeof CORRECTION_REASON_CODES)[number],
+    )
+  ) {
+    errors.push("invalid_correction_reason_code");
+  }
+  if (typeof record.correctionNote !== "string" || !record.correctionNote.trim()) {
+    errors.push("missing_correction_note");
+  }
+  if (typeof record.authorId !== "string" || !record.authorId.trim()) {
+    errors.push("missing_author_id");
+  }
+  if (typeof record.createdAt !== "string" || !Number.isFinite(Date.parse(record.createdAt))) {
+    errors.push("invalid_created_at");
+  }
+
+  const textFields = [
+    String(record.feedbackId ?? ""),
+    String(record.caseId ?? ""),
+    String(record.targetPacketHash ?? ""),
+    String(record.correctionNote ?? ""),
+    String(record.authorId ?? ""),
+  ];
+  if (
+    textFields.some((value) =>
+      [
+        ...FORBIDDEN_REF_PATTERNS,
+        /raw[_ -]?private/i,
+        /raw[_ -]?blocked/i,
+        /(?<![\d+])(?:\+?86[-\s]?)?1[3-9]\d{9}\b/,
+        /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/,
+        /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+      ].some((pattern) => pattern.test(value ?? "")),
+    )
+  ) {
+    errors.push("forbidden_feedback_text_present");
+  }
+
   return result(errors);
 }
 

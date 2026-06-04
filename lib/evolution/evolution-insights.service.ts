@@ -1,5 +1,4 @@
 import { ActionType, PreferenceSignalType, RecommendationFeedbackType } from "@prisma/client";
-import { actionModeLabels, actionTypeLabels, riskLabels } from "@/data/constants";
 import { db } from "@/lib/db";
 import {
   getFormalSkillReviewQueue,
@@ -7,7 +6,16 @@ import {
   getRecentFormalReviewDecisions,
   getRecentSkillAdoptions,
 } from "@/lib/evolution/skill-suggestion.service";
+import type { UiLocale } from "@/lib/i18n/config";
+import { ENGINE_DEFAULT_UI_LOCALE, isEnglishLocale } from "@/lib/i18n/config";
+import {
+  getLocalizedActionModeLabels,
+  getLocalizedActionTypeLabels,
+  getLocalizedRiskLabels,
+} from "@/lib/i18n/labels";
 import { safeParseJson } from "@/lib/utils";
+
+const HAN_PATTERN = /[\u4E00-\u9FFF]/;
 
 export async function getActivePatternFacts(input: {
   workspaceId: string;
@@ -64,41 +72,67 @@ export async function getRecentFormalSkillReviewDecisionPanels(workspaceId: stri
   return getRecentFormalReviewDecisions(workspaceId, 3);
 }
 
-function summarizePattern(record: {
-  patternType: string;
-  patternKey: string;
-  patternValue: string;
-  title: string | null;
-  summary: string | null;
-  confidence: number;
-  evidenceCount: number;
-}) {
+function summarizePattern(
+  record: {
+    patternType: string;
+    patternKey?: string | null;
+    patternValue?: string | null;
+    title: string | null;
+    summary: string | null;
+    confidence: number;
+    evidenceCount: number;
+  },
+  locale: UiLocale,
+) {
+  const english = isEnglishLocale(locale);
   const fallback =
     record.patternType === "approval_pattern"
-      ? "系统观察到你最近会保留外发承诺类动作的人工审批。"
+      ? english
+        ? "Helm observed that you recently keep manual approval on outbound commitment actions."
+        : "系统观察到你最近会保留外发承诺类动作的人工审批。"
       : record.patternType === "communication_style_pattern"
-        ? "系统观察到你最近更偏好简洁直接的外发文案。"
+        ? english
+          ? "Helm observed that you recently prefer concise outbound wording."
+          : "系统观察到你最近更偏好简洁直接的外发文案。"
         : record.patternType === "followup_timing_pattern"
-          ? "系统观察到会后 24 小时内的跟进行动更容易被采纳。"
+          ? english
+            ? "Helm observed that follow-ups within 24 hours after a meeting are more likely to be accepted."
+            : "系统观察到会后 24 小时内的跟进行动更容易被采纳。"
           : record.patternType === "blocker_pattern"
-            ? "系统观察到预算类阻塞正在成为高频模式。"
+            ? english
+              ? "Helm observed that budget blockers are becoming a frequent pattern."
+              : "系统观察到预算类阻塞正在成为高频模式。"
             : record.patternType === "stalled_opportunity_pattern"
-              ? "系统观察到停滞机会超过 5 天未推进时更容易掉速。"
+              ? english
+                ? "Helm observed that stalled opportunities lose momentum when they sit for more than 5 days."
+                : "系统观察到停滞机会超过 5 天未推进时更容易掉速。"
               : record.patternType === "contact_cooling_pattern"
-                ? "系统观察到暖关系超过 7 天未触达时更容易降温。"
-            : "系统最近识别出新的推进规律。";
+                ? english
+                  ? "Helm observed that warm relationships cool down when there is no touchpoint for more than 7 days."
+                  : "系统观察到暖关系超过 7 天未触达时更容易降温。"
+                : english
+                  ? "Helm recently identified a new operating pattern."
+                  : "系统最近识别出新的推进规律。";
 
   return {
-    title: record.title ?? fallback,
-    summary: record.summary ?? fallback,
+    title: selectStoredOrFallback(record.title, fallback, english),
+    summary: selectStoredOrFallback(record.summary, fallback, english),
   };
+}
+
+function selectStoredOrFallback(value: string | null | undefined, fallback: string, english: boolean) {
+  if (!value) return fallback;
+  if (english && HAN_PATTERN.test(value)) return fallback;
+  return value;
 }
 
 export async function getEvolutionInsights(input: {
   workspaceId: string;
   userId?: string | null;
   limit?: number;
+  locale?: UiLocale;
 }) {
+  const locale = input.locale ?? ENGINE_DEFAULT_UI_LOCALE;
   const [patterns, suggestions, skillSuggestions, formalSkillReviewQueue, recentFormalReviewDecisions] = await Promise.all([
     getActivePatternFacts({
       workspaceId: input.workspaceId,
@@ -116,7 +150,7 @@ export async function getEvolutionInsights(input: {
   ]);
 
   const insights = patterns.slice(0, input.limit ?? 4).map((pattern) => {
-    const content = summarizePattern(pattern);
+    const content = summarizePattern(pattern, locale);
     const evidence = safeParseJson<Record<string, unknown>>(pattern.evidenceSnapshot, {});
     return {
       id: pattern.id,
@@ -192,40 +226,61 @@ function suggestionSupportsActionType(targetPolicyKey: string, actionType: Actio
   return false;
 }
 
-function summarizePreferenceSignal(signal: {
-  signalType: PreferenceSignalType;
-  signalKey: string;
-  signalValue: string;
-  weight: number;
-}) {
+function summarizePreferenceSignal(
+  signal: {
+    signalType: PreferenceSignalType;
+    signalKey: string;
+    signalValue: string;
+    weight: number;
+  },
+  locale: UiLocale,
+) {
+  const english = isEnglishLocale(locale);
   if (signal.signalType === PreferenceSignalType.APPROVAL_PREFERENCE) {
     if (signal.signalValue === "approved_after_edit") {
-      return "你通常会先改写再批准同类动作，系统会继续保留可编辑草稿。";
+      return english
+        ? "You usually edit before approving similar actions, so Helm will keep editable drafts."
+        : "你通常会先改写再批准同类动作，系统会继续保留可编辑草稿。";
     }
     if (signal.signalValue === "approved") {
-      return "你最近更常直接采纳同类动作，系统会把这类建议排得更靠前。";
+      return english
+        ? "You recently accept similar actions more often, so Helm will rank this suggestion type higher."
+        : "你最近更常直接采纳同类动作，系统会把这类建议排得更靠前。";
     }
     if (signal.signalValue === "rejected") {
-      return "你最近更常拒绝同类动作，系统会降低自动推进倾向。";
+      return english
+        ? "You recently reject similar actions more often, so Helm will reduce automatic push tendency."
+        : "你最近更常拒绝同类动作，系统会降低自动推进倾向。";
     }
   }
 
   if (signal.signalType === PreferenceSignalType.TIMING_PREFERENCE) {
-    return `系统观察到“${signal.signalKey}”更适合按 ${signal.signalValue} 的窗口推进。`;
+    return english
+      ? `Helm observed that "${signal.signalKey}" fits a ${signal.signalValue} timing window.`
+      : `系统观察到“${signal.signalKey}”更适合按 ${signal.signalValue} 的窗口推进。`;
   }
 
   if (signal.signalType === PreferenceSignalType.RISK_TOLERANCE) {
-    return `系统已经把“${signal.signalKey}”视为更高优先级的风险信号。`;
+    return english
+      ? `Helm now treats "${signal.signalKey}" as a higher-priority risk signal.`
+      : `系统已经把“${signal.signalKey}”视为更高优先级的风险信号。`;
   }
 
-  return `系统最近记录了一个新的偏好信号：${signal.signalKey}。`;
+  return english
+    ? `Helm recently recorded a new preference signal: ${signal.signalKey}.`
+    : `系统最近记录了一个新的偏好信号：${signal.signalKey}。`;
 }
 
 export async function getApprovalLearningPanels(input: {
   workspaceId: string;
   userId?: string | null;
   actionTypes: ActionType[];
+  locale?: UiLocale;
 }) {
+  const locale = input.locale ?? ENGINE_DEFAULT_UI_LOCALE;
+  const actionTypeLabels = getLocalizedActionTypeLabels(locale);
+  const actionModeLabels = getLocalizedActionModeLabels(locale);
+  const riskLabels = getLocalizedRiskLabels(locale);
   const actionTypes = Array.from(new Set(input.actionTypes));
   if (!actionTypes.length) {
     return {} as Record<string, never>;
@@ -305,8 +360,11 @@ export async function getApprovalLearningPanels(input: {
       };
 
       const summaryLines = [
-        ...relevantPatterns.slice(0, 2).map((pattern) => pattern.summary ?? pattern.title ?? "系统最近识别出新的处理规律。"),
-        ...relevantSignals.slice(0, 2).map((signal) => summarizePreferenceSignal(signal)),
+        ...relevantPatterns.slice(0, 2).map((pattern) => {
+          const content = summarizePattern(pattern, locale);
+          return content.summary ?? content.title;
+        }),
+        ...relevantSignals.slice(0, 2).map((signal) => summarizePreferenceSignal(signal, locale)),
       ].slice(0, 3);
 
       return [
@@ -326,16 +384,19 @@ export async function getApprovalLearningPanels(input: {
               }
             : null,
           feedbackStats,
-          learnedPatterns: relevantPatterns.map((pattern) => ({
-            id: pattern.id,
-            title: pattern.title ?? "系统识别出新的规律",
-            summary: pattern.summary ?? "最近事件已经沉淀成稳定模式。",
-            confidence: pattern.confidence,
-            evidenceCount: pattern.evidenceCount,
-          })),
+          learnedPatterns: relevantPatterns.map((pattern) => {
+            const content = summarizePattern(pattern, locale);
+            return {
+              id: pattern.id,
+              title: content.title,
+              summary: content.summary,
+              confidence: pattern.confidence,
+              evidenceCount: pattern.evidenceCount,
+            };
+          }),
           signalHints: relevantSignals.map((signal) => ({
             id: signal.id,
-            summary: summarizePreferenceSignal(signal),
+            summary: summarizePreferenceSignal(signal, locale),
             weight: signal.weight,
             updatedAt: signal.updatedAt,
           })),

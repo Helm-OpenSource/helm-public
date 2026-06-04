@@ -212,16 +212,48 @@ B 组只用于 success 判定：
 
 ## 10. 自身租户与脱敏门 / Self-Tenant And De-identification Gate
 
-self-tenant 不是“无敏感数据”。组织健康诊断可能涉及 reviewer 积压、owner 缺口、
-行动停滞和内部人员绩效相邻信号。
+self-tenant 不是一个单一概念，也不是“无敏感数据”。v0.1 必须拆成三类：
+
+| Class | Meaning | Improvement-loop rule |
+|---|---|---|
+| `fleet_customer_health` | Helm operator 观察客户租户舰队健康 | 仅内部 operator triage / advice-only；永不进入 expert eval、model improvement、training 或 memory promotion |
+| `self_dogfood_health` | Helm 观察自身组织运行 | 去人名化并通过 `EvalCasePromotion` 后，才可成为 public-eligible eval case |
+| `oss_governance` | GitHub / docs / community governance | 留在开源治理流程；不进入 Helm tenant 或专家改进闭环 |
+
+组织健康诊断可能涉及 reviewer 积压、owner 缺口、行动停滞和内部人员绩效相邻信号。
 
 v0.1 必须遵守：
 
 - HR / 绩效评价类内容整体排除。
 - 诊断文案必须声明：组织健康诊断不是绩效评估，不作为绩效输入。
+- `fleet_customer_health` 中的可逆 alias 只是 operator 最小暴露机制，不等于匿名；必须有
+  salt 生命周期、可访问角色、解码审计和 `customerConsentScopeRef`，且仍不得进入
+  improvement loop。
+- `self_dogfood_health` 进入闭环前必须技术性剥离 person-level attribution；不能只靠
+  `walledFromPerformanceEval: true` 声明位。
 - self-tenant 运营类纠正只有经过 `EvalCasePromotion` 的 scanner + human signoff
   后，才可标记为 public-eligible eval case。
 - de-id 失败时进入 quarantine，不得“尽力而为”放行。
+
+### 10.1 Self-Tenant Companion Bridge
+
+Self-Tenant Companion Bridge 是 v0.1 的 public-safe 配套桥，不是生产诊断运行面。
+它把已经安全投影的 `TenantHealthDashboardRow` 映射成 `JudgementPacket` 形状的
+deterministic reference output，用于 synthetic fixture 和 public eval。
+
+Gap review 结论：
+
+- 不新增第三套脱敏机制：`lib/self-tenant-health/privacy.ts` 负责租户内健康数据安全投影；
+  `EvalCasePromotion` 仍是 correction / private source 到 public-eligible eval case 的唯一晋升门。
+- `EvalCasePromotion` 只做 additive 使用；不改变 `publicEligible`、`walledFromPerformanceEval`、
+  scanner result、human signoff 或 quarantine 语义。
+- public Core 的 producer 是确定性参考 producer，不是 LLM expert。真实 LLM-backed
+  Organization Health Expert、真实 self-tenant monthly run、consent、usage / health metadata
+  属于 `helm-control-plane` 后续实现。
+- synthetic monthly diagnosis fixture 必须使用 `TenantHealthDashboardRow` /
+  `TenantHealthDashboardData` 的现有 rollup 形状，不另造 monthly diagnosis schema。
+- 本切片只允许 additive contract changes；若需要改 `JudgementPacket`、`FeedbackRecord`、
+  `EvalCasePromotion` 既有语义，必须停止并升级到 v0.2 设计评审。
 
 ## 11. 契约 / Contracts
 
@@ -400,6 +432,7 @@ The implementation should add validators before any runtime surface:
 | `EvaluationRun` validator | Attempt budget exceeded, consumed B reused by a later candidate, run before registration timestamp, hard gate failure masked by weighted score, expert-vs-rules tie reported as success |
 | `EvalCasePromotion` validator | Self-tenant public eligibility without scanner + human signoff, HR / performance sensitivity |
 | `ExpertRevision` validator | Killed revision without valid fallback, revision derived from unknown feedback |
+| `OperatingSignalSourceEnvelope` validator | Customer fleet health entering improvement loops, self-dogfood with person-level attribution, OSS governance entering tenant ingestion, raw/private fields |
 
 ## 16. 实现计划 / Implementation Plan
 
@@ -475,5 +508,6 @@ generalization, production readiness, statistical significance, or a completed m
 
 | Date | Change |
 |---|---|
+| 2026-06-04 | Clarified self-tenant source classes and added source governance as a pre-improvement-loop hard gate |
 | 2026-06-04 | Drafted v0.1 expert capability feedback loop requirements and held-out eval protocol |
 | 2026-06-04 | Finalized v0.1 verdict split, independent evidence scoring, multi-case replay hashes, and consumed held-out set rules |

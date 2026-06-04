@@ -162,6 +162,7 @@ export async function generateWeeklyReport(input: {
     getEvolutionInsights({
       workspaceId: input.workspaceId,
       limit: 3,
+      locale: input.english ? "en-US" : "zh-CN",
     }),
     db.blocker.findMany({
       where: {

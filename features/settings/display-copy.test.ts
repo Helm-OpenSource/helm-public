@@ -49,6 +49,23 @@ describe("settings display copy", () => {
     expect(rendered).not.toMatch(/recommendation|explanation|prompt/i);
   });
 
+  it("maps prompt registry entries into readable English labels", () => {
+    const rendered = [
+      formatSettingsPromptName("recommendation-explanation", true),
+      formatSettingsPromptVersion("recommendation-explanation-v1", true),
+      formatSettingsPromptTaskType("RECOMMENDATION_EXPLANATION", true),
+      formatSettingsPromptDescription(
+        "增强 recommendation explanation，但不改变排序和策略边界。",
+        true,
+      ),
+    ].join(" / ");
+
+    expect(rendered).toContain("Recommendation explanation");
+    expect(rendered).toContain("Version 1");
+    expect(rendered).toContain("review rules");
+    expect(rendered).not.toMatch(/[\u4E00-\u9FFF]|recommendation-explanation|RECOMMENDATION_EXPLANATION/);
+  });
+
   it("keeps skill suggestions out of raw system wording on Chinese settings pages", () => {
     const rendered = [
       formatSettingsCapabilityCategory("execution", false),

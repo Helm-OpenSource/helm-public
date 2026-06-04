@@ -839,8 +839,8 @@ export async function dismissReflectionCarryForwardAction(input: {
         error instanceof Error
           ? error.message
           : english
-            ? "Failed to dismiss the reflection 延续 candidate"
-            : "忽略反思 延续 候选失败",
+            ? "Failed to dismiss the reflection carry-forward candidate"
+            : "忽略反思延续候选失败",
     };
   }
 }
@@ -905,8 +905,8 @@ export async function acceptReflectionCarryForwardAction(input: {
         error instanceof Error
           ? error.message
           : english
-            ? "Failed to accept the reflection 延续 candidate"
-            : "接受反思 延续 候选失败",
+            ? "Failed to accept the reflection carry-forward candidate"
+            : "接受反思延续候选失败",
     };
   }
 }
@@ -1828,7 +1828,8 @@ export async function acknowledgeMeetingRuntimeTakeoverAction(input: {
     return {
       ok: false,
       error:
-        payload.error.issues[0]?.message ?? (english ? "Invalid takeover 已确认 input" : "接管确认 参数错误"),
+        payload.error.issues[0]?.message ??
+        (english ? "Invalid takeover confirmation input" : "接管确认参数错误"),
     };
   }
 
@@ -3199,8 +3200,8 @@ export async function acknowledgeMeetingHumanActionExecutionAction(input: {
         error instanceof Error
           ? error.message
           : english
-            ? "Execution 已确认 failed"
-            : "execution 已确认 失败",
+            ? "Execution confirmation failed"
+            : "执行确认失败",
     };
   }
 }
@@ -3562,8 +3563,8 @@ export async function acknowledgeMeetingOfficialWriteIntentAction(input: {
         error instanceof Error
           ? error.message
           : english
-            ? "Official write 已确认 failed"
-            : "正式write 已确认 失败",
+            ? "Official write confirmation failed"
+            : "正式写入确认失败",
     };
   }
 }

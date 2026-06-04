@@ -32,6 +32,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ recommend
       workspaceId: workspace.id,
       recommendationId,
       userId: user.id,
+      english,
     });
 
     await logEvent({

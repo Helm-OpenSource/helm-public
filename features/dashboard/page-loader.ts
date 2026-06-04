@@ -54,6 +54,7 @@ export async function loadDashboardPageData() {
       actorUserId: user.id,
       actorType: "USER",
       sourcePage: "/dashboard",
+      english,
       // Keep dashboard first paint stable even when model endpoints are unavailable or slow.
       llmEnhancement: false,
     }).catch((error) => {
@@ -66,6 +67,7 @@ export async function loadDashboardPageData() {
       workspaceId: workspace.id,
       userId: user.id,
       limit: 3,
+      locale,
     }),
     getInternalOperatingWorkspaceData(workspace.id, english, {
       workspace,
