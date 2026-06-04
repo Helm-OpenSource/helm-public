@@ -368,15 +368,15 @@ Helm Certified wording rules, or brand-authorization boundaries, and does not
 claim full-repo bilingualization completion.
 
 最新双语化收口：开源与商业边界文档的中文公开 / 商业边界术语混写已继续清理；本批只改复刻、
-复核优先、公开安全、SDK 接缝、Core 导入、维护者复核、认证、市场、结算通道、客户结果保证
-和商标许可文案及源码守卫，不改变 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、
+复核优先、公开安全、SDK 接缝、Core 导入、维护者复核、认证字样、市场、结算通道、
+服务等级协议、客户结果保证和商标许可文案及源码守卫，不改变 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、
 依赖方向或认证品牌边界，也不声明全仓双语化完成。
 
 Latest bilingualization cleanup: mixed Chinese public/commercial boundary
 terminology in the open-source and commercial boundary doc has been further
 localized. This batch changes fork, review-first, public-safe, SDK seam, Core
-import, maintainer review, certification, marketplace, payout rail, customer
-outcome guarantee, and trademark license wording plus source guards only; it
+import, maintainer review, certification wording, marketplace, payout rail,
+service-level agreement, customer outcome guarantee, and trademark license wording plus source guards only; it
 does not change Apache-2.0, commercial Pack / customer Overlay / control-plane
 routing, dependency direction, or certification-brand boundaries, and does not
 claim full-repo bilingualization completion.

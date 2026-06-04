@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口开源与商业边界文档的中文认证 / 服务等级协议术语混写；本批只改认证字样和服务等级协议文案及源码守卫，不改 Apache-2.0、商业 Pack / 客户 Overlay / 控制面路由、依赖方向、公开 Helm Certified 品牌短语或认证品牌边界。
 - 继续收口认证生态清单归档触发条件的中文术语混写；本批只改认证连接器、工作流包、伙伴和部署复核文案及源码守卫，不改认证流程、输出枚举、公开 Helm Certified 品牌字样规则或品牌授权边界。
 - 继续收口发布现实对齐文档的中文发布边界术语混写；本批只改集成议题、议题驱动候选池、审计轨迹公开姿态、复核文档 / 节奏、可用性服务等级协议、第三方插件运行时、第三方市场、不受信代码加载和能力清单文案及源码守卫，不改 `release:check`、环境变量、tag / channel 字段、枚举值或英文参考摘要。
 - 继续收口中国访问性与证据路由包的中文证据入口术语混写；本批只改黄金路径、GitHub 议题 / 讨论、议题模板、讨论编号和黄金路径报告文案及源码守卫，不改英文参考表格、GitHub / WeChat 路由边界、负责人批准脱敏回执规则或不自动外联边界。

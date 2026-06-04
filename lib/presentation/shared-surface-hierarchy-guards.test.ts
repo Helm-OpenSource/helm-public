@@ -2699,13 +2699,15 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("稳定 SDK 接缝");
     expect(chineseBody).toContain("Core 不能导入");
     expect(chineseBody).toContain("维护者复核");
+    expect(chineseBody).toContain("官方 / 认证字样");
     expect(chineseBody).toContain("认证不是市场");
     expect(chineseBody).toContain("结算通道");
+    expect(chineseBody).toContain("服务等级协议");
     expect(chineseBody).toContain("客户结果保证");
     expect(chineseBody).toContain("商标许可");
 
     expect(chineseBody).not.toMatch(
-      /fork|review-first|public-safe|SDK seam|import\s+商业|maintainer review|Certification 不是 marketplace|payout rail|outcome guarantee|trademark license/,
+      /fork|review-first|public-safe|SDK seam|import\s+商业|maintainer review|Certified 字样|Certification 不是 marketplace|SLA|payout rail|outcome guarantee|trademark license/,
     );
   });
 

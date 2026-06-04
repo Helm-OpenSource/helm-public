@@ -28,7 +28,7 @@ Overlay -> Pack SDK -> Core SDK
 Core 可以定义稳定 SDK 接缝；Pack 和 Overlay 可以依赖 Core；Core 不能导入
 商业 Pack、客户 Overlay、客户路径或商业私有逻辑。
 
-官方 / Certified 字样必须经过维护者复核。认证不是市场、结算通道、SLA、
+官方 / 认证字样必须经过维护者复核。认证不是市场、结算通道、服务等级协议、
 客户结果保证或商标许可。
 
 ## English Reference
