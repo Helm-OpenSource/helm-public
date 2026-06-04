@@ -2092,9 +2092,12 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("OAuth 范围最小化");
     expect(chineseBody).toContain("审计追踪");
     expect(chineseBody).toContain("基础连接器");
+    expect(chineseBody).toContain("`integration: <system>` 议题");
+    expect(chineseBody).toContain("发起 `integration:` 议题");
+    expect(chineseBody).toContain("先开议题对齐方向");
 
     expect(chineseBody).not.toMatch(
-      /connector \/ adapter|CRM \/ IM \/ Mail|auto（自动）|默认全部 review|read-only 才能走 auto|connector README|auto \/ review \/ never|dry-run 模式|Connector 名称|OAuth provider|inbound only|on-demand|落地 surface|graceful degrade|trace 写入|read-only directory|sync 结果|AES-GCM with|哪些动作 auto|默认 auto|默认 review|默认 never|不能 auto|OAuth scope|metadata 不要 PII|plain text|client-side|callback handler|audit log|cache|hard-code customer-specific|config file|happy path|failure mode|fallback 模式|Test 覆盖|generic 表达|配置 inject|bilingual|connector 必须|first-party|原数据 stays|active \+ 7 天 grace|secret 历史|新 connector|dry-run 测试|OAuth-based connector|审计 trace|基础 connector|Certified Integration/,
+      /connector \/ adapter|CRM \/ IM \/ Mail|auto（自动）|默认全部 review|read-only 才能走 auto|connector README|auto \/ review \/ never|dry-run 模式|Connector 名称|OAuth provider|inbound only|on-demand|落地 surface|graceful degrade|trace 写入|read-only directory|sync 结果|AES-GCM with|哪些动作 auto|默认 auto|默认 review|默认 never|不能 auto|OAuth scope|metadata 不要 PII|plain text|client-side|callback handler|audit log|cache|hard-code customer-specific|config file|happy path|failure mode|fallback 模式|Test 覆盖|generic 表达|配置 inject|bilingual|connector 必须|first-party|原数据 stays|active \+ 7 天 grace|secret 历史|新 connector|dry-run 测试|OAuth-based connector|审计 trace|基础 connector|Certified Integration|`integration: <system>` issue|`integration:` issue|先开 issue 对齐方向/,
     );
   });
 

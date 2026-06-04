@@ -33,7 +33,7 @@ questions should open an `integration: <system>` issue first.
 
 ## 0. 在写代码前的 90 秒
 
-问自己 3 个问题，答不上来就先开 `integration: <system>` issue：
+问自己 3 个问题，答不上来就先开 `integration: <system>` 议题：
 
 1. **客户用例**：你客户在这个系统里**真实做什么动作**？哪些动作是经营信号（销售推进 / 客户复核 / 会议承诺）？
 2. **数据流向**：数据从 `<external system>` 进入 Helm 后，**落到哪个 object**（Deal / Account / Meeting / SignalEvent / MemoryItem）？反向是否需要回写？
@@ -242,7 +242,7 @@ npm run e2e -- --grep "<name>"        # 如有 e2e 用例
 
 ## 9. 5 条对集成方的承诺（来自 [README §5 条承诺](../../README.md#我们对集成方的-5-条承诺)）
 
-发起 `integration:` issue 后，作为 Helm 集成方你获得：
+发起 `integration:` 议题后，作为 Helm 集成方你获得：
 
 1. **7 个工作日内回应**：但不承诺一定排期或实现
 2. **3 类清晰边界**：每个集成上线时公开"自动做什么 / 复核后做什么 / 永远只人工"
@@ -271,7 +271,7 @@ npm run e2e -- --grep "<name>"        # 如有 e2e 用例
 1. **看 README §主流系统接入** ([README.md](../../README.md#主流系统接入)) 已支持连接器的实现模式
 2. **看 [`lib/connectors/dingtalk/`](../../lib/connectors/) 或类似 Stable 连接器作为参考**
 3. **GitHub Discussions**：把 6 个交付物的草稿贴出来，让社区评审
-4. **`integration:` issue**：如果是新系统类型（不只是新连接器），先开 issue 对齐方向
+4. **`integration:` 议题**：如果是新系统类型（不只是新连接器），先开议题对齐方向
 
 ---
 
