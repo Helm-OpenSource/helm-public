@@ -1,7 +1,6 @@
-// Deterministic detection engine (spec §3, §8). No LLM, no IO, no network. Given source
-// facts + an ExpectationRule + coverage assertions + an owner policy, it emits review-first
-// MissingRecordDecisionRequests. A "missing" verdict is only possible when coverage is proven
-// complete; otherwise the verdict is "unknown".
+// Deterministic detection engine (spec §3, §8). No LLM, no IO, no network. Emits review-first
+// MissingRecordDecisionRequests. A "missing" verdict is only possible when the required
+// (system, scope) coverage is proven complete; otherwise the verdict is "unknown".
 
 import { evaluateCoverage } from "./coverage";
 import { resolveEffectiveOwner } from "./owner";
@@ -28,7 +27,11 @@ export type EngineInput = {
 };
 
 function crossSystemDependency(rule: ExpectationRule): number {
-  return new Set([rule.trigger.system, rule.expectation.system, ...rule.requiredCoverage]).size;
+  return new Set([
+    rule.trigger.system,
+    rule.expectation.system,
+    ...rule.requiredCoverage.map((c) => c.system),
+  ]).size;
 }
 
 function addDays(iso: string, days: number): number {
@@ -40,7 +43,12 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
   const requests: MissingRecordDecisionRequest[] = [];
   const dep = crossSystemDependency(rule);
 
-  for (const trigger of triggerFacts) {
+  // Only trigger facts from the rule's own (system, entity) stream are in scope.
+  const triggers = triggerFacts.filter(
+    (t) => t.system === rule.trigger.system && t.entity === rule.trigger.entity,
+  );
+
+  for (const trigger of triggers) {
     const coverage = evaluateCoverage({
       rule,
       assertions: coverageAssertions,
@@ -48,7 +56,10 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
       windowEnd: now,
     });
     const coverageRefs = rule.requiredCoverage.map(
-      (s) => `coverage:${s}:${coverage.satisfiedSystems.includes(s) ? "complete" : "unproven"}`,
+      (req) =>
+        `coverage:${req.system}:${req.scope}:${
+          coverage.satisfied.includes(`${req.system}:${req.scope}`) ? "complete" : "unproven"
+        }`,
     );
 
     // Coverage not provable for this window => honest "unknown", never "missing".
@@ -67,7 +78,7 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
         },
         evidenceRefs: [
           `evidence:trigger:${trigger.system}:${trigger.factId}`,
-          `evidence:coverage-unproven:${coverage.unprovenSystems.join(",")}`,
+          `evidence:coverage-unproven:${coverage.unproven.join(",")}`,
         ],
         crossSystemDependency: dep,
         commitmentClass: "advice",
@@ -78,9 +89,12 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
       continue;
     }
 
-    // Coverage complete: does the expected record exist?
+    // Coverage complete: does the expected record exist in the *right* (system, entity) stream?
     const satisfied = expectationFacts.some(
-      (e) => e.system === rule.expectation.system && e.matchValue === trigger.matchValue,
+      (e) =>
+        e.system === rule.expectation.system &&
+        e.entity === rule.expectation.entity &&
+        e.matchValue === trigger.matchValue,
     );
     if (satisfied) continue; // handoff exists -> no finding
 

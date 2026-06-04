@@ -1,17 +1,20 @@
-// Coverage is the integrity core (spec §5): a "missing" verdict is only permitted when
-// every required source system has a CoverageAssertion proving completeness for the window.
-// Otherwise the honest verdict is "unknown" (closed-world assumption does not hold).
+// Coverage is the integrity core (spec §5). A "missing" verdict is only permitted when every
+// required (system, scope) closed world is proven complete for the window. Proving a different
+// scope of the same system (e.g. CRM contacts) does NOT prove the required scope (CRM deals).
 
 import type { CoverageAssertion, ExpectationRule } from "./contracts";
 
 export type CoverageGateResult = {
   complete: boolean;
-  satisfiedSystems: string[];
-  unprovenSystems: string[]; // missing assertion, or completeness !== "complete", or window not covered
+  satisfied: string[]; // "system:scope"
+  unproven: string[]; // "system:scope" lacking a complete, window-covering assertion
 };
 
 function coversWindow(a: CoverageAssertion, windowStart: string, windowEnd: string): boolean {
-  return Date.parse(a.windowStart) <= Date.parse(windowStart) && Date.parse(a.windowEnd) >= Date.parse(windowEnd);
+  return (
+    Date.parse(a.windowStart) <= Date.parse(windowStart) &&
+    Date.parse(a.windowEnd) >= Date.parse(windowEnd)
+  );
 }
 
 export function evaluateCoverage(input: {
@@ -21,23 +24,21 @@ export function evaluateCoverage(input: {
   windowEnd: string;
 }): CoverageGateResult {
   const { rule, assertions, windowStart, windowEnd } = input;
-  const satisfiedSystems: string[] = [];
-  const unprovenSystems: string[] = [];
+  const satisfied: string[] = [];
+  const unproven: string[] = [];
 
-  for (const system of rule.requiredCoverage) {
+  for (const req of rule.requiredCoverage) {
+    const key = `${req.system}:${req.scope}`;
     const proof = assertions.find(
       (a) =>
-        a.system === system &&
+        a.system === req.system &&
+        a.scope === req.scope &&
         a.completeness === "complete" &&
         coversWindow(a, windowStart, windowEnd),
     );
-    if (proof) satisfiedSystems.push(system);
-    else unprovenSystems.push(system);
+    if (proof) satisfied.push(key);
+    else unproven.push(key);
   }
 
-  return {
-    complete: unprovenSystems.length === 0,
-    satisfiedSystems,
-    unprovenSystems,
-  };
+  return { complete: unproven.length === 0, satisfied, unproven };
 }

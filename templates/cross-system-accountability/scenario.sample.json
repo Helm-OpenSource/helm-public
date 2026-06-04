@@ -7,7 +7,7 @@
     "description": "A won CRM deal should have a delivery/handoff project in the PM system within N days.",
     "trigger": { "system": "crm", "entity": "deal", "condition": "stage=won" },
     "expectation": { "system": "pm", "entity": "delivery_project", "withinDays": 7, "matchKey": "dealId" },
-    "requiredCoverage": ["crm", "pm"],
+    "requiredCoverage": [{ "system": "crm", "scope": "deal" }, { "system": "pm", "scope": "delivery_project" }],
     "ownerPolicyRef": "policy:delivery-owner",
     "commitmentClass": "advice",
     "effectMode": "read_only",
@@ -18,8 +18,8 @@
     {
       "name": "covered",
       "coverageAssertions": [
-        { "assertionId": "cov:crm", "system": "crm", "scope": "deals", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "paginated_complete", "completeness": "complete", "evidence": ["expected=ingested=412", "no_pagination_gap"], "asOf": "2026-06-04T00:00:00Z" },
-        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_projects", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "complete", "evidence": ["backfill_checkpoint=2026-04-01", "webhook_live", "no_gap"], "asOf": "2026-06-04T00:00:00Z" }
+        { "assertionId": "cov:crm", "system": "crm", "scope": "deal", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "paginated_complete", "completeness": "complete", "evidence": ["expected=ingested=412", "no_pagination_gap"], "asOf": "2026-06-04T00:00:00Z" },
+        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_project", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "complete", "evidence": ["backfill_checkpoint=2026-04-01", "webhook_live", "no_gap"], "asOf": "2026-06-04T00:00:00Z" }
       ],
       "triggerFacts": [
         { "system": "crm", "entity": "deal", "factId": "deal-A", "matchValue": "deal-A", "occurredAt": "2026-05-01T00:00:00Z" },
@@ -40,8 +40,8 @@
     {
       "name": "pm_unproven",
       "coverageAssertions": [
-        { "assertionId": "cov:crm", "system": "crm", "scope": "deals", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "paginated_complete", "completeness": "complete", "evidence": ["expected=ingested=412"], "asOf": "2026-06-04T00:00:00Z" },
-        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_projects", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "partial", "evidence": ["backfill_incomplete", "pagination_gap_detected"], "asOf": "2026-06-04T00:00:00Z" }
+        { "assertionId": "cov:crm", "system": "crm", "scope": "deal", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "paginated_complete", "completeness": "complete", "evidence": ["expected=ingested=412"], "asOf": "2026-06-04T00:00:00Z" },
+        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_project", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "partial", "evidence": ["backfill_incomplete", "pagination_gap_detected"], "asOf": "2026-06-04T00:00:00Z" }
       ],
       "triggerFacts": [
         { "system": "crm", "entity": "deal", "factId": "deal-D", "matchValue": "deal-D", "occurredAt": "2026-05-15T00:00:00Z" }

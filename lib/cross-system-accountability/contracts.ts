@@ -33,13 +33,17 @@ export type CorrectionReasonCode = (typeof CORRECTION_REASON_CODES)[number];
 export type Verdict = "missing" | "unknown";
 export type Completeness = "complete" | "partial" | "unknown";
 
+// Coverage must be proven per (system, scope) — proving a CRM *contacts* export complete
+// does not prove the CRM *deals* closed world. Systems alone are insufficient.
+export type CoverageRequirement = { system: string; scope: string };
+
 export type ExpectationRule = {
   ruleId: string;
   version: string;
   description: string;
   trigger: { system: string; entity: string; condition: string };
   expectation: { system: string; entity: string; withinDays: number; matchKey: string };
-  requiredCoverage: string[]; // systems that must be coverage-complete, else verdict = unknown
+  requiredCoverage: CoverageRequirement[]; // (system, scope) pairs that must be complete, else unknown
   ownerPolicyRef: string;
   commitmentClass: "advice";
   effectMode: "read_only";

@@ -13,6 +13,7 @@ import { appendLedgerEntry, verifyLedgerChain } from "./ledger";
 import { crossSystemDependencyShare, falsePositiveRate } from "./metrics";
 import { resolveEffectiveOwner } from "./owner";
 import {
+  validateCoverageAssertion,
   validateDecisionRequest,
   validateEffectiveOwner,
   validateExpectationRule,
@@ -197,5 +198,67 @@ describe("metrics", () => {
     expect(share.confirmed).toBe(2); // accepted && !fp
     expect(share.crossSystem).toBe(1);
     expect(share.share).toBeCloseTo(0.5);
+  });
+});
+
+// --- Regression coverage for the reviewer's P1 findings ---
+
+const dealB: SourceFact = {
+  system: "crm",
+  entity: "deal",
+  factId: "deal-B",
+  matchValue: "deal-B",
+  occurredAt: "2026-05-10T00:00:00Z",
+  ownerCandidates: [{ id: "user:alex-alias", kind: "user", active: true, roleEvidence: ["crm:deal-owner"] }],
+};
+const completeCrm: CoverageAssertion = { assertionId: "c", system: "crm", scope: "deal", windowStart: "2026-04-01T00:00:00Z", windowEnd: fixture.now, method: "paginated_complete", completeness: "complete", evidence: ["ok"], asOf: fixture.now };
+const completePm: CoverageAssertion = { assertionId: "p", system: "pm", scope: "delivery_project", windowStart: "2026-04-01T00:00:00Z", windowEnd: fixture.now, method: "webhook_plus_backfill", completeness: "complete", evidence: ["ok"], asOf: fixture.now };
+function run(triggerFacts: SourceFact[], expectationFacts: SourceFact[], coverageAssertions: CoverageAssertion[]) {
+  return detectGaps({ rule: fixture.rule, triggerFacts, expectationFacts, coverageAssertions, ownerPolicy: fixture.ownerPolicy, now: fixture.now });
+}
+
+describe("P1-1 coverage must be scope-complete, not just system-complete", () => {
+  it("does not emit 'missing' when the required scope is unproven (wrong-scope CRM export)", () => {
+    const wrongScopeCrm: CoverageAssertion = { ...completeCrm, scope: "contact" };
+    const reqs = run([dealB], [], [wrongScopeCrm, completePm]);
+    expect(reqs[0].verdict).toBe("unknown");
+    expect(reqs.every((x) => x.verdict !== "missing")).toBe(true);
+  });
+});
+
+describe("P1-2 engine respects rule entity/system streams", () => {
+  it("a wrong-entity expectation fact (PM task) does not mask a missing delivery_project", () => {
+    const pmTask: SourceFact = { system: "pm", entity: "task", factId: "t1", matchValue: "deal-B", occurredAt: "2026-05-11T00:00:00Z" };
+    const reqs = run([dealB], [pmTask], [completeCrm, completePm]);
+    expect(reqs[0].verdict).toBe("missing");
+  });
+  it("ignores trigger facts outside the rule's trigger stream", () => {
+    const offStream: SourceFact = { system: "email", entity: "thread", factId: "th1", matchValue: "x", occurredAt: "2026-05-01T00:00:00Z" };
+    const reqs = run([offStream], [], [completeCrm, completePm]);
+    expect(reqs).toHaveLength(0);
+  });
+});
+
+describe("P1-3 rule validator is fail-closed", () => {
+  it("rejects an empty forbiddenActions list (must declare the full set)", () => {
+    const e = validateExpectationRule({ ...fixture.rule, forbiddenActions: [] }).errors;
+    expect(e.some((x) => x.startsWith("forbidden_action_not_declared:"))).toBe(true);
+  });
+  it("rejects non-positive withinDays", () => {
+    expect(
+      validateExpectationRule({ ...fixture.rule, expectation: { ...fixture.rule.expectation, withinDays: 0 } }).errors,
+    ).toContain("within_days_not_positive");
+  });
+  it("rejects required coverage that omits the expectation scope", () => {
+    expect(
+      validateExpectationRule({ ...fixture.rule, requiredCoverage: [{ system: "crm", scope: "deal" }] }).errors,
+    ).toContain("required_coverage_missing_expectation_scope");
+  });
+  it("accepts the well-formed sample rule", () => {
+    expect(validateExpectationRule(fixture.rule).ok).toBe(true);
+  });
+  it("validateCoverageAssertion rejects bad windows and complete-without-evidence", () => {
+    expect(validateCoverageAssertion({ ...completeCrm, windowStart: fixture.now, windowEnd: "2026-04-01T00:00:00Z" }).errors).toContain("window_start_after_end");
+    expect(validateCoverageAssertion({ ...completeCrm, evidence: [] }).errors).toContain("complete_without_evidence");
   });
 });
