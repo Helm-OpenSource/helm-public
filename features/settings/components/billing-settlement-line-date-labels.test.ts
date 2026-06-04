@@ -11,13 +11,13 @@ describe("formatSettlementLineDateLabel", () => {
   };
 
   it("formats English settlement dates without Chinese date labels", () => {
-    expect(formatSettlementLineDateLabel("2026-04-15T10:30:00+08:00", true, chineseFormatter)).toBe(
+    expect(formatSettlementLineDateLabel(new Date(2026, 3, 15, 10, 30), true, chineseFormatter)).toBe(
       "Apr 15 10:30",
     );
   });
 
   it("delegates Chinese settlement dates to the existing formatter", () => {
-    expect(formatSettlementLineDateLabel("2026-04-15T10:30:00+08:00", false, chineseFormatter)).toBe(
+    expect(formatSettlementLineDateLabel(new Date(2026, 3, 15, 10, 30), false, chineseFormatter)).toBe(
       "04月15日 10:30",
     );
   });
