@@ -19,8 +19,9 @@ import {
   getDeploymentProfileDefaultLocaleCandidate,
   getRequestUiLocaleCandidate,
 } from "@/lib/i18n/request-locale.server";
-import { formatDateLabel, trimText } from "@/lib/utils";
+import { trimText } from "@/lib/utils";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
+import { formatCompanyListDateLabel } from "@/features/companies/company-list-date-labels";
 
 export default async function CompaniesPage() {
   const workspace = await getCurrentWorkspace();
@@ -190,9 +191,10 @@ export default async function CompaniesPage() {
                 </div>
                 <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
                   {company.lastInteractionAt
-                    ? english
-                      ? `Last interaction ${formatDateLabel(company.lastInteractionAt)}`
-                      : `最近互动 ${formatDateLabel(company.lastInteractionAt)}`
+                    ? `${english ? "Last interaction" : "最近互动"} ${formatCompanyListDateLabel(
+                        company.lastInteractionAt,
+                        english,
+                      )}`
                     : english
                       ? "No recent interaction recorded"
                       : "暂无近期互动记录"}
