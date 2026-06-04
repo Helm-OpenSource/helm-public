@@ -53,3 +53,21 @@ attempt budget;consumed-B 不得跨候选复用;`evidenceCompleteness` 独立计
 advice-only `JudgementPacket`,并复用 `FeedbackRecord` 与 `EvalCasePromotion`。真实
 LLM-backed self-tenant monthly run、consent、usage / health metadata 不属于本 public pack,
 后续应在 `helm-control-plane` 实现。
+
+## Source governance before promotion / 晋升前来源治理
+
+Do not feed every operating signal into this loop. Source governance is checked before
+`EvalCasePromotion`:
+
+- `fleet_customer_health`: operator-only customer fleet triage; never training, eval,
+  model improvement, or memory promotion.
+- `self_dogfood_health`: only after person-level attribution is technically removed and
+  `EvalCasePromotion` passes.
+- `synthetic_public`: public fixture / eval only.
+- `deidentified_promoted_case`: must carry a passing promotion record.
+- `oss_governance`: GitHub / docs governance only; not tenant ingestion.
+
+Reference validator:
+`lib/operating-signal-governance/source-governance.ts`.
+Public-safe sample:
+`templates/operating-signal-governance/source-governance.sample.json`.

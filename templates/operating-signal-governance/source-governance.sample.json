@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "helm.operating-signal-source-governance-pack.v1",
+  "description": "Public-safe operating signal source governance sample. Customer fleet health is operator-only and never eligible for expert improvement. Self-dogfood must be de-identified and pass EvalCasePromotion before use.",
+  "sourceEnvelopes": [
+    {
+      "schemaVersion": "helm.operating-signal-source-governance.v1",
+      "signalId": "sig.fleet.customer-health.watch",
+      "sourceClass": "fleet_customer_health",
+      "allowedUses": ["operator_triage", "advice_only_risk_review", "support_readiness"],
+      "forbiddenUses": [
+        "model_improvement",
+        "training",
+        "memory_promotion",
+        "automatic_customer_action",
+        "external_send",
+        "writeback",
+        "performance_evaluation"
+      ],
+      "improvementLoopEligible": false,
+      "promotionState": "blocked",
+      "aliasMode": "reversible_operator_alias",
+      "aliasSaltRef": "salt:fleet-demo:2026-06",
+      "aliasSaltRotatesAt": "2026-07-01T00:00:00Z",
+      "aliasAccessRoles": ["operator_admin"],
+      "aliasDecodeAuditRequired": true,
+      "customerConsentScopeRef": "consent-scope:fleet-demo:operator-health:2026-06",
+      "personAttributionMode": "none",
+      "auditRefs": ["audit:fleet-demo:read-only"],
+      "boundaryNote": "Customer fleet health is only for internal operator triage and advice preparation. It is not anonymous, not training data, and never enters expert eval or improvement loops."
+    },
+    {
+      "schemaVersion": "helm.operating-signal-source-governance.v1",
+      "signalId": "sig.self-dogfood.person-level.quarantine",
+      "sourceClass": "self_dogfood_health",
+      "allowedUses": ["dogfood_improvement"],
+      "forbiddenUses": [
+        "memory_promotion",
+        "automatic_customer_action",
+        "external_send",
+        "writeback",
+        "performance_evaluation"
+      ],
+      "improvementLoopEligible": false,
+      "promotionState": "quarantine",
+      "aliasMode": "irreversible_deidentified",
+      "personAttributionMode": "person_level",
+      "auditRefs": ["audit:self-dogfood:quarantine"],
+      "boundaryNote": "Self-dogfood signal still carries person-level attribution. It is quarantined until attribution is technically removed, not merely declared walled off."
+    },
+    {
+      "schemaVersion": "helm.operating-signal-source-governance.v1",
+      "signalId": "sig.self-dogfood.deidentified",
+      "sourceClass": "self_dogfood_health",
+      "allowedUses": ["dogfood_improvement", "public_eval", "heldout_eval"],
+      "forbiddenUses": [
+        "memory_promotion",
+        "automatic_customer_action",
+        "external_send",
+        "writeback",
+        "performance_evaluation"
+      ],
+      "improvementLoopEligible": true,
+      "promotionState": "public_eligible",
+      "aliasMode": "irreversible_deidentified",
+      "personAttributionMode": "deidentified_cohort",
+      "auditRefs": ["audit:self-dogfood:deid-review"],
+      "boundaryNote": "Self-dogfood signal has been de-identified and still requires EvalCasePromotion scanner plus human signoff before it can enter public eval."
+    },
+    {
+      "schemaVersion": "helm.operating-signal-source-governance.v1",
+      "signalId": "sig.synthetic.public",
+      "sourceClass": "synthetic_public",
+      "allowedUses": ["public_eval", "heldout_eval", "fixture_validation"],
+      "forbiddenUses": [
+        "memory_promotion",
+        "automatic_customer_action",
+        "external_send",
+        "writeback",
+        "performance_evaluation"
+      ],
+      "improvementLoopEligible": true,
+      "promotionState": "public_eligible",
+      "aliasMode": "synthetic_alias",
+      "personAttributionMode": "none",
+      "auditRefs": ["audit:synthetic-fixture"],
+      "boundaryNote": "Synthetic public fixture can be used for public eval. It is not evidence from a real customer, tenant, contributor, or employee."
+    },
+    {
+      "schemaVersion": "helm.operating-signal-source-governance.v1",
+      "signalId": "sig.oss.governance",
+      "sourceClass": "oss_governance",
+      "allowedUses": ["oss_governance_review"],
+      "forbiddenUses": [
+        "tenant_ingestion",
+        "model_improvement",
+        "training",
+        "memory_promotion",
+        "automatic_customer_action",
+        "external_send",
+        "writeback",
+        "performance_evaluation"
+      ],
+      "improvementLoopEligible": false,
+      "promotionState": "non_goal",
+      "aliasMode": "public_handle",
+      "personAttributionMode": "none",
+      "auditRefs": ["audit:oss-governance"],
+      "boundaryNote": "Open-source governance remains in GitHub and documentation workflows. It is not imported into Helm tenant data, customer diagnostics, or expert improvement loops."
+    }
+  ],
+  "promotions": {
+    "sig.self-dogfood.deidentified": {
+      "promotionId": "promo.self-dogfood.deidentified",
+      "sourceCaseId": "sig.self-dogfood.deidentified",
+      "sourceSensitivityClass": "operational",
+      "scannerResult": { "hits": 0 },
+      "humanSignOffBy": "reviewer-alias",
+      "humanSignOffAt": "2026-06-04T08:00:00Z",
+      "publicEligible": true,
+      "walledFromPerformanceEval": true,
+      "quarantineReason": null
+    }
+  }
+}
