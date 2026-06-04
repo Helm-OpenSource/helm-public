@@ -10,7 +10,10 @@ describe("formatAnalyticsDateLabel", () => {
   });
 
   it("delegates Chinese analytics dates to the existing formatter", () => {
-    expect(formatAnalyticsDateLabel(sampleDate, false, formatDateLabel)).toBe("06月04日 15:22");
+    const label = formatAnalyticsDateLabel(sampleDate, false, formatDateLabel);
+
+    expect(label).toBe(formatDateLabel(sampleDate));
+    expect(label).toMatch(/[\u3400-\u9fff]/u);
   });
 
   it("keeps empty analytics dates localized", () => {
