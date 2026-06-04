@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { connectMockCrmSourceAction, disconnectCrmSourceAction } from "@/features/imports/crm-actions";
 import { formatCrmImportDisplayText } from "@/features/imports/display-copy";
+import { formatImportDateLabel } from "@/features/imports/import-date-labels";
 import { formatDateLabel, safeParseJson } from "@/lib/utils";
 
 type SourceCard = {
@@ -668,7 +669,14 @@ export function CrmImportClient({
                   }
                 />
                 <Info label={english ? "Account label" : "来源账号"} value={source?.externalAccountLabel ?? (english ? "Not connected yet" : "尚未连接")} />
-                <Info label={english ? "Last sync" : "最近同步"} value={source?.lastSyncedAt ? formatDateLabel(source.lastSyncedAt) : (english ? "No sync yet" : "还没有同步")} />
+                <Info
+                  label={english ? "Last sync" : "最近同步"}
+                  value={
+                    source?.lastSyncedAt
+                      ? formatImportDateLabel(source.lastSyncedAt, english, formatDateLabel)
+                      : (english ? "No sync yet" : "还没有同步")
+                  }
+                />
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -767,7 +775,10 @@ export function CrmImportClient({
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="font-semibold text-[color:var(--foreground)]">{job.source.sourceType === "HUBSPOT" ? "HubSpot" : "Salesforce"} · {job.jobType === "INITIAL_IMPORT" ? (english ? "Initial import" : "首次导入") : (english ? "Incremental sync" : "增量同步")}</p>
-                        <p className="mt-1 text-sm text-[color:var(--muted)]">{job.source.externalAccountLabel ?? (english ? "Unnamed source" : "未命名来源")} · {formatDateLabel(job.startedAt)}</p>
+                        <p className="mt-1 text-sm text-[color:var(--muted)]">
+                          {job.source.externalAccountLabel ?? (english ? "Unnamed source" : "未命名来源")} ·{" "}
+                          {formatImportDateLabel(job.startedAt, english, formatDateLabel)}
+                        </p>
                       </div>
                       <Badge variant={job.status.includes("FAILED") ? "danger" : job.status.includes("WARNING") ? "warning" : "success"}>
                         {formatCrmImportDisplayText(job.status, english)}
