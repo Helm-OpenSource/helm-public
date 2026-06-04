@@ -922,7 +922,7 @@ This PR's source audit result:
    解释器、推荐展示、recommendation action、LLM 建议解释、BI 报表解释 / 复核、
    i18n 事件标签、internal commercialization、GTM customer demand brief、settings
    custom engagement / tenant resource readiness 文案、approval first-loop
-   复核卡片 / 步骤列表、recommendation feedback、home surface arrival banner
+   复核卡片 / 步骤列表、recommendation feedback、guidance preferences、home surface arrival banner
    与 billing program catalog 文案、skill suggestion formal review、human
    action execution boundary、program invite issuance、customer-facing offer /
    external proposal 与 proposal package 边界文案、billing settlement 与
@@ -974,7 +974,7 @@ This PR's source audit result:
    report analysis / review, i18n event labels, internal commercialization, GTM
    customer demand brief, settings custom engagement / tenant resource
    readiness copy, the approval first-loop review card / step list,
-   recommendation feedback, home surface arrival banner, and billing program
+   recommendation feedback, guidance preferences, home surface arrival banner, and billing program
    catalog copy, skill suggestion formal review, human action execution
    boundary, program invite issuance, customer-facing offer / external proposal,
    proposal package boundary copy, and billing settlement plus payout-readiness
@@ -1155,8 +1155,9 @@ true:
 | 2026-06-04 | 继续收口 conversation detail 与 external narrative detail 的中文空格和中英混写；本批只改可见 detail 文案，不改对话、叙事、发送评估、复核或非承诺边界；Further localized conversation detail and external narrative detail copy by removing Chinese spacing leftovers and mixed English fragments; this batch changes visible detail copy only and leaves conversation, narrative, sendability, review, and non-commitment boundaries unchanged |
 | 2026-06-04 | 继续收口 inbox / follow-up / review request detail model 的中文空格和中英混写；本批只改可见 detail 文案，不改收件箱、跟进、复核、发送评估或非承诺边界；Further localized inbox / follow-up / review request detail-model copy by removing Chinese spacing leftovers and mixed English fragments; this batch changes visible detail copy only and leaves inbox, follow-up, review, sendability, and non-commitment boundaries unchanged |
 | 2026-06-04 | 继续收口 billing settlement 与 tenant resource readiness 面板中的可见混写；本批只改结算收口与受控写回试点说明文案，不改结算、写回、确认或外部系统边界；Further localized visible mixed copy in billing settlement and tenant resource readiness panels; this batch changes settlement closeout and guarded-write pilot explanatory copy only and leaves settlement, writeback, acknowledgement, and external-system boundaries unchanged |
+| 2026-06-04 | 继续收口共享 guidance preferences 控件双语化；本批只改系统说明偏好设置的标题、描述、状态、开关、按钮和提示说明文案，不改偏好 localStorage key、默认开关状态或工作区偏好事件；Further localized the shared guidance preferences control; this batch changes the system-guidance preference title, description, status, toggles, buttons, and helper-note copy only and leaves preference localStorage keys, default toggle state, and workspace preference events unchanged |
 | 2026-06-03 | 继续收口 skill suggestion formal review、human action execution boundary 与 program invite issuance 文案中的中文混写；本批只改中文可见文案，不改能力晋升状态机、人工执行契约或邀请发放权限；Further localized Chinese visible mixed-language copy in skill suggestion formal review, human action execution boundary, and program invite issuance copy; this batch changes visible copy only and leaves capability-promotion state machines, human-execution contracts, and invite-issuance permissions unchanged |
-| 2026-06-03 | 继续收口 recommendation feedback、home surface arrival banner 与 billing program catalog 文案中的中文混写；本批只改中文可见文案，不改推荐反馈动作、首页路由或分成规则结构；Further localized Chinese visible mixed-language copy in recommendation feedback, home surface arrival banner, and billing program catalog surfaces; this batch changes visible copy only and leaves recommendation feedback actions, home routing, and revenue-rule structures unchanged |
+| 2026-06-03 | 继续收口 recommendation feedback、guidance preferences、home surface arrival banner 与 billing program catalog 文案中的中文混写；本批只改中文可见文案，不改推荐反馈动作、首页路由或分成规则结构；Further localized Chinese visible mixed-language copy in recommendation feedback, guidance preferences, home surface arrival banner, and billing program catalog surfaces; this batch changes visible copy only and leaves recommendation feedback actions, home routing, and revenue-rule structures unchanged |
 | 2026-06-03 | 继续收口 approval first-loop 复核卡片与步骤列表中的中文混写；本批只改中文 display model 文案，不改审批协议、状态机或执行边界；Further localized Chinese visible mixed-language copy in the approval first-loop review card and step list; this batch changes display-model copy only and leaves approval protocol, state machines, and execution boundaries unchanged |
 | 2026-06-03 | 继续收口 internal commercialization、GTM customer demand brief 与 settings custom engagement / tenant resource readiness 文案中的中文混写；本批只改中文可见文案，不改内部 GTM 状态机、设置动作契约或资源 readiness 结构；Further localized Chinese visible mixed-language copy in internal commercialization, GTM customer demand brief, and settings custom engagement / tenant resource readiness surfaces; this batch changes visible copy only and leaves internal GTM state machines, settings action contracts, and resource readiness structures unchanged |
 | 2026-06-03 | 继续收口 recommendation action、LLM 建议解释、BI 报表解释 / 复核、i18n 事件标签与 demo 入门交付文案中的中文混写；本批只改中文可见文案与 LLM 输入摘要，不改事件 key、状态机或 JSON schema；Further localized Chinese visible mixed-language copy in recommendation actions, LLM recommendation explanation, BI report analysis / review, i18n event labels, and demo onboarding copy; this batch changes visible copy and LLM input summaries only and leaves event keys, state machines, and JSON schema unchanged |
