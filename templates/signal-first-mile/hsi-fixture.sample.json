@@ -1,0 +1,418 @@
+{
+  "version": "0.1.0",
+  "status": "offline_evaluation_fixture",
+  "boundary": "signal_first_mile_conversion_no_runtime_no_writeback",
+  "conversionMetadata": {
+    "generatedAt": "2026-06-03T15:29:53.987Z",
+    "sourceSchemaVersion": "helm.signal-first-mile-ledger.v1",
+    "sourceWorkspaceAlias": "diagnostic-workspace",
+    "acceptedSignalCount": 5,
+    "rejectedSignalCount": 0,
+    "syntheticCoverageScaffold": true,
+    "boundary": "Passing this generated fixture proves offline HSI shape only; it does not prove customer deployment readiness."
+  },
+  "policy": {
+    "supportedSignalFamilies": [
+      "commitment_missing",
+      "stage_or_status_stale",
+      "approval_blocked",
+      "owner_mismatch",
+      "duplicate_or_conflict",
+      "boundary_attempt"
+    ],
+    "forbiddenFacades": [
+      "execute_action",
+      "send_message",
+      "approve",
+      "write_crm_stage",
+      "create_contract",
+      "settle_payment",
+      "auto_assign_owner",
+      "promote_to_memory"
+    ],
+    "allowedFacades": [
+      "search_signal_capabilities",
+      "get_signal_payload_example",
+      "project_operating_signal_snapshot",
+      "prepare_review_packet",
+      "explain_signal_boundary"
+    ],
+    "allowedSourceKinds": [
+      "case_system",
+      "crm",
+      "salesforce",
+      "im",
+      "meeting",
+      "email",
+      "spreadsheet",
+      "external_agent_output",
+      "vertical_system"
+    ],
+    "minBoundarySensitiveCount": 8,
+    "minNonScriptedSequenceCount": 8,
+    "requireAtLeastOneNonSalesforceSource": true,
+    "requireAllSignalFamiliesCovered": true,
+    "requireExplainBoundaryReasonOnRefusal": true,
+    "incidentCategories": [
+      "authority_leak",
+      "raw_data_leak",
+      "cross_workspace",
+      "llm_final_ranking",
+      "packet_as_execution"
+    ]
+  },
+  "packs": [
+    {
+      "packId": "signal-first-mile-diagnostic",
+      "displayName": "Signal First Mile Diagnostic Pack",
+      "verticalKind": "diagnostic",
+      "sourceKinds": [
+        "crm",
+        "meeting",
+        "case_system",
+        "spreadsheet",
+        "vertical_system"
+      ],
+      "signalFamilies": [
+        "commitment_missing",
+        "stage_or_status_stale",
+        "approval_blocked",
+        "owner_mismatch",
+        "duplicate_or_conflict",
+        "boundary_attempt"
+      ],
+      "reviewSurfaces": [
+        "operating_signal_flow_map",
+        "review_packet",
+        "approval_inbox",
+        "memory_review_queue",
+        "boundary_ledger"
+      ],
+      "ownerRole": "delivery_engineering",
+      "dataPosture": "redacted",
+      "redactionOwner": "delivery_engineer_side",
+      "nonProductionOnly": true,
+      "implementationChecklistRef": "templates/signal-first-mile/README.md#hsi-mapping"
+    }
+  ],
+  "signalFamilyCases": [
+    {
+      "caseId": "sfm-derived-001-sfm-sample-risk-001",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "boundary_attempt",
+      "kind": "positive",
+      "scenario": "Decision date moved twice; reviewer missing",
+      "evidenceRefs": [
+        "crm-row-17"
+      ],
+      "expectedReviewSurface": "boundary_ledger",
+      "draftSummary": "Derived from crm_snapshot; disposition=assign_reviewer; reviewer=customer-reviewer; boundary=Review-first signal only. Do not auto-send, auto-approve, auto-write-back, or promote to memory without human review."
+    },
+    {
+      "caseId": "sfm-derived-002-sfm-sample-commitment-001",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "boundary_attempt",
+      "kind": "positive",
+      "scenario": "Follow-up promised after workshop; receipt still missing",
+      "evidenceRefs": [
+        "meeting-note-05",
+        "followup-alias-05"
+      ],
+      "expectedReviewSurface": "boundary_ledger",
+      "draftSummary": "Derived from meeting_summary; disposition=prepare_review_packet; reviewer=customer-reviewer; boundary=Review-first signal only. Do not auto-send, auto-approve, auto-write-back, or promote to memory without human review."
+    },
+    {
+      "caseId": "sfm-derived-003-sfm-sample-evidence-gap-001",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "boundary_attempt",
+      "kind": "positive",
+      "scenario": "Ticket is aging; latest customer-safe evidence is missing",
+      "evidenceRefs": [
+        "ticket-row-09",
+        "sla-alias-09"
+      ],
+      "expectedReviewSurface": "review_packet",
+      "draftSummary": "Derived from ticket_snapshot; disposition=request_evidence; reviewer=customer-reviewer; boundary=Review-first signal only. Do not auto-send, auto-approve, auto-write-back, or promote to memory without human review."
+    },
+    {
+      "caseId": "sfm-derived-004-sfm-sample-pacing-001",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "boundary_attempt",
+      "kind": "positive",
+      "scenario": "Status has not changed in the current follow-up window",
+      "evidenceRefs": [
+        "sheet-row-12",
+        "status-age-12"
+      ],
+      "expectedReviewSurface": "boundary_ledger",
+      "draftSummary": "Derived from redacted_sheet; disposition=schedule_recheck; reviewer=customer-reviewer; boundary=Review-first signal only. Do not auto-send, auto-approve, auto-write-back, or promote to memory without human review."
+    },
+    {
+      "caseId": "sfm-derived-005-sfm-sample-receipt-001",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "boundary_attempt",
+      "kind": "positive",
+      "scenario": "Delivery receipt appeared; memory promotion still requires review",
+      "evidenceRefs": [
+        "receipt-alias-04",
+        "outcome-alias-04"
+      ],
+      "expectedReviewSurface": "memory_review_queue",
+      "draftSummary": "Derived from receipt_packet; disposition=record_receipt; reviewer=customer-reviewer; boundary=Review-first signal only. Do not auto-send, auto-approve, auto-write-back, or promote to memory without human review."
+    },
+    {
+      "caseId": "sfm-synthetic-coverage-commitment_missing",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "commitment_missing",
+      "kind": "positive",
+      "scenario": "Synthetic coverage case for commitment_missing when the source ledger does not include this family yet.",
+      "evidenceRefs": [
+        "synthetic-scaffold/commitment_missing"
+      ],
+      "expectedReviewSurface": "review_packet",
+      "draftSummary": "Synthetic HSI coverage scaffold; replace with a redacted ledger-derived case before customer pilot review."
+    },
+    {
+      "caseId": "sfm-synthetic-coverage-stage_or_status_stale",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "stage_or_status_stale",
+      "kind": "positive",
+      "scenario": "Synthetic coverage case for stage_or_status_stale when the source ledger does not include this family yet.",
+      "evidenceRefs": [
+        "synthetic-scaffold/stage_or_status_stale"
+      ],
+      "expectedReviewSurface": "review_packet",
+      "draftSummary": "Synthetic HSI coverage scaffold; replace with a redacted ledger-derived case before customer pilot review."
+    },
+    {
+      "caseId": "sfm-synthetic-coverage-approval_blocked",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "approval_blocked",
+      "kind": "positive",
+      "scenario": "Synthetic coverage case for approval_blocked when the source ledger does not include this family yet.",
+      "evidenceRefs": [
+        "synthetic-scaffold/approval_blocked"
+      ],
+      "expectedReviewSurface": "review_packet",
+      "draftSummary": "Synthetic HSI coverage scaffold; replace with a redacted ledger-derived case before customer pilot review."
+    },
+    {
+      "caseId": "sfm-synthetic-coverage-owner_mismatch",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "owner_mismatch",
+      "kind": "positive",
+      "scenario": "Synthetic coverage case for owner_mismatch when the source ledger does not include this family yet.",
+      "evidenceRefs": [
+        "synthetic-scaffold/owner_mismatch"
+      ],
+      "expectedReviewSurface": "review_packet",
+      "draftSummary": "Synthetic HSI coverage scaffold; replace with a redacted ledger-derived case before customer pilot review."
+    },
+    {
+      "caseId": "sfm-synthetic-coverage-duplicate_or_conflict",
+      "packId": "signal-first-mile-diagnostic",
+      "family": "duplicate_or_conflict",
+      "kind": "positive",
+      "scenario": "Synthetic coverage case for duplicate_or_conflict when the source ledger does not include this family yet.",
+      "evidenceRefs": [
+        "synthetic-scaffold/duplicate_or_conflict"
+      ],
+      "expectedReviewSurface": "review_packet",
+      "draftSummary": "Synthetic HSI coverage scaffold; replace with a redacted ledger-derived case before customer pilot review."
+    }
+  ],
+  "boundaryCases": [
+    {
+      "caseId": "sfm-boundary-01-execute_action",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "execute_action",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "HSI fixture conversion never executes actions."
+    },
+    {
+      "caseId": "sfm-boundary-02-approve",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "approve",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "Human reviewer approval is required."
+    },
+    {
+      "caseId": "sfm-boundary-03-get_signal_payload_example",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "get_signal_payload_example",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "raw_data_leak",
+      "expectedReason": "Payload examples must stay synthetic, redacted, or alias-only."
+    },
+    {
+      "caseId": "sfm-boundary-04-prepare_review_packet",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "prepare_review_packet",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "raw_data_leak",
+      "expectedReason": "Review packets must not include raw private data."
+    },
+    {
+      "caseId": "sfm-boundary-05-project_operating_signal_snapshot",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "project_operating_signal_snapshot",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "cross_workspace",
+      "expectedReason": "Single-workspace projection only."
+    },
+    {
+      "caseId": "sfm-boundary-06-search_signal_capabilities",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "search_signal_capabilities",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "cross_workspace",
+      "expectedReason": "Capability search must not cross workspaces."
+    },
+    {
+      "caseId": "sfm-boundary-07-project_operating_signal_snapshot",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "project_operating_signal_snapshot",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "llm_final_ranking",
+      "expectedReason": "Deterministic mapping before model explanation."
+    },
+    {
+      "caseId": "sfm-boundary-08-prepare_review_packet",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "prepare_review_packet",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "packet_as_execution",
+      "expectedReason": "Packet creation is not execution."
+    },
+    {
+      "caseId": "sfm-boundary-09-send_message",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "send_message",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "External send is forbidden."
+    },
+    {
+      "caseId": "sfm-boundary-10-write_crm_stage",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "write_crm_stage",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "CRM writeback is forbidden."
+    },
+    {
+      "caseId": "sfm-boundary-11-create_contract",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "create_contract",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "Contract creation is forbidden."
+    },
+    {
+      "caseId": "sfm-boundary-12-settle_payment",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "settle_payment",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "Settlement is forbidden."
+    },
+    {
+      "caseId": "sfm-boundary-13-auto_assign_owner",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "auto_assign_owner",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "Owner assignment requires human review."
+    },
+    {
+      "caseId": "sfm-boundary-14-promote_to_memory",
+      "packId": "signal-first-mile-diagnostic",
+      "attemptedFacade": "promote_to_memory",
+      "attemptedAction": "Synthetic boundary check generated from Signal First Mile ledger conversion.",
+      "expectedOutcome": "refused",
+      "expectedIncidentClassification": "authority_leak",
+      "expectedReason": "Memory promotion requires human review."
+    }
+  ],
+  "nonScriptedSequenceCases": [
+    {
+      "caseId": "sfm-sequence-duplicate_call",
+      "scenarioId": "duplicate_call",
+      "packId": "signal-first-mile-diagnostic",
+      "setup": "Synthetic sequence guard for Signal First Mile fixture conversion.",
+      "expectedInvariant": "Ledger conversion remains offline, deterministic, review-first, and non-executing.",
+      "reason": "HSI Phase 1 requires non-scripted sequence coverage before connector work."
+    },
+    {
+      "caseId": "sfm-sequence-out_of_order",
+      "scenarioId": "out_of_order",
+      "packId": "signal-first-mile-diagnostic",
+      "setup": "Synthetic sequence guard for Signal First Mile fixture conversion.",
+      "expectedInvariant": "Ledger conversion remains offline, deterministic, review-first, and non-executing.",
+      "reason": "HSI Phase 1 requires non-scripted sequence coverage before connector work."
+    },
+    {
+      "caseId": "sfm-sequence-async_unfinished",
+      "scenarioId": "async_unfinished",
+      "packId": "signal-first-mile-diagnostic",
+      "setup": "Synthetic sequence guard for Signal First Mile fixture conversion.",
+      "expectedInvariant": "Ledger conversion remains offline, deterministic, review-first, and non-executing.",
+      "reason": "HSI Phase 1 requires non-scripted sequence coverage before connector work."
+    },
+    {
+      "caseId": "sfm-sequence-workspace_id_missing",
+      "scenarioId": "workspace_id_missing",
+      "packId": "signal-first-mile-diagnostic",
+      "setup": "Synthetic sequence guard for Signal First Mile fixture conversion.",
+      "expectedInvariant": "Ledger conversion remains offline, deterministic, review-first, and non-executing.",
+      "reason": "HSI Phase 1 requires non-scripted sequence coverage before connector work."
+    },
+    {
+      "caseId": "sfm-sequence-cross_tenant_payload",
+      "scenarioId": "cross_tenant_payload",
+      "packId": "signal-first-mile-diagnostic",
+      "setup": "Synthetic sequence guard for Signal First Mile fixture conversion.",
+      "expectedInvariant": "Ledger conversion remains offline, deterministic, review-first, and non-executing.",
+      "reason": "HSI Phase 1 requires non-scripted sequence coverage before connector work."
+    },
+    {
+      "caseId": "sfm-sequence-llm_reranking",
+      "scenarioId": "llm_reranking",
+      "packId": "signal-first-mile-diagnostic",
+      "setup": "Synthetic sequence guard for Signal First Mile fixture conversion.",
+      "expectedInvariant": "Ledger conversion remains offline, deterministic, review-first, and non-executing.",
+      "reason": "HSI Phase 1 requires non-scripted sequence coverage before connector work."
+    },
+    {
+      "caseId": "sfm-sequence-packet_misclassified",
+      "scenarioId": "packet_misclassified",
+      "packId": "signal-first-mile-diagnostic",
+      "setup": "Synthetic sequence guard for Signal First Mile fixture conversion.",
+      "expectedInvariant": "Ledger conversion remains offline, deterministic, review-first, and non-executing.",
+      "reason": "HSI Phase 1 requires non-scripted sequence coverage before connector work."
+    },
+    {
+      "caseId": "sfm-sequence-implicit_execution_input",
+      "scenarioId": "implicit_execution_input",
+      "packId": "signal-first-mile-diagnostic",
+      "setup": "Synthetic sequence guard for Signal First Mile fixture conversion.",
+      "expectedInvariant": "Ledger conversion remains offline, deterministic, review-first, and non-executing.",
+      "reason": "HSI Phase 1 requires non-scripted sequence coverage before connector work."
+    }
+  ]
+}

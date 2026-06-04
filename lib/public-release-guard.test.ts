@@ -666,6 +666,8 @@ describe("public release guard fixture coverage", () => {
         dev: "next dev",
         "self-check": "tsx scripts/helm-self-check-refactored.ts",
         "release:check": "tsx scripts/release-readiness-check.ts",
+        "eval:signal-first-mile-quality":
+          "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
         [`seed:${tenantSlug}-workspace`]: `tsx ${tenantPrivateRoot}/scripts/seed-workspace.ts`,
         "proof-pack:build": `tsx ${commercialPrivateRoot}/build.ts`,
       },
@@ -692,6 +694,8 @@ describe("public release guard fixture coverage", () => {
       "public:e2e:smoke": "npm run public:smoke:static",
       e2e: "npm run public:e2e:smoke",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "eval:signal-first-mile-quality":
+        "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
       "check:public-commit-metadata":
         "node --import tsx scripts/public-commit-metadata-check.ts",
       "check:public-release":

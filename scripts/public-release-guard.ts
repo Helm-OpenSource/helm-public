@@ -919,6 +919,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "validate:env",
   "delivery:doctor",
   "eval:headless-signal-interface",
+  "eval:signal-first-mile-quality",
   "eval:internal-commercialization",
   "eval:operating-signal-flow",
   "eval:expert-capability-feedback-loop",
