@@ -42,6 +42,7 @@ import type { BusinessLoopGapSummary } from "@/lib/operating-system/operating-ga
 import { buildBusinessLoopGapReadout } from "@/lib/presentation/business-loop-gap-readout";
 import { formatSeededBusinessCopy } from "@/lib/presentation/seeded-business-copy";
 import { formatDateLabel, trimText } from "@/lib/utils";
+import { formatInboxDateLabel } from "@/features/inbox/inbox-date-labels";
 import { formatInboxMessageBody } from "@/features/inbox/message-formatting";
 import { syncGmailConnectorAction } from "@/features/connectors/actions";
 import {
@@ -125,6 +126,10 @@ const reminderOptionsByLocale = {
   "zh-CN": ["2 小时后", "今天下班前", "明天上午", "2 天后"],
   "en-US": ["In 2 hours", "Before end of day", "Tomorrow morning", "In 2 days"],
 } as const;
+
+function formatInboxDate(value: Date | string | null | undefined, english: boolean) {
+  return formatInboxDateLabel(value, english, formatDateLabel);
+}
 
 export function InboxClient({
   threads,
@@ -581,8 +586,8 @@ export function InboxClient({
             <p className="text-sm text-[color:var(--muted-foreground)]">
               {connector?.status === "CONNECTED"
                 ? english
-                  ? `Connected: ${connector.externalAccountEmail ?? "Aliyun Mail account"} · synced ${formatDateLabel(connector.lastSyncedAt)}.`
-                  : `已接入：${connector.externalAccountEmail ?? "阿里邮箱"} · 最近同步 ${formatDateLabel(connector.lastSyncedAt)}。`
+                  ? `Connected: ${connector.externalAccountEmail ?? "Aliyun Mail account"} · synced ${formatInboxDate(connector.lastSyncedAt, english)}.`
+                  : `已接入：${connector.externalAccountEmail ?? "阿里邮箱"} · 最近同步 ${formatInboxDate(connector.lastSyncedAt, english)}。`
                 : english
                   ? "No mail account connected yet. Use the current threads to review the reply and binding path."
                   : "还没接入邮箱。先用当前线程检查回复和对象绑定路径。"}
@@ -764,8 +769,8 @@ export function InboxClient({
                     </div>
                     <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                       {english
-                        ? `Updated ${formatDateLabel(thread.updatedAt)}`
-                        : `更新于 ${formatDateLabel(thread.updatedAt)}`}
+                        ? `Updated ${formatInboxDate(thread.updatedAt, english)}`
+                        : `更新于 ${formatInboxDate(thread.updatedAt, english)}`}
                     </p>
                   </button>
                 ))
@@ -881,7 +886,7 @@ export function InboxClient({
                         <p
                           className={`text-xs ${message.isInbound ? "text-[color:var(--muted-foreground)]" : "text-[color:color-mix(in_oklab,var(--accent-foreground)_72%,transparent)]"}`}
                         >
-                          {formatDateLabel(message.sentAt)}
+                          {formatInboxDate(message.sentAt, english)}
                         </p>
                       </div>
                       <p
