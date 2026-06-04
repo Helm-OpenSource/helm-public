@@ -1,0 +1,17 @@
+{
+  "promotionId": "promo-0001",
+  "sourceCaseId": "a-case-001",
+  "sourceSensitivityClass": "operational",
+  "deidMethod": "alias-substitution + structural-redaction",
+  "scannerResult": {
+    "scanner": "sensitive-fixture-scanner",
+    "hits": 0,
+    "patternsChecked": ["email", "phone", "id_card", "tenant_literal", "internal_ip"]
+  },
+  "humanSignOffBy": "deid-reviewer-alias-01",
+  "humanSignOffAt": "2026-06-04T02:15:00Z",
+  "publicEligible": true,
+  "walledFromPerformanceEval": true,
+  "quarantineReason": null,
+  "_note": "HR / performance-evaluation content is excluded entirely in v0.1; failures must quarantine, never best-effort pass."
+}

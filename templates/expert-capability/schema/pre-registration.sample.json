@@ -1,0 +1,34 @@
+{
+  "preRegistrationId": "prereg-0001",
+  "aCorrectionSetHash": "sha256:a-set-001",
+  "bHeldoutSetHash": "sha256:b-set-001",
+  "disjointProof": "A ∩ B = ∅ verified by caseId set difference",
+  "goldLabelsHash": "sha256:b-gold-001",
+  "goldLockedAt": "2026-06-04T02:30:00Z",
+  "goldLockedBy": "gold-owner-alias-01",
+  "metricDefinition": {
+    "formula": "weightedScore = dispositionGoldAccuracy * w1 + evidenceCompleteness * w2",
+    "w1": 0.7,
+    "w2": 0.3,
+    "minMargin": 0.05,
+    "hardGates": [
+      "boundaryCorrectness == 100%",
+      "commitmentClass == advice",
+      "humanReviewerRequired == true",
+      "no write/send/execute/auto-approve/memory-promotion refs"
+    ]
+  },
+  "previousExpertRevisionId": "oh-expert-v0",
+  "deterministicRuleBaselineRef": "rule-baseline:org-health-v0",
+  "modelVersionPinned": "pinned:org-health-llm-2026-06-04",
+  "decodeParams": { "temperature": 0, "seed": 7 },
+  "replaySnapshotRootHash": "sha256:b-replay-root-001",
+  "replaySnapshotHashes": [
+    "snapshot:b-case-syn-001@1",
+    "snapshot:b-case-trap-001@1"
+  ],
+  "maxAttemptsPerHeldoutSet": 1,
+  "heldoutSetUseCount": 0,
+  "trustedTimestamp": "2026-06-04T03:30:00Z",
+  "contentHash": "sha256:prereg-0001-content"
+}

@@ -1,0 +1,21 @@
+{
+  "packetId": "jp-oh-0001",
+  "caseId": "a-case-001",
+  "contentHash": "sha256:jp-oh-0001-content",
+  "inputSnapshotRef": "snapshot:a-case-001@1",
+  "expertRevisionId": "oh-expert-v0",
+  "commitmentClass": "advice",
+  "disposition": "flag_review_backlog_growing",
+  "evidenceRefs": [
+    "evidence:review-queue-depth-alias",
+    "evidence:owner-coverage-gap-alias"
+  ],
+  "reasoningSummary": "复核队列深度上升且 owner 覆盖出现缺口,建议下月优先关注复核积压。",
+  "boundaryNote": "组织健康诊断建议,非绩效结论、非承诺、不触发自动动作或外发。",
+  "humanReviewerRequired": true,
+  "reviewState": "edited",
+  "forbiddenActionRefs": [],
+  "confidenceBand": "medium",
+  "modelVersion": "pinned:org-health-llm-2026-06-04",
+  "decodeParams": { "temperature": 0, "seed": 7 }
+}

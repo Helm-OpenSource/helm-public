@@ -1,0 +1,19 @@
+{
+  "enumName": "correctionReasonCode",
+  "closed": true,
+  "values": [
+    "evidence_missing",
+    "evidence_wrong",
+    "disposition_wrong",
+    "boundary_violation",
+    "commitment_wording",
+    "hallucinated_fact",
+    "scope_wrong",
+    "owner_reviewer_wrong",
+    "confidence_miscalibrated",
+    "stale_signal",
+    "duplicate_or_conflict",
+    "other_requires_schema_review"
+  ],
+  "notes": "other_requires_schema_review is an escape hatch, not a bucket for normal use."
+}
