@@ -21,6 +21,9 @@ export const PUBLIC_ENV_EXAMPLE_CONTENT = `# ===================================
 DATABASE_URL="mysql://root:root@127.0.0.1:3306/helm2026?charset=utf8mb4"
 APP_URL="http://localhost:3000"
 CONNECTOR_TOKEN_SECRET="public-local-connector-token-secret-000000000000"
+CONNECTOR_TOKEN_SECRET_ID="local"
+CONNECTOR_TOKEN_SECRET_PREVIOUS=""
+CONNECTOR_TOKEN_SECRET_PREVIOUS_ID=""
 
 HELM_RELEASE_PROFILE="community"
 HELM_DEPLOYMENT_REGION="global"

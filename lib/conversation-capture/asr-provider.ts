@@ -1,5 +1,5 @@
-import { db } from "@/lib/db";
 import { getOpenAIBaseUrl, isOpenAIConfigured } from "@/lib/llm/config";
+import { recordLLMCall } from "@/lib/observability/llm-call-log.service";
 import { sanitizeLlmTracePayload } from "@/lib/llm/trace-sanitizer";
 
 type OpenAITranscriptionResponse = {
@@ -179,26 +179,24 @@ export async function transcribeCaptureAudioWithOpenAI(input: {
     });
     throw error;
   } finally {
-    await db.lLMCallLog.create({
-      data: {
-        workspaceId: input.workspaceId,
-        userId: input.userId ?? undefined,
-        provider: "openai",
-        model: config.model,
-        modelVersion: config.model,
-        modelRole: "EXTRACTION",
-        taskType: "AUDIO_TRANSCRIPTION",
-        promptKey: "capture-audio-transcription",
-        promptVersion: "capture_asr_v1",
-        budgetTier: "pilot",
-        outputMode: "text",
-        inputSummary: `${input.audioFile.type || "audio/unknown"} · ${Math.round(input.audioFile.size / 1024)}KB`,
-        outputSummary: success ? text.slice(0, 160) : undefined,
-        latencyMs: Date.now() - startedAt,
-        success,
-        fallbackReason: success ? undefined : "provider_error",
-        errorMessage,
-      },
+    await recordLLMCall({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      provider: "openai",
+      model: config.model,
+      modelVersion: config.model,
+      modelRole: "EXTRACTION",
+      taskType: "AUDIO_TRANSCRIPTION",
+      promptKey: "capture-audio-transcription",
+      promptVersion: "capture_asr_v1",
+      budgetTier: "pilot",
+      outputMode: "text",
+      inputSummary: `${input.audioFile.type || "audio/unknown"} · ${Math.round(input.audioFile.size / 1024)}KB`,
+      outputSummary: success ? text : undefined,
+      latencyMs: Date.now() - startedAt,
+      success,
+      fallbackReason: success ? undefined : "provider_error",
+      errorMessage,
     });
   }
 }
