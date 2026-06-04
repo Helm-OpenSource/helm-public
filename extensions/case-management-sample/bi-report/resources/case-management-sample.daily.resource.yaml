@@ -16,7 +16,7 @@ sensitivity: public
 data_owner:
   team: helm-core
   role: sample-maintainer
-  contact_path: GitHub Issues label vertical:case-management-sample
+  contact_path: "GitHub issue templates: Golden Path activation report for sample-pack success, blockers, or friction; Documentation correction for sample docs issues; Integration request for source-system ideas. Public-safe synthetic evidence only."
 commitment_level: suggestion_only
 caller_scopes:
   - case-management-sample.bi-report

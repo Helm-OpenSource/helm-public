@@ -94,10 +94,19 @@ P0 只保留：
 - `RELEASE_READINESS_CALIBRATION_REPORT`
 
 `release:check` 还会打印只读 manual tagging strategy。该策略不新增第 8 个人工
-receipt，也不创建 release；它用于防止在仓库已有更高 stable tag 时，把
-`v0.1.0-trial` 误发布为 Latest。若已有更高 stable tag，`v0.1.0-trial`
-只能按 prerelease + `--latest=false` 执行，除非 owner 先更新版本策略、gate 文案
-和 launch docs。
+receipt，也不创建 release；它用于防止在仓库已有更高 stable tag 时，把 trial
+release 误发布为 Latest。
+
+默认目标仍是首个公开试点 tag `v0.1.0-trial`。后续 release train 必须在 release
+machine 上显式设置：
+
+- `HELM_RELEASE_CHANNEL=trial|stable`
+- `HELM_RELEASE_TARGET_TAG=<tag>`
+- `HELM_RELEASE_TARGET_TITLE=<release title>`
+
+`trial` channel 只能按 prerelease + `--latest=false` 执行。`stable` channel 必须使用
+稳定 semver tag（例如 `v1.0.1`），并且必须高于现有最高 stable tag；否则 gate
+只报告 blocker，不打印手动 tag / release 命令。
 
 > **发布日决策门**见 [`HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md`](./HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md) §六 "Go/No-Go Evidence Checklist"。本节定义 hard gates **输入约束**，§六 定义 owner 发布日的 6 项 **必备 evidence + Go/No-Go 决策记录格式**。两者不重复：本节是 `release:check` 命令的阻断口径，§六 是人工 sign-off 流程。
 

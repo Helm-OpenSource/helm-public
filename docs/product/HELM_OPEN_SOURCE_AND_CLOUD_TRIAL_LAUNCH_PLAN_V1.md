@@ -45,11 +45,34 @@ current evidence for:
 `npm run release:check` does not create tags or GitHub Releases. It only decides
 whether maintainers may enter the manual tagging step.
 
-The trial release target remains `v0.1.0-trial`. If this repository already has
-a higher stable release tag, maintainers must not let a lower trial tag replace
-the repository's latest stable release. In that case, publish the trial tag as a
-prerelease with `--latest=false`, or update the version strategy and supporting
-docs before tagging.
+When no release target is configured, the default remains the first public-Core
+trial tag:
+
+```bash
+RELEASE_READINESS_FULL=true npm run release:check
+```
+
+For a later trial or stable train, maintainers must set the target explicitly on
+the release machine:
+
+```bash
+HELM_RELEASE_CHANNEL=trial \
+HELM_RELEASE_TARGET_TAG=v0.2.0-trial \
+HELM_RELEASE_TARGET_TITLE="Helm v0.2.0-trial" \
+RELEASE_READINESS_FULL=true \
+npm run release:check
+```
+
+Supported release channels:
+
+- `trial`: publishes as a prerelease with `--latest=false`.
+- `stable`: requires a stable semver tag such as `v1.0.1` and must advance the
+  existing stable line before the gate prints manual tagging commands.
+
+If this repository already has a higher stable release tag, maintainers must not
+let a lower trial tag replace the repository's latest stable release. In that
+case, publish the trial tag as a prerelease with `--latest=false`, or update the
+version strategy and supporting docs before tagging.
 
 The release gate prints suggested manual commands based on the local tag state.
 Those commands are guidance for a human maintainer; they are not executed by the

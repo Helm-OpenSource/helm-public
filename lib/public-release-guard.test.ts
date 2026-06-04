@@ -287,7 +287,7 @@ describe("public release guard fixture coverage", () => {
   it("allows the reviewed public security disclosure email without opening the whole domain", () => {
     writeFixture(
       "SECURITY.md",
-      "Report undisclosed vulnerabilities to security@zhaojiling.com.",
+      "Report undisclosed vulnerabilities to Helm-security@zhaojiling.com.",
     );
     writeFixture(
       "docs/public.md",
@@ -684,6 +684,8 @@ describe("public release guard fixture coverage", () => {
       "public:e2e:smoke": "npm run public:smoke:static",
       e2e: "npm run public:e2e:smoke",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "check:public-commit-metadata":
+        "node --import tsx scripts/public-commit-metadata-check.ts",
       "check:public-release":
         "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
       "public:smoke:static":
@@ -803,6 +805,8 @@ describe("public release guard fixture coverage", () => {
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
       "check:boundaries": "npm run public:smoke:static",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "check:public-commit-metadata":
+        "node --import tsx scripts/public-commit-metadata-check.ts",
       "check:public-release":
         "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
       "db:prepare":

@@ -80,6 +80,18 @@ jobs:
       - name: Public release guard
         run: npm run check:public-release
 
+      - name: Public commit metadata guard (PR baseline)
+        if: github.event_name == 'pull_request'
+        env:
+          HELM_PUBLIC_COMMIT_METADATA_BASELINE_REF: origin/${{ github.base_ref }}
+        run: npm run check:public-commit-metadata
+
+      - name: Public commit metadata guard (push baseline)
+        if: github.event_name != 'pull_request'
+        env:
+          HELM_PUBLIC_COMMIT_METADATA_BASELINE_REF: HEAD^
+        run: npm run check:public-commit-metadata
+
       - name: Secret history guard (PR baseline)
         if: github.event_name == 'pull_request'
         env:

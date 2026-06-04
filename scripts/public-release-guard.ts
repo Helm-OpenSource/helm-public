@@ -156,7 +156,7 @@ const INTERNAL_HOST_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> =
 // the guard still blocks the underlying private-looking domain / slug anywhere
 // else, and it still blocks other addresses on the same domain.
 const PUBLIC_CONTACT_EMAIL_ALLOW_LIST: ReadonlySet<string> = new Set([
-  "security@zhaojiling.com",
+  "Helm-security@zhaojiling.com",
 ]);
 
 const PUBLIC_CONTACT_EMAIL_DOCUMENT_ALLOW_LIST: ReadonlySet<string> = new Set([
@@ -896,6 +896,8 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   e2e: "npm run public:e2e:smoke",
   "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
   "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+  "check:public-commit-metadata":
+    "node --import tsx scripts/public-commit-metadata-check.ts",
   "check:public-release":
     "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
   "release:check": "node --import tsx scripts/release-readiness-check.ts",
@@ -927,6 +929,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "db:seed:force",
   "smoke:docker:d2",
   "check:public-docs",
+  "check:public-commit-metadata",
   "check:public-release",
   "check:secret-history",
   "release:check",
@@ -1206,7 +1209,7 @@ function isAllowedPublicContactReference(
 
   const lowerLine = line.toLowerCase();
   const mentionsAllowedEmail = Array.from(PUBLIC_CONTACT_EMAIL_ALLOW_LIST).some(
-    (email) => lowerLine.includes(email),
+    (email) => lowerLine.includes(email.toLowerCase()),
   );
   if (!mentionsAllowedEmail) return false;
 

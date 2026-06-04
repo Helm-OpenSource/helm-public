@@ -22,6 +22,7 @@
     "self-check": "npm run public:smoke:static",
     "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
     "check:public-release": "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
+    "check:public-commit-metadata": "node --import tsx scripts/public-commit-metadata-check.ts",
     "check:secret-history": "node --import tsx scripts/secret-history-check.ts",
     "release:check": "node --import tsx scripts/release-readiness-check.ts",
     "db:generate": "prisma generate --schema prisma/schema.prisma && prisma generate --schema prisma/schema.sqlite.prisma",
