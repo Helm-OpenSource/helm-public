@@ -38,6 +38,17 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口中国访问性与证据路由包的中文证据入口术语混写；只调整黄金路径、GitHub
+议题 / 讨论、议题模板、讨论编号和黄金路径报告文案，不改变英文参考表格、GitHub / WeChat
+路由边界、负责人批准脱敏回执规则或不自动外联边界。
+
+This round further localizes mixed Chinese evidence-entry terminology in the
+China accessibility and evidence-routing packet. It changes Golden Path, GitHub
+issue / discussion, issue template, discussion number, and Golden Path report
+wording only, without changing the English reference tables, GitHub / WeChat
+routing boundaries, owner-approved redacted receipt rules, or no-automatic-
+outbound boundaries.
+
 本轮继续收口开源增长 7 日运营计划的中文渠道与激活术语混写；只调整本地黄金路径、
 GitHub 议题 / 讨论、好议题、待办队列、议题 / PR 模板和首次改动演练文案，不改变英文参考
 表格、指标定义、验证命令、Cloud / Enterprise 非承诺边界或 GitHub intake 路径。

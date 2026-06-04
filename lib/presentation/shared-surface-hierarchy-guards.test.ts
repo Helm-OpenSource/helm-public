@@ -3076,26 +3076,30 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("目标人群摘要");
     expect(chineseBody).toContain("AI 交付工程师、平台工程师、AI 运营建设者");
     expect(chineseBody).toContain("解决方案架构师和实施负责人");
-    expect(chineseBody).toContain("公开 Core Golden Path");
+    expect(chineseBody).toContain("公开 Core 黄金路径");
     expect(chineseBody).toContain("GitHub 公开安全证据路由");
     expect(chineseBody).toContain("可触达面摘要");
     expect(chineseBody).toContain("README 中文入口");
-    expect(chineseBody).toContain("GitHub Discussion #49");
-    expect(chineseBody).toContain("GitHub issue templates 是主要证据入口");
+    expect(chineseBody).toContain("GitHub 讨论 #49");
+    expect(chineseBody).toContain("GitHub 议题模板是主要证据入口");
     expect(chineseBody).toContain("WeChat 账号与社区 QR 只提供辅助触达");
     expect(chineseBody).toContain("双层证据摘要");
+    expect(chineseBody).toContain("GitHub 议题 / 讨论中的黄金路径结果");
     expect(chineseBody).toContain("单独的私聊、未链接截图、私有部署说明");
     expect(chineseBody).toContain("都不能算激活成功、商业意向、响应义务或路线图需求");
     expect(chineseBody).toContain("证据采集摘要");
     expect(chineseBody).toContain("修改合成夹具 `CASE-SAMPLE-002`");
-    expect(chineseBody).toContain("路由到对应 issue template 或 Discussion #41");
+    expect(chineseBody).toContain("路由到对应议题模板或讨论 #41");
     expect(chineseBody).toContain("负责人闸门摘要");
+    expect(chineseBody).toContain("通过 WeChat / 社区转发行动入口");
+    expect(chineseBody).toContain("修改议题模板语言");
     expect(chineseBody).toContain("不能绕过分支保护");
     expect(chineseBody).toContain("24 小时观察摘要");
+    expect(chineseBody).toContain("只跟踪讨论 #49 / #41 新回复、黄金路径报告");
     expect(chineseBody).toContain("不得把私有遥测");
 
     expect(chineseBody).not.toMatch(
-      /Target People|Current Reachable Surfaces|Two-Tier Evidence Model|Proof Collection Route|Owner-Gated Decisions|24-Hour Watch|Target person|First useful proof|Evidence status|Primary proof|Assisted signal|Reach-only signal|Does Not Count Alone|unlinked screenshots|private deployment notes|owner-approved redacted receipt|Proof Collection|Owner Gate Needed|Track only public-safe fields|private telemetry/,
+      /公开 Core Golden Path|GitHub Discussion|GitHub issue templates|GitHub issue \/ discussion|README Golden Path|issue template|Discussion #41|Golden Path 报告|转发 CTA|Target People|Current Reachable Surfaces|Two-Tier Evidence Model|Proof Collection Route|Owner-Gated Decisions|24-Hour Watch|Target person|First useful proof|Evidence status|Primary proof|Assisted signal|Reach-only signal|Does Not Count Alone|unlinked screenshots|private deployment notes|owner-approved redacted receipt|Proof Collection|Owner Gate Needed|Track only public-safe fields|private telemetry/,
     );
   });
 
