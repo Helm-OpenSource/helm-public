@@ -40,8 +40,8 @@
     "public:e2e:smoke": "npm run public:smoke:static",
     "e2e": "npm run public:e2e:smoke",
     "check:boundaries": "npm run public:smoke:static",
-    "public:smoke:static": "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
-    "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands"
+    "public:smoke:static": "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+    "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands"
   },
   "prisma": {
     "seed": "env LLM_ENABLED=false node --import tsx prisma/seed.ts"
