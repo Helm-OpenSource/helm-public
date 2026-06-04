@@ -2170,6 +2170,19 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps getting-started Chinese support routing copy localized", () => {
+    const gettingStarted = read("docs/getting-started.md");
+    const supportSection = gettingStarted.slice(
+      gettingStarted.indexOf("## 11. 卡住了找谁"),
+    );
+
+    expect(supportSection).toContain("GitHub 议题（Issues）");
+    expect(supportSection).toContain("不要**走公开议题");
+    expect(supportSection).toContain("[../SECURITY.md](../SECURITY.md)");
+
+    expect(supportSection).not.toMatch(/GitHub Issues|公开 issue/);
+  });
+
   it("keeps D2 Docker smoke receipt Chinese proof-scope copy localized", () => {
     const d2SmokeReceipt = read(
       "docs/reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md",

@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 getting-started 中文支持路由术语混写；本批只改 GitHub 议题和安全漏洞不要走公开议题文案及源码守卫，不改 GitHub Issues 链接目标、微信入口、社交媒体占位或 SECURITY.md 私下披露路径。
 - 继续收口 Helm Pack 模板的中文交付工件术语混写；本批只改上下文包、Pack Studio 安全样例、证据矩阵、待复核工作包、证明闭环收口、复核优先工件、工作流引擎、公开声明和静默写入客户关系系统文案及源码守卫，不改模板文件名、英文参考、自动执行禁止边界或客户授权 / 专业复核边界。
 - 继续收口公开试点作业手册的中文试用支持术语混写；本批只改不承诺服务等级协议、GitHub 议题、公开议题或 PR、试用支持申请延期、运行时市场和服务等级协议立场变化文案及源码守卫，不改反馈渠道、邮件主题标签、试用状态机、响应窗口或自动执行 / 自动审批边界。
 - 继续收口公开试点数据政策的中文服务等级协议术语混写；本批只改服务等级协议立场、不承诺服务等级协议、可用性服务等级协议和未来服务条款 / 数据处理协议 / 服务等级协议文案及源码守卫，不改英文参考摘要、30/7 目标口径、删除证明、数据导出、正式商用文件边界或非承诺边界。

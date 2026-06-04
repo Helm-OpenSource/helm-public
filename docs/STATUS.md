@@ -16,6 +16,17 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：getting-started 中文支持路由术语混写已继续清理；本批只改 GitHub 议题和
+安全漏洞不要走公开议题文案及源码守卫，不改变 GitHub Issues 链接目标、微信入口、社交媒体
+占位或 SECURITY.md 私下披露路径，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese support-routing terminology in
+getting-started has been further localized. This batch changes GitHub issue and
+security-vulnerability-not-public-issue wording plus source guards only; it
+does not change GitHub Issues link targets, WeChat entry points, social-media
+placeholders, or the SECURITY.md private disclosure path, and does not claim
+full-repo bilingualization completion.
+
 最新双语化收口：Helm Pack 模板的中文交付工件术语混写已继续清理；本批只改上下文包、
 Pack Studio 安全样例、证据矩阵、待复核工作包、证明闭环收口、复核优先工件、工作流引擎、
 公开声明和静默写入客户关系系统文案及源码守卫，不改变模板文件名、英文参考、自动执行禁止边界
