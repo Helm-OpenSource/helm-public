@@ -24,6 +24,17 @@ describe("EngineeringDeliveryReviewPanel", () => {
     expect(emailPosition).toBeGreaterThan(firstDisclosure);
     expect(html).not.toContain("<details open");
   });
+
+  it("renders suggestion priority labels in English without enum leakage", () => {
+    const review = buildReview();
+    const html = renderToStaticMarkup(
+      createElement(EngineeringDeliveryReviewPanel, { review, english: true }),
+    );
+
+    expect(html).toContain("High priority");
+    expect(html).not.toContain(">HIGH<");
+    expect(html).not.toContain("高优先级");
+  });
 });
 
 function buildReview(): EngineeringDeliveryReview {
