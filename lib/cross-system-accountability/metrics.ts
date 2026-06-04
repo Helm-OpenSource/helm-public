@@ -5,7 +5,7 @@ import type { LedgerDecision, Verdict } from "./contracts";
 export type GapObservation = {
   requestId: string;
   verdict: Verdict;
-  crossSystemDependency: number;
+  distinctSystemsDeclared: number;
   decision: LedgerDecision;
   falsePositive: boolean;
   firstSeenAt: string;
@@ -20,19 +20,6 @@ export function falsePositiveRate(gaps: GapObservation[], minSample = 20) {
     falsePositives,
     rate: flagged.length === 0 ? 0 : falsePositives / flagged.length,
     sufficientSample: flagged.length >= minSample,
-  };
-}
-
-// Moat 1: among confirmed real gaps, share that genuinely needed >=2 systems to detect.
-export function crossSystemDependencyShare(gaps: GapObservation[]) {
-  const confirmed = gaps.filter(
-    (g) => g.verdict === "missing" && g.decision === "accepted" && !g.falsePositive,
-  );
-  const crossSystem = confirmed.filter((g) => g.crossSystemDependency >= 2).length;
-  return {
-    confirmed: confirmed.length,
-    crossSystem,
-    share: confirmed.length === 0 ? 0 : crossSystem / confirmed.length,
   };
 }
 

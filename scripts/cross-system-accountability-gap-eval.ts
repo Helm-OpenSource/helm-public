@@ -47,7 +47,7 @@ function main() {
         ? `owner=${r.effectiveOwner.ownerId}`
         : `owner=unresolved->${r.effectiveOwner.escalationRoleRef ?? r.effectiveOwner.unresolvableReason}`;
       console.log(
-        `  ${r.triggerRef} verdict=${r.verdict} ${owner} crossSystem=${r.crossSystemDependency} review=${r.reviewState}`,
+        `  ${r.triggerRef} verdict=${r.verdict} ${owner} declaredSystems=${r.distinctSystemsDeclared} review=${r.reviewState}`,
       );
     }
   }

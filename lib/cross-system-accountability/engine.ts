@@ -26,7 +26,7 @@ export type EngineInput = {
   now: string; // ISO timestamp, passed in for deterministic evaluation
 };
 
-function crossSystemDependency(rule: ExpectationRule): number {
+function distinctSystemsDeclared(rule: ExpectationRule): number {
   return new Set([
     rule.trigger.system,
     rule.expectation.system,
@@ -41,9 +41,10 @@ function addDays(iso: string, days: number): number {
 export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
   const { rule, triggerFacts, expectationFacts, coverageAssertions, ownerPolicy, now } = input;
   const requests: MissingRecordDecisionRequest[] = [];
-  const dep = crossSystemDependency(rule);
+  const declaredSystems = distinctSystemsDeclared(rule);
 
-  // Only trigger facts from the rule's own (system, entity) stream are in scope.
+  // v0.1 is predicate-blind: rule.trigger.condition is metadata only, so callers must
+  // pre-filter triggerFacts before invoking the public Core.
   const triggers = triggerFacts.filter(
     (t) => t.system === rule.trigger.system && t.entity === rule.trigger.entity,
   );
@@ -80,7 +81,7 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
           `evidence:trigger:${trigger.system}:${trigger.factId}`,
           `evidence:coverage-unproven:${coverage.unproven.join(",")}`,
         ],
-        crossSystemDependency: dep,
+        distinctSystemsDeclared: declaredSystems,
         commitmentClass: "advice",
         reviewState: "proposed",
         humanReviewerRequired: true,
@@ -120,7 +121,7 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
         `evidence:expectation-absent:${rule.expectation.system}:${rule.expectation.entity}`,
         `evidence:within-days-elapsed:${rule.expectation.withinDays}`,
       ],
-      crossSystemDependency: dep,
+      distinctSystemsDeclared: declaredSystems,
       commitmentClass: "advice",
       reviewState: "proposed",
       humanReviewerRequired: true,

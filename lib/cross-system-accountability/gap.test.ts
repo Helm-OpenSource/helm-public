@@ -1,16 +1,17 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type {
-  AccountabilityLedgerEntry,
-  CoverageAssertion,
-  EffectiveOwnerPolicy,
-  ExpectationRule,
-  SourceFact,
+import {
+  CROSS_SYSTEM_ACCOUNTABILITY_MODULE_STATUS,
+  type AccountabilityLedgerEntry,
+  type CoverageAssertion,
+  type EffectiveOwnerPolicy,
+  type ExpectationRule,
+  type SourceFact,
 } from "./contracts";
 import { detectGaps } from "./engine";
 import { appendLedgerEntry, verifyLedgerChain } from "./ledger";
-import { crossSystemDependencyShare, falsePositiveRate } from "./metrics";
+import { falsePositiveRate } from "./metrics";
 import { resolveEffectiveOwner } from "./owner";
 import {
   validateCoverageAssertion,
@@ -62,7 +63,7 @@ describe("engine — covered scenario", () => {
     expect(b.verdict).toBe("missing");
     expect(b.effectiveOwner.resolved).toBe(true);
     expect(b.effectiveOwner.ownerId).toBe("user:alex-alias");
-    expect(b.crossSystemDependency).toBe(2);
+    expect(b.distinctSystemsDeclared).toBe(2);
     expect(b.commitmentClass).toBe("advice");
     expect(b.humanReviewerRequired).toBe(true);
   });
@@ -183,9 +184,9 @@ describe("ledger — append-only hash chain", () => {
 
 describe("metrics", () => {
   const gaps = [
-    { requestId: "1", verdict: "missing" as const, crossSystemDependency: 2, decision: "accepted" as const, falsePositive: false, firstSeenAt: "2026-06-01T00:00:00Z" },
-    { requestId: "2", verdict: "missing" as const, crossSystemDependency: 1, decision: "accepted" as const, falsePositive: false, firstSeenAt: "2026-06-02T00:00:00Z" },
-    { requestId: "3", verdict: "missing" as const, crossSystemDependency: 2, decision: "rejected" as const, falsePositive: true, firstSeenAt: "2026-06-03T00:00:00Z" },
+    { requestId: "1", verdict: "missing" as const, distinctSystemsDeclared: 2, decision: "accepted" as const, falsePositive: false, firstSeenAt: "2026-06-01T00:00:00Z" },
+    { requestId: "2", verdict: "missing" as const, distinctSystemsDeclared: 1, decision: "accepted" as const, falsePositive: false, firstSeenAt: "2026-06-02T00:00:00Z" },
+    { requestId: "3", verdict: "missing" as const, distinctSystemsDeclared: 2, decision: "rejected" as const, falsePositive: true, firstSeenAt: "2026-06-03T00:00:00Z" },
   ];
   it("computes false-positive rate and flags small samples", () => {
     const fp = falsePositiveRate(gaps);
@@ -193,11 +194,8 @@ describe("metrics", () => {
     expect(fp.falsePositives).toBe(1);
     expect(fp.sufficientSample).toBe(false); // < 20
   });
-  it("computes cross-system dependency share over confirmed gaps", () => {
-    const share = crossSystemDependencyShare(gaps);
-    expect(share.confirmed).toBe(2); // accepted && !fp
-    expect(share.crossSystem).toBe(1);
-    expect(share.share).toBeCloseTo(0.5);
+  it("keeps declared system count neutral; public Core does not compute a moat share", () => {
+    expect(gaps.map((g) => g.distinctSystemsDeclared)).toEqual([2, 1, 2]);
   });
 });
 
@@ -260,5 +258,28 @@ describe("P1-3 rule validator is fail-closed", () => {
   it("validateCoverageAssertion rejects bad windows and complete-without-evidence", () => {
     expect(validateCoverageAssertion({ ...completeCrm, windowStart: fixture.now, windowEnd: "2026-04-01T00:00:00Z" }).errors).toContain("window_start_after_end");
     expect(validateCoverageAssertion({ ...completeCrm, evidence: [] }).errors).toContain("complete_without_evidence");
+  });
+});
+
+describe("v0.1 unstable honesty constraints", () => {
+  it("marks the public Core module as unstable, not a stable pack/overlay API", () => {
+    expect(CROSS_SYSTEM_ACCOUNTABILITY_MODULE_STATUS).toBe("v0.1_unstable");
+  });
+
+  it("treats trigger.condition as non-operative metadata; callers must pre-filter trigger facts", () => {
+    const alteredRule: ExpectationRule = {
+      ...fixture.rule,
+      trigger: { ...fixture.rule.trigger, condition: "stage=lost" },
+    };
+    const reqs = detectGaps({
+      rule: alteredRule,
+      triggerFacts: [dealB],
+      expectationFacts: [],
+      coverageAssertions: [completeCrm, completePm],
+      ownerPolicy: fixture.ownerPolicy,
+      now: fixture.now,
+    });
+    expect(reqs[0].verdict).toBe("missing");
+    expect(reqs[0].distinctSystemsDeclared).toBe(2);
   });
 });

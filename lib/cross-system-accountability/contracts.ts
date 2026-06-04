@@ -1,9 +1,11 @@
-// Cross-System Accountability Gap MVP v0.1 — public-safe contracts.
+// Cross-System Accountability Gap MVP v0.1 — public-safe unstable contracts.
 // Spec: docs/product/HELM_CROSS_SYSTEM_ACCOUNTABILITY_GAP_MVP.md
 //
 // Boundary: read-only, advice-only detection. Nothing here may auto-create a record,
 // dispatch, chase, write back to a source system, send externally, or approve. All data
 // is synthetic / public-safe. Detection is deterministic, not AI-synthesised.
+
+export const CROSS_SYSTEM_ACCOUNTABILITY_MODULE_STATUS = "v0.1_unstable" as const;
 
 export const FORBIDDEN_ACTIONS = [
   "auto_create_record",
@@ -41,7 +43,7 @@ export type ExpectationRule = {
   ruleId: string;
   version: string;
   description: string;
-  trigger: { system: string; entity: string; condition: string };
+  trigger: { system: string; entity: string; condition: string }; // non-operative metadata in v0.1; callers pre-filter SourceFacts
   expectation: { system: string; entity: string; withinDays: number; matchKey: string };
   requiredCoverage: CoverageRequirement[]; // (system, scope) pairs that must be complete, else unknown
   ownerPolicyRef: string;
@@ -106,7 +108,7 @@ export type MissingRecordDecisionRequest = {
   coverageAssertionRefs: string[];
   effectiveOwner: EffectiveOwner;
   evidenceRefs: string[];
-  crossSystemDependency: number;
+  distinctSystemsDeclared: number; // neutral declared-system count; not evidence that a gap required multiple systems
   commitmentClass: "advice";
   reviewState: ReviewState;
   humanReviewerRequired: true;
