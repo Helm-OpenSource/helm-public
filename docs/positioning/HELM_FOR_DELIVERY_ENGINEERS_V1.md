@@ -118,20 +118,20 @@ zh/en 在契约层（不只是翻译 README）；按语言环境投影已做；D
 
 ---
 
-## Golden Path onboarding 锚点
+## 黄金路径上手锚点
 
-成功 = 完成以下可执行路径，并让本地检查链证明判断、证据、复核、边界仍然保持 review-first。第 1 / 2 步的 Docker fresh-clone 路径已由 [D2 smoke receipt](../reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md) 验证，只证明 public Core quickstart，不代表商业发布、客户部署或 SLA 承诺。分钟标签只作为导航参考，不是 SLA、上线承诺或客户部署证明。
+成功 = 完成以下可执行路径，并让本地检查链证明判断、证据、复核、边界仍然保持复核优先。第 1 / 2 步的 Docker 全新克隆路径已由 [D2 冒烟回执](../reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md) 验证，只证明公开 Core 快速启动，不代表商业发布、客户部署或 SLA 承诺。分钟标签只作为导航参考，不是 SLA、上线承诺或客户部署证明。
 
 1. `git clone https://github.com/Helm-OpenSource/helm-public.git && cd helm-public && docker compose up` — 起本地工作区
-2. `open http://localhost:3000` — 看到 `/operating`（经营信号流图）、`/approvals`（复核闸）、`/memory`（经营记忆）三张已经可工作的面（⚠️ `/operating` 当前为 **Phase 2 fixture demo**；接入真实业务数据需 Phase 2.3 runtime adoption 解锁）
-3. 读 [`extensions/case-management-sample/README.md`](../../extensions/case-management-sample/README.md) — 看一个 public-safe vertical 起点怎么组织
-4. 改 [`extensions/case-management-sample/tenant.manifest.json`](../../extensions/case-management-sample/tenant.manifest.json) 的 slug + displayName — 你的客户 vertical 雏形开始成形
-5. 跑 `npm run eval:operating-signal-flow` — 看到 7 类信号 / 10 类阻塞 / 22 个 state 哪里被你的 fixture 覆盖、哪里没覆盖
+2. `open http://localhost:3000` — 看到 `/operating`（经营信号流图）、`/approvals`（复核闸）、`/memory`（经营记忆）三张已经可工作的面（⚠️ `/operating` 当前为 **Phase 2 夹具演示**；接入真实业务数据需 Phase 2.3 运行时采用解锁）
+3. 读 [`extensions/case-management-sample/README.md`](../../extensions/case-management-sample/README.md) — 看一个公开安全纵向方案起点怎么组织
+4. 改 [`extensions/case-management-sample/tenant.manifest.json`](../../extensions/case-management-sample/tenant.manifest.json) 的 slug + displayName — 你的客户纵向方案雏形开始成形
+5. 跑 `npm run eval:operating-signal-flow` — 看到 7 类信号 / 10 类阻塞 / 22 个状态哪里被你的夹具覆盖、哪里没覆盖
 6. 读 [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md) — 接你客户的现有系统
 
-走完这 6 步 = 你已经看到了可 fork 工程结构的核心骨架。剩下的是 schema 定制、connector 适配、文案打磨和人工复核。
+走完这 6 步 = 你已经看到了可复刻工程结构的核心骨架。剩下的是数据模式定制、连接器适配、文案打磨和人工复核。
 
-> 如果你卡在某一步，去 GitHub Discussions 发帖。Golden Path 跑不通时，先按 gate 降级，不把它写成已经验证的对外承诺。
+> 如果你卡在某一步，去 GitHub Discussions 发帖。黄金路径跑不通时，先按门禁降级，不把它写成已经验证的对外承诺。
 
 ---
 
@@ -140,23 +140,23 @@ zh/en 在契约层（不只是翻译 README）；按语言环境投影已做；D
 **不卖**：
 
 - ❌ SaaS 直销给端客户（你卖给端客户，Helm Inc. 不和你抢）
-- ❌ fork / 商用 / 自营 license fee
-- ❌ vertical pack 售卖（你想做的 vertical 自己 fork 自己卖）
-- ❌ agent marketplace / plugin store
-- ❌ LLM 编排平台
+- ❌ 复刻 / 商用 / 自营授权费
+- ❌ 纵向方案包售卖（你想做的纵向方案自己复刻自己卖）
+- ❌ 智能体市场 / 插件商店
+- ❌ 大模型编排平台
 
 **卖**：
 
-- ✅ open-core 持续维护 + 升级 + 文档（Apache-2.0，免费）
+- ✅ 开放核心持续维护 + 升级 + 文档（Apache-2.0，免费）
 - ✅ Helm Cloud（托管版） — 可选；交付工程师不想自己部署时用
-- ✅ Helm Enterprise（私有部署 + 商业 connector + 高级 audit / observability） — 可选；客户要求合规时用
+- ✅ Helm Enterprise（私有部署 + 商业连接器 + 高级审计 / 可观测性） — 可选；客户要求合规时用
 - ✅ Certified Delivery Partner 认证 — 你的交付质量被 Helm 背书
 
 开源 / 商业边界详见 [`docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`](../product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)。
 
 ---
 
-## 核心纪律：Recommendation ≠ Commitment
+## 核心纪律：建议不等于承诺
 
 这条是 Helm 的核心纪律，也是**你卖给客户的核心卖点**：
 
@@ -164,7 +164,7 @@ zh/en 在契约层（不只是翻译 README）；按语言环境投影已做；D
 - **承诺（Commitment）**：具有业务影响的正式行动，必须明确授权
 - 任何客户可见措辞，如可能被误读成承诺，会被显式降级为"边界备注 / 前置 / 依赖"
 
-**eval gate 强制执行**。文档不是承诺；**代码 + eval 是可审计证据，正式承诺仍由人工授权和合同定义**。
+**评测门禁强制执行**。文档不是承诺；**代码 + 评测是可审计证据，正式承诺仍由人工授权和合同定义**。
 
 详见 [AGENTS.md §6-§7](../../AGENTS.md)。
 
@@ -175,7 +175,7 @@ zh/en 在契约层（不只是翻译 README）；按语言环境投影已做；D
 | 你想做 | 看这里 |
 |---|---|
 | 跑起来看一眼 | [README.md](../../README.md) 的 90 秒 demo |
-| 跟踪公开 vertical 入口 | [docs/README.md](../README.md) |
+| 跟踪公开纵向方案入口 | [docs/README.md](../README.md) |
 | 接客户的系统 | [`docs/integrations/INTEGRATION_TEMPLATE.md`](../integrations/INTEGRATION_TEMPLATE.md) |
 | 理解开源 / 商业边界 | [`docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md`](../product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md) |
 | 申请 Certified Delivery Partner | [`docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md`](../product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) |
@@ -189,8 +189,8 @@ zh/en 在契约层（不只是翻译 README）；按语言环境投影已做；D
 
 | 日期 | 变化 |
 |---|---|
-| 2026-05-18 | V1 初稿：以"对交付工程师"为唯一受众切换定位；引入 Coze/Wukong/Dify 与 LangGraph/LangChain 双轴差异表；列 7 个 code-backed value point + 30 分钟 onboarding 锚点 + 卖 / 不卖边界 |
-| 2026-05-18 | V1 二稿：填实 `<reference-vertical>` → `case-management-sample`（从 tenant-private vertical pack 抽出），固化为 v0.1 发布物 |
-| 2026-05-18 | V1 三稿：收紧早期交付目标口径、Dify forkability、代码/eval 承诺口径，并给 `case-management-sample` 补上 release gate 防线 |
-| 2026-05-18 | V1 四稿：`case-management-sample` 最小公开参考已落地；30 分钟 onboarding 从"等待目录"调整为"等待 fresh-clone 实跑验证" |
-| 2026-06-01 | D2 Docker fresh-clone smoke 已落 receipt；公开 onboarding 口径改为 public Core quickstart 已验证，但不升级为商业发布或客户部署承诺 |
+| 2026-05-18 | V1 初稿：以"对交付工程师"为唯一受众切换定位；引入 Coze/Wukong/Dify 与 LangGraph/LangChain 双轴差异表；列 7 个有代码支撑的价值点 + 30 分钟上手锚点 + 卖 / 不卖边界 |
+| 2026-05-18 | V1 二稿：填实 `<reference-vertical>` → `case-management-sample`（从租户私有纵向方案包抽出），固化为 v0.1 发布物 |
+| 2026-05-18 | V1 三稿：收紧早期交付目标口径、Dify 可复刻性、代码 / 评测承诺口径，并给 `case-management-sample` 补上发布门禁防线 |
+| 2026-05-18 | V1 四稿：`case-management-sample` 最小公开参考已落地；30 分钟上手从"等待目录"调整为"等待全新克隆实跑验证" |
+| 2026-06-01 | D2 Docker 全新克隆冒烟回执已落；公开上手口径改为公开 Core 快速启动已验证，但不升级为商业发布或客户部署承诺 |

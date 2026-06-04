@@ -16,6 +16,24 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：Helm for Delivery Engineers 定位文档后半段的中文上手 / 商业边界术语混写已继续
+清理；本批只改黄金路径上手、复核优先、Docker 全新克隆、D2 冒烟回执、公开 Core 快速启动、
+公开安全纵向方案、客户纵向方案、可复刻工程结构、数据模式、连接器适配、授权费、智能体市场、
+插件商店、大模型编排平台、开放核心、商业连接器、审计 / 可观测性、建议不等于承诺和评测门禁
+文案及源码守卫，不改变命令、链接、路径、阶段事实、商业边界或非承诺规则，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese onboarding and
+commercial-boundary terminology in the second half of the Helm for Delivery
+Engineers positioning doc has been further localized. This batch changes Golden
+Path onboarding, review-first, Docker fresh clone, D2 smoke receipt, public
+Core quickstart, public-safe vertical, customer vertical, forkable engineering
+structure, data schema, connector adaptation, license fee, agent marketplace,
+plugin store, LLM orchestration platform, open core, commercial connector,
+audit / observability, recommendation is not commitment, and eval gate wording
+plus source guards only; it does not change commands, links, paths, phase
+facts, commercial boundaries, or non-commitment rules, and does not claim
+full-repo bilingualization completion.
+
 最新双语化收口：Helm for Delivery Engineers 定位文档的中文核心价值术语混写已继续清理；
 本批只改智能体平台、大模型框架、可复刻工程结构、工具函数、纵向参考实现、建议 / 承诺边界、
 评测门禁、中文连接器、开放核心、价值点、发布门禁、信号模式、工作器驱动预览、BI 报告技能资产、

@@ -2526,6 +2526,41 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps delivery-engineer positioning Chinese onboarding and boundary copy localized", () => {
+    const positioning = read(
+      "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md",
+    );
+    const chineseBody = positioning.slice(
+      positioning.indexOf("## 黄金路径上手锚点"),
+      positioning.indexOf("## 下一步"),
+    );
+
+    expect(chineseBody).toContain("黄金路径上手锚点");
+    expect(chineseBody).toContain("复核优先");
+    expect(chineseBody).toContain("Docker 全新克隆路径");
+    expect(chineseBody).toContain("D2 冒烟回执");
+    expect(chineseBody).toContain("公开 Core 快速启动");
+    expect(chineseBody).toContain("公开安全纵向方案");
+    expect(chineseBody).toContain("客户纵向方案雏形");
+    expect(chineseBody).toContain("可复刻工程结构");
+    expect(chineseBody).toContain("数据模式定制");
+    expect(chineseBody).toContain("连接器适配");
+    expect(chineseBody).toContain("复刻 / 商用 / 自营授权费");
+    expect(chineseBody).toContain("纵向方案包售卖");
+    expect(chineseBody).toContain("智能体市场 / 插件商店");
+    expect(chineseBody).toContain("大模型编排平台");
+    expect(chineseBody).toContain("开放核心持续维护");
+    expect(chineseBody).toContain("商业连接器");
+    expect(chineseBody).toContain("高级审计 / 可观测性");
+    expect(chineseBody).toContain("建议不等于承诺");
+    expect(chineseBody).toContain("评测门禁强制执行");
+    expect(chineseBody).toContain("代码 + 评测是可审计证据");
+
+    expect(chineseBody).not.toMatch(
+      /Golden Path onboarding|review-first|fresh-clone|D2 smoke receipt|public Core quickstart|Phase 2 fixture demo|runtime adoption|public-safe vertical|state 哪里|fixture 覆盖|可 fork|schema 定制|connector 适配|gate 降级|license fee|vertical pack|agent marketplace|plugin store|LLM 编排平台|open-core|commercial connector|audit \/ observability|Recommendation ≠ Commitment|eval gate|代码 \+ eval/,
+    );
+  });
+
   it("keeps HSI requirements Chinese body localized for review-first signal boundary terminology", () => {
     const hsiRequirements = read(
       "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",
