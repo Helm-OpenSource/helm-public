@@ -127,6 +127,7 @@ export function createConversationDetailReportingContract(
 
 export function toConversationDetailPageReportingProtocol(
   contract: ConversationDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.conversationDetailJudgement,
@@ -138,7 +139,10 @@ export function toConversationDetailPageReportingProtocol(
     pageBoundarySummary: contract.conversationDetailBoundarySummary,
     pageEvidenceSummary: contract.conversationDetailEvidenceSummary,
     pageWorkerSummary: contract.conversationDetailWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.conversationDetailRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(
+      contract.conversationDetailRiskSignal,
+      english,
+    ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -194,8 +198,8 @@ function validateSharedRules(contract: ConversationDetailReportingContract) {
   }
 }
 
-function labelForRiskSignal(signal: ConversationDetailRiskSignal) {
-  if (signal === "high") return "高风险";
-  if (signal === "caution") return "谨慎沟通";
-  return "继续观察";
+function labelForRiskSignal(signal: ConversationDetailRiskSignal, english: boolean) {
+  if (signal === "high") return english ? "High risk" : "高风险";
+  if (signal === "caution") return english ? "Communicate with caution" : "谨慎沟通";
+  return english ? "Keep watching" : "继续观察";
 }

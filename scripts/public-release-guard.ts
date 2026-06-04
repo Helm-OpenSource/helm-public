@@ -896,7 +896,7 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "quality:regression": "npm run test:public:guards && npm run public:smoke:static",
   "public:e2e:smoke": "npm run public:smoke:static",
   e2e: "npm run public:e2e:smoke",
-  "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+  "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
   "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
   "check:public-commit-metadata":
     "node --import tsx scripts/public-commit-metadata-check.ts",
@@ -904,7 +904,7 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
     "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
   "release:check": "node --import tsx scripts/release-readiness-check.ts",
   "public:smoke:static":
-    "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
+    "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
 };
 
 const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([

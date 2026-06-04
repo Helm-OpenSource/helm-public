@@ -4518,7 +4518,7 @@ export async function acknowledgeTenantResourceGuardedWritePilotAction(
   if (!parsed.success) {
     return {
       ok: false,
-      error: session.english ? "Invalid pilot 已确认" : "试点确认参数不合法",
+      error: session.english ? "Invalid pilot confirmation" : "试点确认参数不合法",
     };
   }
 
@@ -4538,7 +4538,7 @@ export async function acknowledgeTenantResourceGuardedWritePilotAction(
         error instanceof Error
           ? error.message
           : session.english
-            ? "Pilot 已确认 failed"
+            ? "Pilot confirmation failed"
             : "试点确认失败",
     };
   }

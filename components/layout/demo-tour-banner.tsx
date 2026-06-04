@@ -20,7 +20,7 @@ export function DemoTourBanner() {
   const searchParams = useSearchParams();
   const { locale, demoMode } = useWorkspaceUi();
   const english = locale === "en-US";
-  const [dismissed, setDismissed] = useState(true); // 默认关闭，减少烦扰
+  const [dismissed, setDismissed] = useState(true);
   const profile = demoMode ? getDemoModeProfile(demoMode, locale) : null;
   const quickPath = profile?.quickPath ?? [];
   const currentStepIndex = quickPath.findIndex(
@@ -34,7 +34,6 @@ export function DemoTourBanner() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    // 检查用户是否永久关闭了引导
     const permanentlyDismissed = window.localStorage.getItem(STORAGE_KEY + "-permanent");
     const frame = window.requestAnimationFrame(() => {
       setDismissed(stored === "true" || permanentlyDismissed === "true");
@@ -43,7 +42,6 @@ export function DemoTourBanner() {
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  // 默认隐藏，只在Demo模式下且用户未关闭时显示
   if (dismissed || !profile || !demoMode) return null;
 
   return (

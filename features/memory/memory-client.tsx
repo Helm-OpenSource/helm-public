@@ -1237,7 +1237,7 @@ export function MemoryClient({
         <CardHeader>
           <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
             <Sparkles className="h-3.5 w-3.5" />
-            {english ? "Reflection 延续" : "复盘延续"}
+            {english ? "Reflection carry-forward" : "复盘延续"}
           </div>
           <CardTitle>
             {english
@@ -1297,7 +1297,7 @@ export function MemoryClient({
                                 candidateId: item.id,
                                 sourcePage: "/memory",
                               }),
-                            english ? "Reflection 延续 candidate accepted" : "已接受复盘延续候选",
+                            english ? "Reflection carry-forward candidate accepted" : "已接受复盘延续候选",
                           )
                         }
                         disabled={pending}
@@ -1316,7 +1316,7 @@ export function MemoryClient({
                                 candidateId: item.id,
                                 sourcePage: "/memory",
                               }),
-                            english ? "Reflection 延续 candidate dismissed" : "已忽略复盘延续候选",
+                            english ? "Reflection carry-forward candidate dismissed" : "已忽略复盘延续候选",
                           )
                         }
                         disabled={pending}
@@ -1341,7 +1341,7 @@ export function MemoryClient({
           ) : (
             <EmptyState
               title={
-                english ? "No reflection 延续 yet" : "还没有复盘延续"
+                english ? "No reflection carry-forward yet" : "还没有复盘延续"
               }
               description={
                 english
@@ -1363,7 +1363,7 @@ export function MemoryClient({
           </div>
           <CardTitle>
             {english
-              ? "Accepted or dismissed 延续 stays visible as an audit trail"
+              ? "Accepted or dismissed carry-forward stays visible as an audit trail"
               : "已经接受或忽略的延续上下文仍然作为审计轨迹保留可见"}
           </CardTitle>
           <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">

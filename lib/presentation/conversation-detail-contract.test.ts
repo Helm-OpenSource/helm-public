@@ -55,6 +55,10 @@ describe("conversation detail reporting contract", () => {
     expect(protocol.pageJudgement).toContain("founder-demo");
     expect(protocol.pageBoundarySummary[0]).toContain("commitment");
     expect(protocol.pageNextAction).toHaveLength(1);
+    expect(
+      toConversationDetailPageReportingProtocol(contract, true)
+        .pagePrioritySignal,
+    ).toBe("Communicate with caution");
   });
 
   it("requires the full evidence grouping on conversation pages", () => {
