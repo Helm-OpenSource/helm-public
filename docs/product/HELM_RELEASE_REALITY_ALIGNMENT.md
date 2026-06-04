@@ -51,7 +51,7 @@ customer-deployment, or roadmap commitments.
 - 5 分钟第一张判断卡
 - 90 秒会议候选提取
 - 10 分钟 CRM 到 Must Push 候选
-- 7 个工作日 integration issue 回复
+- 7 个工作日集成议题回复
 
 新增质量门：
 
@@ -83,7 +83,7 @@ P0 只保留：
 - Slack
 - Zoom
 
-其它系统进入 issue-driven candidate pool。回复 issue 不等于排期，不等于承诺会做。
+其它系统进入议题驱动候选池。回复议题不等于排期，不等于承诺会做。
 
 ## 二、Release Hard Gates
 
@@ -93,7 +93,7 @@ P0 只保留：
 - secret history 已正式修复，或公开镜像已验证无 compromised secret。
 - Docker smoke 已在可用 Docker 主机跑通。
 - on-call / response policy 已 owner-approved。
-- audit trace public posture 为 `claim_withdrawn` 或 `visualization_ready`。
+- 审计轨迹公开姿态为 `claim_withdrawn` 或 `visualization_ready`。
 - Required Reviewer approval record 已存在。
 - Redacted live DB calibration report 已存在。
 
@@ -155,7 +155,7 @@ machine 上显式设置：
 决策：
 
 - 保留 `README.en.md`、`SECURITY.en.md`、`CONTRIBUTING.en.md` 作为开源入口。
-- 深层治理、产品和 review 文档默认中文。
+- 深层治理、产品和复核文档默认中文。
 - 若英文副本不再维护，应归档或改成指向中文源的导航页，不保留过时镜像。
 
 ### 4. Offline eval 优先级
@@ -183,11 +183,11 @@ machine 上显式设置：
 - 8-10 通候选验证电话完成。
 - ≥3 个候选愿意谈 ≥¥30k paid pilot。
 - 选出 Top 1 + backup。
-- Week 0 合同 / DPA / 数据清单 / review 节奏就绪。
+- Week 0 合同 / DPA / 数据清单 / 复核节奏就绪。
 
 ### 2. Degraded-mode health surface
 
-当前已新增 `/health` 公开只读面，集中显示 DB / LLM / connectors / capture / audit trace 的降级姿态。它不是 uptime SLA，也不暴露租户级连接器计数。
+当前已新增 `/health` 公开只读面，集中显示 DB / LLM / 连接器 / 采集 / 审计轨迹的降级姿态。它不是可用性服务等级协议，也不暴露租户级连接器计数。
 
 下一层需要登录后的 workspace-scoped drill-down：
 
@@ -201,15 +201,15 @@ machine 上显式设置：
 
 ### 3. Extension seam
 
-当前 `lib/extensions/registry.tsx` 不是第三方 plugin runtime。
+当前 `lib/extensions/registry.tsx` 不是第三方插件运行时。
 
 正式口径：
 
-- 它是 first-party / private tenant extension seam。
+- 它是一方 / 私有租户扩展接缝。
 - 不提供 sandbox。
-- 不支持第三方 marketplace。
-- 不承诺隔离执行或 untrusted code loading。
-- 如果真实第二租户需要可插拔第三方扩展，再单独评审 sandbox / process isolation / signing / capability manifest。
+- 不支持第三方市场。
+- 不承诺隔离执行或不受信代码加载。
+- 如果真实第二租户需要可插拔第三方扩展，再单独评审沙箱 / 进程隔离 / 签名 / 能力清单。
 
 ## 五、四档登记
 

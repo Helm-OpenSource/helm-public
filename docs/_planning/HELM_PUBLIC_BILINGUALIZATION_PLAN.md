@@ -38,6 +38,19 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口发布现实对齐文档的中文发布边界术语混写；只调整集成议题、议题驱动候选池、
+审计轨迹公开姿态、复核文档 / 节奏、可用性服务等级协议、第三方插件运行时、第三方市场、
+不受信代码加载和能力清单文案，不改变 `release:check`、环境变量、tag / channel 字段、枚举值
+或英文参考摘要。
+
+This round further localizes mixed Chinese release-boundary terminology in the
+release reality alignment doc. It changes integration issue, issue-driven
+candidate pool, audit-trace public posture, review docs / cadence, availability
+service-level agreement, third-party plugin runtime, third-party marketplace,
+untrusted code loading, and capability manifest wording only, without changing
+`release:check`, environment variables, tag / channel fields, enum values, or
+the English reference summary.
+
 本轮继续收口中国访问性与证据路由包的中文证据入口术语混写；只调整黄金路径、GitHub
 议题 / 讨论、议题模板、讨论编号和黄金路径报告文案，不改变英文参考表格、GitHub / WeChat
 路由边界、负责人批准脱敏回执规则或不自动外联边界。

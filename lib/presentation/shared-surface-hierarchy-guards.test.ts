@@ -2709,6 +2709,31 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps release reality alignment Chinese body localized for release-boundary terms", () => {
+    const releaseReality = read("docs/product/HELM_RELEASE_REALITY_ALIGNMENT.md");
+    const chineseBody = releaseReality.slice(
+      releaseReality.indexOf("本文件把 2026-05-02"),
+    );
+
+    expect(chineseBody).toContain("7 个工作日集成议题回复");
+    expect(chineseBody).toContain("议题驱动候选池");
+    expect(chineseBody).toContain("回复议题不等于排期");
+    expect(chineseBody).toContain("审计轨迹公开姿态");
+    expect(chineseBody).toContain("深层治理、产品和复核文档默认中文");
+    expect(chineseBody).toContain("复核节奏就绪");
+    expect(chineseBody).toContain("DB / LLM / 连接器 / 采集 / 审计轨迹");
+    expect(chineseBody).toContain("不是可用性服务等级协议");
+    expect(chineseBody).toContain("不是第三方插件运行时");
+    expect(chineseBody).toContain("一方 / 私有租户扩展接缝");
+    expect(chineseBody).toContain("不支持第三方市场");
+    expect(chineseBody).toContain("不受信代码加载");
+    expect(chineseBody).toContain("沙箱 / 进程隔离 / 签名 / 能力清单");
+
+    expect(chineseBody).not.toMatch(
+      /integration issue|issue-driven candidate pool|回复 issue|audit trace public posture|review 文档|review 节奏|uptime SLA|plugin runtime|private tenant extension seam|third-party marketplace|untrusted code loading|process isolation|capability manifest/,
+    );
+  });
+
   it("keeps extension directory naming protocol Chinese body localized for public/private boundary terms", () => {
     const namingProtocol = read(
       "docs/product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md",
