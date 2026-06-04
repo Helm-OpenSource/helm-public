@@ -173,6 +173,42 @@ Default expectations:
 - After implementation, sync docs, guards, tests, and self-checks
 - Close with a freeze or sprint report
 
+## 9.1 Multi-agent Parallel Work Governance
+
+All subsequent Codex / Claude / other-agent parallel tasks must establish
+workspace ownership before editing files.
+
+Before any implementation, commit, or PR, run and record:
+
+```bash
+git status --short --branch
+git worktree list
+git rev-parse --show-toplevel
+```
+
+Mandatory rules:
+
+- A task stream may only implement in its own worktree + branch. Do not keep
+  layering changes into a directory where another agent already has uncommitted
+  WIP.
+- If the current directory is not the worktree explicitly owned by this task, or
+  if it contains uncommitted changes that do not belong to this task, stop
+  implementation and create a separate worktree / branch from the intended base.
+- Different concerns must use separate commits / PRs. For example,
+  bilingualization, security hardening, capability development, and governance
+  docs must not be mixed into one commit.
+- Staging must list files explicitly. `git add -A` is prohibited by default
+  unless the agent has first proven that the worktree contains no other user or
+  agent changes.
+- Cross-repository tasks may inspect, dispatch, hand off, and track completion
+  only. Implementation changes must happen in the owning repository's own
+  thread / worktree; do not edit files across repository boundaries from the
+  current repository.
+- If an agent discovers that it has affected another parallel workstream, the
+  first action is not to keep implementing. First turn the current WIP into an
+  atomic commit or move it into an isolated worktree, then record the recovery
+  action.
+
 ## 10. Unified Verification Commands
 
 Unless the user explicitly waives them, tasks must include the following verification list:
