@@ -4,6 +4,8 @@ This project follows a release-note-first changelog until the first public tag.
 
 ## Unreleased
 
+- Added the public Core P0 evidence -> signal -> memory candidate -> review packet sample chain, with CRM fixture coverage and review-first guards.
+- Added Golden Path doctor checks for Qwen / region / residency / npm registry posture, OpenAI-only ASR configuration, and connector token placeholder visibility.
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
 - Further localized mixed Chinese empty-state copy in the meeting v2 ingestion and retrieval card; this batch changes the connector ingestion / retrieval empty state plus source guards only and leaves ingestion sources, retrieval policy, runtime events, and memory-loading boundaries unchanged.

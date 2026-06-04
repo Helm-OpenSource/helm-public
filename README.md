@@ -110,6 +110,17 @@ npm run check:public-release
 
 5. 回到 `/demo` / `/operating` 看判断、证据、复核、边界是否仍保持 review-first。
 
+Public Core P0 的最小可演示链路是：
+
+```text
+public fixture evidence
+  -> signal(sourceRef / time / subject / confidence / gapFields)
+  -> memory candidate only
+  -> review packet(evidence / recommendation / risks / boundaries / nextSteps / owner)
+```
+
+这条链路不会自动外发、自动审批、执行动作、写 CRM，或把候选项升级成正式记忆。
+
 ---
 
 ## 5 步本地起服务
@@ -129,8 +140,12 @@ open http://localhost:3000    # 5. 访问
 | 档位 | 字段 | 说明 |
 |---|---|---|
 | **MUST** | `DATABASE_URL`、`APP_URL`、`CONNECTOR_TOKEN_SECRET` | 起服务的最小集 |
-| **OPTIONAL_AI** | `OPENAI_API_KEY`、`DASHSCOPE_API_KEY`、`DASHSCOPE_BASE_URL`、`LLM_*` | 缺失时给 placeholder + banner，不会崩 |
+| **OPTIONAL_AI** | `OPENAI_API_KEY`、`DASHSCOPE_API_KEY`、`DASHSCOPE_BASE_URL`、`LLM_*` | 缺失时给 placeholder + banner，不会崩；默认 provider 为 Qwen |
+| **PROFILE** | `HELM_DEPLOYMENT_REGION`、`HELM_DATA_RESIDENCY`、`NPM_CONFIG_REGISTRY` | public-safe region / residency / npm registry override 姿态；不构成生产合规声明 |
 | **OPTIONAL_CONNECTORS** | DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支付 | 按需开启 |
+
+ASR 目前只走 OpenAI transcription path；`delivery:doctor` 会预检 `.env.example`
+没有声明通用 / Qwen ASR provider，避免把 Qwen LLM 默认值误读成 ASR 支持。
 
 ---
 

@@ -43,6 +43,41 @@
       }
     },
     {
+      "exampleId": "crm-input-1",
+      "sourceKind": "crm",
+      "direction": "input",
+      "dataPosture": "synthetic",
+      "title": "Synthetic CRM opportunity row with owner mismatch",
+      "data": {
+        "opportunityId": "CRM-SYN-00018",
+        "accountAlias": "account-alpha",
+        "stage": "proposal_review",
+        "ownerAlias": "synthetic.user.alpha",
+        "lastCustomerSignalAt": "2026-05-18T20:11:00+08:00",
+        "linkedEvidenceRefs": [
+          "email:email-syn-00104",
+          "meeting:syn-meeting-00045"
+        ]
+      }
+    },
+    {
+      "exampleId": "crm-output-1",
+      "sourceKind": "crm",
+      "direction": "output",
+      "dataPosture": "synthetic",
+      "title": "Helm projection — CRM owner mismatch draft",
+      "data": {
+        "signalFamily": "owner_mismatch",
+        "evidenceRefs": [
+          "crm:CRM-SYN-00018",
+          "email:email-syn-00104"
+        ],
+        "draftSummary": "CRM opportunity owner and latest customer-requested owner differ. Prepare a review packet before any owner change.",
+        "allowedNextSurface": "review_packet",
+        "forbiddenActions": ["write_crm_stage", "auto_assign_owner", "send_message"]
+      }
+    },
+    {
       "exampleId": "im-input-1",
       "sourceKind": "im",
       "direction": "input",

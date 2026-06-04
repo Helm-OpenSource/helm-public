@@ -144,6 +144,8 @@ cp .env.example .env
 | `DATABASE_URL` | MySQL connection string |
 | `APP_URL` | Usually `http://localhost:3000` for local dev |
 | `CONNECTOR_TOKEN_SECRET` | At least a 32-byte random string. Generate with `openssl rand -hex 32` |
+| `CONNECTOR_TOKEN_SECRET_ID` | Current connector-token encryption key version; change it when rotating the secret |
+| `CONNECTOR_TOKEN_SECRET_PREVIOUS` / `CONNECTOR_TOKEN_SECRET_PREVIOUS_ID` | Keep the previous secret and matching version during the rotation window, then clear them after old tokens are rewritten |
 
 ### OPTIONAL_AI (falls back to placeholder)
 
@@ -154,6 +156,8 @@ cp .env.example .env
 | `LLM_BASE_URL` / `LLM_MODEL` | Local / alternative models |
 
 When missing, the UI does not crash; it shows an "LLM not configured" notice.
+
+LLM call logs keep only metadata such as output length, success state, and detected PII patterns. `LLMCallLog.outputSummary` does not persist raw LLM output or ASR transcript text.
 
 ### OPTIONAL_CONNECTORS (enable as needed)
 

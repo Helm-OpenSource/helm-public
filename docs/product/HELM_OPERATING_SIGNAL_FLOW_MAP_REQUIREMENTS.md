@@ -71,6 +71,11 @@ Every displayed signal should carry:
 
 - stable signal key
 - source family
+- sourceRef
+- observed time
+- subject
+- confidence
+- gap fields
 - object link or rejection reason
 - evidence posture
 - review state

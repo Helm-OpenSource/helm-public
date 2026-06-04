@@ -85,8 +85,8 @@ questions should open an `integration: <system>` issue first.
 | 拉取频率 | 按需（用户在 /settings 点击同步） |
 | 落地对象 | 工作区成员目录 + 会议采集元数据 |
 | 落地界面入口 | /settings?tab=connectors · /meetings |
-| 失败降级 | 显示提示条 "DingTalk 临时不可用"，缓存最近一次成功同步结果 |
-| 凭据持久化 | `connector_credential.encryptedToken`，AES-GCM + CONNECTOR_TOKEN_SECRET |
+| 失败降级 | 显示提示条 / banner "DingTalk 临时不可用"，缓存最近一次成功同步 / sync 结果 |
+| 凭据持久化 | `connector_credential.encryptedToken`，通过 `storeConnectorToken()` 写入；版本化 AES-GCM + `CONNECTOR_TOKEN_SECRET_ID`，轮换期配置 previous secret |
 | 追踪写入 | 目录同步 / 邀请审批通过 |
 ```
 
@@ -131,13 +131,14 @@ questions should open an `integration: <system>` issue first.
 - [ ] state 参数防 CSRF（每次 OAuth flow 随机生成）
 - [ ] PKCE 启用（mobile / SPA 场景必须）
 - [ ] redirect_uri 写死在 server side，不允许 query 注入
-- [ ] access_token 加密存储（不写明文，不写到客户端）
-- [ ] refresh_token 加密存储（如适用）
-- [ ] 凭据持久化字段加密 key 走 `process.env.CONNECTOR_TOKEN_SECRET`
-- [ ] 凭据失效时显式降级，提示条给用户重新授权入口
-- [ ] OAuth 回调处理器写审计日志（含 traceId）
-- [ ] 撤销 OAuth 时清理凭据 + 相关缓存
-- [ ] 没有硬编码客户专属 token / secret
+- [ ] access_token 通过 `storeConnectorToken()` 加密存储（不写 plain text，不写 client-side）
+- [ ] refresh_token 通过 `storeConnectorToken()` 加密存储（如适用）
+- [ ] 凭据持久化字段加密 key 走 `process.env.CONNECTOR_TOKEN_SECRET`，密钥版本走 `CONNECTOR_TOKEN_SECRET_ID`
+- [ ] 密钥轮换时先配置 `CONNECTOR_TOKEN_SECRET_PREVIOUS` / `CONNECTOR_TOKEN_SECRET_PREVIOUS_ID`，确认旧 token 重写后再清空
+- [ ] 凭据失效时显式降级，提示条 / banner 给用户重新授权入口
+- [ ] OAuth 回调处理器 / callback handler 写审计日志 / audit log（含 traceId）
+- [ ] 撤销 OAuth 时清理凭据 + 相关缓存 / cache
+- [ ] 没有 hard-code customer-specific token / secret
 - [ ] `npm run check:public-release` PASS（连接器目录不出现 tenant slug / 真实凭据 / 内部 host）
 ```
 

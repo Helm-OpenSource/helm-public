@@ -4,6 +4,10 @@ import { runDeliveryEngineerGoldenPathDoctor } from "./golden-path-doctor";
 
 const ROOT = "/repo";
 
+function helmEnvKey(...parts: readonly string[]) {
+  return ["HELM", ...parts].join("_");
+}
+
 function buildFileMap(overrides: Record<string, string | null> = {}) {
   const scripts = {
     "delivery:doctor": "tsx scripts/delivery-engineer-doctor.ts",
@@ -18,15 +22,19 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
   const base: Record<string, string> = {
     "package.json": JSON.stringify({ scripts }),
     ".env.example": [
-      'HELM_DEPLOYMENT_REGION="global"',
-      'HELM_DATA_RESIDENCY="global"',
+      `${helmEnvKey("DEPLOYMENT", "REGION")}="global"`,
+      `${helmEnvKey("DATA", "RESIDENCY")}="global"`,
       'HELM_DEFAULT_LOCALE="zh-CN"',
       'NPM_REGISTRY=""',
-      'OPENAI_API_KEY=""',
+      'NPM_CONFIG_REGISTRY="https://registry.npmjs.org/"',
       'DASHSCOPE_API_KEY=""',
-      'LLM_ENABLED="false"',
+      'DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"',
+      'OPENAI_API_KEY=""',
       'LLM_DEFAULT_PROVIDER="qwen"',
+      'LLM_ENABLED="false"',
       'ASR_ENABLED="false"',
+      'ASR_OPENAI_MODEL="gpt-4o-mini-transcribe"',
+      'CONNECTOR_TOKEN_SECRET="public-local-connector-token-secret-000000000000"',
     ].join("\n"),
     "README.md": "For delivery engineers",
     "docs/getting-started.md": "NPM_REGISTRY registry-mirrors",
@@ -41,6 +49,7 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
     "extensions/case-management-sample/hsi-pack.manifest.json": "{}",
     "extensions/case-management-sample/fixtures/case.sample.json": "{}",
     "extensions/case-management-sample/signals/case/case-mapper.ts": "export {};",
+    "extensions/case-management-sample/signals/review-packet.ts": "export {};",
     "extensions/case-management-sample/workers/case-allocation-driver/decide.ts": "export {};",
     "extensions/case-management-sample/workers/case-stewardship-driver/decide.ts": "export {};",
     "lib/headless-signal-interface/pack-manifest.ts": "export {};",
@@ -303,5 +312,45 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
     expect(summary.checks.find((item) => item.id === "config:asr-openai-china-boundary")?.status).toBe(
       "pass",
     );
+  });
+
+  it("keeps the China delivery profile and OpenAI-only ASR precheck visible", () => {
+    const summary = runWithFiles(buildFileMap());
+
+    expect(
+      summary.checks.find((check) => check.id === "china-profile:public-env-defaults")?.status,
+    ).toBe("pass");
+    expect(
+      summary.checks.find((check) => check.id === "asr:openai-only-precheck")?.status,
+    ).toBe("pass");
+    expect(
+      summary.checks.find((check) => check.id === "connector-token:minimal-secret-placeholder")
+        ?.status,
+    ).toBe("pass");
+  });
+
+  it("fails when ASR is configured as a Qwen or generic provider path", () => {
+    const summary = runWithFiles(
+      buildFileMap({
+        ".env.example": [
+          `${helmEnvKey("DEPLOYMENT", "REGION")}="global"`,
+          `${helmEnvKey("DATA", "RESIDENCY")}="global"`,
+          'NPM_CONFIG_REGISTRY="https://registry.npmjs.org/"',
+          'DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"',
+          'LLM_DEFAULT_PROVIDER="qwen"',
+          'ASR_PROVIDER="qwen"',
+          'ASR_ENABLED="true"',
+          'ASR_OPENAI_MODEL=""',
+          'OPENAI_API_KEY=""',
+          'CONNECTOR_TOKEN_SECRET="public-local-connector-token-secret-000000000000"',
+        ].join("\n"),
+      }),
+    );
+
+    const check = summary.checks.find((entry) => entry.id === "asr:openai-only-precheck");
+    expect(summary.passed).toBe(false);
+    expect(check?.status).toBe("fail");
+    expect(check?.detail).toContain("ASR_PROVIDER");
+    expect(check?.detail).toContain("ASR_OPENAI_MODEL");
   });
 });
