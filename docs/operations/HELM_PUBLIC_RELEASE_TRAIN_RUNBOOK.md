@@ -11,11 +11,11 @@ public_safety: Public release train runbook. Lists public-safe cadence, gates, c
 
 ## 中文主文本 / Chinese Main Text
 
-本 runbook 定义 `Helm-OpenSource/helm-public` 在第一轮 public-Core launch 之后
+本作业手册定义 `Helm-OpenSource/helm-public` 在第一轮公开 Core 发布之后
 如何发布。它不是发布批准、商业发布声明、生产服务等级承诺、
 客户部署证明，也不是 Helm Cloud / Helm Enterprise 已就绪声明。
 
-发布原则：public Core 通过小而可 review 的 PR 发布，不能直接 push 到 `main`；
+发布原则：公开 Core 通过小而可复核的 PR 发布，不能直接推送到 `main`；
 检查通过是必要条件但不等于发布批准；试用版发布保持预发布且不标记为最新版本，
 除非负责人修改版本策略；稳定版发布必须推进稳定语义化版本线并通过负责人闸门；
 所有私有回执、凭据、客户证据和批准编号都留在仓库外。

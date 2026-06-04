@@ -2433,10 +2433,14 @@ describe("shared surface hierarchy guards", () => {
       "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",
     );
     const chineseBody = releaseTrainRunbook.slice(
-      releaseTrainRunbook.indexOf("本 runbook 定义"),
+      releaseTrainRunbook.indexOf("本作业手册定义"),
       releaseTrainRunbook.indexOf("## English Reference"),
     );
 
+    expect(chineseBody).toContain("本作业手册定义");
+    expect(chineseBody).toContain("第一轮公开 Core 发布之后");
+    expect(chineseBody).toContain("公开 Core 通过小而可复核的 PR 发布");
+    expect(chineseBody).toContain("不能直接推送到 `main`");
     expect(chineseBody).toContain("发布批准");
     expect(chineseBody).toContain("商业发布声明");
     expect(chineseBody).toContain("生产服务等级承诺");
@@ -2450,7 +2454,7 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("人工回执变量");
 
     expect(chineseBody).not.toMatch(
-      /release approval|commercial launch statement|production SLA|customer deployment proof|Enterprise readiness claim|green checks|trial release|prerelease 且|非 latest|owner 修改 version strategy|stable release|stable semver line|owner gate|private receipt|credential、customer evidence|approval id|release command|maintainer 的 guidance|release tag|public safety gates|quality gates|release machine|manual receipt/,
+      /本 runbook|public-Core launch|public Core|可 review|直接 push|release approval|commercial launch statement|production SLA|customer deployment proof|Enterprise readiness claim|green checks|trial release|prerelease 且|非 latest|owner 修改 version strategy|stable release|stable semver line|owner gate|private receipt|credential、customer evidence|approval id|release command|maintainer 的 guidance|release tag|public safety gates|quality gates|release machine|manual receipt/,
     );
   });
 

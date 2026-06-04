@@ -38,6 +38,16 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口公开发布节奏作业手册的中文发布路径术语混写；只调整作业手册、公开 Core 发布、
+可复核 PR 和不得直接推送主干文案，不改变 PR 路径、`main` 保护、release gate、GitHub Release、
+版本策略、人工回执变量或非 SLA 边界。
+
+This round further localizes mixed Chinese release-path terminology in the
+public release train runbook. It changes runbook, public Core launch,
+reviewable PR, and no-direct-main-push wording only, without changing the PR
+path, `main` protection, release gates, GitHub Releases, version strategy,
+manual receipt variables, or non-SLA boundaries.
+
 本轮继续收口集成模板的中文 GitHub 议题术语混写；只调整 `integration:` 议题、发起议题和先开
 议题对齐方向文案，不改变 `integration:` 字面约定、连接器安全清单、测试要求、`authMode=MOCK`
 默认或可接受 PR 边界。
