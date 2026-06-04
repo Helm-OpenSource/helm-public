@@ -8,6 +8,7 @@ export function PageHeader({
   actions,
   briefing,
   className,
+  english = false,
   showBreadcrumb = true,
   titleAs = "h1",
 }: {
@@ -27,12 +28,15 @@ export function PageHeader({
     decisions?: string[];
   };
   className?: string;
+  english?: boolean;
   showBreadcrumb?: boolean;
   titleAs?: "h1" | "h2";
 }) {
   const TitleTag = titleAs;
-  const defaultTakeawaysLabel = "我现在看到的重点";
-  const defaultDecisionsLabel = "现在要确认";
+  const defaultTakeawaysLabel = english
+    ? "What I see"
+    : "我现在看到的重点";
+  const defaultDecisionsLabel = english ? "You decide" : "现在要确认";
 
   return (
     <div
