@@ -167,6 +167,7 @@ export function createExternalProposalPageDetailReportingContract(
 
 export function toCustomerFacingOfferPageReportingProtocol(
   contract: CustomerFacingOfferPageDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.customerOfferPageJudgement,
@@ -178,7 +179,10 @@ export function toCustomerFacingOfferPageReportingProtocol(
     pageBoundarySummary: contract.customerOfferPageBoundarySummary,
     pageEvidenceSummary: contract.customerOfferPageEvidenceSummary,
     pageWorkerSummary: contract.customerOfferPageWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.customerOfferPageRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(
+      contract.customerOfferPageRiskSignal,
+      english,
+    ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -186,6 +190,7 @@ export function toCustomerFacingOfferPageReportingProtocol(
 
 export function toExternalProposalPageReportingProtocol(
   contract: ExternalProposalPageDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.externalProposalPageJudgement,
@@ -197,7 +202,10 @@ export function toExternalProposalPageReportingProtocol(
     pageBoundarySummary: contract.externalProposalPageBoundarySummary,
     pageEvidenceSummary: contract.externalProposalPageEvidenceSummary,
     pageWorkerSummary: contract.externalProposalPageWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.externalProposalPageRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(
+      contract.externalProposalPageRiskSignal,
+      english,
+    ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -272,8 +280,9 @@ function validateSharedRules({
 
 function labelForRiskSignal(
   signal: CustomerFacingOfferExternalProposalRiskSignal,
+  english: boolean,
 ) {
-  if (signal === "high") return "高风险";
-  if (signal === "caution") return "谨慎外发";
-  return "继续观察";
+  if (signal === "high") return english ? "High risk" : "高风险";
+  if (signal === "caution") return english ? "Send with caution" : "谨慎外发";
+  return english ? "Keep watching" : "继续观察";
 }

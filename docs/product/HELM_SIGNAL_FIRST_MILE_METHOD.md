@@ -391,6 +391,36 @@ ledger. For independent accuracy evaluation, use a public-safe golden pack prepa
 outside the collector path. Matching is fixed: `signalKey` first; otherwise
 `sourceRef + businessObject.ref + signalFamily`.
 
+## 8.5 Source Governance Before Improvement Loops
+
+Signal First Mile collects operating signals, but not every collected signal may feed
+expert evaluation or capability improvement. Helm uses a source-class gate before any
+promotion into expert eval, model improvement, or public fixture reuse:
+
+| Source class | Definition | Allowed use | Forbidden use | De-identification requirement | Improvement loop |
+|---|---|---|---|---|---|
+| `fleet_customer_health` | Helm operator view across customer tenant health | Internal operator triage, support readiness, advice-only risk review | Eval case, model improvement, training, memory promotion, automatic customer action | Reversible alias is only minimum exposure; it requires salt lifecycle, role access, decode audit, and `customerConsentScopeRef` | Never |
+| `self_dogfood_health` | Helm observing its own organization operations | Dogfood review and candidate improvement material | HR / performance judgement, person-level promotion, external commitment | Person-level attribution must be technically removed before promotion | Only after de-id + human-review gate |
+| `synthetic_public` | Fully synthetic public fixture | Public eval and fixture validation | Claiming real customer evidence | No real tenant, person, customer, domain, email, phone, or credential | Yes |
+| `deidentified_promoted_case` | Private or dogfood case promoted through review | Held-out eval and regression cases | Promotion without scanner + human signoff | Existing `EvalCasePromotion` gate must pass | Yes |
+| `oss_governance` | GitHub / docs / community governance | Open-source governance workflow | Tenant ingestion, customer diagnosis, expert improvement | Stays in public GitHub / docs process | Never |
+
+This split prevents the overloaded "self-tenant" term from blurring three different
+systems:
+
+- **fleet-health**: Helm's operator view of customer tenant health. It is governed by
+  customer consent, PIPL / residency, operator access, and audit controls. It is not
+  anonymous just because an alias is used, and it never enters expert improvement.
+- **self-dogfood**: Helm's own organization health dogfood. It can become improvement
+  material only after person-level attribution is removed and the promotion gate passes.
+- **OSS governance**: GitHub issues, PRs, contributor activity, and docs governance. It
+  remains outside Helm tenant data and is a non-goal for productized operating signals.
+
+The public validator lives in
+[`../../lib/operating-signal-governance/source-governance.ts`](../../lib/operating-signal-governance/source-governance.ts)
+with a public-safe sample at
+[`../../templates/operating-signal-governance/source-governance.sample.json`](../../templates/operating-signal-governance/source-governance.sample.json).
+
 ## 9. Gate Rules
 
 | Gate | Required proof | Not proven |
@@ -444,6 +474,7 @@ completeness. It is not proof that all enterprise operating scenarios have been 
 
 | Date | Change |
 |---|---|
+| 2026-06-04 | Added operating signal source governance before expert improvement loops |
 | 2026-06-03 | Added Signal Quality Eval as the ledger accuracy and completeness gate before HSI fixture conversion |
 | 2026-06-03 | Added customer materials request as the pre-ledger checklist for delivery engineers |
 | 2026-06-03 | Drafted Signal First Mile method and linked the dependency-free JS drop-in template |

@@ -5,6 +5,7 @@ import type {
 } from "@/features/search/ask-helm-interpreter";
 import type { AskHelmIntentType } from "@/features/search/ask-helm-query-intent";
 import type { AskHelmContextPacketMemorySummary } from "@/features/search/ask-helm-context-packet";
+import { isEnglishLocale, type UiLocale } from "@/lib/i18n/config";
 import { trimText } from "@/lib/utils";
 
 export type AskHelmBusinessSignalKind =
@@ -87,6 +88,7 @@ export type AskHelmBusinessMemoryFactRecord = {
 
 export type AskHelmBusinessSignalBuilderInput = {
   workspaceId: string;
+  locale?: UiLocale;
   now?: Date;
   opportunities?: AskHelmBusinessOpportunityRecord[];
   pendingApprovals?: AskHelmBusinessApprovalRecord[];
@@ -114,32 +116,33 @@ export function buildAskHelmBusinessSignalsFromRecords(
   input: AskHelmBusinessSignalBuilderInput,
 ): AskHelmBusinessSignalDraft[] {
   const now = input.now ?? new Date();
+  const english = input.locale ? isEnglishLocale(input.locale) : false;
   const signals: AskHelmBusinessSignalDraft[] = [];
 
   for (const approval of input.pendingApprovals ?? []) {
-    signals.push(buildPendingReviewSignal(input.workspaceId, approval));
+    signals.push(buildPendingReviewSignal(input.workspaceId, approval, english));
   }
 
   for (const opportunity of input.opportunities ?? []) {
     if (!OPEN_OPPORTUNITY_STAGES.has(opportunity.stage)) continue;
 
     if (isOverdue(opportunity.dueDate, now)) {
-      signals.push(buildOverdueOpportunitySignal(input.workspaceId, opportunity, now));
+      signals.push(buildOverdueOpportunitySignal(input.workspaceId, opportunity, now, english));
       continue;
     }
 
     if (HIGH_RISK_LEVELS.has(opportunity.riskLevel)) {
-      signals.push(buildHighRiskOpportunitySignal(input.workspaceId, opportunity));
+      signals.push(buildHighRiskOpportunitySignal(input.workspaceId, opportunity, english));
       continue;
     }
 
     if (isStale(opportunity.lastProgressAt, now)) {
-      signals.push(buildStaleOpportunitySignal(input.workspaceId, opportunity, now));
+      signals.push(buildStaleOpportunitySignal(input.workspaceId, opportunity, now, english));
     }
   }
 
   for (const fact of input.memoryFacts ?? []) {
-    const signal = buildRecentMemorySignal(input.workspaceId, fact);
+    const signal = buildRecentMemorySignal(input.workspaceId, fact, english);
     if (signal) signals.push(signal);
   }
 
@@ -232,14 +235,19 @@ export function selectAskHelmBusinessSignalsForQuestion({
 function buildPendingReviewSignal(
   workspaceId: string,
   approval: AskHelmBusinessApprovalRecord,
+  english: boolean,
 ): AskHelmBusinessSignalDraft {
   const item = approval.actionItem;
   const object = item.opportunity
     ? opportunityToGroundedObject(item.opportunity)
     : undefined;
-  const title = approval.isHighRisk
-    ? `高风险复核待处理：${item.title}`
-    : `复核待处理：${item.title}`;
+  const title = english
+    ? approval.isHighRisk
+      ? `High-risk review pending: ${item.title}`
+      : `Review pending: ${item.title}`
+    : approval.isHighRisk
+      ? `高风险复核待处理：${item.title}`
+      : `复核待处理：${item.title}`;
 
   return {
     id: `approval:${approval.id}`,
@@ -249,7 +257,9 @@ function buildPendingReviewSignal(
       approval.reasoning ??
       item.aiReason ??
       item.description ??
-      "存在等待人工确认的复核项，需要先看证据与边界再继续推进。",
+      (english
+        ? "A review item is waiting for human confirmation. Check the evidence and boundary before continuing."
+        : "存在等待人工确认的复核项，需要先看证据与边界再继续推进。"),
     evidenceRefs: [
       `workspace:${workspaceId}`,
       `approval:${approval.id}`,
@@ -261,12 +271,13 @@ function buildPendingReviewSignal(
     primaryNextStep: {
       type: "page_target",
       target: "/approvals",
-      label: "打开复核页面确认",
+      label: english ? "Open the review page" : "打开复核页面确认",
     },
     object,
     reviewPosture: "review_required",
-    boundaryNote:
-      "这是复核信号草稿，只提示需要人工确认；不会自动批准、发送、承诺或写回正式系统。",
+    boundaryNote: english
+      ? "This is a review signal draft. It only indicates that human confirmation is required; it does not auto-approve, send, commit, or write back to an official system."
+      : "这是复核信号草稿，只提示需要人工确认；不会自动批准、发送、承诺或写回正式系统。",
     score: approval.isHighRisk || HIGH_RISK_LEVELS.has(item.riskLevel) ? 100 : 92,
   };
 }
@@ -275,6 +286,7 @@ function buildOverdueOpportunitySignal(
   workspaceId: string,
   opportunity: AskHelmBusinessOpportunityRecord,
   now: Date,
+  english: boolean,
 ): AskHelmBusinessSignalDraft {
   const days = daysSince(opportunity.dueDate, now);
   const object = opportunityToGroundedObject(opportunity);
@@ -282,23 +294,28 @@ function buildOverdueOpportunitySignal(
   return {
     id: `opportunity-overdue:${opportunity.id}`,
     kind: "overdue_followup",
-    title: `${opportunityLabel(opportunity)} 已超过推进时间 ${Math.max(days, 1)} 天`,
+    title: english
+      ? `${opportunityLabel(opportunity)} is ${formatEnglishDayCount(Math.max(days, 1))} past its follow-up window`
+      : `${opportunityLabel(opportunity)} 已超过推进时间 ${Math.max(days, 1)} 天`,
     reason:
       opportunity.nextAction ??
       opportunity.nextStepSummary ??
-      "机会存在到期未承接的下一步，需要确认客户等待、内部负责人和是否升级复核。",
+      (english
+        ? "The opportunity has an overdue next step. Confirm customer waiting state, internal owner, and whether review escalation is needed."
+        : "机会存在到期未承接的下一步，需要确认客户等待、内部负责人和是否升级复核。"),
     evidenceRefs: [`workspace:${workspaceId}`, `opportunity:${opportunity.id}`],
     primaryNextStep: {
       type: "page_target",
       target: "/operating",
-      label: "打开经营总盘承接",
+      label: english ? "Open the operating workspace" : "打开经营总盘承接",
     },
     object,
     reviewPosture: HIGH_RISK_LEVELS.has(opportunity.riskLevel)
       ? "review_required"
       : "draft_only",
-    boundaryNote:
-      "这是经营推进信号草稿，只建议承接和复核路径；不等于对客户或团队的正式承诺。",
+    boundaryNote: english
+      ? "This is an operating progress signal draft. It suggests a handoff and review path; it is not a formal commitment to the customer or team."
+      : "这是经营推进信号草稿，只建议承接和复核路径；不等于对客户或团队的正式承诺。",
     score:
       88 +
       Math.min(days, 10) +
@@ -309,27 +326,33 @@ function buildOverdueOpportunitySignal(
 function buildHighRiskOpportunitySignal(
   workspaceId: string,
   opportunity: AskHelmBusinessOpportunityRecord,
+  english: boolean,
 ): AskHelmBusinessSignalDraft {
   const object = opportunityToGroundedObject(opportunity);
 
   return {
     id: `opportunity-risk:${opportunity.id}`,
     kind: "high_risk_opportunity",
-    title: `${opportunityLabel(opportunity)} 需要主管关注`,
+    title: english
+      ? `${opportunityLabel(opportunity)} needs manager attention`
+      : `${opportunityLabel(opportunity)} 需要主管关注`,
     reason:
       opportunity.nextAction ??
       opportunity.nextStepSummary ??
-      "机会风险等级较高，需要核对阻塞、客户预期和下一步是否需要复核。",
+      (english
+        ? "The opportunity risk level is high. Check blockers, customer expectations, and whether the next step needs review."
+        : "机会风险等级较高，需要核对阻塞、客户预期和下一步是否需要复核。"),
     evidenceRefs: [`workspace:${workspaceId}`, `opportunity:${opportunity.id}`],
     primaryNextStep: {
       type: "page_target",
       target: "/operating",
-      label: "打开经营总盘确认风险",
+      label: english ? "Open the operating workspace" : "打开经营总盘确认风险",
     },
     object,
     reviewPosture: "review_required",
-    boundaryNote:
-      "高风险机会只生成复核优先级，不自动升级、承诺、外发或修改 CRM/正式状态。",
+    boundaryNote: english
+      ? "High-risk opportunities only create review priority. They do not auto-escalate, commit, send externally, or modify CRM/official status."
+      : "高风险机会只生成复核优先级，不自动升级、承诺、外发或修改 CRM/正式状态。",
     score: opportunity.riskLevel === "CRITICAL" ? 94 : 88,
   };
 }
@@ -338,6 +361,7 @@ function buildStaleOpportunitySignal(
   workspaceId: string,
   opportunity: AskHelmBusinessOpportunityRecord,
   now: Date,
+  english: boolean,
 ): AskHelmBusinessSignalDraft {
   const days = daysSince(opportunity.lastProgressAt, now);
   const object = opportunityToGroundedObject(opportunity);
@@ -345,21 +369,26 @@ function buildStaleOpportunitySignal(
   return {
     id: `opportunity-stale:${opportunity.id}`,
     kind: "stale_opportunity",
-    title: `${opportunityLabel(opportunity)} ${Math.max(days, STALE_PROGRESS_DAYS)} 天未见新进展`,
+    title: english
+      ? `${opportunityLabel(opportunity)} has had no new progress for ${formatEnglishDayCount(Math.max(days, STALE_PROGRESS_DAYS))}`
+      : `${opportunityLabel(opportunity)} ${Math.max(days, STALE_PROGRESS_DAYS)} 天未见新进展`,
     reason:
       opportunity.nextAction ??
       opportunity.nextStepSummary ??
-      "机会长期没有进展记录，需要判断是客户沉默、内部卡点还是应降级处理。",
+      (english
+        ? "The opportunity has no recent progress record. Confirm whether this is customer silence, an internal blocker, or a downgrade candidate."
+        : "机会长期没有进展记录，需要判断是客户沉默、内部卡点还是应降级处理。"),
     evidenceRefs: [`workspace:${workspaceId}`, `opportunity:${opportunity.id}`],
     primaryNextStep: {
       type: "page_target",
       target: "/operating",
-      label: "打开经营总盘跟进",
+      label: english ? "Open the operating workspace" : "打开经营总盘跟进",
     },
     object,
     reviewPosture: "draft_only",
-    boundaryNote:
-      "沉默信号只提示需要核实原因；在人工确认前不自动改变机会阶段或对外发送。",
+    boundaryNote: english
+      ? "Silence signals only indicate that the reason should be checked. They do not auto-change opportunity stage or send externally before human confirmation."
+      : "沉默信号只提示需要核实原因；在人工确认前不自动改变机会阶段或对外发送。",
     score: 74 + Math.min(Math.floor(days / 3), 8),
   };
 }
@@ -367,6 +396,7 @@ function buildStaleOpportunitySignal(
 function buildRecentMemorySignal(
   workspaceId: string,
   fact: AskHelmBusinessMemoryFactRecord,
+  english: boolean,
 ): AskHelmBusinessSignalDraft | null {
   const objectType = toAskHelmObjectType(fact.objectType);
   if (!objectType || fact.status !== "ACTIVE") return null;
@@ -377,7 +407,7 @@ function buildRecentMemorySignal(
   return {
     id: `memory-fact:${fact.id}`,
     kind: "recent_memory",
-    title: `记忆提示：${fact.title}`,
+    title: english ? `Memory prompt: ${fact.title}` : `记忆提示：${fact.title}`,
     reason: trimText(fact.content, 120),
     evidenceRefs: [
       `workspace:${workspaceId}`,
@@ -387,7 +417,7 @@ function buildRecentMemorySignal(
     primaryNextStep: {
       type: "page_target",
       target: "/memory",
-      label: "打开经营记忆核对",
+      label: english ? "Open operating memory" : "打开经营记忆核对",
     },
     object: {
       objectType,
@@ -397,8 +427,9 @@ function buildRecentMemorySignal(
       deepLink: objectDeepLink(objectType, fact.objectId),
     },
     reviewPosture: fact.factType === "BLOCKER" ? "review_required" : "read_only",
-    boundaryNote:
-      "记忆提示必须以已复核事实为准；如与当前对象状态冲突，应先在记忆页更正。",
+    boundaryNote: english
+      ? "Memory prompts must defer to reviewed facts. If they conflict with current object state, correct them on the memory page first."
+      : "记忆提示必须以已复核事实为准；如与当前对象状态冲突，应先在记忆页更正。",
     score:
       58 +
       Math.min(Math.floor(fact.importance / 10), 10) +
@@ -422,6 +453,10 @@ function opportunityLabel(opportunity: AskHelmBusinessOpportunityRecord) {
   return opportunity.company?.name
     ? `${opportunity.company.name} · ${opportunity.title}`
     : opportunity.title;
+}
+
+function formatEnglishDayCount(days: number) {
+  return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
 function objectDeepLink(type: AskHelmObjectType, id: string) {

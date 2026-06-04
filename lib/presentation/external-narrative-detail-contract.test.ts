@@ -61,6 +61,10 @@ describe("external narrative detail reporting contract", () => {
     expect(protocol.pageJudgement).toContain("proposal-supporting");
     expect(protocol.pageBoundarySummary[0]).toContain("commitment");
     expect(protocol.pageNextAction).toHaveLength(1);
+    expect(
+      toExternalNarrativeDetailPageReportingProtocol(contract, true)
+        .pagePrioritySignal,
+    ).toBe("Express with caution");
   });
 
   it("requires the full evidence grouping on external narrative pages", () => {

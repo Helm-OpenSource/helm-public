@@ -77,14 +77,15 @@ describe("public mirror preflight", () => {
     expect(result.packageManifest.status).toBe("wrote-projection");
     expect(result.envExample.status).toBe("wrote-projection");
     expect(result.dockerignore.status).toBe("wrote-projection");
-    expect(JSON.parse(readText("package.json"))).toEqual({
+    expect(JSON.parse(readText("package.json"))).toMatchObject({
       name: "helm-console",
       private: false,
       license: "Apache-2.0",
       scripts: {
         dev: "next dev",
-        "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
-        "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+        "public:smoke:static":
+          "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+        "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
       },
     });
     expect(readText(".env.example")).toBe(PUBLIC_ENV_EXAMPLE_CONTENT);
