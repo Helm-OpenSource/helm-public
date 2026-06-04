@@ -1,5 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import type { DashboardPageData } from "@/features/dashboard/page-loader";
+import {
+  formatDashboardRiskSignalDateLabel,
+  formatDashboardRiskSignalRelativeLabel,
+} from "@/features/dashboard/risk-signal-date-labels";
 import { formatDateLabel, formatRelative, trimText } from "@/lib/utils";
 
 export type DashboardRiskSignal = {
@@ -33,7 +37,11 @@ export function buildRiskSignals(
         : `逾期承诺：${item.title}`,
       body: trimText(item.commitmentText, 92),
       meta: english
-        ? `Due ${formatDateLabel(item.dueDate)}`
+        ? `Due ${formatDashboardRiskSignalDateLabel(
+            item.dueDate,
+            english,
+            formatDateLabel,
+          )}`
         : `截止 ${formatDateLabel(item.dueDate)}`,
       tone: "danger",
       badge: (
@@ -53,7 +61,11 @@ export function buildRiskSignals(
         : `长时间未推进：${item.title}`,
       body: trimText(item.nextAction),
       meta: english
-        ? `Last moved ${formatRelative(item.lastProgressAt ?? item.updatedAt)}`
+        ? `Last moved ${formatDashboardRiskSignalRelativeLabel(
+            item.lastProgressAt ?? item.updatedAt,
+            english,
+            formatRelative,
+          )}`
         : `最近推进 ${formatRelative(item.lastProgressAt ?? item.updatedAt)}`,
       tone: "warning",
       badge: (
@@ -75,7 +87,11 @@ export function buildRiskSignals(
         ? `${item.company?.name ?? "Independent contact"} has lacked a substantive push recently, so the system recommends restoring our side of the pace first.`
         : `${item.company?.name ?? "独立联系人"} 近期缺少实质推进，系统建议优先恢复我方节奏。`,
       meta: english
-        ? `Last interaction ${formatRelative(item.lastInteractionAt)}`
+        ? `Last interaction ${formatDashboardRiskSignalRelativeLabel(
+            item.lastInteractionAt,
+            english,
+            formatRelative,
+          )}`
         : `最近互动 ${formatRelative(item.lastInteractionAt)}`,
       tone: "warning",
       badge: (
@@ -96,7 +112,11 @@ export function buildRiskSignals(
         : `高严重度阻塞：${item.blockers[0]!.title}`,
       body: trimText(item.blockers[0]!.blockerText, 92),
       meta: english
-        ? `${item.title} · Active for ${formatRelative(item.blockers[0]!.updatedAt)}`
+        ? `${item.title} · Active for ${formatDashboardRiskSignalRelativeLabel(
+            item.blockers[0]!.updatedAt,
+            english,
+            formatRelative,
+          )}`
         : `${item.title} · 已持续 ${formatRelative(item.blockers[0]!.updatedAt)}`,
       tone: "danger",
       badge: (
