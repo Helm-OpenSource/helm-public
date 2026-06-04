@@ -97,7 +97,6 @@ export function AppShell({
             quickCreateData={quickCreateData}
           />
           <main className="mx-auto flex min-w-0 w-full max-w-[1580px] flex-col gap-6 px-4 pt-5 lg:px-8 lg:pt-6">
-            {/* 默认不显示Demo引导，减少烦扰 */}
             {false ? <DemoTourBanner /> : null}
             {children}
           </main>
