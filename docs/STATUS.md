@@ -16,6 +16,23 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：Helm Extension 目录与命名协议的中文公开 / 私有命名边界术语混写已继续清理；
+本批只改扩展 / 样板、可复刻、公开扩展和样板、通用或合成名称、真实客户 / 租户 / 部署、
+私有供应商、私有域名、客户品牌标识、客户连接器运行时配置、联系人 / 域名 / 主机 / 部署回执
+文案及源码守卫，不改变目录示例、英文参考、私有 Overlay 归属、依赖方向或 public-docs 收录规则，
+也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese public/private naming-boundary
+terminology in the Helm Extension directory and naming protocol has been
+further localized. This batch changes extension / sample, forkable, public
+extension and sample, generic or synthetic names, real customer / tenant /
+deployment, private vendor, private domain, customer branding, customer
+connector runtime configuration, and contact / domain / host / deployment
+receipt wording plus source guards only; it does not change directory examples,
+the English reference, private Overlay ownership, dependency direction, or
+public-docs curation rules, and does not claim full-repo bilingualization
+completion.
+
 最新双语化收口：Helm for Delivery Engineers 定位文档后半段的中文上手 / 商业边界术语混写已继续
 清理；本批只改黄金路径上手、复核优先、Docker 全新克隆、D2 冒烟回执、公开 Core 快速启动、
 公开安全纵向方案、客户纵向方案、可复刻工程结构、数据模式、连接器适配、授权费、智能体市场、

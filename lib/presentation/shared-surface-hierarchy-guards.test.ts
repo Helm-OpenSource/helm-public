@@ -2623,6 +2623,32 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps extension directory naming protocol Chinese body localized for public/private boundary terms", () => {
+    const namingProtocol = read(
+      "docs/product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md",
+    );
+    const chineseBody = namingProtocol.slice(
+      namingProtocol.indexOf("本公开协议约束"),
+      namingProtocol.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("扩展 / 样板");
+    expect(chineseBody).toContain("可复刻");
+    expect(chineseBody).toContain("公开扩展和样板");
+    expect(chineseBody).toContain("通用或合成名称");
+    expect(chineseBody).toContain("真实客户、租户、部署");
+    expect(chineseBody).toContain("私有供应商");
+    expect(chineseBody).toContain("私有域名");
+    expect(chineseBody).toContain("客户品牌标识");
+    expect(chineseBody).toContain("客户连接器运行时配置");
+    expect(chineseBody).toContain("联系人、域名、主机或部署回执");
+    expect(chineseBody).toContain("私有 Overlay 仓库");
+
+    expect(chineseBody).not.toMatch(
+      /extension \/ sample|可 fork|公开 extension|sample 必须|generic 或 synthetic|tenant|deployment|vendor|domain|branding|connector runtime configuration|host 或 deployment receipt/,
+    );
+  });
+
   it("keeps certified ecosystem checklist Chinese body localized for manual certification boundary terms", () => {
     const certificationChecklist = read(
       "docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md",
