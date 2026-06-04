@@ -6,6 +6,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 ## 未发布 / Unreleased
 
+- Added the Signal First Mile public template, quickstart, method doc, offline selector, first-change proof package, customer materials request, quality eval, HSI fixture converter, and review-packet generator for delivery-engineer first-run proof without customer data.
 - Added the public Core P0 evidence -> signal -> memory candidate -> review packet sample chain, with CRM fixture coverage and review-first guards.
 - Added Golden Path doctor checks for Qwen / region / residency / npm registry posture, OpenAI-only ASR configuration, and connector token placeholder visibility.
 - Tightened multi-agent worktree governance so shared primary checkouts stay inspection-first, long-lived WIP moves to dedicated worktrees or atomic PR slices, and recovery starts by inventorying affected worktrees before implementation continues.
