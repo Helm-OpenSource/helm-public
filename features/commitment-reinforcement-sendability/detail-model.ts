@@ -504,7 +504,7 @@ function buildSendabilityJudgement(
   }
   if (sendabilityMode === "discussion-only") {
     return english
-      ? "This page is discussion-only and should not be treated as a可发送 reinforcement surface."
+      ? "This page is discussion-only and should not be treated as a sendable reinforcement surface."
       : "当前这页仍是仅讨论，不应被当成可外发的加固面。";
   }
   if (sendabilityMode === "review-before-send") {
@@ -762,7 +762,7 @@ function buildEvidenceGroups(
               .slice(0, 2)
               .map(
                 (log) =>
-                  `${log.actor} · ${log.summary} · ${formatRelative(log.createdAt)}`,
+                  `${log.actor} · ${log.summary} · ${formatRelativeLabel(log.createdAt, english)}`,
               )
           : [
               english
@@ -884,14 +884,56 @@ function buildEvidenceGroups(
       label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `Last updated ${formatRelative(detail.updatedAt)}`
+          ? `Last updated ${formatRelativeLabel(detail.updatedAt, true)}`
           : `最后更新于 ${formatRelative(detail.updatedAt)}`,
         english
-          ? `Current due date: ${formatDateLabel(detail.dueDate)}`
+          ? `Current due date: ${formatDateLabelForLocale(detail.dueDate, true)}`
           : `当前截止时间：${formatDateLabel(detail.dueDate)}`,
       ],
     },
   ];
+}
+
+function formatRelativeLabel(value: Date | string | null | undefined, english: boolean) {
+  if (!english) {
+    return formatRelative(value);
+  }
+  if (!value) {
+    return "none";
+  }
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  const diffMs = date.getTime() - Date.now();
+  const absoluteMs = Math.abs(diffMs);
+  const minuteMs = 60_000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+
+  const formatter = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
+  if (absoluteMs < hourMs) {
+    return formatter.format(Math.round(diffMs / minuteMs), "minute");
+  }
+  if (absoluteMs < dayMs) {
+    return formatter.format(Math.round(diffMs / hourMs), "hour");
+  }
+  return formatter.format(Math.round(diffMs / dayMs), "day");
+}
+
+function formatDateLabelForLocale(value: Date | string | null | undefined, english: boolean) {
+  if (!english) {
+    return formatDateLabel(value);
+  }
+  if (!value) {
+    return "Not set";
+  }
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function labelForStrengthMode(
