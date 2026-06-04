@@ -212,11 +212,11 @@ type AccountabilityLedgerEntry = {
 
 - **`distinctSystemsDeclared`** = 规则声明中涉及的不同系统数。它是中性结构字段,**不是**
   "该缺口必须跨系统才能发现"的护城河证据。
-- **`falsePositiveRate`** = ledger 中 `falsePositive === true` / 总命中(红线 3 / 护城河 2;按 decision disposition 标注;**小样本不下 <10% 结论**,需足量标注)。
+- **`falsePositiveRate`** = ledger 中 `falsePositive === true` / 总命中(红线 3;按 decision disposition 标注;**小样本不下阈值结论**,需足量标注)。
 - **`newGapArrivalRate`** = 清完历史欠账后,每租户每月**净新增**跨系统真空(红线 2;必须 day-1 埋点,否则只能事后才发现退化为一次性审计)。
 
 真实 `singleSystemDetectable=true/false` 与跨系统必要性占比只能由 overlay 审计产生;public Core
-不得自行推导或对外声明。
+不得自行推导或对外声明。若后续 public Core 需要暴露该字段,唯一允许值是 `unknown`。
 
 ## 11. 判死红线 / Kill-lines
 
@@ -224,11 +224,14 @@ type AccountabilityLedgerEntry = {
 2. 清完历史欠账后月增真空很少 → 常驻 SaaS 判死,最多一次性审计。
 3. false positive 长期 >20%(尤其错误指认责任人)→ 信任判死。
 
-## 12. 护城河成立证据 / Moat evidence
+## 12. Overlay-only 证据 / Evidence reserved for overlays
+
+以下证据**不由 public Core 指标产生**,只能由后续 overlay 审计 / owner review / pack
+盲验给出:
 
 1. ≥3 客户中,overlay 审计证明相当比例的真实缺口不是任一单系统可独立发现。
 2. 足量样本下跨客户 FP 达到 owner 批准阈值,客户持续把 ledger 当复核依据。
-3. ≥1 行业 pack 通过**第二客户盲验**,证明规则不是首客户私有流程。
+3. ≥1 pack 通过**第二客户盲验**,证明规则不是首客户私有流程。
 
 ## 13. Validator / CI 要求 / Validator and CI requirements
 
@@ -273,12 +276,12 @@ coverage assertion、effective-owner 判定、复核后的 FP 证据、append-on
 - 首个 MVP 选哪对连接器使 `CoverageAssertion` **可满足**?(最大风险点)
 - escalation/triage 角色如何 deterministic 配置(避免猜测责任人)?
 - ledger 哈希链锚定:签名 / append-only store / 外部时间戳?
-- FP 标注的最小样本量门槛(避免小 n 误判 <10%)?
+- FP 标注的最小样本量门槛(避免小 n 误判阈值)?
 - 多 expectation slice / 多 trigger slice 的规则如何表达,同时保持 public Core 仍 predicate-blind?
 
 ## English Reference
 
-This v0.1 unstable public kernel narrows Helm's moat thesis to a falsifiable core: reliably detecting cross-system
+This v0.1 unstable public kernel narrows Helm's long-term product thesis to a falsifiable core: reliably detecting cross-system
 accountability gaps — work that should exist and should have an accountable owner but is
 missing/unresolved across disconnected systems (CRM, PM, email, approvals) — and recording
 every judgement, review, and outcome in a single-tenant, append-only, auditable ledger.
@@ -292,11 +295,12 @@ and the Core performs no fuzzy, embedding, or LLM-based joins. `scopeRef` may di
 `entity`; coverage assertions must prove the exact trigger and expectation slices, not a
 broader, narrower, or entity-named substitute.
 Passing this MVP proves a bounded public-safe reference kernel, not a stable pack/overlay API,
-not a cross-enterprise flywheel, and not production readiness. Kill-lines are explicit; moat
-evidence must come from later overlay audits, not from the public Core's declared system count.
+not a cross-enterprise flywheel, and not production readiness. Kill-lines are explicit;
+cross-system necessity evidence must come from later overlay audits, not from the public
+Core's declared system count.
 
 ## 变更记录 / Change Log
 
 | Date | Change |
 |---|---|
-| 2026-06-04 | Drafted Cross-System Accountability Gap MVP spec (narrowed thesis, 5 contracts, coverage-integrity core, kill-lines, moat evidence) |
+| 2026-06-04 | Drafted Cross-System Accountability Gap MVP spec (narrowed thesis, 5 contracts, coverage-integrity core, kill-lines, overlay-only evidence) |

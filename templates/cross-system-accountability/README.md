@@ -36,7 +36,7 @@ lib/cross-system-accountability/
   engine.ts      # 确定性检测引擎
   ledger.ts      # append-only 哈希链(复用 expert-capability/hashing)
   validators.ts  # §13 fail-closed 校验
-  metrics.ts     # §10 度量(FP rate / new-gap rate; no moat share in public Core)
+  metrics.ts     # §10 度量(FP rate / new-gap rate; no cross-system necessity share in public Core)
 templates/cross-system-accountability/scenario.sample.json  # synthetic 全路径样本
 scripts/cross-system-accountability-gap-eval.ts             # 离线 CLI
 ```

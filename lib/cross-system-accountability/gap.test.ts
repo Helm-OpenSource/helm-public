@@ -194,8 +194,10 @@ describe("metrics", () => {
     expect(fp.falsePositives).toBe(1);
     expect(fp.sufficientSample).toBe(false); // < 20
   });
-  it("keeps declared system count neutral; public Core does not compute a moat share", () => {
+  it("keeps declared system count neutral; public Core does not compute cross-system necessity", () => {
     expect(gaps.map((g) => g.distinctSystemsDeclared)).toEqual([2, 1, 2]);
+    expect(gaps.every((g) => !("singleSystemDetectable" in g))).toBe(true);
+    expect(falsePositiveRate(gaps)).not.toHaveProperty("singleSystemDetectable");
   });
 });
 
