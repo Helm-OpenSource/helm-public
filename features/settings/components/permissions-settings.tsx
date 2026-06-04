@@ -25,8 +25,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { RolePresetKey } from "@/lib/definitions/role-presets";
-import { formatDateLabel } from "@/lib/utils";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
+import { formatPermissionDateLabel } from "./permissions-date-labels";
 import { Info, RoleGuide } from "./settings-display";
 
 type SettingsMembership = SettingsClientProps["data"]["memberships"][number];
@@ -423,7 +423,7 @@ export function TeamPermissionsCard({
               {dingtalkDirectoryInviteDryRun ? (
                 <p className="text-xs text-[color:var(--muted-foreground)]">
                   {english ? "Recorded" : "记录时间"} ·{" "}
-                  {formatDateLabel(dingtalkDirectoryInviteDryRun.recordedAt)}
+                  {formatPermissionDateLabel(dingtalkDirectoryInviteDryRun.recordedAt, english)}
                 </p>
               ) : null}
             </div>
@@ -775,8 +775,8 @@ export function TeamPermissionsCard({
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {membership.status === "ACTIVE"
                       ? english
-                        ? `Joined ${formatDateLabel(membership.joinedAt)}`
-                        : `加入于 ${formatDateLabel(membership.joinedAt)}`
+                        ? `Joined ${formatPermissionDateLabel(membership.joinedAt, english)}`
+                        : `加入于 ${formatPermissionDateLabel(membership.joinedAt, english)}`
                       : membership.status === "INVITED"
                         ? english
                           ? "Invited, visible in team operations but not counted as an active seat yet"
