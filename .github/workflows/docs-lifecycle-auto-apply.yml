@@ -1,5 +1,10 @@
 name: Docs Lifecycle — Auto-Apply
 
+# 语言 / Language: workflow job names intentionally remain English because
+# automation and branch protection may depend on them.
+# 中文说明：这是 docs lifecycle 的自动应用链，只处理 owner review packet 到期后的
+# status promotion；它不是内容事实更新，也不是 release approval。
+#
 # Step 3 of HELM_DOC_LIFECYCLE_POLICY_V1 §1.4.
 #
 # Looks for the most-recent docs-owner-review-packet-<YYYY-MM>.json that

@@ -271,14 +271,14 @@ export function CommitmentReinforcementSendabilityDetailView(
                 {
                   label: english
                     ? "Customer-visible strengthening"
-                    : text("customer-visible strengthening"),
+                    : text("客户可见加固"),
                   value:
                     mode === "reinforcement"
                       ? text(props.contract.reinforcementPageCustomerVisibleCue)
                       : text(props.contract.sendabilityPageCustomerVisibleCue),
                 },
                 {
-                  label: english ? "Internal-only wording" : text("internal-only wording"),
+                  label: english ? "Internal-only wording" : text("仅内部话术"),
                   value:
                     mode === "reinforcement"
                       ? text(props.contract.reinforcementPageInternalOnlyCue)

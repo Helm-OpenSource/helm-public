@@ -281,12 +281,20 @@ describe("worker skill resource page support", () => {
 
     expect(visibleCopy).toContain("复核");
     expect(visibleCopy).toContain("方案整形");
+    expect(visibleCopy).toContain("CRM上下文");
     expect(visibleCopy).toContain("客户可见措辞必须保持发送前复核");
     expect(visibleCopy).toContain("可以准备客户可读草稿");
     expect(visibleCopy).toContain("先读取商业上下文");
     expect(visibleCopy).not.toMatch(
-      /review-before-send|customer-visible|non-commitment-only|review-first|May prepare|May update|Read commercial context|Read boundary, package|Read proposal and package|proposal draft|governance notes|customer-ready commitment|当前接入的 flow|默认 skill|review 包|proposal 上下文|review 队列|contract 证据/,
+      /review-before-send|customer-visible|non-commitment-only|review-first|May prepare|May update|Read commercial context|Read boundary, package|Read proposal and package|proposal draft|governance notes|customer-ready commitment|当前接入的 flow|默认 skill|review 包|proposal 上下文|review 队列|contract 证据|交付激活 checklist|CRM 上下文|workspace 状态|membership 状态/,
     );
+
+    const source = read("lib/worker-skill-resource/presentation.ts");
+    expect(source).toContain("交付激活清单路径");
+    expect(source).toContain("CRM上下文");
+    expect(source).toContain("工作区状态");
+    expect(source).toContain("成员身份状态");
+    expect(source).not.toMatch(/交付激活 checklist|CRM 上下文|workspace 状态|membership 状态/);
   });
 
   it("pins representative pages and checks to the shared contract presentation helper", () => {

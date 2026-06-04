@@ -5,7 +5,44 @@ created: 2026-06-02
 review_after: 2026-07-02
 public_safety: Public Core operating model. This is not a release approval, commercial commitment, production SLA, customer deployment proof, or private delivery runbook.
 ---
-# Helm Public Open Source Operating Model
+# Helm Public Open Source Operating Model / Helm 公开开源运营模型
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文定义 `Helm-OpenSource/helm-public` 的公开 Core 使命、方向、
+运营方法和第一层 OKR / KPI 闭环。它只适用于 Apache-2.0 Core 仓库，
+不批准 Helm Cloud、Helm Enterprise、认证伙伴状态、生产服务等级承诺、
+客户部署就绪、自动对外发送、自动批准、自动结算、市场或插件沙箱。
+
+Helm 公开 Core 的使命是帮助交付工程师把企业 AI 运营工作转成
+可复刻、有证据支撑、复核优先的运营闭环。运营方式必须坚持：
+先建立信任再扩大规模、先激活再触达、先贡献再扩张、
+用证据推进集成，以及边界明确的开放核心。
+
+所有公开运营变更默认通过小 PR、公开守卫、夹具证据或激活回执
+证明；高风险措辞、商业姿态、安全细节和外部承诺必须走负责人闸门。
+KPI 是运营目标，不是公开服务等级承诺；触达指标不能替代激活证据。
+
+方向摘要：先建立信任再扩大规模；先用克隆、运行、夹具和首次改动证明激活，
+再看星标、复刻和克隆数这类触达信号；先让贡献者能理解、验证和复核小能力，
+再扩张平台面；集成必须从来源对象、数据流、夹具、预演和复核边界开始；
+商业路径必须保持可选且有清晰边界，不能暗示 Helm Cloud、Helm Enterprise、
+服务等级承诺或客户承诺已经就绪。
+
+OKR 摘要：公开 Core 要保持可信且可合并；第一条交付工程师闭环要可复现；
+贡献者入口要变成可靠运营队列；生态方向要避免不安全承诺；开放核心商业路径
+必须由证据门禁推进；周度运营包只汇总 PR 队列、激活证据、风险、请求决策和
+受控执行队列，决策必须和建议分开。
+
+协作分工摘要：维护者执行负责小 PR、检查、复核和受保护分支纪律；产品负责
+公开 Core 范围、用户路径和能力优先级；商业化负责不削弱 Apache-2.0 Core 的
+开放核心路径；增长运营先把公开可见性转成激活和首次改动证据；OPC 和市场领导
+把跨职能证据转成负责人决策和受控执行；发布质量、安全、开发者体验、社区运营、
+指标运营和生态集成架构分别提供门禁、文档、分类、事实和复核优先的集成路径。
+
+## English Reference
 
 This document defines the public Core mission, direction, operating method, and
 first OKR / KPI loop for `Helm-OpenSource/helm-public`.

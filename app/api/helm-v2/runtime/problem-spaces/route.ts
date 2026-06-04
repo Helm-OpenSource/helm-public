@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { getCurrentWorkspace, getCurrentWorkspaceSession, requireCurrentUser } from "@/lib/auth/session";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+} from "@/lib/i18n/api-message-locale";
 import {
   canManageWorkspaceRuntime,
   getRuntimeManagementDeniedMessage,
@@ -30,7 +33,7 @@ const createProblemSpaceSchema = z
     status: z.enum(["DETECTED", "SCOPED", "WATCHING", "WAITING_ON_SIGNAL", "WAITING_ON_AUTHORITY"]).optional(),
   })
   .refine((value) => Boolean(value.sessionId || value.meetingId), {
-    message: "需要 sessionId 或 meetingId",
+    message: "missingSessionOrMeeting",
     path: ["sessionId"],
   });
 
@@ -53,7 +56,13 @@ export async function POST(request: Request) {
   const payload = createProblemSpaceSchema.safeParse(await request.json().catch(() => ({})));
 
   if (!payload.success) {
-    return Response.json({ success: false, message: payload.error.issues[0]?.message ?? "参数不完整" }, { status: 400 });
+    return Response.json(
+      {
+        success: false,
+        message: resolveApiValidationIssueMessage(workspace.defaultLocale, payload.error.issues[0]?.message),
+      },
+      { status: 400 },
+    );
   }
 
   if (!canManageWorkspaceRuntime(membership.role)) {

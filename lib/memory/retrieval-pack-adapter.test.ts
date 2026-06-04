@@ -183,7 +183,7 @@ describe("memory retrieval pack surface adapter", () => {
     });
 
     expect(payload.memoryRetrievalPack?.surface).toBe("recommendation");
-    expect(payload.evidenceSummary).toContain("retrieval pack");
+    expect(payload.evidenceSummary).toContain("检索包");
     expect(payload.decisionRole).toBe("primary");
   });
 });

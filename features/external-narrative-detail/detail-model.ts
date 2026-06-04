@@ -41,11 +41,11 @@ export function buildExternalNarrativeDetailPageContract({
       detail.briefingSnapshot?.payload.summary ??
       (english
         ? "The current narrative surface already brings external narrative pressure, the trust line, open commitments and fallback pressure together."
-        : "当前这张叙事决策面已经把 对外叙事压力、信任话术、开放承诺和兜底压力收在一起。"),
+        : "当前这张叙事决策面已经把对外叙事压力、信任话术、开放承诺和兜底压力收在一起。"),
     externalNarrativeDetailActionSummary: [
       english
         ? "The current page already separates internal framing, exploratory narrative, customer-visible layers and fallback-safe narrative."
-        : "当前页已经把 internal 措辞、探索性 叙事、客户可见层和兜底安全叙事分开了。",
+        : "当前页已经把内部措辞、探索性叙事、客户可见层和兜底安全叙事分开了。",
       signals.pendingApprovalCount
         ? english
           ? `${signals.pendingApprovalCount} approval-sensitive actions remain open, so stronger narrative cannot silently cross into commitment.`
@@ -55,7 +55,7 @@ export function buildExternalNarrativeDetailPageContract({
           : "当前叙事层级、发送评估闸口和兜底话术都已经被收进同一页决策面。",
       english
         ? "You do not need to reconstruct this from scattered scripts and cue packs first; the current external narrative level is already explicit."
-        : "你不需要先从零散的 script 和线索 资料 里重拼；当前对外叙事层级已经说清楚了。",
+        : "你不需要先从零散脚本和线索资料里重拼；当前对外叙事层级已经说清楚了。",
     ],
     externalNarrativeDetailDecisionRequest: [
       english
@@ -63,7 +63,7 @@ export function buildExternalNarrativeDetailPageContract({
         : `确认当前是继续保持「${labelForLevel(level, false)}」，还是在继续向外前先退回「${fallbackLabel(fallbackMode, false)}」。`,
       english
         ? "Confirm whether founder, sales or delivery owns the next narrative pass, and whether review-before-send is still required."
-        : "确认下一轮叙事 pass 由创始人、销售还是交付接手，以及是否仍必须先发送前复核。",
+        : "确认下一轮叙事修订由创始人、销售还是交付接手，以及是否仍必须先发送前复核。",
     ],
     externalNarrativeDetailBoundarySummary: [
       english
@@ -77,7 +77,7 @@ export function buildExternalNarrativeDetailPageContract({
     externalNarrativeDetailEvidenceSummary: [
       english
         ? `${detail.auditLogs.length} audit changes, ${detail.memoryFacts.length} memory facts and the full narrative trace are grouped below without interrupting the main narrative.`
-        : `当前 ${detail.auditLogs.length} 条审计变化、${detail.memoryFacts.length} 条经营记忆事实 和完整叙事轨迹已经分组收在下面，不会打断主叙事。`,
+        : `当前 ${detail.auditLogs.length} 条审计变化、${detail.memoryFacts.length} 条经营记忆事实和完整叙事轨迹已经分组收在下面，不会打断主叙事。`,
       english
         ? "Replay, audit, memory, worker output, boundary trace, sendability trace, narrative trace, fallback trace and historical changes remain available on demand."
         : "回放、审计、经营记忆、执行输出、边界轨迹、发送评估轨迹、叙事轨迹、兜底轨迹和历史变更都保留在附注层按需可看。",
@@ -85,7 +85,7 @@ export function buildExternalNarrativeDetailPageContract({
     externalNarrativeDetailWorkerSummary: [
       english
         ? "Sales worker keeps proposal-supporting and customer-visible narrative layers aligned to one commercial line."
-        : "销售执行会持续把提案-supporting 和客户可见的叙事层对齐到同一条商业推进线上。",
+        : "销售执行会持续把提案支撑和客户可见的叙事层对齐到同一条商业推进线上。",
       english
         ? "Founder / delivery review keeps trust-sensitive, scope-sensitive and fallback-sensitive wording from overstating certainty."
         : "创始人 / 交付复核会持续防止信任敏感、范围-敏感和兜底-敏感措辞被过早说实。",
@@ -123,14 +123,14 @@ export function buildExternalNarrativeDetailPageContract({
           : "当前确实存在强化故事的空间，但前提是发送评估、兜底和非承诺必须持续显式可见。",
       english
         ? "The current page already separates internal framing, proposal support, strengthening and fallback-safe narrative, so the remaining value is choosing the right layer rather than rediscovering context."
-        : "当前页已经把 internal 措辞、提案 support、加固和兜底安全叙事分开了，所以现在真正的价值在于选对层级，而不是重新拼上下文。",
+        : "当前页已经把内部措辞、提案支撑、加固和兜底安全叙事分开了，所以现在真正的价值在于选对层级，而不是重新拼上下文。",
     ],
     pageEscalationHint:
       sendabilityMode === "review-before-send" ||
       sendabilityMode === "not-safe-to-send"
         ? english
           ? "If anyone wants to harden timing, scope or outcome certainty, escalate into approvals before this narrative becomes customer-visible."
-          : "如果任何人想把 时点、范围或结果确定性说实，就先升级进审批，再让这层叙事变成客户可见。"
+          : "如果任何人想把时点、范围或结果确定性说实，就先升级进审批，再让这层叙事变成客户可见。"
         : english
           ? "If trust pressure or dependency pressure rises, step back from the current narrative layer and return to conversation or proposal review first."
           : "如果信任压力或依赖压力开始上升，就先从当前叙事层退回对话或提案复核。",
@@ -379,7 +379,7 @@ function buildDeliveryCue(level: ExternalNarrativeDetailLevel, english: boolean)
     level === "review-before-send" ||
     level === "non-commitment-fallback"
     ? "交付这时最适合先把范围、前置和依赖注脚挂在前台，再允许这层叙事变成客户可见。"
-    : "只要故事开始触碰交付 预期，交付就该先保护 implementation 注脚。";
+    : "只要故事开始触碰交付预期，交付就该先保护实施注脚。";
 }
 
 function buildNextActions({
@@ -431,36 +431,36 @@ function buildEvidenceGroups(
   return [
     {
       groupId: "replay",
-      label: english ? "Replay" : "Replay",
+      label: english ? "Replay" : "回放",
       items: [
         english
           ? `Use the current narrative layer ${labelForLevel(level, true)} to replay the next outward-safe story.`
-          : `可按当前叙事层「${labelForLevel(level, false)}」回放下一轮对外安全 故事。`,
+          : `可按当前叙事层「${labelForLevel(level, false)}」回放下一轮对外安全故事。`,
       ],
     },
     {
       groupId: "audit",
-      label: english ? "Audit" : "Audit",
+      label: english ? "Audit" : "审计",
       items: [latestAudit],
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "Memory",
+      label: english ? "Memory" : "经营记忆",
       items: [latestMemory],
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker output",
+      label: english ? "Worker output" : "执行输出",
       items: [latestAction],
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "Boundary trace",
+      label: english ? "Boundary trace" : "边界轨迹",
       items: [topBlocker],
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "Sendability trace",
+      label: english ? "Sendability trace" : "发送评估轨迹",
       items: [
         english
           ? `Current sendability remains ${labelForSendability(sendabilityMode, true)}.`
@@ -469,12 +469,12 @@ function buildEvidenceGroups(
     },
     {
       groupId: "narrative_trace",
-      label: english ? "Narrative trace" : "Narrative trace",
+      label: english ? "Narrative trace" : "叙事轨迹",
       items: [summary],
     },
     {
       groupId: "fallback_trace",
-      label: english ? "Fallback trace" : "Fallback trace",
+      label: english ? "Fallback trace" : "兜底轨迹",
       items: [
         english
           ? `Fallback stays ${fallbackLabel(fallbackMode, true)}.`
@@ -483,7 +483,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "historical_changes",
-      label: english ? "Historical changes" : "Historical changes",
+      label: english ? "Historical changes" : "历史变化",
       items: [
         english
           ? `${topCommitment} · updated ${formatRelative(detail.updatedAt)}`
@@ -496,25 +496,25 @@ function buildEvidenceGroups(
 function labelForLevel(level: ExternalNarrativeDetailLevel, english: boolean) {
   switch (level) {
     case "internal-framing":
-      return english ? "internal framing" : "internal framing";
+      return english ? "internal framing" : "内部构形";
     case "customer-visible-light":
-      return english ? "customer-visible light" : "customer-visible light";
+      return english ? "customer-visible light" : "轻量客户可见";
     case "customer-visible-structured":
-      return english ? "customer-visible structured" : "customer-visible structured";
+      return english ? "customer-visible structured" : "结构化客户可见";
     case "exploratory-narrative":
-      return english ? "exploratory narrative" : "exploratory narrative";
+      return english ? "exploratory narrative" : "探索型叙事";
     case "proposal-supporting-narrative":
-      return english ? "proposal-supporting narrative" : "proposal-supporting narrative";
+      return english ? "proposal-supporting narrative" : "提案支撑叙事";
     case "strengthening-narrative":
-      return english ? "strengthening narrative" : "strengthening narrative";
+      return english ? "strengthening narrative" : "加固叙事";
     case "review-before-send":
-      return english ? "review before send" : "review-before-send";
+      return english ? "review before send" : "发送前复核";
     case "boundary-only":
-      return english ? "boundary only" : "boundary-only";
+      return english ? "boundary only" : "仅边界";
     case "non-commitment-fallback":
-      return english ? "non-commitment fallback" : "non-commitment fallback";
+      return english ? "non-commitment fallback" : "非承诺兜底";
     default:
-      return english ? "blocked narrative" : "blocked narrative";
+      return english ? "blocked narrative" : "受阻叙事";
   }
 }
 
@@ -524,13 +524,13 @@ function fallbackLabel(
 ) {
   switch (mode) {
     case "boundary-only":
-      return english ? "boundary only" : "boundary-only";
+      return english ? "boundary only" : "仅边界";
     case "non-commitment-fallback":
-      return english ? "non-commitment fallback" : "non-commitment fallback";
+      return english ? "non-commitment fallback" : "非承诺兜底";
     case "review-hold":
-      return english ? "review hold" : "review-hold";
+      return english ? "review hold" : "复核暂缓";
     case "blocked":
-      return english ? "blocked" : "blocked";
+      return english ? "blocked" : "受阻";
     default:
       return english ? "no fallback" : "无需兜底";
   }
@@ -552,7 +552,7 @@ function labelForSendability(
     case "internal-only":
       return english ? "internal only" : "仅内部";
     case "non-commitment-fallback":
-      return english ? "non-commitment fallback" : "non-commitment fallback";
+      return english ? "non-commitment fallback" : "非承诺兜底";
     default:
       return english ? "not safe to send" : "当前不能外发";
   }

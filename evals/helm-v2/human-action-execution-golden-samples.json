@@ -99,7 +99,7 @@
       "acknowledgementMode": "mark_crm_step_done",
       "requiredBoundaryNotes": [
         "official CRM",
-        "shadow",
+        "阴影",
         "人工"
       ],
       "requiresRoleHandoff": false
@@ -159,7 +159,7 @@
       "primaryActionType": "manual_handoff_delivery",
       "acknowledgementMode": "mark_handoff_done",
       "requiredBoundaryNotes": [
-        "handoff done",
+        "交接完成",
         "人工",
         "official CRM"
       ],

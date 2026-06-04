@@ -6,7 +6,10 @@ import {
 } from "@/lib/auth/capture-runtime-governance";
 import { assertWorkspaceMeetingOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { ingestMeetingEndedRuntime } from "@/lib/helm-v2/meeting-action-pack-runtime";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+} from "@/lib/i18n/api-message-locale";
 
 const ingestSchema = z.object({
   meetingId: z.string().min(1),
@@ -22,7 +25,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         success: false,
-        message: payload.error.issues[0]?.message ?? "参数不完整",
+        message: resolveApiValidationIssueMessage(workspace.defaultLocale, payload.error.issues[0]?.message),
       },
       { status: 400 },
     );

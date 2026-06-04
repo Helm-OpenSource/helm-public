@@ -48,17 +48,61 @@ cd helm-public
 
 ---
 
+## 1.1 Mainland China / restricted-network setup (optional)
+
+If your network has unreliable access to Docker Hub or `registry.npmjs.org`,
+treat mirrors as **local environment configuration**. Do not commit private
+mirrors, tokens, or credentials.
+
+For local `npm install`, copy the template:
+
+```bash
+cp .npmrc.example .npmrc
+```
+
+The template only sets:
+
+```ini
+registry=https://registry.npmmirror.com
+```
+
+For `npm ci` inside the Docker build, pass the same mirror:
+
+```bash
+NPM_REGISTRY=https://registry.npmmirror.com docker compose up --build
+```
+
+This build arg only affects npm downloads inside the image. `node:22-slim` and
+`mysql:8.4` still come through your Docker daemon; if Docker Hub is unreliable,
+configure an organization-approved registry mirror in Docker Desktop /
+OrbStack / colima or your enterprise mirror gateway, for example:
+
+```json
+{
+  "registry-mirrors": [
+    "https://<your-org-approved-dockerhub-mirror>"
+  ]
+}
+```
+
+The image build also reaches Debian `apt` mirrors to install OpenSSL / CA
+certificates. If your enterprise network blocks that path too, configure Docker
+/ enterprise network proxy first, or replace the base image in your fork with
+an organization-approved one.
+
+Delete the local `.npmrc` file to return to the default npm registry.
+
+---
+
 ## 2. Install dependencies
 
 ```bash
 npm install
 ```
 
-The `postinstall` step runs `prisma generate`. If it fails, run it directly:
-
-```bash
-npm run db:generate
-```
+The `postinstall` step only runs the local macOS lightningcss signature helper;
+it does **not** generate the Prisma client. After MySQL and `.env` are ready,
+run `npm run db:generate` explicitly in step 5.
 
 ---
 
@@ -68,8 +112,8 @@ Easiest path — run a local instance with Docker:
 
 ```bash
 docker run -d --name helm-mysql \
-  -e MYSQL_ROOT_PASSWORD=password \
-  -e MYSQL_DATABASE=helm \
+  -e MYSQL_ROOT_PASSWORD=root \
+  -e MYSQL_DATABASE=helm2026 \
   -p 3306:3306 \
   mysql:8.4
 ```
@@ -77,10 +121,11 @@ docker run -d --name helm-mysql \
 Default `DATABASE_URL` after that:
 
 ```
-mysql://root:password@127.0.0.1:3306/helm
+mysql://root:root@127.0.0.1:3306/helm2026?charset=utf8mb4
 ```
 
-If you already have MySQL, skip this step and replace the URL in `.env`.
+This matches `.env.example` and `docker-compose.yml`. If you already have MySQL,
+skip this step and replace the URL in `.env`.
 
 ---
 
@@ -120,6 +165,32 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · Alipay · WeChat Pay.
 
 Leave them all blank on a first run.
 
+### China delivery profile preflight (optional)
+
+If this fork is being prepared for a China customer delivery, first align the
+local `.env` profile and network mirror hints:
+
+```bash
+# .env
+HELM_DEPLOYMENT_REGION="cn"
+HELM_DATA_RESIDENCY="cn"
+NPM_REGISTRY="https://registry.npmmirror.com"
+LLM_DEFAULT_PROVIDER="qwen"
+DASHSCOPE_API_KEY="<your-dashscope-key>"
+ASR_ENABLED="false"
+```
+
+Then run the read-only static doctor:
+
+```bash
+npm run delivery:doctor -- --region cn
+```
+
+The command does not make network calls or read customer systems. It flags
+common China-delivery misconfigurations: Qwen configured with only
+`OPENAI_API_KEY`, region / residency still set to `global`, missing npm mirror
+hints, or enabling the current OpenAI-only ASR path under a China profile.
+
 ---
 
 ## 5. Initialize the database
@@ -133,8 +204,11 @@ npm run db:seed        # load development sample data
 If migration fails with an extension-SQL related error, run:
 
 ```bash
-npm run setup-db       # auto-applies extension SQL
+npm run db:migrate     # rerun the migration entrypoint
 ```
+
+If it still fails, first confirm that `.env` `DATABASE_URL` matches your MySQL
+startup parameters.
 
 To reset (**this destroys local data**):
 

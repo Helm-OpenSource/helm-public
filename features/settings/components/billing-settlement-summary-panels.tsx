@@ -49,7 +49,7 @@ export function BillingSettlementSummaryPanels({
     <>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="theme-surface-panel rounded-2xl px-4 py-4">
-          <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Beneficiary totals" : "受益方 totals"}</p>
+          <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Beneficiary totals" : "受益方汇总"}</p>
           <div className="mt-3 space-y-3">
             {settlementBeneficiaryTotals.length ? (
               settlementBeneficiaryTotals.map((item) => (

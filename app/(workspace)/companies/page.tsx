@@ -205,7 +205,7 @@ export default async function CompaniesPage() {
               description={
                 english
                   ? "Import CRM data or capture from a meeting — companies will appear here."
-                  : "导入 CRM 或从会议带入——公司会出现在这里。"
+                  : "导入客户关系系统数据或从会议带入——公司会出现在这里。"
               }
             />
           )}

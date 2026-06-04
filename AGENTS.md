@@ -40,6 +40,11 @@ Helm 是：
 - `delivery-engineer-facing`（自 2026-05-18 起：受众层是 AI 生态交付工程师，非 SaaS 端客户直销）
 - `open-source-first`（Apache-2.0；商业版本不替代开源；详见 [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md)）
 
+所有公开入口、文档、模板和 sample pack 默认必须对交付工程师友好：读者应该能快速判断
+“我该检查什么、fork 什么、改哪一处、跑哪些命令、提交什么 public-safe 证据”。双语化不是
+只翻译文字，而是让中国市场交付工程师可以独立完成 first-change proof，并保持
+recommendation / commitment、review-first、public/private boundary 清晰。
+
 Helm 当前不是：
 
 - 完整企业级多组织 / 多权限 / 多租户平台

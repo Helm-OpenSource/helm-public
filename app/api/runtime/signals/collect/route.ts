@@ -13,13 +13,35 @@ const SIGNAL_COLLECTION_CRON_ENTRYPOINT = {
   jobKeySelection: "query.jobKey",
 };
 
+function isEnglishRequest(request: Request) {
+  return request.headers.get("accept-language")?.toLowerCase().startsWith("en") ?? false;
+}
+
+function getSignalCollectionCronMessage(
+  request: Request,
+  key: "tokenNotConfigured" | "unauthorizedToken" | "usePost" | "unknownJob",
+) {
+  const english = isEnglishRequest(request);
+  const messages = {
+    tokenNotConfigured: english
+      ? "SIGNAL_COLLECTION_CRON_TOKEN is not configured."
+      : "SIGNAL_COLLECTION_CRON_TOKEN 尚未配置。",
+    unauthorizedToken: english ? "Unauthorized cron token." : "cron token 未授权。",
+    usePost: english
+      ? "Use POST for signal collection cron dispatch."
+      : "请使用 POST 触发信号采集 cron dispatch。",
+    unknownJob: english ? "Unknown signal collection job." : "未知的信号采集任务。",
+  } as const;
+  return messages[key];
+}
+
 function authorizeSignalCollectionCron(request: Request) {
   const expected = process.env.SIGNAL_COLLECTION_CRON_TOKEN?.trim() || "";
   if (!expected) {
     return {
       ok: false,
       status: 503,
-      error: "SIGNAL_COLLECTION_CRON_TOKEN is not configured.",
+      error: getSignalCollectionCronMessage(request, "tokenNotConfigured"),
     } as const;
   }
 
@@ -28,18 +50,18 @@ function authorizeSignalCollectionCron(request: Request) {
     return {
       ok: false,
       status: 401,
-      error: "Unauthorized cron token.",
+      error: getSignalCollectionCronMessage(request, "unauthorizedToken"),
     } as const;
   }
 
   return { ok: true } as const;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   return NextResponse.json(
     {
       ok: false,
-      error: "Use POST for signal collection cron dispatch.",
+      error: getSignalCollectionCronMessage(request, "usePost"),
       entrypoint: SIGNAL_COLLECTION_CRON_ENTRYPOINT,
     },
     { status: 405 },
@@ -64,7 +86,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: "Unknown signal collection job.",
+        error: getSignalCollectionCronMessage(request, "unknownJob"),
         unknownJobKeys,
       },
       { status: 404 },

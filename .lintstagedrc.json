@@ -1,5 +1,5 @@
 {
   "*.{ts,tsx}": [
-    "eslint --max-warnings 0 --no-warn-ignored"
+    "node node_modules/eslint/bin/eslint.js --max-warnings 0 --no-warn-ignored"
   ]
 }

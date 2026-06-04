@@ -85,11 +85,11 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: "Move the sales line to the next stage instead of piling on more outreach.",
     },
     ownedOutcomes: {
-      zh: ["推进关键机会到下一阶段", "让跟进节奏和异议处理更稳定", "把复核-required 对外动作留在可见边界内"],
+      zh: ["推进关键机会到下一阶段", "让跟进节奏和异议处理更稳定", "把需复核的对外动作留在可见边界内"],
       en: ["Advance key opportunities to the next stage", "Stabilize follow-up tempo and objection handling", "Keep review-required external moves visible"],
     },
     mainJudgements: {
-      zh: ["哪条机会最该先推", "当前成交阻力主要来自哪里", "哪些动作需要先 internal sync"],
+      zh: ["哪条机会最该先推", "当前成交阻力主要来自哪里", "哪些动作需要先内部同步"],
       en: ["Which opportunity should move first", "Where the main closing friction comes from", "Which moves need internal sync first"],
     },
     handoffEdges: {
@@ -123,7 +123,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: ["Complete strong customer follow-up", "Keep contacts, meetings, and opportunity signals coherent", "Attach the next move to the same opportunity chain"],
     },
     mainJudgements: {
-      zh: ["现在该找谁", "这次互动之后的 下一步 是什么", "哪些承诺需要先确认前提"],
+      zh: ["现在该找谁", "这次互动之后的下一步是什么", "哪些承诺需要先确认前提"],
       en: ["Who to move with now", "What the next step is after this interaction", "Which promises need prerequisites first"],
     },
     handoffEdges: {
@@ -145,23 +145,23 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
     key: "RECRUITER",
     label: { zh: "招聘顾问", en: "Recruiter" },
     summary: {
-      zh: "负责把候选人推进、面试协调和 hiring 判断收成一条连贯招聘主线。",
+      zh: "负责把候选人推进、面试协调和招聘判断收成一条连贯招聘主线。",
       en: "Keeps candidate progress, interview coordination, and hiring judgement coherent.",
     },
     mission: {
-      zh: "让候选人和 hiring team 的推进节奏连续，不让协调细节吞掉主判断。",
+      zh: "让候选人和招聘团队的推进节奏连续，不让协调细节吞掉主判断。",
       en: "Keep candidate and hiring-team momentum continuous without losing the main hiring judgement.",
     },
     ownedOutcomes: {
-      zh: ["推动候选人到下一个明确阶段", "协调面试和 follow-up", "收拢岗位、候选人和反馈回路"],
+      zh: ["推动候选人到下一个明确阶段", "协调面试和后续跟进", "收拢岗位、候选人和反馈回路"],
       en: ["Move candidates to the next clear stage", "Coordinate interviews and follow-up", "Keep role, candidate, and feedback loops coherent"],
     },
     mainJudgements: {
-      zh: ["候选人是否真的在推进", "当前卡点在时间、反馈还是岗位匹配", "哪些沟通要先 internal sync"],
+      zh: ["候选人是否真的在推进", "当前卡点在时间、反馈还是岗位匹配", "哪些沟通要先内部同步"],
       en: ["Whether the candidate is truly advancing", "Whether the blocker is timing, feedback, or fit", "Which comms need internal sync first"],
     },
     handoffEdges: {
-      zh: ["向 hiring 负责人说明候选人节奏", "向创始人升级关键岗位判断", "向运营交代安排与提醒"],
+      zh: ["向招聘负责人说明候选人节奏", "向创始人升级关键岗位判断", "向运营交代安排与提醒"],
       en: ["Explain candidate tempo to the hiring owner", "Escalate key hiring judgement to leadership", "Handoff scheduling and reminders to operations"],
     },
     successSignals: {
@@ -169,7 +169,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: ["Candidates do not drop off", "The feedback chain stays intact", "Interview scheduling stays aligned with role judgement"],
     },
     boundaryNotes: {
-      zh: ["面试安排不等于录用承诺", "候选人简报不等于正式 offer", "高风险表述仍应保留复核"],
+      zh: ["面试安排不等于录用承诺", "候选人简报不等于正式录用通知", "高风险表述仍应保留复核"],
       en: ["Interview scheduling is not a hiring commitment", "Candidate explanation is not a formal offer", "High-risk language still needs review"],
     },
     defaultWorkspaceProfileType: "猎头顾问",
@@ -187,7 +187,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: "Keep post-sale customer momentum continuous instead of reacting only when issues appear.",
     },
     ownedOutcomes: {
-      zh: ["推进续约与扩容线索", "处理客户风险和 issue 升级", "把 follow-through 写回客户上下文"],
+      zh: ["推进续约与扩容线索", "处理客户风险和问题升级", "把后续跟进写回客户上下文"],
       en: ["Advance renewal and expansion signals", "Handle customer risk and issue escalation", "Write follow-through back into the customer context"],
     },
     mainJudgements: {
@@ -221,7 +221,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: "Keep promises, dependencies, and delivery tempo aligned so projects do not slow down internally.",
     },
     ownedOutcomes: {
-      zh: ["明确交付 下一步 和负责人", "识别 时间线 / 范围 / 资源风险", "把客户预期翻译成内部执行条件"],
+      zh: ["明确交付下一步和负责人", "识别时间线 / 范围 / 资源风险", "把客户预期翻译成内部执行条件"],
       en: ["Clarify the next delivery step and owner", "Identify timeline, scope, and resourcing risk", "Translate customer expectation into internal execution conditions"],
     },
     mainJudgements: {
@@ -229,7 +229,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: ["Whether delivery is currently fulfillable", "Where the main delivery blocker is", "Which statements need prerequisite and dependency notes"],
     },
     handoffEdges: {
-      zh: ["向销售说明交付前提", "向 CS 说明上线后 follow-through", "向创始人升级资源风险"],
+      zh: ["向销售说明交付前提", "向客户成功说明上线后跟进", "向创始人升级资源风险"],
       en: ["Explain delivery prerequisites to sales", "Explain post-launch follow-through to CS", "Escalate resourcing risk to leadership"],
     },
     successSignals: {
@@ -263,7 +263,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: ["What the highest-value slice is now", "Which boundaries are still unclear", "Which risks need review or validation first"],
     },
     handoffEdges: {
-      zh: ["向创始人说明取舍", "向交付说明范围和前提", "向运营说明 rollout 节奏"],
+      zh: ["向创始人说明取舍", "向交付说明范围和前提", "向运营说明发布节奏"],
       en: ["Explain tradeoffs to leadership", "Explain scope and prerequisites to delivery", "Explain rollout tempo to operations"],
     },
     successSignals: {
@@ -271,7 +271,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: ["Slices stay small and verifiable", "Scope does not quietly expand", "Implementation can write back into real operating context"],
     },
     boundaryNotes: {
-      zh: ["实现说明不等于商业承诺", "内部 就绪度 不等于对外 ready", "仍需保留复核和 rollout guard"],
+      zh: ["实现说明不等于商业承诺", "内部就绪度不等于对外可用", "仍需保留复核和发布守卫"],
       en: ["Implementation detail is not commercial commitment", "Internal readiness is not external readiness", "Review and rollout guards must remain"],
     },
     defaultWorkspaceProfileType: "顾问 / 服务商",
@@ -293,11 +293,11 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: ["Maintain operating tempo and organizational visibility", "Handle exceptions, reconciliation, and support packs", "Write internal state changes back to readable surfaces"],
     },
     mainJudgements: {
-      zh: ["当前哪类例外最值得先清", "哪些状态会影响组织运行", "哪些问题必须升级给负责人/admin"],
+      zh: ["当前哪类例外最值得先清", "哪些状态会影响组织运行", "哪些问题必须升级给负责人 / 管理员"],
       en: ["Which exceptions should be cleared first", "Which states affect organization health", "Which issues must be escalated to owner or admin"],
     },
     handoffEdges: {
-      zh: ["向负责人/admin 升级治理问题", "向业务角色交代支持状态", "向财务/结算线交接证据和例外"],
+      zh: ["向负责人 / 管理员升级治理问题", "向业务角色交代支持状态", "向财务 / 结算线交接证据和例外"],
       en: ["Escalate governance issues to owner or admin", "Explain support status to business roles", "Handoff evidence and exceptions to finance or settlement"],
     },
     successSignals: {
@@ -331,7 +331,7 @@ const rolePresets: Record<RolePresetKey, RolePresetDefinition> = {
       en: ["What should move first now", "Which threads are waiting", "Which information is still missing"],
     },
     handoffEdges: {
-      zh: ["向负责人/admin 升级高风险判断", "向业务角色交代所需上下文", "向复核面 补齐证据"],
+      zh: ["向负责人 / 管理员升级高风险判断", "向业务角色交代所需上下文", "向复核面补齐证据"],
       en: ["Escalate high-risk judgement to owner or admin", "Explain required context to business roles", "Complete evidence for review surfaces"],
     },
     successSignals: {

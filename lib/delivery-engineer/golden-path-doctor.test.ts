@@ -24,15 +24,21 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
     ".env.example": [
       `${helmEnvKey("DEPLOYMENT", "REGION")}="global"`,
       `${helmEnvKey("DATA", "RESIDENCY")}="global"`,
+      'HELM_DEFAULT_LOCALE="zh-CN"',
+      'NPM_REGISTRY=""',
       'NPM_CONFIG_REGISTRY="https://registry.npmjs.org/"',
+      'DASHSCOPE_API_KEY=""',
       'DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"',
+      'OPENAI_API_KEY=""',
       'LLM_DEFAULT_PROVIDER="qwen"',
+      'LLM_ENABLED="false"',
       'ASR_ENABLED="false"',
       'ASR_OPENAI_MODEL="gpt-4o-mini-transcribe"',
-      'OPENAI_API_KEY=""',
       'CONNECTOR_TOKEN_SECRET="public-local-connector-token-secret-000000000000"',
     ].join("\n"),
     "README.md": "For delivery engineers",
+    "docs/getting-started.md": "NPM_REGISTRY registry-mirrors",
+    "docs/getting-started.en.md": "NPM_REGISTRY registry-mirrors",
     "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md": "delivery engineers",
     "docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md": "Golden Path requirements",
     "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md": "HSI",
@@ -116,6 +122,7 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
       )?.status,
     ).toBe("pass");
     expect(summary.nextCommands).toContain("npm run eval:headless-signal-interface");
+    expect(summary.nextCommands).toContain("npm run delivery:doctor -- --region cn");
   });
 
   it("fails when a required script is missing", () => {
@@ -188,6 +195,123 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
   it("reports the boundary string in the aligned read_only_<scope>_static_check shape", () => {
     const summary = runWithFiles(buildFileMap());
     expect(summary.boundary).toBe("read_only_local_repo_static_check");
+    expect(summary.regionProfile).toBe("global");
+  });
+
+  it("warns when Qwen is enabled but only OPENAI_API_KEY is configured", () => {
+    const summary = runWithFiles(
+      buildFileMap({
+        ".env": [
+          'LLM_ENABLED="true"',
+          'LLM_DEFAULT_PROVIDER="qwen"',
+          'OPENAI_API_KEY="sk-test-only"',
+          'DASHSCOPE_API_KEY=""',
+        ].join("\n"),
+      }),
+    );
+
+    const check = summary.checks.find((item) => item.id === "config:qwen-dashscope-key");
+    expect(summary.passed).toBe(true);
+    expect(check?.status).toBe("warn");
+    expect(check?.detail).toContain("only OPENAI_API_KEY is present");
+  });
+
+  it("surfaces China-profile env and ASR warnings without failing the static doctor", () => {
+    const summary = runDeliveryEngineerGoldenPathDoctor({
+      rootDir: ROOT,
+      regionProfile: "cn",
+      env: {},
+      exists: (absolutePath) => {
+        const relativePath = path.relative(ROOT, absolutePath);
+        return Object.prototype.hasOwnProperty.call(
+          buildFileMap({
+            ".env": [
+              'HELM_DEPLOYMENT_REGION="global"',
+              'HELM_DATA_RESIDENCY="global"',
+              'ASR_ENABLED="true"',
+            ].join("\n"),
+          }),
+          relativePath,
+        );
+      },
+      readFile: (absolutePath) => {
+        const relativePath = path.relative(ROOT, absolutePath);
+        const files = buildFileMap({
+          ".env": [
+            'HELM_DEPLOYMENT_REGION="global"',
+            'HELM_DATA_RESIDENCY="global"',
+            'ASR_ENABLED="true"',
+          ].join("\n"),
+        });
+        const content = files[relativePath];
+        if (content === undefined) {
+          throw new Error(`missing fixture file ${relativePath}`);
+        }
+        return content;
+      },
+      listDirectory: () => [],
+    });
+
+    expect(summary.passed).toBe(true);
+    expect(summary.regionProfile).toBe("cn");
+    expect(summary.checks.find((item) => item.id === "config:china-region-residency")?.status).toBe(
+      "warn",
+    );
+    expect(summary.checks.find((item) => item.id === "network:china-npm-registry")?.status).toBe(
+      "warn",
+    );
+    expect(summary.checks.find((item) => item.id === "config:asr-openai-china-boundary")?.status).toBe(
+      "warn",
+    );
+  });
+
+  it("passes China-profile checks when local China delivery hints are configured", () => {
+    const summary = runDeliveryEngineerGoldenPathDoctor({
+      rootDir: ROOT,
+      regionProfile: "cn",
+      env: {},
+      exists: (absolutePath) => {
+        const relativePath = path.relative(ROOT, absolutePath);
+        return Object.prototype.hasOwnProperty.call(
+          buildFileMap({
+            ".env": [
+              'HELM_DEPLOYMENT_REGION="cn"',
+              'HELM_DATA_RESIDENCY="cn"',
+              'NPM_REGISTRY="https://registry.npmmirror.com"',
+              'ASR_ENABLED="false"',
+            ].join("\n"),
+          }),
+          relativePath,
+        );
+      },
+      readFile: (absolutePath) => {
+        const relativePath = path.relative(ROOT, absolutePath);
+        const files = buildFileMap({
+          ".env": [
+            'HELM_DEPLOYMENT_REGION="cn"',
+            'HELM_DATA_RESIDENCY="cn"',
+            'NPM_REGISTRY="https://registry.npmmirror.com"',
+            'ASR_ENABLED="false"',
+          ].join("\n"),
+        });
+        const content = files[relativePath];
+        if (content === undefined) {
+          throw new Error(`missing fixture file ${relativePath}`);
+        }
+        return content;
+      },
+      listDirectory: () => [],
+    });
+
+    expect(summary.checks.find((item) => item.id === "config:china-region-residency")?.status).toBe(
+      "pass",
+    );
+    expect(summary.checks.find((item) => item.id === "network:china-npm-registry")?.status).toBe(
+      "pass",
+    );
+    expect(summary.checks.find((item) => item.id === "config:asr-openai-china-boundary")?.status).toBe(
+      "pass",
+    );
   });
 
   it("keeps the China delivery profile and OpenAI-only ASR precheck visible", () => {

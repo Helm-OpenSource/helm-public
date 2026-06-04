@@ -883,7 +883,7 @@ function SetupWizardSurface({
                       title={
                         english
                           ? "Prioritize CRM-first connections"
-                          : "优先使用 CRM-first 连接"
+                          : "优先使用客户关系系统连接"
                       }
                       description={
                         english

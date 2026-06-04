@@ -1,0 +1,8 @@
+# Optional local npm mirror for Mainland China or restricted networks.
+# Copy to `.npmrc` for local installs; `.npmrc` is gitignored.
+#
+# cp .npmrc.example .npmrc
+# npm install
+#
+# Remove the local `.npmrc` file to return to the default npm registry.
+registry=https://registry.npmmirror.com

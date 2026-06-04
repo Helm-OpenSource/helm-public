@@ -57,7 +57,7 @@ export const HELM_V2_MEMORY_LOAD_PLAN: Record<
     },
     {
       key: "workspace-summary",
-      description: "当前 workspace 的经营摘要始终可见。",
+      description: "当前工作区的经营摘要始终可见。",
     },
     {
       key: "primary-opportunity-summary",
@@ -75,17 +75,17 @@ export const HELM_V2_MEMORY_LOAD_PLAN: Record<
     },
     {
       key: "handoff-stage-summary",
-      description: "进入交接阶段时自动加载 promised 范围、open risks 和 first 14 day plan。",
+      description: "进入交接阶段时自动加载已承诺范围、未决风险和前 14 天计划。",
     },
     {
       key: "official-write-stage-policy",
-      description: "进入 正式write 意图阶段时自动加载 system-of-record 边界、审批矩阵和最近 acknowledgement。",
+      description: "进入正式写入意图阶段时自动加载权威系统边界、审批矩阵和最近确认记录。",
     },
   ],
   eventTriggered: [
     {
       key: "meeting.ended",
-      description: "会议结束后加载相关 meeting / 机会 / 客户摘要和政策约束。",
+      description: "会议结束后加载相关会议 / 机会 / 客户摘要和政策约束。",
     },
     {
       key: "proposal.requested",
@@ -97,7 +97,7 @@ export const HELM_V2_MEMORY_LOAD_PLAN: Record<
     },
     {
       key: "official.write_intent_created",
-      description: "正式write 意图创建时加载 受控正式集成 边界、审批和最近执行 proof。",
+      description: "正式写入意图创建时加载受控正式集成边界、审批和最近执行证明。",
     },
   ],
   onDemand: [
@@ -430,19 +430,19 @@ export function evaluateMemoryPromotion(item: HelmV2MemoryItem): PromotionDecisi
   const reasons: string[] = [];
 
   if (item.kind === "scratch") {
-    reasons.push("scratch 只用于临时推理，不自动升级为长期记忆。");
+    reasons.push("临时草稿只用于临时推理，不自动升级为长期记忆。");
   }
 
   if (item.kind === "learned_pattern" && item.verification !== "human_confirmed") {
-    reasons.push("learned pattern 必须先经人工确认，不能直接由推断提升。");
+    reasons.push("学习到的模式必须先经人工确认，不能直接由推断提升。");
   }
 
   if (item.promotionRule === "none") {
-    reasons.push("晋升 rule 当前是 none。");
+    reasons.push("当前晋升规则为不晋升。");
   }
 
   if (hasUntrustedSource(item.sourceRefs) && !verificationAllowsPromotion(item.verification)) {
-    reasons.push("来自非可信输入的内容，未经过人工确认或 system-of-record 校验。");
+    reasons.push("来自非可信输入的内容，未经过人工确认或权威系统校验。");
   }
 
   if (item.confidence < 0.7 && item.verification !== "system_of_record") {

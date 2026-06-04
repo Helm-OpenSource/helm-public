@@ -2,7 +2,10 @@ import { MemoryStatus, type MemoryFactType, type ObjectType } from "@prisma/clie
 import { logEvent } from "@/lib/analytics";
 import { getCurrentWorkspace, getCurrentWorkspaceSession, requireCurrentUser } from "@/lib/auth/session";
 import { assertWorkspaceObjectOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+} from "@/lib/i18n/api-message-locale";
 import { createMemoryFact, getMemoryFacts } from "@/lib/memory/memory-fact.service";
 import {
   MEMORY_FACTS_QUERY_LIMIT,
@@ -19,6 +22,7 @@ import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/li
 export async function GET(request: Request) {
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
+  const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
   const { searchParams } = new URL(request.url);
   const objectType = searchParams.get("objectType") as ObjectType | null;
   const objectId = searchParams.get("objectId");
@@ -32,7 +36,9 @@ export async function GET(request: Request) {
   const query = searchParams.get("query")?.trim() || undefined;
 
   if (!objectType || !objectId) {
-    return errorResponse("objectType 和 objectId 不能为空");
+    return errorResponse(
+      english ? "objectType and objectId are required" : "objectType 和 objectId 不能为空",
+    );
   }
 
   if (!cursor.ok) {
@@ -106,7 +112,11 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "对象不在当前 workspace 中",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Object is not in the current workspace"
+          : "对象不在当前工作区中",
       isWorkspaceOwnershipError(error) ? "OBJECT_NOT_FOUND" : "READ_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );
@@ -120,7 +130,9 @@ export async function POST(request: Request) {
   const payload = createMemoryFactSchema.safeParse(await request.json());
 
   if (!payload.success) {
-    return errorResponse(payload.error.issues[0]?.message ?? "参数不完整");
+    return errorResponse(
+      resolveApiValidationIssueMessage(workspace.defaultLocale, payload.error.issues[0]?.message),
+    );
   }
 
   if (!canManageWorkspaceMemory(membership.role)) {
@@ -157,11 +169,15 @@ export async function POST(request: Request) {
         title: created.title,
         status: created.status,
       },
-      "memory fact created",
+      english ? "Memory fact created" : "记忆事实已创建",
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "创建记忆失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to create memory fact"
+          : "创建记忆失败",
       isWorkspaceOwnershipError(error) ? "OBJECT_NOT_FOUND" : "CREATE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

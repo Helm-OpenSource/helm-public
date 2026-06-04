@@ -100,6 +100,29 @@ function renderStatusLabel(status: string, english: boolean) {
   return labels[normalized] ?? status.replace(/_/g, " ");
 }
 
+function formatMetricLabel(label: string, english: boolean) {
+  if (english) return label;
+
+  const labels: Record<string, string> = {
+    cadence: "节奏",
+    density: "密度",
+    hit: "命中",
+    impact: "影响",
+    interval: "区间",
+    "ineffective after guidance": "指引后无效",
+    "ineffective-after-hit": "命中后无效",
+    risk: "风险",
+    "review escalation": "复核升级",
+    sample: "样本",
+    skip: "跳过",
+    stability: "稳定性",
+    "stability confidence": "稳定性置信度",
+    threshold: "阈值",
+  };
+
+  return labels[label] ?? label;
+}
+
 function formatPanelVisibleText(value: string, english: boolean) {
   if (english) return value;
 
@@ -607,7 +630,7 @@ function buildSwarmOperatorControlActions(input: {
         }}
       >
         <Button size="sm" type="submit" variant="secondary">
-          {english ? "Kill (close request)" : "Kill（close request）"}
+          {english ? "Kill (close request)" : "终止（请求关闭）"}
         </Button>
       </form>,
     );
@@ -1167,7 +1190,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.topFailureClasses.slice(0, 3).map((item) => (
                     <div key={item.failureTaxonomy} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.failureTaxonomy} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.failureTaxonomy} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.stabilitySummary}</p>
@@ -1175,7 +1198,7 @@ export function RuntimeOperatorPanel({
                     </div>
                   ))}
                   {!overview.continuityPilotReview.topFailureClasses.length ? (
-                    <p>{english ? "No pilot continuity failure class has been grouped yet." : "当前还没有被分组的 pilot 连续性 失败类型。"}</p>
+                    <p>{english ? "No pilot continuity failure class has been grouped yet." : "当前还没有被分组的试点连续性失败类型。"}</p>
                   ) : null}
                 </div>
               </CardContent>
@@ -1197,7 +1220,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.cohortFamilies.slice(0, 3).map((item) => (
                     <div key={item.cohortKey} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.cohortKey} · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.cohortKey} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1207,14 +1230,14 @@ export function RuntimeOperatorPanel({
                     </div>
                   ))}
                   {!overview.continuityPilotReview.cohortFamilies.length ? (
-                    <p>{english ? "No expanded cohort family is available yet." : "当前还没有 expanded cohort family。"}</p>
+                    <p>{english ? "No expanded cohort family is available yet." : "当前还没有扩展队列族。"}</p>
                   ) : null}
                 </div>
                 <div className="space-y-2 text-sm text-[color:var(--muted-foreground)]">
                   {overview.continuityPilotReview.meetingShapeCohorts.slice(0, 2).map((item) => (
                     <div key={item.meetingShape} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.meetingShape} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.meetingShape} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1228,7 +1251,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.sessionDensityCohorts.slice(0, 2).map((item) => (
                     <div key={item.sessionDensityBand} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.sessionDensityBand} density · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.sessionDensityBand} {formatMetricLabel("density", english)} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1240,7 +1263,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.meetingFrequencyCohorts.slice(0, 2).map((item) => (
                     <div key={item.meetingFrequencyBand} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.meetingFrequencyBand} cadence · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.meetingFrequencyBand} {formatMetricLabel("cadence", english)} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1254,7 +1277,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.participantRoleCohorts.slice(0, 2).map((item) => (
                     <div key={item.participantRolePosture} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.participantRolePosture} · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand}
+                        {item.participantRolePosture} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand}
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
@@ -1267,12 +1290,12 @@ export function RuntimeOperatorPanel({
                 <ul className="space-y-1 text-sm text-[color:var(--muted-foreground)]">
                   {overview.continuityPilotReview.remediationPostureCohorts.slice(0, 3).map((item) => (
                     <li key={`${item.recoveryState}-${item.latestEffectiveness}`}>
-                      - {item.recoveryState} · {item.latestEffectiveness} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · {item.summary}
+                      - {item.recoveryState} · {item.latestEffectiveness} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {item.summary}
                     </li>
                   ))}
                   {overview.continuityPilotReview.failureHistoryCohorts.slice(0, 3).map((item) => (
                     <li key={item.failureHistoryBand}>
-                      - {item.failureHistoryBand} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · {item.summary} · {item.varianceSummary}
+                      - {item.failureHistoryBand} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {item.summary} · {item.varianceSummary}
                     </li>
                   ))}
                 </ul>
@@ -1560,7 +1583,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.thresholdRevisions.map((item) => (
                     <li key={item.scope} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.scopeType} · {item.scope} · risk {item.riskBand} · {item.confidenceBand} · threshold {item.recommendedIneffectiveThreshold} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand} · interval {item.confidenceInterval}
+                        {item.scopeType} · {item.scope} · {formatMetricLabel("risk", english)} {item.riskBand} · {item.confidenceBand} · {formatMetricLabel("threshold", english)} {item.recommendedIneffectiveThreshold} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand} · {formatMetricLabel("interval", english)} {item.confidenceInterval}
                       </p>
                       <p className="mt-1 leading-6">{item.sampleCoverageSummary}</p>
                       <p className="mt-1 leading-6">{item.confidenceSummary}</p>
@@ -1570,7 +1593,7 @@ export function RuntimeOperatorPanel({
                     </li>
                   ))}
                   {!overview.continuityPilotReview.thresholdRevisions.length ? (
-                    <li>{english ? "No threshold revision is currently suggested." : "当前没有 thres持守 revision 建议。"}</li>
+                    <li>{english ? "No threshold revision is currently suggested." : "当前没有阈值修订建议。"}</li>
                   ) : null}
                 </ul>
                 <ul className="space-y-1 text-sm text-[color:var(--muted-foreground)]">
@@ -1696,7 +1719,7 @@ export function RuntimeOperatorPanel({
                 <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
                   {english
                     ? `ineffective after guidance ${overview.continuityPilotReview.operatorHandlingEffectiveness.ineffectiveAfterGuidanceRate}% · review escalation ${overview.continuityPilotReview.operatorHandlingEffectiveness.reviewEscalationRate}%`
-                    : `ineffective after guidance ${overview.continuityPilotReview.operatorHandlingEffectiveness.ineffectiveAfterGuidanceRate}% · review escalation ${overview.continuityPilotReview.operatorHandlingEffectiveness.reviewEscalationRate}%`}
+                    : `${formatMetricLabel("ineffective after guidance", english)} ${overview.continuityPilotReview.operatorHandlingEffectiveness.ineffectiveAfterGuidanceRate}% · ${formatMetricLabel("review escalation", english)} ${overview.continuityPilotReview.operatorHandlingEffectiveness.reviewEscalationRate}%`}
                 </p>
                 <ul className="space-y-1 text-sm text-[color:var(--muted-foreground)]">
                   {overview.continuityPilotReview.operatorHandlingEffectiveness.highlights.map((item, index) => (
@@ -1719,7 +1742,7 @@ export function RuntimeOperatorPanel({
                   {overview.continuityPilotReview.operatorHandlingEffectiveness.stepReviews.slice(0, 3).map((item) => (
                     <div key={item.stepId} className="rounded-2xl border border-[color:var(--border)] px-3 py-3">
                       <p className="font-medium text-[color:var(--foreground)]">
-                        {item.label} · {item.correlationBand} · sample {item.sampleCoverageBand} · stability {item.stabilityBand} · stability confidence {item.stabilityConfidenceBand} · interval {item.confidenceInterval} · impact {item.materialImpactBand} · hit {item.matchedGuidanceRate}% · skip {item.skippedGuidanceRate}% · ineffective-after-hit {item.ineffectiveAfterHitRate}%
+                        {item.label} · {item.correlationBand} · {formatMetricLabel("sample", english)} {item.sampleCoverageBand} · {formatMetricLabel("stability", english)} {item.stabilityBand} · {formatMetricLabel("stability confidence", english)} {item.stabilityConfidenceBand} · {formatMetricLabel("interval", english)} {item.confidenceInterval} · {formatMetricLabel("impact", english)} {item.materialImpactBand} · {formatMetricLabel("hit", english)} {item.matchedGuidanceRate}% · {formatMetricLabel("skip", english)} {item.skippedGuidanceRate}% · {formatMetricLabel("ineffective-after-hit", english)} {item.ineffectiveAfterHitRate}%
                       </p>
                       <p className="mt-1 leading-6">{item.summary}</p>
                       <p className="mt-1 leading-6">{item.correlationSummary}</p>
@@ -1737,12 +1760,12 @@ export function RuntimeOperatorPanel({
             <Card className="workspace-shell-panel border-[color:var(--mode-card-border)]" data-testid="continuity-sop-highlights-card">
               <CardHeader>
                 <CardTitle className="text-lg tracking-tight text-[color:var(--foreground)]">
-                  {english ? "Refined operator SOP" : "refined operator SOP"}
+                  {english ? "Refined operator SOP" : "操作员 SOP 细化"}
                 </CardTitle>
                 <CardDescription className="text-sm leading-7 text-[color:var(--muted-foreground)]">
                   {english
                     ? "SOP stays as bounded operator guidance: evidence-first, escalation-aware, and explicitly outside execution-authority expansion."
-                    : "SOP 保持为 有边界的操作员 指引：evidence-first、带升级规则，并且明确不扩 execution权限。"}
+                    : "SOP 保持为有边界的操作员指引：证据优先、带升级规则，并且明确不扩大执行权限。"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -1754,7 +1777,7 @@ export function RuntimeOperatorPanel({
                     <li key={`${item}-${index}`}>- {item}</li>
                   ))}
                   {!overview.continuityPilotReview.sopHighlights.length ? (
-                    <li>- {english ? "No SOP highlight is available until pilot failure classes accumulate." : "当前还没有可用的 SOP highlight，需要等待更多 pilot 失败类型。"}</li>
+                    <li>- {english ? "No SOP highlight is available until pilot failure classes accumulate." : "当前还没有可用的 SOP 要点，需要等待更多试点失败类型。"}</li>
                   ) : null}
                 </ul>
               </CardContent>
@@ -1763,13 +1786,13 @@ export function RuntimeOperatorPanel({
 
           <div className="grid gap-4 xl:grid-cols-2">
             <QueueCard
-              title={english ? "Budgeted continuity queue" : "budgeted continuity queue"}
+              title={english ? "Budgeted continuity queue" : "有预算的连续性队列"}
               description={
                 english
                   ? "Sessions should show posture, replay risk, recovery state, remediation analytics, repeat-pattern evidence, and bounded runbook guidance without widening execution authority."
-                  : "session 需要同时展示姿态、回放风险、recovery state、remediation analytics、repeat-pattern evidence，以及 有边界的runbook 指引，而不是放大 execution权限。"
+                  : "会话需要同时展示姿态、回放风险、恢复状态、补救分析、重复模式证据，以及有边界的运行手册指引，而不是放大执行权限。"
               }
-              emptyLabel={english ? "No continuity queue right now." : "当前没有 连续性 队列。"}
+              emptyLabel={english ? "No continuity queue right now." : "当前没有连续性队列。"}
               english={english}
               items={overview.continuityQueue.map((item) => {
                 const persistedLifecycleTraceReadout = buildPersistedLifecycleTraceReadout(
@@ -1962,7 +1985,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Verification and truth queue" : "验证 与 truth 队列"}
+              title={english ? "Verification and truth queue" : "验证与真实性队列"}
               description={
                 english
                   ? "Why something was blocked, downgraded or held for review should be visible before any operator treats it as fact."
@@ -1991,7 +2014,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Operating-gap queue" : "operating-gap queue"}
+              title={english ? "Operating-gap queue" : "经营缺口队列"}
               description={
                 english
                   ? "Missing owners, missing evidence, unresolved conflicts, blocked threads, and capability gaps stay explicit here instead of dissolving across separate runtime queues."
@@ -2019,11 +2042,11 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Promotion posture" : "promotion posture"}
+              title={english ? "Promotion posture" : "晋升姿态"}
               description={
                 english
                   ? "Recent promote / reject / defer decisions stay source-grounded and operator-readable instead of collapsing into silent memory writes."
-                  : "这里把最近的晋升 / 拒绝 / 推迟决策保持为基于源头、运营可读，而不是折叠成静默经营记忆 write。"
+                  : "这里把最近的晋升 / 拒绝 / 推迟决策保持为基于源头、运营可读，而不是折叠成静默写入经营记忆。"
               }
               emptyLabel={english ? "No promotion queue right now." : "当前没有晋升队列。"}
               english={english}
@@ -2053,13 +2076,13 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Handoff packets" : "handoff packets"}
+              title={english ? "Handoff packets" : "交接包"}
               description={
                 english
                   ? "Lead-to-worker and worker-to-worker handoffs stay explicit, typed, and reviewable instead of hiding inside conversational carry-over."
                   : "主管 → 执行和执行 → 执行的交接需要显式、可追踪、可复核，而不是藏在隐式上下文里。"
               }
-              emptyLabel={english ? "No handoff packet yet." : "当前还没有交接 资料et。"}
+              emptyLabel={english ? "No handoff packet yet." : "当前还没有交接资料。"}
               english={english}
               items={overview.handoffPackets.map((item) => ({
                 id: item.id,
@@ -2072,13 +2095,13 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Initiative runs" : "initiative runs"}
+              title={english ? "Initiative runs" : "主动运行"}
               description={
                 english
                   ? "Bounded problem spaces become initiative runs with explicit target outcomes instead of expanding into a workflow engine."
-                  : "有边界的问题空间 会进入带目标结果的 主动跑动，但不会扩成 工作流引擎。"
+                  : "有边界的问题空间会进入带目标结果的主动运行，但不会扩成工作流引擎。"
               }
-              emptyLabel={english ? "No initiative run yet." : "当前还没有 主动跑动。"}
+              emptyLabel={english ? "No initiative run yet." : "当前还没有主动运行。"}
               english={english}
               items={overview.initiativeRuns.map((item) => ({
                 id: item.id,
@@ -2091,13 +2114,13 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Problem-space queue" : "problem-space queue"}
+              title={english ? "Problem-space queue" : "问题空间队列"}
               description={
                 english
                   ? "Open issues are expressed as bounded problem spaces with owner hints and next steps, not as a workflow engine."
-                  : "开放问题以 有边界的问题空间 的形式出现，带负责人提示和 下一步，但不会扩成 工作流引擎。"
+                  : "开放问题以有边界的问题空间形式出现，带负责人提示和下一步，但不会扩成工作流引擎。"
               }
-              emptyLabel={english ? "No open problem spaces right now." : "当前没有 open 问题空间。"}
+              emptyLabel={english ? "No open problem spaces right now." : "当前没有开放问题空间。"}
               english={english}
               items={overview.problemSpaces.map((item) => ({
                 id: item.id,
@@ -2107,19 +2130,19 @@ export function RuntimeOperatorPanel({
                 tertiarySummary: [item.groundingSummary, item.driSummary, item.conflictSummary].filter(Boolean).join(" "),
                 status: item.status,
                 href: item.href,
-                meta: item.ownerHint ? (english ? `owner hint ${item.ownerHint}` : `owner hint ${item.ownerHint}`) : null,
+                meta: item.ownerHint ? (english ? `owner hint ${item.ownerHint}` : `负责人提示 ${item.ownerHint}`) : null,
                 timestamp: item.updatedAt,
               }))}
             />
 
             <QueueCard
-              title={english ? "Player-coach queue" : "player-coach queue"}
+              title={english ? "Player-coach queue" : "陪跑教练队列"}
               description={
                 english
                   ? "These briefs stay internal and operator-facing. They help a lead coach the next move without becoming an external commitment surface."
-                  : "这些摘要保持仅内部、面向运营，用来帮助主管教练下一步，不会变成对外承诺 面。"
+                  : "这些摘要保持仅内部、面向运营，用来帮助主管教练下一步，不会变成对外承诺界面。"
               }
-              emptyLabel={english ? "No player-coach briefs right now." : "当前没有 player-coach 摘要。"}
+              emptyLabel={english ? "No player-coach briefs right now." : "当前没有陪跑教练摘要。"}
               english={english}
               items={overview.playerCoachQueue.map((item) => ({
                 id: item.id,
@@ -2134,13 +2157,13 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Coordination trace bridge" : "coordination trace bridge"}
+              title={english ? "Coordination trace bridge" : "协同轨迹桥"}
               description={
                 english
                   ? "This queue shows whether a verified coordination item is still waiting, has entered human execution, or has reached official follow-through on the same operating thread."
                   : "这条队列展示已校验协同事项现在是仍在等待、已经进入人工执行，还是已经进入同一条经营链上的官方跟进。"
               }
-              emptyLabel={english ? "No coordination trace bridge right now." : "当前没有协同轨迹 bridge。"}
+              emptyLabel={english ? "No coordination trace bridge right now." : "当前没有协同轨迹桥。"}
               english={english}
               items={overview.coordinationTraceQueue.map((item) => ({
                 id: item.id,
@@ -2158,7 +2181,7 @@ export function RuntimeOperatorPanel({
           <Card className="workspace-shell-panel border-[color:var(--mode-card-border)]">
             <CardHeader>
               <CardTitle className="text-lg tracking-tight text-[color:var(--foreground)]">
-                {english ? "Reflection 延续" : "reflection 延续"}
+                {english ? "Reflection carry-forward" : "反思延续"}
               </CardTitle>
               <CardDescription className="text-sm leading-7 text-[color:var(--muted-foreground)]">
                 {english
@@ -2244,21 +2267,21 @@ export function RuntimeOperatorPanel({
               {!overview.reflectionCandidates.length ? (
                 <div className="rounded-2xl border border-dashed border-[color:var(--border)] px-3 py-5 text-sm text-[color:var(--muted-foreground)]">
                   {english
-                    ? "No reflection 延续 candidate right now."
-                    : "当前没有反思 延续 候选。"}
+                    ? "No reflection carry-forward candidate right now."
+                    : "当前没有反思延续候选。"}
                 </div>
               ) : null}
             </CardContent>
           </Card>
 
           <QueueCard
-            title={english ? "Reflection queue" : "reflection queue"}
+            title={english ? "Reflection queue" : "反思队列"}
             description={
               english
                 ? "Compacts trusted state into reviewable summaries. Candidates only — no auto-promote."
                 : "把可信状态压成可复核的摘要。仅候选，不自动晋升。"
             }
-            emptyLabel={english ? "No reflection job queued." : "当前没有反思 job。"}
+            emptyLabel={english ? "No reflection job queued." : "当前没有反思任务。"}
             english={english}
             items={overview.reflectionJobs.map((item) => ({
               id: item.id,
@@ -2273,11 +2296,11 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Consolidation queue" : "consolidation queue"}
+            title={english ? "Consolidation queue" : "整合队列"}
             description={
               overview.consolidationAuditSummary.summary
             }
-            emptyLabel={english ? "No consolidation job queued." : "当前没有 整合 job。"}
+            emptyLabel={english ? "No consolidation job queued." : "当前没有整合任务。"}
             english={english}
             items={overview.consolidationJobs.map((item) => ({
               id: item.id,
@@ -2338,7 +2361,7 @@ export function RuntimeOperatorPanel({
             />
 
             <QueueCard
-              title={english ? "Capability catalog" : "capability catalog"}
+              title={english ? "Capability catalog" : "能力目录"}
               description={
                 english
                   ? "Capability hints should stay explicit and reviewable. This surface shows what the runtime currently knows how to assemble without implying broader orchestration authority."
@@ -2383,7 +2406,7 @@ export function RuntimeOperatorPanel({
                 ? "One coarse cue first, before comparing work / review / control cards by hand."
                 : "先看一条粗粒度线索，再去手工对比工作、复核、控制三张卡。"
             }
-            emptyLabel={english ? "No operator cue summary yet." : "当前还没有操作员线索 summary。"}
+            emptyLabel={english ? "No operator cue summary yet." : "当前还没有操作员线索摘要。"}
             english={english}
             items={[
               {
@@ -2417,14 +2440,14 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator next move summary" : "operator next move summary"}
+            title={english ? "Operator next move summary" : "操作员下一步摘要"}
             description={
               english
                 ? "After the top cue is known, the workspace should still answer one bounded next move before anyone scans multiple operator cards by hand."
                 : "顶层线索明确后，工作区还需要先回答一条有边界的下一动作，避免继续手工扫多张操作员卡片。"
             }
             emptyLabel={
-              english ? "No operator next move summary yet." : "当前还没有操作员下一动作 summary。"
+              english ? "No operator next move summary yet." : "当前还没有操作员下一动作摘要。"
             }
             english={english}
             items={[
@@ -2453,7 +2476,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator action cue" : "operator action cue"}
+            title={english ? "Operator action cue" : "操作员动作提示"}
             description={
               english
                 ? "Workspace-level operator scanning should still collapse into one coarse action lane before anyone compares detailed control, review, or continuity cards by hand."
@@ -2490,7 +2513,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator review/control cue" : "operator review/control cue"}
+            title={english ? "Operator review/control cue" : "操作员复核 / 控制提示"}
             description={
               english
                 ? "After the top work lane is clear, the workspace should still say whether the next bounded entry point is review or control before anyone scans both cards by hand."
@@ -2529,14 +2552,14 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator start point" : "operator start point"}
+            title={english ? "Operator start point" : "操作员起点"}
             description={
               english
                 ? "Workspace-level operator scanning should collapse into one primary bounded move plus one secondary fallback before anyone fans out into the full operating surface."
                 : "工作区级操作员扫描应该先压成一条主有边界动作加一条次级兜底，再决定是否展开整张运营面。"
             }
             emptyLabel={
-              english ? "No operator start point yet." : "当前还没有操作员start point。"
+              english ? "No operator start point yet." : "当前还没有操作员起点。"
             }
             english={english}
             items={[
@@ -2572,7 +2595,7 @@ export function RuntimeOperatorPanel({
                 ? "Verification, promotion, reflection and consolidation queues — in one place."
                 : "验证、晋升、反思、整合——一处看完。"
             }
-            emptyLabel={english ? "No operator review summary yet." : "当前还没有操作员复核 summary。"}
+            emptyLabel={english ? "No operator review summary yet." : "当前还没有操作员复核摘要。"}
             english={english}
             items={[
               {
@@ -2585,11 +2608,21 @@ export function RuntimeOperatorPanel({
                 href: overview.operatorReviewSummary.focusHref ?? "/operating",
                 meta: [
                   overview.operatorReviewSummary.focusTitle,
-                  `${overview.operatorReviewSummary.counts.verificationQueue} verification`,
-                  `${overview.operatorReviewSummary.counts.promotionQueue} promotion`,
-                  `${overview.operatorReviewSummary.counts.reflectionCandidates} reflection candidate`,
-                  `${overview.operatorReviewSummary.counts.reflectionJobs} reflection job`,
-                  `${overview.operatorReviewSummary.counts.consolidationJobs} consolidation job`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.verificationQueue} verification`
+                    : `${overview.operatorReviewSummary.counts.verificationQueue} 个验证项`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.promotionQueue} promotion`
+                    : `${overview.operatorReviewSummary.counts.promotionQueue} 个晋升项`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.reflectionCandidates} reflection candidate`
+                    : `${overview.operatorReviewSummary.counts.reflectionCandidates} 个反思候选`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.reflectionJobs} reflection job`
+                    : `${overview.operatorReviewSummary.counts.reflectionJobs} 个反思任务`,
+                  english
+                    ? `${overview.operatorReviewSummary.counts.consolidationJobs} consolidation job`
+                    : `${overview.operatorReviewSummary.counts.consolidationJobs} 个整合任务`,
                   overview.operatorReviewSummary.latestUpdatedAt
                     ? formatPanelTime(overview.operatorReviewSummary.latestUpdatedAt, english)
                     : null,
@@ -2601,7 +2634,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator review action summary" : "operator review action summary"}
+            title={english ? "Operator review action summary" : "操作员复核动作摘要"}
             description={
               english
                 ? "Workspace-level review posture should compress into one bounded next action before the operator scans every review queue by hand."
@@ -2623,11 +2656,21 @@ export function RuntimeOperatorPanel({
                 meta: [
                   overview.operatorReviewActionSummary.reviewState,
                   overview.operatorReviewActionSummary.focusTitle,
-                  `${overview.operatorReviewActionSummary.counts.verificationQueue} verification`,
-                  `${overview.operatorReviewActionSummary.counts.promotionQueue} promotion`,
-                  `${overview.operatorReviewActionSummary.counts.reflectionCandidates} reflection candidate`,
-                  `${overview.operatorReviewActionSummary.counts.reflectionJobs} reflection job`,
-                  `${overview.operatorReviewActionSummary.counts.consolidationJobs} consolidation job`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.verificationQueue} verification`
+                    : `${overview.operatorReviewActionSummary.counts.verificationQueue} 个验证项`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.promotionQueue} promotion`
+                    : `${overview.operatorReviewActionSummary.counts.promotionQueue} 个晋升项`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.reflectionCandidates} reflection candidate`
+                    : `${overview.operatorReviewActionSummary.counts.reflectionCandidates} 个反思候选`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.reflectionJobs} reflection job`
+                    : `${overview.operatorReviewActionSummary.counts.reflectionJobs} 个反思任务`,
+                  english
+                    ? `${overview.operatorReviewActionSummary.counts.consolidationJobs} consolidation job`
+                    : `${overview.operatorReviewActionSummary.counts.consolidationJobs} 个整合任务`,
                   overview.operatorReviewActionSummary.latestUpdatedAt
                     ? formatPanelTime(overview.operatorReviewActionSummary.latestUpdatedAt, english)
                     : null,
@@ -2639,13 +2682,13 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator work summary" : "operator work summary"}
+            title={english ? "Operator work summary" : "操作员工作摘要"}
             description={
               english
                 ? "Workspace-level operator work should collapse continuity attention, control posture, review queues, and critical operating gaps into one bounded next-work summary."
                 : "工作区级操作员工作需要把连续性关注、控制姿态、复核队列和关键经营缺口压成一份有边界的下一步工作摘要。"
             }
-            emptyLabel={english ? "No operator work summary yet." : "当前还没有操作员work summary。"}
+            emptyLabel={english ? "No operator work summary yet." : "当前还没有操作员工作摘要。"}
             english={english}
             items={[
               {
@@ -2662,13 +2705,27 @@ export function RuntimeOperatorPanel({
                   overview.operatorWorkSummary.reviewState,
                   overview.operatorWorkSummary.reviewActionState,
                   overview.operatorWorkSummary.focusTitle,
-                  `${overview.operatorWorkSummary.counts.continuityAttention} continuity attention`,
-                  `${overview.operatorWorkSummary.counts.reviewQueue} review queue`,
-                  `${overview.operatorWorkSummary.counts.promotionQueue} promotion queue`,
-                  `${overview.operatorWorkSummary.counts.reflectionCandidates} reflection candidate`,
-                  `${overview.operatorWorkSummary.counts.reflectionJobs} reflection job`,
-                  `${overview.operatorWorkSummary.counts.consolidationJobs} consolidation job`,
-                  `${overview.operatorWorkSummary.counts.criticalOperatingGaps} critical gap`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.continuityAttention} continuity attention`
+                    : `${overview.operatorWorkSummary.counts.continuityAttention} 个连续性关注项`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.reviewQueue} review queue`
+                    : `${overview.operatorWorkSummary.counts.reviewQueue} 个复核队列项`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.promotionQueue} promotion queue`
+                    : `${overview.operatorWorkSummary.counts.promotionQueue} 个晋升队列项`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.reflectionCandidates} reflection candidate`
+                    : `${overview.operatorWorkSummary.counts.reflectionCandidates} 个反思候选`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.reflectionJobs} reflection job`
+                    : `${overview.operatorWorkSummary.counts.reflectionJobs} 个反思任务`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.consolidationJobs} consolidation job`
+                    : `${overview.operatorWorkSummary.counts.consolidationJobs} 个整合任务`,
+                  english
+                    ? `${overview.operatorWorkSummary.counts.criticalOperatingGaps} critical gap`
+                    : `${overview.operatorWorkSummary.counts.criticalOperatingGaps} 个关键经营缺口`,
                   overview.operatorWorkSummary.latestUpdatedAt
                     ? formatPanelTime(overview.operatorWorkSummary.latestUpdatedAt, english)
                     : null,
@@ -2727,7 +2784,7 @@ export function RuntimeOperatorPanel({
             emptyLabel={
               english
                 ? "No swarm operator control surface is visible yet."
-                : "当前还没有可见的 正在加温的操作员控制 面。"
+                : "当前还没有可见的操作员控制面。"
             }
             english={english}
             items={[
@@ -2776,13 +2833,13 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Operator control summary" : "operator control summary"}
+            title={english ? "Operator control summary" : "操作员控制摘要"}
             description={
               english
                 ? "Environment authority, latest execution seam, and benchmark workflow should collapse into one operator-facing control posture before anyone treats this substrate slice as settled."
                 : "环境权限、最新执行接缝与基准工作流需要先压成一份面向运营的控制姿态，避免不同面各自拼接后再把这条底座切片当成已收口。"
             }
-            emptyLabel={english ? "No operator control summary yet." : "当前还没有操作员控制 summary。"}
+            emptyLabel={english ? "No operator control summary yet." : "当前还没有操作员控制摘要。"}
             english={english}
             items={[
               {
@@ -2816,7 +2873,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Environment seams" : "environment seams"}
+            title={english ? "Environment seams" : "环境边界"}
             description={
               english
                 ? `Connector, browser, control-plane, workspace-context, and official-action seams stay explicit so capability hints do not silently widen authority. ${overview.environmentContract.summary.connectedConnectorCount} connector(s) are currently connected. Latest execution seam is ${overview.environmentContract.executionSeam.posture}, and authority posture is ${overview.environmentContract.executionAuthority.posture}.`
@@ -2897,7 +2954,7 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Benchmark matrix" : "benchmark matrix"}
+            title={english ? "Benchmark matrix" : "基准矩阵"}
             description={
               english
                 ? `Runtime eval, adapter conformance, boundary regression, and operator usability stay explicit as four validation gates before this substrate can be trusted. ${overview.benchmarkMatrix.workflow.summary}`
@@ -2923,13 +2980,13 @@ export function RuntimeOperatorPanel({
           />
 
           <QueueCard
-            title={english ? "Composition-failure inbox" : "composition-failure inbox"}
+            title={english ? "Composition-failure inbox" : "组合失败收件箱"}
             description={
               english
                 ? "Context misses, verification failures and policy blocks stay visible so operators can fix the runtime path instead of silently retrying."
-                : "context miss、验证 fail 和 policy block 都要保持可见，这样操作员修的是运行时 path，而不是静默重试。"
+                : "上下文缺失、验证失败和策略阻断都要保持可见，这样操作员修的是运行时路径，而不是静默重试。"
             }
-            emptyLabel={english ? "No composition failures recorded." : "当前没有 composition failure。"}
+            emptyLabel={english ? "No composition failures recorded." : "当前没有组合失败记录。"}
             english={english}
             items={overview.compositionFailures.map((item) => ({
               id: item.id,

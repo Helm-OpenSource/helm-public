@@ -114,7 +114,7 @@ export function ProposalPackageDetailView(
   const operatingSummaryItems = buildObjectContextDetailOperatingSummaryItems({
     english,
     protocol,
-    objectStateLine: text(`${detail.stageLabel} · ${detail.riskLabel} · ${audienceMode}`),
+    objectStateLine: text(`${detail.stageLabel} · ${detail.riskLabel} · ${displayAudienceMode}`),
   });
   const operatingSummaryConnections = buildDetailOperatingSummaryConnections({
     english,
@@ -151,8 +151,8 @@ export function ProposalPackageDetailView(
         description={
           text(
             english
-              ? `${detail.companyName ?? "No linked company"} · ${detail.contactNames[0] ?? "No linked contact"} · ${audienceMode}`
-              : `${detail.companyName ?? "未关联公司"} · ${detail.contactNames[0] ?? "未关联联系人"} · ${audienceMode}`,
+              ? `${detail.companyName ?? "No linked company"} · ${detail.contactNames[0] ?? "No linked contact"} · ${displayAudienceMode}`
+              : `${detail.companyName ?? "未关联公司"} · ${detail.contactNames[0] ?? "未关联联系人"} · ${displayAudienceMode}`,
           )
         }
         actions={
@@ -466,7 +466,7 @@ function buildUnifiedNavigation({
                 : "客户面向报价详情",
               summary: english
                 ? "Once the package is stable, switch to the customer-facing offer detail."
-                : "当方案包收稳后，切到客户面向报价 detail。",
+                : "当方案包收稳后，切到客户面向报价详情。",
             },
       detailNodeCurrentReason: protocol.pageJudgementReason,
       detailNodePriority: priorityForCommercialRisk(riskSignal),
@@ -497,7 +497,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction:
                 protocol.pageNextAction[0]?.label ??
-                (english ? "Open package detail" : "打开方案包 detail"),
+                (english ? "Open package detail" : "打开方案包详情"),
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode: "internal-only",
@@ -522,7 +522,7 @@ function buildUnifiedNavigation({
                 protocol.pageNextAction[0]?.label ??
                 (english
                   ? "Open customer-facing offer detail"
-                  : "打开客户面向报价 detail"),
+                  : "打开客户面向报价详情"),
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode: "customer-facing-with-boundary",

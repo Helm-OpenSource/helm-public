@@ -13,21 +13,23 @@ import {
   generateOpportunityBriefingSnapshot,
 } from "@/lib/memory/briefing.service";
 
-function parseObjectType(value: string) {
+function parseObjectType(value: string, english: boolean) {
   const normalized = value.toUpperCase();
   if (normalized === ObjectType.CONTACT) return ObjectType.CONTACT;
   if (normalized === ObjectType.COMPANY) return ObjectType.COMPANY;
   if (normalized === ObjectType.OPPORTUNITY) return ObjectType.OPPORTUNITY;
   if (normalized === ObjectType.MEETING) return ObjectType.MEETING;
-  throw new Error("不支持的简报对象类型");
+  throw new Error(english ? "Unsupported briefing object type" : "不支持的简报对象类型");
 }
 
 export async function POST(_: Request, { params }: { params: Promise<{ objectType: string; objectId: string }> }) {
+  let english = false;
+
   try {
     const { user, membership, workspace } = await getCurrentWorkspaceSession();
     const { objectType: rawObjectType, objectId } = await params;
-    const objectType = parseObjectType(rawObjectType);
-    const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
+    english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
+    const objectType = parseObjectType(rawObjectType, english);
 
     if (!canManageWorkspaceInsights(membership.role)) {
       return Response.json(
@@ -91,7 +93,11 @@ export async function POST(_: Request, { params }: { params: Promise<{ objectTyp
     return Response.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "生成简报失败",
+        message: error instanceof Error
+          ? error.message
+          : english
+            ? "Failed to generate briefing"
+            : "生成简报失败",
       },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );

@@ -665,7 +665,7 @@ export function AccountSettingsTab({
                         {source.sourceType === "HUBSPOT" ? "HubSpot" : "Salesforce"}
                       </p>
                       <p className="mt-1 text-sm text-[color:var(--muted)]">
-                        {source.externalAccountLabel ?? (english ? "Unnamed CRM source" : "未命名 CRM 来源")}
+                        {source.externalAccountLabel ?? (english ? "Unnamed CRM source" : "未命名客户关系系统来源")}
                       </p>
                     </div>
                     <Badge

@@ -2,6 +2,7 @@ import { ObjectType } from "@prisma/client";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { logEvent } from "@/lib/analytics";
 import { db } from "@/lib/db";
+import { isEnglishWorkspaceDefaultLocale, resolveApiWorkspaceMessage } from "@/lib/i18n/api-message-locale";
 import {
   MEMORY_TIMELINE_QUERY_LIMIT,
   buildMemoryQueryPageInfo,
@@ -21,6 +22,7 @@ import { errorResponse, successResponse, type TimelineEvent } from "@/lib/memory
 export async function GET(request: Request) {
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
+  const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
   const { searchParams } = new URL(request.url);
   const objectType = searchParams.get("objectType") as ObjectType | null;
   const objectId = searchParams.get("objectId");
@@ -42,7 +44,12 @@ export async function GET(request: Request) {
   const includeTimelineObjects = includeHelm && objectLevel !== "WORKSPACE";
 
   if ((objectType && !objectId) || (!objectType && objectId)) {
-    return errorResponse("objectType 和 objectId 需要同时提供");
+    return errorResponse(
+      resolveApiWorkspaceMessage(workspace.defaultLocale, {
+        zh: "objectType 和 objectId 需要同时提供",
+        en: "objectType and objectId must be provided together",
+      }),
+    );
   }
 
   if (!cursor.ok) {
@@ -166,14 +173,14 @@ export async function GET(request: Request) {
   ]);
 
   const data = [
-    ...threads.map((item) => ({ type: "EMAIL_THREAD" as const, id: item.id, title: item.subject, occurredAt: item.updatedAt, status: item.status, sourceLabel: item.source ?? "邮件线程" })),
-    ...meetings.map((item) => ({ type: "MEETING" as const, id: item.id, title: item.title, occurredAt: item.startsAt, status: item.status, sourceLabel: "会议" })),
+    ...threads.map((item) => ({ type: "EMAIL_THREAD" as const, id: item.id, title: item.subject, occurredAt: item.updatedAt, status: item.status, sourceLabel: item.source ?? (english ? "Email thread" : "邮件线程") })),
+    ...meetings.map((item) => ({ type: "MEETING" as const, id: item.id, title: item.title, occurredAt: item.startsAt, status: item.status, sourceLabel: english ? "Meeting" : "会议" })),
     ...facts.map((item) => ({ type: "MEMORY_FACT" as const, id: item.id, title: item.title, occurredAt: item.createdAt, status: item.status, sourceLabel: item.sourceType })),
     ...commitments.map((item) => ({ type: "COMMITMENT" as const, id: item.id, title: item.title, occurredAt: item.createdAt, status: item.status, sourceLabel: item.sourceType })),
     ...blockers.map((item) => ({ type: "BLOCKER" as const, id: item.id, title: item.title, occurredAt: item.createdAt, status: item.status, sourceLabel: item.sourceType })),
-    ...corrections.map((item) => ({ type: "MEMORY_CORRECTION" as const, id: item.id, title: item.reason ?? item.correctionType, occurredAt: item.createdAt, status: item.correctionType, sourceLabel: item.memoryFact?.title ?? "记忆修正" })),
-    ...entries.map((item) => ({ type: "MEMORY_ENTRY" as const, id: item.id, title: item.title, occurredAt: item.createdAt, status: item.memoryType, sourceLabel: item.source ?? "工作域记忆" })),
-    ...actions.map((item) => ({ type: "ACTION" as const, id: item.id, title: item.title, occurredAt: item.createdAt, status: item.status, sourceLabel: item.sourceType ?? "动作" })),
+    ...corrections.map((item) => ({ type: "MEMORY_CORRECTION" as const, id: item.id, title: item.reason ?? item.correctionType, occurredAt: item.createdAt, status: item.correctionType, sourceLabel: item.memoryFact?.title ?? (english ? "Memory correction" : "记忆修正") })),
+    ...entries.map((item) => ({ type: "MEMORY_ENTRY" as const, id: item.id, title: item.title, occurredAt: item.createdAt, status: item.memoryType, sourceLabel: item.source ?? (english ? "Workspace memory" : "工作域记忆") })),
+    ...actions.map((item) => ({ type: "ACTION" as const, id: item.id, title: item.title, occurredAt: item.createdAt, status: item.status, sourceLabel: item.sourceType ?? (english ? "Action" : "动作") })),
     ...approvals.map((item) => ({ type: "APPROVAL" as const, id: item.id, title: item.actionItem.title, occurredAt: item.createdAt, status: item.status, sourceLabel: item.actionItem.actionType })),
   ]
     .sort(compareTimelineEvents)

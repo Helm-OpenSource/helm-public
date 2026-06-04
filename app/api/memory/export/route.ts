@@ -109,10 +109,12 @@ export async function GET(request: Request) {
   });
 
   const content = [
-    `Helm 工作域记忆导出`,
-    `导出时间：${new Date().toISOString()}`,
-    `来源过滤：${source}`,
-    `对象过滤：${objectType && objectId ? `${objectType}:${objectId}` : "无"}`,
+    english ? "Helm workspace memory export" : "Helm 工作域记忆导出",
+    english ? `Exported at: ${new Date().toISOString()}` : `导出时间：${new Date().toISOString()}`,
+    english ? `Source filter: ${source}` : `来源过滤：${source}`,
+    english
+      ? `Object filter: ${objectType && objectId ? `${objectType}:${objectId}` : "none"}`
+      : `对象过滤：${objectType && objectId ? `${objectType}:${objectId}` : "无"}`,
     "",
     ...entries.map((entry) => `- [${entry.entityType}] ${entry.title}\n  ${entry.content}`),
   ].join("\n");

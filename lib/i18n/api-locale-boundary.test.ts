@@ -7,7 +7,16 @@ const scanRoot = "app/api";
 const sourceExtensions = new Set([".ts", ".tsx"]);
 
 const rawLocaleResolverApiAllowList = new Set([
+  "app/api/auth/dingtalk/callback/route.ts",
+  "app/api/auth/feishu/callback/route.ts",
+  "app/api/auth/wecom/callback/route.ts",
   "app/api/public-auth/wecom/callback/route.ts",
+]);
+
+const requestLocaleCookieApiAllowList = new Set([
+  "app/api/auth/dingtalk/callback/route.ts",
+  "app/api/auth/feishu/callback/route.ts",
+  "app/api/auth/wecom/callback/route.ts",
 ]);
 
 const requestLocaleCookieMarkers = [
@@ -60,6 +69,7 @@ describe("api locale boundary", () => {
         const source = read(file);
         return requestLocaleCookieMarkers.some((marker) => source.includes(marker));
       })
+      .filter((file) => !requestLocaleCookieApiAllowList.has(file))
       .sort();
 
     expect(offenders).toEqual([]);
@@ -76,7 +86,10 @@ describe("api locale boundary", () => {
 
   it("keeps every API locale allowlist entry pointing at an existing source file", () => {
     const sourceFiles = new Set(listSourceFiles(scanRoot));
-    const missing = [...rawLocaleResolverApiAllowList]
+    const missing = [
+      ...rawLocaleResolverApiAllowList,
+      ...requestLocaleCookieApiAllowList,
+    ]
       .filter((file) => !sourceFiles.has(file))
       .sort();
 

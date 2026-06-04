@@ -139,7 +139,7 @@ describeMysqlIntegration("Helm v2 draft-only comms runtime", () => {
     expect(summary?.commsSchedulerRun?.status).toBe("COMPLETED");
     expect(summary?.riskGuardRun?.status).toBe("COMPLETED");
     expect(summary?.customerFollowupDraft?.markdown).toContain("会后 follow-up");
-    expect(summary?.emailDraft?.body).toContain("这组对外 draft 仍然只是 review-before-send handoff");
+    expect(summary?.emailDraft?.body).toContain("这组对外草稿仍然只是发送前复核交接");
     expect(summary?.approvalRequest?.status).toBe("PENDING");
     expect(summary?.artifactReview?.status).toBe("PENDING");
     expect(summary?.bundle?.noSendAuthority).toBe(true);

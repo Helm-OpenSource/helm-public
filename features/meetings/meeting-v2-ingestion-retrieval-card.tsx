@@ -159,7 +159,7 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
                 <div className="theme-surface-panel rounded-2xl px-4 py-4">
                   <div className="flex items-center gap-2">
                     <FolderSearch className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                    <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Retrieval trace" : "Retrieval trace"}</p>
+                    <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Retrieval trace" : "检索轨迹"}</p>
                   </div>
                   <div className="mt-4 space-y-4">
                     {runtime.traces.map((trace) => (
@@ -172,7 +172,7 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
                         <p className="mt-3 text-sm text-[color:var(--muted)]">{trace.rationale}</p>
                         <div className="mt-3 grid gap-3 lg:grid-cols-2">
                           <div>
-                            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "loaded" : "loaded"}</p>
+                            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "loaded" : "已加载"}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {trace.loadedRefs.length > 0 ? (
                                 trace.loadedRefs.map((item) => (
@@ -186,7 +186,7 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
                             </div>
                           </div>
                           <div>
-                            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "skipped / on-demand" : "skipped / on-demand"}</p>
+                            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "skipped / on-demand" : "已跳过 / 按需"}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {trace.skippedRefs.length > 0 ? (
                                 trace.skippedRefs.map((item) => (
@@ -206,10 +206,10 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
                 </div>
 
                 <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Loading strategy" : "Loading strategy"}</p>
+                  <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Loading strategy" : "加载策略"}</p>
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <div>
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">always_on</p>
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "always_on" : "始终加载"}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {runtime.loadingStrategy.alwaysOn.map((item) => (
                           <Badge key={`${meetingId}-always-${item}`} variant="info">
@@ -219,7 +219,7 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">event_triggered</p>
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "event_triggered" : "事件触发"}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {runtime.loadingStrategy.eventTriggered.map((item) => (
                           <Badge key={`${meetingId}-event-${item}`} variant="approval">
@@ -229,7 +229,7 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">stage_triggered</p>
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "stage_triggered" : "阶段触发"}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {runtime.loadingStrategy.stageTriggered.map((item) => (
                           <Badge key={`${meetingId}-stage-${item}`} variant="neutral">
@@ -239,7 +239,7 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">on_demand</p>
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "on_demand" : "按需加载"}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {runtime.loadingStrategy.onDemand.map((item) => (
                           <Badge key={`${meetingId}-demand-${item}`} variant="warning">
@@ -255,7 +255,7 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
           </>
         ) : (
           <div className="rounded-2xl border border-dashed border-[color:var(--border-strong)] bg-white/80 px-5 py-6 text-sm text-[color:var(--muted-foreground)]">
-            {english ? "No connector ingestion / retrieval trace has been generated for this meeting yet." : "当前会议还没有生成 connector ingestion / retrieval 轨迹。"}
+            {english ? "No connector ingestion / retrieval trace has been generated for this meeting yet." : "当前会议还没有生成连接器接入与检索轨迹。"}
           </div>
         )}
       </CardContent>

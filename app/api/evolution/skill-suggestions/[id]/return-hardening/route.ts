@@ -34,10 +34,17 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "skill formal review returned for hardening");
+    return successResponse(
+      { suggestion },
+      english ? "Skill formal review returned for hardening" : "正式评审已退回加固",
+    );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "退回 hardening 失败",
+      error instanceof Error
+        ? error.message
+        : english
+          ? "Failed to return skill formal review for hardening"
+          : "退回加固失败",
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "FORMAL_REVIEW_RETURN_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );
