@@ -14,6 +14,7 @@ import type {
   CustomerSuccessAttentionState,
   CustomerSuccessAuthorityState,
 } from "@/features/customer-success-handoff/detail-model";
+import { formatCustomerSuccessQueueDateLabel } from "@/features/customer-success-handoff/queue-date-labels";
 import { formatDateLabel, trimText } from "@/lib/utils";
 
 type EvidenceGroup = {
@@ -497,8 +498,8 @@ export function buildCustomerSuccessQueueSurfaceModel({
       sinceLastSeenLabel:
         queueItem?.sinceLastSeenLabel ??
         (english
-          ? `The linked thread changed on ${formatThreadDateLabel(thread.updatedAt)}.`
-          : `关联线程在 ${formatThreadDateLabel(thread.updatedAt)} 后出现了变化。`),
+          ? `The linked thread changed on ${formatThreadDateLabel(thread.updatedAt, english)}.`
+          : `关联线程在 ${formatThreadDateLabel(thread.updatedAt, english)} 后出现了变化。`),
       resurfacedBecauseLabel:
         queueItem?.resurfacedBecauseLabel ??
         (thread.shouldReply
@@ -924,8 +925,8 @@ function fallbackCustomerSuccessStageLabel(english: boolean) {
   return english ? "Success follow-through" : "客户成功跟进";
 }
 
-function formatThreadDateLabel(date: Date) {
-  return formatDateLabel(date);
+function formatThreadDateLabel(date: Date, english: boolean) {
+  return formatCustomerSuccessQueueDateLabel(date, english, formatDateLabel);
 }
 
 function formatAuthorityLabel(
