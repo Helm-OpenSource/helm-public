@@ -83,6 +83,9 @@ describe("proposal / package detail reporting contract", () => {
 
     const protocol = toPackagePageReportingProtocol(contract);
     expect(protocol.pagePrioritySignal).toBe("高风险");
+    expect(toPackagePageReportingProtocol(contract, true).pagePrioritySignal).toBe(
+      "High risk",
+    );
     expect(protocol.pageEvidenceSummary[0]).toContain("Evidence drawer");
   });
 });

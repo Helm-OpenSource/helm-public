@@ -50,7 +50,10 @@ export function ExternalNarrativeDetailView({
   english,
   contract,
 }: Props) {
-  const sourceProtocol = toExternalNarrativeDetailPageReportingProtocol(contract);
+  const sourceProtocol = toExternalNarrativeDetailPageReportingProtocol(
+    contract,
+    english,
+  );
   const text = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);

@@ -815,7 +815,7 @@ export function MeetingV2RuntimeCard({
 
         if (!result.ok) {
           toast.error(
-            result.error ?? (english ? "Operator takeover 已确认 failed" : "操作员接管确认失败"),
+            result.error ?? (english ? "Operator takeover confirmation failed" : "操作员接管确认失败"),
           );
           return;
         }
@@ -823,11 +823,11 @@ export function MeetingV2RuntimeCard({
         toast.success(
           result.reused
             ? english
-              ? "Operator takeover 已确认 already recorded"
-              : "操作员接管 已确认 已存在"
+              ? "Operator takeover confirmation already recorded"
+              : "操作员接管确认已存在"
             : english
-              ? "Operator takeover 已确认 recorded"
-              : "操作员接管 已确认 已记录",
+              ? "Operator takeover confirmation recorded"
+              : "操作员接管确认已记录",
         );
         setTakeoverRequestStateOverride("acknowledged");
         setRequestPostureTakeoverStateOverride("acknowledged");
@@ -2283,7 +2283,8 @@ export function MeetingV2RuntimeCard({
                                 : ""}
                             </li>
                             <li>
-                              - 已确认 · {runtime.v21.benchmarkMatrix.workflow.acknowledgement.state} ·{" "}
+                              - {english ? "acknowledged" : "已确认"} ·{" "}
+                              {runtime.v21.benchmarkMatrix.workflow.acknowledgement.state} ·{" "}
                               {runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedBy ?? (english ? "none" : "暂无")}
                               {runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedAt
                                 ? ` · ${formatDateLabel(runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedAt)}`
@@ -4729,7 +4730,7 @@ export function MeetingV2RuntimeCard({
                       </div>
                       <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
                         {english
-                          ? "Reflection only compacts trusted runtime state into a reviewable 延续 summary. It does not auto-promote memory or rewrite canonical truth."
+                          ? "Reflection only compacts trusted runtime state into a reviewable carry-forward summary. It does not auto-promote memory or rewrite canonical truth."
                           : "反思只会把 可信运行时状态 收成可复核的 续传摘要，不会自动 晋升 经营记忆，也不会改写 权威事实。"}
                       </p>
                       <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">

@@ -140,6 +140,7 @@ export function createExternalNarrativeDetailReportingContract(
 
 export function toExternalNarrativeDetailPageReportingProtocol(
   contract: ExternalNarrativeDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.externalNarrativeDetailJudgement,
@@ -153,6 +154,7 @@ export function toExternalNarrativeDetailPageReportingProtocol(
     pageWorkerSummary: contract.externalNarrativeDetailWorkerSummary,
     pagePrioritySignal: labelForRiskSignal(
       contract.externalNarrativeDetailRiskSignal,
+      english,
     ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
@@ -211,8 +213,11 @@ function validateSharedRules(contract: ExternalNarrativeDetailReportingContract)
   }
 }
 
-function labelForRiskSignal(signal: ExternalNarrativeDetailRiskSignal) {
-  if (signal === "high") return "高风险";
-  if (signal === "caution") return "谨慎表达";
-  return "继续观察";
+function labelForRiskSignal(
+  signal: ExternalNarrativeDetailRiskSignal,
+  english: boolean,
+) {
+  if (signal === "high") return english ? "High risk" : "高风险";
+  if (signal === "caution") return english ? "Express with caution" : "谨慎表达";
+  return english ? "Keep watching" : "继续观察";
 }
