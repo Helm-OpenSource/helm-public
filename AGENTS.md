@@ -173,6 +173,27 @@ Codex 默认不负责：
 - 实现后补文档、守卫、测试、自检
 - 最后给出冻结或 sprint 报告
 
+## 9.1 多代理并行工作治理
+
+后续所有 Codex / Claude / 其他 agent 并行任务，必须先把“工作区归属”查清楚，再动手改文件。
+
+开始任何实现、提交或 PR 前，默认先执行并记录：
+
+```bash
+git status --short --branch
+git worktree list
+git rev-parse --show-toplevel
+```
+
+强制规则：
+
+- 一个任务流只能在自己拥有的 worktree + branch 上实现；不得在其他 agent 已经有未提交 WIP 的目录里继续叠改。
+- 如果当前目录不是本任务明确拥有的 worktree，或者存在不属于本任务的未提交改动，必须先停止实现，改用从目标 base 新建的独立 worktree / branch。
+- 不同关注点必须拆成不同提交 / PR；例如双语化、安全 hardening、能力开发、治理文档不得混在同一个提交里。
+- staging 必须显式列文件；默认禁止 `git add -A`，除非先证明工作树里没有其他 agent 或用户的改动。
+- 跨仓任务只能做检查、调度、交接和完成跟踪；实现改动必须发送到对应仓库自己的线程 / worktree，不得从当前仓库跨仓改文件。
+- 若发现已经影响到其他并行工作，第一步不是继续实现，而是先把当前 WIP 收成原子提交或撤出到隔离 worktree，再写清恢复动作。
+
 ## 10. 统一验证命令
 
 `npm run check:boundaries` 是本仓库的本地硬门禁：
