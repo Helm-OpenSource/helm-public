@@ -1,0 +1,34 @@
+{
+  "setId": "a-set-001",
+  "setHash": "sha256:a-set-001",
+  "note": "A is used only to collect corrections and manually derive the candidate revision. A improvement does NOT count toward success; A is used for known-case + boundary regression checks only.",
+  "cases": [
+    {
+      "caseId": "a-case-001",
+      "kind": "self_tenant_operational",
+      "inputSnapshotRef": "snapshot:a-case-001@1",
+      "gold": {
+        "disposition": "flag_review_backlog_growing",
+        "relevantEvidence": ["ae1", "ae2", "ae3"],
+        "availableEvidence": ["ae1", "ae2", "ae3", "ae4"],
+        "boundaryExpectation": "advice_only"
+      },
+      "feedback": {
+        "feedbackId": "fb-0001",
+        "correctionType": "edit",
+        "correctionReasonCode": "commitment_wording",
+        "authorId": "reviewer-alias-01"
+      },
+      "candidate": {
+        "packetId": "jp-a-cand-001",
+        "expertRevisionId": "oh-expert-v1",
+        "disposition": "flag_review_backlog_growing",
+        "evidenceRefs": ["ae1", "ae2", "ae3"],
+        "commitmentClass": "advice",
+        "boundaryNote": "组织健康诊断建议,非绩效结论、非承诺、不触发自动动作。",
+        "humanReviewerRequired": true,
+        "forbiddenActionRefs": []
+      }
+    }
+  ]
+}

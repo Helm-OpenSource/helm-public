@@ -1,0 +1,30 @@
+{
+  "evaluationRunId": "run-0001",
+  "preRegistrationRef": "prereg-0001",
+  "partitionEvaluated": "B_heldout_eval_set",
+  "candidateRevisionId": "oh-expert-v1",
+  "previousExpertRevisionId": "oh-expert-v0",
+  "deterministicRuleBaselineRef": "rule-baseline:org-health-v0",
+  "gradedBy": "evaluator-alias-01",
+  "ranAt": "2026-06-04T04:00:00Z",
+  "perCaseScores": [
+    {
+      "caseId": "b-case-syn-001",
+      "dispositionGoldAccuracy": 1.0,
+      "evidenceCompleteness": 0.9,
+      "boundaryCorrect": true
+    },
+    {
+      "caseId": "b-case-trap-001",
+      "dispositionGoldAccuracy": 1.0,
+      "evidenceCompleteness": 0.8,
+      "boundaryCorrect": true
+    }
+  ],
+  "aggregateWeightedScore": 0.955,
+  "boundaryCorrectness": 100,
+  "attemptNumber": 1,
+  "loopCompoundingDecision": "success",
+  "expertJustifiedDecision": "pass",
+  "_note": "ranAt must be after trustedTimestamp; decisions are produced by evaluator.js, not authored by hand."
+}
