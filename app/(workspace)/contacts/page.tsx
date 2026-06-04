@@ -20,8 +20,9 @@ import {
   getDeploymentProfileDefaultLocaleCandidate,
   getRequestUiLocaleCandidate,
 } from "@/lib/i18n/request-locale.server";
-import { formatDateLabel, trimText } from "@/lib/utils";
+import { trimText } from "@/lib/utils";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
+import { formatContactListDateLabel } from "@/features/contacts/contact-list-date-labels";
 
 export default async function ContactsPage() {
   const workspace = await getCurrentWorkspace();
@@ -191,9 +192,10 @@ export default async function ContactsPage() {
                 </div>
                 <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
                   {contact.lastInteractionAt
-                    ? english
-                      ? `Last interaction ${formatDateLabel(contact.lastInteractionAt)}`
-                      : `最近互动 ${formatDateLabel(contact.lastInteractionAt)}`
+                    ? `${english ? "Last interaction" : "最近互动"} ${formatContactListDateLabel(
+                        contact.lastInteractionAt,
+                        english,
+                      )}`
                     : english
                       ? "No recent interaction recorded"
                       : "暂无近期互动记录"}
