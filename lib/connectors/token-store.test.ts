@@ -1,15 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { isSecureConnectorTokenStorageEnabled, readConnectorToken, storeConnectorToken } from "@/lib/connectors/token-store";
 
 describe("connector token store", () => {
-  const originalSecret = process.env.CONNECTOR_TOKEN_SECRET;
+  const managedEnvKeys = [
+    "NODE_ENV",
+    "CONNECTOR_TOKEN_SECRET",
+    "CONNECTOR_TOKEN_SECRET_ID",
+    "CONNECTOR_TOKEN_SECRET_PREVIOUS",
+    "CONNECTOR_TOKEN_SECRET_PREVIOUS_ID",
+  ] as const;
+  const originalEnv = new Map(
+    managedEnvKeys.map((key) => [key, process.env[key]]),
+  );
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
-    if (originalSecret === undefined) {
-      delete process.env.CONNECTOR_TOKEN_SECRET;
-    } else {
-      process.env.CONNECTOR_TOKEN_SECRET = originalSecret;
+    for (const key of managedEnvKeys) {
+      const originalValue = originalEnv.get(key);
+      if (originalValue === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalValue;
+      }
     }
   });
 
@@ -47,12 +61,77 @@ describe("connector token store", () => {
 
   it("encrypts and decrypts tokens when a secret exists", () => {
     vi.stubEnv("NODE_ENV", "production");
-    process.env.CONNECTOR_TOKEN_SECRET = "helm-local-secret";
+    process.env.CONNECTOR_TOKEN_SECRET = "helm-local-secret-000000000000000000";
+    process.env.CONNECTOR_TOKEN_SECRET_ID = "primary";
 
     const stored = storeConnectorToken("refresh-token-value");
 
-    expect(stored?.startsWith("enc:")).toBe(true);
+    expect(stored?.startsWith("enc:v2:primary:")).toBe(true);
     expect(readConnectorToken(stored)).toBe("refresh-token-value");
+  });
+
+  it("refuses weak production secrets at the token-store boundary", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.CONNECTOR_TOKEN_SECRET = "short-secret";
+
+    expect(() => storeConnectorToken("abc123")).toThrow(
+      "CONNECTOR_TOKEN_SECRET must be at least 32 characters in production",
+    );
+  });
+
+  it("does not silently treat unprefixed stored values as plaintext", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.CONNECTOR_TOKEN_SECRET = "helm-local-secret-000000000000000000";
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(readConnectorToken("raw-token-without-prefix")).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("unsupported connector token storage format"),
+    );
+  });
+
+  it("reads v2 tokens through previous secret during a rotation window", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.CONNECTOR_TOKEN_SECRET = "old-secret-000000000000000000000000";
+    process.env.CONNECTOR_TOKEN_SECRET_ID = "old";
+
+    const stored = storeConnectorToken("rotating-refresh-token");
+
+    process.env.CONNECTOR_TOKEN_SECRET = "new-secret-000000000000000000000000";
+    process.env.CONNECTOR_TOKEN_SECRET_ID = "new";
+    process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS = "old-secret-000000000000000000000000";
+    process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS_ID = "old";
+
+    expect(readConnectorToken(stored)).toBe("rotating-refresh-token");
+  });
+
+  it("returns null with an operator warning when encrypted token key material is unavailable", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.CONNECTOR_TOKEN_SECRET = "old-secret-000000000000000000000000";
+    process.env.CONNECTOR_TOKEN_SECRET_ID = "old";
+
+    const stored = storeConnectorToken("rotating-refresh-token");
+
+    process.env.CONNECTOR_TOKEN_SECRET = "new-secret-000000000000000000000000";
+    process.env.CONNECTOR_TOKEN_SECRET_ID = "new";
+    delete process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS;
+    delete process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS_ID;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(readConnectorToken(stored)).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("connector token secret version is not configured"),
+    );
+  });
+
+  it("keeps legacy encrypted token reads working for migration", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.CONNECTOR_TOKEN_SECRET = "legacy-secret-000000000000000000000";
+
+    const stored = encryptLegacyToken("legacy-encrypted-token", process.env.CONNECTOR_TOKEN_SECRET);
+
+    expect(readConnectorToken(stored)).toBe("legacy-encrypted-token");
   });
 
   it("keeps legacy plain reads working without a secret", () => {
@@ -64,3 +143,13 @@ describe("connector token store", () => {
     expect(readConnectorToken(stored)).toBe("legacy-token-value");
   });
 });
+
+function encryptLegacyToken(token: string, secret: string) {
+  const iv = randomBytes(12);
+  const key = createHash("sha256").update(secret).digest();
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  return `enc:${iv.toString("base64url")}.${tag.toString("base64url")}.${encrypted.toString("base64url")}`;
+}
