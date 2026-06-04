@@ -2019,9 +2019,15 @@ describe("shared surface hierarchy guards", () => {
     expect(trialRunbook).toContain("值守人");
     expect(trialRunbook).toContain("子处理方");
     expect(trialRunbook).toContain("自动跨工作区检索或聚合");
+    expect(trialRunbook).toContain("不承诺服务等级协议");
+    expect(trialRunbook).toContain("GitHub 议题（Issues）");
+    expect(trialRunbook).toContain("公开议题或 PR");
+    expect(trialRunbook).toContain("联系试用支持申请延期");
+    expect(trialRunbook).toContain("运行时市场");
+    expect(trialRunbook).toContain("服务等级协议立场变化");
 
     expect(trialRunbook).not.toMatch(
-      /生成内部 handoff|CRM 信号|Review Action|当前 workspace|trace timeline|release hard gate|connector 默认 dry-run|live send|dry-run import|reserved tenant|oncall|Oncall|sub-processor|hard delete|active → grace|grace →|自动跨 workspace/,
+      /生成内部 handoff|CRM 信号|Review Action|当前 workspace|trace timeline|release hard gate|connector 默认 dry-run|live send|dry-run import|reserved tenant|oncall|Oncall|sub-processor|hard delete|active → grace|grace →|自动跨 workspace|未承诺 SLA|不承诺 SLA|公开 issue|联系 trial-support|marketplace|SLA 立场变化/,
     );
   });
 

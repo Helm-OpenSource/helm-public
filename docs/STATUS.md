@@ -16,6 +16,20 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：公开试点作业手册的中文试用支持术语混写已继续清理；本批只改不承诺服务等级
+协议、GitHub 议题、公开议题或 PR、试用支持申请延期、运行时市场和服务等级协议立场变化文案
+及源码守卫，不改变反馈渠道、邮件主题标签、试用状态机、响应窗口或自动执行 / 自动审批边界，也
+不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese trial-support terminology in the
+public trial runbook has been further localized. This batch changes no
+service-level-agreement commitment, GitHub issue, public issue or PR,
+trial-support extension request, runtime marketplace, and
+service-level-agreement posture-change wording plus source guards only; it does
+not change feedback channels, email subject tags, the trial state machine,
+response windows, or auto-execution / auto-approval boundaries, and does not
+claim full-repo bilingualization completion.
+
 最新双语化收口：公开试点数据政策的中文服务等级协议术语混写已继续清理；本批只改服务等级协议
 立场、不承诺服务等级协议、可用性服务等级协议和未来服务条款 / 数据处理协议 / 服务等级协议文案
 及源码守卫，不改变英文参考摘要、30/7 目标口径、删除证明、数据导出、正式商用文件边界或非承诺

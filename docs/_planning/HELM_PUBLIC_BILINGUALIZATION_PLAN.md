@@ -38,6 +38,17 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口公开试点作业手册的中文试用支持术语混写；只调整不承诺服务等级协议、GitHub 议题、
+公开议题或 PR、试用支持申请延期、运行时市场和服务等级协议立场变化文案，不改变反馈渠道、
+邮件主题标签、试用状态机、响应窗口或自动执行 / 自动审批边界。
+
+This round further localizes mixed Chinese trial-support terminology in the
+public trial runbook. It changes no service-level-agreement commitment, GitHub
+issue, public issue or PR, trial-support extension request, runtime
+marketplace, and service-level-agreement posture-change wording only, without
+changing feedback channels, email subject tags, the trial state machine,
+response windows, or auto-execution / auto-approval boundaries.
+
 本轮继续收口公开试点数据政策的中文服务等级协议术语混写；只调整服务等级协议立场、不承诺服务
 等级协议、可用性服务等级协议和未来服务条款 / 数据处理协议 / 服务等级协议文案，不改变英文参考
 摘要、30/7 目标口径、删除证明、数据导出、正式商用文件边界或非承诺边界。
