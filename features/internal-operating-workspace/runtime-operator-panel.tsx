@@ -853,7 +853,7 @@ export function RuntimeOperatorPanel({
             <div className="theme-surface-panel rounded-2xl px-4 py-4">
               <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
                 <Sparkles className="h-3.5 w-3.5" />
-                {english ? "延续" : "延续复用"}
+                {english ? "carry-forward" : "延续复用"}
               </div>
               <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
                 {overview.summary.reflectionCarryForward}

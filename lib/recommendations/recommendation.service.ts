@@ -8,7 +8,6 @@ import {
   type RecommendationLog,
 } from "@prisma/client";
 import { differenceInCalendarDays, endOfDay, isBefore, startOfDay, subDays } from "date-fns";
-import { actionModeLabels } from "@/data/constants";
 import { logEvent } from "@/lib/analytics";
 import { writeAuditLog } from "@/lib/audit";
 import { assertWorkspaceInsightServiceAccess } from "@/lib/auth/service-governance";
@@ -19,6 +18,7 @@ import {
 } from "@/lib/db/conflict-aware-write";
 import { enhanceRecommendationExplanationWithLLM } from "@/lib/llm-workflows/enhance-recommendation-explanation.workflow";
 import { getActivePatternFacts } from "@/lib/evolution/evolution-insights.service";
+import { getLocalizedActionModeLabels } from "@/lib/i18n/labels";
 import { buildMemoryRecommendationEvidence } from "@/lib/memory/memory-recommendation-bridge.service";
 import { createGovernedAction } from "@/lib/policies/engine";
 import type { MemoryActorContext, ObjectReference } from "@/lib/memory/shared";
@@ -343,6 +343,8 @@ export async function generateRecommendationsForObject(input: GenerateRecommenda
   });
 
   const context = await loadRecommendationContext(input.workspaceId, input.objectType, input.objectId);
+  const locale = input.english ? "en-US" : "zh-CN";
+  const localizedActionModeLabels = getLocalizedActionModeLabels(locale);
   const objectRefs = await getObjectReferences(context);
   const evidence = await loadRecommendationEvidence(input.workspaceId, objectRefs, {
     objectType: input.objectType,
@@ -397,6 +399,7 @@ export async function generateRecommendationsForObject(input: GenerateRecommenda
       context,
       evidence,
       ranked: item,
+      locale,
     });
     const presentationPayload = buildRecommendationPresentationPayload({
       context,
@@ -414,7 +417,7 @@ export async function generateRecommendationsForObject(input: GenerateRecommenda
           recommendationTitle: item.title,
           recommendationDescription: item.description,
           deterministicExplanation: explanation.explanation,
-          policyResultLabel: actionModeLabels[item.policyResult],
+          policyResultLabel: localizedActionModeLabels[item.policyResult],
           fallback: {
             explanation: explanation.explanation,
             whyNow: presentationPayload.whyNow,
@@ -622,7 +625,10 @@ export async function refreshRecommendationExplanationWithLLM(input: {
   recommendationId: string;
   userId?: string | null;
   force?: boolean;
+  english?: boolean;
 }) {
+  const locale = input.english ? "en-US" : "zh-CN";
+  const localizedActionModeLabels = getLocalizedActionModeLabels(locale);
   const details = await getRecommendationExplanation(input.workspaceId, input.recommendationId);
   const payload =
     typeof details.recommendation.recommendationPayload === "string"
@@ -642,7 +648,7 @@ export async function refreshRecommendationExplanationWithLLM(input: {
     recommendationTitle: details.recommendation.title,
     recommendationDescription: details.recommendation.description,
     deterministicExplanation: details.recommendation.explanation,
-    policyResultLabel: actionModeLabels[details.recommendation.policyResult],
+    policyResultLabel: localizedActionModeLabels[details.recommendation.policyResult],
     fallback: {
       explanation: details.recommendation.explanation,
       whyNow: presentation.whyNow,
@@ -772,8 +778,11 @@ export async function createActionFromRecommendation(input: MemoryActorContext &
 export async function getTodayFocusRecommendations(
   input: MemoryActorContext & {
     llmEnhancement?: boolean;
+    english?: boolean;
   },
 ) {
+  const locale = input.english ? "en-US" : "zh-CN";
+  const localizedActionModeLabels = getLocalizedActionModeLabels(locale);
   const [opportunities, meetings, overdueCommitments, openBlockers] = await Promise.all([
     db.opportunity.findMany({
       where: {
@@ -871,7 +880,7 @@ export async function getTodayFocusRecommendations(
           recommendationTitle: item.title,
           recommendationDescription: item.description,
           deterministicExplanation: item.explanation,
-          policyResultLabel: actionModeLabels[item.policyResult],
+          policyResultLabel: localizedActionModeLabels[item.policyResult],
           fallback: {
             explanation: item.explanation,
             whyNow: presentation.whyNow,

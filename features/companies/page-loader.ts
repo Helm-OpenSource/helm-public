@@ -28,6 +28,7 @@ export async function loadCompanyDetailPageData(companyId: string) {
       sourcePage: `/companies/${companyId}`,
       objectType: "COMPANY",
       objectId: companyId,
+      english,
       llmEnhancement: false,
     }).catch((error) => {
       if (isWorkspaceServiceGovernanceError(error)) {

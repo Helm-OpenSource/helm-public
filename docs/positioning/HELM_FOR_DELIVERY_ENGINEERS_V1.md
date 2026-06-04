@@ -181,7 +181,7 @@ zh/en 在契约层（不只是翻译 README）；按语言环境投影已做；D
 | 申请 Certified Delivery Partner | [`docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md`](../product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) |
 | 商业合作 / 联系我们 | 微信 `ffjw0821`（受控人工对接） |
 | 加入社区 | 微信群邀请二维码（先加微信 `ffjw0821` 获取当期有效码） |
-| 社交媒体 / 公众号 | 待补充（当前不作为承诺入口） |
+| 微信公众号 | `Helm开源经营系统` · 微信号 `HelmCoreCN`（信息发布入口，非默认支持工单入口） |
 
 ---
 
