@@ -25,25 +25,25 @@ terms are the workspace agreement plus the legally approved policy.
 
 更新时间：2026-05-02
 状态：公开试点数据政策草案；30/7 数据保留期是当前目标口径，待法务最终对齐后才可作为对外承诺
-适用范围：云端公开试用环境的数据保留期、删除流程、用户权利、SLA 立场
+适用范围：云端公开试用环境的数据保留期、删除流程、用户权利、服务等级协议立场
 实现状态：注册同意勾选框与「数据保留状态」卡片待落地；不新增 schema 枚举，不新增数据保留清理 cron，不新增删除证明 API；删除证明走邮件路径
 
 本文件定义 Helm 云端公开试用（`v0.1.0-trial` 起）的数据政策。它**不替代**未来正式商用版本的服务条款 / 数据处理协议，只覆盖受控试点窗口。负责人已对齐两条核心立场：
 
-1. **不承诺 SLA**（受控试点姿态，不承诺可用性、性能、恢复时点）
+1. **不承诺服务等级协议**（受控试点姿态，不承诺可用性、性能、恢复时点）
 2. **目标数据保留期**（明确生命周期、硬删除、导出与删除证明的目标机制；法务签署前不作为对外承诺）
 
 本文件按 [Helm open source and cloud trial launch posture](../product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md) 与 [release reality alignment](../product/HELM_RELEASE_REALITY_ALIGNMENT.md) 形成目标草案；不走 90/30/7、不新增 `pending_deletion` schema、不新增默认外部写入。正式公开试点以工作区契约和法务签署后的生效政策为准。
 
 ---
 
-## 一、SLA 立场
+## 一、服务等级协议立场
 
 ### 1.1 不承诺事项
 
 云端公开试用环境**不承诺**：
 
-1. 服务可用性百分比（Uptime SLA）
+1. 服务可用性百分比（可用性服务等级协议）
 2. 响应时间 / P95 / P99 性能指标
 3. 故障恢复时点（RTO）
 4. 数据丢失上限（RPO）
@@ -203,7 +203,7 @@ terms are the workspace agreement plus the legally approved policy.
 
 `/setup?onboarding=trial` 与公开首页注册流程必须包含一个**必勾**勾选框：
 
-> 「我已阅读试用数据政策 v1（当前草案见 `docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md`；正式 UI 路由待实现），理解 Helm 当前为受控试点，不承诺 SLA，数据保留期以本工作区试用契约与生效数据政策为准。数据驻留中国境内（阿里云 cn-hangzhou）；OpenAI API 与支付能力默认关闭，启用前会另行告知并请求同意。」
+> 「我已阅读试用数据政策 v1（当前草案见 `docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md`；正式 UI 路由待实现），理解 Helm 当前为受控试点，不承诺服务等级协议，数据保留期以本工作区试用契约与生效数据政策为准。数据驻留中国境内（阿里云 cn-hangzhou）；OpenAI API 与支付能力默认关闭，启用前会另行告知并请求同意。」
 
 ### 6.2 同意记录
 
@@ -223,7 +223,7 @@ terms are the workspace agreement plus the legally approved policy.
 2. [HELM_RELEASE_REALITY_ALIGNMENT.md](../product/HELM_RELEASE_REALITY_ALIGNMENT.md)：本文件继承公开承诺收口与发布硬门禁姿态
 3. [HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md](../product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md) §2.3：发布计划的数据保留期描述需同步收口至 30/7
 4. [README.md](../../README.md)：本文件继承“Helm 当前刻意不做”的公开边界
-5. 未来正式商用版本：本文件**不**替代未来 ToS / DPA / SLA；正式商用版本必须独立起草
+5. 未来正式商用版本：本文件**不**替代未来服务条款 / 数据处理协议 / 服务等级协议；正式商用版本必须独立起草
 
 ---
 

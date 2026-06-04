@@ -38,6 +38,18 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口公开试点数据政策的中文服务等级协议术语混写；只调整服务等级协议立场、不承诺服务
+等级协议、可用性服务等级协议和未来服务条款 / 数据处理协议 / 服务等级协议文案，不改变英文参考
+摘要、30/7 目标口径、删除证明、数据导出、正式商用文件边界或非承诺边界。
+
+This round further localizes mixed Chinese service-level terminology in the
+public trial data policy. It changes service-level-agreement posture, no
+service-level-agreement commitment, availability service-level agreement, and
+future terms-of-service / data-processing-agreement / service-level-agreement
+wording only, without changing the English reference summary, 30/7 target
+posture, deletion attestations, data export, formal commercial document
+boundary, or non-commitment boundary.
+
 本轮继续收口公开维护者状态文档的中文维护者运营术语混写，并对齐登录与角色基础测试里的中文
 断言；只调整议题 / PR 模板、议题分诊、黄金路径外部测试、最新版本标识姿态、议题 #39、候选
 能力姿态和正式能力文案，不改变 GitHub 证据、分支保护、tag 名称、发布姿态、风险队列事实或

@@ -2036,11 +2036,15 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("公开试用工作区的目标生命周期");
     expect(chineseBody).toContain("第三方子处理方");
     expect(chineseBody).toContain("数据处理协议");
+    expect(chineseBody).toContain("服务等级协议立场");
+    expect(chineseBody).toContain("不承诺服务等级协议");
+    expect(chineseBody).toContain("可用性服务等级协议");
+    expect(chineseBody).toContain("服务条款 / 数据处理协议 / 服务等级协议");
     expect(chineseBody).toContain("发布硬门禁姿态");
     expect(chineseBody).toContain("五月落地清单");
 
     expect(chineseBody).not.toMatch(
-      /retention 是|checkbox|schema enum|retention sweep|deletion attestation|workspace owner|grace 期|公开试用 workspace|workspace 创建|read-only|retention 自动|sub-processor|data processing agreement|deletion request|workspace 数据|first-party 数据|soft-delete|release hard gate|launch plan 的 retention|五月落地 checklist|public trial 默认|single region|prompt \/ response|settings 中|banner|signup flow/,
+      /retention 是|checkbox|schema enum|retention sweep|deletion attestation|workspace owner|grace 期|公开试用 workspace|workspace 创建|read-only|retention 自动|sub-processor|data processing agreement|deletion request|workspace 数据|first-party 数据|soft-delete|release hard gate|launch plan 的 retention|五月落地 checklist|public trial 默认|single region|prompt \/ response|settings 中|banner|signup flow|SLA 立场|不承诺 SLA|Uptime SLA|ToS \/ DPA \/ SLA/,
     );
   });
 
