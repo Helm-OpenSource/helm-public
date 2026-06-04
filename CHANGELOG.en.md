@@ -6,6 +6,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public Core P0 evidence -> signal -> memory candidate -> review packet sample chain, with CRM fixture coverage and review-first guards.
 - Added Golden Path doctor checks for Qwen / region / residency / npm registry posture, OpenAI-only ASR configuration, and connector token placeholder visibility.
+- Tightened multi-agent worktree governance so shared primary checkouts stay inspection-first, long-lived WIP moves to dedicated worktrees or atomic PR slices, and recovery starts by inventorying affected worktrees before implementation continues.
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
 - Parameterized `npm run release:check` for later trial and stable release trains.
