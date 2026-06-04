@@ -2735,9 +2735,29 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("不支持第三方市场");
     expect(chineseBody).toContain("不受信代码加载");
     expect(chineseBody).toContain("沙箱 / 进程隔离 / 签名 / 能力清单");
+    expect(chineseBody).toContain("发布硬门禁必须阻断不可控发布");
+    expect(chineseBody).toContain("统一用户可见审计时间线是发布硬门禁");
+    expect(chineseBody).toContain("密钥历史已正式修复");
+    expect(chineseBody).toContain("受损密钥");
+    expect(chineseBody).toContain("值守 / 响应政策已由负责人批准");
+    expect(chineseBody).toContain("必要复核人批准记录");
+    expect(chineseBody).toContain("发布证据中保留回执");
+    expect(chineseBody).toContain("人工打标签策略");
+    expect(chineseBody).toContain("首个公开试点标签");
+    expect(chineseBody).toContain("发布列车");
+    expect(chineseBody).toContain("稳定语义化版本标签");
+    expect(chineseBody).toContain("人工签核流程");
+    expect(chineseBody).toContain("创始人内部门禁");
+    expect(chineseBody).toContain("内部自用包");
+    expect(chineseBody).toContain("边界 / 自检直接消费的标记");
+    expect(chineseBody).toContain("守卫注册表");
+    expect(chineseBody).toContain("README / 公开文档已降级");
+    expect(chineseBody).toContain("发布公告 / 销售文案同步");
+    expect(chineseBody).toContain("法律政策草案");
+    expect(chineseBody).toContain("销售文案、README、发布公告");
 
     expect(chineseBody).not.toMatch(
-      /integration issue|issue-driven candidate pool|回复 issue|audit trace public posture|review 文档|review 节奏|uptime SLA|plugin runtime|private tenant extension seam|third-party marketplace|untrusted code loading|process isolation|capability manifest/,
+      /integration issue|issue-driven candidate pool|回复 issue|audit trace public posture|review 文档|review 节奏|uptime SLA|plugin runtime|private tenant extension seam|third-party marketplace|untrusted code loading|process isolation|capability manifest|release hard gates|trace timeline|release hard gate|secret history|compromised secret|Docker smoke|on-call \/ response policy|owner-approved|Required Reviewer approval record|release evidence|人工 receipt|manual tagging strategy|stable tag|trial release|release train|release machine|semver tag|stable tag|只报告 blocker|hard gates \*\*输入约束|owner 发布日|必备 evidence|sign-off|Founder internal gate|internal dogfood packet|review notes|founder decision|run report|boundary \/ self-check|marker|削弱 guard|guard registry|private owner receipt|public docs|launch post|sales copy|legal policy draft|manual tag \/ GitHub Release \/ announcement/,
     );
   });
 
