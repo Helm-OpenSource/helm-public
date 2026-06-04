@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "helm.self-tenant-companion-bridge.sample.v1",
+  "source": "synthetic_self_tenant_monthly_health_rollup",
+  "gapReview": {
+    "privacyProjection": "lib/self-tenant-health/privacy.ts handles tenant-health safe projection before bridge input.",
+    "promotionGate": "EvalCasePromotion remains the only correction-to-public-eval promotion gate.",
+    "producer": "deterministic public reference producer; real LLM-backed self-tenant runs belong in helm-control-plane.",
+    "contractChange": "additive-only; no existing JudgementPacket or EvalCasePromotion semantic change."
+  },
+  "row": {
+    "tenantAlias": "tenant_synthetic_001",
+    "windowStart": "2026-06-01T00:00:00.000Z",
+    "windowEnd": "2026-06-30T23:59:59.999Z",
+    "candidateCount": 8,
+    "validityPassCount": 5,
+    "validityFailCount": 3,
+    "duplicateCount": 2,
+    "staleCount": 1,
+    "contradictoryCount": 0,
+    "crossTenantBlockedCount": 0,
+    "unsafeBoundaryCount": 0,
+    "reviewRequiredCount": 5,
+    "reviewedCount": 3,
+    "acceptedCount": 2,
+    "rejectedCount": 1,
+    "downgradedCount": 1,
+    "quarantinedCount": 0,
+    "llmCallCount": 6,
+    "llmSuccessCount": 5,
+    "llmFallbackCount": 1,
+    "costBucket": "cny_0_100",
+    "budgetState": "ok",
+    "healthState": "blocked",
+    "primarySourceType": "ask_helm",
+    "supportReasonCodes": ["review_coverage_gap"]
+  },
+  "judgementPacket": {
+    "expertRevisionId": "org-health-deterministic-reference-v0",
+    "disposition": "flag_self_tenant_review_backlog_blocked",
+    "evidenceRefs": [
+      "evidence:self-tenant-health-state:blocked",
+      "evidence:self-tenant-primary-source:ask_helm",
+      "evidence:self-tenant-cost-bucket:cny_0_100",
+      "evidence:self-tenant-budget-state:ok",
+      "evidence:self-tenant-review-coverage:3-of-5",
+      "evidence:self-tenant-signal-volume:8",
+      "evidence:self-tenant-reason:review_coverage_gap"
+    ],
+    "commitmentClass": "advice",
+    "boundaryNote": "Self-tenant health diagnostic reference only: advice, not a commitment, performance conclusion, writeback, external send, approval, or memory promotion. 组织健康诊断建议,非绩效结论、非承诺、不触发自动动作或外发。",
+    "humanReviewerRequired": true,
+    "forbiddenActionRefs": []
+  },
+  "feedbackRecord": {
+    "feedbackId": "fb-self-tenant-001",
+    "caseId": "self-tenant-monthly-synthetic-001",
+    "targetPacketHash": "sha256:self-tenant-monthly-synthetic-packet",
+    "correctionType": "edit",
+    "correctionReasonCode": "commitment_wording",
+    "correctionNote": "将诊断语气保持为 review-first 建议,不写成承诺或绩效结论。",
+    "authorId": "reviewer-alias-01",
+    "createdAt": "2026-06-04T04:00:00Z"
+  },
+  "evalCasePromotion": {
+    "promotionId": "promo-self-tenant-001",
+    "sourceCaseId": "self-tenant-monthly-synthetic-001",
+    "sourceSensitivityClass": "operational",
+    "deidMethod": "tenant-health-safe-projection + alias-only synthetic sample",
+    "scannerResult": {
+      "scanner": "sensitive-fixture-scanner",
+      "hits": 0,
+      "patternsChecked": ["email", "phone", "id_card", "tenant_literal", "internal_ip"]
+    },
+    "humanSignOffBy": "deid-reviewer-alias-01",
+    "humanSignOffAt": "2026-06-04T04:15:00Z",
+    "publicEligible": true,
+    "walledFromPerformanceEval": true,
+    "quarantineReason": null
+  },
+  "hrPerformanceExcludedExample": {
+    "promotionId": "promo-self-tenant-hr-quarantine",
+    "sourceCaseId": "self-tenant-monthly-hr-excluded",
+    "sourceSensitivityClass": "hr_performance",
+    "scannerResult": {
+      "scanner": "sensitive-fixture-scanner",
+      "hits": 1
+    },
+    "humanSignOffBy": null,
+    "humanSignOffAt": null,
+    "publicEligible": false,
+    "walledFromPerformanceEval": true,
+    "quarantineReason": "hr_performance_source_excluded"
+  }
+}
