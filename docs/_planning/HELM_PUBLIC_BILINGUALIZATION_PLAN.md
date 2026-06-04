@@ -38,6 +38,16 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口试点响应与值守姿态文档的中文响应边界术语混写；只调整商业服务等级协议、
+创始人响应人和大模型路径文案，不改变响应目标、P0/P1 升级规则、`release:check` 变量或
+非商业服务等级协议边界。
+
+This round further localizes mixed Chinese response-boundary terminology in the
+trial response and on-call posture doc. It changes commercial service-level
+agreement, founder responder, and large-model path wording only, without
+changing response targets, P0/P1 escalation rules, `release:check` variables,
+or the non-commercial-service-level boundary.
+
 本轮继续收口 HSI 要求文档的中文离线边界术语混写；只调整托管智能体运行时和数据模式迁移文案，
 不改变 HSI 英文参考、评测命令、仅离线阶段门禁、生产连接器或不自动执行边界。
 

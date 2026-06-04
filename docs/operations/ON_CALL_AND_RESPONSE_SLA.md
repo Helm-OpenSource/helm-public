@@ -23,7 +23,7 @@ trial applications, integration issues, public trial feedback, security routing,
 and P0/P1 escalation. If Helm misses a target window, public wording must say so
 honestly and keep the controlled-trial boundary.
 
-本文件定义 `v0.1.0-trial` 之前允许公开表达的响应目标、值班责任和失败降级口径。它不是商业 SLA，不承诺 24x7，不提供赔偿或服务额度。
+本文件定义 `v0.1.0-trial` 之前允许公开表达的响应目标、值班责任和失败降级口径。它不是商业服务等级协议，不承诺 24x7，不提供赔偿或服务额度。
 
 ## 一、适用范围
 
@@ -37,7 +37,7 @@ honestly and keep the controlled-trial boundary.
 
 不适用于：
 
-- 正式商业客户 SLA
+- 正式商业客户服务等级协议
 - 企业支持合同
 - 7x24 值守
 - 客户生产数据处理承诺
@@ -53,8 +53,8 @@ honestly and keep the controlled-trial boundary.
 
 | 入口 | 目标 | 首次响应人 | 升级 |
 | --- | --- | --- | --- |
-| 试点申请 | 1 个工作日内首次答复 | Founder / helm-core 负责人 | 超过 0.5 个工作日未认领，升级负责人 |
-| 通过试点后的首次 1:1 | 7 天内安排，取决于双方日程 | Founder / GTM 负责人 | 无可用窗口时给出下一候选周 |
+| 试点申请 | 1 个工作日内首次答复 | 创始人 / helm-core 负责人 | 超过 0.5 个工作日未认领，升级负责人 |
+| 通过试点后的首次 1:1 | 7 天内安排，取决于双方日程 | 创始人 / GTM 负责人 | 无可用窗口时给出下一候选周 |
 | `integration:` issue | 7 个工作日内人工回复 | 值守维护者 | 超过 5 个工作日未回复，升级维护负责人 |
 | 普通试用反馈 | 2 个工作日内分诊 | 试用支持值守人 | P1/P0 立即升级 |
 | 安全漏洞披露 | 按 SECURITY.md：3 个工作日确认、7 个工作日初评 | 安全复核人 | P0/P1 进入事件模式 |
@@ -71,7 +71,7 @@ P0 条件：
 
 P1 条件：
 
-- 关键连接器或 LLM 路径持续失败但未造成数据越界
+- 关键连接器或大模型路径持续失败但未造成数据越界
 - 审计追踪写入失败或关键审计链断裂
 - 发布硬门禁出现阻断但尚未公开影响用户
 
@@ -87,7 +87,7 @@ P1 条件：
 当 Helm 没有按目标响应时，不能编造“已处理”。使用以下口径：
 
 ```text
-我们没有在目标窗口内完成回复。Helm 当前仍是受控试点，不是商业 SLA。
+我们没有在目标窗口内完成回复。Helm 当前仍是受控试点，不是商业服务等级协议。
 这条请求已升级给负责人；我们会先确认是否仍适合进入试点，再给出下一步。
 ```
 

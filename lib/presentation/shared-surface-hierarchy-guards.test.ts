@@ -2053,14 +2053,18 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("首次响应人");
     expect(chineseBody).toContain("值守维护者");
     expect(chineseBody).toContain("普通试用反馈");
+    expect(chineseBody).toContain("商业服务等级协议");
+    expect(chineseBody).toContain("创始人 / helm-core 负责人");
+    expect(chineseBody).toContain("创始人 / GTM 负责人");
     expect(chineseBody).toContain("跨工作区数据访问或隔离失败");
     expect(chineseBody).toContain("数据保留 / 删除失败影响用户权利");
+    expect(chineseBody).toContain("关键连接器或大模型路径持续失败");
     expect(chineseBody).toContain("发布硬门禁出现阻断");
     expect(chineseBody).toContain("会议 / 客户关系系统 / 邮箱 → 必须推进项 → 复核动作");
     expect(chineseBody).toContain("README 必须改成尽力响应");
 
     expect(chineseBody).not.toMatch(
-      /ToS \/ Support Policy|7x24 on-call|First responder|helm-core owner|GTM owner|Maintainer on duty|maintainer owner|trial feedback|triage|Security reviewer|incident 模式|跨 workspace|retention \/ deletion|审计 trace|audit chain|release hard gate|feature flag|incident closeout|升级给 owner|integration 请求|CRM \/ 邮箱|Review Action|Release Gate|first responder|best-effort/,
+      /ToS \/ Support Policy|商业 SLA|正式商业客户 SLA|7x24 on-call|First responder|Founder \/ helm-core|Founder \/ GTM|helm-core owner|GTM owner|Maintainer on duty|maintainer owner|trial feedback|triage|Security reviewer|LLM 路径|incident 模式|跨 workspace|retention \/ deletion|审计 trace|audit chain|release hard gate|feature flag|incident closeout|升级给 owner|integration 请求|CRM \/ 邮箱|Review Action|Release Gate|first responder|best-effort/,
     );
   });
 

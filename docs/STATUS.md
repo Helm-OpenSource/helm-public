@@ -16,6 +16,18 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：试点响应与值守姿态文档的中文响应边界术语混写已继续清理；本批只改商业服务等级
+协议、创始人响应人和大模型路径文案及源码守卫，不改变响应目标、P0/P1 升级规则、`release:check`
+变量或非商业服务等级协议边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese response-boundary terminology in
+the trial response and on-call posture doc has been further localized. This
+batch changes commercial service-level agreement, founder responder, and
+large-model path wording plus source guards only; it does not change response
+targets, P0/P1 escalation rules, `release:check` variables, or the
+non-commercial-service-level boundary, and does not claim full-repo
+bilingualization completion.
+
 最新双语化收口：HSI 要求文档的中文离线边界术语混写已继续清理；本批只改托管智能体运行时和
 数据模式迁移文案及源码守卫，不改变 HSI 英文参考、评测命令、仅离线阶段门禁、生产连接器或
 不自动执行边界，也不声明全仓双语化完成。
