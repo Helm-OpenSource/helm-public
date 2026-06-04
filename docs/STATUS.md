@@ -352,8 +352,8 @@ full-repo bilingualization completion.
 最新双语化收口：认证生态清单的中文人工认证边界术语混写已继续清理；本批只改连接器、工作流包、
 伙伴、部署、人工认证门禁、市场、结算通道、转售计划、客户结果保证、负责人、范围、
 支持 / 不支持用例、证据引用、复核边界、回滚 / 撤回路径、客户可见声明、非承诺说明、
-批准和复核优先边界文案及源码守卫，不改变认证流程、输出枚举、公开 Helm Certified 字样规则
-或品牌授权边界，也不声明全仓双语化完成。
+批准、复核优先边界、归档触发条件里的认证连接器、工作流包、伙伴和部署复核文案及源码守卫，
+不改变认证流程、输出枚举、公开 Helm Certified 字样规则或品牌授权边界，也不声明全仓双语化完成。
 
 Latest bilingualization cleanup: mixed Chinese manual certification-boundary
 terminology in the certified ecosystem checklist has been further localized.
@@ -361,8 +361,9 @@ This batch changes connector, workflow pack, partner, deployment, manual
 certification gate, marketplace, payout rail, reseller program, customer
 outcome guarantee, owner, scope, supported / unsupported use case, evidence
 refs, review boundary, rollback / withdrawal path, customer-visible claim,
-non-commitment note, approval, and review-first boundary wording plus source
-guards only; it does not change the certification flow, output enums, public
+non-commitment note, approval, review-first boundary, and archive-trigger
+certified connector / workflow pack / partner / deployment-review wording plus
+source guards only; it does not change the certification flow, output enums, public
 Helm Certified wording rules, or brand-authorization boundaries, and does not
 claim full-repo bilingualization completion.
 

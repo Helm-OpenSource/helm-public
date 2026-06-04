@@ -2764,11 +2764,16 @@ describe("shared surface hierarchy guards", () => {
     const certificationChecklist = read(
       "docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md",
     );
+    const frontmatter = certificationChecklist.slice(
+      0,
+      certificationChecklist.indexOf("# Helm Certified Ecosystem Checklist"),
+    );
     const chineseBody = certificationChecklist.slice(
       certificationChecklist.indexOf("本清单定义"),
       certificationChecklist.indexOf("## English Reference"),
     );
 
+    expect(frontmatter).toContain("认证连接器、工作流包、伙伴或部署复核");
     expect(chineseBody).toContain("连接器、工作流包、伙伴和部署");
     expect(chineseBody).toContain("人工认证门禁");
     expect(chineseBody).toContain("不创建市场");
@@ -2787,6 +2792,9 @@ describe("shared surface hierarchy guards", () => {
 
     expect(chineseBody).not.toMatch(
       /connector|workflow pack|partner|deployment|gate|marketplace|payout rail|reseller program|outcome guarantee|owner|scope|supported \/ unsupported use case|version|evidence refs|review boundary|rollback \/ withdrawal path|customer-visible claim|non-commitment note|approval 之后|customer-visible claim|review-first boundary/,
+    );
+    expect(frontmatter).not.toMatch(
+      /certified connector|workflow pack|partner 或 deployment review/,
     );
   });
 

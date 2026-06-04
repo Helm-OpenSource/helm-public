@@ -38,6 +38,15 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口认证生态清单归档触发条件的中文术语混写；只调整认证连接器、工作流包、伙伴和
+部署复核文案，不改变认证流程、输出枚举、公开 Helm Certified 品牌字样规则或品牌授权边界。
+
+This round further localizes mixed Chinese archive-trigger terminology in the
+certified ecosystem checklist. It changes certified connector, workflow pack,
+partner, and deployment-review wording only, without changing the certification
+flow, output enums, public Helm Certified brand wording rules, or
+brand-authorization boundaries.
+
 本轮继续收口发布现实对齐文档的中文发布边界术语混写；只调整集成议题、议题驱动候选池、
 审计轨迹公开姿态、复核文档 / 节奏、可用性服务等级协议、第三方插件运行时、第三方市场、
 不受信代码加载和能力清单文案，不改变 `release:check`、环境变量、tag / channel 字段、枚举值

@@ -5,7 +5,7 @@ created: 2026-04-28
 review_after: 2026-05-28
 archive_trigger:
   - HELM_CERTIFIED_ECOSYSTEM_IMPLEMENTATION_REPORT 落地并完成 docs/README.md 索引切换后 30 天归档
-  - 2026-07-31 之后若没有任何 certified connector、workflow pack、partner 或 deployment review 引用本文件则归档
+  - 2026-07-31 之后若没有任何认证连接器、工作流包、伙伴或部署复核引用本文件则归档
 ---
 
 # Helm Certified Ecosystem Checklist / Helm 认证生态清单
