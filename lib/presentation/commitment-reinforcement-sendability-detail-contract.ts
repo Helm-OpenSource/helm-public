@@ -166,6 +166,7 @@ export function createSendabilityPageDetailReportingContract(
 
 export function toCommitmentReinforcementPageReportingProtocol(
   contract: CommitmentReinforcementPageDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.reinforcementPageJudgement,
@@ -177,7 +178,10 @@ export function toCommitmentReinforcementPageReportingProtocol(
     pageBoundarySummary: contract.reinforcementPageBoundarySummary,
     pageEvidenceSummary: contract.reinforcementPageEvidenceSummary,
     pageWorkerSummary: contract.reinforcementPageWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.reinforcementPageRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(
+      contract.reinforcementPageRiskSignal,
+      english,
+    ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -185,6 +189,7 @@ export function toCommitmentReinforcementPageReportingProtocol(
 
 export function toSendabilityPageReportingProtocol(
   contract: SendabilityPageDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.sendabilityPageJudgement,
@@ -196,7 +201,10 @@ export function toSendabilityPageReportingProtocol(
     pageBoundarySummary: contract.sendabilityPageBoundarySummary,
     pageEvidenceSummary: contract.sendabilityPageEvidenceSummary,
     pageWorkerSummary: contract.sendabilityPageWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.sendabilityPageRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(
+      contract.sendabilityPageRiskSignal,
+      english,
+    ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -271,8 +279,9 @@ function validateSharedRules({
 
 function labelForRiskSignal(
   signal: CommitmentReinforcementSendabilityRiskSignal,
+  english: boolean,
 ) {
-  if (signal === "high") return "高风险";
-  if (signal === "caution") return "谨慎强化";
-  return "继续观察";
+  if (signal === "high") return english ? "High risk" : "高风险";
+  if (signal === "caution") return english ? "Strengthen with caution" : "谨慎强化";
+  return english ? "Keep watching" : "继续观察";
 }

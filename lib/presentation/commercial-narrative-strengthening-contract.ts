@@ -137,6 +137,7 @@ export function createCommercialNarrativeStrengtheningDetailReportingContract(
 
 export function toCommercialNarrativeStrengtheningPageReportingProtocol(
   contract: CommercialNarrativeStrengtheningDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.strengtheningJudgement,
@@ -148,7 +149,10 @@ export function toCommercialNarrativeStrengtheningPageReportingProtocol(
     pageBoundarySummary: contract.strengtheningBoundarySummary,
     pageEvidenceSummary: contract.strengtheningEvidenceSummary,
     pageWorkerSummary: contract.strengtheningWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.strengtheningRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(
+      contract.strengtheningRiskSignal,
+      english,
+    ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -206,8 +210,11 @@ function validateSharedRules(
   }
 }
 
-function labelForRiskSignal(signal: CommercialNarrativeStrengtheningRiskSignal) {
-  if (signal === "high") return "高风险";
-  if (signal === "caution") return "谨慎强化";
-  return "继续观察";
+function labelForRiskSignal(
+  signal: CommercialNarrativeStrengtheningRiskSignal,
+  english: boolean,
+) {
+  if (signal === "high") return english ? "High risk" : "高风险";
+  if (signal === "caution") return english ? "Strengthen with caution" : "谨慎强化";
+  return english ? "Keep watching" : "继续观察";
 }

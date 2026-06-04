@@ -59,8 +59,8 @@ export function CustomerFacingOfferExternalProposalDetailView(
   const { detail, english, mode } = props;
   const sourceProtocol =
     mode === "customer-offer"
-      ? toCustomerFacingOfferPageReportingProtocol(props.contract)
-      : toExternalProposalPageReportingProtocol(props.contract);
+      ? toCustomerFacingOfferPageReportingProtocol(props.contract, english)
+      : toExternalProposalPageReportingProtocol(props.contract, english);
   const text = (value: string) => formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);
   const title =

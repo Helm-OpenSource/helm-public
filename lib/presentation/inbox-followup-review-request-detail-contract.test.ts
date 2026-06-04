@@ -134,5 +134,9 @@ describe("inbox / follow-up / review request detail reporting contract", () => {
     const protocol = toReviewRequestDetailPageReportingProtocol(contract);
     expect(protocol.pageJudgement).toContain("review request");
     expect(protocol.pageBoundarySummary[0]).toContain("commitment");
+    expect(
+      toReviewRequestDetailPageReportingProtocol(contract, true)
+        .pagePrioritySignal,
+    ).toBe("High risk");
   });
 });
