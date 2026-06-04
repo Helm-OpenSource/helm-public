@@ -55,9 +55,13 @@ git worktree list
 git rev-parse --show-toplevel
 ```
 
+- Treat the shared primary checkout as an inspection / sync / audit area by
+  default, not as a long-lived implementation WIP area.
 - Do not implement inside another agent's dirty worktree.
 - Create a separate worktree and branch from the intended base when the current
   checkout contains unrelated WIP.
+- If WIP survives beyond one work turn, close it as an atomic commit / PR slice
+  or move it into a dedicated isolated worktree before starting another task.
 - Keep bilingualization, security hardening, capability work, and governance
   updates in separate commits / PRs.
 - Stage explicit files only; do not use `git add -A` unless the worktree has
