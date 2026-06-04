@@ -1,10 +1,16 @@
 import { ActionExecutionMode, ActionType, ActorType, NotificationType, PreferenceSignalType } from "@prisma/client";
 import { logEvent } from "@/lib/analytics";
 import { writeAuditLog } from "@/lib/audit";
-import { actionModeLabels, actionTypeLabels, policyDefaults, policyRecommendations } from "@/data/constants";
+import { policyDefaults } from "@/data/constants";
 import { db } from "@/lib/db";
 import { recordPolicyChangedDelta } from "@/lib/evolution/delta-event.service";
 import { refreshEvolutionState } from "@/lib/evolution/pattern-detection.service";
+import { resolveUiLocale, isEnglishLocale, type UiLocale } from "@/lib/i18n/config";
+import {
+  getLocalizedActionModeLabels,
+  getLocalizedActionTypeLabels,
+  getLocalizedPolicyGuides,
+} from "@/lib/i18n/labels";
 
 type PatternLike = {
   id: string;
@@ -60,8 +66,27 @@ function stringifyEvidence(pattern: PatternLike) {
   });
 }
 
+async function resolveWorkspaceLocale(workspaceId: string): Promise<UiLocale> {
+  const workspace = await db.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { defaultLocale: true },
+  });
+  return resolveUiLocale(workspace?.defaultLocale);
+}
+
+function pickPatternReason(input: {
+  english: boolean;
+  patternSummary: string | null;
+  zh: string;
+  en: string;
+}) {
+  if (input.english) return input.en;
+  return input.patternSummary ?? input.zh;
+}
+
 async function buildSuggestionSeeds(workspaceId: string, patterns: PatternLike[]): Promise<SuggestionSeed[]> {
-  const [policies, workspaceSignals] = await Promise.all([
+  const [locale, policies, workspaceSignals] = await Promise.all([
+    resolveWorkspaceLocale(workspaceId),
     db.policyRule.findMany({
       where: { workspaceId },
       orderBy: { createdAt: "asc" },
@@ -76,6 +101,8 @@ async function buildSuggestionSeeds(workspaceId: string, patterns: PatternLike[]
   ]);
   const policyMap = new Map(policies.map((policy) => [policy.actionType, policy]));
   const signalMap = new Map(workspaceSignals.map((signal) => [signal.signalKey, signal]));
+  const english = isEnglishLocale(locale);
+  const actionTypeLabels = getLocalizedActionTypeLabels(locale);
 
   const seeds: SuggestionSeed[] = [];
 
@@ -94,10 +121,15 @@ async function buildSuggestionSeeds(workspaceId: string, patterns: PatternLike[]
           targetPolicyKey: actionType,
           currentValue: policy.mode,
           suggestedValue: ActionExecutionMode.REQUIRES_APPROVAL,
-          title: `建议把${actionLabel}切回逐条审批`,
-          reason:
-            pattern.summary ??
-            `系统观察到你最近对“${actionLabel}”这类外发承诺动作几乎都保留人工审批，默认策略值得收紧。`,
+          title: english
+            ? `Suggest switching ${actionLabel} back to per-action approval`
+            : `建议把${actionLabel}切回逐条审批`,
+          reason: pickPatternReason({
+            english,
+            patternSummary: pattern.summary,
+            zh: `系统观察到你最近对“${actionLabel}”这类外发承诺动作几乎都保留人工审批，默认策略值得收紧。`,
+            en: `Helm observed that recent ${actionLabel} outbound or commitment-adjacent actions were usually kept under human approval, so the default policy should tighten.`,
+          }),
           confidence: Math.max(60, pattern.confidence),
           evidenceSnapshot: stringifyEvidence(pattern),
         });
@@ -115,8 +147,15 @@ async function buildSuggestionSeeds(workspaceId: string, patterns: PatternLike[]
         targetPolicyKey: "budget_blocker",
         currentValue: currentRiskValue,
         suggestedValue: "high_risk",
-        title: "建议提高预算阻塞的风险权重",
-        reason: pattern.summary ?? "预算相关阻塞最近明显升高，建议把这类风险前置到首页和 recommendation 排序中。",
+        title: english
+          ? "Suggest raising budget blockers as a stronger risk signal"
+          : "建议提高预算阻塞的风险权重",
+        reason: pickPatternReason({
+          english,
+          patternSummary: pattern.summary,
+          zh: "预算相关阻塞最近明显升高，建议把这类风险前置到首页和 recommendation 排序中。",
+          en: "Budget-related blockers have become more visible, so this risk should move earlier in the homepage and recommendation ranking.",
+        }),
         confidence: Math.max(58, pattern.confidence),
         evidenceSnapshot: stringifyEvidence(pattern),
       });
@@ -133,8 +172,15 @@ async function buildSuggestionSeeds(workspaceId: string, patterns: PatternLike[]
         targetPolicyKey: "meeting_followup",
         currentValue: currentTimingValue,
         suggestedValue: "24h",
-        title: "建议把会后跟进窗口收紧到 24 小时",
-        reason: pattern.summary ?? "系统观察到会后 24 小时内的跟进行动更容易被采纳，值得把这个窗口前置。",
+        title: english
+          ? "Suggest tightening the post-meeting follow-up window to 24 hours"
+          : "建议把会后跟进窗口收紧到 24 小时",
+        reason: pickPatternReason({
+          english,
+          patternSummary: pattern.summary,
+          zh: "系统观察到会后 24 小时内的跟进行动更容易被采纳，值得把这个窗口前置。",
+          en: "Follow-up actions within 24 hours after a meeting are more likely to be accepted, so this window should move earlier.",
+        }),
         confidence: Math.max(56, pattern.confidence),
         evidenceSnapshot: stringifyEvidence(pattern),
       });
@@ -149,8 +195,15 @@ async function buildSuggestionSeeds(workspaceId: string, patterns: PatternLike[]
           targetPolicyKey: "stalled_opportunity",
           currentValue: currentRiskValue,
           suggestedValue: "high_risk",
-          title: "建议把停滞机会前置为更强风险信号",
-          reason: pattern.summary ?? "系统观察到停滞机会会更快拖低推进节奏，建议把它前置到 recommendation 和首页风险区。",
+          title: english
+            ? "Suggest moving stalled opportunities forward as a stronger risk signal"
+            : "建议把停滞机会前置为更强风险信号",
+          reason: pickPatternReason({
+            english,
+            patternSummary: pattern.summary,
+            zh: "系统观察到停滞机会会更快拖低推进节奏，建议把它前置到 recommendation 和首页风险区。",
+            en: "Stalled opportunities are more likely to slow operating momentum, so they should move earlier in recommendations and the homepage risk area.",
+          }),
           confidence: Math.max(58, pattern.confidence),
           evidenceSnapshot: stringifyEvidence(pattern),
         });
@@ -166,8 +219,15 @@ async function buildSuggestionSeeds(workspaceId: string, patterns: PatternLike[]
           targetPolicyKey: "contact_followup",
           currentValue: currentTimingValue,
           suggestedValue: "48h",
-          title: "建议把关系恢复动作提前到 48 小时窗口",
-          reason: pattern.summary ?? "暖关系超过一周未触达时，更适合在 48 小时窗口内做恢复动作，避免关系继续掉温。",
+          title: english
+            ? "Suggest moving relationship recovery into a 48-hour window"
+            : "建议把关系恢复动作提前到 48 小时窗口",
+          reason: pickPatternReason({
+            english,
+            patternSummary: pattern.summary,
+            zh: "暖关系超过一周未触达时，更适合在 48 小时窗口内做恢复动作，避免关系继续掉温。",
+            en: "When a warm relationship has gone untouched for more than a week, a 48-hour recovery window can keep it from cooling further.",
+          }),
           confidence: Math.max(56, pattern.confidence),
           evidenceSnapshot: stringifyEvidence(pattern),
         });
@@ -333,6 +393,7 @@ async function upsertWorkspacePreferenceSignal(input: {
 
 async function applyStrategySuggestionEffect(input: {
   workspaceId: string;
+  locale: UiLocale;
   suggestion: {
     id: string;
     suggestionType: string;
@@ -344,6 +405,10 @@ async function applyStrategySuggestionEffect(input: {
   if (!input.suggestion.suggestedValue) {
     return null;
   }
+  const english = isEnglishLocale(input.locale);
+  const actionTypeLabels = getLocalizedActionTypeLabels(input.locale);
+  const actionModeLabels = getLocalizedActionModeLabels(input.locale);
+  const policyGuides = getLocalizedPolicyGuides(input.locale);
 
   if (input.suggestion.suggestionType === "POLICY_MODE_CHANGE" && isActionType(input.suggestion.targetPolicyKey) && isActionExecutionMode(input.suggestion.suggestedValue)) {
     const actionType = input.suggestion.targetPolicyKey;
@@ -367,11 +432,11 @@ async function applyStrategySuggestionEffect(input: {
           data: {
             workspaceId: input.workspaceId,
             actionType,
-            name: `${actionTypeLabels[actionType]}策略`,
+            name: english ? `${actionTypeLabels[actionType]} policy` : `${actionTypeLabels[actionType]}策略`,
             mode: input.suggestion.suggestedValue,
             riskThreshold: defaultRule.riskThreshold,
             enabled: true,
-            description: policyRecommendations[actionType].summary,
+            description: policyGuides[actionType].summary,
           },
         });
 
@@ -400,7 +465,9 @@ async function applyStrategySuggestionEffect(input: {
     return {
       targetType: "PolicyRule",
       targetId: nextPolicy.id,
-      summary: `已把${actionTypeLabels[actionType]}的默认策略收敛为“${actionModeLabels[input.suggestion.suggestedValue]}”`,
+      summary: english
+        ? `Updated the default ${actionTypeLabels[actionType]} policy to "${actionModeLabels[input.suggestion.suggestedValue]}"`
+        : `已把${actionTypeLabels[actionType]}的默认策略收敛为“${actionModeLabels[input.suggestion.suggestedValue]}”`,
     } satisfies AppliedEffect;
   }
 
@@ -417,7 +484,9 @@ async function applyStrategySuggestionEffect(input: {
     return {
       targetType: "PreferenceSignal",
       targetId: signal.id,
-      summary: `已把“${input.suggestion.targetPolicyKey}”的风险观察提高为“${input.suggestion.suggestedValue}”`,
+      summary: english
+        ? `Raised "${input.suggestion.targetPolicyKey}" risk observation to "${input.suggestion.suggestedValue}"`
+        : `已把“${input.suggestion.targetPolicyKey}”的风险观察提高为“${input.suggestion.suggestedValue}”`,
     } satisfies AppliedEffect;
   }
 
@@ -434,7 +503,9 @@ async function applyStrategySuggestionEffect(input: {
     return {
       targetType: "PreferenceSignal",
       targetId: signal.id,
-      summary: `已把“${input.suggestion.targetPolicyKey}”的默认时间窗口收敛到 ${input.suggestion.suggestedValue}`,
+      summary: english
+        ? `Tightened "${input.suggestion.targetPolicyKey}" default timing window to ${input.suggestion.suggestedValue}`
+        : `已把“${input.suggestion.targetPolicyKey}”的默认时间窗口收敛到 ${input.suggestion.suggestedValue}`,
     } satisfies AppliedEffect;
   }
 
@@ -447,6 +518,8 @@ export async function acceptStrategySuggestion(input: {
   userId: string;
   actorName: string;
 }) {
+  const locale = await resolveWorkspaceLocale(input.workspaceId);
+  const english = isEnglishLocale(locale);
   const suggestion = await db.strategySuggestion.findFirst({
     where: {
       workspaceId: input.workspaceId,
@@ -455,7 +528,7 @@ export async function acceptStrategySuggestion(input: {
   });
 
   if (!suggestion) {
-    throw new Error("策略建议不存在");
+    throw new Error(english ? "Strategy suggestion not found" : "策略建议不存在");
   }
 
   if (suggestion.status !== "OPEN") {
@@ -464,6 +537,7 @@ export async function acceptStrategySuggestion(input: {
 
   const effect = await applyStrategySuggestionEffect({
     workspaceId: input.workspaceId,
+    locale,
     suggestion: {
       id: suggestion.id,
       suggestionType: suggestion.suggestionType,
@@ -492,7 +566,9 @@ export async function acceptStrategySuggestion(input: {
         workspaceId: input.workspaceId,
         userId: input.userId,
         type: NotificationType.UPDATE,
-        title: "策略建议已收敛到系统规则",
+        title: english
+          ? "Strategy suggestion converged into a system rule"
+          : "策略建议已收敛到系统规则",
         body: effect.summary,
         url: "/settings?tab=policies",
       },
@@ -507,7 +583,9 @@ export async function acceptStrategySuggestion(input: {
     actionType: "STRATEGY_SUGGESTION_ACCEPTED",
     targetType: "StrategySuggestion",
     targetId: updated.id,
-    summary: `采纳策略建议：${updated.title}`,
+    summary: english
+      ? `Accepted strategy suggestion: ${updated.title}`
+      : `采纳策略建议：${updated.title}`,
     payload: {
       suggestionType: updated.suggestionType,
       targetPolicyKey: updated.targetPolicyKey,
@@ -576,6 +654,8 @@ export async function dismissStrategySuggestion(input: {
   userId: string;
   actorName: string;
 }) {
+  const locale = await resolveWorkspaceLocale(input.workspaceId);
+  const english = isEnglishLocale(locale);
   const suggestion = await db.strategySuggestion.findFirst({
     where: {
       workspaceId: input.workspaceId,
@@ -584,7 +664,7 @@ export async function dismissStrategySuggestion(input: {
   });
 
   if (!suggestion) {
-    throw new Error("策略建议不存在");
+    throw new Error(english ? "Strategy suggestion not found" : "策略建议不存在");
   }
 
   const updated = await db.strategySuggestion.update({
@@ -604,7 +684,9 @@ export async function dismissStrategySuggestion(input: {
     actionType: "STRATEGY_SUGGESTION_DISMISSED",
     targetType: "StrategySuggestion",
     targetId: updated.id,
-    summary: `忽略策略建议：${updated.title}`,
+    summary: english
+      ? `Dismissed strategy suggestion: ${updated.title}`
+      : `忽略策略建议：${updated.title}`,
     payload: {
       suggestionType: updated.suggestionType,
       targetPolicyKey: updated.targetPolicyKey,
