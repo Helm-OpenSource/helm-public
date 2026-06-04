@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 meeting v2 接入与检索卡片的中文空状态混写；本批只改连接器接入与检索轨迹空状态和源码守卫，不改接入来源、检索策略、运行时事件或记忆加载边界。
 - 继续收口发布现实对齐文档的中文发布硬门禁术语混写；本批只改发布硬门禁、审计时间线、密钥历史、受损密钥、值守 / 响应政策、复核人批准记录、发布证据 / 回执、人工打标签策略、试点标签、发布列车、稳定语义化版本标签、人工签核、创始人内部门禁、内部自用包、边界 / 自检标记和守卫注册表文案及源码守卫，不改 `release:check`、环境变量名、channel 字段、tag 值、GitHub Release 字面量或英文参考摘要。
 - 继续收口 Solution Extension 协议的中文资源、商业线、等级与升级规则术语混写；本批只改契约、复核 / 批准姿态、客户可见、认证模式、工作区范围、审计 / 回放提示、领域对象、操作员界面、数据归属、复核 / 策略 / 报告 / 结算边界、受益方、分润 / 冲回、条款 / 申请 / 邀请、结算 / 付款姿态、能力目录、宿主工作区、共享核心、一方场景、责任边界、升级模式、系统集成交付项目系统和核心产品文案及源码守卫，不改扩展协议、目录命名规则、私有客户定制边界或 Core / Pack / Overlay 依赖方向。
 - 继续收口 Helm Pack 模板的中文抽取 / 工件目录术语混写；本批只改外部复刻者、公开安全证据门禁、负责人抽取门和工件目录说明文案及源码守卫，不改目录路径、模板文件名、英文参考、自动执行禁止边界或客户授权 / 专业复核边界。

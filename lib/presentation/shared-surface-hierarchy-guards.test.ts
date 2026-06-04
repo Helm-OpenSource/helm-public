@@ -1887,6 +1887,19 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps meeting v2 ingestion and retrieval Chinese empty state localized", () => {
+    const ingestionRetrievalCard = read(
+      "features/meetings/meeting-v2-ingestion-retrieval-card.tsx",
+    );
+
+    expect(ingestionRetrievalCard).toContain("连接器接入与检索策略");
+    expect(ingestionRetrievalCard).toContain("接入与检索记录");
+    expect(ingestionRetrievalCard).toContain(
+      "当前会议还没有生成连接器接入与检索轨迹。",
+    );
+    expect(ingestionRetrievalCard).not.toMatch(/connector ingestion \/ retrieval 轨迹/);
+  });
+
   it("keeps meeting draft handoff CRM boundary copy localized", () => {
     const draftCommsRuntime = read(
       "lib/helm-v2/draft-comms-handoff-runtime.ts",

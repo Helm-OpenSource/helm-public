@@ -255,7 +255,7 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
           </>
         ) : (
           <div className="rounded-2xl border border-dashed border-[color:var(--border-strong)] bg-white/80 px-5 py-6 text-sm text-[color:var(--muted-foreground)]">
-            {english ? "No connector ingestion / retrieval trace has been generated for this meeting yet." : "当前会议还没有生成 connector ingestion / retrieval 轨迹。"}
+            {english ? "No connector ingestion / retrieval trace has been generated for this meeting yet." : "当前会议还没有生成连接器接入与检索轨迹。"}
           </div>
         )}
       </CardContent>
