@@ -16,12 +16,14 @@ export async function GET(request: Request) {
     const user = session.user;
     const workspace = session.workspace;
     workspaceLocale = workspace.defaultLocale;
+    const english = workspace.defaultLocale === "en-US";
     const data = await getTodayFocusRecommendations({
       workspaceId: workspace.id,
       actorName: user.name,
       actorUserId: user.id,
       actorType: "USER",
       sourcePage: request.url,
+      english,
     });
 
     return successResponse(data, "ok");
