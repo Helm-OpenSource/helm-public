@@ -28,6 +28,10 @@ import {
   formatCaptureDisplayText,
   formatCaptureObjectType,
 } from "@/features/conversation-capture/display-copy";
+import {
+  formatCaptureResultDateLabel,
+  formatCaptureResultRelativeLabel,
+} from "@/features/conversation-capture/capture-result-date-labels";
 import { formatDateLabel, formatRelative, trimText } from "@/lib/utils";
 
 type CaptureResultPanelProps = {
@@ -309,12 +313,20 @@ export function CaptureResultPanel({
               (english ? "Untitled live capture" : "未命名现场记录")}
           </CardTitle>
           <CardDescription>
-            {formatDateLabel(session.startedAt)} ·{" "}
+            {formatCaptureResultDateLabel(
+              session.startedAt,
+              english,
+              formatDateLabel,
+            )} ·{" "}
             {session.durationSeconds
               ? `${copy.durationPrefix} ${Math.round(session.durationSeconds / 60)} ${english ? "min" : "分钟"}`
               : copy.durationPending}{" "}
             · {copy.updatedPrefix}{" "}
-            {formatRelative(session.endedAt ?? session.startedAt)}
+            {formatCaptureResultRelativeLabel(
+              session.endedAt ?? session.startedAt,
+              english,
+              formatRelative,
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -483,7 +495,15 @@ export function CaptureResultPanel({
                     english,
                   ),
                   meta: english
-                    ? `Status ${item.status}${item.dueDate ? ` · Due ${formatDateLabel(item.dueDate)}` : ""}`
+                    ? `Status ${item.status}${
+                        item.dueDate
+                          ? ` · Due ${formatCaptureResultDateLabel(
+                              item.dueDate,
+                              english,
+                              formatDateLabel,
+                            )}`
+                          : ""
+                      }`
                     : `状态 ${formatCaptureDisplayText(item.status, english)}${item.dueDate ? ` · 截止 ${formatDateLabel(item.dueDate)}` : ""}`,
                 }))}
               />
