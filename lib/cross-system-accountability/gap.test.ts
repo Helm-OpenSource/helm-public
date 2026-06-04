@@ -211,7 +211,8 @@ const dealB: SourceFact = {
   ownerCandidates: [{ id: "user:alex-alias", kind: "user", active: true, roleEvidence: ["crm:deal-owner"] }],
 };
 const completeCrm: CoverageAssertion = { assertionId: "c", system: "crm", scope: "deal", windowStart: "2026-04-01T00:00:00Z", windowEnd: fixture.now, method: "paginated_complete", completeness: "complete", evidence: ["ok"], asOf: fixture.now };
-const completePm: CoverageAssertion = { assertionId: "p", system: "pm", scope: "delivery_project", windowStart: "2026-04-01T00:00:00Z", windowEnd: fixture.now, method: "webhook_plus_backfill", completeness: "complete", evidence: ["ok"], asOf: fixture.now };
+const completePm: CoverageAssertion = { assertionId: "p", system: "pm", scope: "delivery_handoff", windowStart: "2026-04-01T00:00:00Z", windowEnd: fixture.now, method: "webhook_plus_backfill", completeness: "complete", evidence: ["ok"], asOf: fixture.now };
+const completePmEntityScope: CoverageAssertion = { ...completePm, scope: "delivery_project" };
 function run(triggerFacts: SourceFact[], expectationFacts: SourceFact[], coverageAssertions: CoverageAssertion[]) {
   return detectGaps({ rule: fixture.rule, triggerFacts, expectationFacts, coverageAssertions, ownerPolicy: fixture.ownerPolicy, now: fixture.now });
 }
@@ -293,6 +294,53 @@ describe("P1-3 rule validator is fail-closed", () => {
   it("validateCoverageAssertion rejects bad windows and complete-without-evidence", () => {
     expect(validateCoverageAssertion({ ...completeCrm, windowStart: fixture.now, windowEnd: "2026-04-01T00:00:00Z" }).errors).toContain("window_start_after_end");
     expect(validateCoverageAssertion({ ...completeCrm, evidence: [] }).errors).toContain("complete_without_evidence");
+  });
+});
+
+describe("PR-B scope/entity decoupling", () => {
+  const sliceRule: ExpectationRule = {
+    ...fixture.rule,
+    expectationSlice: { scopeRef: "delivery_handoff" },
+    requiredCoverage: [
+      { system: "crm", scope: "deal" },
+      { system: "pm", scope: "delivery_handoff" },
+    ],
+  };
+
+  it("accepts an expectation coverage scope that is different from the expectation entity", () => {
+    expect(validateExpectationRule(sliceRule).ok).toBe(true);
+  });
+
+  it("uses expectationSlice, not expectation.entity, to decide whether an expected record satisfies the gap", () => {
+    const handoffRecord: SourceFact = {
+      system: "pm",
+      entity: "delivery_project",
+      sliceRef: "delivery_handoff",
+      factId: "handoff-B",
+      matchValue: "deal-B",
+      occurredAt: "2026-05-11T00:00:00Z",
+    };
+    const reqs = detectGaps({
+      rule: sliceRule,
+      triggerFacts: [dealB],
+      expectationFacts: [handoffRecord],
+      coverageAssertions: [completeCrm, completePm],
+      ownerPolicy: fixture.ownerPolicy,
+      now: fixture.now,
+    });
+    expect(reqs).toHaveLength(0);
+  });
+
+  it("does not let coverage for the entity scope satisfy a different expectation slice", () => {
+    const reqs = detectGaps({
+      rule: sliceRule,
+      triggerFacts: [dealB],
+      expectationFacts: [],
+      coverageAssertions: [completeCrm, completePmEntityScope],
+      ownerPolicy: fixture.ownerPolicy,
+      now: fixture.now,
+    });
+    expect(reqs[0].verdict).toBe("unknown");
   });
 });
 

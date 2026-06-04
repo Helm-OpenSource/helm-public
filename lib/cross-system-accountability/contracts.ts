@@ -42,6 +42,9 @@ export type CoverageRequirement = { system: string; scope: string };
 export type TriggerSlice = {
   scopeRef: string;
 };
+export type ExpectationSlice = {
+  scopeRef: string;
+};
 
 export type ExpectationRule = {
   ruleId: string;
@@ -50,6 +53,7 @@ export type ExpectationRule = {
   trigger: { system: string; entity: string };
   triggerSlice: TriggerSlice;
   expectation: { system: string; entity: string; withinDays: number; matchKey: string };
+  expectationSlice: ExpectationSlice;
   requiredCoverage: CoverageRequirement[]; // (system, scope) pairs that must be complete, else unknown
   ownerPolicyRef: string;
   commitmentClass: "advice";
