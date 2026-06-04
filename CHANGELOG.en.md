@@ -4,6 +4,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 ## Unreleased
 
+- Further localized the shared guidance preferences control; this batch changes the system-guidance preference title, description, status, toggles, buttons, and helper-note copy only and leaves preference localStorage keys, default toggle state, and workspace preference events unchanged.
 - Added the Signal First Mile public template, quickstart, method doc, offline selector, first-change proof package, customer materials request, quality eval, HSI fixture converter, and review-packet generator for delivery-engineer first-run proof without customer data.
 - Added the public Core P0 evidence -> signal -> memory candidate -> review packet sample chain, with CRM fixture coverage and review-first guards.
 - Added Golden Path doctor checks for Qwen / region / residency / npm registry posture, OpenAI-only ASR configuration, and connector token placeholder visibility.
