@@ -302,7 +302,11 @@ function formatSuggestionPriority(
   priority: EngineeringDeliveryReview["suggestions"][number]["priority"],
   english: boolean,
 ) {
-  if (english) return priority;
+  if (english) {
+    if (priority === "HIGH") return "High priority";
+    if (priority === "MEDIUM") return "Medium priority";
+    return "Low priority";
+  }
   if (priority === "HIGH") return "高优先级";
   if (priority === "MEDIUM") return "中优先级";
   return "低优先级";

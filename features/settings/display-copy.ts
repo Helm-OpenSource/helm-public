@@ -13,6 +13,14 @@ const promptNameZh: Record<string, string> = {
   "bi-report-review": "经营报告复核",
 };
 
+const promptNameEn: Record<string, string> = {
+  "meeting-memory-extraction": "Meeting memory extraction",
+  "object-briefing": "Object briefing",
+  "recommendation-explanation": "Recommendation explanation",
+  "bi-report-analysis": "Business report analysis",
+  "bi-report-review": "Business report review",
+};
+
 const promptTaskTypeZh: Record<string, string> = {
   MEETING_MEMORY_EXTRACTION: "会议记忆提取",
   CONTACT_BRIEFING: "联系人简报",
@@ -24,8 +32,28 @@ const promptTaskTypeZh: Record<string, string> = {
   BI_REPORT_REVIEW: "经营报告复核",
 };
 
+const promptTaskTypeEn: Record<string, string> = {
+  MEETING_MEMORY_EXTRACTION: "Meeting memory extraction",
+  CONTACT_BRIEFING: "Contact briefing",
+  COMPANY_BRIEFING: "Company briefing",
+  OPPORTUNITY_BRIEFING: "Opportunity briefing",
+  MEETING_BRIEFING: "Meeting briefing",
+  RECOMMENDATION_EXPLANATION: "Recommendation explanation",
+  BI_REPORT_ANALYSIS: "Business report analysis",
+  BI_REPORT_REVIEW: "Business report review",
+};
+
 function normalizeProviderName(value: string) {
   return value.trim().toLowerCase();
+}
+
+function humanizeKey(value: string) {
+  const normalized = value
+    .replace(/^prompt[-_.]?/i, "")
+    .replace(/[-_]+v\d+$/i, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return normalized ? normalized[0].toUpperCase() + normalized.slice(1).toLowerCase() : value;
 }
 
 export function formatSettingsModelProviderName(
@@ -74,15 +102,15 @@ export function formatSettingsModelSelection(
 }
 
 export function formatSettingsPromptName(key: string, english: boolean) {
-  if (english) return key;
+  if (english) return promptNameEn[key] ?? humanizeKey(key);
 
   return promptNameZh[key] ?? "说明模板";
 }
 
 export function formatSettingsPromptVersion(version: string, english: boolean) {
-  if (english) return version;
-
   const match = version.match(/v(\d+)/i);
+  if (english) return match ? `Version ${match[1]}` : "Current version";
+
   return match ? `版本 ${match[1]}` : "当前版本";
 }
 
@@ -90,7 +118,7 @@ export function formatSettingsPromptTaskType(
   taskType: string,
   english: boolean,
 ) {
-  if (english) return taskType;
+  if (english) return promptTaskTypeEn[taskType] ?? humanizeKey(taskType);
 
   return promptTaskTypeZh[taskType] ?? "经营说明";
 }
@@ -99,7 +127,28 @@ export function formatSettingsPromptDescription(
   description: string,
   english: boolean,
 ) {
-  if (english) return description;
+  if (english) {
+    return description
+      .replace(/增强 recommendation explanation，但不改变排序和策略边界。/g, "Enhance recommendation explanation without changing ranking or review rules.")
+      .replace(/把会议纪要提取成结构化记忆对象。/g, "Extract meeting notes into reusable memory objects.")
+      .replace(/结构化记忆对象/g, "reusable memory objects")
+      .replace(/结构化/g, "structured")
+      .replace(/策略边界/g, "review rules")
+      .replace(/经营报告/g, "business report")
+      .replace(/建议说明/g, "recommendation explanation")
+      .replace(/简报/g, "briefing")
+      .replace(/复核/g, "review")
+      .replace(/建议/g, "recommendation")
+      .replace(/说明/g, "explanation")
+      .replace(/判断/g, "judgement")
+      .replace(/会议信息/g, "meeting information")
+      .replace(/会议纪要/g, "meeting notes")
+      .replace(/对象/g, "object")
+      .replace(/联系人/g, "contact")
+      .replace(/公司/g, "company")
+      .replace(/机会/g, "opportunity")
+      .replace(/会议/g, "meeting");
+  }
 
   const formatted = description
     .replace(/把会议纪要提取成结构化记忆对象。/g, "把会议纪要整理成可复用的事实、承诺和阻塞。")
