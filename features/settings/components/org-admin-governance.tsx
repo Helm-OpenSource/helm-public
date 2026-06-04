@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatSettingsBoundaryNote } from "@/features/settings/display-copy";
-import { formatDateLabel } from "@/lib/utils";
+import { formatSettingsDateLabel } from "@/features/settings/formatters/settings-date-labels";
 import {
   formatAuthControlConsistencyOverview,
   formatAuthSessionAnomalyInventorySummary,
@@ -107,7 +107,9 @@ export function RecentOrgAdminAudit({
                   <Badge variant="neutral">
                     {getOrganizationAuditActionLabel(item.actionType, english)}
                   </Badge>
-                  <span className="text-xs text-[color:var(--muted-foreground)]">{formatDateLabel(item.createdAt)}</span>
+                  <span className="text-xs text-[color:var(--muted-foreground)]">
+                    {formatSettingsDateLabel(item.createdAt, english)}
+                  </span>
                 </div>
                 <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
                   {formatGovernanceAuditSummary(item.summary, english)}
@@ -890,8 +892,8 @@ export function OrgAdminGovernanceSupportPack({
                   </div>
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {english
-                      ? `Last seen ${formatDateLabel(session.lastSeenAt)} · created ${formatDateLabel(session.createdAt)} · expires ${formatDateLabel(session.expiresAt)}`
-                      : `最近活跃 ${formatDateLabel(session.lastSeenAt)} · 创建于 ${formatDateLabel(session.createdAt)} · 过期于 ${formatDateLabel(session.expiresAt)}`}
+                      ? `Last seen ${formatSettingsDateLabel(session.lastSeenAt, english)} · created ${formatSettingsDateLabel(session.createdAt, english)} · expires ${formatSettingsDateLabel(session.expiresAt, english)}`
+                      : `最近活跃 ${formatSettingsDateLabel(session.lastSeenAt, english)} · 创建于 ${formatSettingsDateLabel(session.createdAt, english)} · 过期于 ${formatSettingsDateLabel(session.expiresAt, english)}`}
                   </p>
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {english ? "Source page" : "来源页面"}：
@@ -900,7 +902,10 @@ export function OrgAdminGovernanceSupportPack({
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {english ? "Last workspace switch marker" : "最近一次工作区切换标记"}：
                     {session.lastWorkspaceSwitchAt
-                      ? formatDateLabel(session.lastWorkspaceSwitchAt)
+                      ? formatSettingsDateLabel(
+                          session.lastWorkspaceSwitchAt,
+                          english,
+                        )
                       : english
                         ? "Not recorded"
                         : "未记录"}
@@ -922,7 +927,7 @@ export function OrgAdminGovernanceSupportPack({
                         {getOrganizationAuditActionLabel(item.actionType, english)}
                       </Badge>
                       <span className="text-xs text-[color:var(--muted-foreground)]">
-                        {formatDateLabel(item.createdAt)}
+                        {formatSettingsDateLabel(item.createdAt, english)}
                       </span>
                     </div>
                     <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
