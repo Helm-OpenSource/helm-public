@@ -10,7 +10,11 @@ import type {
 } from "@/lib/presentation/commercial-narrative-strengthening-contract";
 import { createCommercialNarrativeStrengtheningDetailReportingContract } from "@/lib/presentation/commercial-narrative-strengthening-contract";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
-import { formatDateLabel, formatRelative, trimText } from "@/lib/utils";
+import { formatRelative, trimText } from "@/lib/utils";
+import {
+  formatCommercialNarrativeDateLabel,
+  formatCommercialNarrativeRelativeLabel,
+} from "./date-labels";
 
 export function buildCommercialNarrativeStrengtheningPageContract({
   detail,
@@ -469,7 +473,7 @@ function buildEvidenceGroups(
         .slice(0, 3)
         .map((log) =>
           english
-            ? `${formatRelative(log.createdAt)} · ${log.actor} · ${trimText(log.summary, 120)}`
+            ? `${formatCommercialNarrativeRelativeLabel(log.createdAt, true)} · ${log.actor} · ${trimText(log.summary, 120)}`
             : `${formatRelative(log.createdAt)} · ${log.actor} · ${trimText(log.summary, 120)}`,
         ) || [
         english
@@ -557,11 +561,11 @@ function buildEvidenceGroups(
       label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `Last updated ${formatRelative(detail.updatedAt)}.`
+          ? `Last updated ${formatCommercialNarrativeRelativeLabel(detail.updatedAt, true)}.`
           : `最近更新于 ${formatRelative(detail.updatedAt)}。`,
         english
-          ? `Current due date: ${formatDateLabel(detail.dueDate)}.`
-          : `当前截止时间：${formatDateLabel(detail.dueDate)}。`,
+          ? `Current due date: ${formatCommercialNarrativeDateLabel(detail.dueDate, true)}.`
+          : `当前截止时间：${formatCommercialNarrativeDateLabel(detail.dueDate, false)}。`,
       ],
     },
   ];
