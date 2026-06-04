@@ -138,6 +138,7 @@ export function createPackagePageDetailReportingContract(
 
 export function toProposalPageReportingProtocol(
   contract: ProposalPageDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.proposalPageJudgement,
@@ -149,7 +150,7 @@ export function toProposalPageReportingProtocol(
     pageBoundarySummary: contract.proposalPageBoundarySummary,
     pageEvidenceSummary: contract.proposalPageEvidenceSummary,
     pageWorkerSummary: contract.proposalPageWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.proposalPageRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(contract.proposalPageRiskSignal, english),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -157,6 +158,7 @@ export function toProposalPageReportingProtocol(
 
 export function toPackagePageReportingProtocol(
   contract: PackagePageDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.packagePageJudgement,
@@ -168,7 +170,7 @@ export function toPackagePageReportingProtocol(
     pageBoundarySummary: contract.packagePageBoundarySummary,
     pageEvidenceSummary: contract.packagePageEvidenceSummary,
     pageWorkerSummary: contract.packagePageWorkerSummary,
-    pagePrioritySignal: labelForRiskSignal(contract.packagePageRiskSignal),
+    pagePrioritySignal: labelForRiskSignal(contract.packagePageRiskSignal, english),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
   });
@@ -241,8 +243,8 @@ function validateProposalPackageSharedRules({
   }
 }
 
-function labelForRiskSignal(signal: ProposalPackageRiskSignal) {
-  if (signal === "high") return "高风险";
-  if (signal === "caution") return "谨慎推进";
-  return "继续观察";
+function labelForRiskSignal(signal: ProposalPackageRiskSignal, english: boolean) {
+  if (signal === "high") return english ? "High risk" : "高风险";
+  if (signal === "caution") return english ? "Proceed with caution" : "谨慎推进";
+  return english ? "Keep watching" : "继续观察";
 }

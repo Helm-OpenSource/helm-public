@@ -80,8 +80,8 @@ export function ProposalPackageDetailView(
   const { detail, english, mode } = props;
   const sourceProtocol =
     mode === "proposal"
-      ? toProposalPageReportingProtocol(props.contract)
-      : toPackagePageReportingProtocol(props.contract);
+      ? toProposalPageReportingProtocol(props.contract, english)
+      : toPackagePageReportingProtocol(props.contract, english);
   const text = (value: string) => formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);
   const title =
