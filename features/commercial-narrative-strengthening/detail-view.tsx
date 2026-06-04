@@ -51,7 +51,7 @@ export function CommercialNarrativeStrengtheningDetailView({
   contract,
 }: Props) {
   const sourceProtocol =
-    toCommercialNarrativeStrengtheningPageReportingProtocol(contract);
+    toCommercialNarrativeStrengtheningPageReportingProtocol(contract, english);
   const text = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);

@@ -44,3 +44,21 @@ CLI(`scripts/expert-capability-feedback-loop-eval.ts`,核心 `lib/expert-capabil
 
 evaluator 与 validators 强制:`A ∩ B = ∅`;`goldLockedAt < candidateRevision.createdAt < evaluationRun.ranAt`;
 attempt budget;consumed-B 不得跨候选复用;`evidenceCompleteness` 独立计算、禁 ref 灌水。
+
+## Source governance before promotion / 晋升前来源治理
+
+Do not feed every operating signal into this loop. Source governance is checked before
+`EvalCasePromotion`:
+
+- `fleet_customer_health`: operator-only customer fleet triage; never training, eval,
+  model improvement, or memory promotion.
+- `self_dogfood_health`: only after person-level attribution is technically removed and
+  `EvalCasePromotion` passes.
+- `synthetic_public`: public fixture / eval only.
+- `deidentified_promoted_case`: must carry a passing promotion record.
+- `oss_governance`: GitHub / docs governance only; not tenant ingestion.
+
+Reference validator:
+`lib/operating-signal-governance/source-governance.ts`.
+Public-safe sample:
+`templates/operating-signal-governance/source-governance.sample.json`.
