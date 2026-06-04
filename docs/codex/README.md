@@ -27,6 +27,26 @@ repository, not as operators of the private source split.
 - Run `npm run check:public-docs` and `npm run check:public-release` before
   opening a PR.
 
+## Parallel Worktree Rules
+
+Before editing, every agent must prove which worktree it owns:
+
+```bash
+git status --short --branch
+git worktree list
+git rev-parse --show-toplevel
+```
+
+- Do not implement inside another agent's dirty worktree.
+- Create a separate worktree and branch from the intended base when the current
+  checkout contains unrelated WIP.
+- Keep bilingualization, security hardening, capability work, and governance
+  updates in separate commits / PRs.
+- Stage explicit files only; do not use `git add -A` unless the worktree has
+  first been proven clean except for this task.
+- For cross-repository work, inspect and dispatch from this thread, but send
+  implementation to the owning repository's own thread / worktree.
+
 ## Scope Boundary
 
 This public entry replaces the private source repository's agent templates for
