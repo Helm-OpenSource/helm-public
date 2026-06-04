@@ -16,6 +16,18 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：开源与 Cloud Trial 发布姿态文档的中文服务等级协议术语混写已继续清理；本批只改
+无服务等级协议试用姿态和企业级服务等级协议文案及源码守卫，不改变 release check、GitHub
+Release、人工打标签流程、Cloud Trial 可选路径或非服务等级协议边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese service-level terminology in the
+open-source and Cloud Trial launch posture doc has been further localized. This
+batch changes no-service-level trial posture and enterprise service-level
+agreement wording plus source guards only; it does not change release checks,
+GitHub Releases, manual tagging flow, the optional Cloud Trial path, or the
+non-service-level boundary, and does not claim full-repo bilingualization
+completion.
+
 最新双语化收口：试点响应与值守姿态文档的中文响应边界术语混写已继续清理；本批只改商业服务等级
 协议、创始人响应人和大模型路径文案及源码守卫，不改变响应目标、P0/P1 升级规则、`release:check`
 变量或非商业服务等级协议边界，也不声明全仓双语化完成。

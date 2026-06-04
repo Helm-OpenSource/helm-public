@@ -38,6 +38,16 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口开源与 Cloud Trial 发布姿态文档的中文服务等级协议术语混写；只调整无服务等级协议
+试用姿态和企业级服务等级协议文案，不改变 release check、GitHub Release、人工打标签流程、
+Cloud Trial 可选路径或非服务等级协议边界。
+
+This round further localizes mixed Chinese service-level terminology in the
+open-source and Cloud Trial launch posture doc. It changes no-service-level
+trial posture and enterprise service-level agreement wording only, without
+changing release checks, GitHub Releases, manual tagging flow, the optional
+Cloud Trial path, or the non-service-level boundary.
+
 本轮继续收口试点响应与值守姿态文档的中文响应边界术语混写；只调整商业服务等级协议、
 创始人响应人和大模型路径文案，不改变响应目标、P0/P1 升级规则、`release:check` 变量或
 非商业服务等级协议边界。
