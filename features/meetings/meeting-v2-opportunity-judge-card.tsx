@@ -13,6 +13,7 @@ import {
   reviewMeetingOpportunityJudgeRuntimeAction,
   runMeetingOpportunityJudgeRuntimeAction,
 } from "@/features/meetings/actions";
+import { formatMeetingOpportunityJudgeDateLabel } from "@/features/meetings/meeting-v2-opportunity-judge-date-labels";
 import type { OpportunityJudgeRuntimeSummary } from "@/lib/helm-v2/opportunity-judge-runtime";
 import { formatDateLabel } from "@/lib/utils";
 
@@ -261,7 +262,12 @@ export function MeetingV2OpportunityJudgeCard({ meetingId, runtime }: MeetingV2O
                     <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Next-step brief" : "下一步摘要"}</p>
                     {runtime.latestOpportunityDeltaEvent ? (
                       <p className="text-xs text-[color:var(--muted-foreground)]">
-                        {english ? "latest run" : "最近运行"} · {formatDateLabel(runtime.latestOpportunityDeltaEvent.createdAt)}
+                        {english ? "latest run" : "最近运行"} ·{" "}
+                        {formatMeetingOpportunityJudgeDateLabel(
+                          runtime.latestOpportunityDeltaEvent.createdAt,
+                          english,
+                          formatDateLabel,
+                        )}
                       </p>
                     ) : null}
                   </div>

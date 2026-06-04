@@ -29,7 +29,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDateLabel } from "@/lib/utils";
 import {
   acknowledgeTenantResourceGuardedWritePilotAction,
   requestTenantResourceGuardedWritePilotAction,
@@ -39,6 +38,7 @@ import {
   submitTenantResourceManualProofAction,
   withdrawTenantResourceManualProofAction,
 } from "@/features/settings/actions";
+import { formatTenantResourceDateLabel } from "@/features/settings/components/tenant-resource-date-labels";
 import { Info } from "@/features/settings/components/settings-display";
 import {
   formatTenantResourceDisplayName,
@@ -167,7 +167,7 @@ export function TenantResourceReadinessPanel({
           />
           <Info
             label={english ? "Generated at" : "生成时间"}
-            value={formatDateLabel(new Date(summary.generatedAt))}
+            value={formatTenantResourceDateLabel(summary.generatedAt, english)}
           />
         </div>
 
@@ -328,7 +328,7 @@ function TenantResourceReadinessRow({
           label={english ? "Last sync" : "最近同步"}
           value={
             resource.connection.lastSyncAt
-              ? formatDateLabel(new Date(resource.connection.lastSyncAt))
+              ? formatTenantResourceDateLabel(resource.connection.lastSyncAt, english)
               : english
                 ? "Not recorded"
                 : "未记录"
@@ -458,7 +458,7 @@ function TenantResourceEvidenceDisclosure({
             label={english ? "Freshness" : "新鲜度"}
             value={`${formatEvidenceToken(detail.timing.freshnessPosture, english)} · ${
               detail.timing.observedAt
-                ? formatDateLabel(new Date(detail.timing.observedAt))
+                ? formatTenantResourceDateLabel(detail.timing.observedAt, english)
                 : english
                   ? "not recorded"
                   : "未记录"

@@ -71,4 +71,69 @@ describe("readRecommendationPresentation", () => {
     expect(rendered).toContain("2 fact(s)");
     expect(rendered).not.toMatch(/[\u3400-\u9fff]/u);
   });
+
+  it("does not leak legacy Chinese presentation payload copy in English cards", () => {
+    const presentation = readRecommendationPresentation(
+      {
+        ...baseRecommendation,
+        whyNotAutoExecute: "这条动作需要人工审批。",
+        appliedPolicyRules: [
+          {
+            name: "approval",
+            mode: "REQUIRES_APPROVAL",
+            reason: "当前策略要求审批。",
+          },
+        ],
+        recommendationPayload: {
+          decisionRole: "secondary",
+          decisionLabel: "次优动作",
+          tradeoffSummary: "这一步仍然值得做，但当前不是首选。",
+          alternativeActionTitle: "给客户发结构化跟进",
+          whyNow: "当前事项已经进入明确时间窗口。",
+          evidenceLead: "当前判断主要基于最近互动。",
+          currentBlocker: "待处理 · 预算阻塞：客户还没有确认。",
+          currentCommitment: "已逾期 · 发送材料：今天需要补齐。",
+          expectedImpact: "把责任人、时间和下一步动作重新钉住。",
+          ifNoAction: "如果今天不推进，机会会继续降温。",
+          personalizationHint: "你过去更常接受这类动作。",
+          learnedPatternSummary: ["你最近会保留外发承诺类动作的人工审批"],
+          supportingHighlights: ["客户上周提到预算需要复核"],
+          briefingSummary: "最近简报显示当前风险升高。",
+          evidenceSummary: "已引用 2 条事实、1 个阻塞、1 个承诺。",
+        },
+      },
+      { locale: "en-US" },
+    );
+
+    const rendered = [
+      presentation.decisionLabel,
+      presentation.tradeoffSummary,
+      presentation.alternativeActionTitle,
+      presentation.whyNow,
+      presentation.evidenceLead,
+      presentation.currentBlocker,
+      presentation.currentCommitment,
+      presentation.expectedImpact,
+      presentation.ifNoAction,
+      presentation.personalizationHint,
+      presentation.briefingSummary,
+      presentation.evidenceSummary,
+      presentation.policyHint,
+      presentation.appliedPolicyReason,
+      ...presentation.learnedPatternSummary,
+      ...presentation.supportingHighlights,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    expect(presentation.decisionLabel).toBe("Alternate move");
+    expect(presentation.alternativeActionTitle).toBeNull();
+    expect(presentation.currentBlocker).toBeNull();
+    expect(presentation.currentCommitment).toBeNull();
+    expect(presentation.policyHint).toBeNull();
+    expect(presentation.appliedPolicyReason).toBeNull();
+    expect(presentation.learnedPatternSummary).toEqual([]);
+    expect(presentation.supportingHighlights).toEqual([]);
+    expect(rendered).not.toMatch(/[\u3400-\u9fff]/u);
+  });
 });

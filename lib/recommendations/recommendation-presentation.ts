@@ -67,12 +67,58 @@ type RecommendationPresentationReadOptions = {
   locale?: UiLocale;
 };
 
+const cjkTextPattern = /[\u3400-\u9fff]/u;
+
 const actionModeEnglishLabels: Record<string, string> = {
   SUGGEST_ONLY: "Suggest only",
   REQUIRES_APPROVAL: "Requires approval",
   AUTO_WITHIN_THRESHOLD: "Auto within threshold",
   FORBIDDEN: "Forbidden",
 };
+
+function hasCjkText(value: string) {
+  return cjkTextPattern.test(value);
+}
+
+function englishSafeString(
+  value: string | null,
+  english: boolean,
+): string | null {
+  if (!value) return value;
+  if (!english) return value;
+  return hasCjkText(value) ? null : value;
+}
+
+function readPresentationString(
+  payload: Record<string, unknown>,
+  key: string,
+  fallback: string,
+  english: boolean,
+) {
+  const value = typeof payload[key] === "string" ? payload[key] : null;
+  return englishSafeString(value, english) ?? fallback;
+}
+
+function readNullablePresentationString(
+  payload: Record<string, unknown>,
+  key: string,
+  english: boolean,
+) {
+  const value = typeof payload[key] === "string" ? payload[key] : null;
+  return englishSafeString(value, english);
+}
+
+function readPresentationStringArray(
+  payload: Record<string, unknown>,
+  key: string,
+  english: boolean,
+) {
+  if (!Array.isArray(payload[key])) return [];
+  return payload[key].filter(
+    (item): item is string =>
+      typeof item === "string" && englishSafeString(item, english) !== null,
+  );
+}
 
 function policyResultLabel(policyResult: ActionExecutionMode | string, english: boolean) {
   if (english) {
@@ -406,97 +452,126 @@ export function readRecommendationPresentation(
         )
       : (recommendation.recommendationPayload ?? {});
 
-  const appliedPolicyReason =
+  const rawAppliedPolicyReason =
     recommendation.appliedPolicyRules?.[0]?.reason ?? null;
-  const policyHint =
+  const appliedPolicyReason = englishSafeString(rawAppliedPolicyReason, english);
+  const rawPolicyHint =
     recommendation.whyNotAutoExecute ??
     (typeof payload.whyNotAutoExecute === "string"
       ? payload.whyNotAutoExecute
       : null) ??
-    appliedPolicyReason;
+    rawAppliedPolicyReason;
+  const policyHint = englishSafeString(rawPolicyHint, english);
 
   const llmMeta =
     payload.llmMeta && typeof payload.llmMeta === "object"
       ? (payload.llmMeta as Record<string, unknown>)
       : null;
+  const decisionRole =
+    payload.decisionRole === "secondary" || payload.decisionRole === "defer"
+      ? payload.decisionRole
+      : "primary";
+  const decisionLabelFallback = english
+    ? decisionRole === "secondary"
+      ? "Alternate move"
+      : decisionRole === "defer"
+        ? "Defer for now"
+        : "Primary move"
+    : decisionRole === "secondary"
+      ? "次优动作"
+      : decisionRole === "defer"
+        ? "暂缓处理"
+        : "首选动作";
+  const evidenceSummaryFallback = english
+    ? `References ${parseIdArray(recommendation.supportingFactIds).length} fact(s), ${parseIdArray(recommendation.blockerIds).length} blocker(s), and ${parseIdArray(recommendation.commitmentIds).length} commitment(s).`
+    : `已引用 ${parseIdArray(recommendation.supportingFactIds).length} 条事实、${parseIdArray(recommendation.blockerIds).length} 个阻塞、${parseIdArray(recommendation.commitmentIds).length} 个承诺。`;
 
   return {
-    decisionRole:
-      payload.decisionRole === "secondary" || payload.decisionRole === "defer"
-        ? payload.decisionRole
-        : "primary",
-    decisionLabel:
-      typeof payload.decisionLabel === "string"
-        ? payload.decisionLabel
-        : english
-          ? "Primary move"
-          : "首选动作",
-    tradeoffSummary:
-      typeof payload.tradeoffSummary === "string"
-        ? payload.tradeoffSummary
-        : english
-          ? "This recommendation is still ranked by memory, blockers, commitments, and policy boundaries."
-          : "当前判断建议仍然主要基于记忆、阻塞、承诺和策略边界做排序。",
-    alternativeActionTitle:
-      typeof payload.alternativeActionTitle === "string"
-        ? payload.alternativeActionTitle
-        : null,
-    whyNow:
-      typeof payload.whyNow === "string"
-        ? payload.whyNow
-        : english
-          ? "This recommendation is ready for review because the current evidence points to a concrete next move."
-          : recommendation.explanation,
-    evidenceLead:
-      typeof payload.evidenceLead === "string"
-        ? payload.evidenceLead
-        : english
-          ? "This judgement is based on recent activity, structured memory, and the current risk window."
-          : "当前判断主要基于最近互动、结构化记忆和风险窗口。",
-    currentBlocker:
-      typeof payload.currentBlocker === "string"
-        ? payload.currentBlocker
-        : null,
-    currentCommitment:
-      typeof payload.currentCommitment === "string"
-        ? payload.currentCommitment
-        : null,
-    expectedImpact:
-      typeof payload.expectedImpact === "string"
-        ? payload.expectedImpact
-        : english
-          ? "This move helps turn the next step into reviewed follow-through instead of leaving it at the judgement layer."
-          : "这条动作会帮助你把下一步收口，而不是继续停留在判断层。",
-    ifNoAction:
-      typeof payload.ifNoAction === "string"
-        ? payload.ifNoAction
-        : english
-          ? "If no action is taken, resistance and uncertainty around this object will keep accumulating."
-          : "如果继续不推进，当前对象的阻力和不确定性都会继续累积。",
-    personalizationHint:
-      typeof payload.personalizationHint === "string"
-        ? payload.personalizationHint
-        : null,
-    learnedPatternSummary: Array.isArray(payload.learnedPatternSummary)
-      ? payload.learnedPatternSummary.filter(
-          (item): item is string => typeof item === "string",
-        )
-      : [],
-    supportingHighlights: Array.isArray(payload.supportingHighlights)
-      ? payload.supportingHighlights.filter(
-          (item): item is string => typeof item === "string",
-        )
-      : [],
+    decisionRole,
+    decisionLabel: readPresentationString(
+      payload,
+      "decisionLabel",
+      decisionLabelFallback,
+      english,
+    ),
+    tradeoffSummary: readPresentationString(
+      payload,
+      "tradeoffSummary",
+      english
+        ? "This recommendation is still ranked by memory, blockers, commitments, and policy boundaries."
+        : "当前判断建议仍然主要基于记忆、阻塞、承诺和策略边界做排序。",
+      english,
+    ),
+    alternativeActionTitle: readNullablePresentationString(
+      payload,
+      "alternativeActionTitle",
+      english,
+    ),
+    whyNow: readPresentationString(
+      payload,
+      "whyNow",
+      english
+        ? "This recommendation is ready for review because the current evidence points to a concrete next move."
+        : recommendation.explanation,
+      english,
+    ),
+    evidenceLead: readPresentationString(
+      payload,
+      "evidenceLead",
+      english
+        ? "This judgement is based on recent activity, structured memory, and the current risk window."
+        : "当前判断主要基于最近互动、结构化记忆和风险窗口。",
+      english,
+    ),
+    currentBlocker: readNullablePresentationString(
+      payload,
+      "currentBlocker",
+      english,
+    ),
+    currentCommitment: readNullablePresentationString(
+      payload,
+      "currentCommitment",
+      english,
+    ),
+    expectedImpact: readPresentationString(
+      payload,
+      "expectedImpact",
+      english
+        ? "This move helps turn the next step into reviewed follow-through instead of leaving it at the judgement layer."
+        : "这条动作会帮助你把下一步收口，而不是继续停留在判断层。",
+      english,
+    ),
+    ifNoAction: readPresentationString(
+      payload,
+      "ifNoAction",
+      english
+        ? "If no action is taken, resistance and uncertainty around this object will keep accumulating."
+        : "如果继续不推进，当前对象的阻力和不确定性都会继续累积。",
+      english,
+    ),
+    personalizationHint: readNullablePresentationString(
+      payload,
+      "personalizationHint",
+      english,
+    ),
+    learnedPatternSummary: readPresentationStringArray(
+      payload,
+      "learnedPatternSummary",
+      english,
+    ),
+    supportingHighlights: readPresentationStringArray(
+      payload,
+      "supportingHighlights",
+      english,
+    ),
     briefingSummary:
-      typeof payload.briefingSummary === "string"
-        ? payload.briefingSummary
-        : null,
-    evidenceSummary:
-      typeof payload.evidenceSummary === "string"
-        ? payload.evidenceSummary
-        : english
-          ? `References ${parseIdArray(recommendation.supportingFactIds).length} fact(s), ${parseIdArray(recommendation.blockerIds).length} blocker(s), and ${parseIdArray(recommendation.commitmentIds).length} commitment(s).`
-          : `已引用 ${parseIdArray(recommendation.supportingFactIds).length} 条事实、${parseIdArray(recommendation.blockerIds).length} 个阻塞、${parseIdArray(recommendation.commitmentIds).length} 个承诺。`,
+      readNullablePresentationString(payload, "briefingSummary", english),
+    evidenceSummary: readPresentationString(
+      payload,
+      "evidenceSummary",
+      evidenceSummaryFallback,
+      english,
+    ),
     memoryRetrievalPack:
       payload.memoryRetrievalPack &&
       typeof payload.memoryRetrievalPack === "object"

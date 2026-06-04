@@ -3,9 +3,13 @@
 import { Clock3, Link2, UserRound } from "lucide-react";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { Badge } from "@/components/ui/badge";
+import {
+  formatSharedCardDateLabel,
+  formatSharedCardRelativeLabel,
+} from "@/components/shared/card-date-labels";
 import { getLocalizedCommitmentStatusLabels } from "@/lib/i18n/labels";
 import { formatSeededBusinessCopy } from "@/lib/presentation/seeded-business-copy";
-import { cn, formatDateLabel, formatRelative, trimText } from "@/lib/utils";
+import { cn, trimText } from "@/lib/utils";
 
 type CommitmentCardProps = {
   commitment: {
@@ -116,7 +120,8 @@ export function CommitmentCard({
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
         <span className="inline-flex min-w-0 items-center gap-1.5 break-words">
           <Clock3 className="h-3.5 w-3.5" />
-          {english ? "Due" : "截止"} {formatDateLabel(commitment.dueDate)}
+          {english ? "Due" : "截止"}{" "}
+          {formatSharedCardDateLabel(commitment.dueDate, english)}
         </span>
         {commitment.ownerName ? (
           <span className="inline-flex min-w-0 items-center gap-1.5 break-words">
@@ -133,7 +138,7 @@ export function CommitmentCard({
         {commitment.updatedAt ? (
           <span>
             {english ? "Last changed" : "最近变化"}{" "}
-            {formatRelative(commitment.updatedAt)}
+            {formatSharedCardRelativeLabel(commitment.updatedAt, english)}
           </span>
         ) : null}
       </div>

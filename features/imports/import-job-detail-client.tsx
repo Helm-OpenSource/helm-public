@@ -16,6 +16,7 @@ import {
   formatCrmImportExternalReference,
   formatCrmImportObjectType,
 } from "@/features/imports/display-copy";
+import { formatImportDateLabel } from "@/features/imports/import-date-labels";
 import { formatDateLabel, safeParseJson } from "@/lib/utils";
 
 export function ImportJobDetailClient({
@@ -137,7 +138,7 @@ export function ImportJobDetailClient({
       <PageHeader
         eyebrow={english ? "Import result" : "导入结果"}
         title={`${job.source.sourceType} · ${job.jobType === "INITIAL_IMPORT" ? (english ? "Initial import" : "首次导入") : (english ? "Incremental sync" : "增量同步")}`}
-        description={`${job.source.externalAccountLabel ?? (english ? "Unnamed source" : "未命名来源")} · ${formatDateLabel(job.startedAt)}`}
+        description={`${job.source.externalAccountLabel ?? (english ? "Unnamed source" : "未命名来源")} · ${formatImportDateLabel(job.startedAt, english, formatDateLabel)}`}
         actions={
           <>
             <Button variant="secondary" asChild>
@@ -284,8 +285,18 @@ export function ImportJobDetailClient({
             <Metric label={english ? "Successful records" : "成功记录"} value={english ? `${job.successRecords}` : `${job.successRecords} 条`} />
             <Metric label={english ? "Failed records" : "失败记录"} value={english ? `${job.failedRecords}` : `${job.failedRecords} 条`} />
             <Metric label={english ? "Warnings" : "警告记录"} value={english ? `${job.warningRecords}` : `${job.warningRecords} 条`} />
-            <Metric label={english ? "Started at" : "开始时间"} value={formatDateLabel(job.startedAt)} />
-            <Metric label={english ? "Finished at" : "完成时间"} value={job.finishedAt ? formatDateLabel(job.finishedAt) : (english ? "Still running" : "仍在执行")} />
+            <Metric
+              label={english ? "Started at" : "开始时间"}
+              value={formatImportDateLabel(job.startedAt, english, formatDateLabel)}
+            />
+            <Metric
+              label={english ? "Finished at" : "完成时间"}
+              value={
+                job.finishedAt
+                  ? formatImportDateLabel(job.finishedAt, english, formatDateLabel)
+                  : (english ? "Still running" : "仍在执行")
+              }
+            />
           </CardContent>
         </Card>
 

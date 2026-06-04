@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { completeParticipantPortalOnboardingAction } from "@/features/participant-portal/actions";
+import { formatParticipantPortalDateLabel } from "@/features/participant-portal/participant-portal-date-labels";
 import type { ParticipantPortalInvitePreview } from "@/features/participant-portal/queries";
 import { getParticipantPortalInviteStateCopy } from "@/lib/auth/participant-portal-invite-state";
 import { formatDateLabel } from "@/lib/utils";
@@ -68,7 +69,7 @@ export function ParticipantPortalOnboardingClient({
               <CardContent>
                 <p className="text-sm text-[color:var(--muted-foreground)]">
                   {english
-                    ? `Invite expired on ${formatDateLabel(preview.inviteExpiresAt)}.`
+                    ? `Invite expired on ${formatParticipantPortalDateLabel(preview.inviteExpiresAt, english, formatDateLabel)}.`
                     : `邀请已于 ${formatDateLabel(preview.inviteExpiresAt)} 失效。`}
                 </p>
               </CardContent>
@@ -196,9 +197,9 @@ export function ParticipantPortalOnboardingClient({
           <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Info label={english ? "Invite email" : "邀请邮箱"} value={access.inviteEmail} />
             <Info label={english ? "Workspace" : "组织"} value={access.workspace.name} />
-            <Info label={english ? "Last invite issued" : "最近发放时间"} value={formatDateLabel(access.lastInviteIssuedAt)} />
-            <Info label={english ? "Invite expires" : "邀请失效时间"} value={formatDateLabel(preview.inviteExpiresAt)} />
-            <Info label={english ? "Terms accepted" : "条款确认"} value={formatDateLabel(access.termsAcceptedAt)} />
+            <Info label={english ? "Last invite issued" : "最近发放时间"} value={formatParticipantPortalDateLabel(access.lastInviteIssuedAt, english, formatDateLabel)} />
+            <Info label={english ? "Invite expires" : "邀请失效时间"} value={formatParticipantPortalDateLabel(preview.inviteExpiresAt, english, formatDateLabel)} />
+            <Info label={english ? "Terms accepted" : "条款确认"} value={formatParticipantPortalDateLabel(access.termsAcceptedAt, english, formatDateLabel)} />
           </CardContent>
         </Card>
 

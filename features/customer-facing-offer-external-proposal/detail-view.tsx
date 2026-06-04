@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { UnifiedDetailNavigationPanel } from "@/components/shared/unified-detail-navigation-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatOfferExternalDateLabel } from "@/features/customer-facing-offer-external-proposal/date-labels";
 import {
   formatRoleDetailDisplayText,
   formatRoleDetailEvidenceGroups,
@@ -37,7 +38,6 @@ import {
 } from "@/lib/presentation/customer-facing-offer-external-proposal-detail-contract";
 import { createUnifiedDetailNavigationModel } from "@/lib/presentation/unified-detail-navigation";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
-import { formatDateLabel } from "@/lib/utils";
 
 type CustomerOfferPageProps = {
   mode: "customer-offer";
@@ -333,7 +333,7 @@ export function CustomerFacingOfferExternalProposalDetailView(
                 },
                 {
                   label: english ? "Due date" : "当前截止时间",
-                  value: formatDateLabel(detail.dueDate),
+                  value: formatOfferExternalDateLabel(detail.dueDate, english),
                 },
               ]}
             />
@@ -346,6 +346,7 @@ export function CustomerFacingOfferExternalProposalDetailView(
                 request={text(props.contract.externalProposalPageCollaborationRequest)}
                 decisionRequest={protocol.pageDecisionRequest[0]}
                 nextSteps={props.contract.externalProposalPageCollaborationNextStep.map(text)}
+                english={english}
               />
             ) : null}
 

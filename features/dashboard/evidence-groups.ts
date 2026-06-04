@@ -1,4 +1,5 @@
 import type { DashboardPageData } from "@/features/dashboard/page-loader";
+import { formatDashboardEvidenceDateLabel } from "@/features/dashboard/evidence-date-labels";
 import {
   buildDashboardMemoryHref,
   buildDashboardObjectHref,
@@ -12,6 +13,10 @@ import {
 } from "@/lib/presentation/page-section-anchors";
 import { createEvidencePayloadGroups } from "@/lib/worker-skill-resource/presentation";
 import { formatDateLabel, trimText } from "@/lib/utils";
+
+function formatDashboardEvidenceDate(value: Date | string | null | undefined, english: boolean) {
+  return formatDashboardEvidenceDateLabel(value, english, formatDateLabel);
+}
 
 export function buildDashboardPayloadEvidenceGroups({
   data,
@@ -30,8 +35,8 @@ export function buildDashboardPayloadEvidenceGroups({
           : `查看回放：${meeting.title}`,
         href: `/meetings/${meeting.id}`,
         summary: english
-          ? `Scheduled for ${formatDateLabel(meeting.startsAt)} and already connected to ${meeting.opportunity?.title ?? meeting.company?.name ?? "the current object"}.`
-          : `已排在 ${formatDateLabel(meeting.startsAt)}，并且已经连到${meeting.opportunity?.title ?? meeting.company?.name ?? "当前对象"}。`,
+          ? `Scheduled for ${formatDashboardEvidenceDate(meeting.startsAt, english)} and already connected to ${meeting.opportunity?.title ?? meeting.company?.name ?? "the current object"}.`
+          : `已排在 ${formatDashboardEvidenceDate(meeting.startsAt, english)}，并且已经连到${meeting.opportunity?.title ?? meeting.company?.name ?? "当前对象"}。`,
       })),
       ...data.recentExecutedActions.slice(0, 2).map((action) => ({
         itemId: `action-replay-${action.id}`,

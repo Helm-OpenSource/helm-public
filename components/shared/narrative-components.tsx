@@ -351,6 +351,7 @@ export function CollaborationRequestCard({
   request,
   decisionRequest,
   nextSteps,
+  english,
   className,
 }: {
   label: string;
@@ -359,8 +360,11 @@ export function CollaborationRequestCard({
   request: string;
   decisionRequest?: string;
   nextSteps: string[];
+  english: boolean;
   className?: string;
 }) {
+  const modeLabel = labelForCollaborationMode(mode, english);
+
   return (
     <section
       data-collaboration-request-card="true"
@@ -377,11 +381,11 @@ export function CollaborationRequestCard({
             <div className="space-y-1">
               <p className="text-sm font-semibold text-[color:var(--foreground)]">{summary}</p>
               <p className="text-xs font-medium text-[color:color-mix(in_oklab,#6d28d9_62%,var(--muted-foreground)_38%)]">
-                {labelForCollaborationMode(mode)}
+                {modeLabel}
               </p>
             </div>
           </div>
-          <EvidenceChip label={labelForCollaborationMode(mode)} tone="violet" />
+          <EvidenceChip label={modeLabel} tone="violet" />
         </div>
         <div className="mt-4 space-y-3">
           <NarrativeInlineItem>{request}</NarrativeInlineItem>
@@ -390,7 +394,9 @@ export function CollaborationRequestCard({
           ) : null}
           {nextSteps.length ? (
             <div className="rounded-[20px] border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface-subtle)_90%,white_10%)] px-3 py-3">
-              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">下一步</p>
+              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                {english ? "Next steps" : "下一步"}
+              </p>
               <div className="mt-2 space-y-2">
                 {nextSteps.map((step) => (
                   <p key={step} className="text-sm leading-7 text-[color:var(--foreground)]">
@@ -899,8 +905,12 @@ function EvidenceTargetCard({
   );
 }
 
-function labelForCollaborationMode(mode: CollaborationMode) {
-  if (mode === "helm_drives_human_supervises") return "Helm 推进，人类监督";
-  if (mode === "helm_prepares_human_decides") return "Helm 准备，人类拍板";
-  return "Helm 提醒，人类主导";
+function labelForCollaborationMode(mode: CollaborationMode, english: boolean) {
+  if (mode === "helm_drives_human_supervises") {
+    return english ? "Helm drives, human supervises" : "Helm 推进，人类监督";
+  }
+  if (mode === "helm_prepares_human_decides") {
+    return english ? "Helm prepares, human decides" : "Helm 准备，人类拍板";
+  }
+  return english ? "Helm reminds, human leads" : "Helm 提醒，人类主导";
 }

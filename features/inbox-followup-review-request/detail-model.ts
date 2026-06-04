@@ -31,7 +31,8 @@ import {
 } from "@/lib/presentation/unified-detail-navigation";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
 import { actionTypeLabels } from "@/data/constants";
-import { formatDateLabel, trimText } from "@/lib/utils";
+import { trimText } from "@/lib/utils";
+import { formatInboxFollowupDateLabel } from "@/features/inbox-followup-review-request/date-labels";
 
 type HeaderLink = {
   label: string;
@@ -290,8 +291,8 @@ export function buildInboxDetailPageModel({
         ),
       auditItems: [
         english
-          ? `Last thread update: ${formatDateLabel(thread.updatedAt)}`
-          : `最近一次线程更新时间：${formatDateLabel(thread.updatedAt)}`,
+          ? `Last thread update: ${formatInboxFollowupDateLabel(thread.updatedAt, english)}`
+          : `最近一次线程更新时间：${formatInboxFollowupDateLabel(thread.updatedAt, english)}`,
       ],
       memoryItems: [
         thread.summary ??
@@ -616,8 +617,8 @@ export function buildFollowupDetailPageModel({
         .slice(0, 3)
         .map((item) =>
           english
-            ? `${item.summary} · ${formatDateLabel(item.createdAt)}`
-            : `${item.summary} · ${formatDateLabel(item.createdAt)}`,
+            ? `${item.summary} · ${formatInboxFollowupDateLabel(item.createdAt, english)}`
+            : `${item.summary} · ${formatInboxFollowupDateLabel(item.createdAt, english)}`,
         ),
       memoryItems: detail.memoryFacts.slice(0, 3).map((item) => item.title),
       workerItems: [
@@ -930,8 +931,8 @@ export function buildReviewRequestDetailPageModel({
       ],
       auditItems: [
         english
-          ? `Review status: ${task.status} · updated ${formatDateLabel(task.updatedAt)}`
-          : `当前复核状态：${task.status} · 更新时间 ${formatDateLabel(task.updatedAt)}`,
+          ? `Review status: ${task.status} · updated ${formatInboxFollowupDateLabel(task.updatedAt, english)}`
+          : `当前复核状态：${task.status} · 更新时间 ${formatInboxFollowupDateLabel(task.updatedAt, english)}`,
       ],
       memoryItems: task.recommendationFacts
         .slice(0, 3)
@@ -961,8 +962,8 @@ export function buildReviewRequestDetailPageModel({
       ],
       historyItems: [
         english
-          ? `Created at ${formatDateLabel(task.createdAt)}`
-          : `创建于 ${formatDateLabel(task.createdAt)}`,
+          ? `Created at ${formatInboxFollowupDateLabel(task.createdAt, english)}`
+          : `创建于 ${formatInboxFollowupDateLabel(task.createdAt, english)}`,
       ],
     }),
     pageWhyItMatters: [
@@ -1204,19 +1205,19 @@ function buildReviewRequestAgentSurface({
   const recentChangesItems = compactItems([
     task.status === "EXECUTED"
       ? english
-        ? `${reviewerName ?? "A reviewer"} closed the review line on ${formatDateLabel(reviewedAt ?? task.updatedAt)} and moved the next bounded move to ${formatPrimaryOwner(primaryOwner, true)}.`
-        : `${reviewerName ?? "有复核人"} 在 ${formatDateLabel(reviewedAt ?? task.updatedAt)} 关闭了复核线，并把下一条有边界的动作交给 ${formatPrimaryOwner(primaryOwner, false)}。`
+        ? `${reviewerName ?? "A reviewer"} closed the review line on ${formatInboxFollowupDateLabel(reviewedAt ?? task.updatedAt, english)} and moved the next bounded move to ${formatPrimaryOwner(primaryOwner, true)}.`
+        : `${reviewerName ?? "有复核人"} 在 ${formatInboxFollowupDateLabel(reviewedAt ?? task.updatedAt, english)} 关闭了复核线，并把下一条有边界的动作交给 ${formatPrimaryOwner(primaryOwner, false)}。`
       : task.status === "REJECTED"
         ? english
-          ? `${reviewerName ?? "A reviewer"} requested revision on ${formatDateLabel(reviewedAt ?? task.updatedAt)} before this can move honestly.`
-          : `${reviewerName ?? "有复核人"} 在 ${formatDateLabel(reviewedAt ?? task.updatedAt)} 提出了修改请求，这条线现在还不能直接往前推。`
+          ? `${reviewerName ?? "A reviewer"} requested revision on ${formatInboxFollowupDateLabel(reviewedAt ?? task.updatedAt, english)} before this can move honestly.`
+          : `${reviewerName ?? "有复核人"} 在 ${formatInboxFollowupDateLabel(reviewedAt ?? task.updatedAt, english)} 提出了修改请求，这条线现在还不能直接往前推。`
         : task.status === "WITHDRAWN"
           ? english
-            ? `The prior review route was withdrawn on ${formatDateLabel(task.updatedAt)} and now needs a narrower next handoff.`
-            : `上一条复核路径在 ${formatDateLabel(task.updatedAt)} 被撤回，当前需要一条更窄的下一步交接。`
+            ? `The prior review route was withdrawn on ${formatInboxFollowupDateLabel(task.updatedAt, english)} and now needs a narrower next handoff.`
+            : `上一条复核路径在 ${formatInboxFollowupDateLabel(task.updatedAt, english)} 被撤回，当前需要一条更窄的下一步交接。`
           : english
-            ? `This review request is still waiting for explicit human review as of ${formatDateLabel(task.updatedAt)}.`
-            : `截至 ${formatDateLabel(task.updatedAt)}，这条复核请求仍在等待显式人工复核。`,
+            ? `This review request is still waiting for explicit human review as of ${formatInboxFollowupDateLabel(task.updatedAt, english)}.`
+            : `截至 ${formatInboxFollowupDateLabel(task.updatedAt, english)}，这条复核请求仍在等待显式人工复核。`,
     task.resultPreview
       ? english
         ? "A bounded result preview is already prepared so the reviewer can judge the next move without reopening raw payloads."

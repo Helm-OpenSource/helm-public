@@ -4,6 +4,7 @@ import { DatabaseZap, FolderSearch, ShieldCheck } from "lucide-react";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMeetingIngestionRetrievalDateLabel } from "@/features/meetings/meeting-v2-ingestion-retrieval-date-labels";
 import { formatMeetingDisplayText } from "@/features/meetings/display-copy";
 import type { MeetingConnectorIngestionRetrievalSummary } from "@/lib/helm-v2/connector-ingestion-retrieval-runtime";
 import { formatDateLabel } from "@/lib/utils";
@@ -102,7 +103,11 @@ export function MeetingV2IngestionRetrievalCard({ meetingId, runtime }: MeetingV
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{runtime.traces.length}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
                   {runtime.latestRuntimeEvent
-                    ? `${english ? "synced" : "同步于"} ${formatDateLabel(runtime.latestRuntimeEvent.createdAt)}`
+                    ? `${english ? "synced" : "同步于"} ${formatMeetingIngestionRetrievalDateLabel(
+                        runtime.latestRuntimeEvent.createdAt,
+                        english,
+                        formatDateLabel,
+                      )}`
                     : english
                       ? "trace ready"
 	                      : "记录已就绪"}

@@ -9,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TabsContent } from "@/components/ui/tabs";
-import { formatDateLabel } from "@/lib/utils";
 import { accessStateLabels } from "@/features/settings/formatters/labels";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
 import {
@@ -23,6 +22,7 @@ import {
   formatSettingsPromptTaskType,
   formatSettingsPromptVersion,
 } from "@/features/settings/display-copy";
+import { formatAccountDateLabel } from "./account-date-labels";
 import { Info, StatusHint } from "./settings-display";
 
 type AccountTabData = Pick<
@@ -146,7 +146,9 @@ export function AccountSettingsTab({
                   <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
                     {formatShellAlertText(notification.body, english)}
                   </p>
-                  <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">{formatDateLabel(notification.createdAt)}</p>
+                  <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                    {formatAccountDateLabel(notification.createdAt, english)}
+                  </p>
                 </div>
               ))
             ) : (
@@ -689,7 +691,7 @@ export function AccountSettingsTab({
                       label={english ? "Last sync" : "最近同步"}
                       value={
                         source.lastSyncedAt
-                          ? formatDateLabel(source.lastSyncedAt)
+                          ? formatAccountDateLabel(source.lastSyncedAt, english)
                           : english
                             ? "No sync yet"
                             : "还没有同步"

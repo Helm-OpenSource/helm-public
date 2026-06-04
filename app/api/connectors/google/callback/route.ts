@@ -12,6 +12,7 @@ import {
   syncGmailConnector,
   upsertGmailConnectorFromOauth,
 } from "@/lib/connectors/google";
+import { resolveUiLocale, UI_LOCALE_COOKIE } from "@/lib/i18n/config";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -20,6 +21,8 @@ export async function GET(request: Request) {
   const error = url.searchParams.get("error");
   const cookieStore = await cookies();
   const rawState = cookieStore.get(getGoogleStateCookieName())?.value;
+  const requestLocale = resolveUiLocale(cookieStore.get(UI_LOCALE_COOKIE)?.value);
+  const requestEnglish = requestLocale === "en-US";
   cookieStore.delete(getGoogleStateCookieName());
 
   if (error) {
@@ -35,7 +38,7 @@ export async function GET(request: Request) {
     stateParam: state,
     currentUser: await getCurrentUser(),
     capability: "connectors",
-    english: true,
+    english: requestEnglish,
   });
 
   if (!callbackContext.ok) {

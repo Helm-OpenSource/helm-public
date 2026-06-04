@@ -12,6 +12,7 @@ import {
 } from "@/features/settings/formatters/labels";
 import { formatSettingsCommercialText } from "@/features/settings/display-copy";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
+import { formatProgramCatalogDateLabel } from "./billing-program-catalog-date-labels";
 import { Info } from "./settings-display";
 
 type BillingProgramCatalogData = Pick<
@@ -99,7 +100,16 @@ export function BillingProgramCatalogPanels({
                         english,
                       )}
                     />
-                    <Info label={english ? "Published at" : "发布时间"} value={formatDateLabel(program.activeTermsVersion?.publishedAt ?? program.activeTermsVersion?.effectiveFrom ?? null)} />
+                    <Info
+                      label={english ? "Published at" : "发布时间"}
+                      value={formatProgramCatalogDateLabel(
+                        program.activeTermsVersion?.publishedAt ??
+                          program.activeTermsVersion?.effectiveFrom ??
+                          null,
+                        english,
+                        formatDateLabel,
+                      )}
+                    />
                   </div>
                   <p className="mt-3 text-xs leading-6 text-[color:var(--muted-foreground)]">
                     {formatSettingsCommercialText(program.summary, english)}

@@ -30,6 +30,7 @@ import {
 import { formatDateLabel, trimText } from "@/lib/utils";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 import { CaptureResultPanel } from "@/features/conversation-capture/capture-result-panel";
+import { formatCapturePageDateLabel } from "@/features/conversation-capture/capture-page-date-labels";
 import { formatCaptureDisplayText } from "@/features/conversation-capture/display-copy";
 import { StartRecordingButton } from "@/features/conversation-capture/start-recording-button";
 
@@ -48,6 +49,8 @@ export default async function CapturePage({
   });
   const messages = getUiMessages(uiConfig.locale);
   const english = uiConfig.locale === "en-US";
+  const formatCaptureDate = (value: Date | string | null | undefined) =>
+    formatCapturePageDateLabel(value, english, formatDateLabel);
   const captureSourceLabels = getLocalizedCaptureSourceLabels(uiConfig.locale);
   const captureStatusLabels = getLocalizedCaptureStatusLabels(uiConfig.locale);
   const params = (await searchParams) ?? {};
@@ -254,7 +257,7 @@ export default async function CapturePage({
                     )}
                   </p>
                   <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[color:var(--muted-foreground)]">
-                    <span>{formatDateLabel(session.startedAt)}</span>
+                    <span>{formatCaptureDate(session.startedAt)}</span>
                     <span className="inline-flex items-center gap-1">
                       {english ? "Open result" : "查看结果"}
                       <ArrowRight className="h-3.5 w-3.5" />

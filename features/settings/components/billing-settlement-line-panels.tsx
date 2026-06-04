@@ -13,6 +13,7 @@ import {
 } from "@/features/settings/formatters/labels";
 import { formatSettingsCommercialText } from "@/features/settings/display-copy";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
+import { formatSettlementLineDateLabel } from "./billing-settlement-line-date-labels";
 import { Info } from "./settings-display";
 
 type BillingSettlementLineData = Pick<SettingsClientProps["data"], "currentSettlementBatch">;
@@ -96,9 +97,18 @@ export function BillingSettlementLinePanels({
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Info label={english ? "Amount" : "金额"} value={formatMoneyAmount(line.amountCents, line.currency)} />
-            <Info label={english ? "Approved at" : "批准时间"} value={formatDateLabel(line.approvedAt)} />
-            <Info label={english ? "Exported at" : "导出时间"} value={formatDateLabel(line.exportedAt)} />
-            <Info label={english ? "Paid at" : "支付时间"} value={formatDateLabel(line.paidAt)} />
+            <Info
+              label={english ? "Approved at" : "批准时间"}
+              value={formatSettlementLineDateLabel(line.approvedAt, english, formatDateLabel)}
+            />
+            <Info
+              label={english ? "Exported at" : "导出时间"}
+              value={formatSettlementLineDateLabel(line.exportedAt, english, formatDateLabel)}
+            />
+            <Info
+              label={english ? "Paid at" : "支付时间"}
+              value={formatSettlementLineDateLabel(line.paidAt, english, formatDateLabel)}
+            />
           </div>
           {line.notes ? (
             <p className="mt-3 text-xs leading-6 text-[color:var(--muted-foreground)]">

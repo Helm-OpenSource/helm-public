@@ -369,7 +369,7 @@ export async function generateRecommendationsForObject(input: GenerateRecommenda
     }),
   ]);
 
-  const candidates = getRecommendationCandidates({ context, evidence });
+  const candidates = getRecommendationCandidates({ context, evidence, locale });
   const preferenceSummary = summarizePreferenceSignals(preferenceSignals);
   const ranked = rankRecommendationCandidates({
     context,

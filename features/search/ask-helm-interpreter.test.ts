@@ -434,6 +434,110 @@ describe("Ask Helm read-only interpreter", () => {
     ).toBe(true);
   });
 
+  it("localizes action packet, boundary, plan, and handoff copy for English Ask Helm output", () => {
+    const response = interpretAskHelmQuery({
+      rawQuery: "send renewal email to Atlas now",
+      english: true,
+      relatedObjects: [
+        {
+          objectType: "company",
+          objectId: "company_1",
+          displayName: "Atlas",
+          status: "active",
+          deepLink: "/companies/company_1",
+        },
+      ],
+      memorySummary: ["Atlas asked for the renewal position this week."],
+      workspaceContext: {
+        workspaceSlug: "demo",
+        membershipRole: "member",
+      },
+    });
+
+    expect(response.classification.intentType).toBe("review_required_execution");
+    expect(response.answer.summary).toBe(
+      "This request requires review and cannot be executed directly by Ask Helm.",
+    );
+    expect(response.boundaryNote?.message).toContain("review packet");
+    expect(response.nextStep.primary.label).toBe("Open review page");
+    expect(response.plan?.summary).toBe(
+      "Downgrade the high-risk execution request into a review plan.",
+    );
+    expect(response.preparedArtifact?.title).toBe("Review packet");
+    expect(response.actionHandoff?.label).toBe("Open review page");
+    expect(response.actionPacket).toMatchObject({
+      summary: "Downgrade the high-risk execution request into an evidence-backed review packet for \"Atlas\".",
+      evidenceRefs: expect.arrayContaining([
+        expect.objectContaining({
+          label: "User question",
+        }),
+        expect.objectContaining({
+          note: "Current workspace session and enabled capability context.",
+        }),
+        expect.objectContaining({
+          label: "Execution boundary",
+        }),
+      ]),
+      risks: expect.arrayContaining([
+        expect.objectContaining({
+          label: "High-risk execution downgraded to review",
+          note: "Sending, approval, commitment, payment, or official writeback must be confirmed by a human on the corresponding page.",
+        }),
+      ]),
+      reviewChecklist: expect.arrayContaining([
+        "Confirm every object, business signal, and memory came from the current workspace.",
+        "Confirm this entry has no permission to send, approve, pay, commit, or write official state.",
+      ]),
+    });
+    expect(JSON.stringify(response)).not.toMatch(/[\u4e00-\u9fff]/u);
+  });
+
+  it("keeps representative English Ask Helm intents free of Chinese fallback copy", () => {
+    const relatedObjects = [
+      {
+        objectType: "opportunity" as const,
+        objectId: "opp_1",
+        displayName: "Atlas renewal",
+        status: "active",
+        deepLink: "/opportunities?opportunityId=opp_1",
+      },
+    ];
+    const samples = [
+      "find Atlas renewal",
+      "what is the difference between approval and memory",
+      "how do i use approvals",
+      "what should i work on first today",
+      "why is Atlas blocked",
+      "why did helm recommend this renewal",
+      "prepare message for Atlas",
+      "review packet for Atlas",
+      "queue follow-up for Atlas",
+      "handoff Atlas renewal",
+      "run this plan for Atlas",
+      "send renewal email to Atlas now",
+      "report business signal risk",
+      "latest news about Tesla",
+      "another workspace renewal status",
+      "tell me a joke",
+      "random personal note",
+    ];
+
+    for (const rawQuery of samples) {
+      const response = interpretAskHelmQuery({
+        rawQuery,
+        english: true,
+        relatedObjects,
+        memorySummary: ["Atlas asked for the renewal position this week."],
+        workspaceContext: {
+          workspaceSlug: "demo",
+          membershipRole: "member",
+        },
+      });
+
+      expect(JSON.stringify(response), rawQuery).not.toMatch(/[\u4e00-\u9fff]/u);
+    }
+  });
+
   it("surfaces missing grounded object instead of pretending a draft is sendable", () => {
     const response = interpretAskHelmQuery({
       rawQuery: "准备一封给星河连锁的跟进邮件草稿",

@@ -20,6 +20,7 @@ import {
   runMeetingOfficialWriteIntentRuntimeAction,
   updateMeetingOfficialFollowThroughAction,
 } from "@/features/meetings/actions";
+import { formatMeetingOfficialWriteDateLabel } from "@/features/meetings/meeting-v2-official-write-date-labels";
 import type {
   LimitedAutoIntentRuntimeItem,
   LimitedAutoReviewMode,
@@ -36,6 +37,10 @@ type MeetingV2OfficialWriteCardProps = {
   meetingId: string;
   runtime: OfficialWriteRuntimeSummary | null;
 };
+
+function formatOfficialWriteDate(value: Date | string | null | undefined, english: boolean) {
+  return formatMeetingOfficialWriteDateLabel(value, english, formatDateLabel);
+}
 
 function renderStatusVariant(status: string) {
   if (status.includes("FAILURE") || status.includes("REJECTED") || status.includes("BLOCKED")) return "danger" as const;
@@ -358,9 +363,9 @@ function LimitedAutoIntentPanel({
 
       {(limitedAutoIntent.approvedAt || limitedAutoIntent.attemptedAt || limitedAutoIntent.acknowledgedAt) ? (
         <div className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
-          {limitedAutoIntent.approvedAt ? <p>{english ? "limited auto approved" : "限定自动已批准"}: {formatDateLabel(limitedAutoIntent.approvedAt)}</p> : null}
-          {limitedAutoIntent.attemptedAt ? <p>{english ? "limited auto attempted" : "限定自动已尝试"}: {formatDateLabel(limitedAutoIntent.attemptedAt)}</p> : null}
-          {limitedAutoIntent.acknowledgedAt ? <p>{english ? "limited auto acknowledged" : "限定自动已确认"}: {formatDateLabel(limitedAutoIntent.acknowledgedAt)}</p> : null}
+          {limitedAutoIntent.approvedAt ? <p>{english ? "limited auto approved" : "限定自动已批准"}: {formatOfficialWriteDate(limitedAutoIntent.approvedAt, english)}</p> : null}
+          {limitedAutoIntent.attemptedAt ? <p>{english ? "limited auto attempted" : "限定自动已尝试"}: {formatOfficialWriteDate(limitedAutoIntent.attemptedAt, english)}</p> : null}
+          {limitedAutoIntent.acknowledgedAt ? <p>{english ? "limited auto acknowledged" : "限定自动已确认"}: {formatOfficialWriteDate(limitedAutoIntent.acknowledgedAt, english)}</p> : null}
         </div>
       ) : null}
     </div>
@@ -511,7 +516,7 @@ function FollowThroughPanel({
             <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "current owner / due" : "当前负责人 / 截止时间"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">
               {followThrough.followThroughOwnerName ?? (english ? "unassigned" : "未分配")} ·{" "}
-              {followThrough.followThroughDeadline ? formatDateLabel(followThrough.followThroughDeadline) : english ? "no deadline" : "暂无截止时间"}
+              {followThrough.followThroughDeadline ? formatOfficialWriteDate(followThrough.followThroughDeadline, english) : english ? "no deadline" : "暂无截止时间"}
             </p>
           </div>
           <div>
@@ -576,8 +581,8 @@ function FollowThroughPanel({
 
       {(followThrough.resolvedAt || followThrough.updatedAt) ? (
         <div className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
-          {followThrough.resolvedAt ? <p>{english ? "resolved at" : "解决时间"}: {formatDateLabel(followThrough.resolvedAt)}</p> : null}
-          <p>{english ? "last updated" : "最后更新"}: {formatDateLabel(followThrough.updatedAt)}</p>
+          {followThrough.resolvedAt ? <p>{english ? "resolved at" : "解决时间"}: {formatOfficialWriteDate(followThrough.resolvedAt, english)}</p> : null}
+          <p>{english ? "last updated" : "最后更新"}: {formatOfficialWriteDate(followThrough.updatedAt, english)}</p>
           {followThrough.resolvedByName ? <p>{english ? "resolved by" : "解决人"}: {followThrough.resolvedByName}</p> : null}
         </div>
       ) : null}
@@ -734,9 +739,9 @@ function IntentCard({
 
       {(intent.approvedAt || intent.attemptedAt || intent.acknowledgedAt) ? (
         <div className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
-          {intent.approvedAt ? <p>{english ? "approved" : "已批准"}: {formatDateLabel(intent.approvedAt)}</p> : null}
-          {intent.attemptedAt ? <p>{english ? "attempted" : "已尝试"}: {formatDateLabel(intent.attemptedAt)}</p> : null}
-          {intent.acknowledgedAt ? <p>{english ? "acknowledged" : "已确认"}: {formatDateLabel(intent.acknowledgedAt)}</p> : null}
+          {intent.approvedAt ? <p>{english ? "approved" : "已批准"}: {formatOfficialWriteDate(intent.approvedAt, english)}</p> : null}
+          {intent.attemptedAt ? <p>{english ? "attempted" : "已尝试"}: {formatOfficialWriteDate(intent.attemptedAt, english)}</p> : null}
+          {intent.acknowledgedAt ? <p>{english ? "acknowledged" : "已确认"}: {formatOfficialWriteDate(intent.acknowledgedAt, english)}</p> : null}
         </div>
       ) : null}
 

@@ -21,6 +21,10 @@ import {
   type BusinessAssetJudgementChain,
 } from "@/features/business-assets/display-copy";
 import {
+  formatBusinessAssetDateLabel,
+  formatBusinessAssetRelativeLabel,
+} from "@/features/business-assets/business-asset-date-labels";
+import {
   buildCommitmentAssetHref,
   buildCustomerAssetHref,
   buildOpportunityAssetHref,
@@ -327,12 +331,12 @@ async function loadCustomerAssetModel({
       ...facts.map((item) => ({
         title: item.title,
         body: item.content,
-        meta: `${english ? "Updated" : "更新于"} ${formatDateLabel(item.updatedAt)}`,
+        meta: `${english ? "Updated" : "更新于"} ${businessAssetDateLabel(item.updatedAt, english)}`,
       })),
       ...company.memoryEntries.map((item) => ({
         title: item.title,
         body: item.content,
-        meta: `${english ? "Recorded" : "记录于"} ${formatDateLabel(item.createdAt)}`,
+        meta: `${english ? "Recorded" : "记录于"} ${businessAssetDateLabel(item.createdAt, english)}`,
       })),
     ].slice(0, 6),
     boundary: standardBoundary(english),
@@ -435,7 +439,7 @@ async function loadOpportunityAssetModel({
           ? "No dominant risk"
           : "暂无主导风险",
     summary: english
-      ? `${opportunity.company?.name ?? "No linked customer"} · ${opportunity.owner?.name ?? "Unassigned"} · updated ${formatRelative(opportunity.updatedAt)}.`
+      ? `${opportunity.company?.name ?? "No linked customer"} · ${opportunity.owner?.name ?? "Unassigned"} · updated ${businessAssetRelativeLabel(opportunity.updatedAt, english)}.`
       : `${opportunity.company?.name ?? "未关联客户"} · ${opportunity.owner?.name ?? "未分配负责人"} · ${formatRelative(opportunity.updatedAt)}更新。`,
     primaryAction: {
       label: english ? "Open handling desk" : "打开处理工作区",
@@ -447,7 +451,7 @@ async function loadOpportunityAssetModel({
     ],
     metrics: [
       { label: english ? "Owner" : "负责人", value: opportunity.owner?.name ?? (english ? "Unassigned" : "未分配") },
-      { label: english ? "Due date" : "截止时间", value: formatDateLabel(opportunity.dueDate) },
+      { label: english ? "Due date" : "截止时间", value: businessAssetDateLabel(opportunity.dueDate, english) },
       { label: english ? "Open promises" : "待兑现承诺", value: String(openCommitments.length) },
       { label: english ? "Active risks" : "待处理风险", value: String(openBlockers.length) },
     ],
@@ -512,7 +516,7 @@ async function loadOpportunityAssetModel({
       ...opportunity.meetings.slice(0, 2).map((item) => ({
         label: english ? "Meeting" : "会议",
         value: item.title,
-        description: `${english ? "Starts" : "时间"} ${formatDateLabel(item.startsAt)}`,
+        description: `${english ? "Starts" : "时间"} ${businessAssetDateLabel(item.startsAt, english)}`,
         href: `/meetings/${item.id}`,
       })),
     ].filter((item): item is BusinessAssetDetailModel["relationships"][number] => Boolean(item)),
@@ -520,12 +524,12 @@ async function loadOpportunityAssetModel({
       ...facts.map((item) => ({
         title: item.title,
         body: item.content,
-        meta: `${english ? "Updated" : "更新于"} ${formatDateLabel(item.updatedAt)}`,
+        meta: `${english ? "Updated" : "更新于"} ${businessAssetDateLabel(item.updatedAt, english)}`,
       })),
       ...opportunity.memoryEntries.map((item) => ({
         title: item.title,
         body: item.content,
-        meta: `${english ? "Recorded" : "记录于"} ${formatDateLabel(item.createdAt)}`,
+        meta: `${english ? "Recorded" : "记录于"} ${businessAssetDateLabel(item.createdAt, english)}`,
       })),
     ].slice(0, 6),
     boundary: standardBoundary(english),
@@ -603,7 +607,7 @@ async function loadCommitmentAssetModel({
       ? english
         ? "Overdue"
         : "已逾期"
-      : formatDateLabel(commitment.dueDate),
+      : businessAssetDateLabel(commitment.dueDate, english),
     summary: trimText(commitment.commitmentText, 180),
     primaryAction: {
       label: relatedObject
@@ -621,9 +625,9 @@ async function loadCommitmentAssetModel({
     ],
     metrics: [
       { label: english ? "Owner" : "负责人", value: commitment.ownerUser?.name ?? (english ? "Unassigned" : "未分配") },
-      { label: english ? "Due date" : "截止时间", value: formatDateLabel(commitment.dueDate) },
+      { label: english ? "Due date" : "截止时间", value: businessAssetDateLabel(commitment.dueDate, english) },
       { label: english ? "Confidence" : "置信度", value: `${commitment.confidence}%` },
-      { label: english ? "Updated" : "最后更新", value: formatRelative(commitment.updatedAt) },
+      { label: english ? "Updated" : "最后更新", value: businessAssetRelativeLabel(commitment.updatedAt, english) },
     ],
     judgementChain: buildBusinessAssetJudgementChain({
       english,
@@ -756,8 +760,8 @@ async function loadRiskAssetModel({
     metrics: [
       { label: english ? "Status" : "状态", value: labelSets.blockers[blocker.status] ?? blocker.status },
       { label: english ? "Pressure" : "压力", value: String(blocker.severity) },
-      { label: english ? "First seen" : "首次出现", value: formatDateLabel(blocker.firstSeenAt) },
-      { label: english ? "Updated" : "最后更新", value: formatRelative(blocker.updatedAt) },
+      { label: english ? "First seen" : "首次出现", value: businessAssetDateLabel(blocker.firstSeenAt, english) },
+      { label: english ? "Updated" : "最后更新", value: businessAssetRelativeLabel(blocker.updatedAt, english) },
     ],
     judgementChain: buildBusinessAssetJudgementChain({
       english,
@@ -827,6 +831,20 @@ function signalItem(input: {
     title: trimText(input.title, 92),
     body: trimText(input.body, 140),
   };
+}
+
+function businessAssetDateLabel(
+  value: Date | string | null | undefined,
+  english: boolean,
+) {
+  return formatBusinessAssetDateLabel(value, english, formatDateLabel);
+}
+
+function businessAssetRelativeLabel(
+  value: Date | string | null | undefined,
+  english: boolean,
+) {
+  return formatBusinessAssetRelativeLabel(value, english, formatRelative);
 }
 
 function standardBoundary(english: boolean) {

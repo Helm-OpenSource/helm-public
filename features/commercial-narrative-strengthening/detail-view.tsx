@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { UnifiedDetailNavigationPanel } from "@/components/shared/unified-detail-navigation-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatCommercialNarrativeDateLabel } from "@/features/commercial-narrative-strengthening/date-labels";
 import type {
   CommercialNarrativeStrengtheningAudienceMode,
   CommercialNarrativeStrengtheningDetailReportingContract,
@@ -37,7 +38,6 @@ import {
   formatRoleDetailEvidenceGroups,
   formatRoleDetailPageProtocol,
 } from "@/lib/presentation/role-detail-display-copy";
-import { formatDateLabel } from "@/lib/utils";
 
 type Props = {
   detail: ProposalPackageCommercialDetail;
@@ -264,7 +264,10 @@ export function CommercialNarrativeStrengtheningDetailView({
                 },
                 {
                   label: english ? "Due date" : "当前截止时间",
-                  value: formatDateLabel(detail.dueDate),
+                  value: formatCommercialNarrativeDateLabel(
+                    detail.dueDate,
+                    english,
+                  ),
                 },
               ]}
             />
