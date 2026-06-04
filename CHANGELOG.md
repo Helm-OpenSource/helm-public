@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口开源增长 7 日运营计划的中文渠道与激活术语混写；本批只改本地黄金路径、GitHub 议题 / 讨论、好议题、待办队列、议题 / PR 模板和首次改动演练文案及源码守卫，不改英文参考表格、指标定义、验证命令、Cloud / Enterprise 非承诺边界或 GitHub intake 路径。
 - 继续收口公开 Core 发布公告的中文边界术语混写；本批只改可复刻工程结构、只读黄金路径诊断、合成公开样板包、来源复核、智能体平台、大模型框架和复核优先文案及源码守卫，不改命令、路径、英文公告、社区入口、开源许可或不自动外发 / 审批 / 结算边界。
 - 继续收口公开发布节奏作业手册的中文发布路径术语混写；本批只改作业手册、公开 Core 发布、可复核 PR 和不得直接推送主干文案及源码守卫，不改 PR 路径、`main` 保护、release gate、GitHub Release、版本策略、人工回执变量或非 SLA 边界。
 - 继续收口集成模板的中文 GitHub 议题术语混写；本批只改 `integration:` 议题、发起议题和先开议题对齐方向文案及源码守卫，不改 `integration:` 字面约定、连接器安全清单、测试要求、`authMode=MOCK` 默认或可接受 PR 边界。

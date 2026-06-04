@@ -3006,7 +3006,7 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("增长负责人负责信息、渠道计划、指标读数和优先级");
     expect(chineseBody).toContain("维护者负责公开");
     expect(chineseBody).toContain("文档负责人负责 README 与文档转化修正");
-    expect(chineseBody).toContain("验证负责人负责 Golden Path 与公开守卫检查");
+    expect(chineseBody).toContain("验证负责人负责黄金路径与公开守卫检查");
     expect(chineseBody).toContain("复核者负责公开安全和非承诺复核");
     expect(chineseBody).toContain("指标摘要");
     expect(chineseBody).toContain("独立本地运行");
@@ -3019,13 +3019,15 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("结构化反馈");
     expect(chineseBody).toContain("负责人闸门下的公开叙事");
     expect(chineseBody).toContain("公开安全读数");
-    expect(chineseBody).toContain("渠道与 backlog 摘要");
-    expect(chineseBody).toContain("GitHub Discussions 是标准公开发布对话");
+    expect(chineseBody).toContain("渠道与待办队列摘要");
+    expect(chineseBody).toContain("GitHub 讨论是标准公开发布对话");
+    expect(chineseBody).toContain("待办队列优先补议题 / PR 模板");
+    expect(chineseBody).toContain("README 首次改动演练");
     expect(chineseBody).toContain("WeChat 只做人带人的社区 / 合作触达");
     expect(chineseBody).toContain("复刻改名指南");
 
     expect(chineseBody).not.toMatch(
-      /Growth lead|Metric readout|Daily growth log|Maintainer|Triage labels|Docs owner|Verification owner|Reviewer|Activation proof|Friction queue quality|Community routing|Contribution readiness|Unqualified star growth|Day 1 - Baseline|Day 7 - Readout|Canonical launch conversation|Developer social posts|Growth Backlog|Fork-and-rename guide/,
+      /Golden Path|issue \/ discussion|好 issue|backlog|walkthrough|Growth lead|Metric readout|Daily growth log|Maintainer|Triage labels|Docs owner|Verification owner|Reviewer|Activation proof|Friction queue quality|Community routing|Contribution readiness|Unqualified star growth|Day 1 - Baseline|Day 7 - Readout|Canonical launch conversation|Developer social posts|Growth Backlog|Fork-and-rename guide/,
     );
   });
 

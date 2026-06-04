@@ -38,6 +38,17 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口开源增长 7 日运营计划的中文渠道与激活术语混写；只调整本地黄金路径、
+GitHub 议题 / 讨论、好议题、待办队列、议题 / PR 模板和首次改动演练文案，不改变英文参考
+表格、指标定义、验证命令、Cloud / Enterprise 非承诺边界或 GitHub intake 路径。
+
+This round further localizes mixed Chinese channel and activation terminology in
+the open-source growth 7-day plan. It changes local Golden Path, GitHub issue /
+discussion, good issue, backlog, issue / PR template, and first-change
+walkthrough wording only, without changing the English reference tables, metric
+definitions, verification commands, Cloud / Enterprise non-commitment
+boundaries, or GitHub intake paths.
+
 本轮继续收口公开 Core 发布公告的中文边界术语混写；只调整可复刻工程结构、只读黄金路径诊断、
 合成公开样板包、来源复核、智能体平台、大模型框架和复核优先文案，不改变命令、路径、英文公告、
 社区入口、开源许可或不自动外发 / 审批 / 结算边界。
