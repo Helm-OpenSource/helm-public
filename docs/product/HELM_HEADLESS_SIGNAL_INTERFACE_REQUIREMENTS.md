@@ -79,6 +79,17 @@ Every HSI-compatible pack should be able to provide:
 | Review packet template | Evidence refs, risks, missing info, allowed next surface, forbidden actions, human reviewer requirement |
 | Implementation checklist | Source authorization, redaction owner, reviewer, rollback path, data policy posture, demo data posture |
 
+Every public Core operating signal produced from a fixture must carry at least:
+
+- `sourceRef`: stable source family and fixture reference.
+- observed time: deterministic fixture timestamp, not current wall-clock time.
+- subject: the business object or case being reviewed.
+- confidence: deterministic confidence tier from evidence posture.
+- gap fields: missing evidence, owner, follow-up, status-alignment, or boundary-review gaps.
+
+Meeting notes, email, IM, and CRM examples are all public fixtures. They are not
+live connector output and do not authorize production ingestion.
+
 ## 5. Signal Families
 
 | Family | Meaning |
@@ -100,6 +111,7 @@ Allowed:
 2. Project operating signal snapshots.
 3. Prepare review packets.
 4. Explain why a proposed action is allowed, downgraded, or forbidden.
+5. Prepare memory candidates for human review.
 
 Not allowed:
 
@@ -110,6 +122,24 @@ Not allowed:
 5. Settle payments.
 6. Auto-assign owners.
 7. Promote candidate evidence to official memory.
+
+## 6.1 Memory Candidate And Review Packet Chain
+
+Facts, commitments, blockers, risks, and opportunities may only become memory
+candidates in the public Core path. A memory candidate is not official memory,
+does not update CRM, and does not create a customer-visible commitment.
+
+A review packet must include:
+
+- evidence
+- recommendation
+- risks
+- boundaries
+- next steps
+- owner
+
+Preparing the packet is not approval, send, execution, CRM writeback, or official
+memory write. The packet stays review-first even when confidence is high.
 
 ## 7. Eval Gate
 
@@ -138,3 +168,4 @@ It does not prove:
 | Date | Change |
 |---|---|
 | 2026-06-01 | Public-safe projection restored in `helm-public` so Golden Path doctor can verify the HSI requirement anchor without importing private implementation context |
+| 2026-06-03 | Added the public Core P0 signal -> memory candidate -> review packet slice requirements and CRM fixture coverage while preserving Phase 1 offline boundaries. |

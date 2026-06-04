@@ -32,8 +32,8 @@ A public Apache-2.0 sample pack reference implementation, intended as a starting
 
 - 已有 `tenant.manifest.json` + signals / workers / bi-report manifests
 - 已有 `signals/types.ts`，固定 deterministic signal identity、tenant pinning、suggestion-only 边界
-- 已有 4 类 public sample fixtures：case / day-board / employee / qc-issue；在 owner 完成 synthetic provenance gate 前，公开口径为 synthetic public sample pack, provenance under review
-- 已有一个可运行 case mapper + Vitest，用于展示"从业务记录到 review-first signal"的最小路径
+- 已有 4 类 public sample fixtures：case / day-board / employee / qc-issue；HSI payload examples 覆盖 case system / CRM / IM / meeting / email；在 owner 完成 synthetic provenance gate 前，公开口径为 synthetic public sample pack, provenance under review
+- 已有一个可运行 case mapper + memory candidate / review packet 纯函数 + Vitest，用于展示"证据 -> 经营信号 -> 记忆候选 -> 复核行动包"的最小路径
 - 已有 worker cookbook：case allocation / case stewardship 两个纯函数 driver + Vitest
 - 已有 BI report cookbook：daily activity readout 的 query / schema / metrics / criteria / prompt / template / resource
 
@@ -57,6 +57,8 @@ extensions/case-management-sample/
 │   ├── README.md
 │   ├── types.ts
 │   ├── types.test.ts
+│   ├── review-packet.ts
+│   ├── review-packet.test.ts
 │   └── case/
 │       ├── case-mapper.ts
 │       └── case-mapper.test.ts
@@ -102,7 +104,7 @@ npm run eval:headless-signal-interface
 npm run check:public-release
 ```
 
-5. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey` 和 forbidden-action 边界。
+5. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey`、memory candidate only 和 forbidden-action 边界。
 
 不要把真实客户记录、真实邮箱、真实手机号、私有域名、内网 IP、凭据或部署信息放进本目录。
 
@@ -148,8 +150,12 @@ npm run check:public-release
 - `sourceWindowKey`
 - `signalKey`
 - `severity`
+- `sourceRef`
+- `subject`
+- `observedAt`
 - `scope`
 - `confidence`
+- `gapFields`
 - `trace`
 
 替换这些 domain 字段：
@@ -165,6 +171,8 @@ npm run check:public-release
 - `tenantKey` 必须是 literal，不允许 runtime cross-tenant projection
 - `sourceWindowKey` 必须 deterministic，不允许 UUID / random / ms timestamp
 - `commitment` 默认 `suggestion_only`，不允许 mapper 直接升级成正式承诺
+- 事实 / 承诺 / 阻塞 / 风险 / 机会只能进入 memory candidate，不允许 sample helper 写正式记忆
+- review packet 只能准备 evidence / recommendation / risks / boundaries / nextSteps / owner，不允许自动外发、审批、执行、写 CRM 或写正式记忆
 
 ## 一个完整 fixture 演示
 

@@ -131,8 +131,65 @@ Stop and open a separate review if:
 4. A sample implies auto-send, auto-approve, auto-execute, silent CRM write, or official write.
 5. A public claim depends on a pilot outcome that has not been customer-authorized.
 
-## 9. Change Log
+## 9. Public Core P0 Slice Plan
+
+Goal:
+
+- Show a deterministic chain from public fixture evidence to operating signal,
+  memory candidate, and review packet.
+- Keep every customer-visible action review-first.
+- Preserve China delivery profile defaults for Qwen, local connector posture,
+  region / residency, npm registry override, and OpenAI-only ASR.
+- Keep public examples free of customer data, credentials, deployment receipts,
+  private hosts, and production compliance claims.
+
+Impact:
+
+- `extensions/case-management-sample/`: sample signal contract, CRM fixture
+  coverage, memory candidate and review packet preparation helpers.
+- `lib/headless-signal-interface/` and `lib/delivery-engineer/`: artifact
+  validation and Golden Path doctor checks.
+- `README.md`, `docs/STATUS.md`, `CHANGELOG.md`, `.env.example`: public-safe
+  documentation and status alignment.
+
+Assumptions:
+
+- Phase 1 remains offline, deterministic, and read-only.
+- Memory output is candidate-only and cannot become official memory without a
+  separate human review path.
+- Review packet output is preparation-only and cannot send, approve, execute,
+  write CRM, or promote memory.
+- Public China profile settings are configuration posture and accessibility aids,
+  not production compliance proof.
+
+Validation:
+
+```bash
+npm run test -- extensions/case-management-sample/signals/case/case-mapper.test.ts extensions/case-management-sample/signals/review-packet.test.ts
+npm run test -- lib/headless-signal-interface/pack-artifacts.test.ts lib/delivery-engineer/golden-path-doctor.test.ts
+npm run delivery:doctor
+npm run pack:fixture-check
+npm run eval:headless-signal-interface
+npm run eval:operating-signal-flow
+npm run check:public-release
+npm run check:boundaries
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+npm run e2e
+npm run quality:regression
+```
+
+Rollback:
+
+- Revert the sample helper, fixture, doctor, and docs changes. No schema, API
+  route, external connector, production credential, or runtime side effect is
+  introduced.
+
+## 10. Change Log
 
 | Date | Change |
 |---|---|
+| 2026-06-03 | Added the public Core P0 evidence -> signal -> memory candidate -> review packet slice plan and public-safe validation scope. |
 | 2026-06-01 | Public-safe projection restored in `helm-public`; private extraction context intentionally omitted while preserving Golden Path acceptance and validation rules |
