@@ -23,7 +23,7 @@ export function SelectTrigger({
           "aria-labelledby": ariaLabelledBy,
         }
       : {
-          "aria-label": "选择选项",
+          "aria-label": "Select option / 选择选项",
         };
 
   return (

@@ -16,7 +16,7 @@ export function Switch({
           "aria-labelledby": ariaLabelledBy,
         }
       : {
-          "aria-label": "切换设置",
+          "aria-label": "Toggle setting / 切换设置",
         };
 
   return (
