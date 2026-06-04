@@ -38,6 +38,15 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 HSI 要求文档的中文离线边界术语混写；只调整托管智能体运行时和数据模式迁移文案，
+不改变 HSI 英文参考、评测命令、仅离线阶段门禁、生产连接器或不自动执行边界。
+
+This round further localizes mixed Chinese offline-boundary terminology in the
+HSI requirements doc. It changes hosted intelligent-agent runtime and
+data-schema migration wording only, without changing the HSI English reference,
+eval command, offline-only stage gate, production connectors, or
+no-auto-execution boundary.
+
 本轮继续收口 Helm Extension 目录与命名协议的中文公开 / 私有命名边界术语混写；只调整扩展 /
 样板、可复刻、公开扩展和样板、通用或合成名称、真实客户 / 租户 / 部署、私有供应商、私有域名、
 客户品牌标识、客户连接器运行时配置、联系人 / 域名 / 主机 / 部署回执文案，不改变目录示例、

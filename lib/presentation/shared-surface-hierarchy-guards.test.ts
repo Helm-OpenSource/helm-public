@@ -2574,7 +2574,7 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("公开、可复刻的契约");
     expect(chineseBody).toContain("复核优先的运营信号");
     expect(chineseBody).toContain("客户关系系统替代品");
-    expect(chineseBody).toContain("托管 agent 运行时");
+    expect(chineseBody).toContain("托管智能体运行时");
     expect(chineseBody).toContain("工作流引擎、市场");
     expect(chineseBody).toContain("执行平面");
     expect(chineseBody).toContain("公开契约只覆盖包清单");
@@ -2588,12 +2588,13 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("受控试点");
     expect(chineseBody).toContain("第一阶段保持仅离线");
     expect(chineseBody).toContain("运行时查询");
+    expect(chineseBody).toContain("数据模式迁移");
     expect(chineseBody).toContain("生产连接器");
     expect(chineseBody).toContain("正式写入");
     expect(chineseBody).toContain("大模型最终排名");
 
     expect(chineseBody).not.toMatch(
-      /Headless Signal Interface|可 fork|contract|review-first|operating signals|CRM replacement|hosted agent runtime|workflow engine|marketplace|execution plane|pack manifests|synthetic \/ redacted fixtures|deterministic eval gates|review packet preparation|boundary evidence|delivery loop|fork Helm|inspect sample pack|map source fields|safe fixtures|run HSI eval|inspect operating signal output|prepare review packet|controlled pilot|HSI contract|Phase 1|offline-only|runtime query|API route|schema migration|production connector|hosted MCP|official write|auto-send|auto-approve|auto-execute|LLM final ranking/,
+      /Headless Signal Interface|可 fork|contract|review-first|operating signals|CRM replacement|托管 agent 运行时|hosted agent runtime|workflow engine|marketplace|execution plane|pack manifests|synthetic \/ redacted fixtures|deterministic eval gates|review packet preparation|boundary evidence|delivery loop|fork Helm|inspect sample pack|map source fields|safe fixtures|run HSI eval|inspect operating signal output|prepare review packet|controlled pilot|HSI contract|Phase 1|offline-only|runtime query|API route|schema 迁移|schema migration|production connector|hosted MCP|official write|auto-send|auto-approve|auto-execute|LLM final ranking/,
     );
   });
 

@@ -16,6 +16,17 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：HSI 要求文档的中文离线边界术语混写已继续清理；本批只改托管智能体运行时和
+数据模式迁移文案及源码守卫，不改变 HSI 英文参考、评测命令、仅离线阶段门禁、生产连接器或
+不自动执行边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese offline-boundary terminology in
+the HSI requirements doc has been further localized. This batch changes hosted
+intelligent-agent runtime and data-schema migration wording plus source guards
+only; it does not change the HSI English reference, eval command, offline-only
+stage gate, production connectors, or no-auto-execution boundary, and does not
+claim full-repo bilingualization completion.
+
 最新双语化收口：Helm Extension 目录与命名协议的中文公开 / 私有命名边界术语混写已继续清理；
 本批只改扩展 / 样板、可复刻、公开扩展和样板、通用或合成名称、真实客户 / 租户 / 部署、
 私有供应商、私有域名、客户品牌标识、客户连接器运行时配置、联系人 / 域名 / 主机 / 部署回执

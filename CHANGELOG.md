@@ -8,6 +8,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 - Added the public AI recommendation governance contract.
 - Added multi-agent worktree governance rules to require workspace ownership checks, isolated worktrees for unrelated WIP, explicit staging, concern-separated PRs, and cross-repository dispatch instead of cross-repository edits.
+- 继续收口 HSI 要求文档的中文离线边界术语混写；本批只改托管智能体运行时和数据模式迁移文案及源码守卫，不改 HSI 英文参考、评测命令、仅离线阶段门禁、生产连接器或不自动执行边界。
 - 继续收口 Helm Extension 目录与命名协议的中文公开 / 私有命名边界术语混写；本批只改扩展 / 样板、可复刻、公开扩展和样板、通用或合成名称、真实客户 / 租户 / 部署、私有供应商、私有域名、客户品牌标识、客户连接器运行时配置、联系人 / 域名 / 主机 / 部署回执文案及源码守卫，不改目录示例、英文参考、私有 Overlay 归属、依赖方向或 public-docs 收录规则。
 - 继续收口 Helm for Delivery Engineers 定位文档后半段的中文上手 / 商业边界术语混写；本批只改黄金路径上手、复核优先、Docker 全新克隆、D2 冒烟回执、公开 Core 快速启动、公开安全纵向方案、客户纵向方案、可复刻工程结构、数据模式、连接器适配、授权费、智能体市场、插件商店、大模型编排平台、开放核心、商业连接器、审计 / 可观测性、建议不等于承诺和评测门禁文案及源码守卫，不改命令、链接、路径、阶段事实、商业边界或非承诺规则。
 - 继续收口 Helm for Delivery Engineers 定位文档的中文核心价值术语混写；本批只改智能体平台、大模型框架、可复刻工程结构、工具函数、纵向参考实现、建议 / 承诺边界、评测门禁、中文连接器、开放核心、价值点、发布门禁、信号模式、工作器驱动预览、BI 报告技能资产、作业指南、合成夹具、全新克隆上手、租户私有、边界不变量和脱敏检查文案及源码守卫，不改英文参考、命令、路径、协议字段、发布事实或非承诺边界。
