@@ -17,7 +17,7 @@ archive_trigger:
 
 ## 一句话定位
 
-> **Helm 不是另一个 agent 平台，也不是 LLM framework。它是一套面向企业 AI 经营推进场景、带完整边界纪律的参考实现 + 方法论，目标是让交付工程师把客户业务落地里的判断 / 证据 / 复核 / 边界 / 交付包做成可 fork 的工程结构。**
+> **Helm 不是另一个智能体平台，也不是大模型框架。它是一套面向企业 AI 经营推进场景、带完整边界纪律的参考实现 + 方法论，目标是让交付工程师把客户业务落地里的判断 / 证据 / 复核 / 边界 / 交付包做成可复刻的工程结构。**
 
 ---
 
@@ -25,8 +25,8 @@ archive_trigger:
 
 你是：
 
-- 用 Coze / 阿里悟空 / Dify / LangGraph / 通用 agent 平台**给企业客户做交付**的工程师
-- 项目周期被卡在"客户业务我不懂，agent 怎么搭"
+- 用 Coze / 阿里悟空 / Dify / LangGraph / 通用智能体平台**给企业客户做交付**的工程师
+- 项目周期被卡在"客户业务我不懂，智能体怎么搭"
 - 客户问"AI 会不会越权？建议会不会变成自动承诺？跨租户数据会不会串？" 而你需要一个**可被审计**的答案
 - 想要一个**有意见的脚手架**，不是从零拼框架
 
@@ -36,85 +36,85 @@ archive_trigger:
 
 ## 核心问题
 
-通用 agent 平台和 LLM framework 解决了**怎么搭**，没解决：
+通用智能体平台和大模型框架解决了**怎么搭**，没解决：
 
 1. **该搭什么**——企业客户真实诉求是"今天必须由谁拍板的 3 件事 + 为什么 + 边界"，不是一个聊天框
 2. **怎么不出事**——AI 越权外发 / 自动承诺 / 跨租户串数据，平台不替你扛，你的客户会替你扛
 3. **怎么交付得快**——每个客户从零建模 / 搭审批闸 / 写连接器 / 做 dashboard，你的人月被烧光
 
-Helm 把这三件事**预先编码进一个开源参考实现**。Apache-2.0，可 fork，可商用。
+Helm 把这三件事**预先编码进一个开源参考实现**。Apache-2.0，可复刻，可商用。
 
 ---
 
 ## Helm vs 其他选项
 
-|  | AI agent 平台<br/>(Coze / 悟空 / Dify) | LLM framework<br/>(LangGraph / LangChain) | **Helm** |
+|  | AI 智能体平台<br/>(Coze / 悟空 / Dify) | 大模型框架<br/>(LangGraph / LangChain) | **Helm** |
 |---|---|---|---|
-| 抽象层级 | 拖拉拽 / DAG 编辑器 | SDK + primitives | **有意见的整机 + 图纸** |
-| 给你什么 | 积木 + 配置面板 | 抽象类 + utilities | **可工作的经营推进闭环 + vertical 参考实现** |
+| 抽象层级 | 拖拉拽 / DAG 编辑器 | SDK + 基础构件 | **有意见的整机 + 图纸** |
+| 给你什么 | 积木 + 配置面板 | 抽象类 + 工具函数 | **可工作的经营推进闭环 + 纵向参考实现** |
 | 业务 domain 知识 | 你自带 | 你自带 | **内置：信号 / 案件 / 闭环 / 复核模型已建模** |
-| Advice vs Commitment 边界 | 看你怎么配 | 看你怎么写 | **eval gate 编码强约束**（`commitment: "suggestion_only"` 不可变） |
+| 建议 / 承诺边界 | 看你怎么配 | 看你怎么写 | **评测门禁编码强约束**（`commitment: "suggestion_only"` 不可变） |
 | 多租户隔离 | 平台层（黑盒） | 你自己实现 | **`Deployment Profile` + `Tenant Overlay` 四层切割已设计** |
-| 中文 connector（DingTalk / IMAP / 国内 SaaS） | 部分 | 你自己接 | **内置可工作样板** |
-| 是否可全部 fork | 产品而异（Dify 可自托管；托管平台通常锁定） | 是（无 vertical） | **是（Apache-2.0 + vertical pack）** |
-| 可 fork 的本地闭环 | 否 | 否 | **`docker compose up` + Golden Path checks** |
-| 商业模式（对你） | 平台抽成 / 走他们渠道 | 你自定价 | **open-core**：fork 商用自营，Helm 不抽成 |
-| 谁该用 | 搭对话型 agent 的人 | 搭通用 LLM 应用的人 | **做企业 AI 经营推进交付的工程师** |
+| 中文连接器（DingTalk / IMAP / 国内 SaaS） | 部分 | 你自己接 | **内置可工作样板** |
+| 是否可全部复刻 | 产品而异（Dify 可自托管；托管平台通常锁定） | 是（无纵向方案） | **是（Apache-2.0 + 纵向方案包）** |
+| 可复刻的本地闭环 | 否 | 否 | **`docker compose up` + Golden Path 检查** |
+| 商业模式（对你） | 平台抽成 / 走他们渠道 | 你自定价 | **开放核心**：复刻商用自营，Helm 不抽成 |
+| 谁该用 | 搭对话型智能体的人 | 搭通用大模型应用的人 | **做企业 AI 经营推进交付的工程师** |
 
 > 这张表对比的是**类型**，不是具体产品当下的功能清单（平台会持续演进）。差异点是抽象层级与产品形态，不是某个版本的功能勾选。[Dify 官方文档](https://docs.dify.ai/)强调其 open-source / self-hostable 形态，本表按可视化编排型 AI 应用平台比较，不把 Dify 归入闭源锁定平台。
 
 ---
 
-## 7 个可以直接复用的 value point
+## 7 个可以直接复用的价值点
 
-每条都有代码或当前 release gate 作证，不是商业承诺。
+每条都有代码或当前发布门禁作证，不是商业承诺。
 
 ### 1. 行业纵向参考实现（带电池整机）
 
-`extensions/<vertical>/` 是带电池的整机：signal schema、worker driver preview、connector、BI report skill assets。目标路径是 **fork → 改 slug → 改 schema → 跑 Golden Path 检查 → 准备受控试点复核包**；实际周期依赖客户数据源、权限、复核人和连接器可用性。
+`extensions/<vertical>/` 是带电池的整机：信号模式、工作器驱动预览、连接器、BI 报告技能资产。目标路径是 **复刻 → 改 slug → 改 schema → 跑 Golden Path 检查 → 准备受控试点复核包**；实际周期依赖客户数据源、权限、复核人和连接器可用性。
 
-v0.1 公开发布的 release gate 包含 **[`extensions/case-management-sample/`](../../extensions/case-management-sample/)** 脱敏参考 vertical（案件 / 客服 / 经营推进域）。当前已落的是最小公开参考 + worker / BI cookbook minimum slice：manifest、signal 类型、4 类 synthetic fixture、case mapper 测试、case allocation / stewardship driver cookbook、daily activity readout report skill assets。Docker / fresh-clone onboarding 的当前公开入口见 [docs/README.md](../README.md)；tenant-private 原版不在公开镜像中。
+v0.1 公开发布的发布门禁包含 **[`extensions/case-management-sample/`](../../extensions/case-management-sample/)** 脱敏参考纵向方案（案件 / 客服 / 经营推进域）。当前已落的是最小公开参考 + 工作器 / BI 作业指南最小切片：manifest、signal 类型、4 类合成夹具、case mapper 测试、case allocation / stewardship driver cookbook、daily activity readout report skill assets。Docker / 全新克隆上手的当前公开入口见 [docs/README.md](../README.md)；租户私有原版不在公开镜像中。
 
-### 2. 边界 invariants 编码到 eval gate
+### 2. 边界不变量编码到评测门禁
 
-`OPERATING_SIGNAL_ALLOWED_NEXT_ACTION_SET` 闭集、`commitment: "suggestion_only"` 写死、`crossTenantProjection: false` eval 硬拒、`raw_blocked → QUARANTINED` redaction 检查、`maxLlmTransitionCount: 0`。
+`OPERATING_SIGNAL_ALLOWED_NEXT_ACTION_SET` 闭集、`commitment: "suggestion_only"` 写死、`crossTenantProjection: false` 评测硬拒、`raw_blocked → QUARANTINED` 脱敏检查、`maxLlmTransitionCount: 0`。
 
 代码：[`lib/operating-signal-flow/contract.ts`](../../lib/operating-signal-flow/contract.ts) + [`lib/evals/operating-signal-flow-evals.ts`](../../lib/evals/operating-signal-flow-evals.ts)。
 
-客户问"AI 不会越权"时，你给他看 `npm run eval:operating-signal-flow` 的输出，不是文档承诺。**代码 + eval 是可审计证据；商业承诺仍以人工授权和合同为准**。
+客户问"AI 不会越权"时，你给他看 `npm run eval:operating-signal-flow` 的输出，不是文档承诺。**代码 + 评测是可审计证据；商业承诺仍以人工授权和合同为准**。
 
-### 3. 完整 closure loop（不是只 readout）
+### 3. 完整闭环（不是只读数）
 
-信号采集 → 归一 → 评判 → 复核 → 推动 → 回执 → 学习，22 个 state 已建模 ([`lib/operating-signal-flow/contract.ts`](../../lib/operating-signal-flow/contract.ts))。
+信号采集 → 归一 → 评判 → 复核 → 推动 → 回执 → 学习，22 个状态已建模 ([`lib/operating-signal-flow/contract.ts`](../../lib/operating-signal-flow/contract.ts))。
 
-- BI 工具卡在 readout（"看到了"）
+- BI 工具卡在读数（"看到了"）
 - 对话平台卡在对话（"聊清楚了"）
-- agent 编排卡在执行（"做了一步"）
+- 智能体编排卡在执行（"做了一步"）
 - **Helm 把闭环当一等公民**：发现 → 归责 → 复核 → 推动 → 留痕 → 学习，没有"做完一步就结束"
 
 你卖给客户的核心叙事："不是看报表，是管动作"。
 
-### 4. Opinionated worker 架构
+### 4. 有意见的工作器架构
 
-`workers/*-driver-preview/` 模板已固化"建议+审批"和"只读信号"两种 driver 接口、不可变约束、单测固化模式。做新 driver 时**模板复用**，不需要每次重新设计审批闸门、`proposalKey` 去重、`requiresApproval` 默认值。
+`workers/*-driver-preview/` 模板已固化"建议+审批"和"只读信号"两种驱动接口、不可变约束、单测固化模式。做新驱动时**模板复用**，不需要每次重新设计审批闸门、`proposalKey` 去重、`requiresApproval` 默认值。
 
-### 5. 多租户 / 多层级 / 多 connector 已设计完
+### 5. 多租户 / 多层级 / 多连接器已设计完
 
-[`lib/deployment-profile/contract.ts`](../../lib/deployment-profile/contract.ts) + [`lib/tenant-overlays/contract.ts`](../../lib/tenant-overlays/contract.ts)。open-core / cloud / enterprise / tenant-private 四层切割。
+[`lib/deployment-profile/contract.ts`](../../lib/deployment-profile/contract.ts) + [`lib/tenant-overlays/contract.ts`](../../lib/tenant-overlays/contract.ts)。开放核心 / 云托管 / 企业版 / 租户私有四层切割。
 
 不需要替客户重写多租户隔离逻辑，**省一整轮架构评审**。
 
 ### 6. 双语 + 中国本地化原生
 
-zh/en 在 contract 层（不只是翻译 README）；locale-aware projection 已做；DingTalk / IMAP / 阿里邮箱 / Qwen connector **在仓里**。
+zh/en 在契约层（不只是翻译 README）；按语言环境投影已做；DingTalk / IMAP / 阿里邮箱 / Qwen 连接器 **在仓里**。
 
 同时拿**中文交付市场和中文出海**两个场景，不必二选一。
 
-### 7. Memory + recommendation 引擎可跨 deployment 复用
+### 7. 记忆 + 推荐引擎可跨部署复用
 
-每个 deployment 的匿名化模式回流 memory 层，**越用越聪明**。这是网络效应的种子——多数 framework 没有。
+每个部署的匿名化模式回流记忆层，**越用越聪明**。这是网络效应的种子——多数框架没有。
 
-随交付商规模扩张，Helm 的 reasoning 质量本身也在提升，**你的客户被动受益**。
+随交付商规模扩张，Helm 的推理质量本身也在提升，**你的客户被动受益**。
 
 ---
 

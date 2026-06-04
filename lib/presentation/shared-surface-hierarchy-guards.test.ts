@@ -2490,6 +2490,42 @@ describe("shared surface hierarchy guards", () => {
     );
   });
 
+  it("keeps delivery-engineer positioning Chinese body localized for core value terminology", () => {
+    const positioning = read(
+      "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md",
+    );
+    const chineseBody = positioning.slice(
+      positioning.indexOf("## 一句话定位"),
+      positioning.indexOf("## Golden Path onboarding 锚点"),
+    );
+
+    expect(chineseBody).toContain("智能体平台");
+    expect(chineseBody).toContain("大模型框架");
+    expect(chineseBody).toContain("可复刻的工程结构");
+    expect(chineseBody).toContain("工具函数");
+    expect(chineseBody).toContain("纵向参考实现");
+    expect(chineseBody).toContain("建议 / 承诺边界");
+    expect(chineseBody).toContain("评测门禁");
+    expect(chineseBody).toContain("中文连接器");
+    expect(chineseBody).toContain("纵向方案包");
+    expect(chineseBody).toContain("开放核心");
+    expect(chineseBody).toContain("价值点");
+    expect(chineseBody).toContain("发布门禁");
+    expect(chineseBody).toContain("信号模式");
+    expect(chineseBody).toContain("工作器驱动预览");
+    expect(chineseBody).toContain("BI 报告技能资产");
+    expect(chineseBody).toContain("作业指南最小切片");
+    expect(chineseBody).toContain("合成夹具");
+    expect(chineseBody).toContain("全新克隆上手");
+    expect(chineseBody).toContain("租户私有");
+    expect(chineseBody).toContain("边界不变量");
+    expect(chineseBody).toContain("脱敏检查");
+
+    expect(chineseBody).not.toMatch(
+      /agent 平台|LLM framework|可 fork|utilities|vertical 参考实现|Advice vs Commitment|eval gate|中文 connector|open-core|value point|release gate|signal schema|worker driver preview|BI report skill assets|cookbook minimum slice|synthetic fixture|fresh-clone onboarding|tenant-private|invariants|redaction/,
+    );
+  });
+
   it("keeps HSI requirements Chinese body localized for review-first signal boundary terminology", () => {
     const hsiRequirements = read(
       "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",

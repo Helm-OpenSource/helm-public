@@ -16,6 +16,24 @@ This table is the public Core status baseline. It deliberately does not track
 private Pack, Overlay, or customer deployment readiness, and it is not a
 commercial release approval.
 
+最新双语化收口：Helm for Delivery Engineers 定位文档的中文核心价值术语混写已继续清理；
+本批只改智能体平台、大模型框架、可复刻工程结构、工具函数、纵向参考实现、建议 / 承诺边界、
+评测门禁、中文连接器、开放核心、价值点、发布门禁、信号模式、工作器驱动预览、BI 报告技能资产、
+作业指南、合成夹具、全新克隆上手、租户私有、边界不变量和脱敏检查文案及源码守卫，不改变
+英文参考、命令、路径、协议字段、发布事实或非承诺边界，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: mixed Chinese core-value terminology in the
+Helm for Delivery Engineers positioning doc has been further localized. This
+batch changes intelligent-agent platform, large-model framework, forkable
+engineering structure, utility functions, vertical reference implementation,
+recommendation / commitment boundary, eval gate, Chinese connectors, open core,
+value points, release gate, signal schema, worker-driver preview, BI report
+skill assets, cookbook, synthetic fixture, fresh-clone onboarding,
+tenant-private, boundary invariant, and redaction-check wording plus source
+guards only; it does not change the English reference, commands, paths,
+protocol fields, release facts, or non-commitment boundaries, and does not
+claim full-repo bilingualization completion.
+
 最新双语化收口：公开可见性 GO 决策回执的中文发布边界术语混写已继续清理；本批只改负责人 /
 创始人身份、可见性 GO、仓库可见性、最终人工动作、切换公开、标签、GitHub 预发布、GitHub
 Discussions 公告、发布门禁、完整模式、全部通过、自动步骤、人工回执、Clean History 回执、

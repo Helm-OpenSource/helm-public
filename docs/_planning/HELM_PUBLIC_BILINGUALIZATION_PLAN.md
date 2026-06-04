@@ -38,6 +38,22 @@ customer success handoff detail model, and the next batch of judgement /
 sendability detail surfaces have been further localized, but whole-project
 scans still show remaining candidates.
 
+本轮继续收口 Helm for Delivery Engineers 定位文档的中文核心价值术语混写；只调整智能体平台、
+大模型框架、可复刻工程结构、工具函数、纵向参考实现、建议 / 承诺边界、评测门禁、中文连接器、
+开放核心、价值点、发布门禁、信号模式、工作器驱动预览、BI 报告技能资产、作业指南、合成夹具、
+全新克隆上手、租户私有、边界不变量和脱敏检查文案，不改变英文参考、命令、路径、协议字段、
+发布事实或非承诺边界。
+
+This round further localizes mixed Chinese core-value terminology in the Helm
+for Delivery Engineers positioning doc. It changes intelligent-agent platform,
+large-model framework, forkable engineering structure, utility functions,
+vertical reference implementation, recommendation / commitment boundary, eval
+gate, Chinese connectors, open core, value points, release gate, signal schema,
+worker-driver preview, BI report skill assets, cookbook, synthetic fixture,
+fresh-clone onboarding, tenant-private, boundary invariant, and redaction-check
+wording only, without changing the English reference, commands, paths, protocol
+fields, release facts, or non-commitment boundaries.
+
 本轮继续收口公开可见性 GO 决策回执的中文发布边界术语混写；只调整负责人 / 创始人身份、
 可见性 GO、仓库可见性、最终人工动作、切换公开、标签、GitHub 预发布、GitHub Discussions
 公告、发布门禁、完整模式、全部通过、自动步骤、人工回执、Clean History 回执、审计缺口、
