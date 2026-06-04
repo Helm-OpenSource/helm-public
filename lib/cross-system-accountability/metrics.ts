@@ -1,4 +1,4 @@
-// Day-1 metrics (spec §10) used to test the kill-lines and moat evidence. Pure functions.
+// Day-1 metrics (spec §10) used to test kill-lines. Pure functions.
 
 import type { LedgerDecision, Verdict } from "./contracts";
 
@@ -11,7 +11,7 @@ export type GapObservation = {
   firstSeenAt: string;
 };
 
-// Kill-line 3 / moat 2. Small samples cannot support a "<10%" claim, so flag sufficiency.
+// Kill-line 3. Small samples cannot support threshold claims, so flag sufficiency.
 export function falsePositiveRate(gaps: GapObservation[], minSample = 20) {
   const flagged = gaps.filter((g) => g.verdict === "missing");
   const falsePositives = flagged.filter((g) => g.falsePositive).length;
