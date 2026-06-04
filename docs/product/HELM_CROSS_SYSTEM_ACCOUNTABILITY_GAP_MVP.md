@@ -62,7 +62,8 @@ type ExpectationRule = {
   ruleId: string;
   version: string;
   description: string;
-  trigger: { system: string; entity: string; condition: string };      // condition is non-operative metadata in v0.1
+  trigger: { system: string; entity: string };
+  triggerSlice: { scopeRef: string };  // SourceFact.sliceRef must match this scope
   expectation: { system: string; entity: string; withinDays: number; matchKey: string }; // PM, delivery_project, 7, dealId
   requiredCoverage: CoverageRequirement[]; // (system, scope) pairs that must be coverage-complete;缺一即 unknown
   ownerPolicyRef: string;              // -> EffectiveOwner 策略
@@ -72,9 +73,23 @@ type ExpectationRule = {
 };
 ```
 
-`trigger.condition` 在 v0.1 中**不是 Core 可执行谓词**。调用方必须先把 `SourceFact`
-预过滤到触发切片;public Core 只检查 `system` / `entity` 与 coverage gate。最终接口会用
-`triggerSlice.scopeRef` / `SourceFact.sliceRef` 替代这个字段。
+public Core 不解析业务谓词或表达式。调用方必须先把事实确定性投影到 `SourceFact`,并用
+`sliceRef` 声明该事实属于哪个 closed-world slice。Core 只处理 `system` / `entity` /
+`sliceRef` 与规则匹配的 trigger facts。
+
+```ts
+type SourceFact = {
+  system: string;
+  entity: string;
+  sliceRef: string;
+  factId: string;
+  matchValue: string; // deterministic projection of matchKey; fuzzy/embedding matching is forbidden
+  occurredAt: string;
+};
+```
+
+`matchValue` 必须来自确定性字段映射;public Core 禁止 fuzzy match、embedding match 或 LLM
+推断式 join。
 
 ### 4.2 `CoverageAssertion`(整数核心 / integrity core)
 ```ts
@@ -110,6 +125,7 @@ type EffectiveOwner = {
 ### 4.4 `MissingRecordDecisionRequest`(review-first;复用 decision-request 模式)
 ```ts
 type MissingRecordDecisionRequest = {
+  gapId: string;                       // stable across verdict changes
   requestId: string;
   ruleId: string; ruleVersion: string;
   triggerRef: string;                  // 触发事实(won deal),public-safe 别名
@@ -124,6 +140,9 @@ type MissingRecordDecisionRequest = {
   boundaryNote: string;
 };
 ```
+
+`gapId` / `requestId` 不随 `verdict` 改变;同一 trigger 从 `unknown` 变为 `missing`
+是状态变化,不是新 finding。
 
 ### 4.5 `AccountabilityLedgerEntry`(单租户、append-only、可审计)
 ```ts
@@ -244,7 +263,7 @@ coverage assertion、effective-owner 判定、复核后的 FP 证据、append-on
 - escalation/triage 角色如何 deterministic 配置(避免猜测责任人)?
 - ledger 哈希链锚定:签名 / append-only store / 外部时间戳?
 - FP 标注的最小样本量门槛(避免小 n 误判 <10%)?
-- 最终接口如何以 `triggerSlice.scopeRef` / `SourceFact.sliceRef` 替代 non-operative `condition`?
+- 如何在后续 PR 中允许 `scope` 与 `entity` 解耦,同时保持 coverage assertion 粒度不可偷换?
 
 ## English Reference
 
@@ -256,8 +275,9 @@ Detection is deterministic (`ExpectationRule` + `CoverageAssertion`), not AI-syn
 Coverage is the integrity core: if completeness cannot be proven, the verdict is `unknown`,
 never `missing`. Owners are resolved deterministically; an unassigned gap routes to a
 configured escalation role, never a guessed person. Everything is read-only, review-first,
-advice-only — no auto-create, dispatch, chase, write-back, send, or approval. In v0.1,
-`trigger.condition` is non-operative metadata and upstream callers must pre-filter facts.
+advice-only — no auto-create, dispatch, chase, write-back, send, or approval. The Core is
+predicate-blind: callers must provide deterministic `SourceFact.sliceRef` and `matchValue`,
+and the Core performs no fuzzy, embedding, or LLM-based joins.
 Passing this MVP proves a bounded public-safe reference kernel, not a stable pack/overlay API,
 not a cross-enterprise flywheel, and not production readiness. Kill-lines are explicit; moat
 evidence must come from later overlay audits, not from the public Core's declared system count.

@@ -39,11 +39,16 @@ export type Completeness = "complete" | "partial" | "unknown";
 // does not prove the CRM *deals* closed world. Systems alone are insufficient.
 export type CoverageRequirement = { system: string; scope: string };
 
+export type TriggerSlice = {
+  scopeRef: string;
+};
+
 export type ExpectationRule = {
   ruleId: string;
   version: string;
   description: string;
-  trigger: { system: string; entity: string; condition: string }; // non-operative metadata in v0.1; callers pre-filter SourceFacts
+  trigger: { system: string; entity: string };
+  triggerSlice: TriggerSlice;
   expectation: { system: string; entity: string; withinDays: number; matchKey: string };
   requiredCoverage: CoverageRequirement[]; // (system, scope) pairs that must be complete, else unknown
   ownerPolicyRef: string;
@@ -68,8 +73,9 @@ export type CoverageAssertion = {
 export type SourceFact = {
   system: string;
   entity: string;
+  sliceRef: string;
   factId: string;
-  matchValue: string; // value of the rule.expectation.matchKey (e.g. aliased deal id)
+  matchValue: string; // deterministic projection of rule.expectation.matchKey; fuzzy/embedding matches are forbidden
   occurredAt: string;
   ownerCandidates?: OwnerCandidate[];
 };
@@ -100,6 +106,7 @@ export type EffectiveOwner = {
 export type ReviewState = "proposed" | "accepted" | "rejected" | "deferred";
 
 export type MissingRecordDecisionRequest = {
+  gapId: string;
   requestId: string;
   ruleId: string;
   ruleVersion: string;

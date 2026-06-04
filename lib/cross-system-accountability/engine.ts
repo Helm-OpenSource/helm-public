@@ -43,13 +43,16 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
   const requests: MissingRecordDecisionRequest[] = [];
   const declaredSystems = distinctSystemsDeclared(rule);
 
-  // v0.1 is predicate-blind: rule.trigger.condition is metadata only, so callers must
-  // pre-filter triggerFacts before invoking the public Core.
   const triggers = triggerFacts.filter(
-    (t) => t.system === rule.trigger.system && t.entity === rule.trigger.entity,
+    (t) =>
+      t.system === rule.trigger.system &&
+      t.entity === rule.trigger.entity &&
+      t.sliceRef === rule.triggerSlice.scopeRef,
   );
 
   for (const trigger of triggers) {
+    const gapId = `gap:${rule.ruleId}:${trigger.factId}`;
+    const requestId = `dr:${rule.ruleId}:${trigger.factId}`;
     const coverage = evaluateCoverage({
       rule,
       assertions: coverageAssertions,
@@ -66,7 +69,8 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
     // Coverage not provable for this window => honest "unknown", never "missing".
     if (!coverage.complete) {
       requests.push({
-        requestId: `dr:${rule.ruleId}:${trigger.factId}:unknown`,
+        gapId,
+        requestId,
         ruleId: rule.ruleId,
         ruleVersion: rule.version,
         triggerRef: `evidence:trigger:${trigger.system}:${trigger.factId}`,
@@ -95,6 +99,7 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
       (e) =>
         e.system === rule.expectation.system &&
         e.entity === rule.expectation.entity &&
+        e.sliceRef === rule.expectation.entity &&
         e.matchValue === trigger.matchValue,
     );
     if (satisfied) continue; // handoff exists -> no finding
@@ -109,7 +114,8 @@ export function detectGaps(input: EngineInput): MissingRecordDecisionRequest[] {
     });
 
     requests.push({
-      requestId: `dr:${rule.ruleId}:${trigger.factId}:missing`,
+      gapId,
+      requestId,
       ruleId: rule.ruleId,
       ruleVersion: rule.version,
       triggerRef: `evidence:trigger:${trigger.system}:${trigger.factId}`,

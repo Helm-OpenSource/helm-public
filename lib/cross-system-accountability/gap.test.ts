@@ -204,6 +204,7 @@ describe("metrics", () => {
 const dealB: SourceFact = {
   system: "crm",
   entity: "deal",
+  sliceRef: "deal",
   factId: "deal-B",
   matchValue: "deal-B",
   occurredAt: "2026-05-10T00:00:00Z",
@@ -226,14 +227,43 @@ describe("P1-1 coverage must be scope-complete, not just system-complete", () =>
 
 describe("P1-2 engine respects rule entity/system streams", () => {
   it("a wrong-entity expectation fact (PM task) does not mask a missing delivery_project", () => {
-    const pmTask: SourceFact = { system: "pm", entity: "task", factId: "t1", matchValue: "deal-B", occurredAt: "2026-05-11T00:00:00Z" };
+    const pmTask: SourceFact = { system: "pm", entity: "task", sliceRef: "task", factId: "t1", matchValue: "deal-B", occurredAt: "2026-05-11T00:00:00Z" };
     const reqs = run([dealB], [pmTask], [completeCrm, completePm]);
     expect(reqs[0].verdict).toBe("missing");
   });
   it("ignores trigger facts outside the rule's trigger stream", () => {
-    const offStream: SourceFact = { system: "email", entity: "thread", factId: "th1", matchValue: "x", occurredAt: "2026-05-01T00:00:00Z" };
+    const offStream: SourceFact = { system: "email", entity: "thread", sliceRef: "thread", factId: "th1", matchValue: "x", occurredAt: "2026-05-01T00:00:00Z" };
     const reqs = run([offStream], [], [completeCrm, completePm]);
     expect(reqs).toHaveLength(0);
+  });
+  it("ignores trigger facts whose sliceRef does not match the rule triggerSlice", () => {
+    const wrongSlice: SourceFact = { ...dealB, sliceRef: "deal_all" };
+    const reqs = run([wrongSlice], [], [completeCrm, completePm]);
+    expect(reqs).toHaveLength(0);
+  });
+  it("a wrong-slice expectation fact does not mask a missing delivery_project", () => {
+    const wrongSliceProject: SourceFact = {
+      system: "pm",
+      entity: "delivery_project",
+      sliceRef: "archived_delivery_project",
+      factId: "proj-wrong",
+      matchValue: "deal-B",
+      occurredAt: "2026-05-11T00:00:00Z",
+    };
+    const reqs = run([dealB], [wrongSliceProject], [completeCrm, completePm]);
+    expect(reqs[0].verdict).toBe("missing");
+  });
+  it("uses exact deterministic matchValue equality; near matches do not satisfy the expectation", () => {
+    const nearMatchProject: SourceFact = {
+      system: "pm",
+      entity: "delivery_project",
+      sliceRef: "delivery_project",
+      factId: "proj-near",
+      matchValue: "deal-b",
+      occurredAt: "2026-05-11T00:00:00Z",
+    };
+    const reqs = run([dealB], [nearMatchProject], [completeCrm, completePm]);
+    expect(reqs[0].verdict).toBe("missing");
   });
 });
 
@@ -252,6 +282,11 @@ describe("P1-3 rule validator is fail-closed", () => {
       validateExpectationRule({ ...fixture.rule, requiredCoverage: [{ system: "crm", scope: "deal" }] }).errors,
     ).toContain("required_coverage_missing_expectation_scope");
   });
+  it("rejects a triggerSlice not covered by requiredCoverage", () => {
+    expect(
+      validateExpectationRule({ ...fixture.rule, triggerSlice: { scopeRef: "won_deal" } }).errors,
+    ).toContain("required_coverage_missing_trigger_slice");
+  });
   it("accepts the well-formed sample rule", () => {
     expect(validateExpectationRule(fixture.rule).ok).toBe(true);
   });
@@ -266,20 +301,13 @@ describe("v0.1 unstable honesty constraints", () => {
     expect(CROSS_SYSTEM_ACCOUNTABILITY_MODULE_STATUS).toBe("v0.1_unstable");
   });
 
-  it("treats trigger.condition as non-operative metadata; callers must pre-filter trigger facts", () => {
-    const alteredRule: ExpectationRule = {
-      ...fixture.rule,
-      trigger: { ...fixture.rule.trigger, condition: "stage=lost" },
-    };
-    const reqs = detectGaps({
-      rule: alteredRule,
-      triggerFacts: [dealB],
-      expectationFacts: [],
-      coverageAssertions: [completeCrm, completePm],
-      ownerPolicy: fixture.ownerPolicy,
-      now: fixture.now,
-    });
-    expect(reqs[0].verdict).toBe("missing");
-    expect(reqs[0].distinctSystemsDeclared).toBe(2);
+  it("uses stable gap identity independent of verdict", () => {
+    const missingReq = run([dealB], [], [completeCrm, completePm])[0];
+    const unknownReq = run([dealB], [], [completeCrm, { ...completePm, completeness: "partial" }])[0];
+    expect(missingReq.verdict).toBe("missing");
+    expect(unknownReq.verdict).toBe("unknown");
+    expect(missingReq.gapId).toBe(unknownReq.gapId);
+    expect(missingReq.requestId).toBe(unknownReq.requestId);
+    expect(missingReq.requestId).not.toMatch(/missing|unknown/);
   });
 });
