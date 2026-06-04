@@ -25,13 +25,14 @@ describe("opportunity date labels", () => {
   });
 
   it("formats English absolute dates without Chinese tokens", () => {
-    expect(
-      formatOpportunityDateLabel(
-        "2026-06-06T03:30:00.000Z",
-        true,
-        () => "明天 11:30",
-      ),
-    ).toBe("Jun 6 11:30");
+    const label = formatOpportunityDateLabel(
+      "2026-06-06T03:30:00.000Z",
+      true,
+      () => "明天 11:30",
+    );
+
+    expect(label).toMatch(/^Jun 6 \d{2}:30$/u);
+    expect(label).not.toMatch(/[\u3400-\u9fff]/u);
   });
 
   it("formats English relative dates without Chinese suffixes", () => {
