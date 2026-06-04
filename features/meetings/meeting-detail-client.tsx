@@ -57,12 +57,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  formatDateLabel,
-  safeParseJson,
-  toDateTimeLocalInput,
-  trimText,
-} from "@/lib/utils";
+import { safeParseJson, toDateTimeLocalInput, trimText } from "@/lib/utils";
 import {
   generateMeetingBriefing,
   generatePostMeetingActionSuggestions,
@@ -89,6 +84,7 @@ import {
   updateOpportunityFromMeetingAction,
 } from "@/features/meetings/actions";
 import { formatMeetingDisplayText } from "@/features/meetings/display-copy";
+import { formatMeetingDetailDateLabel } from "@/features/meetings/meeting-detail-date-labels";
 import { MeetingV2RuntimeCard } from "@/features/meetings/meeting-v2-runtime-card";
 import type { MeetingConnectorIngestionRetrievalSummary } from "@/lib/helm-v2/connector-ingestion-retrieval-runtime";
 import { generateMeetingBriefingAction } from "@/features/memory/actions";
@@ -1148,7 +1144,7 @@ export function MeetingDetailClient({
         eyebrow={pageStory.eyebrow}
         title={meeting.title}
         titleAs="h2"
-        description={`${pageStory.description} · ${formatDateLabel(meeting.startsAt)} · ${meeting.company?.name ?? (english ? "No linked company" : "未关联公司")}`}
+        description={`${pageStory.description} · ${formatMeetingDetailDateLabel(meeting.startsAt, english)} · ${meeting.company?.name ?? (english ? "No linked company" : "未关联公司")}`}
         actions={
           <>
             <StartRecordingButton
@@ -1345,7 +1341,7 @@ export function MeetingDetailClient({
                 </div>
                 <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                   {(english ? "Reported at: " : "汇报时间：") +
-                    formatDateLabel(item.createdAt)}
+                    formatMeetingDetailDateLabel(item.createdAt, english)}
                 </p>
                 {item.weeklySummary ? (
                   <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
@@ -2944,7 +2940,7 @@ export function MeetingDetailClient({
                         </p>
                         <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                           {(english ? "Reported at " : "汇报于 ") +
-                            formatDateLabel(item.createdAt)}
+                            formatMeetingDetailDateLabel(item.createdAt, english)}
                         </p>
                         <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[color:var(--foreground)]">
                           {trimText(item.content, 360)}
@@ -3140,7 +3136,7 @@ export function MeetingDetailClient({
                         </span>
                         <span>
                           {english ? "Due" : "截止"}：
-                          {formatDateLabel(item.dueDate)}
+                          {formatMeetingDetailDateLabel(item.dueDate, english)}
                         </span>
                         <span>
                           {english ? "Target" : "作用对象"}：
@@ -3599,7 +3595,7 @@ export function MeetingDetailClient({
                           {trimText(entry.content, 120)}
                         </p>
                         <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                          {formatDateLabel(entry.createdAt)}
+                          {formatMeetingDetailDateLabel(entry.createdAt, english)}
                         </p>
                       </Link>
                     ))
@@ -3651,7 +3647,7 @@ export function MeetingDetailClient({
                   {log.actor} · {log.actorType}
                 </p>
                 <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                  {formatDateLabel(log.createdAt)}
+                  {formatMeetingDetailDateLabel(log.createdAt, english)}
                 </p>
               </div>
             ))
