@@ -313,7 +313,8 @@ bilingualization completion.
 最新双语化收口：Solution Extension 协议的中文公开扩展边界术语混写已继续清理；本批只改公开 Core
 版本、通用扩展、私有客户 overlay、结算逻辑、私有交付作业手册、复核优先、有界方案扩展层、
 领域特定界面、报告资产、有界运行时适配器、市场、插件沙箱、结算通道、客户交付项目跟踪器、
-自动对外发送权限、通用 / 合成名称、合成 / 脱敏夹具和复核优先边界文案及源码守卫，不改变扩展协议、
+自动对外发送权限、通用 / 合成名称、合成 / 脱敏夹具、复核优先边界、复核姿态、工程交付复核
+和邀请 / 复核判断文案及源码守卫，不改变扩展协议、
 目录命名规则、私有客户定制边界或 Core / Pack / Overlay 依赖方向，也不声明全仓双语化完成。
 
 Latest bilingualization cleanup: mixed Chinese public-extension boundary
@@ -323,7 +324,8 @@ settlement logic, private delivery runbook, review-first, bounded
 solution-extension layer, domain-specific surface, report asset, bounded
 runtime adapter, marketplace, plugin sandbox, settlement rail, customer delivery
 project tracker, automatic external-send authority, generic / synthetic names,
-synthetic / redacted fixtures, and review-first boundaries wording plus source
+synthetic / redacted fixtures, review-first boundaries, review posture,
+engineering delivery review, and invite / review judgement wording plus source
 guards only; it does not change the extension protocol, directory naming rules,
 private customer customization boundary, or Core / Pack / Overlay dependency
 direction, and does not claim full-repo bilingualization completion.

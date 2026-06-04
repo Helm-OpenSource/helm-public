@@ -2847,6 +2847,9 @@ describe("shared surface hierarchy guards", () => {
       extensionProtocol.indexOf("本文件是 Solution Extension"),
       extensionProtocol.indexOf("## English Reference"),
     );
+    const chineseMainText = extensionProtocol.slice(
+      extensionProtocol.indexOf("本文件是 Solution Extension"),
+    );
 
     expect(chineseBody).toContain("Solution Extension 协议的公开 Core 版本");
     expect(chineseBody).toContain("公开、通用的扩展");
@@ -2856,6 +2859,9 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("领域特定界面");
     expect(chineseBody).toContain("报告资产");
     expect(chineseBody).toContain("有界运行时适配器");
+    expect(chineseMainText).toContain("复核姿态");
+    expect(chineseMainText).toContain("工程交付复核");
+    expect(chineseMainText).toContain("交付 / 结算 / 邀请 / 复核");
     expect(chineseBody).toContain("不是市场");
     expect(chineseBody).toContain("插件沙箱");
     expect(chineseBody).toContain("结算通道");
@@ -2867,6 +2873,9 @@ describe("shared surface hierarchy guards", () => {
 
     expect(chineseBody).not.toMatch(
       /Solution Extension protocol|public Core version|generic 的|extension 如何|settlement logic|delivery runbook|review-first|domain-specific surfaces|fixtures、report assets|bounded runtime adapters|marketplace|plugin sandbox|settlement rail|customer delivery project tracker|external-send authority|generic \/ synthetic|synthetic \/ redacted fixtures|review-first boundaries/,
+    );
+    expect(chineseMainText).not.toMatch(
+      /review posture|engineering delivery review|invite \/ review/,
     );
   });
 

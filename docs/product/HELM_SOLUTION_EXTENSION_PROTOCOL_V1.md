@@ -158,7 +158,7 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 - 这项能力做什么
 - 输入输出是什么
-- 风险和 review posture 是什么
+- 风险和复核姿态是什么
 
 ### 6.3 这是 `Resource`，如果它主要回答
 
@@ -215,7 +215,7 @@ customer overlays and commercial Pack source are intentionally excluded.
 以下更适合被理解为 `Solution Extension surface`：
 
 - Helm 自己的 first-party internal operating extension
-- Helm 自己的 engineering delivery review
+- Helm 自己的工程交付复核
 - 某类定制开发客户的整套交付模块、页面和 operator pack
 - 某类行业 / 项目型客户的 domain-specific reporting + governance + delivery readout
 
@@ -301,7 +301,7 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 - 输入输出 contract 稳定
 - 风险边界稳定
-- review posture 稳定
+- 复核姿态稳定
 - 不依赖单一客户专属对象或结算规则
 - 在多个 extension 中可复用
 
@@ -367,7 +367,7 @@ customer overlays and commercial Pack source are intentionally excluded.
 当不确定某个东西属于哪一层时，默认先问：
 
 1. 它回答的是能力，还是一整套场景化产品面？
-2. 它的核心问题是执行，还是交付 / 结算 / invite / review？
+2. 它的核心问题是执行，还是交付 / 结算 / 邀请 / 复核？
 3. 它是否脱离单一客户和单一 host workspace 仍然成立？
 
-只要第二题答案偏向交付 / 结算 / invite / review，或第三题答案是否定，就不要直接归入 `Skill / Worker`。
+只要第二题答案偏向交付 / 结算 / 邀请 / 复核，或第三题答案是否定，就不要直接归入 `Skill / Worker`。
