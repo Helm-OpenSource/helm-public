@@ -58,8 +58,8 @@ export function CommitmentReinforcementSendabilityDetailView(
   const { detail, english, mode } = props;
   const sourceProtocol =
     mode === "reinforcement"
-      ? toCommitmentReinforcementPageReportingProtocol(props.contract)
-      : toSendabilityPageReportingProtocol(props.contract);
+      ? toCommitmentReinforcementPageReportingProtocol(props.contract, english)
+      : toSendabilityPageReportingProtocol(props.contract, english);
   const text = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);

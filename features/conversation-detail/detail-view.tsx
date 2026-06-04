@@ -48,7 +48,10 @@ export function ConversationDetailView({
   english,
   contract,
 }: Props) {
-  const sourceProtocol = toConversationDetailPageReportingProtocol(contract);
+  const sourceProtocol = toConversationDetailPageReportingProtocol(
+    contract,
+    english,
+  );
   const text = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);
