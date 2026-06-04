@@ -82,6 +82,10 @@ import {
 import { useConsoleStore } from "@/hooks/use-console-store";
 import { buildOpportunityAssetHref } from "@/features/business-assets/hrefs";
 import {
+  formatOpportunityDateLabel,
+  formatOpportunityRelativeLabel,
+} from "@/features/opportunities/opportunity-date-labels";
+import {
   getLocalizedOpportunityTypeLabels,
   getLocalizedRiskLabels,
   getLocalizedStageLabels,
@@ -350,6 +354,10 @@ export function OpportunitiesClient({
   );
   const displayOptionalText = (value: string | null | undefined) =>
     value ? displayText(value) : "";
+  const dateLabel = (value: Date | string | null | undefined) =>
+    formatOpportunityDateLabel(value, english, formatDateLabel);
+  const relativeLabel = (value: Date | string | null | undefined) =>
+    formatOpportunityRelativeLabel(value, english, formatRelative);
   const pageStory = getWorkspaceStory("opportunities", locale, demoMode);
   const typeLabels = getLocalizedOpportunityTypeLabels(locale);
   const stageLabelsByLocale = getLocalizedStageLabels(locale);
@@ -2178,8 +2186,8 @@ export function OpportunitiesClient({
                     </p>
                     <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
                       {english
-                        ? `Updated ${formatRelative(opportunity.updatedAt)}`
-                        : `最后更新 ${formatRelative(opportunity.updatedAt)}`}
+                        ? `Updated ${relativeLabel(opportunity.updatedAt)}`
+                        : `最后更新 ${relativeLabel(opportunity.updatedAt)}`}
                     </p>
                   </button>
                 ))}
@@ -2224,7 +2232,7 @@ export function OpportunitiesClient({
                   </p>
                   <p className="text-xs text-[color:var(--muted-foreground)]">
                     {(english ? "Reported at " : "汇报于 ") +
-                      formatDateLabel(item.createdAt)}
+                      dateLabel(item.createdAt)}
                   </p>
                   <p className="text-sm leading-6 text-[color:var(--muted)]">
                     {trimText(item.previewText, 140)}
@@ -2428,10 +2436,10 @@ export function OpportunitiesClient({
                       )}
                     </td>
                     <td className="py-4 pr-4 text-[color:var(--muted)]">
-                      {formatDateLabel(opportunity.dueDate)}
+                      {dateLabel(opportunity.dueDate)}
                     </td>
                     <td className="py-4 pr-4 text-[color:var(--muted)]">
-                      {formatRelative(opportunity.updatedAt)}
+                      {relativeLabel(opportunity.updatedAt)}
                     </td>
                     <td className="py-4 pr-4 text-[color:var(--muted)]">
                       {opportunity.owner?.name ??
@@ -2619,7 +2627,7 @@ export function OpportunitiesClient({
                       <div className="space-y-3">
                         <BriefLine
                           label={english ? "Latest movement" : "最近推进"}
-                          value={formatRelative(activeOpportunity.updatedAt)}
+                          value={relativeLabel(activeOpportunity.updatedAt)}
                           note={
                             english
                               ? "Estimated from the latest meaningful update."
@@ -2710,11 +2718,11 @@ export function OpportunitiesClient({
                         />
                         <DetailRow
                           label={english ? "Last updated" : "最后更新"}
-                          value={formatRelative(activeOpportunity.updatedAt)}
+                          value={relativeLabel(activeOpportunity.updatedAt)}
                         />
                         <DetailRow
                           label={english ? "Due date" : "截止时间"}
-                          value={formatDateLabel(activeOpportunity.dueDate)}
+                          value={dateLabel(activeOpportunity.dueDate)}
                         />
                       </dl>
                     </div>
@@ -3281,7 +3289,7 @@ export function OpportunitiesClient({
                               </p>
                               <p className="text-xs text-[color:var(--muted-foreground)]">
                                 {formatAttachmentSize(attachment.sizeBytes)} ·{" "}
-                                {formatDateLabel(attachment.uploadedAt)}
+                                {dateLabel(attachment.uploadedAt)}
                               </p>
                             </div>
                             <Paperclip className="h-4 w-4 text-[color:var(--muted-foreground)]" />
@@ -3375,7 +3383,7 @@ export function OpportunitiesClient({
                   </p>
                   <p>
                     {english ? "Last updated" : "最后更新时间"}：
-                    {formatDateLabel(activeOpportunity.updatedAt)}
+                    {dateLabel(activeOpportunity.updatedAt)}
                   </p>
                 </div>
               </div>
@@ -3458,8 +3466,8 @@ export function OpportunitiesClient({
                         </p>
                         <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                           {english
-                            ? `Confidence ${fact.confidence} · ${formatDateLabel(fact.updatedAt)}`
-                            : `置信度 ${fact.confidence} · ${formatDateLabel(fact.updatedAt)}`}
+                            ? `Confidence ${fact.confidence} · ${dateLabel(fact.updatedAt)}`
+                            : `置信度 ${fact.confidence} · ${dateLabel(fact.updatedAt)}`}
                         </p>
                       </div>
                     ))
@@ -3590,6 +3598,10 @@ function OpportunityCard({
 }) {
   const { locale } = useWorkspaceUi();
   const english = locale === "en-US";
+  const dateLabel = (value: Date | string | null | undefined) =>
+    formatOpportunityDateLabel(value, english, formatDateLabel);
+  const relativeLabel = (value: Date | string | null | undefined) =>
+    formatOpportunityRelativeLabel(value, english, formatRelative);
   const displayText = (value: string | null | undefined) =>
     formatOpportunityDisplayText(value ?? "", english);
   const typeLabels = getLocalizedOpportunityTypeLabels(locale);
@@ -3706,7 +3718,7 @@ function OpportunityCard({
                   </p>
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {(english ? "Reported at: " : "汇报时间：") +
-                      formatDateLabel(item.createdAt)}
+                      dateLabel(item.createdAt)}
                   </p>
                   <p className="mt-1 text-xs leading-6 text-[color:var(--muted)]">
                     {trimText(item.previewText, 120)}
@@ -3741,14 +3753,14 @@ function OpportunityCard({
           <div className="flex items-center gap-2">
             <CalendarClock className="h-3.5 w-3.5" />
             <span>
-              {english ? "Due" : "截止"}：{formatDateLabel(opportunity.dueDate)}
+              {english ? "Due" : "截止"}：{dateLabel(opportunity.dueDate)}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-3.5 w-3.5" />
             <span>
               {english ? "Updated" : "最后更新"}：
-              {formatRelative(opportunity.updatedAt)}
+              {relativeLabel(opportunity.updatedAt)}
             </span>
           </div>
         </div>
@@ -4008,6 +4020,8 @@ function buildOpportunityPayloadEvidenceGroups({
 }) {
   const evidenceText = (value: string) =>
     formatOpportunityDisplayText(value, english);
+  const dateLabel = (value: Date | string | null | undefined) =>
+    formatOpportunityDateLabel(value, english, formatDateLabel);
   const briefingSummary =
     typeof opportunity.briefingSnapshot?.payload.summary === "string"
       ? opportunity.briefingSnapshot.payload.summary
@@ -4056,8 +4070,8 @@ function buildOpportunityPayloadEvidenceGroups({
               OPPORTUNITY_PAGE_ANCHORS.actionWorkspace,
             ),
             summary: english
-              ? `Active due window: ${formatDateLabel(opportunity.dueDate)}`
-              : `当前时间窗口：${formatDateLabel(opportunity.dueDate)}`,
+              ? `Active due window: ${dateLabel(opportunity.dueDate)}`
+              : `当前时间窗口：${dateLabel(opportunity.dueDate)}`,
           }
         : undefined,
     ].filter(hasEvidenceTarget),
