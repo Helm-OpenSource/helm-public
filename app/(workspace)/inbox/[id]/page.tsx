@@ -7,10 +7,10 @@ import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
-import { formatDateLabel } from "@/lib/utils";
 import { buildInboxDetailPageModel } from "@/features/inbox-followup-review-request/detail-model";
 import { InboxFollowupReviewRequestDetailView } from "@/features/inbox-followup-review-request/detail-view";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatInboxDetailDateLabel } from "@/features/inbox/inbox-detail-date-labels";
 import { formatInboxMessageBody } from "@/features/inbox/message-formatting";
 
 export default async function InboxDetailPage({
@@ -108,7 +108,7 @@ export default async function InboxDetailPage({
                 <p
                   className={`text-xs ${message.isInbound ? "text-[color:var(--muted-foreground)]" : "text-[color:color-mix(in_oklab,var(--accent-foreground)_72%,transparent)]"}`}
                 >
-                  {formatDateLabel(message.sentAt)}
+                  {formatInboxDetailDateLabel(message.sentAt, english)}
                 </p>
               </div>
               <p
