@@ -346,6 +346,7 @@ export function CustomerFacingOfferExternalProposalDetailView(
                 request={text(props.contract.externalProposalPageCollaborationRequest)}
                 decisionRequest={protocol.pageDecisionRequest[0]}
                 nextSteps={props.contract.externalProposalPageCollaborationNextStep.map(text)}
+                english={english}
               />
             ) : null}
 

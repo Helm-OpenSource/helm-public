@@ -339,6 +339,7 @@ export function ProposalPackageDetailView(
                 request={text(props.contract.packagePageCollaborationRequest)}
                 decisionRequest={protocol.pageDecisionRequest[0]}
                 nextSteps={props.contract.packagePageCollaborationNextStep.map(text)}
+                english={english}
               />
             ) : null}
 
