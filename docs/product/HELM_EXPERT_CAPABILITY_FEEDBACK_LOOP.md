@@ -235,6 +235,26 @@ v0.1 必须遵守：
   后，才可标记为 public-eligible eval case。
 - de-id 失败时进入 quarantine，不得“尽力而为”放行。
 
+### 10.1 Self-Tenant Companion Bridge
+
+Self-Tenant Companion Bridge 是 v0.1 的 public-safe 配套桥，不是生产诊断运行面。
+它把已经安全投影的 `TenantHealthDashboardRow` 映射成 `JudgementPacket` 形状的
+deterministic reference output，用于 synthetic fixture 和 public eval。
+
+Gap review 结论：
+
+- 不新增第三套脱敏机制：`lib/self-tenant-health/privacy.ts` 负责租户内健康数据安全投影；
+  `EvalCasePromotion` 仍是 correction / private source 到 public-eligible eval case 的唯一晋升门。
+- `EvalCasePromotion` 只做 additive 使用；不改变 `publicEligible`、`walledFromPerformanceEval`、
+  scanner result、human signoff 或 quarantine 语义。
+- public Core 的 producer 是确定性参考 producer，不是 LLM expert。真实 LLM-backed
+  Organization Health Expert、真实 self-tenant monthly run、consent、usage / health metadata
+  属于 `helm-control-plane` 后续实现。
+- synthetic monthly diagnosis fixture 必须使用 `TenantHealthDashboardRow` /
+  `TenantHealthDashboardData` 的现有 rollup 形状，不另造 monthly diagnosis schema。
+- 本切片只允许 additive contract changes；若需要改 `JudgementPacket`、`FeedbackRecord`、
+  `EvalCasePromotion` 既有语义，必须停止并升级到 v0.2 设计评审。
+
 ## 11. 契约 / Contracts
 
 ### 11.1 `JudgementPacket`
