@@ -3,6 +3,7 @@ status: active
 owner: helm-core
 created: 2026-04-27
 review_after: 2026-07-26
+public_safety: Public-safe pilot runbook. Uses synthetic sample-pack signals and public-safe steps only; no customer data, private contacts, deployment receipts, credentials, or approval ids.
 # frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-19
 # rationale: default — no archive/dormant signal in path
 ---

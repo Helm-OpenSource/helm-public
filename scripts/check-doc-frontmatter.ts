@@ -34,6 +34,20 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 
 const REQUIRED_FIELDS = ["status", "owner", "created", "review_after"] as const;
 
+// Conditional-required fields: sensitive public subtrees must additionally
+// declare a `public_safety` frontmatter line. This makes the public-safety
+// scope an explicit, reviewable assertion (not just a convention) for docs
+// most likely to leak private/customer/commercial content if mishandled.
+const CONDITIONAL_REQUIRED: ReadonlyArray<{
+  prefix: string;
+  fields: readonly string[];
+}> = [
+  { prefix: "docs/reviews/", fields: ["public_safety"] },
+  { prefix: "docs/product/", fields: ["public_safety"] },
+  { prefix: "docs/legal/", fields: ["public_safety"] },
+  { prefix: "docs/pilot/", fields: ["public_safety"] },
+];
+
 const SKIP_PREFIXES: ReadonlyArray<string> = [
   "docs/internal/archive/",
   "docs/internal/_pii-mapping/",
@@ -119,6 +133,16 @@ function validate(rel: string): Violation | null {
   for (const field of REQUIRED_FIELDS) {
     if (!fields.has(field)) {
       reasons.push(`missing required field: ${field}`);
+    }
+  }
+  for (const rule of CONDITIONAL_REQUIRED) {
+    if (!rel.startsWith(rule.prefix)) continue;
+    for (const field of rule.fields) {
+      if (!fields.has(field)) {
+        reasons.push(
+          `missing conditional-required field for ${rule.prefix}: ${field}`,
+        );
+      }
     }
   }
   const rawStatus = fields.get("status") ?? "";
