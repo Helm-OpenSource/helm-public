@@ -46,8 +46,8 @@ import type { MeetingRuntimeSummary } from "@/lib/helm-v2/meeting-action-pack-ru
 import { buildCloseSettlementHandoffReadout } from "@/lib/helm-v2/close-settlement-handoff-readout";
 import { buildPersistedLifecycleTraceReadout } from "@/lib/helm-v2/persisted-lifecycle-trace-readout";
 import { buildTakeoverRemediationHandoffReadout } from "@/lib/helm-v2/takeover-remediation-handoff-readout";
-import { formatDateLabel } from "@/lib/utils";
 import { formatMeetingDisplayText } from "@/features/meetings/display-copy";
+import { formatMeetingRuntimeDateLabel } from "@/features/meetings/meeting-v2-runtime-date-labels";
 
 type MeetingV2RuntimeCardProps = {
   meetingId: string;
@@ -272,6 +272,8 @@ export function MeetingV2RuntimeCard({
   const { locale } = useWorkspaceUi();
   const english = locale === "en-US";
   const text = (value: string) => formatMeetingDisplayText(value, english);
+  const formatRuntimeDateLabel = (value: Date | string | null | undefined) =>
+    formatMeetingRuntimeDateLabel(value, english);
   const [pending, startTransition] = useTransition();
   const persistedLifecycleTraceReadout = runtime?.v21
     ? buildPersistedLifecycleTraceReadout(runtime.v21.debugger.persistedLifecycleTrace)
@@ -1395,7 +1397,7 @@ export function MeetingV2RuntimeCard({
                     <p className="min-w-0 text-sm font-semibold text-[color:var(--foreground)]">{english ? "Action pack preview" : "行动包预览"}</p>
                     {runtime.latestMeetingEndedEvent ? (
                       <p className="min-w-0 break-words text-xs text-[color:var(--muted-foreground)]">
-                        {english ? "latest run" : "最近运行"} · {formatDateLabel(runtime.latestMeetingEndedEvent.createdAt)}
+                        {english ? "latest run" : "最近运行"} · {formatRuntimeDateLabel(runtime.latestMeetingEndedEvent.createdAt)}
                       </p>
                     ) : null}
                   </div>
@@ -2066,7 +2068,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.operatorProgressSummary.operatorControlState,
                                 runtime.v21.operatorProgressSummary.closePostureState,
                                 runtime.v21.operatorProgressSummary.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.operatorProgressSummary.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.operatorProgressSummary.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -2114,7 +2116,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.operatorActionSummary.checkpointKey,
                                 runtime.v21.operatorActionSummary.currentOwner,
                                 runtime.v21.operatorActionSummary.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.operatorActionSummary.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.operatorActionSummary.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -2148,7 +2150,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.operatorControlSummary.benchmarkWorkflowState,
                                 runtime.v21.operatorControlSummary.benchmarkFollowThroughState,
                                 runtime.v21.operatorControlSummary.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.operatorControlSummary.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.operatorControlSummary.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -2188,7 +2190,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.environmentContract.executionSeam.posture,
                                 runtime.v21.environmentContract.executionSeam.latestSource,
                                 runtime.v21.environmentContract.executionSeam.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.environmentContract.executionSeam.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.environmentContract.executionSeam.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -2270,7 +2272,7 @@ export function MeetingV2RuntimeCard({
                               - {english ? "request" : "请求"} · {runtime.v21.benchmarkMatrix.workflow.request.state} ·{" "}
                               {runtime.v21.benchmarkMatrix.workflow.request.requestKey ?? (english ? "none" : "暂无")}
                               {runtime.v21.benchmarkMatrix.workflow.request.requestedAt
-                                ? ` · ${formatDateLabel(runtime.v21.benchmarkMatrix.workflow.request.requestedAt)}`
+                                ? ` · ${formatRuntimeDateLabel(runtime.v21.benchmarkMatrix.workflow.request.requestedAt)}`
                                 : ""}
                             </li>
                             <li>
@@ -2279,7 +2281,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.benchmarkMatrix.workflow.latestRun.benchmarkRunId ??
                                 (english ? "none" : "暂无")}
                               {runtime.v21.benchmarkMatrix.workflow.latestRun.recordedAt
-                                ? ` · ${formatDateLabel(runtime.v21.benchmarkMatrix.workflow.latestRun.recordedAt)}`
+                                ? ` · ${formatRuntimeDateLabel(runtime.v21.benchmarkMatrix.workflow.latestRun.recordedAt)}`
                                 : ""}
                             </li>
                             <li>
@@ -2287,7 +2289,7 @@ export function MeetingV2RuntimeCard({
                               {runtime.v21.benchmarkMatrix.workflow.acknowledgement.state} ·{" "}
                               {runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedBy ?? (english ? "none" : "暂无")}
                               {runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedAt
-                                ? ` · ${formatDateLabel(runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedAt)}`
+                                ? ` · ${formatRuntimeDateLabel(runtime.v21.benchmarkMatrix.workflow.acknowledgement.acknowledgedAt)}`
                                 : ""}
                             </li>
                             <li>
@@ -2297,7 +2299,7 @@ export function MeetingV2RuntimeCard({
                                 (english ? "none" : "暂无")}
                               {(runtime.v21.benchmarkMatrix.workflow.followThrough.resolvedAt ??
                                 runtime.v21.benchmarkMatrix.workflow.followThrough.requestedAt)
-                                ? ` · ${formatDateLabel(
+                                ? ` · ${formatRuntimeDateLabel(
                                     runtime.v21.benchmarkMatrix.workflow.followThrough.resolvedAt ??
                                       runtime.v21.benchmarkMatrix.workflow.followThrough.requestedAt,
                                   )}`
@@ -2307,7 +2309,7 @@ export function MeetingV2RuntimeCard({
                               <li key={item.layerId}>
                                 - {item.label} · {item.outcomeStatus} · {item.recordedGateCount}/{item.gates.length}{" "}
                                 {english ? "gate(s)" : "个闸口"}
-                                {item.latestRecordedAt ? ` · ${formatDateLabel(item.latestRecordedAt)}` : ""}
+                                {item.latestRecordedAt ? ` · ${formatRuntimeDateLabel(item.latestRecordedAt)}` : ""}
                               </li>
                             ))}
                             {!runtime.v21.benchmarkMatrix.layers.length ? (
@@ -3262,10 +3264,10 @@ export function MeetingV2RuntimeCard({
                                 debuggerView?.takeoverRequest.action ?? runtime.v21.debugger.takeoverRequest.action,
                                 debuggerView?.takeoverRequest.checkpointKey ?? runtime.v21.debugger.takeoverRequest.checkpointKey,
                                 (debuggerView?.takeoverRequest.acknowledgedAt ?? runtime.v21.debugger.takeoverRequest.acknowledgedAt)
-                                  ? formatDateLabel(debuggerView?.takeoverRequest.acknowledgedAt ?? runtime.v21.debugger.takeoverRequest.acknowledgedAt)
+                                  ? formatRuntimeDateLabel(debuggerView?.takeoverRequest.acknowledgedAt ?? runtime.v21.debugger.takeoverRequest.acknowledgedAt)
                                   : null,
                                 (debuggerView?.takeoverRequest.requestedAt ?? runtime.v21.debugger.takeoverRequest.requestedAt)
-                                  ? formatDateLabel(debuggerView?.takeoverRequest.requestedAt ?? runtime.v21.debugger.takeoverRequest.requestedAt)
+                                  ? formatRuntimeDateLabel(debuggerView?.takeoverRequest.requestedAt ?? runtime.v21.debugger.takeoverRequest.requestedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -3290,9 +3292,9 @@ export function MeetingV2RuntimeCard({
                                   debuggerView?.takeoverActivation.checkpointKey ?? runtime.v21.debugger.takeoverActivation.checkpointKey,
                                   debuggerView?.takeoverActivation.currentOwner ?? runtime.v21.debugger.takeoverActivation.currentOwner,
                                   (debuggerView?.takeoverActivation.releasedAt ?? runtime.v21.debugger.takeoverActivation.releasedAt)
-                                    ? formatDateLabel(debuggerView?.takeoverActivation.releasedAt ?? runtime.v21.debugger.takeoverActivation.releasedAt)
+                                    ? formatRuntimeDateLabel(debuggerView?.takeoverActivation.releasedAt ?? runtime.v21.debugger.takeoverActivation.releasedAt)
                                     : (debuggerView?.takeoverActivation.startedAt ?? runtime.v21.debugger.takeoverActivation.startedAt)
-                                      ? formatDateLabel(debuggerView?.takeoverActivation.startedAt ?? runtime.v21.debugger.takeoverActivation.startedAt)
+                                      ? formatRuntimeDateLabel(debuggerView?.takeoverActivation.startedAt ?? runtime.v21.debugger.takeoverActivation.startedAt)
                                       : null,
                                 ]
                                   .filter(Boolean)
@@ -3333,9 +3335,9 @@ export function MeetingV2RuntimeCard({
                                     runtime.v21.debugger.takeoverFollowThrough.action,
                                     runtime.v21.debugger.takeoverFollowThrough.checkpointKey,
                                     runtime.v21.debugger.takeoverFollowThrough.resolvedAt
-                                      ? formatDateLabel(runtime.v21.debugger.takeoverFollowThrough.resolvedAt)
+                                      ? formatRuntimeDateLabel(runtime.v21.debugger.takeoverFollowThrough.resolvedAt)
                                       : runtime.v21.debugger.takeoverFollowThrough.requestedAt
-                                        ? formatDateLabel(runtime.v21.debugger.takeoverFollowThrough.requestedAt)
+                                        ? formatRuntimeDateLabel(runtime.v21.debugger.takeoverFollowThrough.requestedAt)
                                         : null,
                                   ]
                                     .filter(Boolean)
@@ -3531,9 +3533,9 @@ export function MeetingV2RuntimeCard({
                                 : `${runThreadView?.requestPosture.acknowledgedRequestCount ?? runtime.v21.runThread.requestPosture.acknowledgedRequestCount} 个已确认请求`,
                               runThreadView?.requestPosture.latestLifecycleKind ?? runtime.v21.runThread.requestPosture.latestLifecycleKind,
                               (runThreadView?.requestPosture.latestAcknowledgedAt ?? runtime.v21.runThread.requestPosture.latestAcknowledgedAt)
-                                ? formatDateLabel(runThreadView?.requestPosture.latestAcknowledgedAt ?? runtime.v21.runThread.requestPosture.latestAcknowledgedAt)
+                                ? formatRuntimeDateLabel(runThreadView?.requestPosture.latestAcknowledgedAt ?? runtime.v21.runThread.requestPosture.latestAcknowledgedAt)
                                 : (runThreadView?.requestPosture.latestRequestedAt ?? runtime.v21.runThread.requestPosture.latestRequestedAt)
-                                  ? formatDateLabel(runThreadView?.requestPosture.latestRequestedAt ?? runtime.v21.runThread.requestPosture.latestRequestedAt)
+                                  ? formatRuntimeDateLabel(runThreadView?.requestPosture.latestRequestedAt ?? runtime.v21.runThread.requestPosture.latestRequestedAt)
                                   : null,
                             ]
                               .filter(Boolean)
@@ -3556,7 +3558,7 @@ export function MeetingV2RuntimeCard({
                               runtime.v21.runThread.resultAcknowledgement.source,
                               runtime.v21.runThread.resultAcknowledgement.referenceId,
                               runtime.v21.runThread.resultAcknowledgement.updatedAt
-                                ? formatDateLabel(runtime.v21.runThread.resultAcknowledgement.updatedAt)
+                                ? formatRuntimeDateLabel(runtime.v21.runThread.resultAcknowledgement.updatedAt)
                                 : null,
                             ]
                               .filter(Boolean)
@@ -3590,7 +3592,7 @@ export function MeetingV2RuntimeCard({
                               runtime.v21.runThread.resultFlow.latestSource,
                               runtime.v21.runThread.resultFlow.latestState,
                               runtime.v21.runThread.resultFlow.latestUpdatedAt
-                                ? formatDateLabel(runtime.v21.runThread.resultFlow.latestUpdatedAt)
+                                ? formatRuntimeDateLabel(runtime.v21.runThread.resultFlow.latestUpdatedAt)
                                 : null,
                             ]
                               .filter(Boolean)
@@ -3632,7 +3634,7 @@ export function MeetingV2RuntimeCard({
                                 </p>
                                 <p className="mt-1 leading-6">{item.summary}</p>
                                 <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                                  {[item.referenceId, formatDateLabel(item.updatedAt)].join(" · ")}
+                                  {[item.referenceId, formatRuntimeDateLabel(item.updatedAt)].join(" · ")}
                                 </p>
                               </li>
                             ))}
@@ -3663,7 +3665,7 @@ export function MeetingV2RuntimeCard({
                               runtime.v21.runThread.forwardFlow.checkpointKey,
                               runtime.v21.runThread.forwardFlow.latestLifecycleKind,
                               runtime.v21.runThread.forwardFlow.latestUpdatedAt
-                                ? formatDateLabel(runtime.v21.runThread.forwardFlow.latestUpdatedAt)
+                                ? formatRuntimeDateLabel(runtime.v21.runThread.forwardFlow.latestUpdatedAt)
                                 : null,
                             ]
                               .filter(Boolean)
@@ -3697,7 +3699,7 @@ export function MeetingV2RuntimeCard({
                               runtime.v21.runThread.closeoutFlow.currentOwner,
                               runtime.v21.runThread.closeoutFlow.checkpointKey,
                               runtime.v21.runThread.closeoutFlow.latestUpdatedAt
-                                ? formatDateLabel(runtime.v21.runThread.closeoutFlow.latestUpdatedAt)
+                                ? formatRuntimeDateLabel(runtime.v21.runThread.closeoutFlow.latestUpdatedAt)
                                 : null,
                             ]
                               .filter(Boolean)
@@ -3722,7 +3724,7 @@ export function MeetingV2RuntimeCard({
                                     item.actorName,
                                     item.checkpointKey,
                                     item.referenceId,
-                                    formatDateLabel(item.updatedAt),
+                                    formatRuntimeDateLabel(item.updatedAt),
                                   ]
                                     .filter(Boolean)
                                     .join(" · ")}
@@ -3762,7 +3764,7 @@ export function MeetingV2RuntimeCard({
                               runtime.v21.runThread.settlementFlow.currentOwner,
                               runtime.v21.runThread.settlementFlow.checkpointKey,
                               runtime.v21.runThread.settlementFlow.latestUpdatedAt
-                                ? formatDateLabel(runtime.v21.runThread.settlementFlow.latestUpdatedAt)
+                                ? formatRuntimeDateLabel(runtime.v21.runThread.settlementFlow.latestUpdatedAt)
                                 : null,
                             ]
                               .filter(Boolean)
@@ -3810,7 +3812,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeoutSummary.checkpointKey,
                                 runtime.v21.runThread.closeoutSummary.currentOwner,
                                 runtime.v21.runThread.closeoutSummary.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeoutSummary.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeoutSummary.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -3841,7 +3843,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeoutResolution.checkpointKey,
                                 runtime.v21.runThread.closeoutResolution.resolvedBy,
                                 runtime.v21.runThread.closeoutResolution.resolvedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeoutResolution.resolvedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeoutResolution.resolvedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -3899,11 +3901,11 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeoutResolutionFollowThrough.resolvedBy ??
                                   runtime.v21.runThread.closeoutResolutionFollowThrough.requestedBy,
                                 runtime.v21.runThread.closeoutResolutionFollowThrough.resolvedAt
-                                  ? formatDateLabel(
+                                  ? formatRuntimeDateLabel(
                                       runtime.v21.runThread.closeoutResolutionFollowThrough.resolvedAt,
                                     )
                                   : runtime.v21.runThread.closeoutResolutionFollowThrough.requestedAt
-                                    ? formatDateLabel(
+                                    ? formatRuntimeDateLabel(
                                         runtime.v21.runThread.closeoutResolutionFollowThrough.requestedAt,
                                       )
                                     : null,
@@ -3979,7 +3981,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeoutOutcome.checkpointKey,
                                 runtime.v21.runThread.closeoutOutcome.currentOwner,
                                 runtime.v21.runThread.closeoutOutcome.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeoutOutcome.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeoutOutcome.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -4010,9 +4012,9 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeRequest.checkpointKey,
                                 runtime.v21.runThread.closeRequest.requestedBy,
                                 runtime.v21.runThread.closeRequest.resolvedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeRequest.resolvedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeRequest.resolvedAt)
                                   : runtime.v21.runThread.closeRequest.requestedAt
-                                    ? formatDateLabel(runtime.v21.runThread.closeRequest.requestedAt)
+                                    ? formatRuntimeDateLabel(runtime.v21.runThread.closeRequest.requestedAt)
                                     : null,
                               ]
                                 .filter(Boolean)
@@ -4064,7 +4066,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeLifecycle.checkpointKey,
                                 runtime.v21.runThread.closeLifecycle.currentOwner,
                                 runtime.v21.runThread.closeLifecycle.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeLifecycle.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeLifecycle.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -4096,7 +4098,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeControl.checkpointKey,
                                 runtime.v21.runThread.closeControl.currentOwner,
                                 runtime.v21.runThread.closeControl.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeControl.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeControl.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -4130,7 +4132,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeControlFlow.checkpointKey,
                                 runtime.v21.runThread.closeControlFlow.currentOwner,
                                 runtime.v21.runThread.closeControlFlow.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeControlFlow.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeControlFlow.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -4170,7 +4172,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeDecisionFlow.checkpointKey,
                                 runtime.v21.runThread.closeDecisionFlow.currentOwner,
                                 runtime.v21.runThread.closeDecisionFlow.latestUpdatedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeDecisionFlow.latestUpdatedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeDecisionFlow.latestUpdatedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -4209,7 +4211,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeDecisionControlSummary.checkpointKey,
                                 runtime.v21.runThread.closeDecisionControlSummary.currentOwner,
                                 runtime.v21.runThread.closeDecisionControlSummary.latestUpdatedAt
-                                  ? formatDateLabel(
+                                  ? formatRuntimeDateLabel(
                                       runtime.v21.runThread.closeDecisionControlSummary
                                         .latestUpdatedAt,
                                     )
@@ -4247,7 +4249,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeResolutionSummary.checkpointKey,
                                 runtime.v21.runThread.closeResolutionSummary.currentOwner,
                                 runtime.v21.runThread.closeResolutionSummary.latestUpdatedAt
-                                  ? formatDateLabel(
+                                  ? formatRuntimeDateLabel(
                                       runtime.v21.runThread.closeResolutionSummary.latestUpdatedAt,
                                     )
                                   : null,
@@ -4287,7 +4289,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeResolutionForwardSummary.checkpointKey,
                                 runtime.v21.runThread.closeResolutionForwardSummary.currentOwner,
                                 runtime.v21.runThread.closeResolutionForwardSummary.latestUpdatedAt
-                                  ? formatDateLabel(
+                                  ? formatRuntimeDateLabel(
                                       runtime.v21.runThread.closeResolutionForwardSummary
                                         .latestUpdatedAt,
                                     )
@@ -4333,7 +4335,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeResolutionControlSummary.checkpointKey,
                                 runtime.v21.runThread.closeResolutionControlSummary.currentOwner,
                                 runtime.v21.runThread.closeResolutionControlSummary.latestUpdatedAt
-                                  ? formatDateLabel(
+                                  ? formatRuntimeDateLabel(
                                       runtime.v21.runThread.closeResolutionControlSummary
                                         .latestUpdatedAt,
                                     )
@@ -4372,7 +4374,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closePostureSummary.checkpointKey,
                                 runtime.v21.runThread.closePostureSummary.currentOwner,
                                 runtime.v21.runThread.closePostureSummary.latestUpdatedAt
-                                  ? formatDateLabel(
+                                  ? formatRuntimeDateLabel(
                                       runtime.v21.runThread.closePostureSummary.latestUpdatedAt,
                                     )
                                   : null,
@@ -4411,7 +4413,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closePostureForwardSummary.checkpointKey,
                                 runtime.v21.runThread.closePostureForwardSummary.currentOwner,
                                 runtime.v21.runThread.closePostureForwardSummary.latestUpdatedAt
-                                  ? formatDateLabel(
+                                  ? formatRuntimeDateLabel(
                                       runtime.v21.runThread.closePostureForwardSummary
                                         .latestUpdatedAt,
                                     )
@@ -4451,9 +4453,9 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.settlementReview.requestedBy,
                                 runtime.v21.runThread.settlementReview.resolvedBy,
                                 runtime.v21.runThread.settlementReview.resolvedAt
-                                  ? formatDateLabel(runtime.v21.runThread.settlementReview.resolvedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.settlementReview.resolvedAt)
                                   : runtime.v21.runThread.settlementReview.requestedAt
-                                    ? formatDateLabel(runtime.v21.runThread.settlementReview.requestedAt)
+                                    ? formatRuntimeDateLabel(runtime.v21.runThread.settlementReview.requestedAt)
                                     : null,
                               ]
                                 .filter(Boolean)
@@ -4510,7 +4512,7 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeoutConfirmation.checkpointKey,
                                 runtime.v21.runThread.closeoutConfirmation.confirmedBy,
                                 runtime.v21.runThread.closeoutConfirmation.confirmedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeoutConfirmation.confirmedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeoutConfirmation.confirmedAt)
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -4561,9 +4563,9 @@ export function MeetingV2RuntimeCard({
                                 runtime.v21.runThread.closeoutRefresh.checkpointKey,
                                 runtime.v21.runThread.closeoutRefresh.requestedBy,
                                 runtime.v21.runThread.closeoutRefresh.requestedAt
-                                  ? formatDateLabel(runtime.v21.runThread.closeoutRefresh.requestedAt)
+                                  ? formatRuntimeDateLabel(runtime.v21.runThread.closeoutRefresh.requestedAt)
                                   : runtime.v21.runThread.closeoutRefresh.resolvedAt
-                                    ? formatDateLabel(runtime.v21.runThread.closeoutRefresh.resolvedAt)
+                                    ? formatRuntimeDateLabel(runtime.v21.runThread.closeoutRefresh.resolvedAt)
                                     : null,
                               ]
                                 .filter(Boolean)
@@ -4604,7 +4606,7 @@ export function MeetingV2RuntimeCard({
                                 <p className="font-medium text-[color:var(--foreground)]">{item.label}</p>
                                 <p className="mt-1 leading-6">{item.summary}</p>
                                 <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                                  {[item.kind, item.source, item.checkpointKey, formatDateLabel(item.timestamp)]
+                                  {[item.kind, item.source, item.checkpointKey, formatRuntimeDateLabel(item.timestamp)]
                                     .filter(Boolean)
                                     .join(" · ")}
                                 </p>
@@ -4625,7 +4627,7 @@ export function MeetingV2RuntimeCard({
                                 <p className="font-medium text-[color:var(--foreground)]">{item.label}</p>
                                 <p className="mt-1 leading-6">{item.summary}</p>
                                 <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                                  {[item.kind, item.source, item.checkpointKey, formatDateLabel(item.timestamp)]
+                                  {[item.kind, item.source, item.checkpointKey, formatRuntimeDateLabel(item.timestamp)]
                                     .filter(Boolean)
                                     .join(" · ")}
                                 </p>
@@ -4675,10 +4677,10 @@ export function MeetingV2RuntimeCard({
                               humanInputRequestState,
                               runtime.v21.debugger.humanInputRequest.checkpointKey,
                               runtime.v21.debugger.humanInputRequest.acknowledgedAt
-                                ? formatDateLabel(runtime.v21.debugger.humanInputRequest.acknowledgedAt)
+                                ? formatRuntimeDateLabel(runtime.v21.debugger.humanInputRequest.acknowledgedAt)
                                 : null,
                               runtime.v21.debugger.humanInputRequest.requestedAt
-                                ? formatDateLabel(runtime.v21.debugger.humanInputRequest.requestedAt)
+                                ? formatRuntimeDateLabel(runtime.v21.debugger.humanInputRequest.requestedAt)
                                 : null,
                             ]
                               .filter(Boolean)
@@ -4746,7 +4748,7 @@ export function MeetingV2RuntimeCard({
                                 <Badge variant={renderStatusVariant(job.status)}>{job.status}</Badge>
                                 <span className="text-xs font-medium text-[color:var(--muted-foreground)]">{job.jobType}</span>
                               </div>
-                              <span className="text-xs text-[color:var(--muted-foreground)]">{formatDateLabel(job.createdAt)}</span>
+                              <span className="text-xs text-[color:var(--muted-foreground)]">{formatRuntimeDateLabel(job.createdAt)}</span>
                             </div>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{job.inputSummary}</p>
                             {job.outputSummary ? (
@@ -4830,7 +4832,7 @@ export function MeetingV2RuntimeCard({
                                 </Badge>
                               ))}
                               <span className="text-xs text-[color:var(--muted-foreground)]">
-                                {formatDateLabel(candidate.createdAt)}
+                                {formatRuntimeDateLabel(candidate.createdAt)}
                               </span>
                             </div>
                           </div>
@@ -4873,7 +4875,7 @@ export function MeetingV2RuntimeCard({
                                 <Badge variant={renderStatusVariant(job.status)}>{job.status}</Badge>
                                 <span className="text-xs font-medium text-[color:var(--muted-foreground)]">{job.jobType}</span>
                               </div>
-                              <span className="text-xs text-[color:var(--muted-foreground)]">{formatDateLabel(job.createdAt)}</span>
+                              <span className="text-xs text-[color:var(--muted-foreground)]">{formatRuntimeDateLabel(job.createdAt)}</span>
                             </div>
                             <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{job.inputSummary}</p>
                             {job.outputSummary ? (

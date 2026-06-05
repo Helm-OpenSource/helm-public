@@ -29,7 +29,8 @@ import {
   type UnifiedDetailNavigationModel,
   type UnifiedDetailNodePriority,
 } from "@/lib/presentation/unified-detail-navigation";
-import { formatDateLabel, trimText } from "@/lib/utils";
+import { trimText } from "@/lib/utils";
+import { formatCustomerSuccessDateLabel } from "@/features/customer-success-handoff/date-labels";
 import {
   buildCustomerSuccessInternalActionSpecs,
   parseCustomerSuccessInternalActionMetadata,
@@ -1669,13 +1670,13 @@ function buildRecentChanges({
             : null,
           detail.updatedAt > lastSeenAt
             ? english
-              ? `The working line was refreshed after ${formatDateLabel(lastSeenAt)} and now reads as ${formatStage(stage, true)}.`
-              : `这条工作线在 ${formatDateLabel(lastSeenAt)} 之后被刷新，当前已经转到「${formatStage(stage, false)}」。`
+              ? `The working line was refreshed after ${formatCustomerSuccessDateLabel(lastSeenAt, english)} and now reads as ${formatStage(stage, true)}.`
+              : `这条工作线在 ${formatCustomerSuccessDateLabel(lastSeenAt, english)} 之后被刷新，当前已经转到「${formatStage(stage, false)}」。`
             : null,
           signals.pendingReview && signals.pendingReview.updatedAt > lastSeenAt
             ? english
-              ? `Review pressure tightened on ${formatDateLabel(signals.pendingReview.updatedAt)}.`
-              : `复核压力在 ${formatDateLabel(signals.pendingReview.updatedAt)} 进一步收紧。`
+              ? `Review pressure tightened on ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}.`
+              : `复核压力在 ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)} 进一步收紧。`
             : null,
           signals.topBlocker && signals.topBlocker.updatedAt > lastSeenAt
             ? english
@@ -1689,14 +1690,14 @@ function buildRecentChanges({
             : null,
           signals.recentThread && signals.recentThread.updatedAt > lastSeenAt
             ? english
-              ? `The linked success inbox thread changed on ${formatDateLabel(signals.recentThread.updatedAt)}.`
-              : `关联客户成功收件箱线程在 ${formatDateLabel(signals.recentThread.updatedAt)} 后出现变化。`
+              ? `The linked success inbox thread changed on ${formatCustomerSuccessDateLabel(signals.recentThread.updatedAt, english)}.`
+              : `关联客户成功收件箱线程在 ${formatCustomerSuccessDateLabel(signals.recentThread.updatedAt, english)} 后出现变化。`
             : null,
           detail.briefingSnapshot?.generatedAt &&
           detail.briefingSnapshot.generatedAt > lastSeenAt
             ? english
-              ? `Helm refreshed the prepared framing on ${formatDateLabel(detail.briefingSnapshot.generatedAt)}.`
-              : `Helm 在 ${formatDateLabel(detail.briefingSnapshot.generatedAt)} 重新整理了已准备措辞。`
+              ? `Helm refreshed the prepared framing on ${formatCustomerSuccessDateLabel(detail.briefingSnapshot.generatedAt, english)}.`
+              : `Helm 在 ${formatCustomerSuccessDateLabel(detail.briefingSnapshot.generatedAt, english)} 重新整理了已准备措辞。`
             : null,
         ])
       : [];
@@ -1708,8 +1709,8 @@ function buildRecentChanges({
   return compactStrings([
     lastSeenAt
       ? english
-        ? `No material customer success delta has been surfaced since ${formatDateLabel(lastSeenAt)}.`
-        : `自 ${formatDateLabel(lastSeenAt)} 以来，当前还没有出现新的客户成功关键变化。`
+        ? `No material customer success delta has been surfaced since ${formatCustomerSuccessDateLabel(lastSeenAt, english)}.`
+        : `自 ${formatCustomerSuccessDateLabel(lastSeenAt, english)} 以来，当前还没有出现新的客户成功关键变化。`
       : postSendOutcome
         ? postSendOutcome.deltaSummary
         : signals.latestAudit
@@ -1724,8 +1725,8 @@ function buildRecentChanges({
       : null,
     signals.pendingReview
       ? english
-        ? `Review pressure is still open after ${formatDateLabel(signals.pendingReview.updatedAt)}.`
-        : `当前复核压力仍然开放，最近更新于 ${formatDateLabel(signals.pendingReview.updatedAt)}。`
+        ? `Review pressure is still open after ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}.`
+        : `当前复核压力仍然开放，最近更新于 ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}。`
       : signals.topBlocker
         ? english
           ? `Blocker pressure remains visible: ${trimText(signals.topBlocker.blockerText, 96)}`
@@ -1779,8 +1780,8 @@ function buildResurfaceReasons({
         : `当前仍被以下事项卡住：${trimText(signals.topBlocker.blockerText, 96)}`
       : signals.pendingReview
         ? english
-          ? `This remains waiting on the open review path last updated ${formatDateLabel(signals.pendingReview.updatedAt)}.`
-          : `当前仍在等待开放中的复核路径，最近更新于 ${formatDateLabel(signals.pendingReview.updatedAt)}。`
+          ? `This remains waiting on the open review path last updated ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}.`
+          : `当前仍在等待开放中的复核路径，最近更新于 ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}。`
         : null,
     lastSeenAt != null &&
     signals.latestAudit &&
@@ -1964,8 +1965,8 @@ function buildProcessAdvisory({
         : "这条链反复回到发送前复核，是因为当前表述还没有准备好在没有显式复核的前提下说得更实。",
       whyNow: signals.pendingReview
         ? english
-          ? `Open review pressure is still active from ${formatDateLabel(signals.pendingReview.updatedAt)}.`
-          : `开放中的复核压力仍在生效，最近更新于 ${formatDateLabel(signals.pendingReview.updatedAt)}。`
+          ? `Open review pressure is still active from ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}.`
+          : `开放中的复核压力仍在生效，最近更新于 ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}。`
         : english
           ? "The sendability posture is still review-before-send, so the next move must stay review-held."
           : "当前发送评估姿态仍是发送前复核，所以下一步必须继续停在复核挂起。",
@@ -2581,8 +2582,8 @@ function buildExternalDraftReviewOutcome({
 
   const revisionRequest = revisionTask?.reviewedBy?.name
     ? english
-      ? `${revisionTask.reviewedBy.name} requested revision on ${formatDateLabel(revisionTask.reviewedAt ?? revisionTask.updatedAt)}.`
-      : `${revisionTask.reviewedBy.name} 在 ${formatDateLabel(revisionTask.reviewedAt ?? revisionTask.updatedAt)} 要求修改当前草稿。`
+      ? `${revisionTask.reviewedBy.name} requested revision on ${formatCustomerSuccessDateLabel(revisionTask.reviewedAt ?? revisionTask.updatedAt, english)}.`
+      : `${revisionTask.reviewedBy.name} 在 ${formatCustomerSuccessDateLabel(revisionTask.reviewedAt ?? revisionTask.updatedAt, english)} 要求修改当前草稿。`
     : null;
 
   const sendHandoff = handoffTask?.reviewedBy?.name
@@ -2593,8 +2594,8 @@ function buildExternalDraftReviewOutcome({
 
   const manualSendRecorded = manualSendRecord
     ? english
-      ? `Manual send recorded by ${manualSendRecord.actor} on ${formatDateLabel(manualSendRecord.at)}.`
-      : `${manualSendRecord.actor} 已在 ${formatDateLabel(manualSendRecord.at)} 记录手动发送。`
+      ? `Manual send recorded by ${manualSendRecord.actor} on ${formatCustomerSuccessDateLabel(manualSendRecord.at, english)}.`
+      : `${manualSendRecord.actor} 已在 ${formatCustomerSuccessDateLabel(manualSendRecord.at, english)} 记录手动发送。`
     : null;
 
   const reviewPosture = revisionRequest
@@ -3003,8 +3004,8 @@ function buildBoundarySignalAfterPostSend({
     return {
       at: signals.topBlocker.updatedAt,
       summary: english
-        ? `A post-send blocker signal tightened the boundary on ${formatDateLabel(signals.topBlocker.updatedAt)}: ${trimText(signals.topBlocker.blockerText, 120)}`
-        : `当前在 ${formatDateLabel(signals.topBlocker.updatedAt)} 出现了 post-send 阻塞信号，并收紧了边界：${trimText(signals.topBlocker.blockerText, 120)}`,
+        ? `A post-send blocker signal tightened the boundary on ${formatCustomerSuccessDateLabel(signals.topBlocker.updatedAt, english)}: ${trimText(signals.topBlocker.blockerText, 120)}`
+        : `当前在 ${formatCustomerSuccessDateLabel(signals.topBlocker.updatedAt, english)} 出现了 post-send 阻塞信号，并收紧了边界：${trimText(signals.topBlocker.blockerText, 120)}`,
       text: signals.topBlocker.blockerText,
     };
   }
@@ -3013,8 +3014,8 @@ function buildBoundarySignalAfterPostSend({
     return {
       at: signals.pendingReview.updatedAt,
       summary: english
-        ? `Review pressure stayed active after the human handoff on ${formatDateLabel(signals.pendingReview.updatedAt)}.`
-        : `当前复核压力在 ${formatDateLabel(signals.pendingReview.updatedAt)} 之后仍保持活跃。`,
+        ? `Review pressure stayed active after the human handoff on ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}.`
+        : `当前复核压力在 ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)} 之后仍保持活跃。`,
       text:
         signals.pendingReview.actionItem.description ??
         signals.pendingReview.actionItem.title,
@@ -3041,8 +3042,8 @@ function findFirstMeaningfulExternalOutcome({
           at: message.sentAt,
           kind: "external-reply" as const,
           summary: english
-            ? `First meaningful external reply arrived on ${formatDateLabel(message.sentAt)}: ${trimText(message.body, 120)}`
-            : `当前第一条 meaningful external 回应在 ${formatDateLabel(message.sentAt)} 到达：${trimText(message.body, 120)}`,
+            ? `First meaningful external reply arrived on ${formatCustomerSuccessDateLabel(message.sentAt, english)}: ${trimText(message.body, 120)}`
+            : `当前第一条 meaningful external 回应在 ${formatCustomerSuccessDateLabel(message.sentAt, english)} 到达：${trimText(message.body, 120)}`,
           text: message.body,
         })),
     ),
@@ -3058,8 +3059,8 @@ function findFirstMeaningfulExternalOutcome({
         at: log.createdAt,
         kind: "account-trace" as const,
         summary: english
-          ? `First meaningful post-send outcome appeared in the account trace on ${formatDateLabel(log.createdAt)}: ${log.actor} · ${trimText(log.summary, 120)}`
-          : `当前第一条有意义的发送后结果在 ${formatDateLabel(log.createdAt)} 出现在账户轨迹中：${log.actor} · ${trimText(log.summary, 120)}`,
+          ? `First meaningful post-send outcome appeared in the account trace on ${formatCustomerSuccessDateLabel(log.createdAt, english)}: ${log.actor} · ${trimText(log.summary, 120)}`
+          : `当前第一条有意义的发送后结果在 ${formatCustomerSuccessDateLabel(log.createdAt, english)} 出现在账户轨迹中：${log.actor} · ${trimText(log.summary, 120)}`,
         text: log.summary,
       })),
   ]
@@ -3627,8 +3628,8 @@ function buildInternalActionApprovalSummary({
     : null;
   if (approvedAt && metadata?.approvedByName) {
     return english
-      ? `${metadata.approvedByName} approved internal execution on ${formatDateLabel(approvedAt)}.`
-      : `${metadata.approvedByName} 在 ${formatDateLabel(approvedAt)} 批准了内部执行。`;
+      ? `${metadata.approvedByName} approved internal execution on ${formatCustomerSuccessDateLabel(approvedAt, english)}.`
+      : `${metadata.approvedByName} 在 ${formatCustomerSuccessDateLabel(approvedAt, english)} 批准了内部执行。`;
   }
 
   if (actionItem?.status === "APPROVED") {
@@ -3658,8 +3659,8 @@ function buildInternalActionExecutionSummary({
 
   const actorLabel = metadata?.executedByName ?? "Helm AI";
   return english
-    ? `${actorLabel} executed this internally on ${formatDateLabel(executedAt)}.`
-    : `${actorLabel} 在 ${formatDateLabel(executedAt)} 完成了内部执行。`;
+    ? `${actorLabel} executed this internally on ${formatCustomerSuccessDateLabel(executedAt, english)}.`
+    : `${actorLabel} 在 ${formatCustomerSuccessDateLabel(executedAt, english)} 完成了内部执行。`;
 }
 
 type WatchTouch = {
@@ -3727,23 +3728,23 @@ function formatWatchTouchSummary(touch: WatchTouch, english: boolean) {
   if (touch.kind === "backed") {
     if (touch.isCurrentUser) {
       return english
-        ? `You backed this on ${formatDateLabel(touch.at)}.`
-        : `你在 ${formatDateLabel(touch.at)} 支持过这条线。`;
+        ? `You backed this on ${formatCustomerSuccessDateLabel(touch.at, english)}.`
+        : `你在 ${formatCustomerSuccessDateLabel(touch.at, english)} 支持过这条线。`;
     }
     return english
-      ? `${touch.actorLabel ?? "A user"} backed this on ${formatDateLabel(touch.at)}.`
-      : `${touch.actorLabel ?? "有用户"}在 ${formatDateLabel(touch.at)} 支持过这条线。`;
+      ? `${touch.actorLabel ?? "A user"} backed this on ${formatCustomerSuccessDateLabel(touch.at, english)}.`
+      : `${touch.actorLabel ?? "有用户"}在 ${formatCustomerSuccessDateLabel(touch.at, english)} 支持过这条线。`;
   }
 
   if (touch.isCurrentUser) {
     return english
-      ? `You reviewed this on ${formatDateLabel(touch.at)}.`
-      : `你在 ${formatDateLabel(touch.at)} 复核过这条线。`;
+      ? `You reviewed this on ${formatCustomerSuccessDateLabel(touch.at, english)}.`
+      : `你在 ${formatCustomerSuccessDateLabel(touch.at, english)} 复核过这条线。`;
   }
 
   return english
-    ? `${touch.actorLabel ?? "A user"} reviewed this on ${formatDateLabel(touch.at)}.`
-    : `${touch.actorLabel ?? "有用户"}在 ${formatDateLabel(touch.at)} 复核过这条线。`;
+    ? `${touch.actorLabel ?? "A user"} reviewed this on ${formatCustomerSuccessDateLabel(touch.at, english)}.`
+    : `${touch.actorLabel ?? "有用户"}在 ${formatCustomerSuccessDateLabel(touch.at, english)} 复核过这条线。`;
 }
 
 function buildHeaderLinks({
@@ -4499,8 +4500,8 @@ function buildEvidenceGroups({
             : "当前还没有审计轨迹。",
         signals.pendingReview
           ? english
-            ? `Review updated ${formatDateLabel(signals.pendingReview.updatedAt)}`
-            : `复核更新于 ${formatDateLabel(signals.pendingReview.updatedAt)}`
+            ? `Review updated ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}`
+            : `复核更新于 ${formatCustomerSuccessDateLabel(signals.pendingReview.updatedAt, english)}`
           : null,
       ]),
     },
@@ -4582,7 +4583,7 @@ function buildEvidenceGroups({
             ? "No dominant commitment trace."
             : "当前没有主导承诺轨迹。",
         detail.meetings[0]
-          ? `${detail.meetings[0].title} · ${formatDateLabel(detail.meetings[0].startsAt)}`
+          ? `${detail.meetings[0].title} · ${formatCustomerSuccessDateLabel(detail.meetings[0].startsAt, english)}`
           : english
             ? "No latest success meeting."
             : "当前没有最近客户成功会议。",
@@ -4593,10 +4594,10 @@ function buildEvidenceGroups({
       label: english ? "Historical changes" : "历史变化",
       items: compactStrings([
         english
-          ? `Opportunity updated ${formatDateLabel(detail.updatedAt)}`
-          : `机会更新于 ${formatDateLabel(detail.updatedAt)}`,
+          ? `Opportunity updated ${formatCustomerSuccessDateLabel(detail.updatedAt, english)}`
+          : `机会更新于 ${formatCustomerSuccessDateLabel(detail.updatedAt, english)}`,
         company?.memoryEntries[0]
-          ? `${company.memoryEntries[0].title} · ${formatDateLabel(company.memoryEntries[0].createdAt)}`
+          ? `${company.memoryEntries[0].title} · ${formatCustomerSuccessDateLabel(company.memoryEntries[0].createdAt, english)}`
           : null,
       ]),
     },

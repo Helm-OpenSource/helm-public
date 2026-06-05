@@ -13,6 +13,7 @@ import {
   createExternalNarrativeDetailReportingContract,
 } from "@/lib/presentation/external-narrative-detail-contract";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
+import { formatExternalNarrativeRelativeLabel } from "./date-labels";
 import { formatRelative, trimText } from "@/lib/utils";
 
 export function buildExternalNarrativeDetailPageContract({
@@ -486,7 +487,7 @@ function buildEvidenceGroups(
       label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `${topCommitment} · updated ${formatRelative(detail.updatedAt)}`
+          ? `${topCommitment} · updated ${formatExternalNarrativeRelativeLabel(detail.updatedAt, true)}`
           : `${topCommitment} · 最近更新于 ${formatRelative(detail.updatedAt)}`,
       ],
     },

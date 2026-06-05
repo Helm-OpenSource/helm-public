@@ -15,6 +15,7 @@ import {
   formatCrmImportExternalReference,
   formatCrmImportObjectType,
 } from "@/features/imports/display-copy";
+import { formatImportDateLabel } from "@/features/imports/import-date-labels";
 import { formatDateLabel } from "@/lib/utils";
 
 export function ImportConflictsClient({
@@ -250,7 +251,7 @@ export function ImportConflictsClient({
                         ? ` · ${conflict.internalObjectId}`
                         : ""
                       : ""}{" "}
-                    · {formatDateLabel(conflict.createdAt)}
+                    · {formatImportDateLabel(conflict.createdAt, english, formatDateLabel)}
                   </p>
                 </div>
                 <Badge variant="warning">{english ? "Score" : "评分"} {conflict.matchScore}</Badge>

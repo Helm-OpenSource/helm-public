@@ -35,7 +35,7 @@ import {
   formatRoleDetailEvidenceGroups,
   formatRoleDetailPageProtocol,
 } from "@/lib/presentation/role-detail-display-copy";
-import { formatDateLabel } from "@/lib/utils";
+import { formatConversationDateLabel } from "./date-labels";
 
 type Props = {
   detail: ProposalPackageCommercialDetail;
@@ -258,7 +258,7 @@ export function ConversationDetailView({
                 },
                 {
                   label: english ? "Due date" : "当前截止时间",
-                  value: formatDateLabel(detail.dueDate),
+                  value: formatConversationDateLabel(detail.dueDate, english),
                 },
               ]}
             />

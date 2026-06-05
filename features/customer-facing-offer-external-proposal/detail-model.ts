@@ -10,7 +10,11 @@ import {
   createExternalProposalPageDetailReportingContract,
 } from "@/lib/presentation/customer-facing-offer-external-proposal-detail-contract";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
-import { formatDateLabel, formatRelative, trimText } from "@/lib/utils";
+import { formatRelative, trimText } from "@/lib/utils";
+import {
+  formatOfferExternalDateLabel,
+  formatOfferExternalRelativeLabel,
+} from "./date-labels";
 
 export function buildCustomerFacingOfferPageContract({
   detail,
@@ -634,7 +638,7 @@ function buildEvidenceGroups(
               .slice(0, 2)
               .map((log) =>
                 english
-                  ? `${log.actor} · ${log.summary} · ${formatRelative(log.createdAt)}`
+                  ? `${log.actor} · ${log.summary} · ${formatOfferExternalRelativeLabel(log.createdAt, true)}`
                   : `${log.actor} · ${log.summary} · ${formatRelative(log.createdAt)}`,
               )
           : [
@@ -745,11 +749,11 @@ function buildEvidenceGroups(
       label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `Last updated ${formatRelative(detail.updatedAt)}`
+          ? `Last updated ${formatOfferExternalRelativeLabel(detail.updatedAt, true)}`
           : `最后更新于 ${formatRelative(detail.updatedAt)}`,
         english
-          ? `Current due date: ${formatDateLabel(detail.dueDate)}`
-          : `当前截止时间：${formatDateLabel(detail.dueDate)}`,
+          ? `Current due date: ${formatOfferExternalDateLabel(detail.dueDate, true)}`
+          : `当前截止时间：${formatOfferExternalDateLabel(detail.dueDate, false)}`,
       ],
     },
   ];

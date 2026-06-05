@@ -14,6 +14,7 @@ import {
   acknowledgeMeetingHumanActionExecutionAction,
   runMeetingHumanActionExecutionRuntimeAction,
 } from "@/features/meetings/actions";
+import { formatMeetingHumanExecutionDateLabel } from "@/features/meetings/meeting-v2-human-execution-date-labels";
 import type {
   HumanActionExecutionAckMode,
   HumanActionExecutionRuntimeAction,
@@ -351,7 +352,13 @@ export function MeetingV2HumanActionExecutionCard({ meetingId, runtime }: Meetin
                           {action.executedByName || action.executedAt ? (
                             <p>
                               {action.executedByName ?? (english ? "Unknown" : "未知执行人")}
-                              {action.executedAt ? ` · ${formatDateLabel(action.executedAt)}` : ""}
+                              {action.executedAt
+                                ? ` · ${formatMeetingHumanExecutionDateLabel(
+                                    action.executedAt,
+                                    english,
+                                    formatDateLabel,
+                                  )}`
+                                : ""}
                             </p>
                           ) : null}
                           {action.proofNote ? <p>{action.proofNote}</p> : null}

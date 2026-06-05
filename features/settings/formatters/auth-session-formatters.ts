@@ -1,3 +1,5 @@
+import { format } from "date-fns";
+import { enUS } from "date-fns/locale";
 import { formatDateLabel } from "@/lib/utils";
 import { formatAuthSessionProvider } from "./governance-formatters";
 
@@ -126,12 +128,18 @@ type AuthSessionAnomalyMarker = {
   anomalyScopes: AuthSessionAnomalyScope[];
 } | null;
 
-function formatOptionalDateLabel(value: Date | string | null | undefined) {
+function formatOptionalDateLabel(value: Date | string | null | undefined, english: boolean) {
   if (!value) {
     return null;
   }
 
-  return formatDateLabel(value instanceof Date ? value : new Date(value));
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (english) {
+    return format(date, "MMM d HH:mm", { locale: enUS });
+  }
+
+  return formatDateLabel(date);
 }
 
 export function formatAuthSessionRevokeScope(
@@ -451,7 +459,7 @@ export function formatAuthControlConsistencyOverview(
       : `${overview.currentSessionProtectedScopeCount} 个当前会话受保护`,
   ];
 
-  const latestDetectedLabel = formatOptionalDateLabel(overview.latestDetectedAt);
+  const latestDetectedLabel = formatOptionalDateLabel(overview.latestDetectedAt, english);
   if (latestDetectedLabel) {
     parts.push(english ? `latest anomaly ${latestDetectedLabel}` : `最近异常 ${latestDetectedLabel}`);
   }
@@ -472,7 +480,7 @@ export function formatAuthControlConsistencyOverview(
     );
   }
 
-  const latestRecordedLabel = formatOptionalDateLabel(overview.latestFollowThroughRecordedAt);
+  const latestRecordedLabel = formatOptionalDateLabel(overview.latestFollowThroughRecordedAt, english);
   if (latestRecordedLabel) {
     parts.push(english ? `recorded ${latestRecordedLabel}` : `记录于 ${latestRecordedLabel}`);
   }
@@ -507,7 +515,7 @@ export function formatLatestAuthAnomalyFollowThroughSummary(
       : `${summary.currentSessionProtectedScopeCount} 个当前会话受保护`,
   ];
 
-  const latestMarkerLabel = formatOptionalDateLabel(summary.latestMarkerRecordedAt);
+  const latestMarkerLabel = formatOptionalDateLabel(summary.latestMarkerRecordedAt, english);
   if (latestMarkerLabel) {
     parts.push(english ? `latest marker ${latestMarkerLabel}` : `最近标记 ${latestMarkerLabel}`);
   }
@@ -528,7 +536,7 @@ export function formatLatestAuthAnomalyFollowThroughSummary(
     );
   }
 
-  const latestRecordedLabel = formatOptionalDateLabel(summary.latestFollowThroughRecordedAt);
+  const latestRecordedLabel = formatOptionalDateLabel(summary.latestFollowThroughRecordedAt, english);
   if (latestRecordedLabel) {
     parts.push(english ? `recorded ${latestRecordedLabel}` : `记录于 ${latestRecordedLabel}`);
   }
@@ -566,7 +574,7 @@ export function formatLatestMarkerCoverageSummary(
       : `${summary.currentSessionProtectedScopeCount} 个当前会话受保护`,
   ];
 
-  const latestMarkerLabel = formatOptionalDateLabel(summary.latestMarkerRecordedAt);
+  const latestMarkerLabel = formatOptionalDateLabel(summary.latestMarkerRecordedAt, english);
   if (latestMarkerLabel) {
     parts.push(english ? `latest marker ${latestMarkerLabel}` : `最近标记 ${latestMarkerLabel}`);
   }
@@ -587,7 +595,7 @@ export function formatLatestMarkerCoverageSummary(
     );
   }
 
-  const latestRecordedLabel = formatOptionalDateLabel(summary.latestFollowThroughRecordedAt);
+  const latestRecordedLabel = formatOptionalDateLabel(summary.latestFollowThroughRecordedAt, english);
   if (latestRecordedLabel) {
     parts.push(english ? `recorded ${latestRecordedLabel}` : `记录于 ${latestRecordedLabel}`);
   }
@@ -630,7 +638,7 @@ export function formatRevokeExecutionAggregateSummary(
       : `${summary.currentSessionProtectedScopeCount} 个当前会话受保护`,
   ];
 
-  const latestExecutedLabel = formatOptionalDateLabel(summary.latestExecutedAt);
+  const latestExecutedLabel = formatOptionalDateLabel(summary.latestExecutedAt, english);
   if (latestExecutedLabel) {
     parts.push(english ? `latest executed ${latestExecutedLabel}` : `最近执行于 ${latestExecutedLabel}`);
   }

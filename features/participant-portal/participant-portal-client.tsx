@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { logoutAction } from "@/features/auth/actions";
 import { updateParticipantPortalProfileAction } from "@/features/participant-portal/actions";
+import { formatParticipantPortalDateLabel } from "@/features/participant-portal/participant-portal-date-labels";
 import type { ParticipantPortalData } from "@/features/participant-portal/queries";
 import { formatDateLabel } from "@/lib/utils";
 
@@ -257,8 +258,8 @@ export function ParticipantPortalClient({ locale, data }: ParticipantPortalClien
               <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <Info label={english ? "Portal status" : "门户状态"} value={portalStatusLabels[currentAccess.status][english ? "en" : "zh"]} />
                 <Info label={english ? "Invite email" : "邀请邮箱"} value={currentAccess.inviteEmail} />
-                <Info label={english ? "Terms accepted" : "条款确认"} value={currentAccess.termsAcceptedAt ? formatDateLabel(currentAccess.termsAcceptedAt) : (english ? "Pending" : "待确认")} />
-                <Info label={english ? "Activated at" : "激活时间"} value={formatDateLabel(currentAccess.activatedAt)} />
+                <Info label={english ? "Terms accepted" : "条款确认"} value={currentAccess.termsAcceptedAt ? formatParticipantPortalDateLabel(currentAccess.termsAcceptedAt, english, formatDateLabel) : (english ? "Pending" : "待确认")} />
+                <Info label={english ? "Activated at" : "激活时间"} value={formatParticipantPortalDateLabel(currentAccess.activatedAt, english, formatDateLabel)} />
                 <Info label={english ? "Beneficiary registry" : "受益方登记"} value={english ? "Registered" : "已登记"} />
               </CardContent>
             </Card>
@@ -451,7 +452,7 @@ export function ParticipantPortalClient({ locale, data }: ParticipantPortalClien
                         </div>
                         <div className="mt-3 grid gap-3 md:grid-cols-2">
                           <Info label={english ? "Attributed amount" : "归因金额"} value={formatMoneyAmount(entry.attributedAmountCents, entry.currency)} />
-                          <Info label={english ? "Recognized at" : "入账时间"} value={formatDateLabel(entry.recognizedAt)} />
+                          <Info label={english ? "Recognized at" : "入账时间"} value={formatParticipantPortalDateLabel(entry.recognizedAt, english, formatDateLabel)} />
                         </div>
                       </div>
                     ))
@@ -481,7 +482,7 @@ export function ParticipantPortalClient({ locale, data }: ParticipantPortalClien
                           </div>
                           <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                             <Info label={english ? "Amount" : "金额"} value={formatMoneyAmount(entry.payableAmountCents, entry.currency)} />
-                            <Info label={english ? "Payable after" : "最早可结算"} value={formatDateLabel(entry.payableAfter)} />
+                            <Info label={english ? "Payable after" : "最早可结算"} value={formatParticipantPortalDateLabel(entry.payableAfter, english, formatDateLabel)} />
                             <Info
                               label={english ? "Source record" : "来源记录"}
                               value={entry.revenueAttributionLedger.sourceReference ? (english ? "Linked" : "已关联") : (english ? "Not set" : "未设置")}

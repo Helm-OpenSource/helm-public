@@ -11,6 +11,7 @@ import {
   type UnifiedDetailNavigationModel,
   type UnifiedDetailNodePriority,
 } from "@/lib/presentation/unified-detail-navigation";
+import { formatConversationChainDateLabel } from "@/features/conversation-chain-extension/conversation-chain-date-labels";
 import { formatDateLabel, trimText } from "@/lib/utils";
 
 type HeaderLink = {
@@ -1143,7 +1144,11 @@ export function buildContactConversationChainExtensionModel({
       {
         label: english ? "Last interaction" : "最近互动",
         value: contact.lastInteractionAt
-          ? formatDateLabel(contact.lastInteractionAt)
+          ? formatConversationChainDateLabel(
+              contact.lastInteractionAt,
+              english,
+              formatDateLabel,
+            )
           : english
             ? "No interaction yet"
             : "暂无互动",
@@ -1672,7 +1677,11 @@ export function buildMeetingConversationChainExtensionModel({
       },
       {
         label: english ? "Meeting date" : "会议时间",
-        value: formatDateLabel(meeting.startsAt),
+        value: formatConversationChainDateLabel(
+          meeting.startsAt,
+          english,
+          formatDateLabel,
+        ),
       },
     ],
     boundaryLabel: english

@@ -85,6 +85,54 @@ describe("settings display copy", () => {
     );
   });
 
+  it("maps seeded skill suggestion copy into English settings surfaces", () => {
+    const rendered = [
+      formatSettingsCapabilityCategory("governance", true),
+      formatSettingsSkillSuggestionText(
+        "建议把“外部承诺复核缓冲包”收成候选能力",
+        true,
+      ),
+      formatSettingsSkillSuggestionText(
+        "这只是一条复核优先 的候选能力，用来帮助人更稳地复核外部承诺类草稿，不代表 Helm 获得自动对外发送或自动承诺权限。",
+        true,
+      ),
+      formatSettingsSkillSuggestionText(
+        "已把“会后跟进窗口包”提升为观察期能力，会继续积累证据但仍不进入正式能力目录或执行路由。 当前校准分 91，复现 3 次，边界事件 0 次。 当前已达到 formal review ready 状态，但仍需要人工写入静态能力目录、测试和文档。",
+        true,
+      ),
+      formatSettingsSkillSuggestionText(
+        "“预算阻塞澄清包”已进入正式复核队列，下一步仍是人工决定是否补能力目录、测试、守卫和文档。",
+        true,
+      ),
+    ].join(" ");
+
+    expect(rendered).toContain("governance");
+    expect(rendered).toContain(
+      'Suggest turning "External commitment review buffer" into a candidate capability',
+    );
+    expect(rendered).toContain("review-first candidate capability");
+    expect(rendered).toContain("does not grant Helm automatic external-send or automatic-commitment authority");
+    expect(rendered).toContain("Promoted \"Post-meeting follow-up window pack\" to probationary capability");
+    expect(rendered).toContain("does not enter the formal capability catalog or execution routing");
+    expect(rendered).toContain("Current calibration score 91");
+    expect(rendered).toContain("Budget blocker clarification pack");
+    expect(rendered).toContain("formal review queue");
+    expect(rendered).not.toMatch(/[\u4E00-\u9FFF]/);
+  });
+
+  it("keeps English skill suggestion boundaries from becoming execution claims", () => {
+    const rendered = formatSettingsSkillSuggestionText(
+      "这只是一条复核优先 的候选能力，用来恢复停滞机会的内部推进，不代表 Helm 可以自动改阶段、自动承诺对外结果或自动写回高风险状态。",
+      true,
+    );
+
+    expect(rendered).toContain("review-first candidate capability");
+    expect(rendered).toContain("does not let Helm auto-change stages");
+    expect(rendered).toContain("commit external outcomes");
+    expect(rendered).toContain("write high-risk states");
+    expect(rendered).not.toMatch(/[\u4E00-\u9FFF]|will change stages|will write/i);
+  });
+
   it("localizes org-admin boundary notes before rendering Chinese settings pages", () => {
     const rendered = [
       formatSettingsBoundaryNote(

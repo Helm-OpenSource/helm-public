@@ -64,7 +64,8 @@ import {
 } from "@/lib/i18n/labels";
 import type { ParticipantPortalInviteIssuanceState } from "@/lib/auth/participant-portal-invite-state";
 import { getWorkspaceStory } from "@/lib/presentation/workspace-story";
-import { formatDateLabel, safeParseJson } from "@/lib/utils";
+import { safeParseJson } from "@/lib/utils";
+import { formatSettingsDateLabel } from "@/features/settings/settings-date-labels";
 import {
   connectAliyunFounderDefaultAction,
   connectAliyunMailConnectorAction,
@@ -544,6 +545,8 @@ export function SettingsClient({
     featureFlags,
   });
   const english = locale === "en-US";
+  const formatSettingsDate = (value: Date | string | null | undefined) =>
+    formatSettingsDateLabel(value, english);
 
   const navigateSettingsTab = (value: string) => {
     const tab = resolveInitialSettingsTab(value);
@@ -715,8 +718,9 @@ export function SettingsClient({
                 ? `${authControlOverview.driftScopeCount} drift scopes and ${authControlOverview.currentSessionProtectedScopeCount} current-session-protected scopes still need operator judgement.`
                 : `仍有 ${authControlOverview.driftScopeCount} 个漂移范围与 ${authControlOverview.currentSessionProtectedScopeCount} 个当前会话保护范围需要人工判断。`,
           meta: authControlOverview.latestDetectedAt
-            ? `${english ? "Latest detected" : "最近发现"} ${formatDateLabel(
+            ? `${english ? "Latest detected" : "最近发现"} ${formatSettingsDateLabel(
                 authControlOverview.latestDetectedAt,
+                english,
               )}`
             : undefined,
         }
@@ -3129,7 +3133,7 @@ export function SettingsClient({
                                 />
                                 <Info
                                   label={english ? "Created" : "创建时间"}
-                                  value={formatDateLabel(profile.createdAt)}
+                                  value={formatSettingsDateLabel(profile.createdAt, english)}
                                 />
                               </div>
                               {profile.notes ? (
@@ -3264,15 +3268,16 @@ export function SettingsClient({
                                   label={
                                     english ? "Effective from" : "生效起点"
                                   }
-                                  value={formatDateLabel(
+                                  value={formatSettingsDateLabel(
                                     referral.effectiveFrom,
+                                    english,
                                   )}
                                 />
                                 <Info
                                   label={
                                     english ? "Effective until" : "生效截止"
                                   }
-                                  value={formatDateLabel(referral.effectiveTo)}
+                                  value={formatSettingsDateLabel(referral.effectiveTo, english)}
                                 />
                               </div>
                               {referral.notes ? (
@@ -3449,8 +3454,9 @@ export function SettingsClient({
                                   label={
                                     english ? "Effective from" : "生效起点"
                                   }
-                                  value={formatDateLabel(
+                                  value={formatSettingsDateLabel(
                                     engagement.effectiveFrom,
+                                    english,
                                   )}
                                 />
                               </div>
@@ -3873,7 +3879,7 @@ export function SettingsClient({
                   canManageParticipantPortal={canManageParticipantPortal}
                   data={data}
                   english={english}
-                  formatDateLabel={formatDateLabel}
+                  formatDateLabel={formatSettingsDate}
                   issueParticipantPortalAccess={issueParticipantPortalAccess}
                   latestParticipantPortalInviteUrl={
                     latestParticipantPortalInviteUrl
@@ -3891,7 +3897,7 @@ export function SettingsClient({
                   canManageManualSettlement={canManageManualSettlement}
                   data={data}
                   english={english}
-                  formatDateLabel={formatDateLabel}
+                  formatDateLabel={formatSettingsDate}
                 >
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4023,7 +4029,7 @@ export function SettingsClient({
                               />
                               <Info
                                 label={english ? "Submitted at" : "提交时间"}
-                                value={formatDateLabel(application.createdAt)}
+                                value={formatSettingsDateLabel(application.createdAt, english)}
                               />
                             </div>
                             {application.background ? (
@@ -4047,8 +4053,8 @@ export function SettingsClient({
                             {application.reviewedByUser ? (
                               <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
                                 {english
-                                  ? `Last reviewed by ${application.reviewedByUser.name} on ${formatDateLabel(application.reviewedAt)}`
-                                  : `最近由 ${application.reviewedByUser.name} 于 ${formatDateLabel(application.reviewedAt)} 审核`}
+                                  ? `Last reviewed by ${application.reviewedByUser.name} on ${formatSettingsDateLabel(application.reviewedAt, english)}`
+                                  : `最近由 ${application.reviewedByUser.name} 于 ${formatSettingsDateLabel(application.reviewedAt, english)} 审核`}
                               </p>
                             ) : null}
                             {application.linkedBeneficiary ? (
@@ -4072,8 +4078,8 @@ export function SettingsClient({
                                 </p>
                                 <p>
                                   {english
-                                    ? `Last invite issued on ${formatDateLabel(application.participantPortalAccess.lastInviteIssuedAt)}.`
-                                    : `最近一次邀请发放时间：${formatDateLabel(application.participantPortalAccess.lastInviteIssuedAt)}。`}
+                                    ? `Last invite issued on ${formatSettingsDateLabel(application.participantPortalAccess.lastInviteIssuedAt, english)}.`
+                                    : `最近一次邀请发放时间：${formatSettingsDateLabel(application.participantPortalAccess.lastInviteIssuedAt, english)}。`}
                                 </p>
                                 <p>
                                   {getProgramApplicationInviteGuidance(
@@ -4273,7 +4279,7 @@ export function SettingsClient({
                 <BillingAttributionDetailPanels
                   data={data}
                   english={english}
-                  formatDateLabel={formatDateLabel}
+                  formatDateLabel={formatSettingsDate}
                   formatMoneyAmount={formatMoneyAmount}
                   revenueAttributionNarrative={revenueAttributionNarrative}
                   revenueRuleNarrative={revenueRuleNarrative}
@@ -4287,7 +4293,7 @@ export function SettingsClient({
                   data={data}
                   english={english}
                   exportCurrentSettlementBatch={exportCurrentSettlementBatch}
-                  formatDateLabel={formatDateLabel}
+                  formatDateLabel={formatSettingsDate}
                   formatMoneyAmount={formatMoneyAmount}
                   markSettlementLinePaid={markSettlementLinePaid}
                   pending={pending}
@@ -4493,7 +4499,7 @@ export function SettingsClient({
                     />
                     <Info
                       label={english ? "Last sync" : "最近同步"}
-                      value={formatDateLabel(gmailConnector?.lastSyncedAt)}
+                      value={formatSettingsDateLabel(gmailConnector?.lastSyncedAt, english)}
                     />
                     <Info
                       label={english ? "Sync status" : "同步状态"}
@@ -4804,13 +4810,14 @@ export function SettingsClient({
                             label={
                               english ? "Last callback at" : "最近回调时间"
                             }
-                            value={formatDateLabel(
+                            value={formatSettingsDateLabel(
                               dingtalkConnector?.lastCallbackResult?.recordedAt
                                 ? new Date(
                                     dingtalkConnector.lastCallbackResult
                                       .recordedAt,
                                   )
                                 : null,
+                              english,
                             )}
                           />
                           <Info
@@ -4878,13 +4885,14 @@ export function SettingsClient({
                           />
                           <Info
                             label={english ? "Last ingest at" : "最近采集时间"}
-                            value={formatDateLabel(
+                            value={formatSettingsDateLabel(
                               dingtalkConnector?.lastIngestResult?.recordedAt
                                 ? new Date(
                                     dingtalkConnector.lastIngestResult
                                       .recordedAt,
                                   )
                                 : null,
+                              english,
                             )}
                           />
                           <Info
@@ -5224,10 +5232,11 @@ export function SettingsClient({
                           />
                           <Info
                             label={english ? "Last callback at" : "最近回调时间"}
-                            value={formatDateLabel(
+                            value={formatSettingsDateLabel(
                               feishuConnector?.lastCallbackResult?.recordedAt
                                 ? new Date(feishuConnector.lastCallbackResult.recordedAt)
                                 : null,
+                              english,
                             )}
                           />
                           <Info
@@ -5276,10 +5285,11 @@ export function SettingsClient({
                                 ? "Last read-only ingest at"
                                 : "最近只读采集时间"
                             }
-                            value={formatDateLabel(
+                            value={formatSettingsDateLabel(
                               feishuConnector?.lastIngestResult?.recordedAt
                                 ? new Date(feishuConnector.lastIngestResult.recordedAt)
                                 : null,
+                              english,
                             )}
                           />
                           <Info
@@ -5537,11 +5547,12 @@ export function SettingsClient({
                               ?.lastValidationResult?.recordedAt ? (
                               <p className="text-xs text-[color:var(--muted-foreground)]">
                                 {english ? "Last checked" : "最近校验"}：
-                                {formatDateLabel(
+                                {formatSettingsDateLabel(
                                   new Date(
                                     wecomConnector.calendarRegistry
                                       .lastValidationResult.recordedAt,
                                   ),
+                                  english,
                                 )}
                               </p>
                             ) : null}
@@ -5633,8 +5644,9 @@ export function SettingsClient({
                                       </p>
                                     </div>
                                     <p className="text-xs text-[color:var(--muted-foreground)]">
-                                      {formatDateLabel(
+                                      {formatSettingsDateLabel(
                                         new Date(calendar.recordedAt),
+                                        english,
                                       )}
                                     </p>
                                   </div>
@@ -5695,13 +5707,14 @@ export function SettingsClient({
                               label={
                                 english ? "Last callback at" : "最近回调时间"
                               }
-                              value={formatDateLabel(
+                              value={formatSettingsDateLabel(
                                 wecomConnector?.lastCallbackResult?.recordedAt
                                   ? new Date(
                                       wecomConnector.lastCallbackResult
                                         .recordedAt,
                                     )
                                   : null,
+                                english,
                               )}
                             />
                             <Info
@@ -5757,13 +5770,14 @@ export function SettingsClient({
                                   ? "Last read-only ingest at"
                                   : "最近只读采集时间"
                               }
-                              value={formatDateLabel(
+                              value={formatSettingsDateLabel(
                                 wecomConnector?.lastIngestResult?.recordedAt
                                   ? new Date(
                                       wecomConnector.lastIngestResult
                                         .recordedAt,
                                     )
                                   : null,
+                                english,
                               )}
                             />
                             <Info
@@ -6052,7 +6066,7 @@ export function SettingsClient({
                             </span>
                             <span>
                               {english ? "Created" : "创建时间"}：
-                              {formatDateLabel(suggestion.createdAt)}
+                              {formatSettingsDateLabel(suggestion.createdAt, english)}
                             </span>
                           </div>
                           <div className="theme-surface-panel-soft rounded-2xl px-3 py-3 text-xs leading-6 text-[color:var(--muted)]">
@@ -6201,8 +6215,9 @@ export function SettingsClient({
                       <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
                         <span>
                           {english ? "Effective at" : "生效时间"}：
-                          {formatDateLabel(
+                          {formatSettingsDateLabel(
                             suggestion.appliedAt ?? suggestion.confirmedAt,
+                            english,
                           )}
                         </span>
                         <span>
@@ -6242,7 +6257,7 @@ export function SettingsClient({
                         <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
                           <span>
                             {english ? "Decision at" : "决定时间"}：
-                            {formatDateLabel(suggestion.formalReviewDecisionAt)}
+                            {formatSettingsDateLabel(suggestion.formalReviewDecisionAt, english)}
                           </span>
                           <span>
                             {english ? "Reviewer" : "评审人"}：
@@ -6419,10 +6434,11 @@ export function SettingsClient({
                             </span>
                             <span>
                               {english ? "Queued at" : "入队时间"}：
-                              {formatDateLabel(
+                              {formatSettingsDateLabel(
                                 item.formalReviewQueuedAt ??
                                   item.appliedAt ??
                                   item.confirmedAt,
+                                english,
                               )}
                             </span>
                           </div>
@@ -6668,7 +6684,7 @@ export function SettingsClient({
                           <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
                             <span>
                               {english ? "Decision at" : "决定时间"}：
-                              {formatDateLabel(item.formalReviewDecisionAt)}
+                              {formatSettingsDateLabel(item.formalReviewDecisionAt, english)}
                             </span>
                             <span>
                               {english ? "Reviewer" : "评审人"}：
@@ -6929,8 +6945,9 @@ export function SettingsClient({
                       </p>
                       <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                         {english ? "Effective at" : "生效时间"}：
-                        {formatDateLabel(
+                        {formatSettingsDateLabel(
                           suggestion.appliedAt ?? suggestion.confirmedAt,
+                          english,
                         )}
                       </p>
                     </div>

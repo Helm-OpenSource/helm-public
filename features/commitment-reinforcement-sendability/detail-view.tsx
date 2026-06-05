@@ -36,7 +36,7 @@ import {
   formatRoleDetailEvidenceGroups,
   formatRoleDetailPageProtocol,
 } from "@/lib/presentation/role-detail-display-copy";
-import { formatDateLabel } from "@/lib/utils";
+import { formatReinforcementSendabilityDateLabel } from "@/features/commitment-reinforcement-sendability/date-labels";
 
 type ReinforcementPageProps = {
   mode: "reinforcement";
@@ -297,7 +297,10 @@ export function CommitmentReinforcementSendabilityDetailView(
                 },
                 {
                   label: english ? "Due date" : "当前截止时间",
-                  value: formatDateLabel(detail.dueDate),
+                  value: formatReinforcementSendabilityDateLabel(
+                    detail.dueDate,
+                    english,
+                  ),
                 },
               ]}
             />

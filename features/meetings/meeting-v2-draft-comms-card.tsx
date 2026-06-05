@@ -13,6 +13,7 @@ import {
   reviewMeetingDraftCommsRuntimeAction,
   runMeetingDraftCommsRuntimeAction,
 } from "@/features/meetings/actions";
+import { formatMeetingDraftCommsDateLabel } from "@/features/meetings/meeting-v2-draft-comms-date-labels";
 import { formatMeetingDisplayText } from "@/features/meetings/display-copy";
 import type { DraftCommsRuntimeSummary } from "@/lib/helm-v2/draft-comms-handoff-runtime";
 import { formatDateLabel } from "@/lib/utils";
@@ -35,6 +36,10 @@ function renderStatusVariant(status: string) {
   if (status.includes("CONFIRMED") || status.includes("COMPLETED") || status.includes("APPROVED")) return "success" as const;
   if (status.includes("PENDING") || status.includes("QUEUED") || status.includes("RUNNING")) return "approval" as const;
   return "neutral" as const;
+}
+
+function formatDraftCommsDate(value: Date | string | null | undefined, english: boolean) {
+  return formatMeetingDraftCommsDateLabel(value, english, formatDateLabel);
 }
 
 function reviewSuccessMessage(mode: ReviewMode, english: boolean, approvedForNextStepHandoff: boolean, blockedByBoundary: boolean) {
@@ -242,7 +247,7 @@ export function MeetingV2DraftCommsCard({ meetingId, runtime }: MeetingV2DraftCo
                     <p className="text-sm font-semibold text-[color:var(--foreground)]">{english ? "Current customer-facing handoff draft" : "当前客户跟进交接草稿"}</p>
                     {runtime.latestFollowupRequestedEvent ? (
                       <p className="text-xs text-[color:var(--muted-foreground)]">
-                        {english ? "latest run" : "最近运行"} · {formatDateLabel(runtime.latestFollowupRequestedEvent.createdAt)}
+                        {english ? "latest run" : "最近运行"} · {formatDraftCommsDate(runtime.latestFollowupRequestedEvent.createdAt, english)}
                       </p>
                     ) : null}
                   </div>

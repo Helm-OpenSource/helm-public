@@ -51,6 +51,29 @@ type CommandPaletteProps = {
   onQuickCreate: (tab: "opportunity" | "contact" | "meeting") => void;
 };
 
+function formatCommandPaletteDateLabel(value: Date | string, english: boolean) {
+  if (!english) {
+    return formatDateLabel(value);
+  }
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+export function formatCommandPaletteMeetingDescription(
+  startsAt: Date | string,
+  english: boolean,
+) {
+  return english
+    ? `Meeting · ${formatCommandPaletteDateLabel(startsAt, true)}`
+    : `会议 · ${formatCommandPaletteDateLabel(startsAt, false)}`;
+}
+
 export function CommandPalette({
   open,
   onOpenChange,
@@ -194,7 +217,10 @@ export function CommandPalette({
       .map((item) => ({
         id: `meeting-${item.id}`,
         title: item.title,
-        description: english ? `Meeting · ${formatDateLabel(item.startsAt)}` : `会议 · ${formatDateLabel(item.startsAt)}`,
+        description: formatCommandPaletteMeetingDescription(
+          item.startsAt,
+          english,
+        ),
         href: `/meetings/${item.id}`,
         icon: CalendarDays,
       }));

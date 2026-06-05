@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
 import { formatDateLabel } from "@/lib/utils";
+import { formatInboxDateLabel } from "@/features/inbox/inbox-date-labels";
 import { buildInboxDetailPageModel } from "@/features/inbox-followup-review-request/detail-model";
 import { InboxFollowupReviewRequestDetailView } from "@/features/inbox-followup-review-request/detail-view";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,8 @@ export default async function InboxDetailPage({
     workspaceDefaultLocale: workspace.defaultLocale,
   });
   const english = isEnglishLocale(locale);
+  const formatInboxDate = (value: Date | string | null | undefined) =>
+    formatInboxDateLabel(value, english, formatDateLabel);
   const connector = await db.connector.findUnique({
     where: {
       workspaceId_userId_provider: {
@@ -108,7 +111,7 @@ export default async function InboxDetailPage({
                 <p
                   className={`text-xs ${message.isInbound ? "text-[color:var(--muted-foreground)]" : "text-[color:color-mix(in_oklab,var(--accent-foreground)_72%,transparent)]"}`}
                 >
-                  {formatDateLabel(message.sentAt)}
+                  {formatInboxDate(message.sentAt)}
                 </p>
               </div>
               <p
