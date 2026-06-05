@@ -909,6 +909,10 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
   "check:public-commit-metadata":
     "node --import tsx scripts/public-commit-metadata-check.ts",
+  "check:bilingual-mixing":
+    "node --import tsx scripts/lint-bilingual-mixing.ts",
+  "check:bilingual-mixing:update":
+    "node --import tsx scripts/lint-bilingual-mixing.ts --update-baseline",
   "check:public-release":
     "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
   "release:check": "node --import tsx scripts/release-readiness-check.ts",
@@ -944,6 +948,8 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "smoke:docker:d2",
   "check:public-docs",
   "check:public-commit-metadata",
+  "check:bilingual-mixing",
+  "check:bilingual-mixing:update",
   "check:public-release",
   "check:secret-history",
   "release:check",

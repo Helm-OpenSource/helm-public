@@ -45,6 +45,10 @@ function seedProjectedMirror(): void {
       "check:public-commit-metadata":
         "node --import tsx scripts/public-commit-metadata-check.ts",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "check:bilingual-mixing":
+        "node --import tsx scripts/lint-bilingual-mixing.ts",
+      "check:bilingual-mixing:update":
+        "node --import tsx scripts/lint-bilingual-mixing.ts --update-baseline",
       "check:public-release":
         "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
       "db:prepare":
