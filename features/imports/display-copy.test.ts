@@ -54,6 +54,46 @@ describe("CRM import display copy", () => {
     );
   });
 
+  it("converts persisted Chinese ingress copy for the English surface", () => {
+    const display = formatCrmImportDisplayText(
+      "客户关系系统入口保持先复核和只读。连接 → 预览 → 导入 → 预热 对操作人可见；冲突、就绪度、回写和重跑必须显式复核。",
+      true,
+    );
+
+    expect(display).toContain("CRM ingress");
+    expect(display).toContain("review-first");
+    expect(display).toContain("read-only");
+    expect(display).toContain("connect -> preview -> import -> warmup");
+    expect(display).toContain("operator");
+    expect(display).toContain("conflicts");
+    expect(display).toContain("readiness");
+    expect(display).toContain("writeback");
+    expect(display).toContain("rerun");
+    expect(display).toContain("explicit review");
+    expect(display).not.toMatch(/[一-龥]/);
+  });
+
+  it("converts persisted Chinese CRM statuses for the English surface", () => {
+    expect(formatCrmImportDisplayText("待复核", true)).toBe("needs review");
+    expect(formatCrmImportDisplayText("已自动关联", true)).toBe("auto linked");
+    expect(formatCrmImportDisplayText("已完成，有警告", true)).toBe(
+      "completed with warnings",
+    );
+    expect(formatCrmImportDisplayText("演示连接", true)).toBe("mock connection");
+    expect(formatCrmImportDisplayText("首次导入", true)).toBe("initial import");
+  });
+
+  it("keeps English CRM copy unchanged on the English surface", () => {
+    const display = formatCrmImportDisplayText(
+      "Assist stays recommendation-first and never auto-runs a connector flow.",
+      true,
+    );
+
+    expect(display).toBe(
+      "Assist stays recommendation-first and never auto-runs a connector flow.",
+    );
+  });
+
   it("formats imported object types before they reach item rows", () => {
     expect(formatCrmImportObjectType("CONTACT", false)).toBe("联系人");
     expect(formatCrmImportObjectType("COMPANY", false)).toBe("公司");
