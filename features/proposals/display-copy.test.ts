@@ -16,6 +16,14 @@ describe("proposals list display copy", () => {
     expect(stageLabel("WAITING_THEM", false)).toBe("等对方");
   });
 
+  it("converts persisted Chinese proposal labels for the English surface", () => {
+    expect(riskLabel("高", true)).toBe("High");
+    expect(riskLabel("极高", true)).toBe("Critical");
+    expect(stageLabel("已接触", true)).toBe("Contacted");
+    expect(stageLabel("等对方", true)).toBe("Waiting on customer");
+    expect(stageLabel("内部同步", true)).toBe("Internal sync");
+  });
+
   it("keeps risk tone stable for known and unknown risk levels", () => {
     expect(riskTone("LOW")).toBe("neutral");
     expect(riskTone("MEDIUM")).toBe("info");

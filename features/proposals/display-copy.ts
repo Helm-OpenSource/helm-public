@@ -26,12 +26,16 @@ export function riskLabel(level: string, english: boolean): string {
   if (english) {
     switch (level) {
       case "LOW":
+      case "低":
         return "Low";
       case "MEDIUM":
+      case "中":
         return "Medium";
       case "HIGH":
+      case "高":
         return "High";
       case "CRITICAL":
+      case "极高":
         return "Critical";
       default:
         return enumFallback(level);
@@ -56,12 +60,16 @@ export function stageLabel(stage: string, english: boolean): string {
   if (english) {
     switch (stage) {
       case "CONTACTED":
+      case "已接触":
         return "Contacted";
       case "ADVANCING":
+      case "推进中":
         return "Advancing";
       case "WAITING_THEM":
+      case "等对方":
         return "Waiting on customer";
       case "INTERNAL_SYNC":
+      case "内部同步":
         return "Internal sync";
       default:
         return enumFallback(stage);
