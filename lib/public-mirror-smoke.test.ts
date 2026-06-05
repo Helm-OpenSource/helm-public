@@ -57,7 +57,8 @@ function seedProjectedMirror(): void {
       "quality:regression":
         "npm run test:public:guards && npm run public:smoke:static",
       "release:check": "node --import tsx scripts/release-readiness-check.ts",
-      "self-check": "npm run public:smoke:static",
+      "self-check":
+        "npm run public:smoke:static && npm run check:secret-history",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":
         "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",

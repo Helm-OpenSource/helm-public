@@ -888,7 +888,8 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   typecheck: "tsc --noEmit --project tsconfig.public.json",
   "db:prepare":
     "node -e \"console.log('public mirror: database prepare is not required')\"",
-  "self-check": "npm run public:smoke:static",
+  "self-check":
+    "npm run public:smoke:static && npm run check:secret-history",
   "check:boundaries": "npm run public:smoke:static",
   test: "vitest run --config vitest.public.config.ts",
   "test:public:guards":

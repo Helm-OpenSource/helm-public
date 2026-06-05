@@ -189,7 +189,8 @@ describe("public mirror tree builder", () => {
         "quality:regression":
           "npm run test:public:guards && npm run public:smoke:static",
         "release:check": "node --import tsx scripts/release-readiness-check.ts",
-        "self-check": "npm run public:smoke:static",
+        "self-check":
+          "npm run public:smoke:static && npm run check:secret-history",
         test: "vitest run --config vitest.public.config.ts",
         "test:public:guards":
           "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
@@ -281,7 +282,9 @@ describe("public mirror tree builder", () => {
     expect(scripts["db:prepare"]).toBe(
       "node -e \"console.log('public mirror: database prepare is not required')\"",
     );
-    expect(scripts["self-check"]).toBe("npm run public:smoke:static");
+    expect(scripts["self-check"]).toBe(
+      "npm run public:smoke:static && npm run check:secret-history",
+    );
     expect(scripts["check:boundaries"]).toBe("npm run public:smoke:static");
     expect(scripts.test).toBe("vitest run --config vitest.public.config.ts");
     expect(scripts["test:public:guards"]).toBe(

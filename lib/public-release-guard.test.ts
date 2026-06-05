@@ -679,7 +679,8 @@ describe("public release guard fixture coverage", () => {
       "proof-pack:build",
     ]);
     expect(projection.manifest.scripts).toMatchObject({
-      "self-check": "npm run public:smoke:static",
+      "self-check":
+        "npm run public:smoke:static && npm run check:secret-history",
       "release:check": "node --import tsx scripts/release-readiness-check.ts",
       dev: "next dev",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
@@ -832,7 +833,8 @@ describe("public release guard fixture coverage", () => {
       "quality:regression":
         "npm run test:public:guards && npm run public:smoke:static",
       "release:check": "node --import tsx scripts/release-readiness-check.ts",
-      "self-check": "npm run public:smoke:static",
+      "self-check":
+        "npm run public:smoke:static && npm run check:secret-history",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":
         "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
