@@ -3,6 +3,7 @@ status: active
 owner: Product / Delivery Engineering / Engineering
 created: 2026-06-01
 review_after: 2026-06-15
+public_safety: Public-safe closeout summary. Captures decision and evidence sources only; no customer identifiers, raw rows, or private approval evidence.
 source_basis: internal strategy packet summarized into public-safe artifacts
 archive_trigger:
   - These artifact templates are replaced by a newer public Pack delivery contract

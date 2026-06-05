@@ -3,6 +3,7 @@ status: active
 owner: helm-core
 created: 2026-04-27
 review_after: 2026-07-26
+public_safety: Public-safe trial data policy. Describes data-handling boundaries only; no customer data, credentials, private deployment details, or processing-agreement signatories.
 # frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-19
 # rationale: default — no archive/dormant signal in path
 ---

@@ -3,6 +3,7 @@ status: active
 owner: Product / Delivery Engineering / Engineering
 created: 2026-06-01
 review_after: 2026-06-15
+public_safety: Public-safe smoke receipt. Records public command output and classification only; no credentials, customer data, workspace ids, or database output.
 source_pr: https://github.com/Helm-OpenSource/helm-public/pull/36
 source_head_commit: 9839d1f9c1b20639f80772358e0ab7624375687f
 tested_checkout_commit: 3402d454c94080d14b603faa2320adc8d9026767

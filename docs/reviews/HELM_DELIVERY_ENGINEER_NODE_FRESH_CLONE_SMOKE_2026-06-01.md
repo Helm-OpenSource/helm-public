@@ -3,6 +3,7 @@ status: active
 owner: Product / Delivery Engineering / Engineering
 created: 2026-06-01
 review_after: 2026-06-15
+public_safety: Public-safe smoke receipt. Records public command output and classification only; no credentials, customer data, workspace ids, or database output.
 source_commit: 9ee60b607d5b845c8508341dfce656d17c3110e8
 receipt_kind: node_fresh_clone_smoke
 not_d2_docker_receipt: true

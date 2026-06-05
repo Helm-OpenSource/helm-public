@@ -3,6 +3,7 @@ status: active
 owner: helm-core
 created: 2026-05-02
 review_after: 2026-05-31
+public_safety: Public-safe release-vs-reality alignment. Proven-capability statements only; no release-date promises, private receipts, or commitment-shaped claims.
 archive_trigger:
   - v0.1.0-trial 发布完成并有新的 release retrospective
   - 本文件被正式 launch readiness checklist 替代

@@ -62,7 +62,8 @@ describe("public package manifest builder", () => {
       license: "Apache-2.0",
       scripts: {
         dev: "next dev",
-        "self-check": "npm run public:smoke:static",
+        "self-check":
+          "npm run public:smoke:static && npm run check:secret-history",
         "public:smoke:static":
           "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
         "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",

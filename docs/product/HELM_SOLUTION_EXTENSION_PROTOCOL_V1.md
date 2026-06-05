@@ -3,6 +3,7 @@ status: active
 owner: helm-core
 created: 2026-04-12
 review_after: 2026-07-11
+public_safety: Public-safe extension protocol. Customer-specific overlays, private Pack implementation, and tenant configuration are excluded from helm-public.
 # frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-19
 # rationale: default — no archive/dormant signal in path
 ---

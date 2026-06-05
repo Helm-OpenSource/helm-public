@@ -62,3 +62,6 @@ jobs:
 
       - name: Doc frontmatter guard
         run: npx tsx scripts/check-doc-frontmatter.ts
+
+      - name: Bilingual mixing guard
+        run: npm run check:bilingual-mixing

@@ -139,6 +139,41 @@ describe("public release guard fixture coverage", () => {
     expect(result.violations[0]?.excerpt).not.toContain(syntheticLeak);
   });
 
+  it("flags assignment-form bare-token credentials and redacts the value", () => {
+    // Held in a non-keyword variable and interpolated so this synthetic value
+    // is not itself a `KEYWORD=<literal>` assignment in this test's source
+    // (which the guard also scans) — same discipline as the known-leaked test.
+    const syntheticAssignmentValue = "Ab3xK9mQ2pLw7Vn4Zt";
+    writeFixture("docs/public.md", `DB_PASSWORD = "${syntheticAssignmentValue}"`);
+
+    const result = runGuard();
+
+    expect(result.violations).toHaveLength(1);
+    expect(result.violations[0]).toMatchObject({
+      rule: "credential:assignment-form",
+      path: "docs/public.md",
+      line: 1,
+    });
+    expect(result.violations[0]?.excerpt).not.toContain(syntheticAssignmentValue);
+    expect(result.violations[0]?.excerpt).toContain("***");
+  });
+
+  it("does not flag placeholder, env-ref, or identifier-shaped assignments", () => {
+    writeFixture(
+      "docs/public.md",
+      [
+        "DB_PASSWORD=changeme",
+        "DB_PASSWORD=$DATABASE_PASSWORD",
+        'it("throws Phase3qRejectionError for input with secret key")',
+        "password: hunter2",
+      ].join("\n"),
+    );
+
+    const result = runGuard();
+
+    expect(result.violations).toEqual([]);
+  });
+
   it("still runs credential checks on policy descriptor files", () => {
     writeFixture(
       "README.md",
@@ -679,7 +714,8 @@ describe("public release guard fixture coverage", () => {
       "proof-pack:build",
     ]);
     expect(projection.manifest.scripts).toMatchObject({
-      "self-check": "npm run public:smoke:static",
+      "self-check":
+        "npm run public:smoke:static && npm run check:secret-history",
       "release:check": "node --import tsx scripts/release-readiness-check.ts",
       dev: "next dev",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
@@ -819,6 +855,10 @@ describe("public release guard fixture coverage", () => {
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
       "check:public-commit-metadata":
         "node --import tsx scripts/public-commit-metadata-check.ts",
+      "check:bilingual-mixing":
+        "node --import tsx scripts/lint-bilingual-mixing.ts",
+      "check:bilingual-mixing:update":
+        "node --import tsx scripts/lint-bilingual-mixing.ts --update-baseline",
       "check:public-release":
         "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
       "db:prepare":
@@ -832,7 +872,8 @@ describe("public release guard fixture coverage", () => {
       "quality:regression":
         "npm run test:public:guards && npm run public:smoke:static",
       "release:check": "node --import tsx scripts/release-readiness-check.ts",
-      "self-check": "npm run public:smoke:static",
+      "self-check":
+        "npm run public:smoke:static && npm run check:secret-history",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":
         "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
