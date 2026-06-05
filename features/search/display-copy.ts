@@ -74,7 +74,15 @@ const askIntentLabels: Record<string, { zh: string; en: string }> = {
 };
 
 function pickLabel(value: string, english: boolean, labels: Record<string, { zh: string; en: string }>) {
-  const label = labels[value] ?? labels[value.trim().toLowerCase()];
+  const normalizedValue = value.trim();
+  const label =
+    labels[value] ??
+    labels[normalizedValue.toLowerCase()] ??
+    Object.values(labels).find(
+      (candidate) =>
+        candidate.zh === normalizedValue ||
+        candidate.en.toLowerCase() === normalizedValue.toLowerCase(),
+    );
   if (label) return english ? label.en : label.zh;
 
   return value.replaceAll("_", " ");
