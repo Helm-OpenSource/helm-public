@@ -11,6 +11,24 @@ describe("analytics frontstage display copy", () => {
     ).toBe("recommendation prompt workflow");
   });
 
+  it("maps seeded Chinese analytics labels back to English frontstage copy", () => {
+    expect(
+      formatAnalyticsVisibleText(
+        "判断建议 / 阻塞 / 承诺 / 提示词 / 使用信号 / 工作回路",
+        true,
+      ),
+    ).toBe("recommendation / blocker / commitment / prompt / usage signal / workflow");
+    expect(formatAnalyticsTechnicalKey("现场采集_已打开", true)).toBe(
+      "conversation capture opened",
+    );
+    expect(
+      formatAnalyticsVisibleText(
+        "智能服务 服务来源 试点 转写文本 · 智能服务已关闭",
+        true,
+      ),
+    ).toBe("AI service provider pilot transcript · AI service disabled");
+  });
+
   it("maps analytics system terms to Chinese operating language", () => {
     expect(
       formatAnalyticsVisibleText(
