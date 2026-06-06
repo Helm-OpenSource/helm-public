@@ -287,7 +287,7 @@ export async function generateMeetingActionItemsAction(meetingId: string) {
     actionType: "MEETING_ACTION_ITEMS_GENERATED",
     targetType: "Meeting",
     targetId: meeting.id,
-    summary: english ? `Generated ${createdResults.length} post-meeting action items` : `生成会后 动作items：${createdResults.length} 条`,
+    summary: english ? `Generated ${createdResults.length} post-meeting action items` : `生成会后动作项：${createdResults.length} 条`,
     payload: {
       suggestions: suggestions.slice(0, 3),
     },
