@@ -12,6 +12,10 @@ import { parseArgs, HELP_TEXT } from "./cli/args";
 import { runInit } from "./cli/init";
 import { runProfileCommand } from "./cli/profile";
 
+function asString(value: string | boolean | undefined): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 export function main(argv: readonly string[], cwd: string = process.cwd()): number {
   const options = parseArgs(argv);
 
@@ -28,22 +32,35 @@ export function main(argv: readonly string[], cwd: string = process.cwd()): numb
 
   // profile
   try {
-    const { runDir, result } = runProfileCommand({
+    const flags = options.flags;
+    const out = runProfileCommand({
       cwd,
       scopePath: options.scope,
       source: options.source,
       output: options.output,
+      workspace: asString(flags.workspace),
+      redact: flags.redact === true,
+      emitOverlayDraft: flags["emit-overlay-draft"] === true,
+      overlayRoot: asString(flags["overlay-root"]),
+      tenant: asString(flags.tenant),
+      extensionSlug: asString(flags["extension-slug"]),
+      force: options.force,
     });
     if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify(out.result, null, 2)}\n`);
     } else {
-      const { codeScan, candidates } = result;
+      const { codeScan, candidates } = out.result;
       process.stdout.write(
         `profile: scanned ${codeScan.scannedFileCount}/${codeScan.fileCount} file(s), ` +
           `found ${codeScan.objects.length} object(s), ` +
           `${candidates.length} mapping candidate(s)\n`,
       );
-      process.stdout.write(`profile: wrote run to ${runDir}\n`);
+      process.stdout.write(`profile: wrote run to ${out.runDir}\n`);
+      if (out.materializedFiles) {
+        process.stdout.write(
+          `profile: materialized ${out.materializedFiles.length} overlay file(s)\n`,
+        );
+      }
     }
     return 0;
   } catch (error) {

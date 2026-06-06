@@ -2,13 +2,21 @@
  * Source Profiler — `profile` command.
  *
  * Loads the scope manifest (or a default rooted at --source), runs the
- * deterministic profiler, and writes a user-private run directory.
+ * deterministic profiler, writes a user-private run directory, and optionally
+ * emits a redacted export and an overlay draft (materializing it only when an
+ * overlay root is given and the guard passes).
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseScopeManifest, defaultScopeManifest, type ScopeManifest } from "../contract/scope-manifest";
 import { runProfile, type ProfileResult } from "../profiler/profile";
+import { buildReviewPacket } from "../review/review-packet";
+import { redactReviewPacket } from "../review/redact";
+import { buildOverlayDraft } from "../overlay/overlay-draft";
+import { materializeOverlayDraft } from "../overlay/materialize";
+import type { ReviewPacket } from "../contract/review-packet";
+import type { OverlayPatchDraft } from "../contract/overlay";
 import { shortHash } from "../util/hash";
 
 export type ProfileCommandInput = {
@@ -16,13 +24,25 @@ export type ProfileCommandInput = {
   scopePath?: string;
   source?: string;
   output?: string;
+  workspace?: string;
+  redact?: boolean;
+  emitOverlayDraft?: boolean;
+  overlayRoot?: string;
+  tenant?: string;
+  extensionSlug?: string;
+  force?: boolean;
+  /** Repo root that must not contain the overlay root. Defaults to cwd. */
+  sourceRepoRoot?: string;
   now?: () => Date;
 };
 
 export type ProfileCommandResult = {
   runDir: string;
   result: ProfileResult;
+  reviewPacket: ReviewPacket;
   artifactRefs: string[];
+  overlayDraft?: OverlayPatchDraft;
+  materializedFiles?: string[];
 };
 
 export function runProfileCommand(input: ProfileCommandInput): ProfileCommandResult {
@@ -43,12 +63,64 @@ export function runProfileCommand(input: ProfileCommandInput): ProfileCommandRes
   mkdirSync(runDir, { recursive: true });
 
   const artifactRefs = ["run.json", "code-scan.json", "mapping-candidates.json"];
-  const runRecord = { ...result.run, artifactRefs };
-  writeJson(path.join(runDir, "run.json"), runRecord);
+
+  const reviewPacket = buildReviewPacket({
+    run: result.run,
+    codeScan: result.codeScan,
+    candidates: result.candidates,
+    source: manifest.root,
+    workspace: input.workspace,
+  });
+
   writeJson(path.join(runDir, "code-scan.json"), result.codeScan);
   writeJson(path.join(runDir, "mapping-candidates.json"), result.candidates);
+  writeJson(path.join(runDir, "review-packet.json"), reviewPacket);
+  artifactRefs.push("review-packet.json");
 
-  return { runDir, result: { ...result, run: runRecord }, artifactRefs };
+  if (input.redact) {
+    writeJson(path.join(runDir, "review-packet.redacted.json"), redactReviewPacket(reviewPacket));
+    artifactRefs.push("review-packet.redacted.json");
+  }
+
+  let overlayDraft: OverlayPatchDraft | undefined;
+  let materializedFiles: string[] | undefined;
+  if (input.emitOverlayDraft) {
+    if (!input.tenant || !input.extensionSlug) {
+      throw new Error("--emit-overlay-draft requires --tenant and --extension-slug");
+    }
+    overlayDraft = buildOverlayDraft({
+      packet: reviewPacket,
+      tenantKey: input.tenant,
+      extensionSlug: input.extensionSlug,
+      overlayRoot: input.overlayRoot ?? "(not-materialized)",
+    });
+
+    if (input.overlayRoot) {
+      const materialized = materializeOverlayDraft({
+        draft: overlayDraft,
+        overlayRoot: input.overlayRoot,
+        sourceRepoRoot: input.sourceRepoRoot ?? cwd,
+        cwd,
+        force: input.force,
+      });
+      materializedFiles = materialized.writtenFiles;
+      overlayDraft = { ...overlayDraft, materialized: true };
+    }
+    writeJson(path.join(runDir, "overlay-draft.json"), overlayDraft);
+    artifactRefs.push("overlay-draft.json");
+  }
+
+  const runRecord = { ...result.run, artifactRefs };
+  writeJson(path.join(runDir, "run.json"), runRecord);
+
+  return {
+    runDir,
+    result: { ...result, run: runRecord },
+    reviewPacket,
+    artifactRefs,
+    overlayDraft,
+    materializedFiles,
+  };
 }
 
 function loadManifest({

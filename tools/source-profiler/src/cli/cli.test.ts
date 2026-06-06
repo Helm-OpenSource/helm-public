@@ -66,7 +66,9 @@ describe("runProfileCommand", () => {
         output: "out",
         now: () => new Date("2026-06-07T00:00:00.000Z"),
       });
-      expect(artifactRefs).toEqual(["run.json", "code-scan.json", "mapping-candidates.json"]);
+      expect(artifactRefs).toEqual(
+        expect.arrayContaining(["run.json", "code-scan.json", "mapping-candidates.json", "review-packet.json"]),
+      );
       for (const ref of artifactRefs) {
         expect(existsSync(path.join(runDir, ref))).toBe(true);
       }
