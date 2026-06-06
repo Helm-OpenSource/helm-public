@@ -79,12 +79,90 @@ const CHINESE_ANALYTICS_REPLACEMENTS: Array<[RegExp, string]> = [
   [/智能服务 被关闭/g, "智能服务已关闭"],
 ];
 
+const ENGLISH_ANALYTICS_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/内部运营角色页/g, "internal operating role surface"],
+  [/现场采集/g, "conversation capture"],
+  [/会议简报/g, "meeting briefing"],
+  [/复核请求详情/g, "review request detail"],
+  [/复核请求/g, "review request"],
+  [/成功复盘/g, "success check"],
+  [/扩展复盘详情/g, "expansion review detail"],
+  [/扩展复盘/g, "expansion review"],
+  [/发送前复核/g, "review-before-send"],
+  [/正式复核/g, "formal review"],
+  [/面向客户/g, "customer-facing"],
+  [/客户可见/g, "customer-visible"],
+  [/客户成功/g, "customer success"],
+  [/邮件会话/g, "email thread"],
+  [/会议纪要/g, "meeting notes"],
+  [/今日重点/g, "today focus"],
+  [/后续动作/g, "follow-through"],
+  [/默认模型/g, "default model"],
+  [/智能服务已关闭/g, "AI service disabled"],
+  [/模型已关闭/g, "model disabled"],
+  [/智能服务/g, "AI service"],
+  [/通用模型/g, "general model"],
+  [/结构化输出/g, "structured output"],
+  [/转写文本/g, "transcript"],
+  [/服务来源/g, "provider"],
+  [/推理/g, "reasoning"],
+  [/解释/g, "explanation"],
+  [/判断建议/g, "recommendation"],
+  [/阻塞/g, "blocker"],
+  [/承诺/g, "commitment"],
+  [/工作回路/g, "workflow"],
+  [/使用信号/g, "usage signal"],
+  [/提示词/g, "prompt"],
+  [/待处理队列/g, "queue"],
+  [/交接/g, "handoff"],
+  [/协作者/g, "worker"],
+  [/能力/g, "skill"],
+  [/操作人/g, "operator"],
+  [/来源/g, "source"],
+  [/记忆/g, "memory"],
+  [/对象/g, "object"],
+  [/联系人/g, "contact"],
+  [/公司/g, "company"],
+  [/收件箱/g, "inbox"],
+  [/邮件/g, "email"],
+  [/会话/g, "thread"],
+  [/认证/g, "auth"],
+  [/时间线/g, "timeline"],
+  [/页面访问/g, "page view"],
+  [/工作区/g, "workspace"],
+  [/页面/g, "page"],
+  [/用户/g, "user"],
+  [/动作/g, "action"],
+  [/已创建/g, "created"],
+  [/已生成/g, "generated"],
+  [/已打开/g, "opened"],
+  [/已查看/g, "viewed"],
+  [/查看/g, "view"],
+  [/已关闭/g, "disabled"],
+  [/流转/g, "flow"],
+  [/回放/g, "replay"],
+  [/详情/g, "detail"],
+  [/方案/g, "proposal"],
+  [/打包方案/g, "package"],
+  [/推进管线/g, "pipeline"],
+  [/简报/g, "briefing"],
+  [/试点/g, "pilot"],
+  [/采集/g, "capture"],
+  [/转写/g, "transcription"],
+];
+
 export function formatAnalyticsVisibleText(
   value: string | null | undefined,
   english: boolean,
 ) {
   if (!value) return "";
-  if (english) return value;
+  if (english) {
+    return ENGLISH_ANALYTICS_REPLACEMENTS.reduce(
+      (current, [pattern, replacement]) =>
+        current.replace(pattern, replacement),
+      value,
+    );
+  }
 
   return CHINESE_ANALYTICS_REPLACEMENTS.reduce(
     (current, [pattern, replacement]) => current.replace(pattern, replacement),
@@ -97,7 +175,6 @@ export function formatAnalyticsTechnicalKey(
   english: boolean,
 ) {
   if (!value) return "";
-  if (english) return value;
 
   const readable = value
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
