@@ -15,6 +15,7 @@
     "lib/**/*.ts",
     "lib/**/*.tsx",
     "prisma/**/*.ts",
+    "tools/**/*.ts",
     "instrumentation.ts",
     "middleware.ts",
     "next.config.ts",

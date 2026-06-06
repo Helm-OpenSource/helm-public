@@ -1,0 +1,18 @@
+// Synthetic Prisma models for Source Profiler tests. No real data.
+
+model Company {
+  id        Int       @id @default(autoincrement())
+  name      String
+  domain    String?
+  ownerId   Int
+  contacts  Contact[]
+}
+
+model Contact {
+  id        Int      @id @default(autoincrement())
+  fullName  String
+  email     String
+  phone     String?
+  companyId Int
+  company   Company  @relation(fields: [companyId], references: [id])
+}
