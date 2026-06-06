@@ -308,4 +308,4 @@ npm run quality:regression
 - 微信 `ffjw0821` — 联系我们 / 商业合作 / 社群沟通（人工受控入口）
 - 微信社群邀请二维码 — 先加微信 `ffjw0821` 获取当期有效二维码（邀请二维码存在时效）
 - 微信公众号 `Helm开源经营系统`（微信号 `HelmCoreCN`）— 信息发布入口，非默认支持工单入口
-- 安全漏洞——**不要**走公开 issue，见 [../SECURITY.md](../SECURITY.md)
+- 安全漏洞——**不要**走公开议题，见 [../SECURITY.md](../SECURITY.md)
