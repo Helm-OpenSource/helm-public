@@ -55,4 +55,31 @@ describe("redactReviewPacket", () => {
     expect(redacted.candidates[0].confidence).toBe(original.candidates[0].confidence);
     expect(redacted.candidates[0].signalFamily).toBe(original.candidates[0].signalFamily);
   });
+
+  it("redacts actor and workspace metadata (B4)", () => {
+    const objects = scanFile("private/schema.sql", DDL);
+    const withIdentity = buildReviewPacket({
+      run: {
+        runId: "r",
+        toolVersion: "0.1.0",
+        contractVersion: "1.0.0",
+        createdAt: "2026-06-07T00:00:00.000Z",
+        scopeHash: "h",
+        phase: "completed",
+        modalities: ["static_source"],
+        artifactRefs: [],
+        audit: [],
+      },
+      codeScan: { fileCount: 1, scannedFileCount: 1, skippedFiles: [], objects },
+      candidates: objects.flatMap(proposeMappings),
+      actor: "alice@example.com",
+      workspace: "acme-internal-ws",
+    });
+    const redacted = redactReviewPacket(withIdentity);
+    expect(redacted.requiredMetadata.actor).toBe("redacted");
+    expect(redacted.requiredMetadata.workspace).toBe("redacted");
+    const json = JSON.stringify(redacted);
+    expect(json).not.toContain("alice@example.com");
+    expect(json).not.toContain("acme-internal-ws");
+  });
 });

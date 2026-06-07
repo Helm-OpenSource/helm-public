@@ -64,7 +64,8 @@ function parseSqlDdl(relPath: string, content: string): DiscoveredObject[] {
   let m: RegExpExecArray | null;
   while ((m = tableRe.exec(content)) !== null) {
     const tableName = stripQuotes(m[1]).split(".").pop() as string;
-    const body = m[2];
+    // Strip SQL comments first so a comment line cannot swallow the next column.
+    const body = m[2].replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
     const fields: DiscoveredField[] = [];
     const associations: Association[] = [];
     for (const rawLine of splitTopLevel(body)) {
@@ -113,6 +114,12 @@ function parseSqlDdl(relPath: string, content: string): DiscoveredObject[] {
 
 function parsePrisma(relPath: string, content: string): DiscoveredObject[] {
   const objects: DiscoveredObject[] = [];
+  // Collect declared enum names so enum-typed fields are scalars, not relations.
+  const enumNames = new Set<string>();
+  const enumRe = /enum\s+([A-Za-z0-9_]+)\s*\{/g;
+  let e: RegExpExecArray | null;
+  while ((e = enumRe.exec(content)) !== null) enumNames.add(e[1]);
+
   const modelRe = /model\s+([A-Za-z0-9_]+)\s*\{([\s\S]*?)\}/g;
   let m: RegExpExecArray | null;
   while ((m = modelRe.exec(content)) !== null) {
@@ -126,9 +133,13 @@ function parsePrisma(relPath: string, content: string): DiscoveredObject[] {
       const fieldMatch = line.match(/^([A-Za-z0-9_]+)\s+([A-Za-z0-9_]+)(\?|\[\])?/);
       if (!fieldMatch) continue;
       const [, fieldName, typeName, modifier] = fieldMatch;
+      // Enum-typed fields are scalar-like: record them as an "enum" field.
+      if (enumNames.has(typeName)) {
+        fields.push(makeField(fieldName, "enum", modifier === "?"));
+        continue;
+      }
       // A field is a relation when it references another model (non-scalar type)
-      // or carries an explicit @relation attribute. Enums are rare and treated
-      // as relations in v1 (documented limitation).
+      // or carries an explicit @relation attribute.
       const isRelation = /@relation/.test(line) || !isScalar(typeName);
       if (isRelation) {
         associations.push({

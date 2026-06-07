@@ -27,7 +27,7 @@ export const auditEntrySchema = z.object({
   phase: profilerPhaseSchema,
   message: z.string().min(1),
   level: z.enum(["info", "warn", "error"]).default("info"),
-});
+}).strict();
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 
 export const sourceProfileRunSchema = z.object({
@@ -44,5 +44,5 @@ export const sourceProfileRunSchema = z.object({
   /** Relative paths (within the run dir) of produced artifacts. */
   artifactRefs: z.array(z.string()).default([]),
   audit: z.array(auditEntrySchema).default([]),
-});
+}).strict();
 export type SourceProfileRun = z.infer<typeof sourceProfileRunSchema>;

@@ -62,4 +62,41 @@ describe("source-profiler boundary guard", () => {
       rmSync(repo, { recursive: true, force: true });
     }
   });
+
+  it("closes the B5 false-negatives: Function(), import(net), accepted state, bare bypass", () => {
+    const repo = mkdtempSync(path.join(os.tmpdir(), "sp-guard5-"));
+    try {
+      const coreDir = path.join(repo, "tools/source-profiler/src/profiler");
+      mkdirSync(coreDir, { recursive: true });
+      // Function(...) without `new`, dynamic import of a net module, and a
+      // hardcoded human-accepted state — all in a core (non-ai) file.
+      writeFileSync(
+        path.join(coreDir, "evil.ts"),
+        [
+          "export const f = Function('return 1');",
+          "export const g = async () => await import('https');",
+          'export const c = { state: "accepted_by_human" };',
+        ].join("\n"),
+      );
+      const rules = runSourceProfilerBoundariesCheck(repo).map((v) => v.rule);
+      expect(rules).toContain("SP-A"); // Function() + dynamic import
+      expect(rules).toContain("SP-B"); // import('https')
+      expect(rules).toContain("SP-C"); // accepted_by_human anywhere
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("flags a @bypass without justification (SP-BYPASS)", () => {
+    const repo = mkdtempSync(path.join(os.tmpdir(), "sp-guard6-"));
+    try {
+      const dir = path.join(repo, "tools/source-profiler/src/util");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, "x.ts"), "export const x = 1; // @bypass-SP-A\n");
+      const rules = runSourceProfilerBoundariesCheck(repo).map((v) => v.rule);
+      expect(rules).toContain("SP-BYPASS");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
 });

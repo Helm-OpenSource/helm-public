@@ -76,4 +76,23 @@ describe("runAiOverlay — remote consent ceremony", () => {
     // The prompt sent to the transport must not contain the real table name.
     expect(sentPrompt).not.toContain("deals");
   });
+
+  it("cannot be bypassed by smuggling a remote provider under providerKind:local (B1)", async () => {
+    let called = 0;
+    const transport = async () => {
+      called++;
+      return "[]";
+    };
+    const remote: AiProvider = createRemoteProvider({ kind: "openai", transport });
+    const out = await runAiOverlay({
+      packet: packet(),
+      providerKind: "local",
+      consent: false,
+      provider: remote,
+      now: fixedNow,
+    });
+    expect(called).toBe(0); // transport must never be invoked
+    expect(out.candidates).toEqual([]);
+    expect(out.audit.some((a) => /does not match|consent/i.test(a.message))).toBe(true);
+  });
 });

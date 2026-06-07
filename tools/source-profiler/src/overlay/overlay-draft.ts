@@ -15,7 +15,7 @@ import type {
   OverlayPatchDraft,
   ConnectorDraft,
 } from "../contract/overlay";
-import { overlayPatchDraftSchema } from "../contract/overlay";
+import { overlayPatchDraftSchema, safeSlugSchema } from "../contract/overlay";
 import { scanContentForSecrets } from "../profiler/secret-preflight";
 
 export type BuildOverlayDraftInput = {
@@ -27,6 +27,9 @@ export type BuildOverlayDraftInput = {
 
 export function buildOverlayDraft(input: BuildOverlayDraftInput): OverlayPatchDraft {
   const { packet, tenantKey, extensionSlug, overlayRoot } = input;
+  // Fail fast on unsafe slugs (no '/', '\\', '.', '..') before building paths.
+  safeSlugSchema.parse(tenantKey);
+  safeSlugSchema.parse(extensionSlug);
   const baseDir = `tenants/${tenantKey}/extensions/${extensionSlug}`;
 
   const candidates = packet.candidates;

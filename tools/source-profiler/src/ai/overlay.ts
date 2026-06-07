@@ -45,7 +45,18 @@ export async function runAiOverlay(input: AiOverlayInput): Promise<AiOverlayResu
   const promptPreview = previewPrompt(prompt);
   add(`built redacted AI prompt (${prompt.redactedPacketJson.length} chars), no row data`);
 
-  const consent = evaluateAiConsent({ providerKind: input.providerKind, consent: input.consent });
+  // Bind consent to the ACTUAL provider, not just the requested kind. A caller
+  // must not smuggle a remote provider in under providerKind:"local".
+  if (input.provider && input.provider.kind !== input.providerKind) {
+    add(
+      `AI overlay blocked — provider kind "${input.provider.kind}" does not match requested "${input.providerKind}"; preview only`,
+      "warn",
+    );
+    return { candidates: [], promptPreview, audit };
+  }
+  const effectiveKind = input.provider?.kind ?? input.providerKind;
+
+  const consent = evaluateAiConsent({ providerKind: effectiveKind, consent: input.consent });
   for (const reason of consent.reasons) add(reason, consent.allowed ? "info" : "warn");
   if (!consent.allowed) {
     add("AI overlay blocked — consent not satisfied; preview only", "warn");
@@ -55,7 +66,7 @@ export async function runAiOverlay(input: AiOverlayInput): Promise<AiOverlayResu
   const provider = resolveProvider(input);
   if (!provider) {
     add(
-      `remote provider "${input.providerKind}" consented but no transport configured; preview only, nothing sent`,
+      `remote provider "${effectiveKind}" consented but no transport configured; preview only, nothing sent`,
       "warn",
     );
     return { candidates: [], promptPreview, audit };

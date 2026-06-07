@@ -55,4 +55,23 @@ describe("buildOverlayDraft", () => {
       expect(file.path.startsWith("tenants/acme/extensions/acme-crm/")).toBe(true);
     }
   });
+
+  it("rejects unsafe tenant/slug values (B3)", () => {
+    expect(() =>
+      buildOverlayDraft({
+        packet: samplePacket(),
+        tenantKey: "..",
+        extensionSlug: "pwn",
+        overlayRoot: "(not-materialized)",
+      }),
+    ).toThrow();
+    expect(() =>
+      buildOverlayDraft({
+        packet: samplePacket(),
+        tenantKey: "acme/evil",
+        extensionSlug: "x",
+        overlayRoot: "(not-materialized)",
+      }),
+    ).toThrow();
+  });
 });

@@ -63,6 +63,23 @@ describe("materializeOverlayDraft", () => {
     }
   });
 
+  it("rejects tenant/slug path traversal (B3)", () => {
+    const repo = tmp("sp-repoT-");
+    const overlay = tmp("sp-overlayT-");
+    try {
+      writeFileSync(path.join(overlay, "AGENTS.md"), "# overlay\n");
+      const evil = { ...draft(overlay), tenantKey: "..", extensionSlug: "pwn" };
+      expect(() =>
+        materializeOverlayDraft({ draft: evil, overlayRoot: overlay, sourceRepoRoot: repo, cwd: repo }),
+      ).toThrow(/\^\[A-Za-z0-9_-\]\+\$/);
+      // and nothing was written outside the tenants/ tree
+      expect(existsSync(path.join(overlay, "extensions/pwn"))).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(overlay, { recursive: true, force: true });
+    }
+  });
+
   it("refuses a target that is not an overlay root", () => {
     const repo = tmp("sp-repo3-");
     const overlay = tmp("sp-overlay3-");

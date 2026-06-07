@@ -30,7 +30,9 @@ const TOOL_ROOT_REL = "tools/source-profiler";
 
 const EXEC_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: "eval", re: /\beval\s*\(/ },
-  { id: "new-function", re: /\bnew\s+Function\s*\(/ },
+  // Catch both `new Function(` and a bare `Function(` call (not a `.Function(`
+  // method access).
+  { id: "function-ctor", re: /(^|[^.\w])Function\s*\(/ },
   { id: "child_process", re: /child_process/ },
   // Note: bare `exec(` is intentionally NOT banned — it false-matches
   // RegExp.prototype.exec. child_process import is caught above; the distinctive
@@ -38,16 +40,26 @@ const EXEC_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: "exec-sync", re: /\b(execSync|execFile|execFileSync)\s*\(/ },
   { id: "spawn", re: /\bspawn(Sync)?\s*\(/ },
   { id: "vm", re: /\bnode:vm\b|\brequire\(['"]vm['"]\)/ },
-  { id: "dynamic-import", re: /\bimport\s*\(\s*[^'"\s)]/ },
-  { id: "dynamic-require", re: /\brequire\s*\(\s*[^'"\s)]/ },
+  // Any dynamic import()/require() — literal or computed — is disallowed in the
+  // tool (it never code-splits or loads modules at runtime).
+  { id: "dynamic-import", re: /\bimport\s*\(/ },
+  { id: "dynamic-require", re: /\brequire\s*\(/ },
 ];
 
 const NETWORK_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: "fetch", re: /\bfetch\s*\(/ },
   { id: "node-http", re: /\bnode:(http|https|net|dgram|tls)\b/ },
-  { id: "require-http", re: /\brequire\(['"](http|https|net|dgram|tls)['"]\)/ },
+  { id: "require-net", re: /\brequire\s*\(\s*['"](node:)?(http|https|net|dgram|tls)['"]\s*\)/ },
+  { id: "import-net", re: /\bimport\s*\(\s*['"](node:)?(http|https|net|dgram|tls)['"]\s*\)/ },
+  { id: "import-net-static", re: /\bfrom\s+['"](node:)?(http|https|net|dgram|tls)['"]/ },
   { id: "xhr", re: /\bXMLHttpRequest\b/ },
   { id: "ws", re: /\bnew\s+WebSocket\s*\(/ },
+];
+
+// Tooling — deterministic OR ai — must never finalize a human decision.
+const ACCEPTED_STATE_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
+  { id: "asserts-accepted", re: /state\s*:\s*['"]accepted_by_human['"]/ },
+  { id: "asserts-rejected", re: /state\s*:\s*['"]rejected_by_human['"]/ },
 ];
 
 // Reused from the profiler's own secret rules (kept in sync conceptually).
@@ -81,20 +93,22 @@ export function runSourceProfilerBoundariesCheck(repoRoot: string): Violation[] 
         continue;
       }
       if (isTest) continue; // tests may reference banned tokens as assertions
+      // Any @bypass-* must carry a justification on the same line.
+      const bypass = line.match(/@bypass-([A-Za-z0-9-]+)\b(.*)$/);
+      if (bypass && bypass[2].trim().length === 0) {
+        violations.push({ rule: "SP-BYPASS", file: rel, line: i + 1, detail: `@bypass-${bypass[1]} without justification` });
+      }
       // SP-A no-exec everywhere in the tool source.
       check(EXEC_PATTERNS, line, i, rel, "SP-A", violations);
-      // SP-B no-network in the deterministic core only.
+      // SP-B no-network in the deterministic core only (ai/db are sanctioned I/O).
       if (!inAiDir && !inDbDir) {
         check(NETWORK_PATTERNS, line, i, rel, "SP-B", violations);
       }
-      // SP-C: AI overlay must not assert acceptance / deterministic origin.
-      if (inAiDir) {
-        if (/origin\s*:\s*['"]deterministic['"]/.test(line)) {
-          pushIfNotBypassed(violations, "SP-C", rel, i, line, "ai output claims deterministic origin");
-        }
-        if (/state\s*:\s*['"]accepted_by_human['"]/.test(line)) {
-          pushIfNotBypassed(violations, "SP-C", rel, i, line, "ai output asserts human acceptance");
-        }
+      // SP-C-state: tooling never finalizes a human decision — anywhere in the tool.
+      check(ACCEPTED_STATE_PATTERNS, line, i, rel, "SP-C", violations);
+      // SP-C-origin: AI overlay must not claim deterministic origin.
+      if (inAiDir && /origin\s*:\s*['"]deterministic['"]/.test(line)) {
+        pushIfNotBypassed(violations, "SP-C", rel, i, line, "ai output claims deterministic origin");
       }
     }
   }

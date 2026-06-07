@@ -23,7 +23,7 @@ export const discoveredFieldSchema = z.object({
   nullable: z.boolean().default(true),
   /** Deterministic semantic tags, e.g. ["email"], ["amount"], ["stage"], ["fk:companies"]. */
   semanticTags: z.array(z.string()).default([]),
-});
+}).strict();
 export type DiscoveredField = z.infer<typeof discoveredFieldSchema>;
 
 export const associationSchema = z.object({
@@ -32,7 +32,7 @@ export const associationSchema = z.object({
   /** Referenced object name (best-effort, structural). */
   toObject: z.string().min(1),
   kind: z.enum(["belongs_to", "has_many", "many_to_many", "unknown"]).default("unknown"),
-});
+}).strict();
 export type Association = z.infer<typeof associationSchema>;
 
 export const discoveredObjectSchema = z.object({
@@ -45,7 +45,7 @@ export const discoveredObjectSchema = z.object({
   associations: z.array(associationSchema).default([]),
   /** 0-100 confidence in the structural parse. */
   parseConfidence: z.number().int().min(0).max(100),
-});
+}).strict();
 export type DiscoveredObject = z.infer<typeof discoveredObjectSchema>;
 
 export const skippedFileSchema = z.object({
@@ -58,7 +58,7 @@ export const skippedFileSchema = z.object({
     "secret_preflight",
     "unreadable",
   ]),
-});
+}).strict();
 export type SkippedFile = z.infer<typeof skippedFileSchema>;
 
 export const codeScanSummarySchema = z.object({
@@ -66,5 +66,5 @@ export const codeScanSummarySchema = z.object({
   scannedFileCount: z.number().int().min(0),
   skippedFiles: z.array(skippedFileSchema).default([]),
   objects: z.array(discoveredObjectSchema).default([]),
-});
+}).strict();
 export type CodeScanSummary = z.infer<typeof codeScanSummarySchema>;

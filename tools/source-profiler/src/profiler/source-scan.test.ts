@@ -62,3 +62,62 @@ describe("scanFile — OpenAPI JSON", () => {
     expect(meeting?.fields.find((f) => f.name === "contactId")?.nullable).toBe(true);
   });
 });
+
+describe("scanFile — edge cases (G2)", () => {
+  it("SQL: skips comments, quoted identifiers, and composite PRIMARY KEY lines", () => {
+    const ddl = [
+      'CREATE TABLE "orders" (',
+      '  "id" INTEGER NOT NULL,',
+      "  -- the order total",
+      '  "total" DECIMAL(10,2),',
+      '  "stage" VARCHAR(20),',
+      '  PRIMARY KEY ("id")',
+      ");",
+    ].join("\n");
+    const [orders] = scanFile("orders.sql", ddl);
+    const names = orders.fields.map((f) => f.name);
+    expect(names).toEqual(["id", "total", "stage"]); // PK + comment lines excluded
+    expect(orders.fields.find((f) => f.name === "id")?.nullable).toBe(false);
+  });
+
+  it("Prisma: enum-typed fields are scalar fields, not relations", () => {
+    const prisma = [
+      "enum Status { OPEN CLOSED }",
+      "model Ticket {",
+      "  id Int @id",
+      "  status Status",
+      "  owner User @relation(fields: [ownerId], references: [id])",
+      "  ownerId Int",
+      "}",
+    ].join("\n");
+    const [ticket] = scanFile("ticket.prisma", prisma);
+    expect(ticket.fields.find((f) => f.name === "status")?.dataType).toBe("enum");
+    expect(ticket.associations.some((a) => a.toObject === "User")).toBe(true);
+    expect(ticket.fields.some((f) => f.name === "status")).toBe(true);
+  });
+
+  it("OpenAPI: tolerates array and $ref properties without crashing", () => {
+    const doc = JSON.stringify({
+      openapi: "3.0.0",
+      components: {
+        schemas: {
+          Thing: {
+            type: "object",
+            required: ["tags"],
+            properties: {
+              tags: { type: "array", items: { type: "string" } },
+              ref: { $ref: "#/components/schemas/Other" },
+              name: { type: "string" },
+            },
+          },
+        },
+      },
+    });
+    const [thing] = scanFile("api.json", doc);
+    expect(thing.fields.map((f) => f.name)).toEqual(
+      expect.arrayContaining(["tags", "ref", "name"]),
+    );
+    expect(thing.fields.find((f) => f.name === "tags")?.nullable).toBe(false);
+    expect(thing.fields.find((f) => f.name === "ref")?.nullable).toBe(true);
+  });
+});

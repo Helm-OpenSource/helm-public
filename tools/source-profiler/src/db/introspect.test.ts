@@ -64,6 +64,38 @@ describe("catalogToDiscoveredObjects + mapping", () => {
   });
 });
 
+describe("introspectViaExecutor — allowlist enters the query (B2)", () => {
+  it("does not issue any query when the allowlist is empty", async () => {
+    const queries: string[] = [];
+    const executor: CatalogExecutor = {
+      engine: "postgres",
+      async query(sql) {
+        queries.push(sql);
+        return [];
+      },
+    };
+    const { summary } = await introspectViaExecutor(executor, { schemas: [], tables: [] });
+    expect(queries).toEqual([]); // never read catalog metadata at all
+    expect(summary.tables).toEqual([]);
+  });
+
+  it("constrains the catalog query to the allowlisted schema", async () => {
+    const queries: string[] = [];
+    const executor: CatalogExecutor = {
+      engine: "postgres",
+      async query(sql) {
+        queries.push(sql);
+        return [];
+      },
+    };
+    await introspectViaExecutor(executor, { schemas: ["public"], tables: [] });
+    expect(queries.length).toBeGreaterThan(0);
+    expect(queries[0]).toContain("'public'");
+    expect(queries[0]).toMatch(/table_schema IN/i);
+    expect(queries.join("\n")).not.toContain("internal");
+  });
+});
+
 describe("introspectViaExecutor — write canary", () => {
   it("warns (not fails) when the connection is write-capable", async () => {
     const executor: CatalogExecutor = {

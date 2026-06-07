@@ -16,13 +16,13 @@ export const catalogSnapshotColumnSchema = z.object({
   dataType: z.string().min(1),
   nullable: z.boolean().default(true),
   comment: z.string().optional(),
-});
+}).strict();
 
 export const catalogSnapshotForeignKeySchema = z.object({
   column: z.string().min(1),
   referencesTable: z.string().min(1),
   referencesColumn: z.string().min(1),
-});
+}).strict();
 
 export const catalogSnapshotTableSchema = z.object({
   schema: z.string().min(1),
@@ -31,7 +31,7 @@ export const catalogSnapshotTableSchema = z.object({
   indexes: z.array(z.string()).default([]),
   foreignKeys: z.array(catalogSnapshotForeignKeySchema).default([]),
   comment: z.string().optional(),
-});
+}).strict();
 
 export const dbCatalogSnapshotSchema = z
   .object({

@@ -25,7 +25,7 @@ export const fieldMappingSchema = z.object({
   enumMap: z.record(z.string(), z.string()).optional(),
   /** 0-100 confidence in this field-level mapping. */
   confidence: z.number().int().min(0).max(100),
-});
+}).strict();
 export type FieldMapping = z.infer<typeof fieldMappingSchema>;
 
 export const signalMappingCandidateSchema = z.object({
@@ -44,5 +44,5 @@ export const signalMappingCandidateSchema = z.object({
   state: candidateStateSchema.default("candidate"),
   /** Pointers back to evidence (object/field ids); never raw rows. */
   evidenceRefs: z.array(z.string()).default([]),
-});
+}).strict();
 export type SignalMappingCandidate = z.infer<typeof signalMappingCandidateSchema>;

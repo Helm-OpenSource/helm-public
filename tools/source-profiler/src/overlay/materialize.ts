@@ -36,6 +36,8 @@ export type MaterializeResult = {
   writtenFiles: string[];
 };
 
+const SAFE_SLUG = /^[A-Za-z0-9_-]+$/;
+
 export function materializeOverlayDraft(input: MaterializeInput): MaterializeResult {
   const { draft, cwd, sourceRepoRoot, force } = input;
   const overlayRootAbs = path.resolve(cwd, input.overlayRoot);
@@ -55,6 +57,11 @@ export function materializeOverlayDraft(input: MaterializeInput): MaterializeRes
     );
   }
 
+  // Reject unsafe slugs and verify the normalized target stays inside the
+  // overlay root (defense-in-depth against tenant/slug path traversal).
+  if (!SAFE_SLUG.test(draft.tenantKey) || !SAFE_SLUG.test(draft.extensionSlug)) {
+    throw new Error("overlay tenantKey/extensionSlug must match ^[A-Za-z0-9_-]+$");
+  }
   const targetDir = path.join(
     overlayRootAbs,
     "tenants",
@@ -62,6 +69,9 @@ export function materializeOverlayDraft(input: MaterializeInput): MaterializeRes
     "extensions",
     draft.extensionSlug,
   );
+  if (!isInside(targetDir, overlayRootAbs)) {
+    throw new Error(`overlay target dir escapes overlay root: ${targetDir}`);
+  }
   if (existsSync(targetDir) && readdirSync(targetDir).length > 0 && !force) {
     throw new Error(
       `overlay target already exists and is non-empty: ${targetDir} (pass force to overwrite)`,

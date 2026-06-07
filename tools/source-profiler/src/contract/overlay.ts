@@ -24,7 +24,7 @@ export const overlayFileDraftSchema = z.object({
     "review_packet_doc",
     "synthetic_test",
   ]),
-});
+}).strict();
 export type OverlayFileDraft = z.infer<typeof overlayFileDraftSchema>;
 
 /**
@@ -40,18 +40,28 @@ export const connectorDraftSchema = z.object({
   candidates: z.array(signalMappingCandidateSchema).default([]),
   /** Always false in v1; the draft is inert. */
   activated: z.literal(false),
-});
+}).strict();
 export type ConnectorDraft = z.infer<typeof connectorDraftSchema>;
+
+/**
+ * Safe slug: alphanumerics, `_`, `-` only. Forbids `/`, `\`, `.`, `..` so a
+ * tenant/extension value can never traverse out of `tenants/<t>/extensions/<s>/`.
+ */
+export const safeSlugSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/, "must match ^[A-Za-z0-9_-]+$ (no '/', '\\\\', '.', '..')");
 
 export const overlayPatchDraftSchema = z.object({
   schemaVersion: z.literal("helm.source-profiler.overlay-draft.v1"),
-  tenantKey: z.string().min(1),
-  extensionSlug: z.string().min(1),
+  tenantKey: safeSlugSchema,
+  extensionSlug: safeSlugSchema,
   /** The overlay root this draft targets (recorded for audit; not auto-applied). */
   overlayRoot: z.string().min(1),
   files: z.array(overlayFileDraftSchema).default([]),
   connectorDraft: connectorDraftSchema.optional(),
   /** Whether the draft was materialized to disk or only emitted as a patch. */
   materialized: z.boolean().default(false),
-});
+}).strict();
 export type OverlayPatchDraft = z.infer<typeof overlayPatchDraftSchema>;

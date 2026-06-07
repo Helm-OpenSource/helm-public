@@ -41,7 +41,15 @@ export function redactReviewPacket(packet: ReviewPacket): ReviewPacket {
     ...packet,
     sensitivity: "REDACTED_SHAREABLE",
     redactionStatus: "redacted",
-    requiredMetadata: { ...packet.requiredMetadata, source: REDACTED, redactionStatus: "redacted" },
+    // Redact identity-bearing metadata: source, actor (may be an OS username /
+    // email), and workspace. traceId is the run id (non-identifying) and kept.
+    requiredMetadata: {
+      ...packet.requiredMetadata,
+      source: REDACTED,
+      actor: REDACTED,
+      workspace: REDACTED,
+      redactionStatus: "redacted",
+    },
     codeScan,
     candidates,
     schemaIntrospection: undefined,

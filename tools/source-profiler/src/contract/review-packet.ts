@@ -36,5 +36,5 @@ export const reviewPacketSchema = z.object({
   candidates: z.array(signalMappingCandidateSchema).default([]),
   redactionStatus: redactionStatusSchema,
   humanReviewState: humanReviewStateSchema.default("pending_review"),
-});
+}).strict();
 export type ReviewPacket = z.infer<typeof reviewPacketSchema>;

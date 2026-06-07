@@ -67,7 +67,7 @@ export const requiredArtifactMetadataSchema = z.object({
   rawOutputHash: z.string().min(1),
   redactionStatus: redactionStatusSchema,
   traceId: z.string().min(1),
-});
+}).strict();
 export type RequiredArtifactMetadata = z.infer<
   typeof requiredArtifactMetadataSchema
 >;

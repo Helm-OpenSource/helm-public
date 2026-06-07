@@ -80,7 +80,9 @@ export async function introspectViaExecutor(
   executor: CatalogExecutor,
   allowlist: CatalogAllowlist,
 ): Promise<IntrospectResult> {
-  const snapshot = await snapshotFromExecutor(executor);
+  // Pass the allowlist into the catalog query so out-of-scope metadata is never
+  // read; introspectFromSnapshot filters again as defense-in-depth.
+  const snapshot = await snapshotFromExecutor(executor, allowlist);
   if (executor.probeWriteCapability) {
     const writable = await executor.probeWriteCapability().catch(() => false);
     snapshot.permissionPosture = writable ? "write_capable_warned" : "read_only_confirmed";

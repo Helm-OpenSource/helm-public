@@ -19,9 +19,16 @@ type EntityRule = {
   requiredTags: string[];
   /** Tags that boost confidence when present. */
   boostTags: string[];
+  /** If EVERY tag here is present, this rule does NOT fire (mutual exclusion). */
+  suppressIfTags?: string[];
+  /** Object/table name hint; a match adds confidence. */
+  nameHint?: RegExp;
   /** tag -> External* targetField + transform. */
   fieldTargets: Record<string, { targetField: string; transform?: FieldMapping["transform"] }>;
 };
+
+const NAME_HINT_BONUS = 10;
+const AMBIGUITY_PENALTY = 12;
 
 const ENTITY_RULES: readonly EntityRule[] = [
   {
@@ -29,6 +36,7 @@ const ENTITY_RULES: readonly EntityRule[] = [
     signalFamily: "advancement",
     requiredTags: ["amount", "stage"],
     boostTags: ["company_ref", "owner_ref", "name", "due_date"],
+    nameHint: /(deal|opportunit|pipeline|商机|机会)/i,
     fieldTargets: {
       amount: { targetField: "amount" },
       stage: { targetField: "stageLabel" },
@@ -43,6 +51,7 @@ const ENTITY_RULES: readonly EntityRule[] = [
     signalFamily: "advancement",
     requiredTags: ["name", "domain"],
     boostTags: ["owner_ref"],
+    nameHint: /(compan|account|organi|客户|公司)/i,
     fieldTargets: {
       name: { targetField: "name", transform: "normalize_name" },
       domain: { targetField: "domain", transform: "normalize_domain" },
@@ -54,6 +63,7 @@ const ENTITY_RULES: readonly EntityRule[] = [
     signalFamily: "advancement",
     requiredTags: ["email"],
     boostTags: ["name", "phone", "company_ref", "owner_ref"],
+    nameHint: /(contact|person|people|lead|联系人)/i,
     fieldTargets: {
       email: { targetField: "email" },
       name: { targetField: "fullName", transform: "normalize_name" },
@@ -67,6 +77,9 @@ const ENTITY_RULES: readonly EntityRule[] = [
     signalFamily: "receipt",
     requiredTags: ["date", "name"],
     boostTags: ["contact_ref", "company_ref"],
+    // A clear Opportunity (amount+stage) is not a meeting, even if it has dates.
+    suppressIfTags: ["amount", "stage"],
+    nameHint: /(meeting|event|appointment|calendar|会议|日程)/i,
     fieldTargets: {
       name: { targetField: "title", transform: "normalize_name" },
       date: { targetField: "startsAt", transform: "parse_date" },
@@ -79,6 +92,9 @@ const ENTITY_RULES: readonly EntityRule[] = [
     signalFamily: "commitment",
     requiredTags: ["due_date", "name"],
     boostTags: ["owner_ref"],
+    // A clear Opportunity (amount+stage) is not a task, even if it has a due date.
+    suppressIfTags: ["amount", "stage"],
+    nameHint: /(task|todo|action|ticket|工单|任务)/i,
     fieldTargets: {
       name: { targetField: "title", transform: "normalize_name" },
       due_date: { targetField: "dueDate", transform: "parse_date" },
@@ -94,6 +110,8 @@ export function proposeMappings(object: DiscoveredObject): SignalMappingCandidat
 
   for (const rule of ENTITY_RULES) {
     if (!rule.requiredTags.every((t) => presentTags.has(t))) continue;
+    // Mutual exclusion: a stronger competing signal suppresses this rule.
+    if (rule.suppressIfTags && rule.suppressIfTags.every((t) => presentTags.has(t))) continue;
 
     const fieldMappings: FieldMapping[] = [];
     const usedTags: string[] = [];
@@ -109,14 +127,13 @@ export function proposeMappings(object: DiscoveredObject): SignalMappingCandidat
       });
     }
 
-    const confidence = scoreConfidence(rule, presentTags);
     candidates.push({
       id: shortHash(`${object.id}:${rule.entity}`),
       sourceObjectId: object.id,
       targetEntity: rule.entity,
       signalFamily: rule.signalFamily,
       fieldMappings,
-      confidence,
+      confidence: scoreConfidence(rule, presentTags, object),
       rationale: buildRationale(object, rule, usedTags),
       origin: "deterministic",
       state: "candidate",
@@ -124,15 +141,26 @@ export function proposeMappings(object: DiscoveredObject): SignalMappingCandidat
     });
   }
 
+  // Ambiguity penalty: when an object yields multiple candidates, keep the top
+  // one and downweight the rest so coincidental matches sort below clear ones.
+  if (candidates.length > 1) {
+    candidates.sort((a, b) => b.confidence - a.confidence);
+    for (let i = 1; i < candidates.length; i++) {
+      candidates[i].confidence = Math.max(0, candidates[i].confidence - AMBIGUITY_PENALTY);
+    }
+  }
+
   return candidates;
 }
 
-function scoreConfidence(rule: EntityRule, presentTags: Set<string>): number {
-  const required = rule.requiredTags.length;
+function scoreConfidence(rule: EntityRule, presentTags: Set<string>, object: DiscoveredObject): number {
   const boostHits = rule.boostTags.filter((t) => presentTags.has(t)).length;
   // Required tags all present (guaranteed here) → base 70; each boost adds up to 30.
   const boostShare = rule.boostTags.length === 0 ? 0 : (boostHits / rule.boostTags.length) * 30;
-  return Math.min(100, Math.round(70 + boostShare + Math.min(required - 2, 0)));
+  const nameBonus = rule.nameHint && rule.nameHint.test(object.name) ? NAME_HINT_BONUS : 0;
+  const raw = Math.round(70 + boostShare + nameBonus);
+  // Cap by structural parse confidence: a low-confidence parse caps the mapping.
+  return Math.max(0, Math.min(100, Math.min(raw, object.parseConfidence)));
 }
 
 function buildRationale(

@@ -18,14 +18,14 @@ export const catalogColumnSchema = z.object({
   /** Column comment if the catalog exposes one and the policy allows it. */
   comment: z.string().optional(),
   semanticTags: z.array(z.string()).default([]),
-});
+}).strict();
 export type CatalogColumn = z.infer<typeof catalogColumnSchema>;
 
 export const catalogForeignKeySchema = z.object({
   column: z.string().min(1),
   referencesTable: z.string().min(1),
   referencesColumn: z.string().min(1),
-});
+}).strict();
 export type CatalogForeignKey = z.infer<typeof catalogForeignKeySchema>;
 
 export const catalogTableSchema = z.object({
@@ -35,7 +35,7 @@ export const catalogTableSchema = z.object({
   indexes: z.array(z.string()).default([]),
   foreignKeys: z.array(catalogForeignKeySchema).default([]),
   comment: z.string().optional(),
-});
+}).strict();
 export type CatalogTable = z.infer<typeof catalogTableSchema>;
 
 export const schemaIntrospectionSummarySchema = z.object({
@@ -45,7 +45,7 @@ export const schemaIntrospectionSummarySchema = z.object({
   permissionPosture: z.enum(["read_only_confirmed", "unknown", "write_capable_warned"]),
   /** Hard invariant: the catalog path never reads business rows. */
   rowDataRead: z.literal(false),
-});
+}).strict();
 export type SchemaIntrospectionSummary = z.infer<
   typeof schemaIntrospectionSummarySchema
 >;
