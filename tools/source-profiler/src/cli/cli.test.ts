@@ -53,14 +53,14 @@ describe("runInit", () => {
 });
 
 describe("runProfileCommand", () => {
-  it("writes a run directory with the three artifacts", () => {
+  it("writes a run directory with the three artifacts", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "sp-run-"));
     try {
       writeFileSync(
         path.join(dir, "schema.sql"),
         "CREATE TABLE deals (id INTEGER PRIMARY KEY, name VARCHAR(99), amount DECIMAL(10,2), stage VARCHAR(20));",
       );
-      const { runDir, artifactRefs, result } = runProfileCommand({
+      const { runDir, artifactRefs, result } = await runProfileCommand({
         cwd: dir,
         source: ".",
         output: "out",

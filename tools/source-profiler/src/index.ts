@@ -11,12 +11,13 @@
 import { parseArgs, HELP_TEXT } from "./cli/args";
 import { runInit } from "./cli/init";
 import { runProfileCommand } from "./cli/profile";
+import type { AiProviderKind } from "./ai/types";
 
 function asString(value: string | boolean | undefined): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-export function main(argv: readonly string[], cwd: string = process.cwd()): number {
+export async function main(argv: readonly string[], cwd: string = process.cwd()): Promise<number> {
   const options = parseArgs(argv);
 
   if (options.command === "help") {
@@ -33,7 +34,7 @@ export function main(argv: readonly string[], cwd: string = process.cwd()): numb
   // profile
   try {
     const flags = options.flags;
-    const out = runProfileCommand({
+    const out = await runProfileCommand({
       cwd,
       scopePath: options.scope,
       source: options.source,
@@ -45,6 +46,8 @@ export function main(argv: readonly string[], cwd: string = process.cwd()): numb
       tenant: asString(flags.tenant),
       extensionSlug: asString(flags["extension-slug"]),
       force: options.force,
+      aiProvider: asAiProvider(flags["ai-provider"]),
+      aiConsent: flags["ai-consent"] === true,
     });
     if (options.json) {
       process.stdout.write(`${JSON.stringify(out.result, null, 2)}\n`);
@@ -55,6 +58,9 @@ export function main(argv: readonly string[], cwd: string = process.cwd()): numb
           `found ${codeScan.objects.length} object(s), ` +
           `${candidates.length} mapping candidate(s)\n`,
       );
+      if (out.aiCandidateCount !== undefined) {
+        process.stdout.write(`profile: AI overlay added ${out.aiCandidateCount} advisory candidate(s)\n`);
+      }
       process.stdout.write(`profile: wrote run to ${out.runDir}\n`);
       if (out.materializedFiles) {
         process.stdout.write(
@@ -69,8 +75,15 @@ export function main(argv: readonly string[], cwd: string = process.cwd()): numb
   }
 }
 
+const AI_PROVIDER_KINDS = new Set(["local", "openai", "anthropic", "custom"]);
+function asAiProvider(value: string | boolean | undefined): AiProviderKind | undefined {
+  return typeof value === "string" && AI_PROVIDER_KINDS.has(value)
+    ? (value as AiProviderKind)
+    : undefined;
+}
+
 // Direct invocation (tsx). Tests import the command modules, not this entry.
 const isDirect = process.argv[1] && /source-profiler[/\\]src[/\\]index\.ts$/.test(process.argv[1]);
 if (isDirect) {
-  process.exit(main(process.argv.slice(2)));
+  void main(process.argv.slice(2)).then((code) => process.exit(code));
 }
