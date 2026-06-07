@@ -83,10 +83,19 @@ open http://localhost:3000
 ```bash
 npm run delivery:doctor
 npm run delivery:doctor -- --region cn   # 中国客户交付前的本地静态预检
+npm run golden:path                       # 生成 /tmp/helm-golden-path-proof 本地证据包
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run check:public-release
 ```
+
+`npm run golden:path` 是当前推荐的单一 first proof 入口。它只写
+`/tmp/helm-golden-path-proof`，生成 `MANIFEST.json`、`doctor-receipt.json`、
+`pack-fixture-receipt.json`、`fixture-diff-summary.json`、`hsi-eval-result.json`、
+`public-release-guard-receipt.json`、`source-profiler-receipt.json`、
+`boundary-note.md` 和 `next-safe-actions.md`。这只是本地 public-safe 证据包，
+not customer deployment readiness、not release readiness、not connector
+authorization、not writeback、not external send、not approval execution。
 
 数据接入先按 [Helm 数据接入体验](docs/product/HELM_DATA_INTAKE_EXPERIENCE.md)
 走 source-intake-first：L0 诊断材料 → L1 脱敏 fixture / dry-run → L2 只读接入。
@@ -415,6 +424,7 @@ npm run release:check
 |---|---|
 | **🚀 `git clone` + `docker compose up`** | 本地跑通核心 surface；从 `extensions/case-management-sample/` 开始 fork 你的客户 vertical |
 | **🧭 `npm run delivery:doctor`** | 先做只读本地诊断：Golden Path 文件、关键 scripts、sample pack、HSI eval 和 D2 smoke 姿态 |
+| **📦 `npm run golden:path`** | 生成 `/tmp/helm-golden-path-proof` 本地证据包：doctor、fixture diff、HSI eval、public guard、source-profiler receipt |
 | **🧪 `npm run pack:fixture-check`** | 检查 pack manifest、tenant 对齐、fixture JSON、安全 marker 和 HSI surface 覆盖 |
 | **💬 [GitHub Discussions](https://github.com/Helm-OpenSource/helm-public/discussions)** | 社区问答、vertical 共建、卡点求助 |
 | **📮 微信 `ffjw0821`** | 联系我们、合作沟通、获取当期社群邀请二维码（二维码按周期更新） |

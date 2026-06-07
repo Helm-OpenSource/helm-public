@@ -11,11 +11,13 @@ function helmEnvKey(...parts: readonly string[]) {
 function buildFileMap(overrides: Record<string, string | null> = {}) {
   const scripts = {
     "delivery:doctor": "tsx scripts/delivery-engineer-doctor.ts",
+    "golden:path": "node --import tsx scripts/golden-path-proof.ts",
     "pack:fixture-check": "tsx scripts/pack-fixture-check.ts",
     "eval:headless-signal-interface": "tsx scripts/headless-signal-interface-evals.ts",
     "eval:signal-first-mile-quality": "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
     "eval:operating-signal-flow": "tsx scripts/operating-signal-flow-evals.ts",
     "check:public-release": "tsx scripts/public-release-guard.ts",
+    "check:golden-path-docs": "node --import tsx scripts/check-golden-path-docs.ts",
     "check:boundaries": "tsx scripts/decision-first-boundary-check.ts",
     "self-check": "tsx scripts/helm-self-check-refactored.ts",
   };
@@ -48,6 +50,8 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
     "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md": "closeout",
     "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md": "D2 smoke pending",
     "features/settings/data-intake-ux.ts": "L0 L1 L2 SourceIntakeOption forbiddenAction no writeback external send approval execution customer deployment proof",
+    "scripts/golden-path-proof.ts": "DEFAULT_GOLDEN_PATH_PROOF_OUTPUT /tmp/helm-golden-path-proof MANIFEST.json source-profiler-receipt.json",
+    "scripts/check-golden-path-docs.ts": "npm run golden:path /tmp/helm-golden-path-proof",
     "templates/signal-first-mile/run-first-change-proof.js": "evalCommand MANIFEST.json customer-materials.md signal-quality-report.md hsi-fixture.json review-packet.md",
     "templates/signal-first-mile/selector-input.sample.json": "{}",
     "templates/signal-first-mile/signal-quality-eval.js": "module.exports = {};",
@@ -129,6 +133,7 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
       )?.status,
     ).toBe("pass");
     expect(summary.nextCommands).toContain("npm run eval:headless-signal-interface");
+    expect(summary.nextCommands).toContain("npm run golden:path");
     expect(summary.nextCommands).toContain("npm run delivery:doctor -- --region cn");
   });
 

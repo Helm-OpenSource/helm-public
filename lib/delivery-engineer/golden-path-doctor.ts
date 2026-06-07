@@ -67,6 +67,8 @@ const REQUIRED_FILES = [
   "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md",
   "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md",
   "features/settings/data-intake-ux.ts",
+  "scripts/golden-path-proof.ts",
+  "scripts/check-golden-path-docs.ts",
   "templates/signal-first-mile/run-first-change-proof.js",
   "templates/signal-first-mile/selector-input.sample.json",
   "templates/signal-first-mile/signal-quality-eval.js",
@@ -89,11 +91,13 @@ const REQUIRED_FILES = [
 
 const REQUIRED_PACKAGE_SCRIPTS = [
   "delivery:doctor",
+  "golden:path",
   "eval:headless-signal-interface",
   "eval:signal-first-mile-quality",
   "eval:operating-signal-flow",
   "pack:fixture-check",
   "check:public-release",
+  "check:golden-path-docs",
   "check:boundaries",
   "self-check",
 ] as const;
@@ -803,12 +807,14 @@ export function runDeliveryEngineerGoldenPathDoctor(
     nextCommands: [
       "npm run delivery:doctor",
       "npm run delivery:doctor -- --region cn",
+      "npm run golden:path",
       "node templates/signal-first-mile/run-first-change-proof.js templates/signal-first-mile/selector-input.sample.json /tmp/helm-sfm-first-change-proof",
       "npm run eval:signal-first-mile-quality",
       "npm run pack:fixture-check",
       "npm run eval:headless-signal-interface",
       "npm run eval:operating-signal-flow",
       "npm run check:public-release",
+      "npm run check:golden-path-docs",
       "npm run self-check",
       "npm run check:boundaries",
     ],

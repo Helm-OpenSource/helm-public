@@ -38,6 +38,10 @@ change / verification commands / public-safe evidence route / boundary explicit.
 Docs that only translate terms without guiding a first-change proof still need
 the next layer.
 
+当前 Golden Path 的单一 first proof 入口是 `npm run golden:path`，默认生成
+`/tmp/helm-golden-path-proof` 本地证据包；它不是客户部署、发布 ready、
+connector 授权、写回、外发或审批证明。
+
 ## 从这里开始 / Start Here
 
 - [README](../README.md) / [README English](../README.en.md)

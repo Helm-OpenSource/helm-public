@@ -173,9 +173,11 @@ describe("public mirror tree builder", () => {
       license: "Apache-2.0",
       scripts: {
         "check:boundaries":
-          "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
+          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
         "check:source-profiler-boundaries":
           "node --import tsx scripts/check-source-profiler-boundaries.ts",
+        "check:golden-path-docs":
+          "node --import tsx scripts/check-golden-path-docs.ts",
         "check:diagnostics-risk":
           "node --import tsx scripts/check-diagnostics-risk.ts",
         "check:llm-candidate-boundaries":
@@ -301,10 +303,13 @@ describe("public mirror tree builder", () => {
       "npm run public:smoke:static && npm run check:secret-history",
     );
     expect(scripts["check:boundaries"]).toBe(
-      "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
+      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
     );
     expect(scripts["check:source-profiler-boundaries"]).toBe(
       "node --import tsx scripts/check-source-profiler-boundaries.ts",
+    );
+    expect(scripts["check:golden-path-docs"]).toBe(
+      "node --import tsx scripts/check-golden-path-docs.ts",
     );
     expect(scripts["check:diagnostics-risk"]).toBe(
       "node --import tsx scripts/check-diagnostics-risk.ts",
