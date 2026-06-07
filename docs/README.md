@@ -50,6 +50,7 @@ the next layer.
 ## 公开契约 / Public Contracts
 
 - [AI 推荐治理契约 / AI recommendation governance](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md)
+- [诊断与自动化证据层要求 / Diagnostic automation evidence layer requirements](product/HELM_DIAGNOSTIC_AUTOMATION_EVIDENCE_LAYER_REQUIREMENTS.md)
 - [开源与商业边界 / Open source and commercial boundary](product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)
 - [开源与 Cloud trial 发布姿态 / Open source and cloud trial launch posture](product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md)
 - [发布现实对齐 / Release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md)

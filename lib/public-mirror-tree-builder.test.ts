@@ -172,7 +172,10 @@ describe("public mirror tree builder", () => {
       private: false,
       license: "Apache-2.0",
       scripts: {
-        "check:boundaries": "npm run public:smoke:static",
+        "check:boundaries":
+          "npm run public:smoke:static && npm run check:diagnostics-risk",
+        "check:diagnostics-risk":
+          "node --import tsx scripts/check-diagnostics-risk.ts",
         "check:public-commit-metadata":
           "node --import tsx scripts/public-commit-metadata-check.ts",
         "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
@@ -289,7 +292,12 @@ describe("public mirror tree builder", () => {
     expect(scripts["self-check"]).toBe(
       "npm run public:smoke:static && npm run check:secret-history",
     );
-    expect(scripts["check:boundaries"]).toBe("npm run public:smoke:static");
+    expect(scripts["check:boundaries"]).toBe(
+      "npm run public:smoke:static && npm run check:diagnostics-risk",
+    );
+    expect(scripts["check:diagnostics-risk"]).toBe(
+      "node --import tsx scripts/check-diagnostics-risk.ts",
+    );
     expect(scripts.test).toBe("vitest run --config vitest.public.config.ts");
     expect(scripts["test:public:guards"]).toBe(
       "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",

@@ -898,7 +898,10 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
     "node -e \"console.log('public mirror: database prepare is not required')\"",
   "self-check":
     "npm run public:smoke:static && npm run check:secret-history",
-  "check:boundaries": "npm run public:smoke:static",
+  "check:boundaries":
+    "npm run public:smoke:static && npm run check:diagnostics-risk",
+  "check:diagnostics-risk":
+    "node --import tsx scripts/check-diagnostics-risk.ts",
   test: "vitest run --config vitest.public.config.ts",
   "test:public:guards":
     "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
@@ -939,6 +942,8 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "eval:cross-system-accountability-gap",
   "kit:dry-run",
   "pack:fixture-check",
+  "diagnostics:doctor",
+  "check:diagnostics-risk",
   "db:generate",
   "db:migrate",
   "db:prepare",
