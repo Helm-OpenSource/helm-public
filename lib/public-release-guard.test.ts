@@ -721,7 +721,10 @@ describe("public release guard fixture coverage", () => {
       typecheck: "tsc --noEmit --project tsconfig.public.json",
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
-      "check:boundaries": "npm run public:smoke:static",
+      "check:boundaries":
+        "npm run public:smoke:static && npm run check:diagnostics-risk",
+      "check:diagnostics-risk":
+        "node --import tsx scripts/check-diagnostics-risk.ts",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":
         "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
@@ -851,7 +854,10 @@ describe("public release guard fixture coverage", () => {
     expect(result.violations).toEqual([]);
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
-      "check:boundaries": "npm run public:smoke:static",
+      "check:boundaries":
+        "npm run public:smoke:static && npm run check:diagnostics-risk",
+      "check:diagnostics-risk":
+        "node --import tsx scripts/check-diagnostics-risk.ts",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
       "check:public-commit-metadata":
         "node --import tsx scripts/public-commit-metadata-check.ts",
