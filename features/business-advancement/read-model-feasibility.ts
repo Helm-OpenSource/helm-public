@@ -433,7 +433,7 @@ export const FIXTURE_FEASIBILITY_MATRIX: readonly FixtureFeasibilityRow[] = [
     evidenceRationale:
       "Detecting 'user asked the same question 3 times in 3 days without entering " +
       "any primary action' requires persisting Ask Helm session query history. " +
-      "Final Requirements V1 §二.15 显式ly prohibits '问 Helm 多轮聊天历史持久化'. " +
+      "Final Requirements V1 §二.15 explicitly prohibits '问 Helm 多轮聊天历史持久化'. " +
       "Without session persistence there is no read model surface to project this signal. " +
       "No current memory, dashboard, or operating surface tracks Ask Helm interaction patterns.",
     boundaryRationale:
@@ -442,7 +442,7 @@ export const FIXTURE_FEASIBILITY_MATRIX: readonly FixtureFeasibilityRow[] = [
       "The system must not auto-push items or auto-mark queries as resolved.",
     forbiddenImplementation:
       "No Ask Helm session persistence schema may be added in Phase 1B — " +
-      "this is 显式ly forbidden in Final Requirements V1 §二.15. " +
+      "this is explicitly forbidden in Final Requirements V1 §二.15. " +
       "No runtime extractor to capture and store query patterns. " +
       "No event queue for Ask Helm interaction events. " +
       "future_only status reflects this hard requirement prohibition, not a " +
@@ -497,7 +497,7 @@ export const FIXTURE_FEASIBILITY_MATRIX: readonly FixtureFeasibilityRow[] = [
       "The system must not auto-push answers or auto-mark them as official facts.",
     forbiddenImplementation:
       "No session persistence schema for Ask Helm answers in Phase 1B — " +
-      "显式ly forbidden by Final Requirements V1 §二.15. " +
+      "explicitly forbidden by Final Requirements V1 §二.15. " +
       "No runtime extractor to capture confidence scores at answer time. " +
       "No event queue for user-action follow-through events. " +
       "future_only status is a requirement boundary, not just a technical gap. " +

@@ -354,7 +354,7 @@ function buildMeetingCandidates(context: RecommendationObjectContext, evidence: 
       description: topBlocker
         ? english
           ? `Create one clear action item around "${topBlocker.title}".`
-          : `先围绕“${topBlocker.title}”拆一条明确 动作item。`
+          : `先围绕“${topBlocker.title}”拆一条明确的动作项。`
         : english
           ? "Turn the meeting conclusion into trackable follow-through instead of leaving it in the notes."
           : "让会议结论变成能追踪的后续动作，而不是停在纪要里。",

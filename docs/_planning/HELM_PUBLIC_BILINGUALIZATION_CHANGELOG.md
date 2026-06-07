@@ -19,6 +19,21 @@ full-repo bilingualization completion".
 
 ## 批次记录 / Batch log
 
+最新双语化收口：bilingual-mixing baseline 中 8 条可安全收口的 zh/en 粘连文案已清理并从冻结集移除；
+本批只改诊断首环的证据闸口标签、读模型可行性里的 explicitly 措辞，以及会议 / 导入 / 推荐里的“动作项”
+展示文案及对应 baseline 冻结项，不改日期格式串、offline-eval 检测词表、`正式write` 既定运行时术语，
+也不改被测试 / 守卫按字符串匹配依赖的文案，余下 21 条按设计继续冻结，也不声明全仓双语化完成。
+
+Latest bilingualization cleanup: 8 safely-closable zh/en glued-copy entries in the
+bilingual-mixing baseline have been cleared and removed from the frozen set. This batch
+changes the diagnostics first-loop evidence-gate label, the read-model feasibility
+"explicitly" wording, and the "action item" display copy in meetings / imports /
+recommendations plus the matching frozen baseline entries only; it does not change
+date-format pattern strings, the offline-eval detection vocabulary, the established
+`正式write` runtime term, or copy that tests / guards match by string. The remaining 21
+entries stay frozen by design, and this does not claim full-repo bilingualization
+completion.
+
 最新双语化收口：getting-started 中文支持路由术语混写已继续清理；本批只改 GitHub 议题和
 安全漏洞不要走公开议题文案及源码守卫，不改变 GitHub Issues 链接目标、微信入口、社交媒体
 占位或 SECURITY.md 私下披露路径，也不声明全仓双语化完成。
