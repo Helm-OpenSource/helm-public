@@ -44,6 +44,15 @@ npm run check:public-release
 
 剩余风险 / Remaining risk:
 
+## 评审与合并纪律 / Review And Merge Discipline
+
+- [ ] 本 PR 通过 PR audit trail 合入；不会直接 push 到 `main` / `develop` 等受保护分支。
+      This PR will merge through the PR audit trail; it will not be pushed directly to protected branches such as `main` or `develop`.
+- [ ] 合入路径是二次评审通过，或 PR body 顶端已有 `Break-glass merge intended: <reason>` 并在 Owner Gate 写明 receipt。
+      Merge path is either second-reviewer approval, or the PR body starts with `Break-glass merge intended: <reason>` and the Owner Gate records the receipt.
+- [ ] 未使用 `--no-verify`、跳过 CI、跳过本地硬门禁；如有 owner 豁免，已在 Remaining risk 写明。
+      No `--no-verify`, skipped CI, or skipped local hard gate was used; any owner exemption is documented in Remaining risk.
+
 ## 截图或录屏 / Screenshots Or Recording
 
 UI 变化必须提供；否则写 `N/A`。

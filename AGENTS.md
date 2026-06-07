@@ -190,6 +190,7 @@ Codex 默认不负责：
 git status --short --branch
 git worktree list
 git rev-parse --show-toplevel
+node scripts/worktree-governance-audit.mjs --repo .
 ```
 
 强制规则：
