@@ -8,6 +8,12 @@ hand-built integration engineering.
 
 It is **not** a server-side ingest service, a connector, or an auto-writer.
 
+## Docs
+
+- [Usage](docs/USAGE.md) — commands, flags, output artifacts, supported inputs.
+- [Boundaries](docs/BOUNDARIES.md) — trust model, public vs private, overlay ownership, guards.
+- [Integration](docs/INTEGRATION.md) — Signal First Mile, Cross-System Accountability, and the boundary to a future server-side Auto-Discovery (separate plan).
+
 ## Boundaries (v1)
 
 - **Read-only.** Never executes scanned code, never writes to external systems,
