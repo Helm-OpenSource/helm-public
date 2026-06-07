@@ -899,7 +899,9 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "self-check":
     "npm run public:smoke:static && npm run check:secret-history",
   "check:boundaries":
-    "npm run public:smoke:static && npm run check:diagnostics-risk",
+    "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk",
+  "check:source-profiler-boundaries":
+    "node --import tsx scripts/check-source-profiler-boundaries.ts",
   "check:diagnostics-risk":
     "node --import tsx scripts/check-diagnostics-risk.ts",
   test: "vitest run --config vitest.public.config.ts",
@@ -942,6 +944,9 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "eval:cross-system-accountability-gap",
   "kit:dry-run",
   "pack:fixture-check",
+  "source-profiler",
+  "source-profiler:init",
+  "check:source-profiler-boundaries",
   "diagnostics:doctor",
   "check:diagnostics-risk",
   "db:generate",

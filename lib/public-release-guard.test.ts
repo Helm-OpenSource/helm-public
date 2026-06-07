@@ -722,7 +722,9 @@ describe("public release guard fixture coverage", () => {
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:diagnostics-risk",
+        "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk",
+      "check:source-profiler-boundaries":
+        "node --import tsx scripts/check-source-profiler-boundaries.ts",
       "check:diagnostics-risk":
         "node --import tsx scripts/check-diagnostics-risk.ts",
       test: "vitest run --config vitest.public.config.ts",
@@ -855,7 +857,9 @@ describe("public release guard fixture coverage", () => {
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:diagnostics-risk",
+        "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk",
+      "check:source-profiler-boundaries":
+        "node --import tsx scripts/check-source-profiler-boundaries.ts",
       "check:diagnostics-risk":
         "node --import tsx scripts/check-diagnostics-risk.ts",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
