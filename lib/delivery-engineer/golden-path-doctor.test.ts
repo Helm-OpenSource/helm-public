@@ -13,6 +13,7 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
     "delivery:doctor": "tsx scripts/delivery-engineer-doctor.ts",
     "pack:fixture-check": "tsx scripts/pack-fixture-check.ts",
     "eval:headless-signal-interface": "tsx scripts/headless-signal-interface-evals.ts",
+    "eval:signal-first-mile-quality": "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
     "eval:operating-signal-flow": "tsx scripts/operating-signal-flow-evals.ts",
     "check:public-release": "tsx scripts/public-release-guard.ts",
     "check:boundaries": "tsx scripts/decision-first-boundary-check.ts",
@@ -41,9 +42,15 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
     "docs/getting-started.en.md": "NPM_REGISTRY registry-mirrors",
     "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md": "delivery engineers",
     "docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md": "Golden Path requirements",
+    "docs/product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md": "Setup diagnostic requirements L0 L1 L2 source intake proof package forbidden actions read-only local static check no writeback no external send no approval execution no official memory promotion no customer deployment proof",
+    "docs/product/HELM_DATA_INTAKE_EXPERIENCE.md": "Helm data intake L0 diagnostic material L1 redacted fixture L2 read-only access forbidden actions no writeback external send approval execution hosted ingest endpoint customer deployment proof",
     "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md": "HSI",
     "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md": "closeout",
     "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md": "D2 smoke pending",
+    "features/settings/data-intake-ux.ts": "L0 L1 L2 SourceIntakeOption forbiddenAction no writeback external send approval execution customer deployment proof",
+    "templates/signal-first-mile/run-first-change-proof.js": "evalCommand MANIFEST.json customer-materials.md signal-quality-report.md hsi-fixture.json review-packet.md",
+    "templates/signal-first-mile/selector-input.sample.json": "{}",
+    "templates/signal-first-mile/signal-quality-eval.js": "module.exports = {};",
     "extensions/case-management-sample/README.md": "sample",
     "extensions/case-management-sample/tenant.manifest.json": "{}",
     "extensions/case-management-sample/hsi-pack.manifest.json": "{}",
@@ -123,6 +130,53 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
     ).toBe("pass");
     expect(summary.nextCommands).toContain("npm run eval:headless-signal-interface");
     expect(summary.nextCommands).toContain("npm run delivery:doctor -- --region cn");
+  });
+
+  it("checks source-intake static assets without reading generated proof output", () => {
+    const summary = runWithFiles(buildFileMap());
+
+    expect(summary.boundary).toBe("read_only_local_repo_static_check");
+    expect(
+      summary.checks.find((check) => check.id === "source-intake:setup-diagnostic-doc")
+        ?.status,
+    ).toBe("pass");
+    expect(
+      summary.checks.find((check) => check.id === "source-intake:proof-package-static-assets")
+        ?.status,
+    ).toBe("pass");
+    expect(
+      summary.checks.find((check) => check.id === "source-intake:l0-l1-l2-contract")
+        ?.status,
+    ).toBe("pass");
+    expect(
+      summary.checks.find((check) => check.id === "source-intake:forbidden-action-boundary")
+        ?.status,
+    ).toBe("pass");
+    expect(summary.nextCommands).toContain(
+      "node templates/signal-first-mile/run-first-change-proof.js templates/signal-first-mile/selector-input.sample.json /tmp/helm-sfm-first-change-proof",
+    );
+    expect(summary.nextCommands).toContain("npm run eval:signal-first-mile-quality");
+    expect(summary.checks.map((check) => `${check.id} ${check.detail}`).join("\n")).not.toContain(
+      "/tmp/helm-sfm-first-change-proof",
+    );
+  });
+
+  it("fails source-intake checks when L0/L1/L2 or forbidden boundaries drift", () => {
+    const summary = runWithFiles(
+      buildFileMap({
+        "docs/product/HELM_DATA_INTAKE_EXPERIENCE.md": "connector setup only",
+        "features/settings/data-intake-ux.ts": "connector setup only",
+      }),
+    );
+
+    expect(summary.passed).toBe(false);
+    expect(
+      summary.checks.find((check) => check.id === "source-intake:l0-l1-l2-contract")?.status,
+    ).toBe("fail");
+    expect(
+      summary.checks.find((check) => check.id === "source-intake:forbidden-action-boundary")
+        ?.status,
+    ).toBe("fail");
   });
 
   it("fails when a required script is missing", () => {
