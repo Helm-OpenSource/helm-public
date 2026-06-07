@@ -722,9 +722,11 @@ describe("public release guard fixture coverage", () => {
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
+        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
       "check:source-profiler-boundaries":
         "node --import tsx scripts/check-source-profiler-boundaries.ts",
+      "check:golden-path-docs":
+        "node --import tsx scripts/check-golden-path-docs.ts",
       "check:diagnostics-risk":
         "node --import tsx scripts/check-diagnostics-risk.ts",
       "check:llm-candidate-boundaries":
@@ -863,9 +865,11 @@ describe("public release guard fixture coverage", () => {
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
+        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
       "check:source-profiler-boundaries":
         "node --import tsx scripts/check-source-profiler-boundaries.ts",
+      "check:golden-path-docs":
+        "node --import tsx scripts/check-golden-path-docs.ts",
       "check:diagnostics-risk":
         "node --import tsx scripts/check-diagnostics-risk.ts",
       "check:llm-candidate-boundaries":

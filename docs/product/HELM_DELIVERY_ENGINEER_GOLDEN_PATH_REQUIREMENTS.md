@@ -156,6 +156,37 @@ The README and sample documentation must provide a concrete "change this line ->
 run this command -> observe this change" walkthrough without adding a new route,
 page, package, or command.
 
+## 4.1 Proof Package Contract
+
+`npm run golden:path` is the single local proof-package entry for the public Core
+Golden Path. It writes only under `/tmp/helm-golden-path-proof` by default and
+must remain a read-only repo inspection plus synthetic fixture diff. The command
+may remove and recreate that temp output directory; it must not write inside the
+source checkout, activate a connector, send externally, write back, approve,
+assign an owner, or promote official memory.
+
+The package must include these files:
+
+| File | Purpose |
+|---|---|
+| `MANIFEST.json` | Contract, pass/fail summary, non-claim list, and file index. |
+| `doctor-receipt.json` | `delivery:doctor` read-only Golden Path receipt. |
+| `pack-fixture-receipt.json` | Public sample pack fixture check receipt. |
+| `fixture-diff-summary.json` | `CASE-SAMPLE-002` first-change proof: `"priorityScore": 64` -> `"priorityScore": 82`, severity `info` -> `warning`. |
+| `hsi-eval-result.json` | Headless Signal Interface offline eval receipt. |
+| `public-release-guard-receipt.json` | Public docs curation plus public-release guard receipt. |
+| `source-profiler-receipt.json` | Local source-profiler sample-app smoke with redacted review packet and candidate-only mappings. |
+| `boundary-note.md` | Explicit non-claims and forbidden actions. |
+| `next-safe-actions.md` | Review-first follow-up checklist. |
+
+The proof package is not customer deployment readiness, not release readiness,
+not connector authorization, not writeback, not external send, not approval
+execution, and not official memory promotion.
+
+`check:golden-path-docs` must keep README, this requirements doc, `docs/STATUS.md`,
+`package.json`, and the proof-package command aligned. `check:boundaries` must
+include that guard so drift is caught before public mirror or release checks.
+
 ## 5. Requirements
 
 | ID | Requirement | Repo | Status |

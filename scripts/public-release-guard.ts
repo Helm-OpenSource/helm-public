@@ -899,9 +899,11 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "self-check":
     "npm run public:smoke:static && npm run check:secret-history",
   "check:boundaries":
-    "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
+    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
   "check:source-profiler-boundaries":
     "node --import tsx scripts/check-source-profiler-boundaries.ts",
+  "check:golden-path-docs":
+    "node --import tsx scripts/check-golden-path-docs.ts",
   "check:diagnostics-risk":
     "node --import tsx scripts/check-diagnostics-risk.ts",
   "check:llm-candidate-boundaries":
@@ -942,6 +944,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "typecheck",
   "validate:env",
   "delivery:doctor",
+  "golden:path",
   "eval:headless-signal-interface",
   "eval:signal-first-mile-quality",
   "eval:internal-commercialization",
@@ -955,6 +958,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "source-profiler",
   "source-profiler:init",
   "check:source-profiler-boundaries",
+  "check:golden-path-docs",
   "diagnostics:doctor",
   "check:diagnostics-risk",
   "check:llm-candidate-boundaries",
