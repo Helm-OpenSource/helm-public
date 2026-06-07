@@ -25,7 +25,9 @@ import { executeLLMTask } from "@/lib/llm/provider-registry";
 import {
   buildFailClosedCounterfactualResult,
   counterfactualReviewerOutputSchema,
+  prepareCounterfactualEgress,
   selectedContextStubSchema,
+  type CounterfactualEgressPolicy,
   type CounterfactualReviewerOutput,
 } from "@/lib/llm/intelligence-contracts-v2";
 import {
@@ -47,6 +49,8 @@ export interface CounterfactualBoundaryReceipt {
   reviewState: CounterfactualReviewerOutput["reviewState"];
   requiredHumanReview: boolean;
   reason: string | null;
+  /** Trace correlation id; lets a late provider result be marked superseded. */
+  traceId: string | null;
   timedOut: boolean;
   /**
    * `executeLLMTask` exposes no cancellation, so on timeout the in-flight
@@ -67,6 +71,12 @@ export interface CounterfactualReviewInput {
   judgementSummary: string;
   /** LLM workflows may only *request* a capability by reference. */
   capabilityRequested?: CapabilityRequested;
+  /**
+   * Remote-egress policy. A non-`public_safe_synthetic` stub defaults to
+   * remote-risk and requires consent + prompt preview, or the workflow fails
+   * closed before dispatch.
+   */
+  egressPolicy?: CounterfactualEgressPolicy;
   maxLatencyMs?: number;
   /** Optional audit sink. Invoked once with the authoritative boundary decision. */
   recordBoundaryDecision?: (receipt: CounterfactualBoundaryReceipt) => void;
@@ -112,6 +122,7 @@ export async function reviewCounterfactualWithLLM(
       reviewState: output.reviewState,
       requiredHumanReview: output.requiredHumanReview,
       reason: output.reason,
+      traceId: input.traceId ?? null,
       timedOut: meta.timedOut,
       providerCallCancelled: false,
       latencyBudgetMs,
@@ -150,10 +161,27 @@ export async function reviewCounterfactualWithLLM(
     objectId: contextStub.objectRef.objectId,
   };
 
-  const fallback = buildFailClosedCounterfactualResult("provider_failure");
-  const prompt = buildCounterfactualReviewPrompt({
+  // 5. Remote egress gate (mirrors v1). Non-synthetic / remote path requires
+  // consent + prompt preview; otherwise fail closed BEFORE any dispatch. The
+  // stub + judgement summary are redacted before reaching the provider.
+  const egress = prepareCounterfactualEgress({
     contextStub,
     judgementSummary: input.judgementSummary,
+    policy: input.egressPolicy,
+  });
+  if (!egress.ok || !egress.safeStub || egress.safeJudgementSummary === null) {
+    return emit(buildFailClosedCounterfactualResult("egress_blocked"), {
+      timedOut: false,
+      objectRef,
+    });
+  }
+  const safeStub = egress.safeStub;
+  const safeJudgementSummary = egress.safeJudgementSummary;
+
+  const fallback = buildFailClosedCounterfactualResult("provider_failure");
+  const prompt = buildCounterfactualReviewPrompt({
+    contextStub: safeStub,
+    judgementSummary: safeJudgementSummary,
   });
 
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -178,10 +206,10 @@ export async function reviewCounterfactualWithLLM(
         promptVersion: llmPromptVersions.counterfactualReview,
         systemPrompt: prompt.systemPrompt,
         userPrompt: prompt.userPrompt,
-        inputSummary: `${objectRef.objectType}:${objectRef.objectId} 的反证复核`,
+        inputSummary: `${safeStub.objectRef.objectType}:${safeStub.objectRef.objectId} 的反证复核`,
         outputMode: "json",
         jsonSchema: counterfactualReviewSchema,
-        maxOutputTokens: contextStub.tokenBudget.maxOutputTokens,
+        maxOutputTokens: safeStub.tokenBudget.maxOutputTokens,
         fallbackOutput: fallback,
         parseOutput(rawText) {
           const trimmed = (rawText ?? "").trim();

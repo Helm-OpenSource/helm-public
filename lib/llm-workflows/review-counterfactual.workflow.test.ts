@@ -218,4 +218,40 @@ describe("reviewCounterfactualWithLLM", () => {
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({ reason: "unsafe_capability_request", timedOut: false });
   });
+
+  it("fails closed (egress_blocked) for a private_runtime stub without consent + preview", async () => {
+    const privateStub = {
+      ...contextStub,
+      privacyClass: "private_runtime" as const,
+    };
+    const result = await reviewCounterfactualWithLLM({
+      ...baseInput,
+      contextStub: privateStub,
+      judgementSummary: "Email owner@acme.example about the renewal risk.",
+    });
+    expect(result.reviewState).toBe("needs_review");
+    expect(result.requiredHumanReview).toBe(true);
+    expect(result.reason).toBe("egress_blocked");
+    expect(vi.mocked(executeLLMTask)).not.toHaveBeenCalled();
+  });
+
+  it("redacts the stub and judgement summary before dispatch when remote consent is present", async () => {
+    vi.mocked(executeLLMTask).mockImplementation(
+      async (options: LLMTaskInput<CounterfactualReviewerOutput>) =>
+        buildExecutionResult(options.fallbackOutput),
+    );
+    const privateStub = {
+      ...contextStub,
+      privacyClass: "private_runtime" as const,
+    };
+    await reviewCounterfactualWithLLM({
+      ...baseInput,
+      contextStub: privateStub,
+      judgementSummary: "Email owner@acme.example about the renewal risk.",
+      egressPolicy: { providerMode: "remote", consentGranted: true, promptPreviewAccepted: true },
+    });
+    const userPrompt = vi.mocked(executeLLMTask).mock.calls[0]?.[0].userPrompt ?? "";
+    expect(userPrompt).toContain("[redacted-email]");
+    expect(userPrompt).not.toContain("owner@acme.example");
+  });
 });

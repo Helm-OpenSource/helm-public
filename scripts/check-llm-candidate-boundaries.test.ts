@@ -155,6 +155,36 @@ describe("check-llm-candidate-boundaries", () => {
     expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-E")).toBe(true);
   });
 
+  it("rejects serializing a selection receipt even without a userPrompt literal", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { LLMContextSelectionReceipt } from "@/lib/llm/intelligence-contracts-v2";
+        export function leak(receipt: LLMContextSelectionReceipt) {
+          const blob = JSON.stringify(receipt);
+          return blob;
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-E")).toBe(true);
+  });
+
+  it("allows referencing the selection receipt without a prompt/serialize/dispatch sink", () => {
+    writeFile(
+      "lib/llm/example.ts",
+      `
+        import type { LLMContextSelectionReceipt } from "@/lib/llm/intelligence-contracts-v2";
+        import type { SelectedContextStub } from "@/lib/llm/intelligence-contracts-v2";
+        export function pick(receipt: LLMContextSelectionReceipt): SelectedContextStub["objectRef"] {
+          return receipt.objectRef;
+        }
+      `,
+    );
+    expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
+  });
+
   it("accepts the stub being passed into a prompt", () => {
     writeFile(
       "lib/llm-workflows/example.ts",

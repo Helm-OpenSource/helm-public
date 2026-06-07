@@ -6,6 +6,7 @@ import {
   counterfactualReviewerOutputSchema,
   llmContextSelectionReceiptSchema,
   parseSelectedContextStub,
+  prepareCounterfactualEgress,
   projectSelectedContextStub,
   selectedContextStubSchema,
 } from "@/lib/llm/intelligence-contracts-v2";
@@ -126,5 +127,40 @@ describe("CounterfactualReviewerOutput", () => {
     expect(
       selectedContextStubSchema.safeParse({ ...stubInput, selectionRationale: ["leaked"] }).success,
     ).toBe(false);
+  });
+});
+
+describe("counterfactual egress gate", () => {
+  const judgementSummary = "Email owner@acme.example about the renewal risk.";
+
+  it("blocks a remote private_runtime stub without consent + preview", () => {
+    const result = prepareCounterfactualEgress({
+      contextStub: { ...stubInput, privacyClass: "private_runtime" },
+      judgementSummary,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.safeStub).toBeNull();
+    expect(result.audit.blockedReason).toMatch(/consent_and_prompt_preview/);
+  });
+
+  it("allows a public_safe_synthetic stub on the local path without consent", () => {
+    const result = prepareCounterfactualEgress({
+      contextStub: { ...stubInput, privacyClass: "public_safe_synthetic" },
+      judgementSummary: "Pipeline summary, no PII.",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.providerMode).toBe("local");
+  });
+
+  it("redacts stub + summary when remote consent and preview are present", () => {
+    const result = prepareCounterfactualEgress({
+      contextStub: { ...stubInput, privacyClass: "private_runtime" },
+      judgementSummary,
+      policy: { providerMode: "remote", consentGranted: true, promptPreviewAccepted: true },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.safeJudgementSummary).toContain("[redacted-email]");
+    expect(result.safeJudgementSummary).not.toContain("owner@acme.example");
+    expect(result.audit.redacted).toBe(true);
   });
 });

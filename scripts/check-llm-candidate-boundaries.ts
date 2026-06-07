@@ -46,10 +46,16 @@ const BANNED_TERM_PATTERNS: ReadonlyArray<{ pattern: RegExp; term: string }> = [
 // receipt literal inside the source modules under TARGET_ROOTS.
 const SKIPPED_STATUS_PATTERN = /status\s*:\s*["']skipped["']/;
 
-// v2 rule E: the audit-only selection receipt must not be serialized into an
-// LLM prompt. Flag a prompt-building module that also references the receipt.
+// v2 rule E: the audit-only selection receipt must not be serialized, prompt-
+// built, or dispatched. Flag any candidate-aware module that references the
+// receipt alongside a prompt/serialize/dispatch sink. Only the defining
+// contract (which exports projectSelectedContextStub) may reference it. This is
+// broader than a single `userPrompt:` literal so cross-file helpers, renamed
+// variables, and JSON.stringify/executeLLMTask paths are caught too.
 const SELECTOR_RECEIPT_PATTERN = /\b(LLMContextSelectionReceipt|selectorReceipt|selectionReceipt)\b/;
-const PROMPT_BUILDER_PATTERN = /\buserPrompt\s*:/;
+const SELECTOR_RECEIPT_SINK_PATTERN =
+  /\buserPrompt\s*:|JSON\.stringify|executeLLMTask|build\w*ReviewPrompt/;
+const SELECTOR_RECEIPT_DEFINING_FILE = "lib/llm/intelligence-contracts-v2.ts";
 
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
@@ -182,12 +188,16 @@ export function runLlmCandidateBoundaryCheck(
       }
     }
 
-    if (PROMPT_BUILDER_PATTERN.test(content) && SELECTOR_RECEIPT_PATTERN.test(content)) {
+    if (
+      repoRelative !== SELECTOR_RECEIPT_DEFINING_FILE &&
+      SELECTOR_RECEIPT_PATTERN.test(content) &&
+      SELECTOR_RECEIPT_SINK_PATTERN.test(content)
+    ) {
       violations.push({
         file: repoRelative,
         rule: "LLM-CANDIDATE-E",
         detail:
-          "Selection receipt content is audit-only; it must not be passed into an LLM prompt. Use SelectedContextStub.",
+          "Selection receipt content is audit-only; it must not be serialized, prompt-built, or dispatched. Only intelligence-contracts-v2.ts may reference it (projectSelectedContextStub). Use SelectedContextStub.",
       });
     }
   }

@@ -16,6 +16,8 @@
 
 import { z } from "zod";
 
+import { redactLLMEgressValue } from "@/lib/llm/intelligence-contracts";
+
 export const PRIVACY_CLASSES = [
   "public_safe_synthetic",
   "redacted_review",
@@ -109,6 +111,83 @@ export function projectSelectedContextStub(
   });
 }
 
+export interface CounterfactualEgressPolicy {
+  providerMode?: "local" | "remote";
+  consentGranted?: boolean;
+  promptPreviewAccepted?: boolean;
+  auditRef?: string;
+}
+
+export interface CounterfactualEgressResult {
+  ok: boolean;
+  providerMode: "local" | "remote";
+  safeStub: SelectedContextStub | null;
+  safeJudgementSummary: string | null;
+  audit: {
+    redacted: boolean;
+    consentGranted: boolean;
+    promptPreviewAccepted: boolean;
+    auditRef?: string;
+    blockedReason?: string;
+  };
+}
+
+/**
+ * Egress gate for the Counterfactual Reviewer, mirroring the v1 packet egress
+ * ceremony. A non-`public_safe_synthetic` stub defaults to remote-risk; a remote
+ * provider path requires consent + prompt preview, otherwise it fails closed
+ * BEFORE any provider dispatch. On the allowed path both the stub and the
+ * free-text judgement summary are redacted before they can reach a provider.
+ */
+export function prepareCounterfactualEgress(input: {
+  contextStub: SelectedContextStub;
+  judgementSummary: string;
+  policy?: CounterfactualEgressPolicy;
+}): CounterfactualEgressResult {
+  const providerMode =
+    input.policy?.providerMode ??
+    (input.contextStub.privacyClass === "public_safe_synthetic" ? "local" : "remote");
+  const consentGranted = input.policy?.consentGranted === true;
+  const promptPreviewAccepted = input.policy?.promptPreviewAccepted === true;
+
+  if (providerMode === "remote" && (!consentGranted || !promptPreviewAccepted)) {
+    return {
+      ok: false,
+      providerMode,
+      safeStub: null,
+      safeJudgementSummary: null,
+      audit: {
+        redacted: false,
+        consentGranted,
+        promptPreviewAccepted,
+        auditRef: input.policy?.auditRef,
+        blockedReason: "remote_counterfactual_requires_consent_and_prompt_preview",
+      },
+    };
+  }
+
+  const redactedStub = redactLLMEgressValue(input.contextStub);
+  const safeStub = selectedContextStubSchema.parse(redactedStub.value);
+  const redactedSummary = redactLLMEgressValue(input.judgementSummary);
+  const safeJudgementSummary =
+    typeof redactedSummary.value === "string"
+      ? redactedSummary.value
+      : String(redactedSummary.value ?? "");
+
+  return {
+    ok: true,
+    providerMode,
+    safeStub,
+    safeJudgementSummary,
+    audit: {
+      redacted: redactedStub.redacted || redactedSummary.redacted,
+      consentGranted,
+      promptPreviewAccepted,
+      auditRef: input.policy?.auditRef,
+    },
+  };
+}
+
 export const COUNTERFACTUAL_REVIEW_STATES = [
   "candidate",
   "needs_review",
@@ -145,6 +224,7 @@ export const COUNTERFACTUAL_FAIL_CLOSED_REASONS = [
   "missing_policy",
   "missing_permission",
   "unsafe_capability_request",
+  "egress_blocked",
 ] as const;
 export const counterfactualReasonSchema = z.enum(COUNTERFACTUAL_FAIL_CLOSED_REASONS);
 export type CounterfactualFailClosedReason = z.infer<typeof counterfactualReasonSchema>;
