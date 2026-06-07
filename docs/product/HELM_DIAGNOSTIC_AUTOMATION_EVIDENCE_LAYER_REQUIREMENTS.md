@@ -112,7 +112,7 @@ type DiagnosticCommand = {
 
 `repoOwner` 只是 ownership pointer，用来标明后续交接归属。Public Core 源码**不得**硬编码
 私有 split-repo 名称（public-mirror / release guard 禁止在公开代码里出现私有仓 slug），因此
-私有归属统一记为不透明的 `private-owning-repo`，具体归属由 owning repo 在公开仓之外解析；
+私有归属统一记为不透明的 `sibling-repo`，具体归属由 owning repo 在公开仓之外解析；
 该字段不得包含或推断私有内容、私有路径、客户配置，也不得授权跨仓自动执行。
 
 初版 public Core 只允许 `read` 与 `local_draft` 自动化。`repo_write` 需要显式任务授权；
@@ -244,6 +244,11 @@ Risk policy 是机器约束，不是只写在文档里的口号。
 | `external_write` | Forbidden in public automation | owning repo + human approval |
 | `activation` | Forbidden in public automation | connector / control-plane owner approval |
 | `commitment` | Forbidden in public automation | founder / owner-held decision record |
+
+注意:public Core 把 `repo_write` 的 "ask first" 实现为**不可自动运行**——registry guard 要求任何高于
+`local_draft` 的条目必须显式 `disabled: true`(占位/人工门控),不会被 doctor 或自动化直接执行。
+未来若要让某个 `repo_write` 命令真正运行,必须经显式任务授权 + git 纪律,并由 owning 流程承接,而非
+在 public Core 自动跑。
 
 Forbidden actions:
 

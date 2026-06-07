@@ -29,6 +29,16 @@ describe("scanTextForForbidden — primitives", () => {
     expect(ids).toContain("exec");
   });
 
+  it("catches dynamic import()/require() with a computed (non-literal) specifier", () => {
+    const v = scanTextForForbidden(
+      ["const m = await import(specifier);", "const n = require(name);"].join("\n"),
+      "fixture.ts",
+    );
+    const ids = v.map((x) => x.detail);
+    expect(ids).toContain("dynamic-import");
+    expect(ids).toContain("dynamic-require");
+  });
+
   it("does NOT flag declarative forbiddenActions strings", () => {
     const v = scanTextForForbidden('forbiddenActions: ["auto_send", "activate_connector"],', "registry.ts");
     expect(v).toEqual([]);

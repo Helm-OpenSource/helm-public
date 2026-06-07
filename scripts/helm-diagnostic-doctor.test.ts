@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -32,6 +32,18 @@ describe("isAllowedOutputPath", () => {
     expect(isAllowedOutputPath("docs/out.json", process.cwd())).toBe(false);
     expect(isAllowedOutputPath("/etc/passwd", process.cwd())).toBe(false);
     expect(isAllowedOutputPath(".", process.cwd())).toBe(false);
+  });
+
+  it("rejects a symlink inside tmp that points into the repo (realpath)", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "helm-doctor-ln-"));
+    try {
+      const link = path.join(dir, "escape");
+      symlinkSync(process.cwd(), link); // tmp symlink -> repo root
+      // Writing "under" the symlink would land in the repo; must be rejected.
+      expect(isAllowedOutputPath(path.join(link, "out.json"), process.cwd())).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

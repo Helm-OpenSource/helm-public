@@ -14,7 +14,7 @@
  * release-ready, deployment-ready, accepted-by-human, or approved.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -116,12 +116,34 @@ export function buildDoctorEnvelope(repoRoot: string, now?: () => Date): DoctorE
   };
 }
 
-/** A draft output path is only allowed under the OS temp dir. */
+/**
+ * A draft output path is only allowed under the OS temp dir. Symlinks on the
+ * nearest existing ancestor are resolved (realpath) before the prefix check, so
+ * a symlink planted inside tmp that points into the repo cannot be followed.
+ */
 export function isAllowedOutputPath(target: string, cwd: string): boolean {
   const abs = path.resolve(cwd, target);
-  const tmp = path.resolve(os.tmpdir());
-  const rel = path.relative(tmp, abs);
-  return rel === "" ? false : !rel.startsWith("..") && !path.isAbsolute(rel);
+  let tmpReal: string;
+  try {
+    tmpReal = realpathSync(os.tmpdir());
+  } catch {
+    return false;
+  }
+  // Resolve symlinks on the deepest ancestor that already exists.
+  let ancestor = abs;
+  while (!existsSync(ancestor) && path.dirname(ancestor) !== ancestor) {
+    ancestor = path.dirname(ancestor);
+  }
+  let realAncestor: string;
+  try {
+    realAncestor = realpathSync(ancestor);
+  } catch {
+    return false;
+  }
+  const remainder = path.relative(ancestor, abs); // "" if abs already exists
+  const realTarget = remainder ? path.join(realAncestor, remainder) : realAncestor;
+  const rel = path.relative(tmpReal, realTarget);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
 function parseOutputFlag(argv: readonly string[]): string | undefined {

@@ -13,6 +13,12 @@
  *     lists are not flagged — but a real `auto_send(...)` call or a network/exec
  *     primitive is.
  *
+ * LIMITS: this is a tripwire, NOT a sandbox. A static token scan can be evaded
+ * by deliberate obfuscation (split-literal identifiers, computed member access,
+ * reflection, aliasing). It catches accidental drift in self-authored code; the
+ * real guarantee is that diagnostics code is read-only/no-exec by construction
+ * and is open-source and auditable.
+ *
  * Exit 0 = clean, 1 = violations. Wired into `npm run check:boundaries`.
  * NOT typechecked (scripts/** excluded); covered by a vitest unit test.
  */
@@ -38,6 +44,12 @@ const CALL_PRIMITIVES: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: "xhr", re: /\bXMLHttpRequest\b/ },
   { id: "websocket", re: /\bnew\s+WebSocket\s*\(/ },
   { id: "child_process", re: /\bchild_process\b/ },
+  // Any dynamic import()/require() — literal OR computed specifier — is flagged.
+  // Diagnostics code uses only static imports, so this has no false positives
+  // here and catches a non-literal module load that MODULE_IMPORT_PATTERNS
+  // (literal-only) would miss.
+  { id: "dynamic-import", re: /\bimport\s*\(/ },
+  { id: "dynamic-require", re: /\brequire\s*\(/ },
 ];
 
 /**
@@ -83,19 +95,35 @@ export function scanTextForForbidden(text: string, source: string): RiskViolatio
   return out;
 }
 
+/** This guard's own file — excluded (its pattern literals are definitions). */
+const GUARD_BASENAME = "check-diagnostics-risk.ts";
+
 function listDiagnosticsFiles(repoRoot: string): string[] {
-  const dir = path.join(repoRoot, "lib", "diagnostics");
   const files: string[] = [];
-  if (existsSync(dir)) {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (!entry.isFile()) continue;
-      if (!entry.name.endsWith(".ts")) continue;
-      if (entry.name.endsWith(".test.ts")) continue;
-      files.push(path.join(dir, entry.name));
+
+  // All non-test diagnostics library modules.
+  const libDir = path.join(repoRoot, "lib", "diagnostics");
+  if (existsSync(libDir)) {
+    for (const entry of readdirSync(libDir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+        files.push(path.join(libDir, entry.name));
+      }
     }
   }
-  const doctor = path.join(repoRoot, "scripts", "helm-diagnostic-doctor.ts");
-  if (existsSync(doctor)) files.push(doctor);
+
+  // Any diagnostics executable under scripts/ (auto-covers future scripts),
+  // excluding test files and this guard itself.
+  const scriptsDir = path.join(repoRoot, "scripts");
+  if (existsSync(scriptsDir)) {
+    for (const entry of readdirSync(scriptsDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+      if (entry.name === GUARD_BASENAME) continue;
+      if (!/diagnostic/i.test(entry.name)) continue;
+      files.push(path.join(scriptsDir, entry.name));
+    }
+  }
+
   return files.sort();
 }
 
