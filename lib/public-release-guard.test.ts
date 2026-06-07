@@ -722,14 +722,20 @@ describe("public release guard fixture coverage", () => {
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk",
+        "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
       "check:source-profiler-boundaries":
         "node --import tsx scripts/check-source-profiler-boundaries.ts",
       "check:diagnostics-risk":
         "node --import tsx scripts/check-diagnostics-risk.ts",
+      "check:llm-candidate-boundaries":
+        "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+      "eval:llm-critic-boundaries":
+        "vitest run lib/evals/llm-critic-evals.test.ts",
+      "eval:llm-v2-boundaries":
+        "vitest run lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":
-        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
       "quality:regression":
         "npm run test:public:guards && npm run public:smoke:static",
       "public:e2e:smoke": "npm run public:smoke:static",
@@ -857,11 +863,13 @@ describe("public release guard fixture coverage", () => {
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk",
+        "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
       "check:source-profiler-boundaries":
         "node --import tsx scripts/check-source-profiler-boundaries.ts",
       "check:diagnostics-risk":
         "node --import tsx scripts/check-diagnostics-risk.ts",
+      "check:llm-candidate-boundaries":
+        "node --import tsx scripts/check-llm-candidate-boundaries.ts",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
       "check:public-commit-metadata":
         "node --import tsx scripts/public-commit-metadata-check.ts",
@@ -875,6 +883,10 @@ describe("public release guard fixture coverage", () => {
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       dev: "next dev",
       e2e: "npm run public:e2e:smoke",
+      "eval:llm-critic-boundaries":
+        "vitest run lib/evals/llm-critic-evals.test.ts",
+      "eval:llm-v2-boundaries":
+        "vitest run lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
       "public:e2e:smoke": "npm run public:smoke:static",
       "public:smoke:static":
         "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
@@ -886,7 +898,7 @@ describe("public release guard fixture coverage", () => {
         "npm run public:smoke:static && npm run check:secret-history",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":
-        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
     });
   });

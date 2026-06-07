@@ -55,6 +55,8 @@ the next layer.
 - [诊断与自动化证据层要求 / Diagnostic automation evidence layer requirements](product/HELM_DIAGNOSTIC_AUTOMATION_EVIDENCE_LAYER_REQUIREMENTS.md)
 - [智能体化实施工程治理需求 / Agentic implementation engineering governance requirements](product/HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md)
 - [外部智能体输入 PRD / External agent intake PRD](product/HELM_EXTERNAL_AGENT_INTAKE_PRD.md)
+- [LLM 智能深化 v1 / LLM intelligence deepening v1](product/HELM_LLM_INTELLIGENCE_DEEPENING_V1.md)
+- [LLM 智能深化 v2 / LLM intelligence deepening v2](product/HELM_LLM_INTELLIGENCE_DEEPENING_V2.md)
 - [开源与商业边界 / Open source and commercial boundary](product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)
 - [开源与 Cloud trial 发布姿态 / Open source and cloud trial launch posture](product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md)
 - [发布现实对齐 / Release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md)
