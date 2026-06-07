@@ -48,6 +48,7 @@ export async function main(argv: readonly string[], cwd: string = process.cwd())
       force: options.force,
       aiProvider: asAiProvider(flags["ai-provider"]),
       aiConsent: flags["ai-consent"] === true,
+      dbCatalog: asString(flags["db-catalog"]),
     });
     if (options.json) {
       process.stdout.write(`${JSON.stringify(out.result, null, 2)}\n`);
@@ -58,6 +59,9 @@ export async function main(argv: readonly string[], cwd: string = process.cwd())
           `found ${codeScan.objects.length} object(s), ` +
           `${candidates.length} mapping candidate(s)\n`,
       );
+      if (out.dbTableCount !== undefined) {
+        process.stdout.write(`profile: DB catalog introspected ${out.dbTableCount} table(s)\n`);
+      }
       if (out.aiCandidateCount !== undefined) {
         process.stdout.write(`profile: AI overlay added ${out.aiCandidateCount} advisory candidate(s)\n`);
       }
