@@ -224,7 +224,13 @@ npm run dev
 | http://localhost:3000 | 公开首页 |
 | http://localhost:3000/dashboard | 今天必须拍板的 3 件事（需登录） |
 | http://localhost:3000/mobile | 移动端 Ask Helm |
-| http://localhost:3000/setup | 6 步初始化 |
+| http://localhost:3000/setup | 6 步初始化；数据来源先走 L0/L1/L2 source intake |
+
+首次数据接入不要直接从生产 connector 开始。先按
+[数据接入体验](product/HELM_DATA_INTAKE_EXPERIENCE.md) 判断你手上是会议摘要、IM /
+邮件 digest、CRM / 工单 snapshot、脱敏表格、业务系统显式标记，还是只读 API 授权；
+再决定 L0 诊断材料、L1 fixture / dry-run 或 L2 只读接入。这个流程不授权写回、外发、
+审批执行或客户部署。
 
 种子数据里有现成的演示账号，直接走 `/login` 用其中一个邮箱登录即可。
 
@@ -295,6 +301,7 @@ npm run quality:regression
 
 - 想理解架构哲学：[../AGENTS.md](../AGENTS.md) §1-§4
 - 想做 UI 改动：[../DESIGN.md](../DESIGN.md)
+- 想判断数据接入路径：[product/HELM_DATA_INTAKE_EXPERIENCE.md](product/HELM_DATA_INTAKE_EXPERIENCE.md)
 - 想接连接器：[integrations/INTEGRATION_TEMPLATE.md](integrations/INTEGRATION_TEMPLATE.md)
 - 想了解当前优先级：[../WORKING-CONTEXT.md](../WORKING-CONTEXT.md)
 - 想提 PR：[../CONTRIBUTING.md](../CONTRIBUTING.md)
