@@ -13,8 +13,24 @@ import type { CatalogAllowlist } from "./types";
 
 type Engine = DbCatalogSnapshot["engine"];
 
-/** Quote a SQL string literal, escaping embedded single quotes. */
+/**
+ * Allowlist identifiers are operator-supplied catalog names. Restrict them to a
+ * safe charset so they can never break out of a SQL string literal (covers the
+ * MySQL backslash-escape case, where doubling quotes alone is insufficient).
+ */
+const SAFE_DB_IDENTIFIER = /^[A-Za-z0-9_$.]+$/;
+
+function assertSafeIdentifier(value: string): void {
+  if (!SAFE_DB_IDENTIFIER.test(value)) {
+    throw new Error(
+      `unsafe catalog identifier in allowlist: ${JSON.stringify(value)} (allowed: A-Z a-z 0-9 _ $ .)`,
+    );
+  }
+}
+
+/** Quote a SQL string literal for a validated identifier. */
 function lit(value: string): string {
+  assertSafeIdentifier(value);
   return `'${value.replace(/'/g, "''")}'`;
 }
 

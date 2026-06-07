@@ -52,6 +52,13 @@ statically enforces:
 - **SP-C** AI files may not claim deterministic origin or assert acceptance;
 - **SP-D** fixtures contain no real secrets/PII.
 
+The guard is a static token scan, **not a sandbox** — deliberately obfuscated
+code (string-concatenated identifiers, reflection, aliasing, computed member
+access) can evade it. It is defense-in-depth. The real guarantees are that the
+deterministic core is no-network/no-exec by construction, all external I/O is
+injected (executors/transports — no bundled DB driver or `fetch`), and the tool
+is open-source and auditable.
+
 ## Remote AI consent ceremony
 
 A remote provider runs only with, all at once: an explicit `--ai-provider`, an

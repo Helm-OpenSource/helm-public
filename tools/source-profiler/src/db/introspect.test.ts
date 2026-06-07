@@ -96,6 +96,23 @@ describe("introspectViaExecutor — allowlist enters the query (B2)", () => {
   });
 });
 
+describe("catalog query — identifier safety (S1)", () => {
+  it("rejects an unsafe allowlist identifier instead of embedding it in SQL", async () => {
+    let called = 0;
+    const executor: CatalogExecutor = {
+      engine: "mysql",
+      async query() {
+        called++;
+        return [];
+      },
+    };
+    await expect(
+      introspectViaExecutor(executor, { schemas: ["e'vil"], tables: [] }),
+    ).rejects.toThrow(/unsafe catalog identifier/);
+    expect(called).toBe(0);
+  });
+});
+
 describe("introspectViaExecutor — write canary", () => {
   it("warns (not fails) when the connection is write-capable", async () => {
     const executor: CatalogExecutor = {

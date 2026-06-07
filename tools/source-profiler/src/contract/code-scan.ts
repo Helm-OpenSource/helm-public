@@ -21,7 +21,11 @@ export const discoveredFieldSchema = z.object({
   /** Normalized type: string|int|float|decimal|bool|timestamp|date|json|enum|fk|unknown. */
   dataType: z.string().min(1),
   nullable: z.boolean().default(true),
-  /** Deterministic semantic tags, e.g. ["email"], ["amount"], ["stage"], ["fk:companies"]. */
+  /**
+   * Deterministic semantic tags, e.g. ["email"], ["amount"], ["stage"], ["fk"].
+   * Tags are generic tokens only — never embed a referenced table/field name
+   * (those would survive redaction, which keeps semanticTags).
+   */
   semanticTags: z.array(z.string()).default([]),
 }).strict();
 export type DiscoveredField = z.infer<typeof discoveredFieldSchema>;

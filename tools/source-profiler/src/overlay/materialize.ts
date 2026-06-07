@@ -81,8 +81,10 @@ export function materializeOverlayDraft(input: MaterializeInput): MaterializeRes
   const writtenFiles: string[] = [];
   for (const file of draft.files) {
     const fileAbs = path.resolve(overlayRootAbs, file.path);
-    if (!isInside(fileAbs, overlayRootAbs)) {
-      throw new Error(`overlay file path escapes overlay root: ${file.path}`);
+    // Confine writes to THIS extension's target dir, not just the overlay root,
+    // so a draft can never write into another tenant/extension tree.
+    if (!isInside(fileAbs, targetDir)) {
+      throw new Error(`overlay file path escapes the extension target dir: ${file.path}`);
     }
     mkdirSync(path.dirname(fileAbs), { recursive: true });
     writeFileSync(fileAbs, file.content, "utf8");

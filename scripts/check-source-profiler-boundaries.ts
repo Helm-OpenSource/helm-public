@@ -5,6 +5,14 @@
  * prefers false-positives over false-negatives. Each rule supports an inline
  * `@bypass-<ruleId>` escape hatch (which must also be justified in the PR).
  *
+ * LIMITS: this is a token scan, not a sandbox. Deliberately obfuscated forms —
+ * string-concatenated identifiers (`globalThis['ev'+'al']`),
+ * reflection (`constructor.constructor`), aliasing (`const f = fetch; f()`), or
+ * computed member access — can evade it. The guard is defense-in-depth; the real
+ * guarantees are (1) the deterministic core is no-network/no-exec by
+ * construction, (2) all external I/O is injected (executors/transports — no
+ * bundled DB driver or `fetch`), and (3) the tool is open-source and auditable.
+ *
  * Rules:
  *   SP-A no-exec       — no code execution anywhere in the tool (eval, Function,
  *                        child_process, vm, dynamic require/import of code).
