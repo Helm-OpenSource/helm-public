@@ -61,9 +61,15 @@ const REQUIRED_FILES = [
   "README.md",
   "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md",
   "docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md",
+  "docs/product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md",
+  "docs/product/HELM_DATA_INTAKE_EXPERIENCE.md",
   "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",
   "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md",
   "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md",
+  "features/settings/data-intake-ux.ts",
+  "templates/signal-first-mile/run-first-change-proof.js",
+  "templates/signal-first-mile/selector-input.sample.json",
+  "templates/signal-first-mile/signal-quality-eval.js",
   "extensions/case-management-sample/README.md",
   "extensions/case-management-sample/tenant.manifest.json",
   "extensions/case-management-sample/hsi-pack.manifest.json",
@@ -84,6 +90,7 @@ const REQUIRED_FILES = [
 const REQUIRED_PACKAGE_SCRIPTS = [
   "delivery:doctor",
   "eval:headless-signal-interface",
+  "eval:signal-first-mile-quality",
   "eval:operating-signal-flow",
   "pack:fixture-check",
   "check:public-release",
@@ -212,6 +219,29 @@ function fileStatus(rootDir: string, relativePath: string, exists: FileExists): 
   };
 }
 
+function readRepoFile(
+  rootDir: string,
+  relativePath: string,
+  exists: FileExists,
+  readFile: FileReader,
+): string | null {
+  const absolutePath = path.join(rootDir, relativePath);
+  if (!exists(absolutePath)) {
+    return null;
+  }
+
+  try {
+    return readFile(absolutePath);
+  } catch {
+    return null;
+  }
+}
+
+function containsAll(content: string, markers: readonly string[]) {
+  const normalized = content.toLowerCase();
+  return markers.every((marker) => normalized.includes(marker.toLowerCase()));
+}
+
 function parsePackageJson(rootDir: string, readFile: FileReader): PackageJson | null {
   try {
     return JSON.parse(readFile(path.join(rootDir, "package.json"))) as PackageJson;
@@ -315,6 +345,123 @@ function freshCloneStatus(
       ? `${matchingReceipts.length} D2 smoke receipt file(s) found: ${matchingReceipts.join(", ")}`
       : "no fresh-clone smoke receipt found under docs/reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE*.md; 30-minute onboarding remains a target, not a verified promise",
     nextAction: hasReceipt ? undefined : "run D2 smoke in a clean checkout before publishing time claims",
+  };
+}
+
+function sourceIntakeSetupDiagnosticDocStatus(
+  rootDir: string,
+  exists: FileExists,
+  readFile: FileReader,
+): DeliveryDoctorCheck {
+  const relativePath = "docs/product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md";
+  const content = readRepoFile(rootDir, relativePath, exists, readFile);
+  const requiredMarkers = ["L0", "L1", "L2", "source intake", "read-only", "writeback"];
+  const passed = Boolean(content && containsAll(content, requiredMarkers));
+
+  return {
+    id: "source-intake:setup-diagnostic-doc",
+    title: "source-intake setup diagnostic requirements",
+    status: passed ? "pass" : "fail",
+    detail: passed
+      ? "setup diagnostic requirements doc keeps source-intake, L0/L1/L2, read-only, and forbidden-action posture visible"
+      : `${relativePath} is missing required source-intake, L0/L1/L2, read-only, or forbidden-action markers`,
+    nextAction: passed
+      ? undefined
+      : "restore the setup diagnostic requirements doc before extending onboarding claims",
+  };
+}
+
+function sourceIntakeProofPackageStaticAssetsStatus(
+  rootDir: string,
+  exists: FileExists,
+  readFile: FileReader,
+): DeliveryDoctorCheck {
+  const scriptPath = "templates/signal-first-mile/run-first-change-proof.js";
+  const selectorPath = "templates/signal-first-mile/selector-input.sample.json";
+  const qualityEvalPath = "templates/signal-first-mile/signal-quality-eval.js";
+  const scriptContent = readRepoFile(rootDir, scriptPath, exists, readFile);
+  const selectorContent = readRepoFile(rootDir, selectorPath, exists, readFile);
+  const qualityEvalContent = readRepoFile(rootDir, qualityEvalPath, exists, readFile);
+  const scriptHasExpectedOutputs = Boolean(
+    scriptContent &&
+      containsAll(scriptContent, [
+        "evalCommand",
+        "MANIFEST.json",
+        "customer-materials.md",
+        "signal-quality-report.md",
+        "hsi-fixture.json",
+        "review-packet.md",
+      ]),
+  );
+  const passed = Boolean(scriptHasExpectedOutputs && selectorContent && qualityEvalContent);
+
+  return {
+    id: "source-intake:proof-package-static-assets",
+    title: "Signal First Mile static proof package assets",
+    status: passed ? "pass" : "fail",
+    detail: passed
+      ? "in-repo proof package generator, selector sample, quality eval, manifest, customer materials, quality report, HSI fixture, and review packet markers are present"
+      : "in-repo Signal First Mile proof package script, selector sample, quality eval, or expected output markers are missing",
+    nextAction: passed
+      ? undefined
+      : "restore Signal First Mile static assets before showing proof package guidance",
+  };
+}
+
+function sourceIntakeLadderContractStatus(
+  rootDir: string,
+  exists: FileExists,
+  readFile: FileReader,
+): DeliveryDoctorCheck {
+  const dataIntakeDoc = readRepoFile(
+    rootDir,
+    "docs/product/HELM_DATA_INTAKE_EXPERIENCE.md",
+    exists,
+    readFile,
+  );
+  const dataIntakeUx = readRepoFile(rootDir, "features/settings/data-intake-ux.ts", exists, readFile);
+  const passed = containsAll(dataIntakeDoc ?? "", ["L0", "L1", "L2"]) &&
+    containsAll(dataIntakeUx ?? "", ["L0", "L1", "L2"]);
+
+  return {
+    id: "source-intake:l0-l1-l2-contract",
+    title: "source-intake L0/L1/L2 contract",
+    status: passed ? "pass" : "fail",
+    detail: passed
+      ? "data-intake doc and setup UX keep the L0/L1/L2 source-intake ladder visible"
+      : "data-intake doc or setup UX no longer exposes the L0/L1/L2 source-intake ladder",
+    nextAction: passed
+      ? undefined
+      : "restore L0 diagnostic, L1 fixture/dry-run, and L2 read-only access markers",
+  };
+}
+
+function sourceIntakeForbiddenActionBoundaryStatus(
+  rootDir: string,
+  exists: FileExists,
+  readFile: FileReader,
+): DeliveryDoctorCheck {
+  const dataIntakeDoc = readRepoFile(
+    rootDir,
+    "docs/product/HELM_DATA_INTAKE_EXPERIENCE.md",
+    exists,
+    readFile,
+  );
+  const dataIntakeUx = readRepoFile(rootDir, "features/settings/data-intake-ux.ts", exists, readFile);
+  const requiredMarkers = ["writeback", "external send", "approval", "deployment"];
+  const passed = containsAll(dataIntakeDoc ?? "", requiredMarkers) &&
+    containsAll(dataIntakeUx ?? "", requiredMarkers);
+
+  return {
+    id: "source-intake:forbidden-action-boundary",
+    title: "source-intake forbidden-action boundary",
+    status: passed ? "pass" : "fail",
+    detail: passed
+      ? "source-intake docs and UX keep writeback, external send, approval execution, and deployment boundaries visible"
+      : "source-intake docs or UX no longer state writeback, external send, approval, and deployment boundaries",
+    nextAction: passed
+      ? undefined
+      : "restore forbidden-action wording before claiming setup diagnostic readiness",
   };
 }
 
@@ -630,6 +777,10 @@ export function runDeliveryEngineerGoldenPathDoctor(
     sampleTestStatus(rootDir, exists),
     sensitiveSampleStatus(rootDir, exists, readFile),
     freshCloneStatus(rootDir, listDirectory),
+    sourceIntakeSetupDiagnosticDocStatus(rootDir, exists, readFile),
+    sourceIntakeProofPackageStaticAssetsStatus(rootDir, exists, readFile),
+    sourceIntakeLadderContractStatus(rootDir, exists, readFile),
+    sourceIntakeForbiddenActionBoundaryStatus(rootDir, exists, readFile),
     qwenCredentialStatus(doctorEnv),
     chinaRegionResidencyStatus(regionProfile, doctorEnv),
     chinaNpmRegistryStatus(regionProfile, rootDir, exists, doctorEnv),
@@ -652,6 +803,8 @@ export function runDeliveryEngineerGoldenPathDoctor(
     nextCommands: [
       "npm run delivery:doctor",
       "npm run delivery:doctor -- --region cn",
+      "node templates/signal-first-mile/run-first-change-proof.js templates/signal-first-mile/selector-input.sample.json /tmp/helm-sfm-first-change-proof",
+      "npm run eval:signal-first-mile-quality",
       "npm run pack:fixture-check",
       "npm run eval:headless-signal-interface",
       "npm run eval:operating-signal-flow",
