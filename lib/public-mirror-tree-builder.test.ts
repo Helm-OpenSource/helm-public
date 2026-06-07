@@ -173,9 +173,11 @@ describe("public mirror tree builder", () => {
       license: "Apache-2.0",
       scripts: {
         "check:boundaries":
-          "npm run public:smoke:static && npm run check:source-profiler-boundaries",
+          "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk",
         "check:source-profiler-boundaries":
           "node --import tsx scripts/check-source-profiler-boundaries.ts",
+        "check:diagnostics-risk":
+          "node --import tsx scripts/check-diagnostics-risk.ts",
         "check:public-commit-metadata":
           "node --import tsx scripts/public-commit-metadata-check.ts",
         "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
@@ -293,10 +295,13 @@ describe("public mirror tree builder", () => {
       "npm run public:smoke:static && npm run check:secret-history",
     );
     expect(scripts["check:boundaries"]).toBe(
-      "npm run public:smoke:static && npm run check:source-profiler-boundaries",
+      "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk",
     );
     expect(scripts["check:source-profiler-boundaries"]).toBe(
       "node --import tsx scripts/check-source-profiler-boundaries.ts",
+    );
+    expect(scripts["check:diagnostics-risk"]).toBe(
+      "node --import tsx scripts/check-diagnostics-risk.ts",
     );
     expect(scripts.test).toBe("vitest run --config vitest.public.config.ts");
     expect(scripts["test:public:guards"]).toBe(
