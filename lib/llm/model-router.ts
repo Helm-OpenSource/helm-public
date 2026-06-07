@@ -32,6 +32,7 @@ export function resolveModelForTask(config: WorkspaceLLMConfig, taskType: LLMTas
       };
     case "BI_REPORT_ANALYSIS":
     case "BI_REPORT_REVIEW":
+    case "JUDGEMENT_BOUNDARY_REVIEW":
     case "EXTERNAL_CASE_ASSIGNMENT":
     case "EXTERNAL_CASE_ASSIGNMENT_ACTION_BRIEFING":
     case "EXTERNAL_EMPLOYEE_SIGNAL_ACTION_BRIEFING":
@@ -58,6 +59,7 @@ export function getModelRoleForTask(taskType: LLMTaskType): LLMModelRole {
       return "BRIEFING";
     case "BI_REPORT_ANALYSIS":
     case "BI_REPORT_REVIEW":
+    case "JUDGEMENT_BOUNDARY_REVIEW":
     case "EXTERNAL_CASE_ASSIGNMENT":
     case "EXTERNAL_CASE_ASSIGNMENT_ACTION_BRIEFING":
     case "EXTERNAL_EMPLOYEE_SIGNAL_ACTION_BRIEFING":

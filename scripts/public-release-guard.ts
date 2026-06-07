@@ -899,14 +899,18 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "self-check":
     "npm run public:smoke:static && npm run check:secret-history",
   "check:boundaries":
-    "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk",
+    "npm run public:smoke:static && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
   "check:source-profiler-boundaries":
     "node --import tsx scripts/check-source-profiler-boundaries.ts",
   "check:diagnostics-risk":
     "node --import tsx scripts/check-diagnostics-risk.ts",
+  "check:llm-candidate-boundaries":
+    "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+  "eval:llm-critic-boundaries":
+    "vitest run lib/evals/llm-critic-evals.test.ts",
   test: "vitest run --config vitest.public.config.ts",
   "test:public:guards":
-    "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+    "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts lib/evals/llm-critic-evals.test.ts",
   "quality:regression": "npm run test:public:guards && npm run public:smoke:static",
   "public:e2e:smoke": "npm run public:smoke:static",
   e2e: "npm run public:e2e:smoke",
@@ -942,6 +946,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "eval:operating-signal-flow",
   "eval:expert-capability-feedback-loop",
   "eval:cross-system-accountability-gap",
+  "eval:llm-critic-boundaries",
   "kit:dry-run",
   "pack:fixture-check",
   "source-profiler",
@@ -949,6 +954,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "check:source-profiler-boundaries",
   "diagnostics:doctor",
   "check:diagnostics-risk",
+  "check:llm-candidate-boundaries",
   "db:generate",
   "db:migrate",
   "db:prepare",
