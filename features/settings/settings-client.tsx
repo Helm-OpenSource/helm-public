@@ -143,6 +143,13 @@ import { getChinaCheckoutActionLabel } from "@/lib/billing/china-renew-restore";
 import { buildWorkspaceOperatingFoundationSummary } from "@/lib/operating-system";
 import { buildInviteAcceptanceGuidance } from "@/lib/auth/public-entry";
 import { MemberDefinitionCard } from "@/features/settings/member-definition-card";
+import {
+  formatSourceIntakeLabel,
+  getDataIntakeLevels,
+  getProofPackageFiles,
+  getResourceAccessCatalog,
+  isSourceIntakeOptionKey,
+} from "@/features/settings/data-intake-ux";
 import { CONNECTOR_PERMISSION_SUMMARIES } from "@/features/agentic-governance/connector-permission-summary";
 import { pickConnectorForCurrentUser } from "@/features/settings/connector-selection";
 import { AccountSettingsTab } from "@/features/settings/components/account-settings-tab";
@@ -393,8 +400,10 @@ export function SettingsClient({
     provider: "WECOM",
   });
   const crmSources = data.importSources;
-  const legacyConnectors = safeParseJson<
-    Array<{ name: string; status: string }>
+  // connectedSources is a legacy setup column; render it as source-intake
+  // guidance, never as connector authorization.
+  const setupSourceSelections = safeParseJson<
+    Array<{ name: string; status?: string }>
   >(data.workspace?.connectedSources, []);
   const [wecomCalendarRegistryDraft, setWecomCalendarRegistryDraft] = useState(
     (wecomConnector?.calendarRegistry?.boundCalendars ?? [])
@@ -545,6 +554,9 @@ export function SettingsClient({
     featureFlags,
   });
   const english = locale === "en-US";
+  const dataIntakeLevels = getDataIntakeLevels(english);
+  const resourceAccessCatalog = getResourceAccessCatalog(english);
+  const proofPackageFiles = getProofPackageFiles(english);
   const formatSettingsDate = (value: Date | string | null | undefined) =>
     formatSettingsDateLabel(value, english);
 
@@ -4362,6 +4374,123 @@ export function SettingsClient({
 
         <TabsContent value="connectors">
           <div className="space-y-6">
+            <Card className="workspace-panel-muted" data-testid="resource-access-catalog">
+              <CardHeader>
+                <CardTitle>
+                  {english ? "Source intake before connectors" : "先做数据来源诊断，再接连接器"}
+                </CardTitle>
+                <CardDescription>
+                  {english
+                    ? "Use L0 diagnostic material and L1 fixtures before any L2 read-only connector. This is a proof path, not writeback or deployment authorization."
+                    : "先用 L0 诊断材料和 L1 fixture 证明信号链，再进入 L2 只读接入。这是证据路径，不是写回或部署授权。"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {dataIntakeLevels.map((level) => (
+                    <div
+                      key={level.key}
+                      className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+                    >
+                      <p className="text-xs font-semibold text-[var(--accent)]">
+                        {level.key}
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">
+                        {level.title}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                        {level.summary}
+                      </p>
+                      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                        {english ? "Evidence" : "证据"} · {level.output}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {resourceAccessCatalog.map((resource) => (
+                    <div
+                      key={resource.key}
+                      className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                          {resource.title}
+                        </p>
+                        <span className="rounded-full bg-[color:var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold text-[color:var(--foreground)] ring-1 ring-[color:var(--border)]">
+                          {resource.level}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <Info
+                          label={english ? "Minimum permission" : "最小权限"}
+                          value={resource.permissionSummary}
+                        />
+                        <Info
+                          label={english ? "Dry-run evidence" : "预演证据"}
+                          value={resource.dryRunEvidence}
+                        />
+                        <Info
+                          label={english ? "Read-only status" : "只读状态"}
+                          value={resource.readOnlyStatus}
+                        />
+                        <Info
+                          label={english ? "Failure posture" : "失败姿态"}
+                          value={resource.failurePosture}
+                        />
+                      </div>
+                      <p className="mt-3 rounded-2xl bg-[color:var(--surface-subtle)] px-3 py-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                        {resource.forbiddenAction}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="workspace-panel-muted" data-testid="signal-first-mile-proof-viewer">
+              <CardHeader>
+                <CardTitle>
+                  {english ? "Signal First Mile proof package" : "经营信号首公里 proof package"}
+                </CardTitle>
+                <CardDescription>
+                  {english
+                    ? "First version is read-only: inspect generated files and run the recorded eval command. It does not upload materials, open a hosted endpoint, or call a connector."
+                    : "第一版保持只读：查看生成文件并运行记录的 eval 命令。它不上传材料、不开放托管端点、不调用连接器。"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 font-mono text-xs leading-6 text-[color:var(--muted)]">
+                  node templates/signal-first-mile/run-first-change-proof.js{" \\"}
+                  <br />
+                  &nbsp;&nbsp;templates/signal-first-mile/selector-input.sample.json{" \\"}
+                  <br />
+                  &nbsp;&nbsp;/tmp/helm-sfm-first-change-proof
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  {proofPackageFiles.map((file) => (
+                    <div
+                      key={file.file}
+                      className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+                    >
+                      <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                        {file.file}
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                        {file.purpose}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Missing files mean the proof package has not been generated yet; that is a setup state, not a connector failure or deployment blocker."
+                    : "文件缺失只说明 proof package 尚未生成；这是初始化状态，不是连接器失败或部署阻塞。"}
+                </p>
+              </CardContent>
+            </Card>
+
             <Card className="workspace-panel-muted">
               <CardHeader>
                 <CardTitle>
@@ -4453,8 +4582,13 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {english ? "Live connectors" : "真实连接器"}
+                  {english ? "Read-only connectors" : "只读连接器"}
                 </CardTitle>
+                <CardDescription>
+                  {english
+                    ? "Connector actions below keep the current read-only / review-first boundary. Connecting or syncing does not authorize writeback, external send, approval execution, or customer deployment."
+                    : "下方连接器操作继续保持只读 / 先复核边界。连接或同步不授权写回、外发、审批执行或客户部署。"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                 <div className="theme-surface-panel rounded-2xl px-4 py-4">
@@ -5954,37 +6088,43 @@ export function SettingsClient({
                       ? "The key thing to watch during pilot is not only whether a connector attached, but whether imported objects were bound correctly. If unbound threads or import failures keep rising, clean data quality first before widening the pilot."
                       : "当前试点期最值得盯的不是“接没接上”，而是“接进来的对象有没有被绑定对”。如果待绑定线程或导入失败行持续升高，建议先清数据质量，再扩大试点范围。"}
                   </div>
-                  {legacyConnectors.length ? (
-                    legacyConnectors.map((connector) => (
-                      <div
-                        key={connector.name}
-                        className="workspace-panel rounded-2xl px-4 py-3"
-                      >
-                        <p className="font-medium text-[color:var(--foreground)]">
-                          {connector.name}
-                        </p>
-                        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                          {connector.status === "connected"
-                            ? english
-                              ? "Demo connector state from setup wizard"
-                              : "初始化向导中的演示连接状态"
-                            : english
-                              ? "Not enabled yet"
-                              : "尚未启用"}
-                        </p>
-                      </div>
-                    ))
+                  {setupSourceSelections.length ? (
+                    setupSourceSelections.map((selection) => {
+                      const sourceIntakeSelection = isSourceIntakeOptionKey(
+                        selection.name,
+                      );
+                      return (
+                        <div
+                          key={selection.name}
+                          className="workspace-panel rounded-2xl px-4 py-3"
+                        >
+                          <p className="font-medium text-[color:var(--foreground)]">
+                            {formatSourceIntakeLabel(selection.name, locale)}
+                          </p>
+                          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                            {sourceIntakeSelection ||
+                            selection.status === "diagnostic_selected"
+                              ? english
+                                ? "Source intake selection from setup wizard; not connector authorization."
+                                : "初始化向导中的数据来源诊断选择；不是连接器授权。"
+                              : english
+                                ? "Legacy setup note; not connector authorization."
+                                : "历史初始化说明；不是连接器授权。"}
+                          </p>
+                        </div>
+                      );
+                    })
                   ) : (
                     <EmptyState
                       title={
                         english
-                          ? "No legacy connector notes yet"
-                          : "还没有历史连接器说明"
+                          ? "No setup source-intake notes yet"
+                          : "还没有初始化数据来源诊断说明"
                       }
                       description={
                         english
-                          ? "Mock connector states from setup wizard will also appear here."
-                          : "初始化向导里的模拟连接状态也会在这里展示。"
+                          ? "Source-intake defaults from setup appear here as guidance, not connector state."
+                          : "初始化向导里的数据来源默认项会作为引导显示在这里，不作为连接器状态。"
                       }
                     />
                   )}
