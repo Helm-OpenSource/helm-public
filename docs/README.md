@@ -53,6 +53,8 @@ the next layer.
 
 - [AI 推荐治理契约 / AI recommendation governance](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md)
 - [诊断与自动化证据层要求 / Diagnostic automation evidence layer requirements](product/HELM_DIAGNOSTIC_AUTOMATION_EVIDENCE_LAYER_REQUIREMENTS.md)
+- [智能体化实施工程治理需求 / Agentic implementation engineering governance requirements](product/HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md)
+- [外部智能体输入 PRD / External agent intake PRD](product/HELM_EXTERNAL_AGENT_INTAKE_PRD.md)
 - [开源与商业边界 / Open source and commercial boundary](product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)
 - [开源与 Cloud trial 发布姿态 / Open source and cloud trial launch posture](product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md)
 - [发布现实对齐 / Release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md)
@@ -79,6 +81,7 @@ the next layer.
 - [公开维护者状态基线 / Public maintainer status baseline](operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md)
 - [开源增长 7 日运营计划 / Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md)
 - [OPC 周报包模板 / OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md)
+- [发布就绪回执清单 / Release readiness receipt checklist](operations/RELEASE_READINESS_RECEIPT_CHECKLIST.md)
 - [中国访问性与证据路由包 / China accessibility and evidence routing packet](operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md)
 - [Agent 工作入口 / Agent working entry](codex/README.md)
 - [状态真值表 / Status truth table](STATUS.md)
