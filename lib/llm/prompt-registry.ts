@@ -5,6 +5,11 @@ import {
   type JudgementCandidate,
   type LLMContextPacket,
 } from "@/lib/llm/intelligence-contracts";
+import {
+  COUNTERFACTUAL_REVIEW_STATES,
+  DOWNGRADE_CONDITION_TYPES,
+  type SelectedContextStub,
+} from "@/lib/llm/intelligence-contracts-v2";
 
 export const llmPromptRegistry = {
   meetingMemoryExtraction: {
@@ -51,6 +56,13 @@ export const llmPromptRegistry = {
     description:
       "泛化 BI reviewer 的边界复核模式，fail-closed 地检查经营判断候选的证据缺口、过强动作和越权风险。",
   },
+  counterfactualReview: {
+    key: "counterfactual-review",
+    version: "counterfactual-review-v1",
+    taskTypes: ["COUNTERFACTUAL_REVIEW"],
+    description:
+      "对经营判断候选做反证复核：只给出替代假设、需要的反证证据和降级条件，只能降级或要求人审，不能升级为承诺或执行。",
+  },
 } as const;
 
 export const llmPromptVersions = {
@@ -61,6 +73,7 @@ export const llmPromptVersions = {
   biReportAnalysis: llmPromptRegistry.biReportAnalysis.version,
   biReportReview: llmPromptRegistry.biReportReview.version,
   judgementBoundaryReview: llmPromptRegistry.judgementBoundaryReview.version,
+  counterfactualReview: llmPromptRegistry.counterfactualReview.version,
 } as const;
 
 export function getRegisteredPromptSummaries() {
@@ -324,6 +337,76 @@ export const judgementBoundaryReviewSchema = {
     "boundaryDecision",
   ],
 } as const;
+
+export const counterfactualReviewSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    alternativeHypotheses: {
+      type: "array",
+      items: { type: "string" },
+    },
+    disconfirmingEvidenceNeeded: {
+      type: "array",
+      items: { type: "string" },
+    },
+    downgradeConditions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          type: {
+            type: "string",
+            enum: [...DOWNGRADE_CONDITION_TYPES],
+          },
+          note: { type: "string" },
+        },
+        required: ["type"],
+      },
+    },
+    commitmentRiskUp: { type: "boolean" },
+    downReason: { type: ["string", "null"] },
+    reviewState: {
+      type: "string",
+      enum: [...COUNTERFACTUAL_REVIEW_STATES],
+    },
+    requiredHumanReview: { type: "boolean" },
+    reason: { type: ["string", "null"] },
+  },
+  required: [
+    "alternativeHypotheses",
+    "disconfirmingEvidenceNeeded",
+    "downgradeConditions",
+    "commitmentRiskUp",
+    "reviewState",
+    "requiredHumanReview",
+  ],
+} as const;
+
+export function buildCounterfactualReviewPrompt(input: {
+  contextStub: SelectedContextStub;
+  judgementSummary: string;
+}) {
+  return {
+    promptKey: llmPromptRegistry.counterfactualReview.key,
+    promptVersion: llmPromptVersions.counterfactualReview,
+    systemPrompt:
+      "你是 Helm 的反证复核人。你的唯一任务是质疑一个经营判断候选：给出可能成立的替代假设、还需要哪些反证证据、以及在什么条件下应该把这个判断降级。你只能降级或要求人审；不能批准、不能执行、不能升级为承诺、不能触发任何外部动作、不能写记忆。只输出符合 schema 的 JSON。",
+    userPrompt: [
+      `objectRef：${JSON.stringify(input.contextStub.objectRef)}`,
+      `privacyClass：${input.contextStub.privacyClass}`,
+      `policySnapshotHash：${input.contextStub.policySnapshotHash}`,
+      `selectedEvidenceRefs：${JSON.stringify(input.contextStub.selectedEvidenceRefs)}`,
+      `missingEvidence：${JSON.stringify(input.contextStub.missingEvidence)}`,
+      `judgement 候选摘要：${input.judgementSummary}`,
+      `downgradeConditions.type 只能从以下枚举里选：${DOWNGRADE_CONDITION_TYPES.join("、")}。`,
+      "只引用 selectedEvidenceRefs 与 missingEvidence；不要请求或假设未提供的上下文。",
+      "如果证据不足或候选越界，commitmentRiskUp=true，reviewState=needs_review，requiredHumanReview=true。",
+      "不要输出任何批准、执行、承诺升级、connector、外发、写回或记忆写入字段。",
+    ].join("\n"),
+  };
+}
 
 export function buildMeetingMemoryExtractionPrompt(input: {
   title: string;

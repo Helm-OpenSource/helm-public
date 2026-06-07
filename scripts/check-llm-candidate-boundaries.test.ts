@@ -114,6 +114,60 @@ describe("check-llm-candidate-boundaries", () => {
     expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
   });
 
+  it("rejects banned v2 terms in candidate-aware modules", () => {
+    writeFile(
+      "lib/llm/example.ts",
+      `
+        import type { CounterfactualReviewerOutput } from "@/lib/llm/intelligence-contracts-v2";
+        export const connectorHandle = "x";
+        export type Result = CounterfactualReviewerOutput;
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations[0]?.rule).toBe("LLM-CANDIDATE-C");
+  });
+
+  it("rejects a hard-coded skipped scan status in a source module", () => {
+    writeFile(
+      "lib/llm/example.ts",
+      `
+        export const receipt = { promptInjectionScanResult: { status: "skipped" } };
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-D")).toBe(true);
+  });
+
+  it("rejects passing a selection receipt into an LLM prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { LLMContextSelectionReceipt } from "@/lib/llm/intelligence-contracts-v2";
+        export function buildPrompt(receipt: LLMContextSelectionReceipt) {
+          return { userPrompt: JSON.stringify(receipt) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-E")).toBe(true);
+  });
+
+  it("accepts the stub being passed into a prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { SelectedContextStub } from "@/lib/llm/intelligence-contracts-v2";
+        export function buildPrompt(stub: SelectedContextStub) {
+          return { userPrompt: JSON.stringify(stub.selectedEvidenceRefs) };
+        }
+      `,
+    );
+    expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
+  });
+
   it("rejects assignment-style external fetch calls from critic modules", () => {
     writeFile(
       "lib/llm-workflows/example.ts",

@@ -908,9 +908,11 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
     "node --import tsx scripts/check-llm-candidate-boundaries.ts",
   "eval:llm-critic-boundaries":
     "vitest run lib/evals/llm-critic-evals.test.ts",
+  "eval:llm-v2-boundaries":
+    "vitest run lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
   test: "vitest run --config vitest.public.config.ts",
   "test:public:guards":
-    "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts lib/evals/llm-critic-evals.test.ts",
+    "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
   "quality:regression": "npm run test:public:guards && npm run public:smoke:static",
   "public:e2e:smoke": "npm run public:smoke:static",
   e2e: "npm run public:e2e:smoke",
@@ -947,6 +949,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "eval:expert-capability-feedback-loop",
   "eval:cross-system-accountability-gap",
   "eval:llm-critic-boundaries",
+  "eval:llm-v2-boundaries",
   "kit:dry-run",
   "pack:fixture-check",
   "source-profiler",

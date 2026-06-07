@@ -19,11 +19,37 @@ const TEST_FILE_PATTERN = /\.(test|spec)\.tsx?$/;
 const BYPASS_TOKEN = "@bypass-llm-candidate-boundary";
 
 const CANDIDATE_AWARE_PATTERN =
-  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM)\b/;
+  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate)\b/;
 const UNSAFE_REVIEW_STATE_PATTERN =
   /reviewState\s*:\s*["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
 const UNSAFE_STATE_ENUM_DEFINITION_PATTERN =
-  /\b(?:JUDGEMENT_REVIEW_STATES|judgementReviewStateSchema)\b[\s\S]{0,500}["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
+  /\b(?:JUDGEMENT_REVIEW_STATES|judgementReviewStateSchema|COUNTERFACTUAL_REVIEW_STATES|counterfactualReviewStateSchema)\b[\s\S]{0,500}["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
+
+// v2 terms-to-avoid: banned public-contract / UI identifiers. Use the approved
+// alternatives (capabilityRequested, capabilityRef, missingSignalNote,
+// memoryPromotionCandidate, workflowDraftReference, ...). Checked on
+// candidate-aware modules only, as exact camelCase identifiers.
+const BANNED_TERM_PATTERNS: ReadonlyArray<{ pattern: RegExp; term: string }> = [
+  { pattern: /\bagentActivation\b/, term: "agentActivation" },
+  { pattern: /\bactivateAgent\b/, term: "activateAgent" },
+  { pattern: /\bcontextExpansion\b/, term: "contextExpansion" },
+  { pattern: /\bconnectorHandle\b/, term: "connectorHandle" },
+  { pattern: /\bupgradeToCommitment\b/, term: "upgradeToCommitment" },
+  { pattern: /\bcommitmentBasis\b/, term: "commitmentBasis" },
+  { pattern: /\bmemoryWrite\b/, term: "memoryWrite" },
+  { pattern: /\brunbookExecution\b/, term: "runbookExecution" },
+  { pattern: /\bworkflowTrigger\b/, term: "workflowTrigger" },
+];
+
+// v2 rule D: a `skipped` prompt-injection status may live only in synthetic
+// fixtures (lib/evals/**, *.test.ts). It must never be hard-coded as a real
+// receipt literal inside the source modules under TARGET_ROOTS.
+const SKIPPED_STATUS_PATTERN = /status\s*:\s*["']skipped["']/;
+
+// v2 rule E: the audit-only selection receipt must not be serialized into an
+// LLM prompt. Flag a prompt-building module that also references the receipt.
+const SELECTOR_RECEIPT_PATTERN = /\b(LLMContextSelectionReceipt|selectorReceipt|selectionReceipt)\b/;
+const PROMPT_BUILDER_PATTERN = /\buserPrompt\s*:/;
 
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
@@ -102,11 +128,24 @@ export function runLlmCandidateBoundaryCheck(
       continue;
     }
 
+    const repoRelative = toRepoRelative(repoRoot, file);
+
+    // Rule D runs on every source module under TARGET_ROOTS, not only
+    // candidate-aware ones: a real `skipped` scan literal is never allowed in
+    // source. Synthetic fixtures live under lib/evals/** and *.test.ts.
+    if (SKIPPED_STATUS_PATTERN.test(content)) {
+      violations.push({
+        file: repoRelative,
+        rule: "LLM-CANDIDATE-D",
+        detail:
+          "promptInjectionScanResult.status=skipped is only allowed in synthetic fixtures, not source modules.",
+      });
+    }
+
     if (!isCandidateAware(content)) {
       continue;
     }
 
-    const repoRelative = toRepoRelative(repoRoot, file);
     if (UNSAFE_REVIEW_STATE_PATTERN.test(content)) {
       violations.push({
         file: repoRelative,
@@ -131,6 +170,25 @@ export function runLlmCandidateBoundaryCheck(
           detail,
         });
       }
+    }
+
+    for (const { pattern, term } of BANNED_TERM_PATTERNS) {
+      if (pattern.test(content)) {
+        violations.push({
+          file: repoRelative,
+          rule: "LLM-CANDIDATE-C",
+          detail: `Banned v2 term "${term}" — use the approved capabilityRef / candidate naming instead.`,
+        });
+      }
+    }
+
+    if (PROMPT_BUILDER_PATTERN.test(content) && SELECTOR_RECEIPT_PATTERN.test(content)) {
+      violations.push({
+        file: repoRelative,
+        rule: "LLM-CANDIDATE-E",
+        detail:
+          "Selection receipt content is audit-only; it must not be passed into an LLM prompt. Use SelectedContextStub.",
+      });
     }
   }
 
