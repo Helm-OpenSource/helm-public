@@ -26,6 +26,12 @@ describe("setup user orientation contract", () => {
     expect(setupWizardSource).toContain('data-testid="setup-source-intake"');
     expect(setupWizardSource).toContain("getSourceIntakeOptions");
     expect(setupWizardSource).toContain("getDataIntakeLevels");
+    expect(setupWizardSource).toContain("sourceIntakeLevelCounts");
+    expect(setupWizardSource).toContain("recommendedSourceIntakeCommand");
+    expect(setupWizardSource).toContain("data-testid=\"setup-source-intake-guidance-command\"");
+    expect(setupWizardSource).toContain("node templates/signal-first-mile/run-first-change-proof.js");
+    expect(setupWizardSource).toContain("当前选择分布");
+    expect(setupWizardSource).toContain("Selected layer mix");
     expect(setupWizardSource).toContain("它不授权连接器、生产采集、写回、外发、审批执行或客户部署");
     expect(setupWizardSource).toContain("Available");
     expect(setupWizardSource).toContain("可选");
@@ -33,6 +39,15 @@ describe("setup user orientation contract", () => {
     expect(setupWizardSource).not.toContain("已连接");
     expect(setupWizardSource).not.toContain("Not connected");
     expect(setupWizardSource).not.toContain("未连接");
+  });
+
+  it("renders the source-intake next command as guidance text only", () => {
+    expect(setupWizardSource).toContain("setup-source-intake-guidance-command");
+    expect(setupWizardSource).toContain("下一步命令");
+    expect(setupWizardSource).toContain("Next command");
+    expect(setupWizardSource).not.toContain("onClick={recommendedSourceIntakeCommand");
+    expect(setupWizardSource).not.toContain("exec(");
+    expect(setupWizardSource).not.toContain("spawn(");
   });
 
   it("does not describe setup as granting automatic commitment authority", () => {

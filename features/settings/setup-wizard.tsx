@@ -170,6 +170,16 @@ function SetupWizardSurface({
     activeCount: activeTeamCount,
     invitedCount: invitedTeamCount,
   });
+  const sourceIntakeLevelCounts = dataIntakeLevels.map((level) => ({
+    ...level,
+    count: sourceSelections.filter((selection) =>
+      sourceIntakeOptions.some(
+        (option) => option.key === selection && option.level === level.key,
+      ),
+    ).length,
+  }));
+  const recommendedSourceIntakeCommand =
+    "node templates/signal-first-mile/run-first-change-proof.js templates/signal-first-mile/selector-input.sample.json /tmp/helm-sfm-first-change-proof";
   const applyRecommendedSetupPreset = () => {
     setProfileType(personaOptions[0]);
     setSourceSelections(sourceIntakeOptions.slice(0, 3).map((option) => option.key));
@@ -596,6 +606,42 @@ function SetupWizardSurface({
                       </div>
                     </button>
                   ))}
+                </div>
+
+                <div className="workspace-panel-muted rounded-2xl px-4 py-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                        {english ? "Selected layer mix" : "当前选择分布"}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {sourceIntakeLevelCounts.map((level) => (
+                          <span
+                            key={level.key}
+                            className="rounded-full bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)] ring-1 ring-[color:var(--border)]"
+                          >
+                            {level.key} · {level.count}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2 lg:max-w-[620px]">
+                      <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                        {english ? "Next command" : "下一步命令"}
+                      </p>
+                      <p
+                        className="overflow-x-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 font-mono text-xs leading-6 text-[color:var(--muted)]"
+                        data-testid="setup-source-intake-guidance-command"
+                      >
+                        {recommendedSourceIntakeCommand}
+                      </p>
+                      <p className="text-xs leading-5 text-[color:var(--muted-foreground)]">
+                        {english
+                          ? "This is guidance text only. Setup does not run the command or inspect generated proof package output."
+                          : "这只是引导文本。初始化不会执行命令，也不会读取生成的 proof package 输出。"}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="workspace-panel-muted rounded-2xl px-4 py-3 text-sm leading-6 text-[color:var(--muted)]">
