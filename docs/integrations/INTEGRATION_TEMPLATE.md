@@ -18,10 +18,11 @@ before implementation: the customer use case, data flow, auto / review / never
 boundary table, OAuth or API-key security checklist, fixture and dry-run plan,
 user-visible naming rules, and disconnect / export behavior.
 
-The default acceptable path is read-only or review-first. Automatic external
-send, automatic approval, and automatic write-back are outside the current PR
-boundary. A contributor who cannot answer the use case, data flow, and boundary
-questions should open an `integration: <system>` issue first.
+The default acceptable path is source-intake-first: diagnostic material, fixture
+or dry-run proof, then read-only or review-first connector work. Automatic
+external send, automatic approval, and automatic write-back are outside the
+current PR boundary. A contributor who cannot answer the use case, data flow,
+and boundary questions should open an `integration: <system>` issue first.
 
 > 接你客户的现有系统是你的核心交付动作——这一份模板告诉你做一个 Helm 集成（连接器 / 适配器）需要交付的全部内容、按什么顺序、用什么边界。
 
@@ -31,7 +32,23 @@ questions should open an `integration: <system>` issue first.
 
 ---
 
-## 0. 在写代码前的 90 秒
+## 0. 数据接入先走 3 阶段
+
+新增或改造连接器前，先按 [Helm 数据接入体验](../product/HELM_DATA_INTAKE_EXPERIENCE.md)
+收敛证据路径：
+
+| 阶段 | 目标 | 典型交付物 | 不代表 |
+|---|---|---|---|
+| L0 diagnostic intake | 说明客户现在能给什么材料、能形成什么经营信号 | signal ledger、customer materials request | connector 授权、客户系统写回 |
+| L1 fixture / dry-run | 用 redacted / synthetic fixture 证明 mapper、eval 和 review packet | fixture、signal-quality report、HSI eval、review packet | 生产 freshness、客户部署批准 |
+| L2 read-only connector | 在最小 scope、审计 trace 和撤销路径齐备后接只读采集 | read-only ingest、failure posture、quarantine / retry path | 写回、外发、审批执行、正式 memory promotion |
+
+只有 L0/L1 的材料和边界能说清楚，才进入 L2。L3 写回、客户可见外发和审批执行不属于
+public Core 默认接入路径。
+
+---
+
+## 1. 在写代码前的 90 秒
 
 问自己 3 个问题，答不上来就先开 `integration: <system>` 议题：
 
@@ -41,29 +58,29 @@ questions should open an `integration: <system>` issue first.
 
 ---
 
-## 1. 集成的 6 个交付物
+## 2. 集成的 6 个交付物
 
 每个新连接器 PR 默认需要交付**这 6 个**。少一个 = 还没完成。
 
 | # | 交付物 | 文件 / 位置 |
 |---|---|---|
-| 1 | 数据流声明 | 本模板 §2 表格嵌入到连接器 README |
-| 2 | 边界三轨表（自动 / 复核 / 永远手动） | 本模板 §3 表格嵌入到连接器 README |
-| 3 | OAuth + API key 安全清单 | 本模板 §4 已勾选清单嵌入到连接器 README |
+| 1 | 数据流声明 | 本模板 §3 表格嵌入到连接器 README |
+| 2 | 边界三轨表（自动 / 复核 / 永远手动） | 本模板 §4 表格嵌入到连接器 README |
+| 3 | OAuth + API key 安全清单 | 本模板 §5 已勾选清单嵌入到连接器 README |
 | 4 | 测试夹具 + 预演模式 | `lib/connectors/<name>/fixtures/` + `*.test.ts` |
-| 5 | 用户可见命名规范 | 本模板 §6 检查表 |
-| 6 | 退出与数据回收 | 本模板 §7 接入 `/settings` 自助导出与退出流程 |
+| 5 | 用户可见命名规范 | 本模板 §7 检查表 |
+| 6 | 退出与数据回收 | 本模板 §8 接入 `/settings` 自助导出与退出流程 |
 
 ---
 
-## 2. 数据流声明模板
+## 3. 数据流声明模板
 
 复制下表，填到你连接器 README 的最前面：
 
 ```markdown
 | 维度 | 内容 |
 |---|---|
-| 连接器名称 | <name>（必须符合 §6 命名规范） |
+| 连接器名称 | <name>（必须符合 §7 命名规范） |
 | 上游系统 | <external system>（含官方域名 / OAuth 提供方） |
 | 数据方向 | 仅入站 / 入站 + 出站草稿 / 入站 + 先复核出站 |
 | 拉取频率 | 手动 / 按需 / 按 `<interval>` 定时 |
@@ -92,7 +109,7 @@ questions should open an `integration: <system>` issue first.
 
 ---
 
-## 3. 边界三轨表
+## 4. 边界三轨表
 
 每个连接器必须显式声明：哪些动作自动、哪些动作复核、哪些动作永远手动。
 
@@ -122,7 +139,7 @@ questions should open an `integration: <system>` issue first.
 
 ---
 
-## 4. OAuth + API key 安全清单
+## 5. OAuth + API key 安全清单
 
 构建基于 OAuth 的连接器时勾选下面 12 条：
 
@@ -153,11 +170,11 @@ API key（非 OAuth）模式额外勾选：
 
 ---
 
-## 5. 测试夹具 + 预演模式
+## 6. 测试夹具 + 预演模式
 
 每个连接器 PR 必须包含：
 
-### 5.1 Fixture 文件
+### 6.1 Fixture 文件
 
 路径约定：`lib/connectors/<name>/fixtures/`
 
@@ -168,7 +185,7 @@ API key（非 OAuth）模式额外勾选：
 - 文件名带 `.fixture.ts` / `.sample.json` 后缀
 - 通过 `npm run check:public-release`（无 tenant slug / 真实凭据 / 内部 host）
 
-### 5.2 预演模式
+### 6.2 预演模式
 
 连接器**默认必须支持 `authMode=MOCK`**：
 
@@ -183,7 +200,7 @@ if (authMode === "MOCK") {
 
 参考实现：[`lib/connectors/salesforce/`](../../lib/connectors/) 中 Salesforce 连接器的 `authMode=MOCK` 默认回退模式。
 
-### 5.3 测试覆盖
+### 6.3 测试覆盖
 
 最低要求：
 
@@ -200,7 +217,7 @@ describe("connector <name>", () => {
 
 ---
 
-## 6. 用户可见命名规范
+## 7. 用户可见命名规范
 
 连接器在用户面前出现的字符串（标题 / 描述 / 按钮 / 提示条）必须符合：
 
@@ -212,7 +229,7 @@ describe("connector <name>", () => {
 
 ---
 
-## 7. 退出与数据回收
+## 8. 退出与数据回收
 
 每个连接器必须支持：
 
@@ -223,7 +240,7 @@ describe("connector <name>", () => {
 
 ---
 
-## 8. 提交前自检
+## 9. 提交前自检
 
 合并前 PR 默认应通过：
 
@@ -241,7 +258,7 @@ npm run e2e -- --grep "<name>"        # 如有 e2e 用例
 
 ---
 
-## 9. 5 条对集成方的承诺（来自 [README §5 条承诺](../../README.md#我们对集成方的-5-条承诺)）
+## 10. 5 条对集成方的承诺（来自 [README §5 条承诺](../../README.md#我们对集成方的-5-条承诺)）
 
 发起 `integration:` 议题后，作为 Helm 集成方你获得：
 
@@ -253,7 +270,7 @@ npm run e2e -- --grep "<name>"        # 如有 e2e 用例
 
 ---
 
-## 10. 进阶：成为认证集成
+## 11. 进阶：成为认证集成
 
 完成基础连接器后，如果你想：
 
@@ -265,7 +282,7 @@ npm run e2e -- --grep "<name>"        # 如有 e2e 用例
 
 ---
 
-## 11. 不知道怎么办时
+## 12. 不知道怎么办时
 
 按优先级：
 
@@ -276,8 +293,9 @@ npm run e2e -- --grep "<name>"        # 如有 e2e 用例
 
 ---
 
-## 12. 变更记录
+## 13. 变更记录
 
 | 日期 | 变化 |
 |---|---|
+| 2026-06-07 | 补充 source-intake-first 三阶段：L0 诊断材料、L1 fixture / dry-run、L2 只读连接器；明确 L3 写回 / 外发 / 审批执行不属于 public Core 默认接入路径 |
 | 2026-05-18 | V1 初版：定义连接器 6 个交付物 / 数据流声明模板 / 边界三轨表 / OAuth 安全清单 / 预演测试规范 / 用户可见命名规范 / 退出与数据回收 |

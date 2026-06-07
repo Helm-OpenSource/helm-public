@@ -88,6 +88,10 @@ npm run eval:headless-signal-interface
 npm run check:public-release
 ```
 
+数据接入先按 [Helm 数据接入体验](docs/product/HELM_DATA_INTAKE_EXPERIENCE.md)
+走 source-intake-first：L0 诊断材料 → L1 脱敏 fixture / dry-run → L2 只读接入。
+这条路径不授权写回、外发、审批执行或客户部署。
+
 第一处可验证改动：
 
 1. 打开 `extensions/case-management-sample/fixtures/case.sample.json`。
@@ -175,6 +179,10 @@ ASR 目前只走 OpenAI transcription path；`delivery:doctor` 会预检 `.env.e
 
 > **接你客户的现有系统是你的核心交付动作——这套接口给你模板。**
 > 保留客户已经在用的系统。Helm 在它们之上长出"今天该做什么"。
+
+第一步不是直接连接生产系统，而是先做数据来源诊断：确认手上已有的会议摘要、IM / 邮件
+digest、CRM / 工单 snapshot、脱敏表格、业务系统显式标记或只读 API 授权，再决定 L0 / L1 /
+L2 路径。详见 [数据接入体验](docs/product/HELM_DATA_INTAKE_EXPERIENCE.md)。
 
 ### 已支持
 

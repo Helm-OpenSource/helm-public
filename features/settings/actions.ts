@@ -3317,10 +3317,12 @@ export async function updateWorkspaceSetupAction(input: z.infer<typeof workspace
     where: { id: workspace.id },
     data: {
       profileType: parsed.data.profileType,
+      // Legacy column name. Setup now stores source-intake selections here,
+      // not connector authorization or production connection state.
       connectedSources: JSON.stringify(
         parsed.data.connectedSources.map((name) => ({
           name,
-          status: "connected",
+          status: "diagnostic_selected",
         })),
       ),
       focusAreas: JSON.stringify(parsed.data.focusAreas),

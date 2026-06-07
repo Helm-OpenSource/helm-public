@@ -26,6 +26,10 @@ import {
 } from "@/features/settings/actions";
 import { buildInviteAcceptanceGuidance } from "@/lib/auth/public-entry";
 import {
+  getDataIntakeLevels,
+  getSourceIntakeOptions,
+} from "@/features/settings/data-intake-ux";
+import {
   listRolePresetOptions,
   suggestRolePresetKeyFromText,
 } from "@/lib/definitions/role-presets";
@@ -79,20 +83,22 @@ function SetupWizardSurface({
 }: SetupWizardProps) {
   const router = useRouter();
   const english = locale === "en-US";
-  const { personaOptions, connectorOptions, focusOptions, strategyOptions } =
+  const { personaOptions, focusOptions, strategyOptions } =
     getLocalizedSetupOptions(locale);
+  const dataIntakeLevels = getDataIntakeLevels(locale);
+  const sourceIntakeOptions = getSourceIntakeOptions(locale);
   const rolePresetOptions = listRolePresetOptions(locale);
   const roleLabelsByLocale = getLocalizedRoleLabels(locale);
   const steps = english
     ? [
         "Who's running this",
-        "Where signals come from",
+        "Source intake",
         "What you care about",
         "Default rules",
         "Invite the team",
         "AI settings",
       ]
-    : ["谁在操盘", "信号从哪来", "你最关心什么", "默认规则", "邀请团队", "AI 设置"];
+    : ["谁在操盘", "数据来源诊断", "你最关心什么", "默认规则", "邀请团队", "AI 设置"];
   const inviteStepIndex = 4;
   const [pending, startTransition] = useTransition();
   const [pendingMode, setPendingMode] = useState<"save" | "invite" | null>(
@@ -100,8 +106,8 @@ function SetupWizardSurface({
   );
   const [step, setStep] = useState(0);
   const [profileType, setProfileType] = useState(personaOptions[0]);
-  const [connectors, setConnectors] = useState<string[]>(
-    connectorOptions.slice(0, 3),
+  const [sourceSelections, setSourceSelections] = useState<string[]>(
+    sourceIntakeOptions.slice(0, 3).map((option) => option.key),
   );
   const [focusAreas, setFocusAreas] = useState<string[]>(
     focusOptions.slice(0, 2),
@@ -166,7 +172,7 @@ function SetupWizardSurface({
   });
   const applyRecommendedSetupPreset = () => {
     setProfileType(personaOptions[0]);
-    setConnectors(connectorOptions.slice(0, 3));
+    setSourceSelections(sourceIntakeOptions.slice(0, 3).map((option) => option.key));
     setFocusAreas(focusOptions.slice(0, 2));
     setStrategies(strategyOptions.slice(0, 3));
     setDefaultLocale(locale);
@@ -199,8 +205,8 @@ function SetupWizardSurface({
         ? "Keep the first loop signal-first"
         : "第一条回路继续保持信号优先",
       body: english
-        ? `${connectors.length} sources are selected now. Keep only the 2-3 sources that unlock a real meeting, follow-up, or hot opportunity first; do not mistake broader ingest for first value.`
-        : `当前已选 ${connectors.length} 个来源。第一轮只保留能尽快打开真实会议、跟进或高优先机会的 2-3 个高信号来源，不要把更广的导入误当成首轮价值。`,
+        ? `${sourceSelections.length} sources are selected now. Keep only the 2-3 sources that unlock a real meeting, follow-up, or hot opportunity first; do not mistake broader ingest for first value.`
+        : `当前已选 ${sourceSelections.length} 个来源方案。第一轮只保留能尽快打开真实会议、跟进或高优先机会的 2-3 个高信号来源，不要把更广的导入误当成首轮价值。`,
     },
     {
       title: english
@@ -257,7 +263,7 @@ function SetupWizardSurface({
       setPendingMode("save");
       const result = await updateWorkspaceSetupAction({
         profileType,
-        connectedSources: connectors,
+        connectedSources: sourceSelections,
         focusAreas,
         defaultStrategies: strategies,
         defaultLocale,
@@ -387,12 +393,12 @@ function SetupWizardSurface({
             }
           />
           <SetupOrientationCard
-            eyebrow={english ? "2 · Signals" : "2 · 再接入信号"}
-            title={english ? "Choose the first signal sources" : "选择第一批信号来源"}
+            eyebrow={english ? "2 · Source intake" : "2 · 数据来源诊断"}
+            title={english ? "Diagnose source intake" : "诊断第一批数据来源"}
             body={
               english
-                ? "Start with the sources that reveal meetings, customer waiting, commitments and blockers."
-                : "先选能暴露会议、客户等待、承诺和阻塞的来源。"
+                ? "Start with the materials already in hand, then decide whether fixture, dry-run, or read-only access is needed."
+                : "先选手上已有的客户材料，再判断是否需要 fixture、dry-run 或只读接入。"
             }
           />
           <SetupOrientationCard
@@ -452,8 +458,8 @@ function SetupWizardSurface({
                   ? `Current step: ${steps[step]}`
                   : `当前步骤：${steps[step]}`,
                 english
-                  ? `Selected sources: ${connectors.length} · focus areas: ${focusAreas.length} · strategies: ${strategies.length}`
-                  : `已选来源 ${connectors.length} 个 · 关注目标 ${focusAreas.length} 项 · 默认策略 ${strategies.length} 项`,
+                  ? `Selected sources: ${sourceSelections.length} · focus areas: ${focusAreas.length} · strategies: ${strategies.length}`
+                  : `已选来源方案 ${sourceSelections.length} 个 · 关注目标 ${focusAreas.length} 项 · 默认策略 ${strategies.length} 项`,
                 english
                   ? "Use teammate invites before setup completes so the first handoff is not delayed."
                   : "在完成初始化前就邀请团队，避免第一轮经营交接被延后。",
@@ -518,41 +524,85 @@ function SetupWizardSurface({
             ) : null}
 
             {step === 1 ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {connectorOptions.map((connector) => (
-                  <button
-                    key={connector}
-                    type="button"
-                    onClick={() => toggle(connector, connectors, setConnectors)}
-                    className={`rounded-2xl border px-4 py-4 text-left transition ${
-                      connectors.includes(connector)
-                        ? "workspace-panel-muted border-[color:var(--border-strong)]"
-                        : "workspace-panel hover:border-[color:var(--border-strong)]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-[color:var(--foreground)]">
-                          {connector}
-                        </p>
-                        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                          {english
-                            ? "CRM-first connectors are prioritized here. Even demo connections are saved into workspace setup so the shell can guide the next step correctly."
-                            : "这里优先配置最关键的信息连接。只要连上，后续首页、跟进、接手和判断就能按真实业务路径往前走。"}
-                        </p>
+              <div className="space-y-4" data-testid="setup-source-intake">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {dataIntakeLevels.map((level) => (
+                    <div
+                      key={level.key}
+                      className="workspace-panel-muted rounded-2xl px-4 py-3"
+                    >
+                      <div className="text-xs font-semibold text-[var(--accent)]">
+                        {level.key}
                       </div>
-                      <div className="rounded-full bg-[color:color-mix(in_oklab,var(--surface-subtle)_88%,var(--background)_12%)] px-2.5 py-1 text-xs font-medium text-[color:var(--muted)]">
-                        {connectors.includes(connector)
-                          ? english
-                            ? "Connected"
-                            : "已连接"
-                          : english
-                            ? "Not connected"
-                            : "未连接"}
-                      </div>
+                      <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">
+                        {level.title}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                        {level.summary}
+                      </p>
+                      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                        {english ? "Output" : "产出"} · {level.output}
+                      </p>
                     </div>
-                  </button>
-                ))}
+                  ))}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {sourceIntakeOptions.map((source) => (
+                    <button
+                      key={source.key}
+                      type="button"
+                      onClick={() =>
+                        toggle(source.key, sourceSelections, setSourceSelections)
+                      }
+                      className={`rounded-2xl border px-4 py-4 text-left transition ${
+                        sourceSelections.includes(source.key)
+                          ? "workspace-panel-muted border-[color:var(--border-strong)]"
+                          : "workspace-panel hover:border-[color:var(--border-strong)]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-[color:var(--foreground)]">
+                              {source.label}
+                            </p>
+                            <span className="rounded-full bg-[color:var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold text-[color:var(--foreground)] ring-1 ring-[color:var(--border)]">
+                              {source.level}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                            {source.material}
+                          </p>
+                          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                            {source.posture}
+                          </p>
+                          <p className="mt-3 text-sm font-medium text-[var(--accent)]">
+                            {source.primaryAction}
+                          </p>
+                          <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                            {source.boundary}
+                          </p>
+                        </div>
+                        <div className="rounded-full bg-[color:color-mix(in_oklab,var(--surface-subtle)_88%,var(--background)_12%)] px-2.5 py-1 text-xs font-medium text-[color:var(--muted)]">
+                          {sourceSelections.includes(source.key)
+                            ? english
+                              ? "Selected"
+                              : "已选"
+                            : english
+                              ? "Available"
+                              : "可选"}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="workspace-panel-muted rounded-2xl px-4 py-3 text-sm leading-6 text-[color:var(--muted)]">
+                  {english
+                    ? "Setup saves source-intake defaults for guidance only. It does not authorize a connector, production ingest, writeback, external send, approval execution, or customer deployment."
+                    : "初始化只保存数据来源诊断默认项，用于后续引导；它不授权连接器、生产采集、写回、外发、审批执行或客户部署。"}
+                </div>
               </div>
             ) : null}
 
