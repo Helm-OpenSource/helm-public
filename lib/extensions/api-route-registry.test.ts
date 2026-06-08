@@ -15,14 +15,31 @@ import {
   __resetExtensionApiRoutesForTest,
   decodeRequestPath,
   listRegisteredExtensionApiRoutes,
-  registerExtensionApiRoutes,
+  registerExtensionApiRoutes as registerRawExtensionApiRoutes,
   resolveExtensionApiRoute,
   type ExtensionApiRoute,
 } from "./api-route-registry";
 
 const PACK = "samplepack";
+const handlerOwnedAuthorization = {
+  kind: "handler_owned" as const,
+  evidence: "api-route-registry test handler owns auth gate",
+};
 const ok = (body: string): ExtensionApiRoute["handler"] => () =>
   new Response(body, { status: 200 });
+
+function registerExtensionApiRoutes(
+  packId: string,
+  routes: ReadonlyArray<Omit<ExtensionApiRoute, "authorization">>,
+) {
+  registerRawExtensionApiRoutes(
+    packId,
+    routes.map((route) => ({
+      ...route,
+      authorization: handlerOwnedAuthorization,
+    })),
+  );
+}
 
 beforeEach(() => __resetExtensionApiRoutesForTest());
 afterEach(() => __resetExtensionApiRoutesForTest());

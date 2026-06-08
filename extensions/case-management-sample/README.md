@@ -30,7 +30,7 @@ A public Apache-2.0 sample pack reference implementation, intended as a starting
 
 **Minimum public reference** — 这是 synthetic public sample pack（provenance under review），不是 production-ready vertical，但已经消除了公开 README / 1-pager 的 dead-link 风险：
 
-- 已有 `tenant.manifest.json` + signals / workers / bi-report manifests
+- 已有 `tenant.manifest.json` + signals / workers / bi-report manifests + public-safe `permission.manifest.json`
 - 已有 `signals/types.ts`，固定 deterministic signal identity、tenant pinning、suggestion-only 边界
 - 已有 4 类 public sample fixtures：case / day-board / employee / qc-issue；HSI payload examples 覆盖 case system / CRM / IM / meeting / email；在 owner 完成 synthetic provenance gate 前，公开口径为 synthetic public sample pack, provenance under review
 - 已有一个可运行 case mapper + memory candidate / review packet 纯函数 + Vitest，用于展示"证据 -> 经营信号 -> 记忆候选 -> 复核行动包"的最小路径
@@ -46,6 +46,7 @@ A public Apache-2.0 sample pack reference implementation, intended as a starting
 ```
 extensions/case-management-sample/
 ├── tenant.manifest.json
+├── permission.manifest.json
 ├── README.md
 ├── fixtures/
 │   ├── case.sample.json
@@ -103,6 +104,18 @@ npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run check:public-release
 ```
+
+权限 manifest / Permission manifest:
+
+```bash
+npm run test -- lib/extensions/permission-manifest.test.ts \
+  lib/extensions/permission-access.test.ts \
+  lib/extensions/permission-api-proof.test.ts
+```
+
+`permission.manifest.json` 只声明 synthetic case-management 资源、动作、风险、数据分类和默认效果模式。
+它不是租户授权绑定；真实人员、队列、字段策略、entitlement、receipt 和写回 gate 仍属于私有 Overlay /
+control-plane。
 
 5. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey`、memory candidate only 和 forbidden-action 边界。
 

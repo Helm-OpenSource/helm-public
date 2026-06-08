@@ -41,8 +41,8 @@ import type {
   ExtensionIndustryDemoReadoutPage,
   ReportsExtensionDescriptor,
   SolutionExtensionCatalogEntry,
-  WorkspaceLike,
   WorkspaceNavExtensionDescriptor,
+  ExtensionAccessProbe,
 } from "./registry-types";
 
 // Re-export shared types so Pack modules can import everything they need from
@@ -98,7 +98,7 @@ export type IndustryDemoReadoutContribution = {
 
 /** Implementation-console-style panel access gate contribution. */
 export type ImplementationConsoleContribution = {
-  getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+  getAccess: ExtensionAccessProbe;
 };
 
 // ---------------------------------------------------------------------------
@@ -112,12 +112,12 @@ export type PackContributions = {
   workspaceNavExtensions?: ReadonlyArray<WorkspaceNavExtensionDescriptor>;
   /** Account-binding contribution gated by its own access probe. */
   accountBinding?: {
-    getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+    getAccess: ExtensionAccessProbe;
     build: () => AccountBindingContribution;
   };
   /** Approvals BI-board contribution gated by its own access probe. */
   biBoard?: {
-    getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+    getAccess: ExtensionAccessProbe;
     build: () => BiBoardContribution;
   };
   industryDemoReadouts?: ReadonlyArray<IndustryDemoReadoutContribution>;

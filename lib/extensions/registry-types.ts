@@ -9,6 +9,11 @@
 
 import type { ReactNode } from "react";
 import { SolutionExtensionKind } from "@prisma/client";
+import type {
+  PermissionDecision,
+  PermissionFailureCode,
+  PermissionSubject,
+} from "@/lib/auth/permission-policy";
 
 export type WorkspaceLike = {
   id: string;
@@ -16,6 +21,23 @@ export type WorkspaceLike = {
   systemKey?: string | null;
   workspaceClass?: string | null;
 };
+
+export type ExtensionAccessContext = {
+  subject?: PermissionSubject | null;
+  traceId?: string;
+};
+
+export type ExtensionAccessResult = {
+  ok: boolean;
+  reason?: string;
+  failureCode?: PermissionFailureCode;
+  decision?: PermissionDecision;
+};
+
+export type ExtensionAccessProbe = (
+  workspace: WorkspaceLike,
+  context?: ExtensionAccessContext,
+) => Promise<ExtensionAccessResult>;
 
 export type SolutionExtensionCatalogEntry = {
   extensionKey: string;
@@ -49,7 +71,7 @@ export type ResolvedReportsExtensionsType = {
 
 export type ReportsExtensionDescriptor = {
   id: string;
-  getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+  getAccess: ExtensionAccessProbe;
   buildTabs: (english: boolean) => ReadonlyArray<ReportsExtensionTab>;
   matchTab: (requested: string | undefined) => string | null;
   renderSurface: (input: { matchedTab: string; english: boolean }) => ReactNode;
@@ -118,7 +140,7 @@ export type ResolvedWorkspaceNavExtensionsType = {
 
 export type WorkspaceNavExtensionDescriptor = {
   id: string;
-  getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+  getAccess: ExtensionAccessProbe;
   buildCluster: (english: boolean) => WorkspaceNavExtensionCluster;
 };
 

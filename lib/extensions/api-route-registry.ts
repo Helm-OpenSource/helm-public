@@ -22,11 +22,10 @@ import "server-only";
  *   root (`instrumentation.ts` → `extensions/pack-bootstrap`). Nothing is
  *   discovered or loaded dynamically at request time; the store is populated
  *   once at boot, same lifecycle as the 5A pack registry.
- * - NOT a new permission model: this module does ZERO auth. Each migrated route
- *   keeps its own existing gate (e.g. workspace session + a role/authorization
- *   check, a pack-specific access probe, a cron token, or a public fixture gate)
- *   verbatim inside its handler. The adapter only maps (method, path) → the same
- *   handler function.
+ * - NOT a new permission model: this module only enforces that every route
+ *   declares an authorization gate. Routes can either use the Core permission
+ *   evaluator wrapper below or explicitly mark that the handler owns its gate.
+ *   The adapter still only maps (method, path) → the same handler function.
  * - NOT a behavior change on its own: until a catch-all route is wired and a
  *   physical route file is removed, this store stays empty and is pure dead
  *   code. Empty store ⇒ `resolveExtensionApiRoute` returns null ⇒ caller 404s,
@@ -34,6 +33,14 @@ import "server-only";
  *
  * This is the seam that will become part of `@helm/pack-sdk` (route contract).
  */
+
+import {
+  evaluatePermission,
+  type PermissionDecision,
+  type PermissionPolicy,
+  type PermissionResource,
+  type PermissionSubject,
+} from "@/lib/auth/permission-policy";
 
 export type ApiRouteMethod =
   | "GET"
@@ -55,6 +62,17 @@ export type ExtensionApiRouteHandler = (
   context: { params: Record<string, string> },
 ) => Promise<Response> | Response;
 
+export type ExtensionApiRouteAuthorization =
+  | {
+      kind: "permission_evaluator";
+      actionName: string;
+      policyVersion: string;
+    }
+  | {
+      kind: "handler_owned";
+      evidence: string;
+    };
+
 /**
  * One registered route. `pattern` is the path **relative to
  * `/api/extensions/`**, using `:name` for a dynamic segment, e.g.
@@ -63,6 +81,7 @@ export type ExtensionApiRouteHandler = (
 export type ExtensionApiRoute = {
   method: ApiRouteMethod;
   pattern: string;
+  authorization?: ExtensionApiRouteAuthorization;
   handler: ExtensionApiRouteHandler;
 };
 
@@ -79,8 +98,93 @@ type CompiledRoute = {
   segments: PatternSegment[];
   /** Count of param segments — used to prefer the most specific match. */
   paramCount: number;
+  authorization: ExtensionApiRouteAuthorization;
   handler: ExtensionApiRouteHandler;
 };
+
+export type PermissionedExtensionApiRouteHandler = (
+  request: Request,
+  context: {
+    params: Record<string, string>;
+    permissionDecision: PermissionDecision;
+  },
+) => Promise<Response> | Response;
+
+export type PermissionedExtensionApiRouteInput = {
+  method: ApiRouteMethod;
+  pattern: string;
+  actionName: string;
+  policy: PermissionPolicy;
+  resource:
+    | PermissionResource
+    | ((
+        request: Request,
+        context: { params: Record<string, string> },
+      ) => PermissionResource);
+  resolveSubject: (
+    request: Request,
+    context: { params: Record<string, string> },
+  ) => Promise<PermissionSubject | null> | PermissionSubject | null;
+  handler: PermissionedExtensionApiRouteHandler;
+};
+
+function permissionDeniedResponse(decision: PermissionDecision): Response {
+  return Response.json(
+    {
+      error: {
+        code: decision.failureCode ?? "permission_denied",
+        message: "Permission denied",
+        traceId: decision.traceId,
+        policyVersion: decision.policyVersion,
+      },
+    },
+    { status: 403 },
+  );
+}
+
+function resolveTraceId(request: Request, fallback: string): string {
+  return request.headers.get("x-helm-trace-id")?.trim() || fallback;
+}
+
+export function createPermissionedExtensionApiRoute(
+  input: PermissionedExtensionApiRouteInput,
+): ExtensionApiRoute {
+  return {
+    method: input.method,
+    pattern: input.pattern,
+    authorization: {
+      kind: "permission_evaluator",
+      actionName: input.actionName,
+      policyVersion: input.policy.policyVersion,
+    },
+    handler: async (request, context) => {
+      const resource =
+        typeof input.resource === "function"
+          ? input.resource(request, context)
+          : input.resource;
+      const subject = await input.resolveSubject(request, context);
+      const decision = evaluatePermission({
+        subject,
+        resource,
+        actionName: input.actionName,
+        policy: input.policy,
+        traceId: resolveTraceId(
+          request,
+          `extension-api:${input.method}:${input.pattern}:${input.actionName}`,
+        ),
+      });
+
+      if (decision.effect !== "allow") {
+        return permissionDeniedResponse(decision);
+      }
+
+      return input.handler(request, {
+        ...context,
+        permissionDecision: decision,
+      });
+    },
+  };
+}
 
 function compilePattern(pattern: string): {
   segments: PatternSegment[];
@@ -141,6 +245,24 @@ function routeShapeKey(method: ApiRouteMethod, segments: PatternSegment[]): stri
   return `${method} ${shape}`;
 }
 
+function validateRouteAuthorization(
+  packId: string,
+  route: ExtensionApiRoute,
+): ExtensionApiRouteAuthorization {
+  const authorization = route.authorization;
+  if (!authorization) {
+    throw new Error(
+      `Extension API route ${route.method} ${route.pattern} in pack "${packId}" must declare authorization metadata.`,
+    );
+  }
+  if (authorization.kind === "handler_owned" && authorization.evidence.trim().length === 0) {
+    throw new Error(
+      `Extension API route ${route.method} ${route.pattern} in pack "${packId}" has empty handler-owned authorization evidence.`,
+    );
+  }
+  return authorization;
+}
+
 /**
  * Register a Pack/Overlay's API routes. Idempotent per `packId` (re-registering
  * the same id is a no-op, so HMR / double instrumentation does not duplicate
@@ -169,6 +291,7 @@ export function registerExtensionApiRoutes(
   const existingShapes = new Map(s.routes.map((r) => [r.shapeKey, r]));
   const batchShapes = new Set<string>();
   const compiled: CompiledRoute[] = routes.map((r) => {
+    const authorization = validateRouteAuthorization(packId, r);
     const { segments, paramCount } = compilePattern(r.pattern);
     const shapeKey = routeShapeKey(r.method, segments);
     if (batchShapes.has(shapeKey)) {
@@ -192,6 +315,7 @@ export function registerExtensionApiRoutes(
       shapeKey,
       segments,
       paramCount,
+      authorization,
       handler: r.handler,
     };
   });
@@ -215,6 +339,7 @@ export type ResolvedExtensionApiRoute = {
   params: Record<string, string>;
   packId: string;
   pattern: string;
+  authorization: ExtensionApiRouteAuthorization;
 };
 
 /**
@@ -308,6 +433,7 @@ export function resolveExtensionApiRoute(
     params: best.params,
     packId: best.route.packId,
     pattern: best.route.pattern,
+    authorization: best.route.authorization,
   };
 }
 
@@ -343,10 +469,12 @@ export function listRegisteredExtensionApiRoutes(): ReadonlyArray<{
   packId: string;
   method: ApiRouteMethod;
   pattern: string;
+  authorizationKind: ExtensionApiRouteAuthorization["kind"];
 }> {
   return store().routes.map((r) => ({
     packId: r.packId,
     method: r.method,
     pattern: r.pattern,
+    authorizationKind: r.authorization.kind,
   }));
 }
