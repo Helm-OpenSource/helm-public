@@ -145,11 +145,12 @@ Minimum fields:
 | `createdAt` | ISO timestamp |
 | `actor` | Agent or human alias; no personal secret or credential |
 | `mode` | `AgentImplementationMode` |
+| `worktreeProfile` | `WorktreeProfile`; records whether the run is read-only, local draft, repo-write reviewed, private sandbox, or external-write forbidden |
 | `repo` | Repo alias, root hash or branch ref, dirty-state summary |
 | `intent` | Short user-visible intent |
 | `scope` | Files/modules/commands allowed for this run |
 | `inputRefs` | Redacted evidence, fixture, issue, PR, source-profiler packet, or HSI refs |
-| `redactionStatus` | Canonical doctor-packet value: `synthetic`, `redacted`, `alias_only`, `raw_private_rejected`, or `unknown` |
+| `redactionStatus` | Closed set: `synthetic`, `redacted`, `alias_only`, `raw_blocked`, or `unknown_blocked` |
 | `commandResults` | Command name, args, cwd, risk, exit code, start/end, redacted output summary |
 | `fileChangeSummary` | Added/modified/deleted file list and rationale; empty for read-only runs |
 | `outputArtifacts` | Review packets, local drafts, eval reports, screenshots, or blocked-action records |
@@ -158,10 +159,12 @@ Minimum fields:
 | `validationReceipts` | Build/test/lint/eval/guard receipts, including failures |
 | `humanReceipts` | Optional reviewer/owner receipt refs; absent means not approved |
 | `nextSafeActions` | Review-first next steps only |
+| `sarpReceipt` | Optional SARP v0.1 deterministic review receipt; `capsuleRunId` must match `runId`; evidence only, not approval |
 
 Capsule content must not include raw prompts, secrets, raw customer rows, full transcripts, production URLs,
 private hostnames, tenant slugs, internal deployment receipts, or unredacted source paths from customer repos.
-If redaction cannot be proven, `redactionStatus` must be `unknown` and downstream routing must be `quarantine`.
+If redaction cannot be proven, `redactionStatus` must be `raw_blocked` or `unknown_blocked` and downstream
+routing must be `quarantine`.
 
 Shared redaction mapping:
 
@@ -170,8 +173,8 @@ Shared redaction mapping:
 | Doctor packet | `synthetic` | `synthetic` | May proceed as public-safe evidence |
 | Doctor packet / external intake | `redacted` | `redacted` | May proceed as review-first evidence |
 | Doctor packet / external intake | `alias_only` | `alias_only` | May proceed as review-first evidence |
-| External intake | `contains_pii` | `raw_private_rejected` | Quarantine / reject; no raw persistence |
-| External intake / unknown source | `unknown` | `unknown` | Quarantine until redaction is proven |
+| External intake | `contains_pii` | `raw_blocked` | Quarantine / reject; no raw persistence |
+| External intake / unknown source | `unknown` | `unknown_blocked` | Quarantine until redaction is proven |
 
 ## 8. Diagnostic Command Registry
 
@@ -206,7 +209,7 @@ The registry should initially cover only public-safe commands:
 - HSI eval
 - Signal First Mile quality eval
 - source-profiler smoke once merged, using the same registry rather than a parallel source-profiler command table
-- agentic trajectory eval once implemented
+- SARP v0.1 deterministic boundary fixture guard through `npm run check:agentic-sarp`
 
 ## 9. Helm Doctor Packet
 
@@ -251,6 +254,17 @@ Minimum failure classes:
 
 Trajectory eval must include negative fixtures and hard boundary traps. It should report `pass`,
 `fail`, or `inconclusive`; it must not let LLM self-critique override deterministic failures.
+
+Current public Core implementation:
+
+- `lib/agentic/contracts.ts` defines the closed failure vocabulary.
+- `lib/agentic/run-capsule.ts` defines `AgentRunCapsule`, redaction quarantine, forbidden-risk rejection, and optional `sarpReceipt`.
+- `lib/agentic/trajectory-eval.ts` detects process-level failures deterministically.
+- `lib/agentic/sarp-contracts.ts` and `lib/agentic/sarp-eval.ts` produce SARP v0.1 review receipts with `pass`, `advisory`, `block`, or `escalate` verdicts.
+- `scripts/check-agentic-sarp.ts` runs synthetic SARP boundary fixtures and is wired into `npm run check:boundaries`.
+
+This implementation is still an evidence and guard layer. It is not an agent runtime, planner,
+workflow engine, external execution surface, approval surface, or production deployment proof.
 
 ## 11. Source-Controlled AI Checks
 
@@ -323,20 +337,21 @@ Recommended PR order:
 | Slice | Scope | Validation |
 |---|---|---|
 | PR0 requirements | This document, external-agent intake PRD anchor, docs index, manifest, status | `check:public-docs`, `check:public-release` |
-| PR1 command registry extension | Extend existing `lib/diagnostics/command-registry.ts` and `lib/diagnostics/doctor-packet.ts`; do not fork the registry | unit tests, public release guard |
-| PR2 run capsule | `AgentRunCapsule` schema, redaction guard, `/tmp` writer | unit tests, path guard fixtures |
-| PR3 trajectory eval | Process-level fixture pack and evaluator | negative fixtures, boundary traps |
-| PR4 AI checks | Source-controlled check contract and suggestion-only runner | no mutation tests, no self-approval tests |
-| PR5 proof package | Read-only proof package projection | fixture-backed rendering / docs |
-| PR6 private observability adapter | Optional private adapter contract | explicit opt-in, redaction tests |
+| Baseline capsule / trajectory eval | `AgentRunCapsule`, redaction quarantine, forbidden-risk rejection, deterministic trajectory failure classes | unit tests, negative fixtures |
+| SARP PR1 | SARP v0.1 contracts and deterministic review evaluator | SARP receipt unit tests |
+| SARP PR2 | Optional capsule `sarpReceipt`, `attachSarpReviewReceipt`, and `check:agentic-sarp` wired into `check:boundaries` | capsule receipt tests, synthetic guard fixtures, public package projection tests |
+| SARP PR3 | Documentation and status truth sync for the code-backed SARP slice | `check:public-docs`, `check:public-release`, `check:boundaries` |
+| Future source-controlled AI checks | Source-controlled check contract and suggestion-only runner | no mutation tests, no self-approval tests |
+| Future proof package projection | Read-only proof package projection | fixture-backed rendering / docs |
+| Future private observability adapter | Optional private adapter contract | explicit opt-in, redaction tests |
 
 ## 17. Acceptance Criteria
 
-For requirements:
+For requirements and status truth:
 
 - New public docs are listed in `docs/public-docs-manifest.json`.
 - `docs/README.md` links the public contract.
-- `docs/STATUS.md` states this is requirements-only, not runtime implementation.
+- `docs/STATUS.md` states the current code-backed SARP guard status without claiming runtime implementation.
 - Public release guard does not find secrets, private hosts, tenant slugs, or customer facts.
 
 For future implementation:
@@ -347,8 +362,9 @@ For future implementation:
 - `external_write`, `activation`, and `commitment` risks are blocked by tests.
 - Agent run capsules cannot persist raw prompts, credentials, raw rows, transcripts, private URLs, or customer
   identifiers.
-- Capsule redaction values map to the existing doctor-packet / external-intake vocabularies; no third redaction enum is introduced.
+- Capsule redaction values map explicitly from doctor-packet / external-intake values and never carry raw private content forward.
 - Trajectory eval includes overreach, validation-skip, redaction-leak, and candidate-autopromotion fixtures.
+- `check:agentic-sarp` stays synthetic/offline and remains part of `check:boundaries`.
 - Any source-profiler integration reuses source-profiler ReviewPacket / mapping-candidate contract after merge.
 
 ## English Reference
@@ -370,3 +386,4 @@ tests, and `/tmp` proof artifacts before any UI, connector, hosted endpoint, or 
 | Date | Change |
 |---|---|
 | 2026-06-07 | Drafted the Helm agentic implementation engineering requirements from current public Core contracts and recent open-source agent pattern review. |
+| 2026-06-08 | Synchronized the requirements with SARP v0.1 contracts, optional capsule receipts, deterministic trajectory/SARP guard implementation, and `check:agentic-sarp` boundary wiring. |
