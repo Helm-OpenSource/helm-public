@@ -126,8 +126,9 @@ export type PackContributions = {
   signalCollectionJobs?: () => ReadonlyArray<SignalCollectionJob>;
   /**
    * API routes the pack serves under `/api/extensions/<pack>/...`, dispatched by
-   * the Core catch-all (repo-split 5B). Each handler keeps its own auth gate;
-   * the registry performs no auth. Patterns are relative to `/api/extensions/`.
+   * the Core catch-all (repo-split 5B). Each route must declare authorization
+   * metadata: either the Core permission evaluator wrapper or handler-owned
+   * gate evidence. Patterns are relative to `/api/extensions/`.
    */
   apiRoutes?: ReadonlyArray<ExtensionApiRoute>;
 };
