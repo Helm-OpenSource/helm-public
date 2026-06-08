@@ -1,5 +1,5 @@
 ---
-status: review
+status: active
 owner: helm-core
 created: 2026-06-08
 review_after: 2026-07-08
