@@ -117,6 +117,12 @@ npm run test -- lib/extensions/permission-manifest.test.ts \
 它不是租户授权绑定；真实人员、队列、字段策略、entitlement、receipt 和写回 gate 仍属于私有 Overlay /
 control-plane。
 
+Runtime read proof / 运行时读取证明：
+
+- `lib/extensions/permission-api-proof.ts` exposes a synthetic session resolver and registered extension API route proof.
+- The proof path is `session -> workspace -> permission decision -> row filter -> field redaction -> audit receipt`.
+- The response includes only synthetic rows plus redaction metadata; raw contact tokens, financial values, and legal notes are not returned.
+
 5. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey`、memory candidate only 和 forbidden-action 边界。
 
 不要把真实客户记录、真实邮箱、真实手机号、私有域名、内网 IP、凭据或部署信息放进本目录。

@@ -172,9 +172,11 @@ permission -> row filter -> field redaction -> deny audit.
 
 **Estimated scope:** Medium
 
-**Completion note:** Implemented as a synthetic registered extension API route proof. It filters rows by explicit
-queue scope and redacts contact / financial / legal-sensitive fields in API serialization before returning rows.
-Deny responses return typed failure codes and never include rows.
+**Completion note:** Implemented as a synthetic registered extension API route proof. It resolves a public-safe
+synthetic session into a workspace subject, evaluates the permission decision, filters rows by explicit queue scope,
+redacts contact / financial / legal-sensitive fields in API serialization, and emits a synthetic read audit receipt for
+`session -> workspace -> permission_decision -> row_filter -> field_redaction -> audit_receipt`. Deny responses return
+typed failure codes and never include rows.
 
 ### Task 5: Review-required side-effect proof
 
