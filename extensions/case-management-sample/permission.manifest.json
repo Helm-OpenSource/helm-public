@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "helm.permission-manifest/v1",
+  "packKey": "case-management-sample",
+  "policyVersion": "permission-policy/v1",
+  "resources": [
+    {
+      "kind": "case_record",
+      "displayName": "Synthetic case record",
+      "dataClassifications": [
+        "workspace_internal",
+        "personal_contact",
+        "financial_data",
+        "legal_sensitive"
+      ],
+      "supportsRowFilters": true,
+      "fieldRedactions": [
+        {
+          "field": "contact",
+          "dataClassification": "personal_contact",
+          "defaultRedaction": "alias_only"
+        },
+        {
+          "field": "balance",
+          "dataClassification": "financial_data",
+          "defaultRedaction": "raw_private_rejected"
+        },
+        {
+          "field": "legalNotes",
+          "dataClassification": "legal_sensitive",
+          "defaultRedaction": "raw_private_rejected"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "case.read",
+      "resourceKind": "case_record",
+      "effectMode": "read_only",
+      "riskLevel": "low",
+      "allowedDataClassifications": ["workspace_internal"],
+      "supportsRowFilter": true,
+      "supportsFieldRedaction": true,
+      "obligations": ["apply_row_filter", "apply_field_redaction"]
+    },
+    {
+      "name": "case.prepare_writeback",
+      "resourceKind": "case_record",
+      "effectMode": "review_required",
+      "riskLevel": "high",
+      "allowedDataClassifications": [
+        "workspace_internal",
+        "financial_data",
+        "legal_sensitive"
+      ],
+      "supportsRowFilter": true,
+      "supportsFieldRedaction": true,
+      "obligations": [
+        "human_review_required",
+        "no_external_send",
+        "no_customer_writeback"
+      ]
+    },
+    {
+      "name": "case.execute_writeback",
+      "resourceKind": "case_record",
+      "effectMode": "blocked_side_effect",
+      "riskLevel": "critical",
+      "allowedDataClassifications": ["workspace_internal"],
+      "supportsRowFilter": true,
+      "supportsFieldRedaction": true,
+      "obligations": ["blocked_in_public_core"]
+    }
+  ]
+}

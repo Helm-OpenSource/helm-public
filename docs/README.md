@@ -65,6 +65,8 @@ connector 授权、写回、外发或审批证明。
 - [开源与 Cloud trial 发布姿态 / Open source and cloud trial launch posture](product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md)
 - [发布现实对齐 / Release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md)
 - [认证生态清单 / Certified ecosystem checklist](product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md)
+- [权限策略契约 / Permission policy contract](product/HELM_PERMISSION_POLICY_CONTRACT.md)
+- [权限策略实施计划 / Permission policy implementation plan](product/HELM_PERMISSION_POLICY_IMPLEMENTATION_PLAN.md)
 - [交付工程师黄金路径要求 / Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
 - [交付工程师初始化诊断要求 / Delivery engineer setup diagnostic requirements](product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md)
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
@@ -97,6 +99,7 @@ connector 授权、写回、外发或审批证明。
 - [AI-native enterprise AI artifact templates closeout](reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md)
 - [D2 Docker fresh-clone smoke 回执 / D2 Docker fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md)
 - [Node fresh-clone smoke 回执 / Node fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md)
+- [权限管理研究 / Permission management research](reviews/HELM_PERMISSION_MANAGEMENT_RESEARCH_2026-06-08.md)
 
 ## 不属于本公开文档面 / Not In This Public Docs Surface
 
