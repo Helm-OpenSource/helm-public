@@ -266,9 +266,16 @@ Current public Core implementation:
 - `lib/agentic/trajectory-eval.ts` detects process-level failures deterministically.
 - `lib/agentic/sarp-contracts.ts` and `lib/agentic/sarp-eval.ts` produce SARP v0.1 review receipts with `pass`, `advisory`, `block`, or `escalate` verdicts.
 - `scripts/check-agentic-sarp.ts` runs synthetic SARP boundary fixtures and is wired into `npm run check:boundaries`.
+- `scripts/sarp-proof.ts` writes a local `/tmp/helm-sarp-proof` package from the same synthetic SARP fixtures and deterministic receipts.
 
 This implementation is still an evidence and guard layer. It is not an agent runtime, planner,
 workflow engine, external execution surface, approval surface, or production deployment proof.
+
+The local SARP proof package is a reviewer convenience layer. It contains a manifest, fixture summary,
+synthetic `AgentRunCapsule` JSON files, SARP receipt JSON files, a boundary note, and next-safe-actions
+checklist. It masks the output path in the manifest, rejects output outside `/tmp` or `os.tmpdir()`, and
+does not call an LLM, read customer data, activate connectors, send externally, write back, promote memory,
+or create approvals.
 
 ## 11. Source-Controlled AI Checks
 
@@ -345,8 +352,9 @@ Recommended PR order:
 | SARP PR1 | SARP v0.1 contracts and deterministic review evaluator | SARP receipt unit tests |
 | SARP PR2 | Optional capsule `sarpReceipt`, `attachSarpReviewReceipt`, and `check:agentic-sarp` wired into `check:boundaries` | capsule receipt tests, synthetic guard fixtures, public package projection tests |
 | SARP PR3 | Documentation and status truth sync for the code-backed SARP slice | `check:public-docs`, `check:public-release`, `check:boundaries` |
+| SARP PR4 | Local SARP proof package writer (`npm run sarp:proof`) | temp-root guard tests, fixture verdict tests, `test:public:guards` |
 | Future source-controlled AI checks | Source-controlled check contract and suggestion-only runner | no mutation tests, no self-approval tests |
-| Future proof package projection | Read-only proof package projection | fixture-backed rendering / docs |
+| Future proof package viewer | Read-only proof package viewer | fixture-backed rendering / docs |
 | Future private observability adapter | Optional private adapter contract | explicit opt-in, redaction tests |
 
 ## 17. Acceptance Criteria
@@ -369,6 +377,7 @@ For future implementation:
 - Capsule redaction values map explicitly from doctor-packet / external-intake values and never carry raw private content forward.
 - Trajectory eval includes overreach, validation-skip, redaction-leak, and candidate-autopromotion fixtures.
 - `check:agentic-sarp` stays synthetic/offline and remains part of `check:boundaries`.
+- `sarp:proof` writes only to `/tmp` or `os.tmpdir()`, uses synthetic fixtures, and remains evidence-only.
 - Any source-profiler integration reuses source-profiler ReviewPacket / mapping-candidate contract after merge.
 
 ## English Reference
@@ -391,3 +400,4 @@ tests, and `/tmp` proof artifacts before any UI, connector, hosted endpoint, or 
 |---|---|
 | 2026-06-07 | Drafted the Helm agentic implementation engineering requirements from current public Core contracts and recent open-source agent pattern review. |
 | 2026-06-08 | Synchronized the requirements with SARP v0.1 contracts, optional capsule receipts, deterministic trajectory/SARP guard implementation, and `check:agentic-sarp` boundary wiring. |
+| 2026-06-08 | Added the local SARP proof package slice (`npm run sarp:proof`) as synthetic, temp-only review evidence. |

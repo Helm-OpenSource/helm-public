@@ -97,6 +97,10 @@ npm run check:public-release
 not customer deployment readiness、not release readiness、not connector
 authorization、not writeback、not external send、not approval execution。
 
+Agentic / SARP 复核的本地证据包可用 `npm run sarp:proof` 生成到
+`/tmp/helm-sarp-proof`。它只使用 synthetic `AgentRunCapsule` fixture 和
+deterministic SARP receipt，不调用 LLM、不外发、不审批、不写回、不激活 connector。
+
 数据接入先按 [Helm 数据接入体验](docs/product/HELM_DATA_INTAKE_EXPERIENCE.md)
 走 source-intake-first：L0 诊断材料 → L1 脱敏 fixture / dry-run → L2 只读接入。
 这条路径不授权写回、外发、审批执行或客户部署。
