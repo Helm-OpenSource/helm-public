@@ -10,6 +10,7 @@ import {
   isRedactionSafe,
 } from "./contracts";
 import { diagnosticCommandRiskSchema } from "../diagnostics/command-registry";
+import { redactionStatusSchema } from "../diagnostics/doctor-packet";
 
 describe("agentic closed-set vocabulary", () => {
   it("modes and worktree profiles are the documented closed sets", () => {
@@ -39,10 +40,17 @@ describe("agentic closed-set vocabulary", () => {
     }
   });
 
+  it("AgentRedactionStatus equals the canonical doctor-packet RedactionStatus — no fork", () => {
+    expect([...agentRedactionStatusSchema.options].sort()).toEqual(
+      [...redactionStatusSchema.options].sort(),
+    );
+    expect(agentRedactionStatusSchema.safeParse("raw_blocked").success).toBe(false);
+    expect(agentRedactionStatusSchema.safeParse("unknown_blocked").success).toBe(false);
+  });
+
   it("only synthetic/redacted/alias_only are redaction-safe", () => {
     expect([...AGENT_REDACTION_SAFE].sort()).toEqual(["alias_only", "redacted", "synthetic"]);
-    expect(isRedactionSafe("raw_blocked")).toBe(false);
-    expect(isRedactionSafe("unknown_blocked")).toBe(false);
-    expect(agentRedactionStatusSchema.options).toContain("unknown_blocked");
+    expect(isRedactionSafe("raw_private_rejected")).toBe(false);
+    expect(isRedactionSafe("unknown")).toBe(false);
   });
 });

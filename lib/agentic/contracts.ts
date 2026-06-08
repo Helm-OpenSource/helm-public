@@ -11,6 +11,7 @@
  */
 
 import { z } from "zod";
+import { redactionStatusSchema, type RedactionStatus } from "../diagnostics/doctor-packet";
 
 export const agentImplementationModeSchema = z.enum([
   "explore",
@@ -53,20 +54,14 @@ export const AGENT_FORBIDDEN_RISKS: ReadonlySet<AgentImplementationRisk> = new S
 ]);
 
 /**
- * Capsule redaction status (§7). `raw_blocked` / `unknown_blocked` mean redaction
+ * Capsule redaction status (§7). `raw_private_rejected` / `unknown` mean redaction
  * is not proven → the capsule must be quarantined and may persist no content.
- * Maps onto the doctor-packet (`raw_private_rejected`/`unknown`) and
- * external-agent-intake (`contains_pii`/`unknown`) vocabularies: anything not in
- * AGENT_REDACTION_SAFE is treated as quarantine.
+ * Reuses the canonical doctor-packet vocabulary rather than introducing a
+ * third redaction enum. External-agent-intake values must be mapped to this
+ * vocabulary before capsule construction.
  */
-export const agentRedactionStatusSchema = z.enum([
-  "synthetic",
-  "redacted",
-  "alias_only",
-  "raw_blocked",
-  "unknown_blocked",
-]);
-export type AgentRedactionStatus = z.infer<typeof agentRedactionStatusSchema>;
+export const agentRedactionStatusSchema = redactionStatusSchema;
+export type AgentRedactionStatus = RedactionStatus;
 
 export const AGENT_REDACTION_SAFE: ReadonlySet<AgentRedactionStatus> = new Set([
   "synthetic",
