@@ -97,6 +97,7 @@ connector 授权、写回、外发或审批证明。
 - [AI-native enterprise AI artifact templates closeout](reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md)
 - [D2 Docker fresh-clone smoke 回执 / D2 Docker fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md)
 - [Node fresh-clone smoke 回执 / Node fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md)
+- [权限管理研究 / Permission management research](reviews/HELM_PERMISSION_MANAGEMENT_RESEARCH_2026-06-08.md)
 
 ## 不属于本公开文档面 / Not In This Public Docs Surface
 
