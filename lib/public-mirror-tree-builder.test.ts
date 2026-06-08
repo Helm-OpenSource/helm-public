@@ -173,7 +173,7 @@ describe("public mirror tree builder", () => {
       license: "Apache-2.0",
       scripts: {
         "check:boundaries":
-          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
+          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp",
         "check:source-profiler-boundaries":
           "node --import tsx scripts/check-source-profiler-boundaries.ts",
         "check:golden-path-docs":
@@ -182,6 +182,7 @@ describe("public mirror tree builder", () => {
           "node --import tsx scripts/check-diagnostics-risk.ts",
         "check:llm-candidate-boundaries":
           "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+        "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
         "check:public-commit-metadata":
           "node --import tsx scripts/public-commit-metadata-check.ts",
         "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
@@ -210,7 +211,7 @@ describe("public mirror tree builder", () => {
           "npm run public:smoke:static && npm run check:secret-history",
         test: "vitest run --config vitest.public.config.ts",
         "test:public:guards":
-          "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
+          "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
         typecheck: "tsc --noEmit --project tsconfig.public.json",
       },
     });
@@ -303,7 +304,7 @@ describe("public mirror tree builder", () => {
       "npm run public:smoke:static && npm run check:secret-history",
     );
     expect(scripts["check:boundaries"]).toBe(
-      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries",
+      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp",
     );
     expect(scripts["check:source-profiler-boundaries"]).toBe(
       "node --import tsx scripts/check-source-profiler-boundaries.ts",
@@ -317,12 +318,15 @@ describe("public mirror tree builder", () => {
     expect(scripts["check:llm-candidate-boundaries"]).toBe(
       "node --import tsx scripts/check-llm-candidate-boundaries.ts",
     );
+    expect(scripts["check:agentic-sarp"]).toBe(
+      "node --import tsx scripts/check-agentic-sarp.ts",
+    );
     expect(scripts["eval:llm-critic-boundaries"]).toBe(
       "vitest run lib/evals/llm-critic-evals.test.ts",
     );
     expect(scripts.test).toBe("vitest run --config vitest.public.config.ts");
     expect(scripts["test:public:guards"]).toBe(
-      "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
+      "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
     );
     expect(scripts["quality:regression"]).toBe(
       "npm run test:public:guards && npm run public:smoke:static",

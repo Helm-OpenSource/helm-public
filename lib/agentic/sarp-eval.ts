@@ -7,7 +7,7 @@
  */
 
 import type { AgentImplementationMode, TrajectoryFailureClass } from "./contracts";
-import type { AgentRunCapsule } from "./run-capsule";
+import { agentRunCapsuleSchema, type AgentRunCapsule } from "./run-capsule";
 import {
   SARP_REVIEW_VERSION,
   sarpReviewReceiptSchema,
@@ -56,6 +56,13 @@ export function runSarpReview(capsule: AgentRunCapsule, options: RunSarpReviewOp
     verdict,
     checks: checksWithSeverity.map(({ check }) => check),
     humanReviewRequired: verdict === "block" || verdict === "escalate",
+  });
+}
+
+export function attachSarpReviewReceipt(capsule: AgentRunCapsule, options: RunSarpReviewOptions = {}): AgentRunCapsule {
+  return agentRunCapsuleSchema.parse({
+    ...capsule,
+    sarpReceipt: runSarpReview(capsule, options),
   });
 }
 
