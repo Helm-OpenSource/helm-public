@@ -5,6 +5,7 @@ import {
   validateCapsuleWithinPublicCore,
   type BuildAgentRunCapsuleInput,
 } from "./run-capsule";
+import { runSarpReview } from "./sarp-eval";
 
 const fixedNow = () => new Date("2026-06-07T00:00:00.000Z");
 
@@ -93,6 +94,21 @@ describe("buildAgentRunCapsule", () => {
         }),
       ),
     ).toThrow(/forbidden risk/);
+  });
+
+  it("accepts an optional SARP review receipt for the same run", () => {
+    const capsule = buildAgentRunCapsule(baseInput());
+    const sarpReceipt = runSarpReview(capsule, { now: fixedNow });
+    expect(() => agentRunCapsuleSchema.parse({ ...capsule, sarpReceipt })).not.toThrow();
+  });
+
+  it("rejects a SARP review receipt from a different run", () => {
+    const capsule = buildAgentRunCapsule(baseInput());
+    const otherCapsule = buildAgentRunCapsule(baseInput({ runId: "run-2" }));
+    const sarpReceipt = runSarpReview(otherCapsule, { now: fixedNow });
+    expect(() => agentRunCapsuleSchema.parse({ ...capsule, sarpReceipt })).toThrow(
+      /sarpReceipt.capsuleRunId must match runId/,
+    );
   });
 });
 

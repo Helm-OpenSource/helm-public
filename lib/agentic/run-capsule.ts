@@ -8,6 +8,7 @@
  *    is QUARANTINED and persists no content;
  *  - a command result that declares a forbidden risk (external_write /
  *    activation / commitment) is rejected — those fail closed in Public Core;
+ *  - optional SARP receipts are deterministic review evidence, not approval;
  *  - there is no accepted/approved field — only humans accept downstream.
  */
 
@@ -23,6 +24,7 @@ import {
   isRedactionSafe,
   type AgentRedactionStatus,
 } from "./contracts";
+import { sarpReviewReceiptSchema } from "./sarp-contracts";
 
 export const capsuleRepoSchema = z
   .object({
@@ -89,9 +91,19 @@ export const agentRunCapsuleSchema = z
     validationReceipts: z.array(capsuleValidationReceiptSchema).default([]),
     humanReceipts: z.array(z.string()).default([]),
     nextSafeActions: z.array(z.string()).default([]),
+    sarpReceipt: sarpReviewReceiptSchema.optional(),
     quarantined: z.boolean().default(false),
   })
-  .strict();
+  .strict()
+  .superRefine((capsule, ctx) => {
+    if (capsule.sarpReceipt && capsule.sarpReceipt.capsuleRunId !== capsule.runId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sarpReceipt", "capsuleRunId"],
+        message: "sarpReceipt.capsuleRunId must match runId",
+      });
+    }
+  });
 export type AgentRunCapsule = z.infer<typeof agentRunCapsuleSchema>;
 
 export type BuildAgentRunCapsuleInput = {

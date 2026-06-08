@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { agentRunCapsuleSchema, type AgentRunCapsule } from "./run-capsule";
-import { runSarpReview } from "./sarp-eval";
+import { attachSarpReviewReceipt, runSarpReview } from "./sarp-eval";
 import type { SarpCheckId } from "./sarp-contracts";
 
 const REVIEWED_AT = new Date("2026-06-08T00:00:00.000Z");
@@ -134,5 +134,15 @@ describe("runSarpReview", () => {
     );
     expect(receipt.verdict).toBe("pass");
     expect(check(receipt, "permission_boundary_check")).toMatchObject({ passed: true });
+  });
+
+  it("can attach a matching SARP receipt to an existing capsule", () => {
+    const reviewed = attachSarpReviewReceipt(capsule(), { now: () => REVIEWED_AT });
+    expect(reviewed.sarpReceipt).toMatchObject({
+      sarpVersion: "0.1",
+      capsuleRunId: "sarp-run-1",
+      verdict: "pass",
+    });
+    expect(agentRunCapsuleSchema.parse(reviewed)).toEqual(reviewed);
   });
 });
