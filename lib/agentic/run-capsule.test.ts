@@ -61,7 +61,7 @@ describe("buildAgentRunCapsule", () => {
   it("quarantines and withholds content when redaction is unproven", () => {
     const capsule = buildAgentRunCapsule(
       baseInput({
-        redactionStatus: "unknown_blocked",
+        redactionStatus: "unknown",
         intent: "raw secret content",
         inputRefs: ["/Users/alice/raw"],
         outputArtifacts: ["/tmp/raw.json"],
@@ -122,7 +122,7 @@ describe("validateCapsuleWithinPublicCore", () => {
       worktreeProfile: "read_only_local",
       repo: { alias: "x", branchRef: "y", dirtyState: "clean" },
       intent: "",
-      redactionStatus: "unknown_blocked",
+      redactionStatus: "unknown",
       quarantined: false,
       commandResults: [
         { name: "w", args: [], cwd: "<cwd>", risk: "repo_write", exitCode: 0, startedAt: "t", endedAt: "t", outputSummary: "" },

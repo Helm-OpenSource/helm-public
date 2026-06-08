@@ -150,7 +150,7 @@ Minimum fields:
 | `intent` | Short user-visible intent |
 | `scope` | Files/modules/commands allowed for this run |
 | `inputRefs` | Redacted evidence, fixture, issue, PR, source-profiler packet, or HSI refs |
-| `redactionStatus` | Closed set: `synthetic`, `redacted`, `alias_only`, `raw_blocked`, or `unknown_blocked` |
+| `redactionStatus` | Canonical doctor-packet closed set: `synthetic`, `redacted`, `alias_only`, `raw_private_rejected`, or `unknown` |
 | `commandResults` | Command name, args, cwd, risk, exit code, start/end, redacted output summary |
 | `fileChangeSummary` | Added/modified/deleted file list and rationale; empty for read-only runs |
 | `outputArtifacts` | Review packets, local drafts, eval reports, screenshots, or blocked-action records |
@@ -163,7 +163,7 @@ Minimum fields:
 
 Capsule content must not include raw prompts, secrets, raw customer rows, full transcripts, production URLs,
 private hostnames, tenant slugs, internal deployment receipts, or unredacted source paths from customer repos.
-If redaction cannot be proven, `redactionStatus` must be `raw_blocked` or `unknown_blocked` and downstream
+If redaction cannot be proven, `redactionStatus` must be `raw_private_rejected` or `unknown` and downstream
 routing must be `quarantine`.
 
 Shared redaction mapping:
@@ -173,8 +173,12 @@ Shared redaction mapping:
 | Doctor packet | `synthetic` | `synthetic` | May proceed as public-safe evidence |
 | Doctor packet / external intake | `redacted` | `redacted` | May proceed as review-first evidence |
 | Doctor packet / external intake | `alias_only` | `alias_only` | May proceed as review-first evidence |
-| External intake | `contains_pii` | `raw_blocked` | Quarantine / reject; no raw persistence |
-| External intake / unknown source | `unknown` | `unknown_blocked` | Quarantine until redaction is proven |
+| External intake | `contains_pii` | `raw_private_rejected` | Quarantine / reject; no raw persistence |
+| Doctor packet / external intake / unknown source | `unknown` | `unknown` | Quarantine until redaction is proven |
+
+Agentic capsules reuse the doctor-packet `redactionStatus` schema directly; they do not introduce a
+third redaction enum. External-intake values must be mapped to the doctor-packet vocabulary before
+capsule construction.
 
 ## 8. Diagnostic Command Registry
 

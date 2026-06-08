@@ -4,7 +4,7 @@
  * A reviewable, candidate-only record of an agent/human implementation or
  * diagnostic run. Pure builder + zod `.strict`. It never grants authority:
  *  - free-text is redacted (reusing the merged diagnostics `redactText`);
- *  - if redaction is not proven (`raw_blocked` / `unknown_blocked`) the capsule
+ *  - if redaction is not proven (`raw_private_rejected` / `unknown`) the capsule
  *    is QUARANTINED and persists no content;
  *  - a command result that declares a forbidden risk (external_write /
  *    activation / commitment) is rejected — those fail closed in Public Core;
