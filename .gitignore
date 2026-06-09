@@ -71,3 +71,6 @@ next-env.d.ts
 
 # Source Profiler private run outputs (user-owned diagnosis artifacts — never commit)
 .helm-profiler/
+
+# Claude Code local agent config (local-only; may contain settings/tokens — never commit to public repo)
+.claude/
