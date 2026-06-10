@@ -20,6 +20,7 @@ const {
   dbMock: {
     blocker: {
       create: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
   deltaMock: {
@@ -69,7 +70,7 @@ vi.mock("@/lib/memory/memory-fact.service", () => ({
   createMemoryFact: memoryFactMock.createMemoryFact,
 }));
 
-import { createBlocker } from "@/lib/memory/blocker.service";
+import { createBlocker, getBlockersForObject } from "@/lib/memory/blocker.service";
 
 describe("blocker service seed batch suppression", () => {
   beforeEach(() => {
@@ -111,5 +112,27 @@ describe("blocker service seed batch suppression", () => {
 
     expect(deltaMock.recordBlockerDelta).toHaveBeenCalled();
     expect(evolutionMock.refreshEvolutionState).not.toHaveBeenCalled();
+  });
+
+  it("restricts to active statuses when getBlockersForObject is called with onlyActive", async () => {
+    await getBlockersForObject({
+      workspaceId: "workspace-1",
+      objectType: "OPPORTUNITY" as never,
+      objectId: "opp-1",
+      onlyActive: true,
+    });
+    const where = dbMock.blocker.findMany.mock.calls.at(-1)?.[0]?.where;
+    expect(where.status?.in).toContain("OPEN");
+    expect(where.status?.in).toContain("MONITORING");
+  });
+
+  it("returns all statuses by default (no active filter)", async () => {
+    await getBlockersForObject({
+      workspaceId: "workspace-1",
+      objectType: "OPPORTUNITY" as never,
+      objectId: "opp-1",
+    });
+    const where = dbMock.blocker.findMany.mock.calls.at(-1)?.[0]?.where;
+    expect(where.status).toBeUndefined();
   });
 });

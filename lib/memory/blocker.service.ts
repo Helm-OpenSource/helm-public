@@ -282,18 +282,20 @@ export async function getBlockersForObject(args: {
   workspaceId: string;
   objectType: ObjectType;
   objectId: string;
+  onlyActive?: boolean;
 }) {
+  const onlyActive = args.onlyActive ?? false;
   if (args.objectType === ObjectType.CONTACT) {
-    return getBlockers({ workspaceId: args.workspaceId, relatedContactId: args.objectId });
+    return getBlockers({ workspaceId: args.workspaceId, relatedContactId: args.objectId, onlyActive });
   }
   if (args.objectType === ObjectType.COMPANY) {
-    return getBlockers({ workspaceId: args.workspaceId, relatedCompanyId: args.objectId });
+    return getBlockers({ workspaceId: args.workspaceId, relatedCompanyId: args.objectId, onlyActive });
   }
   if (args.objectType === ObjectType.OPPORTUNITY) {
-    return getBlockers({ workspaceId: args.workspaceId, relatedOpportunityId: args.objectId });
+    return getBlockers({ workspaceId: args.workspaceId, relatedOpportunityId: args.objectId, onlyActive });
   }
   if (args.objectType === ObjectType.MEETING) {
-    return getBlockers({ workspaceId: args.workspaceId, relatedMeetingId: args.objectId });
+    return getBlockers({ workspaceId: args.workspaceId, relatedMeetingId: args.objectId, onlyActive });
   }
   return [];
 }

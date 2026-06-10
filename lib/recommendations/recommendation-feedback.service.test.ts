@@ -41,6 +41,7 @@ const {
   dbMock: {
     recommendationLog: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -102,14 +103,16 @@ describe("recommendation feedback seed batch suppression", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     serviceGovernanceMock.assertWorkspaceInsightServiceAccess.mockResolvedValue(undefined);
-    dbMock.recommendationLog.findUnique.mockResolvedValue({
+    const recommendationRow = {
       id: "rec-1",
       title: "Send follow-up",
       actionType: "DRAFT_EXTERNAL_EMAIL",
       objectType: "OPPORTUNITY",
       objectId: "opp-1",
       policyResult: "REQUIRES_APPROVAL",
-    });
+    };
+    dbMock.recommendationLog.findUnique.mockResolvedValue(recommendationRow);
+    dbMock.recommendationLog.findFirst.mockResolvedValue(recommendationRow);
     dbMock.$transaction.mockImplementation(async (callback: (tx: RecommendationFeedbackTransaction) => Promise<unknown>) =>
       callback({
         recommendationFeedback: {

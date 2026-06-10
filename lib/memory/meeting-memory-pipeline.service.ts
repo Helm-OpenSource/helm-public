@@ -288,6 +288,9 @@ export async function processMeetingMemory(input: MemoryActorContext & { meeting
   const createdCommitments = [];
   for (const draft of commitmentDrafts) {
     if (existingCommitmentKeys.has(draft.commitmentText)) continue;
+    // Track within-batch too: two LLM drafts with identical text would both
+    // pass the DB-only check and be persisted as duplicates otherwise.
+    existingCommitmentKeys.add(draft.commitmentText);
     createdCommitments.push(
       await createCommitment({
         ...draft,
@@ -302,6 +305,7 @@ export async function processMeetingMemory(input: MemoryActorContext & { meeting
   const createdBlockers = [];
   for (const draft of blockerDrafts) {
     if (existingBlockerKeys.has(draft.blockerText)) continue;
+    existingBlockerKeys.add(draft.blockerText);
     createdBlockers.push(
       await createBlocker({
         ...draft,

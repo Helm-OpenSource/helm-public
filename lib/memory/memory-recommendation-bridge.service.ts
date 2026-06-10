@@ -19,15 +19,23 @@ export async function buildMemoryRecommendationEvidence(args: {
       objectRefs: args.objectRefs,
       limit: 24,
     }),
+    // Only OPEN commitments / ACTIVE blockers are valid recommendation
+    // evidence: the ranking layer treats blockers[0] as the top *active*
+    // blocker (urgency/impact/risk boosts) and the candidate layer escalates
+    // off it, so a long-resolved high-severity blocker would otherwise keep
+    // inflating recommendations forever. (The briefing service already filters
+    // this way; previously only the display layer compensated, not the math.)
     getCommitmentsForObject({
       workspaceId: args.workspaceId,
       objectType: args.primaryRef.objectType,
       objectId: args.primaryRef.objectId,
+      onlyOpen: true,
     }),
     getBlockersForObject({
       workspaceId: args.workspaceId,
       objectType: args.primaryRef.objectType,
       objectId: args.primaryRef.objectId,
+      onlyActive: true,
     }),
     getLatestBriefingSnapshot({
       workspaceId: args.workspaceId,
