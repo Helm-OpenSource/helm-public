@@ -162,6 +162,7 @@ export async function queryBiReportRowsFromOdps(input: {
       }),
       timeoutError,
     ]);
+    assertOdpsPayloadOk(payload);
     const rows = extractRows(payload);
     return rows.map(normalizeBiReportRow);
   } catch (error) {
@@ -512,6 +513,30 @@ function extractMcpToolPayload(payload: unknown) {
   }
 
   return payload;
+}
+
+// The ODPS bridge (both the HTTP endpoint and the MCP tool) reports a query
+// failure as a 200-OK JSON body `{ success: false, error: "ODPS-..." }` rather
+// than a non-2xx status. Without this check extractRows() would find no `rows`
+// array and silently return [], so a failed query (missing table, bad SQL,
+// permission error) would surface as a perfectly normal empty BI report — zero
+// metrics presented as if they were real. Surface the bridge error instead.
+function assertOdpsPayloadOk(payload: unknown) {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    (payload as { success?: unknown }).success === false
+  ) {
+    const message = (payload as { error?: unknown }).error;
+    throw new Error(
+      `BI report ODPS query failed: ${
+        typeof message === "string" && message.trim()
+          ? message.trim()
+          : "the ODPS bridge reported success=false"
+      }`,
+    );
+  }
 }
 
 function extractRows(payload: unknown) {
