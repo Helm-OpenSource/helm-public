@@ -439,18 +439,30 @@ class McpStdioClient {
       }
     });
 
-    this.child.once("exit", () => {
+    const failAllPending = (reason: string) => {
       this.markReady();
       for (const [, pending] of this.pending) {
         clearTimeout(pending.timer);
-        pending.reject(
-          new Error(
-            `DingTalk MCP process exited unexpectedly. stderr: ${formatMcpStderrForError(this.stderrBuffer)}`,
-          ),
-        );
+        pending.reject(new Error(reason));
       }
       this.pending.clear();
+    };
+
+    this.child.once("exit", () => {
+      failAllPending(
+        `DingTalk MCP process exited unexpectedly. stderr: ${formatMcpStderrForError(this.stderrBuffer)}`,
+      );
     });
+
+    // Without an `error` listener a missing/unspawnable MCP binary (ENOENT —
+    // the most common misconfiguration) emits an unhandled `error` on the child
+    // and crashes the whole Node process; `exit` never fires in that case.
+    this.child.once("error", (err: Error) => {
+      failAllPending(`DingTalk MCP process failed to start: ${err.message}`);
+    });
+    // EPIPE on stdin after the child dies is emitted as `error` on the stream;
+    // swallow it (pending requests are already rejected via exit/error).
+    this.child.stdin.on("error", () => {});
 
     setTimeout(() => {
       this.markReady();
@@ -504,7 +516,17 @@ class McpStdioClient {
       if (isMcpDebugEnabled()) {
         console.error("[dingtalk-mcp] send request", method);
       }
-      this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+      try {
+        this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+      } catch (err) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(
+          new Error(
+            `DingTalk MCP request could not be written: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
     });
   }
 
@@ -517,7 +539,11 @@ class McpStdioClient {
       method,
       ...(params ? { params } : {}),
     };
-    this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+    try {
+      this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+    } catch {
+      // Best-effort notification; the child has already gone away.
+    }
   }
 
   close() {
