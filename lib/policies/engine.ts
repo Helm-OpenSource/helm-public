@@ -628,8 +628,12 @@ export async function approveApprovalTask(
       ? "Approved and awaiting execution"
       : "已批准待执行";
 
-  await db.approvalTask.update({
-    where: { id: task.id },
+  // Atomic transition: claim the PENDING -> approved move with a conditional
+  // write so two concurrent approve calls cannot both pass the guard above and
+  // both run the side effects (duplicate receipts, duplicate execution). The
+  // loser sees count === 0 and stops.
+  const claimed = await db.approvalTask.updateMany({
+    where: { id: task.id, status: ApprovalStatus.PENDING },
     data: {
       status: ApprovalStatus.EXECUTED,
       reviewedAt: now,
@@ -638,6 +642,9 @@ export async function approveApprovalTask(
       decisionReason,
     },
   });
+  if (claimed.count === 0) {
+    throw new Error("Approval task is no longer pending and cannot be approved");
+  }
 
   await db.actionItem.update({
     where: { id: task.actionItemId },
@@ -816,8 +823,10 @@ export async function rejectApprovalTask(
     english: options?.english ?? false,
   });
 
-  await db.approvalTask.update({
-    where: { id: task.id },
+  // Atomic PENDING -> rejected claim: only a still-pending task may be rejected,
+  // and a concurrent approve/reject race resolves to a single winner.
+  const claimed = await db.approvalTask.updateMany({
+    where: { id: task.id, status: ApprovalStatus.PENDING },
     data: {
       status: ApprovalStatus.REJECTED,
       reviewedAt: new Date(),
@@ -825,6 +834,9 @@ export async function rejectApprovalTask(
       decisionReason: reason ?? "已拒绝执行",
     },
   });
+  if (claimed.count === 0) {
+    throw new Error("Approval task is no longer pending and cannot be rejected");
+  }
 
   await db.actionItem.update({
     where: { id: task.actionItemId },
@@ -934,8 +946,10 @@ export async function markApprovalManual(
     english: options?.english ?? false,
   });
 
-  await db.approvalTask.update({
-    where: { id: task.id },
+  // Atomic PENDING -> withdrawn (manual) claim: only a still-pending task may be
+  // moved to manual handling, with single-winner resolution under concurrency.
+  const claimed = await db.approvalTask.updateMany({
+    where: { id: task.id, status: ApprovalStatus.PENDING },
     data: {
       status: ApprovalStatus.WITHDRAWN,
       reviewedAt: new Date(),
@@ -943,6 +957,9 @@ export async function markApprovalManual(
       decisionReason: "已改成人工处理",
     },
   });
+  if (claimed.count === 0) {
+    throw new Error("Approval task is no longer pending and cannot be moved to manual handling");
+  }
 
   await db.actionItem.update({
     where: { id: task.actionItemId },

@@ -29,6 +29,7 @@ const {
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     notification: {
       create: vi.fn(),
@@ -316,6 +317,44 @@ describe("policy engine service governance", () => {
     await expect(
       executeActionItem("action-1", { actorName: "Reviewer", actorType: ActorType.USER, actorUserId: "user-1" }),
     ).rejects.toThrow(/approved state/i);
+    expect(dbMock.actionItem.update).not.toHaveBeenCalled();
+  });
+
+  it("claims the approval transition atomically and proceeds when it wins", async () => {
+    serviceGovernanceMock.assertWorkspaceGovernedActionReviewServiceAccess.mockResolvedValue(undefined);
+    dbMock.approvalTask.findUnique.mockResolvedValueOnce({
+      id: "task-1",
+      workspaceId: "workspace-1",
+      actionItemId: "action-1",
+      status: ApprovalStatus.PENDING,
+      actionItem: { id: "action-1", title: "Send email", draftContent: "hi" },
+    });
+    dbMock.approvalTask.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await approveApprovalTask("task-1", "Reviewer", "user-1", undefined, { actorType: ActorType.USER });
+
+    // The transition is a conditional PENDING -> approved write.
+    expect(dbMock.approvalTask.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "task-1", status: ApprovalStatus.PENDING } }),
+    );
+    expect(dbMock.actionItem.update).toHaveBeenCalled();
+  });
+
+  it("stops without side effects when it loses the concurrent-approve race", async () => {
+    serviceGovernanceMock.assertWorkspaceGovernedActionReviewServiceAccess.mockResolvedValue(undefined);
+    dbMock.approvalTask.findUnique.mockResolvedValueOnce({
+      id: "task-1",
+      workspaceId: "workspace-1",
+      actionItemId: "action-1",
+      status: ApprovalStatus.PENDING,
+      actionItem: { id: "action-1", title: "Send email", draftContent: "hi" },
+    });
+    // Another concurrent approve already flipped it: conditional write matches 0 rows.
+    dbMock.approvalTask.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      approveApprovalTask("task-1", "Reviewer", "user-1", undefined, { actorType: ActorType.USER }),
+    ).rejects.toThrow(/no longer pending/i);
     expect(dbMock.actionItem.update).not.toHaveBeenCalled();
   });
 });
