@@ -782,7 +782,7 @@ async function createTaskFromExternal(input: {
   return actionItem.id;
 }
 
-async function applyAssociations(input: {
+export async function applyAssociations(input: {
   opportunityByExternalId: Map<string, string>;
   companyByExternalId: Map<string, string>;
   contactByExternalId: Map<string, string>;
@@ -792,11 +792,20 @@ async function applyAssociations(input: {
   let opportunityCompanyLinks = 0;
   let opportunityContactLinks = 0;
 
+  // A contact/opportunity has a single primary company. When a record has
+  // multiple COMPANY associations (e.g. a person at a parent + subsidiary in
+  // HubSpot), running every update would let the last association in iteration
+  // order win non-deterministically and clobber the company resolved during
+  // upsert. Bind each record to its FIRST company association only.
+  const contactCompanyAssigned = new Set<string>();
+  const opportunityCompanyAssigned = new Set<string>();
+
   for (const association of input.dataset.associations) {
     if (association.fromType === "CONTACT" && association.toType === "COMPANY") {
       const contactId = input.contactByExternalId.get(association.fromId);
       const companyId = input.companyByExternalId.get(association.toId);
-      if (contactId && companyId) {
+      if (contactId && companyId && !contactCompanyAssigned.has(contactId)) {
+        contactCompanyAssigned.add(contactId);
         await db.contact.update({
           where: { id: contactId },
           data: { companyId },
@@ -808,7 +817,8 @@ async function applyAssociations(input: {
     if (association.fromType === "OPPORTUNITY" && association.toType === "COMPANY") {
       const opportunityId = input.opportunityByExternalId.get(association.fromId);
       const companyId = input.companyByExternalId.get(association.toId);
-      if (opportunityId && companyId) {
+      if (opportunityId && companyId && !opportunityCompanyAssigned.has(opportunityId)) {
+        opportunityCompanyAssigned.add(opportunityId);
         await db.opportunity.update({
           where: { id: opportunityId },
           data: { companyId },
