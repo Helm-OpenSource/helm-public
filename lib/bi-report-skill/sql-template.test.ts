@@ -78,9 +78,17 @@ describe("renderBiReportSql", () => {
     expect(sql).toBe("select * from t where d = '2026-06-09'");
   });
 
-  it("escapes single quotes in values", () => {
+  it("escapes single quotes the ODPS way (backslash, not doubled-quote)", () => {
+    // ODPS does not honor '' (it concatenates adjacent literals and drops the
+    // quote); it uses C-style \' . Verified against the live ODPS bridge.
     const sql = renderBiReportSql("select '{{name}}'", { name: "o'brien" });
-    expect(sql).toBe("select 'o''brien'");
+    expect(sql).toBe("select 'o\\'brien'");
+  });
+
+  it("escapes backslashes before quotes so a trailing backslash can't break out", () => {
+    const sql = renderBiReportSql("select '{{v}}'", { v: "a\\'b" });
+    // a\'b  ->  backslash doubled then quote escaped  ->  a\\\'b
+    expect(sql).toBe("select 'a\\\\\\'b'");
   });
 
   it("throws on missing params", () => {

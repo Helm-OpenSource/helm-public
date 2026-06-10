@@ -146,10 +146,15 @@ function shiftMonthLabel(referenceDate: Date, offsetMonths: number, timeZone?: s
 }
 
 function escapeSqlStringLiteral(value: string) {
-  // ODPS/MaxCompute string literals honor backslash escapes, so a value ending
-  // in `\` would escape the closing quote unless the backslash is doubled too.
-  // Escape backslashes first, then single quotes.
-  return value.replace(/\\/g, "\\\\").replace(/'/g, "''");
+  // ODPS/MaxCompute string literals use C-style backslash escapes, NOT the SQL
+  // doubled-quote form. Verified against the live ODPS bridge:
+  //   SELECT 'a''b'  -> "ab"   (ODPS treats '' as two adjacent literals and
+  //                             concatenates them, silently DROPPING the quote)
+  //   SELECT 'a\'b'  -> "a'b"  (correct)
+  // So a quote must be escaped as \' , not '' — otherwise any value containing a
+  // single quote (e.g. a name like O'Brien) is corrupted. Escape backslashes
+  // first so an existing `\` can't combine with the quote escape we add.
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 function assertBiReportQueryParamsDeclared(skill: BiReportSkillPack, params: Record<string, string>) {
