@@ -1167,6 +1167,7 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
             id: match.importItemId!,
             workspaceId: input.workspaceId,
           },
+          include: { importJob: { select: { source: { select: { sourceType: true } } } } },
         });
       })()
     : null;
@@ -1176,6 +1177,11 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
   if (!item || !normalized) {
     throw new Error("冲突缺少可恢复的导入载荷");
   }
+
+  // The source type lets the conflict-created object carry its external
+  // identity, so the next incremental import resolves to it by external ID
+  // instead of creating a duplicate.
+  const externalSource = item.importJob.source.sourceType;
 
   const actor = input.actorName ?? "导入冲突处理";
   const baseAuditPayload = {
@@ -1260,6 +1266,10 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
         name: String(normalized.name ?? "未命名公司"),
         website: (normalized.website as string | null | undefined) ?? null,
         industry: (normalized.industry as string | null | undefined) ?? null,
+        externalSource,
+        externalObjectType: "COMPANY",
+        externalObjectId: item.externalId,
+        externalSyncedAt: new Date(),
       },
     });
 
@@ -1309,6 +1319,10 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
         email: (normalized.email as string | null | undefined) ?? null,
         phone: (normalized.phone as string | null | undefined) ?? null,
         title: (normalized.title as string | null | undefined) ?? null,
+        externalSource,
+        externalObjectType: "CONTACT",
+        externalObjectId: item.externalId,
+        externalSyncedAt: new Date(),
       },
     });
 
@@ -1358,6 +1372,10 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
         type: "CLIENT",
         stage: normalizeOpportunityStage(normalized.stageLabel as string | undefined),
         dueDate: normalized.dueDate ? new Date(String(normalized.dueDate)) : null,
+        externalSource,
+        externalObjectType: "OPPORTUNITY",
+        externalObjectId: item.externalId,
+        externalSyncedAt: new Date(),
       },
     });
 
