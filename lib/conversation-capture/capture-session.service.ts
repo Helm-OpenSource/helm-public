@@ -128,8 +128,13 @@ export async function stopCaptureSession(
   }
 
   const endedAt = new Date();
-  const updated = await db.captureSession.update({
-    where: { id: existing.id },
+  // Atomic RECORDING -> PROCESSING claim: only a still-recording session may be
+  // stopped. Without this, a double-stop (double-click / retry, or a stop after
+  // the session already COMPLETED/FAILED) re-ran the entire processing pipeline
+  // — re-upserting the meeting note, deleting+recreating insights, regenerating
+  // actions — and recomputed durationSeconds against `now`, corrupting it.
+  const claimed = await db.captureSession.updateMany({
+    where: { id: existing.id, status: CaptureSessionStatus.RECORDING },
     data: {
       title: input.title ?? existing.title ?? undefined,
       endedAt,
@@ -139,6 +144,14 @@ export async function stopCaptureSession(
       processingStatus: CaptureProcessingStatus.RUNNING,
     },
   });
+  if (claimed.count === 0) {
+    throw new Error(
+      input.english
+        ? "This capture session has already ended or is being processed."
+        : "该现场记录已结束或正在处理，无法重复结束。",
+    );
+  }
+  const updated = await db.captureSession.findUniqueOrThrow({ where: { id: existing.id } });
 
   await writeAuditLog({
     workspaceId: input.workspaceId,
