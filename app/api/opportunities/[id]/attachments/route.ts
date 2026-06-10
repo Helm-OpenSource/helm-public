@@ -16,6 +16,13 @@ import {
   buildOpportunityAttachmentMemoryPayload,
   parseOpportunityAttachmentMemoryEntry,
 } from "@/lib/opportunities/attachment-memory";
+import {
+  buildAttachmentDownloadUrl,
+  buildAttachmentStorageKey,
+  getAttachmentExtensionForMimeType,
+  getAttachmentUploadRoot,
+  isAllowedAttachmentMimeType,
+} from "@/lib/opportunities/attachment-storage";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -30,23 +37,6 @@ function sanitizeFileName(fileName: string) {
     .replace(/[^\w.\-()\u4e00-\u9fff]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 120) || fallback;
-}
-
-function getExtensionFromMimeType(mimeType: string) {
-  if (mimeType === "application/pdf") return ".pdf";
-  if (mimeType === "text/plain") return ".txt";
-  if (mimeType === "text/markdown") return ".md";
-  if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return ".docx";
-  if (mimeType === "application/msword") return ".doc";
-  if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return ".xlsx";
-  if (mimeType === "application/vnd.ms-excel") return ".xls";
-  if (mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation") return ".pptx";
-  if (mimeType === "application/vnd.ms-powerpoint") return ".ppt";
-  if (mimeType === "image/png") return ".png";
-  if (mimeType === "image/jpeg") return ".jpg";
-  if (mimeType === "image/webp") return ".webp";
-  if (mimeType === "image/gif") return ".gif";
-  return "";
 }
 
 export async function POST(
@@ -110,31 +100,47 @@ export async function POST(
     );
   }
 
+  // Only inert document/image types may be stored — rejecting html/svg/js etc.
+  // closes the stored-XSS vector at the source rather than relying on download
+  // headers alone.
+  if (!isAllowedAttachmentMimeType(file.type)) {
+    return errorResponse(
+      english
+        ? "Unsupported file type. Allowed: PDF, Office documents, plain text/markdown, and PNG/JPEG/WebP/GIF images."
+        : "不支持的文件类型。允许：PDF、Office 文档、纯文本/Markdown，以及 PNG/JPEG/WebP/GIF 图片。",
+      "ATTACHMENT_MIME_NOT_ALLOWED",
+      415,
+    );
+  }
+
   const sanitizedName = sanitizeFileName(file.name);
-  const originalExt = path.extname(sanitizedName);
-  const extension = originalExt || getExtensionFromMimeType(file.type);
+  // Stored filename's extension is derived ONLY from the allowlisted MIME type,
+  // never from the user-supplied name.
+  const extension = getAttachmentExtensionForMimeType(file.type);
   const storedFileName = `${Date.now()}-${randomUUID()}${extension}`;
-  const relativeDir = path.join(
-    "uploads",
-    "opportunity-attachments",
+  const storageKey = buildAttachmentStorageKey({
+    workspaceId: workspace.id,
+    opportunityId,
+    storedFileName,
+  });
+  const absoluteDir = path.join(
+    getAttachmentUploadRoot(),
     workspace.id,
     opportunityId,
   );
-  const absoluteDir = path.join(process.cwd(), "public", relativeDir);
   const absolutePath = path.join(absoluteDir, storedFileName);
-  const relativePath = `/${path
-    .join(relativeDir, storedFileName)
-    .replaceAll(path.sep, "/")}`;
 
   await mkdir(absoluteDir, { recursive: true });
   await writeFile(absolutePath, Buffer.from(await file.arrayBuffer()));
 
   const uploadedAt = new Date();
+  // url points at the authenticated download route, never a static asset path.
   const payload = buildOpportunityAttachmentMemoryPayload({
     fileName: sanitizedName,
-    mimeType: file.type || "application/octet-stream",
+    mimeType: file.type,
     sizeBytes: file.size,
-    url: relativePath,
+    url: "",
+    storageKey,
     uploadedAt,
   });
 
@@ -156,6 +162,27 @@ export async function POST(
     },
   });
 
+  // The download URL needs the persisted memory-entry id, so backfill it now.
+  const downloadUrl = buildAttachmentDownloadUrl({
+    opportunityId,
+    memoryEntryId: created.id,
+  });
+  const finalContent = JSON.stringify(
+    buildOpportunityAttachmentMemoryPayload({
+      fileName: sanitizedName,
+      mimeType: file.type,
+      sizeBytes: file.size,
+      url: downloadUrl,
+      storageKey,
+      uploadedAt,
+    }),
+  );
+  await db.memoryEntry.update({
+    where: { id: created.id },
+    data: { content: finalContent },
+  });
+  created.content = finalContent;
+
   await writeAuditLog({
     workspaceId: workspace.id,
     userId: user.id,
@@ -169,9 +196,10 @@ export async function POST(
       : `上传附件：${sanitizedName}`,
     payload: {
       memoryEntryId: created.id,
-      attachmentUrl: relativePath,
+      attachmentUrl: downloadUrl,
+      storageKey,
       sizeBytes: file.size,
-      mimeType: file.type || "application/octet-stream",
+      mimeType: file.type,
     },
     relatedObjectType: "Opportunity",
     relatedObjectId: opportunityId,

@@ -5,6 +5,7 @@ import { createCommitment, getCommitments } from "@/lib/memory/commitment.servic
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { createCommitmentSchema } from "@/lib/memory/schemas";
 import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET(request: Request) {
   const workspace = await getCurrentWorkspace();
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "创建承诺失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "创建承诺失败"),
       isWorkspaceOwnershipError(error) ? "RELATED_OBJECT_NOT_FOUND" : "CREATE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

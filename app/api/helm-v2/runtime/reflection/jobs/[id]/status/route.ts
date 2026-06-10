@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth/capture-runtime-governance";
 import { assertWorkspaceReflectionJobOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { updateConsolidationJobStatus } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const updateReflectionJobStatusSchema = z.object({
   mode: z.enum(["pause", "resume"]).optional(),
@@ -44,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ success: true, data: result });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Reflection job update failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Reflection job update failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

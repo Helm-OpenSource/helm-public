@@ -74,6 +74,17 @@ function normalizeColumnValue(column: BiReportSchemaColumn, input: unknown): {
       if (!Number.isInteger(value)) {
         return { ok: false, value: null, error: "integer value is invalid" };
       }
+      // A 21-digit business key (e.g. a work-order number) is integer-valued but
+      // not representable as a JS number — Number("123...") rounds it and the key
+      // is silently corrupted. Reject so authors declare ID-like columns as
+      // `string`, where the raw value is preserved.
+      if (!Number.isSafeInteger(value)) {
+        return {
+          ok: false,
+          value: null,
+          error: "integer value exceeds safe range; declare ID-like columns as string",
+        };
+      }
       return { ok: true, value };
     }
     case "decimal": {

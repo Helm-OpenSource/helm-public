@@ -12,6 +12,7 @@ import {
   generateMeetingBriefingSnapshot,
   generateOpportunityBriefingSnapshot,
 } from "@/lib/memory/briefing.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 function parseObjectType(value: string) {
   const normalized = value.toUpperCase();
@@ -91,7 +92,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ objectTyp
     return Response.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "生成简报失败",
+        message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "生成简报失败"),
       },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );

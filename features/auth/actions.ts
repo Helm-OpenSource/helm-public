@@ -1157,28 +1157,24 @@ export async function passwordLoginAction(input: z.infer<typeof passwordLoginSch
     };
   }
 
+  // Enumeration resistance: an unauthenticated caller must not be able to
+  // distinguish "no such account" / "account exists but has no password" /
+  // "wrong password". All three return one generic credential error.
+  const invalidCredentials = {
+    ok: false as const,
+    error: english
+      ? "Incorrect email/phone or password."
+      : "邮箱/手机号或密码不正确。",
+  };
+
   const user = await findUserByIdentifier(parsed.data.identifier);
-  if (!user || user.memberships.length === 0) {
-    return {
-      ok: false,
-      error: english ? "This account does not have an active organization yet." : "当前账号还没有可进入的组织。",
-    };
-  }
-
-  if (!user.passwordHash) {
-    return {
-      ok: false,
-      error: english
-        ? "This account has not finished password setup yet. Use legacy invite entry or complete verified signup first."
-        : "这个账号还没有完成密码设置。请先使用旧邀请入口，或先完成正式验证注册。",
-    };
-  }
-
-  if (!verifyPassword(parsed.data.password, user.passwordHash)) {
-    return {
-      ok: false,
-      error: english ? "Incorrect password" : "密码不正确",
-    };
+  if (
+    !user ||
+    user.memberships.length === 0 ||
+    !user.passwordHash ||
+    !verifyPassword(parsed.data.password, user.passwordHash)
+  ) {
+    return invalidCredentials;
   }
 
   return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.PASSWORD, locale);

@@ -10,6 +10,7 @@ import { assertWorkspaceCaptureSessionOwnership, isWorkspaceOwnershipError } fro
 import { stopCaptureSession } from "@/lib/conversation-capture/capture-session.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const schema = z.object({
   transcriptText: z.string().trim().optional().nullable(),
@@ -91,7 +92,7 @@ export async function POST(
     return successResponse(result, english ? "capture session processed" : "会议记录已处理");
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : english ? "Failed to stop and process capture" : "结束记录失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to stop and process capture" : "结束记录失败"),
       isWorkspaceOwnershipError(error) ? "CAPTURE_NOT_FOUND" : "CAPTURE_PROCESS_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

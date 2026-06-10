@@ -338,13 +338,22 @@ function requireBiReportP0ProcessService() {
   return svc;
 }
 
-export function getBiReportP0ProcessSkillKey(): string {
-  return requireBiReportP0ProcessService().skillKey;
+export function getBiReportP0ProcessSkillKey(): string | null {
+  return getRegisteredBiReportP0ProcessService()?.skillKey ?? null;
 }
 
 export async function resolveBiReportPushWorkspaceIdFromRegistry(input: {
   workspaceId?: string | null;
 }): Promise<string> {
+  const svc = getRegisteredBiReportP0ProcessService();
+  if (svc) {
+    return svc.resolvePushWorkspaceId(input);
+  }
+  // No Pack registered (public mirror): honor an explicitly provided
+  // workspace id instead of failing on the missing P0 process service.
+  if (input.workspaceId?.trim()) {
+    return input.workspaceId.trim();
+  }
   return requireBiReportP0ProcessService().resolvePushWorkspaceId(input);
 }
 

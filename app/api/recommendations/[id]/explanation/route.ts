@@ -2,6 +2,7 @@ import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { logEvent } from "@/lib/analytics";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { getRecommendationExplanation } from "@/lib/recommendations/recommendation.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET(
   request: Request,
@@ -23,6 +24,6 @@ export async function GET(
     });
     return successResponse(data, "ok");
   } catch (error) {
-    return errorResponse(error instanceof Error ? error.message : "读取 recommendation 解释失败", "RECOMMENDATION_NOT_FOUND", 404);
+    return errorResponse(serverErrorMessage(error, "读取 recommendation 解释失败"), "RECOMMENDATION_NOT_FOUND", 404);
   }
 }

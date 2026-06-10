@@ -11,6 +11,7 @@ import {
   resolveWorkspaceAssignableOwnerId,
 } from "@/lib/auth/workspace-data-governance";
 import { assignProblemSpaceDri } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const assignSchema = z.object({
   assignedUserId: z.string().optional(),
@@ -58,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ success: true, data: result });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Assign DRI failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Assign DRI failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

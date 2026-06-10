@@ -1,6 +1,7 @@
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { logEvent } from "@/lib/analytics";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const supportedEvents = new Set(["recommendation_card_viewed", "recommendation_explanation_viewed"]);
 
@@ -31,6 +32,6 @@ export async function POST(
 
     return successResponse({ ok: true }, "ok");
   } catch (error) {
-    return errorResponse(error instanceof Error ? error.message : "记录 recommendation 埋点失败", "RECOMMENDATION_TRACK_FAILED", 500);
+    return errorResponse(serverErrorMessage(error, "记录 recommendation 埋点失败"), "RECOMMENDATION_TRACK_FAILED", 500);
   }
 }

@@ -58,7 +58,9 @@ function getOdpsApiToken() {
 
 function getOdpsTimeoutMs() {
   const value = Number(process.env.BI_REPORT_ODPS_TIMEOUT_MS ?? readRootEnv("BI_REPORT_ODPS_TIMEOUT_MS") ?? 30_000);
-  return Number.isFinite(value) ? value : 30_000;
+  // Reject 0/negative/NaN (Number("") === 0): an instant-timeout config would
+  // abort every query before it starts.
+  return Number.isFinite(value) && value > 0 ? value : 30_000;
 }
 
 function getOdpsMcpCommand() {
@@ -141,8 +143,9 @@ export async function queryBiReportRowsFromOdps(input: {
   void input.sqlParams;
   const timeoutMs = getOdpsTimeoutMs();
   const fetchController = shouldUseHttpOdpsBridge() ? new AbortController() : null;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const timeoutError = new Promise<never>((_, reject) => {
-    setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       if (fetchController) {
         fetchController.abort();
       }
@@ -166,6 +169,13 @@ export async function queryBiReportRowsFromOdps(input: {
       throw new Error(`BI report ODPS query timed out after ${timeoutMs}ms`);
     }
     throw error;
+  } finally {
+    // Always clear the timer: otherwise a fast query still keeps the event loop
+    // (and any serverless invocation) alive until timeoutMs elapses, then fires
+    // a pointless abort().
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
 }
 
@@ -355,18 +365,28 @@ class BiReportOdpsMcpClient {
       }
     });
 
-    this.child.once("exit", () => {
+    const failAllPending = (reason: string) => {
       this.markReady();
       for (const [, pending] of this.pending) {
         clearTimeout(pending.timer);
-        pending.reject(
-          new Error(
-            `BI report ODPS MCP process exited unexpectedly. stderr: ${this.stderrBuffer || "n/a"}`,
-          ),
-        );
+        pending.reject(new Error(`${reason} stderr: ${this.stderrBuffer || "n/a"}`));
       }
       this.pending.clear();
+    };
+
+    this.child.once("exit", () => {
+      failAllPending("BI report ODPS MCP process exited unexpectedly.");
     });
+
+    // Without an `error` listener, a missing MCP binary (ENOENT — the most
+    // common misconfiguration) emits an unhandled `error` on the child and
+    // crashes the whole Node/Next.js process; `exit` never fires in that case.
+    this.child.once("error", (err: Error) => {
+      failAllPending(`BI report ODPS MCP process failed to start: ${err.message}.`);
+    });
+    // EPIPE on stdin after the child dies is likewise emitted as `error` on the
+    // stream; swallow it (pending requests are already rejected via exit/error).
+    this.child.stdin.on("error", () => {});
 
     setTimeout(() => {
       this.markReady();
@@ -411,7 +431,17 @@ class BiReportOdpsMcpClient {
         );
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+      try {
+        this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+      } catch (err) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(
+          new Error(
+            `BI report ODPS MCP request could not be written: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
     });
   }
 

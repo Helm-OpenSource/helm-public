@@ -1,6 +1,7 @@
 import { getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { getTodayFocusRecommendations } from "@/lib/recommendations/recommendation.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET(request: Request) {
   try {
@@ -22,6 +23,6 @@ export async function GET(request: Request) {
 
     return successResponse(data, "ok");
   } catch (error) {
-    return errorResponse(error instanceof Error ? error.message : "生成今日重点失败", "TODAY_FOCUS_FAILED", 500);
+    return errorResponse(serverErrorMessage(error, "生成今日重点失败"), "TODAY_FOCUS_FAILED", 500);
   }
 }

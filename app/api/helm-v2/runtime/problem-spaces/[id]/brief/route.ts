@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { getProblemSpaceEdgeBrief } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const briefAudienceSchema = z.enum(["IC", "DRI", "PLAYER_COACH"]);
 
@@ -24,6 +25,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     return Response.json({ success: true, data: result });
   } catch (error) {
-    return Response.json({ success: false, message: error instanceof Error ? error.message : "Problem-space brief failed" }, { status: 500 });
+    return Response.json({ success: false, message: serverErrorMessage(error, "Problem-space brief failed") }, { status: 500 });
   }
 }

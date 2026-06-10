@@ -5,6 +5,7 @@ import { deleteMemoryFact } from "@/lib/memory/correction.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { deleteMemoryFactSchema } from "@/lib/memory/schemas";
 import { canManageMemoryFacts, getMemoryFactManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getCurrentWorkspaceSession();
@@ -47,7 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "删除记忆失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "删除记忆失败"),
       isWorkspaceOwnershipError(error) ? "FACT_NOT_FOUND" : "DELETE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

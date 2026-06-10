@@ -147,6 +147,9 @@ export async function recordTrialDecisionAction(
 
   const data = parsed.data;
   try {
+    // TrialApplication is intentionally global (no workspaceId column):
+    // access is restricted to the Helm reserved workspace above. Do not
+    // copy this unscoped `where` for workspace-bound entities.
     await db.trialApplication.update({
       where: { id: data.applicationId },
       data: {

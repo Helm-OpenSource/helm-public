@@ -9,6 +9,7 @@ import { assertWorkspaceMeetingOwnership, isWorkspaceOwnershipError } from "@/li
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { generateMeetingBriefingSnapshot } from "@/lib/memory/briefing.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(request: Request, { params }: { params: Promise<{ meetingId: string }> }) {
   const { user, membership, workspace } = await getCurrentWorkspaceSession();
@@ -60,7 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mee
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "生成简报失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "生成简报失败"),
       isWorkspaceOwnershipError(error) ? "MEETING_NOT_FOUND" : "BRIEFING_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

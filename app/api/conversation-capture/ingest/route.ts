@@ -9,6 +9,7 @@ import { assertWorkspaceObjectOwnership, isWorkspaceOwnershipError } from "@/lib
 import { ingestConversationCapture } from "@/lib/conversation-capture/capture-session.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const schema = z.object({
   title: z.string().trim().min(1).max(120),
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
     return successResponse(result, "capture ingested");
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : english ? "Failed to ingest external conversation" : "外部会话导入失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to ingest external conversation" : "外部会话导入失败"),
       isWorkspaceOwnershipError(error) ? "OBJECT_NOT_FOUND" : "CAPTURE_INGEST_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth/capture-runtime-governance";
 import { assertWorkspaceMeetingOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { queueReflectionJob } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_: Request, { params }: { params: Promise<{ meetingId: string }> }) {
   const { membership, workspace } = await getCurrentWorkspaceSession();
@@ -28,7 +29,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ meetingId
     return Response.json({ success: true, data: result });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Reflection queue failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Reflection queue failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

@@ -5,6 +5,7 @@ import { resolveBlocker } from "@/lib/memory/blocker.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { resolveBlockerSchema } from "@/lib/memory/schemas";
 import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getCurrentWorkspaceSession();
@@ -48,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "解决阻塞失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "解决阻塞失败"),
       isWorkspaceOwnershipError(error) ? "BLOCKER_NOT_FOUND" : "RESOLVE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

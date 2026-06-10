@@ -9,6 +9,9 @@ export type OpportunityAttachmentMemoryPayload = {
   mimeType: string;
   sizeBytes: number;
   url: string;
+  // Path relative to the private upload root. Absent on legacy entries that
+  // stored the file under public/uploads (url pointed straight at it).
+  storageKey?: string;
   uploadedAt: string;
 };
 
@@ -19,6 +22,7 @@ export type OpportunityAttachmentItem = {
   mimeType: string;
   sizeBytes: number;
   url: string;
+  storageKey?: string;
   uploadedAt: Date;
   createdAt: Date;
 };
@@ -28,6 +32,7 @@ export function buildOpportunityAttachmentMemoryPayload(input: {
   mimeType: string;
   sizeBytes: number;
   url: string;
+  storageKey?: string;
   uploadedAt?: Date;
 }): OpportunityAttachmentMemoryPayload {
   return {
@@ -36,6 +41,7 @@ export function buildOpportunityAttachmentMemoryPayload(input: {
     mimeType: input.mimeType,
     sizeBytes: input.sizeBytes,
     url: input.url,
+    ...(input.storageKey ? { storageKey: input.storageKey } : {}),
     uploadedAt: (input.uploadedAt ?? new Date()).toISOString(),
   };
 }
@@ -73,6 +79,7 @@ export function parseOpportunityAttachmentMemoryEntry(input: {
     mimeType: parsed.mimeType,
     sizeBytes: parsed.sizeBytes,
     url: parsed.url,
+    storageKey: typeof parsed.storageKey === "string" ? parsed.storageKey : undefined,
     uploadedAt,
     createdAt: input.createdAt,
   };

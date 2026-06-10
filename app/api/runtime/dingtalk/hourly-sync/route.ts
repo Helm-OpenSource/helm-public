@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { ActorType, ConnectorProvider } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
@@ -6,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { syncDingTalkReadonlyConnector } from "@/lib/connectors/dingtalk-ingestion";
 import { db } from "@/lib/db";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 function isAuthorized(request: Request) {
   const expected = process.env.DINGTALK_SYNC_CRON_TOKEN?.trim() || "";
@@ -18,7 +20,7 @@ function isAuthorized(request: Request) {
   }
 
   const token = request.headers.get("x-helm-cron-token")?.trim() || "";
-  if (token !== expected) {
+  if (!safeTokenEqual(token, expected)) {
     return {
       ok: false,
       status: 401,
@@ -29,6 +31,15 @@ function isAuthorized(request: Request) {
   return {
     ok: true,
   } as const;
+}
+
+function safeTokenEqual(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
 export async function GET(request: Request) {
@@ -134,7 +145,7 @@ export async function GET(request: Request) {
       details.push({
         connectorId: connector.id,
         status: "FAILURE",
-        message: error instanceof Error ? error.message : "unknown error",
+        message: serverErrorMessage(error, "unknown error"),
       });
 
       await writeAuditLog({

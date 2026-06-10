@@ -38,6 +38,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# uploaded attachments (stored outside the public tree, served via auth route)
+/var/uploads
+/public/uploads
+
 # local database
 /dev.db
 /dev.db-*

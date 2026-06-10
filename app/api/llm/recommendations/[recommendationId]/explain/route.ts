@@ -7,6 +7,7 @@ import {
 import { assertWorkspaceRecommendationOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { refreshRecommendationExplanationWithLLM } from "@/lib/recommendations/recommendation.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_: Request, { params }: { params: Promise<{ recommendationId: string }> }) {
   try {
@@ -55,7 +56,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ recommend
     return Response.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "增强 recommendation 解释失败",
+        message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "增强 recommendation 解释失败"),
       },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );

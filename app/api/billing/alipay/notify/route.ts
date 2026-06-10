@@ -20,6 +20,7 @@ import { getChinaBillingPeriodUnix } from "@/lib/billing/china-payment";
 import { syncWorkspacePaymentStatusFromCallbackEvent } from "@/lib/billing/integration";
 import { verifyAlipayNotifyPayload } from "@/lib/billing/alipay";
 import { PAYMENT_PROVIDER } from "@/lib/billing/runtime-constants";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export const runtime = "nodejs";
 
@@ -49,12 +50,12 @@ export async function POST(request: Request) {
       hintSource: hintedWorkspace.hintSource,
       hintWorkspaceId: hintedWorkspace.workspaceId,
       payload: {
-        error: error instanceof Error ? error.message : "Alipay notify verification failed",
+        error: serverErrorMessage(error, "Alipay notify verification failed"),
       },
     });
 
     return new Response(
-      error instanceof Error ? error.message : "Alipay notify verification failed",
+      serverErrorMessage(error, "Alipay notify verification failed"),
       { status: 400 },
     );
   }
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
       summary: buildBillingWebhookExceptionSummary({
         provider: PAYMENT_PROVIDER.ALIPAY,
       }),
-      failureReason: error instanceof Error ? error.message : "alipay-callback-processing-failed",
+      failureReason: serverErrorMessage(error, "alipay-callback-processing-failed"),
       payload: {
         outTradeNo,
         tradeNo,
@@ -156,7 +157,7 @@ export async function POST(request: Request) {
     });
 
     return new Response(
-      error instanceof Error ? error.message : "Alipay notify processing failed",
+      serverErrorMessage(error, "Alipay notify processing failed"),
       { status: 500 },
     );
   }

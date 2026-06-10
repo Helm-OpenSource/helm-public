@@ -5,6 +5,7 @@ import { processMeetingMemory } from "@/lib/memory/meeting-memory-pipeline.servi
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { processImportedMeetingNoteSchema } from "@/lib/memory/schemas";
 import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(request: Request) {
   const session = await getCurrentWorkspaceSession();
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "导入纪要处理失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "导入纪要处理失败"),
       isWorkspaceOwnershipError(error) ? "MEETING_NOT_FOUND" : "IMPORTED_MEETING_MEMORY_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

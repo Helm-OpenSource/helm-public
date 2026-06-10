@@ -15,6 +15,7 @@ import {
   resolveWorkspaceAssignableOwnerId,
 } from "@/lib/auth/workspace-data-governance";
 import { createRuntimeProblemSpace, listProblemSpacesForWorkspace } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const createProblemSpaceSchema = z
   .object({
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
     return Response.json({ success: true, data: result });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Problem-space creation failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Problem-space creation failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

@@ -1,6 +1,7 @@
 import { subDays } from "date-fns";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { getLLMOverview } from "@/lib/observability/llm-metrics.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET(request: Request) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     return Response.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "读取 LLM 调用日志失败",
+        message: serverErrorMessage(error, "读取 LLM 调用日志失败"),
       },
       { status: 500 },
     );

@@ -11,6 +11,7 @@ import { ensureWorkspaceProcessingAllowed, recordUsageLedgerEntry } from "@/lib/
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { runCrmImportSource } from "@/lib/imports/crm-entry.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const schema = z.object({
   sourceId: z.string().min(1),
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : english ? "CRM import failed" : "CRM 导入失败" },
+      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "CRM import failed" : "CRM 导入失败") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

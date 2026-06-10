@@ -5,6 +5,7 @@ import { processMeetingMemory } from "@/lib/memory/meeting-memory-pipeline.servi
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { processMeetingMemorySchema } from "@/lib/memory/schemas";
 import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(request: Request, { params }: { params: Promise<{ meetingId: string }> }) {
   const session = await getCurrentWorkspaceSession();
@@ -51,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mee
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : "处理会议记忆失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "处理会议记忆失败"),
       isWorkspaceOwnershipError(error) ? "MEETING_NOT_FOUND" : "MEETING_MEMORY_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );
