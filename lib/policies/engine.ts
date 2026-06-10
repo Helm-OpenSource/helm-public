@@ -308,6 +308,18 @@ export async function executeActionItem(
     return action;
   }
 
+  // Boundary guard: when an action required approval it carries an approval
+  // task, and execution is only permitted once that task is approved (its
+  // terminal "EXECUTED" = approved state). A task that is still PENDING (not
+  // yet approved) or that was REJECTED/WITHDRAWN must never reach execution —
+  // otherwise a rejected suggestion could be executed. Actions with no approval
+  // task are the non-gated auto-execute path and proceed unchanged.
+  if (action.approvalTask && action.approvalTask.status !== ApprovalStatus.EXECUTED) {
+    throw new Error(
+      "Cannot execute this action: its approval is not in an approved state",
+    );
+  }
+
   const metadata = safeParseJson<Record<string, unknown>>(action.metadata, {});
   const policySnapshot = safeParseJson<Record<string, unknown>>(action.policySnapshot, {});
   const draftContent = actor.editedContent ?? action.draftContent ?? action.description ?? action.title;
@@ -589,6 +601,14 @@ export async function approveApprovalTask(
   });
 
   if (!task) throw new Error("Approval task not found");
+
+  // Terminal-state guard: a task may only be approved from PENDING. Without
+  // this, a REJECTED/WITHDRAWN/already-approved task could be flipped to
+  // approved (rejected -> approved) and then executed — bypassing the human
+  // review gate the boundary is built to enforce.
+  if (task.status !== ApprovalStatus.PENDING) {
+    throw new Error("Approval task is no longer pending and cannot be approved");
+  }
 
   await assertWorkspaceGovernedActionReviewServiceAccess({
     workspaceId: task.workspaceId,
