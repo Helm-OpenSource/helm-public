@@ -566,6 +566,7 @@ async function upsertMeetingFromExternal(input: {
     workspaceId: input.workspaceId,
     sourceType: input.source.sourceType,
     meeting: input.meeting,
+    companyId: input.companyId,
     governance: input.governance,
   });
 

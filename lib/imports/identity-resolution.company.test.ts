@@ -7,6 +7,10 @@ const { dbMock } = vi.hoisted(() => ({
       findFirst: vi.fn(),
       findMany: vi.fn(),
     },
+    meeting: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -15,8 +19,8 @@ vi.mock("@/lib/auth/service-governance", () => ({
   assertWorkspaceImportServiceAccess: vi.fn(),
 }));
 
-import { resolveCompanyIdentity } from "@/lib/imports/identity-resolution.service";
-import type { ExternalCompany } from "@/lib/imports/crm-types";
+import { resolveCompanyIdentity, resolveMeetingIdentity } from "@/lib/imports/identity-resolution.service";
+import type { ExternalCompany, ExternalMeeting } from "@/lib/imports/crm-types";
 
 function buildCompany(overrides: Partial<ExternalCompany> = {}): ExternalCompany {
   return {
@@ -71,6 +75,67 @@ describe("resolveCompanyIdentity", () => {
       workspaceId: "ws-1",
       sourceType: ImportSourceType.HUBSPOT,
       company: buildCompany({ name: "Brand New Co", domain: "brandnew.io", website: "https://brandnew.io" }),
+    });
+    expect(decision.status).toBe("CREATE_NEW");
+  });
+});
+
+function buildMeeting(overrides: Partial<ExternalMeeting> = {}): ExternalMeeting {
+  return {
+    externalId: "m-ext-1",
+    sourceType: ImportSourceType.HUBSPOT,
+    title: "周会",
+    startsAt: new Date("2026-06-10T02:00:00.000Z"),
+    endsAt: new Date("2026-06-10T03:00:00.000Z"),
+    raw: {},
+    ...overrides,
+  } as ExternalMeeting;
+}
+
+describe("resolveMeetingIdentity company scoping", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dbMock.meeting.findFirst.mockResolvedValue(null); // no external-id exact match
+  });
+
+  const existing = [
+    {
+      id: "mtg-1",
+      title: "周会",
+      startsAt: new Date("2026-06-10T02:00:00.000Z"),
+      companyId: "co-A",
+    },
+  ];
+
+  it("AUTO_LINKs when company + title + start time all match", async () => {
+    dbMock.meeting.findMany.mockResolvedValue(existing);
+    const decision = await resolveMeetingIdentity({
+      workspaceId: "ws-1",
+      sourceType: ImportSourceType.HUBSPOT,
+      meeting: buildMeeting(),
+      companyId: "co-A",
+    });
+    expect(decision.status).toBe("AUTO_LINKED");
+    expect(decision.internalObjectId).toBe("mtg-1");
+  });
+
+  it("does NOT merge a same-title same-time meeting from a different company", async () => {
+    dbMock.meeting.findMany.mockResolvedValue(existing);
+    const decision = await resolveMeetingIdentity({
+      workspaceId: "ws-1",
+      sourceType: ImportSourceType.HUBSPOT,
+      meeting: buildMeeting(),
+      companyId: "co-B",
+    });
+    expect(decision.status).toBe("CREATE_NEW");
+  });
+
+  it("does NOT auto-merge on the weak title+time key when no company context", async () => {
+    dbMock.meeting.findMany.mockResolvedValue(existing);
+    const decision = await resolveMeetingIdentity({
+      workspaceId: "ws-1",
+      sourceType: ImportSourceType.HUBSPOT,
+      meeting: buildMeeting(),
     });
     expect(decision.status).toBe("CREATE_NEW");
   });

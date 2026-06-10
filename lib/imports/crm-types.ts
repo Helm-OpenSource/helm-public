@@ -174,6 +174,11 @@ export type TimelineRecordSource = RecordSource | "HUBSPOT" | "SALESFORCE";
 
 export function normalizeName(value?: string | null) {
   return String(value ?? "")
+    // NFKC canonicalizes full-width / compatibility characters to their plain
+    // forms, so real data like "ＡＢＣ公司" matches "ABC公司" (Chinese names and
+    // company names are routinely entered full-width). Mirrors the memory
+    // write-dedupe normalization.
+    .normalize("NFKC")
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();

@@ -265,6 +265,7 @@ export async function resolveMeetingIdentity(input: {
   workspaceId: string;
   sourceType: ImportSourceType;
   meeting: ExternalMeeting;
+  companyId?: string | null;
   governance?: IdentityMatchGovernanceInput;
 }): Promise<MatchDecision> {
   await assertIdentityResolutionServiceAccess(input.workspaceId, input.governance);
@@ -291,19 +292,26 @@ export async function resolveMeetingIdentity(input: {
     where: {
       workspaceId: input.workspaceId,
     },
-    select: { id: true, title: true, startsAt: true },
+    select: { id: true, title: true, startsAt: true, companyId: true },
   });
-  const sameSlot = meetings.find(
-    (candidate) =>
-      normalizeName(candidate.title) === normalizeName(input.meeting.title) &&
-      candidate.startsAt.getTime() === input.meeting.startsAt.getTime(),
-  );
+  // Title + start-time alone is a weak key — two different teams' "周会" can
+  // share both. Only treat it as the same meeting when the resolved company
+  // also matches; with no company context the key is too weak to auto-merge
+  // (which previously merged unrelated meetings / synthetic note-meetings).
+  const sameSlot = input.companyId
+    ? meetings.find(
+        (candidate) =>
+          candidate.companyId === input.companyId &&
+          normalizeName(candidate.title) === normalizeName(input.meeting.title) &&
+          candidate.startsAt.getTime() === input.meeting.startsAt.getTime(),
+      )
+    : undefined;
 
   if (sameSlot) {
     return {
       status: "AUTO_LINKED",
       internalObjectId: sameSlot.id,
-      reason: "会议标题和开始时间匹配到现有会议",
+      reason: "公司、会议标题与开始时间均匹配到现有会议",
       score: 94,
     };
   }
