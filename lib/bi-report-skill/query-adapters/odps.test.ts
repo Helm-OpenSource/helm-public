@@ -54,4 +54,21 @@ describe("queryBiReportRowsFromOdps", () => {
       { one: 1, maybe_null: null, dec_val: 2.5 },
     ]);
   });
+
+  it("warns (does not silently pass) when a BIGINT column exceeds safe-integer precision", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // The bridge returns BIGINT as a raw number, so this arrives already rounded.
+    const fetchImpl = makeFetch({
+      success: true,
+      rows: [{ case_id: 9223372036854775807, small: 3 }],
+    });
+    await callOdps(fetchImpl);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("case_id"),
+    );
+    // a normal safe integer must NOT warn
+    expect(
+      warn.mock.calls.every((args) => !String(args[0]).includes('"small"')),
+    ).toBe(true);
+  });
 });

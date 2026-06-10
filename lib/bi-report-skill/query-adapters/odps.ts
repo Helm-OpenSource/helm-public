@@ -563,8 +563,30 @@ function normalizeBiReportRow(row: unknown): BiReportRow {
   }
 
   return Object.fromEntries(
-    Object.entries(row).map(([key, value]) => [key, normalizeBiReportRowValue(value)]),
+    Object.entries(row).map(([key, value]) => {
+      warnOnUnsafeBigInt(key, value);
+      return [key, normalizeBiReportRowValue(value)];
+    }),
   ) as BiReportRow;
+}
+
+// The ODPS bridge serializes BIGINT columns as raw JSON numbers, so a value
+// above Number.MAX_SAFE_INTEGER (2^53) — e.g. a snowflake/timestamp-prefixed id
+// or a large pre-aggregated amount — has ALREADY lost integer precision by the
+// time response.json() parses it (9223372036854775807 -> 9223372036854776000).
+// Precision can't be recovered here, but it must not be lost silently: warn so
+// the corruption is visible, and point at the fix (CAST the column to STRING in
+// the query, which the bridge then quotes and we preserve exactly).
+function warnOnUnsafeBigInt(key: string, value: unknown) {
+  if (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    !Number.isSafeInteger(value)
+  ) {
+    console.warn(
+      `[bi-report odps] column "${key}" value ${value} exceeds Number.MAX_SAFE_INTEGER and has lost integer precision at the JSON boundary; CAST it to STRING in the ODPS query to keep it exact.`,
+    );
+  }
 }
 
 function normalizeBiReportRowValue(value: unknown): BiReportRow[keyof BiReportRow] {
