@@ -55,10 +55,18 @@ function formatTimestamp(date = new Date()) {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+export function buildAlipaySignContent(params: Record<string, string>) {
+  return buildSignContent(params);
+}
+
 function buildSignContent(params: Record<string, string>) {
   return Object.entries(params)
     .filter(([, value]) => value !== "" && value !== undefined && value !== null)
-    .sort(([left], [right]) => left.localeCompare(right))
+    // Alipay RSA2 signing is defined over keys in ASCII (code-unit) order.
+    // localeCompare diverges from ASCII for mixed case / punctuation like "_",
+    // which would produce a signature Alipay rejects (and reject valid notifies
+    // on our side) for any key set where the two orderings differ.
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
     .join("&");
 }

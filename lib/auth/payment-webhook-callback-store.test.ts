@@ -143,6 +143,33 @@ describe("payment webhook callback store", () => {
     );
   });
 
+  it("does not overwrite an already-RESOLVED event when a stale failure collides", async () => {
+    dbMock.paymentWebhookCallbackEvent.findUnique.mockResolvedValueOnce({
+      id: "callback-resolved",
+      governanceStatus: PAYMENT_WEBHOOK_CALLBACK_STATUS.RESOLVED,
+      summary: "original success",
+      failureReason: null,
+      processedAt: new Date("2026-06-01T00:00:00Z"),
+    });
+
+    await recordPaymentWebhookVerificationFailure({
+      provider: PaymentProvider.ALIPAY,
+      callbackMode: PAYMENT_WEBHOOK_CALLBACK_MODE.ALIPAY_NOTIFY,
+      callbackFingerprint: "fingerprint-resolved",
+      sourcePage: "/api/billing/alipay/notify",
+      summary: "verification failed",
+      failureReason: "alipay-notify-verification-failed",
+      payload: { error: "bad signature" },
+    });
+
+    const updateData = dbMock.paymentWebhookCallbackEvent.update.mock.calls[0]?.[0]?.data;
+    // The resolved status and its original summary/reason are preserved...
+    expect(updateData.governanceStatus).toBe(PAYMENT_WEBHOOK_CALLBACK_STATUS.RESOLVED);
+    expect(updateData.summary).toBe("original success");
+    // ...but the duplicate observation is still recorded.
+    expect(updateData.duplicateReceptionCount).toEqual({ increment: 1 });
+  });
+
   it("finalizes a callback event with tenant-mapped governance truth", async () => {
     await finalizePaymentWebhookCallbackEvent({
       eventId: "callback-1",

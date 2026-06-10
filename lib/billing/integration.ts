@@ -326,7 +326,11 @@ async function persistChinaPaymentStatus(input: {
       paymentSubscriptionId:
         input.statusSnapshot.subscriptionId ?? input.workspace.billingAccount.paymentSubscriptionId,
       paymentSubscriptionStatus: input.statusSnapshot.providerStatus,
-      paymentCheckoutSessionId: input.statusSnapshot.checkoutSessionId,
+      // Coalesce like the sibling id fields above: a callback with no session
+      // id passes "" and must not clobber a previously-stored valid id.
+      paymentCheckoutSessionId:
+        input.statusSnapshot.checkoutSessionId ||
+        input.workspace.billingAccount.paymentCheckoutSessionId,
       paymentCheckoutCompletedAt: resolution.shouldRecordCheckoutCompletion
         ? new Date()
         : input.workspace.billingAccount.paymentCheckoutCompletedAt,
