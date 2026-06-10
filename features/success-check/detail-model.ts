@@ -20,6 +20,8 @@ import {
   createUnifiedDetailNavigationModel,
   type UnifiedDetailNavigationModel,
 } from "@/lib/presentation/unified-detail-navigation";
+import { format } from "date-fns";
+import { enUS } from "date-fns/locale";
 import { formatDateLabel, trimText } from "@/lib/utils";
 
 type HeaderLink = {
@@ -291,10 +293,10 @@ export function buildSuccessCheckDetailPageModel({
     },
     eyebrow: english
       ? "Success check / Review surface"
-      : "Success check / 复核面",
+      : "成功检查 / 复核面",
     title: english
       ? `${detail.title} · Success check`
-      : `${detail.title} · Success check`,
+      : `${detail.title} · 成功检查`,
     description: english
       ? `${detail.company?.name ?? "No company"} · ${stageLabel} · ${reviewPosture}`
       : `${detail.company?.name ?? "暂无公司"} · ${stageLabel} · ${reviewPosture}`,
@@ -382,7 +384,7 @@ export function buildSuccessCheckDetailPageModel({
     evidenceGroups,
     stageBadge: english
       ? `Success check · ${formatRisk(detail.riskLevel, true)}`
-      : `Success check · ${formatRisk(detail.riskLevel, false)}`,
+      : `成功检查 · ${formatRisk(detail.riskLevel, false)}`,
   };
 }
 
@@ -487,7 +489,7 @@ function buildWatchState({
     return {
       lastTouchAt: reviewCandidate,
       lastTouchSummary: english
-        ? `${explicitReview?.reviewedBy?.name ?? "A reviewer"} reviewed this on ${formatDateLabel(reviewCandidate)}`
+        ? `${explicitReview?.reviewedBy?.name ?? "A reviewer"} reviewed this on ${formatSuccessCheckDateLabel(reviewCandidate, true)}`
         : `${explicitReview?.reviewedBy?.name ?? "有复核人"} 在 ${formatDateLabel(reviewCandidate)} 复核了这条成功检查`,
     };
   }
@@ -496,7 +498,7 @@ function buildWatchState({
     return {
       lastTouchAt: approvalCandidate,
       lastTouchSummary: english
-        ? `A human reviewed the linked approval on ${formatDateLabel(approvalCandidate)}`
+        ? `A human reviewed the linked approval on ${formatSuccessCheckDateLabel(approvalCandidate, true)}`
         : `在 ${formatDateLabel(approvalCandidate)} 有人复核了相关审批`,
     };
   }
@@ -504,7 +506,7 @@ function buildWatchState({
   return {
     lastTouchAt: null,
     lastTouchSummary: english
-      ? `No explicit user touch yet. The current readiness read was prepared on ${formatDateLabel(detail.updatedAt)}.`
+      ? `No explicit user touch yet. The current readiness read was prepared on ${formatSuccessCheckDateLabel(detail.updatedAt, true)}.`
       : `当前还没有显式用户触点。这条准备度判断准备于 ${formatDateLabel(detail.updatedAt)}。`,
   };
 }
@@ -538,19 +540,19 @@ function buildSuccessCheckAgentSurface({
     watchState.lastTouchAt != null && detail.updatedAt > watchState.lastTouchAt
       ? signals.pendingReview
         ? english
-          ? `Since ${formatDateLabel(watchState.lastTouchAt)}, explicit review pressure is still open and keeps this at a readiness check.`
+          ? `Since ${formatSuccessCheckDateLabel(watchState.lastTouchAt, true)}, explicit review pressure is still open and keeps this at a readiness check.`
           : `自 ${formatDateLabel(watchState.lastTouchAt)} 以来，显式复核压力仍未关闭，所以这条线还停在准备度检查。`
         : signals.topBlocker
           ? english
-            ? `Since ${formatDateLabel(watchState.lastTouchAt)}, blocker "${signals.topBlocker.title}" still keeps the account from widening honestly.`
+            ? `Since ${formatSuccessCheckDateLabel(watchState.lastTouchAt, true)}, blocker "${signals.topBlocker.title}" still keeps the account from widening honestly.`
             : `自 ${formatDateLabel(watchState.lastTouchAt)} 以来，阻塞点「${signals.topBlocker.title}」仍然让这条账户线不能诚实地继续扩大。`
           : signals.recentThread &&
               signals.recentThread.updatedAt > watchState.lastTouchAt
             ? english
-              ? `Since ${formatDateLabel(watchState.lastTouchAt)}, the latest external thread changed and the next action now needs a fresh readiness read.`
+              ? `Since ${formatSuccessCheckDateLabel(watchState.lastTouchAt, true)}, the latest external thread changed and the next action now needs a fresh readiness read.`
               : `自 ${formatDateLabel(watchState.lastTouchAt)} 以来，最近一条外部线程已经变化，下一步现在需要重新做一次准备度判断。`
             : english
-              ? `Since ${formatDateLabel(watchState.lastTouchAt)}, this success check has stayed aligned to ${stageLabel} without widening the story prematurely.`
+              ? `Since ${formatSuccessCheckDateLabel(watchState.lastTouchAt, true)}, this success check has stayed aligned to ${stageLabel} without widening the story prematurely.`
               : `自 ${formatDateLabel(watchState.lastTouchAt)} 以来，这条成功检查一直对齐在「${stageLabel}」，没有提前把叙事抬大。`
       : watchState.lastTouchAt == null
         ? english
@@ -861,7 +863,7 @@ function buildEvidenceGroups({
   return [
     {
       groupId: "readiness-pressure",
-      label: english ? "Readiness pressure" : "Readiness 压力",
+      label: english ? "Readiness pressure" : "准备度压力",
       items: compactItems([
         ...detail.blockers
           .slice(0, 3)
@@ -923,7 +925,7 @@ function buildEvidenceGroups({
         company?.briefingSnapshot?.payload.summary
           ? english
             ? `Company briefing: ${trimText(company.briefingSnapshot.payload.summary, 120)}`
-            : `Company briefing：${trimText(company.briefingSnapshot.payload.summary, 120)}`
+            : `公司简报：${trimText(company.briefingSnapshot.payload.summary, 120)}`
           : null,
         signals.latestAudit
           ? english
@@ -1142,18 +1144,18 @@ function describeReviewPosture(
   english: boolean,
 ) {
   if (attentionState === "review-before-send") {
-    return english ? "Review-limited" : "Review-limited";
+    return english ? "Review-limited" : "受复核限制";
   }
 
   if (attentionState === "blocked") {
-    return english ? "Boundary-limited" : "Boundary-limited";
+    return english ? "Boundary-limited" : "受边界限制";
   }
 
   if (signals.recentThread?.status.includes("WAITING")) {
     return english ? "Waiting for reply" : "等待回复";
   }
 
-  return english ? "Readiness watch" : "Readiness watch";
+  return english ? "Readiness watch" : "准备度观察";
 }
 
 function formatRisk(
@@ -1170,6 +1172,17 @@ function formatRisk(
     default:
       return english ? "Medium risk" : "中风险";
   }
+}
+
+function formatSuccessCheckDateLabel(
+  value: Date | string | null | undefined,
+  english: boolean,
+) {
+  if (!english) return formatDateLabel(value);
+  if (!value) return "Not set";
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  return format(date, "MMM d HH:mm", { locale: enUS });
 }
 
 function compactItems(items: Array<string | null>) {

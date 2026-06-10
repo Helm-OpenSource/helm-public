@@ -32,11 +32,11 @@
     ],
     "expected": {
       "customerFollowupIncludes": ["建议先围绕以下一步继续推进", "follow-up"],
-      "emailIncludes": ["会后下一步建议", "review-before-send handoff"],
-      "execBriefIncludes": ["What matters now", "Why now"],
+      "emailIncludes": ["会后下一步建议", "发送前复核交接"],
+      "execBriefIncludes": ["当前最重要的事", "为什么是现在"],
       "expectedAudienceOrder": ["customer", "internal", "executive"],
       "fallbackRequired": false,
-      "requiredBoundaryNotes": ["review-before-send", "不会自动发送"]
+      "requiredBoundaryNotes": ["发送前复核", "不会自动发送"]
     }
   },
   {
@@ -72,10 +72,10 @@
     "expected": {
       "customerFollowupIncludes": ["今天已经确认的信息", "终面"],
       "emailIncludes": ["终面", "不会自动发送"],
-      "execBriefIncludes": ["Boundary / review posture", "What matters now"],
+      "execBriefIncludes": ["边界 / 复核姿态", "当前最重要的事"],
       "expectedAudienceOrder": ["customer", "internal", "executive"],
       "fallbackRequired": false,
-      "requiredBoundaryNotes": ["review-before-send", "不会自动创建外部日程"]
+      "requiredBoundaryNotes": ["发送前复核", "不会自动创建外部日程"]
     }
   },
   {
@@ -112,11 +112,11 @@
     "expected": {
       "customerFollowupIncludes": ["澄清", "下一步"],
       "emailIncludes": ["会后下一步建议", "如果你们方便"],
-      "execBriefIncludes": ["Boundary / review posture", "What matters now"],
+      "execBriefIncludes": ["边界 / 复核姿态", "当前最重要的事"],
       "expectedAudienceOrder": ["customer", "internal", "executive"],
       "fallbackRequired": true,
       "editedRiskyDraftMarkdown": "我们保证 5 月 12 日可以上线，并直接给到 15% 折扣。",
-      "requiredBoundaryNotes": ["review-before-send", "正式承诺"]
+      "requiredBoundaryNotes": ["发送前复核", "正式承诺"]
     }
   }
 ]

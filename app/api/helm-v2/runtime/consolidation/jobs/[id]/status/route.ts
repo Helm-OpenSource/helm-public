@@ -1,5 +1,8 @@
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+} from "@/lib/i18n/api-message-locale";
 import { z } from "zod";
 import {
   canManageWorkspaceRuntime,
@@ -29,7 +32,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const body = updateJobStatusSchema.safeParse(await request.json().catch(() => ({})));
     if (!body.success) {
       return Response.json(
-        { success: false, message: body.error.issues[0]?.message ?? "参数不完整" },
+        {
+          success: false,
+          message: resolveApiValidationIssueMessage(workspace.defaultLocale, body.error.issues[0]?.message),
+        },
         { status: 400 },
       );
     }

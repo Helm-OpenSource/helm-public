@@ -1,7 +1,10 @@
 import { ObjectType, UsageType } from "@prisma/client";
 import { ensureWorkspaceProcessingAllowed, recordUsageLedgerEntry } from "@/lib/billing/foundation";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiWorkspaceMessage,
+} from "@/lib/i18n/api-message-locale";
 import { generateRecommendationsForObject } from "@/lib/recommendations/recommendation.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 
@@ -21,7 +24,12 @@ export async function GET(request: Request) {
   const parsedLimit = limit ? Number(limit) : undefined;
 
   if (!objectType || !objectId) {
-    return errorResponse("objectType 和 objectId 不能为空");
+    return errorResponse(
+      resolveApiWorkspaceMessage(workspace.defaultLocale, {
+        zh: "objectType 和 objectId 不能为空",
+        en: "objectType and objectId are required",
+      }),
+    );
   }
 
   const recommendations = await generateRecommendationsForObject({

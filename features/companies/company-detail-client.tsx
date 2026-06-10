@@ -42,6 +42,7 @@ import {
   createCompanyQuickOpportunityAction,
   generateCompanyBriefAction,
 } from "@/features/companies/actions";
+import { formatCompanyDetailDateLabel } from "@/features/companies/company-detail-date-labels";
 import { buildOpportunityAssetHref } from "@/features/business-assets/hrefs";
 import { generateObjectBriefingAction } from "@/features/memory/actions";
 import { createActionFromRecommendationAction } from "@/features/recommendations/actions";
@@ -652,7 +653,7 @@ export function CompanyDetailClient({
         >
           {demoMode ? (
             <div className="space-y-2">
-              <Badge variant="approval">Account Intelligence</Badge>
+              <Badge variant="approval">{english ? "Account Intelligence" : "账户判断"}</Badge>
               <p className="text-lg font-semibold text-[color:var(--foreground)]">
                 {english
                   ? "The company page compresses key contacts, momentum path and the last 30 days of activity into one account view."
@@ -971,7 +972,11 @@ export function CompanyDetailClient({
                       {meeting.title}
                     </p>
                     <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                      {formatDateLabel(meeting.startsAt)}
+                      {formatCompanyDetailDateLabel(
+                        meeting.startsAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     </p>
                     <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
                       {trimText(
@@ -1259,7 +1264,11 @@ export function CompanyDetailClient({
                       {trimText(text(entry.content), 120)}
                     </p>
                     <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                      {formatDateLabel(entry.createdAt)}
+                      {formatCompanyDetailDateLabel(
+                        entry.createdAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     </p>
                   </div>
                 ))

@@ -35,7 +35,7 @@ import {
   formatRoleDetailEvidenceGroups,
   formatRoleDetailPageProtocol,
 } from "@/lib/presentation/role-detail-display-copy";
-import { formatDateLabel } from "@/lib/utils";
+import { formatConversationDateLabel } from "./date-labels";
 
 type Props = {
   detail: ProposalPackageCommercialDetail;
@@ -48,7 +48,10 @@ export function ConversationDetailView({
   english,
   contract,
 }: Props) {
-  const sourceProtocol = toConversationDetailPageReportingProtocol(contract);
+  const sourceProtocol = toConversationDetailPageReportingProtocol(
+    contract,
+    english,
+  );
   const text = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);
@@ -255,7 +258,7 @@ export function ConversationDetailView({
                 },
                 {
                   label: english ? "Due date" : "当前截止时间",
-                  value: formatDateLabel(detail.dueDate),
+                  value: formatConversationDateLabel(detail.dueDate, english),
                 },
               ]}
             />
@@ -367,7 +370,7 @@ function buildUnifiedNavigation({
               : "客户面向报价详情",
             summary: english
               ? "Return to the customer-facing offer if the talk track still needs a lighter external-safe surface."
-              : "如果当前话术还需要更轻一点的 可对外表面，就回到客户可见 offer。",
+              : "如果当前话术还需要更轻一点的可对外表面，就回到客户可见报价。",
           }
         : {
             type: "package",
@@ -375,7 +378,7 @@ function buildUnifiedNavigation({
             label: english ? "Package detail" : "方案包详情",
             summary: english
               ? "Return to package shaping if the conversation still needs cleaner package boundary and next-step framing."
-              : "如果当前对话还需要更清楚的方案包边界和下一步措辞，就回到方案包 detail。",
+              : "如果当前对话还需要更清楚的方案包边界和下一步措辞，就回到方案包详情。",
           },
       detailNodeNext: {
         type: "external-narrative",
@@ -397,17 +400,17 @@ function buildUnifiedNavigation({
         handoffTarget: "conversation",
         handoffReason: english
           ? "The package boundary is ready enough that the next useful move is scene-specific conversation guidance, not more raw package rows."
-          : "当前方案包边界已经足够清楚，下一步最有价值的是场景化对话 guidance，而不是继续翻原始方案包行。",
+          : "当前方案包边界已经足够清楚，下一步最有价值的是场景化对话指引，而不是继续翻原始方案包行。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
         handoffRisk: english
           ? "This handoff can still change trust and expectation, so boundary and non-commitment cues must stay visible."
-          : "这次切换仍会改变信任和 预期，所以边界与非承诺线索必须继续可见。",
+          : "这次切换仍会改变信任和预期，所以边界与非承诺线索必须继续可见。",
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction:
           protocol.pageNextAction[0]?.label ??
-          (english ? "Open conversation detail" : "打开对话 detail"),
+          (english ? "Open conversation detail" : "打开对话详情"),
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: "internal-only",
@@ -418,7 +421,7 @@ function buildUnifiedNavigation({
         handoffTarget: "conversation",
         handoffReason: english
           ? "The offer wording is coherent enough to choose the right spoken scene instead of reworking the same external-safe copy."
-          : "当前提案 措辞已经够连贯，可以直接选择最合适的 当面场景，而不是继续重写同一版 可对外文案。",
+          : "当前报价措辞已经够连贯，可以直接选择最合适的当面场景，而不是继续重写同一版可对外文案。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -428,7 +431,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction:
           protocol.pageNextAction[0]?.label ??
-          (english ? "Open conversation detail" : "打开对话 detail"),
+          (english ? "Open conversation detail" : "打开对话详情"),
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: customerFacing
@@ -441,7 +444,7 @@ function buildUnifiedNavigation({
         handoffTarget: "external-narrative",
         handoffReason: english
           ? "The current talk track is stable enough to shape a reusable external narrative layer instead of staying in scene-only guidance."
-          : "当前话术 已经足够稳定，可以进一步整理成可复用的 对外叙事层，而不必继续停留在 场景层提示。",
+          : "当前话术已经足够稳定，可以进一步整理成可复用的对外叙事层，而不必继续停留在场景层提示。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -453,7 +456,7 @@ function buildUnifiedNavigation({
           protocol.pageNextAction[0]?.label ??
           (english
             ? "Open external narrative detail"
-            : "打开 对外叙事详情面"),
+            : "打开对外叙事详情面"),
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:
@@ -470,7 +473,7 @@ function buildUnifiedNavigation({
         handoffTarget: "founder-conversation",
         handoffReason: english
           ? "Use the founder role page when the next move needs founder-owned trust framing rather than one shared talk track."
-          : "当下一步需要创始人亲自承接信任措辞，而不是继续停在共享 talk track 时，切到创始人 role 页面。",
+          : "当下一步需要创始人亲自承接信任措辞，而不是继续停在共享话术时，切到创始人角色页面。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -480,7 +483,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open founder conversation detail."
-          : "打开创始人对话 detail。",
+          : "打开创始人对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:
@@ -494,7 +497,7 @@ function buildUnifiedNavigation({
         handoffTarget: "sales-conversation",
         handoffReason: english
           ? "Use the sales role page when the next move needs sales-owned follow-up framing instead of one shared talk track."
-          : "当下一步需要销售亲自承接跟进措辞，而不是继续停在共享 talk track 时，切到销售 role 页面。",
+          : "当下一步需要销售亲自承接跟进措辞，而不是继续停在共享话术时，切到销售角色页面。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -504,7 +507,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open sales conversation detail."
-          : "打开销售对话 detail。",
+          : "打开销售对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode: customerFacing
@@ -517,7 +520,7 @@ function buildUnifiedNavigation({
         handoffTarget: "delivery-conversation",
         handoffReason: english
           ? "Use the delivery role page when the next move needs scope, implementation or activation clarification rather than one shared talk track."
-          : "当下一步需要范围、implementation 或激活澄清，而不是继续停在共享 talk track 时，切到交付 role 页面。",
+          : "当下一步需要范围、实施或激活澄清，而不是继续停在共享话术时，切到交付角色页面。",
         handoffBoundary: protocol.pageBoundarySummary[0],
         handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
         handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -527,7 +530,7 @@ function buildUnifiedNavigation({
         handoffDecisionRequest: protocol.pageDecisionRequest[0],
         handoffNextAction: english
           ? "Open delivery conversation detail."
-          : "打开交付对话 detail。",
+          : "打开交付对话详情。",
         handoffWorkerSummary: protocol.pageWorkerSummary,
         handoffEvidenceSummary: protocol.pageEvidenceSummary,
         handoffVisibilityMode:
@@ -581,33 +584,29 @@ function SecondarySummaryCard({
 function formatMode(mode: ConversationDetailMode, english: boolean) {
   switch (mode) {
     case "founder-meeting":
-      return english ? "Founder meeting" : "Founder meeting";
+      return english ? "Founder meeting" : "创始人会议";
     case "founder-demo":
-      return english ? "Founder demo" : "Founder demo";
+      return english ? "Founder demo" : "创始人演示";
     case "sales-first-contact":
-      return english ? "Sales first contact" : "Sales first contact";
+      return english ? "Sales first contact" : "销售首次接触";
     case "sales-follow-up":
-      return english ? "Sales follow-up" : "Sales follow-up";
+      return english ? "Sales follow-up" : "销售跟进";
     case "objection-handling":
-      return english ? "Objection handling" : "Objection handling";
+      return english ? "Objection handling" : "异议处理";
     case "proposal-walkthrough":
-      return english ? "Proposal walkthrough" : "Proposal walkthrough";
+      return english ? "Proposal walkthrough" : "方案走查";
     case "boundary-clarification":
-      return english ? "Boundary clarification" : "Boundary clarification";
+      return english ? "Boundary clarification" : "边界澄清";
     case "prerequisite-clarification":
-      return english
-        ? "Prerequisite clarification"
-        : "Prerequisite clarification";
+      return english ? "Prerequisite clarification" : "前置条件澄清";
     case "dependency-clarification":
-      return english ? "Dependency clarification" : "Dependency clarification";
+      return english ? "Dependency clarification" : "依赖澄清";
     case "non-commitment-clarification":
-      return english
-        ? "Non-commitment clarification"
-        : "Non-commitment clarification";
+      return english ? "Non-commitment clarification" : "非承诺澄清";
     case "review-before-send":
-      return english ? "Review before send" : "Review before send";
+      return english ? "Review before send" : "发送前复核";
     default:
-      return english ? "Internal prep only" : "Internal-only 准备";
+      return english ? "Internal prep only" : "仅内部准备";
   }
 }
 

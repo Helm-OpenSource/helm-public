@@ -30,10 +30,10 @@ A public Apache-2.0 sample pack reference implementation, intended as a starting
 
 **Minimum public reference** — 这是 synthetic public sample pack（provenance under review），不是 production-ready vertical，但已经消除了公开 README / 1-pager 的 dead-link 风险：
 
-- 已有 `tenant.manifest.json` + signals / workers / bi-report manifests
+- 已有 `tenant.manifest.json` + signals / workers / bi-report manifests + public-safe `permission.manifest.json`
 - 已有 `signals/types.ts`，固定 deterministic signal identity、tenant pinning、suggestion-only 边界
-- 已有 4 类 public sample fixtures：case / day-board / employee / qc-issue；在 owner 完成 synthetic provenance gate 前，公开口径为 synthetic public sample pack, provenance under review
-- 已有一个可运行 case mapper + Vitest，用于展示"从业务记录到 review-first signal"的最小路径
+- 已有 4 类 public sample fixtures：case / day-board / employee / qc-issue；HSI payload examples 覆盖 case system / CRM / IM / meeting / email；在 owner 完成 synthetic provenance gate 前，公开口径为 synthetic public sample pack, provenance under review
+- 已有一个可运行 case mapper + memory candidate / review packet 纯函数 + Vitest，用于展示"证据 -> 经营信号 -> 记忆候选 -> 复核行动包"的最小路径
 - 已有 worker cookbook：case allocation / case stewardship 两个纯函数 driver + Vitest
 - 已有 BI report cookbook：daily activity readout 的 query / schema / metrics / criteria / prompt / template / resource
 
@@ -46,6 +46,7 @@ A public Apache-2.0 sample pack reference implementation, intended as a starting
 ```
 extensions/case-management-sample/
 ├── tenant.manifest.json
+├── permission.manifest.json
 ├── README.md
 ├── fixtures/
 │   ├── case.sample.json
@@ -57,6 +58,8 @@ extensions/case-management-sample/
 │   ├── README.md
 │   ├── types.ts
 │   ├── types.test.ts
+│   ├── review-packet.ts
+│   ├── review-packet.test.ts
 │   └── case/
 │       ├── case-mapper.ts
 │       └── case-mapper.test.ts
@@ -85,15 +88,42 @@ extensions/case-management-sample/
 ## Minimal Start Here
 
 1. 打开 `fixtures/case.sample.json`。
-2. 改一条 synthetic sample case 的非敏感字段，例如 `status`、`severity` 或 `blockers`。
-3. 跑：
+2. 找到 `CASE-SAMPLE-002`，把 `"priorityScore": 64` 改成 `"priorityScore": 82`。这只改变 synthetic fixture 的优先级，不引入真实客户数据。
+3. 观察 mapper 变化：
+
+```bash
+npx tsx -e "import fs from 'node:fs'; import { mapCaseRecordToSignals } from './extensions/case-management-sample/signals/case/case-mapper.ts'; const cases = JSON.parse(fs.readFileSync('extensions/case-management-sample/fixtures/case.sample.json', 'utf8')); const sample = cases.find((item) => item.caseId === 'CASE-SAMPLE-002'); const signal = mapCaseRecordToSignals(sample)[0]; console.log(signal.identity.severity, signal.payload.nextAction);"
+```
+
+改动前输出应为 `info continue_followup`；改动后应为 `warning continue_followup`。
+
+4. 跑：
 
 ```bash
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
+npm run check:public-release
 ```
 
-4. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey` 和 forbidden-action 边界。
+权限 manifest / Permission manifest:
+
+```bash
+npm run test -- lib/extensions/permission-manifest.test.ts \
+  lib/extensions/permission-access.test.ts \
+  lib/extensions/permission-api-proof.test.ts
+```
+
+`permission.manifest.json` 只声明 synthetic case-management 资源、动作、风险、数据分类和默认效果模式。
+它不是租户授权绑定；真实人员、队列、字段策略、entitlement、receipt 和写回 gate 仍属于私有 Overlay /
+control-plane。
+
+Runtime read proof / 运行时读取证明：
+
+- `lib/extensions/permission-api-proof.ts` exposes a synthetic session resolver and registered extension API route proof.
+- The proof path is `session -> workspace -> permission decision -> row filter -> field redaction -> audit receipt`.
+- The response includes only synthetic rows plus redaction metadata; raw contact tokens, financial values, and legal notes are not returned.
+
+5. 检查 mapper / eval 是否仍保持 `commitment: "suggestion_only"`、literal `tenantKey`、memory candidate only 和 forbidden-action 边界。
 
 不要把真实客户记录、真实邮箱、真实手机号、私有域名、内网 IP、凭据或部署信息放进本目录。
 
@@ -139,8 +169,12 @@ npm run check:public-release
 - `sourceWindowKey`
 - `signalKey`
 - `severity`
+- `sourceRef`
+- `subject`
+- `observedAt`
 - `scope`
 - `confidence`
+- `gapFields`
 - `trace`
 
 替换这些 domain 字段：
@@ -156,6 +190,8 @@ npm run check:public-release
 - `tenantKey` 必须是 literal，不允许 runtime cross-tenant projection
 - `sourceWindowKey` 必须 deterministic，不允许 UUID / random / ms timestamp
 - `commitment` 默认 `suggestion_only`，不允许 mapper 直接升级成正式承诺
+- 事实 / 承诺 / 阻塞 / 风险 / 机会只能进入 memory candidate，不允许 sample helper 写正式记忆
+- review packet 只能准备 evidence / recommendation / risks / boundaries / nextSteps / owner，不允许自动外发、审批、执行、写 CRM 或写正式记忆
 
 ## 一个完整 fixture 演示
 
@@ -185,4 +221,10 @@ npx vitest run extensions/case-management-sample/signals/case/case-mapper.test.t
 
 ## 反馈 / Feedback
 
-GitHub Issues with label `vertical: case-management-sample`.
+Use the current public-safe GitHub issue templates instead of a label route:
+
+- Golden Path success, blocker, or sample-pack friction: `Golden Path activation report`.
+- Stale or unclear sample documentation: `Documentation correction`.
+- New source-system or integration idea: `Integration request`.
+
+Use synthetic sample data and public-safe command output only. Do not include customer data, private contacts, private domains, credentials, private deployment evidence, security details, or response-time, commercial, support, service, implementation, or roadmap commitment wording.

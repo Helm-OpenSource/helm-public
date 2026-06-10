@@ -5,7 +5,33 @@ created: 2026-06-01
 review_after: 2026-07-01
 public_safety: Public boundary statement. Does not disclose private Pack, Overlay, or customer deployment details.
 ---
-# Helm Open Source And Commercial Boundary
+# Helm Open Source And Commercial Boundary / Helm 开源与商业边界
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+Helm Core 采用 Apache-2.0。`helm-public` 的目标是让交付工程师可以独立
+复刻、运行和审查一个复核优先的业务运营参考实现，而不是承载商业私有
+交付、客户 overlay 或客户部署证据。
+
+商业产品不会替代开源 Core。商业侧只在需要私有合同、托管运营、认证 Pack、
+企业治理或客户专属交付时增加能力。公开仓库必须保持公开安全，并且不能把
+商业 Pack、客户 Overlay 或控制面元数据反向带入 Core。
+
+依赖方向固定为：
+
+```text
+Overlay -> Pack SDK -> Core SDK
+```
+
+Core 可以定义稳定 SDK 接缝；Pack 和 Overlay 可以依赖 Core；Core 不能导入
+商业 Pack、客户 Overlay、客户路径或商业私有逻辑。
+
+官方 / 认证字样必须经过维护者复核。认证不是市场、结算通道、服务等级协议、
+客户结果保证或商标许可。
+
+## English Reference
 
 Helm Core is Apache-2.0. The public repository is intended to be useful on its
 own for delivery engineers who want a forkable, review-first business operations

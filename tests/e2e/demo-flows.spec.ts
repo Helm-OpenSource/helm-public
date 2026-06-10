@@ -399,7 +399,7 @@ test("可以载入本地阿里邮箱示例数据并在收件箱看到真实来�
   await loginAs(page, "founder@demo.com");
   await page.goto("/settings?tab=connectors");
   await waitForWorkspaceUiHydration(page);
-  await expect(page.getByRole("heading", { name: /真实连接器|Real connectors/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /只读连接器|Read-only connectors/i })).toBeVisible();
 
   const mockButton = page.getByRole("button", { name: /载入本地.*示例数据|Load local demo data/i }).first();
   if (await mockButton.isVisible().catch(() => false)) {

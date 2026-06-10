@@ -44,10 +44,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       },
     });
 
-    return successResponse({ suggestion }, "skill formal review deferred");
+    return successResponse(
+      { suggestion },
+      english ? "Skill formal review deferred" : "正式评审已暂缓",
+    );
   } catch (error) {
     return errorResponse(
-      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "defer 正式评审失败"),
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to defer skill formal review" : "defer 正式评审失败"),
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "FORMAL_REVIEW_DEFER_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

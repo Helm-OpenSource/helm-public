@@ -196,7 +196,7 @@ export async function createStripeCheckoutSession(input: {
     "custom_text[submit][message]",
     input.locale === "en-US"
       ? `${input.organizationName} is purchasing Helm Team. Seat posture follows 1 included admin + ${billableSeats} additional active seats.`
-      : `${input.organizationName} 正在购买 Helm Team。当前 seat 结构按 1 个 included admin + ${billableSeats} 个额外 active seat 结算。`,
+      : `${input.organizationName} 正在购买 Helm Team。当前席位结构按 1 个内含管理员席位 + ${billableSeats} 个额外活跃席位结算。`,
   );
 
   return stripeRequest<StripeCheckoutSessionResponse>("/checkout/sessions", { params });

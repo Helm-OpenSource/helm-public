@@ -1,0 +1,32 @@
+{
+  "engine": "postgres",
+  "permissionPosture": "read_only_confirmed",
+  "tables": [
+    {
+      "schema": "public",
+      "name": "deals",
+      "columns": [
+        { "name": "id", "dataType": "integer", "nullable": false },
+        { "name": "name", "dataType": "character varying", "nullable": false },
+        { "name": "amount", "dataType": "numeric", "nullable": true },
+        { "name": "stage", "dataType": "character varying", "nullable": true },
+        { "name": "company_id", "dataType": "integer", "nullable": true },
+        { "name": "owner_id", "dataType": "integer", "nullable": true }
+      ],
+      "indexes": ["deals_pkey"],
+      "foreignKeys": [
+        { "column": "company_id", "referencesTable": "companies", "referencesColumn": "id" }
+      ]
+    },
+    {
+      "schema": "internal",
+      "name": "audit_log",
+      "columns": [
+        { "name": "id", "dataType": "integer", "nullable": false },
+        { "name": "action", "dataType": "text", "nullable": false }
+      ],
+      "indexes": [],
+      "foreignKeys": []
+    }
+  ]
+}

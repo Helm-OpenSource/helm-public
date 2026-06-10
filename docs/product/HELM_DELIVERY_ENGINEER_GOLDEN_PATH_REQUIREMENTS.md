@@ -10,7 +10,36 @@ source_basis:
   - Claude cross-check rounds on 2026-06-01
   - Local repo truth from delivery:doctor, public docs manifest, HSI requirements, and case-management sample
 ---
-# Helm Delivery Engineer Golden Path Requirements
+# Helm Delivery Engineer Golden Path Requirements / Helm 交付工程师 Golden Path 要求
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文是 `Helm-OpenSource/helm-public` 中交付工程师黄金路径的公开 Core 要求契约。它把北极星目标
+收敛成仓库可验证工作：帮助 AI 交付工程师把客户业务实施中的判断、证据、复核、边界和交付包工作，
+组织成可复刻的工程结构。
+
+第一版只覆盖已有表面的要求与验证契约，不新增产品面。`helm-public` 只承接公开 Core、
+基础 SDK、公开样板包、公开文档、公开测试、Docker 快速启动和离线评测。商业行业 Pack 属于
+`helm-packs`；客户 Overlay 属于 `helm-overlays`；BOM、授权、部署注册表、版本清单、
+健康心跳与用量元数据属于 `helm-control-plane`。
+
+核心铁律：
+
+1. 零新增表面：优先复用 `/demo`、`extensions/case-management-sample`、
+   `delivery:doctor`、既有评测和既有公开发布守卫。
+2. 只写相对门禁措辞：公开文本只能使用“现在 / 下一步 / 更后续”和证据门禁，
+   不写具体发布日期或版本日期承诺。
+3. 过门禁前保持私有：仓库可见性切换是最终负责人动作，不由本工作流自动完成。
+4. 不夸大声明：没有精确证据门禁和引用，不得写 `verified`、`clean SDK`、
+   `100% synthetic`、`release-ready` 或 `production-ready`。
+
+黄金路径的最小链路是：克隆公开 Core、用 Docker 快速启动或标准本地路径启动、
+查看 `/demo` 与公开样板包、修改合成夹具、运行既有检查、观察信号 / 复核包路径，
+并确认禁止写入 / 发送 / 批准 / 执行 / 跨租户路径仍被阻断。
+
+## English Reference
 
 This document is the public Core requirements contract for the delivery-engineer
 Golden Path in `Helm-OpenSource/helm-public`.
@@ -84,7 +113,7 @@ readiness, or customer deployment commitments.
 
 | Gate | Delivery-engineer question | Passing evidence | Explicit non-claim |
 |---|---|---|---|
-| Gate-10, nominal first trust | "Can I trust the shape of this repo?" | `npm run delivery:doctor` and `npm run pack:fixture-check` pass with zero failures. | Does not prove SDK cleanliness, customer deployment readiness, or complete sample provenance. |
+| Gate-10, nominal first trust | "Can I trust the shape of this repo?" | `npm run delivery:doctor` and `npm run pack:fixture-check` pass with zero failures. For China-region delivery preflight, `npm run delivery:doctor -- --region cn` reports no unexpected warnings for local profile / mirror / ASR configuration. | Does not prove SDK cleanliness, customer deployment readiness, production region approval, or complete sample provenance. |
 | Gate-30, nominal edit loop | "Do I know where to make the first business change?" | README points to the Golden Path, `case-management-sample` has a minimal edit loop, and the HSI eval path is visible. D2 fresh-clone receipts can support Docker onboarding evidence, but they do not become release approval. | Does not prove a time-bound onboarding guarantee, live connector readiness, or production deployment. |
 | Gate-60, nominal review proof | "Can I prove the fork stays inside review-first boundaries?" | HSI and operating-signal evals pass, forbidden actions remain rejected, and a review packet can be prepared from checked-in public sample artifacts. | Does not approve a pilot, send anything externally, write CRM state, or certify a customer Pack. |
 
@@ -101,6 +130,7 @@ The first version uses existing assets only:
 
 ```bash
 npm run delivery:doctor
+npm run delivery:doctor -- --region cn
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run eval:operating-signal-flow
@@ -110,9 +140,52 @@ npm run check:public-release
 7. Inspect the produced signal / review packet path and confirm that forbidden
    write, send, approve, execute, and cross-tenant paths stay blocked.
 
+The minimum public Core P0 chain is:
+
+```text
+public fixture evidence
+  -> operating signal with sourceRef / time / subject / confidence / gap fields
+  -> memory candidate only
+  -> review packet with evidence / recommendation / risks / boundaries / next steps / owner
+```
+
+This chain must never auto-send, auto-approve, execute, write CRM, or promote an
+official memory record.
+
 The README and sample documentation must provide a concrete "change this line ->
 run this command -> observe this change" walkthrough without adding a new route,
 page, package, or command.
+
+## 4.1 Proof Package Contract
+
+`npm run golden:path` is the single local proof-package entry for the public Core
+Golden Path. It writes only under `/tmp/helm-golden-path-proof` by default and
+must remain a read-only repo inspection plus synthetic fixture diff. The command
+may remove and recreate that temp output directory; it must not write inside the
+source checkout, activate a connector, send externally, write back, approve,
+assign an owner, or promote official memory.
+
+The package must include these files:
+
+| File | Purpose |
+|---|---|
+| `MANIFEST.json` | Contract, pass/fail summary, non-claim list, and file index. |
+| `doctor-receipt.json` | `delivery:doctor` read-only Golden Path receipt. |
+| `pack-fixture-receipt.json` | Public sample pack fixture check receipt. |
+| `fixture-diff-summary.json` | `CASE-SAMPLE-002` first-change proof: `"priorityScore": 64` -> `"priorityScore": 82`, severity `info` -> `warning`. |
+| `hsi-eval-result.json` | Headless Signal Interface offline eval receipt. |
+| `public-release-guard-receipt.json` | Public docs curation plus public-release guard receipt. |
+| `source-profiler-receipt.json` | Local source-profiler sample-app smoke with redacted review packet and candidate-only mappings. |
+| `boundary-note.md` | Explicit non-claims and forbidden actions. |
+| `next-safe-actions.md` | Review-first follow-up checklist. |
+
+The proof package is not customer deployment readiness, not release readiness,
+not connector authorization, not writeback, not external send, not approval
+execution, and not official memory promotion.
+
+`check:golden-path-docs` must keep README, this requirements doc, `docs/STATUS.md`,
+`package.json`, and the proof-package command aligned. `check:boundaries` must
+include that guard so drift is caught before public mirror or release checks.
 
 ## 5. Requirements
 
@@ -188,6 +261,7 @@ command merely to prove the first Golden Path slice.
 
 ```bash
 npm run delivery:doctor
+npm run delivery:doctor -- --region cn
 npm run pack:fixture-check
 npm run eval:headless-signal-interface
 npm run eval:operating-signal-flow
@@ -207,6 +281,8 @@ Machine-checkable acceptance:
 - `pack:fixture-check` passes with zero failures.
 - HSI and operating-signal evals keep forbidden action, sensitive data,
   cross-tenant projection, and LLM commitment incidents at zero.
+- Case-management sample tests prove the signal -> memory candidate -> review
+  packet path remains review-first.
 - `check:public-release` reports zero blockers before any public visibility
   claim.
 
@@ -244,3 +320,4 @@ the R5 / R7 follow-up docs and must be described as Next, not as already done.
 | Date | Change |
 |---|---|
 | 2026-06-01 | Initial public Core Golden Path requirements created from DEF spec, repo truth, and Claude cross-check rounds. |
+| 2026-06-03 | Added the public Core P0 evidence -> signal -> memory candidate -> review packet acceptance chain and kept all customer-visible actions review-first. |

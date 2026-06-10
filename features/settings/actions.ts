@@ -1656,10 +1656,12 @@ export async function transferOrganizationOwnershipAction(
 
 export async function switchOrganizationAction(input: z.infer<typeof switchWorkspaceSchema>) {
   const user = await requireCurrentUser();
+  const currentWorkspace = await getCurrentWorkspace();
+  const english = currentWorkspace.defaultLocale === "en-US";
   const parsed = switchWorkspaceSchema.safeParse(input);
 
   if (!parsed.success) {
-    return { ok: false, error: "Invalid workspace" };
+    return { ok: false, error: english ? "Invalid workspace" : "工作区参数无效" };
   }
 
   const membership = await db.membership.findUnique({
@@ -1675,7 +1677,7 @@ export async function switchOrganizationAction(input: z.infer<typeof switchWorks
   });
 
   if (!membership || membership.status === MembershipStatus.INACTIVE) {
-    return { ok: false, error: "Workspace unavailable" };
+    return { ok: false, error: english ? "Workspace unavailable" : "当前无法切换到该工作区" };
   }
 
   await ensureWorkspaceCommercialFoundation(membership.workspaceId);
@@ -2158,7 +2160,7 @@ export async function createCustomEngagementAction(input: z.infer<typeof customE
   if (!parsed.success) {
     return {
       ok: false,
-      error: english ? "Please provide valid custom engagement details" : "请填写有效的 custom engagement 信息",
+      error: english ? "Please provide valid custom engagement details" : "请填写有效的定制服务信息",
     };
   }
 
@@ -2217,7 +2219,7 @@ export async function createCustomEngagementAction(input: z.infer<typeof customE
       targetId: engagement.id,
       summary: english
         ? `Created custom engagement: ${engagement.label}`
-        : `已创建 custom engagement：${engagement.label}`,
+        : `已创建定制服务：${engagement.label}`,
       payload: {
         engagementKey: engagement.engagementKey,
         engagementType: engagement.engagementType,
@@ -2251,7 +2253,7 @@ export async function createCustomEngagementAction(input: z.infer<typeof customE
           ? error.message
           : english
             ? "Failed to create the custom engagement"
-            : "创建 custom engagement 失败",
+            : "创建定制服务失败",
     };
   }
 }
@@ -2266,7 +2268,7 @@ export async function updateCustomEngagementStatusAction(
   const parsed = customEngagementStatusSchema.safeParse(input);
 
   if (!parsed.success) {
-    return { ok: false, error: english ? "Invalid engagement status update" : "custom engagement 状态参数错误" };
+    return { ok: false, error: english ? "Invalid engagement status update" : "定制服务状态参数错误" };
   }
 
   if (!canManageContributionRegistry(membership.role)) {
@@ -2293,7 +2295,7 @@ export async function updateCustomEngagementStatusAction(
   });
 
   if (!engagement) {
-    return { ok: false, error: english ? "Custom engagement not found" : "没有找到该 custom engagement" };
+    return { ok: false, error: english ? "Custom engagement not found" : "没有找到该定制服务" };
   }
 
   const updated = await db.customEngagement.update({
@@ -2311,7 +2313,7 @@ export async function updateCustomEngagementStatusAction(
     targetId: updated.id,
     summary: english
       ? `Updated custom engagement status: ${updated.label} -> ${updated.status.toLowerCase()}`
-      : `已更新 custom engagement 状态：${updated.label} -> ${updated.status}`,
+      : `已更新定制服务状态：${updated.label} -> ${updated.status}`,
     payload: {
       status: updated.status,
     },
@@ -3326,10 +3328,12 @@ export async function updateWorkspaceSetupAction(input: z.infer<typeof workspace
     where: { id: workspace.id },
     data: {
       profileType: parsed.data.profileType,
+      // Legacy column name. Setup now stores source-intake selections here,
+      // not connector authorization or production connection state.
       connectedSources: JSON.stringify(
         parsed.data.connectedSources.map((name) => ({
           name,
-          status: "connected",
+          status: "diagnostic_selected",
         })),
       ),
       focusAreas: JSON.stringify(parsed.data.focusAreas),
@@ -4527,7 +4531,7 @@ export async function acknowledgeTenantResourceGuardedWritePilotAction(
   if (!parsed.success) {
     return {
       ok: false,
-      error: session.english ? "Invalid pilot 已确认" : "试点确认参数不合法",
+      error: session.english ? "Invalid pilot confirmation" : "试点确认参数不合法",
     };
   }
 
@@ -4547,7 +4551,7 @@ export async function acknowledgeTenantResourceGuardedWritePilotAction(
         error instanceof Error
           ? error.message
           : session.english
-            ? "Pilot 已确认 failed"
+            ? "Pilot confirmation failed"
             : "试点确认失败",
     };
   }

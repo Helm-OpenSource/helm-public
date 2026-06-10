@@ -13,6 +13,14 @@ const promptNameZh: Record<string, string> = {
   "bi-report-review": "经营报告复核",
 };
 
+const promptNameEn: Record<string, string> = {
+  "meeting-memory-extraction": "Meeting memory extraction",
+  "object-briefing": "Object briefing",
+  "recommendation-explanation": "Recommendation explanation",
+  "bi-report-analysis": "Business report analysis",
+  "bi-report-review": "Business report review",
+};
+
 const promptTaskTypeZh: Record<string, string> = {
   MEETING_MEMORY_EXTRACTION: "会议记忆提取",
   CONTACT_BRIEFING: "联系人简报",
@@ -24,8 +32,28 @@ const promptTaskTypeZh: Record<string, string> = {
   BI_REPORT_REVIEW: "经营报告复核",
 };
 
+const promptTaskTypeEn: Record<string, string> = {
+  MEETING_MEMORY_EXTRACTION: "Meeting memory extraction",
+  CONTACT_BRIEFING: "Contact briefing",
+  COMPANY_BRIEFING: "Company briefing",
+  OPPORTUNITY_BRIEFING: "Opportunity briefing",
+  MEETING_BRIEFING: "Meeting briefing",
+  RECOMMENDATION_EXPLANATION: "Recommendation explanation",
+  BI_REPORT_ANALYSIS: "Business report analysis",
+  BI_REPORT_REVIEW: "Business report review",
+};
+
 function normalizeProviderName(value: string) {
   return value.trim().toLowerCase();
+}
+
+function humanizeKey(value: string) {
+  const normalized = value
+    .replace(/^prompt[-_.]?/i, "")
+    .replace(/[-_]+v\d+$/i, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return normalized ? normalized[0].toUpperCase() + normalized.slice(1).toLowerCase() : value;
 }
 
 export function formatSettingsModelProviderName(
@@ -74,15 +102,15 @@ export function formatSettingsModelSelection(
 }
 
 export function formatSettingsPromptName(key: string, english: boolean) {
-  if (english) return key;
+  if (english) return promptNameEn[key] ?? humanizeKey(key);
 
   return promptNameZh[key] ?? "说明模板";
 }
 
 export function formatSettingsPromptVersion(version: string, english: boolean) {
-  if (english) return version;
-
   const match = version.match(/v(\d+)/i);
+  if (english) return match ? `Version ${match[1]}` : "Current version";
+
   return match ? `版本 ${match[1]}` : "当前版本";
 }
 
@@ -90,7 +118,7 @@ export function formatSettingsPromptTaskType(
   taskType: string,
   english: boolean,
 ) {
-  if (english) return taskType;
+  if (english) return promptTaskTypeEn[taskType] ?? humanizeKey(taskType);
 
   return promptTaskTypeZh[taskType] ?? "经营说明";
 }
@@ -99,7 +127,28 @@ export function formatSettingsPromptDescription(
   description: string,
   english: boolean,
 ) {
-  if (english) return description;
+  if (english) {
+    return description
+      .replace(/增强 recommendation explanation，但不改变排序和策略边界。/g, "Enhance recommendation explanation without changing ranking or review rules.")
+      .replace(/把会议纪要提取成结构化记忆对象。/g, "Extract meeting notes into reusable memory objects.")
+      .replace(/结构化记忆对象/g, "reusable memory objects")
+      .replace(/结构化/g, "structured")
+      .replace(/策略边界/g, "review rules")
+      .replace(/经营报告/g, "business report")
+      .replace(/建议说明/g, "recommendation explanation")
+      .replace(/简报/g, "briefing")
+      .replace(/复核/g, "review")
+      .replace(/建议/g, "recommendation")
+      .replace(/说明/g, "explanation")
+      .replace(/判断/g, "judgement")
+      .replace(/会议信息/g, "meeting information")
+      .replace(/会议纪要/g, "meeting notes")
+      .replace(/对象/g, "object")
+      .replace(/联系人/g, "contact")
+      .replace(/公司/g, "company")
+      .replace(/机会/g, "opportunity")
+      .replace(/会议/g, "meeting");
+  }
 
   const formatted = description
     .replace(/把会议纪要提取成结构化记忆对象。/g, "把会议纪要整理成可复用的事实、承诺和阻塞。")
@@ -130,11 +179,94 @@ export function formatSettingsCapabilityCategory(
   return category;
 }
 
+const skillSuggestionCapabilityNameEn: Record<string, string> = {
+  外部承诺复核缓冲包: "External commitment review buffer",
+  简洁外发语气包: "Concise outbound tone pack",
+  会后跟进窗口包: "Post-meeting follow-up window pack",
+  预算阻塞澄清包: "Budget blocker clarification pack",
+  预算阻碍澄清包: "Budget blocker clarification pack",
+  停滞机会恢复包: "Stalled opportunity recovery pack",
+  关系回温包: "Relationship re-warm pack",
+};
+
+function translateSkillSuggestionCapabilityNames(text: string) {
+  let formatted = text;
+  for (const [zh, en] of Object.entries(skillSuggestionCapabilityNameEn)) {
+    formatted = formatted.replace(new RegExp(zh, "g"), en);
+  }
+  return formatted;
+}
+
+function formatSettingsSkillSuggestionEnglishText(text: string) {
+  const formatted = translateSkillSuggestionCapabilityNames(text)
+    .replace(/建议把“([^”]+)”收成候选能力/g, 'Suggest turning "$1" into a candidate capability')
+    .replace(/“([^”]+)”已通过正式复核，当前只进入待晋升批准状态，仍需人工补静态能力目录、测试、守卫和文档。/g, '"$1" passed formal review and is only pending promotion approval; a human still needs to add the static capability catalog entry, tests, guards and docs.')
+    .replace(/“([^”]+)”已被正式复核暂缓，当前保留在人工治理层，等待复核人重新入队或补充说明。/g, '"$1" was deferred in formal review and remains under human governance until a reviewer requeues it or adds prerequisite context.')
+    .replace(/“([^”]+)”已被正式复核拒绝，当前不会进入正式能力晋升，需要后续重新判断是否值得再入队。/g, '"$1" was rejected in formal review and will not be promoted unless it is reassessed later.')
+    .replace(/“([^”]+)”已进入正式复核队列，下一步仍是人工决定是否补能力目录、测试、守卫和文档。/g, '"$1" entered the formal review queue; the next step is still a human decision about catalog, tests, guards and docs.')
+    .replace(/“([^”]+)”已从正式复核返回加固，会继续记录边界事件并在证据更稳后重新进入队列。/g, '"$1" was returned from formal review for hardening; boundary events will keep being recorded before it can re-enter the queue.')
+    .replace(/“([^”]+)”已达到 formal review ready，可以进入人工正式复核队列，但仍不是正式能力。/g, '"$1" reached formal review ready and can enter the human formal review queue, but it is still not a formal capability.')
+    .replace(/“([^”]+)”当前仍在候选能力校准期，暂未进入正式复核队列。/g, '"$1" is still calibrating as a candidate capability and has not entered formal review.')
+    .replace(/已把“([^”]+)”提升为观察期能力，会继续积累证据但仍不进入正式能力目录或执行路由。/g, 'Promoted "$1" to probationary capability; it will keep accumulating evidence but still does not enter the formal capability catalog or execution routing.')
+    .replace(/已把“([^”]+)”收口为复核优先的候选能力，会继续积累证据但不会自动变成正式能力。/g, 'Captured "$1" as a review-first candidate capability; it will keep accumulating evidence but will not automatically become a formal capability.')
+    .replace(/当前校准分 (\d+)，复现 (\d+) 次，边界事件 (\d+) 次。/g, "Current calibration score $1, reproduced $2 time(s), boundary events $3.")
+    .replace(/当前校准信号：采纳 (\d+)、驳回 (\d+)、边界事件 (\d+)。/g, "Current calibration signal: accepted $1, dismissed $2, boundary events $3.")
+    .replace(/当前已达到 formal review ready 状态，但仍需要人工写入静态能力目录、测试和文档。/g, "It has reached formal review ready, but a human still needs to add the static capability catalog entry, tests and docs.")
+    .replace(/当前已达到 formal review ready 判断阈值。/g, "It has reached the formal review ready threshold.")
+    .replace(/当前仍未达到正式复核就绪阈值。/g, "It has not reached the formal review readiness threshold.")
+    .replace(/这条能力已经进入观察期能力层，会继续积累证据和复核备注。/g, "This capability has entered the probationary layer and will keep accumulating evidence and review notes.")
+    .replace(/这条能力目前仍停留在候选能力层，只作为复核优先的候选能力观察。/g, "This capability remains in the candidate layer and is only observed as a review-first candidate capability.")
+    .replace(/它已经通过正式复核，但仍只是待晋升批准状态，必须人工补静态能力目录、测试、守卫和文档后才可能成为正式能力。/g, "It passed formal review but is still only pending promotion approval; it can become formal only after a human adds the static catalog entry, tests, guards and docs.")
+    .replace(/它已被正式复核暂缓，当前仍停留在人工治理层，等待复核人重新入队或补充前置材料。/g, "It was deferred in formal review and remains under human governance until a reviewer requeues it or adds prerequisites.")
+    .replace(/它已被正式复核拒绝，当前不会自动进入正式晋升，也不会因此获得任何执行权限。/g, "It was rejected in formal review; it will not be promoted automatically and gains no execution authority.")
+    .replace(/它已经进入正式复核队列，但仍然只是人工评审项，不代表已经成为正式系统能力。/g, "It has entered the formal review queue, but it is still a human review item and not a formal system capability.")
+    .replace(/它曾被正式复核退回加固，会继续在候选\/观察层积累证据与边界说明。/g, "It was returned from formal review for hardening and will keep accumulating evidence and boundary notes in the candidate or probationary layer.")
+    .replace(/它已达到正式复核就绪状态，但仍需要人工补静态能力目录、测试、守卫和文档后才能成为正式系统能力。/g, "It is formal-review ready, but a human still needs to add the static capability catalog entry, tests, guards and docs before it can become a formal system capability.")
+    .replace(/它还没有进入正式复核队列，也不会自动获得路由、发送、承诺或正式写入权限。/g, "It has not entered the formal review queue and does not automatically gain routing, send, commitment, or formal write authority.")
+    .replace(/这只是一条复核优先 的候选能力，用来帮助人更稳地复核外部承诺类草稿，不代表 Helm 获得自动对外发送或自动承诺权限。/g, "This is a review-first candidate capability for safer human review of external-commitment drafts. It does not grant Helm automatic external-send or automatic-commitment authority.")
+    .replace(/这只是一条仅草稿的候选能力，用来偏向更简洁的外发草稿，不代表 Helm 可以绕过复核或直接替人发出外部消息。/g, "This is a draft-only candidate capability for more concise outbound drafts. It does not let Helm bypass review or send external messages for people.")
+    .replace(/这只是一条复核优先 的候选能力，用来把会后 24 小时窗口内更有效的推进姿态沉淀出来，不代表 Helm 自动生成外部承诺或替人决定下一步。/g, "This is a review-first candidate capability for post-meeting follow-up within the 24-hour window. It does not let Helm create external commitments or decide the next step for people.")
+    .replace(/这只是一条仅草稿的候选能力，用来把预算阻塞澄清、补材料和下一步建议写成可复核草稿，不代表 Helm 获得报价承诺或付款承诺权限。/g, "This is a draft-only candidate capability for budget-blocker clarification, supplemental material and reviewed next-step drafts. It does not grant quoting or payment-commitment authority.")
+    .replace(/这只是一条复核优先 的候选能力，用来恢复停滞机会的内部推进，不代表 Helm 可以自动改阶段、自动承诺对外结果或自动写回高风险状态。/g, "This is a review-first candidate capability for internal stalled-opportunity recovery. It does not let Helm auto-change stages, commit external outcomes, or write high-risk states.")
+    .replace(/这只是一条仅草稿的候选能力，用来帮助关系回温和低阻力恢复触达，不代表 Helm 获得对外发送权限或替人决定承诺内容。/g, "This is a draft-only candidate capability for relationship re-warm and low-friction outreach. It does not grant external-send authority or decide commitment content for people.")
+    .replace(/类别 ([a-z_]+)，默认面为 ([a-z_]+)。/g, "Category $1, default surface $2.")
+    .replace(/校准分 (\d+)，证据 (\d+)，持续复现 (\d+)。/g, "Calibration score $1, evidence $2, repeated signal $3.")
+    .replace(/\bADVANCING\b/g, "Advancing")
+    .replace(/\bINTERNAL_SYNC\b/g, "Internal sync")
+    .replace(/\bWAITING_THEM\b/g, "Waiting on them")
+    .replace(/\bNEEDS_REVIEW\b/g, "Needs review")
+    .replace(/\bAUTO_WITHIN_THRESHOLD\b/g, "Auto within threshold")
+    .replace(/\bREQUIRES_APPROVAL\b/g, "Requires approval")
+    .replace(/\bSUGGEST_ONLY\b/g, "Suggest only")
+    .replace(/\bFORBIDDEN\b/g, "Forbidden")
+    .replace(/\bwithin_48h_preferred\b/g, "within 48 hours preferred")
+    .replace(/\bmeeting_followup\b/g, "meeting follow-up")
+    .replace(/\bcontact_followup\b/g, "contact follow-up")
+    .replace(/预算阻碍/g, "budget blocker")
+    .replace(/预算阻塞/g, "budget blocker")
+    .replace(/阻碍/g, "blocker")
+    .replace(/阻塞/g, "blocker")
+    .replace(/draft-only/gi, "draft-only")
+    .replace(/review-first/gi, "review-first")
+    .replace(/review-before-send/gi, "review before send")
+    .replace(/approved-pending-promotion/gi, "approved pending promotion")
+    .replace(/probationary capability/gi, "probationary capability")
+    .replace(/candidate capability/gi, "candidate capability")
+    .replace(/candidate-only/gi, "candidate-only")
+    .replace(/formal review ready/gi, "formal review ready")
+    .replace(/formal review/gi, "formal review")
+    .replace(/formal skill/gi, "formal capability")
+    .replace(/skill catalog/gi, "capability catalog");
+
+  return formatSeededBusinessCopy(formatted, true);
+}
+
 export function formatSettingsSkillSuggestionText(
   text: string | null | undefined,
   english: boolean,
 ) {
-  if (!text || english) return text ?? "";
+  if (!text) return "";
+  if (english) return formatSettingsSkillSuggestionEnglishText(text);
 
   const formatted = text
     .replace(/\bADVANCING\b/g, "推进中")

@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "helm.signal-first-mile-quality-goldens.v1",
+  "version": "0.1.0",
+  "status": "public_safe_sample",
+  "generatedAt": "2026-06-03T00:00:00.000Z",
+  "boundary": "Synthetic and alias-only Signal First Mile quality goldens. This is not customer deployment readiness, connector authorization, external send, writeback, approval, or memory promotion.",
+  "thresholds": {
+    "precision": 1,
+    "recall": 1,
+    "signalFamilyAccuracy": 1,
+    "dispositionAccuracy": 1,
+    "requiredFieldCompleteness": 0.9,
+    "evidenceCoverage": 0.8,
+    "reviewerCompleteness": 1,
+    "boundaryIncidentCount": 0,
+    "rawPrivateLeakCount": 0
+  },
+  "cases": [
+    {
+      "caseId": "SFM-QUALITY-CRM-RISK-001",
+      "signalKey": "sfm-sample-risk-001",
+      "sourceRef": "crm-row-17",
+      "businessObjectRef": "Deal-Alias-001",
+      "sourceFamily": "crm",
+      "signalFamily": "risk",
+      "dispositionMode": "assign_reviewer",
+      "requiredEvidenceRefs": ["crm-row-17"],
+      "requiredOwner": "delivery-owner",
+      "requiredReviewer": "customer-reviewer",
+      "requiredForbiddenNextActions": [
+        "auto_send",
+        "auto_approve",
+        "auto_write_back",
+        "auto_assign_owner",
+        "promote_to_memory_without_review"
+      ]
+    },
+    {
+      "caseId": "SFM-QUALITY-MEETING-COMMITMENT-001",
+      "signalKey": "sfm-sample-commitment-001",
+      "sourceRef": "meeting-note-05",
+      "businessObjectRef": "Meeting-Alias-005",
+      "sourceFamily": "meeting",
+      "signalFamily": "commitment",
+      "dispositionMode": "prepare_review_packet",
+      "requiredEvidenceRefs": ["meeting-note-05", "followup-alias-05"],
+      "requiredOwner": "delivery-owner",
+      "requiredReviewer": "customer-reviewer",
+      "requiredForbiddenNextActions": [
+        "auto_send",
+        "auto_approve",
+        "auto_write_back",
+        "auto_assign_owner",
+        "promote_to_memory_without_review"
+      ]
+    },
+    {
+      "caseId": "SFM-QUALITY-TICKET-EVIDENCE-GAP-001",
+      "signalKey": "sfm-sample-evidence-gap-001",
+      "sourceRef": "ticket-row-09",
+      "businessObjectRef": "Case-Alias-009",
+      "sourceFamily": "ticket",
+      "signalFamily": "evidence_gap",
+      "dispositionMode": "request_evidence",
+      "requiredEvidenceRefs": ["ticket-row-09", "sla-alias-09"],
+      "requiredOwner": "support-owner",
+      "requiredReviewer": "customer-reviewer",
+      "requiredForbiddenNextActions": [
+        "auto_send",
+        "auto_approve",
+        "auto_write_back",
+        "auto_assign_owner",
+        "promote_to_memory_without_review"
+      ]
+    },
+    {
+      "caseId": "SFM-QUALITY-SHEET-PACING-001",
+      "signalKey": "sfm-sample-pacing-001",
+      "sourceRef": "sheet-row-12",
+      "businessObjectRef": "Workstream-Alias-012",
+      "sourceFamily": "sheet",
+      "signalFamily": "pacing",
+      "dispositionMode": "schedule_recheck",
+      "requiredEvidenceRefs": ["sheet-row-12", "status-age-12"],
+      "requiredOwner": "delivery-owner",
+      "requiredReviewer": "customer-reviewer",
+      "requiredForbiddenNextActions": [
+        "auto_send",
+        "auto_approve",
+        "auto_write_back",
+        "auto_assign_owner",
+        "promote_to_memory_without_review"
+      ]
+    },
+    {
+      "caseId": "SFM-QUALITY-DELIVERY-RECEIPT-001",
+      "signalKey": "sfm-sample-receipt-001",
+      "sourceRef": "receipt-alias-04",
+      "businessObjectRef": "Receipt-Alias-004",
+      "sourceFamily": "delivery",
+      "signalFamily": "receipt",
+      "dispositionMode": "record_receipt",
+      "requiredEvidenceRefs": ["receipt-alias-04", "outcome-alias-04"],
+      "requiredOwner": "delivery-owner",
+      "requiredReviewer": "customer-reviewer",
+      "requiredForbiddenNextActions": [
+        "auto_send",
+        "auto_approve",
+        "auto_write_back",
+        "auto_assign_owner",
+        "promote_to_memory_without_review"
+      ]
+    }
+  ]
+}

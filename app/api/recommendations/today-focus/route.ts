@@ -1,9 +1,12 @@
 import { getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
+import { resolveApiWorkspaceMessage } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { getTodayFocusRecommendations } from "@/lib/recommendations/recommendation.service";
 import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET(request: Request) {
+  let workspaceLocale: string | null | undefined;
+
   try {
     const session = await getCurrentWorkspaceSessionOrNull();
 
@@ -13,16 +16,29 @@ export async function GET(request: Request) {
 
     const user = session.user;
     const workspace = session.workspace;
+    workspaceLocale = workspace.defaultLocale;
+    const english = workspace.defaultLocale === "en-US";
     const data = await getTodayFocusRecommendations({
       workspaceId: workspace.id,
       actorName: user.name,
       actorUserId: user.id,
       actorType: "USER",
       sourcePage: request.url,
+      english,
     });
 
     return successResponse(data, "ok");
   } catch (error) {
-    return errorResponse(serverErrorMessage(error, "生成今日重点失败"), "TODAY_FOCUS_FAILED", 500);
+    return errorResponse(
+      serverErrorMessage(
+        error,
+        resolveApiWorkspaceMessage(workspaceLocale, {
+          zh: "生成今日重点失败",
+          en: "Failed to generate today focus",
+        }),
+      ),
+      "TODAY_FOCUS_FAILED",
+      500,
+    );
   }
 }

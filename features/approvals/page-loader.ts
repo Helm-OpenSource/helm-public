@@ -81,7 +81,7 @@ export async function loadApprovalsPageData(
   });
   const english = locale === "en-US";
   const { approvalId, evidenceOpen } = (await searchParams) ?? {};
-  const tasks = await getApprovalTasksData(workspace.id);
+  const tasks = await getApprovalTasksData(workspace.id, english);
   const actionTypes = tasks.map(
     (task) => task.actionItem.actionType as ActionType,
   );
@@ -117,6 +117,7 @@ export async function loadApprovalsPageData(
         workspaceId: workspace.id,
         userId: user.id,
         actionTypes,
+        locale,
       }),
       {},
     ),

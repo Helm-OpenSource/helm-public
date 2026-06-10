@@ -169,6 +169,7 @@ export function createCustomerSuccessDetailReportingContract(
 
 export function toCustomerSuccessHandoffPageReportingProtocol(
   contract: CustomerSuccessHandoffSurfaceContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.customerSuccessHandoffJudgement,
@@ -182,6 +183,7 @@ export function toCustomerSuccessHandoffPageReportingProtocol(
     pageWorkerSummary: contract.customerSuccessHandoffWorkerSummary,
     pagePrioritySignal: labelForRiskSignal(
       contract.customerSuccessHandoffRiskSignal,
+      english,
     ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
@@ -190,6 +192,7 @@ export function toCustomerSuccessHandoffPageReportingProtocol(
 
 export function toCustomerSuccessDetailPageReportingProtocol(
   contract: CustomerSuccessDetailReportingContract,
+  english = false,
 ): PageReportingProtocol {
   return createPageReportingProtocol({
     pageJudgement: contract.customerSuccessDetailJudgement,
@@ -203,6 +206,7 @@ export function toCustomerSuccessDetailPageReportingProtocol(
     pageWorkerSummary: contract.customerSuccessDetailWorkerSummary,
     pagePrioritySignal: labelForRiskSignal(
       contract.customerSuccessDetailRiskSignal,
+      english,
     ),
     pageEscalationHint: contract.pageEscalationHint,
     pageEvidenceLinks: contract.pageEvidenceLinks,
@@ -318,8 +322,8 @@ function validateSharedFields({
   }
 }
 
-function labelForRiskSignal(signal: CustomerSuccessRiskSignal) {
-  if (signal === "high") return "高风险接手";
-  if (signal === "caution") return "谨慎跟进";
-  return "继续观察";
+function labelForRiskSignal(signal: CustomerSuccessRiskSignal, english: boolean) {
+  if (signal === "high") return english ? "High-risk handoff" : "高风险接手";
+  if (signal === "caution") return english ? "Follow up with caution" : "谨慎跟进";
+  return english ? "Keep watching" : "继续观察";
 }

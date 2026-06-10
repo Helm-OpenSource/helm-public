@@ -29,7 +29,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDateLabel } from "@/lib/utils";
 import {
   acknowledgeTenantResourceGuardedWritePilotAction,
   requestTenantResourceGuardedWritePilotAction,
@@ -39,6 +38,7 @@ import {
   submitTenantResourceManualProofAction,
   withdrawTenantResourceManualProofAction,
 } from "@/features/settings/actions";
+import { formatTenantResourceDateLabel } from "@/features/settings/components/tenant-resource-date-labels";
 import { Info } from "@/features/settings/components/settings-display";
 import {
   formatTenantResourceDisplayName,
@@ -167,7 +167,7 @@ export function TenantResourceReadinessPanel({
           />
           <Info
             label={english ? "Generated at" : "生成时间"}
-            value={formatDateLabel(new Date(summary.generatedAt))}
+            value={formatTenantResourceDateLabel(summary.generatedAt, english)}
           />
         </div>
 
@@ -240,7 +240,7 @@ export function TenantResourceReadinessPanel({
             <div className="workspace-panel rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted-foreground)]">
               {english
                 ? "No tenant resources are registered yet. Connectors, CRM imports, capture sessions and tenant extensions will appear here after their existing source-of-truth records exist."
-                : "当前还没有登记的租户资源。已有连接器、CRM 导入、现场采集和租户扩展在各自来源记录存在后会出现在这里。"}
+                : "当前还没有登记的租户资源。已有连接器、客户关系系统导入、现场采集和租户扩展在各自来源记录存在后会出现在这里。"}
             </div>
           )}
         </div>
@@ -328,7 +328,7 @@ function TenantResourceReadinessRow({
           label={english ? "Last sync" : "最近同步"}
           value={
             resource.connection.lastSyncAt
-              ? formatDateLabel(new Date(resource.connection.lastSyncAt))
+              ? formatTenantResourceDateLabel(resource.connection.lastSyncAt, english)
               : english
                 ? "Not recorded"
                 : "未记录"
@@ -438,7 +438,7 @@ function TenantResourceEvidenceDisclosure({
       <p className="mt-4 rounded-2xl border border-dashed border-[color:var(--border)] px-4 py-3 text-sm text-[color:var(--muted-foreground)]">
         {english
           ? "Evidence detail has not been generated for this resource yet."
-          : "这条资源还没有生成 evidence detail。"}
+          : "这条资源还没有生成证据详情。"}
       </p>
     );
   }
@@ -458,7 +458,7 @@ function TenantResourceEvidenceDisclosure({
             label={english ? "Freshness" : "新鲜度"}
             value={`${formatEvidenceToken(detail.timing.freshnessPosture, english)} · ${
               detail.timing.observedAt
-                ? formatDateLabel(new Date(detail.timing.observedAt))
+                ? formatTenantResourceDateLabel(detail.timing.observedAt, english)
                 : english
                   ? "not recorded"
                   : "未记录"
@@ -847,7 +847,7 @@ function TenantResourceGuardedWritePilotControls({
                   ? "Optional review note. Reject requires a short reason."
                   : "可填写复核备注；拒绝时需要简短原因。"
                 : english
-                  ? "Optional 已确认 note."
+                  ? "Optional acknowledgement note."
                   : "可填写确认备注。"
           }
           value={note}
@@ -937,7 +937,7 @@ function TenantResourceGuardedWritePilotControls({
       </div>
       <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">
         {english
-          ? "This pilot never writes to the external system. It only proves that accepted proof plus eligible evaluation can stay reviewable through a local candidate / review / 已确认 seam."
+          ? "This pilot never writes to the external system. It only proves that accepted proof plus eligible evaluation can stay reviewable through a local candidate / review / acknowledgement seam."
           : "这个试点不会写入外部系统。它只证明已接受证据与符合条件的评估可以进入本地候选、复核与确认链路，并持续保持可复核。"}
       </p>
     </div>

@@ -79,11 +79,11 @@ export function CaptureSessionPanel({
     panelTitle: english ? "Start capture" : "开始记录",
     panelDescription: english
       ? "This is not just a recorder. Once you stop, Helm will turn the transcript into facts, commitments, blockers and follow-up actions."
-      : "这不是一个录音工具。结束记录后，Helm 会把转写文本转成事实、承诺、阻塞和后续动作。",
+      : "这不是一个录音工具。结束记录后，Helm会把转写文本转成事实、承诺、阻塞和后续动作。",
     entryBadge: english ? "Live capture entry" : "现场记录入口",
     currentObject: english ? "Current object:" : "当前对象：",
     classifyLater: english ? "Classify later" : "稍后归类",
-    browserMvp: english ? "Browser audio MVP" : "浏览器录音 MVP",
+    browserMvp: english ? "Browser audio MVP" : "浏览器录音最小可用版",
     entryDescription: english
       ? "Open it during customer calls, candidate conversations, partnership discussions or internal priority sessions. The front-end only handles start and stop; the backend handles transcription, understanding and writeback. If the device cannot record audio, it automatically falls back to note mode."
       : "适合在客户会、候选人沟通、合作讨论和内部优先级会话里直接打开。前台只做开始与结束，后台会自动完成转写、理解和写回；如果当前设备不支持录音，会自动回退到速记模式。",
@@ -99,13 +99,13 @@ export function CaptureSessionPanel({
       : "当前会在结束记录时上传真实音频，并优先走真实语音转写。若语音转写不可用，会自动回退到速记文本或兜底转写。",
     notesHint: english
       ? "No usable microphone is available, so the system will continue with your typed notes."
-      : "当前没有拿到可用麦克风，Helm 会改用你输入的速记文本继续打通后续链路。",
+      : "当前没有拿到可用麦克风，Helm会改用你输入的速记文本继续打通后续链路。",
     transcriptLabel: english
       ? "Notes / transcript draft"
       : "现场速记 / 转写草稿",
     transcriptPlaceholder: english
       ? "Paste live notes here. If ASR is unavailable, Helm will prefer this text; if this is also empty, it falls back to the demo transcript."
-      : "可以直接粘贴现场速记。若真实语音转写不可用，Helm 会优先使用这里的文本；如果这里也为空，才会回退到演示转写。",
+      : "可以直接粘贴现场速记。若真实语音转写不可用，Helm会优先使用这里的文本；如果这里也为空，才会回退到演示转写。",
     stop: english ? "Stop and process" : "结束记录并处理",
     close: english ? "Close for now" : "稍后继续",
     processing: english ? "Processing capture" : "正在处理现场记录",

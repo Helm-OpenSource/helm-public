@@ -33,6 +33,34 @@ describe("business asset display copy", () => {
     expect(Object.values(chain).join(" ")).not.toMatch(/fixture|fallback|tenant|workspace/i);
   });
 
+  it("localizes seeded Chinese judgement-chain copy for English surfaces", () => {
+    const chain = buildBusinessAssetJudgementChain({
+      english: true,
+      signal: "客户一周没有确认方案",
+      judgement: "机会正在降温",
+      action: "先补一次确认会议",
+      needsReview: true,
+      learningTarget: "客户资产记忆",
+    });
+
+    expect(chain.signal).toBe(
+      "Signal seen: Customer has not confirmed the proposal for one week",
+    );
+    expect(chain.judgement).toBe(
+      "Current judgement: Opportunity momentum is cooling",
+    );
+    expect(chain.action).toBe(
+      "Recommended move: Schedule a confirmation meeting first",
+    );
+    expect(chain.review).toBe(
+      "Human review is required before this becomes an external move.",
+    );
+    expect(chain.learn).toBe(
+      "After handling, the result should write back to customer asset memory.",
+    );
+    expect(Object.values(chain).join(" ")).not.toMatch(/[\u4e00-\u9fff]/);
+  });
+
   it("builds stable asset routes from business objects", () => {
     expect(normalizeBusinessAssetType("risk")).toBe("risk");
     expect(normalizeBusinessAssetType("meeting")).toBeNull();

@@ -1,0 +1,19 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Synthetic API", "version": "1.0.0" },
+  "components": {
+    "schemas": {
+      "Meeting": {
+        "type": "object",
+        "required": ["title", "startTime"],
+        "properties": {
+          "id": { "type": "integer" },
+          "title": { "type": "string" },
+          "startTime": { "type": "string", "format": "date-time" },
+          "contactId": { "type": "integer" },
+          "companyId": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

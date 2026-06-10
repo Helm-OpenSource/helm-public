@@ -20,7 +20,11 @@ import {
   WECOM_OAUTH_CALLBACK_SOURCE_PAGE,
 } from "@/lib/connectors/wecom";
 import { db } from "@/lib/db";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiWorkspaceMessage,
+} from "@/lib/i18n/api-message-locale";
+import { resolveUiLocale, UI_LOCALE_COOKIE } from "@/lib/i18n/config";
 
 function normalizeEmail(value: string | null | undefined) {
   const trimmed = value?.trim().toLowerCase();
@@ -81,21 +85,21 @@ function buildCallbackStatusCopy(input: {
 
   switch (input.status) {
     case "connected":
-      return "企业微信 OAuth 回调已完成，当前 workspace 范围会话已生效。";
+      return "企业微信 OAuth 回调已完成，当前工作区范围会话已生效。";
     case "oauth-error":
       return "企业微信在回调阶段返回了 OAuth 错误。";
     case "failure":
       return "企业微信回调在身份绑定完成前失败。";
     case "unresolved":
-      return "企业微信回调已完成，但 Helm 无法把企业微信身份解析到当前 workspace 用户。";
+      return "企业微信回调已完成，但 Helm 无法把企业微信身份解析到当前工作区用户。";
     case "mismatch":
-      return "企业微信回调已完成，但企业微信身份与当前 workspace 用户不匹配。";
+      return "企业微信回调已完成，但企业微信身份与当前工作区用户不匹配。";
     case "missing-state":
-      return "企业微信回调状态 缺失或已过期。";
+      return "企业微信回调状态缺失或已过期。";
     case "invalid-state":
-      return "企业微信回调状态 无法被信任。";
+      return "企业微信回调状态无法被信任。";
     case "forbidden":
-      return "当前角色不能管理这个 workspace 的企业微信连接器回调。";
+      return "当前角色不能管理这个工作区的企业微信连接器回调。";
   }
 }
 
@@ -139,6 +143,8 @@ export async function GET(request: Request) {
     url.searchParams.get("message");
   const cookieStore = await cookies();
   const rawState = cookieStore.get(getWeComStateCookieName())?.value ?? null;
+  const requestLocale = resolveUiLocale(cookieStore.get(UI_LOCALE_COOKIE)?.value);
+  const requestEnglish = requestLocale === "en-US";
   cookieStore.delete(getWeComStateCookieName());
 
   const currentUser = await getCurrentUser();
@@ -147,7 +153,7 @@ export async function GET(request: Request) {
     return buildSettingsRedirect(request, {
       status: "missing-state",
       message: buildCallbackStatusCopy({
-        english: true,
+        english: requestEnglish,
         status: "missing-state",
       }),
     });
@@ -158,14 +164,14 @@ export async function GET(request: Request) {
     stateParam: state,
     currentUser,
     capability: "connectors",
-    english: true,
+    english: requestEnglish,
   });
 
   if (!callbackContext.ok) {
     return buildSettingsRedirect(request, {
       status: callbackContext.status,
       message: buildCallbackStatusCopy({
-        english: true,
+        english: requestEnglish,
         status: callbackContext.status,
         message: callbackContext.message,
       }),
@@ -194,7 +200,10 @@ export async function GET(request: Request) {
   if (!workspace || !workspaceUser) {
     return buildSettingsRedirect(request, {
       status: "failure",
-      message: "Workspace callback context could not be resolved.",
+      message: resolveApiWorkspaceMessage(requestLocale, {
+        zh: "无法解析工作区回调上下文。",
+        en: "Workspace callback context could not be resolved.",
+      }),
     });
   }
 
@@ -313,14 +322,14 @@ export async function GET(request: Request) {
         redirectStatus: "unresolved",
         summary: english
           ? "WeCom OAuth callback could not resolve a provider email or mobile"
-          : "企业微信 OAuth 回调无法解析 provider 邮箱或手机号",
+          : "企业微信 OAuth 回调无法解析服务商邮箱或手机号",
         message: identity.userId
           ? english
             ? "WeCom returned a user identifier, but no email or mobile that Helm could bind to the active workspace user."
-            : "企业微信返回了用户标识，但没有返回 Helm 可用于绑定当前 workspace 用户的邮箱或手机号。"
+            : "企业微信返回了用户标识，但没有返回 Helm 可用于绑定当前工作区用户的邮箱或手机号。"
           : english
             ? "WeCom callback did not return an internal user identifier that Helm could bind to the active workspace user."
-            : "企业微信回调没有返回 Helm 可用于绑定当前 workspace 用户的内部用户标识。",
+            : "企业微信回调没有返回 Helm 可用于绑定当前工作区用户的内部用户标识。",
         profile,
         corpId: identity.corpId,
       });
@@ -336,15 +345,15 @@ export async function GET(request: Request) {
         redirectStatus: "mismatch",
         summary: english
           ? "WeCom OAuth callback identity mismatched the active workspace user"
-          : "企业微信 OAuth 回调身份与当前 workspace 用户不匹配",
+          : "企业微信 OAuth 回调身份与当前工作区用户不匹配",
         message:
           providerIdentity && workspaceIdentity
             ? english
               ? `WeCom returned ${providerIdentity}, but the active workspace user is ${workspaceIdentity}.`
-              : `企业微信返回的是 ${providerIdentity}，但当前 workspace 用户是 ${workspaceIdentity}。`
+              : `企业微信返回的是 ${providerIdentity}，但当前工作区用户是 ${workspaceIdentity}。`
             : english
               ? "WeCom callback returned an identity that does not match the active workspace user."
-              : "企业微信回调返回的身份与当前 workspace 用户不匹配。",
+              : "企业微信回调返回的身份与当前工作区用户不匹配。",
         profile,
         corpId: identity.corpId,
         matchedWorkspaceUserEmail: workspaceIdentity,
@@ -403,7 +412,7 @@ export async function GET(request: Request) {
       actionType: WECOM_OAUTH_CALLBACK_AUDIT_ACTIONS.SUCCESS,
       summary: english
         ? `WeCom OAuth callback resolved ${matchedWorkspaceUserIdentity} for the active workspace user`
-        : `企业微信 OAuth 回调已把 ${matchedWorkspaceUserIdentity} 解析到当前 workspace 用户`,
+        : `企业微信 OAuth 回调已把 ${matchedWorkspaceUserIdentity} 解析到当前工作区用户`,
       callbackResult,
       provider: "WECOM",
       role: callbackContext.role,

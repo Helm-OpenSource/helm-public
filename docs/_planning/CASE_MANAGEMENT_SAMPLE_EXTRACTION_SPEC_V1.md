@@ -11,7 +11,28 @@ archive_trigger:
   - This document is misused to claim production readiness or customer deployment readiness
 ---
 
-# Case Management Sample Extraction Spec
+# Case Management Sample Extraction Spec / Case Management Sample 抽取规范
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+`extensions/case-management-sample/` 是 Helm 最小公开参考 Pack。它让交付工程师
+可以检查、fork、测试和改造一个完整但 synthetic 的 case-management 形状，而不接触
+任何客户专属配置或私有实现逻辑。
+
+公开 sample 必须只包含 generic manifest、synthetic fixture、source-agnostic signal
+family、review-first worker example、BI report cookbook 以及 HSI / delivery-engineer
+static checks。它不得包含客户名称、真实员工名、真实邮箱 / 手机号、私有 domain、
+内网 IP、cloud database host、secret、token、credential、prompt replay、客户部署细节、
+客户 runtime configuration 或商业私有 connector logic。
+
+在声称 sample pack 可作为公开参考之前，至少要跑 `delivery:doctor`、
+`pack:fixture-check`、HSI / operating-signal eval、`check:public-release` 和
+`check:boundaries`。如果 sample 需要真实客户数据、production credential、auto-send /
+auto-approve / auto-execute / silent CRM write 或未授权 pilot outcome，必须停止并单独 review。
+
+## English Reference
 
 ## 1. Purpose
 
@@ -131,8 +152,65 @@ Stop and open a separate review if:
 4. A sample implies auto-send, auto-approve, auto-execute, silent CRM write, or official write.
 5. A public claim depends on a pilot outcome that has not been customer-authorized.
 
-## 9. Change Log
+## 9. Public Core P0 Slice Plan
+
+Goal:
+
+- Show a deterministic chain from public fixture evidence to operating signal,
+  memory candidate, and review packet.
+- Keep every customer-visible action review-first.
+- Preserve China delivery profile defaults for Qwen, local connector posture,
+  region / residency, npm registry override, and OpenAI-only ASR.
+- Keep public examples free of customer data, credentials, deployment receipts,
+  private hosts, and production compliance claims.
+
+Impact:
+
+- `extensions/case-management-sample/`: sample signal contract, CRM fixture
+  coverage, memory candidate and review packet preparation helpers.
+- `lib/headless-signal-interface/` and `lib/delivery-engineer/`: artifact
+  validation and Golden Path doctor checks.
+- `README.md`, `docs/STATUS.md`, `CHANGELOG.md`, `.env.example`: public-safe
+  documentation and status alignment.
+
+Assumptions:
+
+- Phase 1 remains offline, deterministic, and read-only.
+- Memory output is candidate-only and cannot become official memory without a
+  separate human review path.
+- Review packet output is preparation-only and cannot send, approve, execute,
+  write CRM, or promote memory.
+- Public China profile settings are configuration posture and accessibility aids,
+  not production compliance proof.
+
+Validation:
+
+```bash
+npm run test -- extensions/case-management-sample/signals/case/case-mapper.test.ts extensions/case-management-sample/signals/review-packet.test.ts
+npm run test -- lib/headless-signal-interface/pack-artifacts.test.ts lib/delivery-engineer/golden-path-doctor.test.ts
+npm run delivery:doctor
+npm run pack:fixture-check
+npm run eval:headless-signal-interface
+npm run eval:operating-signal-flow
+npm run check:public-release
+npm run check:boundaries
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+npm run e2e
+npm run quality:regression
+```
+
+Rollback:
+
+- Revert the sample helper, fixture, doctor, and docs changes. No schema, API
+  route, external connector, production credential, or runtime side effect is
+  introduced.
+
+## 10. Change Log
 
 | Date | Change |
 |---|---|
+| 2026-06-03 | Added the public Core P0 evidence -> signal -> memory candidate -> review packet slice plan and public-safe validation scope. |
 | 2026-06-01 | Public-safe projection restored in `helm-public`; private extraction context intentionally omitted while preserving Golden Path acceptance and validation rules |

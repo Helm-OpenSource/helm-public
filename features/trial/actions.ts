@@ -128,20 +128,46 @@ export type TrialDecisionResult =
   | { ok: true }
   | { ok: false; error: string };
 
+function getTrialDecisionActionMessage(
+  english: boolean,
+  key: "reservedWorkspaceOnly" | "invalidDecisionPayload" | "applicationUpdateFailed",
+) {
+  const messages = {
+    reservedWorkspaceOnly: {
+      zh: "试用申请复核仅限 Helm reserved 工作区。",
+      en: "Trial review is restricted to the Helm reserved workspace.",
+    },
+    invalidDecisionPayload: {
+      zh: "试用申请决策参数无效。",
+      en: "Invalid trial decision payload.",
+    },
+    applicationUpdateFailed: {
+      zh: "无法更新该试用申请；它可能已被移除。",
+      en: "Could not update the application. It may have been removed.",
+    },
+  } as const;
+  const message = messages[key];
+  return english ? message.en : message.zh;
+}
+
 export async function recordTrialDecisionAction(
   input: TrialDecisionInput,
 ): Promise<TrialDecisionResult> {
   const session = await getCurrentWorkspaceSession();
+  const english = session.workspace.defaultLocale === "en-US";
 
   if (!isHelmReservedWorkspace(session.workspace)) {
-    return { ok: false, error: "Trial review is restricted to the Helm reserved workspace." };
+    return {
+      ok: false,
+      error: getTrialDecisionActionMessage(english, "reservedWorkspaceOnly"),
+    };
   }
 
   const parsed = decisionInputSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid decision payload.",
+      error: getTrialDecisionActionMessage(english, "invalidDecisionPayload"),
     };
   }
 
@@ -165,7 +191,7 @@ export async function recordTrialDecisionAction(
     console.warn("[trial-application] decision update failed", error);
     return {
       ok: false,
-      error: "Could not update the application. It may have been removed.",
+      error: getTrialDecisionActionMessage(english, "applicationUpdateFailed"),
     };
   }
 

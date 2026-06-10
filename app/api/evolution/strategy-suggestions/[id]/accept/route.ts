@@ -32,10 +32,13 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "strategy suggestion accepted");
+    return successResponse(
+      { suggestion },
+      english ? "Strategy suggestion accepted" : "策略建议已采纳",
+    );
   } catch (error) {
     return errorResponse(
-      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "采纳策略建议失败"),
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to accept strategy suggestion" : "采纳策略建议失败"),
       isWorkspaceOwnershipError(error) ? "SUGGESTION_NOT_FOUND" : "ACCEPT_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

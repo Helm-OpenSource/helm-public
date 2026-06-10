@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { UnifiedDetailNavigationPanel } from "@/components/shared/unified-detail-navigation-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatCommercialNarrativeDateLabel } from "@/features/commercial-narrative-strengthening/date-labels";
 import type {
   CommercialNarrativeStrengtheningAudienceMode,
   CommercialNarrativeStrengtheningDetailReportingContract,
@@ -37,7 +38,6 @@ import {
   formatRoleDetailEvidenceGroups,
   formatRoleDetailPageProtocol,
 } from "@/lib/presentation/role-detail-display-copy";
-import { formatDateLabel } from "@/lib/utils";
 
 type Props = {
   detail: ProposalPackageCommercialDetail;
@@ -51,7 +51,7 @@ export function CommercialNarrativeStrengtheningDetailView({
   contract,
 }: Props) {
   const sourceProtocol =
-    toCommercialNarrativeStrengtheningPageReportingProtocol(contract);
+    toCommercialNarrativeStrengtheningPageReportingProtocol(contract, english);
   const text = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);
@@ -98,7 +98,7 @@ export function CommercialNarrativeStrengtheningDetailView({
         title={
           english
             ? `${detail.title} commercial strengthening detail`
-            : text(`${detail.title} commercial 加固详情页`)
+            : text(`${detail.title} 商业叙事加固详情页`)
         }
         description={
           english
@@ -117,7 +117,7 @@ export function CommercialNarrativeStrengtheningDetailView({
               <Link href={`/reinforcement-variants/${detail.id}`}>
                 {english
                   ? "Open reinforcement variants page"
-                  : text("打开加固变体s 页面")}
+                  : text("打开加固变体页面")}
               </Link>
             </Button>
             <Button variant="secondary" asChild>
@@ -150,7 +150,7 @@ export function CommercialNarrativeStrengtheningDetailView({
           label:
             english
               ? "Commercial narrative strengthening judgement"
-              : text("Commercial 叙事加固判断"),
+              : text("商业叙事加固判断"),
           headline: protocol.pageJudgement,
           summary: protocol.pageJudgementReason,
         }}
@@ -247,11 +247,11 @@ export function CommercialNarrativeStrengtheningDetailView({
                   value: text(formatFallbackMode(contract.strengtheningFallbackMode, english)),
                 },
                 {
-                  label: english ? "Customer-visible cue" : text("customer-visible cue"),
+                  label: english ? "Customer-visible cue" : text("客户可见提示"),
                   value: text(contract.strengtheningCustomerVisibleCue),
                 },
                 {
-                  label: english ? "Internal-only cue" : text("internal-only cue"),
+                  label: english ? "Internal-only cue" : text("仅内部提示"),
                   value: text(contract.strengtheningInternalOnlyCue),
                 },
                 {
@@ -264,7 +264,10 @@ export function CommercialNarrativeStrengtheningDetailView({
                 },
                 {
                   label: english ? "Due date" : "当前截止时间",
-                  value: formatDateLabel(detail.dueDate),
+                  value: formatCommercialNarrativeDateLabel(
+                    detail.dueDate,
+                    english,
+                  ),
                 },
               ]}
             />
@@ -374,7 +377,7 @@ function buildUnifiedNavigation({
           : "加固变体详情",
         summary: english
           ? "Return to reinforcement variants before deciding which strengthening layer should carry the narrative."
-          : "回到加固变体s，再确认当前到底由哪一层加固承载商业叙事。",
+          : "回到加固变体，再确认当前到底由哪一层加固承载商业叙事。",
       },
       detailNodeNext: {
         type: "sendability",
@@ -513,11 +516,11 @@ function formatStrengtheningLevel(
 ) {
   switch (level) {
     case "recommendation-only":
-      return english ? "Recommendation only" : "仅 recommendation";
+      return english ? "Recommendation only" : "仅建议";
     case "exploratory-strengthening":
-      return english ? "Exploratory strengthening" : "Exploratory 强化";
+      return english ? "Exploratory strengthening" : "探索型加固";
     case "pilot-strengthening":
-      return english ? "Pilot strengthening" : "Pilot 强化";
+      return english ? "Pilot strengthening" : "试点加固";
     case "customer-visible-light":
       return english ? "Customer-visible light" : "轻量客户可见";
     case "customer-visible-structured":
@@ -545,7 +548,7 @@ function formatIntent(
     case "warm-up-trust":
       return english ? "Warm up trust" : "升温信任";
     case "advance-pilot-story":
-      return english ? "Advance pilot story" : "推进 pilot 叙事";
+      return english ? "Advance pilot story" : "推进试点叙事";
     case "build-customer-confidence":
       return english ? "Build customer confidence" : "建立客户信心";
     case "hold-review-line":

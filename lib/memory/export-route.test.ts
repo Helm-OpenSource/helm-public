@@ -126,7 +126,13 @@ describe("memory export route", () => {
     expect(response.headers.get("vary")).toBe("Cookie");
     expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     expect(response.headers.get("content-disposition")).toContain("helm-memory-summary.txt");
-    await expect(response.text()).resolves.toContain("Kickoff summary");
+    const exportedText = await response.text();
+    expect(exportedText).toContain("Helm workspace memory export");
+    expect(exportedText).toContain("Exported at:");
+    expect(exportedText).toContain("Source filter: ALL");
+    expect(exportedText).toContain("Object filter: MEETING:meeting-1");
+    expect(exportedText).toContain("Kickoff summary");
+    expect(exportedText).not.toContain("Helm 工作域记忆导出");
     expect(ownershipMock.assertWorkspaceObjectOwnership).toHaveBeenCalledWith({
       workspaceId: "workspace-1",
       objectType: "MEETING",
@@ -151,6 +157,33 @@ describe("memory export route", () => {
         actionType: "MEMORY_SUMMARY_EXPORTED",
       }),
     );
+  });
+
+  it("keeps Chinese export body copy for zh-CN workspaces", async () => {
+    sessionMock.getCurrentWorkspaceSession.mockResolvedValue({
+      user: { id: "user-1", name: "Owner" },
+      membership: { role: "MEMBER" },
+      workspace: { id: "workspace-1", defaultLocale: "zh-CN" },
+    });
+    permissionsMock.canExportMemory.mockReturnValue(true);
+    dbMock.memoryEntry.findMany.mockResolvedValue([
+      {
+        entityType: "WORKSPACE",
+        title: "经营记忆",
+        content: "本周需要复核客户下一步。",
+      },
+    ]);
+
+    const response = await exportMemoryRoute(new Request("http://localhost/api/memory/export"));
+
+    expect(response.status).toBe(200);
+    const exportedText = await response.text();
+    expect(exportedText).toContain("Helm 工作域记忆导出");
+    expect(exportedText).toContain("导出时间：");
+    expect(exportedText).toContain("来源过滤：ALL");
+    expect(exportedText).toContain("对象过滤：无");
+    expect(exportedText).toContain("经营记忆");
+    expect(exportedText).not.toContain("Helm workspace memory export");
   });
 
   it("excludes legacy OpenClaw entries from default ALL exports", async () => {

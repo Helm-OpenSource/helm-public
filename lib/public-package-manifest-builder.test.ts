@@ -53,17 +53,20 @@ describe("public package manifest builder", () => {
     expect(result).toMatchObject({
       status: "printed-projection",
       outputPath: null,
-      removedScripts: [`seed:${tenantSlug}`, "self-check"],
+      removedScripts: [`seed:${tenantSlug}`],
       exitCode: 0,
     });
-    expect(JSON.parse(output)).toEqual({
+    expect(JSON.parse(output)).toMatchObject({
       name: "helm-console",
       private: false,
       license: "Apache-2.0",
       scripts: {
         dev: "next dev",
-        "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
-        "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+        "self-check":
+          "npm run public:smoke:static && npm run check:secret-history",
+        "public:smoke:static":
+          "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+        "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
       },
     });
     expect(JSON.parse(readText("package.json"))).toEqual(sourceManifest);
@@ -95,8 +98,9 @@ describe("public package manifest builder", () => {
       license: "Apache-2.0",
       scripts: {
         dev: "next dev",
-        "public:smoke:static": "tsx scripts/public-mirror-smoke.ts --repo-root .",
-        "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+        "public:smoke:static":
+          "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+        "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
       },
     });
   });

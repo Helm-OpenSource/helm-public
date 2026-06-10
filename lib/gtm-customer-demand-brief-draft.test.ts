@@ -21,7 +21,7 @@ describe("GTM CustomerDemandBrief draft", () => {
         regionLabel: "China",
         background: "希望先看销售跟进和客户复盘控制线。",
         contributionPlan: "已有线索列表和一次客户复盘会。",
-        internalNotes: "来自销售预填，不进入客户 workspace。",
+        internalNotes: "来自销售预填，不进入客户工作区。",
         status: "SUBMITTED",
         partnerProgram: {
           title: "销售转介绍计划",
@@ -37,7 +37,7 @@ describe("GTM CustomerDemandBrief draft", () => {
 
     expect(draft.title).toContain("星河增长");
     expect(draft.draftContent).toContain("CustomerDemandBrief 草稿候选");
-    expect(draft.draftContent).toContain("不创建 workspace");
+    expect(draft.draftContent).toContain("不创建工作区");
     expect(draft.draftContent).toContain("不外发材料");
     expect(draft.draftContent).toContain("不写客户系统");
     expect(draft.metadata.kind).toBe(GTM_CUSTOMER_DEMAND_BRIEF_DRAFT_KIND);

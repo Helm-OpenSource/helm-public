@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "CRM incremental sync failed" : "CRM 增量同步失败") },
+      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "CRM incremental sync failed" : "客户关系系统增量同步失败") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

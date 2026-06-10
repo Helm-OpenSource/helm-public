@@ -35,6 +35,7 @@ export default defineConfig({
       "extensions/**/*.test.ts",
       "eslint-rules/**/*.test.ts",
       "scripts/**/*.test.ts",
+      "tools/**/*.test.ts",
     ],
     exclude: ["tests/e2e/**"],
   },

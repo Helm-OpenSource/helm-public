@@ -72,6 +72,10 @@ import {
   generateContactFollowUpAction,
   mergeContactsAction,
 } from "@/features/contacts/actions";
+import {
+  formatContactDateLabel,
+  formatContactRelativeLabel,
+} from "@/features/contacts/contact-date-labels";
 import { generateObjectBriefingAction } from "@/features/memory/actions";
 import { createActionFromRecommendationAction } from "@/features/recommendations/actions";
 import { StartRecordingButton } from "@/features/conversation-capture/start-recording-button";
@@ -576,6 +580,19 @@ export function ContactDetailClient({
       meta: string;
     } => Boolean(item),
   );
+  const contactLastInteractionRelative = formatContactRelativeLabel(
+    contact.lastInteractionAt,
+    english,
+    formatRelative,
+  );
+  const pageHeaderDescription = [
+    pageStory.description,
+    contact.company?.name ?? (english ? "Independent contact" : "独立联系人"),
+    `${english ? "Last interaction" : "最近互动"} ${contactLastInteractionRelative}`,
+  ].join(" · ");
+  const lastMeaningfulInteractionExplanation = english
+    ? `The last meaningful interaction was ${contactLastInteractionRelative}. That means the system is not looking only at profile fields; it is using interaction cadence, active blockers, open commitments and your handling preferences as recommendation context.`
+    : `最近一次互动是 ${formatRelative(contact.lastInteractionAt)}。这意味着判断不能只盯着资料字段，而要把最近互动节奏、当前卡点、未兑现承诺和你的处理偏好一起看。`;
 
   function runAction(
     fn: () => Promise<{ ok: boolean; error?: string }>,
@@ -696,7 +713,7 @@ export function ContactDetailClient({
         titleAs="h2"
         eyebrow={pageStory.eyebrow}
         title={contact.name}
-        description={`${pageStory.description} · ${contact.company?.name ?? (english ? "Independent contact" : "独立联系人")} · ${english ? "Last interaction" : "最近互动"} ${formatRelative(contact.lastInteractionAt)}`}
+        description={pageHeaderDescription}
         actions={
           <>
             <StartRecordingButton
@@ -768,7 +785,11 @@ export function ContactDetailClient({
         />
         <Metric
           label={english ? "Last interaction" : "最近互动"}
-          value={formatDateLabel(contact.lastInteractionAt)}
+          value={formatContactDateLabel(
+            contact.lastInteractionAt,
+            english,
+            formatDateLabel,
+          )}
         />
         <Metric
           label={english ? "Open commitments" : "未完成承诺"}
@@ -1041,7 +1062,11 @@ export function ContactDetailClient({
                     </p>
                     <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                       {english ? "Confidence" : "置信度"} {fact.confidence} ·{" "}
-                      {formatDateLabel(fact.updatedAt)}
+                      {formatContactDateLabel(
+                        fact.updatedAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     </p>
                   </div>
                 ))
@@ -1100,7 +1125,11 @@ export function ContactDetailClient({
                             </p>
                           </div>
                           <p className="text-xs text-[color:var(--muted-foreground)]">
-                            {formatDateLabel(item.createdAt)}
+                            {formatContactDateLabel(
+                              item.createdAt,
+                              english,
+                              formatDateLabel,
+                            )}
                           </p>
                         </div>
                       </Link>
@@ -1274,7 +1303,11 @@ export function ContactDetailClient({
                       {meeting.title}
                     </p>
                     <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                      {formatDateLabel(meeting.startsAt)}
+                      {formatContactDateLabel(
+                        meeting.startsAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     </p>
                     <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
                       {trimText(
@@ -1366,9 +1399,7 @@ export function ContactDetailClient({
                 </p>
               </div>
               <div className="theme-judgement-panel-inset rounded-2xl p-4 text-sm leading-6 text-[color:var(--muted)]">
-                {english
-                  ? `The last meaningful interaction was ${formatRelative(contact.lastInteractionAt)}. That means the system is not looking only at profile fields; it is using interaction cadence, active blockers, open commitments and your handling preferences as recommendation context.`
-                  : `最近一次互动是 ${formatRelative(contact.lastInteractionAt)}。这意味着判断不能只盯着资料字段，而要把最近互动节奏、当前卡点、未兑现承诺和你的处理偏好一起看。`}
+                {lastMeaningfulInteractionExplanation}
               </div>
               {recommendations.length
                 ? recommendations.slice(0, 2).map((item, index) => (

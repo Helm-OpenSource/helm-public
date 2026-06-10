@@ -101,7 +101,7 @@ export function RecommendationFeedbackButtons({
         title={
           english
             ? "Mark as accepted (records feedback only; does not generate an ActionItem)"
-            : "记为采纳（只写反馈，不生成 ActionItem）"
+            : "记为采纳（只写反馈，不生成动作项）"
         }
       >
         <Check className="h-3.5 w-3.5" />

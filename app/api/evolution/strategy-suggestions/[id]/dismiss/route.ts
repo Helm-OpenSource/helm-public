@@ -32,10 +32,13 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "strategy suggestion dismissed");
+    return successResponse(
+      { suggestion },
+      english ? "Strategy suggestion dismissed" : "策略建议已忽略",
+    );
   } catch (error) {
     return errorResponse(
-      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "忽略策略建议失败"),
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to dismiss strategy suggestion" : "忽略策略建议失败"),
       isWorkspaceOwnershipError(error) ? "SUGGESTION_NOT_FOUND" : "DISMISS_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

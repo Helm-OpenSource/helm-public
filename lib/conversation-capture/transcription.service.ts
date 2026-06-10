@@ -29,42 +29,68 @@ type BuildTranscriptInput = MemoryActorContext & {
   context: CaptureContextSummary;
 };
 
-function buildFallbackTranscript(input: BuildTranscriptInput) {
-  const label = input.context.objectLabel ?? input.session.title ?? "这次交流";
+export function buildFallbackTranscript(input: BuildTranscriptInput) {
+  const english = input.english ?? false;
+  const label = input.context.objectLabel ?? input.session.title ?? (english ? "this conversation" : "这次交流");
 
   if (input.context.opportunityTitle?.includes("方案") || input.context.companyName?.includes("星桥")) {
-    return [
-      `客户表示本次最关心的是付款周期和推进节奏，而非总价。`,
-      `对方希望我们在下周三前先发一版精简方案结构，方便内部先过一轮。`,
-      `采购侧还在等预算和财务口径确认，这一步如果不先收口，后面很难继续推进。`,
-      `我们内部也要在两天内确认交付排期，否则外部承诺会失真。`,
-      `${label} 会后建议先发结构草稿，再同步内部排期确认。`,
-    ].join("\n");
+    return english
+      ? [
+          "The customer said the payment cycle and delivery pace matter more than the total price in this round.",
+          "They want a concise proposal structure before next Wednesday so their team can review it internally first.",
+          "Procurement is still waiting for budget and finance alignment; if that is not closed first, the deal will be hard to move forward.",
+          "Our team also needs to confirm delivery scheduling within two days so external wording does not become a false commitment.",
+          `${label} should be followed by a structure draft first, then internal delivery-schedule confirmation.`,
+        ].join("\n")
+      : [
+          `客户表示本次最关心的是付款周期和推进节奏，而非总价。`,
+          `对方希望我们在下周三前先发一版精简方案结构，方便内部先过一轮。`,
+          `采购侧还在等预算和财务口径确认，这一步如果不先收口，后面很难继续推进。`,
+          `我们内部也要在两天内确认交付排期，否则外部承诺会失真。`,
+          `${label} 会后建议先发结构草稿，再同步内部排期确认。`,
+        ].join("\n");
   }
 
   if (input.context.opportunityTitle?.includes("岗位") || input.context.contactName) {
-    return [
-      `${input.context.contactName ?? "候选人"} 对岗位方向整体认可，但对薪资区间仍有顾虑。`,
-      `用人方倾向继续推进，希望 48 小时内同步反馈，不希望流程拖太久。`,
-      `如果本周不能把反馈和下一轮安排收口，候选人流失风险会上升。`,
-      `${label} 会后建议先同步积极反馈，再单独讨论薪资边界。`,
-    ].join("\n");
+    return english
+      ? [
+          `${input.context.contactName ?? "The candidate"} is generally aligned with the role direction, but still has concerns about the compensation range.`,
+          "The hiring side wants to keep moving and expects feedback within 48 hours rather than letting the process drag.",
+          "If feedback and the next round are not closed this week, candidate-dropoff risk will increase.",
+          `${label} should be followed by positive feedback first, then a separate compensation-boundary discussion.`,
+        ].join("\n")
+      : [
+          `${input.context.contactName ?? "候选人"} 对岗位方向整体认可，但对薪资区间仍有顾虑。`,
+          `用人方倾向继续推进，希望 48 小时内同步反馈，不希望流程拖太久。`,
+          `如果本周不能把反馈和下一轮安排收口，候选人流失风险会上升。`,
+          `${label} 会后建议先同步积极反馈，再单独讨论薪资边界。`,
+        ].join("\n");
   }
 
-  return [
-    `${label} 中已经出现了明确下一步，但仍有一项关键阻塞没有收口。`,
-    `对方愿意继续推进，不过希望我们先给出更清晰的下一步和时间窗口。`,
-    `如果本周内不跟进，这次沟通形成的热度会明显下降。`,
-    `建议先收口阻塞，再把后续动作送入审批或自动执行链路。`,
-  ].join("\n");
+  return english
+    ? [
+        `${label} already contains a clear next step, but one key blocker is still unresolved.`,
+        "The other side is willing to keep moving, but expects a clearer next move and time window from us first.",
+        "If there is no follow-up this week, the momentum created by this conversation will drop noticeably.",
+        "Close the blocker first, then send the follow-up action into approval or the guarded execution path.",
+      ].join("\n")
+    : [
+        `${label} 中已经出现了明确下一步，但仍有一项关键阻塞没有收口。`,
+        `对方愿意继续推进，不过希望我们先给出更清晰的下一步和时间窗口。`,
+        `如果本周内不跟进，这次沟通形成的热度会明显下降。`,
+        `建议先收口阻塞，再把后续动作送入审批或自动执行链路。`,
+      ].join("\n");
 }
 
-function buildSegments(input: {
+export function buildSegments(input: {
   text: string;
   contactName?: string | null;
+  english?: boolean;
 }) {
   const lines = splitIntoSentences(input.text);
-  const speakers = ["我方", input.contactName ?? "对方"];
+  const speakers = input.english
+    ? ["Our side", input.contactName ?? "Counterparty"]
+    : ["我方", input.contactName ?? "对方"];
 
   return lines.map((line, index) => ({
     speaker: speakers[index % speakers.length],
@@ -122,6 +148,7 @@ export async function generateConversationTranscript(input: BuildTranscriptInput
       : buildSegments({
           text: fullText,
           contactName: input.context.contactName,
+          english: input.english,
         });
   const speakerSeparated = new Set(segments.map((segment) => segment.speaker).filter(Boolean)).size > 1;
 
@@ -168,7 +195,9 @@ export async function generateConversationTranscript(input: BuildTranscriptInput
     actionType: "TRANSCRIPT_GENERATED",
     targetType: "CaptureSession",
     targetId: input.session.id,
-    summary: `生成会话转写：${input.session.title ?? input.context.objectLabel ?? "现场记录"}`,
+    summary: input.english
+      ? `Generated conversation transcript: ${input.session.title ?? input.context.objectLabel ?? "field capture"}`
+      : `生成会话转写：${input.session.title ?? input.context.objectLabel ?? "现场记录"}`,
     payload: {
       segmentsCount: segments.length,
       confidence: transcript.confidence,

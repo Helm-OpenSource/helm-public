@@ -54,6 +54,8 @@ import type {
   ResolvedReportsExtensionsType,
   ResolvedWorkspaceNavExtensionsType,
   WorkspaceLike,
+  ExtensionAccessContext,
+  ExtensionAccessResult,
   WorkspaceNavExtensionCluster,
 } from "./registry-types";
 import type { BiReportSignalRoutingConfig } from "@/lib/bi-report-skill/types";
@@ -97,14 +99,17 @@ export const REPORTS_EXTENSION_ACCESS_TIMEOUT_MS = 2_500;
 export async function resolveReportsExtensionAccessSafely(
   descriptor: {
     id: string;
-    getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+    getAccess: (
+      workspace: WorkspaceLike,
+      context?: ExtensionAccessContext,
+    ) => Promise<ExtensionAccessResult>;
   },
   workspace: WorkspaceLike,
-  options?: { timeoutMs?: number },
-): Promise<{ ok: boolean }> {
+  options?: { timeoutMs?: number; accessContext?: ExtensionAccessContext },
+): Promise<ExtensionAccessResult> {
   const timeoutMs = options?.timeoutMs ?? REPORTS_EXTENSION_ACCESS_TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const timeout = new Promise<{ ok: boolean }>((resolve) => {
+  const timeout = new Promise<ExtensionAccessResult>((resolve) => {
     timer = setTimeout(() => {
       console.error(
         `[reports-extensions] ${descriptor.id} getAccess timed out after ${timeoutMs}ms; treating as ok=false`,
@@ -115,7 +120,7 @@ export async function resolveReportsExtensionAccessSafely(
 
   try {
     return await Promise.race([
-      descriptor.getAccess(workspace).catch((error) => {
+      descriptor.getAccess(workspace, options?.accessContext).catch((error) => {
         console.error(
           `[reports-extensions] ${descriptor.id} getAccess threw; treating as ok=false`,
           error,
@@ -164,6 +169,7 @@ export async function resolveReportsExtensions(input: {
   workspace: WorkspaceLike;
   english: boolean;
   requestedTab?: string | string[] | undefined;
+  accessContext?: ExtensionAccessContext;
 }): Promise<ResolvedReportsExtensions> {
   const reportsExtensions: ReadonlyArray<ReportsExtensionDescriptor> =
     getRegisteredReportsExtensions();
@@ -175,7 +181,9 @@ export async function resolveReportsExtensions(input: {
   const accessResults = await Promise.all(
     reportsExtensions.map(async (descriptor) => ({
       descriptor,
-      access: await resolveReportsExtensionAccessSafely(descriptor, input.workspace),
+      access: await resolveReportsExtensionAccessSafely(descriptor, input.workspace, {
+        accessContext: input.accessContext,
+      }),
     })),
   );
 
@@ -239,9 +247,10 @@ export async function resolveReportsExtensions(input: {
 
 export async function resolveImportsExtensions(input: {
   workspace: WorkspaceLike;
+  accessContext?: ExtensionAccessContext;
 }): Promise<ResolvedImportsExtensions> {
   for (const binding of getRegisteredAccountBindings()) {
-    const access = await binding.getAccess(input.workspace);
+    const access = await binding.getAccess(input.workspace, input.accessContext);
     if (access.ok) {
       return { accountBinding: binding.build() };
     }
@@ -251,9 +260,10 @@ export async function resolveImportsExtensions(input: {
 
 export async function resolveApprovalsExtensions(input: {
   workspace: WorkspaceLike;
+  accessContext?: ExtensionAccessContext;
 }): Promise<ResolvedApprovalsExtensions> {
   for (const board of getRegisteredBiBoards()) {
-    const access = await board.getAccess(input.workspace);
+    const access = await board.getAccess(input.workspace, input.accessContext);
     if (access.ok) {
       return { biBoard: board.build() };
     }
@@ -263,10 +273,11 @@ export async function resolveApprovalsExtensions(input: {
 
 export async function canRenderImplementationConsolePanel(
   workspace: WorkspaceLike,
+  accessContext?: ExtensionAccessContext,
 ): Promise<boolean> {
   const console_ = getRegisteredImplementationConsole();
   if (!console_) return false;
-  const access = await console_.getAccess(workspace);
+  const access = await console_.getAccess(workspace, accessContext);
   return access.ok;
 }
 
@@ -297,12 +308,13 @@ export function resolveExtensionIndustryDemoReadoutPage(input: {
 export async function resolveWorkspaceNavExtensions(input: {
   workspace: WorkspaceLike;
   english: boolean;
+  accessContext?: ExtensionAccessContext;
 }): Promise<ResolvedWorkspaceNavExtensions> {
   const workspaceNavExtensions = getRegisteredWorkspaceNavExtensions();
   const accessResults = await Promise.all(
     workspaceNavExtensions.map(async (descriptor) => ({
       descriptor,
-      access: await descriptor.getAccess(input.workspace),
+      access: await descriptor.getAccess(input.workspace, input.accessContext),
     })),
   );
 

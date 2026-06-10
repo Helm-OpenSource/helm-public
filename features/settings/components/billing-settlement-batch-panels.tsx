@@ -13,6 +13,10 @@ import { Input } from "@/components/ui/input";
 import { settlementBatchStatusLabels } from "@/features/settings/formatters/labels";
 import { formatSettlementBatchReference } from "@/features/settings/formatters/settlement-formatters";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
+import {
+  formatSettlementBatchDateLabel,
+  formatSettlementBatchDateRangeLabel,
+} from "./billing-settlement-batch-date-labels";
 import { Info } from "./settings-display";
 
 type BillingSettlementBatchData = Pick<
@@ -127,9 +131,23 @@ export function BillingSettlementBatchPanels({
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <Info label={english ? "Period" : "结算周期"} value={currentSettlementBatch.periodLabel} />
-            <Info label={english ? "Window" : "结算窗口"} value={`${formatDateLabel(currentSettlementBatch.periodStart)} - ${formatDateLabel(currentSettlementBatch.periodEnd)}`} />
-            <Info label={english ? "Approved at" : "批准时间"} value={formatDateLabel(currentSettlementBatch.approvedAt)} />
-            <Info label={english ? "Exported at" : "导出时间"} value={formatDateLabel(currentSettlementBatch.exportedAt)} />
+            <Info
+              label={english ? "Window" : "结算窗口"}
+              value={formatSettlementBatchDateRangeLabel(
+                currentSettlementBatch.periodStart,
+                currentSettlementBatch.periodEnd,
+                english,
+                formatDateLabel,
+              )}
+            />
+            <Info
+              label={english ? "Approved at" : "批准时间"}
+              value={formatSettlementBatchDateLabel(currentSettlementBatch.approvedAt, english, formatDateLabel)}
+            />
+            <Info
+              label={english ? "Exported at" : "导出时间"}
+              value={formatSettlementBatchDateLabel(currentSettlementBatch.exportedAt, english, formatDateLabel)}
+            />
           </div>
           {currentSettlementBatch.notes ? (
             <p className="mt-3 text-xs leading-6 text-[color:var(--muted-foreground)]">
@@ -171,7 +189,7 @@ export function BillingSettlementBatchPanels({
             <p className="mt-3 text-xs leading-6 text-[color:var(--muted-foreground)]">
               {english
                 ? "Only fully paid or reversed exported batches can move into closeout."
-                : "只有全部条目都进入已支付或已冲回姿态后，已导出的批次才能进入 closeout。"}
+                : "只有全部条目都进入已支付或已冲回姿态后，已导出的批次才能进入收口。"}
             </p>
           ) : null}
         </div>
@@ -193,7 +211,10 @@ export function BillingSettlementBatchPanels({
                   <Info label={english ? "Period" : "周期"} value={batch.periodLabel} />
                   <Info label={english ? "Line count" : "条目数"} value={english ? `${batch.lineCount}` : `${batch.lineCount} 条`} />
                   <Info label={english ? "Total" : "总金额"} value={formatMoneyAmount(batch.totalAmountCents, batch.currency)} />
-                  <Info label={english ? "Closed at" : "关闭时间"} value={formatDateLabel(batch.closedAt)} />
+                  <Info
+                    label={english ? "Closed at" : "关闭时间"}
+                    value={formatSettlementBatchDateLabel(batch.closedAt, english, formatDateLabel)}
+                  />
                 </div>
               </div>
             ))

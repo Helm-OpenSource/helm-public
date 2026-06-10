@@ -34,6 +34,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# local package-manager overrides
+.npmrc
+
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
@@ -69,3 +72,9 @@ next-env.d.ts
 
 # Local-only analysis dropbox (production data inspection — never commit)
 **/.local-analysis/
+
+# Source Profiler private run outputs (user-owned diagnosis artifacts — never commit)
+.helm-profiler/
+
+# Claude Code local agent config (local-only; may contain settings/tokens — never commit to public repo)
+.claude/

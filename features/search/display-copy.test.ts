@@ -28,4 +28,20 @@ describe("Ask Helm search display copy", () => {
       "对象查找",
     );
   });
+
+  it("converts persisted Chinese Ask Helm labels for the English surface", () => {
+    expect(formatAskHelmObjectTypeLabel("联系人", true)).toBe("Contact");
+    expect(formatAskHelmRelatedObjectStatus("opportunity", "已接触", true)).toBe(
+      "Contacted",
+    );
+    expect(formatAskHelmRetrievalSourceLabel("工作区上下文", true)).toBe(
+      "Workspace context",
+    );
+    expect(formatAskHelmBoundaryTypeLabel("建议不等于承诺", true)).toBe(
+      "Suggestion, not commitment",
+    );
+    expect(formatAskHelmIntentTypeLabel("上报经营信号", true)).toBe(
+      "Submit business signal",
+    );
+  });
 });

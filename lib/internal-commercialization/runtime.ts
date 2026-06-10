@@ -157,13 +157,13 @@ function reviewSafeActionLabel(
   const labels: Record<InternalCommercializationReviewSafeAction, string> = {
     PREPARE_DIAGNOSIS_BRIEF_FOR_REVIEW: english
       ? "Prepare diagnosis brief for review"
-      : "准备诊断 brief，等待复核",
+      : "准备诊断简报，等待复核",
     PREPARE_TRIAL_SCOPE_DRAFT_FOR_REVIEW: english
       ? "Prepare controlled trial scope for review"
       : "准备受控试跑范围草稿，等待复核",
     PREPARE_PILOT_SCOPE_PACKET_FOR_REVIEW: english
       ? "Prepare controlled pilot scope packet for review"
-      : "准备受控试点 scope packet，等待复核",
+      : "准备受控试点范围包，等待复核",
     PREPARE_CLOSEOUT_REPORT_CANDIDATE_FOR_REVIEW: english
       ? "Prepare closeout report candidate for review"
       : "准备复盘报告候选，等待复核",
@@ -310,7 +310,7 @@ export function buildInternalCommercializationLifecycleReadout({
       : "把 AI 服务商作为 alias-only 经营对象，管理候选池、Daily Top 3、诊断、受控试跑、受控试点、复盘和客户转渠道判断。",
     boundary: english
       ? "Read-only reserved-workspace board. Helm prepares review packets and next actions; it does not contact customers, auto-send, silently write CRM, quote, contract, publish claims or run workflows."
-      : "这是 Helm 自留工作区的只读经营看板。Helm 只准备复核包和下一步建议，不直接触客、不自动外发、不静默写 CRM、不自动报价/签约/发布 claim，也不触发 workflow。",
+      : "这是 Helm 自留工作区的只读经营看板。Helm 只准备复核包和下一步建议，不直接触客、不自动外发、不静默写 CRM、不自动报价/签约/发布声明，也不触发工作流。",
     truncated,
     counts,
     stageBuckets: [

@@ -3,6 +3,7 @@ status: active
 owner: Product / Delivery Engineering / Engineering
 created: 2026-06-01
 review_after: 2026-06-15
+public_safety: Public-safe smoke receipt. Records public command output and classification only; no credentials, customer data, workspace ids, or database output.
 source_pr: https://github.com/Helm-OpenSource/helm-public/pull/36
 source_head_commit: 9839d1f9c1b20639f80772358e0ab7624375687f
 tested_checkout_commit: 3402d454c94080d14b603faa2320adc8d9026767
@@ -14,7 +15,23 @@ archive_trigger:
   - The Docker quickstart path is materially changed
 ---
 
-# Helm Delivery Engineer D2 Docker Fresh-Clone Smoke Receipt
+# Helm Delivery Engineer D2 Docker Fresh-Clone Smoke Receipt / Helm 交付工程师 D2 Docker Fresh-Clone Smoke 回执
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本回执记录 PR #36 的 D2 Docker 全新克隆冒烟验证已在 GitHub Actions 于
+2026-06-01 通过。它证明测试分支可以被干净检出到新目录，用
+`docker compose up --build -d` 构建，连接随附 MySQL 8.4 服务初始化，并服务最小
+公开上手端点。
+
+当前证明范围仅限被测 PR 分支的公开 Core Docker 快速启动冒烟验证。它不证明客户部署就绪、
+Helm Cloud / Enterprise 发布就绪、生产连接器凭据或回调就绪、生产数据保留 /
+数据处理协议 / 服务等级承诺 / 事件流程就绪、商业 Pack / 客户 Overlay 就绪、运行时市场，
+或任何自动对外发送 / 批准 / 结算 / 客户承诺权限。
+
+## English Reference
 
 ## 1. Conclusion
 

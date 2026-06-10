@@ -7,14 +7,15 @@ import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/li
 import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_: Request, { params }: { params: Promise<{ meetingId: string }> }) {
+  let english = false;
+
   try {
     const session = await getCurrentWorkspaceSession();
     const { user, membership, workspace } = session;
+    english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
     const { meetingId } = await params;
 
     if (!canManageWorkspaceMemory(membership.role)) {
-      const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
-
       return Response.json(
         {
           success: false,
@@ -51,7 +52,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ meetingId
     return Response.json(
       {
         success: false,
-        message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "处理会议记忆失败"),
+        message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to process meeting memory" : "处理会议记忆失败"),
       },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );

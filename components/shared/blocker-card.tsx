@@ -3,9 +3,13 @@
 import { AlertTriangle, GaugeCircle, Link2, ScanSearch } from "lucide-react";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { Badge } from "@/components/ui/badge";
+import {
+  formatSharedCardDateLabel,
+  formatSharedCardRelativeLabel,
+} from "@/components/shared/card-date-labels";
 import { formatRoleDetailDisplayText } from "@/lib/presentation/role-detail-display-copy";
 import { getLocalizedBlockerStatusLabels } from "@/lib/i18n/labels";
-import { cn, formatDateLabel, formatRelative, trimText } from "@/lib/utils";
+import { cn, trimText } from "@/lib/utils";
 
 type BlockerCardProps = {
   blocker: {
@@ -113,7 +117,8 @@ export function BlockerCard({ blocker, className, compact = false }: BlockerCard
         {blocker.firstSeenAt ? (
           <span className="inline-flex min-w-0 items-center gap-1.5 break-words">
             <AlertTriangle className="h-3.5 w-3.5" />
-            {english ? "First seen" : "首次出现"} {formatDateLabel(blocker.firstSeenAt)}
+            {english ? "First seen" : "首次出现"}{" "}
+            {formatSharedCardDateLabel(blocker.firstSeenAt, english)}
           </span>
         ) : null}
         {displayTargetLabel ? (
@@ -125,7 +130,8 @@ export function BlockerCard({ blocker, className, compact = false }: BlockerCard
         {blocker.updatedAt ? (
           <span className="inline-flex min-w-0 items-center gap-1.5 break-words">
             <GaugeCircle className="h-3.5 w-3.5" />
-            {english ? "Last changed" : "最近变化"} {formatRelative(blocker.updatedAt)}
+            {english ? "Last changed" : "最近变化"}{" "}
+            {formatSharedCardRelativeLabel(blocker.updatedAt, english)}
           </span>
         ) : null}
       </div>

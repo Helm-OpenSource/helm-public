@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, preview, workspaceId: workspace.id });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "CRM preview failed" : "CRM 预览失败") },
+      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "CRM preview failed" : "客户关系系统预览失败") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

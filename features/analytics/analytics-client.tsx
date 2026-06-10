@@ -18,6 +18,7 @@ import {
   formatAnalyticsTechnicalKey,
   formatAnalyticsVisibleText,
 } from "@/features/analytics/display-copy";
+import { formatAnalyticsDateLabel } from "@/features/analytics/date-labels";
 import {
   getLocalizedActionTypeLabels,
   getLocalizedEventLabels,
@@ -317,13 +318,13 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
       tone: "info",
     },
     {
-      label: english ? "AI work posture" : "AI 工作姿态",
+      label: english ? "AI work posture" : "AI工作姿态",
       value: english
         ? `${data.llmOverview.successCount} completed · ${data.llmOverview.fallbackCount} held`
         : `${data.llmOverview.successCount} 次顺利完成 · ${data.llmOverview.fallbackCount} 次安全停住`,
       detail: english
         ? "Show whether AI helped or stopped safely before exposing service logs."
-        : "先看 AI 是帮上忙还是安全停住，再展开服务日志。",
+        : "先看AI是帮上忙还是安全停住，再展开服务日志。",
       href: "/diagnostics",
       tone: data.llmOverview.fallbackCount > 0 ? "warning" : "success",
     },
@@ -359,7 +360,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
         summary={
           english
             ? "The useful readout is accepted work, stopped work, opportunity movement, active people, and AI's posture."
-            : "有效读数是已确认推进、被拦事项、机会移动、活跃人员和 AI 工作姿态。"
+            : "有效读数是已确认推进、被拦事项、机会移动、活跃人员和AI工作姿态。"
         }
         items={[...analyticsAssetFocusItems]}
         primaryAction={{
@@ -546,7 +547,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
 
       <LazyDisclosure
         className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
-        title={english ? "AI work posture" : "引用：AI 工作姿态"}
+        title={english ? "AI work posture" : "引用：AI工作姿态"}
       >
         <div className="grid gap-4 md:grid-cols-3">
           <MetricCard
@@ -1331,7 +1332,11 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
                     </Badge>
                   </div>
                   <p className="text-xs text-[color:var(--muted-foreground)]">
-                    {formatDateLabel(event.createdAt)}
+                    {formatAnalyticsDateLabel(
+                      event.createdAt,
+                      english,
+                      formatDateLabel,
+                    )}
                   </p>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-sm text-[color:var(--muted-foreground)]">
@@ -1366,12 +1371,12 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
       </Card>
       </LazyDisclosure>
 
-      <LazyDisclosure title={english ? "AI work posture detail" : "查看 AI 工作姿态明细"}>
+      <LazyDisclosure title={english ? "AI work posture detail" : "查看AI工作姿态明细"}>
       <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "AI task mix" : "AI 工作分布"}
+              {english ? "AI task mix" : "AI工作分布"}
             </CardTitle>
             <CardDescription>
               {english
@@ -1416,7 +1421,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
         <Card>
           <CardHeader>
             <CardTitle>
-              {english ? "Recent AI work records" : "最近 AI 工作记录"}
+              {english ? "Recent AI work records" : "最近AI工作记录"}
             </CardTitle>
             <CardDescription>
               {english
@@ -1450,7 +1455,11 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
                       </Badge>
                     </div>
                     <p className="text-xs text-[color:var(--muted-foreground)]">
-                      {formatDateLabel(item.createdAt)}
+                      {formatAnalyticsDateLabel(
+                        item.createdAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     </p>
                   </div>
                   <div className="mt-2 text-sm text-[color:var(--muted-foreground)]">
@@ -1510,7 +1519,7 @@ export function AnalyticsClient({ data }: AnalyticsClientProps) {
       </div>
       </LazyDisclosure>
 
-      <LazyDisclosure title={english ? "AI service reference" : "查看 AI 服务引用"}>
+      <LazyDisclosure title={english ? "AI service reference" : "查看AI服务引用"}>
       <div className="grid gap-6 xl:grid-cols-3">
         <Card>
           <CardHeader>

@@ -64,7 +64,8 @@ import {
 } from "@/lib/i18n/labels";
 import type { ParticipantPortalInviteIssuanceState } from "@/lib/auth/participant-portal-invite-state";
 import { getWorkspaceStory } from "@/lib/presentation/workspace-story";
-import { formatDateLabel, safeParseJson } from "@/lib/utils";
+import { safeParseJson } from "@/lib/utils";
+import { formatSettingsDateLabel } from "@/features/settings/settings-date-labels";
 import {
   connectAliyunFounderDefaultAction,
   connectAliyunMailConnectorAction,
@@ -142,6 +143,13 @@ import { getChinaCheckoutActionLabel } from "@/lib/billing/china-renew-restore";
 import { buildWorkspaceOperatingFoundationSummary } from "@/lib/operating-system";
 import { buildInviteAcceptanceGuidance } from "@/lib/auth/public-entry";
 import { MemberDefinitionCard } from "@/features/settings/member-definition-card";
+import {
+  formatSourceIntakeLabel,
+  getDataIntakeLevels,
+  getProofPackageFiles,
+  getResourceAccessCatalog,
+  isSourceIntakeOptionKey,
+} from "@/features/settings/data-intake-ux";
 import { CONNECTOR_PERMISSION_SUMMARIES } from "@/features/agentic-governance/connector-permission-summary";
 import { pickConnectorForCurrentUser } from "@/features/settings/connector-selection";
 import { AccountSettingsTab } from "@/features/settings/components/account-settings-tab";
@@ -392,8 +400,10 @@ export function SettingsClient({
     provider: "WECOM",
   });
   const crmSources = data.importSources;
-  const legacyConnectors = safeParseJson<
-    Array<{ name: string; status: string }>
+  // connectedSources is a legacy setup column; render it as source-intake
+  // guidance, never as connector authorization.
+  const setupSourceSelections = safeParseJson<
+    Array<{ name: string; status?: string }>
   >(data.workspace?.connectedSources, []);
   const [wecomCalendarRegistryDraft, setWecomCalendarRegistryDraft] = useState(
     (wecomConnector?.calendarRegistry?.boundCalendars ?? [])
@@ -544,6 +554,11 @@ export function SettingsClient({
     featureFlags,
   });
   const english = locale === "en-US";
+  const dataIntakeLevels = getDataIntakeLevels(english);
+  const resourceAccessCatalog = getResourceAccessCatalog(english);
+  const proofPackageFiles = getProofPackageFiles(english);
+  const formatSettingsDate = (value: Date | string | null | undefined) =>
+    formatSettingsDateLabel(value, english);
 
   const navigateSettingsTab = (value: string) => {
     const tab = resolveInitialSettingsTab(value);
@@ -715,8 +730,9 @@ export function SettingsClient({
                 ? `${authControlOverview.driftScopeCount} drift scopes and ${authControlOverview.currentSessionProtectedScopeCount} current-session-protected scopes still need operator judgement.`
                 : `仍有 ${authControlOverview.driftScopeCount} 个漂移范围与 ${authControlOverview.currentSessionProtectedScopeCount} 个当前会话保护范围需要人工判断。`,
           meta: authControlOverview.latestDetectedAt
-            ? `${english ? "Latest detected" : "最近发现"} ${formatDateLabel(
+            ? `${english ? "Latest detected" : "最近发现"} ${formatSettingsDateLabel(
                 authControlOverview.latestDetectedAt,
+                english,
               )}`
             : undefined,
         }
@@ -856,7 +872,7 @@ export function SettingsClient({
     data.billingOverview.paymentRailStage === "LIVE"
       ? english
         ? "Live integration"
-        : "live integration"
+        : "真实接入"
       : english
         ? "Foundation only"
         : "基础层已冻结";
@@ -3129,7 +3145,7 @@ export function SettingsClient({
                                 />
                                 <Info
                                   label={english ? "Created" : "创建时间"}
-                                  value={formatDateLabel(profile.createdAt)}
+                                  value={formatSettingsDateLabel(profile.createdAt, english)}
                                 />
                               </div>
                               {profile.notes ? (
@@ -3264,15 +3280,16 @@ export function SettingsClient({
                                   label={
                                     english ? "Effective from" : "生效起点"
                                   }
-                                  value={formatDateLabel(
+                                  value={formatSettingsDateLabel(
                                     referral.effectiveFrom,
+                                    english,
                                   )}
                                 />
                                 <Info
                                   label={
                                     english ? "Effective until" : "生效截止"
                                   }
-                                  value={formatDateLabel(referral.effectiveTo)}
+                                  value={formatSettingsDateLabel(referral.effectiveTo, english)}
                                 />
                               </div>
                               {referral.notes ? (
@@ -3449,8 +3466,9 @@ export function SettingsClient({
                                   label={
                                     english ? "Effective from" : "生效起点"
                                   }
-                                  value={formatDateLabel(
+                                  value={formatSettingsDateLabel(
                                     engagement.effectiveFrom,
+                                    english,
                                   )}
                                 />
                               </div>
@@ -3873,7 +3891,7 @@ export function SettingsClient({
                   canManageParticipantPortal={canManageParticipantPortal}
                   data={data}
                   english={english}
-                  formatDateLabel={formatDateLabel}
+                  formatDateLabel={formatSettingsDate}
                   issueParticipantPortalAccess={issueParticipantPortalAccess}
                   latestParticipantPortalInviteUrl={
                     latestParticipantPortalInviteUrl
@@ -3891,7 +3909,7 @@ export function SettingsClient({
                   canManageManualSettlement={canManageManualSettlement}
                   data={data}
                   english={english}
-                  formatDateLabel={formatDateLabel}
+                  formatDateLabel={formatSettingsDate}
                 >
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4023,7 +4041,7 @@ export function SettingsClient({
                               />
                               <Info
                                 label={english ? "Submitted at" : "提交时间"}
-                                value={formatDateLabel(application.createdAt)}
+                                value={formatSettingsDateLabel(application.createdAt, english)}
                               />
                             </div>
                             {application.background ? (
@@ -4047,8 +4065,8 @@ export function SettingsClient({
                             {application.reviewedByUser ? (
                               <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
                                 {english
-                                  ? `Last reviewed by ${application.reviewedByUser.name} on ${formatDateLabel(application.reviewedAt)}`
-                                  : `最近由 ${application.reviewedByUser.name} 于 ${formatDateLabel(application.reviewedAt)} 审核`}
+                                  ? `Last reviewed by ${application.reviewedByUser.name} on ${formatSettingsDateLabel(application.reviewedAt, english)}`
+                                  : `最近由 ${application.reviewedByUser.name} 于 ${formatSettingsDateLabel(application.reviewedAt, english)} 审核`}
                               </p>
                             ) : null}
                             {application.linkedBeneficiary ? (
@@ -4072,8 +4090,8 @@ export function SettingsClient({
                                 </p>
                                 <p>
                                   {english
-                                    ? `Last invite issued on ${formatDateLabel(application.participantPortalAccess.lastInviteIssuedAt)}.`
-                                    : `最近一次邀请发放时间：${formatDateLabel(application.participantPortalAccess.lastInviteIssuedAt)}。`}
+                                    ? `Last invite issued on ${formatSettingsDateLabel(application.participantPortalAccess.lastInviteIssuedAt, english)}.`
+                                    : `最近一次邀请发放时间：${formatSettingsDateLabel(application.participantPortalAccess.lastInviteIssuedAt, english)}。`}
                                 </p>
                                 <p>
                                   {getProgramApplicationInviteGuidance(
@@ -4273,7 +4291,7 @@ export function SettingsClient({
                 <BillingAttributionDetailPanels
                   data={data}
                   english={english}
-                  formatDateLabel={formatDateLabel}
+                  formatDateLabel={formatSettingsDate}
                   formatMoneyAmount={formatMoneyAmount}
                   revenueAttributionNarrative={revenueAttributionNarrative}
                   revenueRuleNarrative={revenueRuleNarrative}
@@ -4287,7 +4305,7 @@ export function SettingsClient({
                   data={data}
                   english={english}
                   exportCurrentSettlementBatch={exportCurrentSettlementBatch}
-                  formatDateLabel={formatDateLabel}
+                  formatDateLabel={formatSettingsDate}
                   formatMoneyAmount={formatMoneyAmount}
                   markSettlementLinePaid={markSettlementLinePaid}
                   pending={pending}
@@ -4356,6 +4374,123 @@ export function SettingsClient({
 
         <TabsContent value="connectors">
           <div className="space-y-6">
+            <Card className="workspace-panel-muted" data-testid="resource-access-catalog">
+              <CardHeader>
+                <CardTitle>
+                  {english ? "Source intake before connectors" : "先做数据来源诊断，再接连接器"}
+                </CardTitle>
+                <CardDescription>
+                  {english
+                    ? "Use L0 diagnostic material and L1 fixtures before any L2 read-only connector. This is a proof path, not writeback or deployment authorization."
+                    : "先用 L0 诊断材料和 L1 fixture 证明信号链，再进入 L2 只读接入。这是证据路径，不是写回或部署授权。"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {dataIntakeLevels.map((level) => (
+                    <div
+                      key={level.key}
+                      className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+                    >
+                      <p className="text-xs font-semibold text-[var(--accent)]">
+                        {level.key}
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">
+                        {level.title}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                        {level.summary}
+                      </p>
+                      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                        {english ? "Evidence" : "证据"} · {level.output}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {resourceAccessCatalog.map((resource) => (
+                    <div
+                      key={resource.key}
+                      className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                          {resource.title}
+                        </p>
+                        <span className="rounded-full bg-[color:var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold text-[color:var(--foreground)] ring-1 ring-[color:var(--border)]">
+                          {resource.level}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <Info
+                          label={english ? "Minimum permission" : "最小权限"}
+                          value={resource.permissionSummary}
+                        />
+                        <Info
+                          label={english ? "Dry-run evidence" : "预演证据"}
+                          value={resource.dryRunEvidence}
+                        />
+                        <Info
+                          label={english ? "Read-only status" : "只读状态"}
+                          value={resource.readOnlyStatus}
+                        />
+                        <Info
+                          label={english ? "Failure posture" : "失败姿态"}
+                          value={resource.failurePosture}
+                        />
+                      </div>
+                      <p className="mt-3 rounded-2xl bg-[color:var(--surface-subtle)] px-3 py-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                        {resource.forbiddenAction}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="workspace-panel-muted" data-testid="signal-first-mile-proof-viewer">
+              <CardHeader>
+                <CardTitle>
+                  {english ? "Signal First Mile proof package" : "经营信号首公里 proof package"}
+                </CardTitle>
+                <CardDescription>
+                  {english
+                    ? "First version is read-only: inspect generated files and run the recorded eval command. It does not upload materials, open a hosted endpoint, or call a connector."
+                    : "第一版保持只读：查看生成文件并运行记录的 eval 命令。它不上传材料、不开放托管端点、不调用连接器。"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 font-mono text-xs leading-6 text-[color:var(--muted)]">
+                  node templates/signal-first-mile/run-first-change-proof.js{" \\"}
+                  <br />
+                  &nbsp;&nbsp;templates/signal-first-mile/selector-input.sample.json{" \\"}
+                  <br />
+                  &nbsp;&nbsp;/tmp/helm-sfm-first-change-proof
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  {proofPackageFiles.map((file) => (
+                    <div
+                      key={file.file}
+                      className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+                    >
+                      <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                        {file.file}
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                        {file.purpose}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Missing files mean the proof package has not been generated yet; that is a setup state, not a connector failure or deployment blocker."
+                    : "文件缺失只说明 proof package 尚未生成；这是初始化状态，不是连接器失败或部署阻塞。"}
+                </p>
+              </CardContent>
+            </Card>
+
             <Card className="workspace-panel-muted">
               <CardHeader>
                 <CardTitle>
@@ -4447,8 +4582,13 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {english ? "Live connectors" : "真实连接器"}
+                  {english ? "Read-only connectors" : "只读连接器"}
                 </CardTitle>
+                <CardDescription>
+                  {english
+                    ? "Connector actions below keep the current read-only / review-first boundary. Connecting or syncing does not authorize writeback, external send, approval execution, or customer deployment."
+                    : "下方连接器操作继续保持只读 / 先复核边界。连接或同步不授权写回、外发、审批执行或客户部署。"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                 <div className="theme-surface-panel rounded-2xl px-4 py-4">
@@ -4493,7 +4633,7 @@ export function SettingsClient({
                     />
                     <Info
                       label={english ? "Last sync" : "最近同步"}
-                      value={formatDateLabel(gmailConnector?.lastSyncedAt)}
+                      value={formatSettingsDateLabel(gmailConnector?.lastSyncedAt, english)}
                     />
                     <Info
                       label={english ? "Sync status" : "同步状态"}
@@ -4598,7 +4738,7 @@ export function SettingsClient({
                       variant="secondary"
                       onClick={() =>
                         runConnectorAction(
-                          () => connectAliyunFounderDefaultAction(),
+                          () => connectAliyunFounderDefaultAction({ locale }),
                           english
                             ? "Founder default account applied"
                             : "已应用创始人默认账号",
@@ -4804,20 +4944,21 @@ export function SettingsClient({
                             label={
                               english ? "Last callback at" : "最近回调时间"
                             }
-                            value={formatDateLabel(
+                            value={formatSettingsDateLabel(
                               dingtalkConnector?.lastCallbackResult?.recordedAt
                                 ? new Date(
                                     dingtalkConnector.lastCallbackResult
                                       .recordedAt,
                                   )
                                 : null,
+                              english,
                             )}
                           />
                           <Info
                             label={
                               english
                                 ? "Resolved provider email"
-                                : "解析到的 provider 邮箱"
+                                : "解析到的服务商邮箱"
                             }
                             value={
                               dingtalkConnector?.lastCallbackResult
@@ -4878,13 +5019,14 @@ export function SettingsClient({
                           />
                           <Info
                             label={english ? "Last ingest at" : "最近采集时间"}
-                            value={formatDateLabel(
+                            value={formatSettingsDateLabel(
                               dingtalkConnector?.lastIngestResult?.recordedAt
                                 ? new Date(
                                     dingtalkConnector.lastIngestResult
                                       .recordedAt,
                                   )
                                 : null,
+                              english,
                             )}
                           />
                           <Info
@@ -5224,15 +5366,16 @@ export function SettingsClient({
                           />
                           <Info
                             label={english ? "Last callback at" : "最近回调时间"}
-                            value={formatDateLabel(
+                            value={formatSettingsDateLabel(
                               feishuConnector?.lastCallbackResult?.recordedAt
                                 ? new Date(feishuConnector.lastCallbackResult.recordedAt)
                                 : null,
+                              english,
                             )}
                           />
                           <Info
                             label={
-                              english ? "Resolved provider email" : "解析到的 provider 邮箱"
+                              english ? "Resolved provider email" : "解析到的服务商邮箱"
                             }
                             value={
                               feishuConnector?.lastCallbackResult?.providerEmail ??
@@ -5276,10 +5419,11 @@ export function SettingsClient({
                                 ? "Last read-only ingest at"
                                 : "最近只读采集时间"
                             }
-                            value={formatDateLabel(
+                            value={formatSettingsDateLabel(
                               feishuConnector?.lastIngestResult?.recordedAt
                                 ? new Date(feishuConnector.lastIngestResult.recordedAt)
                                 : null,
+                              english,
                             )}
                           />
                           <Info
@@ -5308,7 +5452,7 @@ export function SettingsClient({
                             value={
                               english
                                 ? "Message draft(review-first) pending"
-                                : "消息草稿（review-first）待落地"
+                                : "消息草稿（先复核）待落地"
                             }
                           />
                         </div>
@@ -5537,11 +5681,12 @@ export function SettingsClient({
                               ?.lastValidationResult?.recordedAt ? (
                               <p className="text-xs text-[color:var(--muted-foreground)]">
                                 {english ? "Last checked" : "最近校验"}：
-                                {formatDateLabel(
+                                {formatSettingsDateLabel(
                                   new Date(
                                     wecomConnector.calendarRegistry
                                       .lastValidationResult.recordedAt,
                                   ),
+                                  english,
                                 )}
                               </p>
                             ) : null}
@@ -5633,8 +5778,9 @@ export function SettingsClient({
                                       </p>
                                     </div>
                                     <p className="text-xs text-[color:var(--muted-foreground)]">
-                                      {formatDateLabel(
+                                      {formatSettingsDateLabel(
                                         new Date(calendar.recordedAt),
+                                        english,
                                       )}
                                     </p>
                                   </div>
@@ -5695,20 +5841,21 @@ export function SettingsClient({
                               label={
                                 english ? "Last callback at" : "最近回调时间"
                               }
-                              value={formatDateLabel(
+                              value={formatSettingsDateLabel(
                                 wecomConnector?.lastCallbackResult?.recordedAt
                                   ? new Date(
                                       wecomConnector.lastCallbackResult
                                         .recordedAt,
                                     )
                                   : null,
+                                english,
                               )}
                             />
                             <Info
                               label={
                                 english
                                   ? "Resolved provider email"
-                                  : "解析到的 provider 邮箱"
+                                  : "解析到的服务商邮箱"
                               }
                               value={
                                 wecomConnector?.lastCallbackResult
@@ -5757,13 +5904,14 @@ export function SettingsClient({
                                   ? "Last read-only ingest at"
                                   : "最近只读采集时间"
                               }
-                              value={formatDateLabel(
+                              value={formatSettingsDateLabel(
                                 wecomConnector?.lastIngestResult?.recordedAt
                                   ? new Date(
                                       wecomConnector.lastIngestResult
                                         .recordedAt,
                                     )
                                   : null,
+                                english,
                               )}
                             />
                             <Info
@@ -5940,37 +6088,43 @@ export function SettingsClient({
                       ? "The key thing to watch during pilot is not only whether a connector attached, but whether imported objects were bound correctly. If unbound threads or import failures keep rising, clean data quality first before widening the pilot."
                       : "当前试点期最值得盯的不是“接没接上”，而是“接进来的对象有没有被绑定对”。如果待绑定线程或导入失败行持续升高，建议先清数据质量，再扩大试点范围。"}
                   </div>
-                  {legacyConnectors.length ? (
-                    legacyConnectors.map((connector) => (
-                      <div
-                        key={connector.name}
-                        className="workspace-panel rounded-2xl px-4 py-3"
-                      >
-                        <p className="font-medium text-[color:var(--foreground)]">
-                          {connector.name}
-                        </p>
-                        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                          {connector.status === "connected"
-                            ? english
-                              ? "Demo connector state from setup wizard"
-                              : "初始化向导中的演示连接状态"
-                            : english
-                              ? "Not enabled yet"
-                              : "尚未启用"}
-                        </p>
-                      </div>
-                    ))
+                  {setupSourceSelections.length ? (
+                    setupSourceSelections.map((selection) => {
+                      const sourceIntakeSelection = isSourceIntakeOptionKey(
+                        selection.name,
+                      );
+                      return (
+                        <div
+                          key={selection.name}
+                          className="workspace-panel rounded-2xl px-4 py-3"
+                        >
+                          <p className="font-medium text-[color:var(--foreground)]">
+                            {formatSourceIntakeLabel(selection.name, locale)}
+                          </p>
+                          <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                            {sourceIntakeSelection ||
+                            selection.status === "diagnostic_selected"
+                              ? english
+                                ? "Source intake selection from setup wizard; not connector authorization."
+                                : "初始化向导中的数据来源诊断选择；不是连接器授权。"
+                              : english
+                                ? "Legacy setup note; not connector authorization."
+                                : "历史初始化说明；不是连接器授权。"}
+                          </p>
+                        </div>
+                      );
+                    })
                   ) : (
                     <EmptyState
                       title={
                         english
-                          ? "No legacy connector notes yet"
-                          : "还没有历史连接器说明"
+                          ? "No setup source-intake notes yet"
+                          : "还没有初始化数据来源诊断说明"
                       }
                       description={
                         english
-                          ? "Mock connector states from setup wizard will also appear here."
-                          : "初始化向导里的模拟连接状态也会在这里展示。"
+                          ? "Source-intake defaults from setup appear here as guidance, not connector state."
+                          : "初始化向导里的数据来源默认项会作为引导显示在这里，不作为连接器状态。"
                       }
                     />
                   )}
@@ -6052,7 +6206,7 @@ export function SettingsClient({
                             </span>
                             <span>
                               {english ? "Created" : "创建时间"}：
-                              {formatDateLabel(suggestion.createdAt)}
+                              {formatSettingsDateLabel(suggestion.createdAt, english)}
                             </span>
                           </div>
                           <div className="theme-surface-panel-soft rounded-2xl px-3 py-3 text-xs leading-6 text-[color:var(--muted)]">
@@ -6201,8 +6355,9 @@ export function SettingsClient({
                       <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
                         <span>
                           {english ? "Effective at" : "生效时间"}：
-                          {formatDateLabel(
+                          {formatSettingsDateLabel(
                             suggestion.appliedAt ?? suggestion.confirmedAt,
+                            english,
                           )}
                         </span>
                         <span>
@@ -6242,7 +6397,7 @@ export function SettingsClient({
                         <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
                           <span>
                             {english ? "Decision at" : "决定时间"}：
-                            {formatDateLabel(suggestion.formalReviewDecisionAt)}
+                            {formatSettingsDateLabel(suggestion.formalReviewDecisionAt, english)}
                           </span>
                           <span>
                             {english ? "Reviewer" : "评审人"}：
@@ -6419,10 +6574,11 @@ export function SettingsClient({
                             </span>
                             <span>
                               {english ? "Queued at" : "入队时间"}：
-                              {formatDateLabel(
+                              {formatSettingsDateLabel(
                                 item.formalReviewQueuedAt ??
                                   item.appliedAt ??
                                   item.confirmedAt,
+                                english,
                               )}
                             </span>
                           </div>
@@ -6668,7 +6824,7 @@ export function SettingsClient({
                           <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
                             <span>
                               {english ? "Decision at" : "决定时间"}：
-                              {formatDateLabel(item.formalReviewDecisionAt)}
+                              {formatSettingsDateLabel(item.formalReviewDecisionAt, english)}
                             </span>
                             <span>
                               {english ? "Reviewer" : "评审人"}：
@@ -6929,8 +7085,9 @@ export function SettingsClient({
                       </p>
                       <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                         {english ? "Effective at" : "生效时间"}：
-                        {formatDateLabel(
+                        {formatSettingsDateLabel(
                           suggestion.appliedAt ?? suggestion.confirmedAt,
+                          english,
                         )}
                       </p>
                     </div>

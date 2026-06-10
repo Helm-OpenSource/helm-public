@@ -156,7 +156,7 @@ const INTERNAL_HOST_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> =
 // the guard still blocks the underlying private-looking domain / slug anywhere
 // else, and it still blocks other addresses on the same domain.
 const PUBLIC_CONTACT_EMAIL_ALLOW_LIST: ReadonlySet<string> = new Set([
-  "security@zhaojiling.com",
+  "Helm-security@zhaojiling.com",
 ]);
 
 const PUBLIC_CONTACT_EMAIL_DOCUMENT_ALLOW_LIST: ReadonlySet<string> = new Set([
@@ -228,24 +228,30 @@ export function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-// Bare-token credential heuristic. Triggers when the same line carries a
-// credential keyword (password / secret / token / key / pwd / credential)
-// AND a high-entropy token-shaped substring outside the URL-embedded
-// pattern. Designed to catch standalone leaks like the rotated dev RDS
-// example removed in 2026-04-27. Tuned conservatively (length 16+ AND
-// variety 3+) to avoid flagging identifier-like prose such as method
-// names or kebab-case rule names.
+// Assignment-form credential rule (Rule C). Unlike the earlier
+// keyword-anywhere + entropy-anywhere heuristic — which drove ~70+ false
+// positives on PascalCase identifiers (`Phase3qRejectionError`) and test
+// salts and was removed — this rule requires the credential keyword to sit
+// in ASSIGNMENT position (`KEYWORD = value` / `KEYWORD: value`) AND the
+// assigned value to be a high-entropy token. Measured false-positive count
+// across app/features/lib/scripts/docs/prisma on the current tree: 0, while
+// it still catches standalone leaks like the rotated dev RDS example removed
+// 2026-04-27 (`DB_PASSWORD=<entropy>`, `client_secret: <entropy>`).
 //
-// Currently retained as scaffolding for the next iteration of the
-// credential check; not wired into a scanner yet, hence the underscore
-// prefix to signal "intentionally unused".
-const _CREDENTIAL_KEYWORD_PATTERN =
-  /\b(password|secret|token|api[_-]?key|private[_-]?key|credential|pwd)\b/i;
+// Captures: group 1 = keyword-bearing identifier, group 2 = assigned value.
+const ASSIGNMENT_CREDENTIAL_PATTERN =
+  /\b([A-Za-z0-9_]*?(?:password|secret|token|api[_-]?key|private[_-]?key|credential|pwd))\s*[:=]\s*['"`]?([^\s'"`,;)}{]{8,})/gi;
+
+// Intentionally-public high-entropy assignment values (e.g. a published
+// sample fixture token) may be permitted by SHA-256 without storing the
+// plaintext here — same discipline as KNOWN_LEAKED_TOKEN_SHA256. Empty today.
+//   node -e "console.log(require('crypto').createHash('sha256').update(process.argv[1]).digest('hex'));" "<value>"
+const ALLOWED_ASSIGNMENT_VALUE_SHA256: ReadonlySet<string> = new Set<string>([]);
 
 const PLACEHOLDER_TOKEN_PATTERN =
-  /^(\*+|<[^>]+>|x+|\$\{[^}]+\}|password|secret|token|key|api_key|private_key|credential|pwd|root|pass|example|changeme|todo|tbd|na|n\/a)$/i;
+  /^(\*+|<[^>]+>|x+|\$\{[^}]+\}|password|secret|token|key|api_key|private_key|credential|pwd|root|pass|example|changeme|todo|tbd|na|n\/a|null|undefined|true|false)$/i;
 
-function _looksLikeHighEntropyToken(token: string): boolean {
+function looksLikeHighEntropyToken(token: string): boolean {
   // Real-world credentials in the formats Helm accepts (Aliyun, Stripe,
   // OpenAI, AWS, generic random) almost always satisfy:
   //   length >= 16   AND
@@ -729,6 +735,8 @@ const COMMERCIAL_ENTITLEMENT_SOURCE_EXTENSIONS = new Set<string>([
 const COMMERCIAL_ENTITLEMENT_ALLOW_LIST = new Set<string>([
   "lib/deployment-profile/contract.ts",
   "lib/deployment-profile/contract.test.ts",
+  "lib/delivery-engineer/golden-path-doctor.ts",
+  "lib/delivery-engineer/golden-path-doctor.test.ts",
   "scripts/validate-env.ts",
 ]);
 
@@ -831,10 +839,12 @@ const SECRET_REDACTION_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp; 
     pattern: /([a-z][a-z0-9+.-]*:\/\/[^\s:@/'"`]+):[^\s@'"`]+@/gi,
     replacement: "$1:***@",
   },
-  // bare assignment forms: PASSWORD=..., TOKEN=..., SECRET=..., API_KEY=...
+  // bare assignment forms: PASSWORD=..., TOKEN=..., secret: ..., api_key=...
+  // Case-insensitive and aligned with ASSIGNMENT_CREDENTIAL_PATTERN so any
+  // value flagged by Rule C is also redacted from the printed excerpt.
   {
     name: "assignment-credentials",
-    pattern: /\b((?:[A-Z0-9_]*?(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY))\s*[:=]\s*['"]?)([^\s'"`,;]{4,})/g,
+    pattern: /\b([A-Za-z0-9_]*?(?:password|secret|token|api[_-]?key|private[_-]?key|credential|pwd)\s*[:=]\s*['"`]?)([^\s'"`,;]{4,})/gi,
     replacement: "$1***",
   },
 ];
@@ -886,21 +896,43 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   typecheck: "tsc --noEmit --project tsconfig.public.json",
   "db:prepare":
     "node -e \"console.log('public mirror: database prepare is not required')\"",
-  "self-check": "npm run public:smoke:static",
-  "check:boundaries": "npm run public:smoke:static",
+  "self-check":
+    "npm run public:smoke:static && npm run check:secret-history",
+  "check:boundaries":
+    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp",
+  "check:source-profiler-boundaries":
+    "node --import tsx scripts/check-source-profiler-boundaries.ts",
+  "check:golden-path-docs":
+    "node --import tsx scripts/check-golden-path-docs.ts",
+  "check:diagnostics-risk":
+    "node --import tsx scripts/check-diagnostics-risk.ts",
+  "check:llm-candidate-boundaries":
+    "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+  "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
+  "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
+  "eval:llm-critic-boundaries":
+    "vitest run lib/evals/llm-critic-evals.test.ts",
+  "eval:llm-v2-boundaries":
+    "vitest run lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
   test: "vitest run --config vitest.public.config.ts",
   "test:public:guards":
-    "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+    "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts scripts/sarp-proof.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
   "quality:regression": "npm run test:public:guards && npm run public:smoke:static",
   "public:e2e:smoke": "npm run public:smoke:static",
   e2e: "npm run public:e2e:smoke",
-  "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+  "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
   "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+  "check:public-commit-metadata":
+    "node --import tsx scripts/public-commit-metadata-check.ts",
+  "check:bilingual-mixing":
+    "node --import tsx scripts/lint-bilingual-mixing.ts",
+  "check:bilingual-mixing:update":
+    "node --import tsx scripts/lint-bilingual-mixing.ts --update-baseline",
   "check:public-release":
     "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
   "release:check": "node --import tsx scripts/release-readiness-check.ts",
   "public:smoke:static":
-    "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
+    "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
 };
 
 const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
@@ -914,11 +946,26 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "typecheck",
   "validate:env",
   "delivery:doctor",
+  "golden:path",
   "eval:headless-signal-interface",
+  "eval:signal-first-mile-quality",
   "eval:internal-commercialization",
   "eval:operating-signal-flow",
+  "eval:expert-capability-feedback-loop",
+  "eval:cross-system-accountability-gap",
+  "eval:llm-critic-boundaries",
+  "eval:llm-v2-boundaries",
   "kit:dry-run",
   "pack:fixture-check",
+  "source-profiler",
+  "source-profiler:init",
+  "check:source-profiler-boundaries",
+  "check:golden-path-docs",
+  "diagnostics:doctor",
+  "check:diagnostics-risk",
+  "check:llm-candidate-boundaries",
+  "check:agentic-sarp",
+  "sarp:proof",
   "db:generate",
   "db:migrate",
   "db:prepare",
@@ -927,6 +974,9 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "db:seed:force",
   "smoke:docker:d2",
   "check:public-docs",
+  "check:public-commit-metadata",
+  "check:bilingual-mixing",
+  "check:bilingual-mixing:update",
   "check:public-release",
   "check:secret-history",
   "release:check",
@@ -1206,7 +1256,7 @@ function isAllowedPublicContactReference(
 
   const lowerLine = line.toLowerCase();
   const mentionsAllowedEmail = Array.from(PUBLIC_CONTACT_EMAIL_ALLOW_LIST).some(
-    (email) => lowerLine.includes(email),
+    (email) => lowerLine.includes(email.toLowerCase()),
   );
   if (!mentionsAllowedEmail) return false;
 
@@ -1291,6 +1341,11 @@ function scanFile(
     // Credential leak detection — runs on every scanned file, even on
     // policy-descriptor files. Secrets must never be policy-described.
 
+    // At most one credential violation per line: the more specific rules
+    // (URL-embedded, known-leaked hash) take precedence over the generic
+    // assignment rule, so a single leak is not double-counted.
+    let credentialFlaggedOnLine = false;
+
     // Rule A: URL-embedded credential.
     URL_EMBEDDED_CREDENTIAL_PATTERN.lastIndex = 0;
     let credentialMatch: RegExpExecArray | null;
@@ -1303,6 +1358,7 @@ function scanFile(
           line: lineNumber,
           excerpt: maskSecrets(line.trim()).slice(0, 240),
         });
+        credentialFlaggedOnLine = true;
         break;
       }
     }
@@ -1322,17 +1378,39 @@ function scanFile(
             line: lineNumber,
             excerpt: maskSecrets(line.trim()).slice(0, 240),
           });
+          credentialFlaggedOnLine = true;
           break;
         }
       }
     }
 
-    // (Heuristic bare-token rule deliberately omitted: real-world
-    // credentials and PascalCase identifiers like `Phase3qRejectionError`
-    // share length / case / digit profile, so the heuristic drove ~70+
-    // false positives without catching the canonical leaked value.
-    // Deterministic Rule B (SHA-256 deny list) is the authoritative
-    // backstop. Add new known leaks via their hash there.)
+    // Rule C: assignment-form credential. `KEYWORD = <high-entropy-value>` /
+    // `KEYWORD: <high-entropy-value>`. The earlier keyword-anywhere +
+    // entropy-anywhere heuristic was removed for ~70+ false positives; the
+    // assignment-position requirement plus the placeholder/entropy filters
+    // give 0 measured false positives on the current tree while still
+    // catching standalone leaks the SHA-256 deny list cannot know in advance.
+    if (!credentialFlaggedOnLine) {
+      ASSIGNMENT_CREDENTIAL_PATTERN.lastIndex = 0;
+      let assignmentMatch: RegExpExecArray | null;
+      while (
+        (assignmentMatch = ASSIGNMENT_CREDENTIAL_PATTERN.exec(line)) !== null
+      ) {
+        const value = assignmentMatch[2] ?? "";
+        if (
+          looksLikeHighEntropyToken(value) &&
+          !ALLOWED_ASSIGNMENT_VALUE_SHA256.has(sha256Hex(value))
+        ) {
+          violations.push({
+            rule: "credential:assignment-form",
+            path: relativePath,
+            line: lineNumber,
+            excerpt: maskSecrets(line.trim()).slice(0, 240),
+          });
+          break;
+        }
+      }
+    }
 
     if (!isPolicyDescriptor) {
       const licenseHeaderRule = getLicenseHeaderRule(

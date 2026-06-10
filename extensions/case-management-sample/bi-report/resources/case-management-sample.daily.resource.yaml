@@ -1,10 +1,11 @@
+# 语言 / Language: 中文 + English. Public-safe synthetic resource metadata only.
 id: case_management_sample.daily_activity
 upstream: case-management-sample-bi-report
 endpoint:
   path: sample://case-management/day-board
   method: READ
   via: static-fixture
-  upstream_terminus: Synthetic day-board fixture for the public case-management sample.
+  upstream_terminus: Synthetic day-board fixture for the public case-management sample. / 公开 case-management sample 的 synthetic day-board fixture。
 freshness:
   promised_max_lag: 24h
   staleness_action: degrade
@@ -16,7 +17,7 @@ sensitivity: public
 data_owner:
   team: helm-core
   role: sample-maintainer
-  contact_path: GitHub Issues label vertical:case-management-sample
+  contact_path: "GitHub issue templates / GitHub issue 模板: Golden Path activation report for sample-pack success, blockers, or friction; Documentation correction for sample docs issues; Integration request for source-system ideas. Public-safe synthetic evidence only. / 仅使用 public-safe synthetic evidence。"
 commitment_level: suggestion_only
 caller_scopes:
   - case-management-sample.bi-report
@@ -25,27 +26,27 @@ field_dictionary:
   - name: board_date
     type: date
     required: true
-    description: Synthetic day-board date.
+    description: Synthetic day-board date. / Synthetic day-board 日期。
     pii_class: public
   - name: open_case_count
     type: integer
     required: true
-    description: Number of open synthetic cases.
+    description: Number of open synthetic cases. / 未结 synthetic case 数量。
     pii_class: public
   - name: review_required_count
     type: integer
     required: true
-    description: Number of synthetic cases requiring human review.
+    description: Number of synthetic cases requiring human review. / 需要人工复核的 synthetic case 数量。
     pii_class: public
   - name: stale_case_count
     type: integer
     required: true
-    description: Number of stale synthetic cases.
+    description: Number of stale synthetic cases. / 停滞 synthetic case 数量。
     pii_class: public
   - name: red_alert
     type: boolean
     required: true
-    description: Whether the synthetic day board is in red alert.
+    description: Whether the synthetic day board is in red alert. / Synthetic day board 是否处于红色预警。
     pii_class: public
 sample_payload:
   request:

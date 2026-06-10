@@ -435,7 +435,7 @@ function buildReinforcementJudgement(
   if (strengthMode === "boundary-only-reinforcement") {
     return english
       ? "This page supports only boundary-only reinforcement, not stronger promise-bearing language."
-      : "当前这页只支持仅边界加固，不支持更强的承诺-bearing语言。";
+      : "当前这页只支持仅边界加固，不支持更强的承诺型语言。";
   }
   if (strengthMode === "internal-reinforcement-only") {
     return english
@@ -469,7 +469,7 @@ function buildReinforcementJudgement(
   }
   return english
     ? `Reinforcement should stay constrained because the current sendability is still ${sendabilityMode}.`
-    : `当前加固仍应保持克制，因为发送评估仍停留在「${sendabilityMode}」。`;
+    : `当前加固仍应保持克制，因为发送评估仍停留在「${labelForSendabilityMode(sendabilityMode, false)}」。`;
 }
 
 function buildSendabilityJudgement(
@@ -504,7 +504,7 @@ function buildSendabilityJudgement(
   }
   if (sendabilityMode === "discussion-only") {
     return english
-      ? "This page is discussion-only and should not be treated as a可发送 reinforcement surface."
+      ? "This page is discussion-only and should not be treated as a sendable reinforcement surface."
       : "当前这页仍是仅讨论，不应被当成可外发的加固面。";
   }
   if (sendabilityMode === "review-before-send") {
@@ -519,7 +519,7 @@ function buildSendabilityJudgement(
   }
   return english
     ? `This page is not-safe-to-send; reinforcement must stay behind review while the current ${strengthMode} pressure is resolved.`
-    : `当前这页仍然是 not-可发送；在当前 ${strengthMode} 压力被收口之前，加固必须继续停留在复核后面。`;
+    : `当前这页仍然不可发送；在当前「${labelForStrengthMode(strengthMode, false)}」压力被收口之前，加固必须继续停留在复核后面。`;
 }
 
 function buildBoundaryLineForStrengthMode(
@@ -544,7 +544,7 @@ function buildBoundaryLineForStrengthMode(
   if (strengthMode === "reinforcement-after-review") {
     return english
       ? "Reinforcement-after-review means no strengthening should leave review until another pass explicitly clears it."
-      : "复核后加固（加固-after-review）表示在下一轮复核明确放行之前，任何强化表达都不应离开复核。";
+      : "复核后加固表示在下一轮复核明确放行之前，任何强化表达都不应离开复核。";
   }
   if (strengthMode === "reinforcement-after-risk-reduction") {
     return english
@@ -612,7 +612,7 @@ function buildBoundaryLineForSendability(
   }
   return english
     ? "Not-safe-to-send means the current version must not leave internal review."
-    : "not-可发送 表示当前版本不能离开 internal 复核。";
+    : "不可发送表示当前版本不能离开内部复核。";
 }
 
 function buildReinforcementNextActions({
@@ -762,7 +762,7 @@ function buildEvidenceGroups(
               .slice(0, 2)
               .map(
                 (log) =>
-                  `${log.actor} · ${log.summary} · ${formatRelative(log.createdAt)}`,
+                  `${log.actor} · ${log.summary} · ${formatRelativeLabel(log.createdAt, english)}`,
               )
           : [
               english
@@ -772,7 +772,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "记忆",
+      label: english ? "Memory" : "经营记忆",
       items:
         detail.memoryFacts.length > 0 || detail.memoryEntries.length > 0
           ? [
@@ -781,14 +781,14 @@ function buildEvidenceGroups(
                 .map((fact) =>
                   english
                     ? `${fact.title}: ${trimText(fact.content, 80)}`
-                    : `${fact.title}：${trimText(fact.content, 80)}`,
+                    : `事实：${fact.title}：${trimText(fact.content, 80)}`,
                 ),
               ...detail.memoryEntries
                 .slice(0, 1)
                 .map((entry) =>
                   english
                     ? `${entry.title}: ${trimText(entry.content, 72)}`
-                    : `${entry.title}：${trimText(entry.content, 72)}`,
+                    : `记忆：${entry.title}：${trimText(entry.content, 72)}`,
                 ),
             ]
           : [
@@ -799,7 +799,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker 输出",
+      label: english ? "Worker output" : "执行输出",
       items:
         detail.actionItems.length > 0 ||
         Boolean(detail.briefingSnapshot?.payload.recommendedNextSteps?.length)
@@ -827,7 +827,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "边界痕迹",
+      label: english ? "Boundary trace" : "边界轨迹",
       items: [
         detail.blockers.length
           ? english
@@ -847,7 +847,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "可发送性痕迹",
+      label: english ? "Sendability trace" : "发送评估轨迹",
       items: [
         detail.actionItems.some(
           (item) => item.approvalTask?.status === "PENDING",
@@ -860,16 +860,16 @@ function buildEvidenceGroups(
             : "当前没有活跃审批任务直接挡在当前对外措辞前面。",
         english
           ? `Helm is tracking sendability as ${sendabilityMode}.`
-          : `Helm 当前把发送评估判断为「${sendabilityMode}」。`,
+          : `Helm 当前把发送评估判断为「${labelForSendabilityMode(sendabilityMode, false)}」。`,
       ],
     },
     {
       groupId: "reinforcement_trace",
-      label: english ? "Reinforcement trace" : "强化痕迹",
+      label: english ? "Reinforcement trace" : "加固轨迹",
       items: [
         english
           ? `Helm is currently holding reinforcement at ${strengthMode}.`
-          : `Helm 当前把加固层级判断为「${strengthMode}」。`,
+          : `Helm 当前把加固层级判断为「${labelForStrengthMode(strengthMode, false)}」。`,
         detail.nextAction
           ? english
             ? `The current strengthening pressure is anchored to the recorded next move: ${detail.nextAction}`
@@ -884,14 +884,56 @@ function buildEvidenceGroups(
       label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `Last updated ${formatRelative(detail.updatedAt)}`
+          ? `Last updated ${formatRelativeLabel(detail.updatedAt, true)}`
           : `最后更新于 ${formatRelative(detail.updatedAt)}`,
         english
-          ? `Current due date: ${formatDateLabel(detail.dueDate)}`
+          ? `Current due date: ${formatDateLabelForLocale(detail.dueDate, true)}`
           : `当前截止时间：${formatDateLabel(detail.dueDate)}`,
       ],
     },
   ];
+}
+
+function formatRelativeLabel(value: Date | string | null | undefined, english: boolean) {
+  if (!english) {
+    return formatRelative(value);
+  }
+  if (!value) {
+    return "none";
+  }
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  const diffMs = date.getTime() - Date.now();
+  const absoluteMs = Math.abs(diffMs);
+  const minuteMs = 60_000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+
+  const formatter = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
+  if (absoluteMs < hourMs) {
+    return formatter.format(Math.round(diffMs / minuteMs), "minute");
+  }
+  if (absoluteMs < dayMs) {
+    return formatter.format(Math.round(diffMs / hourMs), "hour");
+  }
+  return formatter.format(Math.round(diffMs / dayMs), "day");
+}
+
+function formatDateLabelForLocale(value: Date | string | null | undefined, english: boolean) {
+  if (!english) {
+    return formatDateLabel(value);
+  }
+  if (!value) {
+    return "Not set";
+  }
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function labelForStrengthMode(
@@ -900,53 +942,53 @@ function labelForStrengthMode(
 ) {
   switch (mode) {
     case "no-reinforcement":
-      return english ? "no-reinforcement" : "no-reinforcement";
+      return english ? "no-reinforcement" : "暂无加固";
     case "internal-reinforcement-only":
       return english
         ? "internal-reinforcement-only"
-        : "internal-reinforcement-only";
+        : "仅内部加固";
     case "customer-visible-reinforcement":
       return english
         ? "customer-visible-reinforcement"
-        : "customer-visible-reinforcement";
+        : "客户可见加固";
     case "reinforcement-after-review":
       return english
         ? "reinforcement-after-review"
-        : "reinforcement-after-review";
+        : "复核后加固";
     case "reinforcement-after-risk-reduction":
       return english
         ? "reinforcement-after-risk-reduction"
-        : "reinforcement-after-risk-reduction";
+        : "风险降低后加固";
     case "reinforcement-blocked":
-      return english ? "reinforcement-blocked" : "reinforcement-blocked";
+      return english ? "reinforcement-blocked" : "加固受阻";
     case "reinforcement-deferred":
-      return english ? "reinforcement-deferred" : "reinforcement-deferred";
+      return english ? "reinforcement-deferred" : "加固延后";
     default:
       return english
         ? "boundary-only-reinforcement"
-        : "boundary-only-reinforcement";
+        : "仅边界加固";
   }
 }
 
 function labelForSendabilityMode(mode: SendabilityPageMode, english: boolean) {
   switch (mode) {
     case "safe-to-send":
-      return english ? "safe-to-send" : "safe-to-send";
+      return english ? "safe-to-send" : "可安全发送";
     case "safe-with-boundary":
-      return english ? "safe-with-boundary" : "safe-with-boundary";
+      return english ? "safe-with-boundary" : "带边界可发送";
     case "safe-with-prerequisite":
-      return english ? "safe-with-prerequisite" : "safe-with-prerequisite";
+      return english ? "safe-with-prerequisite" : "补齐前置后可发送";
     case "safe-with-dependency":
-      return english ? "safe-with-dependency" : "safe-with-dependency";
+      return english ? "safe-with-dependency" : "带依赖说明可发送";
     case "safe-with-risk-note":
-      return english ? "safe-with-risk-note" : "safe-with-risk-note";
+      return english ? "safe-with-risk-note" : "带风险提示可发送";
     case "discussion-only":
-      return english ? "discussion-only" : "discussion-only";
+      return english ? "discussion-only" : "仅适合讨论";
     case "review-before-send":
-      return english ? "review-before-send" : "review-before-send";
+      return english ? "review-before-send" : "发送前复核";
     case "internal-only":
-      return english ? "internal-only" : "internal-only";
+      return english ? "internal-only" : "仅内部";
     default:
-      return english ? "not-safe-to-send" : "not-safe-to-send";
+      return english ? "not-safe-to-send" : "不可发送";
   }
 }

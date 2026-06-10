@@ -3,6 +3,7 @@ status: active
 owner: Product / Delivery Engineering / Engineering
 created: 2026-06-01
 review_after: 2026-06-15
+public_safety: Public-safe closeout summary. Captures decision and evidence sources only; no customer identifiers, raw rows, or private approval evidence.
 source_basis: internal strategy packet summarized into public-safe artifacts
 archive_trigger:
   - These artifact templates are replaced by a newer public Pack delivery contract
@@ -10,7 +11,25 @@ archive_trigger:
   - The work is moved out of `helm-public`
 ---
 
-# Helm AI-Native Enterprise AI Artifact Templates Closeout
+# Helm AI-Native Enterprise AI Artifact Templates Closeout / Helm AI-Native 企业 AI Artifact 模板 Closeout
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本收口回执记录一批公开安全的 Pack 交付工件模板如何落入 `helm-public`。本批把内部
+AI 原生企业 AI 用户体验参考工作转成公开可审查工件：上下文包、Pack Studio 安全样例、
+证据矩阵、待复核工作包、证明闭环收口，以及黄金路径诊断 / 评测 / 公开守卫验证。
+
+历史状态：静态 / 离线 / 本地运行时冒烟验证已关闭；D2 Docker 全新克隆冒烟验证
+后来由 `HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md` 关闭。本文件保留历史收口状态，
+不代表当前发布批准。
+
+不要把本收口回执解读为客户部署就绪、商业发布就绪或已验证的 30 分钟上手声明。
+工件模板不创建运行时 API、数据模式、连接器采用、客户数据接入、托管 MCP、自动发送、
+自动批准、自动执行、静默客户关系系统写入或公开证明声明。
+
+## English Reference
 
 > Supersession note (2026-06-01): the D2 Docker blocker recorded in this
 > closeout was later closed by

@@ -25,8 +25,8 @@ import type {
   WorkspaceFirstLoopModel,
 } from "@/lib/operating-system";
 import type { EngineeringDeliveryReview } from "@/lib/reports/engineering-delivery-review";
-import { formatDateLabel, formatShortDate } from "@/lib/utils";
 import { generateWeeklyReportAction } from "@/features/reports/actions";
+import { formatReportDateLabel, formatReportDateRange } from "@/features/reports/date-labels";
 import { formatReportDisplayText } from "@/features/reports/display-copy";
 import { EngineeringDeliveryReviewPanel } from "@/features/reports/engineering-delivery-review-panel";
 import type { FirstLoopAdoptionSummary } from "@/features/diagnostics/first-loop-adoption";
@@ -276,10 +276,10 @@ export function ReportsClient({
         id: "binding",
         title: english
           ? "Attach loose threads before widening CRM input"
-          : "先补信息归属，再扩大 CRM 接入",
+          : "先补信息归属，再扩大客户关系系统接入",
         body: english
           ? "Some real threads are still not attached to a customer, company, or opportunity. Reserve one block next week to clear them before widening CRM-first usage."
-          : "当前仍有真实线程未绑定。建议下周先留一个时间块清理绑定债，再继续扩大 CRM 优先使用范围。",
+          : "当前仍有真实线程未绑定。建议下周先留一个时间块清理绑定债，再继续扩大客户关系系统优先使用范围。",
         variant: "warning",
       });
     }
@@ -357,7 +357,7 @@ export function ReportsClient({
     selected?.approvalsApprovedCount ??
     0;
   const reportWindowLabel = selected
-    ? `${formatShortDate(selected.weekStart)} - ${formatShortDate(selected.weekEnd)}`
+    ? formatReportDateRange(selected.weekStart, selected.weekEnd, english)
     : english
       ? "No review asset yet"
       : "还没有复盘资产";
@@ -576,8 +576,7 @@ export function ReportsClient({
                   {reportText(primaryReport.summaryText)}
                 </p>
                 <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                  {formatShortDate(primaryReport.weekStart)} -{" "}
-                  {formatShortDate(primaryReport.weekEnd)}
+                  {formatReportDateRange(primaryReport.weekStart, primaryReport.weekEnd, english)}
                 </p>
               </button>
             ) : null}
@@ -623,8 +622,7 @@ export function ReportsClient({
                   {reportText(secondaryReport.summaryText)}
                 </p>
                 <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                  {formatShortDate(secondaryReport.weekStart)} -{" "}
-                  {formatShortDate(secondaryReport.weekEnd)}
+                  {formatReportDateRange(secondaryReport.weekStart, secondaryReport.weekEnd, english)}
                 </p>
               </button>
             ) : null}
@@ -677,8 +675,8 @@ export function ReportsClient({
                         <Badge variant="approval">{planningWindowLabel}</Badge>
                         <Badge variant="neutral">
                           {english
-                            ? `Based on ${formatShortDate(selected.weekStart)} - ${formatShortDate(selected.weekEnd)}`
-                            : `基于 ${formatShortDate(selected.weekStart)} - ${formatShortDate(selected.weekEnd)}`}
+                            ? `Based on ${formatReportDateRange(selected.weekStart, selected.weekEnd, english)}`
+                            : `基于 ${formatReportDateRange(selected.weekStart, selected.weekEnd, english)}`}
                         </Badge>
                       </div>
                       <p className="text-xl font-semibold tracking-tight text-[color:var(--foreground)]">
@@ -775,7 +773,7 @@ export function ReportsClient({
                           description={
                             english
                               ? "After the current report is generated, this view can derive a practical plan suggestion for next week from real movement and risk."
-                              : "先生成本周周报，Helm 会基于真实推进和风险给出更实用的下周计划建议。"
+                              : "先生成本周周报，Helm会基于真实推进和风险给出更实用的下周计划建议。"
                           }
                         />
                       )}
@@ -791,8 +789,7 @@ export function ReportsClient({
                           {english ? "Summary" : "周报摘要"}
                         </Badge>
                         <Badge variant="neutral">
-                          {formatShortDate(selected.weekStart)} -{" "}
-                          {formatShortDate(selected.weekEnd)}
+                          {formatReportDateRange(selected.weekStart, selected.weekEnd, english)}
                         </Badge>
                       </div>
                       <p className="text-xl font-semibold tracking-tight text-[color:var(--foreground)]">
@@ -1024,7 +1021,7 @@ export function ReportsClient({
                                 </p>
                                 <p className="workspace-note-meta mt-2 text-xs">
                                   {english ? "Due" : "截止"}{" "}
-                                  {formatDateLabel(item.dueDate)}
+                                  {formatReportDateLabel(item.dueDate, english)}
                                 </p>
                               </div>
                             ))
@@ -1500,7 +1497,7 @@ export function ReportsClient({
                                   ? ` · ${english ? "New value" : "新值"}：${item.suggestedValue}`
                                   : ""}
                                 {item.appliedAt
-                                  ? ` · ${english ? "Effective at" : "生效于"} ${formatDateLabel(item.appliedAt)}`
+                                  ? ` · ${english ? "Effective at" : "生效于"} ${formatReportDateLabel(item.appliedAt, english)}`
                                   : ""}
                               </p>
                             </div>
@@ -1745,8 +1742,8 @@ export function ReportsClient({
                   >
                     <p className="workspace-note-meta text-sm leading-6">
                       {english
-                        ? `Generated at ${formatDateLabel(selected.createdAt)}. Sources include opportunity movement, approval records, meetings, daily usage snapshots and event telemetry.`
-                        : `生成时间：${formatDateLabel(selected.createdAt)}。数据来源包括机会推进、审批记录、会议、每日使用快照和使用信号。`}
+                        ? `Generated at ${formatReportDateLabel(selected.createdAt, english)}. Sources include opportunity movement, approval records, meetings, daily usage snapshots and event telemetry.`
+                        : `生成时间：${formatReportDateLabel(selected.createdAt, english)}。数据来源包括机会推进、审批记录、会议、每日使用快照和使用信号。`}
                     </p>
                   </div>
                 </>

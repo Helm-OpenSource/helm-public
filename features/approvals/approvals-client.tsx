@@ -91,7 +91,6 @@ import {
 import { createPageReportingProtocol } from "@/lib/presentation/reporting-protocol";
 import { getWorkspaceStory } from "@/lib/presentation/workspace-story";
 import {
-  formatDateLabel,
   formatRelative,
   safeParseJson,
   trimText,
@@ -124,6 +123,7 @@ import {
   formatApprovalLearningDisplayText,
   formatApprovalPolicyModeForReview,
 } from "@/features/approvals/approval-learning-display";
+import { formatApprovalDateLabel } from "@/features/approvals/approval-date-labels";
 import { resolveApprovalObjectDetailHref } from "@/features/approvals/approval-object-detail-link";
 
 type ApprovalsClientProps = {
@@ -359,6 +359,8 @@ export function ApprovalsClient({
   const pathname = usePathname();
   const { locale, demoMode } = useWorkspaceUi();
   const english = locale === "en-US";
+  const approvalDateLabel = (value: Date | string | null | undefined) =>
+    formatApprovalDateLabel(value, english);
   const approvalText = (text: string) =>
     formatApprovalLearningDisplayText(text, english);
   const approvalTitle = (text: string | null | undefined) =>
@@ -2315,7 +2317,7 @@ export function ApprovalsClient({
                       label={
                         english ? "Suggested execution time" : "建议执行时间"
                       }
-                      value={formatDateLabel(
+                      value={approvalDateLabel(
                         task.actionItem.suggestedExecutionAt,
                       )}
                     />
@@ -2874,7 +2876,7 @@ export function ApprovalsClient({
                                 <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                                   {english ? "Confidence" : "置信度"}{" "}
                                   {fact.confidence} ·{" "}
-                                  {formatDateLabel(fact.updatedAt)}
+                                  {approvalDateLabel(fact.updatedAt)}
                                 </p>
                               </div>
                             ))}
@@ -2947,7 +2949,7 @@ export function ApprovalsClient({
                                 </p>
                                 <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                                   {english ? "Handled on" : "处理于"}{" "}
-                                  {formatDateLabel(
+                                  {approvalDateLabel(
                                     task.reviewedAt ?? task.updatedAt,
                                   )}
                                 </p>
@@ -3969,6 +3971,8 @@ function ApprovalLearningPanel({
 }) {
   const { locale } = useWorkspaceUi();
   const english = locale === "en-US";
+  const approvalDateLabel = (value: Date | string | null | undefined) =>
+    formatApprovalDateLabel(value, english);
   const policyModeLabel = panel.policy
     ? formatApprovalPolicyModeForReview({
         mode: panel.policy.mode,
@@ -4088,7 +4092,7 @@ function ApprovalLearningPanel({
                   <p className="workspace-note-meta mt-2 text-xs">
                     {english ? "Weight" : "权重"} {signal.weight} ·{" "}
                     {english ? "Updated" : "更新于"}{" "}
-                    {formatDateLabel(signal.updatedAt)}
+                    {approvalDateLabel(signal.updatedAt)}
                   </p>
                 </div>
               ))}
@@ -4173,7 +4177,7 @@ function ApprovalLearningPanel({
                         </p>
                         <p className="workspace-note-meta mt-2 text-xs">
                           {english ? "Effective at" : "生效于"}{" "}
-                          {formatDateLabel(
+                          {approvalDateLabel(
                             suggestion.appliedAt ?? suggestion.confirmedAt,
                           )}
                         </p>

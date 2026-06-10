@@ -58,6 +58,12 @@ describe("memory frontstage display copy", () => {
     expect(formatMemoryVisibleText("HELM_V2_MEETING_RUNTIME_INGESTED", false)).toBe(
       "会议运行记录已接入",
     );
+    expect(formatMemoryVisibleText("CRM_IMPORT_COMPLETED", false)).toBe(
+      "客户关系系统导入已完成",
+    );
+    expect(formatMemoryVisibleText("CRM_IMPORT_COMPLETED", false)).not.toContain(
+      "CRM 导入",
+    );
     expect(formatMemoryVisibleText("SYSTEM INFERENCE", false)).toBe("系统推断");
     expect(formatMemoryVisibleText("AUTH SESSION", false)).toBe("认证会话");
     expect(formatMemoryVisibleText('"status": "ACTIVE"', false)).toBe(

@@ -474,8 +474,8 @@ export function previewCsvImport(input: {
     }
     insights.push(
       rowsWithActions > 0
-        ? `${rowsWithActions} 行会议已经带了 动作items，导入后会直接长出会后动作与记忆。`
-        : "没有显式 动作items 的会议，Helm 会从纪要正文里提取会后动作。",
+        ? `${rowsWithActions} 行会议已经带了动作项，导入后会直接长出会后动作与记忆。`
+        : "没有明确动作项的会议，Helm 会从纪要正文里提取会后动作。",
     );
   }
 

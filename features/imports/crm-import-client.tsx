@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { connectMockCrmSourceAction, disconnectCrmSourceAction } from "@/features/imports/crm-actions";
 import { formatCrmImportDisplayText } from "@/features/imports/display-copy";
+import { formatImportDateLabel } from "@/features/imports/import-date-labels";
 import { formatDateLabel, safeParseJson } from "@/lib/utils";
 
 type SourceCard = {
@@ -130,16 +131,16 @@ export function CrmImportClient({
     connectedSourceCount > 0
       ? english
         ? "CRM ingress is already shaping which objects, conflicts and warmup outputs matter now."
-        : "CRM 导入已经开始决定现在哪些对象、冲突和预热结果最值得先看。"
+        : "客户关系系统导入已经开始决定现在哪些对象、冲突和预热结果最值得先看。"
       : english
         ? "Connect the first CRM source so object links, activity history and import pressure can enter Helm together."
-        : "先接入第一个 CRM 来源，把对象关系、活动历史和导入压力一起带进 Helm。";
+        : "先接入第一个客户关系系统来源，把对象关系、活动历史和导入压力一起带进 Helm。";
   const crmOperatingSummary =
     connectedSourceCount > 0
       ? openConflictSummary(data.openConflicts, english)
       : english
         ? "This page stays read-only and ingress-first until at least one CRM source is connected."
-        : "在至少接入一个 CRM 来源之前，这一页都应保持只读和入口优先。";
+        : "在至少接入一个客户关系系统来源之前，这一页都应保持只读和入口优先。";
   const crmOperatingItems = [
     {
       label: english ? "Current ingress focus" : "当前入口焦点",
@@ -150,7 +151,7 @@ export function CrmImportClient({
             : "先看哪一个已接入来源、哪次导入结果和哪一条预热输出最值得先复核。"
           : english
             ? "Connect the first CRM source."
-            : "先接入第一个 CRM 来源。",
+            : "先接入第一个客户关系系统来源。",
     },
     {
       label: english ? "Object-state impact" : "对象层影响",
@@ -260,7 +261,7 @@ export function CrmImportClient({
         connectedSourceCount === 0
           ? english
             ? "Connect one CRM source first so object graph, activity history and warmup output enter Helm together."
-            : "先接入一个 CRM 来源，让对象关系、活动历史和预热输出一起进入 Helm。"
+            : "先接入一个客户关系系统来源，让对象关系、活动历史和预热输出一起进入 Helm。"
           : english
             ? "Keep the first connected source narrow, then validate preview, import result and warmup before widening the ingress set."
             : "先把已连接的第一个来源跑通，再验证预览、导入结果和预热，之后再扩大入口集合。",
@@ -335,7 +336,7 @@ export function CrmImportClient({
         sourceId,
         preview: payload.preview,
       });
-      toast.success(english ? "CRM preview generated" : "已生成 CRM 导入预览");
+      toast.success(english ? "CRM preview generated" : "已生成客户关系系统导入预览");
     });
   };
 
@@ -359,7 +360,7 @@ export function CrmImportClient({
         return;
       }
 
-      toast.success(incremental ? (english ? "CRM incremental sync completed" : "CRM 增量同步已完成") : (english ? "CRM initial import completed" : "CRM 首次导入已完成"));
+      toast.success(incremental ? (english ? "CRM incremental sync completed" : "客户关系系统增量同步已完成") : (english ? "CRM initial import completed" : "客户关系系统首次导入已完成"));
       router.push(`/imports/jobs/${payload.result.jobId}`);
       router.refresh();
     });
@@ -414,7 +415,7 @@ export function CrmImportClient({
         toast.error(result.error ?? (english ? "Disconnect failed" : "断开失败"));
         return;
       }
-      toast.success(english ? "CRM source disconnected" : "已断开 CRM 连接");
+      toast.success(english ? "CRM source disconnected" : "已断开客户关系系统连接");
       router.refresh();
     });
   };
@@ -472,7 +473,7 @@ export function CrmImportClient({
           boundary={
             english
               ? "CRM ingress remains review-first and read-only. It is not a connector admin plane or an execution surface."
-              : "CRM 入口继续保持先复核和只读；它不是连接器管理面，也不是执行面。"
+              : "客户关系系统入口继续保持先复核和只读；它不是连接器管理面，也不是执行面。"
           }
           recommendationsLabel={english ? "Recommended next moves" : "建议先处理"}
           remindersLabel={english ? "Context reminders" : "上下文提醒"}
@@ -523,7 +524,7 @@ export function CrmImportClient({
             <p className="text-lg font-semibold text-[color:var(--foreground)]">
             {english
               ? "Import the CRM object graph first so follow-up gaps, blockers and priority drift surface immediately."
-              : "先把 CRM 里的对象层和关系层接进来，再让会后断链、推进断链和判断断链立刻暴露出来。"}
+              : "先把客户关系系统里的对象层和关系层接进来，再让会后断链、推进断链和判断断链立刻暴露出来。"}
             </p>
           </div>
           <Metric label={messages.crm.connectedCrmSources} value={english ? `${data.sources.filter((item) => item.status === "CONNECTED").length}` : `${data.sources.filter((item) => item.status === "CONNECTED").length} 个`} />
@@ -534,7 +535,7 @@ export function CrmImportClient({
       </Card>
 
       <ObjectContextOperatingSummary
-        label={english ? "CRM operating summary" : "CRM 操作摘要"}
+        label={english ? "CRM operating summary" : "客户关系系统操作摘要"}
         title={crmOperatingTitle}
         summary={crmOperatingSummary}
         items={crmOperatingItems}
@@ -548,7 +549,7 @@ export function CrmImportClient({
           title={
             english
               ? "CRM ingress stays reviewable, but write actions are narrowed for this role"
-              : "CRM 入口仍可复核，但当前角色的写动作已被收窄"
+              : "客户关系系统入口仍可复核，但当前角色的写动作已被收窄"
           }
           summary={
             !capability.canManageConnectors && !capability.canManageImports
@@ -668,7 +669,14 @@ export function CrmImportClient({
                   }
                 />
                 <Info label={english ? "Account label" : "来源账号"} value={source?.externalAccountLabel ?? (english ? "Not connected yet" : "尚未连接")} />
-                <Info label={english ? "Last sync" : "最近同步"} value={source?.lastSyncedAt ? formatDateLabel(source.lastSyncedAt) : (english ? "No sync yet" : "还没有同步")} />
+                <Info
+                  label={english ? "Last sync" : "最近同步"}
+                  value={
+                    source?.lastSyncedAt
+                      ? formatImportDateLabel(source.lastSyncedAt, english, formatDateLabel)
+                      : (english ? "No sync yet" : "还没有同步")
+                  }
+                />
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -767,7 +775,10 @@ export function CrmImportClient({
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="font-semibold text-[color:var(--foreground)]">{job.source.sourceType === "HUBSPOT" ? "HubSpot" : "Salesforce"} · {job.jobType === "INITIAL_IMPORT" ? (english ? "Initial import" : "首次导入") : (english ? "Incremental sync" : "增量同步")}</p>
-                        <p className="mt-1 text-sm text-[color:var(--muted)]">{job.source.externalAccountLabel ?? (english ? "Unnamed source" : "未命名来源")} · {formatDateLabel(job.startedAt)}</p>
+                        <p className="mt-1 text-sm text-[color:var(--muted)]">
+                          {job.source.externalAccountLabel ?? (english ? "Unnamed source" : "未命名来源")} ·{" "}
+                          {formatImportDateLabel(job.startedAt, english, formatDateLabel)}
+                        </p>
                       </div>
                       <Badge variant={job.status.includes("FAILED") ? "danger" : job.status.includes("WARNING") ? "warning" : "success"}>
                         {formatCrmImportDisplayText(job.status, english)}
@@ -793,7 +804,7 @@ export function CrmImportClient({
               })
             ) : (
               <EmptyState
-                title={english ? "No CRM import job yet" : "还没有 CRM 导入任务"}
+                title={english ? "No CRM import job yet" : "还没有客户关系系统导入任务"}
                 description={english ? "Connect HubSpot or Salesforce, then run the first import." : "先连 HubSpot 或 Salesforce，再跑首次导入。"}
               />
             )}
@@ -817,7 +828,7 @@ export function CrmImportClient({
                 <div className="workspace-panel-muted rounded-[18px] px-4 py-4 text-sm text-[color:var(--foreground)]">
                   <p className="font-semibold text-[color:var(--foreground)]">{english ? "What warmup already did" : "当前预热已做的事"}</p>
                   <ul className="mt-3 space-y-2 leading-6">
-                    <li>{english ? "1. Detect blockers and commitments from CRM notes / events" : "1. 识别 CRM 笔记与事件里的阻塞与承诺"}</li>
+                    <li>{english ? "1. Detect blockers and commitments from CRM notes / events" : "1. 识别客户关系系统笔记与事件里的阻塞与承诺"}</li>
                     <li>{english ? "2. Rebuild recommendations for imported contacts, companies, opportunities and meetings" : "2. 为新导入的联系人、公司、机会和会议重算判断建议"}</li>
                     <li>{english ? "3. Refresh dashboard and object pages so today focus reflects imported value immediately" : "3. 刷新今日工作台与对象详情页，确保今日重点直接看到新导入价值"}</li>
                   </ul>

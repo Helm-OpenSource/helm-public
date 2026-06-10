@@ -32,10 +32,13 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "skill suggestion accepted");
+    return successResponse(
+      { suggestion },
+      english ? "Skill suggestion accepted" : "候选能力建议已采纳",
+    );
   } catch (error) {
     return errorResponse(
-      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "采纳候选能力建议失败"),
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to accept skill suggestion" : "采纳候选能力建议失败"),
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "ACCEPT_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

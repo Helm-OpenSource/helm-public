@@ -240,7 +240,7 @@ export function buildFirstLoopAdoptionReadout(input: {
         : stage === "review"
           ? input.english
             ? "Primary actions or return anchors are being opened, but review has not become the visible proof gate yet."
-            : "主动作或回访锚点已经被打开，但复核还没有成为当前清晰可见的 proof闸口。"
+            : "主动作或回访锚点已经被打开，但复核还没有成为当前清晰可见的证据闸口。"
           : stage === "action"
             ? input.english
               ? "Setup handoff is visible, but primary-action opens are still too thin to prove activation."

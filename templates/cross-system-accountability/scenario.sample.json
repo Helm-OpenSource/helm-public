@@ -1,0 +1,55 @@
+{
+  "note": "Public-safe synthetic scenario for the Cross-System Accountability Gap MVP. No real data. now is passed for deterministic evaluation.",
+  "now": "2026-06-04T00:00:00Z",
+  "rule": {
+    "ruleId": "won-deal-needs-delivery-handoff",
+    "version": "1.0.0",
+    "description": "A won CRM deal should have a delivery/handoff project in the PM system within N days.",
+    "trigger": { "system": "crm", "entity": "deal" },
+    "triggerSlice": { "scopeRef": "deal" },
+    "expectation": { "system": "pm", "entity": "delivery_project", "withinDays": 7, "matchKey": "dealId" },
+    "expectationSlice": { "scopeRef": "delivery_handoff" },
+    "requiredCoverage": [{ "system": "crm", "scope": "deal" }, { "system": "pm", "scope": "delivery_handoff" }],
+    "ownerPolicyRef": "policy:delivery-owner",
+    "commitmentClass": "advice",
+    "effectMode": "read_only",
+    "forbiddenActions": ["auto_create_record", "auto_dispatch", "auto_chase", "auto_write_source", "external_send", "approval"]
+  },
+  "ownerPolicy": { "policyRef": "policy:delivery-owner", "escalationRoleRef": "role:delivery-escalation" },
+  "scenarios": [
+    {
+      "name": "covered",
+      "coverageAssertions": [
+        { "assertionId": "cov:crm", "system": "crm", "scope": "deal", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "paginated_complete", "completeness": "complete", "evidence": ["expected=ingested=412", "no_pagination_gap"], "asOf": "2026-06-04T00:00:00Z" },
+        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_handoff", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "complete", "evidence": ["backfill_checkpoint=2026-04-01", "webhook_live", "no_gap"], "asOf": "2026-06-04T00:00:00Z" }
+      ],
+      "triggerFacts": [
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-A", "matchValue": "deal-A", "occurredAt": "2026-05-01T00:00:00Z" },
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-B", "matchValue": "deal-B", "occurredAt": "2026-05-10T00:00:00Z", "ownerCandidates": [ { "id": "user:alex-alias", "kind": "user", "active": true, "roleEvidence": ["crm:deal-owner", "hr:active-tenure"] } ] },
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-C", "matchValue": "deal-C", "occurredAt": "2026-05-12T00:00:00Z", "ownerCandidates": [ { "id": "group:sales-team", "kind": "group", "active": true }, { "id": "user:departed-alias", "kind": "user", "active": false }, { "id": "bot:sync", "kind": "bot", "active": true } ] },
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-E", "matchValue": "deal-E", "occurredAt": "2026-06-02T00:00:00Z", "ownerCandidates": [ { "id": "user:robin-alias", "kind": "user", "active": true, "roleEvidence": ["crm:deal-owner"] } ] }
+      ],
+      "expectationFacts": [
+        { "system": "pm", "entity": "delivery_project", "sliceRef": "delivery_handoff", "factId": "proj-A", "matchValue": "deal-A", "occurredAt": "2026-05-03T00:00:00Z" }
+      ],
+      "expected": {
+        "deal-A": "satisfied (no finding)",
+        "deal-B": "missing + owner resolved (user:alex-alias)",
+        "deal-C": "missing + escalation (no accountable user)",
+        "deal-E": "not yet due (no finding)"
+      }
+    },
+    {
+      "name": "pm_unproven",
+      "coverageAssertions": [
+        { "assertionId": "cov:crm", "system": "crm", "scope": "deal", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "paginated_complete", "completeness": "complete", "evidence": ["expected=ingested=412"], "asOf": "2026-06-04T00:00:00Z" },
+        { "assertionId": "cov:pm", "system": "pm", "scope": "delivery_handoff", "windowStart": "2026-04-01T00:00:00Z", "windowEnd": "2026-06-04T00:00:00Z", "method": "webhook_plus_backfill", "completeness": "partial", "evidence": ["backfill_incomplete", "pagination_gap_detected"], "asOf": "2026-06-04T00:00:00Z" }
+      ],
+      "triggerFacts": [
+        { "system": "crm", "entity": "deal", "sliceRef": "deal", "factId": "deal-D", "matchValue": "deal-D", "occurredAt": "2026-05-15T00:00:00Z" }
+      ],
+      "expectationFacts": [],
+      "expected": { "deal-D": "unknown (PM coverage not provable -> never 'missing')" }
+    }
+  ]
+}

@@ -1,4 +1,19 @@
-# Report Skills
+# Report Skills / 报表 Skills
+
+> **语言 / Language**: **中文主文本** + **English reference summary**
+
+## English Reference Summary
+
+`report-skills/` stores narrow BI-report proactive-push skill packages. A
+`skill` here is not a Codex skill, not a marketplace abstraction, and not a
+runtime platform. It is a versioned set of SQL, schema, metric, criteria, prompt,
+message-template, subscription-example, and sample-input assets for deterministic
+report evaluation plus bounded explanation.
+
+The current narrow capability is `ODPS report -> deterministic evaluation -> LLM
+explanation -> DingTalk push`. It is not a full BI platform, arbitrary analytics
+DSL, online SQL editor, outbound orchestration engine, or auto-remediation
+engine.
 
 ## 1. 目的
 

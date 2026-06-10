@@ -174,6 +174,7 @@ function ProactiveFlowCard({
             request={flow.collaboration.collaborationRequest}
             decisionRequest={flow.collaboration.collaborationDecisionRequest}
             nextSteps={flow.collaboration.collaborationNextStep}
+            english={english}
           />
 
           <div data-worker-assignment="true">
@@ -204,7 +205,10 @@ function ProactiveFlowCard({
           <EvidenceDrawer
             marker="active"
             label={english ? "Sources and context" : "依据与来源"}
-            leadingChip={labelForCollaborationMode(flow.collaboration.collaborationMode)}
+            leadingChip={labelForCollaborationMode(
+              flow.collaboration.collaborationMode,
+              english,
+            )}
             summaryItems={[
               ...flow.activeReport.activeReportEvidenceSummary,
               ...prefixItems(
@@ -308,10 +312,14 @@ function labelForAudience(audience: ActiveReportAudience, english: boolean) {
   return english ? "Operator" : "操作人";
 }
 
-function labelForCollaborationMode(mode: CollaborationMode) {
-  if (mode === "helm_drives_human_supervises") return "系统推进，人类监督";
-  if (mode === "helm_prepares_human_decides") return "系统准备，人类拍板";
-  return "系统提醒，人类主导";
+function labelForCollaborationMode(mode: CollaborationMode, english: boolean) {
+  if (mode === "helm_drives_human_supervises") {
+    return english ? "System drives, human supervises" : "系统推进，人类监督";
+  }
+  if (mode === "helm_prepares_human_decides") {
+    return english ? "System prepares, human decides" : "系统准备，人类拍板";
+  }
+  return english ? "System reminds, human leads" : "系统提醒，人类主导";
 }
 
 function prefixItems(prefix: string, items: string[]) {

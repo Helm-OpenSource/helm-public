@@ -306,7 +306,7 @@ export async function completeParticipantPortalOnboardingAction(
     return {
       ok: false,
       error: english
-        ? "Please complete profile, payout details, and contribution terms 已确认"
+        ? "Please complete profile, payout details, and contribution terms acknowledgement."
         : "请完整填写资料、结算方式，并确认贡献方条款",
     };
   }

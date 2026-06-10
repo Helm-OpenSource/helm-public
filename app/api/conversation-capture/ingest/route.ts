@@ -78,7 +78,7 @@ export async function POST(request: Request) {
       transcriptModel: parsed.data.transcriptModel ?? null,
     });
 
-    return successResponse(result, "capture ingested");
+    return successResponse(result, english ? "capture ingested" : "外部会话已导入");
   } catch (error) {
     return errorResponse(
       isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to ingest external conversation" : "外部会话导入失败"),

@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { formatOperatingDisplayText } from "@/features/internal-operating-workspace/display-copy";
 
 describe("operating display copy", () => {
+  it("keeps English operating surfaces from leaking seeded Chinese labels", () => {
+    const rendered = formatOperatingDisplayText(
+      "线索发现 / 内部支持人简报 / 客户成功共同接力 / 候选人管线 / 方案准备度 / 支付准备度 / 可发送边界",
+      true,
+    );
+
+    expect(rendered).toContain("Lead discovery");
+    expect(rendered).toContain("internal champion briefing");
+    expect(rendered).toContain("customer success handoff");
+    expect(rendered).toContain("candidate pipeline");
+    expect(rendered).toContain("proposal readiness");
+    expect(rendered).toContain("payment readiness");
+    expect(rendered).toContain("sendability boundary");
+    expect(rendered).not.toMatch(/[\u4e00-\u9fff]/);
+  });
+
   it("keeps Chinese operating surfaces from exposing internal mixed-language labels", () => {
     const rendered = formatOperatingDisplayText(
       "Founder review-before-send lane with Leads, customer success, candidate pipeline, issue follow-through, expansion pressure and proposal readiness.",

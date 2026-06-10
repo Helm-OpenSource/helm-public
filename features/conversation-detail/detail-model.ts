@@ -12,6 +12,7 @@ import {
   createConversationDetailReportingContract,
 } from "@/lib/presentation/conversation-detail-contract";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
+import { formatConversationRelativeLabel } from "./date-labels";
 import { formatRelative, trimText } from "@/lib/utils";
 
 export function buildConversationDetailPageContract({
@@ -34,7 +35,7 @@ export function buildConversationDetailPageContract({
       detail.briefingSnapshot?.payload.summary ??
       (english
         ? "The current conversation surface already brings active deal pressure, role handoff pressure, boundary notes and the latest usable follow-up context together."
-        : "当前这张对话决策面已经把 机会压力、角色接力压力、边界备注和最近可用的跟进上下文收在一起。"),
+        : "当前这张对话决策面已经把机会压力、角色接力压力、边界备注和最近可用的跟进上下文收在一起。"),
     conversationDetailActionSummary: [
       english
         ? "The current conversation page already separates founder-, sales- and delivery-safe talk tracks."
@@ -61,7 +62,7 @@ export function buildConversationDetailPageContract({
     conversationDetailBoundarySummary: [
       english
         ? "Conversation guidance can change emphasis, pacing and scene fit, but it still cannot silently turn discussion-safe wording into commitment."
-        : "对话 guidance 可以改变重点、节奏和场景适配，但它仍然不能悄悄把仅讨论措辞变成承诺。",
+        : "对话指引可以改变重点、节奏和场景适配，但它仍然不能悄悄把仅讨论措辞变成承诺。",
       buildBoundaryLine(mode, sendabilityMode, english),
       english
         ? "Boundary, prerequisite, dependency and non-commitment cues must stay visible before anyone reuses this wording in a customer-facing moment."
@@ -70,10 +71,10 @@ export function buildConversationDetailPageContract({
     conversationDetailEvidenceSummary: [
       english
         ? `${detail.auditLogs.length} audit changes, ${detail.memoryFacts.length} memory facts and the full conversation trace are grouped below without interrupting the main narrative.`
-        : `当前 ${detail.auditLogs.length} 条审计变化、${detail.memoryFacts.length} 条经营记忆事实 和完整对话轨迹已经分组收在下面，不会打断主叙事。`,
+        : `当前 ${detail.auditLogs.length} 条审计变化、${detail.memoryFacts.length} 条经营记忆事实和完整对话轨迹已经分组收在下面，不会打断主叙事。`,
       english
         ? "Replay, audit, memory, worker output, boundary trace, sendability trace, conversation trace, scenario trace and historical changes remain available on demand."
-        : "回放、审计、经营记忆、执行输出、边界轨迹、发送评估轨迹、对话轨迹、scenario 轨迹和历史变更都保留在附注层按需可看。",
+        : "回放、审计、经营记忆、执行输出、边界轨迹、发送评估轨迹、对话轨迹、场景轨迹和历史变更都保留在附注层按需可看。",
     ],
     conversationDetailWorkerSummary: [
       english
@@ -112,7 +113,7 @@ export function buildConversationDetailPageContract({
           : `当前仍有 ${signals.openCommitmentCount} 条开放承诺在塑造信任压力，所以下一句不能假装已经获得了还没被兑现的确定性。`
         : english
           ? "There is room to keep the conversation warm, but only if the wording still keeps the non-commitment and boundary line visible."
-          : "当前确实存在继续升温对话的空间，但前提是措辞仍然把非承诺和边界话术 挂在前台。",
+          : "当前确实存在继续升温对话的空间，但前提是措辞仍然把非承诺和边界话术挂在前台。",
       english
         ? "The current page already separates founder-, sales- and delivery-safe talk tracks, so the remaining value is choosing the right scene, not rediscovering context."
         : "当前页已经把创始人、销售和交付可用的话术层分开了，所以现在真正的价值在于选对场景，而不是重新拼上下文。",
@@ -122,17 +123,17 @@ export function buildConversationDetailPageContract({
       sendabilityMode === "not-ready-for-customer"
         ? english
           ? "If anyone wants to harden timing, outcome or scope certainty in the next conversation, escalate into review before the wording travels outward."
-          : "如果任何人想在下一次对话里把 时点、结果或范围确定性说实，就先升级进复核，再允许这句话往外走。"
+          : "如果任何人想在下一次对话里把时点、结果或范围确定性说实，就先升级进复核，再允许这句话往外走。"
         : english
           ? "If trust pressure, dependency pressure or founder risk rises, step back from the current scene and return to package or offer review first."
-          : "如果信任压力、依赖压力或创始人风险开始上升，就先从当前场景退回，回到方案包或 offer 复核。",
+          : "如果信任压力、依赖压力或创始人风险开始上升，就先从当前场景退回，回到方案包或报价复核。",
     pageEvidenceLinks: [
       {
         label: english ? "Open package page" : "打开方案包页面",
         href: `/packages/${detail.id}`,
       },
       {
-        label: english ? "Open customer offer page" : "打开客户可见 offer 页面",
+        label: english ? "Open customer offer page" : "打开客户可见报价页面",
         href: `/offers/${detail.id}`,
       },
       {
@@ -339,7 +340,7 @@ function buildSalesCue(mode: ConversationDetailMode, english: boolean) {
   }
 
   return mode === "sales-first-contact" || mode === "sales-follow-up"
-    ? "销售这时最适合继续升温、确认下一动作，并只复用边界安全 的客户可见措辞。"
+    ? "销售这时最适合继续升温、确认下一动作，并只复用边界安全的客户可见措辞。"
     : "销售应把当前判断翻成下一步安全跟进，而不是把它说成承诺。";
 }
 
@@ -356,7 +357,7 @@ function buildDeliveryCue(mode: ConversationDetailMode, english: boolean) {
     mode === "prerequisite-clarification" ||
     mode === "dependency-clarification"
     ? "交付这时最适合先把范围、前置和依赖注脚说清，再允许下一次对外对话。"
-    : "只要对话开始触碰预期，交付就该先保护范围 clarity 和 implementation 注脚。";
+    : "只要对话开始触碰预期，交付就该先保护范围清晰度和实施注脚。";
 }
 
 function buildNextActions({
@@ -378,7 +379,7 @@ function buildNextActions({
         mode === "founder-meeting" || mode === "founder-demo"
           ? english
             ? "Open customer-facing offer page"
-            : "打开客户可见 offer 页面"
+            : "打开客户可见报价页面"
           : english
             ? "Open package page"
             : "打开方案包页面",
@@ -419,7 +420,7 @@ function buildEvidenceGroups(
   return [
     {
       groupId: "replay",
-      label: english ? "Replay" : "Replay",
+      label: english ? "Replay" : "回放",
       items: [
         english
           ? `Use the current scene ${labelForMode(mode, true)} to replay the next spoken move.`
@@ -428,27 +429,27 @@ function buildEvidenceGroups(
     },
     {
       groupId: "audit",
-      label: english ? "Audit" : "Audit",
+      label: english ? "Audit" : "审计",
       items: [latestAudit],
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "Memory",
+      label: english ? "Memory" : "经营记忆",
       items: [latestMemory],
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker output",
+      label: english ? "Worker output" : "执行输出",
       items: [latestAction],
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "Boundary trace",
+      label: english ? "Boundary trace" : "边界轨迹",
       items: [topBlocker],
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "Sendability trace",
+      label: english ? "Sendability trace" : "发送评估轨迹",
       items: [
         english
           ? `Current sendability remains ${labelForSendability(sendabilityMode, true)}.`
@@ -457,12 +458,12 @@ function buildEvidenceGroups(
     },
     {
       groupId: "conversation_trace",
-      label: english ? "Conversation trace" : "Conversation trace",
+      label: english ? "Conversation trace" : "对话轨迹",
       items: [summary],
     },
     {
       groupId: "scenario_trace",
-      label: english ? "Scenario trace" : "Scenario trace",
+      label: english ? "Scenario trace" : "场景轨迹",
       items: [
         english
           ? `Related cues: founder-risk-clarification / sales-objection-response / proposal-shaping-review / delivery_activation_checklist.`
@@ -471,10 +472,10 @@ function buildEvidenceGroups(
     },
     {
       groupId: "historical_changes",
-      label: english ? "Historical changes" : "Historical changes",
+      label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `${topCommitment} · updated ${formatRelative(detail.updatedAt)}`
+          ? `${topCommitment} · updated ${formatConversationRelativeLabel(detail.updatedAt, true)}`
           : `${topCommitment} · 最近更新于 ${formatRelative(detail.updatedAt)}`,
       ],
     },
@@ -484,27 +485,27 @@ function buildEvidenceGroups(
 function labelForMode(mode: ConversationDetailMode, english: boolean) {
   switch (mode) {
     case "founder-meeting":
-      return english ? "founder meeting" : "founder meeting";
+      return english ? "founder meeting" : "创始人会议";
     case "founder-demo":
-      return english ? "founder demo" : "founder demo";
+      return english ? "founder demo" : "创始人演示";
     case "sales-first-contact":
-      return english ? "sales first contact" : "sales first contact";
+      return english ? "sales first contact" : "销售首次接触";
     case "sales-follow-up":
-      return english ? "sales follow-up" : "sales follow-up";
+      return english ? "sales follow-up" : "销售跟进";
     case "objection-handling":
-      return english ? "objection handling" : "objection handling";
+      return english ? "objection handling" : "异议处理";
     case "proposal-walkthrough":
-      return english ? "proposal walkthrough" : "proposal walkthrough";
+      return english ? "proposal walkthrough" : "方案走查";
     case "boundary-clarification":
-      return english ? "boundary clarification" : "boundary clarification";
+      return english ? "boundary clarification" : "边界澄清";
     case "prerequisite-clarification":
-      return english ? "prerequisite clarification" : "prerequisite clarification";
+      return english ? "prerequisite clarification" : "前置条件澄清";
     case "dependency-clarification":
-      return english ? "dependency clarification" : "dependency clarification";
+      return english ? "dependency clarification" : "依赖澄清";
     case "non-commitment-clarification":
-      return english ? "non-commitment clarification" : "non-commitment clarification";
+      return english ? "non-commitment clarification" : "非承诺澄清";
     case "review-before-send":
-      return english ? "review before send" : "review-before-send";
+      return english ? "review before send" : "发送前复核";
     default:
       return english ? "internal prep only" : "仅内部准备";
   }
@@ -517,13 +518,13 @@ function fallbackLabel(mode: ConversationDetailMode, english: boolean) {
     case "sales-follow-up":
     case "objection-handling":
     case "proposal-walkthrough":
-      return english ? "boundary clarification" : "boundary clarification";
+      return english ? "boundary clarification" : "边界澄清";
     case "boundary-clarification":
     case "prerequisite-clarification":
     case "dependency-clarification":
       return english ? "internal prep only" : "仅内部准备";
     default:
-      return english ? "review before send" : "review-before-send";
+      return english ? "review before send" : "发送前复核";
   }
 }
 

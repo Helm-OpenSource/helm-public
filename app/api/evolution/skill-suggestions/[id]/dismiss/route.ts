@@ -32,10 +32,13 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actorName: user.name,
     });
 
-    return successResponse({ suggestion }, "skill suggestion dismissed");
+    return successResponse(
+      { suggestion },
+      english ? "Skill suggestion dismissed" : "候选能力建议已忽略",
+    );
   } catch (error) {
     return errorResponse(
-      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "忽略候选能力建议失败"),
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to dismiss skill suggestion" : "忽略候选能力建议失败"),
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "DISMISS_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

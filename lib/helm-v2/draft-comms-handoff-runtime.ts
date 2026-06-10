@@ -29,19 +29,19 @@ const PROPOSAL_COMPOSER_AGENT = "proposal-composer";
 const COMMS_SCHEDULER_AGENT = "comms-scheduler";
 const RISK_PROMISE_GUARD_AGENT = "risk-promise-guard";
 const DEFAULT_WORKSPACE_SUMMARY =
-  "当前 workspace 以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
+  "当前工作区以判断优先方式把会议、对象状态、审批和下一步收成同一条经营推进链。";
 export const DRAFT_ONLY_COMMS_BOUNDARY_NOTE =
-  "这组对外 draft 仍然只是 review-before-send handoff / 复核-before-send 交接，不会自动发送、不会自动创建外部日程，也不会形成正式承诺。";
+  "这组对外草稿仍然只是发送前复核交接，不会自动发送、不会自动创建外部日程，也不会形成正式承诺。";
 const DRAFT_ONLY_APPROVAL_NOTE =
-  "approved 只表示允许进入下一步人工动作，不代表任何邮件已发送、日程已创建，或 正式 CRM 状态已改写。";
+  "已通过只表示允许进入下一步人工动作，不代表任何邮件已发送、日程已创建，或正式客户关系系统状态已改写。";
 const APPROVED_DOES_NOT_MEAN_SENT_NOTE =
-  "Approved does not mean sent. 不代表邮件已发送、不代表日程已创建，也不代表形成正式承诺或 正式 CRM 写回。";
+  "已通过不等于已发送；不代表邮件已发送、不代表日程已创建，也不代表形成正式承诺或正式客户关系系统写回。";
 const NON_COMMITMENT_FALLBACK_NOTE =
   "涉及报价、合同、交付日期、折扣或正式范围承诺的内容，仍需在内部复核后再单独确认。";
 const CALENDAR_SUGGESTION_NOTE =
   "当前只生成时间建议，不会自动替你预约外部日程。";
 const INTERNAL_ONLY_NOTE =
-  "internal摘要 仅用于内部协同和管理复核，不会直接对外可见。";
+  "内部摘要仅用于内部协同和管理复核，不会直接对外可见。";
 
 type DraftCommsMeeting = NonNullable<
   Awaited<ReturnType<typeof loadDraftCommsMeeting>>
@@ -550,7 +550,7 @@ async function loadConfirmedMeetingSource(
       markdown: "",
       boundary: DRAFT_ONLY_COMMS_BOUNDARY_NOTE,
       recommendedNextAction:
-        "先人工确认这条 follow-up 应该怎么说，再决定下一步。",
+        "先人工确认这条跟进应该怎么说，再决定下一步。",
       openQuestions: [],
     }),
     riskFlags: nestedArtifactPayload<RiskFlagsArtifact>(riskBundle, {
@@ -600,7 +600,7 @@ function buildRelevantObjectMemory(source: ConfirmedMeetingSource) {
 function buildOpportunitySummary(source: ConfirmedMeetingSource) {
   const opportunity = source.meeting.opportunity;
   if (!opportunity) {
-    return "当前会议还没有关联正式机会，对外 draft 只能围绕会后下一步和待确认依赖来写。";
+    return "当前会议还没有关联正式机会，对外草稿只能围绕会后下一步和待确认依赖来写。";
   }
   const stage = opportunity.shadowStage ?? opportunity.stage;
   const nextAction =
@@ -647,7 +647,7 @@ export function buildProposalComposerArtifacts(input: {
     artifactId: "customer_followup_draft.md",
     audience: "customer",
     markdown: [
-      `# ${customer} 会后 follow-up draft`,
+      `# ${customer} 会后跟进草稿`,
       "",
       `感谢今天的沟通。基于今天已经确认的信息，我们建议先围绕以下一步继续推进：`,
       `- ${nextAction}`,
@@ -685,7 +685,7 @@ export function buildProposalComposerArtifacts(input: {
     artifactId: "internal_collab_brief.md",
     audience: "internal",
     markdown: [
-      `# ${customer} internal collaboration brief`,
+      `# ${customer} 内部协同摘要`,
       "",
       "## 当前判断",
       `- ${buildOpportunitySummary({
@@ -714,14 +714,14 @@ export function buildProposalComposerArtifacts(input: {
             `- 唯一负责人：${input.meeting.owner?.name ?? "待指定"} · ${nextAction}`,
           ]),
       "",
-      "## Relevant object memory",
+      "## 相关对象记忆",
       ...(memoryHighlights.length
         ? memoryHighlights.map((item) => `- ${item}`)
         : [
-            "- 当前还没有足够的 promoted 经营记忆，可先沿本次 meeting facts 推进。",
+            "- 当前还没有足够的已提升经营记忆，可先沿本次会议事实推进。",
           ]),
       "",
-      "## Boundary",
+      "## 边界",
       `- ${INTERNAL_ONLY_NOTE}`,
       `- ${DRAFT_ONLY_APPROVAL_NOTE}`,
     ].join("\n"),
@@ -737,19 +737,19 @@ export function buildProposalComposerArtifacts(input: {
     artifactId: "exec_brief.md",
     audience: "executive",
     markdown: [
-      `# ${customer} exec brief`,
+      `# ${customer} 负责人摘要`,
       "",
-      "## What matters now",
+      "## 当前最重要的事",
       `- ${nextAction}`,
       "",
-      "## Why now",
+      "## 为什么是现在",
       `- ${blockerLine}`,
       "",
-      "## Boundary / review posture",
+      "## 边界 / 复核姿态",
       `- ${DRAFT_ONLY_APPROVAL_NOTE}`,
-      `- ${commitmentWarnings.length > 0 ? NON_COMMITMENT_FALLBACK_NOTE : "当前仍停在 draft-only comms 层，不形成正式承诺。"}`,
+      `- ${commitmentWarnings.length > 0 ? NON_COMMITMENT_FALLBACK_NOTE : "当前仍停在仅草稿沟通层，不形成正式承诺。"}`,
       "",
-      "## Evidence refs",
+      "## 证据引用",
       ...sharedEvidence.map((item) => `- ${item}`),
     ].join("\n"),
     evidenceRefs: sharedEvidence,
@@ -914,7 +914,7 @@ export function buildCommsSchedulerArtifacts(input: {
 }
 
 function hasMitigationLanguage(text: string) {
-  return /内部复核|双方确认|不构成正式承诺|review-before-send|不会自动发送|still requires review|does not constitute a commitment|after internal review/i.test(
+  return /内部复核|双方确认|不构成正式承诺|不会形成正式承诺|review-before-send|不会自动发送|still requires review|does not constitute a commitment|after internal review/i.test(
     text,
   );
 }
@@ -931,7 +931,7 @@ function buildFallbackMarkdown(nextAction: string, openQuestions: string[]) {
       ? openQuestions.map((item) => `- ${item}`)
       : ["- 当前仍需确认负责人、时间窗口和相关依赖。"]),
     "",
-    "说明：这份文字仍然只是 review-before-send draft，不会自动发送，也不构成正式承诺；价格、合同、交付日期或正式范围承诺都必须继续人工复核。",
+    "说明：这份文字仍然只是发送前复核草稿，不会自动发送，也不构成正式承诺；价格、合同、交付日期或正式范围承诺都必须继续人工复核。",
   ].join("\n");
 }
 
@@ -975,7 +975,7 @@ export function evaluateDraftCommsRiskGuard(
     detail:
       promiseRisk && !mitigationPresent
         ? "当前措辞可能被误读成承诺，需要先回退到非承诺表达。"
-        : "承诺 / 承诺措辞当前仍保留在 recommendation / 复核-before-send 边界内。",
+        : "承诺措辞当前仍保留在建议和发送前复核边界内。",
   });
   pushCheck({
     key: "pricing_risk",
@@ -990,37 +990,37 @@ export function evaluateDraftCommsRiskGuard(
     status: contractRisk && !mitigationPresent ? "warn" : "pass",
     detail:
       contractRisk && !mitigationPresent
-        ? "合同 / 条款相关表述需要保留复核-before-send 和人工确认。"
-        : "合同 / 条款相关表述仍停在复核-before-send 层。",
+        ? "合同 / 条款相关表述需要保留发送前复核和人工确认。"
+        : "合同 / 条款相关表述仍停在发送前复核层。",
   });
   pushCheck({
     key: "delivery_date_risk",
     status: deliveryRisk && !mitigationPresent ? "warn" : "pass",
     detail:
       deliveryRisk && !mitigationPresent
-        ? "交付日期 / go-live 措辞当前缺少足够的边界说明。"
+        ? "交付日期 / 上线措辞当前缺少足够的边界说明。"
         : "交付日期相关表达没有越过当前非承诺边界。",
   });
   pushCheck({
     key: "data_leakage_risk",
     status: dataLeakageRisk ? "block" : "pass",
     detail: dataLeakageRisk
-      ? "发现疑似敏感数据泄露风险，当前 draft 必须 block。"
+      ? "发现疑似敏感数据泄露风险，当前草稿必须阻断。"
       : "未发现明显的数据泄露风险。",
   });
   pushCheck({
     key: "content_contamination_risk",
     status: contaminationRisk ? "block" : "pass",
     detail: contaminationRisk
-      ? "发现疑似提示 / content contamination 痕迹，当前 draft 必须 block。"
+      ? "发现疑似提示或内容污染痕迹，当前草稿必须阻断。"
       : "未发现明显的内容污染痕迹。",
   });
   pushCheck({
     key: "provenance_uncertainty",
     status: provenanceUncertainty ? "warn" : "pass",
     detail: provenanceUncertainty
-      ? "源头 provenance 仍包含 un可信内容或未决 未决问题。"
-      : "当前源头 provenance 已足以支撑 draft-only 交接。",
+      ? "源头来源仍包含不可信内容或未决问题。"
+      : "当前源头来源已足以支撑仅草稿交接。",
   });
 
   const hardBlocked = dataLeakageRisk || contaminationRisk;
@@ -1078,9 +1078,9 @@ export function evaluateDraftCommsRiskGuard(
       ? [
           "# blocked draft",
           "",
-          "当前这份客户可见 draft 已被 Risk & 承诺 Guard block。",
+          "当前这份客户可见草稿已被风险与承诺守卫阻断。",
           "",
-          "请先移除敏感信息 / 污染内容，重新回到复核-before-send。",
+          "请先移除敏感信息或污染内容，再回到发送前复核。",
         ].join("\n")
       : softFallbackRequired
         ? buildFallbackMarkdown(
@@ -1092,10 +1092,10 @@ export function evaluateDraftCommsRiskGuard(
     blocked: hardBlocked,
     boundary: DRAFT_ONLY_COMMS_BOUNDARY_NOTE,
     decisionHint: hardBlocked
-      ? "必须先 block by 边界，再由人工重写。"
+      ? "必须先按边界阻断，再由人工重写。"
       : softFallbackRequired
         ? "先切到非承诺兜底，再决定是否进入下一步人工交接。"
-        : "当前可以进入复核-before-send，但已通过仍不等于已发送。",
+        : "当前可以进入发送前复核，但已通过仍不等于已发送。",
   };
 
   return {
@@ -1244,7 +1244,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "customer_followup_draft.md",
     title: `${input.meeting.title} customer follow-up draft`,
     summary:
-      "提案 Composer 已生成客户可见 follow-up draft，但仍保持复核-before-send。",
+      "提案整理器已生成客户可见跟进草稿，但仍保持发送前复核。",
     approvalTier: resolveApprovalRule("email.create_draft").tier,
     reviewPosture: "review_before_send_required",
     artifactsJson: jsonStringify(input.proposal.customerFollowupDraft),
@@ -1262,7 +1262,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "internal_collab_brief.md",
     title: `${input.meeting.title} internal collaboration brief`,
     summary:
-      "提案 Composer 已生成仅内部 collab摘要，用于内部协同与接力。",
+      "提案整理器已生成仅内部协同摘要，用于内部协同与接力。",
     approvalTier: resolveApprovalRule("memory.write_draft").tier,
     reviewPosture: "internal_only",
     artifactsJson: jsonStringify(input.proposal.internalCollabBrief),
@@ -1279,7 +1279,7 @@ async function createDraftCommsArtifacts(input: {
     meeting: input.meeting,
     artifactType: "exec_brief.md",
     title: `${input.meeting.title} exec brief`,
-    summary: "提案 Composer 已生成 exec摘要，用于经营负责人快速判断。",
+    summary: "提案整理器已生成经营负责人摘要，用于经营负责人快速判断。",
     approvalTier: resolveApprovalRule("memory.write_draft").tier,
     reviewPosture: "internal_exec_brief",
     artifactsJson: jsonStringify(input.proposal.execBrief),
@@ -1297,7 +1297,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "email_draft.eml",
     title: `${input.meeting.title} email draft`,
     summary:
-      "Comms & Scheduler 已生成 email draft，但当前仍无 send权限。",
+      "沟通与排期器已生成邮件草稿，但当前仍无发送权限。",
     approvalTier: resolveApprovalRule("email.create_draft").tier,
     reviewPosture: "review_before_send_required",
     artifactsJson: jsonStringify(input.comms.emailDraft),
@@ -1315,7 +1315,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "calendar_options.json",
     title: `${input.meeting.title} calendar options`,
     summary:
-      "Comms & Scheduler 已生成 calendar options，但当前仍不自动 booking。",
+      "沟通与排期器已生成日程选项，但当前仍不自动预约。",
     approvalTier: resolveApprovalRule("calendar.create_draft").tier,
     reviewPosture: "review_before_send_required",
     artifactsJson: jsonStringify(input.comms.calendarOptions),
@@ -1333,7 +1333,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "message_variants.md",
     title: `${input.meeting.title} message variants`,
     summary:
-      "Comms & Scheduler 已生成多条 message variants，但仍保持客户-draft姿态。",
+      "沟通与排期器已生成多条消息版本，但仍保持客户草稿姿态。",
     approvalTier: resolveApprovalRule("email.create_draft").tier,
     reviewPosture: "review_before_send_required",
     artifactsJson: jsonStringify(input.comms.messageVariants),
@@ -1351,7 +1351,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "risk_review.json",
     title: `${input.meeting.title} draft comms risk review`,
     summary:
-      "Risk & 承诺 Guard 已检查当前 draft 措辞的承诺、pricing、contract、交付与 provenance姿态。",
+      "风险与承诺守卫已检查当前草稿措辞的承诺、价格、合同、交付与来源姿态。",
     approvalTier: resolveApprovalRule("email.create_draft").tier,
     reviewPosture: "guard_review",
     artifactsJson: jsonStringify(input.guard.riskReview),
@@ -1369,7 +1369,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "approval_requirements.json",
     title: `${input.meeting.title} approval requirements`,
     summary:
-      "当前 draft comms 的复核-before-send 要求和非承诺边界已被收口。",
+      "当前沟通草稿的发送前复核要求和非承诺边界已被收口。",
     approvalTier: resolveApprovalRule("email.create_draft").tier,
     reviewPosture: "approval_path",
     artifactsJson: jsonStringify(input.guard.approvalRequirements),
@@ -1387,7 +1387,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "sanitized_artifact.md",
     title: `${input.meeting.title} sanitized draft`,
     summary:
-      "Risk & 承诺 Guard 已生成当前最安全的客户可见交接措辞。",
+      "风险与承诺守卫已生成当前最安全的客户可见交接措辞。",
     approvalTier: resolveApprovalRule("email.create_draft").tier,
     reviewPosture: "review_before_send_required",
     artifactsJson: jsonStringify(input.guard.sanitizedArtifact),
@@ -1405,7 +1405,7 @@ async function createDraftCommsArtifacts(input: {
     artifactType: "draft_comms_bundle.json",
     title: `${input.meeting.title} draft comms bundle`,
     summary:
-      "confirmed 动作资料 已进入 draft-only comms 交接，但下一步仍必须复核-before-send。",
+      "已确认的动作资料已进入仅草稿沟通交接，但下一步仍必须发送前复核。",
     approvalTier: resolveApprovalRule("email.create_draft").tier,
     reviewPosture: "review_before_send_required",
     artifactsJson: jsonStringify(input.bundle),
@@ -2055,7 +2055,7 @@ export async function reviewDraftCommsRuntime(input: {
     nextSanitizedArtifact = {
       ...currentSanitized,
       blocked: true,
-      decisionHint: "当前 draft 已被人工标记为受阻 by 边界。",
+      decisionHint: "当前草稿已被人工按边界标记为受阻。",
     };
     nextBundlePayload = {
       ...currentBundlePayload,
@@ -2551,7 +2551,7 @@ export function evaluateSprint3DraftCommsRuntime(input: {
   const nonCommitmentFallbackPass =
     !input.guard.riskReview.fallbackRequired ||
     (input.guard.sanitizedArtifact.appliedFallback &&
-      /不构成正式承诺|review-before-send|内部复核/i.test(
+      /不构成正式承诺|不会形成正式承诺|review-before-send|发送前复核|内部复核/i.test(
         input.guard.sanitizedArtifact.markdown,
       ));
   const audienceCorrectnessPass =

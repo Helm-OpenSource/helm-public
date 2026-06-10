@@ -28,4 +28,22 @@ describe("trial onboarding surface contract", () => {
     expect(trialOnboardingHelperSource).not.toContain("高成本 processing");
     expect(trialOnboardingHelperSource).not.toContain("active seat");
   });
+
+  it("keeps trial date labels bilingual instead of using Chinese dates in English mode", () => {
+    expect(trialOnboardingSurfaceSource).toContain(
+      'return locale === "en-US" ? "Not set yet" : "尚未设置";',
+    );
+    expect(trialOnboardingSurfaceSource).toContain(
+      'return format(value, "MMM d, yyyy");',
+    );
+    expect(trialOnboardingSurfaceSource).toContain(
+      'return format(value, "yyyy年M月d日", { locale: zhCN });',
+    );
+    expect(trialOnboardingSurfaceSource).toContain(
+      "{english ? \"Trial ends\" : \"试用结束\"}：{formatDateLabel(data.trialEndsAt, locale)}",
+    );
+    expect(trialOnboardingSurfaceSource).toContain(
+      "{english ? \"Grace ends\" : \"宽限期结束\"}：{formatDateLabel(data.graceEndsAt, locale)}",
+    );
+  });
 });

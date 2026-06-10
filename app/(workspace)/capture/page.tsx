@@ -30,6 +30,7 @@ import {
 import { formatDateLabel, trimText } from "@/lib/utils";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 import { CaptureResultPanel } from "@/features/conversation-capture/capture-result-panel";
+import { formatCapturePageDateLabel } from "@/features/conversation-capture/capture-page-date-labels";
 import { formatCaptureDisplayText } from "@/features/conversation-capture/display-copy";
 import { StartRecordingButton } from "@/features/conversation-capture/start-recording-button";
 
@@ -48,6 +49,8 @@ export default async function CapturePage({
   });
   const messages = getUiMessages(uiConfig.locale);
   const english = uiConfig.locale === "en-US";
+  const formatCaptureDate = (value: Date | string | null | undefined) =>
+    formatCapturePageDateLabel(value, english, formatDateLabel);
   const captureSourceLabels = getLocalizedCaptureSourceLabels(uiConfig.locale);
   const captureStatusLabels = getLocalizedCaptureStatusLabels(uiConfig.locale);
   const params = (await searchParams) ?? {};
@@ -109,7 +112,7 @@ export default async function CapturePage({
             label: english ? "What it never does" : "绝不做什么",
             value: english
               ? "Send messages to your customer. Modify CRM without your click. Decide for you."
-              : "向客户发送任何消息。未经你点击就改写 CRM。替你决策。",
+              : "向客户发送任何消息。未经你点击就改写客户关系管理系统。替你决策。",
           },
           {
             label: english ? "After the meeting" : "会后",
@@ -247,14 +250,14 @@ export default async function CapturePage({
                         session.transcript?.fullText ??
                           (english
                             ? "After capture stops, the system will generate a transcript and move into the operating-understanding pipeline."
-                            : "结束记录后，Helm 会在后台生成转写文本并进入经营理解链路。"),
+                            : "结束记录后，Helm会在后台生成转写文本并进入经营理解链路。"),
                         english,
                       ),
                       88,
                     )}
                   </p>
                   <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[color:var(--muted-foreground)]">
-                    <span>{formatDateLabel(session.startedAt)}</span>
+                    <span>{formatCaptureDate(session.startedAt)}</span>
                     <span className="inline-flex items-center gap-1">
                       {english ? "Open result" : "查看结果"}
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -302,7 +305,7 @@ export default async function CapturePage({
                 <p>
                   {english
                     ? "1. The transcript is only a middle layer; Helm first surfaces blockers, commitments and next steps you can act on."
-                    : "1. 转写文本只是中间层，Helm 会先把会话里的阻塞、承诺和推进动作提出来。"}
+                    : "1. 转写文本只是中间层，Helm会先把会话里的阻塞、承诺和推进动作提出来。"}
                 </p>
                 <p>
                   {english

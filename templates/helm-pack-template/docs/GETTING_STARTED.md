@@ -34,8 +34,8 @@ cd ../my-helm-pack
 ### 6. 填 fixtures/（强约束 A）
 让 Day-1 看板有真实可读内容。
 
-### 7. 准备 review-first 交付 artifacts
-从 `pack-template/artifacts/` 复制并填写：
+### 7. 准备复核优先交付工件
+从 `pack-template/artifacts/` 工件目录复制并填写：
 
 - `context-packet.template.json`
 - `pack-studio.sample.csv`
@@ -43,7 +43,7 @@ cd ../my-helm-pack
 - `work-pack.template.md`
 - `proof-loop-closeout.template.md`
 
-这些 artifacts 只使用 synthetic / redacted / alias-only 样本。它们不授权自动外发、自动审批、自动执行、silent CRM write 或 public claim。
+这些工件只使用合成 / 脱敏 / 仅别名样本。它们不授权自动外发、自动审批、自动执行、静默写入客户关系系统或创建公开声明。
 
 ### 8. 实现 worker
 - 商业版：闭源 worker 仓库

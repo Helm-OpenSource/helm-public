@@ -2,35 +2,144 @@
 
 # Helm
 
-### AI platforms hand you LEGO bricks. Helm is an assembled, customizable, boundary-aware **business operations loop reference implementation**.
+### Turn scattered enterprise operating signals into reviewable judgment, risk, next actions, and delivery loops.
 
-> For delivery engineers building enterprise AI operations systems on top of Coze / Alibaba Wukong / Dify / LangGraph / general agent platforms.
+> Helm is an open-source Core for enterprise leaders, AI delivery engineers, and enterprise AI operations teams.
 >
-> Generic platforms tell you "how to assemble." Helm helps you turn judgement, evidence, review, boundaries, and delivery packages in customer implementation work into a forkable engineering structure.
+> It does not let AI run the business, and it does not automate executive decisions. Helm helps teams see what is happening, who needs to decide, where the risk is, what should move next, and which actions must never become automatic commitments.
 
 **License**: Apache-2.0 · **Repository posture**: open-source Core, public after owner Go/No-Go · **Helm Cloud / Enterprise**: optional commercial editions; do not replace open source
 
-> **Not an engineer?** First read the one-pager positioning at [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md); or after running the repo, open `/demo` (about 90 seconds, no email required).
+> **Fastest way to understand it**: leaders should start with "why it matters" and the method below; delivery engineers can run `docker compose up` and the Golden Path; partners can evaluate consulting / delivery fit with public sample data only.
 
 ---
 
 ## One-line positioning
 
-> **Helm is not another agent platform, nor an LLM framework. It is a reference implementation + methodology for enterprise AI operations systems, with full boundary discipline, built to help delivery engineers turn judgement / evidence / review / boundaries / delivery packages into a forkable engineering structure.**
+> **Helm is an open-source reference implementation + method for "operating signals -> AI-assisted judgment -> human review -> traceable execution."**
+>
+> Generic agent platforms tell you how to assemble. Helm helps turn enterprise AI pilots and customer delivery work into forkable, verifiable engineering structures for judgment, evidence, review, boundaries, and delivery packages.
 
 Full argument: [HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md).
 
 ---
 
+## Why enterprise leaders should care
+
+The hardest part of an enterprise AI pilot is often not model capability. It is that operating signals do not become action:
+
+- Customer feedback, sales signals, project risks, meeting commitments, and delivery blockers are scattered across systems.
+- Management sees late summaries, not the decisions that must move today.
+- AI can generate suggestions, but often cannot show evidence, boundary, owner, and next step.
+- Teams fear auto-send, auto-commitment, and permission overreach, so AI pilots stall at demo level.
+
+Helm turns those signals into a reviewable operating loop: **see the real state, form judgment, route it through human review, move the next action, and keep evidence.**
+
+---
+
+## The Helm method
+
+1. **Collect operating signals**: customer communication, CRM, meetings, email, project progress, risk feedback, external leads.
+2. **Structure business objects**: customer, opportunity, project, fact, commitment, blocker, risk, next action.
+3. **Form judgment candidates**: today's top 3-5 moves, reason, evidence, impact, and boundary.
+4. **Route through human review**: customer-visible actions, commitments, CRM stage changes, and high-risk suggestions require explicit review.
+5. **Preserve delivery evidence**: each judgment, recommendation, boundary, and action carries traceable evidence for review and reuse.
+
+The goal is not "AI runs the company." The goal is more timely, controlled, and reviewable business execution.
+
+---
+
+## How it supports GTM: turning interest into verifiable capability
+
+Helm's GTM goal is not to create sales language first. It is to let each role use the same evidence path to make a decision:
+
+| GTM audience | What they need to believe | README conversion action |
+|---|---|---|
+| **Enterprise leader** | AI is not only a demo; it can enter operating execution, risk sensing, and review loops | Open the 90-second demo and judge fit for AI pilot governance and operating execution |
+| **Delivery engineer** | Helm is not a black-box product; it is a forkable, editable, verifiable delivery asset | Run the Golden Path, change one synthetic fixture, and prove boundaries still hold |
+| **AI consulting / delivery partner** | Helm can become method, case material, assets, and follow-on service capability | Evaluate partnership fit with public-safe scenarios, without putting customer details in public GitHub |
+| **Open-source contributor** | Contribution paths are clear and bounded away from commercial or customer-private material | Start with docs, fixtures, read-only connectors, dry-runs, and public-safe issues |
+
+The market capability to build is: **turn "I am interested in AI operating execution" into "I can try it with public samples, judge whether it fits, know how to contact you, and continue into controlled partnership evaluation."**
+
+---
+
 ## What it solves (delivery engineer view)
 
-Generic agent platforms and LLM frameworks solve "how to assemble." Three things they don't carry for you:
+Generic agent platforms and LLM frameworks solve "how to assemble." Three things still fall on the delivery team:
 
 1. **What to assemble** — the real enterprise need is "today's 3 calls a human must make + why + boundary," not a chat box
 2. **How not to blow it** — AI overreach, auto-commitment, cross-tenant data leakage — the platform doesn't carry these; your customer does
 3. **How to ship faster** — modeling from scratch per customer, building review gates, writing connectors, shipping dashboards — burns through your person-months
 
 Helm **encodes these three answers into an open-source reference implementation**.
+
+---
+
+## How to start
+
+| Who you are | Recommended path |
+|---|---|
+| **Enterprise leader / operator** | Open the 90-second demo and judge whether Helm fits AI pilot governance, operating execution, and delivery review |
+| **Delivery engineer** | Run the Golden Path, change one synthetic fixture, and verify judgment / evidence / review / boundary still hold |
+| **AI consulting / delivery partner** | Evaluate fit with public sample data; keep customer-specific details private and abstracted |
+| **Open-source contributor** | Start with docs corrections, Golden Path feedback, read-only connectors, fixtures, and dry-run boundaries |
+
+---
+
+## 90 seconds to see Helm
+
+```bash
+git clone https://github.com/Helm-OpenSource/helm-public.git
+cd helm-public
+cp .env.example .env       # Local MySQL by default
+docker compose up          # mysql:8.4 + app
+open http://localhost:3000
+```
+
+First screen: `/operating` (operating signal flow map), `/approvals` (review gate), `/memory` (operating memory) — three already-working surfaces.
+
+> The demo uses public synthetic data. It does not represent real customer business flow. Do not put customer data, private domains, production logs, deployment evidence, or internal project information into public channels.
+
+> Requires local Docker Desktop / OrbStack / colima. Boots the minimal set (no connectors, no AI, no payments).
+> Mainland China / restricted-network environments can configure local npm and
+> Docker mirrors first: `cp .npmrc.example .npmrc`, then run
+> `NPM_REGISTRY=https://registry.npmmirror.com docker compose up --build`.
+> Docker Hub base images still require an organization-approved registry mirror
+> in your Docker daemon. See [getting-started.en.md §1.1](docs/getting-started.en.md#11-mainland-china--restricted-network-setup-optional).
+
+## Delivery Engineer Golden Path
+
+This path answers three questions: can I trust the boundaries, where do I make the first change, and can I prove the fork remains review-first? It reuses existing surfaces; it does not add pages, packages, or commands.
+
+```bash
+npm run delivery:doctor
+npm run delivery:doctor -- --region cn   # local static preflight before China customer delivery
+npm run pack:fixture-check
+npm run eval:headless-signal-interface
+npm run check:public-release
+```
+
+Minimal edit entry:
+
+1. Open `extensions/case-management-sample/fixtures/case.sample.json`.
+2. Change one synthetic fixture.
+3. Run `npm run pack:fixture-check` and `npm run eval:headless-signal-interface`.
+4. Return to `/demo` / `/operating` and confirm judgement, evidence, review, and boundaries stay review-first.
+
+Golden Path acceptance: see [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md). `extensions/case-management-sample/` provides a readable / editable public sample pack. Docker / fresh-clone evidence is governed by review receipts and gates, not date promises.
+
+---
+
+## When Helm is a good fit
+
+| Good fit | Not a fit yet |
+|---|---|
+| You have AI pilots but lack operating execution, review, and evidence loops | You only need a generic chatbot |
+| Consulting / delivery teams need to turn AI demos into managed delivery systems | You only need generic BI dashboards or one-off summaries |
+| Customers worry about auto-commitment, auto-send, and permission overreach | You need AI to auto-approve, auto-send, or decide for humans |
+| Teams need to connect CRM, meetings, email, and IM operating signals | You need full enterprise SSO / SCIM / multi-tenant platform immediately |
+| You need judgment, evidence, review, and boundary as forkable engineering assets | You need a third-party plugin marketplace or complete workflow engine |
 
 ---
 
@@ -49,44 +158,6 @@ Helm **encodes these three answers into an open-source reference implementation*
 | Commercial model (for you) | Platform takes a cut / their channel | You set your price | **open-core**: fork it, sell it commercially. Helm Inc. doesn't take a cut |
 
 > This table compares **types**, not specific products' current feature checklists; platforms keep evolving. The contrast is in abstraction level and product shape. [Dify's official docs](https://docs.dify.ai/) emphasize its open-source / self-hostable posture; this table compares Dify as a visual AI application platform, not as a closed-source locked platform.
-
----
-
-## 90 seconds to see Helm
-
-```bash
-git clone https://github.com/Helm-OpenSource/helm-public.git
-cd helm-public
-cp .env.example .env       # Local MySQL by default
-docker compose up          # mysql:8.4 + app
-open http://localhost:3000
-```
-
-First screen: `/operating` (operating signal flow map), `/approvals` (review gate), `/memory` (operating memory) — three already-working surfaces.
-
-> **⚠️ Phase 2 fixture demo**: `/operating` currently shows synthetic fixture data and does not represent live tenant business flow. DPO review and founder-attested 5-role signoff are recorded, but route adoption is still locked until Engineering / Product / Security / Operations per-role receipts are attached. The current shadow probe is Phase 1.5 day-2 dogfood proxy only. See [`docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md`](docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md).
-
-> Requires local Docker Desktop / OrbStack / colima. Boots the minimal set (no connectors, no AI, no payments).
-
-Golden Path acceptance: see [HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md](docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md). `extensions/case-management-sample/` provides a readable / editable public sample pack. Docker / fresh-clone evidence is governed by review receipts and gates, not date promises.
-
-## Delivery Engineer Golden Path
-
-This path answers three questions: can I trust the boundaries, where do I make the first change, and can I prove the fork remains review-first? It reuses existing surfaces; it does not add pages, packages, or commands.
-
-```bash
-npm run delivery:doctor
-npm run pack:fixture-check
-npm run eval:headless-signal-interface
-npm run check:public-release
-```
-
-Minimal edit entry:
-
-1. Open `extensions/case-management-sample/fixtures/case.sample.json`.
-2. Change one synthetic fixture.
-3. Run `npm run pack:fixture-check` and `npm run eval:headless-signal-interface`.
-4. Return to `/demo` / `/operating` and confirm judgement, evidence, review, and boundaries stay review-first.
 
 ---
 
@@ -184,9 +255,9 @@ Pipedrive, Zoho, Dynamics, Notion, Coda, Tencent Meeting, Webex, Yonyou, Kingdee
 | Draft-style capability | draft / preview / review-first, never auto-send |
 | Evidence-layer adapter | enters evidence candidate, never directly into Must Push truth |
 
-### 5 commitments to integrators
+### 5 integration principles
 
-1. **Response within 7 business days**: we aim to reply to `integration:` issues within 7 business days, but never commit to a roadmap or shipment.
+1. **Human review, boundary first**: `integration:` issues are reviewed at the public community pace; response targets live in the operations docs and do not create roadmap or implementation commitments.
 2. **3 clear boundaries**: every integration ships with a public "auto / review / human-only" matrix.
 3. **Never send for you**: every customer-visible action waits for a user click. This line never moves.
 4. **Data portability**: all ingested data is exportable from `/settings` in one click.
@@ -246,14 +317,14 @@ Details: [AGENTS.md §6-§7](AGENTS.md), [lib/operating-signal-flow/contract.ts]
 - Public Core, Docker quickstart, case-management sample pack, Golden Path doctor, offline evals, public-release guard.
 - Repo split boundary: Core stays in this repository; industry Packs, customer Overlays, and BOM / authorization / deployment metadata move through their corresponding private target repositories, not Public Core.
 - Repository visibility is public after the owner Go/No-Go; future release, tag, and announcement changes remain owner-gated.
-- README, governance docs, `.env.example` tiers, and `docker-compose.yml`.
+- README, governance docs, `.env.example` tiers, `docker-compose.yml`, and local mirror guidance for Mainland China / restricted networks.
 
 **Next**
 - Remove frozen legacy repository links and date-style release copy from public entry points.
 - Document the Builder walkthrough as "change this line -> run this command -> observe this change".
 - Complete the sample provenance gate, fork-and-rename guide, "what Helm does not do", and forker upgrade story.
 - Add a read-only split doctor in the corresponding governance repository, aggregating Core / Pack / Overlay / BOM readiness.
-- Continue degraded-mode health surface, Required Reviewer review, and redacted live DB calibration.
+- Continue degraded-mode health surface, Required Reviewer review, redacted live DB calibration, and production deployment runbook / image boundaries.
 
 **Later**
 - Community-contributed vertical pack collaboration (open-source vertical vs tenant-private boundary)
@@ -331,20 +402,21 @@ Details: [CONTRIBUTING.en.md](CONTRIBUTING.en.md) · participation implies agree
 
 > **The main path is fork + self-host + Golden Path checks.** The early-landing partner path is only a backup for design partners who need Helm-team-led hands-on support. If you're a potential Helm Inc. partner, look at [Certified Delivery Partner](docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md) first; pilot engagement is reserved for cases where Certified doesn't fit.
 
-| Target | Acceptance |
-|---|---|
-| Apply → first response | Target **1 business day**; governed by [ON_CALL_AND_RESPONSE_SLA.md](docs/operations/ON_CALL_AND_RESPONSE_SLA.md) |
-| Approved → first 1:1 | Target **within 7 days**; depends on the mutually confirmed pilot window |
-| Setup → first card | Target **5 minutes**; the card must include evidence / reason / boundary |
-| Full setup wizard | Target **6 steps / 12 min**; failures must show a recoverable reason |
-| 60-min meeting → facts / commitments / follow-up drafts | Target **90 seconds to candidate**; adoption rate, wrong-commitment incidents, audit coverage are pilot quality gates |
-| Connect CRM → today's calls | Target **10 minutes to 3-5 Must Push candidates**; unavailable connectors degrade visibly and do not fabricate signals |
-| Integration issue → human reply | Target **within 7 business days**; no roadmap or implementation commitment |
-| Public trial retention | Governed by the workspace trial contract + effective data policy; `30-day active + 7-day grace` remains a legal-review target |
-| Self-serve export | Workspace first-party data from `/settings`; third-party source-system data remains in those systems |
-| Audit trace | Critical write paths carry `traceId`; until the user-visible trace timeline lands, no "0-second replay" promise |
+Early partnership starts from a public-safe operating scenario, not a feature checklist:
 
-Default 5 metrics: Must Push adoption, 48h follow-up completion, manager review time, wrong-commitment incident, audit trace coverage.
+1. Describe the operating signal source using public sample data or an abstracted customer scenario.
+2. State which judgments need AI assistance and which actions require human review.
+3. Use the Golden Path to verify judgment / evidence / review / boundary.
+4. Then discuss whether Certified Delivery Partner, private deployment, Cloud, or Enterprise fits.
+
+| Evaluation question | What to inspect |
+|---|---|
+| Does it improve operating execution? | Must Push adoption, 48h follow-up completion, manager review time |
+| Does it preserve boundaries? | wrong-commitment incident, customer-visible review rate, zero unauthorized outbound action |
+| Can delivery reuse it? | sample pack forkability, editable fixtures, reviewable delivery evidence |
+| Is partnership a fit? | whether a consulting / delivery partner can turn it into method, assets, cases, and follow-on service capability |
+
+Customer data, private domains, production logs, deployment evidence, commercial terms, and real project details do not belong in public GitHub. Keep them private and abstracted through an owner-approved private path.
 
 ---
 

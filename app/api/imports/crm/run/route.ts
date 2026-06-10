@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "CRM import failed" : "CRM 导入失败") },
+      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "CRM import failed" : "客户关系系统导入失败") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

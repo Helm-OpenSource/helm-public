@@ -355,6 +355,18 @@ afterEach(() => {
 });
 
 describe("auth verification code attempt cap", () => {
+  it("localizes trial signup password confirmation errors from the submitted locale", async () => {
+    const result = await startTrialSignupAction({
+      ...createSignupInput(),
+      confirmPassword: "Password456",
+      locale: "zh-CN",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("两次输入的密码必须一致");
+    expect(mocks.db.authEnrollment.create).not.toHaveBeenCalled();
+  });
+
   it("blocks login when the active phone code already reached the attempt cap", async () => {
     const record = makeCodeRecord({
       id: "login-code-1",
@@ -969,6 +981,17 @@ describe("auth verification code attempt cap", () => {
 });
 
 describe("first-login identity completion action", () => {
+  it("localizes incomplete password confirmation errors from the submitted locale", async () => {
+    const result = await completeFirstLoginIdentityCompletionAction({
+      password: "Password123",
+      locale: "zh-CN",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("请完整填写密码和确认密码");
+    expect(mocks.session.requireCurrentUser).not.toHaveBeenCalled();
+  });
+
   it("does not route first-time demo users into identity completion", async () => {
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-ui-locale") {

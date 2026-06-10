@@ -7,8 +7,29 @@ const scanRoot = "app/api";
 const sourceExtensions = new Set([".ts", ".tsx"]);
 
 const rawLocaleResolverApiAllowList = new Set([
+  "app/api/auth/dingtalk/callback/route.ts",
+  "app/api/auth/feishu/callback/route.ts",
+  "app/api/auth/wecom/callback/route.ts",
+  "app/api/connectors/google/callback/route.ts",
+  "app/api/connectors/hubspot/callback/route.ts",
+  "app/api/connectors/salesforce/callback/route.ts",
   "app/api/public-auth/wecom/callback/route.ts",
 ]);
+
+const requestLocaleCookieApiAllowList = new Set([
+  "app/api/auth/dingtalk/callback/route.ts",
+  "app/api/auth/feishu/callback/route.ts",
+  "app/api/auth/wecom/callback/route.ts",
+  "app/api/connectors/google/callback/route.ts",
+  "app/api/connectors/hubspot/callback/route.ts",
+  "app/api/connectors/salesforce/callback/route.ts",
+]);
+
+const connectorOauthCallbackRoutes = [
+  "app/api/connectors/google/callback/route.ts",
+  "app/api/connectors/hubspot/callback/route.ts",
+  "app/api/connectors/salesforce/callback/route.ts",
+] as const;
 
 const requestLocaleCookieMarkers = [
   "UI_LOCALE_COOKIE",
@@ -60,6 +81,7 @@ describe("api locale boundary", () => {
         const source = read(file);
         return requestLocaleCookieMarkers.some((marker) => source.includes(marker));
       })
+      .filter((file) => !requestLocaleCookieApiAllowList.has(file))
       .sort();
 
     expect(offenders).toEqual([]);
@@ -76,10 +98,24 @@ describe("api locale boundary", () => {
 
   it("keeps every API locale allowlist entry pointing at an existing source file", () => {
     const sourceFiles = new Set(listSourceFiles(scanRoot));
-    const missing = [...rawLocaleResolverApiAllowList]
+    const missing = [
+      ...rawLocaleResolverApiAllowList,
+      ...requestLocaleCookieApiAllowList,
+    ]
       .filter((file) => !sourceFiles.has(file))
       .sort();
 
     expect(missing).toEqual([]);
+  });
+
+  it("keeps connector OAuth callbacks on request-locale governance messages", () => {
+    for (const file of connectorOauthCallbackRoutes) {
+      const source = read(file);
+
+      expect(source).toContain("UI_LOCALE_COOKIE");
+      expect(source).toContain("resolveUiLocale(");
+      expect(source).toContain("english: requestEnglish");
+      expect(source).not.toContain("english: true");
+    }
   });
 });

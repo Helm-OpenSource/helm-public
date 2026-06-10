@@ -449,6 +449,477 @@ describe("shared surface hierarchy guards", () => {
     expect(model).not.toContain("contact.relationshipStage ??");
   });
 
+  it("keeps Chinese commercial detail labels free of English fallback cue labels", () => {
+    const externalNarrativeView = read("features/external-narrative-detail/detail-view.tsx");
+    const reinforcementView = read("features/commitment-reinforcement-sendability/detail-view.tsx");
+    const commercialStrengtheningView = read("features/commercial-narrative-strengthening/detail-view.tsx");
+    const commercialStrengtheningModel = read("features/commercial-narrative-strengthening/detail-model.ts");
+    const commercialSources = [
+      externalNarrativeView,
+      reinforcementView,
+      commercialStrengtheningView,
+      commercialStrengtheningModel,
+    ].join("\n");
+
+    for (const fragment of [
+      'text("founder cue")',
+      'text("sales cue")',
+      'text("delivery cue")',
+      'text("customer-visible strengthening")',
+      'text("internal-only wording")',
+      'text("打开加固变体s 页面")',
+      'text("Commercial 叙事加固判断")',
+      '"打开加固变体s 页面"',
+      "打开加固变体s 并确认下一层加固",
+      "回到加固变体s",
+    ]) {
+      expect(commercialSources).not.toContain(fragment);
+    }
+
+    expect(externalNarrativeView).toContain('text("创始人提示")');
+    expect(externalNarrativeView).toContain('text("销售提示")');
+    expect(externalNarrativeView).toContain('text("交付提示")');
+    expect(reinforcementView).toContain('text("客户可见加固")');
+    expect(reinforcementView).toContain('text("仅内部话术")');
+    expect(commercialStrengtheningView).toContain('text("打开加固变体页面")');
+    expect(commercialStrengtheningView).toContain('text("商业叙事加固判断")');
+    expect(commercialStrengtheningModel).toContain('"打开加固变体页面"');
+    expect(commercialStrengtheningModel).toContain("打开加固变体并确认下一层加固");
+  });
+
+  it("keeps Chinese runtime operator empty-state copy free of mixed English fragments", () => {
+    const runtimeOperatorPanel = read("features/internal-operating-workspace/runtime-operator-panel.tsx");
+
+    for (const fragment of [
+      "当前还没有交接 资料et",
+      "经营记忆 write",
+      "当前还没有 主动跑动",
+      "当前没有 open 问题空间",
+      "当前没有 player-coach 摘要",
+      "当前没有协同轨迹 bridge",
+      "Reflection 延续",
+      "reflection 延续",
+      "当前没有反思 job",
+      "当前没有 整合 job",
+      "当前还没有操作员线索 summary",
+      "当前还没有操作员下一动作 summary",
+      "当前还没有操作员start point",
+      "当前还没有操作员复核 summary",
+      "当前还没有操作员work summary",
+      "当前还没有操作员控制 summary",
+      "context miss、验证 fail 和 policy block",
+      "运行时 path",
+      "当前没有 composition failure",
+      "pilot 连续性 失败类型",
+      "当前还没有 expanded cohort family",
+      "当前还没有可用的 SOP highlight",
+      "当前还没有可用的 SOP highlight，需要等待更多 pilot 失败类型",
+      "recovery state、remediation analytics",
+      "repeat-pattern evidence，以及 有边界的runbook 指引",
+      "execution权限",
+      "当前没有 连续性 队列",
+    ]) {
+      expect(runtimeOperatorPanel).not.toContain(fragment);
+    }
+
+    expect(runtimeOperatorPanel).toContain("当前还没有交接资料。");
+    expect(runtimeOperatorPanel).toContain("当前没有开放问题空间。");
+    expect(runtimeOperatorPanel).toContain("负责人提示 ${item.ownerHint}");
+    expect(runtimeOperatorPanel).toContain("当前没有陪跑教练摘要。");
+    expect(runtimeOperatorPanel).toContain("当前没有协同轨迹桥。");
+    expect(runtimeOperatorPanel).toContain("当前没有反思任务。");
+    expect(runtimeOperatorPanel).toContain("当前没有组合失败记录。");
+    expect(runtimeOperatorPanel).toContain("当前还没有扩展队列族。");
+    expect(runtimeOperatorPanel).toContain("当前没有连续性队列。");
+  });
+
+  it("keeps Chinese meeting runtime empty-state copy free of mixed English fragments", () => {
+    const meetingRuntimeCard = read("features/meetings/meeting-v2-runtime-card.tsx");
+
+    for (const fragment of [
+      "当前还没有可见的协同轨迹 bridge",
+      "当前还没有反思 job",
+      "当前还没有反思 延续 候选",
+      "当前还没有 整合 job",
+    ]) {
+      expect(meetingRuntimeCard).not.toContain(fragment);
+    }
+
+    expect(meetingRuntimeCard).toContain("当前还没有可见的协同轨迹桥。");
+    expect(meetingRuntimeCard).toContain("当前还没有反思任务。");
+    expect(meetingRuntimeCard).toContain("当前还没有反思延续候选。");
+    expect(meetingRuntimeCard).toContain("当前还没有整合任务。");
+  });
+
+  it("keeps Chinese meeting runtime action copy free of mixed English fragments", () => {
+    const meetingActions = read("features/meetings/actions.ts");
+    const meetingRuntimeCard = read("features/meetings/meeting-v2-runtime-card.tsx");
+    const runtimeOperatorPanel = read("features/internal-operating-workspace/runtime-operator-panel.tsx");
+    const sources = `${meetingActions}\n${meetingRuntimeCard}\n${runtimeOperatorPanel}`;
+
+    for (const fragment of [
+      "整合 job 不存在",
+      "human input 检查点 request",
+      "请求 human input 检查点失败",
+      "接管跟进闭环 request 参数错误",
+      "操作员接管 follow-through",
+      "接管跟进闭环 resolve 参数错误",
+      "human input 检查点 已确认",
+      "Human input checkpoint 已确认",
+      "Artifact复核 记录",
+      "Kill（close request）",
+    ]) {
+      expect(sources).not.toContain(fragment);
+    }
+
+    expect(meetingActions).toContain("整合任务不存在");
+    expect(meetingActions).toContain("人工输入检查点请求参数错误");
+    expect(meetingRuntimeCard).toContain("人工输入检查点确认已记录");
+    expect(meetingRuntimeCard).toContain("产物复核记录");
+    expect(runtimeOperatorPanel).toContain("终止（请求关闭）");
+  });
+
+  it("keeps Chinese customer-success handoff copy free of recently fixed mixed English fragments", () => {
+    const detailModel = read("features/customer-success-handoff/detail-model.ts");
+    const queueModel = read("features/customer-success-handoff/queue-model.ts");
+    const sources = `${detailModel}\n${queueModel}`;
+
+    for (const fragment of [
+      "success 跟进闭环",
+      "拓展 read",
+      "普通客户成功 path 上",
+      "Issue 跟进闭环",
+      "meaningful post-send 结果",
+      "meaningful post-send 信号",
+      "当前 post-send",
+      "人工 send 交接",
+      "silence 或人工交接",
+      "拓展已 ready",
+      "复核-limited",
+      "commercial motion 时",
+      "intervention 压力",
+      "交接 evidence",
+      "ready-to-send、客户安全",
+      "当前已经足够 resolved / unblocked",
+      "已 backing",
+      "明确 backing",
+      "Outcome 已解除阻塞",
+      "Outcome 收紧了边界",
+      "Customer success 接手面",
+      "Customer success 链",
+      "company 跟进闭环",
+      "当前应把 客户成功验收 当作",
+      "扩大 ownership",
+      "把 adoption、阻塞",
+      "承诺-like 动作",
+      "dedicated success 交接",
+      "success 验证",
+      "扩大 负责人压力",
+      "accountable 动作",
+      "commercial-safe，",
+      "或 unblocker",
+      "安全 playbook",
+      "仅 advisory",
+      "user 审批路径",
+      "policy 线",
+      "这一面 仍然禁用",
+      "check-in 草稿",
+      "已经 settle",
+      "下一条 请求",
+      "下一步 加温",
+      "commercial 方案包线",
+      "success 问题修复",
+      "success 收件箱",
+      "sales-owned commercial 跟进",
+      "当前 success 边界",
+      "跳过 success 画面",
+      "company detail 应",
+      "客户成功 路由",
+      "客户成功 triage",
+      "widened 压力",
+      "收件箱 triage",
+      "派生 success",
+      "复核 持守",
+      "active 升级",
+      "Queue 项",
+      "Issue 跟进",
+      "Success 收件箱线程",
+      "advisory 路由",
+      "inbound 回应",
+      "widened 判断",
+      "Success 跟进",
+      "当前对外姿态 ",
+      "判断姿态 ",
+      "公司详情面 后面",
+      "客户成功验收 和拓展路由",
+      "交接 路由",
+      "扩大后的 负责人",
+      "更高 执行风险",
+      "内部 playbook",
+      "发送评估姿态 仍",
+      "复核话术 关闭",
+      "已经 agreed",
+      "复核姿态 仍",
+      "边界姿态 仍",
+      "非承诺优先 治理",
+      "缺失的 请求",
+      "边界话术 和判断姿态",
+      "可拓展 的措辞",
+      "交接 面",
+      "路由 线索",
+      "复核请求 或泛化",
+      "工作流 或",
+      "阶段模型 派生",
+      "新的 权威对象",
+      "诚实的 经营入口",
+      "路由和 负责人",
+      "当前证据 说得",
+      "交接 reason",
+      "回复 请求",
+      "禁用 对外发送",
+      "对外发送 和承诺",
+      "持守中 草稿",
+      "当前证据 更实",
+    ]) {
+      expect(sources).not.toContain(fragment);
+    }
+
+    expect(detailModel).toContain("客户成功接手面");
+    expect(detailModel).toContain("客户成功链 /");
+    expect(detailModel).toContain("负责人归属");
+    expect(detailModel).toContain("仅建议");
+    expect(detailModel).toContain("客户成功跟进闭环说成对外确定性");
+    expect(detailModel).toContain("值得进入拓展研判");
+    expect(detailModel).toContain("有意义的发送后结果");
+    expect(detailModel).toContain("显式介入压力");
+    expect(detailModel).toContain("交接证据会继续保留");
+    expect(detailModel).toContain("商业方案包线");
+    expect(detailModel).toContain("客户成功收件箱线程");
+    expect(detailModel).toContain("交接路由已经收在这里");
+    expect(detailModel).toContain("非承诺优先治理约束");
+    expect(queueModel).toContain("问题跟进闭环");
+    expect(queueModel).toContain("普通客户成功路径上");
+    expect(queueModel).toContain("当前沉默仍然不等于确认");
+    expect(queueModel).toContain("派生客户成功队列");
+    expect(queueModel).toContain("客户成功收件箱仍是派生面");
+    expect(queueModel).toContain("最新入站回应正在要求澄清");
+    expect(queueModel).toContain("很薄的收件箱路线线索");
+    expect(queueModel).toContain("这一面仍继续禁用对外发送和承诺");
+  });
+
+  it("keeps customer-facing offer and external proposal copy free of recently fixed mixed fragments", () => {
+    const detailModel = read(
+      "features/customer-facing-offer-external-proposal/detail-model.ts",
+    );
+
+    for (const fragment of [
+      "对外安全 动作",
+      "经营记忆事实 和完整发送评估",
+      "跟进安全语言 和异议",
+      "创始人 /操作员",
+      "信任敏感 措辞",
+      "决定 可对外措辞",
+      "一版 可对外提案",
+      "对外闸口 前",
+      "提案 面",
+      "仅讨论 措辞",
+      "发送前复核闸口 由谁",
+      "依赖清理 或",
+      "把 可对外叙事",
+      "下一步 号召动作",
+      "becomes可发送",
+      "可发送 之前",
+      "使用 可对外提案",
+      "提案安全 版本",
+      "as可发送 copy",
+    ]) {
+      expect(detailModel).not.toContain(fragment);
+    }
+
+    expect(detailModel).toContain("下一步对外安全动作由谁接");
+    expect(detailModel).toContain("经营记忆事实和完整发送评估轨迹");
+    expect(detailModel).toContain("跟进安全语言和异议安全备选表达");
+    expect(detailModel).toContain("创始人 / 操作员复核");
+    expect(detailModel).toContain("信任敏感措辞");
+    expect(detailModel).toContain("一版可对外提案结构");
+    expect(detailModel).toContain("对外闸口前");
+    expect(detailModel).toContain("同一个提案面");
+    expect(detailModel).toContain("仅讨论措辞");
+    expect(detailModel).toContain("下一步号召动作");
+    expect(detailModel).toContain("anything becomes sendable");
+    expect(detailModel).toContain("sendable copy");
+  });
+
+  it("keeps conversation and external narrative detail copy free of recently fixed mixed fragments", () => {
+    const conversationDetailModel = read(
+      "features/conversation-detail/detail-model.ts",
+    );
+    const conversationDetailView = read(
+      "features/conversation-detail/detail-view.tsx",
+    );
+    const externalNarrativeDetailModel = read(
+      "features/external-narrative-detail/detail-model.ts",
+    );
+    const externalNarrativeDetailView = read(
+      "features/external-narrative-detail/detail-view.tsx",
+    );
+    const sources = [
+      conversationDetailModel,
+      conversationDetailView,
+      externalNarrativeDetailModel,
+      externalNarrativeDetailView,
+    ].join("\n");
+
+    for (const fragment of [
+      "把 机会压力",
+      "对话 guidance",
+      "经营记忆事实 和完整对话",
+      "scenario 轨迹",
+      "边界话术 挂在前台",
+      "把 时点",
+      "边界安全 的客户可见",
+      "对话 guidance",
+      "话术 已经",
+      "可复用的 对外叙事层",
+      "停留在 场景层提示",
+      "打开 对外叙事详情面",
+      "把 对外叙事压力",
+      "internal 措辞",
+      "探索性 叙事",
+      "script 和线索 资料",
+      "叙事 pass",
+      "经营记忆事实 和完整叙事",
+      "提案-supporting",
+      "提案 support",
+      "把 时点",
+      "回到 按场景 的对话 detail",
+      "打开叙事兜底 detail",
+      "打开对话 detail",
+    ]) {
+      expect(sources).not.toContain(fragment);
+    }
+
+    expect(conversationDetailModel).toContain("对话指引可以改变重点");
+    expect(conversationDetailModel).toContain("经营记忆事实和完整对话轨迹");
+    expect(conversationDetailModel).toContain("场景轨迹和历史变更");
+    expect(conversationDetailView).toContain("场景化对话指引");
+    expect(conversationDetailView).toContain("可复用的对外叙事层");
+    expect(externalNarrativeDetailModel).toContain("内部措辞、探索性叙事");
+    expect(externalNarrativeDetailModel).toContain("零散脚本和线索资料");
+    expect(externalNarrativeDetailModel).toContain("下一轮叙事修订");
+    expect(externalNarrativeDetailModel).toContain("提案支撑");
+    expect(externalNarrativeDetailView).toContain("按场景组织的对话详情");
+    expect(externalNarrativeDetailView).toContain("打开叙事兜底详情");
+  });
+
+  it("keeps inbox follow-up review request copy free of recently fixed mixed fragments", () => {
+    const detailModel = read(
+      "features/inbox-followup-review-request/detail-model.ts",
+    );
+
+    for (const fragment of [
+      "完整机会 框架",
+      "范围、price",
+      "时点 或结果",
+      "contact 负责人",
+      "复核请求 分开了",
+      "跟进文案 压力",
+      "审批-敏感",
+      "复核请求 之前",
+      "跟进详情面 可以",
+      "交接时点 的清晰度",
+      "把 草稿压力",
+      "下一步 路由",
+      "Follow-up 判断",
+      "当前 下动作",
+      "复核请求 不应该",
+      "边界优先 处理",
+      "复核请求 仍",
+      "仅复核 和非承诺",
+      "原始复核姿态 中",
+      "复核请求 面",
+      "success 跟进闭环",
+      "success 边界",
+      "打开方案包 detail",
+      "打开 对外叙事详情面",
+      "共享对话场景 已经",
+      "范围、terms",
+      "文案 里回答",
+      "信任敏感 措辞",
+      "打开创始人对话 detail",
+      "rollout 澄清",
+      "打开交付对话 detail",
+      "打开销售对话 detail",
+      "dedicated 客户成功交接",
+      "company 级 proxy",
+      "company detail 必须",
+      "success 判断",
+      "复核请求 误当成",
+      "更宽的 客户成功边界",
+      "不知不觉中 过度承诺",
+      "范围或 上线节奏澄清",
+      "进入 专门的客户成功交接面",
+      "躲在 公司级代理路由后面",
+      "接管 客户成功判断",
+    ]) {
+      expect(detailModel).not.toContain(fragment);
+    }
+
+    expect(detailModel).toContain("完整机会框架");
+    expect(detailModel).toContain("范围、价格、时点或结果确定性");
+    expect(detailModel).toContain("联系人负责人");
+    expect(detailModel).toContain("跟进文案压力");
+    expect(detailModel).toContain("跟进详情面可以提高节奏");
+    expect(detailModel).toContain("跟进判断");
+    expect(detailModel).toContain("当前下一步动作");
+    expect(detailModel).toContain("复核请求不应该");
+    expect(detailModel).toContain("仅复核和非承诺");
+    expect(detailModel).toContain("客户成功跟进闭环");
+    expect(detailModel).toContain("打开方案包详情");
+    expect(detailModel).toContain("打开对外叙事详情面");
+    expect(detailModel).toContain("专门的客户成功交接面");
+    expect(detailModel).toContain("公司详情必须继续只是账户上下文");
+    expect(detailModel).toContain("更宽的客户成功边界");
+    expect(detailModel).toContain("不知不觉中过度承诺");
+    expect(detailModel).toContain("范围或上线节奏澄清");
+  });
+
+  it("keeps billing and tenant resource readiness copy free of recently fixed mixed fragments", () => {
+    const settlementBatchPanels = read(
+      "features/settings/components/billing-settlement-batch-panels.tsx",
+    );
+    const tenantResourceReadinessPanel = read(
+      "features/settings/components/tenant-resource-readiness-panel.tsx",
+    );
+    const tenantHealthPage = read(
+      "features/self-tenant-health/tenant-health-page.tsx",
+    );
+    const sources = `${settlementBatchPanels}\n${tenantResourceReadinessPanel}\n${tenantHealthPage}`;
+
+    for (const fragment of [
+      "进入 closeout",
+      "Optional 已确认 note",
+      "review / 已确认 seam",
+      "CRM 记录",
+      "LLM prompt 或",
+      "CRM 导入、现场采集",
+    ]) {
+      expect(sources).not.toContain(fragment);
+    }
+
+    expect(settlementBatchPanels).toContain("已导出的批次才能进入收口");
+    expect(tenantHealthPage).toContain("客户关系系统记录");
+    expect(tenantHealthPage).toContain("Ask Helm 提问原文");
+    expect(tenantHealthPage).toContain("大模型提示词");
+    expect(tenantResourceReadinessPanel).toContain("客户关系系统导入、现场采集");
+    expect(tenantResourceReadinessPanel).toContain(
+      "Optional acknowledgement note.",
+    );
+    expect(tenantResourceReadinessPanel).toContain(
+      "local candidate / review / acknowledgement seam",
+    );
+  });
+
   it("keeps meeting detail prompts and prepared-summary answers object-first", () => {
     const meetingDetail = read("features/meetings/meeting-detail-client.tsx");
 
@@ -699,6 +1170,58 @@ describe("shared surface hierarchy guards", () => {
     expect(panel).not.toContain("actionModeLabels");
     expect(displayCopy).toContain("条件内准备");
     expect(displayCopy).toContain("受控路由链路");
+  });
+
+  it("keeps conversation capture Chinese copy localized without changing capture boundaries", () => {
+    const capturePage = read("app/(workspace)/capture/page.tsx");
+    const sessionPanel = read(
+      "features/conversation-capture/capture-session-panel.tsx",
+    );
+    const resultPanel = read(
+      "features/conversation-capture/capture-result-panel.tsx",
+    );
+    const combined = `${capturePage}\n${sessionPanel}\n${resultPanel}`;
+
+    expect(capturePage).toContain("改写客户关系管理系统");
+    expect(capturePage).toContain("Helm会在后台生成转写文本");
+    expect(capturePage).toContain("Helm会先把会话里的阻塞");
+    expect(sessionPanel).toContain("Helm会把转写文本转成事实");
+    expect(sessionPanel).toContain("浏览器录音最小可用版");
+    expect(sessionPanel).toContain("Helm会改用你输入的速记文本");
+    expect(resultPanel).toContain("Helm已经把转写文本里最重要的经营信号提出来");
+    expect(resultPanel).toContain("Helm会把这条动作继续送入受控路由链");
+    expect(resultPanel).toContain("Helm不会强行制造新的建议");
+
+    expect(combined).not.toMatch(
+      /改写 CRM|Helm 会|Helm 已经|Helm 不会|浏览器录音 MVP/,
+    );
+  });
+
+  it("keeps import ingress Chinese copy localized while preserving connector boundaries", () => {
+    const importsClient = read("features/imports/imports-client.tsx");
+    const crmImportClient = read("features/imports/crm-import-client.tsx");
+    const importConflictsClient = read(
+      "features/imports/import-conflicts-client.tsx",
+    );
+    const combined = `${importsClient}\n${crmImportClient}\n${importConflictsClient}`;
+
+    expect(importsClient).toContain("优先接客户关系系统");
+    expect(crmImportClient).toContain("客户关系系统导入已经开始决定");
+    expect(crmImportClient).toContain("先接入第一个客户关系系统来源");
+    expect(crmImportClient).toContain("已生成客户关系系统导入预览");
+    expect(crmImportClient).toContain("客户关系系统入口继续保持先复核和只读");
+    expect(crmImportClient).toContain("先把客户关系系统里的对象层和关系层接进来");
+    expect(crmImportClient).toContain("客户关系系统操作摘要");
+    expect(crmImportClient).toContain("还没有客户关系系统导入任务");
+    expect(crmImportClient).toContain("识别客户关系系统笔记与事件里的阻塞与承诺");
+    expect(importConflictsClient).toContain("冲突清空后回到客户关系系统导入面");
+    expect(importConflictsClient).toContain("继续客户关系系统接入");
+    expect(importConflictsClient).toContain("返回客户关系系统导入");
+    expect(importConflictsClient).toContain("再回到客户关系系统导入");
+
+    expect(combined).not.toMatch(
+      /优先接 CRM|CRM 导入已经|CRM 来源|CRM 导入预览|CRM 增量同步|CRM 首次导入|已断开 CRM 连接|CRM 入口|CRM 里的对象层|CRM 操作摘要|还没有 CRM 导入任务|识别 CRM 笔记|CRM 导入面|继续 CRM 接入|返回 CRM 导入|回到 CRM 导入/,
+    );
   });
 
   it("keeps the highest-traffic business surfaces focused on action before guidance and secondary explanation", () => {
@@ -1168,5 +1691,1640 @@ describe("shared surface hierarchy guards", () => {
     expect(alertDisplayCopy).toContain('[/today focus/gi, "今日重点"]');
     expect(alertDisplayCopy).toContain('[/meeting_followup/g, "会后跟进"]');
     expect(seededBusinessCopy).toContain('[/\\bchampion\\b/gi, "支持人"]');
+  });
+
+  it("keeps customer offer and commercial narrative Chinese boundary copy free of mixed spacing", () => {
+    const customerOfferModel = read(
+      "features/customer-facing-offer-external-proposal/detail-model.ts",
+    );
+    const customerOfferView = read(
+      "features/customer-facing-offer-external-proposal/detail-view.tsx",
+    );
+    const commercialModel = read(
+      "features/commercial-narrative-strengthening/detail-model.ts",
+    );
+    const commercialView = read(
+      "features/commercial-narrative-strengthening/detail-view.tsx",
+    );
+    const combined = [
+      customerOfferModel,
+      customerOfferView,
+      commercialModel,
+      commercialView,
+    ].join("\n");
+
+    expect(customerOfferModel).toContain(
+      "仅讨论表示当前页面只适合讨论，不适合承诺、强化预期或暗示承诺。",
+    );
+    expect(customerOfferView).toContain("客户可见提案详情页");
+    expect(customerOfferView).toContain("复核闸口前面");
+    expect(customerOfferView).toContain("打开对外叙事详情面");
+    expect(commercialModel).toContain("信任敏感措辞");
+    expect(commercialModel).toContain(
+      "内部异议、依赖修复和未解决的信任备注仍然只适合仅内部。",
+    );
+    expect(commercialModel).toContain("受复核约束");
+    expect(commercialModel).toContain("边界优先复核");
+    expect(commercialModel).toContain("轻量客户可见措辞");
+    expect(commercialModel).toContain("仅讨论措辞");
+    expect(commercialView).toContain("商业叙事加固详情页");
+
+    expect(combined).not.toMatch(
+      /仅讨论 表示|客户可见提案 详情页|复核闸口 前面|打开 对外叙事详情面|信任敏感 措辞|internal 异议|复核-bound|边界-led|客户可见-light|仅讨论 措辞|commercial 加固详情页/,
+    );
+  });
+
+  it("keeps role definition and participant portal copy free of mixed Chinese fragments", () => {
+    const rolePresets = read("lib/definitions/role-presets.ts");
+    const roleFoundations = read("lib/definitions/role-foundations.ts");
+    const participantActions = read("features/participant-portal/actions.ts");
+    const combined = [rolePresets, roleFoundations, participantActions].join(
+      "\n",
+    );
+
+    expect(rolePresets).toContain("把需复核的对外动作留在可见边界内");
+    expect(rolePresets).toContain("哪些动作需要先内部同步");
+    expect(rolePresets).toContain("招聘团队的推进节奏连续");
+    expect(rolePresets).toContain("候选人简报不等于正式录用通知");
+    expect(rolePresets).toContain("把后续跟进写回客户上下文");
+    expect(rolePresets).toContain("明确交付下一步和负责人");
+    expect(rolePresets).toContain("向客户成功说明上线后跟进");
+    expect(rolePresets).toContain("内部就绪度不等于对外可用");
+    expect(rolePresets).toContain("仍需保留复核和发布守卫");
+    expect(rolePresets).toContain("向负责人 / 管理员升级治理问题");
+    expect(rolePresets).toContain("向复核面补齐证据");
+    expect(roleFoundations).toContain("试点就绪度诊断");
+    expect(roleFoundations).toContain("这只是起步能力建议资料。");
+    expect(roleFoundations).toContain("本周优先动作");
+    expect(roleFoundations).toContain("提案澄清和异议处理");
+    expect(roleFoundations).toContain("帮助客户销售更快产出");
+    expect(roleFoundations).toContain("帮助客户成功在客户沉默");
+    expect(roleFoundations).toContain("季度业务回顾");
+    expect(roleFoundations).toContain("实施启动会");
+    expect(roleFoundations).toContain("拆动作项");
+    expect(roleFoundations).toContain("起步能力姿态仍需要继续");
+    expect(participantActions).toContain(
+      "Please complete profile, payout details, and contribution terms acknowledgement.",
+    );
+
+    expect(combined).not.toMatch(
+      /复核-required|哪些动作需要先 internal sync|哪些沟通要先 internal sync|hiring 判断|hiring team 的|hiring 负责人|正式 offer|issue 升级|把 follow-through|向 CS 说明上线后 follow-through|交付 下一步|识别 时间线|向运营说明 rollout 节奏|内部 就绪度|对外 ready|仍需保留复核和 rollout guard|负责人\/admin|复核面 补齐|试点 就绪度|starter skill suggestion 资料|候选 capability|正式 skill|top 动作|提案 clarifications|时间线 或|帮助 AE|帮助 CS|issue 等待|适用于 QBR|实施 kick-off|动作item|starter skills 已|starter skill姿态|contribution terms 已确认/,
+    );
+  });
+
+  it("keeps meeting action-pack runtime Chinese copy free of mixed operational fragments", () => {
+    const actionPackRuntime = read(
+      "lib/helm-v2/meeting-action-pack-runtime.ts",
+    );
+
+    expect(actionPackRuntime).toContain("从风险提醒或会中风险提示里抽出的推断");
+    expect(actionPackRuntime).toContain("会议动作资料需要更强人工确认");
+    expect(actionPackRuntime).toContain("会议 / 公司层");
+    expect(actionPackRuntime).toContain("当前会议还没有关联公司");
+    expect(actionPackRuntime).toContain("事实与推导继续分层保存");
+    expect(actionPackRuntime).toContain("## 未决问题");
+    expect(actionPackRuntime).toContain("暂无额外未决问题");
+    expect(actionPackRuntime).toContain("先由人工确认动作资料");
+    expect(actionPackRuntime).toContain("动作资料仍带有未决问题");
+    expect(actionPackRuntime).toContain("总体继续沿会议动作资料推进");
+    expect(actionPackRuntime).toContain("会议分析已把会议摘要");
+    expect(actionPackRuntime).toContain("正式客户关系系统状态");
+
+    expect(actionPackRuntime).not.toMatch(
+      /风险 alerts|meeting 动作资料|meeting \/ company|关联 company|明确 下一步|facts 与 推导|推导 默认不 晋升|Open questions|open question|确认 动作资料|动作资料 仍带有 未决问题|沿 meeting 动作资料|会议分析 已|正式 CRM/,
+    );
+  });
+
+  it("keeps Helm v2 event-flow and layered-memory descriptions free of mixed Chinese fragments", () => {
+    const eventFlow = read("lib/helm-v2/event-flow.ts");
+    const layeredMemory = read("lib/helm-v2/layered-memory.ts");
+    const combined = `${eventFlow}\n${layeredMemory}`;
+
+    expect(eventFlow).toContain("草稿已形成，需要进入风险与承诺边界检查。");
+    expect(eventFlow).toContain("可继续低风险仅草稿行动层。");
+    expect(eventFlow).toContain("交接资料已生成，可进入交付或客户成功接手面。");
+    expect(eventFlow).toContain("人工确认会议事实，并触发对象经营记忆晋升。");
+    expect(eventFlow).toContain("生成主管关注标记。");
+    expect(eventFlow).toContain("交接资料和交付检查清单。");
+    expect(layeredMemory).toContain("当前工作区的经营摘要始终可见。");
+    expect(layeredMemory).toContain("已承诺范围、未决风险和前 14 天计划。");
+    expect(layeredMemory).toContain("权威系统边界、审批矩阵和最近确认记录。");
+    expect(layeredMemory).toContain("会议结束后加载相关会议 / 机会 / 客户摘要");
+    expect(layeredMemory).toContain("最近执行证明");
+    expect(layeredMemory).toContain("临时草稿只用于临时推理");
+    expect(layeredMemory).toContain("学习到的模式必须先经人工确认");
+    expect(layeredMemory).toContain("当前晋升规则为不晋升");
+    expect(layeredMemory).toContain("权威系统校验");
+
+    expect(combined).not.toMatch(
+      /draft 已形成|低风险 draft-only 行动层|交接 资料|CS 接手面|触发 Meeting Analyst|人工确认 meeting facts|object 经营记忆 晋升|主管关注 标记|对 draft 制品|交付 checklist|当前 workspace 的经营摘要|promised 范围|open risks|first 14 day plan|进入 正式write 意图阶段|system-of-record 边界|最近 acknowledgement|相关 meeting \/ 机会|正式write 意图创建|受控正式集成 边界|执行 proof|scratch 只用于|learned pattern 必须|晋升 rule 当前是 none|system-of-record 校验/,
+    );
+  });
+
+  it("keeps opportunity judge runtime Chinese output copy free of mixed operational fragments", () => {
+    const opportunityJudge = read(
+      "lib/helm-v2/opportunity-judge-runtime.ts",
+    );
+
+    expect(opportunityJudge).toContain("当前还缺少足够的决策标准");
+    expect(opportunityJudge).toContain("当前仍缺少明确支持人 / 负责人");
+    expect(opportunityJudge).toContain("预算或采购决策标准仍未确认");
+    expect(opportunityJudge).toContain("需要主管复核措辞和让步边界");
+    expect(opportunityJudge).toContain("升级给主管 / 操作员共同复核");
+    expect(opportunityJudge).toContain("当前无需额外主管升级");
+    expect(opportunityJudge).toContain("历史时间线当前主要指向");
+    expect(opportunityJudge).toContain("已复用对象经营记忆");
+    expect(opportunityJudge).toContain("当前支持人 / 负责人仍不明确");
+    expect(opportunityJudge).toContain("已批准只表示允许把判断消费进阴影摘要");
+    expect(opportunityJudge).toContain("下一步摘要已生成");
+    expect(opportunityJudge).toContain("机会判断套件已就绪：阶段差异");
+    expect(opportunityJudge).toContain("当前没有新增主管关注标记");
+    expect(opportunityJudge).toContain("当前没有新增主管升级信号");
+    expect(opportunityJudge).toContain("正式客户关系系统已写回");
+    expect(opportunityJudge).toContain("正式客户关系系统写回");
+    expect(opportunityJudge).toContain("正式客户关系系统已更新");
+
+    expect(opportunityJudge).not.toMatch(
+      /decision criteria|champion \/ 负责人|主管 复核|主管 \/操作员|额外 主管|仅阴影 复核|历史 timeline|object 经营记忆|判断 消费进阴影摘要|下一步摘要 已生成|操作员\/ 主管|stage差异|套件 已就绪|新增 主管 升级|正式 CRM/,
+    );
+  });
+
+  it("keeps human action execution runtime Chinese boundary copy free of mixed CRM spacing", () => {
+    const humanAction = read("lib/helm-v2/human-action-execution-runtime.ts");
+
+    expect(humanAction).toContain("正式客户关系系统已更新");
+    expect(humanAction).toContain("Helm已记录人工动作");
+    expect(humanAction).toContain("已人工完成客户关系系统/管线步骤");
+    expect(humanAction).toContain("未自动替你写正式客户关系系统");
+    expect(humanAction).toContain("人工客户关系系统/管线步骤");
+    expect(humanAction).toContain("不是Helm自动正式写回");
+    expect(humanAction).toContain("当前没有新增主管关注");
+    expect(humanAction).toContain("正式客户关系系统写回权限");
+
+    expect(humanAction).not.toMatch(
+      /正式 CRM|正式CRM|Helm 已记录|CRM 步骤|CRM\/管线|CRM \/ 管线|人工 scheduling|新增 主管关注|Helm 自动正式写回/,
+    );
+  });
+
+  it("keeps meeting v2 CRM boundary component copy localized", () => {
+    const opportunityJudgeCard = read(
+      "features/meetings/meeting-v2-opportunity-judge-card.tsx",
+    );
+    const humanActionCard = read(
+      "features/meetings/meeting-v2-human-action-execution-card.tsx",
+    );
+    const runtimeCard = read("features/meetings/meeting-v2-runtime-card.tsx");
+    const combined = `${opportunityJudgeCard}\n${humanActionCard}\n${runtimeCard}`;
+
+    expect(opportunityJudgeCard).toContain("正式客户关系系统状态不变");
+    expect(opportunityJudgeCard).toContain("正式客户关系系统写回");
+    expect(humanActionCard).toContain("客户关系系统写入权限");
+    expect(humanActionCard).toContain("标记已人工完成客户关系系统步骤");
+    expect(runtimeCard).toContain("正式客户关系系统状态");
+
+    expect(combined).not.toMatch(
+      /正式 CRM|CRM 步骤|CRM 写入|CRM 状态/,
+    );
+  });
+
+  it("keeps meeting v2 ingestion and retrieval Chinese empty state localized", () => {
+    const ingestionRetrievalCard = read(
+      "features/meetings/meeting-v2-ingestion-retrieval-card.tsx",
+    );
+
+    expect(ingestionRetrievalCard).toContain("连接器接入与检索策略");
+    expect(ingestionRetrievalCard).toContain("接入与检索记录");
+    expect(ingestionRetrievalCard).toContain(
+      "当前会议还没有生成连接器接入与检索轨迹。",
+    );
+    expect(ingestionRetrievalCard).not.toMatch(/connector ingestion \/ retrieval 轨迹/);
+  });
+
+  it("keeps meeting draft handoff CRM boundary copy localized", () => {
+    const draftCommsRuntime = read(
+      "lib/helm-v2/draft-comms-handoff-runtime.ts",
+    );
+    const meetingDisplayCopy = read("features/meetings/display-copy.ts");
+    const combined = `${draftCommsRuntime}\n${meetingDisplayCopy}`;
+
+    expect(draftCommsRuntime).toContain("正式客户关系系统状态已改写");
+    expect(draftCommsRuntime).toContain("正式客户关系系统写回");
+    expect(meetingDisplayCopy).toContain("正式客户关系系统状态");
+
+    expect(combined).not.toMatch(/正式 CRM|CRM 写回|CRM 状态/);
+  });
+
+  it("keeps public home Chinese entry copy localized for delivery engineers", () => {
+    const publicHome = read("app/page.tsx");
+
+    expect(publicHome).toContain("AI平台给你乐高积木");
+    expect(publicHome).toContain("可复用的Apache-2.0核心工程");
+    expect(publicHome).toContain("复用这套工具集");
+    expect(publicHome).toContain("复刻仓库，用黄金路径检查链");
+    expect(publicHome).toContain("投资回报材料今天不发");
+    expect(publicHome).toContain("客户关系管理阶段还停在");
+    expect(publicHome).toContain("这四条Helm都接住了");
+    expect(publicHome).toContain("关键写路径打追踪编号");
+    expect(publicHome).toContain("可复刻核心工程 · 先复核黄金路径");
+    expect(publicHome).toContain("客户关系管理和人力系统");
+    expect(publicHome).toContain("自己克隆仓库并跑黄金路径检查链");
+
+    expect(publicHome).not.toMatch(
+      /AI 平台|企业 AI|可 fork|Fork 这套|fork 仓库|Golden Path 检查链|ROI 材料|ROI 问题|CRM 阶段|关键写路径打 trace ID|Helm 已经|Helm 是|CRM 和 HR|clone 并跑/,
+    );
+  });
+
+  it("keeps public login Chinese entry copy free of mixed Helm spacing", () => {
+    const loginPage = read("app/(auth)/login/page.tsx");
+
+    expect(loginPage).toContain("你的Helm组织");
+    expect(loginPage).toContain("Helm已经知道你是谁");
+    expect(loginPage).toContain("开通你的Helm试点工作区");
+    expect(loginPage).toContain("回到你的Helm工作区");
+    expect(loginPage).toContain("申请Helm Cloud试用");
+
+    expect(loginPage).not.toMatch(
+      /你的 Helm 组织|Helm 已经|开通你的 Helm 试点工作区|回到你的 Helm 工作区|申请 Helm Cloud 试用/,
+    );
+  });
+
+  it("keeps global metadata and database banner Chinese copy localized", () => {
+    const rootLayout = read("app/layout.tsx");
+    const databaseBanner = read("components/shared/database-connection-banner.tsx");
+
+    expect(rootLayout).toContain("面向企业AI交付工程师");
+    expect(rootLayout).toContain("可复刻");
+    expect(rootLayout).toContain("行业样板、连接器、评估门禁和商业智能制品");
+    expect(databaseBanner).toContain("先连上公司VPN");
+    expect(databaseBanner).toContain("VPN连接");
+    expect(databaseBanner).toContain("请先连接公司VPN");
+
+    expect(`${rootLayout}\n${databaseBanner}`).not.toMatch(
+      /企业 AI|可 fork|vertical 样板|BI artefacts|先连上 VPN|VPN 连接|公司 VPN/,
+    );
+  });
+
+  it("keeps public trial and demo Chinese entry copy localized", () => {
+    const trialPage = read("app/trial/page.tsx");
+    const demoPage = read("app/demo/page.tsx");
+    const demoLoading = read("app/demo/loading.tsx");
+    const combined = `${trialPage}\n${demoPage}\n${demoLoading}`;
+
+    expect(trialPage).toContain("面向企业AI交付工程师");
+    expect(trialPage).toContain("直接复刻开源仓库");
+    expect(trialPage).toContain("在 GitHub 上复刻");
+    expect(trialPage).toContain("Helm 会自动运行什么");
+    expect(trialPage).toContain("会在哪些边界停下来");
+    expect(trialPage).toContain("第一次一对一导览");
+    expect(demoPage).toContain("团队第一天可复刻的行业样板");
+    expect(demoPage).toContain("通用行业样板");
+    expect(demoPage).toContain("客户关系管理导入");
+    expect(demoPage).toContain("打开完整读数");
+    expect(demoPage).toContain("不会写入客户关系系统");
+    expect(demoPage).toContain("自己克隆仓库并跑黄金路径检查链");
+    expect(demoLoading).toContain("不会写回真实客户关系系统");
+
+    expect(combined).not.toMatch(
+      /企业 AI|直接 fork|去 GitHub fork|Helm 自动跑什么|在哪条线停下来|day-1|vertical 样板|通用 vertical|CRM 导入|完整 readout|写 CRM|写入CRM|真实CRM|clone 并跑|Golden Path 检查链|真实 CRM/,
+    );
+  });
+
+  it("keeps demo and signal fixtures free of mixed Chinese CRM wording", () => {
+    const b2bSaasPack = read("lib/demo/industry-fixtures/b2b-saas.ts");
+    const customerSuccessPack = read(
+      "lib/demo/industry-fixtures/customer-success.ts",
+    );
+    const businessAdvancementFixtures = read(
+      "features/business-advancement/fixtures.ts",
+    );
+    const combined = `${b2bSaasPack}\n${customerSuccessPack}\n${businessAdvancementFixtures}`;
+
+    expect(combined).toContain("客户关系系统阶段仍停在");
+    expect(combined).toContain("客户关系系统显示客户内部");
+    expect(combined).toContain("客户关系系统记录：机会 14 天无活动");
+    expect(combined).toContain("自动改客户关系系统阶段");
+
+    expect(combined).not.toMatch(
+      /CRM 阶段|CRM 记录|CRM 承诺|CRM 显示|CRM 未更新|CRM 机会|写回 CRM|自动改 CRM/,
+    );
+  });
+
+  it("keeps workspace story and pilot runbook CRM boundary copy localized", () => {
+    const workspaceStory = read("lib/presentation/workspace-story.ts");
+    const trialRunbook = read("docs/pilot/PUBLIC_TRIAL_RUNBOOK.md");
+    const combined = `${workspaceStory}\n${trialRunbook}`;
+
+    expect(combined).toContain("客户关系系统阶段变更");
+    expect(combined).not.toMatch(/CRM 阶段变更/);
+  });
+
+  it("keeps public trial runbook Chinese copy free of recently fixed mixed operational fragments", () => {
+    const trialRunbook = read("docs/pilot/PUBLIC_TRIAL_RUNBOOK.md");
+
+    expect(trialRunbook).toContain("生成内部交接");
+    expect(trialRunbook).toContain("客户关系系统信号");
+    expect(trialRunbook).toContain("复核动作");
+    expect(trialRunbook).toContain("当前工作区的窄手机端经营推进入口");
+    expect(trialRunbook).toContain("统一用户可见追踪时间线仍是发布硬门禁");
+    expect(trialRunbook).toContain("连接器默认预演");
+    expect(trialRunbook).toContain("客户关系系统 / 邮箱 / 会议来源做预演导入");
+    expect(trialRunbook).toContain("受控租户路径");
+    expect(trialRunbook).toContain("值守人");
+    expect(trialRunbook).toContain("子处理方");
+    expect(trialRunbook).toContain("自动跨工作区检索或聚合");
+    expect(trialRunbook).toContain("不承诺服务等级协议");
+    expect(trialRunbook).toContain("GitHub 议题（Issues）");
+    expect(trialRunbook).toContain("公开议题或 PR");
+    expect(trialRunbook).toContain("联系试用支持申请延期");
+    expect(trialRunbook).toContain("运行时市场");
+    expect(trialRunbook).toContain("服务等级协议立场变化");
+
+    expect(trialRunbook).not.toMatch(
+      /生成内部 handoff|CRM 信号|Review Action|当前 workspace|trace timeline|release hard gate|connector 默认 dry-run|live send|dry-run import|reserved tenant|oncall|Oncall|sub-processor|hard delete|active → grace|grace →|自动跨 workspace|未承诺 SLA|不承诺 SLA|公开 issue|联系 trial-support|marketplace|SLA 立场变化/,
+    );
+  });
+
+  it("keeps public trial data policy Chinese body free of recently fixed mixed legal fragments", () => {
+    const dataPolicy = read("docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md");
+    const chineseBody = dataPolicy.slice(dataPolicy.indexOf("更新时间："));
+
+    expect(chineseBody).toContain("30/7 数据保留期");
+    expect(chineseBody).toContain("注册同意勾选框");
+    expect(chineseBody).toContain("工作区负责人");
+    expect(chineseBody).toContain("宽限期结束前自助导出");
+    expect(chineseBody).toContain("公开试用工作区的目标生命周期");
+    expect(chineseBody).toContain("第三方子处理方");
+    expect(chineseBody).toContain("数据处理协议");
+    expect(chineseBody).toContain("服务等级协议立场");
+    expect(chineseBody).toContain("不承诺服务等级协议");
+    expect(chineseBody).toContain("可用性服务等级协议");
+    expect(chineseBody).toContain("服务条款 / 数据处理协议 / 服务等级协议");
+    expect(chineseBody).toContain("发布硬门禁姿态");
+    expect(chineseBody).toContain("五月落地清单");
+
+    expect(chineseBody).not.toMatch(
+      /retention 是|checkbox|schema enum|retention sweep|deletion attestation|workspace owner|grace 期|公开试用 workspace|workspace 创建|read-only|retention 自动|sub-processor|data processing agreement|deletion request|workspace 数据|first-party 数据|soft-delete|release hard gate|launch plan 的 retention|五月落地 checklist|public trial 默认|single region|prompt \/ response|settings 中|banner|signup flow|SLA 立场|不承诺 SLA|Uptime SLA|ToS \/ DPA \/ SLA/,
+    );
+  });
+
+  it("keeps trial response and on-call Chinese body free of recently fixed mixed operational fragments", () => {
+    const responsePolicy = read("docs/operations/ON_CALL_AND_RESPONSE_SLA.md");
+    const chineseBody = responsePolicy.slice(
+      responsePolicy.indexOf("本文件定义 `v0.1.0-trial`"),
+    );
+
+    expect(chineseBody).toContain("首次响应人");
+    expect(chineseBody).toContain("值守维护者");
+    expect(chineseBody).toContain("普通试用反馈");
+    expect(chineseBody).toContain("商业服务等级协议");
+    expect(chineseBody).toContain("创始人 / helm-core 负责人");
+    expect(chineseBody).toContain("创始人 / GTM 负责人");
+    expect(chineseBody).toContain("跨工作区数据访问或隔离失败");
+    expect(chineseBody).toContain("数据保留 / 删除失败影响用户权利");
+    expect(chineseBody).toContain("关键连接器或大模型路径持续失败");
+    expect(chineseBody).toContain("发布硬门禁出现阻断");
+    expect(chineseBody).toContain("会议 / 客户关系系统 / 邮箱 → 必须推进项 → 复核动作");
+    expect(chineseBody).toContain("README 必须改成尽力响应");
+
+    expect(chineseBody).not.toMatch(
+      /ToS \/ Support Policy|商业 SLA|正式商业客户 SLA|7x24 on-call|First responder|Founder \/ helm-core|Founder \/ GTM|helm-core owner|GTM owner|Maintainer on duty|maintainer owner|trial feedback|triage|Security reviewer|LLM 路径|incident 模式|跨 workspace|retention \/ deletion|审计 trace|audit chain|release hard gate|feature flag|incident closeout|升级给 owner|integration 请求|CRM \/ 邮箱|Review Action|Release Gate|first responder|best-effort/,
+    );
+  });
+
+  it("keeps integration template Chinese body free of recently fixed mixed connector fragments", () => {
+    const integrationTemplate = read("docs/integrations/INTEGRATION_TEMPLATE.md");
+    const chineseBody = integrationTemplate.slice(integrationTemplate.indexOf("> 接你客户"));
+
+    expect(chineseBody).toContain("连接器 / 适配器");
+    expect(chineseBody).toContain("客户关系系统 / 即时消息 / 邮件 / 日历 / 会议 / 支付 / 大模型等");
+    expect(chineseBody).toContain("默认全部复核");
+    expect(chineseBody).toContain("测试夹具 + 预演模式");
+    expect(chineseBody).toContain("落地界面入口");
+    expect(chineseBody).toContain("失败降级 | <降级策略：空提示条 / 缓存 / 合成占位>");
+    expect(chineseBody).toContain("每个连接器必须显式声明");
+    expect(chineseBody).toContain("OAuth 范围最小化");
+    expect(chineseBody).toContain("审计追踪");
+    expect(chineseBody).toContain("基础连接器");
+    expect(chineseBody).toContain("`integration: <system>` 议题");
+    expect(chineseBody).toContain("发起 `integration:` 议题");
+    expect(chineseBody).toContain("先开议题对齐方向");
+
+    expect(chineseBody).not.toMatch(
+      /connector \/ adapter|CRM \/ IM \/ Mail|auto（自动）|默认全部 review|read-only 才能走 auto|connector README|auto \/ review \/ never|dry-run 模式|Connector 名称|OAuth provider|inbound only|on-demand|落地 surface|graceful degrade|trace 写入|read-only directory|sync 结果|AES-GCM with|哪些动作 auto|默认 auto|默认 review|默认 never|不能 auto|OAuth scope|metadata 不要 PII|plain text|client-side|callback handler|audit log|cache|hard-code customer-specific|config file|happy path|failure mode|fallback 模式|Test 覆盖|generic 表达|配置 inject|bilingual|connector 必须|first-party|原数据 stays|active \+ 7 天 grace|secret 历史|新 connector|dry-run 测试|OAuth-based connector|审计 trace|基础 connector|Certified Integration|`integration: <system>` issue|`integration:` issue|先开 issue 对齐方向/,
+    );
+  });
+
+  it("keeps Codex docs entry Chinese body localized for public repo boundary terminology", () => {
+    const codexReadme = read("docs/codex/README.md");
+    const chineseBody = codexReadme.slice(
+      codexReadme.indexOf("在 `helm-public` 中"),
+      codexReadme.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("公开 Core 仓库的贡献者");
+    expect(chineseBody).toContain("私有源仓拆分的执行者");
+    expect(chineseBody).toContain("私有域名");
+    expect(chineseBody).toContain("联系人");
+    expect(chineseBody).toContain("凭据");
+    expect(chineseBody).toContain("规划 / 复核归档");
+    expect(chineseBody).toContain("新公开文档");
+    expect(chineseBody).toContain("私有多代理交接");
+    expect(chineseBody).toContain("复核包");
+    expect(chineseBody).toContain("发布回执");
+    expect(chineseBody).toContain("客户交付作业手册");
+
+    expect(chineseBody).not.toMatch(
+      /public Core|source\s+split|operator|private domain|contact|credential|planning \/ review archive|new public doc|multi-agent handoff|review packet|release receipt|delivery runbook/,
+    );
+  });
+
+  it("keeps public docs index Chinese entry copy localized for China-market wayfinding", () => {
+    const docsReadme = read("docs/README.md");
+    const chineseIntro = docsReadme.slice(
+      docsReadme.indexOf("本目录是 `helm-public`"),
+      docsReadme.indexOf("This directory is the curated documentation surface"),
+    );
+    const publicDocsBoundary = docsReadme.slice(
+      docsReadme.indexOf("公开文档面必须刻意保持小而可审计"),
+      docsReadme.indexOf("The public docs surface is intentionally small"),
+    );
+    const deliveryEngineerIntro = docsReadme.slice(
+      docsReadme.indexOf("交付工程师优先阅读"),
+      docsReadme.indexOf("Delivery-engineer-first reading"),
+    );
+
+    expect(chineseIntro).toContain("Apache-2.0 公开 Core");
+    expect(chineseIntro).toContain("样板 Pack");
+    expect(chineseIntro).toContain("Docker 快速启动");
+    expect(publicDocsBoundary).toContain("规划、复核、商业");
+    expect(deliveryEngineerIntro).toContain("检查 / 复刻 / 首次改动");
+    expect(deliveryEngineerIntro).toContain("验证命令 / 公开安全证据路径 / 边界");
+    expect(deliveryEngineerIntro).toContain("首次改动证明");
+    expect(docsReadme).toContain("交付工程师黄金路径要求 / Delivery engineer Golden Path requirements");
+    expect(docsReadme).toContain("扩展目录与命名协议 / Extension directory and naming protocol");
+    expect(docsReadme).toContain("运营信号流图要求 / Operating signal flow map requirements");
+    expect(docsReadme).toContain("公开试点作业手册 / Public trial runbook");
+    expect(docsReadme).toContain("试点响应与值守姿态 / Trial response and on-call posture");
+    expect(docsReadme).toContain("公开发布节奏作业手册 / Public release train runbook");
+    expect(docsReadme).toContain("OPC 周报包模板 / OPC weekly packet template");
+    expect(docsReadme).toContain(
+      "中国访问性与证据路由包 / China accessibility and evidence routing packet",
+    );
+    expect(docsReadme).toContain(
+      "密钥修复回执与私有部署证据 / Secret remediation receipts and private deployment evidence",
+    );
+
+    expect(chineseIntro).not.toMatch(
+      /Apache-2\.0 public Core|sample pack|Docker quickstart/,
+    );
+    expect(publicDocsBoundary).not.toMatch(/规划、review/);
+    expect(deliveryEngineerIntro).not.toMatch(
+      /inspect \/ fork \/ first change|verification commands|public-safe evidence route|first-change proof/,
+    );
+    expect(docsReadme).not.toMatch(
+      /交付工程师 Golden Path 要求|Extension 目录与命名协议|Operating signal flow map 要求|公开试点 runbook|试点响应与 on-call 姿态|公开 release train runbook|OPC 周报 packet 模板|中国访问性与证据路由 packet|secret remediation 回执/,
+    );
+  });
+
+  it("keeps getting-started Chinese support routing copy localized", () => {
+    const gettingStarted = read("docs/getting-started.md");
+    const supportSection = gettingStarted.slice(
+      gettingStarted.indexOf("## 11. 卡住了找谁"),
+    );
+
+    expect(supportSection).toContain("GitHub 议题（Issues）");
+    expect(supportSection).toContain("不要**走公开议题");
+    expect(supportSection).toContain("[../SECURITY.md](../SECURITY.md)");
+
+    expect(supportSection).not.toMatch(/GitHub Issues|公开 issue/);
+  });
+
+  it("keeps D2 Docker smoke receipt Chinese proof-scope copy localized", () => {
+    const d2SmokeReceipt = read(
+      "docs/reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md",
+    );
+    const chineseBody = d2SmokeReceipt.slice(
+      d2SmokeReceipt.indexOf("本回执记录 PR #36"),
+      d2SmokeReceipt.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("D2 Docker 全新克隆冒烟验证");
+    expect(chineseBody).toContain("干净检出到新目录");
+    expect(chineseBody).toContain("随附 MySQL 8.4 服务");
+    expect(chineseBody).toContain("公开上手端点");
+    expect(chineseBody).toContain("被测 PR 分支");
+    expect(chineseBody).toContain("公开 Core Docker 快速启动冒烟验证");
+    expect(chineseBody).toContain("客户部署就绪");
+    expect(chineseBody).toContain("发布就绪");
+    expect(chineseBody).toContain("生产连接器凭据或回调就绪");
+    expect(chineseBody).toContain("生产数据保留");
+    expect(chineseBody).toContain("数据处理协议");
+    expect(chineseBody).toContain("服务等级承诺");
+    expect(chineseBody).toContain("事件流程就绪");
+    expect(chineseBody).toContain("客户 Overlay 就绪");
+    expect(chineseBody).toContain("运行时市场");
+    expect(chineseBody).toContain("自动对外发送 / 批准 / 结算 / 客户承诺权限");
+
+    expect(chineseBody).not.toMatch(
+      /fresh-clone smoke|clean checkout|bundled MySQL|service 初始化|public onboarding endpoints|tested PR branch|public Core Docker quickstart smoke|部署 ready|release ready|connector credential|callback\s+ready|retention \/ DPA \/ SLA \/ incident process ready|customer Overlay\s+ready|runtime marketplace|automatic external send|approval \/ settlement|customer commitment authority/,
+    );
+  });
+
+  it("keeps Node fresh-clone smoke receipt Chinese scope copy localized", () => {
+    const nodeSmokeReceipt = read(
+      "docs/reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md",
+    );
+    const chineseBody = nodeSmokeReceipt.slice(
+      nodeSmokeReceipt.indexOf("本回执证明已合并"),
+      nodeSmokeReceipt.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("主分支可以克隆到干净目录");
+    expect(chineseBody).toContain("基于 Node 的黄金路径检查");
+    expect(chineseBody).toContain("离线评测");
+    expect(chineseBody).toContain("公开守卫");
+    expect(chineseBody).toContain("生产构建");
+    expect(chineseBody).toContain("HTTP 冒烟验证");
+    expect(chineseBody).toContain("D2 Docker 全新克隆冒烟回执");
+    expect(chineseBody).toContain("Node 全新克隆路径为 PASS");
+    expect(chineseBody).toContain("D2 Docker 全新克隆路径");
+    expect(chineseBody).toContain("阻塞");
+    expect(chineseBody).toContain("阻断项");
+    expect(chineseBody).toContain("Docker Compose 上手路径");
+    expect(chineseBody).toContain("基于 MySQL 的本地工作区设置");
+    expect(chineseBody).toContain("30 分钟上手声明");
+    expect(chineseBody).toContain("D2 冒烟完成");
+    expect(chineseBody).toContain("客户部署就绪");
+    expect(chineseBody).toContain("生产连接器就绪");
+    expect(chineseBody).toContain("商业发布 Go/No-Go 批准");
+
+    expect(chineseBody).not.toMatch(
+      /main branch|clone 到 clean directory|Node-based Golden Path checks|offline evals|public guards|production build|HTTP smoke|fresh-clone smoke receipt|Node fresh-clone path|D2 Docker fresh-clone path|BLOCKED|blocker|Docker Compose onboarding|MySQL-backed local workspace setup|30-minute onboarding claim|D2 smoke completion|customer deployment readiness|production connector readiness|commercial release Go\/No-Go approval/,
+    );
+  });
+
+  it("keeps redacted live calibration receipt Chinese scope copy localized", () => {
+    const calibrationReceipt = read(
+      "docs/reviews/HELM_BUSINESS_ADVANCEMENT_PHASE3_REDACTED_LIVE_CALIBRATION_REPORT_V1.md",
+    );
+    const chineseBody = calibrationReceipt.slice(
+      calibrationReceipt.indexOf(
+        "本文件是 `RELEASE_READINESS_CALIBRATION_REPORT`",
+      ),
+      calibrationReceipt.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("公开安全回执");
+    expect(chineseBody).toContain("发布负责人");
+    expect(chineseBody).toContain("公开发布门禁");
+    expect(chineseBody).toContain("脱敏实时校准证据");
+    expect(chineseBody).toContain("原始客户数据");
+    expect(chineseBody).toContain("原始数据库行");
+    expect(chineseBody).toContain("工作区编号");
+    expect(chineseBody).toContain("客户标识符");
+    expect(chineseBody).toContain("SQL 输出");
+    expect(chineseBody).toContain("私有复核人备注");
+    expect(chineseBody).toContain("私有部署证据");
+    expect(chineseBody).toContain("自动客户部署就绪");
+    expect(chineseBody).toContain("客户服务等级承诺");
+    expect(chineseBody).toContain("生产运行时采用");
+    expect(chineseBody).toContain("自动发送 / 自动批准 /");
+    expect(chineseBody).toContain("自动付款 / 自动执行权限");
+    expect(chineseBody).toContain("原始校准数据");
+    expect(chineseBody).toContain("功能开关");
+    expect(chineseBody).toContain("允许名单");
+    expect(chineseBody).toContain("回滚、审计和复核人控制");
+
+    expect(chineseBody).not.toMatch(
+      /public-safe receipt|release owner|release gate|redacted live calibration evidence|raw customer data|raw database rows|workspace ids|customer identifiers|SQL output|private reviewer notes|private deployment evidence|该 receipt|automatic customer deployment readiness|customer SLA|production runtime adoption|auto-send|auto-approve|auto-pay|auto-execute permission|raw calibration data|runtime adoption|feature flag|allowlist|rollback|audit 和 reviewer controls/,
+    );
+  });
+
+  it("keeps visibility Go decision Chinese release-boundary copy localized", () => {
+    const visibilityGo = read(
+      "docs/reviews/HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md",
+    );
+    const chineseBody = visibilityGo.slice(
+      visibilityGo.indexOf("本文件记录 2026-06-01"),
+      visibilityGo.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("负责人（创始人身份）");
+    expect(chineseBody).toContain("可见性 **GO** 决策");
+    expect(chineseBody).toContain("仓库可见性");
+    expect(chineseBody).toContain("最终人工动作");
+    expect(chineseBody).toContain("切换为公开");
+    expect(chineseBody).toContain("GitHub 预发布");
+    expect(chineseBody).toContain("GitHub Discussions 公告");
+    expect(chineseBody).toContain("发布门禁");
+    expect(chineseBody).toContain("完整模式");
+    expect(chineseBody).toContain("全部通过");
+    expect(chineseBody).toContain("自动步骤");
+    expect(chineseBody).toContain("人工回执");
+    expect(chineseBody).toContain("Clean History 回执");
+    expect(chineseBody).toContain("审计缺口");
+    expect(chineseBody).toContain("运维保存 RDS 凭据轮换回执");
+    expect(chineseBody).toContain("真实复核人批准编号");
+    expect(chineseBody).toContain("占位编号");
+    expect(chineseBody).toContain("发布机器");
+    expect(chineseBody).toContain("真实记录值");
+    expect(chineseBody).toContain("建议不等于承诺");
+    expect(chineseBody).toContain("复核优先");
+    expect(chineseBody).toContain("不自动写入 / 发送 / 批准 / 结算");
+
+    expect(chineseBody).not.toMatch(
+      /owner|founder identity|visibility|repository visibility|manual action|flip|tag|prerelease|announcement|release gate|tagging|FULL mode|ALL CLEAR|automated steps|manual receipts|clean-history receipt|audit gaps|ops 保存|credential-rotation receipt|legal document|reviewer approval id|placeholder|release machine|recorded values|full release gate|recommendation|commitment|review-first|auto-write|send \/ approve \/ settle/,
+    );
+  });
+
+  it("keeps clean-history receipt Chinese safety-scope copy localized", () => {
+    const cleanHistoryReceipt = read(
+      "docs/reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md",
+    );
+    const chineseBody = cleanHistoryReceipt.slice(
+      cleanHistoryReceipt.indexOf("本文件是仓库可见性门禁"),
+      cleanHistoryReceipt.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("仓库可见性门禁");
+    expect(chineseBody).toContain("历史级步骤");
+    expect(chineseBody).toContain("公开安全回执");
+    expect(chineseBody).toContain("公开 Core 历史");
+    expect(chineseBody).toContain("真实密钥");
+    expect(chineseBody).toContain("完整历史扫描");
+    expect(chineseBody).toContain("不轮换凭据");
+    expect(chineseBody).toContain("不批准发布");
+    expect(chineseBody).toContain("不切换仓库可见性");
+    expect(chineseBody).toContain("负责人动作");
+    expect(chineseBody).toContain("清洗后的快照");
+    expect(chineseBody).toContain("完整私有单体仓库历史");
+    expect(chineseBody).toContain("私有源仓受损提交");
+    expect(chineseBody).toContain("任何引用都不可达");
+    expect(chineseBody).toContain("非密钥");
+    expect(chineseBody).toContain("刻意构造的假夹具");
+    expect(chineseBody).toContain("密钥检测器");
+    expect(chineseBody).toContain("真实凭据");
+    expect(chineseBody).toContain("形似凭据的内容");
+
+    expect(chineseBody).not.toMatch(
+      /repository visibility gate|history-level|public-safe receipt|public Core history|secret|full-history scan|credential|release|flip repository visibility|owner action|sanitized snapshot|private monorepo history|private source repo compromised commits|ref 都不可达|finding|non-secret|deliberate fake fixture|secret detector|history 被重写|new commit|credential-shaped content/,
+    );
+  });
+
+  it("keeps AI-native artifact template closeout Chinese scope copy localized", () => {
+    const artifactCloseout = read(
+      "docs/reviews/HELM_AI_NATIVE_B2B_ARTIFACT_TEMPLATES_CLOSEOUT.md",
+    );
+    const chineseBody = artifactCloseout.slice(
+      artifactCloseout.indexOf("本收口回执记录"),
+      artifactCloseout.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("收口回执");
+    expect(chineseBody).toContain("公开安全的 Pack 交付工件模板");
+    expect(chineseBody).toContain("AI 原生企业 AI 用户体验参考工作");
+    expect(chineseBody).toContain("公开可审查工件");
+    expect(chineseBody).toContain("上下文包");
+    expect(chineseBody).toContain("Pack Studio 安全样例");
+    expect(chineseBody).toContain("证据矩阵");
+    expect(chineseBody).toContain("待复核工作包");
+    expect(chineseBody).toContain("证明闭环收口");
+    expect(chineseBody).toContain("黄金路径诊断 / 评测 / 公开守卫验证");
+    expect(chineseBody).toContain("静态 / 离线 / 本地运行时冒烟验证");
+    expect(chineseBody).toContain("D2 Docker 全新克隆冒烟验证");
+    expect(chineseBody).toContain("历史收口状态");
+    expect(chineseBody).toContain("当前发布批准");
+    expect(chineseBody).toContain("客户部署就绪");
+    expect(chineseBody).toContain("商业发布就绪");
+    expect(chineseBody).toContain("30 分钟上手声明");
+    expect(chineseBody).toContain("运行时 API");
+    expect(chineseBody).toContain("数据模式");
+    expect(chineseBody).toContain("连接器采用");
+    expect(chineseBody).toContain("客户数据接入");
+    expect(chineseBody).toContain("自动发送");
+    expect(chineseBody).toContain("静默客户关系系统写入");
+    expect(chineseBody).toContain("公开证明声明");
+
+    expect(chineseBody).not.toMatch(
+      /closeout|public-safe|Pack delivery artifact templates|slice|AI-native enterprise AI UX reference work|artifact：|Context Packet|safe sample|Evidence Matrix|Review-Ready Work Pack|Proof Loop closeout|Golden Path doctor|eval \/ public guard validation|static \/ offline \/ local runtime smoke|fresh-clone Docker smoke|release approval|customer deployment readiness|commercial release readiness|30-minute onboarding claim|artifact templates|runtime API、schema|connector adoption|customer data intake|hosted MCP|auto-send|auto-approve|auto-execute|silent CRM write|public proof claim/,
+    );
+  });
+
+  it("keeps Helm pack template Chinese artifact guidance localized", () => {
+    const packTemplateDocs = [
+      read("templates/helm-pack-template/README.md"),
+      read("templates/helm-pack-template/docs/GETTING_STARTED.md"),
+      read("templates/helm-pack-template/EXTRACTION_NOTES.md"),
+      read("templates/helm-pack-template/pack-template/PACK.md"),
+      read("templates/helm-pack-template/pack-template/artifacts/README.md"),
+      read("templates/helm-pack-template/pack-template/artifacts/work-pack.template.md"),
+      read(
+        "templates/helm-pack-template/pack-template/artifacts/proof-loop-closeout.template.md",
+      ),
+    ].join("\n");
+
+    expect(packTemplateDocs).toContain("复核优先工件");
+    expect(packTemplateDocs).toContain("公开安全交付工件模板");
+    expect(packTemplateDocs).toContain("上下文包");
+    expect(packTemplateDocs).toContain("Pack Studio 安全样例");
+    expect(packTemplateDocs).toContain("证据矩阵");
+    expect(packTemplateDocs).toContain("待复核工作包");
+    expect(packTemplateDocs).toContain("证明闭环收口");
+    expect(packTemplateDocs).toContain("外部复刻者验证");
+    expect(packTemplateDocs).toContain("公开安全证据门禁");
+    expect(packTemplateDocs).toContain("负责人抽取门");
+    expect(packTemplateDocs).toContain("工件目录");
+    expect(packTemplateDocs).toContain("准备负责人复核");
+    expect(packTemplateDocs).toContain("不是工作流引擎");
+    expect(packTemplateDocs).toContain("静默写入客户关系系统");
+    expect(packTemplateDocs).toContain("公开或客户可见声明");
+    expect(packTemplateDocs).toContain("合格专业人士复核");
+    expect(packTemplateDocs).toContain("不把内部学习直接变成公开声明");
+
+    expect(packTemplateDocs).not.toMatch(
+      /review-first artifact|public-safe 交付 artifact|Review-first 交付 artifacts|准备 review-first 交付 artifacts|review gate 和 outcome|准备 owner review|不是 workflow engine|用于准备 review 的静态 Pack artifact|准备 review packet|推荐下一步 review-safe action|自动发送 customer-visible messages|silent write CRM|创建 public claim|7-day Run，但不把内部学习直接变成 public claim|closeout 默认 internal-only|Public 或 customer-visible claims|外部 forker|public-safe evidence gate|owner 抽取门|模板见 `artifacts\/`。|从 `pack-template\/artifacts\/` 复制并填写/,
+    );
+  });
+
+  it("keeps public release train runbook Chinese body free of recently fixed mixed release-governance fragments", () => {
+    const releaseTrainRunbook = read(
+      "docs/operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md",
+    );
+    const chineseBody = releaseTrainRunbook.slice(
+      releaseTrainRunbook.indexOf("本作业手册定义"),
+      releaseTrainRunbook.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("本作业手册定义");
+    expect(chineseBody).toContain("第一轮公开 Core 发布之后");
+    expect(chineseBody).toContain("公开 Core 通过小而可复核的 PR 发布");
+    expect(chineseBody).toContain("不能直接推送到 `main`");
+    expect(chineseBody).toContain("发布批准");
+    expect(chineseBody).toContain("商业发布声明");
+    expect(chineseBody).toContain("生产服务等级承诺");
+    expect(chineseBody).toContain("检查通过是必要条件但不等于发布批准");
+    expect(chineseBody).toContain("试用版发布保持预发布且不标记为最新版本");
+    expect(chineseBody).toContain("稳定语义化版本线");
+    expect(chineseBody).toContain("负责人闸门");
+    expect(chineseBody).toContain("私有回执、凭据、客户证据和批准编号");
+    expect(chineseBody).toContain("发布命令只是给人工维护者的指引");
+    expect(chineseBody).toContain("公开安全");
+    expect(chineseBody).toContain("人工回执变量");
+
+    expect(chineseBody).not.toMatch(
+      /本 runbook|public-Core launch|public Core|可 review|直接 push|release approval|commercial launch statement|production SLA|customer deployment proof|Enterprise readiness claim|green checks|trial release|prerelease 且|非 latest|owner 修改 version strategy|stable release|stable semver line|owner gate|private receipt|credential、customer evidence|approval id|release command|maintainer 的 guidance|release tag|public safety gates|quality gates|release machine|manual receipt/,
+    );
+  });
+
+  it("keeps public Core launch announcement Chinese body localized for announcement-boundary terminology", () => {
+    const launchAnnouncement = read(
+      "docs/launch/HELM_PUBLIC_CORE_LAUNCH_ANNOUNCEMENT_V1.md",
+    );
+    const chineseBody = launchAnnouncement.slice(
+      launchAnnouncement.indexOf("## 中文"),
+    );
+
+    expect(chineseBody).toContain("可复刻的工程结构");
+    expect(chineseBody).toContain("只读黄金路径诊断");
+    expect(chineseBody).toContain("合成公开样板包");
+    expect(chineseBody).toContain("来源复核中");
+    expect(chineseBody).toContain("智能体平台 / 大模型框架");
+    expect(chineseBody).toContain("全程复核优先");
+
+    expect(chineseBody).not.toMatch(
+      /可 fork|Golden Path|synthetic public|sample pack|provenance under review|agent 平台|LLM framework|review-first/,
+    );
+  });
+
+  it("keeps open-source and Cloud Trial launch posture Chinese body localized for release-governance terminology", () => {
+    const launchPosture = read(
+      "docs/product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md",
+    );
+    const chineseBody = launchPosture.slice(
+      launchPosture.indexOf("本文记录 Helm Core"),
+      launchPosture.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("公开发布姿态");
+    expect(chineseBody).toContain("发布批准");
+    expect(chineseBody).toContain("私有发布回执");
+    expect(chineseBody).toContain("负责人 Go/No-Go");
+    expect(chineseBody).toContain("人工打标签决策");
+    expect(chineseBody).toContain("Apache-2.0 Core 源码");
+    expect(chineseBody).toContain("本地 Docker 快速启动");
+    expect(chineseBody).toContain("公开样板 Pack");
+    expect(chineseBody).toContain("无服务等级协议的试用姿态");
+    expect(chineseBody).toContain("密钥轮换回执");
+    expect(chineseBody).toContain("控制面授权状态");
+    expect(chineseBody).toContain("私有发布负责人批准记录");
+    expect(chineseBody).toContain("人工打标签步骤");
+    expect(chineseBody).toContain("发布机器");
+    expect(chineseBody).toContain("发布通道、目标标签和目标标题");
+    expect(chineseBody).toContain("试用版只能按预发布");
+    expect(chineseBody).toContain("稳定语义化版本标签");
+    expect(chineseBody).toContain("已有稳定线");
+    expect(chineseBody).toContain("企业级服务等级协议");
+
+    expect(chineseBody).not.toMatch(
+      /release approval|release receipt|owner approval|人工 tagging|Core source|Docker quickstart|public sample Pack|无 SLA|no-SLA|trial posture|secret rotation receipt|control-plane entitlement state|release owner approval record|manual tagging|trial \/ stable release train|release machine|release channel|target tag|target title|prerelease|stable semver tag|stable line|企业级 SLA|enterprise SLA/,
+    );
+  });
+
+  it("keeps public roadmap Chinese body free of recently fixed mixed roadmap-boundary fragments", () => {
+    const publicRoadmap = read("docs/roadmap/HELM_PUBLIC_ROADMAP.md");
+    const chineseBody = publicRoadmap.slice(
+      publicRoadmap.indexOf("本文描述 Helm 公开 Core"),
+      publicRoadmap.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("相对门禁路线图");
+    expect(chineseBody).toContain("AI 交付工程师");
+    expect(chineseBody).toContain("判断");
+    expect(chineseBody).toContain("证据、复核、边界和交付包工作");
+    expect(chineseBody).toContain("商业发布批准");
+    expect(chineseBody).toContain("生产服务等级承诺");
+    expect(chineseBody).toContain("客户部署承诺");
+    expect(chineseBody).toContain("仓库可见性批准");
+    expect(chineseBody).toContain("可复刻的工程结构");
+    expect(chineseBody).toContain("建议不是承诺");
+    expect(chineseBody).toContain("复核包不是批准、发送、写回、结算或执行");
+    expect(chineseBody).toContain("证据门禁");
+    expect(chineseBody).toContain("发布日期承诺");
+    expect(chineseBody).toContain("独立门禁、仓库路由和负责人批准");
+    expect(chineseBody).toContain("额外连接器就绪");
+
+    expect(chineseBody).not.toMatch(
+      /commercial release approval|production SLA|customer deployment commitment|repository visibility approval|delivery engineers|gate-relative|gate-relative roadmap|judgement|evidence、review|boundary 和 delivery package work|可 fork|recommendation 不是 commitment|review packet|不是 approval|send、|write-back|settlement 或 execution|public-safe|evidence gates|launch-date promise|Now 是|Next 是|Later 必须|独立 gate|repo routing|owner approval|Enterprise readiness|industry Pack hardening|customer Overlay delivery|connector readiness/,
+    );
+  });
+
+  it("keeps delivery engineer Golden Path Chinese body localized for requirement-boundary terminology", () => {
+    const goldenPath = read(
+      "docs/product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md",
+    );
+    const chineseBody = goldenPath.slice(
+      goldenPath.indexOf("本文是 `Helm-OpenSource/helm-public`"),
+      goldenPath.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("交付工程师黄金路径");
+    expect(chineseBody).toContain("公开 Core 要求契约");
+    expect(chineseBody).toContain("判断、证据、复核、边界和交付包工作");
+    expect(chineseBody).toContain("可复刻的工程结构");
+    expect(chineseBody).toContain("已有表面的要求与验证契约");
+    expect(chineseBody).toContain("公开样板包");
+    expect(chineseBody).toContain("公开文档");
+    expect(chineseBody).toContain("公开测试");
+    expect(chineseBody).toContain("离线评测");
+    expect(chineseBody).toContain("部署注册表");
+    expect(chineseBody).toContain("版本清单");
+    expect(chineseBody).toContain("健康心跳与用量元数据");
+    expect(chineseBody).toContain("零新增表面");
+    expect(chineseBody).toContain("既有评测和既有公开发布守卫");
+    expect(chineseBody).toContain("只写相对门禁措辞");
+    expect(chineseBody).toContain("证据门禁");
+    expect(chineseBody).toContain("仓库可见性切换是最终负责人动作");
+    expect(chineseBody).toContain("黄金路径的最小链路");
+    expect(chineseBody).toContain("信号 / 复核包路径");
+    expect(chineseBody).toContain("禁止写入 / 发送 / 批准 / 执行 / 跨租户路径");
+
+    expect(chineseBody).not.toMatch(
+      /delivery-engineer|public Core requirements contract|judgement|evidence、review|boundary 和 delivery package work|可 fork|requirements 与 verification contract|existing evals|existing public-release guards|Gate-relative wording only|evidence gates|launch date|version-date promise|visibility flip|owner action|workstream|No overclaim|clone public Core|Docker quickstart|public sample pack|synthetic fixture|signal \/ review packet path|forbidden write \/ send \/ approve \/ execute \/ cross-tenant path|public docs|public tests|offline evals|deployment registry|version inventory|health heartbeat|usage metadata/,
+    );
+  });
+
+  it("keeps delivery-engineer positioning Chinese body localized for core value terminology", () => {
+    const positioning = read(
+      "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md",
+    );
+    const chineseBody = positioning.slice(
+      positioning.indexOf("## 一句话定位"),
+      positioning.indexOf("## Golden Path onboarding 锚点"),
+    );
+
+    expect(chineseBody).toContain("智能体平台");
+    expect(chineseBody).toContain("大模型框架");
+    expect(chineseBody).toContain("可复刻的工程结构");
+    expect(chineseBody).toContain("工具函数");
+    expect(chineseBody).toContain("纵向参考实现");
+    expect(chineseBody).toContain("建议 / 承诺边界");
+    expect(chineseBody).toContain("评测门禁");
+    expect(chineseBody).toContain("中文连接器");
+    expect(chineseBody).toContain("纵向方案包");
+    expect(chineseBody).toContain("开放核心");
+    expect(chineseBody).toContain("价值点");
+    expect(chineseBody).toContain("发布门禁");
+    expect(chineseBody).toContain("信号模式");
+    expect(chineseBody).toContain("工作器驱动预览");
+    expect(chineseBody).toContain("BI 报告技能资产");
+    expect(chineseBody).toContain("作业指南最小切片");
+    expect(chineseBody).toContain("合成夹具");
+    expect(chineseBody).toContain("全新克隆上手");
+    expect(chineseBody).toContain("租户私有");
+    expect(chineseBody).toContain("边界不变量");
+    expect(chineseBody).toContain("脱敏检查");
+
+    expect(chineseBody).not.toMatch(
+      /agent 平台|LLM framework|可 fork|utilities|vertical 参考实现|Advice vs Commitment|eval gate|中文 connector|open-core|value point|release gate|signal schema|worker driver preview|BI report skill assets|cookbook minimum slice|synthetic fixture|fresh-clone onboarding|tenant-private|invariants|redaction/,
+    );
+  });
+
+  it("keeps delivery-engineer positioning Chinese onboarding and boundary copy localized", () => {
+    const positioning = read(
+      "docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md",
+    );
+    const chineseBody = positioning.slice(
+      positioning.indexOf("## 黄金路径上手锚点"),
+      positioning.indexOf("## 下一步"),
+    );
+
+    expect(chineseBody).toContain("黄金路径上手锚点");
+    expect(chineseBody).toContain("复核优先");
+    expect(chineseBody).toContain("Docker 全新克隆路径");
+    expect(chineseBody).toContain("D2 冒烟回执");
+    expect(chineseBody).toContain("公开 Core 快速启动");
+    expect(chineseBody).toContain("公开安全纵向方案");
+    expect(chineseBody).toContain("客户纵向方案雏形");
+    expect(chineseBody).toContain("可复刻工程结构");
+    expect(chineseBody).toContain("数据模式定制");
+    expect(chineseBody).toContain("连接器适配");
+    expect(chineseBody).toContain("复刻 / 商用 / 自营授权费");
+    expect(chineseBody).toContain("纵向方案包售卖");
+    expect(chineseBody).toContain("智能体市场 / 插件商店");
+    expect(chineseBody).toContain("大模型编排平台");
+    expect(chineseBody).toContain("开放核心持续维护");
+    expect(chineseBody).toContain("商业连接器");
+    expect(chineseBody).toContain("高级审计 / 可观测性");
+    expect(chineseBody).toContain("建议不等于承诺");
+    expect(chineseBody).toContain("评测门禁强制执行");
+    expect(chineseBody).toContain("代码 + 评测是可审计证据");
+
+    expect(chineseBody).not.toMatch(
+      /Golden Path onboarding|review-first|fresh-clone|D2 smoke receipt|public Core quickstart|Phase 2 fixture demo|runtime adoption|public-safe vertical|state 哪里|fixture 覆盖|可 fork|schema 定制|connector 适配|gate 降级|license fee|vertical pack|agent marketplace|plugin store|LLM 编排平台|open-core|commercial connector|audit \/ observability|Recommendation ≠ Commitment|eval gate|代码 \+ eval/,
+    );
+  });
+
+  it("keeps HSI requirements Chinese body localized for review-first signal boundary terminology", () => {
+    const hsiRequirements = read(
+      "docs/product/HELM_HEADLESS_SIGNAL_INTERFACE_REQUIREMENTS.md",
+    );
+    const chineseBody = hsiRequirements.slice(
+      hsiRequirements.indexOf("Helm 无头信号接口"),
+      hsiRequirements.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("Helm 无头信号接口");
+    expect(chineseBody).toContain("公开、可复刻的契约");
+    expect(chineseBody).toContain("复核优先的运营信号");
+    expect(chineseBody).toContain("客户关系系统替代品");
+    expect(chineseBody).toContain("托管智能体运行时");
+    expect(chineseBody).toContain("工作流引擎、市场");
+    expect(chineseBody).toContain("执行平面");
+    expect(chineseBody).toContain("公开契约只覆盖包清单");
+    expect(chineseBody).toContain("合成 / 脱敏夹具");
+    expect(chineseBody).toContain("确定性评测门禁");
+    expect(chineseBody).toContain("复核包准备");
+    expect(chineseBody).toContain("边界证据");
+    expect(chineseBody).toContain("交付闭环可诊断");
+    expect(chineseBody).toContain("复刻 Helm");
+    expect(chineseBody).toContain("准备复核包");
+    expect(chineseBody).toContain("受控试点");
+    expect(chineseBody).toContain("第一阶段保持仅离线");
+    expect(chineseBody).toContain("运行时查询");
+    expect(chineseBody).toContain("数据模式迁移");
+    expect(chineseBody).toContain("生产连接器");
+    expect(chineseBody).toContain("正式写入");
+    expect(chineseBody).toContain("大模型最终排名");
+
+    expect(chineseBody).not.toMatch(
+      /Headless Signal Interface|可 fork|contract|review-first|operating signals|CRM replacement|托管 agent 运行时|hosted agent runtime|workflow engine|marketplace|execution plane|pack manifests|synthetic \/ redacted fixtures|deterministic eval gates|review packet preparation|boundary evidence|delivery loop|fork Helm|inspect sample pack|map source fields|safe fixtures|run HSI eval|inspect operating signal output|prepare review packet|controlled pilot|HSI contract|Phase 1|offline-only|runtime query|API route|schema 迁移|schema migration|production connector|hosted MCP|official write|auto-send|auto-approve|auto-execute|LLM final ranking/,
+    );
+  });
+
+  it("keeps open-source commercial boundary Chinese body localized for public/commercial terms", () => {
+    const commercialBoundary = read(
+      "docs/product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md",
+    );
+    const chineseBody = commercialBoundary.slice(
+      commercialBoundary.indexOf("Helm Core 采用"),
+      commercialBoundary.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("独立");
+    expect(chineseBody).toContain("复刻、运行和审查");
+    expect(chineseBody).toContain("复核优先的业务运营参考实现");
+    expect(chineseBody).toContain("公开仓库必须保持公开安全");
+    expect(chineseBody).toContain("稳定 SDK 接缝");
+    expect(chineseBody).toContain("Core 不能导入");
+    expect(chineseBody).toContain("维护者复核");
+    expect(chineseBody).toContain("官方 / 认证字样");
+    expect(chineseBody).toContain("认证不是市场");
+    expect(chineseBody).toContain("结算通道");
+    expect(chineseBody).toContain("服务等级协议");
+    expect(chineseBody).toContain("客户结果保证");
+    expect(chineseBody).toContain("商标许可");
+
+    expect(chineseBody).not.toMatch(
+      /fork|review-first|public-safe|SDK seam|import\s+商业|maintainer review|Certified 字样|Certification 不是 marketplace|SLA|payout rail|outcome guarantee|trademark license/,
+    );
+  });
+
+  it("keeps release reality alignment Chinese body localized for release-boundary terms", () => {
+    const releaseReality = read("docs/product/HELM_RELEASE_REALITY_ALIGNMENT.md");
+    const chineseBody = releaseReality.slice(
+      releaseReality.indexOf("本文件把 2026-05-02"),
+    );
+
+    expect(chineseBody).toContain("7 个工作日集成议题回复");
+    expect(chineseBody).toContain("议题驱动候选池");
+    expect(chineseBody).toContain("回复议题不等于排期");
+    expect(chineseBody).toContain("审计轨迹公开姿态");
+    expect(chineseBody).toContain("深层治理、产品和复核文档默认中文");
+    expect(chineseBody).toContain("复核节奏就绪");
+    expect(chineseBody).toContain("DB / LLM / 连接器 / 采集 / 审计轨迹");
+    expect(chineseBody).toContain("不是可用性服务等级协议");
+    expect(chineseBody).toContain("不是第三方插件运行时");
+    expect(chineseBody).toContain("一方 / 私有租户扩展接缝");
+    expect(chineseBody).toContain("不支持第三方市场");
+    expect(chineseBody).toContain("不受信代码加载");
+    expect(chineseBody).toContain("沙箱 / 进程隔离 / 签名 / 能力清单");
+    expect(chineseBody).toContain("发布硬门禁必须阻断不可控发布");
+    expect(chineseBody).toContain("统一用户可见审计时间线是发布硬门禁");
+    expect(chineseBody).toContain("密钥历史已正式修复");
+    expect(chineseBody).toContain("受损密钥");
+    expect(chineseBody).toContain("值守 / 响应政策已由负责人批准");
+    expect(chineseBody).toContain("必要复核人批准记录");
+    expect(chineseBody).toContain("发布证据中保留回执");
+    expect(chineseBody).toContain("人工打标签策略");
+    expect(chineseBody).toContain("首个公开试点标签");
+    expect(chineseBody).toContain("发布列车");
+    expect(chineseBody).toContain("稳定语义化版本标签");
+    expect(chineseBody).toContain("人工签核流程");
+    expect(chineseBody).toContain("创始人内部门禁");
+    expect(chineseBody).toContain("内部自用包");
+    expect(chineseBody).toContain("边界 / 自检直接消费的标记");
+    expect(chineseBody).toContain("守卫注册表");
+    expect(chineseBody).toContain("README / 公开文档已降级");
+    expect(chineseBody).toContain("发布公告 / 销售文案同步");
+    expect(chineseBody).toContain("法律政策草案");
+    expect(chineseBody).toContain("销售文案、README、发布公告");
+
+    expect(chineseBody).not.toMatch(
+      /integration issue|issue-driven candidate pool|回复 issue|audit trace public posture|review 文档|review 节奏|uptime SLA|plugin runtime|private tenant extension seam|third-party marketplace|untrusted code loading|process isolation|capability manifest|release hard gates|trace timeline|release hard gate|secret history|compromised secret|Docker smoke|on-call \/ response policy|owner-approved|Required Reviewer approval record|release evidence|人工 receipt|manual tagging strategy|stable tag|trial release|release train|release machine|semver tag|stable tag|只报告 blocker|hard gates \*\*输入约束|owner 发布日|必备 evidence|sign-off|Founder internal gate|internal dogfood packet|review notes|founder decision|run report|boundary \/ self-check|marker|削弱 guard|guard registry|private owner receipt|public docs|launch post|sales copy|legal policy draft|manual tag \/ GitHub Release \/ announcement/,
+    );
+  });
+
+  it("keeps extension directory naming protocol Chinese body localized for public/private boundary terms", () => {
+    const namingProtocol = read(
+      "docs/product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md",
+    );
+    const chineseBody = namingProtocol.slice(
+      namingProtocol.indexOf("本公开协议约束"),
+      namingProtocol.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("扩展 / 样板");
+    expect(chineseBody).toContain("可复刻");
+    expect(chineseBody).toContain("公开扩展和样板");
+    expect(chineseBody).toContain("通用或合成名称");
+    expect(chineseBody).toContain("真实客户、租户、部署");
+    expect(chineseBody).toContain("私有供应商");
+    expect(chineseBody).toContain("私有域名");
+    expect(chineseBody).toContain("客户品牌标识");
+    expect(chineseBody).toContain("客户连接器运行时配置");
+    expect(chineseBody).toContain("联系人、域名、主机或部署回执");
+    expect(chineseBody).toContain("私有 Overlay 仓库");
+
+    expect(chineseBody).not.toMatch(
+      /extension \/ sample|可 fork|公开 extension|sample 必须|generic 或 synthetic|tenant|deployment|vendor|domain|branding|connector runtime configuration|host 或 deployment receipt/,
+    );
+  });
+
+  it("keeps certified ecosystem checklist Chinese body localized for manual certification boundary terms", () => {
+    const certificationChecklist = read(
+      "docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md",
+    );
+    const frontmatter = certificationChecklist.slice(
+      0,
+      certificationChecklist.indexOf("# Helm Certified Ecosystem Checklist"),
+    );
+    const chineseBody = certificationChecklist.slice(
+      certificationChecklist.indexOf("本清单定义"),
+      certificationChecklist.indexOf("## English Reference"),
+    );
+
+    expect(frontmatter).toContain("认证连接器、工作流包、伙伴或部署复核");
+    expect(chineseBody).toContain("连接器、工作流包、伙伴和部署");
+    expect(chineseBody).toContain("人工认证门禁");
+    expect(chineseBody).toContain("不创建市场");
+    expect(chineseBody).toContain("结算通道");
+    expect(chineseBody).toContain("转售计划");
+    expect(chineseBody).toContain("客户结果保证");
+    expect(chineseBody).toContain("负责人、范围");
+    expect(chineseBody).toContain("支持 / 不支持的用例");
+    expect(chineseBody).toContain("证据引用");
+    expect(chineseBody).toContain("复核边界");
+    expect(chineseBody).toContain("回滚 / 撤回路径");
+    expect(chineseBody).toContain("客户可见声明");
+    expect(chineseBody).toContain("非承诺说明");
+    expect(chineseBody).toContain("批准之后");
+    expect(chineseBody).toContain("复核优先边界");
+
+    expect(chineseBody).not.toMatch(
+      /connector|workflow pack|partner|deployment|gate|marketplace|payout rail|reseller program|outcome guarantee|owner|scope|supported \/ unsupported use case|version|evidence refs|review boundary|rollback \/ withdrawal path|customer-visible claim|non-commitment note|approval 之后|customer-visible claim|review-first boundary/,
+    );
+    expect(frontmatter).not.toMatch(
+      /certified connector|workflow pack|partner 或 deployment review/,
+    );
+  });
+
+  it("keeps operating signal flow map Chinese body localized for read-only signal-flow terms", () => {
+    const signalFlowMap = read(
+      "docs/product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md",
+    );
+    const chineseBody = signalFlowMap.slice(
+      signalFlowMap.indexOf("运营信号流图"),
+      signalFlowMap.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("运营信号流图");
+    expect(chineseBody).toContain("公开 Core 契约");
+    expect(chineseBody).toContain("业务信号");
+    expect(chineseBody).toContain("不把建议变成承诺");
+    expect(chineseBody).toContain("只读投影");
+    expect(chineseBody).toContain("重试队列");
+    expect(chineseBody).toContain("分发器");
+    expect(chineseBody).toContain("自动执行平面");
+    expect(chineseBody).toContain("流转是顺畅、积压还是阻塞");
+    expect(chineseBody).toContain("来源信号如何进入复核包");
+    expect(chineseBody).toContain("候选动作");
+    expect(chineseBody).toContain("记忆候选");
+    expect(chineseBody).toContain("被拒输入");
+    expect(chineseBody).toContain("确定性规则");
+    expect(chineseBody).toContain("AI 辅助解释");
+    expect(chineseBody).toContain("人工复核");
+    expect(chineseBody).toContain("稳定信号键");
+    expect(chineseBody).toContain("拒绝原因");
+    expect(chineseBody).toContain("证据姿态");
+    expect(chineseBody).toContain("复核状态");
+    expect(chineseBody).toContain("负责人 / 复核人路由");
+    expect(chineseBody).toContain("边界说明");
+    expect(chineseBody).toContain("私有域名");
+    expect(chineseBody).toContain("私有部署回执");
+
+    expect(chineseBody).not.toMatch(
+      /Operating Signal Flow Map|public Core contract|business signal|recommendation|commitment|read-only projection|runtime DAG|scheduler|retry queue|dispatcher|workflow engine|BI platform|automatic execution plane|current flow|smooth|backlogged|blocked|source signal|review packet|candidate action|report、memory candidate|rejected input|deterministic rules|AI-assisted explanation|human review|stable signal key|source family|object link|rejection reason|evidence posture|review state|owner \/ reviewer routing|boundary note|private domain|deployment receipt/,
+    );
+  });
+
+  it("keeps solution extension protocol Chinese body localized for public extension boundary terms", () => {
+    const extensionProtocol = read(
+      "docs/product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md",
+    );
+    const chineseBody = extensionProtocol.slice(
+      extensionProtocol.indexOf("本文件是 Solution Extension"),
+      extensionProtocol.indexOf("## English Reference"),
+    );
+    const chineseMainText = extensionProtocol.slice(
+      extensionProtocol.indexOf("本文件是 Solution Extension"),
+    );
+
+    expect(chineseBody).toContain("Solution Extension 协议的公开 Core 版本");
+    expect(chineseBody).toContain("公开、通用的扩展");
+    expect(chineseBody).toContain("结算逻辑");
+    expect(chineseBody).toContain("私有交付作业手册");
+    expect(chineseBody).toContain("复核优先的有界方案扩展层");
+    expect(chineseBody).toContain("领域特定界面");
+    expect(chineseBody).toContain("报告资产");
+    expect(chineseBody).toContain("有界运行时适配器");
+    expect(chineseMainText).toContain("复核姿态");
+    expect(chineseMainText).toContain("工程交付复核");
+    expect(chineseMainText).toContain("交付 / 结算 / 邀请 / 复核");
+    expect(chineseMainText).toContain("连接器 / 浏览器运行时");
+    expect(chineseMainText).toContain("输入输出契约");
+    expect(chineseMainText).toContain("复核 / 批准姿态");
+    expect(chineseMainText).toContain("客户可见");
+    expect(chineseMainText).toContain("认证模式");
+    expect(chineseMainText).toContain("审计 / 回放提示");
+    expect(chineseMainText).toContain("额外领域对象");
+    expect(chineseMainText).toContain("租户 / 保留工作区数据归属");
+    expect(chineseMainText).toContain("分润 / 冲回逻辑");
+    expect(chineseMainText).toContain("条款 / 申请 / 邀请边界");
+    expect(chineseMainText).toContain("受益方");
+    expect(chineseMainText).toContain("能力目录");
+    expect(chineseMainText).toContain("宿主工作区");
+    expect(chineseMainText).toContain("一方场景");
+    expect(chineseMainText).toContain("扩展边界");
+    expect(chineseMainText).toContain("角色身份稳定");
+    expect(chineseMainText).toContain("责任边界稳定");
+    expect(chineseMainText).toContain("临时操作员壳层");
+    expect(chineseMainText).toContain("工程复核");
+    expect(chineseMainText).toContain("系统集成交付项目系统");
+    expect(chineseMainText).toContain("测试 / 守卫已稳定");
+    expect(chineseMainText).toContain("文档 / 边界措辞已稳定");
+    expect(chineseMainText).toContain("输入输出契约稳定");
+    expect(chineseMainText).toContain("一方保留扩展");
+    expect(chineseMainText).toContain("共享核心");
+    expect(chineseMainText).toContain("怎么复核");
+    expect(chineseMainText).toContain("怎么邀请");
+    expect(chineseMainText).toContain("新工作流 / 操作员界面");
+    expect(chineseMainText).toContain("新结算 / 归因 / 邀请规则");
+    expect(chineseMainText).toContain("新角色姿态");
+    expect(chineseBody).toContain("不是市场");
+    expect(chineseBody).toContain("插件沙箱");
+    expect(chineseBody).toContain("结算通道");
+    expect(chineseBody).toContain("客户交付项目跟踪器");
+    expect(chineseBody).toContain("自动对外发送权限");
+    expect(chineseBody).toContain("通用 / 合成名称");
+    expect(chineseBody).toContain("合成 / 脱敏夹具");
+    expect(chineseBody).toContain("复核优先边界");
+
+    expect(chineseBody).not.toMatch(
+      /Solution Extension protocol|public Core version|generic 的|extension 如何|settlement logic|delivery runbook|review-first|domain-specific surfaces|fixtures、report assets|bounded runtime adapters|marketplace|plugin sandbox|settlement rail|customer delivery project tracker|external-send authority|generic \/ synthetic|synthetic \/ redacted fixtures|review-first boundaries/,
+    );
+    expect(chineseMainText).not.toMatch(
+      /review posture|engineering delivery review|invite \/ review|connector \/ browser runtime|怎么 review|怎么 invite|domain objects|operator surfaces|tenant \/ reserved workspace data ownership|review \/ policy \/ reporting \/ settlement boundary|query \/ report|workflow \/ operator surface|settlement \/ attribution \/ invite|role posture|输入输出 contract|tests \/ guards|docs \/ boundary wording|approval posture|customer-facing|auth mode|workspace scope|audit \/ replay hint|beneficiary|split \/ reversal|terms \/ application \/ invite|settlement \/ payout posture|Worker` catalog|capability catalog|capability metadata|core 升级|host data|public-readable|host workspace|operator data|internal readout|data ownership|tenant workspace|shared core|first-party scenario|first-party 经营特例|first-party reserved extension|extension 边界|responsibility boundary|escalation mode|temporary operator shell|application \/ terms \/ review|first-party surfaces|generic core report module|Prisma schema|extension registry UI|marketplace taxonomy|SI project system|custom extension|core product|抽成 core|导致 schema/,
+    );
+  });
+
+  it("keeps OPC weekly packet Chinese body free of recently fixed mixed public-operations fragments", () => {
+    const opcPacket = read("docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md");
+    const chineseBody = opcPacket.slice(
+      opcPacket.indexOf("本模板把 `helm-public`"),
+      opcPacket.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("负责人闸门");
+    expect(chineseBody).toContain("证据优先");
+    expect(chineseBody).toContain("受控执行闭环");
+    expect(chineseBody).toContain("发布批准");
+    expect(chineseBody).toContain("客户承诺");
+    expect(chineseBody).toContain("服务等级承诺");
+    expect(chineseBody).toContain("自动外联活动");
+    expect(chineseBody).toContain("认证批准");
+    expect(chineseBody).toContain("证据包");
+    expect(chineseBody).toContain("公开安全事实");
+    expect(chineseBody).toContain("命令回执");
+    expect(chineseBody).toContain("激活阻断项");
+    expect(chineseBody).toContain("贡献者信号");
+    expect(chineseBody).toContain("受保护分支");
+    expect(chineseBody).toContain("中国访问性回执");
+    expect(chineseBody).toContain("负责人批准的逐字文案");
+    expect(chineseBody).toContain("触达 / 联系或辅助信号");
+    expect(chineseBody).toContain("负责人批准的脱敏回执");
+
+    expect(chineseBody).not.toMatch(
+      /owner-gated|proof-first|controlled-execution loop|release approval|customer commitment|readiness statement|automatic outbound campaign|certification approval|private delivery runbook|owner gate|proof packet|controlled execution|证据和 queue|public-safe facts|command receipts|issue \/ PR state|activation blockers|contributor signals|direct push protected branch|verification|中国访问性 receipt|owner-approved exact copy|channel、timing|responsible person|no-go confirmation|community contact|reach \/ contact|assisted signal|public-safe evidence|owner-approved redacted receipt/,
+    );
+  });
+
+  it("keeps public visibility gate Chinese body free of recently fixed mixed visibility-gate fragments", () => {
+    const visibilityGate = read(
+      "docs/operations/HELM_PUBLIC_VISIBILITY_GATE_CHECKLIST_V1.md",
+    );
+    const chineseBody = visibilityGate.slice(
+      visibilityGate.indexOf("本清单记录 `helm-public`"),
+      visibilityGate.indexOf("## English Reference"),
+    );
+
+    expect(visibilityGate).toContain("Helm 公开可见性门禁清单 V1");
+    expect(chineseBody).toContain("从私有仓库切到公开仓库");
+    expect(chineseBody).toContain("运营门禁");
+    expect(chineseBody).toContain("公开发布已完成");
+    expect(chineseBody).toContain("已执行门禁状态");
+    expect(chineseBody).toContain("公开安全事项");
+    expect(chineseBody).toContain("可见性门禁");
+    expect(chineseBody).toContain("仓库可见性只能由负责人");
+    expect(chineseBody).toContain("步骤通过之后完成");
+    expect(chineseBody).toContain("本清单不会切换");
+    expect(chineseBody).toContain("未来发布不能复用");
+    expect(chineseBody).toContain("实际回执、凭据、批准编号和负责人动作");
+    expect(chineseBody).toContain("发布机器或私有记录");
+
+    expect(chineseBody).not.toMatch(
+      /private 到 public|operational gate|launch 已完成|gate state|public-safe\s+items|operationalizes|Golden Path requirements|visibility gate|repository visibility|owner 作为|步骤 green|launch 前失败|checklist 不会 flip|flip\s+visibility|未来 release|receipt|credential|approval id|owner action|release machine/,
+    );
+  });
+
+  it("keeps public operating model Chinese opening free of recently fixed mixed operating-model fragments", () => {
+    const operatingModel = read(
+      "docs/operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md",
+    );
+    const chineseOpening = operatingModel.slice(
+      operatingModel.indexOf("本文定义 `Helm-OpenSource/helm-public`"),
+      operatingModel.indexOf("## English Reference"),
+    );
+
+    expect(chineseOpening).toContain("公开 Core 使命");
+    expect(chineseOpening).toContain("运营方法");
+    expect(chineseOpening).toContain("OKR / KPI 闭环");
+    expect(chineseOpening).toContain("认证伙伴状态");
+    expect(chineseOpening).toContain("生产服务等级承诺");
+    expect(chineseOpening).toContain("客户部署就绪");
+    expect(chineseOpening).toContain("自动对外发送、自动批准、自动结算");
+    expect(chineseOpening).toContain("市场或插件沙箱");
+    expect(chineseOpening).toContain("可复刻、有证据支撑、复核优先的运营闭环");
+    expect(chineseOpening).toContain("先建立信任再扩大规模");
+    expect(chineseOpening).toContain("先激活再触达");
+    expect(chineseOpening).toContain("先贡献再扩张");
+    expect(chineseOpening).toContain("集成必须从来源对象、数据流、夹具、预演和复核边界开始");
+    expect(chineseOpening).toContain("边界明确的开放核心");
+    expect(chineseOpening).toContain("公开守卫");
+    expect(chineseOpening).toContain("夹具证据");
+    expect(chineseOpening).toContain("激活回执");
+    expect(chineseOpening).toContain("负责人闸门");
+    expect(chineseOpening).toContain("触达指标不能替代激活证据");
+
+    expect(chineseOpening).not.toMatch(
+      /public Core mission|operating method|KPI loop|certified partner status|production SLA|customer deployment readiness|automatic external send|automatic approval|automatic settlement|marketplace|plugin sandbox|mission 是|operations work|forkable|evidence-backed|review-first|operating loop|trust before scale|activation before reach|contribution before expansion|integration by evidence|open-core with explicit boundary|公开 guard|fixture evidence|activation receipt|owner gate|public SLA|reach metrics|activation evidence/,
+    );
+  });
+
+  it("keeps public operating model Chinese table summaries covering direction, OKR, and workstreams", () => {
+    const operatingModel = read(
+      "docs/operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md",
+    );
+    const chineseOpening = operatingModel.slice(
+      operatingModel.indexOf("方向摘要："),
+      operatingModel.indexOf("## English Reference"),
+    );
+
+    expect(chineseOpening).toContain("方向摘要");
+    expect(chineseOpening).toContain("先建立信任再扩大规模");
+    expect(chineseOpening).toContain("先用克隆、运行、夹具和首次改动证明激活");
+    expect(chineseOpening).toContain("触达信号");
+    expect(chineseOpening).toContain("先让贡献者能理解、验证和复核小能力");
+    expect(chineseOpening).toContain(
+      "集成必须从来源对象、数据流、夹具、预演和复核边界开始",
+    );
+    expect(chineseOpening).toContain("商业路径必须保持可选且有清晰边界");
+    expect(chineseOpening).toContain("服务等级承诺或客户承诺已经就绪");
+    expect(chineseOpening).toContain("OKR 摘要");
+    expect(chineseOpening).toContain("公开 Core 要保持可信且可合并");
+    expect(chineseOpening).toContain("第一条交付工程师闭环要可复现");
+    expect(chineseOpening).toContain("贡献者入口要变成可靠运营队列");
+    expect(chineseOpening).toContain("周度运营包只汇总 PR 队列、激活证据、风险、请求决策和");
+    expect(chineseOpening).toContain("受控执行队列");
+    expect(chineseOpening).toContain("决策必须和建议分开");
+    expect(chineseOpening).toContain("协作分工摘要");
+    expect(chineseOpening).toContain("维护者执行负责小 PR、检查、复核和受保护分支纪律");
+    expect(chineseOpening).toContain("增长运营先把公开可见性转成激活和首次改动证据");
+    expect(chineseOpening).toContain("复核优先的集成路径");
+
+    expect(chineseOpening).not.toMatch(
+      /Trust before scale|Activation before reach|Contribution before expansion|Integration by evidence|Open-core with explicit boundary|reach signals only|owner gate|roadmap commitment|customer commitment readiness|Weekly operating packets|controlled execution queue|decisions are separated from recommendations|Maintainer execution|Workstream Decomposition/,
+    );
+  });
+
+  it("keeps open-source growth plan Chinese body free of recently fixed mixed growth-operations fragments", () => {
+    const growthPlan = read(
+      "docs/operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md",
+    );
+    const chineseBody = growthPlan.slice(
+      growthPlan.indexOf("本文是 `helm-public`"),
+      growthPlan.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("公开 Core 增长");
+    expect(chineseBody).toContain("认知、激活、社区接入和摩擦移除");
+    expect(chineseBody).toContain("商业发布批准");
+    expect(chineseBody).toContain("服务等级承诺");
+    expect(chineseBody).toContain("自动外联活动");
+    expect(chineseBody).toContain("公开发布转成可度量的交付工程师激活闭环");
+    expect(chineseBody).toContain("合成样板包");
+    expect(chineseBody).toContain("激活摩擦而非虚荣指标");
+    expect(chineseBody).toContain("理解、激活和贡献质量");
+    expect(chineseBody).toContain("触达信号");
+    expect(chineseBody).toContain("夹具改动");
+    expect(chineseBody).toContain("公开安全");
+    expect(chineseBody).toContain("可复现阻断项");
+    expect(chineseBody).toContain("激活证明");
+
+    expect(chineseBody).not.toMatch(
+      /public-Core growth|operating plan|awareness|community intake|friction removal|launch approval|readiness\s+statement|SLA|outbound campaign|公开 launch|delivery engineer activation loop|synthetic sample pack|activation friction|vanity\s+metrics|comprehension|contribution quality|Stars、\s*forks、\s*clones|reach signal|fixture change|public-safe\s+report|blocker 这类 activation proof/,
+    );
+  });
+
+  it("keeps open-source growth plan Chinese table summaries covering roles, metrics, plan, channels, and backlog", () => {
+    const growthPlan = read(
+      "docs/operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md",
+    );
+    const chineseBody = growthPlan.slice(
+      growthPlan.indexOf("角色摘要："),
+      growthPlan.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("角色摘要");
+    expect(chineseBody).toContain("增长负责人负责信息、渠道计划、指标读数和优先级");
+    expect(chineseBody).toContain("维护者负责公开");
+    expect(chineseBody).toContain("文档负责人负责 README 与文档转化修正");
+    expect(chineseBody).toContain("验证负责人负责黄金路径与公开守卫检查");
+    expect(chineseBody).toContain("复核者负责公开安全和非承诺复核");
+    expect(chineseBody).toContain("指标摘要");
+    expect(chineseBody).toContain("独立本地运行");
+    expect(chineseBody).toContain("具体可复现阻断项");
+    expect(chineseBody).toContain("社区路由质量");
+    expect(chineseBody).toContain("首批贡献准备度");
+    expect(chineseBody).toContain("不要优化无资格星标增长");
+    expect(chineseBody).toContain("7 日计划摘要");
+    expect(chineseBody).toContain("移除首次运行歧义");
+    expect(chineseBody).toContain("结构化反馈");
+    expect(chineseBody).toContain("负责人闸门下的公开叙事");
+    expect(chineseBody).toContain("公开安全读数");
+    expect(chineseBody).toContain("渠道与待办队列摘要");
+    expect(chineseBody).toContain("GitHub 讨论是标准公开发布对话");
+    expect(chineseBody).toContain("待办队列优先补议题 / PR 模板");
+    expect(chineseBody).toContain("README 首次改动演练");
+    expect(chineseBody).toContain("WeChat 只做人带人的社区 / 合作触达");
+    expect(chineseBody).toContain("复刻改名指南");
+
+    expect(chineseBody).not.toMatch(
+      /Golden Path|issue \/ discussion|好 issue|backlog|walkthrough|Growth lead|Metric readout|Daily growth log|Maintainer|Triage labels|Docs owner|Verification owner|Reviewer|Activation proof|Friction queue quality|Community routing|Contribution readiness|Unqualified star growth|Day 1 - Baseline|Day 7 - Readout|Canonical launch conversation|Developer social posts|Growth Backlog|Fork-and-rename guide/,
+    );
+  });
+
+  it("keeps China accessibility packet Chinese body free of recently fixed mixed evidence-routing fragments", () => {
+    const chinaPacket = read(
+      "docs/operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md",
+    );
+    const chineseBody = chinaPacket.slice(
+      chinaPacket.indexOf("本文记录 `helm-public`"),
+      chinaPacket.indexOf("## English Reference"),
+    );
+
+    expect(chinaPacket).toContain("Helm 中国访问性与证据路由包");
+    expect(chineseBody).toContain("中国市场的交付工程师");
+    expect(chineseBody).toContain("公开 Core");
+    expect(chineseBody).toContain("激活证据保持可验证");
+    expect(chineseBody).toContain("公开公告");
+    expect(chineseBody).toContain("回复模板");
+    expect(chineseBody).toContain("付费报价声明");
+    expect(chineseBody).toContain("响应时间或路线图承诺");
+    expect(chineseBody).toContain("主要激活证明");
+    expect(chineseBody).toContain("GitHub 公开安全证据");
+    expect(chineseBody).toContain("首次改动证明");
+    expect(chineseBody).toContain("文档摩擦");
+    expect(chineseBody).toContain("集成用例");
+    expect(chineseBody).toContain("辅助信号或触达 / 联系信号");
+    expect(chineseBody).toContain("激活成功、商业意向、响应义务或路线图需求");
+    expect(chineseBody).toContain("公开渠道或脱敏回执");
+    expect(chineseBody).toContain("凭据、令牌、cookie、QR 凭据、密钥");
+    expect(chineseBody).toContain("私有环境细节、生产日志、安全漏洞细节");
+
+    expect(chineseBody).not.toMatch(
+      /delivery engineers|public Core\s+loop|activation evidence|public announcement|reply\s+template|private runbook|paid-offer statement|response-time|roadmap\s+commitment|primary activation proof|public-safe evidence|first-change proof|docs friction|integration use case|assisted signal|reach\/contact signal|activation success|commercial intent|response obligation|roadmap demand|公开 channel|redacted receipt|private domain|credential|token|QR credential|secret|private environment detail|production log|security vulnerability detail|paid-offer|obligation wording/,
+    );
+  });
+
+  it("keeps China accessibility packet Chinese table summaries covering target people, evidence, routing, gates, and watch", () => {
+    const chinaPacket = read(
+      "docs/operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md",
+    );
+    const chineseBody = chinaPacket.slice(
+      chinaPacket.indexOf("目标人群摘要："),
+      chinaPacket.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("目标人群摘要");
+    expect(chineseBody).toContain("AI 交付工程师、平台工程师、AI 运营建设者");
+    expect(chineseBody).toContain("解决方案架构师和实施负责人");
+    expect(chineseBody).toContain("公开 Core 黄金路径");
+    expect(chineseBody).toContain("GitHub 公开安全证据路由");
+    expect(chineseBody).toContain("可触达面摘要");
+    expect(chineseBody).toContain("README 中文入口");
+    expect(chineseBody).toContain("GitHub 讨论 #49");
+    expect(chineseBody).toContain("GitHub 议题模板是主要证据入口");
+    expect(chineseBody).toContain("WeChat 账号与社区 QR 只提供辅助触达");
+    expect(chineseBody).toContain("双层证据摘要");
+    expect(chineseBody).toContain("GitHub 议题 / 讨论中的黄金路径结果");
+    expect(chineseBody).toContain("单独的私聊、未链接截图、私有部署说明");
+    expect(chineseBody).toContain("都不能算激活成功、商业意向、响应义务或路线图需求");
+    expect(chineseBody).toContain("证据采集摘要");
+    expect(chineseBody).toContain("修改合成夹具 `CASE-SAMPLE-002`");
+    expect(chineseBody).toContain("路由到对应议题模板或讨论 #41");
+    expect(chineseBody).toContain("负责人闸门摘要");
+    expect(chineseBody).toContain("通过 WeChat / 社区转发行动入口");
+    expect(chineseBody).toContain("修改议题模板语言");
+    expect(chineseBody).toContain("不能绕过分支保护");
+    expect(chineseBody).toContain("24 小时观察摘要");
+    expect(chineseBody).toContain("只跟踪讨论 #49 / #41 新回复、黄金路径报告");
+    expect(chineseBody).toContain("不得把私有遥测");
+
+    expect(chineseBody).not.toMatch(
+      /公开 Core Golden Path|GitHub Discussion|GitHub issue templates|GitHub issue \/ discussion|README Golden Path|issue template|Discussion #41|Golden Path 报告|转发 CTA|Target People|Current Reachable Surfaces|Two-Tier Evidence Model|Proof Collection Route|Owner-Gated Decisions|24-Hour Watch|Target person|First useful proof|Evidence status|Primary proof|Assisted signal|Reach-only signal|Does Not Count Alone|unlinked screenshots|private deployment notes|owner-approved redacted receipt|Proof Collection|Owner Gate Needed|Track only public-safe fields|private telemetry/,
+    );
+  });
+
+  it("keeps public maintainer status Chinese body localized for operating baseline terminology", () => {
+    const maintainerStatus = read(
+      "docs/operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md",
+    );
+    const chineseBody = maintainerStatus.slice(
+      maintainerStatus.indexOf("本文是 `helm-public`"),
+      maintainerStatus.indexOf("## English Reference"),
+    );
+
+    expect(chineseBody).toContain("维护者运营基线");
+    expect(chineseBody).toContain("项目健康快照");
+    expect(chineseBody).toContain("发布批准");
+    expect(chineseBody).toContain("商业服务等级承诺");
+    expect(chineseBody).toContain("公开 GitHub 仓库表面");
+    expect(chineseBody).toContain("发布与标签姿态");
+    expect(chineseBody).toContain("公开文档 / 贡献入口");
+    expect(chineseBody).toContain("维护者风险");
+    expect(chineseBody).toContain("下一步运营队列");
+    expect(chineseBody).toContain("负责人批准记录");
+    expect(chineseBody).toContain("凭据轮换回执");
+    expect(chineseBody).toContain("法律复核记录");
+    expect(chineseBody).toContain("自动写入 / 发送 / 批准 /");
+    expect(chineseBody).toContain("维护者运营闭环");
+    expect(chineseBody).toContain("议题分诊");
+    expect(chineseBody).toContain("社区上手");
+    expect(chineseBody).toContain("黄金路径外部测试");
+    expect(chineseBody).toContain("发布元数据卫生");
+    expect(chineseBody).toContain("必需检查漂移监控");
+    expect(chineseBody).toContain("最新版本标识姿态");
+    expect(chineseBody).toContain("议题 #39");
+    expect(chineseBody).toContain("证据摘要");
+    expect(chineseBody).toContain("四档摘要");
+    expect(chineseBody).toContain("风险队列摘要");
+    expect(chineseBody).toContain("下一步摘要");
+
+    expect(chineseBody).not.toMatch(
+      /maintainer operating baseline|project-health snapshot|release approval|commercial SLA|customer commitment|readiness statement|repository surface|tag posture|guard status|public docs|contribution entry points|maintainer risks|next operating queue|control-plane readiness|owner approval record|credential rotation receipt|legal reviewer record|customer commitment path|public Core repo|docs index|branch protection|prerelease tag|launch announcement|maintainer operating loop|issue 分诊|issue 队列|issue 模板|issue #39|community onboarding|Golden Path 外部测试|Golden Path 测试|Latest 标识|仓库 Latest|external testing|release metadata hygiene|required-check drift monitoring|day-7 readout|repository metadata|post-launch|workflow job/,
+    );
+  });
+
+  it("keeps search, reports, and analytics Chinese boundary copy localized", () => {
+    const searchPage = read("app/(workspace)/search/page.tsx");
+    const reportsClient = read("features/reports/reports-client.tsx");
+    const analyticsClient = read("features/analytics/analytics-client.tsx");
+    const combined = `${searchPage}\n${reportsClient}\n${analyticsClient}`;
+
+    expect(searchPage).toContain("自动写客户关系系统状态");
+    expect(searchPage).toContain("正式必推事项");
+    expect(searchPage).toContain("客户关系系统字段");
+    expect(searchPage).toContain("受限大模型 / 公共辅助");
+    expect(searchPage).toContain("大模型仅在已审计上下文范围内解释");
+    expect(searchPage).toContain("不保留原始提示词或原始音频");
+    expect(searchPage).toContain("大模型推理");
+    expect(reportsClient).toContain("扩大客户关系系统接入");
+    expect(reportsClient).toContain("Helm会基于真实推进和风险");
+    expect(analyticsClient).toContain("AI工作姿态");
+    expect(analyticsClient).toContain("先看AI是帮上忙还是安全停住");
+    expect(analyticsClient).toContain("最近AI工作记录");
+
+    expect(combined).not.toMatch(
+      /写 CRM 状态|CRM 字段|正式 Must Push|受限 LLM|LLM 仅|LLM 推理|不保留 raw|扩大 CRM 接入|CRM 优先|Helm 会基于|AI 工作姿态|先看 AI|最近 AI 工作记录|查看 AI/,
+    );
+  });
+
+  it("keeps object entry surfaces using localized CRM wording", () => {
+    const proposalsPage = read("app/(workspace)/proposals/page.tsx");
+    const meetingsPage = read("app/(workspace)/meetings/page.tsx");
+    const companiesPage = read("app/(workspace)/companies/page.tsx");
+    const contactsPage = read("app/(workspace)/contacts/page.tsx");
+    const businessAssetPage = read(
+      "features/business-assets/business-asset-detail-page.tsx",
+    );
+    const combined = `${proposalsPage}\n${meetingsPage}\n${companiesPage}\n${contactsPage}\n${businessAssetPage}`;
+
+    expect(proposalsPage).toContain("客户关系系统信号或会议承诺");
+    expect(meetingsPage).toContain("新的客户关系系统、导入或记录会议");
+    expect(companiesPage).toContain("导入客户关系系统数据或从会议带入");
+    expect(contactsPage).toContain("连接客户关系系统数据");
+    expect(businessAssetPage).toContain("会议、客户关系系统变化、承诺或风险");
+
+    expect(combined).not.toMatch(
+      /CRM 信号|新的 CRM|导入 CRM|连接 CRM 数据|CRM 变化/,
+    );
+  });
+
+  it("keeps diagnostics CRM readiness copy localized", () => {
+    const diagnosticsClient = read("features/diagnostics/diagnostics-client.tsx");
+
+    expect(diagnosticsClient).toContain("客户关系系统和对象绑定是否已经足够稳定");
+    expect(diagnosticsClient).toContain("未命名客户关系系统账号");
+    expect(diagnosticsClient).toContain("还没有连接任何客户关系系统来源");
+    expect(diagnosticsClient).toContain("客户关系系统优先迁移");
+    expect(diagnosticsClient).toContain("先清客户关系系统与身份绑定债");
+    expect(diagnosticsClient).toContain("已连接客户关系系统");
+
+    expect(diagnosticsClient).not.toMatch(
+      /CRM 和对象绑定|未命名 CRM|任何 CRM 来源|当 CRM-first|先清 CRM|已连接 CRM 来源|已连接 CRM"/,
+    );
+  });
+
+  it("keeps settings setup CRM source copy localized", () => {
+    const setupWizard = read("features/settings/setup-wizard.tsx");
+    const accountSettingsTab = read(
+      "features/settings/components/account-settings-tab.tsx",
+    );
+    const combined = `${setupWizard}\n${accountSettingsTab}`;
+
+    expect(setupWizard).toContain("优先使用客户关系系统连接");
+    expect(accountSettingsTab).toContain("未命名客户关系系统来源");
+
+    expect(combined).not.toMatch(/优先使用 CRM-first 连接|未命名 CRM 来源/);
   });
 });

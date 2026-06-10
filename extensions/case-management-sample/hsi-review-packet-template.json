@@ -8,9 +8,14 @@
     "workspaceId": "string — must equal the authenticated workspace",
     "capabilityId": "string — references a capability from search_signal_capabilities",
     "fixtureId": "string — references a fixture under fixtures/ or hsi-payload-examples.json",
+    "owner": "object — accountable reviewer / owner alias; not an auto-assignee",
+    "evidence": "object[] — sourceRef, observedAt, and subjectRef only; no raw payload embedded",
     "evidenceRefs": "string[] — fixture / payload example paths only; raw payload not embedded",
+    "recommendation": "string — suggested next move; never a commitment",
     "risks": "string[] — short human-readable risk lines",
+    "boundaries": "string[] — explicit non-commitment and no-write boundaries",
     "missingInfo": "string[] — what the human reviewer still needs before approval",
+    "nextSteps": "string[] — reviewer-owned next steps; no external side effect",
     "allowedNextSurface": "one of operating_signal_flow_map | review_packet | approval_inbox | memory_review_queue | boundary_ledger",
     "forbiddenActions": "string[] — explicit list of actions this packet must NOT trigger",
     "requiredReviewSurface": "same enum as allowedNextSurface",
@@ -49,17 +54,40 @@
     "workspaceId": "workspace-case-management-sample",
     "capabilityId": "case-management-sample.commitment_missing",
     "fixtureId": "cm-commitment-missing-meeting-followup",
+    "owner": {
+      "kind": "employee",
+      "refId": "synthetic.user.alpha"
+    },
+    "evidence": [
+      {
+        "sourceRef": "meeting:syn-meeting-00045",
+        "observedAt": "2026-05-17T15:00:00+08:00",
+        "subjectRef": "CASE-SAMPLE-001"
+      }
+    ],
     "evidenceRefs": [
       "extensions/case-management-sample/hsi-payload-examples.json#meeting-input-1",
       "extensions/case-management-sample/fixtures/case.sample.json"
     ],
+    "recommendation": "Create a review-first follow-up packet for the Friday proposal commitment; recommendation is not a customer commitment.",
     "risks": [
       "客户经理周一会议承诺周五前发方案，未在 case 系统创建跟进任务",
       "若周五未交付，客户会重新引入历史 vendor"
     ],
+    "boundaries": [
+      "recommendation != commitment",
+      "review packet != approval",
+      "no auto-send",
+      "no CRM writeback",
+      "no official memory write"
+    ],
     "missingInfo": [
       "确认方案的最终版本归属（销售 vs 售前）",
       "确认客户对承诺的接受口径（书面 vs 口头）"
+    ],
+    "nextSteps": [
+      "Open review packet for synthetic.user.alpha",
+      "Confirm owner and deadline before preparing any customer-visible draft"
     ],
     "allowedNextSurface": "review_packet",
     "forbiddenActions": [

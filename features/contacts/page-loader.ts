@@ -37,6 +37,7 @@ export async function loadContactDetailPageData(contactId: string) {
         sourcePage: `/contacts/${contactId}`,
         objectType: "CONTACT",
         objectId: contactId,
+        english,
         llmEnhancement: false,
       }).catch((error) => {
         if (isWorkspaceServiceGovernanceError(error)) {

@@ -1,5 +1,8 @@
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiWorkspaceMessage,
+} from "@/lib/i18n/api-message-locale";
 import {
   canManageWorkspaceRuntime,
   getRuntimeManagementDeniedMessage,
@@ -8,6 +11,13 @@ import { assertWorkspaceRuntimeCheckpointOwnership, isWorkspaceOwnershipError } 
 import { db } from "@/lib/db";
 import { resumeRuntimeCheckpoint } from "@/lib/helm-v2/runtime-upgrade";
 import { serverErrorMessage } from "@/lib/http/server-error";
+
+function getCheckpointResumeFailedMessage(locale: string | null | undefined) {
+  return resolveApiWorkspaceMessage(locale, {
+    zh: "checkpoint 续传失败",
+    en: "Checkpoint resume failed",
+  });
+}
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { membership, workspace } = await getCurrentWorkspaceSession();
@@ -30,7 +40,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       },
     });
     if (!checkpoint) {
-      return Response.json({ success: false, message: "Checkpoint resume failed" }, { status: 404 });
+      return Response.json(
+        {
+          success: false,
+          message: getCheckpointResumeFailedMessage(workspace.defaultLocale),
+        },
+        { status: 404 },
+      );
     }
 
     const result = await resumeRuntimeCheckpoint({

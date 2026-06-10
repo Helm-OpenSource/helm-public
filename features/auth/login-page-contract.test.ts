@@ -151,7 +151,7 @@ describe("login page salvage contract", () => {
     expect(signupHtml).toContain(
       'data-public-sso-options="[{&quot;provider&quot;:&quot;dingtalk&quot;,&quot;ready&quot;:true,&quot;startUrl&quot;:&quot;/api/public-auth/dingtalk/start&quot;},{&quot;provider&quot;:&quot;feishu&quot;,&quot;ready&quot;:true,&quot;startUrl&quot;:&quot;/api/public-auth/feishu/start&quot;}]"',
     );
-    expect(signupHtml).toContain("开通你的 Helm 试点工作区。");
+    expect(signupHtml).toContain("开通你的Helm试点工作区。");
 
     const passwordElement = await LoginPage({
       searchParams: Promise.resolve({ tab: "password" }),
@@ -230,7 +230,7 @@ describe("login page salvage contract", () => {
     const html = renderToStaticMarkup(element);
 
     expect(html).toContain("确认加入「杭州示例科技有限公司」。");
-    expect(html).toContain("Helm 已经知道你是谁、要加入哪个组织。");
+    expect(html).toContain("Helm已经知道你是谁、要加入哪个组织。");
     expect(html).toContain('data-testid="login-invitation-orientation"');
     expect(html).toContain("已识别身份");
     expect(html).toContain("身份：董事");

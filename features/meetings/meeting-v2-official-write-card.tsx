@@ -20,6 +20,7 @@ import {
   runMeetingOfficialWriteIntentRuntimeAction,
   updateMeetingOfficialFollowThroughAction,
 } from "@/features/meetings/actions";
+import { formatMeetingOfficialWriteDateLabel } from "@/features/meetings/meeting-v2-official-write-date-labels";
 import type {
   LimitedAutoIntentRuntimeItem,
   LimitedAutoReviewMode,
@@ -36,6 +37,10 @@ type MeetingV2OfficialWriteCardProps = {
   meetingId: string;
   runtime: OfficialWriteRuntimeSummary | null;
 };
+
+function formatOfficialWriteDate(value: Date | string | null | undefined, english: boolean) {
+  return formatMeetingOfficialWriteDateLabel(value, english, formatDateLabel);
+}
 
 function renderStatusVariant(status: string) {
   if (status.includes("FAILURE") || status.includes("REJECTED") || status.includes("BLOCKED")) return "danger" as const;
@@ -99,24 +104,24 @@ function followThroughSuccessMessage(mode: OfficialFollowThroughUpdateMode, engl
   }
 }
 
-function renderFollowThroughTypeLabel(type: OfficialFollowThroughRuntimeItem["followThroughType"]) {
+function renderFollowThroughTypeLabel(type: OfficialFollowThroughRuntimeItem["followThroughType"], english: boolean) {
   switch (type) {
     case "ack_success_followthrough":
-      return "ack success";
+      return english ? "ack success" : "回执成功";
     case "failure_followthrough":
-      return "failure";
+      return english ? "failure" : "失败";
     case "unknown_status_followthrough":
-      return "unknown status";
+      return english ? "unknown status" : "未知状态";
     case "stale_receipt_followthrough":
-      return "stale receipt";
+      return english ? "stale receipt" : "过期回执";
     case "partial_success_followthrough":
-      return "partial success";
+      return english ? "partial success" : "部分成功";
     case "manual_reconciliation_followthrough":
-      return "manual reconciliation";
+      return english ? "manual reconciliation" : "人工对账";
     case "escalation_followthrough":
-      return "escalation";
+      return english ? "escalation" : "升级";
     case "resolved_followthrough":
-      return "resolved";
+      return english ? "resolved" : "已解决";
   }
 }
 
@@ -134,7 +139,7 @@ function OfficialWriteReviewForm({
   return (
     <div className="mt-4 space-y-3">
       <div>
-        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "review notes" : "review notes"}</p>
+        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "review notes" : "复核备注"}</p>
         <Textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={3} className="mt-2 text-sm" />
       </div>
       <div className="flex flex-wrap gap-2">
@@ -177,12 +182,12 @@ function OfficialWriteAcknowledgementForm({
     <div className="mt-4 space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "已确认 note" : "已确认 note"}</p>
+          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "acknowledgement note" : "确认备注"}</p>
           <Textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="mt-2 text-sm" />
         </div>
         <div>
           <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-            {english ? "external system reference (optional)" : "外部系统 reference（可选）"}
+            {english ? "external system reference (optional)" : "外部系统引用（可选）"}
           </p>
           <Input
             value={externalSystemReference}
@@ -236,7 +241,7 @@ function LimitedAutoReviewForm({
   return (
     <div className="mt-4 space-y-3">
       <div>
-        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "limited auto review note" : "limited auto review note"}</p>
+        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "limited auto review note" : "限定自动复核备注"}</p>
         <Textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={3} className="mt-2 text-sm" />
       </div>
       <div className="flex flex-wrap gap-2">
@@ -290,45 +295,45 @@ function LimitedAutoIntentPanel({
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.06fr_0.94fr]">
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "eligibility" : "eligibility"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "eligibility" : "资格判断"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{limitedAutoIntent.limitedAutoEligibilityReason}</p>
             {limitedAutoIntent.manualOnlyReason ? (
               <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{limitedAutoIntent.manualOnlyReason}</p>
             ) : null}
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "coverage posture" : "coverage posture"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "coverage posture" : "覆盖姿态"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">
               {limitedAutoIntent.actionDefaultPath} · {limitedAutoIntent.actionRiskClass}
             </p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{limitedAutoIntent.acknowledgmentRequirement}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what auto path will do" : "what auto path will do"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what auto path will do" : "自动路径会做什么"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{limitedAutoIntent.whatAutoPathWillDo}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what it will not do" : "what it will not do"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what it will not do" : "自动路径不会做什么"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{limitedAutoIntent.whatAutoPathWillNotDo}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "risk / boundary" : "risk / boundary"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "risk / boundary" : "风险 / 边界"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{limitedAutoIntent.riskReviewSummary ?? (english ? "No extra risk summary" : "暂无额外风险概要")}</p>
           </div>
         </div>
 
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "approval requirements" : "approval requirements"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "approval requirements" : "审批要求"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">
               {limitedAutoIntent.approvalRequirements.requiredApprovals.join(", ") || (english ? "no explicit approver" : "无显式审批人")}
             </p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-              {english ? "mandatory reviewers" : "mandatory reviewers"}: {limitedAutoIntent.approvalRequirements.mandatoryReviewers.join(", ") || "none"}
+              {english ? "mandatory reviewers" : "强制复核人"}: {limitedAutoIntent.approvalRequirements.mandatoryReviewers.join(", ") || (english ? "none" : "无")}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "ack / failure trace" : "ack / failure trace"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "ack / failure trace" : "回执 / 失败轨迹"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{limitedAutoIntent.receiptSummary}</p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
               {limitedAutoIntent.rollbackExpectation}
@@ -340,7 +345,7 @@ function LimitedAutoIntentPanel({
             ) : null}
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "proposed payload" : "proposed payload"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "proposed payload" : "拟写入载荷"}</p>
             <pre className="mt-2 overflow-x-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--dark-inset-bg)]/95 p-3 text-xs text-white">
               {JSON.stringify(limitedAutoIntent.proposedWritePayload, null, 2)}
             </pre>
@@ -358,9 +363,9 @@ function LimitedAutoIntentPanel({
 
       {(limitedAutoIntent.approvedAt || limitedAutoIntent.attemptedAt || limitedAutoIntent.acknowledgedAt) ? (
         <div className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
-          {limitedAutoIntent.approvedAt ? <p>{english ? "limited auto approved" : "limited auto approved"}: {formatDateLabel(limitedAutoIntent.approvedAt)}</p> : null}
-          {limitedAutoIntent.attemptedAt ? <p>{english ? "limited auto attempted" : "limited auto attempted"}: {formatDateLabel(limitedAutoIntent.attemptedAt)}</p> : null}
-          {limitedAutoIntent.acknowledgedAt ? <p>{english ? "limited auto acknowledged" : "limited auto acknowledged"}: {formatDateLabel(limitedAutoIntent.acknowledgedAt)}</p> : null}
+          {limitedAutoIntent.approvedAt ? <p>{english ? "limited auto approved" : "限定自动已批准"}: {formatOfficialWriteDate(limitedAutoIntent.approvedAt, english)}</p> : null}
+          {limitedAutoIntent.attemptedAt ? <p>{english ? "limited auto attempted" : "限定自动已尝试"}: {formatOfficialWriteDate(limitedAutoIntent.attemptedAt, english)}</p> : null}
+          {limitedAutoIntent.acknowledgedAt ? <p>{english ? "limited auto acknowledged" : "限定自动已确认"}: {formatOfficialWriteDate(limitedAutoIntent.acknowledgedAt, english)}</p> : null}
         </div>
       ) : null}
     </div>
@@ -402,17 +407,17 @@ function FollowThroughUpdateForm({
     <div className="mt-4 space-y-3">
       <div className="grid gap-3 lg:grid-cols-2">
         <div>
-          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "owner" : "owner"}</p>
+          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "owner" : "负责人"}</p>
           <Input value={ownerName} onChange={(event) => setOwnerName(event.target.value)} className="mt-2 text-sm" />
         </div>
         <div>
-          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "next action" : "next action"}</p>
+          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "next action" : "下一动作"}</p>
           <Input value={nextAction} onChange={(event) => setNextAction(event.target.value)} className="mt-2 text-sm" />
         </div>
       </div>
       <div>
         <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-          {english ? "reconciliation / resolution note" : "reconciliation / resolution note"}
+          {english ? "reconciliation / resolution note" : "对账 / 解决备注"}
         </p>
         <Textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="mt-2 text-sm" />
       </div>
@@ -490,7 +495,7 @@ function FollowThroughPanel({
     <div className="rounded-2xl border border-[color:var(--status-info-border)] bg-[color:var(--status-info-bg)]/80 px-4 py-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="info">{english ? "Helm v2 · follow-through" : "Helm v2 · 跟进闭环"}</Badge>
-        <Badge variant="neutral">{renderFollowThroughTypeLabel(followThrough.followThroughType)}</Badge>
+        <Badge variant="neutral">{renderFollowThroughTypeLabel(followThrough.followThroughType, english)}</Badge>
         <Badge variant={renderStatusVariant(followThrough.followThroughStatus.toUpperCase())}>{followThrough.followThroughStatus}</Badge>
         <Badge variant={renderStatusVariant(followThrough.followThroughResolutionStatus.toUpperCase())}>
           {followThrough.followThroughResolutionStatus}
@@ -503,54 +508,54 @@ function FollowThroughPanel({
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.06fr_0.94fr]">
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "source official action" : "source official action"}</p>
-            <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{followThrough.sourceActionType ?? (english ? "manual override" : "manual override")}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "source official action" : "源正式动作"}</p>
+            <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{followThrough.sourceActionType ?? (english ? "manual override" : "人工推翻")}</p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{followThrough.officialObjectRef}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "current owner / due" : "current owner / due"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "current owner / due" : "当前负责人 / 截止时间"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">
               {followThrough.followThroughOwnerName ?? (english ? "unassigned" : "未分配")} ·{" "}
-              {followThrough.followThroughDeadline ? formatDateLabel(followThrough.followThroughDeadline) : english ? "no deadline" : "暂无 deadline"}
+              {followThrough.followThroughDeadline ? formatOfficialWriteDate(followThrough.followThroughDeadline, english) : english ? "no deadline" : "暂无截止时间"}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "current next action" : "current next action"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "current next action" : "当前下一动作"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{followThrough.followThroughNextAction}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "boundary" : "boundary"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "boundary" : "边界"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{followThrough.followThroughBoundary}</p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
               {english
                 ? "Resolution does not automatically mean external outcome success. No broad auto-write, no send authority, and no auto-booking."
-                : "resolution 不自动等于 external 结果 success。当前仍无 broad auto-write、发送权限、auto-booking。"}
+                : "解决不自动等于外部结果成功。当前仍无广泛自动写入、发送权限或自动预约。"}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "role handoff / summary impact" : "role handoff / summary impact"}</p>
-            <p className="mt-2 text-sm text-[color:var(--foreground)]">{followThrough.roleHandoffImpact ?? (english ? "No direct role handoff impact" : "当前没有直接 role 交接 impact")}</p>
-            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{followThrough.summaryWritebackImpact ?? (english ? "No extra summary note" : "当前没有额外 summary 备注")}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "role handoff / summary impact" : "角色交接 / 摘要影响"}</p>
+            <p className="mt-2 text-sm text-[color:var(--foreground)]">{followThrough.roleHandoffImpact ?? (english ? "No direct role handoff impact" : "当前没有直接角色交接影响")}</p>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{followThrough.summaryWritebackImpact ?? (english ? "No extra summary note" : "当前没有额外摘要备注")}</p>
             {followThrough.blockerSummaryImpact ? <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{followThrough.blockerSummaryImpact}</p> : null}
           </div>
         </div>
 
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "ack / receipt state" : "ack / receipt state"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "ack / receipt state" : "确认 / 回执状态"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{currentReceiptState}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "follow-through summary" : "follow-through summary"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "follow-through summary" : "跟进闭环摘要"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{followThrough.followThroughSummary}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "reconciliation / resolution notes" : "reconciliation / resolution notes"}</p>
-            <p className="mt-2 text-sm text-[color:var(--foreground)]">{followThrough.reconciliationNote ?? (english ? "No reconciliation note yet" : "当前没有 对账 备注")}</p>
-            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{followThrough.resolutionNote ?? (english ? "No resolution note yet" : "当前没有 resolution 备注")}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "reconciliation / resolution notes" : "对账 / 解决备注"}</p>
+            <p className="mt-2 text-sm text-[color:var(--foreground)]">{followThrough.reconciliationNote ?? (english ? "No reconciliation note yet" : "当前没有对账备注")}</p>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{followThrough.resolutionNote ?? (english ? "No resolution note yet" : "当前没有解决备注")}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "evidence refs" : "evidence refs"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "evidence refs" : "证据引用"}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {followThrough.followThroughEvidenceRefs.map((item) => (
                 <Badge key={`${followThrough.id}-${item}`} variant="info">
@@ -560,7 +565,7 @@ function FollowThroughPanel({
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "write-back targets" : "write-back targets"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "write-back targets" : "回写目标"}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {followThrough.followThroughWritebackTargets.map((item) => (
                 <Badge key={`${followThrough.id}-writeback-${item}`} variant="neutral">
@@ -576,9 +581,9 @@ function FollowThroughPanel({
 
       {(followThrough.resolvedAt || followThrough.updatedAt) ? (
         <div className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
-          {followThrough.resolvedAt ? <p>{english ? "resolved at" : "resolved at"}: {formatDateLabel(followThrough.resolvedAt)}</p> : null}
-          <p>{english ? "last updated" : "last updated"}: {formatDateLabel(followThrough.updatedAt)}</p>
-          {followThrough.resolvedByName ? <p>{english ? "resolved by" : "resolved by"}: {followThrough.resolvedByName}</p> : null}
+          {followThrough.resolvedAt ? <p>{english ? "resolved at" : "解决时间"}: {formatOfficialWriteDate(followThrough.resolvedAt, english)}</p> : null}
+          <p>{english ? "last updated" : "最后更新"}: {formatOfficialWriteDate(followThrough.updatedAt, english)}</p>
+          {followThrough.resolvedByName ? <p>{english ? "resolved by" : "解决人"}: {followThrough.resolvedByName}</p> : null}
         </div>
       ) : null}
     </div>
@@ -628,52 +633,52 @@ function IntentCard({
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.06fr_0.94fr]">
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "source" : "source"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "source" : "源头"}</p>
             <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">{intent.sourceTitle}</p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{intent.sourceSummary}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "target official object" : "target official object"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "target official object" : "目标正式对象"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{intent.officialObjectRef}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "coverage posture" : "coverage posture"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "coverage posture" : "覆盖姿态"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">
               {intent.actionDefaultPath} · {intent.actionRiskClass}
             </p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{intent.acknowledgmentRequirement}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what this changes" : "what this changes"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what this changes" : "本次会改变什么"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{intent.whatThisChanges}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what this does not change" : "what this does not change"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what this does not change" : "本次不会改变什么"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{intent.whatThisDoesNotMean}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "boundary" : "boundary"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "boundary" : "边界"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{intent.writeBoundary}</p>
           </div>
         </div>
 
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "approval requirements" : "approval requirements"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "approval requirements" : "审批要求"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">
               {intent.writeApprovalTier} · {intent.approvalRequirements.requiredApprovals.join(", ") || (english ? "no explicit approver" : "无显式审批人")}
             </p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-              {english ? "mandatory reviewers" : "mandatory reviewers"}: {intent.approvalRequirements.mandatoryReviewers.join(", ") || "none"}
+              {english ? "mandatory reviewers" : "强制复核人"}: {intent.approvalRequirements.mandatoryReviewers.join(", ") || (english ? "none" : "无")}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "risk review" : "risk review"}</p>
-            <p className="mt-2 text-sm text-[color:var(--foreground)]">{intent.riskReviewSummary ?? (english ? "No extra risk summary" : "暂无额外风险 summary")}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "risk review" : "风险复核"}</p>
+            <p className="mt-2 text-sm text-[color:var(--foreground)]">{intent.riskReviewSummary ?? (english ? "No extra risk summary" : "暂无额外风险摘要")}</p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{intent.rollbackExpectation}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "evidence refs" : "evidence refs"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "evidence refs" : "证据引用"}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {intent.evidenceRefs.map((item) => (
                 <Badge key={`${meetingId}-${intent.id}-${item}`} variant="info">
@@ -683,24 +688,24 @@ function IntentCard({
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "receipt / reconciliation" : "receipt / reconciliation"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "receipt / reconciliation" : "回执 / 对账"}</p>
             <p className="mt-2 text-sm text-[color:var(--foreground)]">{intent.receiptSummary}</p>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
               {intent.receiptSummaryWritebackMode === "audit_only"
-                ? english
-                  ? "This state stays audit-only and will not update the managed official summary."
-                  : "当前状态保持仅审计，不会更新 受管正式摘要。"
+                  ? english
+                    ? "This state stays audit-only and will not update the managed official summary."
+                    : "当前状态保持仅审计，不会更新受管正式摘要。"
                 : intent.receiptSummaryWritebackMode === "reconciliation_note"
                   ? english
                     ? "This state may update summaries only with reconciliation notes and still does not claim official success."
-                    : "当前状态只会带 对账 备注更新摘要，仍不代表 正式成功。"
+                    : "当前状态只会带对账备注更新摘要，仍不代表正式成功。"
                   : english
                     ? "This state may update summaries because the external system returned a success acknowledgment."
-                    : "当前状态可以更新摘要，因为 外部系统 返回了 成功回执。"}
+                    : "当前状态可以更新摘要，因为外部系统返回了成功回执。"}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "proposed payload" : "proposed payload"}</p>
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "proposed payload" : "拟写入载荷"}</p>
             <pre className="mt-2 overflow-x-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--dark-inset-bg)]/95 p-3 text-xs text-white">
               {JSON.stringify(intent.writePayloadDraft, null, 2)}
             </pre>
@@ -734,9 +739,9 @@ function IntentCard({
 
       {(intent.approvedAt || intent.attemptedAt || intent.acknowledgedAt) ? (
         <div className="mt-4 space-y-1 text-xs text-[color:var(--muted-foreground)]">
-          {intent.approvedAt ? <p>{english ? "approved" : "approved"}: {formatDateLabel(intent.approvedAt)}</p> : null}
-          {intent.attemptedAt ? <p>{english ? "attempted" : "attempted"}: {formatDateLabel(intent.attemptedAt)}</p> : null}
-          {intent.acknowledgedAt ? <p>{english ? "acknowledged" : "acknowledged"}: {formatDateLabel(intent.acknowledgedAt)}</p> : null}
+          {intent.approvedAt ? <p>{english ? "approved" : "已批准"}: {formatOfficialWriteDate(intent.approvedAt, english)}</p> : null}
+          {intent.attemptedAt ? <p>{english ? "attempted" : "已尝试"}: {formatOfficialWriteDate(intent.attemptedAt, english)}</p> : null}
+          {intent.acknowledgedAt ? <p>{english ? "acknowledged" : "已确认"}: {formatOfficialWriteDate(intent.acknowledgedAt, english)}</p> : null}
         </div>
       ) : null}
 
@@ -882,7 +887,7 @@ export function MeetingV2OfficialWriteCard({ meetingId, runtime }: MeetingV2Offi
         reviewNotes,
       });
       if (!result.ok) {
-        toast.error(result.error ?? (english ? "Limited auto review failed" : "limited auto 复核失败"));
+        toast.error(result.error ?? (english ? "Limited auto review failed" : "限定自动复核失败"));
         return;
       }
       toast.success(limitedAutoSuccessMessage(mode, english));
@@ -937,7 +942,9 @@ export function MeetingV2OfficialWriteCard({ meetingId, runtime }: MeetingV2Offi
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="info">{english ? "Helm v2 · follow-through" : "Helm v2 · 跟进闭环"}</Badge>
           <Badge variant="neutral">
-            {english ? "approved source → richer official coverage → follow-through / exception handling" : "approved source → richer official coverage → follow-through / exception handling"}
+            {english
+              ? "approved source → richer official coverage → follow-through / exception handling"
+              : "已通过源头 → 扩展正式系统覆盖 → 跟进闭环 / 异常处理"}
           </Badge>
           {runtime?.latestIntentEvent ? (
             <Badge variant={renderStatusVariant(runtime.latestIntentEvent.status)}>{runtime.latestIntentEvent.status}</Badge>
@@ -982,42 +989,42 @@ export function MeetingV2OfficialWriteCard({ meetingId, runtime }: MeetingV2Offi
           <>
             <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-8">
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "pending review" : "pending review"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "pending review" : "待复核"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{counts?.pending ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "intent does not equal actual write" : "意图不等于真正写入"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "approved" : "approved"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "approved" : "已批准"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{counts?.approved ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "approved still != success" : "已通过仍不等于成功"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "attempted" : "attempted"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "attempted" : "已尝试"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{counts?.attempted ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "guarded path only" : "仅受约束路径"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "ack success" : "ack success"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "ack success" : "回执成功"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{counts?.success ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "system returned success required" : "必须拿到系统返回的成功回执"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "limited auto eligible" : "limited auto eligible"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "limited auto eligible" : "可进入限定自动"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{limitedAutoCounts?.eligible ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "still narrow, never default" : "仍然极窄，绝不作为默认"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "manual-only" : "manual-only"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "manual-only" : "仅人工"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{limitedAutoCounts?.manualOnly ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "visible, but kept on manual path" : "可见，但仍停在人工路径"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "blocked" : "blocked"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "blocked" : "已阻断"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{limitedAutoCounts?.blocked ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "boundary still wins" : "边界仍然优先"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "deferred" : "deferred"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "deferred" : "已延后"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{limitedAutoCounts?.deferred ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "needs more proof or clearer posture" : "还需要更多证据或更清楚的姿态"}</p>
               </div>
@@ -1025,17 +1032,17 @@ export function MeetingV2OfficialWriteCard({ meetingId, runtime }: MeetingV2Offi
 
             <div className="grid gap-3 md:grid-cols-3">
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "follow-through open" : "follow-through open"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "follow-through open" : "跟进待处理"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{followThroughCounts?.open ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "official outcome still needs handling" : "正式结果仍需要处理"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "manager attention" : "manager attention"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "manager attention" : "主管关注"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{followThroughCounts?.managerAttention ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "attention, not a final decision" : "只是关注，不是最终决定"}</p>
               </div>
               <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "unresolved" : "unresolved"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "unresolved" : "未解决"}</p>
                 <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">{followThroughCounts?.unresolved ?? 0}</p>
                 <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{english ? "resolution != official success" : "解决不等于正式成功"}</p>
               </div>
@@ -1044,7 +1051,7 @@ export function MeetingV2OfficialWriteCard({ meetingId, runtime }: MeetingV2Offi
             <div className="theme-surface-panel rounded-2xl px-4 py-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "current official posture" : "current official posture"}</p>
+                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "current official posture" : "当前正式姿态"}</p>
                   <p className="mt-2 text-sm text-[color:var(--foreground)]">
                     {runtime.currentOfficial
                       ? `${runtime.currentOfficial.stage ?? "null"} · ${runtime.currentOfficial.nextAction ?? (english ? "no next action" : "暂无下一动作")}`
@@ -1054,7 +1061,7 @@ export function MeetingV2OfficialWriteCard({ meetingId, runtime }: MeetingV2Offi
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what this does not do" : "what this does not do"}</p>
+                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "what this does not do" : "它不会做什么"}</p>
                   <p className="mt-2 text-sm text-[color:var(--foreground)]">
                     {english
                       ? "No default auto-write, no send authority, no auto booking, no hidden commit, and no success claim before external acknowledgment."
@@ -1091,7 +1098,7 @@ export function MeetingV2OfficialWriteCard({ meetingId, runtime }: MeetingV2Offi
 
             <div className="space-y-4">
               <div className="space-y-1">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "operator / manager follow-through" : "operator / manager follow-through"}</p>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{english ? "operator / manager follow-through" : "操作员 / 主管跟进闭环"}</p>
                 <p className="text-sm text-[color:var(--muted-foreground)]">
                   {english
                     ? "This layer handles post-write follow-through, exception handling, reconciliation, escalation, and resolution write-back. It still does not claim broad auto-write or external success without a strong receipt."

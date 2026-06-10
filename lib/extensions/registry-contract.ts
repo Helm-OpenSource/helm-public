@@ -41,8 +41,8 @@ import type {
   ExtensionIndustryDemoReadoutPage,
   ReportsExtensionDescriptor,
   SolutionExtensionCatalogEntry,
-  WorkspaceLike,
   WorkspaceNavExtensionDescriptor,
+  ExtensionAccessProbe,
 } from "./registry-types";
 
 // Re-export shared types so Pack modules can import everything they need from
@@ -98,7 +98,7 @@ export type IndustryDemoReadoutContribution = {
 
 /** Implementation-console-style panel access gate contribution. */
 export type ImplementationConsoleContribution = {
-  getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+  getAccess: ExtensionAccessProbe;
 };
 
 // ---------------------------------------------------------------------------
@@ -112,12 +112,12 @@ export type PackContributions = {
   workspaceNavExtensions?: ReadonlyArray<WorkspaceNavExtensionDescriptor>;
   /** Account-binding contribution gated by its own access probe. */
   accountBinding?: {
-    getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+    getAccess: ExtensionAccessProbe;
     build: () => AccountBindingContribution;
   };
   /** Approvals BI-board contribution gated by its own access probe. */
   biBoard?: {
-    getAccess: (workspace: WorkspaceLike) => Promise<{ ok: boolean }>;
+    getAccess: ExtensionAccessProbe;
     build: () => BiBoardContribution;
   };
   industryDemoReadouts?: ReadonlyArray<IndustryDemoReadoutContribution>;
@@ -126,8 +126,9 @@ export type PackContributions = {
   signalCollectionJobs?: () => ReadonlyArray<SignalCollectionJob>;
   /**
    * API routes the pack serves under `/api/extensions/<pack>/...`, dispatched by
-   * the Core catch-all (repo-split 5B). Each handler keeps its own auth gate;
-   * the registry performs no auth. Patterns are relative to `/api/extensions/`.
+   * the Core catch-all (repo-split 5B). Each route must declare authorization
+   * metadata: either the Core permission evaluator wrapper or handler-owned
+   * gate evidence. Patterns are relative to `/api/extensions/`.
    */
   apiRoutes?: ReadonlyArray<ExtensionApiRoute>;
 };

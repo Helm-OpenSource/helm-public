@@ -340,6 +340,25 @@ describe("memory write governance routes", () => {
     });
   });
 
+  it("uses workspace default locale for legacy LLM meeting-memory fallback errors", async () => {
+    permissionsMock.canManageWorkspaceMemory.mockReturnValue(true);
+    meetingMemoryPipelineMock.processMeetingMemory.mockRejectedValue(null);
+
+    const response = await llmMeetingMemoryRoute(
+      new Request("http://localhost/api/llm/meetings/meeting-1/process-memory", { method: "POST" }),
+      {
+        params: Promise.resolve({ meetingId: "meeting-1" }),
+      },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      message: "Failed to process meeting memory",
+    });
+    expect(ownershipMock.assertWorkspaceMeetingOwnership).toHaveBeenCalledWith("workspace-1", "meeting-1");
+  });
+
   it("allows a write path once capability is present", async () => {
     permissionsMock.canManageWorkspaceMemory.mockReturnValue(true);
     memoryFactServiceMock.createMemoryFact.mockResolvedValue({
@@ -370,6 +389,7 @@ describe("memory write governance routes", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       success: true,
+      message: "Memory fact created",
       data: {
         id: "fact-1",
       },
@@ -385,5 +405,140 @@ describe("memory write governance routes", () => {
       objectType: "MEETING",
       objectId: "meeting-1",
     });
+  });
+
+  it("uses workspace default locale for memory-domain success messages", async () => {
+    sessionMock.getCurrentWorkspaceSession.mockResolvedValue({
+      user: { id: "user-1", name: "Owner" },
+      membership: { role: "MEMBER" },
+      workspace: { id: "workspace-1", defaultLocale: "zh-CN" },
+    });
+    permissionsMock.canManageWorkspaceMemory.mockReturnValue(true);
+    memoryFactServiceMock.createMemoryFact.mockResolvedValue({
+      id: "fact-1",
+      objectType: "MEETING",
+      objectId: "meeting-1",
+      factType: "SUMMARY",
+      title: "Fact",
+      status: "ACTIVE",
+    });
+    correctionServiceMock.confirmMemoryFact.mockResolvedValue({
+      fact: {
+        id: "fact-1",
+        confirmedByUser: true,
+        status: "ACTIVE",
+      },
+    });
+    commitmentServiceMock.createCommitment.mockResolvedValue({
+      id: "commitment-1",
+      status: "OPEN",
+    });
+    commitmentServiceMock.updateCommitmentStatus.mockResolvedValue({
+      id: "commitment-1",
+      status: "IN_PROGRESS",
+      fulfilledAt: null,
+    });
+    blockerServiceMock.createBlocker.mockResolvedValue({
+      id: "blocker-1",
+      status: "OPEN",
+    });
+    blockerServiceMock.resolveBlocker.mockResolvedValue({
+      id: "blocker-1",
+      status: "RESOLVED",
+      resolvedAt: new Date("2026-06-04T08:00:00.000Z"),
+    });
+    blockerServiceMock.updateBlockerStatus.mockResolvedValue({
+      id: "blocker-1",
+      status: "OPEN",
+      resolvedAt: null,
+    });
+
+    const responses = await Promise.all([
+      createMemoryFactRoute(
+        new Request("http://localhost/api/memory/facts", {
+          method: "POST",
+          body: JSON.stringify({
+            objectType: "MEETING",
+            objectId: "meeting-1",
+            factType: "SUMMARY",
+            title: "Fact",
+            content: "content",
+            sourceType: "MEETING_NOTE",
+            sourceId: "manual-1",
+          }),
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+      confirmMemoryFactRoute(new Request("http://localhost/api/memory/facts/fact-1/confirm", { method: "POST" }), {
+        params: Promise.resolve({ id: "fact-1" }),
+      }),
+      createCommitmentRoute(
+        new Request("http://localhost/api/commitments", {
+          method: "POST",
+          body: JSON.stringify({
+            title: "Commitment",
+            commitmentText: "Do the thing",
+            sourceType: "MEETING_NOTE",
+            sourceId: "meeting-1",
+          }),
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+      updateCommitmentStatusRoute(
+        new Request("http://localhost/api/commitments/commitment-1/status", {
+          method: "POST",
+          body: JSON.stringify({ status: "IN_PROGRESS" }),
+          headers: { "content-type": "application/json" },
+        }),
+        {
+          params: Promise.resolve({ id: "commitment-1" }),
+        },
+      ),
+      createBlockerRoute(
+        new Request("http://localhost/api/blockers", {
+          method: "POST",
+          body: JSON.stringify({
+            title: "Blocker",
+            blockerType: "RISK",
+            blockerText: "Blocked",
+            sourceType: "MEETING_NOTE",
+            sourceId: "meeting-1",
+          }),
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+      resolveBlockerRoute(
+        new Request("http://localhost/api/blockers/blocker-1/resolve", {
+          method: "POST",
+          body: JSON.stringify({ resolutionNote: "resolved" }),
+          headers: { "content-type": "application/json" },
+        }),
+        {
+          params: Promise.resolve({ id: "blocker-1" }),
+        },
+      ),
+      updateBlockerStatusRoute(
+        new Request("http://localhost/api/blockers/blocker-1/status", {
+          method: "POST",
+          body: JSON.stringify({ status: "OPEN" }),
+          headers: { "content-type": "application/json" },
+        }),
+        {
+          params: Promise.resolve({ id: "blocker-1" }),
+        },
+      ),
+    ]);
+
+    const payloads = await Promise.all(responses.map((response) => response.json()));
+
+    expect(payloads.map((payload) => payload.message)).toEqual([
+      "记忆事实已创建",
+      "记忆事实已确认",
+      "承诺已创建",
+      "承诺状态已更新",
+      "阻塞已创建",
+      "阻塞已解决",
+      "阻塞状态已更新",
+    ]);
   });
 });

@@ -3,8 +3,11 @@ import {
   formatGovernanceAuditMarker,
   formatGovernanceAuditSummary,
   formatGovernanceAuditTargetType,
+  formatWebhookCallbackMarker,
   formatIdentityMatchMarker,
 } from "@/features/settings/formatters/governance-formatters";
+
+const sampleDate = new Date(2026, 3, 15, 10, 30);
 
 describe("settings governance formatters", () => {
   it("keeps Chinese org-admin markers out of raw internal enum wording", () => {
@@ -86,5 +89,73 @@ describe("settings governance formatters", () => {
     expect(rendered).toContain("已停用");
     expect(rendered).toContain("已激活");
     expect(rendered).not.toMatch(/PROVIDER\/SOURCE|INACTIVE|ACTIVE/);
+  });
+
+  it("renders governance marker dates in the selected locale", () => {
+    const audit = formatGovernanceAuditMarker(
+      {
+        createdAt: sampleDate,
+        actionType: "APPROVAL_APPROVED",
+        summary: "Approval approved.",
+        actor: "Lin Zhou",
+        targetType: "ApprovalTask",
+        targetId: "approval-1",
+        sourcePage: "/settings?tab=permissions",
+      },
+      true,
+    );
+
+    expect(audit).toContain("Approval approved · Apr 15 10:30");
+    expect(audit).not.toMatch(/[月日]|操作者|目标/);
+
+    const webhook = formatWebhookCallbackMarker(
+      {
+        provider: "Feishu",
+        recordedAt: sampleDate,
+        summary: "OAuth callback resolved.",
+        workspaceScoped: true,
+      },
+      true,
+    );
+
+    expect(webhook).toContain("Feishu · Apr 15 10:30");
+    expect(webhook).toContain("workspace-scoped");
+    expect(webhook).not.toMatch(/[月日]|已进入工作区范围/);
+
+    const identity = formatIdentityMatchMarker(
+      {
+        recordedAt: sampleDate,
+        status: "NEEDS_REVIEW",
+        reason: "Names are close but email identity is missing.",
+        externalType: "CONTACT",
+        externalId: "crm-1",
+        internalObjectType: "contact",
+        internalObjectId: "contact-1",
+        matchScore: 68,
+      },
+      true,
+    );
+
+    expect(identity).toContain("Contact · Apr 15 10:30");
+    expect(identity).toContain("score 68");
+    expect(identity).not.toMatch(/[月日]|联系人|分值/);
+  });
+
+  it("keeps Chinese governance marker dates in Chinese format", () => {
+    const rendered = formatGovernanceAuditMarker(
+      {
+        createdAt: sampleDate,
+        actionType: "APPROVAL_APPROVED",
+        summary: "审批通过。",
+        actor: "林舟",
+        targetType: "ApprovalTask",
+        targetId: "approval-1",
+        sourcePage: "/settings?tab=permissions",
+      },
+      false,
+    );
+
+    expect(rendered).toContain("审批通过 · 04月15日 10:30");
+    expect(rendered).toContain("操作者 林舟");
   });
 });

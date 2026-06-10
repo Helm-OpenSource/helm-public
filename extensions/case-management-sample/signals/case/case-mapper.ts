@@ -1,6 +1,7 @@
 import {
   buildSignalIdentity,
   type SignalCandidate,
+  type SignalGapField,
   type SignalSeverity,
 } from "../types";
 
@@ -148,6 +149,16 @@ export function mapCaseRecordToSignals(
         },
       },
       source: "external_case_backend",
+      sourceRef: {
+        sourceKind: "case_system",
+        sourceId: record.caseId,
+        sourceRef: `case_system:${record.caseId}`,
+      },
+      subject: {
+        kind: "case",
+        refId: record.caseId,
+        label: record.caseId,
+      },
       resourceId: record.caseId,
       payload: {
         caseId: record.caseId,
@@ -160,6 +171,7 @@ export function mapCaseRecordToSignals(
       },
       observedAt: new Date(`${record.observedDate}T00:00:00.000Z`),
       confidence: record.evidenceCount > 0 ? "trusted" : "degraded",
+      gapFields: deriveGapFields(record, severity),
       trace: {
         connectorTraceId: `sample-case:${record.caseId}:${record.observedDate}`,
       },
@@ -180,4 +192,46 @@ function deriveNextAction(record: SampleCaseRecord): SampleCaseSignalPayload["ne
     return "collect_evidence";
   }
   return "continue_followup";
+}
+
+function deriveGapFields(
+  record: SampleCaseRecord,
+  severity: SignalSeverity,
+): readonly SignalGapField[] {
+  const gaps: SignalGapField[] = [];
+
+  if (record.evidenceCount === 0 || record.stage === "evidence_gap") {
+    gaps.push({
+      field: "evidence",
+      severity: "breach",
+      detail: "case has no reviewable evidence attached",
+    });
+  }
+
+  if (record.blockedReason === "boundary_attempt") {
+    gaps.push({
+      field: "boundary_review",
+      severity,
+      detail:
+        "boundary_attempt requires a human review packet before any customer-visible action",
+    });
+  }
+
+  if (record.blockedReason === "stale_owner") {
+    gaps.push({
+      field: "owner",
+      severity,
+      detail: "case owner needs review before owner-sensitive follow-up",
+    });
+  }
+
+  if (record.stage === "review_required" && gaps.length === 0) {
+    gaps.push({
+      field: "followup",
+      severity,
+      detail: "review_required case needs an explicit reviewer-owned next step",
+    });
+  }
+
+  return gaps;
 }

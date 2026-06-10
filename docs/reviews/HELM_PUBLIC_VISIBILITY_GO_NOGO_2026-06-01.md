@@ -5,7 +5,26 @@ created: 2026-06-01
 review_after: 2026-09-01
 public_safety: Public-safe decision record. Captures the Go decision, gate evidence sources, and follow-up obligations only. No credentials, no raw approval evidence; the authoritative reviewer-approval record lives off-repo.
 ---
-# Helm Public Core — Visibility Go/No-Go Decision (2026-06-01)
+# Helm Public Core Visibility Go/No-Go Decision / Helm Public Core 可见性 Go/No-Go 决策 (2026-06-01)
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文件记录 2026-06-01 负责人（创始人身份）给出的可见性 **GO** 决策。
+仓库可见性已由负责人作为最终人工动作切换为公开。随后负责人批准创建
+`v0.1.0-trial` 标签、GitHub 预发布（`--latest=false`）和 GitHub Discussions 公告。
+
+发布门禁在打标签前以完整模式重新运行并显示全部通过：15/15 个自动步骤与
+7/7 个人工回执均满足。历史安全证据由 Clean History 回执记录。
+
+仍需跟进的审计缺口：运维保存 RDS 凭据轮换回执；用法律文件中的真实复核人批准编号替换
+占位编号；在发布机器上用真实记录值重新运行完整发布门禁。
+
+该 GO 决策不改变 Helm 硬边界：建议不等于承诺，复核优先，不自动写入 / 发送 / 批准 / 结算，
+Core 不依赖 Pack 或 Overlay，也不声明 `100% synthetic` provenance。
+
+## English Reference
 
 ## Decision
 

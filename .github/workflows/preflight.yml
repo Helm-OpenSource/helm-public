@@ -1,5 +1,10 @@
 name: Preflight (Fast PR Feedback)
 
+# 语言 / Language: workflow job names intentionally remain English because
+# branch protection required-check contexts depend on them.
+# 中文说明：这是快速 PR feedback 链，只跑 lint / typecheck / boundary 等轻量 gate。
+# 交付工程师可用它快速判断 PR 是否值得进入完整 CI review。
+#
 # Lightweight CI that runs only the three fastest gates (lint / typecheck /
 # boundary) for quick PR reviewer feedback. Heavier checks (build / test /
 # e2e / quality regression) continue to run in ci.yml.
@@ -57,3 +62,6 @@ jobs:
 
       - name: Doc frontmatter guard
         run: npx tsx scripts/check-doc-frontmatter.ts
+
+      - name: Bilingual mixing guard
+        run: npm run check:bilingual-mixing

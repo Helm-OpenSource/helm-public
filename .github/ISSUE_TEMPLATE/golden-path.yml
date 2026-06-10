@@ -1,0 +1,72 @@
+name: Golden Path 激活报告 / Golden Path activation report
+description: 报告 public Core Golden Path 成功、阻塞或摩擦点。/ Report a public Core Golden Path success, blocker, or friction point.
+title: "docs: Golden Path activation - "
+labels: ["documentation", "help wanted"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本报告帮助维护者按证据排序激活摩擦。只能使用 synthetic sample data。不要包含客户数据、凭据、私有部署证据或私有联系人列表。
+
+        This report helps maintainers rank activation friction by evidence. Use synthetic sample data only. Do not include customer data, credentials, private deployment evidence, or private contact lists.
+  - type: checkboxes
+    id: public-safety
+    attributes:
+      label: 公开安全确认 / Public-safety confirmation
+      options:
+        - label: 本报告只使用公开仓库文件、synthetic sample data 和 public-safe 命令输出。/ This report uses only public repository files, synthetic sample data, and public-safe command output.
+          required: true
+        - label: 我理解本报告不是 Cloud、Enterprise、生产 SLA 或客户部署证明。/ I understand this report is not a Cloud, Enterprise, production SLA, or customer deployment proof.
+          required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: 结果类型 / Result type
+      options:
+        - 成功运行 / Ran successfully
+        - 遇到可复现阻塞 / Hit a reproducible blocker
+        - 遇到环境配置摩擦 / Hit environment setup friction
+        - 文档不清楚 / Documentation was unclear
+        - 不确定 / Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境 / Environment
+      description: 包含 OS、Node 版本、npm 版本、Docker 或容器运行时，以及 commit 或 release。/ Include OS, Node version, npm version, Docker or container runtime, and commit or release.
+      placeholder: |
+        OS:
+        node -v:
+        npm -v:
+        Docker / OrbStack / colima:
+        commit or release:
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: 已测试命令或路由 / Commands or route path tested
+      description: 只列出你实际尝试过的命令或公开路由。/ List only commands or public routes you actually tried.
+      placeholder: |
+        docker compose up
+        npm run delivery:doctor
+        npm run pack:fixture-check
+        npm run eval:headless-signal-interface
+        /operating
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: 观察结果 / Observed result
+      description: 粘贴简短输出或描述可见结果，不要粘贴 secrets。/ Paste short output or describe the visible result. Do not paste secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: 摩擦点或下一步改进 / Friction or next improvement
+      description: 维护者应修复、澄清什么，或把什么作为环境前置条件记录？/ What should maintainers fix, clarify, or leave as a documented environment prerequisite?
+    validations:
+      required: false

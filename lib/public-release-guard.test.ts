@@ -139,6 +139,41 @@ describe("public release guard fixture coverage", () => {
     expect(result.violations[0]?.excerpt).not.toContain(syntheticLeak);
   });
 
+  it("flags assignment-form bare-token credentials and redacts the value", () => {
+    // Held in a non-keyword variable and interpolated so this synthetic value
+    // is not itself a `KEYWORD=<literal>` assignment in this test's source
+    // (which the guard also scans) — same discipline as the known-leaked test.
+    const syntheticAssignmentValue = "Ab3xK9mQ2pLw7Vn4Zt";
+    writeFixture("docs/public.md", `DB_PASSWORD = "${syntheticAssignmentValue}"`);
+
+    const result = runGuard();
+
+    expect(result.violations).toHaveLength(1);
+    expect(result.violations[0]).toMatchObject({
+      rule: "credential:assignment-form",
+      path: "docs/public.md",
+      line: 1,
+    });
+    expect(result.violations[0]?.excerpt).not.toContain(syntheticAssignmentValue);
+    expect(result.violations[0]?.excerpt).toContain("***");
+  });
+
+  it("does not flag placeholder, env-ref, or identifier-shaped assignments", () => {
+    writeFixture(
+      "docs/public.md",
+      [
+        "DB_PASSWORD=changeme",
+        "DB_PASSWORD=$DATABASE_PASSWORD",
+        'it("throws Phase3qRejectionError for input with secret key")',
+        "password: hunter2",
+      ].join("\n"),
+    );
+
+    const result = runGuard();
+
+    expect(result.violations).toEqual([]);
+  });
+
   it("still runs credential checks on policy descriptor files", () => {
     writeFixture(
       "README.md",
@@ -287,7 +322,7 @@ describe("public release guard fixture coverage", () => {
   it("allows the reviewed public security disclosure email without opening the whole domain", () => {
     writeFixture(
       "SECURITY.md",
-      "Report undisclosed vulnerabilities to security@zhaojiling.com.",
+      "Report undisclosed vulnerabilities to Helm-security@zhaojiling.com.",
     );
     writeFixture(
       "docs/public.md",
@@ -563,6 +598,14 @@ describe("public release guard fixture coverage", () => {
       `const value = process.env.${releaseProfileEnv};`,
     );
     writeFixture(
+      "lib/delivery-engineer/golden-path-doctor.ts",
+      `const value = process.env.${releaseProfileEnv};`,
+    );
+    writeFixture(
+      "lib/delivery-engineer/golden-path-doctor.test.ts",
+      `const value = process.env.${releaseProfileEnv};`,
+    );
+    writeFixture(
       "app/layout.tsx",
       `const locale = process.env.${defaultLocaleEnv};`,
     );
@@ -658,6 +701,8 @@ describe("public release guard fixture coverage", () => {
         dev: "next dev",
         "self-check": "tsx scripts/helm-self-check-refactored.ts",
         "release:check": "tsx scripts/release-readiness-check.ts",
+        "eval:signal-first-mile-quality":
+          "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
         [`seed:${tenantSlug}-workspace`]: `tsx ${tenantPrivateRoot}/scripts/seed-workspace.ts`,
         "proof-pack:build": `tsx ${commercialPrivateRoot}/build.ts`,
       },
@@ -669,26 +714,46 @@ describe("public release guard fixture coverage", () => {
       "proof-pack:build",
     ]);
     expect(projection.manifest.scripts).toMatchObject({
-      "self-check": "npm run public:smoke:static",
+      "self-check":
+        "npm run public:smoke:static && npm run check:secret-history",
       "release:check": "node --import tsx scripts/release-readiness-check.ts",
       dev: "next dev",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
-      "check:boundaries": "npm run public:smoke:static",
+      "check:boundaries":
+        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp",
+      "check:source-profiler-boundaries":
+        "node --import tsx scripts/check-source-profiler-boundaries.ts",
+      "check:golden-path-docs":
+        "node --import tsx scripts/check-golden-path-docs.ts",
+      "check:diagnostics-risk":
+        "node --import tsx scripts/check-diagnostics-risk.ts",
+      "check:llm-candidate-boundaries":
+        "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+      "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
+      "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
+      "eval:llm-critic-boundaries":
+        "vitest run lib/evals/llm-critic-evals.test.ts",
+      "eval:llm-v2-boundaries":
+        "vitest run lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":
-        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts scripts/sarp-proof.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
       "quality:regression":
         "npm run test:public:guards && npm run public:smoke:static",
       "public:e2e:smoke": "npm run public:smoke:static",
       e2e: "npm run public:e2e:smoke",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "eval:signal-first-mile-quality":
+        "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
+      "check:public-commit-metadata":
+        "node --import tsx scripts/public-commit-metadata-check.ts",
       "check:public-release":
         "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
       "public:smoke:static":
-        "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
-      "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+        "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+      "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
     });
     expect(validatePublicPackageManifestProjection(projection)).toEqual([]);
   });
@@ -801,25 +866,47 @@ describe("public release guard fixture coverage", () => {
     expect(result.violations).toEqual([]);
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
-      "check:boundaries": "npm run public:smoke:static",
+      "check:boundaries":
+        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp",
+      "check:source-profiler-boundaries":
+        "node --import tsx scripts/check-source-profiler-boundaries.ts",
+      "check:golden-path-docs":
+        "node --import tsx scripts/check-golden-path-docs.ts",
+      "check:diagnostics-risk":
+        "node --import tsx scripts/check-diagnostics-risk.ts",
+      "check:llm-candidate-boundaries":
+        "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+      "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
+      "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+      "check:public-commit-metadata":
+        "node --import tsx scripts/public-commit-metadata-check.ts",
+      "check:bilingual-mixing":
+        "node --import tsx scripts/lint-bilingual-mixing.ts",
+      "check:bilingual-mixing:update":
+        "node --import tsx scripts/lint-bilingual-mixing.ts --update-baseline",
       "check:public-release":
         "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       dev: "next dev",
       e2e: "npm run public:e2e:smoke",
+      "eval:llm-critic-boundaries":
+        "vitest run lib/evals/llm-critic-evals.test.ts",
+      "eval:llm-v2-boundaries":
+        "vitest run lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
       "public:e2e:smoke": "npm run public:smoke:static",
       "public:smoke:static":
-        "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
-      "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+        "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+      "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
       "quality:regression":
         "npm run test:public:guards && npm run public:smoke:static",
       "release:check": "node --import tsx scripts/release-readiness-check.ts",
-      "self-check": "npm run public:smoke:static",
+      "self-check":
+        "npm run public:smoke:static && npm run check:secret-history",
       test: "vitest run --config vitest.public.config.ts",
       "test:public:guards":
-        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+        "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts scripts/sarp-proof.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
       typecheck: "tsc --noEmit --project tsconfig.public.json",
     });
   });

@@ -135,6 +135,7 @@ export default async function SearchPage({
   const workspaceBusinessSignals = shouldLoadAskBusinessContext
     ? buildAskHelmBusinessSignalsFromRecords({
         workspaceId: workspace.id,
+        locale,
         opportunities: businessContextReadModel.data.opportunities,
         pendingApprovals: businessContextReadModel.data.pendingApprovals,
         memoryFacts: businessContextReadModel.data.memoryFacts,
@@ -179,6 +180,7 @@ export default async function SearchPage({
     askMode && q
       ? interpretAskHelmQuery({
           rawQuery: q,
+          english,
           currentPage: "/search",
           relatedObjects,
           memorySummary: memorySummaries
@@ -1680,7 +1682,7 @@ function AskHelmSignalIntakePanel({
           <p className="text-xs leading-5 text-[color:var(--muted-foreground)]">
             {english
               ? "This answer did not send, commit, write CRM status, or create a formal Must Push automatically."
-              : "这次回答没有自动外发、自动承诺、自动写 CRM 状态，也没有自动生成正式 Must Push。"}
+              : "这次回答没有自动外发、自动承诺、自动写客户关系系统状态，也没有自动生成正式必推事项。"}
           </p>
         </div>
       ) : null}
@@ -1778,14 +1780,14 @@ function AskHelmSignalIntakePanel({
             placeholder={
               english
                 ? "Meeting, message, CRM field, screenshot note, or owner note. PII will be redacted."
-                : "可写会议、消息、CRM 字段、截图说明或负责人说明；邮箱和电话会脱敏。"
+                : "可写会议、消息、客户关系系统字段、截图说明或负责人说明；邮箱和电话会脱敏。"
             }
           />
         </label>
         <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3 text-xs leading-5 text-[color:var(--muted-foreground)]">
           {english
             ? "Boundary: this candidate is audit-only and review-required. It does not send messages, make commitments, write CRM status, or create a formal Must Push."
-            : "边界：这里只写入审计候选且必须复核；不会发消息、不会作承诺、不会写 CRM 状态、不会创建正式 Must Push。"}
+            : "边界：这里只写入审计候选且必须复核；不会发消息、不会作承诺、不会写客户关系系统状态、不会创建正式必推事项。"}
         </div>
         <Button
           type="submit"
@@ -1936,17 +1938,17 @@ function AskHelmLayeredAnswerPanel({
         />
         <LayeredAnswerLayer
           rank="L4"
-          title={english ? "Bounded LLM / public assistance" : "受限 LLM / 公共辅助"}
+          title={english ? "Bounded LLM / public assistance" : "受限大模型 / 公共辅助"}
           description={
             english
               ? "LLM only explains, summarizes, routes or prepares drafts from the audited packet. Public knowledge cannot override tenant facts."
-              : "LLM 仅在已审计上下文范围内解释、总结、路由或起草；公共知识不得覆盖租户事实。"
+              : "大模型仅在已审计上下文范围内解释、总结、路由或起草；公共知识不得覆盖租户事实。"
           }
           items={llmSummaryItems}
           fallback={
             english
               ? "LLM reasoning is bounded — no public knowledge injected."
-              : "LLM 推理已受限——不注入公共知识。"
+              : "大模型推理已受限——不注入公共知识。"
           }
           dataTestId="ask-helm-layered-answer-layer-llm"
         />
@@ -2178,7 +2180,7 @@ function AskHelmContextAuditPanel({
           <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
             {english
               ? "Raw prompt and raw audio are not retained. The packet is eligible for redacted replay only."
-              : "不保留 raw prompt 或 raw audio；仅允许脱敏回放复核。"}
+              : "不保留原始提示词或原始音频；仅允许脱敏回放复核。"}
           </p>
         </div>
         <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-4">
@@ -2270,7 +2272,7 @@ function formatContextLayerLabel(
     helm_semantics: { zh: "Helm 语义", en: "Helm semantics" },
     helm_global_patterns: { zh: "Helm 全局经验", en: "Helm global patterns" },
     public_knowledge: { zh: "公共知识", en: "Public knowledge" },
-    llm_reasoning: { zh: "LLM 推理", en: "LLM reasoning" },
+    llm_reasoning: { zh: "大模型推理", en: "LLM reasoning" },
   };
   return english ? labels[layerId].en : labels[layerId].zh;
 }
@@ -2298,7 +2300,7 @@ function formatContextLayerNote(
     helm_semantics: "Helm 语义负责页面职责、复核姿态和建议不等于承诺的边界。",
     helm_global_patterns: "跨租户经验必须先脱敏、复核并批准为可复用知识。",
     public_knowledge: "公共知识不能覆盖租户事实；Ask Helm v1 默认不纳入。",
-    llm_reasoning: "LLM 只能基于已审计上下文解释、总结、路由或准备草稿。",
+    llm_reasoning: "大模型只能基于已审计上下文解释、总结、路由或准备草稿。",
   };
   return notes[layer.id];
 }

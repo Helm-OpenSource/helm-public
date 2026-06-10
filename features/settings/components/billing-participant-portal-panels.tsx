@@ -30,6 +30,7 @@ import type {
   PortalInviteBeneficiaryType,
   SettingsClientProps,
 } from "@/features/settings/types/settings-client-props";
+import { formatParticipantPortalDateLabel } from "./billing-participant-portal-date-labels";
 import { Info } from "./settings-display";
 
 type BillingParticipantPortalData = Pick<
@@ -298,15 +299,27 @@ export function BillingParticipantPortalPanels({
                     />
                     <Info
                       label={english ? "Last invite issued" : "最近发放时间"}
-                      value={formatDateLabel(access.lastInviteIssuedAt)}
+                      value={formatParticipantPortalDateLabel(
+                        access.lastInviteIssuedAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     />
                     <Info
                       label={english ? "Terms accepted" : "条款确认"}
-                      value={formatDateLabel(access.termsAcceptedAt)}
+                      value={formatParticipantPortalDateLabel(
+                        access.termsAcceptedAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     />
                     <Info
                       label={english ? "Activated at" : "激活时间"}
-                      value={formatDateLabel(access.activatedAt)}
+                      value={formatParticipantPortalDateLabel(
+                        access.activatedAt,
+                        english,
+                        formatDateLabel,
+                      )}
                     />
                   </div>
                   {access.notes ? (

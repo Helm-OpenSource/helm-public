@@ -172,25 +172,47 @@ describe("public mirror tree builder", () => {
       private: false,
       license: "Apache-2.0",
       scripts: {
-        "check:boundaries": "npm run public:smoke:static",
+        "check:boundaries":
+          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp",
+        "check:source-profiler-boundaries":
+          "node --import tsx scripts/check-source-profiler-boundaries.ts",
+        "check:golden-path-docs":
+          "node --import tsx scripts/check-golden-path-docs.ts",
+        "check:diagnostics-risk":
+          "node --import tsx scripts/check-diagnostics-risk.ts",
+        "check:llm-candidate-boundaries":
+          "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+        "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
+        "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
+        "check:public-commit-metadata":
+          "node --import tsx scripts/public-commit-metadata-check.ts",
         "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
+        "check:bilingual-mixing":
+          "node --import tsx scripts/lint-bilingual-mixing.ts",
+        "check:bilingual-mixing:update":
+          "node --import tsx scripts/lint-bilingual-mixing.ts --update-baseline",
         "check:public-release":
           "npm run check:public-docs && node --import tsx scripts/public-release-guard.ts",
         "db:prepare":
           "node -e \"console.log('public mirror: database prepare is not required')\"",
         dev: "next dev",
         e2e: "npm run public:e2e:smoke",
+        "eval:llm-critic-boundaries":
+          "vitest run lib/evals/llm-critic-evals.test.ts",
+        "eval:llm-v2-boundaries":
+          "vitest run lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
         "public:e2e:smoke": "npm run public:smoke:static",
         "public:smoke:static":
-          "npm run check:public-docs && tsx scripts/public-mirror-smoke.ts --repo-root .",
-        "public:smoke": "tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+          "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
+        "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
         "quality:regression":
           "npm run test:public:guards && npm run public:smoke:static",
         "release:check": "node --import tsx scripts/release-readiness-check.ts",
-        "self-check": "npm run public:smoke:static",
+        "self-check":
+          "npm run public:smoke:static && npm run check:secret-history",
         test: "vitest run --config vitest.public.config.ts",
         "test:public:guards":
-          "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+          "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts scripts/sarp-proof.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
         typecheck: "tsc --noEmit --project tsconfig.public.json",
       },
     });
@@ -279,11 +301,34 @@ describe("public mirror tree builder", () => {
     expect(scripts["db:prepare"]).toBe(
       "node -e \"console.log('public mirror: database prepare is not required')\"",
     );
-    expect(scripts["self-check"]).toBe("npm run public:smoke:static");
-    expect(scripts["check:boundaries"]).toBe("npm run public:smoke:static");
+    expect(scripts["self-check"]).toBe(
+      "npm run public:smoke:static && npm run check:secret-history",
+    );
+    expect(scripts["check:boundaries"]).toBe(
+      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp",
+    );
+    expect(scripts["check:source-profiler-boundaries"]).toBe(
+      "node --import tsx scripts/check-source-profiler-boundaries.ts",
+    );
+    expect(scripts["check:golden-path-docs"]).toBe(
+      "node --import tsx scripts/check-golden-path-docs.ts",
+    );
+    expect(scripts["check:diagnostics-risk"]).toBe(
+      "node --import tsx scripts/check-diagnostics-risk.ts",
+    );
+    expect(scripts["check:llm-candidate-boundaries"]).toBe(
+      "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+    );
+    expect(scripts["check:agentic-sarp"]).toBe(
+      "node --import tsx scripts/check-agentic-sarp.ts",
+    );
+    expect(scripts["sarp:proof"]).toBe("node --import tsx scripts/sarp-proof.ts");
+    expect(scripts["eval:llm-critic-boundaries"]).toBe(
+      "vitest run lib/evals/llm-critic-evals.test.ts",
+    );
     expect(scripts.test).toBe("vitest run --config vitest.public.config.ts");
     expect(scripts["test:public:guards"]).toBe(
-      "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts",
+      "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts scripts/sarp-proof.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
     );
     expect(scripts["quality:regression"]).toBe(
       "npm run test:public:guards && npm run public:smoke:static",

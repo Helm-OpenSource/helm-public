@@ -32,6 +32,16 @@ describe("case-management-sample case mapper", () => {
         severity: "critical",
       },
       resourceId: "CASE-SAMPLE-001",
+      sourceRef: {
+        sourceKind: "case_system",
+        sourceId: "CASE-SAMPLE-001",
+        sourceRef: "case_system:CASE-SAMPLE-001",
+      },
+      subject: {
+        kind: "case",
+        refId: "CASE-SAMPLE-001",
+        label: "CASE-SAMPLE-001",
+      },
       payload: {
         blocker: "boundary_attempt",
         reviewRequired: true,
@@ -39,6 +49,14 @@ describe("case-management-sample case mapper", () => {
       },
       confidence: "trusted",
     });
+    expect(signal.observedAt.toISOString()).toBe("2026-05-18T00:00:00.000Z");
+    expect(signal.gapFields).toEqual([
+      {
+        field: "boundary_review",
+        severity: "critical",
+        detail: "boundary_attempt requires a human review packet before any customer-visible action",
+      },
+    ]);
   });
 
   it("does not emit signals for closed cases", () => {
@@ -56,6 +74,13 @@ describe("case-management-sample case mapper", () => {
     expect(signal.identity.severity).toBe("breach");
     expect(signal.confidence).toBe("degraded");
     expect(signal.payload.nextAction).toBe("collect_evidence");
+    expect(signal.gapFields).toEqual([
+      {
+        field: "evidence",
+        severity: "breach",
+        detail: "case has no reviewable evidence attached",
+      },
+    ]);
   });
 
   it("treats raw closed statuses from a real backend as closed (no signals)", () => {

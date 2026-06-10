@@ -1,0 +1,84 @@
+name: 缺陷报告 / Bug report
+description: 报告可复现的 public Core 缺陷。/ Report a reproducible public Core bug.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本表单仅用于 public Core 缺陷。不要包含客户数据、私有域名、内网 IP、凭据、私有部署证据或未公开安全细节。
+
+        Use this form for public Core bugs only. Do not include customer data, private domains, internal IPs, credentials, private deployment evidence, or undisclosed security details.
+  - type: checkboxes
+    id: public-safety
+    attributes:
+      label: 公开安全确认 / Public-safety confirmation
+      options:
+        - label: 本 issue 不包含客户名称、私人联系方式、私有域名、内网 IP、凭据、私有部署证据或未公开安全细节。/ This issue contains no customer names, private contacts, private domains, internal IPs, credentials, private deployment evidence, or undisclosed security details.
+          required: true
+        - label: 这不是安全漏洞。安全问题请走 SECURITY.md，不要发公开 issue。/ This is not a security vulnerability. Security issues go through SECURITY.md, not public issues.
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: 什么失败了？/ What failed?
+      description: 用一两句话说明问题。/ State the bug in one or two sentences.
+      placeholder: "`npm run pack:fixture-check` fails after changing a synthetic fixture."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤 / Reproduction steps
+      description: 列出准确命令、路由、fixture 路径或 sample input。/ List exact commands, route paths, fixture paths, or sample inputs.
+      placeholder: |
+        1. Clone the repo. / 克隆仓库。
+        2. Run ... / 运行 ...
+        3. Open ... / 打开 ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果 / Expected result
+      description: 原本应该发生什么？/ What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果 / Actual result
+      description: 只包含最小相关错误文本，不要粘贴 secrets。/ Include the smallest relevant error text. Do not paste secrets.
+    validations:
+      required: true
+  - type: input
+    id: ref
+    attributes:
+      label: Commit、分支或 release / Commit, branch, or release
+      placeholder: "main@<sha>, v0.1.0-trial, or your branch name"
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: 已运行命令 / Commands already run
+      description: 粘贴命令和简短结果。/ Paste commands and short results.
+      placeholder: |
+        npm run check:public-docs
+        npm run check:public-release
+    validations:
+      required: false
+  - type: dropdown
+    id: boundary
+    attributes:
+      label: 边界区域 / Boundary area
+      description: 选择该缺陷最接近的边界。/ Pick the closest boundary this bug touches.
+      options:
+        - 公开文档或 quickstart / Public docs or quickstart
+        - 合成 sample pack 或 fixture / Synthetic sample pack or fixture
+        - 只读 connector 或 dry-run 路径 / Read-only connector or dry-run path
+        - review-first 审批或草稿路径 / Review-first approval or draft path
+        - 构建、测试、guard 或 CI / Build, test, guard, or CI
+        - 不确定 / Not sure
+    validations:
+      required: true

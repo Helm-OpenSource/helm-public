@@ -266,6 +266,51 @@ describe("feishu oauth routes", () => {
     expect(auditMock.writeAuditLog.mock.calls.some((call) => call[0]?.actionType === "FEISHU_OAUTH_CALLBACK_SUCCEEDED")).toBe(true);
   });
 
+  it("localizes unresolved workspace callback context from request locale before exchange", async () => {
+    const cookieStore = createCookieStore({
+      "helm-feishu-oauth-state": JSON.stringify({
+        state: "state-1",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+        provider: "feishu",
+      }),
+      "helm-ui-locale": "zh-CN",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+    dbMock.workspace.findUnique.mockResolvedValue(null);
+
+    const response = await feishuCallbackRoute(
+      new Request("http://localhost/api/auth/feishu/callback?code=code-1&state=state-1"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(decodeURIComponent(response.headers.get("location") ?? "")).toContain(
+      "无法解析工作区回调上下文。",
+    );
+    expect(oauthCallbackGovernanceMock.resolveWorkspaceOauthCallbackContext).toHaveBeenCalledWith(
+      expect.objectContaining({ english: false }),
+    );
+    expect(feishuMock.exchangeFeishuAuthCode).not.toHaveBeenCalled();
+  });
+
+  it("localizes missing callback state from request locale before exchange", async () => {
+    const cookieStore = createCookieStore({
+      "helm-ui-locale": "zh-CN",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+
+    const response = await feishuCallbackRoute(
+      new Request("http://localhost/api/auth/feishu/callback?code=code-1"),
+    );
+
+    expect(response.status).toBe(307);
+    const location = decodeURIComponent(response.headers.get("location") ?? "");
+    expect(location).toContain("status=missing-state");
+    expect(location).toContain("飞书回调状态缺失或已过期。");
+    expect(oauthCallbackGovernanceMock.resolveWorkspaceOauthCallbackContext).not.toHaveBeenCalled();
+    expect(feishuMock.exchangeFeishuAuthCode).not.toHaveBeenCalled();
+  });
+
   it("marks mismatch when Feishu identity differs from current workspace user", async () => {
     const cookieStore = createCookieStore({
       "helm-feishu-oauth-state": JSON.stringify({

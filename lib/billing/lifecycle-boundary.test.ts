@@ -17,8 +17,12 @@ describe("lifecycle boundary", () => {
 
     expect(readOnly.stillAvailable).toContain("导出会议或记忆包");
     expect(readOnly.stillAvailable).toContain("使用本地 CSV 导入预演，但不触发外部重算");
-    expect(readOnly.pausedHighCostProcessing).toContain("新的 CRM 预演计算");
+    expect(readOnly.pausedHighCostProcessing).toContain("新的客户关系系统预演计算");
+    expect(readOnly.pausedHighCostProcessing).toContain("客户关系系统导入执行");
     expect(readOnly.scopeNote).toContain("本地 CSV 导入预览继续允许");
+    expect(readOnly.scopeNote).toContain("客户关系系统预览");
+    expect(readOnly.pausedHighCostProcessing.join("\n")).not.toMatch(/CRM 预演|CRM 导入/);
+    expect(readOnly.scopeNote).not.toMatch(/CRM 预览/);
   });
 
   it("keeps canceled aligned with read-first and restore-first boundary behavior", () => {

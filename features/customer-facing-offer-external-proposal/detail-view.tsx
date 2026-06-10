@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { UnifiedDetailNavigationPanel } from "@/components/shared/unified-detail-navigation-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatOfferExternalDateLabel } from "@/features/customer-facing-offer-external-proposal/date-labels";
 import {
   formatRoleDetailDisplayText,
   formatRoleDetailEvidenceGroups,
@@ -37,7 +38,6 @@ import {
 } from "@/lib/presentation/customer-facing-offer-external-proposal-detail-contract";
 import { createUnifiedDetailNavigationModel } from "@/lib/presentation/unified-detail-navigation";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
-import { formatDateLabel } from "@/lib/utils";
 
 type CustomerOfferPageProps = {
   mode: "customer-offer";
@@ -59,15 +59,15 @@ export function CustomerFacingOfferExternalProposalDetailView(
   const { detail, english, mode } = props;
   const sourceProtocol =
     mode === "customer-offer"
-      ? toCustomerFacingOfferPageReportingProtocol(props.contract)
-      : toExternalProposalPageReportingProtocol(props.contract);
+      ? toCustomerFacingOfferPageReportingProtocol(props.contract, english)
+      : toExternalProposalPageReportingProtocol(props.contract, english);
   const text = (value: string) => formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);
   const title =
     mode === "customer-offer"
       ? english
         ? `${detail.title} customer-facing offer detail`
-        : `${detail.title} 客户可见提案 详情页`
+        : `${detail.title} 客户可见提案详情页`
       : english
         ? `${detail.title} external proposal detail`
         : `${detail.title} 外部提案详情页`;
@@ -308,7 +308,7 @@ export function CustomerFacingOfferExternalProposalDetailView(
                   ),
                 },
                 {
-                  label: text(english ? "Internal-only wording" : "internal-only wording"),
+                  label: text(english ? "Internal-only wording" : "仅内部措辞"),
                   value: text(
                     mode === "customer-offer"
                       ? props.contract.customerOfferPageInternalOnlyCue
@@ -333,7 +333,7 @@ export function CustomerFacingOfferExternalProposalDetailView(
                 },
                 {
                   label: english ? "Due date" : "当前截止时间",
-                  value: formatDateLabel(detail.dueDate),
+                  value: formatOfferExternalDateLabel(detail.dueDate, english),
                 },
               ]}
             />
@@ -346,6 +346,7 @@ export function CustomerFacingOfferExternalProposalDetailView(
                 request={text(props.contract.externalProposalPageCollaborationRequest)}
                 decisionRequest={protocol.pageDecisionRequest[0]}
                 nextSteps={props.contract.externalProposalPageCollaborationNextStep.map(text)}
+                english={english}
               />
             ) : null}
 
@@ -474,7 +475,7 @@ function buildUnifiedNavigation({
                 : "客户面向报价详情",
               summary: english
                 ? "Return to the lighter customer offer if the external proposal still needs a safer surface."
-                : "如果外部提案仍需要更安全的表达表面，就回到更轻的客户 offer。",
+                : "如果外部提案仍需要更安全的表达表面，就回到更轻的客户提案。",
             },
       detailNodeNext:
         mode === "customer-offer"
@@ -504,10 +505,10 @@ function buildUnifiedNavigation({
         mode === "customer-offer"
           ? english
             ? "Use this detail when the customer-visible offer still needs sendability plus boundary cues tightly attached."
-            : "当客户可见提案 仍需要把发送评估与边界线索紧贴主叙事放置时，停在这里。"
+            : "当客户可见提案仍需要把发送评估与边界线索紧贴主叙事放置时，停在这里。"
           : english
             ? "Use this detail when the work is already in the structured external proposal phase and the next question is reinforcement, not more raw offer drafting."
-            : "当工作已经进入结构化的外部提案阶段，下一步问题变成加固而不是继续起草原始提案 时，停在这里。",
+            : "当工作已经进入结构化的外部提案阶段，下一步问题变成加固而不是继续起草原始提案时，停在这里。",
     },
     handoffs:
       mode === "customer-offer"
@@ -527,7 +528,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction:
                 protocol.pageNextAction[0]?.label ??
-                (english ? "Open customer-facing offer detail" : "打开客户可见提案 detail"),
+                (english ? "Open customer-facing offer detail" : "打开客户可见提案详情"),
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode:
@@ -541,7 +542,7 @@ function buildUnifiedNavigation({
               handoffTarget: "conversation",
               handoffReason: english
                 ? "The customer-facing offer is coherent enough that the next useful move is scene-specific talk-track guidance, not another round of lighter copy edits."
-                : "当前客户可见提案 已经足够连贯，下一步真正有价值的是场景化 话术指引，而不是继续改更轻的文案。",
+                : "当前客户可见提案已经足够连贯，下一步真正有价值的是场景化话术指引，而不是继续改更轻的文案。",
               handoffBoundary: protocol.pageBoundarySummary[0],
               handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
               handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -551,7 +552,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction: english
                 ? "Open conversation detail"
-                : "打开对话 detail",
+                : "打开对话详情",
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode:
@@ -567,7 +568,7 @@ function buildUnifiedNavigation({
               handoffTarget: "external-proposal",
               handoffReason: english
                 ? "A more structured external proposal layer is needed now, not another round of fragmented offer bullets."
-                : "当前需要的是更结构化的外部提案层，而不是继续堆零散的 offer bullet。",
+                : "当前需要的是更结构化的外部提案层，而不是继续堆零散的报价要点。",
               handoffBoundary: protocol.pageBoundarySummary[0],
               handoffPrerequisite: protocol.pageBoundarySummary[1] ?? null,
               handoffDependency: protocol.pageBoundarySummary[2] ?? null,
@@ -577,7 +578,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction:
                 protocol.pageNextAction[0]?.label ??
-                (english ? "Open external proposal detail" : "打开外部提案 detail"),
+                (english ? "Open external proposal detail" : "打开外部提案详情"),
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode:
@@ -602,7 +603,7 @@ function buildUnifiedNavigation({
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction: english
                 ? "Open reinforcement detail"
-                : "打开加固 detail",
+                : "打开加固详情",
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode: "internal-only",
@@ -619,11 +620,11 @@ function buildUnifiedNavigation({
               handoffDependency: protocol.pageBoundarySummary[2] ?? null,
               handoffRisk: english
                 ? "If the narrative outruns boundary or review gates, it can still be misread as commitment."
-                : "如果叙事跑在边界或复核闸口 前面，仍可能被误读成承诺。",
+                : "如果叙事跑在边界或复核闸口前面，仍可能被误读成承诺。",
               handoffDecisionRequest: protocol.pageDecisionRequest[0],
               handoffNextAction: english
                 ? "Open external narrative detail"
-                : "打开 对外叙事详情面",
+                : "打开对外叙事详情面",
               handoffWorkerSummary: protocol.pageWorkerSummary,
               handoffEvidenceSummary: protocol.pageEvidenceSummary,
               handoffVisibilityMode:

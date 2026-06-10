@@ -47,7 +47,7 @@ export async function enhanceRecommendationExplanationWithLLM(input: {
     promptVersion: llmPromptVersions.recommendationExplanation,
     systemPrompt: prompt.systemPrompt,
     userPrompt: prompt.userPrompt,
-    inputSummary: `${input.objectLabel} 的 recommendation 解释增强`,
+    inputSummary: `${input.objectLabel} 的建议解释增强`,
     outputMode: "json",
     jsonSchema: recommendationExplanationSchema,
     fallbackOutput: input.fallback,

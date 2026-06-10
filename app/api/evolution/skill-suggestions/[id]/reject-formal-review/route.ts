@@ -44,10 +44,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       },
     });
 
-    return successResponse({ suggestion }, "skill formal review rejected");
+    return successResponse(
+      { suggestion },
+      english ? "Skill formal review rejected" : "正式评审已拒绝",
+    );
   } catch (error) {
     return errorResponse(
-      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "reject 正式评审失败"),
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to reject skill formal review" : "reject 正式评审失败"),
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "FORMAL_REVIEW_REJECT_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

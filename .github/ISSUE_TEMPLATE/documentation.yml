@@ -1,0 +1,61 @@
+name: 文档修正 / Documentation correction
+description: 报告过期、不清楚或错误的公开文档。/ Report stale, unclear, or incorrect public documentation.
+title: "docs: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本表单仅用于公开文档。公开文档必须保持 evidence-gated，不得包含客户数据、私有证明、私有部署证据、凭据或带时间承诺的商业承诺。
+
+        Use this for public documentation only. Public docs must remain evidence-gated and must not include customer data, private proof, private deployment evidence, credentials, or time-bound commercial promises.
+  - type: checkboxes
+    id: public-safety
+    attributes:
+      label: 公开安全确认 / Public-safety confirmation
+      options:
+        - label: 本请求不包含客户名称、私人联系方式、私有域名、内网 IP、凭据、私有部署证据或未公开安全细节。/ This request contains no customer names, private contacts, private domains, internal IPs, credentials, private deployment evidence, or undisclosed security details.
+          required: true
+  - type: input
+    id: doc-path
+    attributes:
+      label: 文档路径 / Document path
+      placeholder: "README.md, docs/getting-started.md, docs/product/..."
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 哪里不清楚或错误？/ What is unclear or wrong?
+      description: 说明不匹配、过期声明、错字或缺失上下文。/ Explain the mismatch, stale claim, typo, or missing context.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-change
+    attributes:
+      label: 建议修正 / Proposed correction
+      description: 保持 review-first，不要把 recommendation 写成 commitment。/ Keep wording review-first. Do not turn recommendations into commitments.
+    validations:
+      required: false
+  - type: dropdown
+    id: claim-risk
+    attributes:
+      label: 声明风险 / Claim risk
+      options:
+        - 无客户可见承诺风险 / No customer-facing commitment risk
+        - 可能被读成 roadmap 承诺 / Might be read as a roadmap promise
+        - 可能被读成 Cloud 或 Enterprise readiness / Might be read as Cloud or Enterprise readiness
+        - 可能被读成自动发送、写入、审批、执行或结算 / Might be read as automatic send, write, approval, execution, or settlement
+        - 不确定 / Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: 建议验证 / Suggested verification
+      description: 列出应验证该变更的 docs guard 或人工检查。/ List docs guards or manual checks that should confirm the change.
+      placeholder: |
+        npm run check:public-docs
+        npm run check:public-release
+    validations:
+      required: false

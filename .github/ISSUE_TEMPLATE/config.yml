@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全披露 / Security disclosure
+    url: https://github.com/Helm-OpenSource/helm-public/blob/main/SECURITY.md
+    about: 不要在公开 issue 中报告安全漏洞。/ Do not report security vulnerabilities in public issues.
+  - name: 社区讨论 / Community discussion
+    url: https://github.com/Helm-OpenSource/helm-public/discussions
+    about: 问题、上手记录和社区帮助请使用 Discussions。/ Use Discussions for questions, walkthrough notes, and community help.
+  - name: 贡献指南 / Contributing guide
+    url: https://github.com/Helm-OpenSource/helm-public/blob/main/CONTRIBUTING.md
+    about: 开 PR 前请先阅读公开贡献规则。/ Read the public contribution rules before opening a PR.

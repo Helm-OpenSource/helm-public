@@ -55,6 +55,7 @@ import {
   getOperatingSkillById,
 } from "@/lib/operating-system";
 import { formatDateLabel, safeParseJson } from "@/lib/utils";
+import { formatMemoryDateLabel } from "@/features/memory/memory-date-labels";
 import {
   acceptReflectionCarryForwardAction,
   dismissReflectionCarryForwardAction,
@@ -374,6 +375,8 @@ export function MemoryClient({
   const router = useRouter();
   const { locale, demoMode } = useWorkspaceUi();
   const english = locale === "en-US";
+  const dateLabel = (value: Date | string | null | undefined) =>
+    formatMemoryDateLabel(value, english, formatDateLabel);
   const memoryText = (value: string | null | undefined) =>
     formatMemoryVisibleText(value, english);
   const memoryStatus = (value: string | null | undefined) =>
@@ -1211,8 +1214,8 @@ export function MemoryClient({
                       </Badge>
                       <Badge variant="neutral">
                         {item.decidedAt
-                          ? formatDateLabel(item.decidedAt)
-                          : formatDateLabel(item.updatedAt)}
+                          ? dateLabel(item.decidedAt)
+                          : dateLabel(item.updatedAt)}
                       </Badge>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
@@ -1237,7 +1240,7 @@ export function MemoryClient({
         <CardHeader>
           <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
             <Sparkles className="h-3.5 w-3.5" />
-            {english ? "Reflection 延续" : "复盘延续"}
+            {english ? "Reflection carry-forward" : "复盘延续"}
           </div>
           <CardTitle>
             {english
@@ -1297,7 +1300,7 @@ export function MemoryClient({
                                 candidateId: item.id,
                                 sourcePage: "/memory",
                               }),
-                            english ? "Reflection 延续 candidate accepted" : "已接受复盘延续候选",
+                            english ? "Reflection carry-forward candidate accepted" : "已接受复盘延续候选",
                           )
                         }
                         disabled={pending}
@@ -1316,7 +1319,7 @@ export function MemoryClient({
                                 candidateId: item.id,
                                 sourcePage: "/memory",
                               }),
-                            english ? "Reflection 延续 candidate dismissed" : "已忽略复盘延续候选",
+                            english ? "Reflection carry-forward candidate dismissed" : "已忽略复盘延续候选",
                           )
                         }
                         disabled={pending}
@@ -1341,7 +1344,7 @@ export function MemoryClient({
           ) : (
             <EmptyState
               title={
-                english ? "No reflection 延续 yet" : "还没有复盘延续"
+                english ? "No reflection carry-forward yet" : "还没有复盘延续"
               }
               description={
                 english
@@ -1363,7 +1366,7 @@ export function MemoryClient({
           </div>
           <CardTitle>
             {english
-              ? "Accepted or dismissed 延续 stays visible as an audit trail"
+              ? "Accepted or dismissed carry-forward stays visible as an audit trail"
               : "已经接受或忽略的延续上下文仍然作为审计轨迹保留可见"}
           </CardTitle>
           <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
@@ -2513,7 +2516,7 @@ export function MemoryClient({
                 <div className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface-subtle)_82%,var(--surface)_18%)] px-4 py-3 md:block md:border-0 md:bg-transparent md:px-0 md:py-0">
                   <div className="min-w-0 space-y-1 text-xs text-[color:var(--muted-foreground)] md:text-right">
                     <p className="break-words font-medium text-[color:var(--muted-foreground)]">
-                      {formatDateLabel(item.timestamp)}
+                      {dateLabel(item.timestamp)}
                     </p>
                     <p className="break-words">
                       {memoryText(item.objectLabel)}
@@ -2578,7 +2581,7 @@ export function MemoryClient({
                             </div>
                             <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
                               {english
-                                ? `Occurred ${formatDateLabel(item.externalRecord.occurredAt)} · Synced ${formatDateLabel(item.externalRecord.syncedAt)}`
+                                ? `Occurred ${dateLabel(item.externalRecord.occurredAt)} · Synced ${dateLabel(item.externalRecord.syncedAt)}`
                                 : `原始时间 ${formatDateLabel(item.externalRecord.occurredAt)} · 同步时间 ${formatDateLabel(item.externalRecord.syncedAt)}`}
                             </p>
                           </div>
@@ -3157,7 +3160,7 @@ export function MemoryClient({
                         {memoryText(log.targetType)}
                       </span>
                       <span>·</span>
-                      <span>{formatDateLabel(log.createdAt)}</span>
+                      <span>{dateLabel(log.createdAt)}</span>
                     </div>
                     <div className="mt-3 space-y-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-3">
                       {buildAuditReasonChain(log, english).map((item) => (

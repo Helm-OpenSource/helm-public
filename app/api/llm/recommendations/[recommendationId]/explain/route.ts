@@ -10,10 +10,12 @@ import { refreshRecommendationExplanationWithLLM } from "@/lib/recommendations/r
 import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_: Request, { params }: { params: Promise<{ recommendationId: string }> }) {
+  let english = false;
+
   try {
     const { user, membership, workspace } = await getCurrentWorkspaceSession();
     const { recommendationId } = await params;
-    const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
+    english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
 
     if (!canManageWorkspaceInsights(membership.role)) {
       return Response.json(
@@ -31,6 +33,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ recommend
       workspaceId: workspace.id,
       recommendationId,
       userId: user.id,
+      english,
     });
 
     await logEvent({

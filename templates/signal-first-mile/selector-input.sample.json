@@ -1,0 +1,12 @@
+{
+  "materialType": "business_web_app",
+  "accessLevel": "ui_change_allowed",
+  "sourceFamily": "web_app",
+  "signalFamily": "risk",
+  "canModifyBusinessUi": true,
+  "canRunLocalJs": true,
+  "hasRedactedExport": false,
+  "hasReadOnlyApi": false,
+  "hasReadOnlyAuthorization": false,
+  "dataPosture": "redacted"
+}

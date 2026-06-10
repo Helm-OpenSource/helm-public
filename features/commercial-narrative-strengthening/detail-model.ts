@@ -10,7 +10,11 @@ import type {
 } from "@/lib/presentation/commercial-narrative-strengthening-contract";
 import { createCommercialNarrativeStrengtheningDetailReportingContract } from "@/lib/presentation/commercial-narrative-strengthening-contract";
 import type { ProposalPackageCommercialDetail } from "@/features/proposal-package/proposal-package-detail-view";
-import { formatDateLabel, formatRelative, trimText } from "@/lib/utils";
+import { formatRelative, trimText } from "@/lib/utils";
+import {
+  formatCommercialNarrativeDateLabel,
+  formatCommercialNarrativeRelativeLabel,
+} from "./date-labels";
 
 export function buildCommercialNarrativeStrengtheningPageContract({
   detail,
@@ -41,14 +45,14 @@ export function buildCommercialNarrativeStrengtheningPageContract({
     strengtheningActionSummary: [
       english
         ? "The current page already separates recommendation-only, exploratory, pilot, customer-visible and fallback narrative layers."
-        : "当前页已经把仅建议、探索性、pilot、客户可见和兜底叙事层分开了。",
+        : "当前页已经把仅建议、探索性、试点、客户可见和兜底叙事层分开了。",
       signals.pendingApprovalCount
         ? english
           ? `${signals.pendingApprovalCount} approval-sensitive actions remain open, so stronger narrative cannot silently cross into customer-visible commitment.`
           : `当前仍有 ${signals.pendingApprovalCount} 条审批敏感动作未收口，所以更强的叙事不能悄悄越过客户可见承诺边界。`
         : english
           ? "The current strengthening path, sendability gate and fallback line are already grouped into one decision page."
-          : "当前加固 path、发送评估闸口 和兜底话术 都已经被收进同一页决策面。",
+          : "当前加固路径、发送评估闸口和兜底话术都已经被收进同一页决策面。",
       english
         ? "You do not need to infer strengthening level from scattered notes first; the current layer is already explicit."
         : "你不需要先从零散备注里倒推加固层级；当前层级已经说清楚了。",
@@ -59,12 +63,12 @@ export function buildCommercialNarrativeStrengtheningPageContract({
         : `确认这版当前是继续保持「${labelForLevel(strengtheningLevel, false)}」，还是需要退回「${fallbackLabel(fallbackMode, false)}」。`,
       english
         ? "Confirm who owns the next wording pass, and whether founder, sales or delivery must review it before anything customer-visible gets stronger."
-        : "确认下一轮措辞 pass 由谁接，以及在任何客户可见表达继续变强之前，是否需要创始人、销售或交付先复核。",
+        : "确认下一轮措辞由谁接，以及在任何客户可见表达继续变强之前，是否需要创始人、销售或交付先复核。",
     ],
     strengtheningBoundarySummary: [
       english
         ? "Commercial narrative strengthening can raise confidence and clarity, but it still cannot silently harden recommendation into commitment."
-        : "commercial 叙事加固可以抬高信心和清晰度，但它仍然不能悄悄把建议硬化成承诺。",
+        : "商业叙事加固可以抬高信心和清晰度，但它仍然不能悄悄把建议硬化成承诺。",
       buildBoundaryLine(
         strengtheningLevel,
         sendabilityMode,
@@ -89,7 +93,7 @@ export function buildCommercialNarrativeStrengtheningPageContract({
         : "销售执行会持续把仅建议、试点加固和客户可见的叙事层对齐到同一条商业推进线上。",
       english
         ? "Founder / delivery review keeps sendability, promise pressure and trust-sensitive wording from being overstated too early."
-        : "创始人 / 交付复核会持续防止发送评估、承诺压力和信任敏感 措辞被过早说实。",
+        : "创始人 / 交付复核会持续防止发送评估、承诺压力和信任敏感措辞被过早说实。",
     ],
     strengtheningNextAction: buildNextActions({
       id: detail.id,
@@ -114,7 +118,7 @@ export function buildCommercialNarrativeStrengtheningPageContract({
       : "只有仍然保持范围、时点和结果措辞可回退的加固，才允许继续变成客户可见。",
     strengtheningInternalOnlyCue: english
       ? "Internal objections, dependency repair and unresolved trust notes remain internal-only."
-      : "internal 异议、依赖修复和未解决的信任备注仍然只适合仅内部。",
+      : "内部异议、依赖修复和未解决的信任备注仍然只适合仅内部。",
     strengtheningFallbackCue: english
       ? "When strengthening pressure runs ahead of evidence or boundary clarity, Helm falls back to non-commitment or boundary-only wording first."
       : "一旦加固压力跑在证据或边界清晰度前面，Helm 会先退回非承诺或仅边界措辞。",
@@ -131,7 +135,7 @@ export function buildCommercialNarrativeStrengtheningPageContract({
           : "当前确实存在强化商业叙事的空间，但前提是发送评估和非承诺必须持续显式可见。",
       english
         ? "The current page already separates what can get stronger from what must remain soft, review-bound or fallback-safe, so the remaining value is choosing the right layer rather than rediscovering context."
-        : "当前页已经把哪些可以更强、哪些必须继续保持柔性、复核-bound 或兜底安全分开了，所以现在真正的价值在于选对层级，而不是重新拼上下文。",
+        : "当前页已经把哪些可以更强、哪些必须继续保持柔性、受复核约束或兜底安全分开了，所以现在真正的价值在于选对层级，而不是重新拼上下文。",
     ],
     pageEscalationHint:
       strengtheningLevel === "blocked-strengthening" ||
@@ -142,12 +146,12 @@ export function buildCommercialNarrativeStrengtheningPageContract({
           : "如果任何人想把承诺、时点或结果确定性说实，就先升级进审批，再允许下一步加固动作变成客户可见。"
         : english
           ? "If trust pressure or dependency pressure rises, step back from strengthening and return to boundary-led review first."
-          : "如果信任压力或依赖压力开始上升，就先从加固退回边界-led 复核。",
+          : "如果信任压力或依赖压力开始上升，就先从加固退回边界优先复核。",
     pageEvidenceLinks: [
       {
         label: english
           ? "Open reinforcement variants page"
-          : "打开加固变体s 页面",
+          : "打开加固变体页面",
         href: `/reinforcement-variants/${detail.id}`,
       },
       {
@@ -339,11 +343,11 @@ function buildJudgement(
     case "customer-visible-light":
       return english
         ? "This commercial narrative can move into customer-visible-light wording, while still keeping non-commitment explicit."
-        : "当前商业叙事可以进入客户可见-light 措辞，但非承诺仍必须显式可见。";
+        : "当前商业叙事可以进入轻量客户可见措辞，但非承诺仍必须显式可见。";
     case "customer-visible-structured":
       return english
         ? "This commercial narrative can move into customer-visible-structured wording, while still keeping sendability and non-commitment visible."
-        : "当前商业叙事可以进入客户可见-structured 措辞，但发送评估和非承诺仍必须继续挂在前台。";
+        : "当前商业叙事可以进入结构化客户可见措辞，但发送评估和非承诺仍必须继续挂在前台。";
     case "review-before-send":
       return english
         ? "This commercial narrative is already stronger, but it still must stop at review-before-send before any customer-visible move."
@@ -351,7 +355,7 @@ function buildJudgement(
     case "risk-reduction-required":
       return english
         ? "This commercial narrative should pause until risk reduction happens, because stronger wording is still unsafe."
-        : "当前商业叙事应先暂停，直到完成风险 reduction，因为更强表达当前仍然不安全。";
+        : "当前商业叙事应先暂停，直到完成风险降低，因为更强表达当前仍然不安全。";
     case "boundary-only":
       return english
         ? "This commercial narrative should stay boundary-only, so it can clarify without pretending certainty."
@@ -363,7 +367,7 @@ function buildJudgement(
     default:
       return english
         ? `This commercial narrative should stay ${sendabilityMode} because the current pressure still blocks safe strengthening.`
-        : `当前商业叙事应继续停在「${sendabilityMode}」对应层级，因为当前压力仍在挡住安全加固。`;
+        : `当前商业叙事应继续停在「${labelForSendabilityMode(sendabilityMode, false)}」对应层级，因为当前压力仍在挡住安全加固。`;
   }
 }
 
@@ -377,11 +381,11 @@ function buildBoundaryLine(
     case "recommendation-only":
       return english
         ? "This layer is still internal recommendation, so it cannot be flattened into customer-visible commitment wording."
-        : "当前这一层仍属于内部 recommendation，不能直接压平成客户可见承诺措辞。";
+        : "当前这一层仍属于内部建议，不能直接压平成客户可见承诺措辞。";
     case "exploratory-strengthening":
       return english
         ? "Exploratory strengthening may warm up the story, but it still belongs to discussion-only wording."
-        : "探索性加固可以帮助升温叙事，但它仍属于仅讨论 措辞。";
+        : "探索性加固可以帮助升温叙事，但它仍属于仅讨论措辞。";
     case "review-before-send":
       return english
         ? "The narrative may already look stronger, but sendability is still gated by review-before-send."
@@ -389,16 +393,16 @@ function buildBoundaryLine(
     case "non-commitment-fallback":
       return english
         ? `This layer explicitly falls back to ${fallbackMode}, so stronger wording must not leak outward as commitment.`
-        : `当前这一层显式退回到「${fallbackMode}」，所以更强表达不能向外泄漏成承诺。`;
+        : `当前这一层显式退回到「${fallbackLabel(fallbackMode, false)}」，所以更强表达不能向外泄漏成承诺。`;
     case "customer-visible-light":
     case "customer-visible-structured":
       return english
         ? `This layer is ${sendabilityMode}, but customer-visible wording still stays non-commitment until a human approves stronger language.`
-        : `当前这一层虽然是「${sendabilityMode}」，但客户可见措辞仍然属于非承诺，除非人工明确批准更强语言。`;
+        : `当前这一层虽然是「${labelForSendabilityMode(sendabilityMode, false)}」，但客户可见措辞仍然属于非承诺，除非人工明确批准更强语言。`;
     default:
       return english
         ? "Boundary, fallback and sendability cues stay visible on the main page and do not get buried in evidence."
-        : "边界、兜底和发送评估线索会继续留在主页面前台，而不会被埋进 evidence。";
+        : "边界、兜底和发送评估线索会继续留在主页面前台，而不会被埋进依据。";
   }
 }
 
@@ -421,7 +425,7 @@ function buildNextActions({
             : "打开审批并守住加固边界"
           : english
             ? "Open reinforcement variants and confirm the next layer"
-            : "打开加固变体s 并确认下一层加固",
+            : "打开加固变体并确认下一层加固",
       href:
         sendabilityMode === "review-before-send" ||
         sendabilityMode === "not-safe-to-send"
@@ -469,17 +473,17 @@ function buildEvidenceGroups(
         .slice(0, 3)
         .map((log) =>
           english
-            ? `${formatRelative(log.createdAt)} · ${log.actor} · ${trimText(log.summary, 120)}`
+            ? `${formatCommercialNarrativeRelativeLabel(log.createdAt, true)} · ${log.actor} · ${trimText(log.summary, 120)}`
             : `${formatRelative(log.createdAt)} · ${log.actor} · ${trimText(log.summary, 120)}`,
         ) || [
         english
           ? "No audit change has been recorded yet."
-          : "当前还没有新的审计 change。",
+          : "当前还没有新的审计变化。",
       ],
     },
     {
       groupId: "memory",
-      label: english ? "Memory" : "记忆",
+      label: english ? "Memory" : "经营记忆",
       items: detail.memoryFacts
         .slice(0, 3)
         .map((fact) =>
@@ -494,7 +498,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "worker_output",
-      label: english ? "Worker output" : "Worker 输出",
+      label: english ? "Worker output" : "执行输出",
       items: detail.briefingSnapshot?.payload.recommendedNextSteps?.slice(
         0,
         3,
@@ -506,23 +510,23 @@ function buildEvidenceGroups(
     },
     {
       groupId: "boundary_trace",
-      label: english ? "Boundary trace" : "边界痕迹",
+      label: english ? "Boundary trace" : "边界轨迹",
       items: [
         english
           ? "Boundary, fallback and sendability notes remain attached to the main strengthening page."
           : "边界、兜底和发送评估备注仍然牢牢挂在主加固页面上。",
         english
           ? "This layer still does not upgrade recommendation into commitment."
-          : "当前这一层仍然不会把 recommendation 升级成承诺。",
+          : "当前这一层仍然不会把建议升级成承诺。",
       ],
     },
     {
       groupId: "sendability_trace",
-      label: english ? "Sendability trace" : "可发送性痕迹",
+      label: english ? "Sendability trace" : "发送评估轨迹",
       items: [
         english
           ? `Current sendability mode: ${sendabilityMode}.`
-          : `当前发送评估模式：${sendabilityMode}。`,
+          : `当前发送评估模式：${labelForSendabilityMode(sendabilityMode, false)}。`,
         english
           ? "Outward wording only moves when the current layer keeps its review and non-commitment boundary explicit."
           : "只有当前层继续把复核和非承诺边界挂出来时，对外措辞才允许继续移动。",
@@ -530,7 +534,7 @@ function buildEvidenceGroups(
     },
     {
       groupId: "strengthening_trace",
-      label: english ? "Strengthening trace" : "强化痕迹",
+      label: english ? "Strengthening trace" : "加固轨迹",
       items: [
         english
           ? `Current strengthening level: ${labelForLevel(level, true)}.`
@@ -542,11 +546,11 @@ function buildEvidenceGroups(
     },
     {
       groupId: "fallback_trace",
-      label: english ? "Fallback trace" : "回退痕迹",
+      label: english ? "Fallback trace" : "兜底轨迹",
       items: [
         english
           ? `Current fallback mode: ${fallbackMode}.`
-          : `当前兜底模式：${fallbackMode}。`,
+          : `当前兜底模式：${fallbackLabel(fallbackMode, false)}。`,
         english
           ? "Fallback keeps stronger language from leaking ahead of evidence."
           : "兜底会持续阻止更强表达跑在证据前面。",
@@ -557,11 +561,11 @@ function buildEvidenceGroups(
       label: english ? "Historical changes" : "历史变化",
       items: [
         english
-          ? `Last updated ${formatRelative(detail.updatedAt)}.`
+          ? `Last updated ${formatCommercialNarrativeRelativeLabel(detail.updatedAt, true)}.`
           : `最近更新于 ${formatRelative(detail.updatedAt)}。`,
         english
-          ? `Current due date: ${formatDateLabel(detail.dueDate)}.`
-          : `当前截止时间：${formatDateLabel(detail.dueDate)}。`,
+          ? `Current due date: ${formatCommercialNarrativeDateLabel(detail.dueDate, true)}.`
+          : `当前截止时间：${formatCommercialNarrativeDateLabel(detail.dueDate, false)}。`,
       ],
     },
   ];
@@ -595,13 +599,13 @@ function labelForLevel(
 ) {
   switch (level) {
     case "recommendation-only":
-      return english ? "recommendation-only" : "recommendation-only";
+      return english ? "recommendation-only" : "仅建议";
     case "exploratory-strengthening":
       return english
         ? "exploratory-strengthening"
-        : "exploratory-strengthening";
+        : "探索型加固";
     case "pilot-strengthening":
-      return english ? "pilot-strengthening" : "pilot-strengthening";
+      return english ? "pilot-strengthening" : "试点加固";
     case "customer-visible-light":
       return english ? "customer-visible light" : "轻量客户可见";
     case "customer-visible-structured":
@@ -617,7 +621,29 @@ function labelForLevel(
     case "non-commitment-fallback":
       return english ? "non-commitment fallback" : "非承诺回退";
     default:
-      return english ? "blocked-strengthening" : "强化阻塞";
+      return english ? "blocked-strengthening" : "加固受阻";
+  }
+}
+
+function labelForSendabilityMode(
+  mode: CommercialNarrativeStrengtheningSendabilityMode,
+  english: boolean,
+) {
+  switch (mode) {
+    case "safe-to-send":
+      return english ? "safe-to-send" : "可发送";
+    case "safe-with-boundary":
+      return english ? "safe-with-boundary" : "带边界可发送";
+    case "discussion-only":
+      return english ? "discussion-only" : "仅讨论";
+    case "review-before-send":
+      return english ? "review-before-send" : "发送前复核";
+    case "not-safe-to-send":
+      return english ? "not-safe-to-send" : "不可发送";
+    case "internal-only":
+      return english ? "internal-only" : "仅内部";
+    default:
+      return english ? "non-commitment fallback" : "非承诺兜底";
   }
 }
 
@@ -627,11 +653,11 @@ function fallbackLabel(
 ) {
   switch (fallbackMode) {
     case "boundary-only":
-      return english ? "boundary-only review" : "boundary-only review";
+      return english ? "boundary-only review" : "仅边界复核";
     case "non-commitment-fallback":
-      return english ? "non-commitment fallback" : "non-commitment fallback";
+      return english ? "non-commitment fallback" : "非承诺兜底";
     case "review-hold":
-      return english ? "review hold" : "review hold";
+      return english ? "review hold" : "复核暂缓";
     case "blocked":
       return english ? "blocked state" : "受阻状态";
     default:

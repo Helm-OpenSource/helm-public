@@ -53,7 +53,7 @@ export function getWorkspaceStory(
       eyebrow: english ? "Review queue" : "复核队列",
       description: english
         ? "Drafts that touch your customer or your CRM stop here. Approve, edit, or hold — every choice lands an audit trace you can replay."
-        : "客户可见的草稿、CRM 阶段变更，全部停在这里等你点。通过 / 改写 / 保留——每一次都会落一条可回放的审计 trace。",
+        : "客户可见的草稿、客户关系系统阶段变更，全部停在这里等你点。通过 / 改写 / 保留——每一次都会落一条可回放的审计 trace。",
     },
     contacts: {
       eyebrow: english ? "Relationships" : "关系视图",

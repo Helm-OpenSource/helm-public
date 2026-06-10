@@ -67,7 +67,7 @@ export async function POST(request: Request) {
         id: created.id,
         status: created.status,
       },
-      "blocker created",
+      english ? "Blocker created" : "阻塞已创建",
     );
   } catch (error) {
     return errorResponse(

@@ -736,7 +736,7 @@ async function createTaskFromExternal(input: {
       actionType: ActionType.CREATE_TASK,
       title: input.task.title,
       description: input.task.body ?? null,
-      aiReason: "从 CRM 任务导入，作为后续经营动作输入",
+      aiReason: "从客户关系系统任务导入，作为后续经营动作输入",
       metadata: safeJsonString(input.task.raw),
       sourceType: input.source.sourceType === "HUBSPOT" ? "MEETING_NOTE" : "ACTION_ITEM",
       sourceId: input.task.externalId,
@@ -746,7 +746,7 @@ async function createTaskFromExternal(input: {
       requiresApproval: false,
       status: input.task.completed ? ActionStatus.EXECUTED : ActionStatus.MANUAL,
       executionStatus: input.task.completed ? "done" : "imported",
-      statusReason: "从外部 CRM T请求 导入",
+      statusReason: "从外部客户关系系统任务导入",
     },
   });
 
@@ -757,9 +757,9 @@ async function createTaskFromExternal(input: {
       opportunityId: input.opportunityId ?? null,
       entityType: input.opportunityId ? "OPPORTUNITY" : input.contactId ? "CONTACT" : "WORKSPACE",
       memoryType: "NOTE",
-      title: `导入 CRM 任务：${input.task.title}`,
-      content: input.task.body ?? "已从 CRM 导入一条待处理任务",
-      source: input.source.sourceType === "HUBSPOT" ? "HubSpot T请求 导入" : "Salesforce T请求 导入",
+      title: `导入客户关系系统任务：${input.task.title}`,
+      content: input.task.body ?? "已从客户关系系统导入一条待处理任务",
+      source: input.source.sourceType === "HUBSPOT" ? "HubSpot 任务导入" : "Salesforce 任务导入",
     },
   });
 
@@ -1091,7 +1091,7 @@ export async function runCrmImport(input: RunCrmImportInput): Promise<ImportSumm
     await writeAuditLog({
       workspaceId: input.workspaceId,
       userId: input.userId ?? null,
-      actor: "CRM 导入",
+      actor: "客户关系系统导入",
       actorType: ActorType.SYSTEM,
       actionType: "CRM_IMPORT_COMPLETED",
       targetType: "ImportJob",
@@ -1112,7 +1112,7 @@ export async function runCrmImport(input: RunCrmImportInput): Promise<ImportSumm
         status: ImportJobStatus.FAILED,
         failedRecords,
         finishedAt: new Date(),
-        errorSummary: error instanceof Error ? error.message : "CRM 导入失败",
+        errorSummary: error instanceof Error ? error.message : "客户关系系统导入失败",
       },
     });
 

@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ACCESS_STATE } from "@/lib/billing/runtime-constants";
 import { getChinaCheckoutActionLabel } from "@/lib/billing/china-renew-restore";
-import { formatDateLabel } from "@/lib/utils";
 import { accessStateLabels } from "@/features/settings/formatters/labels";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
+import { formatBillingDateLabel } from "./billing-date-labels";
 import { Info } from "./settings-display";
 
 type BillingOverviewData = Pick<
@@ -255,7 +255,10 @@ export function BillingOverviewPanels({
               />
               <Info
                 label={english ? "Billing period end" : "当前计费周期结束"}
-                value={formatDateLabel(data.billingOverview.billingPeriodEndsAt)}
+                value={formatBillingDateLabel(
+                  data.billingOverview.billingPeriodEndsAt,
+                  english,
+                )}
               />
             </div>
             <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
@@ -374,19 +377,31 @@ export function BillingOverviewPanels({
             />
             <Info
               label={english ? "Trial started" : "试用开始"}
-              value={formatDateLabel(data.billingOverview.trialStartedAt)}
+              value={formatBillingDateLabel(
+                data.billingOverview.trialStartedAt,
+                english,
+              )}
             />
             <Info
               label={english ? "Trial ends" : "试用结束"}
-              value={formatDateLabel(data.billingOverview.trialEndsAt)}
+              value={formatBillingDateLabel(
+                data.billingOverview.trialEndsAt,
+                english,
+              )}
             />
             <Info
               label={english ? "Grace ends" : "宽限结束"}
-              value={formatDateLabel(data.billingOverview.graceEndsAt)}
+              value={formatBillingDateLabel(
+                data.billingOverview.graceEndsAt,
+                english,
+              )}
             />
             <Info
               label={english ? "Billing period end" : "计费周期结束"}
-              value={formatDateLabel(data.billingOverview.billingPeriodEndsAt)}
+              value={formatBillingDateLabel(
+                data.billingOverview.billingPeriodEndsAt,
+                english,
+              )}
             />
             <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
               {data.lifecycleBoundarySummary.note}
@@ -542,11 +557,11 @@ export function BillingOverviewPanels({
                   />
                   <Info
                     label={english ? "Effective from" : "生效起点"}
-                    value={formatDateLabel(worker.effectiveFrom)}
+                    value={formatBillingDateLabel(worker.effectiveFrom, english)}
                   />
                   <Info
                     label={english ? "Effective until" : "生效截止"}
-                    value={formatDateLabel(worker.effectiveTo)}
+                    value={formatBillingDateLabel(worker.effectiveTo, english)}
                   />
                   <Info
                     label={english ? "Internal limit" : "内部上限"}

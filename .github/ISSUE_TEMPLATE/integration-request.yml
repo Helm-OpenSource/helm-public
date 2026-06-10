@@ -1,0 +1,86 @@
+name: 集成请求 / Integration request
+description: 请求 read-first 或 review-first 集成路径。/ Request a read-first or review-first integration path.
+title: "feat: integration - "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        集成请求必须从 use case、data flow 和 boundary 开始。创建本 issue 不代表 roadmap 承诺或交付日期。
+
+        Integration requests must start from use case, data flow, and boundary. Opening this issue does not create a roadmap commitment or delivery date.
+  - type: checkboxes
+    id: public-safety
+    attributes:
+      label: 公开安全确认 / Public-safety confirmation
+      options:
+        - label: 本请求不包含客户名称、私人联系方式、私有域名、内网 IP、凭据、私有部署证据或未公开安全细节。/ This request contains no customer names, private contacts, private domains, internal IPs, credentials, private deployment evidence, or undisclosed security details.
+          required: true
+        - label: 我理解本 issue 不会让 Helm 维护者承诺构建、排期、认证或支持该集成。/ I understand this issue does not commit Helm maintainers to build, schedule, certify, or support the integration.
+          required: true
+  - type: input
+    id: system
+    attributes:
+      label: 系统或 provider / System or provider
+      placeholder: "Slack, Microsoft 365, Google Workspace, Zoom, ..."
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: 交付工程师 use case / Delivery-engineer use case
+      description: 描述通用客户工作流，不要命名真实客户。/ Describe the generic customer workflow without naming a real customer.
+      placeholder: "A delivery engineer needs to turn meeting transcripts into review-first operating signals."
+    validations:
+      required: true
+  - type: textarea
+    id: data-flow
+    attributes:
+      label: 数据流 / Data flow
+      description: 说明 source object、所需字段、Helm 内目标位置，以及数据是 synthetic、fixture 还是真实数据。/ State the source object, fields needed, destination inside Helm, and whether data is synthetic, fixture, or real.
+      placeholder: |
+        Source:
+        Fields:
+        Helm destination:
+        Fixture or dry-run path:
+    validations:
+      required: true
+  - type: textarea
+    id: boundary-table
+    attributes:
+      label: 边界三轨表 / Boundary table
+      description: 填写三行。/ Fill all three rows.
+      placeholder: |
+        Auto:
+        Review-first:
+        Never:
+    validations:
+      required: true
+  - type: textarea
+    id: auth-scopes
+    attributes:
+      label: 认证与最小权限 scope / Authentication and least-privilege scopes
+      description: 如已知，列出 auth mode、scope、token 存储和撤销需求。/ List expected auth mode, scopes, token storage, and revocation needs if known.
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据与验证想法 / Evidence and verification idea
+      description: 哪些 fixture、dry-run 或 guard 能证明它保持 read-first 或 review-first？/ What fixture, dry-run, or guard should prove this stays read-first or review-first?
+      placeholder: "Synthetic fixture, dry-run connector, eval case, or public guard."
+    validations:
+      required: true
+  - type: dropdown
+    id: first-loop
+    attributes:
+      label: 是否适配首批闭环 / First-loop fit
+      description: 是否支持 meeting、CRM 或 email 进入 Must Push 与 Review Action 的首批公开闭环？/ Does this support the first public loop of meeting, CRM, or email into Must Push and Review Action?
+      options:
+        - 是，meeting 到 review-first action / Yes, meeting to review-first action
+        - 是，CRM 到 operating signal / Yes, CRM to operating signal
+        - 是，email/thread 到 review-first action / Yes, email or thread to review-first action
+        - 相邻但不是首批闭环 / Adjacent but not first-loop
+        - 不确定 / Not sure
+    validations:
+      required: true

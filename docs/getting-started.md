@@ -48,17 +48,57 @@ cd helm-public
 
 ---
 
+## 1.1 中国大陆 / 受限网络准备（可选）
+
+如果你的网络访问 Docker Hub 或 `registry.npmjs.org` 不稳定，先把镜像源作为**本地
+环境配置**处理，不要把私有 mirror、token 或凭据提交进仓库。
+
+本地 `npm install` 可复制模板：
+
+```bash
+cp .npmrc.example .npmrc
+```
+
+模板只设置：
+
+```ini
+registry=https://registry.npmmirror.com
+```
+
+Docker 构建里的 `npm ci` 可以用同一个镜像：
+
+```bash
+NPM_REGISTRY=https://registry.npmmirror.com docker compose up --build
+```
+
+这个 build arg 只影响镜像内的 npm 下载。`node:22-slim` 和 `mysql:8.4` 仍由你的
+Docker daemon 拉取；如果 Docker Hub 不稳定，请在 Docker Desktop / OrbStack /
+colima 或企业镜像网关里配置你们组织认可的 registry mirror，例如：
+
+```json
+{
+  "registry-mirrors": [
+    "https://<your-org-approved-dockerhub-mirror>"
+  ]
+}
+```
+
+镜像构建还会访问 Debian `apt` 源安装 OpenSSL / CA 证书；如果企业网络也拦截这条
+链路，请先配置 Docker / 企业网络代理，或在你的 fork 中替换为组织批准的基础镜像。
+
+需要恢复 npm 默认 registry 时，删除本地 `.npmrc` 即可。
+
+---
+
 ## 2. 安装依赖
 
 ```bash
 npm install
 ```
 
-`postinstall` 会自动跑 `prisma generate`。如果失败，单独跑：
-
-```bash
-npm run db:generate
-```
+`postinstall` 只运行本地 macOS lightningcss 签名修复 helper；它**不会**自动生成
+Prisma client。请在完成 MySQL 与 `.env` 配置后，按第 5 步显式运行
+`npm run db:generate`。
 
 ---
 
@@ -68,8 +108,8 @@ npm run db:generate
 
 ```bash
 docker run -d --name helm-mysql \
-  -e MYSQL_ROOT_PASSWORD=password \
-  -e MYSQL_DATABASE=helm \
+  -e MYSQL_ROOT_PASSWORD=root \
+  -e MYSQL_DATABASE=helm2026 \
   -p 3306:3306 \
   mysql:8.4
 ```
@@ -77,10 +117,11 @@ docker run -d --name helm-mysql \
 启动后默认 `DATABASE_URL`：
 
 ```
-mysql://root:password@127.0.0.1:3306/helm
+mysql://root:root@127.0.0.1:3306/helm2026?charset=utf8mb4
 ```
 
-如果你已有 MySQL，跳过这一步，把上面 URL 替换到 `.env` 即可。
+这与 `.env.example`、`docker-compose.yml` 保持一致。如果你已有 MySQL，跳过这一步，
+把对应 URL 替换到 `.env` 即可。
 
 ---
 
@@ -99,6 +140,8 @@ cp .env.example .env
 | `DATABASE_URL` | MySQL 连接串 |
 | `APP_URL` | 本地通常填 `http://localhost:3000` |
 | `CONNECTOR_TOKEN_SECRET` | 至少 32 字节随机字符串，用 `openssl rand -hex 32` 生成 |
+| `CONNECTOR_TOKEN_SECRET_ID` | 当前连接器 token 加密密钥版本；轮换时改成新版本号 |
+| `CONNECTOR_TOKEN_SECRET_PREVIOUS` / `CONNECTOR_TOKEN_SECRET_PREVIOUS_ID` | 轮换窗口内保留旧密钥和值对应版本，确认旧 token 重写后再清空 |
 
 ### OPTIONAL_AI（可选，缺失时走 placeholder）
 
@@ -110,11 +153,37 @@ cp .env.example .env
 
 缺失时 UI 不会崩，会显式标注「未配置 LLM」。
 
+LLM 调用日志只保留输出长度、成功状态和可检测 PII 模式等元数据；`LLMCallLog.outputSummary` 不落库原始 LLM 输出或 ASR 转写正文。
+
 ### OPTIONAL_CONNECTORS（可选，按需）
 
 DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支付。
 
 第一次跑全部留空即可。
+
+### 中国交付 profile 预检（可选）
+
+如果这个 fork 准备面向中国客户交付，先把本地 `.env` 里的 profile 与网络镜像提示对齐：
+
+```bash
+# .env
+HELM_DEPLOYMENT_REGION="cn"
+HELM_DATA_RESIDENCY="cn"
+NPM_REGISTRY="https://registry.npmmirror.com"
+LLM_DEFAULT_PROVIDER="qwen"
+DASHSCOPE_API_KEY="<your-dashscope-key>"
+ASR_ENABLED="false"
+```
+
+然后运行只读静态 doctor：
+
+```bash
+npm run delivery:doctor -- --region cn
+```
+
+这条命令不会联网，也不会读取客户系统。它会提示常见中国交付误配：Qwen 只填了
+`OPENAI_API_KEY`、region / residency 仍为 `global`、未配置 npm 镜像提示，或在中国
+profile 下启用了当前仍是 OpenAI-only 的 ASR 路径。
 
 ---
 
@@ -129,8 +198,10 @@ npm run db:seed        # 灌入开发示例数据
 如果迁移失败提示 extension SQL 相关，单独跑：
 
 ```bash
-npm run setup-db       # 自动应用 extension SQL
+npm run db:migrate     # 重新应用迁移入口
 ```
+
+如果仍失败，先确认 `.env` 里的 `DATABASE_URL` 与 MySQL 启动参数一致。
 
 需要重置时（**会删本地数据**）：
 
@@ -153,7 +224,13 @@ npm run dev
 | http://localhost:3000 | 公开首页 |
 | http://localhost:3000/dashboard | 今天必须拍板的 3 件事（需登录） |
 | http://localhost:3000/mobile | 移动端 Ask Helm |
-| http://localhost:3000/setup | 6 步初始化 |
+| http://localhost:3000/setup | 6 步初始化；数据来源先走 L0/L1/L2 source intake |
+
+首次数据接入不要直接从生产 connector 开始。先按
+[数据接入体验](product/HELM_DATA_INTAKE_EXPERIENCE.md) 判断你手上是会议摘要、IM /
+邮件 digest、CRM / 工单 snapshot、脱敏表格、业务系统显式标记，还是只读 API 授权；
+再决定 L0 诊断材料、L1 fixture / dry-run 或 L2 只读接入。这个流程不授权写回、外发、
+审批执行或客户部署。
 
 种子数据里有现成的演示账号，直接走 `/login` 用其中一个邮箱登录即可。
 
@@ -224,6 +301,7 @@ npm run quality:regression
 
 - 想理解架构哲学：[../AGENTS.md](../AGENTS.md) §1-§4
 - 想做 UI 改动：[../DESIGN.md](../DESIGN.md)
+- 想判断数据接入路径：[product/HELM_DATA_INTAKE_EXPERIENCE.md](product/HELM_DATA_INTAKE_EXPERIENCE.md)
 - 想接连接器：[integrations/INTEGRATION_TEMPLATE.md](integrations/INTEGRATION_TEMPLATE.md)
 - 想了解当前优先级：[../WORKING-CONTEXT.md](../WORKING-CONTEXT.md)
 - 想提 PR：[../CONTRIBUTING.md](../CONTRIBUTING.md)
@@ -233,8 +311,8 @@ npm run quality:regression
 
 ## 11. 卡住了找谁
 
-- GitHub Issues — 优先公开提问，便于其他人搜到
+- GitHub 议题（Issues）— 优先公开提问，便于其他人搜到
 - 微信 `ffjw0821` — 联系我们 / 商业合作 / 社群沟通（人工受控入口）
 - 微信社群邀请二维码 — 先加微信 `ffjw0821` 获取当期有效二维码（邀请二维码存在时效）
-- 社交媒体 / 公众号 — 待补充（当前不作为承诺入口）
-- 安全漏洞——**不要**走公开 issue，见 [../SECURITY.md](../SECURITY.md)
+- 微信公众号 `Helm开源经营系统`（微信号 `HelmCoreCN`）— 信息发布入口，非默认支持工单入口
+- 安全漏洞——**不要**走公开议题，见 [../SECURITY.md](../SECURITY.md)

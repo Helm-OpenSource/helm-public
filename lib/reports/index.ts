@@ -1,5 +1,5 @@
 import { endOfWeek, format, startOfWeek, subWeeks } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { enUS, zhCN } from "date-fns/locale";
 import { ActorType } from "@prisma/client";
 import { logEvent } from "@/lib/analytics";
 import { writeAuditLog } from "@/lib/audit";
@@ -17,14 +17,31 @@ export function getWeekRange(offset = 0) {
   return { weekStart, weekEnd };
 }
 
-function buildSummaryText(input: {
+export function buildWeeklyReportSummaryText(input: {
   opportunitiesAdvancedCount: number;
   overdueFollowupsCount: number;
   aiSuggestionsCount: number;
   approvalsApprovedCount: number;
   openHighRiskCount: number;
+  english?: boolean;
 }) {
+  if (input.english) {
+    return `Over the past week, Helm identified ${input.opportunitiesAdvancedCount} opportunity movement action(s), while ${input.overdueFollowupsCount} follow-up item(s) are still overdue. Helm generated ${input.aiSuggestionsCount} suggested action(s) this week, and ${input.approvalsApprovedCount} of them were approved for execution. ${input.openHighRiskCount} high-risk item(s) still need review.`;
+  }
+
   return `过去一周识别出 ${input.opportunitiesAdvancedCount} 次机会推进动作，当前仍有 ${input.overdueFollowupsCount} 个跟进已逾期。本周生成 ${input.aiSuggestionsCount} 条建议动作，其中 ${input.approvalsApprovedCount} 条已被批准执行。目前还有 ${input.openHighRiskCount} 个高风险事项待处理。`;
+}
+
+export function buildWeeklyReportAuditSummary(input: {
+  weekStart: Date;
+  weekEnd: Date;
+  english?: boolean;
+}) {
+  if (input.english) {
+    return `Generated manager weekly report: ${format(input.weekStart, "MMM dd", { locale: enUS })} - ${format(input.weekEnd, "MMM dd", { locale: enUS })}`;
+  }
+
+  return `生成管理者周报：${format(input.weekStart, "MM月dd日", { locale: zhCN })} - ${format(input.weekEnd, "MM月dd日", { locale: zhCN })}`;
 }
 
 export async function generateWeeklyReport(input: {
@@ -145,6 +162,7 @@ export async function generateWeeklyReport(input: {
     getEvolutionInsights({
       workspaceId: input.workspaceId,
       limit: 3,
+      locale: input.english ? "en-US" : "zh-CN",
     }),
     db.blocker.findMany({
       where: {
@@ -476,12 +494,13 @@ export async function generateWeeklyReport(input: {
       workspaceId: input.workspaceId,
       weekStart,
       weekEnd,
-      summaryText: buildSummaryText({
+      summaryText: buildWeeklyReportSummaryText({
         opportunitiesAdvancedCount,
         overdueFollowupsCount,
         aiSuggestionsCount,
         approvalsApprovedCount,
         openHighRiskCount,
+        english: input.english,
       }),
       opportunitiesAdvancedCount,
       overdueFollowupsCount,
@@ -492,12 +511,13 @@ export async function generateWeeklyReport(input: {
     },
     update: {
       weekEnd,
-      summaryText: buildSummaryText({
+      summaryText: buildWeeklyReportSummaryText({
         opportunitiesAdvancedCount,
         overdueFollowupsCount,
         aiSuggestionsCount,
         approvalsApprovedCount,
         openHighRiskCount,
+        english: input.english,
       }),
       opportunitiesAdvancedCount,
       overdueFollowupsCount,
@@ -516,7 +536,11 @@ export async function generateWeeklyReport(input: {
     actionType: "WEEKLY_REPORT_GENERATED",
     targetType: "WeeklyReport",
     targetId: report.id,
-    summary: `生成管理者周报：${format(weekStart, "MM月dd日", { locale: zhCN })} - ${format(weekEnd, "MM月dd日", { locale: zhCN })}`,
+    summary: buildWeeklyReportAuditSummary({
+      weekStart,
+      weekEnd,
+      english: input.english,
+    }),
     payload,
   });
 

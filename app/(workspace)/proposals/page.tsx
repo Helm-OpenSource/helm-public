@@ -28,6 +28,7 @@ import { getCurrentWorkspace } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
+import { riskLabel, riskTone, stageLabel } from "@/features/proposals/display-copy";
 
 const ACTIVE_STAGES: OpportunityStage[] = [
   OpportunityStage.CONTACTED,
@@ -35,53 +36,6 @@ const ACTIVE_STAGES: OpportunityStage[] = [
   OpportunityStage.WAITING_THEM,
   OpportunityStage.INTERNAL_SYNC,
 ];
-
-function riskTone(level: string): "neutral" | "info" | "warning" | "danger" {
-  switch (level) {
-    case "LOW":
-      return "neutral";
-    case "MEDIUM":
-      return "info";
-    case "HIGH":
-      return "warning";
-    case "CRITICAL":
-      return "danger";
-    default:
-      return "neutral";
-  }
-}
-
-function riskLabel(level: string, english: boolean): string {
-  if (english) return level;
-  switch (level) {
-    case "LOW":
-      return "低";
-    case "MEDIUM":
-      return "中";
-    case "HIGH":
-      return "高";
-    case "CRITICAL":
-      return "极高";
-    default:
-      return level;
-  }
-}
-
-function stageLabel(stage: string, english: boolean): string {
-  if (english) return stage;
-  switch (stage) {
-    case "CONTACTED":
-      return "已接触";
-    case "ADVANCING":
-      return "推进中";
-    case "WAITING_THEM":
-      return "等对方";
-    case "INTERNAL_SYNC":
-      return "内部同步";
-    default:
-      return stage;
-  }
-}
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await resolveWorkspaceUiLocaleForRequest();
@@ -154,7 +108,7 @@ export default async function ProposalsListPage() {
             <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
               {english
                 ? "Once a CRM signal or meeting commitment surfaces, the related draft will wait here for review."
-                : "一旦 CRM 信号或会议承诺出现，对应草稿会在这里等你复核。"}
+                : "一旦客户关系系统信号或会议承诺出现，对应草稿会在这里等你复核。"}
             </p>
           </CardContent>
         </Card>

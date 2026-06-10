@@ -40,6 +40,11 @@ Helm 是：
 - `delivery-engineer-facing`（自 2026-05-18 起：受众层是 AI 生态交付工程师，非 SaaS 端客户直销）
 - `open-source-first`（Apache-2.0；商业版本不替代开源；详见 [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md)）
 
+所有公开入口、文档、模板和 sample pack 默认必须对交付工程师友好：读者应该能快速判断
+“我该检查什么、fork 什么、改哪一处、跑哪些命令、提交什么 public-safe 证据”。双语化不是
+只翻译文字，而是让中国市场交付工程师可以独立完成 first-change proof，并保持
+recommendation / commitment、review-first、public/private boundary 清晰。
+
 Helm 当前不是：
 
 - 完整企业级多组织 / 多权限 / 多租户平台
@@ -172,6 +177,32 @@ Codex 默认不负责：
 - 拆成有限任务
 - 实现后补文档、守卫、测试、自检
 - 最后给出冻结或 sprint 报告
+
+## 9.1 多代理并行工作治理
+
+后续所有 Codex / Claude / 其他 agent 并行任务，必须先把“工作区归属”查清楚，再动手改文件。
+
+共享主检出（例如 `/Users/tommyqian/Documents/helm-public`）默认只用于检查、同步、审计或短时救援；不得作为长期实现 WIP 区。任何非微小实现、需要多轮验证的任务、或可能超过一个工作回合的任务，默认先从目标 base 创建独立 worktree + branch。
+
+开始任何实现、提交或 PR 前，默认先执行并记录：
+
+```bash
+git status --short --branch
+git worktree list
+git rev-parse --show-toplevel
+node scripts/worktree-governance-audit.mjs --repo .
+```
+
+强制规则：
+
+- 共享主检出若已经有未提交 WIP，新的实现线程必须绕开它；不得为了“方便”在同一目录继续叠改，也不得要求其他线程替当前线程分拣 WIP。
+- 一个任务流只能在自己拥有的 worktree + branch 上实现；不得在其他 agent 已经有未提交 WIP 的目录里继续叠改。
+- 如果当前目录不是本任务明确拥有的 worktree，或者存在不属于本任务的未提交改动，必须先停止实现，改用从目标 base 新建的独立 worktree / branch。
+- 同一 worktree 内的 WIP 必须能被一个明确任务说明解释；超过一个工作回合仍未收口的 WIP，必须尽快收成原子提交、推到对应 PR，或迁移到专用隔离 worktree。
+- 不同关注点必须拆成不同提交 / PR；例如双语化、安全 hardening、能力开发、治理文档不得混在同一个提交里。
+- staging 必须显式列文件；默认禁止 `git add -A`，除非先证明工作树里没有其他 agent 或用户的改动。
+- 跨仓任务只能做检查、调度、交接和完成跟踪；实现改动必须发送到对应仓库自己的线程 / worktree，不得从当前仓库跨仓改文件。
+- 若发现已经影响到其他并行工作，第一步不是继续实现，而是先停止当前实现、盘点受影响 worktree / 分支 / 文件、把当前 WIP 收成原子提交或撤出到隔离 worktree，再写清恢复动作。
 
 ## 10. 统一验证命令
 

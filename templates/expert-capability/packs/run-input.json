@@ -1,0 +1,9 @@
+{
+  "evaluationRunId": "run-0001",
+  "candidateRevisionId": "oh-expert-v1",
+  "candidateRevisionCreatedAt": "2026-06-04T03:00:00Z",
+  "ranAt": "2026-06-04T04:00:00Z",
+  "attemptNumber": 1,
+  "bSetConsumedByRevisionIds": [],
+  "note": "Run facts for the offline evaluator. candidateRevisionCreatedAt must be after goldLockedAt; ranAt must be after trustedTimestamp; bSetConsumedByRevisionIds lists prior candidates that already consumed this B (must not include a different candidate)."
+}

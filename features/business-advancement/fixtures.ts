@@ -113,7 +113,7 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
         displayName: "某企业试点方案机会",
       },
       evidenceRefs: [
-        "CRM 记录：机会 14 天无活动",
+        "客户关系系统记录：机会 14 天无活动",
         "最近互动：客户表示等待方案确认",
       ],
       expectedReviewPosture: "review_required",
@@ -135,7 +135,7 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
       fixtureId: "AS-FX-005",
       sourceType: "crm",
       sourceScenario:
-        "CRM 承诺今天到期，负责人无更新，涉及向客户提交报价的承诺。",
+        "客户关系系统承诺今天到期，负责人无更新，涉及向客户提交报价的承诺。",
       signalType: "overdue_commitment",
       objectRef: {
         objectType: "commitment",
@@ -143,14 +143,14 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
         displayName: "报价提交承诺 2026-04-26",
       },
       evidenceRefs: [
-        "CRM 承诺记录：到期日为今日，负责人无动作",
+        "客户关系系统承诺记录：到期日为今日，负责人无动作",
         "客户沟通记录：客户等待报价",
       ],
       expectedReviewPosture: "review_required",
       expectedBoundaryNote:
         "recommendation != 承诺。系统建议跟进，但不能自动写入已履约或替负责人完成承诺。",
       expectedMustPushTitle: "处理今日到期承诺",
-      expectedPrimaryAction: "打开 CRM 承诺详情，确认负责人并准备跟进动作",
+      expectedPrimaryAction: "打开客户关系系统承诺详情，确认负责人并准备跟进动作",
       expectedRejectedBehaviors: [
         "自动写入已履约",
         "擅自关闭承诺记录",
@@ -165,7 +165,7 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
       fixtureId: "AS-FX-006",
       sourceType: "crm",
       sourceScenario:
-        "客户等待提案，报价或方案尚未确认，CRM 显示负责人无 7 日内更新。",
+        "客户等待提案，报价或方案尚未确认，客户关系系统显示负责人无 7 日内更新。",
       signalType: "customer_waiting",
       objectRef: {
         objectType: "opportunity",
@@ -173,7 +173,7 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
         displayName: "方案待确认机会",
       },
       evidenceRefs: [
-        "CRM 记录：客户等待提案，7 日内无负责人更新",
+        "客户关系系统记录：客户等待提案，7 日内无负责人更新",
         "邮件线程：客户催促方案确认",
       ],
       expectedReviewPosture: "review_required",
@@ -376,7 +376,7 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
       fixtureId: "AS-FX-013",
       sourceType: "email",
       sourceScenario:
-        "客户邮件表达续约或采购顾虑，CRM 未更新，且负责人无跟进动作。",
+        "客户邮件表达续约或采购顾虑，客户关系系统未更新，且负责人无跟进动作。",
       signalType: "stalled_opportunity",
       objectRef: {
         objectType: "email_thread",
@@ -385,14 +385,14 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
       },
       evidenceRefs: [
         "邮件内容：客户表达续约顾虑",
-        "CRM 记录：对应机会 10 日无更新",
+        "客户关系系统记录：对应机会 10 日无更新",
       ],
       expectedReviewPosture: "review_required",
       expectedBoundaryNote:
         "recommendation != 承诺。系统建议跟进续约风险，但不能自动改 forecast 或续约状态。",
       expectedMustPushTitle: "处理续约风险信号",
       expectedPrimaryAction:
-        "打开邮件线程和 CRM 机会，准备续约风险跟进方案并提交复核",
+        "打开邮件线程和客户关系系统机会，准备续约风险跟进方案并提交复核",
       expectedRejectedBehaviors: [
         "自动改 forecast",
         "自动改续约状态",
@@ -558,7 +558,7 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
       fixtureId: "AS-FX-019",
       sourceType: "combined",
       sourceScenario:
-        "最近会议显示客户等待下一版方案，CRM 机会 14 天无推进，邮件线程也没有后续回复。",
+        "最近会议显示客户等待下一版方案，客户关系系统机会 14 天无推进，邮件线程也没有后续回复。",
       signalType: "stalled_opportunity",
       objectRef: {
         objectType: "opportunity",
@@ -567,19 +567,19 @@ export const ADVANCEMENT_SIGNAL_FIXTURES: readonly AdvancementSignalFixture[] =
       },
       evidenceRefs: [
         "会议纪要：客户等待下一版方案",
-        "CRM 记录：机会 14 天无推进",
+        "客户关系系统记录：机会 14 天无推进",
         "邮件线程：无后续回复",
       ],
       expectedReviewPosture: "review_required",
       expectedBoundaryNote:
-        "多源聚合只提高判断可信度，不能自动写回 CRM、邮件或资源系统。",
+        "多源聚合只提高判断可信度，不能自动写回客户关系系统、邮件或资源系统。",
       expectedMustPushTitle: "聚合客户停滞推进项",
       expectedPrimaryAction: "打开客户或机会详情，查看聚合 evidence 并确认负责人",
       expectedRejectedBehaviors: [
         "自动合并对象",
         "自动写回多个系统",
         "自动发送方案到客户",
-        "自动改 CRM 阶段",
+        "自动改客户关系系统阶段",
       ],
     },
 

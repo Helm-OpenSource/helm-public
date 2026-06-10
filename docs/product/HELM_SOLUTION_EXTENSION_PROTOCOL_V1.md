@@ -3,10 +3,28 @@ status: active
 owner: helm-core
 created: 2026-04-12
 review_after: 2026-07-11
+public_safety: Public-safe extension protocol. Customer-specific overlays, private Pack implementation, and tenant configuration are excluded from helm-public.
 # frontmatter backfilled by scripts/docs-frontmatter-backfill.ts on 2026-05-19
 # rationale: default — no archive/dormant signal in path
 ---
-# Helm Solution Extension Protocol V1
+# Helm Solution Extension Protocol V1 / Helm Solution Extension 协议 V1
+
+> **语言 / Language**: **中文主文本** + **English reference**
+
+## 中文主文本 / Chinese Main Text
+
+本文件是 Solution Extension 协议的公开 Core 版本。它定义公开、通用的扩展如何与 Helm Core
+发生关系，但不发布私有客户 overlay、商业 Pack 实现细节、结算逻辑或私有交付作业手册。
+
+Solution Extension 是复核优先的有界方案扩展层，可以在 Helm Core 之上组合
+领域特定界面、夹具、报告资产和有界运行时适配器。它不是市场、插件沙箱、结算通道、
+客户交付项目跟踪器或自动对外发送权限。
+
+公开扩展必须使用通用 / 合成名称，使用合成 / 脱敏夹具，
+声明复核优先边界，避免客户专属配置，并保持 Core 可独立构建。私有客户定制
+必须留在 `helm-public` 之外。
+
+## English Reference
 
 This is the public Core version of the Solution Extension protocol.
 
@@ -80,11 +98,11 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 它定义：
 
-- 输入输出 contract
+- 输入输出契约
 - 适用场景
 - 风险等级
-- review / approval posture
-- 是否允许 customer-facing
+- 复核 / 批准姿态
+- 是否允许客户可见
 
 ### 5.3 Resource
 
@@ -93,9 +111,9 @@ customer overlays and commercial Pack source are intentionally excluded.
 它定义：
 
 - 调哪个系统
-- 用什么 auth mode
-- 哪个 workspace scope
-- 有哪些 audit / replay hint
+- 用什么认证模式
+- 哪个工作区范围
+- 有哪些审计 / 回放提示
 
 ### 5.4 Solution Extension
 
@@ -106,10 +124,10 @@ customer overlays and commercial Pack source are intentionally excluded.
 - `Worker`
 - `Skill`
 - `Resource`
-- 额外 domain objects
-- 页面和 operator surfaces
-- tenant / reserved workspace data ownership
-- review / policy / reporting / settlement boundary
+- 额外领域对象
+- 页面和操作员界面
+- 租户 / 保留工作区数据归属
+- 复核 / 策略 / 报告 / 结算边界
 
 它的职责不是“定义一个能力”，而是“把一整套场景化产品面和运行约束收成可治理的一层”。
 
@@ -120,10 +138,10 @@ customer overlays and commercial Pack source are intentionally excluded.
 它定义：
 
 - 收益来自哪里
-- 谁是 beneficiary
-- split / reversal 逻辑
-- terms / application / invite 边界
-- settlement / payout posture
+- 谁是受益方
+- 分润 / 冲回逻辑
+- 条款 / 申请 / 邀请边界
+- 结算 / 付款姿态
 
 它可以挂到 `Worker`、`Solution Extension` 或平台自身，但它本身不是 `Skill`。
 
@@ -141,11 +159,11 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 - 这项能力做什么
 - 输入输出是什么
-- 风险和 review posture 是什么
+- 风险和复核姿态是什么
 
 ### 6.3 这是 `Resource`，如果它主要回答
 
-- 调什么数据源 / API / connector / browser runtime
+- 调什么数据源 / API / 连接器 / 浏览器运行时
 
 ### 6.4 这是 `Solution Extension`，如果它主要回答
 
@@ -155,8 +173,8 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 - 收益从哪来
 - 怎么归因
-- 怎么 review
-- 怎么 invite
+- 怎么复核
+- 怎么邀请
 - 怎么结算
 
 ## 7. 当前 repo 的正确映射
@@ -187,18 +205,18 @@ customer overlays and commercial Pack source are intentionally excluded.
 这些对象虽然会引用 worker、partner 或 participant，但它们的主问题仍然是：
 
 - 商业来源
-- beneficiary
-- review / invite
-- settlement / payout posture
+- 受益方
+- 复核 / 邀请
+- 结算 / 付款姿态
 
-所以它们不应被塞进 `Skill` 或 `Worker` catalog。
+所以它们不应被塞进 `Skill` 或 `Worker` 目录。
 
 ### 7.3 属于 `Solution Extension`
 
 以下更适合被理解为 `Solution Extension surface`：
 
 - Helm 自己的 first-party internal operating extension
-- Helm 自己的 engineering delivery review
+- Helm 自己的工程交付复核
 - 某类定制开发客户的整套交付模块、页面和 operator pack
 - 某类行业 / 项目型客户的 domain-specific reporting + governance + delivery readout
 
@@ -209,20 +227,20 @@ customer overlays and commercial Pack source are intentionally excluded.
 “定制开发共性”里往往同时包含：
 
 - 新页面
-- 新 domain objects
-- 新 query / report
-- 新 workflow / operator surface
-- 新 settlement / attribution / invite 规则
-- 新 role posture
+- 新领域对象
+- 新查询 / 报表
+- 新工作流 / 操作员界面
+- 新结算 / 归因 / 邀请规则
+- 新角色姿态
 
 这些内容超过了 `Skill` 和 `Worker` 的职责。
 
 如果把它们整体塞进 `Skill / Worker`，会产生 4 个后果：
 
-1. capability catalog 被产品模块污染
+1. 能力目录被产品模块污染
 2. 交付对象和执行对象混在一起
-3. 结算 / 分润 / terms 被误读成 capability metadata
-4. 后续 core 升级无法判断“该抽能力、该抽页面、还是该抽商业线”
+3. 结算 / 分润 / 条款被误读成能力元数据
+4. 后续核心升级无法判断“该抽能力、该抽页面、还是该抽商业线”
 
 因此：
 
@@ -240,9 +258,9 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 特点：
 
-- host data 归 Helm reserved workspace
-- 可以有 public-readable 入口
-- 但真正的 host workspace、operator data、internal readout 仍属于 Helm 自留层
+- 宿主数据归 Helm 保留工作区
+- 可以有公开可读入口
+- 但真正的宿主工作区、操作员数据、内部读面仍属于 Helm 自留层
 
 ### 9.2 `TENANT_CUSTOM`
 
@@ -250,18 +268,18 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 特点：
 
-- data ownership 归该 tenant workspace
-- 可以复用 shared `Worker / Skill / Resource`
-- 不默认进入 shared core
+- 数据归属归该租户工作区
+- 可以复用共享 `Worker / Skill / Resource`
+- 不默认进入共享核心
 
 ### 9.3 `REUSABLE_EXTENSION`
 
-用于已经在多个客户或多个 first-party scenario 里重复验证的扩展原型。
+用于已经在多个客户或多个一方场景里重复验证的扩展原型。
 
 特点：
 
 - 语义已稳定
-- 仍保留 extension 边界
+- 仍保留扩展边界
 - 但已经值得被打包、复制、标准化
 
 ### 9.4 `CORE_PRODUCT`
@@ -272,9 +290,9 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 - 代码已稳定
 - 页面已稳定
-- tests / guards 已稳定
-- docs / boundary wording 已稳定
-- 不再依赖单一客户或单一 first-party 经营特例
+- 测试 / 守卫已稳定
+- 文档 / 边界措辞已稳定
+- 不再依赖单一客户或单一一方经营特例
 
 ## 10. 升级规则
 
@@ -282,9 +300,9 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 只有当一项能力同时满足以下条件时，才应进入 `Skill`：
 
-- 输入输出 contract 稳定
+- 输入输出契约稳定
 - 风险边界稳定
-- review posture 稳定
+- 复核姿态稳定
 - 不依赖单一客户专属对象或结算规则
 - 在多个 extension 中可复用
 
@@ -292,20 +310,20 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 只有当以下条件成立时，才应进入 `Worker`：
 
-- 角色 identity 稳定
-- responsibility boundary 稳定
-- escalation mode 稳定
-- 不只是某个单独项目的 temporary operator shell
+- 角色身份稳定
+- 责任边界稳定
+- 升级模式稳定
+- 不只是某个单独项目的临时操作员壳层
 
 ### 10.3 保持为 `Commercial / Delivery Line`
 
 只要核心问题仍然是：
 
-- attribution
-- payout
-- invite
-- settlement
-- application / terms / review
+- 归因
+- 付款
+- 邀请
+- 结算
+- 申请 / 条款 / 复核
 
 就继续留在 `Commercial / Delivery Line`，不要提炼进 `Skill / Worker`。
 
@@ -318,39 +336,39 @@ customer overlays and commercial Pack source are intentionally excluded.
 3. 只有其中稳定的执行能力才提炼进 `Skill`
 4. 只有其中稳定的角色执行身份才提炼进 `Worker`
 5. `CustomEngagement`、`PartnerProgram`、`ProgramApplication`、`ParticipantPortalAccess`、`SettlementBatch` 继续不是 `Skill / Worker`
-6. engineering review、internal operating extension 这类 first-party surfaces，当前也不应被直接写成 generic core report module
+6. 工程复核、内部运营扩展这类一方界面，当前也不应被直接写成通用核心报表模块
 
 ## 12. 刻意未做
 
 本协议当前刻意未做：
 
-- 新 Prisma schema
-- 新 extension registry UI
-- marketplace taxonomy
-- SI project system
-- 自动把 custom extension 晋级成 core product
+- 新 Prisma 数据模式
+- 新扩展注册界面
+- 市场分类法
+- 系统集成交付项目系统
+- 自动把定制扩展晋级成核心产品
 - 自动把 skill/worker 与结算对象做一对一映射
 
 ## 13. 风险项
 
 ### 风险 1
 
-如果把 `CustomEngagement` 这类对象误写成 `Skill`，后续 capability catalog 会失真。
+如果把 `CustomEngagement` 这类对象误写成 `Skill`，后续能力目录会失真。
 
 ### 风险 2
 
-如果把 first-party reserved extension 误写成 shared core，普通租户会继续看到 Helm 自营数据。
+如果把一方保留扩展误写成共享核心，普通租户会继续看到 Helm 自营数据。
 
 ### 风险 3
 
-如果把所有“共性”都直接抽成 core，会过早平台化，导致 schema、权限和升级路径一起失控。
+如果把所有“共性”都直接抽成核心，会过早平台化，导致数据模式、权限和升级路径一起失控。
 
 ## 14. 最终判断原则
 
 当不确定某个东西属于哪一层时，默认先问：
 
 1. 它回答的是能力，还是一整套场景化产品面？
-2. 它的核心问题是执行，还是交付 / 结算 / invite / review？
-3. 它是否脱离单一客户和单一 host workspace 仍然成立？
+2. 它的核心问题是执行，还是交付 / 结算 / 邀请 / 复核？
+3. 它是否脱离单一客户和单一宿主工作区仍然成立？
 
-只要第二题答案偏向交付 / 结算 / invite / review，或第三题答案是否定，就不要直接归入 `Skill / Worker`。
+只要第二题答案偏向交付 / 结算 / 邀请 / 复核，或第三题答案是否定，就不要直接归入 `Skill / Worker`。

@@ -19,7 +19,8 @@ import {
   getDeploymentProfileDefaultLocaleCandidate,
   getRequestUiLocaleCandidate,
 } from "@/lib/i18n/request-locale.server";
-import { formatDateLabel, trimText } from "@/lib/utils";
+import { formatLocalizedDateLabel } from "@/lib/i18n/date-labels";
+import { trimText } from "@/lib/utils";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 
 export default async function CompaniesPage() {
@@ -191,8 +192,8 @@ export default async function CompaniesPage() {
                 <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
                   {company.lastInteractionAt
                     ? english
-                      ? `Last interaction ${formatDateLabel(company.lastInteractionAt)}`
-                      : `最近互动 ${formatDateLabel(company.lastInteractionAt)}`
+                      ? `Last interaction ${formatLocalizedDateLabel(company.lastInteractionAt, true)}`
+                      : `最近互动 ${formatLocalizedDateLabel(company.lastInteractionAt, false)}`
                     : english
                       ? "No recent interaction recorded"
                       : "暂无近期互动记录"}
@@ -205,7 +206,7 @@ export default async function CompaniesPage() {
               description={
                 english
                   ? "Import CRM data or capture from a meeting — companies will appear here."
-                  : "导入 CRM 或从会议带入——公司会出现在这里。"
+                  : "导入客户关系系统数据或从会议带入——公司会出现在这里。"
               }
             />
           )}

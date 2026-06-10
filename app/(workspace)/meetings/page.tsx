@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CalendarDays, Clock3, FileText, Sparkles } from "lucide-react";
+import { formatMeetingPageDateLabel } from "@/features/meetings/meeting-page-date-labels";
 import { formatMeetingDisplayText } from "@/features/meetings/display-copy";
 import { loadMeetingsPageData } from "@/features/meetings/page-loader";
 import { formatDateLabel, trimText } from "@/lib/utils";
@@ -15,6 +16,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+function formatMeetingPageDate(value: Date | string | null | undefined, english: boolean) {
+  return formatMeetingPageDateLabel(value, english, formatDateLabel);
+}
 
 export default async function MeetingsPage() {
   const meetingsRouteIdentity = { sourcePage: "/meetings" as const };
@@ -160,7 +165,7 @@ export default async function MeetingsPage() {
                   </p>
                   <p className="text-xs text-[color:var(--muted-foreground)]">
                     {(english ? "Reported at " : "汇报于 ") +
-                      formatDateLabel(item.createdAt)}
+                      formatMeetingPageDate(item.createdAt, english)}
                   </p>
                   <p className="text-sm leading-6 text-[color:var(--muted)]">
                     {trimText(item.previewText, 140)}
@@ -381,7 +386,7 @@ export default async function MeetingsPage() {
                 description={
                   english
                     ? "New meetings from CRM, imports or capture will appear here."
-                    : "新的 CRM、导入或记录会议会出现在这里。"
+                    : "新的客户关系系统、导入或记录会议会出现在这里。"
                 }
               />
             )}
@@ -495,7 +500,7 @@ function MeetingOverviewCard({
           ) : null}
         </div>
         <div className="text-right text-xs text-[color:var(--muted-foreground)]">
-          <p>{formatDateLabel(meeting.startsAt)}</p>
+          <p>{formatMeetingPageDate(meeting.startsAt, english)}</p>
           <p className="mt-1">
             {meeting.location ?? (english ? "No location" : "未填写地点")}
           </p>
@@ -543,7 +548,7 @@ function MeetingOverviewCard({
           </p>
           <p className="mt-1">
             {(english ? "Reported at " : "汇报于 ") +
-              formatDateLabel(meeting.dingtalkLatestWorkProgress.createdAt)}
+              formatMeetingPageDate(meeting.dingtalkLatestWorkProgress.createdAt, english)}
           </p>
           <p className="mt-1">
             {meeting.dingtalkLatestWorkProgress.nextWeekPlan

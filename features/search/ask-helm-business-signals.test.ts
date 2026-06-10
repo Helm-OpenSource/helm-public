@@ -77,6 +77,57 @@ describe("Ask Helm business signal builder", () => {
     expect(signals.some((signal) => signal.kind === "stale_opportunity")).toBe(true);
   });
 
+  it("localizes generated business signal copy for English Ask Helm surfaces", () => {
+    const signals = buildAskHelmBusinessSignalsFromRecords({
+      workspaceId,
+      now,
+      locale: "en-US",
+      opportunities: [
+        {
+          id: "opp_overdue",
+          workspaceId,
+          title: "Atlas renewal",
+          stage: "ADVANCING",
+          riskLevel: "MEDIUM",
+          dueDate: new Date("2026-05-01T00:00:00.000Z"),
+          company: { name: "Atlas" },
+        },
+        {
+          id: "opp_risk",
+          workspaceId,
+          title: "Helix expansion",
+          stage: "ADVANCING",
+          riskLevel: "CRITICAL",
+        },
+      ],
+      pendingApprovals: [
+        {
+          id: "approval_high",
+          isHighRisk: true,
+          actionItem: {
+            id: "action_high",
+            title: "Renewal email draft",
+            riskLevel: "HIGH",
+          },
+        },
+      ],
+    });
+
+    const rendered = signals
+      .flatMap((signal) => [
+        signal.title,
+        signal.reason,
+        signal.primaryNextStep.label,
+        signal.boundaryNote,
+      ])
+      .join("\n");
+
+    expect(rendered).toContain("High-risk review pending");
+    expect(rendered).toContain("Open the review page");
+    expect(rendered).toContain("Open the operating workspace");
+    expect(rendered).not.toMatch(/[\u3400-\u9fff]/u);
+  });
+
   it("dedupes by the same opportunity object keeping the highest score", () => {
     const signals = buildAskHelmBusinessSignalsFromRecords({
       workspaceId,

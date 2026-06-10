@@ -1,3 +1,5 @@
+import { format } from "date-fns";
+import { enUS } from "date-fns/locale";
 import { formatDateLabel } from "@/lib/utils";
 import type {
   OrganizationGovernanceAuditMarker,
@@ -140,6 +142,20 @@ export const organizationAuditActionLabels = {
   ORGANIZATION_SUPPORT_PACK_EXPORTED: { zh: "支持包导出", en: "Support pack exported" },
 } as const;
 
+function formatGovernanceDateLabel(value: Date | string | null | undefined, english: boolean) {
+  if (!value) {
+    return english ? "Not recorded" : "未设置";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (english) {
+    return format(date, "MMM d HH:mm", { locale: enUS });
+  }
+
+  return formatDateLabel(date);
+}
+
 export function formatGovernanceAuditMarker(
   marker: OrganizationGovernanceAuditMarker,
   english: boolean,
@@ -151,10 +167,10 @@ export function formatGovernanceAuditMarker(
   const actionLabel =
     organizationAuditActionLabels[marker.actionType as keyof typeof organizationAuditActionLabels]?.[
       english ? "en" : "zh"
-    ] ?? marker.actionType;
+  ] ?? marker.actionType;
   const targetType = formatGovernanceAuditTargetType(marker.targetType, english);
 
-  return `${actionLabel} · ${formatDateLabel(marker.createdAt)} · ${english ? "actor" : "操作者"} ${marker.actor} · ${english ? "target" : "目标"} ${targetType}`;
+  return `${actionLabel} · ${formatGovernanceDateLabel(marker.createdAt, english)} · ${english ? "actor" : "操作者"} ${marker.actor} · ${english ? "target" : "目标"} ${targetType}`;
 }
 
 export function formatGovernanceAuditSummary(
@@ -198,7 +214,7 @@ export function formatWebhookCallbackMarker(
 
   return [
     marker.provider,
-    formatDateLabel(marker.recordedAt),
+    formatGovernanceDateLabel(marker.recordedAt, english),
     marker.summary,
     marker.workspaceScoped
       ? english
@@ -220,7 +236,7 @@ export function formatIdentityMatchMarker(
 
   return [
     formatIdentityMatchExternalType(marker.externalType, english),
-    formatDateLabel(marker.recordedAt),
+    formatGovernanceDateLabel(marker.recordedAt, english),
     marker.reason ?? (english ? "No reason recorded" : "未记录原因"),
     `${english ? "score" : "分值"} ${marker.matchScore}`,
     formatIdentityMatchStatus(marker.status, english),

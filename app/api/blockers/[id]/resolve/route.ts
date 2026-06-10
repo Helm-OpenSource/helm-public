@@ -1,6 +1,9 @@
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { assertWorkspaceBlockerOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
-import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
+import {
+  isEnglishWorkspaceDefaultLocale,
+  resolveApiValidationIssueMessage,
+} from "@/lib/i18n/api-message-locale";
 import { resolveBlocker } from "@/lib/memory/blocker.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { resolveBlockerSchema } from "@/lib/memory/schemas";
@@ -15,7 +18,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const payload = resolveBlockerSchema.safeParse(await request.json().catch(() => ({})));
 
   if (!payload.success) {
-    return errorResponse(payload.error.issues[0]?.message ?? "参数不完整");
+    return errorResponse(
+      resolveApiValidationIssueMessage(workspace.defaultLocale, payload.error.issues[0]?.message),
+    );
   }
 
   if (!canManageWorkspaceMemory(membership.role)) {
@@ -45,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: updated.status,
         resolvedAt: updated.resolvedAt,
       },
-      "blocker resolved",
+      english ? "Blocker resolved" : "阻塞已解决",
     );
   } catch (error) {
     return errorResponse(

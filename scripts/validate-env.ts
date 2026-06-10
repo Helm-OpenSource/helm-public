@@ -102,6 +102,8 @@ const connectorBlocks: ConnectorBlock[] = [
       "WECHAT_PAY_MERCHANT_ID",
       "WECHAT_PAY_MERCHANT_SERIAL_NO",
       "WECHAT_PAY_PRIVATE_KEY",
+      "WECHAT_PAY_PLATFORM_PUBLIC_KEY",
+      "WECHAT_PAY_API_V3_KEY",
     ],
     triggerKey: "WECHAT_PAY_APP_ID",
   },
@@ -208,6 +210,21 @@ function validateMust(result: ValidationResult): void {
     } else {
       result.warnings.push(
         "MUST: CONNECTOR_TOKEN_SECRET should be at least 32 characters for stronger local security",
+      );
+    }
+  }
+  if (
+    process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS &&
+    process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS.length < 32
+  ) {
+    if (process.env.NODE_ENV === "production") {
+      result.valid = false;
+      result.errors.push(
+        "MUST: CONNECTOR_TOKEN_SECRET_PREVIOUS must be at least 32 characters in production",
+      );
+    } else {
+      result.warnings.push(
+        "MUST: CONNECTOR_TOKEN_SECRET_PREVIOUS should be at least 32 characters for safer token rotation",
       );
     }
   }
@@ -341,6 +358,14 @@ function validateEnvironment(): ValidationResult {
     ) {
       result.recommendations.push(
         "Production CONNECTOR_TOKEN_SECRET should be at least 64 characters",
+      );
+    }
+    if (
+      process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS &&
+      process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS.length < 64
+    ) {
+      result.recommendations.push(
+        "Production CONNECTOR_TOKEN_SECRET_PREVIOUS should be at least 64 characters during rotation",
       );
     }
   }

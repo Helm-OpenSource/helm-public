@@ -36,7 +36,7 @@ import {
   formatRoleDetailEvidenceGroups,
   formatRoleDetailPageProtocol,
 } from "@/lib/presentation/role-detail-display-copy";
-import { formatDateLabel } from "@/lib/utils";
+import { formatReinforcementSendabilityDateLabel } from "@/features/commitment-reinforcement-sendability/date-labels";
 
 type ReinforcementPageProps = {
   mode: "reinforcement";
@@ -58,8 +58,8 @@ export function CommitmentReinforcementSendabilityDetailView(
   const { detail, english, mode } = props;
   const sourceProtocol =
     mode === "reinforcement"
-      ? toCommitmentReinforcementPageReportingProtocol(props.contract)
-      : toSendabilityPageReportingProtocol(props.contract);
+      ? toCommitmentReinforcementPageReportingProtocol(props.contract, english)
+      : toSendabilityPageReportingProtocol(props.contract, english);
   const text = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
   const protocol = formatRoleDetailPageProtocol(sourceProtocol, english);
@@ -271,14 +271,14 @@ export function CommitmentReinforcementSendabilityDetailView(
                 {
                   label: english
                     ? "Customer-visible strengthening"
-                    : text("customer-visible strengthening"),
+                    : text("客户可见加固"),
                   value:
                     mode === "reinforcement"
                       ? text(props.contract.reinforcementPageCustomerVisibleCue)
                       : text(props.contract.sendabilityPageCustomerVisibleCue),
                 },
                 {
-                  label: english ? "Internal-only wording" : text("internal-only wording"),
+                  label: english ? "Internal-only wording" : text("仅内部话术"),
                   value:
                     mode === "reinforcement"
                       ? text(props.contract.reinforcementPageInternalOnlyCue)
@@ -297,7 +297,10 @@ export function CommitmentReinforcementSendabilityDetailView(
                 },
                 {
                   label: english ? "Due date" : "当前截止时间",
-                  value: formatDateLabel(detail.dueDate),
+                  value: formatReinforcementSendabilityDateLabel(
+                    detail.dueDate,
+                    english,
+                  ),
                 },
               ]}
             />

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { detectPIIInOutput } from "@/lib/llm/output-pii-scrubber";
 import { trimText } from "@/lib/utils";
 
 type RecordLLMCallInput = {
@@ -46,7 +47,10 @@ export async function recordLLMCall(input: RecordLLMCallInput) {
       budgetTier: trimNullable(input.budgetTier),
       outputMode: trimNullable(input.outputMode),
       inputSummary: trimNullable(input.inputSummary),
-      outputSummary: trimNullable(input.outputSummary),
+      outputSummary: sanitizeLLMCallOutputSummary({
+        taskType: input.taskType,
+        outputSummary: input.outputSummary,
+      }),
       tokenUsagePrompt: input.tokenUsagePrompt,
       tokenUsageCompletion: input.tokenUsageCompletion,
       latencyMs: input.latencyMs,
@@ -55,6 +59,33 @@ export async function recordLLMCall(input: RecordLLMCallInput) {
       errorMessage: trimNullable(input.errorMessage),
     },
   });
+}
+
+export function sanitizeLLMCallOutputSummary(input: {
+  taskType: string;
+  outputSummary?: string | null;
+}) {
+  const summary = input.outputSummary?.trim();
+  if (!summary) {
+    return null;
+  }
+
+  const piiResult = detectPIIInOutput(summary);
+  const piiTypes = [...new Set(piiResult.hits.map((hit) => hit.type))];
+
+  if (input.taskType === "AUDIO_TRANSCRIPTION") {
+    const piiNote = piiTypes.length > 0 ? `；检测到 PII 模式：${piiTypes.join(", ")}` : "";
+    return trimText(
+      `ASR 转写完成（${summary.length} 字）${piiNote}；原文未落库。`,
+      240,
+    );
+  }
+
+  const piiNote = piiTypes.length > 0 ? `；检测到 PII 模式：${piiTypes.join(", ")}` : "";
+  return trimText(
+    `LLM 输出完成（${summary.length} 字）${piiNote}；原文未落库。`,
+    240,
+  );
 }
 
 export async function getRecentLLMCallLogs(workspaceId: string, limit = 20) {

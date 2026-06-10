@@ -100,6 +100,10 @@ describe("OpenClaw runtime routes", () => {
     );
 
     expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      message: "OpenClaw memory sync completed",
+    });
     expect(openClawServiceMock.syncOpenClawMemory).toHaveBeenCalledTimes(1);
 
     const syncInput = openClawServiceMock.syncOpenClawMemory.mock.calls[0]?.[0];
@@ -116,6 +120,28 @@ describe("OpenClaw runtime routes", () => {
     expect(syncInput).not.toHaveProperty("backupDir");
     expect(syncInput).not.toHaveProperty("lanceDbPath");
     expect(syncInput).not.toHaveProperty("openclawBin");
+  });
+
+  it("uses workspace default locale for OpenClaw sync success messages", async () => {
+    sessionMock.getCurrentWorkspaceSession.mockResolvedValue({
+      user: { id: "user-1", name: "Taylor" },
+      membership: { role: "OPERATOR" },
+      workspace: { id: "workspace-1", defaultLocale: "zh-CN" },
+    });
+
+    const response = await syncOpenClawRoute(
+      new Request("http://localhost/api/memory/openclaw/sync", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sourceMode: "backup_jsonl", maxItems: 20 }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      message: "OpenClaw 记忆同步已完成",
+    });
   });
 
   it("redacts raw sync errors from the sync route response", async () => {
