@@ -12,6 +12,11 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
+  clearFailedLogins,
+  getLoginLockStatus,
+  recordFailedLogin,
+} from "@/lib/auth/login-rate-limit.service";
+import {
   ACTIVE_WORKSPACE_COOKIE,
   activateMembershipIfInvited,
   clearSession,
@@ -1167,16 +1172,32 @@ export async function passwordLoginAction(input: z.infer<typeof passwordLoginSch
       : "邮箱/手机号或密码不正确。",
   };
 
-  const user = await findUserByIdentifier(parsed.data.identifier);
+  // Durable per-identifier rate limit. Checked and incremented for ANY
+  // identifier (existent or not) so the lockout cannot be used to probe which
+  // accounts exist. Fails open if the table/DB is unavailable.
+  const identifier = parsed.data.identifier;
+  const lock = await getLoginLockStatus(identifier);
+  if (lock.locked) {
+    return {
+      ok: false as const,
+      error: english
+        ? "Too many attempts. Please try again later."
+        : "尝试次数过多，请稍后再试。",
+    };
+  }
+
+  const user = await findUserByIdentifier(identifier);
   if (
     !user ||
     user.memberships.length === 0 ||
     !user.passwordHash ||
     !verifyPassword(parsed.data.password, user.passwordHash)
   ) {
+    await recordFailedLogin(identifier);
     return invalidCredentials;
   }
 
+  await clearFailedLogins(identifier);
   return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.PASSWORD, locale);
 }
 

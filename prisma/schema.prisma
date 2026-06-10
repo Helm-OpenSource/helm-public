@@ -1231,6 +1231,21 @@ model AuthVerificationCode {
   @@index([userId])
 }
 
+// Durable per-identifier password-login rate limiting. The identifier
+// (email/phone) is hashed, never stored raw; attempts are tracked for any
+// identifier so the lockout reveals nothing about account existence.
+model FailedLoginAttempt {
+  id              String    @id @default(cuid())
+  identifierHash  String    @unique
+  attemptCount    Int       @default(0)
+  windowStartedAt DateTime  @default(now())
+  lockedUntil     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([lockedUntil])
+}
+
 model AuthSession {
   id                    String     @id @default(cuid())
   userId                String
