@@ -1,7 +1,7 @@
 import { biReportAnalysisSchema, buildBiReportAnalysisPrompt, llmPromptVersions } from "@/lib/llm/prompt-registry";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
 import { reviewBiReportAnalysisWithLLM } from "@/lib/llm-workflows/review-bi-report.workflow";
-import { safeParseJson } from "@/lib/utils";
+import { parseLlmJsonOrThrow } from "@/lib/llm/output-parse-error";
 import type { BiReportAnalysisOutput } from "@/lib/bi-report-skill/types";
 import type { BiReportOdpsKnowledgeContext } from "@/lib/bi-report-skill/odps-knowledge";
 
@@ -56,7 +56,7 @@ export async function analyzeBiReportWithLLM(input: {
     outputMode: "json",
     jsonSchema: biReportAnalysisSchema,
     fallbackOutput: input.fallback,
-    parseOutput: (rawText) => safeParseJson(rawText, input.fallback),
+    parseOutput: (rawText) => parseLlmJsonOrThrow<BiReportAnalysisOutput>(rawText),
   });
 
   const normalized = normalizeBiReportAnalysisOutput(result.output, input.fallback);

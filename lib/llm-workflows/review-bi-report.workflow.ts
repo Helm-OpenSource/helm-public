@@ -4,7 +4,7 @@ import {
   llmPromptVersions,
 } from "@/lib/llm/prompt-registry";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
-import { safeParseJson } from "@/lib/utils";
+import { parseLlmJsonOrThrow } from "@/lib/llm/output-parse-error";
 import type {
   BiReportAnalysisOutput,
   BiReportAnalysisReviewOutput,
@@ -58,6 +58,6 @@ export async function reviewBiReportAnalysisWithLLM(input: {
     outputMode: "json",
     jsonSchema: biReportReviewSchema,
     fallbackOutput: fallback,
-    parseOutput: (rawText) => safeParseJson(rawText, fallback),
+    parseOutput: (rawText) => parseLlmJsonOrThrow<BiReportAnalysisReviewOutput>(rawText),
   });
 }

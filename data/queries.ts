@@ -208,9 +208,14 @@ export async function getCustomerSuccessQueueData(workspaceId: string) {
         },
         emailThreads: {
           include: {
+            // The queue only renders the latest message + total count per
+            // thread (see successInboxThreads below), so fetch just the most
+            // recent message and a count instead of every full message body.
             messages: {
-              orderBy: { sentAt: "asc" },
+              orderBy: { sentAt: "desc" },
+              take: 1,
             },
+            _count: { select: { messages: true } },
           },
           orderBy: { updatedAt: "desc" },
         },
@@ -404,8 +409,8 @@ export async function getCustomerSuccessQueueData(workspaceId: string) {
           stage: detail.stage,
           nextAction: detail.nextAction,
         },
-        latestMessage: thread.messages.at(-1) ?? null,
-        messageCount: thread.messages.length,
+        latestMessage: thread.messages[0] ?? null,
+        messageCount: thread._count.messages,
       })),
     )
     .filter(

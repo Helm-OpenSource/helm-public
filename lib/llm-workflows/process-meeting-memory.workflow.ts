@@ -4,7 +4,7 @@ import { executeLLMTask } from "@/lib/llm/provider-registry";
 import { parseDueDateHint } from "@/lib/memory/shared";
 import type { MeetingCommitmentExtractionInput } from "@/lib/memory/commitment-extraction.service";
 import type { MeetingFactExtractionInput } from "@/lib/memory/fact-extraction.service";
-import { safeParseJson } from "@/lib/utils";
+import { parseLlmJsonOrThrow } from "@/lib/llm/output-parse-error";
 
 type MeetingFactDraftShape = Array<{
   workspaceId: string;
@@ -137,7 +137,9 @@ function parseMeetingMemoryOutput(
   meeting: MeetingMemoryWorkflowInput["meeting"],
   fallback: MeetingMemoryWorkflowInput["fallback"],
 ): MeetingMemoryExtractionOutput {
-  const parsed = safeParseJson<{
+  // Throw on malformed JSON so the executor records fallbackUsed=true rather
+  // than silently normalizing `{}` into a fallback-shaped "success".
+  const parsed = parseLlmJsonOrThrow<{
     summary?: string;
     facts?: Array<{
       title?: string;
@@ -162,7 +164,7 @@ function parseMeetingMemoryOutput(
       severity?: number;
     }>;
     candidateActions?: string[];
-  }>(rawText, {});
+  }>(rawText);
 
   const validObjectIds = new Set([
     meeting.id,
