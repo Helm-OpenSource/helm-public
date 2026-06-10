@@ -536,11 +536,25 @@ async function fetchSalesforceDataset(
       ),
     ]);
 
-  const accountRows = parseSalesforceRows(SalesforceAccountRowSchema, accountsRaw, "account");
-  const contactRows = parseSalesforceRows(SalesforceContactRowSchema, contactsRaw, "contact");
-  const opportunityRows = parseSalesforceRows(SalesforceOpportunityRowSchema, opportunitiesRaw, "opportunity");
-  const eventRows = parseSalesforceRows(SalesforceEventRowSchema, eventsRaw, "event");
-  const taskRows = parseSalesforceRows(SalesforceTaskRowSchema, tasksRaw, "task");
+  // Drop rows without a Salesforce Id: coercing a missing Id to "" would make
+  // every such row share externalId "" and overwrite one another (and EXACT-
+  // match each other) on the next import. A real Salesforce object always has
+  // an Id, so a missing one is a malformed row to skip, not merge.
+  const accountRows = parseSalesforceRows(SalesforceAccountRowSchema, accountsRaw, "account").filter(
+    (row) => Boolean(row.Id),
+  );
+  const contactRows = parseSalesforceRows(SalesforceContactRowSchema, contactsRaw, "contact").filter(
+    (row) => Boolean(row.Id),
+  );
+  const opportunityRows = parseSalesforceRows(SalesforceOpportunityRowSchema, opportunitiesRaw, "opportunity").filter(
+    (row) => Boolean(row.Id),
+  );
+  const eventRows = parseSalesforceRows(SalesforceEventRowSchema, eventsRaw, "event").filter(
+    (row) => Boolean(row.Id),
+  );
+  const taskRows = parseSalesforceRows(SalesforceTaskRowSchema, tasksRaw, "task").filter(
+    (row) => Boolean(row.Id),
+  );
 
   const ownerIds = uniqueStrings([
     ...accountRows.map((item) => item.OwnerId ?? null),

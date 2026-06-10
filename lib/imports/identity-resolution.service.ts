@@ -75,16 +75,19 @@ export async function resolveCompanyIdentity(input: {
       select: { id: true, name: true, website: true },
     });
 
-    const company = companies.find((candidate) => {
-      const candidateDomain = normalizeDomain(candidate.website);
-      return candidateDomain === domain || normalizeName(candidate.name) === normalizeName(input.company.name);
-    });
+    // Auto-link ONLY on a true domain match. A shared company name (very common
+    // — e.g. two unrelated "Acme" companies on different domains) is NOT a
+    // strong identifier, so it must fall through to the NEEDS_REVIEW path below
+    // rather than silently merging two distinct companies.
+    const company = companies.find(
+      (candidate) => normalizeDomain(candidate.website) === domain,
+    );
 
     if (company) {
       return {
         status: "AUTO_LINKED",
         internalObjectId: company.id,
-        reason: `通过域名或公司名匹配到现有公司（${domain}）`,
+        reason: `通过域名匹配到现有公司（${domain}）`,
         score: 92,
       };
     }
