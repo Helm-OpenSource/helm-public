@@ -2,32 +2,15 @@ import { ObjectType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getApprovalTasksData as getApprovalTasksDataQuery } from "@/features/approvals/queries";
 import { getCompanyDetailData as getCompanyDetailDataQuery } from "@/features/companies/queries";
-import { getContactDetailData as getContactDetailDataQuery } from "@/features/contacts/queries";
-import { getDashboardData as getDashboardDataQuery } from "@/features/dashboard/queries";
-import { getInboxData as getInboxDataQuery } from "@/features/inbox/queries";
-import { getMeetingsOverviewData as getMeetingsOverviewDataQuery, getMeetingDetailData as getMeetingDetailDataQuery } from "@/features/meetings/queries";
-import { getMemoryData as getMemoryDataQuery } from "@/features/memory/queries";
-import { getOpportunitiesData as getOpportunitiesDataQuery } from "@/features/opportunities/queries";
-import { searchWorkspaceEntities as searchWorkspaceEntitiesQuery } from "@/features/search/queries";
-import { getSettingsData as getSettingsDataQuery } from "@/features/settings/queries";
-import { getWorkspaceLayoutData as getWorkspaceLayoutDataQuery } from "@/features/workspace/queries";
 import { safeParseJson } from "@/lib/utils";
 
-export async function getWorkspaceLayoutData(workspaceId: string, userId: string) {
-  return getWorkspaceLayoutDataQuery(workspaceId, userId);
-}
-
-export async function getDashboardData(workspaceId: string, userId: string) {
-  return getDashboardDataQuery(workspaceId, userId);
-}
-
-export async function searchWorkspaceEntities(workspaceId: string, query: string) {
-  return searchWorkspaceEntitiesQuery(workspaceId, query);
-}
-
-export async function getOpportunitiesData(workspaceId: string) {
-  return getOpportunitiesDataQuery(workspaceId);
-}
+// This module is a thin aggregation layer kept ONLY for the queries that
+// workspace pages still import from `@/data/queries`:
+//   getOpportunityCommercialDetailData, getCompanyDetailData,
+//   getApprovalTasksData, getCustomerSuccessQueueData.
+// The previous per-domain re-export wrappers (getDashboardData, getInboxData,
+// getMemoryData, …) were dead — every caller imports the `features/<domain>/
+// queries` modules directly — so they were removed.
 
 export async function getOpportunityCommercialDetailData(
   workspaceId: string,
@@ -154,20 +137,8 @@ export async function getOpportunityCommercialDetailData(
   };
 }
 
-export async function getContactDetailData(workspaceId: string, contactId: string) {
-  return getContactDetailDataQuery(workspaceId, contactId);
-}
-
 export async function getCompanyDetailData(workspaceId: string, companyId: string) {
   return getCompanyDetailDataQuery(workspaceId, companyId);
-}
-
-export async function getMeetingDetailData(workspaceId: string, meetingId: string) {
-  return getMeetingDetailDataQuery(workspaceId, meetingId);
-}
-
-export async function getMeetingsOverviewData(workspaceId: string) {
-  return getMeetingsOverviewDataQuery(workspaceId);
 }
 
 export async function getApprovalTasksData(workspaceId: string) {
@@ -433,29 +404,3 @@ export async function getCustomerSuccessQueueData(workspaceId: string) {
   };
 }
 
-export async function getInboxData(
-  workspaceId: string,
-  selectedThreadId?: string,
-  viewerEmail?: string | null,
-) {
-  return getInboxDataQuery(workspaceId, {
-    selectedThreadId,
-    viewerEmail,
-  });
-}
-
-export async function getMemoryData(
-  workspaceId: string,
-  options?: {
-    query?: string;
-    dimension?: "ALL" | "CONTACT" | "COMPANY" | "OPPORTUNITY" | "MEETING";
-    objectType?: ObjectType;
-    objectId?: string;
-  },
-) {
-  return getMemoryDataQuery(workspaceId, options);
-}
-
-export async function getSettingsData(workspaceId: string, userId: string) {
-  return getSettingsDataQuery(workspaceId, userId);
-}
