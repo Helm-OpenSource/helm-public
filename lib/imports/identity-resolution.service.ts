@@ -169,6 +169,14 @@ export async function resolveContactIdentity(input: {
     }
   }
 
+  // NOTE: do NOT add phone as a contact match/merge key here. It looks tempting
+  // as a secondary identifier, but real customer data makes it dangerous:
+  // placeholder/shared phone numbers are pervasive (in a production
+  // debt-collection dataset a single placeholder "11111111111" was attached to
+  // ~116k DISTINCT people, and a real-looking number to ~1.6k), so matching on
+  // phone would catastrophically false-merge unrelated contacts. Email + a
+  // company-scoped name remain the only identifiers used; a weak name-only
+  // match below is surfaced for review (NEEDS_REVIEW), never auto-merged.
   const normalized = normalizeName(input.contact.fullName);
   const candidates = await db.contact.findMany({
     where: {
