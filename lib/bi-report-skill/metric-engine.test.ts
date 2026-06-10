@@ -53,6 +53,32 @@ describe("computeBiReportMetrics derived-metric resolution", () => {
     expect(metricsByKey.pay_rate).toBeCloseTo(0.3);
   });
 
+  it("warns when a sum exceeds the safe-integer range (precision risk)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bigRows = [
+      { amt: Number.MAX_SAFE_INTEGER },
+      { amt: Number.MAX_SAFE_INTEGER },
+    ];
+    const definitions = {
+      version: "v1",
+      aggregations: [{ key: "amt_sum", label: "Amount", type: "sum", field: "amt" }],
+    } as unknown as BiReportMetricDefinition;
+
+    computeBiReportMetrics({ definitions, rows: bigRows });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain("MAX_SAFE_INTEGER");
+  });
+
+  it("does not warn for ordinary in-range sums", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const definitions = {
+      version: "v1",
+      aggregations: [{ key: "paid_sum", label: "Paid", type: "sum", field: "paid" }],
+    } as unknown as BiReportMetricDefinition;
+    computeBiReportMetrics({ definitions, rows });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("warns (instead of silently emitting 0) when a metric references an undefined key", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const definitions = {

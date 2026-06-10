@@ -16,7 +16,18 @@ export function computeBiReportMetrics(input: {
 
   for (const definition of input.definitions.aggregations) {
     if (definition.type !== "sum") continue;
-    metricsByKey[definition.key] = input.rows.reduce((sum, row) => sum + readNumericValue(row[definition.field]), 0);
+    const sum = input.rows.reduce((acc, row) => acc + readNumericValue(row[definition.field]), 0);
+    // Amount columns arrive from the ODPS bridge as JS numbers (doubles). Once a
+    // sum crosses Number.MAX_SAFE_INTEGER (~9e15) it silently loses integer
+    // precision — real financial totals are already in the trillions, so warn
+    // when a metric enters that range rather than reporting a corrupted figure
+    // as if it were exact.
+    if (Number.isFinite(sum) && Math.abs(sum) > Number.MAX_SAFE_INTEGER) {
+      console.warn(
+        `[bi-report metric-engine] metric "${definition.key}" sum ${sum} exceeds Number.MAX_SAFE_INTEGER; precision may be lost — consider scaling the amount unit in the query.`,
+      );
+    }
+    metricsByKey[definition.key] = sum;
   }
 
   const rankings = buildRankings(input.rows, input.definitions.rankings ?? []);
