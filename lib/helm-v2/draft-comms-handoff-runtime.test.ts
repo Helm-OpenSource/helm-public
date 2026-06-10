@@ -207,5 +207,18 @@ describeMysqlIntegration("Helm v2 draft-only comms runtime", () => {
     const blockedSummary = await getMeetingDraftCommsRuntimeSummary(blockedFixture.workspace.id, blockedFixture.meeting.id);
     expect(blockedSummary?.artifactReview?.status).toBe("REJECTED");
     expect(blockedSummary?.bundle?.reviewStatus).toBe("blocked_by_boundary");
+
+    // Terminal-state guard: a rejected draft cannot be re-reviewed back into an
+    // approved/handoff-ready state.
+    await expect(
+      reviewDraftCommsRuntime({
+        workspaceId: blockedFixture.workspace.id,
+        meetingId: blockedFixture.meeting.id,
+        reviewerId: blockedFixture.user.id,
+        reviewerName: blockedFixture.user.name,
+        mode: "approve",
+        sourcePage: `/meetings/${blockedFixture.meeting.id}`,
+      }),
+    ).rejects.toThrow(/already been resolved/i);
   });
 });
