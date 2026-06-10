@@ -16,6 +16,81 @@ export type SampleCaseBlockedReason =
   | "stale_owner"
   | null;
 
+// Stage normalization for the ingestion boundary.
+//
+// External case backends do not emit the sample's four canonical stages — they
+// emit their own status vocabulary (a real debt-collection backend uses e.g.
+// `create` / `dealing` / `transfer` / `finish` / `close` / `processed` /
+// `replied`). Casting those raw rows straight to SampleCaseRecord is a trap:
+// the sample (and its workers) gate on `stage !== "closed"`, so a real `finish`
+// or `close` would be mis-read as still-open and generate signals/allocations
+// for dead cases, while a genuinely unknown status would silently look routine.
+//
+// `normalizeSampleCaseStage` maps the recognized vocabularies and, crucially,
+// routes anything unrecognized to `review_required` — surfaced for a human to
+// reconcile rather than silently dropped or silently treated as active.
+const CLOSED_STAGE_TOKENS = new Set([
+  "closed",
+  "close",
+  "finish",
+  "finished",
+  "done",
+  "complete",
+  "completed",
+  "resolved",
+  "cancel",
+  "cancelled",
+  "canceled",
+  "archived",
+]);
+
+const ACTIVE_STAGE_TOKENS = new Set([
+  "active_followup",
+  "create",
+  "created",
+  "dealing",
+  "open",
+  "opened",
+  "processing",
+  "in_progress",
+  "ongoing",
+  "follow_up",
+  "following_up",
+]);
+
+const EVIDENCE_GAP_STAGE_TOKENS = new Set([
+  "evidence_gap",
+  "missing_evidence",
+  "need_evidence",
+  "awaiting_evidence",
+]);
+
+export function isClosedStage(rawStage: string | null | undefined): boolean {
+  if (!rawStage) return false;
+  return CLOSED_STAGE_TOKENS.has(rawStage.trim().toLowerCase());
+}
+
+export function normalizeSampleCaseStage(
+  rawStage: string | null | undefined,
+  // Adopters pass their backend's status vocabulary here. Statuses whose
+  // disposition is backend-specific (a real backend's `processed` / `replied`
+  // can mean "done" OR "in progress" depending on the product) are
+  // deliberately NOT auto-classified — declare them explicitly via overrides
+  // rather than letting the sample guess.
+  overrides?: Readonly<Record<string, SampleCaseStage>>,
+): SampleCaseStage {
+  const token = rawStage?.trim().toLowerCase() ?? "";
+  const override = overrides?.[token];
+  if (override) return override;
+  if (CLOSED_STAGE_TOKENS.has(token)) return "closed";
+  if (EVIDENCE_GAP_STAGE_TOKENS.has(token)) return "evidence_gap";
+  if (ACTIVE_STAGE_TOKENS.has(token)) return "active_followup";
+  if (token === "review_required") return "review_required";
+  // Unknown / drifted upstream status: surface for review rather than silently
+  // dropping it (as a wrong "closed" would) or treating it as routine active.
+  return "review_required";
+}
+
 export type SampleCaseRecord = {
   workspaceId: string;
   caseId: string;
@@ -41,7 +116,9 @@ export type SampleCaseSignalPayload = {
 export function mapCaseRecordToSignals(
   record: SampleCaseRecord,
 ): Array<SignalCandidate<SampleCaseSignalPayload>> {
-  if (record.stage === "closed") return [];
+  // Defense in depth: use the robust closed-stage check so a record carrying a
+  // raw/drifted closed status (e.g. "close"/"finish") is not mistaken for open.
+  if (isClosedStage(record.stage)) return [];
 
   const severity = deriveSeverity(record);
   const blocker = record.blockedReason ?? "none";

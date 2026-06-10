@@ -1,4 +1,4 @@
-import type { SampleCaseRecord } from "../../signals/case/case-mapper";
+import { isClosedStage, type SampleCaseRecord } from "../../signals/case/case-mapper";
 import { buildLifecycleObjective } from "../lifecycle-objectives";
 import {
   DEFAULT_OPERATION_MODE,
@@ -16,7 +16,7 @@ const WORKER_ID = "case-allocation-driver-v0" as const;
 
 export function decideAllocations(input: AllocationDecideInput): AllocationDecideReport {
   const mode: WorkerOperationMode = input.operationMode ?? DEFAULT_OPERATION_MODE;
-  const openCases = input.cases.filter((caseRecord) => caseRecord.stage !== "closed");
+  const openCases = input.cases.filter((caseRecord) => !isClosedStage(caseRecord.stage));
   const eligibleEmployees = input.employees
     .filter((employee) => employee.active && employee.reviewCapacity > 0)
     .filter((employee) => employee.role === "case-owner" || employee.role === "reviewer")

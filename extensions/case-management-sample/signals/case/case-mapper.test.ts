@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { mapCaseRecordToSignals, type SampleCaseRecord } from "./case-mapper";
+import {
+  isClosedStage,
+  mapCaseRecordToSignals,
+  normalizeSampleCaseStage,
+  type SampleCaseRecord,
+} from "./case-mapper";
 
 const baseCase: SampleCaseRecord = {
   workspaceId: "workspace-sample",
@@ -51,5 +56,47 @@ describe("case-management-sample case mapper", () => {
     expect(signal.identity.severity).toBe("breach");
     expect(signal.confidence).toBe("degraded");
     expect(signal.payload.nextAction).toBe("collect_evidence");
+  });
+
+  it("treats raw closed statuses from a real backend as closed (no signals)", () => {
+    // Real debt-collection backends use lowercase finish/close, not the
+    // sample's literal "closed" — the old `stage === "closed"` check mis-read
+    // these as open.
+    for (const raw of ["finish", "close", "CLOSED", " Done "]) {
+      expect(
+        mapCaseRecordToSignals({ ...baseCase, stage: raw as SampleCaseRecord["stage"] }),
+      ).toEqual([]);
+    }
+  });
+});
+
+describe("normalizeSampleCaseStage (ingestion boundary)", () => {
+  it("maps the real debt-collection vocabulary safely", () => {
+    expect(normalizeSampleCaseStage("finish")).toBe("closed");
+    expect(normalizeSampleCaseStage("close")).toBe("closed");
+    expect(normalizeSampleCaseStage("create")).toBe("active_followup");
+    expect(normalizeSampleCaseStage("dealing")).toBe("active_followup");
+    // handed-off / unknown-disposition statuses are surfaced for review, not
+    // silently treated as routine-active or silently dropped as closed.
+    expect(normalizeSampleCaseStage("transfer")).toBe("review_required");
+    expect(normalizeSampleCaseStage("processed")).toBe("review_required");
+    expect(normalizeSampleCaseStage("replied")).toBe("review_required");
+    expect(normalizeSampleCaseStage("totally-unknown")).toBe("review_required");
+    expect(normalizeSampleCaseStage(null)).toBe("review_required");
+  });
+
+  it("lets adopters declare their own backend vocabulary via overrides", () => {
+    const overrides = { processed: "closed", replied: "active_followup" } as const;
+    expect(normalizeSampleCaseStage("processed", overrides)).toBe("closed");
+    expect(normalizeSampleCaseStage("replied", overrides)).toBe("active_followup");
+    // overrides do not weaken the safe default for truly-unknown statuses
+    expect(normalizeSampleCaseStage("mystery", overrides)).toBe("review_required");
+  });
+
+  it("isClosedStage recognizes drifted closed tokens case-insensitively", () => {
+    expect(isClosedStage("finish")).toBe(true);
+    expect(isClosedStage("CLOSE")).toBe(true);
+    expect(isClosedStage("dealing")).toBe(false);
+    expect(isClosedStage(null)).toBe(false);
   });
 });

@@ -1,3 +1,4 @@
+import { isClosedStage } from "../../signals/case/case-mapper";
 import {
   DEFAULT_OPERATION_MODE,
   enforceModeInvariants,
@@ -19,7 +20,7 @@ export function decideStewardship(
   input: StewardshipDecideInput,
 ): StewardshipDecideReport {
   const mode: WorkerOperationMode = input.operationMode ?? DEFAULT_OPERATION_MODE;
-  const activeCases = input.cases.filter((caseRecord) => caseRecord.stage !== "closed");
+  const activeCases = input.cases.filter((caseRecord) => !isClosedStage(caseRecord.stage));
   const actionsByCase = groupRecentActions(input.recentActions ?? []);
   const today = parseDate(input.today);
 
