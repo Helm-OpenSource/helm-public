@@ -38,15 +38,18 @@ const schema = z.object({
 export async function POST(request: Request) {
   const { user, membership, workspace } = await getCurrentWorkspaceSession();
   const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
+
+  // Gate on capability before parsing the (attacker-controlled) request body,
+  // matching the start/stop routes.
+  if (!canManageWorkspaceCaptureSessions(membership.role)) {
+    return errorResponse(getCaptureManagementDeniedMessage(english), "CAPTURE_GOVERNANCE_REQUIRED", 403);
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
 
   if (!parsed.success) {
     return errorResponse(english ? "Please provide transcript text and a title" : "请提供 transcript 文本与标题", "INVALID_CAPTURE_INGEST", 400);
-  }
-
-  if (!canManageWorkspaceCaptureSessions(membership.role)) {
-    return errorResponse(getCaptureManagementDeniedMessage(english), "CAPTURE_GOVERNANCE_REQUIRED", 403);
   }
 
   try {
