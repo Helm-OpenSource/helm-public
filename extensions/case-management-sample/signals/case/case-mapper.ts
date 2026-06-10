@@ -114,6 +114,23 @@ export type SampleCaseSignalPayload = {
   nextAction: "collect_evidence" | "review_boundary" | "continue_followup";
 };
 
+// Defense in depth: observedDate is typed as a required date string, but real
+// backends carry pervasive NULL/empty date fields. An unparseable value would
+// otherwise silently become an Invalid Date and later throw a contextless
+// "RangeError: Invalid time value" when the review packet serializes
+// observedAt.toISOString(). Fail loudly here, naming the case, instead.
+function parseObservedAt(record: SampleCaseRecord): Date {
+  const observedAt = new Date(`${record.observedDate}T00:00:00.000Z`);
+  if (Number.isNaN(observedAt.getTime())) {
+    throw new Error(
+      `Sample case ${record.caseId} has an unparseable observedDate (${JSON.stringify(
+        record.observedDate,
+      )}); a valid YYYY-MM-DD date is required.`,
+    );
+  }
+  return observedAt;
+}
+
 export function mapCaseRecordToSignals(
   record: SampleCaseRecord,
 ): Array<SignalCandidate<SampleCaseSignalPayload>> {
@@ -169,7 +186,7 @@ export function mapCaseRecordToSignals(
         reviewRequired,
         nextAction: deriveNextAction(record),
       },
-      observedAt: new Date(`${record.observedDate}T00:00:00.000Z`),
+      observedAt: parseObservedAt(record),
       confidence: record.evidenceCount > 0 ? "trusted" : "degraded",
       gapFields: deriveGapFields(record, severity),
       trace: {

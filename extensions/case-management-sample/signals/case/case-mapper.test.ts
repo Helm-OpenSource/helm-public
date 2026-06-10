@@ -93,6 +93,17 @@ describe("case-management-sample case mapper", () => {
       ).toEqual([]);
     }
   });
+
+  it("fails loudly (not with a downstream Invalid Date) on a missing/unparseable observedDate", () => {
+    // Real backends carry pervasive NULL date fields; an empty observedDate must
+    // not silently become an Invalid Date that crashes review-packet
+    // serialization (observedAt.toISOString()).
+    for (const bad of ["", "not-a-date"]) {
+      expect(() =>
+        mapCaseRecordToSignals({ ...baseCase, observedDate: bad }),
+      ).toThrow(/observedDate/i);
+    }
+  });
 });
 
 describe("normalizeSampleCaseStage (ingestion boundary)", () => {
