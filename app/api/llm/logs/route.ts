@@ -1,6 +1,7 @@
 import { subDays } from "date-fns";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { getLLMOverview } from "@/lib/observability/llm-metrics.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 
 export async function GET(request: Request) {
@@ -23,11 +24,10 @@ export async function GET(request: Request) {
     return Response.json(
       {
         success: false,
-        message: error instanceof Error
-          ? error.message
-          : english
-            ? "Failed to read LLM call logs"
-            : "读取 LLM 调用日志失败",
+        message: serverErrorMessage(
+          error,
+          english ? "Failed to read LLM call logs" : "读取 LLM 调用日志失败",
+        ),
       },
       { status: 500 },
     );

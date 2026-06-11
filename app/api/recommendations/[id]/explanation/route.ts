@@ -3,6 +3,7 @@ import { logEvent } from "@/lib/analytics";
 import { resolveApiWorkspaceMessage } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { getRecommendationExplanation } from "@/lib/recommendations/recommendation.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET(
   request: Request,
@@ -28,12 +29,13 @@ export async function GET(
     return successResponse(data, "ok");
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : resolveApiWorkspaceMessage(workspaceLocale, {
+      serverErrorMessage(
+        error,
+        resolveApiWorkspaceMessage(workspaceLocale, {
           zh: "读取 recommendation 解释失败",
           en: "Failed to read recommendation explanation",
         }),
+      ),
       "RECOMMENDATION_NOT_FOUND",
       404,
     );

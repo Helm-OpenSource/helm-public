@@ -1231,6 +1231,21 @@ model AuthVerificationCode {
   @@index([userId])
 }
 
+// Durable per-identifier password-login rate limiting. The identifier
+// (email/phone) is hashed, never stored raw; attempts are tracked for any
+// identifier so the lockout reveals nothing about account existence.
+model FailedLoginAttempt {
+  id              String    @id @default(cuid())
+  identifierHash  String    @unique
+  attemptCount    Int       @default(0)
+  windowStartedAt DateTime  @default(now())
+  lockedUntil     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([lockedUntil])
+}
+
 model AuthSession {
   id                    String     @id @default(cuid())
   userId                String
@@ -1405,7 +1420,7 @@ model WorkspaceSolutionExtension {
   kind         SolutionExtensionKind
   status       WorkspaceSolutionExtensionStatus @default(ACTIVE)
   version      String?
-  configJson   String?
+  configJson   String?                          @db.LongText
   enabledAt    DateTime                         @default(now())
   disabledAt   DateTime?
   createdAt    DateTime                         @default(now())
@@ -1605,8 +1620,8 @@ model GtmLead {
   stage                    GtmLeadStage          @default(CAPTURED)
   nextAction               String?
   blocker                  String?
-  evidenceRefsJson         String?
-  internalNotes            String?
+  evidenceRefsJson         String?               @db.LongText
+  internalNotes            String?               @db.LongText
   createdAt                DateTime              @default(now())
   updatedAt                DateTime              @updatedAt
   workspace                Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1629,19 +1644,19 @@ model CustomerDemandBrief {
   briefKey                        String
   entryMode                       CustomerDemandBriefEntryMode
   prefillSource                   String?
-  customerSummary                 String
-  businessPressureTagsJson        String
-  currentResourceTagsJson         String
-  resourceEvidenceReadinessJson   String
-  painToControlLineCandidatesJson String
-  roleMapJson                     String
-  firstLoopCandidatesJson         String
-  successCriteria                 String
-  riskBoundaryTagsJson            String
-  customerVisibleSummary          String
-  internalSalesNotes              String?
-  trialInitializationPayloadJson  String?
-  sourceTraceJson                 String
+  customerSummary                 String                                          @db.LongText
+  businessPressureTagsJson        String                                          @db.LongText
+  currentResourceTagsJson         String                                          @db.LongText
+  resourceEvidenceReadinessJson   String                                          @db.LongText
+  painToControlLineCandidatesJson String                                          @db.LongText
+  roleMapJson                     String                                          @db.LongText
+  firstLoopCandidatesJson         String                                          @db.LongText
+  successCriteria                 String                                          @db.LongText
+  riskBoundaryTagsJson            String                                          @db.LongText
+  customerVisibleSummary          String                                          @db.LongText
+  internalSalesNotes              String?                                         @db.LongText
+  trialInitializationPayloadJson  String?                                         @db.LongText
+  sourceTraceJson                 String                                          @db.LongText
   reviewStatus                    CustomerDemandBriefReviewStatus                 @default(DRAFT)
   customerConfirmationStatus      CustomerDemandBriefCustomerConfirmationStatus   @default(NOT_INVITED)
   createdAt                       DateTime                                        @default(now())
@@ -1667,10 +1682,10 @@ model OperatingControlLineCandidate {
   painTag                  String
   controlLineTemplate      OperatingControlLineCandidateTemplate
   targetBusinessObject     String
-  resourceInputsJson       String
+  resourceInputsJson       String                                          @db.LongText
   evidenceReadiness        OperatingControlLineCandidateEvidenceReadiness  @default(DECLARED)
   status                   OperatingControlLineCandidateStatus             @default(DRAFT)
-  evidenceNotesJson        String
+  evidenceNotesJson        String                                          @db.LongText
   reviewerNotes            String?
   createdAt                DateTime                                        @default(now())
   updatedAt                DateTime                                        @updatedAt
@@ -1701,14 +1716,14 @@ model CustomerContextUpdateRequest {
   requestKey               String
   origin                   CustomerContextUpdateRequestOrigin
   scope                    CustomerContextUpdateRequestScope
-  proposedChangesJson      String
+  proposedChangesJson      String                                          @db.LongText
   materiality              CustomerContextUpdateRequestMateriality
   reviewStatus             CustomerContextUpdateRequestReviewStatus        @default(REVIEW_REQUIRED)
   reviewerActor            String?
   reviewerDecisionNote     String?
   appliedAt                DateTime?
   supersededByRequestId    String?
-  sourceTraceJson          String
+  sourceTraceJson          String                                          @db.LongText
   createdAt                DateTime                                        @default(now())
   updatedAt                DateTime                                        @updatedAt
   workspace                Workspace                                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1732,16 +1747,16 @@ model DiagnosticSession {
   diagnosticKey                   String
   workspaceCandidate              String?
   businessGoal                    String
-  availableResourcesJson          String
-  roleReadinessJson               String
+  availableResourcesJson          String                  @db.LongText
+  roleReadinessJson               String                  @db.LongText
   firstLoopCandidateType          FirstLoopType?
   firstLoopCandidateNote          String?
-  riskNotesJson                   String
-  boundaryNotesJson               String
+  riskNotesJson                   String                  @db.LongText
+  boundaryNotesJson               String                  @db.LongText
   status                          DiagnosticSessionStatus @default(DRAFT)
   reviewerActor                   String?
   reviewerDecisionNote            String?
-  sourceTraceJson                 String
+  sourceTraceJson                 String                  @db.LongText
   createdAt                       DateTime                @default(now())
   updatedAt                       DateTime                @updatedAt
   workspace                       Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -4087,8 +4102,8 @@ model BiReportDelivery {
   targetKey         String
   status            BiReportDeliveryStatus  @default(PENDING)
   providerMessageId String?
-  requestBody       String?
-  responseBody      String?
+  requestBody       String?                 @db.LongText
+  responseBody      String?                 @db.LongText
   sentAt            DateTime?
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
@@ -4109,11 +4124,11 @@ model BiReportRunMemory {
   windowLabel        String
   severity           BiReportSeverity?
   shouldSend         Boolean           @default(false)
-  summaryMetricsJson String
-  topFindingsJson    String
-  analysisSummary    String
+  summaryMetricsJson String            @db.LongText
+  topFindingsJson    String            @db.LongText
+  analysisSummary    String            @db.LongText
   continuityStatus   String?
-  historicalContext  String?
+  historicalContext  String?           @db.LongText
   createdAt          DateTime          @default(now())
   workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -4129,10 +4144,10 @@ model BiReportFeedbackMemory {
   skillVersion      String
   windowLabel       String?
   feedbackStatus    String
-  confirmedCause    String?
-  confirmedAction   String?
-  resolutionOutcome String?
-  note              String?
+  confirmedCause    String?   @db.LongText
+  confirmedAction   String?   @db.LongText
+  resolutionOutcome String?   @db.LongText
+  note              String?   @db.LongText
   createdAt         DateTime  @default(now())
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -4151,10 +4166,10 @@ model BiReportBusinessSignal {
   summary                String                            @db.LongText
   severity               BiReportSeverity
   continuityStatus       String?
-  dimensionsJson         String?
-  metricsJson            String?
-  evidenceJson           String?
-  recommendedActionsJson String?
+  dimensionsJson         String?                           @db.LongText
+  metricsJson            String?                           @db.LongText
+  evidenceJson           String?                           @db.LongText
+  recommendedActionsJson String?                           @db.LongText
   status                 String                            @default("open")
   ownerUserId            String?
   ownerUserName          String?
@@ -4183,7 +4198,7 @@ model BiReportSignalNotification {
   targetKey         String
   status            String                 @default("pending")
   providerMessageId String?
-  errorMessage      String?
+  errorMessage      String?                @db.LongText
   sentAt            DateTime?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
@@ -4225,7 +4240,7 @@ model BiReportHandoffExecutionLog {
   stage          String
   authorUserId   String
   summary        String                 @db.LongText
-  detailsJson    String?
+  detailsJson    String?                @db.LongText
   isEffective    Boolean?
   followUpNeeded Boolean?
   createdAt      DateTime               @default(now())

@@ -1069,6 +1069,17 @@ export async function addOrganizationMemberAction(input: z.infer<typeof membersh
     return { ok: false, error: english ? "Only owner, billing admin or admin can manage organization members" : "只有组织负责人、计费管理员或管理员可以管理组织成员" };
   }
 
+  // Owner role is only reachable through the ownership-transfer flow.
+  // Without this guard any ADMIN/BILLING_ADMIN could mint a second OWNER
+  // here, bypassing the DIRECT_OWNER_ASSIGNMENT_NOT_ALLOWED invariant that
+  // updateOrganizationMembershipRoleAction enforces.
+  if (parsed.data.role === "OWNER") {
+    return {
+      ok: false,
+      error: getMembershipRoleGuardMessage("DIRECT_OWNER_ASSIGNMENT_NOT_ALLOWED", english),
+    };
+  }
+
   const rawIdentifier = String(parsed.data.email ?? "").trim();
   const { normalizedEmail, normalizedPhone } = resolveMemberIdentifier(rawIdentifier);
   if (!normalizedEmail && !normalizedPhone) {

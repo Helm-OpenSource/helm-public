@@ -9,6 +9,7 @@ import { assertWorkspaceObjectOwnership, isWorkspaceOwnershipError } from "@/lib
 import { ingestConversationCapture } from "@/lib/conversation-capture/capture-session.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const schema = z.object({
   title: z.string().trim().min(1).max(120),
@@ -37,15 +38,18 @@ const schema = z.object({
 export async function POST(request: Request) {
   const { user, membership, workspace } = await getCurrentWorkspaceSession();
   const english = isEnglishWorkspaceDefaultLocale(workspace.defaultLocale);
+
+  // Gate on capability before parsing the (attacker-controlled) request body,
+  // matching the start/stop routes.
+  if (!canManageWorkspaceCaptureSessions(membership.role)) {
+    return errorResponse(getCaptureManagementDeniedMessage(english), "CAPTURE_GOVERNANCE_REQUIRED", 403);
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
 
   if (!parsed.success) {
     return errorResponse(english ? "Please provide transcript text and a title" : "请提供 transcript 文本与标题", "INVALID_CAPTURE_INGEST", 400);
-  }
-
-  if (!canManageWorkspaceCaptureSessions(membership.role)) {
-    return errorResponse(getCaptureManagementDeniedMessage(english), "CAPTURE_GOVERNANCE_REQUIRED", 403);
   }
 
   try {
@@ -80,7 +84,7 @@ export async function POST(request: Request) {
     return successResponse(result, english ? "capture ingested" : "外部会话已导入");
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : english ? "Failed to ingest external conversation" : "外部会话导入失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to ingest external conversation" : "外部会话导入失败"),
       isWorkspaceOwnershipError(error) ? "OBJECT_NOT_FOUND" : "CAPTURE_INGEST_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

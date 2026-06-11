@@ -1,5 +1,15 @@
 #!/usr/bin/env tsx
 
+/**
+ * Run a BI report push (dry-run by default).
+ *
+ * This script imports server-only modules, so run it with the server-only
+ * shim hook:
+ *
+ *   node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs \
+ *     scripts/run-bi-report-push.ts --skill=<key> --workspace-id=<id> [--dry-run]
+ */
+
 import { executeBiReportPush } from "@/lib/bi-report-skill/run-executor";
 import { resolveBiReportPushWorkspaceIdFromRegistry } from "@/lib/extensions/registry";
 import { jsonStringify } from "@/lib/utils";
@@ -57,7 +67,7 @@ async function main() {
     return;
   }
 
-  console.log("[bi-report dry-run]");
+  console.log(payload.dryRun ? "[bi-report dry-run]" : "[bi-report run]");
   console.log(jsonStringify({
     skillKey: payload.skillKey,
     severity: payload.severity,

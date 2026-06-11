@@ -10,6 +10,7 @@ import { ensureWorkspaceProcessingAllowed, recordUsageLedgerEntry } from "@/lib/
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { previewCrmImportSource } from "@/lib/imports/crm-entry.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const schema = z.object({
   sourceId: z.string().min(1),
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, preview, workspaceId: workspace.id });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : english ? "CRM preview failed" : "客户关系系统预览失败" },
+      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "CRM preview failed" : "客户关系系统预览失败") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

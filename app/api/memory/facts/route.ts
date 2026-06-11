@@ -18,6 +18,7 @@ import {
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { createMemoryFactSchema } from "@/lib/memory/schemas";
 import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET(request: Request) {
   const user = await requireCurrentUser();
@@ -112,11 +113,7 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : english
-          ? "Object is not in the current workspace"
-          : "对象不在当前工作区中",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "对象不在当前 workspace 中"),
       isWorkspaceOwnershipError(error) ? "OBJECT_NOT_FOUND" : "READ_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );
@@ -173,11 +170,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : english
-          ? "Failed to create memory fact"
-          : "创建记忆失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "创建记忆失败"),
       isWorkspaceOwnershipError(error) ? "OBJECT_NOT_FOUND" : "CREATE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

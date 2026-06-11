@@ -123,18 +123,31 @@ export async function recordPaymentWebhookVerificationFailure(input: {
   });
 
   if (existing) {
+    // The failure fingerprint is built from the raw body only (nothing is
+    // trusted before verification), so it can collide with an already-RESOLVED
+    // event — e.g. a provider re-delivering a processed event with a stale
+    // signature, or a replay of the body with a bad signature. Do NOT rewrite a
+    // terminally-resolved record's status to VERIFICATION_FAILED; that would
+    // corrupt the audit trail of a real, successfully-processed payment. Record
+    // the duplicate observation but preserve the resolved status/reason.
+    const isResolved =
+      existing.governanceStatus === PAYMENT_WEBHOOK_CALLBACK_STATUS.RESOLVED;
     return db.paymentWebhookCallbackEvent.update({
       where: { id: existing.id },
       data: {
-        governanceStatus: PAYMENT_WEBHOOK_CALLBACK_STATUS.VERIFICATION_FAILED,
-        summary: input.summary,
-        failureReason: input.failureReason,
+        governanceStatus: isResolved
+          ? existing.governanceStatus
+          : PAYMENT_WEBHOOK_CALLBACK_STATUS.VERIFICATION_FAILED,
+        summary: isResolved ? existing.summary ?? input.summary : input.summary,
+        failureReason: isResolved
+          ? existing.failureReason ?? input.failureReason
+          : input.failureReason,
         hintSource: input.hintSource ?? undefined,
         hintWorkspaceId: input.hintWorkspaceId ?? undefined,
-        payloadJson: serializePayload(input.payload),
+        payloadJson: isResolved ? undefined : serializePayload(input.payload),
         lastReceivedAt: new Date(),
         lastDuplicateAt: new Date(),
-        processedAt: new Date(),
+        processedAt: isResolved ? existing.processedAt ?? new Date() : new Date(),
         duplicateReceptionCount: {
           increment: 1,
         },

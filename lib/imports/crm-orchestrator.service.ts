@@ -566,6 +566,7 @@ async function upsertMeetingFromExternal(input: {
     workspaceId: input.workspaceId,
     sourceType: input.source.sourceType,
     meeting: input.meeting,
+    companyId: input.companyId,
     governance: input.governance,
   });
 
@@ -781,7 +782,7 @@ async function createTaskFromExternal(input: {
   return actionItem.id;
 }
 
-async function applyAssociations(input: {
+export async function applyAssociations(input: {
   opportunityByExternalId: Map<string, string>;
   companyByExternalId: Map<string, string>;
   contactByExternalId: Map<string, string>;
@@ -791,11 +792,20 @@ async function applyAssociations(input: {
   let opportunityCompanyLinks = 0;
   let opportunityContactLinks = 0;
 
+  // A contact/opportunity has a single primary company. When a record has
+  // multiple COMPANY associations (e.g. a person at a parent + subsidiary in
+  // HubSpot), running every update would let the last association in iteration
+  // order win non-deterministically and clobber the company resolved during
+  // upsert. Bind each record to its FIRST company association only.
+  const contactCompanyAssigned = new Set<string>();
+  const opportunityCompanyAssigned = new Set<string>();
+
   for (const association of input.dataset.associations) {
     if (association.fromType === "CONTACT" && association.toType === "COMPANY") {
       const contactId = input.contactByExternalId.get(association.fromId);
       const companyId = input.companyByExternalId.get(association.toId);
-      if (contactId && companyId) {
+      if (contactId && companyId && !contactCompanyAssigned.has(contactId)) {
+        contactCompanyAssigned.add(contactId);
         await db.contact.update({
           where: { id: contactId },
           data: { companyId },
@@ -807,7 +817,8 @@ async function applyAssociations(input: {
     if (association.fromType === "OPPORTUNITY" && association.toType === "COMPANY") {
       const opportunityId = input.opportunityByExternalId.get(association.fromId);
       const companyId = input.companyByExternalId.get(association.toId);
-      if (opportunityId && companyId) {
+      if (opportunityId && companyId && !opportunityCompanyAssigned.has(opportunityId)) {
+        opportunityCompanyAssigned.add(opportunityId);
         await db.opportunity.update({
           where: { id: opportunityId },
           data: { companyId },
@@ -1166,6 +1177,7 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
             id: match.importItemId!,
             workspaceId: input.workspaceId,
           },
+          include: { importJob: { select: { source: { select: { sourceType: true } } } } },
         });
       })()
     : null;
@@ -1175,6 +1187,11 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
   if (!item || !normalized) {
     throw new Error("冲突缺少可恢复的导入载荷");
   }
+
+  // The source type lets the conflict-created object carry its external
+  // identity, so the next incremental import resolves to it by external ID
+  // instead of creating a duplicate.
+  const externalSource = item.importJob.source.sourceType;
 
   const actor = input.actorName ?? "导入冲突处理";
   const baseAuditPayload = {
@@ -1259,6 +1276,10 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
         name: String(normalized.name ?? "未命名公司"),
         website: (normalized.website as string | null | undefined) ?? null,
         industry: (normalized.industry as string | null | undefined) ?? null,
+        externalSource,
+        externalObjectType: "COMPANY",
+        externalObjectId: item.externalId,
+        externalSyncedAt: new Date(),
       },
     });
 
@@ -1308,6 +1329,10 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
         email: (normalized.email as string | null | undefined) ?? null,
         phone: (normalized.phone as string | null | undefined) ?? null,
         title: (normalized.title as string | null | undefined) ?? null,
+        externalSource,
+        externalObjectType: "CONTACT",
+        externalObjectId: item.externalId,
+        externalSyncedAt: new Date(),
       },
     });
 
@@ -1357,6 +1382,10 @@ export async function resolveImportConflict(input: ResolveImportConflictInput) {
         type: "CLIENT",
         stage: normalizeOpportunityStage(normalized.stageLabel as string | undefined),
         dueDate: normalized.dueDate ? new Date(String(normalized.dueDate)) : null,
+        externalSource,
+        externalObjectType: "OPPORTUNITY",
+        externalObjectId: item.externalId,
+        externalSyncedAt: new Date(),
       },
     });
 

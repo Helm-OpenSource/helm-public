@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/capture-runtime-governance";
 import { assertWorkspaceMeetingOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { queueConsolidationJob } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const queueMeetingConsolidationSchema = z.object({
   sourcePage: z.string().min(1).optional(),
@@ -49,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mee
     return Response.json({ success: true, data: result });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Consolidation queue failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Consolidation queue failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

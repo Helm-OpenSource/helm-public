@@ -1955,6 +1955,18 @@ export async function reviewDraftCommsRuntime(input: {
     );
   }
 
+  // Terminal-state guard: once a draft-only comms request has been resolved
+  // (REJECTED or APPROVED) it must not be re-reviewed. Without this, a
+  // previously human-REJECTED customer-facing draft could be re-submitted with
+  // mode "approve" and flipped to APPROVED — re-opening a rejected draft for
+  // handoff. Only a still-PENDING request (incl. a kept-draft, which leaves the
+  // approval request pending) may be reviewed.
+  if (masterBundle.approvalRequest.status !== ApprovalRequestStatus.PENDING) {
+    throw new Error(
+      "This draft-only comms request has already been resolved and cannot be re-reviewed.",
+    );
+  }
+
   const currentBundlePayload = artifactPayload<DraftCommsBundleArtifact>(
     masterBundle,
     {

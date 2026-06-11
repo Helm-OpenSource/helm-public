@@ -75,16 +75,19 @@ export async function resolveCompanyIdentity(input: {
       select: { id: true, name: true, website: true },
     });
 
-    const company = companies.find((candidate) => {
-      const candidateDomain = normalizeDomain(candidate.website);
-      return candidateDomain === domain || normalizeName(candidate.name) === normalizeName(input.company.name);
-    });
+    // Auto-link ONLY on a true domain match. A shared company name (very common
+    // — e.g. two unrelated "Acme" companies on different domains) is NOT a
+    // strong identifier, so it must fall through to the NEEDS_REVIEW path below
+    // rather than silently merging two distinct companies.
+    const company = companies.find(
+      (candidate) => normalizeDomain(candidate.website) === domain,
+    );
 
     if (company) {
       return {
         status: "AUTO_LINKED",
         internalObjectId: company.id,
-        reason: `通过域名或公司名匹配到现有公司（${domain}）`,
+        reason: `通过域名匹配到现有公司（${domain}）`,
         score: 92,
       };
     }
@@ -166,6 +169,14 @@ export async function resolveContactIdentity(input: {
     }
   }
 
+  // NOTE: do NOT add phone as a contact match/merge key here. It looks tempting
+  // as a secondary identifier, but real customer data makes it dangerous:
+  // placeholder/shared phone numbers are pervasive (in a production
+  // debt-collection dataset a single placeholder "11111111111" was attached to
+  // ~116k DISTINCT people, and a real-looking number to ~1.6k), so matching on
+  // phone would catastrophically false-merge unrelated contacts. Email + a
+  // company-scoped name remain the only identifiers used; a weak name-only
+  // match below is surfaced for review (NEEDS_REVIEW), never auto-merged.
   const normalized = normalizeName(input.contact.fullName);
   const candidates = await db.contact.findMany({
     where: {
@@ -262,6 +273,7 @@ export async function resolveMeetingIdentity(input: {
   workspaceId: string;
   sourceType: ImportSourceType;
   meeting: ExternalMeeting;
+  companyId?: string | null;
   governance?: IdentityMatchGovernanceInput;
 }): Promise<MatchDecision> {
   await assertIdentityResolutionServiceAccess(input.workspaceId, input.governance);
@@ -288,19 +300,26 @@ export async function resolveMeetingIdentity(input: {
     where: {
       workspaceId: input.workspaceId,
     },
-    select: { id: true, title: true, startsAt: true },
+    select: { id: true, title: true, startsAt: true, companyId: true },
   });
-  const sameSlot = meetings.find(
-    (candidate) =>
-      normalizeName(candidate.title) === normalizeName(input.meeting.title) &&
-      candidate.startsAt.getTime() === input.meeting.startsAt.getTime(),
-  );
+  // Title + start-time alone is a weak key — two different teams' "周会" can
+  // share both. Only treat it as the same meeting when the resolved company
+  // also matches; with no company context the key is too weak to auto-merge
+  // (which previously merged unrelated meetings / synthetic note-meetings).
+  const sameSlot = input.companyId
+    ? meetings.find(
+        (candidate) =>
+          candidate.companyId === input.companyId &&
+          normalizeName(candidate.title) === normalizeName(input.meeting.title) &&
+          candidate.startsAt.getTime() === input.meeting.startsAt.getTime(),
+      )
+    : undefined;
 
   if (sameSlot) {
     return {
       status: "AUTO_LINKED",
       internalObjectId: sameSlot.id,
-      reason: "会议标题和开始时间匹配到现有会议",
+      reason: "公司、会议标题与开始时间均匹配到现有会议",
       score: 94,
     };
   }

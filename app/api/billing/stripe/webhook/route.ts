@@ -21,6 +21,7 @@ import {
 import { syncWorkspacePaymentStatusFromCallbackEvent } from "@/lib/billing/integration";
 import { PAYMENT_PROVIDER } from "@/lib/billing/runtime-constants";
 import { verifyStripeWebhookSignature } from "@/lib/billing/stripe";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export const runtime = "nodejs";
 
@@ -64,14 +65,14 @@ export async function POST(request: Request) {
       hintSource: hintedWorkspace.hintSource,
       hintWorkspaceId: hintedWorkspace.workspaceId,
       payload: {
-        error: error instanceof Error ? error.message : "Webhook verification failed",
+        error: serverErrorMessage(error, "Webhook verification failed"),
       },
     });
 
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Webhook verification failed",
+        error: serverErrorMessage(error, "Webhook verification failed"),
       },
       { status: 400 },
     );
@@ -196,7 +197,7 @@ export async function POST(request: Request) {
       summary: buildBillingWebhookExceptionSummary({
         provider: PAYMENT_PROVIDER.STRIPE,
       }),
-      failureReason: error instanceof Error ? error.message : "stripe-callback-processing-failed",
+      failureReason: serverErrorMessage(error, "stripe-callback-processing-failed"),
       payload: {
         eventType: event.type,
         resolutionSource: tenancy.resolutionSource,
@@ -206,7 +207,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Stripe callback processing failed",
+        error: serverErrorMessage(error, "Stripe callback processing failed"),
       },
       { status: 500 },
     );

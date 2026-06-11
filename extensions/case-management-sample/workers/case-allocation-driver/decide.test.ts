@@ -56,4 +56,40 @@ describe("case-management-sample case allocation driver", () => {
     expect(report.stats.eligibleEmployees).toBe(0);
     expect(report.proposals.some((item) => item.proposalKind === "flag_capacity_gap")).toBe(true);
   });
+
+  it("consumes capacity per employee and flags the overflow once exhausted", () => {
+    const owners: SampleEmployeeRecord[] = [
+      { employeeRefId: "owner-a", displayName: "Owner A", role: "case-owner", active: true, reviewCapacity: 1 },
+      { employeeRefId: "owner-b", displayName: "Owner B", role: "case-owner", active: true, reviewCapacity: 1 },
+    ];
+    // Three non-boundary open cases, two seats of capacity → 2 assignments + 1 gap.
+    const threeCases: SampleCaseRecord[] = [1, 2, 3].map((n) => ({
+      workspaceId: "ws",
+      caseId: `CASE-CAP-00${n}`,
+      ownerRefId: "unassigned",
+      stage: "active_followup",
+      ageDays: 2,
+      priorityScore: 50,
+      evidenceCount: 1,
+      blockedReason: null,
+      observedDate: "2026-05-18",
+    }));
+
+    const report = decideAllocations({
+      cases: threeCases,
+      employees: owners,
+      operationMode: "active",
+    });
+
+    const assignments = report.proposals.filter(
+      (p) => p.proposalKind === "propose_assignment_recommendation",
+    );
+    const gaps = report.proposals.filter((p) => p.proposalKind === "flag_capacity_gap");
+
+    expect(assignments).toHaveLength(2);
+    expect(gaps).toHaveLength(1);
+    // Each owner is used exactly once — not all cases dumped on the first seat.
+    const assignedOwners = assignments.map((p) => p.recommendedOwnerRefId).sort();
+    expect(assignedOwners).toEqual(["owner-a", "owner-b"]);
+  });
 });

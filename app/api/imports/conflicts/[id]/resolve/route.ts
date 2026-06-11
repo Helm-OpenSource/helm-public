@@ -9,6 +9,7 @@ import { assertWorkspaceImportConflictOwnership, isWorkspaceOwnershipError } fro
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { resolveImportConflict } from "@/lib/imports/crm-orchestrator.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const schema = z.object({
   resolution: z.enum(["LINK", "CREATE_NEW", "IGNORE"]),
@@ -56,7 +57,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "冲突处理失败" },
+      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "冲突处理失败") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

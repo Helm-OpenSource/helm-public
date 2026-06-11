@@ -1,4 +1,5 @@
 import { recordLLMCall } from "@/lib/observability/llm-call-log.service";
+import { isLlmOutputParseError } from "@/lib/llm/output-parse-error";
 import { getWorkspaceLLMConfig } from "@/lib/llm/config";
 import { appendLLMContextAuditToInputSummary, buildLLMContextAudit } from "@/lib/llm/context-audit";
 import {
@@ -386,6 +387,11 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知 LLM 错误";
     const latencyMs = Date.now() - start;
+    // Distinguish a malformed-JSON output from a genuine provider/transport
+    // failure so the call ledger reflects what actually happened.
+    const fallbackReason = isLlmOutputParseError(error)
+      ? "output_parse_failed"
+      : "provider_error";
 
     await recordLLMCallSafely({
       workspaceId: input.workspaceId,
@@ -403,7 +409,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       outputSummary: "本次调用失败，已回退到规则逻辑。",
       latencyMs,
       success: false,
-      fallbackReason: "provider_error",
+      fallbackReason,
       errorMessage: message,
     });
 
@@ -417,7 +423,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       promptVersion,
       success: false,
       fallbackUsed: true,
-      fallbackReason: "provider_error",
+      fallbackReason,
       errorMessage: message,
       latencyMs,
       rawOutput: null,

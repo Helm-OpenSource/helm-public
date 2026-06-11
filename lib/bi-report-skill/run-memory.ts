@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isMissingTableError } from "@/lib/bi-report-skill/missing-table-error";
 import type {
   BiReportContinuityStatus,
   BiReportRunMemoryEntry,
@@ -123,9 +124,5 @@ function isContinuityStatus(value: string | null): value is BiReportContinuitySt
 }
 
 function isMissingBiReportRunMemoryTableError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    message.includes(`relation "BiReportRunMemory" does not exist`) ||
-    message.includes("no such table: BiReportRunMemory")
-  );
+  return isMissingTableError(error);
 }

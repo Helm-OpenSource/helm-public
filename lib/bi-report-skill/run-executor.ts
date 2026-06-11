@@ -21,6 +21,7 @@ import { persistBiReportRowLevelSignals } from "@/lib/bi-report-skill/row-level-
 import { resolveBiReportSignalOwner } from "@/lib/bi-report-skill/signal-routing";
 import { createBiReportSignalNotification } from "@/lib/bi-report-skill/signal-notification";
 import { isBiReportSignalNotificationSendEnabled } from "@/lib/bi-report-skill/signal-notification-policy";
+import { lintBiReportMessageTemplate } from "@/lib/bi-report-skill/message-template-lint";
 import { buildBiReportQueryInput } from "@/lib/bi-report-skill/sql-template";
 import type { BiReportSubscriptionConfig } from "@/lib/bi-report-skill/types";
 import {
@@ -161,6 +162,8 @@ export async function executeBiReportPush(input: ExecuteBiReportPushInput): Prom
     skill,
     subscription,
   });
+  // Surface silent-empty template placeholders alongside query lint warnings.
+  query.knowledgeLint.warnings.push(...lintBiReportMessageTemplate(skill));
   const effectiveSql = input.sql?.trim() || query.sql;
   const queryMode = input.inputFile ? "sample_input" : input.sql ? "custom_sql" : "odps";
   const persistedRun = workspaceMissing || dryRun

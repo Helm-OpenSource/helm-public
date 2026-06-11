@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/capture-runtime-governance";
 import { assertWorkspaceSignalObjectOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { ingestRuntimeSignals } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const signalSchema = z.object({
   meetingId: z.string().optional(),
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     return Response.json({ success: true, data: result });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Signal ingest failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Signal ingest failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

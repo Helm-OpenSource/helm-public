@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isMissingTableError } from "@/lib/bi-report-skill/missing-table-error";
 import type {
   BiReportFeedbackMemoryEntry,
   BiReportFeedbackStatus,
@@ -177,9 +178,5 @@ export const __testOnly = {
 };
 
 function isMissingBiReportFeedbackMemoryTableError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    message.includes(`relation "BiReportFeedbackMemory" does not exist`) ||
-    message.includes("no such table: BiReportFeedbackMemory")
-  );
+  return isMissingTableError(error);
 }

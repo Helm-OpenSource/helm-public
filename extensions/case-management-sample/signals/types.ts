@@ -168,7 +168,10 @@ export function buildSignalIdentity(input: {
   if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(input.sourceWindowKey)) {
     throw new Error("sourceWindowKey must not contain UUID");
   }
-  if (/\b\d{13,}\b/.test(input.sourceWindowKey)) {
+  // Exactly 13 digits: ms-epoch timestamps stay 13 digits until year 2286.
+  // Longer digit runs (e.g. 21-digit upstream work-order numbers) are
+  // deterministic business keys and must stay accepted.
+  if (/(?<!\d)\d{13}(?!\d)/.test(input.sourceWindowKey)) {
     throw new Error("sourceWindowKey must not contain ms-precision timestamp");
   }
   return {

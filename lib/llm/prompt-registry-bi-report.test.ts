@@ -26,8 +26,14 @@ describe("bi report prompt registry", () => {
       skillPromptTemplate: "输出结构建议：possibleCauses / recommendedActions / boundaryNote。",
     });
 
-    expect(prompt.systemPrompt).toContain("当前 skill 的补充解释约束如下");
-    expect(prompt.systemPrompt).toContain("possibleCauses / recommendedActions / boundaryNote");
+    // The workspace-editable skill template is data, not a system instruction:
+    // it lives in a fenced user-prompt section, never the system prompt.
+    expect(prompt.systemPrompt).not.toContain(
+      "possibleCauses / recommendedActions / boundaryNote",
+    );
+    expect(prompt.systemPrompt).toContain("skill_supplementary_notes");
+    expect(prompt.userPrompt).toContain("<skill_supplementary_notes>");
+    expect(prompt.userPrompt).toContain("possibleCauses / recommendedActions / boundaryNote");
     expect(prompt.userPrompt).toContain("连续性状态：recurring");
     expect(prompt.userPrompt).toContain("最近两次也出现了同类波动");
     expect(prompt.userPrompt).toContain("最近一条人工复盘确认是口径变更导致");

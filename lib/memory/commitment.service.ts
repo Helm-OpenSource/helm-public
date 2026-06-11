@@ -261,18 +261,20 @@ export async function getCommitmentsForObject(args: {
   workspaceId: string;
   objectType: ObjectType;
   objectId: string;
+  onlyOpen?: boolean;
 }) {
+  const onlyOpen = args.onlyOpen ?? false;
   if (args.objectType === ObjectType.CONTACT) {
-    return getCommitments({ workspaceId: args.workspaceId, relatedContactId: args.objectId });
+    return getCommitments({ workspaceId: args.workspaceId, relatedContactId: args.objectId, onlyOpen });
   }
   if (args.objectType === ObjectType.COMPANY) {
-    return getCommitments({ workspaceId: args.workspaceId, relatedCompanyId: args.objectId });
+    return getCommitments({ workspaceId: args.workspaceId, relatedCompanyId: args.objectId, onlyOpen });
   }
   if (args.objectType === ObjectType.OPPORTUNITY) {
-    return getCommitments({ workspaceId: args.workspaceId, relatedOpportunityId: args.objectId });
+    return getCommitments({ workspaceId: args.workspaceId, relatedOpportunityId: args.objectId, onlyOpen });
   }
   if (args.objectType === ObjectType.MEETING) {
-    return getCommitments({ workspaceId: args.workspaceId, relatedMeetingId: args.objectId });
+    return getCommitments({ workspaceId: args.workspaceId, relatedMeetingId: args.objectId, onlyOpen });
   }
   return [];
 }

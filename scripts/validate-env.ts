@@ -153,7 +153,9 @@ function stripWrappingQuotes(value: string): string {
 
 function loadEnvFiles() {
   const root = process.cwd();
-  for (const relativePath of [".env.example", ".env"]) {
+  // `.env` first: with skip-if-already-set semantics, the first file loaded
+  // wins, so the real environment must take precedence over example defaults.
+  for (const relativePath of [".env", ".env.example"]) {
     const filePath = path.join(root, relativePath);
     if (!existsSync(filePath)) {
       continue;

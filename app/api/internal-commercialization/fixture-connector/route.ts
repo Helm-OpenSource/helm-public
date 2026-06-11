@@ -7,6 +7,7 @@ import {
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { runInternalCommercializationFixtureConnector } from "@/lib/internal-commercialization/fixture-connector";
 import { assertHelmReservedWorkspaceAccess } from "@/lib/workspace-reserved";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const requestSchema = z.object({
   dryRun: z.boolean().optional().default(true),
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Reserved workspace required",
+        error: serverErrorMessage(error, "Reserved workspace required"),
       },
       {
         status: 403,

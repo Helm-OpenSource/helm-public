@@ -450,8 +450,13 @@ export function summarizeOperatingGaps(
   return {
     totalOpen: gaps.length,
     reviewRequired: gaps.filter((item) => item.operatorReviewRequired).length,
-    escalationRequired: gaps.filter((item) =>
-      item.severity === "critical" || item.escalationPosture !== "watch",
+    // Escalation is driven by severity. The previous predicate also accepted any
+    // gap whose escalationPosture !== "watch", but no gap factory ever assigns
+    // the "watch" posture, so that clause was always true and escalationRequired
+    // collapsed to equal totalOpen — an uninformative metric. A high-urgency
+    // (critical/high) gap is the real escalation signal; medium/low gaps are not.
+    escalationRequired: gaps.filter(
+      (item) => item.severity === "critical" || item.severity === "high",
     ).length,
     kindCounts: Array.from(kindCountMap.entries())
       .map(([kind, count]) => ({ kind, count }))

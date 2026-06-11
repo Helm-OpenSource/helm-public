@@ -4,6 +4,7 @@ import { assertWorkspaceMeetingOwnership, isWorkspaceOwnershipError } from "@/li
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { processMeetingMemory } from "@/lib/memory/meeting-memory-pipeline.service";
 import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_: Request, { params }: { params: Promise<{ meetingId: string }> }) {
   let english = false;
@@ -51,11 +52,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ meetingId
     return Response.json(
       {
         success: false,
-        message: error instanceof Error
-          ? error.message
-          : english
-            ? "Failed to process meeting memory"
-            : "处理会议记忆失败",
+        message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to process meeting memory" : "处理会议记忆失败"),
       },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );

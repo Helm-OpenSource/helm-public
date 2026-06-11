@@ -1,4 +1,4 @@
-import { ActorType, MemoryCorrectionType } from "@prisma/client";
+import { ActorType, MemoryCorrectionType, MemoryStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { serviceGovernanceMock, dbMock, evolutionDeltaMock, evolutionPatternMock, sharedMock } = vi.hoisted(() => ({
@@ -164,5 +164,87 @@ describe("memory correction service governance", () => {
       english: true,
     });
     expect(dbMock.memoryFact.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("demotes a fact to INVALID for an INVALIDATE correction even without afterValue.status", async () => {
+    serviceGovernanceMock.assertWorkspaceMemoryServiceAccess.mockResolvedValue(undefined);
+    dbMock.memoryFact.findFirst.mockResolvedValueOnce({
+      id: "fact-1",
+      workspaceId: "workspace-1",
+      title: "客户本周确认采购",
+      content: "客户本周确认采购",
+      status: MemoryStatus.ACTIVE,
+      confidence: 80,
+      normalizedValue: null,
+      objectType: "OPPORTUNITY",
+      objectId: "opp-1",
+    });
+    dbMock.memoryFact.update.mockImplementation(async ({ data }) => ({ id: "fact-1", ...data }));
+    dbMock.memoryCorrection.create.mockResolvedValue({ id: "corr-1" });
+
+    await correctMemoryFact({
+      workspaceId: "workspace-1",
+      actorName: "Reviewer",
+      actorUserId: "user-1",
+      actorType: ActorType.USER,
+      memoryFactId: "fact-1",
+      correctionType: MemoryCorrectionType.INVALIDATE,
+      reason: "信息已不成立",
+      english: false,
+    });
+
+    // The human INVALIDATE must actually demote the fact, not just log a label.
+    expect(dbMock.memoryFact.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "fact-1" },
+        data: expect.objectContaining({ status: MemoryStatus.INVALID }),
+      }),
+    );
+
+    // And it must expire EVERY briefing that embedded this fact — including
+    // sibling-object briefings (a contact/opportunity briefing that pulled this
+    // company fact) — not just the fact's own-object briefing.
+    expect(dbMock.briefingSnapshot.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: "workspace-1",
+          sourceFactIds: { contains: '"fact-1"' },
+        }),
+      }),
+    );
+  });
+
+  it("leaves status untouched for a CONTENT_UPDATE correction", async () => {
+    serviceGovernanceMock.assertWorkspaceMemoryServiceAccess.mockResolvedValue(undefined);
+    dbMock.memoryFact.findFirst.mockResolvedValueOnce({
+      id: "fact-2",
+      workspaceId: "workspace-1",
+      title: "old",
+      content: "old",
+      status: MemoryStatus.ACTIVE,
+      confidence: 70,
+      normalizedValue: null,
+      objectType: "CONTACT",
+      objectId: "c-1",
+    });
+    dbMock.memoryFact.update.mockImplementation(async ({ data }) => ({ id: "fact-2", ...data }));
+    dbMock.memoryCorrection.create.mockResolvedValue({ id: "corr-2" });
+
+    await correctMemoryFact({
+      workspaceId: "workspace-1",
+      actorName: "Reviewer",
+      actorUserId: "user-1",
+      actorType: ActorType.USER,
+      memoryFactId: "fact-2",
+      correctionType: MemoryCorrectionType.CONTENT_UPDATE,
+      afterValue: { content: "new" },
+      english: false,
+    });
+
+    expect(dbMock.memoryFact.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: MemoryStatus.ACTIVE, content: "new" }),
+      }),
+    );
   });
 });

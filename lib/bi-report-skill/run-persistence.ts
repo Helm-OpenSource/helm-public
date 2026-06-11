@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isMissingTableError } from "@/lib/bi-report-skill/missing-table-error";
 import type {
   BiReportDeliveryPreview,
   BiReportEffectivenessSummary,
@@ -1305,13 +1306,5 @@ function readBiReportDedupeWindowMinutes(source: Record<string, unknown> | null)
 }
 
 function isMissingBiReportPersistenceTableError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    message.includes(`relation "BiReportSubscription" does not exist`) ||
-    message.includes("no such table: BiReportSubscription") ||
-    message.includes(`relation "BiReportRun" does not exist`) ||
-    message.includes("no such table: BiReportRun") ||
-    message.includes(`relation "BiReportDelivery" does not exist`) ||
-    message.includes("no such table: BiReportDelivery")
-  );
+  return isMissingTableError(error);
 }

@@ -8,6 +8,7 @@ import { updateBlockerStatus } from "@/lib/memory/blocker.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { updateBlockerStatusSchema } from "@/lib/memory/schemas";
 import { canManageWorkspaceMemory, getMemoryManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getCurrentWorkspaceSession();
@@ -54,11 +55,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : english
-          ? "Failed to update blocker status"
-          : "更新阻塞状态失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "更新阻塞状态失败"),
       isWorkspaceOwnershipError(error) ? "BLOCKER_NOT_FOUND" : "UPDATE_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

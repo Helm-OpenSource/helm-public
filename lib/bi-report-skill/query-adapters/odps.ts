@@ -58,7 +58,9 @@ function getOdpsApiToken() {
 
 function getOdpsTimeoutMs() {
   const value = Number(process.env.BI_REPORT_ODPS_TIMEOUT_MS ?? readRootEnv("BI_REPORT_ODPS_TIMEOUT_MS") ?? 30_000);
-  return Number.isFinite(value) ? value : 30_000;
+  // Reject 0/negative/NaN (Number("") === 0): an instant-timeout config would
+  // abort every query before it starts.
+  return Number.isFinite(value) && value > 0 ? value : 30_000;
 }
 
 function getOdpsMcpCommand() {
@@ -141,8 +143,9 @@ export async function queryBiReportRowsFromOdps(input: {
   void input.sqlParams;
   const timeoutMs = getOdpsTimeoutMs();
   const fetchController = shouldUseHttpOdpsBridge() ? new AbortController() : null;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const timeoutError = new Promise<never>((_, reject) => {
-    setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       if (fetchController) {
         fetchController.abort();
       }
@@ -159,13 +162,23 @@ export async function queryBiReportRowsFromOdps(input: {
       }),
       timeoutError,
     ]);
+    assertOdpsPayloadOk(payload);
     const rows = extractRows(payload);
-    return rows.map(normalizeBiReportRow);
+    const normalized = rows.map(normalizeBiReportRow);
+    warnOnUnsafeBigIntColumns(normalized);
+    return normalized;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`BI report ODPS query timed out after ${timeoutMs}ms`);
     }
     throw error;
+  } finally {
+    // Always clear the timer: otherwise a fast query still keeps the event loop
+    // (and any serverless invocation) alive until timeoutMs elapses, then fires
+    // a pointless abort().
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
 }
 
@@ -355,18 +368,28 @@ class BiReportOdpsMcpClient {
       }
     });
 
-    this.child.once("exit", () => {
+    const failAllPending = (reason: string) => {
       this.markReady();
       for (const [, pending] of this.pending) {
         clearTimeout(pending.timer);
-        pending.reject(
-          new Error(
-            `BI report ODPS MCP process exited unexpectedly. stderr: ${this.stderrBuffer || "n/a"}`,
-          ),
-        );
+        pending.reject(new Error(`${reason} stderr: ${this.stderrBuffer || "n/a"}`));
       }
       this.pending.clear();
+    };
+
+    this.child.once("exit", () => {
+      failAllPending("BI report ODPS MCP process exited unexpectedly.");
     });
+
+    // Without an `error` listener, a missing MCP binary (ENOENT — the most
+    // common misconfiguration) emits an unhandled `error` on the child and
+    // crashes the whole Node/Next.js process; `exit` never fires in that case.
+    this.child.once("error", (err: Error) => {
+      failAllPending(`BI report ODPS MCP process failed to start: ${err.message}.`);
+    });
+    // EPIPE on stdin after the child dies is likewise emitted as `error` on the
+    // stream; swallow it (pending requests are already rejected via exit/error).
+    this.child.stdin.on("error", () => {});
 
     setTimeout(() => {
       this.markReady();
@@ -411,7 +434,17 @@ class BiReportOdpsMcpClient {
         );
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+      try {
+        this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+      } catch (err) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(
+          new Error(
+            `BI report ODPS MCP request could not be written: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
     });
   }
 
@@ -484,6 +517,30 @@ function extractMcpToolPayload(payload: unknown) {
   return payload;
 }
 
+// The ODPS bridge (both the HTTP endpoint and the MCP tool) reports a query
+// failure as a 200-OK JSON body `{ success: false, error: "ODPS-..." }` rather
+// than a non-2xx status. Without this check extractRows() would find no `rows`
+// array and silently return [], so a failed query (missing table, bad SQL,
+// permission error) would surface as a perfectly normal empty BI report — zero
+// metrics presented as if they were real. Surface the bridge error instead.
+function assertOdpsPayloadOk(payload: unknown) {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    (payload as { success?: unknown }).success === false
+  ) {
+    const message = (payload as { error?: unknown }).error;
+    throw new Error(
+      `BI report ODPS query failed: ${
+        typeof message === "string" && message.trim()
+          ? message.trim()
+          : "the ODPS bridge reported success=false"
+      }`,
+    );
+  }
+}
+
 function extractRows(payload: unknown) {
   if (Array.isArray(payload)) {
     return payload;
@@ -510,6 +567,38 @@ function normalizeBiReportRow(row: unknown): BiReportRow {
   return Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key, normalizeBiReportRowValue(value)]),
   ) as BiReportRow;
+}
+
+// The ODPS bridge serializes BIGINT columns as raw JSON numbers, so a value
+// above Number.MAX_SAFE_INTEGER (2^53) — e.g. a snowflake/timestamp-prefixed id
+// or a large pre-aggregated amount — has ALREADY lost integer precision by the
+// time response.json() parses it (9223372036854775807 -> 9223372036854776000).
+// Precision can't be recovered here, but it must not be lost silently. Warn ONCE
+// per query, listing the affected columns (a multi-row result sharing a
+// corrupted column would otherwise log one identical warning per row and bury
+// the signal), and point at the fix: CAST the column to STRING in the query,
+// which the bridge then quotes and we preserve exactly.
+function warnOnUnsafeBigIntColumns(rows: BiReportRow[]) {
+  const affected = new Set<string>();
+  for (const row of rows) {
+    for (const [key, value] of Object.entries(row)) {
+      if (
+        typeof value === "number" &&
+        Number.isInteger(value) &&
+        !Number.isSafeInteger(value)
+      ) {
+        affected.add(key);
+      }
+    }
+  }
+
+  if (affected.size > 0) {
+    console.warn(
+      `[bi-report odps] column(s) ${[...affected]
+        .map((key) => `"${key}"`)
+        .join(", ")} returned integer values beyond Number.MAX_SAFE_INTEGER and have lost precision at the JSON boundary; CAST them to STRING in the ODPS query to keep them exact.`,
+    );
+  }
 }
 
 function normalizeBiReportRowValue(value: unknown): BiReportRow[keyof BiReportRow] {

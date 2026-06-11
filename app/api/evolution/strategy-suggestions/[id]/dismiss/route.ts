@@ -7,6 +7,7 @@ import { assertWorkspaceStrategySuggestionOwnership, isWorkspaceOwnershipError }
 import { dismissStrategySuggestion } from "@/lib/evolution/strategy-suggestion.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_: Request, context: { params: Promise<{ id: string }> }) {
   const { user, membership, workspace } = await getCurrentWorkspaceSession();
@@ -37,11 +38,7 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : english
-          ? "Failed to dismiss strategy suggestion"
-          : "忽略策略建议失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to dismiss strategy suggestion" : "忽略策略建议失败"),
       isWorkspaceOwnershipError(error) ? "SUGGESTION_NOT_FOUND" : "DISMISS_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

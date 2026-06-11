@@ -2,7 +2,7 @@ import { ObjectType } from "@prisma/client";
 import { buildBriefingPrompt, briefingSchema, llmPromptVersions } from "@/lib/llm/prompt-registry";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
 import type { MemoryRetrievalPackSurfaceTrace } from "@/lib/memory/retrieval-pack-adapter";
-import { safeParseJson } from "@/lib/utils";
+import { parseLlmJsonOrThrow } from "@/lib/llm/output-parse-error";
 
 type BriefingLikePayload = {
   summary: string;
@@ -62,12 +62,12 @@ export async function generateBriefingWithLLM(input: BriefingWorkflowInput) {
       importantFactHighlights: input.fallbackPayload.recentFacts.map((item) => String(item.content ?? item.title ?? "")).slice(0, 3),
     },
     parseOutput: (rawText) =>
-      safeParseJson(rawText, {
-        summary: input.fallbackPayload.summary,
-        recommendedQuestions: input.fallbackPayload.recommendedQuestions,
-        recommendedNextSteps: input.fallbackPayload.recommendedNextSteps,
-        importantFactHighlights: input.fallbackPayload.recentFacts.map((item) => String(item.content ?? item.title ?? "")).slice(0, 3),
-      }),
+      parseLlmJsonOrThrow<{
+        summary: string;
+        recommendedQuestions: string[];
+        recommendedNextSteps: string[];
+        importantFactHighlights: string[];
+      }>(rawText),
   });
 
   const payload: BriefingLikePayload = {

@@ -86,6 +86,36 @@ describe("operating gap projection", () => {
     expect(summary.kindCounts[0]?.count).toBeGreaterThan(0);
   });
 
+  it("counts only critical/high-severity gaps as escalation-required (not every open gap)", () => {
+    const base = {
+      gapKey: "k",
+      workspaceId: "ws_1",
+      kind: "missing-owner" as const,
+      sourceRepresentation: "problem-space" as const,
+      title: "t",
+      summary: "s",
+      ownerHint: null,
+      nextActionHint: null,
+      evidenceRefs: [],
+      evidenceSummary: "",
+      escalationPosture: "assign-owner" as const,
+      operatorReviewRequired: false,
+      href: "/x",
+      updatedAt: new Date("2026-04-04T13:00:00.000Z"),
+    };
+    const summary = summarizeOperatingGaps([
+      { ...base, id: "g1", severity: "critical" },
+      { ...base, id: "g2", severity: "high" },
+      { ...base, id: "g3", severity: "medium" },
+      { ...base, id: "g4", severity: "low" },
+    ]);
+
+    expect(summary.totalOpen).toBe(4);
+    // Previously this was always equal to totalOpen (the escalationPosture
+    // !== "watch" clause was dead); now it reflects real severity.
+    expect(summary.escalationRequired).toBe(2);
+  });
+
   it("projects missing-kpi-link when business-loop metrics are missing or stale", () => {
     const missingMetrics = buildOperatingGapQueue({
       workspaceId: "ws_1",

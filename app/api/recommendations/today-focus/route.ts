@@ -2,6 +2,7 @@ import { getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
 import { resolveApiWorkspaceMessage } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { getTodayFocusRecommendations } from "@/lib/recommendations/recommendation.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET(request: Request) {
   let workspaceLocale: string | null | undefined;
@@ -29,12 +30,13 @@ export async function GET(request: Request) {
     return successResponse(data, "ok");
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : resolveApiWorkspaceMessage(workspaceLocale, {
+      serverErrorMessage(
+        error,
+        resolveApiWorkspaceMessage(workspaceLocale, {
           zh: "生成今日重点失败",
-          en: "Failed to generate today's focus",
+          en: "Failed to generate today focus",
         }),
+      ),
       "TODAY_FOCUS_FAILED",
       500,
     );

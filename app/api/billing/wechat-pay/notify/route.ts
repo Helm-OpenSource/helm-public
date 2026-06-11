@@ -24,6 +24,7 @@ import {
   parseWeChatPayNotifyPayload,
   verifyWeChatPayNotifySignature,
 } from "@/lib/billing/wechat-pay";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export const runtime = "nodejs";
 
@@ -69,12 +70,12 @@ export async function POST(request: Request) {
       }),
       failureReason: "wechat-notify-verification-failed",
       payload: {
-        error: error instanceof Error ? error.message : "WeChat Pay notify verification failed",
+        error: serverErrorMessage(error, "WeChat Pay notify verification failed"),
       },
     });
 
     return failureResponse(
-      error instanceof Error ? error.message : "WeChat Pay notify verification failed",
+      serverErrorMessage(error, "WeChat Pay notify verification failed"),
     );
   }
 
@@ -160,7 +161,7 @@ export async function POST(request: Request) {
       summary: buildBillingWebhookExceptionSummary({
         provider: PAYMENT_PROVIDER.WECHAT_PAY,
       }),
-      failureReason: error instanceof Error ? error.message : "wechat-callback-processing-failed",
+      failureReason: serverErrorMessage(error, "wechat-callback-processing-failed"),
       payload: {
         outTradeNo: decrypted.out_trade_no ?? null,
         transactionId: decrypted.transaction_id ?? null,
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
     });
 
     return failureResponse(
-      error instanceof Error ? error.message : "WeChat Pay notify processing failed",
+      serverErrorMessage(error, "WeChat Pay notify processing failed"),
       500,
     );
   }

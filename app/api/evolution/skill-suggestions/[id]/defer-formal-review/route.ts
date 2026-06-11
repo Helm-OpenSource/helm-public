@@ -10,6 +10,7 @@ import {
 import { deferSkillFormalReview } from "@/lib/evolution/skill-suggestion.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { user, membership, workspace } = await getCurrentWorkspaceSession();
@@ -49,11 +50,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : english
-          ? "Failed to defer skill formal review"
-          : "暂缓正式评审失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to defer skill formal review" : "defer 正式评审失败"),
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "FORMAL_REVIEW_DEFER_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

@@ -1,4 +1,5 @@
 import type {
+  BiReportAggregationDefinition,
   BiReportComputedMetrics,
   BiReportMetricDefinition,
   BiReportRankingDefinition,
@@ -15,25 +16,55 @@ export function computeBiReportMetrics(input: {
 
   for (const definition of input.definitions.aggregations) {
     if (definition.type !== "sum") continue;
-    metricsByKey[definition.key] = input.rows.reduce((sum, row) => sum + readNumericValue(row[definition.field]), 0);
+    const sum = input.rows.reduce((acc, row) => acc + readNumericValue(row[definition.field]), 0);
+    // Amount columns arrive from the ODPS bridge as JS numbers (doubles). Once a
+    // sum crosses Number.MAX_SAFE_INTEGER (~9e15) it silently loses integer
+    // precision — real financial totals are already in the trillions, so warn
+    // when a metric enters that range rather than reporting a corrupted figure
+    // as if it were exact.
+    if (Number.isFinite(sum) && Math.abs(sum) > Number.MAX_SAFE_INTEGER) {
+      console.warn(
+        `[bi-report metric-engine] metric "${definition.key}" sum ${sum} exceeds Number.MAX_SAFE_INTEGER; precision may be lost — consider scaling the amount unit in the query.`,
+      );
+    }
+    metricsByKey[definition.key] = sum;
   }
 
   const rankings = buildRankings(input.rows, input.definitions.rankings ?? []);
 
-  for (const definition of input.definitions.aggregations) {
-    if (definition.type === "ratio") {
-      metricsByKey[definition.key] = safeRatio(metricsByKey[definition.numerator], metricsByKey[definition.denominator]);
-      continue;
+  // Derived metrics (ratio / pct_change / ranking_count) may reference other
+  // metric keys. Resolve them in dependency order via a fixpoint so a derived
+  // metric that references another derived metric is computed correctly
+  // regardless of declaration order — previously a forward reference silently
+  // read undefined and defaulted to 0.
+  const pendingDerived = input.definitions.aggregations.filter(
+    (definition) => definition.type !== "sum",
+  );
+  let progressed = true;
+  while (progressed && pendingDerived.length > 0) {
+    progressed = false;
+    for (let index = pendingDerived.length - 1; index >= 0; index -= 1) {
+      const definition = pendingDerived[index];
+      const ready = derivedMetricDependencies(definition).every(
+        (dependency) => dependency in metricsByKey,
+      );
+      if (!ready) continue;
+      metricsByKey[definition.key] = computeDerivedMetric(definition, metricsByKey, rankings);
+      pendingDerived.splice(index, 1);
+      progressed = true;
     }
-
-    if (definition.type === "pct_change") {
-      metricsByKey[definition.key] = calculatePctChange(metricsByKey[definition.current], metricsByKey[definition.previous]);
-      continue;
-    }
-
-    if (definition.type === "ranking_count") {
-      metricsByKey[definition.key] = rankings[definition.rankingKey]?.length ?? 0;
-    }
+  }
+  // Anything still pending references an undefined (or cyclic) metric: surface
+  // it instead of silently emitting a plausible-looking 0, then compute with
+  // whatever is available (missing dependencies resolve to 0).
+  for (const definition of pendingDerived) {
+    const missing = derivedMetricDependencies(definition).filter(
+      (dependency) => !(dependency in metricsByKey),
+    );
+    console.warn(
+      `[bi-report metric-engine] metric "${definition.key}" references undefined metric(s): ${missing.join(", ")}`,
+    );
+    metricsByKey[definition.key] = computeDerivedMetric(definition, metricsByKey, rankings);
   }
 
   const definitionOrder =
@@ -61,6 +92,30 @@ export function computeBiReportMetrics(input: {
     summaryMetrics,
     rankings,
   };
+}
+
+function derivedMetricDependencies(definition: BiReportAggregationDefinition): string[] {
+  if (definition.type === "ratio") return [definition.numerator, definition.denominator];
+  if (definition.type === "pct_change") return [definition.current, definition.previous];
+  // ranking_count depends on a ranking, not on other metrics.
+  return [];
+}
+
+function computeDerivedMetric(
+  definition: BiReportAggregationDefinition,
+  metricsByKey: Record<string, number>,
+  rankings: Record<string, BiReportRankingItem[]>,
+): number {
+  if (definition.type === "ratio") {
+    return safeRatio(metricsByKey[definition.numerator], metricsByKey[definition.denominator]);
+  }
+  if (definition.type === "pct_change") {
+    return calculatePctChange(metricsByKey[definition.current], metricsByKey[definition.previous]);
+  }
+  if (definition.type === "ranking_count") {
+    return rankings[definition.rankingKey]?.length ?? 0;
+  }
+  return 0;
 }
 
 function buildRankings(rows: BiReportRow[], rankings: BiReportRankingDefinition[]) {

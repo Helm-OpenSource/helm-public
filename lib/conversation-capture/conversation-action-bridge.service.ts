@@ -27,7 +27,7 @@ type ConversationActionBridgeInput = {
   commitmentTitle?: string | null;
 };
 
-function mapActionType(
+export function mapActionType(
   candidate: string,
   opportunityType?: OpportunityType | null,
 ) {
@@ -58,12 +58,24 @@ function mapActionType(
   return ActionType.CREATE_TASK;
 }
 
-function inferRiskLevel(candidate: string, baseRiskLevel: RiskLevel) {
+export function inferRiskLevel(
+  candidate: string,
+  baseRiskLevel: RiskLevel,
+  actionType: ActionType,
+) {
   if (/预算|法务|承诺|付款|薪资/.test(candidate)) {
     return RiskLevel.HIGH;
   }
 
-  if (/邮件|反馈|方案|回复/.test(candidate)) {
+  // Drive risk off the RESOLVED action type rather than re-matching keywords:
+  // any external-facing draft/reply must be at least HIGH so it requires human
+  // review and cannot auto-execute. (Previously the risk keyword set diverged
+  // from the action-type keyword set on "草稿"/"确认", letting an external-email
+  // action slip through at MEDIUM and auto-send.)
+  if (
+    actionType === ActionType.DRAFT_EXTERNAL_EMAIL ||
+    actionType === ActionType.GENERATE_REPLY_DRAFT
+  ) {
     return baseRiskLevel === RiskLevel.CRITICAL
       ? RiskLevel.CRITICAL
       : RiskLevel.HIGH;
@@ -99,6 +111,7 @@ export async function createConversationActions(
       continue;
     }
 
+    const actionType = mapActionType(candidate, input.opportunityType);
     created.push(
       await createGovernedAction({
         workspaceId: input.workspaceId,
@@ -106,7 +119,7 @@ export async function createConversationActions(
         actorUserId: input.actorUserId,
         actorType: input.actorType,
         english: input.english,
-        actionType: mapActionType(candidate, input.opportunityType),
+        actionType,
         title,
         description: candidate,
         aiReason: [
@@ -126,6 +139,7 @@ export async function createConversationActions(
         riskLevel: inferRiskLevel(
           candidate,
           input.baseRiskLevel ?? RiskLevel.MEDIUM,
+          actionType,
         ),
         meetingId: input.meetingId,
         opportunityId: input.opportunityId ?? undefined,

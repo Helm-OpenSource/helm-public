@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth/commercial-governance";
 import { getInternalCommercializationLifecycleReadout } from "@/lib/internal-commercialization/runtime";
 import { assertHelmReservedWorkspaceAccess } from "@/lib/workspace-reserved";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function GET() {
   const { membership, workspace } = await getCurrentWorkspaceSession();
@@ -21,7 +22,7 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Reserved workspace required",
+        error: serverErrorMessage(error, "Reserved workspace required"),
       },
       {
         status: 403,

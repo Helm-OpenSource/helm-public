@@ -10,6 +10,7 @@ import { ensureWorkspaceProcessingAllowed, recordUsageLedgerEntry } from "@/lib/
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { rerunImportWarmup } from "@/lib/imports/crm-entry.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_request: Request, context: { params: Promise<{ jobId: string }> }) {
   const session = await getCurrentWorkspaceSession();
@@ -60,7 +61,7 @@ export async function POST(_request: Request, context: { params: Promise<{ jobId
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "预热失败" },
+      { ok: false, error: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "预热失败") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

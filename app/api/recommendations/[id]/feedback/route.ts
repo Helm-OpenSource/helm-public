@@ -18,6 +18,7 @@ import {
 } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { submitRecommendationFeedback } from "@/lib/recommendations/recommendation-feedback.service";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const feedbackSchema = z.object({
   feedbackType: z.nativeEnum(RecommendationFeedbackType),
@@ -88,12 +89,15 @@ export async function POST(
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
+      isWorkspaceOwnershipError(error)
         ? error.message
-        : resolveApiWorkspaceMessage(workspaceLocale, {
-          zh: "提交 recommendation feedback 失败",
-          en: "Failed to submit recommendation feedback",
-        }),
+        : serverErrorMessage(
+            error,
+            resolveApiWorkspaceMessage(workspaceLocale, {
+              zh: "提交 recommendation feedback 失败",
+              en: "Failed to submit recommendation feedback",
+            }),
+          ),
       isWorkspaceOwnershipError(error) ? "RELATED_OBJECT_NOT_FOUND" : "RECOMMENDATION_FEEDBACK_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

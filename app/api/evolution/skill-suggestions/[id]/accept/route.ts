@@ -7,6 +7,7 @@ import { assertWorkspaceSkillSuggestionOwnership, isWorkspaceOwnershipError } fr
 import { acceptSkillSuggestion } from "@/lib/evolution/skill-suggestion.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_: Request, context: { params: Promise<{ id: string }> }) {
   const { user, membership, workspace } = await getCurrentWorkspaceSession();
@@ -37,11 +38,7 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : english
-          ? "Failed to accept skill suggestion"
-          : "采纳候选能力建议失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to accept skill suggestion" : "采纳候选能力建议失败"),
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "ACCEPT_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

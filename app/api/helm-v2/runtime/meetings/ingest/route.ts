@@ -11,6 +11,7 @@ import {
 import { assertWorkspaceMeetingOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { ingestMeetingEndedRuntime } from "@/lib/helm-v2/meeting-action-pack-runtime";
 import { getMeetingRuntimeUpgradeSummary } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const ingestSchema = z.object({
   meetingId: z.string().min(1),
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Helm v2.1 meeting ingest failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Helm v2.1 meeting ingest failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

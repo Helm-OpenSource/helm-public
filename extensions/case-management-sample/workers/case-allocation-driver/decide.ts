@@ -1,4 +1,4 @@
-import type { SampleCaseRecord } from "../../signals/case/case-mapper";
+import { isClosedStage, type SampleCaseRecord } from "../../signals/case/case-mapper";
 import { buildLifecycleObjective } from "../lifecycle-objectives";
 import {
   DEFAULT_OPERATION_MODE,
@@ -16,7 +16,7 @@ const WORKER_ID = "case-allocation-driver-v0" as const;
 
 export function decideAllocations(input: AllocationDecideInput): AllocationDecideReport {
   const mode: WorkerOperationMode = input.operationMode ?? DEFAULT_OPERATION_MODE;
-  const openCases = input.cases.filter((caseRecord) => caseRecord.stage !== "closed");
+  const openCases = input.cases.filter((caseRecord) => !isClosedStage(caseRecord.stage));
   const eligibleEmployees = input.employees
     .filter((employee) => employee.active && employee.reviewCapacity > 0)
     .filter((employee) => employee.role === "case-owner" || employee.role === "reviewer")
@@ -29,18 +29,45 @@ export function decideAllocations(input: AllocationDecideInput): AllocationDecid
 
   const proposals: AllocationProposal[] = [];
 
+  // Track remaining review capacity per employee and consume it on each
+  // assignment. Without this every case was assigned to eligibleEmployees[0],
+  // so capacity was never respected and flag_capacity_gap only fired when the
+  // eligible pool was literally empty.
+  const remainingCapacity = new Map<string, number>(
+    eligibleEmployees.map((employee) => [employee.employeeRefId, employee.reviewCapacity]),
+  );
+
+  const pickEmployeeWithCapacity = (): SampleEmployeeRecord | null => {
+    let maxRemaining = 0;
+    for (const employee of eligibleEmployees) {
+      maxRemaining = Math.max(maxRemaining, remainingCapacity.get(employee.employeeRefId) ?? 0);
+    }
+    if (maxRemaining <= 0) return null;
+    // eligibleEmployees is sorted by (capacity desc, refId asc); return the
+    // first employee currently at the max remaining for a deterministic pick.
+    return (
+      eligibleEmployees.find(
+        (employee) => (remainingCapacity.get(employee.employeeRefId) ?? 0) === maxRemaining,
+      ) ?? null
+    );
+  };
+
   for (const caseRecord of openCases) {
     if (caseRecord.blockedReason === "boundary_attempt") {
       proposals.push(wrapProposal(buildBoundaryFlag(caseRecord), mode));
       continue;
     }
 
-    const selected = eligibleEmployees[0];
+    const selected = pickEmployeeWithCapacity();
     if (!selected) {
       proposals.push(wrapProposal(buildCapacityFlag(caseRecord), mode));
       continue;
     }
 
+    remainingCapacity.set(
+      selected.employeeRefId,
+      (remainingCapacity.get(selected.employeeRefId) ?? 0) - 1,
+    );
     proposals.push(wrapProposal(buildAssignmentProposal(caseRecord, selected), mode));
   }
 

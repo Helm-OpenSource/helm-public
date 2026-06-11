@@ -5,6 +5,7 @@ import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import { subDays } from "date-fns";
 import { logEvent } from "@/lib/analytics";
+import { redactProviderErrorBody } from "@/lib/connectors/error-redaction";
 import { db } from "@/lib/db";
 import { readConnectorToken, storeConnectorToken } from "@/lib/connectors/token-store";
 
@@ -441,7 +442,14 @@ async function fetchImapMessages(input: {
 
     return parsed;
   } finally {
-    await client.logout();
+    // If the fetch loop threw because the connection died, logout() will throw
+    // too and would mask the original error (and leak the socket). Fall back to
+    // a forced close so the original error propagates and the socket is freed.
+    try {
+      await client.logout();
+    } catch {
+      client.close();
+    }
   }
 }
 
@@ -590,7 +598,11 @@ export async function syncGmailConnector(connectorId: string) {
       data: {
         status: ConnectorStatus.ERROR,
         lastSyncStatus: "同步失败",
-        lastSyncMessage: error instanceof Error ? error.message : "未知错误",
+        // IMAP/SMTP error text can echo auth material; redact before it lands in
+        // a user-visible connector status field.
+        lastSyncMessage: redactProviderErrorBody(
+          error instanceof Error ? error.message : "未知错误",
+        ),
       },
     });
     throw error;

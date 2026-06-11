@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/capture-runtime-governance";
 import { assertWorkspaceRuntimeArtifactOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { confirmRuntimeArtifact } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const confirmSchema = z.object({
   decision: z.enum(["confirm", "reject", "keep_draft"]).optional(),
@@ -51,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ success: true, data: result });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Artifact confirmation failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Artifact confirmation failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

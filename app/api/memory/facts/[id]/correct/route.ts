@@ -8,6 +8,7 @@ import { correctMemoryFact } from "@/lib/memory/correction.service";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
 import { correctMemoryFactSchema } from "@/lib/memory/schemas";
 import { canManageMemoryFacts, getMemoryFactManagementDeniedMessage } from "@/lib/memory/permissions";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getCurrentWorkspaceSession();
@@ -55,11 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : english
-          ? "Failed to correct memory fact"
-          : "记忆修正失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "记忆修正失败"),
       isWorkspaceOwnershipError(error) ? "FACT_NOT_FOUND" : "CORRECTION_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

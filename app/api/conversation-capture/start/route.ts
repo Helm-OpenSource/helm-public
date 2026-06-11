@@ -10,6 +10,7 @@ import { assertWorkspaceObjectOwnership, isWorkspaceOwnershipError } from "@/lib
 import { startCaptureSession } from "@/lib/conversation-capture/capture-session.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const schema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
     return successResponse(session, english ? "capture session started" : "会议记录已开始");
   } catch (error) {
     return errorResponse(
-      error instanceof Error ? error.message : english ? "Failed to start capture session" : "启动会议记录失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to start capture session" : "启动会议记录失败"),
       isWorkspaceOwnershipError(error) ? "OBJECT_NOT_FOUND" : "CAPTURE_START_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

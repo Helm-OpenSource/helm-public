@@ -10,6 +10,7 @@ import {
 import { returnSkillFormalReviewForHardening } from "@/lib/evolution/skill-suggestion.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 export async function POST(_: Request, context: { params: Promise<{ id: string }> }) {
   const { user, membership, workspace } = await getCurrentWorkspaceSession();
@@ -40,11 +41,7 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
     );
   } catch (error) {
     return errorResponse(
-      error instanceof Error
-        ? error.message
-        : english
-          ? "Failed to return skill formal review for hardening"
-          : "退回加固失败",
+      isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, english ? "Failed to return skill suggestion to hardening" : "退回 hardening 失败"),
       isWorkspaceOwnershipError(error) ? "SKILL_SUGGESTION_NOT_FOUND" : "FORMAL_REVIEW_RETURN_FAILED",
       isWorkspaceOwnershipError(error) ? 404 : 500,
     );

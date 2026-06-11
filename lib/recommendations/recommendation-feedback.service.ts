@@ -87,8 +87,11 @@ export async function submitRecommendationFeedback(
     english: input.english ?? false,
   });
 
-  const recommendation = await db.recommendationLog.findUnique({
-    where: { id: input.recommendationId },
+  // Defense in depth: scope the lookup to the caller's workspace so this
+  // reusable service never mutates a recommendation belonging to another
+  // workspace, even if a future caller forgets the ownership guard.
+  const recommendation = await db.recommendationLog.findFirst({
+    where: { id: input.recommendationId, workspaceId: input.workspaceId },
   });
 
   if (!recommendation) {

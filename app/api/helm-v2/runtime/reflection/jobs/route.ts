@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/capture-runtime-governance";
 import { assertWorkspaceMeetingOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
 import { listReflectionJobsForWorkspace, queueReflectionJob } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const queueSchema = z.object({
   meetingId: z.string().min(1),
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
     return Response.json({ success: true, data });
   } catch (error) {
     return Response.json(
-      { success: false, message: error instanceof Error ? error.message : "Reflection queue failed" },
+      { success: false, message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "Reflection queue failed") },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );
   }

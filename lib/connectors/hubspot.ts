@@ -483,7 +483,10 @@ async function fetchHubSpotDataset(sourceId: string, previewOnly = false, increm
     const associationsData = asHubSpotAssociations(item.associations);
     const updatedAt = readDate(properties.lastmodifieddate);
     if (updatedAfter && updatedAt && updatedAt.toISOString() <= updatedAfter) continue;
-    const externalId = String(item.id ?? "");
+    // Skip rows with no HubSpot id: a coerced "" externalId would collide
+    // across all such rows and overwrite them on re-import.
+    if (!item.id) continue;
+    const externalId = String(item.id);
     contacts.push({
       externalId,
       sourceType: ImportSourceType.HUBSPOT,
@@ -511,7 +514,10 @@ async function fetchHubSpotDataset(sourceId: string, previewOnly = false, increm
     const associationsData = asHubSpotAssociations(item.associations);
     const updatedAt = readDate(properties.lastmodifieddate);
     if (updatedAfter && updatedAt && updatedAt.toISOString() <= updatedAfter) continue;
-    const externalId = String(item.id ?? "");
+    // Skip rows with no HubSpot id: a coerced "" externalId would collide
+    // across all such rows and overwrite them on re-import.
+    if (!item.id) continue;
+    const externalId = String(item.id);
     companies.push({
       externalId,
       sourceType: ImportSourceType.HUBSPOT,
@@ -534,7 +540,10 @@ async function fetchHubSpotDataset(sourceId: string, previewOnly = false, increm
     const associationsData = asHubSpotAssociations(item.associations);
     const updatedAt = readDate(properties.lastmodifieddate);
     if (updatedAfter && updatedAt && updatedAt.toISOString() <= updatedAfter) continue;
-    const externalId = String(item.id ?? "");
+    // Skip rows with no HubSpot id: a coerced "" externalId would collide
+    // across all such rows and overwrite them on re-import.
+    if (!item.id) continue;
+    const externalId = String(item.id);
     opportunities.push({
       externalId,
       sourceType: ImportSourceType.HUBSPOT,
@@ -561,7 +570,10 @@ async function fetchHubSpotDataset(sourceId: string, previewOnly = false, increm
     const associationsData = asHubSpotAssociations(item.associations);
     const occurredAt = readDate(properties.hs_timestamp) ?? new Date();
     if (updatedAfter && occurredAt.toISOString() <= updatedAfter) continue;
-    const externalId = String(item.id ?? "");
+    // Skip rows with no HubSpot id: a coerced "" externalId would collide
+    // across all such rows and overwrite them on re-import.
+    if (!item.id) continue;
+    const externalId = String(item.id);
     notes.push({
       externalId,
       sourceType: ImportSourceType.HUBSPOT,

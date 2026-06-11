@@ -10,6 +10,7 @@ import {
   isEnglishWorkspaceDefaultLocale,
   resolveApiValidationIssueMessage,
 } from "@/lib/i18n/api-message-locale";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const ingestSchema = z.object({
   meetingId: z.string().min(1),
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "meeting-ended ingest failed",
+        message: isWorkspaceOwnershipError(error) ? error.message : serverErrorMessage(error, "meeting-ended ingest failed"),
       },
       { status: isWorkspaceOwnershipError(error) ? 404 : 500 },
     );

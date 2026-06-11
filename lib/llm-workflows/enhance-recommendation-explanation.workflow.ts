@@ -1,6 +1,6 @@
 import { buildRecommendationExplanationPrompt, llmPromptVersions, recommendationExplanationSchema } from "@/lib/llm/prompt-registry";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
-import { safeParseJson } from "@/lib/utils";
+import { parseLlmJsonOrThrow } from "@/lib/llm/output-parse-error";
 
 type RecommendationExplanationFallback = {
   explanation: string;
@@ -51,7 +51,7 @@ export async function enhanceRecommendationExplanationWithLLM(input: {
     outputMode: "json",
     jsonSchema: recommendationExplanationSchema,
     fallbackOutput: input.fallback,
-    parseOutput: (rawText) => safeParseJson(rawText, input.fallback),
+    parseOutput: (rawText) => parseLlmJsonOrThrow<RecommendationExplanationFallback>(rawText),
   });
 
   return result;

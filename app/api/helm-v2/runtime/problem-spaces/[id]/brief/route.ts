@@ -5,6 +5,7 @@ import {
   resolveApiValidationIssueMessage,
 } from "@/lib/i18n/api-message-locale";
 import { getProblemSpaceEdgeBrief } from "@/lib/helm-v2/runtime-upgrade";
+import { serverErrorMessage } from "@/lib/http/server-error";
 
 const briefAudienceSchema = z.enum(["IC", "DRI", "PLAYER_COACH"]);
 
@@ -42,12 +43,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return Response.json(
       {
         success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : english
-              ? "Problem-space brief failed"
-              : "生成问题空间简报失败",
+        message: serverErrorMessage(
+          error,
+          english ? "Problem-space brief failed" : "问题空间简报生成失败",
+        ),
       },
       { status: 500 },
     );

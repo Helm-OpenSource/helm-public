@@ -1,4 +1,4 @@
-import { ActionStatus, ActionType, ActorType, RiskLevel } from "@prisma/client";
+import { ActionStatus, ActionType, ActorType, ApprovalStatus, RiskLevel } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -29,6 +29,7 @@ const {
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     notification: {
       create: vi.fn(),
@@ -84,6 +85,7 @@ vi.mock("next/cache", () => ({
 }));
 
 import {
+  approveApprovalTask,
   createGovernedAction,
   executeActionItem,
   markApprovalManual,
@@ -277,5 +279,82 @@ describe("policy engine service governance", () => {
       english: true,
     });
     expect(dbMock.policyRule.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to approve a task that is no longer pending (no rejected -> approved)", async () => {
+    serviceGovernanceMock.assertWorkspaceGovernedActionReviewServiceAccess.mockResolvedValue(undefined);
+    dbMock.approvalTask.findUnique.mockResolvedValueOnce({
+      id: "task-1",
+      workspaceId: "workspace-1",
+      actionItemId: "action-1",
+      status: ApprovalStatus.REJECTED,
+      actionItem: { id: "action-1", title: "Send email" },
+    });
+
+    await expect(
+      approveApprovalTask("task-1", "Reviewer", "user-1", undefined, { actorType: ActorType.USER }),
+    ).rejects.toThrow(/no longer pending/i);
+    expect(dbMock.approvalTask.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to execute an action whose approval was rejected", async () => {
+    serviceGovernanceMock.assertWorkspaceGovernedActionReviewServiceAccess.mockResolvedValue(undefined);
+    dbMock.actionItem.findUnique.mockResolvedValueOnce({
+      id: "action-1",
+      workspaceId: "workspace-1",
+      status: ActionStatus.BLOCKED,
+      actionType: ActionType.DRAFT_EXTERNAL_EMAIL,
+      metadata: null,
+      policySnapshot: null,
+      workspace: { id: "workspace-1", defaultLocale: "zh-CN" },
+      opportunity: null,
+      contact: null,
+      meeting: null,
+      approvalTask: { id: "task-1", status: ApprovalStatus.REJECTED },
+      recommendationLog: null,
+    });
+
+    await expect(
+      executeActionItem("action-1", { actorName: "Reviewer", actorType: ActorType.USER, actorUserId: "user-1" }),
+    ).rejects.toThrow(/approved state/i);
+    expect(dbMock.actionItem.update).not.toHaveBeenCalled();
+  });
+
+  it("claims the approval transition atomically and proceeds when it wins", async () => {
+    serviceGovernanceMock.assertWorkspaceGovernedActionReviewServiceAccess.mockResolvedValue(undefined);
+    dbMock.approvalTask.findUnique.mockResolvedValueOnce({
+      id: "task-1",
+      workspaceId: "workspace-1",
+      actionItemId: "action-1",
+      status: ApprovalStatus.PENDING,
+      actionItem: { id: "action-1", title: "Send email", draftContent: "hi" },
+    });
+    dbMock.approvalTask.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await approveApprovalTask("task-1", "Reviewer", "user-1", undefined, { actorType: ActorType.USER });
+
+    // The transition is a conditional PENDING -> approved write.
+    expect(dbMock.approvalTask.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "task-1", status: ApprovalStatus.PENDING } }),
+    );
+    expect(dbMock.actionItem.update).toHaveBeenCalled();
+  });
+
+  it("stops without side effects when it loses the concurrent-approve race", async () => {
+    serviceGovernanceMock.assertWorkspaceGovernedActionReviewServiceAccess.mockResolvedValue(undefined);
+    dbMock.approvalTask.findUnique.mockResolvedValueOnce({
+      id: "task-1",
+      workspaceId: "workspace-1",
+      actionItemId: "action-1",
+      status: ApprovalStatus.PENDING,
+      actionItem: { id: "action-1", title: "Send email", draftContent: "hi" },
+    });
+    // Another concurrent approve already flipped it: conditional write matches 0 rows.
+    dbMock.approvalTask.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      approveApprovalTask("task-1", "Reviewer", "user-1", undefined, { actorType: ActorType.USER }),
+    ).rejects.toThrow(/no longer pending/i);
+    expect(dbMock.actionItem.update).not.toHaveBeenCalled();
   });
 });
