@@ -69,7 +69,7 @@ export async function confirmMemoryFact(input: MemoryActorContext & { memoryFact
     },
   });
 
-  await expireObjectBriefings(input.workspaceId, fact.objectType, fact.objectId);
+  await expireObjectBriefings(input.workspaceId, fact.objectType, fact.objectId, fact.id);
 
   await writeMemoryAuditAndEvent({
     workspaceId: input.workspaceId,
@@ -194,7 +194,7 @@ export async function correctMemoryFact(input: CorrectInput) {
     },
   });
 
-  await expireObjectBriefings(input.workspaceId, fact.objectType, fact.objectId);
+  await expireObjectBriefings(input.workspaceId, fact.objectType, fact.objectId, fact.id);
 
   await writeMemoryAuditAndEvent({
     workspaceId: input.workspaceId,
@@ -284,7 +284,7 @@ export async function invalidateMemoryFact(input: MemoryActorContext & { memoryF
     },
   });
 
-  await expireObjectBriefings(input.workspaceId, fact.objectType, fact.objectId);
+  await expireObjectBriefings(input.workspaceId, fact.objectType, fact.objectId, fact.id);
 
   await writeMemoryAuditAndEvent({
     workspaceId: input.workspaceId,
@@ -371,7 +371,7 @@ export async function deleteMemoryFact(input: MemoryActorContext & { memoryFactI
     },
   });
 
-  await expireObjectBriefings(input.workspaceId, fact.objectType, fact.objectId);
+  await expireObjectBriefings(input.workspaceId, fact.objectType, fact.objectId, fact.id);
 
   await writeMemoryAuditAndEvent({
     workspaceId: input.workspaceId,
@@ -420,7 +420,12 @@ export async function deleteMemoryFact(input: MemoryActorContext & { memoryFactI
   return { fact: updated, correction };
 }
 
-async function expireObjectBriefings(workspaceId: string, objectType: string, objectId: string) {
+async function expireObjectBriefings(
+  workspaceId: string,
+  objectType: string,
+  objectId: string,
+  factId?: string,
+) {
   await db.briefingSnapshot.updateMany({
     where: {
       workspaceId,
@@ -432,4 +437,24 @@ async function expireObjectBriefings(workspaceId: string, objectType: string, ob
       expiresAt: new Date(),
     },
   });
+
+  // A briefing aggregates facts from RELATED objects too (a contact briefing
+  // pulls its company/opportunity facts, a meeting briefing pulls all three),
+  // so a corrected/invalidated fact gets baked into other objects' cached
+  // snapshots. Expiring only the fact's own-object briefing left those sibling
+  // briefings serving the now-retracted fact as live memory. Expire every
+  // snapshot whose sourceFactIds references this fact. The id is matched in its
+  // quoted JSON form ("id") to avoid accidental substring matches.
+  if (factId) {
+    await db.briefingSnapshot.updateMany({
+      where: {
+        workspaceId,
+        expiresAt: null,
+        sourceFactIds: { contains: `"${factId}"` },
+      },
+      data: {
+        expiresAt: new Date(),
+      },
+    });
+  }
 }

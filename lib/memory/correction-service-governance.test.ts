@@ -200,6 +200,18 @@ describe("memory correction service governance", () => {
         data: expect.objectContaining({ status: MemoryStatus.INVALID }),
       }),
     );
+
+    // And it must expire EVERY briefing that embedded this fact — including
+    // sibling-object briefings (a contact/opportunity briefing that pulled this
+    // company fact) — not just the fact's own-object briefing.
+    expect(dbMock.briefingSnapshot.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: "workspace-1",
+          sourceFactIds: { contains: '"fact-1"' },
+        }),
+      }),
+    );
   });
 
   it("leaves status untouched for a CONTENT_UPDATE correction", async () => {
