@@ -145,10 +145,31 @@ export async function correctMemoryFact(input: CorrectInput) {
     normalizedValue: safeParseJson<Record<string, unknown>>(fact.normalizedValue, {}),
   };
 
-  const next = {
+  const next: typeof previous = {
     ...previous,
     ...input.afterValue,
   };
+
+  // The status effect must follow the correctionType, not just an optional
+  // afterValue.status. Previously an INVALIDATE/DELETE correction submitted
+  // without afterValue.status recorded the correction in the ledger but left the
+  // fact ACTIVE — so a human's "invalidate" silently lost and the fact kept
+  // feeding briefings/retrieval. An explicit afterValue.status still wins (e.g.
+  // STATUS_CHANGE); otherwise INVALIDATE -> INVALID and DELETE -> ARCHIVED,
+  // consistent with the dedicated invalidate/delete paths.
+  // Check the EXPLICITLY-supplied afterValue.status (not next.status, which
+  // always inherits the fact's current status via the spread and would make the
+  // correctionType branch unreachable).
+  const correctedStatus: MemoryStatus =
+    typeof input.afterValue?.status === "string"
+      ? (input.afterValue.status as MemoryStatus)
+      : input.correctionType === MemoryCorrectionType.INVALIDATE
+        ? MemoryStatus.INVALID
+        : input.correctionType === MemoryCorrectionType.DELETE
+          ? MemoryStatus.ARCHIVED
+          : fact.status;
+  // Keep the ledger's afterValue consistent with what the fact actually became.
+  next.status = correctedStatus;
 
   const updated = await db.memoryFact.update({
     where: { id: fact.id },
@@ -157,7 +178,7 @@ export async function correctMemoryFact(input: CorrectInput) {
       content: typeof next.content === "string" ? next.content : fact.content,
       confidence: typeof next.confidence === "number" ? next.confidence : fact.confidence,
       normalizedValue: next.normalizedValue ? jsonStringify(next.normalizedValue) : fact.normalizedValue,
-      status: typeof next.status === "string" ? (next.status as MemoryStatus) : fact.status,
+      status: correctedStatus,
     },
   });
 
