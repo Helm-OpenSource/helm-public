@@ -55,20 +55,29 @@ describe("queryBiReportRowsFromOdps", () => {
     ]);
   });
 
-  it("warns (does not silently pass) when a BIGINT column exceeds safe-integer precision", async () => {
+  it("warns once per query (not per row) when a BIGINT column exceeds safe-integer precision", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    // The bridge returns BIGINT as a raw number, so this arrives already rounded.
+    // The bridge returns BIGINT as a raw number, so these arrive already rounded.
+    // Many rows share the corrupted column — the warning must not repeat per row.
     const fetchImpl = makeFetch({
       success: true,
-      rows: [{ case_id: 9223372036854775807, small: 3 }],
+      rows: [
+        { case_id: 9223372036854775807, small: 3 },
+        { case_id: 9223372036854775806, small: 4 },
+        { case_id: 9223372036854775805, small: 5 },
+      ],
     });
     await callOdps(fetchImpl);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("case_id"),
-    );
-    // a normal safe integer must NOT warn
-    expect(
-      warn.mock.calls.every((args) => !String(args[0]).includes('"small"')),
-    ).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("case_id"));
+    // a normal safe integer column must NOT be named
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain('"small"');
+  });
+
+  it("does not warn when all integers are within the safe range", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchImpl = makeFetch({ success: true, rows: [{ a: 1, b: 2_000_000 }] });
+    await callOdps(fetchImpl);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
