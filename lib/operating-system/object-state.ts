@@ -1620,7 +1620,10 @@ function formatMeetingIngressDate(
   date: Date | null | undefined,
   english: boolean,
 ) {
-  if (!date) {
+  if (!date || Number.isNaN(date.getTime())) {
+    // A Date parsed from a malformed ingress timestamp is non-null but NaN;
+    // toLocaleString would render the literal "Invalid Date" into the
+    // user-facing meeting-note / calendar source summary. Drop it instead.
     return null;
   }
 
