@@ -10,11 +10,13 @@ export function NavLink({
   icon,
   label,
   activeDescendantExclusions,
+  trailing,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   activeDescendantExclusions?: string[];
+  trailing?: React.ReactNode;
 }) {
   const pathname = usePathname();
   const active = isNavLinkActive(pathname, href, {
@@ -49,6 +51,7 @@ export function NavLink({
       >
         {label}
       </span>
+      {trailing ? <span className="ml-auto shrink-0">{trailing}</span> : null}
     </Link>
   );
 }

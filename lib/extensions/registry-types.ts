@@ -120,12 +120,25 @@ export type WorkspaceNavExtensionIconKey =
   | "compass"
   | "boxes";
 
+// Pack-neutral status badge for a nav item. Tones are generic so Core stays
+// agnostic of any pack's domain status vocabulary (a pack/overlay maps its own
+// statuses — e.g. NPA workbench surfaceStatus — onto these tones).
+export type WorkspaceNavExtensionBadgeTone = "live" | "planned" | "muted" | "blocked";
+
+export type WorkspaceNavExtensionStatusBadge = {
+  label: string;
+  tone: WorkspaceNavExtensionBadgeTone;
+};
+
 export type WorkspaceNavExtensionItem = {
   key: string;
   href: string;
   label: string;
   iconKey: WorkspaceNavExtensionIconKey;
   description?: string;
+  // Optional, additive: when set, renders a small status badge after the label.
+  // Existing items without it render unchanged (backward compatible).
+  statusBadge?: WorkspaceNavExtensionStatusBadge;
 };
 
 export type WorkspaceNavExtensionCluster = {
