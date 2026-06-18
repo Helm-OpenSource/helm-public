@@ -1,3 +1,11 @@
+---
+status: active
+owner: Product / Delivery Engineering / Engineering
+created: 2026-06-18
+review_after: 2026-07-30
+public_safety: Public-safe contract and offline-eval protocol only. Advice-only, deterministic, synthetic/fixture-only. No customer data, LLM/neural, execution, writeback, external send, approval, or memory promotion.
+---
+
 # Helm Operating Judgement Fusion v0.1
 
 Status: contract + offline-eval layer (fixture-only). Advice-only. No real customer data,
