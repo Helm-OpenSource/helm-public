@@ -79,6 +79,19 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     workspace,
     english,
     requestedTab,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    },
+    membership: {
+      id: membership.id,
+      workspaceId: membership.workspaceId,
+      role: membership.role,
+      status: membership.status,
+      rolePresetKey: membership.rolePresetKey,
+      persona: membership.persona,
+    },
   });
 
   const activeTab = reportsExtensions.active

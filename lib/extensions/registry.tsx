@@ -170,6 +170,19 @@ export async function resolveReportsExtensions(input: {
   english: boolean;
   requestedTab?: string | string[] | undefined;
   accessContext?: ExtensionAccessContext;
+  user?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  } | null;
+  membership?: {
+    id?: string;
+    workspaceId: string;
+    role?: string;
+    status?: string;
+    rolePresetKey?: string | null;
+    persona?: string | null;
+  } | null;
 }): Promise<ResolvedReportsExtensions> {
   const reportsExtensions: ReadonlyArray<ReportsExtensionDescriptor> =
     getRegisteredReportsExtensions();
@@ -218,6 +231,9 @@ export async function resolveReportsExtensions(input: {
         surface: descriptor.renderSurface({
           matchedTab: matched,
           english: input.english,
+          workspace: input.workspace,
+          user: input.user ?? null,
+          membership: input.membership ?? null,
         }),
         pageViewEvent: descriptor.buildPageViewEvent({ matchedTab: matched }),
       };
