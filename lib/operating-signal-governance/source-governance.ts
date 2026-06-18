@@ -218,7 +218,7 @@ function hasUse(source: OperatingSignalSourceEnvelope, use: OperatingSignalUse):
   return source.allowedUses.includes(use) || source.forbiddenUses.includes(use);
 }
 
-function collectUnsafeInputErrors(value: unknown): string[] {
+export function collectUnsafeInputErrors(value: unknown): string[] {
   const errors = new Set<string>();
   let sawPrivatePattern = false;
 

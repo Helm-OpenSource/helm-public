@@ -19,6 +19,7 @@
     "eval:signal-first-mile-quality": "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
     "eval:internal-commercialization": "tsx scripts/internal-commercialization-eval.ts",
     "eval:operating-signal-flow": "tsx scripts/operating-signal-flow-evals.ts",
+    "eval:operating-judgement-fusion": "tsx scripts/operating-judgement-fusion-evals.ts",
     "eval:expert-capability-feedback-loop": "tsx scripts/expert-capability-feedback-loop-eval.ts",
     "eval:cross-system-accountability-gap": "tsx scripts/cross-system-accountability-gap-eval.ts",
     "eval:llm-critic-boundaries": "vitest run lib/evals/llm-critic-evals.test.ts",
