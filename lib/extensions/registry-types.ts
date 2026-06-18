@@ -69,12 +69,35 @@ export type ResolvedReportsExtensionsType = {
   };
 };
 
+export type ReportsExtensionSurfaceUser = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+};
+
+export type ReportsExtensionSurfaceMembership = {
+  id?: string;
+  workspaceId: string;
+  role?: string;
+  status?: string;
+  rolePresetKey?: string | null;
+  persona?: string | null;
+};
+
+export type ReportsExtensionSurfaceContext = {
+  matchedTab: string;
+  english: boolean;
+  workspace: WorkspaceLike;
+  user?: ReportsExtensionSurfaceUser | null;
+  membership?: ReportsExtensionSurfaceMembership | null;
+};
+
 export type ReportsExtensionDescriptor = {
   id: string;
   getAccess: ExtensionAccessProbe;
   buildTabs: (english: boolean) => ReadonlyArray<ReportsExtensionTab>;
   matchTab: (requested: string | undefined) => string | null;
-  renderSurface: (input: { matchedTab: string; english: boolean }) => ReactNode;
+  renderSurface: (input: ReportsExtensionSurfaceContext) => ReactNode;
   buildPageViewEvent: (input: {
     matchedTab: string;
   }) => ReportsExtensionPageViewEvent | null;
