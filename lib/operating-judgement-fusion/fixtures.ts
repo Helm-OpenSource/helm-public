@@ -194,6 +194,18 @@ export const SYNTHETIC_FUSION_HELDOUT_CASES: FusionHeldoutCase[] = [
   },
 ];
 
+// A held-out case contaminated with a raw/private signal alongside a clean one. Under an
+// improvement use the gate must veto the whole case, not just exclude the raw signal.
+export const RAW_CONTAMINATED_HELDOUT_CASE: FusionHeldoutCase = {
+  caseId: "raw-contaminated",
+  kind: "synthetic_non_self_org",
+  goldDisposition: "prepare_review_packet",
+  input: input("Deal:deal-10", [
+    syntheticSignal({ signalKey: "rc-clean", objectRef: "Deal:deal-10", signalFamily: "risk", confidenceBand: "high" }),
+    syntheticSignal({ signalKey: "rc-raw", objectRef: "Deal:deal-10", signalFamily: "commitment", redactionStatus: "raw_blocked" }),
+  ]),
+};
+
 // A poisoned held-out case: a fleet-health source under an improvement use. The gate must
 // veto, and the run must not be reported as a pass.
 export const POISONED_HELDOUT_CASE: FusionHeldoutCase = {

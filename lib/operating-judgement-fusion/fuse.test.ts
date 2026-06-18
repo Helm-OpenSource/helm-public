@@ -252,6 +252,26 @@ describe("fuseOperatingSignals", () => {
     expect(reasons["unsafe-ev"]).toBe("unsafe_evidence_ref");
   });
 
+  it("hard-fails an improvement-use fusion when any input signal is raw/private/unsafe", () => {
+    const result = fuseOperatingSignals(
+      input(
+        [
+          signal({ signalKey: "clean", signalFamily: "commitment" }, "synthetic_public", ["heldout_eval"]),
+          signal({ signalKey: "raw", redactionStatus: "raw_blocked" }, "synthetic_public", ["heldout_eval"]),
+        ],
+        "heldout_eval",
+      ),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.judgement).toBeNull();
+    expect(
+      result.gate.errors.some((error) =>
+        error.includes("unsafe_signal_forbidden_in_improvement_use"),
+      ),
+    ).toBe(true);
+  });
+
   it("hard-fails the gate when the source envelope is not bound to the signal", () => {
     const bound = signal({ signalKey: "sig-a", signalFamily: "commitment" });
     const mismatched = { ...bound, source: { ...bound.source, signalId: "different-key" } };

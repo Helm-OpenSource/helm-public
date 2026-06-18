@@ -25,12 +25,14 @@ import type {
   RunInput,
 } from "../expert-capability/contracts";
 import {
+  canonicalJson,
   computeASetHash,
   computeBSetHash,
   computeGoldLabelsHash,
   computePreRegistrationContentHash,
   computeReplaySnapshotHashes,
   computeReplaySnapshotRootHash,
+  sha256,
 } from "../expert-capability/hashing";
 import { validateEvaluationRun, validatePreRegistration } from "../expert-capability/validators";
 import type { ValidationResult } from "../expert-capability/validators";
@@ -122,7 +124,10 @@ export function buildFusionHeldoutSets(
     return {
       caseId: heldout.caseId,
       kind: heldout.kind,
-      inputSnapshotRef: `snapshot:${heldout.caseId}`,
+      // Bind the replay snapshot to the FULL fusion input (signals + source envelopes), so
+      // editing any input field — even one fusion ignores, like sourceRef or source.signalId,
+      // or adding an excluded raw signal — breaks the pre-registration's replay hashes.
+      inputSnapshotRef: sha256(canonicalJson(heldout.input)),
       gold: {
         disposition: heldout.goldDisposition,
         relevantEvidence: [],

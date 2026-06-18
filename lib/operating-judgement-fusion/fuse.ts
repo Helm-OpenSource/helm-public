@@ -193,6 +193,13 @@ function runSourceClassGate(input: JudgementFusionInput): {
       if (!gate.ok) {
         errors.push(...gate.errors.map((error) => `${event.signalKey}:${error}`));
       }
+      // For eval / training uses the held-out set must be pristine: a raw / private /
+      // unsafe signal anywhere in the case hard-fails the run, it cannot just be excluded
+      // while a clean co-signal carries the score.
+      const unsafe = eventSafetyExclusionReason(event);
+      if (unsafe) {
+        errors.push(`${event.signalKey}:unsafe_signal_forbidden_in_improvement_use:${unsafe}`);
+      }
     }
   }
 

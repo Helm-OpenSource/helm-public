@@ -4,6 +4,7 @@ import type { MetricDefinition, RunInput } from "../expert-capability/contracts"
 import { buildFusionPreRegistration, runFusionHeldoutEval, type FusionHeldoutCase } from "./eval";
 import {
   POISONED_HELDOUT_CASE,
+  RAW_CONTAMINATED_HELDOUT_CASE,
   SYNTHETIC_FUSION_HELDOUT_CASES,
 } from "./fixtures";
 
@@ -121,6 +122,54 @@ describe("runFusionHeldoutEval", () => {
     });
 
     expect(report.hardGateFailures).toContain("gold_locked_after_candidate");
+    expect(report.decision).not.toBe("fusion_beats_baseline");
+  });
+
+  it("binds the replay input content: editing a fusion-irrelevant input field breaks pre-registration", () => {
+    // Change event.sourceRef only — fusion ignores it, the output is unchanged, and it is
+    // not unsafe. With a content-bound inputSnapshotRef this still breaks the binding.
+    const tampered = SYNTHETIC_FUSION_HELDOUT_CASES.map((c, i) =>
+      i === 0
+        ? {
+            ...c,
+            input: {
+              ...c.input,
+              signals: c.input.signals.map((s, j) =>
+                j === 0
+                  ? { ...s, event: { ...s.event, sourceRef: "fixture:edited-after-lock" } }
+                  : s,
+              ),
+            },
+          }
+        : c,
+    );
+    const report = runFusionHeldoutEval({
+      cases: tampered,
+      preRegistration: standardPreReg(SYNTHETIC_FUSION_HELDOUT_CASES),
+      runInput: standardRun(),
+    });
+
+    expect(report.preRegistrationValidation.ok).toBe(false);
+    expect(
+      report.preRegistrationValidation.errors.some(
+        (error) =>
+          error === "replay_snapshot_hashes_do_not_cover_b_cases" ||
+          error === "b_set_hash_mismatch",
+      ),
+    ).toBe(true);
+    expect(report.decision).not.toBe("fusion_beats_baseline");
+  });
+
+  it("vetoes the run when a held-out case carries a raw/private signal", () => {
+    const cases = [...SYNTHETIC_FUSION_HELDOUT_CASES, RAW_CONTAMINATED_HELDOUT_CASE];
+    const report = runFusionHeldoutEval({
+      cases,
+      preRegistration: standardPreReg(cases),
+      runInput: standardRun(),
+    });
+
+    expect(report.hardGateFailures).toContain("source_class_gate_failed:raw-contaminated");
+    expect(report.runValidation.ok).toBe(false);
     expect(report.decision).not.toBe("fusion_beats_baseline");
   });
 
