@@ -184,77 +184,93 @@ export async function resolveReportsExtensions(input: {
     persona?: string | null;
   } | null;
 }): Promise<ResolvedReportsExtensions> {
-  const reportsExtensions: ReadonlyArray<ReportsExtensionDescriptor> =
-    getRegisteredReportsExtensions();
-
   const requestedSingle = Array.isArray(input.requestedTab)
     ? input.requestedTab[0]
     : input.requestedTab;
 
-  const accessResults = await Promise.all(
-    reportsExtensions.map(async (descriptor) => ({
-      descriptor,
-      access: await resolveReportsExtensionAccessSafely(descriptor, input.workspace, {
-        accessContext: input.accessContext,
-      }),
-    })),
-  );
+  try {
+    const reportsExtensions: ReadonlyArray<ReportsExtensionDescriptor> =
+      getRegisteredReportsExtensions();
 
-  const tabs: ReportsExtensionTab[] = [];
-  let active: ResolvedReportsExtensions["active"] = null;
-
-  for (const { descriptor, access } of accessResults) {
-    if (!access.ok) continue;
-    try {
-      tabs.push(...descriptor.buildTabs(input.english));
-    } catch (error) {
-      console.error(
-        `[reports-extensions] ${descriptor.id} buildTabs threw; skipping tabs`,
-        error,
-      );
-    }
-
-    if (active) continue;
-    let matched: string | null = null;
-    try {
-      matched = descriptor.matchTab(requestedSingle ?? undefined);
-    } catch (error) {
-      console.error(
-        `[reports-extensions] ${descriptor.id} matchTab threw; not activating surface`,
-        error,
-      );
-    }
-    if (!matched) continue;
-
-    try {
-      active = {
-        surface: descriptor.renderSurface({
-          matchedTab: matched,
-          english: input.english,
-          workspace: input.workspace,
-          user: input.user ?? null,
-          membership: input.membership ?? null,
+    const accessResults = await Promise.all(
+      reportsExtensions.map(async (descriptor) => ({
+        descriptor,
+        access: await resolveReportsExtensionAccessSafely(descriptor, input.workspace, {
+          accessContext: input.accessContext,
         }),
-        pageViewEvent: descriptor.buildPageViewEvent({ matchedTab: matched }),
-      };
-    } catch (error) {
-      console.error(
-        `[reports-extensions] ${descriptor.id} renderSurface threw; rendering inline degraded panel`,
-        error,
-      );
-      active = {
-        surface: buildReportsExtensionFallbackSurface({
-          descriptorId: descriptor.id,
-          english: descriptor.resolveFallbackEnglish
-            ? descriptor.resolveFallbackEnglish()
-            : input.english,
-        }),
-        pageViewEvent: null,
-      };
+      })),
+    );
+
+    const tabs: ReportsExtensionTab[] = [];
+    let active: ResolvedReportsExtensions["active"] = null;
+
+    for (const { descriptor, access } of accessResults) {
+      if (!access.ok) continue;
+      try {
+        tabs.push(...descriptor.buildTabs(input.english));
+      } catch (error) {
+        console.error(
+          `[reports-extensions] ${descriptor.id} buildTabs threw; skipping tabs`,
+          error,
+        );
+      }
+
+      if (active) continue;
+      let matched: string | null = null;
+      try {
+        matched = descriptor.matchTab(requestedSingle ?? undefined);
+      } catch (error) {
+        console.error(
+          `[reports-extensions] ${descriptor.id} matchTab threw; not activating surface`,
+          error,
+        );
+      }
+      if (!matched) continue;
+
+      try {
+        active = {
+          surface: descriptor.renderSurface({
+            matchedTab: matched,
+            english: input.english,
+            workspace: input.workspace,
+            user: input.user ?? null,
+            membership: input.membership ?? null,
+          }),
+          pageViewEvent: descriptor.buildPageViewEvent({ matchedTab: matched }),
+        };
+      } catch (error) {
+        console.error(
+          `[reports-extensions] ${descriptor.id} renderSurface threw; rendering inline degraded panel`,
+          error,
+        );
+        active = {
+          surface: buildReportsExtensionFallbackSurface({
+            descriptorId: descriptor.id,
+            english: descriptor.resolveFallbackEnglish
+              ? descriptor.resolveFallbackEnglish()
+              : input.english,
+          }),
+          pageViewEvent: null,
+        };
+      }
     }
+
+    return { tabs, active };
+  } catch (error) {
+    console.error("[reports-extensions] resolveReportsExtensions failed; rendering fail-open fallback", error);
+    return requestedSingle
+      ? {
+          tabs: [],
+          active: {
+            surface: buildReportsExtensionFallbackSurface({
+              descriptorId: requestedSingle,
+              english: input.english,
+            }),
+            pageViewEvent: null,
+          },
+        }
+      : { tabs: [], active: null };
   }
-
-  return { tabs, active };
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +364,11 @@ export async function logReportsExtensionPageView(
   event: ReportsExtensionPageViewEvent | null,
 ): Promise<void> {
   if (!event) return;
-  await logPageViewEvent(event);
+  try {
+    await logPageViewEvent(event);
+  } catch (error) {
+    console.error("[reports-extensions] logReportsExtensionPageView failed; suppressing page crash", error);
+  }
 }
 
 // ---------------------------------------------------------------------------
