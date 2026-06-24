@@ -34,7 +34,7 @@ describe("reports extension page fail-open", () => {
     try {
       const { resolveReportsExtensions } = await import("./registry");
       const resolved = await resolveReportsExtensions({
-        workspace: { id: "ws_1", slug: "guangpu", systemKey: "guangpu" },
+        workspace: { id: "ws_1", slug: "sample-workspace", systemKey: "sample-workspace" },
         english: false,
         requestedTab: "bi-report",
       });
