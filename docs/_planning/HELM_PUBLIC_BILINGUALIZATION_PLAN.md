@@ -1037,7 +1037,7 @@ This plan does not authorize:
 3. 新增 Cloud、Enterprise、SLA 或客户部署 ready 声明。/ New Cloud, Enterprise, SLA, or customer deployment readiness claims.
 4. 把 recommendation 写成 commitment。/ Turning recommendation into commitment.
 5. 自动对外发送、自动写入、自动审批、执行或结算。/ Automatic external send, broad auto-write, automatic approval, execution, or settlement.
-6. 把私有 WeChat / QR / community handoff 当作公开 activation proof。/ Treating private WeChat / QR / community handoff as public activation proof.
+6. 把私有 WeChat / community handoff 当作公开 activation proof。/ Treating private WeChat / community handoff as public activation proof.
 
 ## 6. 后续批次 / Follow-Up Batches
 

@@ -315,6 +315,5 @@ Expected — the seed data requires a sign-in. If even `/login` won't submit, do
 
 - GitHub Issues — prefer public questions so others can find them
 - WeChat `ffjw0821` — contact us / partnership topics / community coordination
-- Community invite QR — add WeChat `ffjw0821` first to receive the currently valid invite QR (QR codes expire)
 - WeChat Official Account `Helm开源经营系统` (WeChat ID `HelmCoreCN`) — announcement channel, not the default support queue
 - Security vulnerabilities — **do not** use public issues; see [../SECURITY.md](../SECURITY.md)
