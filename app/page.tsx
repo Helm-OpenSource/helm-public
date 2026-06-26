@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -592,24 +591,9 @@ export default async function Home({
             </a>
             <span className="text-[color:var(--muted-foreground)]">
               {english
-                ? "Contact WeChat: ffjw0821 (community invite QR via WeChat)"
-                : "联系微信：ffjw0821（入群二维码请先加微信获取当期有效码）"}
+                ? "Contact WeChat: ffjw0821 (community invites are handled manually)"
+                : "联系微信：ffjw0821（社群邀请由人工受控对接）"}
             </span>
-          </div>
-        </div>
-        <div className="mx-auto w-full max-w-[1280px] px-6 pb-8 lg:px-10">
-          <div className="inline-flex flex-col gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] p-3">
-            <p className="text-xs text-[color:var(--muted-foreground)]">
-              {english ? "Helm open-source community WeChat invite QR" : "Helm 开源社区微信邀请二维码"}
-            </p>
-            <Image
-              src="/wechat-community-qr.png"
-              alt={english ? "Helm community WeChat invite QR" : "Helm 开源社区微信邀请二维码"}
-              width={176}
-              height={260}
-              className="h-auto w-44 rounded-md border border-[color:var(--border)] bg-black/5"
-              loading="lazy"
-            />
           </div>
         </div>
       </footer>

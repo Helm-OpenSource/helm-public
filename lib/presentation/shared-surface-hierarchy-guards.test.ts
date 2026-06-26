@@ -3194,7 +3194,7 @@ describe("shared surface hierarchy guards", () => {
     expect(chineseBody).toContain("README 中文入口");
     expect(chineseBody).toContain("GitHub 讨论 #49");
     expect(chineseBody).toContain("GitHub 议题模板是主要证据入口");
-    expect(chineseBody).toContain("WeChat 账号与社区 QR 只提供辅助触达");
+    expect(chineseBody).toContain("WeChat 账号与社区交接只提供辅助触达");
     expect(chineseBody).toContain("双层证据摘要");
     expect(chineseBody).toContain("GitHub 议题 / 讨论中的黄金路径结果");
     expect(chineseBody).toContain("单独的私聊、未链接截图、私有部署说明");
