@@ -159,4 +159,40 @@ describe("supervised agent loop (Tier 1.2)", () => {
     expect(result.finalState).toBe("failed");
     expect(result.steps).toHaveLength(3);
   });
+
+  it("fails closed on a finish with an inline (non-reference) resultRef", async () => {
+    const result = await runAgentLoop({
+      ctx,
+      plan: () => ({ kind: "finish", resultRef: "summary: balance is 1234 for Jane" }),
+    });
+    expect(result.terminationReason).toBe("invalid_output_ref");
+    expect(result.finalState).toBe("failed");
+  });
+
+  it("fails closed on an await_review with an inline (non-reference) reasonCode", async () => {
+    const result = await runAgentLoop({
+      ctx,
+      plan: () => ({ kind: "await_review", reasonCode: "needs human because amount 4321" }),
+    });
+    expect(result.terminationReason).toBe("invalid_output_ref");
+    expect(result.finalState).toBe("failed");
+  });
+
+  it("accepts a reference-token resultRef / reasonCode", async () => {
+    const finished = await runAgentLoop({ ctx, plan: () => ({ kind: "finish", resultRef: "result:summary-1" }) });
+    expect(finished.terminationReason).toBe("finished");
+    const review = await runAgentLoop({ ctx, plan: () => ({ kind: "await_review", reasonCode: "needs_human_approval" }) });
+    expect(review.terminationReason).toBe("await_review");
+  });
+
+  it("rejects a non-deterministic traceId (UUID)", async () => {
+    await expect(
+      runAgentLoop({ ctx: { ...ctx, traceId: "550e8400-e29b-41d4-a716-446655440000" }, plan: () => ({ kind: "finish" }) }),
+    ).rejects.toThrow(/traceId/);
+  });
+
+  it("carries the authoritative workspaceId from ctx into the result", async () => {
+    const result = await runAgentLoop({ ctx, plan: () => ({ kind: "finish" }) });
+    expect(result.workspaceId).toBe("w1");
+  });
 });
