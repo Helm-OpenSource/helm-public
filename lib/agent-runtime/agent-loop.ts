@@ -184,6 +184,7 @@ export type AgentLoopTerminationReason =
   | "blocked_forbidden_risk"
   | "tool_not_registered"
   | "tool_error"
+  | "invalid_output_ref"
   | "max_steps_exceeded";
 
 export type AgentLoopResult = Readonly<{
@@ -209,6 +210,7 @@ export async function runAgentLoop(input: {
 }): Promise<AgentLoopResult> {
   const { ctx, plan } = input;
   assertDeterministicId("agentRunId", ctx.agentRunId);
+  if (ctx.traceId) assertDeterministicId("traceId", ctx.traceId); // audit correlation must stay deterministic too
   if (!Number.isInteger(ctx.maxSteps) || ctx.maxSteps < 1) {
     throw new Error("agent loop requires a positive integer maxSteps");
   }
@@ -238,12 +240,25 @@ export async function runAgentLoop(input: {
     const decision = await plan({ steps: [...steps], lifecycle }, ctx);
 
     if (decision.kind === "finish") {
+      // resultRef is optional, but when present it must be a reference token (no inline
+      // content / PII) — same fail-closed rule applied to argsRef / observationRef.
+      if (decision.resultRef !== undefined && !isReferenceToken(decision.resultRef)) {
+        lifecycle = transitionAgentState(lifecycle, "failed");
+        record(decision, lifecycle);
+        return finish(lifecycle, "invalid_output_ref");
+      }
       lifecycle = transitionAgentState(lifecycle, "completed");
       record(decision, lifecycle);
       return finish(lifecycle, "finished");
     }
 
     if (decision.kind === "await_review") {
+      // reasonCode is the human-review marker; it must be a reference token, not free text.
+      if (!isReferenceToken(decision.reasonCode)) {
+        lifecycle = transitionAgentState(lifecycle, "failed");
+        record(decision, lifecycle);
+        return finish(lifecycle, "invalid_output_ref");
+      }
       lifecycle = transitionAgentState(lifecycle, "awaiting_review");
       record(decision, lifecycle);
       return finish(lifecycle, "await_review");
