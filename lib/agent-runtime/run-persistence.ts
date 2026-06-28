@@ -25,12 +25,21 @@ import {
 
 export async function persistAgentRunResult(input: {
   result: AgentLoopResult;
-  workspaceId: string;
+  /** Optional. The run's tenant is the loop's authoritative result.workspaceId (single
+   * source of truth). If provided, it MUST equal result.workspaceId — a mismatch fails
+   * closed so a run can never be written to a foreign tenant (tenant-isolation guard). */
+  workspaceId?: string;
   store?: AgentRunStore;
 }): Promise<AgentRunRecord | null> {
-  const { result, workspaceId } = input;
-  if (!workspaceId) throw new Error("persistAgentRunResult requires a workspaceId");
+  const { result } = input;
   if (!result?.agentRunId) throw new Error("persistAgentRunResult requires a result with an agentRunId");
+  const workspaceId = result.workspaceId;
+  if (!workspaceId) throw new Error("persistAgentRunResult requires a result carrying a workspaceId");
+  if (input.workspaceId !== undefined && input.workspaceId !== workspaceId) {
+    throw new Error(
+      `persistAgentRunResult tenant mismatch: result.workspaceId=${workspaceId} but caller passed workspaceId=${input.workspaceId}`,
+    );
+  }
   const store = input.store ?? getAgentRunStore();
 
   let record: AgentRunRecord | null = null;

@@ -90,8 +90,23 @@ describe("persistAgentRunResult (Tier 1.1↔1.2↔2.4 pipeline)", () => {
     expect((await getAgentRunStore().listRuns("w1"))).toHaveLength(1);
   });
 
-  it("requires a workspaceId and a valid result", async () => {
+  it("uses result.workspaceId as the single source of truth (no param needed)", async () => {
     const result = await runAgentLoop({ ctx, plan: buildSequencePlanner([{ kind: "finish" }]) });
-    await expect(persistAgentRunResult({ result, workspaceId: "" })).rejects.toThrow(/workspaceId/);
+    expect(result.workspaceId).toBe("w1"); // carried from ctx
+    const store = new InMemoryAgentRunStore();
+    registerAgentRunStore(store);
+    const record = await persistAgentRunResult({ result, store }); // no workspaceId param
+    expect(record?.workspaceId).toBe("w1");
+  });
+
+  it("tenant-isolation guard: a w1 run cannot be persisted to w2 (fail-closed)", async () => {
+    const result = await runAgentLoop({ ctx, plan: buildSequencePlanner([{ kind: "finish" }]) });
+    expect(result.workspaceId).toBe("w1");
+    await expect(persistAgentRunResult({ result, workspaceId: "w2" })).rejects.toThrow(/tenant mismatch/);
+    // and the w2 store must stay empty — nothing leaked across the tenant boundary
+    const w2store = new InMemoryAgentRunStore();
+    registerAgentRunStore(w2store);
+    await persistAgentRunResult({ result, workspaceId: "w2" }).catch(() => {});
+    expect(await buildWorkspaceRunReadout("w2")).toMatchObject({ totalRuns: 0 });
   });
 });

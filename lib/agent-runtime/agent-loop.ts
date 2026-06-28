@@ -188,6 +188,9 @@ export type AgentLoopTerminationReason =
 
 export type AgentLoopResult = Readonly<{
   agentRunId: string;
+  /** The authoritative workspace the loop ran in (carried from ctx). Persisters MUST use
+   * this as the single source of truth so a run can never be written to a foreign tenant. */
+  workspaceId: string;
   finalState: AgentLifecycleState;
   steps: readonly AgentStep[];
   terminationReason: AgentLoopTerminationReason;
@@ -228,7 +231,7 @@ export async function runAgentLoop(input: {
     finalState: AgentLifecycleState,
     terminationReason: AgentLoopTerminationReason,
   ): AgentLoopResult =>
-    Object.freeze({ agentRunId: ctx.agentRunId, finalState, steps: Object.freeze([...steps]), terminationReason });
+    Object.freeze({ agentRunId: ctx.agentRunId, workspaceId: ctx.workspaceId, finalState, steps: Object.freeze([...steps]), terminationReason });
 
   for (let i = 0; i < ctx.maxSteps; i += 1) {
     lifecycle = transitionAgentState(lifecycle, "deciding");
