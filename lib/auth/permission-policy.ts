@@ -21,7 +21,10 @@ export type PermissionEffectMode = RuntimePermissionProfile;
 export const permissionRiskLevelSchema = z.enum(["low", "medium", "high", "critical"]);
 export type PermissionRiskLevel = z.infer<typeof permissionRiskLevelSchema>;
 
-export const permissionActorTypeSchema = z.enum(["user", "service", "system"]);
+// "governed_worker" / "ai" make automated actors first-class principals (AgentOS review
+// P-H) so packs no longer maintain a parallel actor model off to the side. Additive —
+// existing user/service/system paths are unchanged.
+export const permissionActorTypeSchema = z.enum(["user", "service", "system", "governed_worker", "ai"]);
 export type PermissionActorType = z.infer<typeof permissionActorTypeSchema>;
 
 export const permissionAuditSourceSchema = z.enum([
@@ -29,6 +32,7 @@ export const permissionAuditSourceSchema = z.enum([
   "delegated_service",
   "system_guard",
   "synthetic_fixture",
+  "governed_execution",
 ]);
 export type PermissionAuditSource = z.infer<typeof permissionAuditSourceSchema>;
 
@@ -64,6 +68,7 @@ export const permissionFailureCodeSchema = z.enum([
   "data_class_denied",
   "blocked_side_effect",
   "no_policy_match",
+  "missing_worker_clearance",
 ]);
 export type PermissionFailureCode = z.infer<typeof permissionFailureCodeSchema>;
 
@@ -89,6 +94,12 @@ export type PermissionSubject = {
   readonly serviceScopes?: readonly string[];
   readonly policyVersion?: string;
   readonly auditSource?: PermissionAuditSource;
+  // Automated-actor identity (actorType "governed_worker" / "ai"): the worker principal
+  // + its autonomy clearance receipt. Lets governed/AI actors be evaluated by the same
+  // central PEP instead of a parallel actor model in the packs (AgentOS review P-H).
+  readonly workerId?: string;
+  readonly workerVersion?: string;
+  readonly autonomyClearanceRef?: string;
 };
 
 export type PermissionResource = {
@@ -218,6 +229,24 @@ function validateSubject(input: PermissionEvaluationInput): PermissionDecision |
         input,
         "missing_service_scope",
         "Service actor requires service key, scope, policy version, and delegated audit source.",
+      );
+    }
+    return null;
+  }
+
+  if (subject.actorType === "governed_worker" || subject.actorType === "ai") {
+    // Automated actors carry a worker identity + an autonomy clearance receipt + a
+    // deterministic policy version, audited as governed_execution. fail-closed otherwise.
+    if (
+      !subject.workerId ||
+      !subject.autonomyClearanceRef ||
+      !subject.policyVersion ||
+      subject.auditSource !== "governed_execution"
+    ) {
+      return deny(
+        input,
+        "missing_worker_clearance",
+        "Governed/AI actor requires workerId, autonomyClearanceRef, policyVersion, and governed_execution audit source.",
       );
     }
     return null;
