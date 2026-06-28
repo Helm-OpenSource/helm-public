@@ -4,12 +4,15 @@ import { buildPerceivedIntelligence, settleIntelligence, advanceToAnalyzed, adva
 import {
   InMemoryIntelligenceStore,
   collectIntelligenceFeedback,
+  getIntelligenceSourceProvider,
   getIntelligenceStore,
   registerIntelligenceAnalyzer,
   registerIntelligenceDecider,
   registerIntelligenceOrchestrator,
+  registerIntelligenceSourceProvider,
   registerIntelligenceStore,
   resetIntelligencePipelineForTest,
+  resetIntelligenceSourceProviderForTest,
   resetIntelligenceStoreForTest,
   runIntelligencePipeline,
 } from "@/lib/intelligence/intelligence-pipeline";
@@ -30,6 +33,7 @@ const orchestration = { planRef: "plan:1" };
 afterEach(() => {
   resetIntelligencePipelineForTest();
   resetIntelligenceStoreForTest();
+  resetIntelligenceSourceProviderForTest();
 });
 
 describe("runIntelligencePipeline (four-stage flow)", () => {
@@ -66,6 +70,33 @@ describe("runIntelligencePipeline (four-stage flow)", () => {
   it("requires a perceived record", async () => {
     const analyzed = advanceToAnalyzed(perceived(), analysis);
     await expect(runIntelligencePipeline({ record: analyzed })).rejects.toThrow(/perceived/);
+  });
+});
+
+describe("IntelligenceSourceProvider seam (real per-case sources bind here)", () => {
+  it("defaults to none (consumer falls back / halts)", () => {
+    expect(getIntelligenceSourceProvider()).toBeNull();
+  });
+
+  it("register/get swaps the provider; returns the previous", () => {
+    const provider = (record: ReturnType<typeof perceived>) => ({ outcomeReadout: { subjectRef: record.topic } });
+    const prev = registerIntelligenceSourceProvider(provider);
+    expect(prev).toBeNull();
+    expect(getIntelligenceSourceProvider()).toBe(provider);
+    expect(getIntelligenceSourceProvider()?.(perceived())).toEqual({ outcomeReadout: { subjectRef: "case_recovery" } });
+  });
+
+  it("a registered provider drives per-case sources through the pipeline", async () => {
+    // provider supplies per-case sources; a tiny adapter turns them into facets
+    registerIntelligenceSourceProvider((r) => ({ outcomeReadout: { subjectRef: r.topic }, proposal: { kind: r.topic } }));
+    const provider = getIntelligenceSourceProvider()!;
+    const res = await runIntelligencePipeline({
+      record: perceived(),
+      analyzer: (r) => (provider(r)?.outcomeReadout ? analysis : null),
+      decider: (r) => (provider(r)?.proposal ? decision : null),
+      orchestrator: () => orchestration,
+    });
+    expect(res.reachedStage).toBe("orchestrated");
   });
 });
 
