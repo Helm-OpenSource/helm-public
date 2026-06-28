@@ -148,6 +148,43 @@ export function resetIntelligenceStoreForTest(): void {
   activeStore = new InMemoryIntelligenceStore();
 }
 
+// --- per-case source provider seam (real engines bind here) ----------------------
+// A provider returns, for a given record, the case's raw stage inputs (the outcome readout /
+// proposal / execution plan) that the tenant's stage adapters turn into facets. This is the
+// clean cross-component injection point: the PACK registers a provider built from its real
+// derivation engines (pack → @helm/core is a clean dependency), and the tenant overlay
+// consumes getIntelligenceSourceProvider() — no fragile overlay→pack import. Null/unregistered
+// → the consumer falls back (e.g. to fixtures) or halts honestly.
+
+export type IntelligenceCaseSources = Readonly<{
+  outcomeReadout?: unknown;
+  proposal?: unknown;
+  postApprovalPlan?: unknown;
+}>;
+
+export type IntelligenceSourceProvider = (
+  record: IntelligenceRecord,
+) => IntelligenceCaseSources | null;
+
+let activeSourceProvider: IntelligenceSourceProvider | null = null;
+
+export function registerIntelligenceSourceProvider(
+  provider: IntelligenceSourceProvider | null,
+): IntelligenceSourceProvider | null {
+  const previous = activeSourceProvider;
+  activeSourceProvider = provider;
+  return previous;
+}
+
+/** The registered per-case source provider, or null when none is bound (consumer falls back). */
+export function getIntelligenceSourceProvider(): IntelligenceSourceProvider | null {
+  return activeSourceProvider;
+}
+
+export function resetIntelligenceSourceProviderForTest(): void {
+  activeSourceProvider = null;
+}
+
 // --- 回灌: feedback for learning -------------------------------------------------
 
 export type IntelligenceFeedbackItem = Readonly<{
