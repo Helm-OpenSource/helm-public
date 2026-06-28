@@ -256,3 +256,83 @@ describe("permission policy evaluator", () => {
     });
   });
 });
+
+describe("governed / AI automated actors (Tier 3.8)", () => {
+  const governedWorker = {
+    actorType: "governed_worker" as const,
+    workspaceId: "workspace-1",
+    workerId: "case-work-queue-driver",
+    workerVersion: "v1",
+    autonomyClearanceRef: "clr:assign:full_auto",
+    policyVersion: "permission-policy/v1",
+    auditSource: "governed_execution" as const,
+  };
+  const caseResource = {
+    kind: "case",
+    workspaceId: "workspace-1",
+    dataClassifications: ["workspace_internal" as const],
+  };
+
+  it("allows a fully-credentialed governed_worker on a capability-free action", () => {
+    const decision = evaluatePermission({
+      subject: governedWorker,
+      resource: caseResource,
+      actionName: "case.read",
+      policy: basePolicy,
+      traceId: "trace-gw-allow",
+    });
+    expect(decision.effect).toBe("allow");
+    expect(decision.actor?.actorType).toBe("governed_worker");
+  });
+
+  it("treats an ai actor as a first-class principal too", () => {
+    const decision = evaluatePermission({
+      subject: { ...governedWorker, actorType: "ai" as const },
+      resource: caseResource,
+      actionName: "case.read",
+      policy: basePolicy,
+      traceId: "trace-ai-allow",
+    });
+    expect(decision.effect).toBe("allow");
+  });
+
+  it("fail-closed: missing autonomyClearanceRef → missing_worker_clearance", () => {
+    const decision = evaluatePermission({
+      subject: { ...governedWorker, autonomyClearanceRef: undefined },
+      resource: caseResource,
+      actionName: "case.read",
+      policy: basePolicy,
+      traceId: "trace-gw-noclr",
+    });
+    expect(decision.effect).toBe("deny");
+    expect(decision.failureCode).toBe("missing_worker_clearance");
+  });
+
+  it("fail-closed: wrong audit source → missing_worker_clearance", () => {
+    const decision = evaluatePermission({
+      subject: { ...governedWorker, auditSource: "session" as const },
+      resource: caseResource,
+      actionName: "case.read",
+      policy: basePolicy,
+      traceId: "trace-gw-badaudit",
+    });
+    expect(decision.effect).toBe("deny");
+    expect(decision.failureCode).toBe("missing_worker_clearance");
+  });
+
+  it("a governed_worker is still bound by Core's blocked_side_effect", () => {
+    const decision = evaluatePermission({
+      subject: governedWorker,
+      resource: caseResource,
+      actionName: "execute_writeback",
+      policy: basePolicy,
+      traceId: "trace-gw-blocked",
+    });
+    expect(decision.effect).toBe("deny");
+    expect(decision.failureCode).toBe("blocked_side_effect");
+  });
+
+  it("missing_worker_clearance is a closed-enum failure code", () => {
+    expect(permissionFailureCodeSchema.parse("missing_worker_clearance")).toBe("missing_worker_clearance");
+  });
+});
