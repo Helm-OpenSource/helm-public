@@ -22,15 +22,39 @@ import {
 } from "@/lib/agentic/contracts";
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-const MS_TIMESTAMP_RE = /\b\d{13,}\b/;
+// A run of 7+ digits catches phone numbers, ID/card numbers, amount-like and ms-timestamp
+// raw values (ms ≥13 ⊂ this). Dates stay safe because their digit groups are hyphen-split.
+const RAW_VALUE_DIGIT_RUN_RE = /\d{7,}/;
+// Facet refs must be namespaced + bounded: <namespace>:<key>, both safe slugs over a closed
+// charset (no whitespace, no Chinese/raw names, no value punctuation). This is the shared
+// reference-token policy a Core seam can be safely built on.
+const NAMESPACED_REF_RE = /^[a-z][a-z0-9_-]*:[A-Za-z0-9:._-]+$/;
+// Identity components (topic / workspaceId / dedupeKey) are bare slugs (no namespace required),
+// same closed charset + same raw-value rejection.
+const IDENTITY_SLUG_RE = /^[a-z0-9][A-Za-z0-9:._-]*$/;
 
-/** A reference token: non-empty, no whitespace (a ref, not inline content/PII). */
+function hasRawValue(value: string): boolean {
+  return UUID_RE.test(value) || RAW_VALUE_DIGIT_RUN_RE.test(value);
+}
+
+/**
+ * A facet reference token: a namespaced, bounded slug carrying NO raw value. Rejects
+ * whitespace, raw names, UUIDs, ms timestamps, and long digit runs (phone/ID/amount) — so a
+ * facet can never smuggle PII / raw values inline. This is the shared reference-only policy.
+ */
 export function isIntelligenceRef(value: unknown): value is string {
-  return typeof value === "string" && value.trim() !== "" && !/\s/.test(value);
+  return typeof value === "string" && NAMESPACED_REF_RE.test(value) && !hasRawValue(value);
+}
+
+/** An identity slug (topic / workspaceId / dedupeKey): bare safe slug, same raw-value rejection. */
+function isIdentitySlug(value: unknown): value is string {
+  return typeof value === "string" && IDENTITY_SLUG_RE.test(value) && !hasRawValue(value);
 }
 
 function assertRef(name: string, value: unknown): asserts value is string {
-  if (!isIntelligenceRef(value)) throw new Error(`intelligence ${name} must be a non-empty reference token`);
+  if (!isIntelligenceRef(value)) {
+    throw new Error(`intelligence ${name} must be a namespaced reference token (<ns>:<key>, no raw value/PII)`);
+  }
 }
 
 function assertRefList(name: string, value: unknown): asserts value is readonly string[] {
@@ -38,9 +62,10 @@ function assertRefList(name: string, value: unknown): asserts value is readonly 
   value.forEach((v, i) => assertRef(`${name}[${i}]`, v));
 }
 
-function assertDeterministic(name: string, value: string): void {
-  if (UUID_RE.test(value)) throw new Error(`intelligence ${name} must not contain a UUID`);
-  if (MS_TIMESTAMP_RE.test(value)) throw new Error(`intelligence ${name} must not contain a ms timestamp`);
+function assertIdentity(name: string, value: unknown): asserts value is string {
+  if (!isIdentitySlug(value)) {
+    throw new Error(`intelligence ${name} must be a safe identity slug (no whitespace/raw value/PII)`);
+  }
 }
 
 // --- stages: a strict, fail-closed progression (no skipping) ---------------------
@@ -90,8 +115,7 @@ export type IntelligenceRecord = Readonly<{
 /** Deterministic intelligence id: intel:<topic>:<workspaceId>:<dedupeKey>. */
 export function buildIntelligenceId(input: { topic: string; workspaceId: string; dedupeKey: string }): string {
   for (const [name, value] of Object.entries(input)) {
-    assertRef(name, value);
-    assertDeterministic(name, value);
+    assertIdentity(name, value);
   }
   return `intel:${input.topic}:${input.workspaceId}:${input.dedupeKey}`;
 }
@@ -110,11 +134,11 @@ export function buildPerceivedIntelligence(input: {
   perception: PerceptionFacet;
   traceId?: string | null;
 }): IntelligenceRecord {
-  assertRef("topic", input.topic);
-  assertRef("workspaceId", input.workspaceId);
+  assertIdentity("topic", input.topic);
+  assertIdentity("workspaceId", input.workspaceId);
+  assertIdentity("dedupeKey", input.dedupeKey);
   assertRef("occurredAtRef", input.occurredAtRef);
-  assertDeterministic("occurredAtRef", input.occurredAtRef);
-  if (input.traceId != null) assertDeterministic("traceId", input.traceId);
+  if (input.traceId != null) assertRef("traceId", input.traceId);
   assertPerception(input.perception);
   return Object.freeze({
     intelligenceId: buildIntelligenceId({ topic: input.topic, workspaceId: input.workspaceId, dedupeKey: input.dedupeKey }),
@@ -160,7 +184,6 @@ export function advanceToOrchestrated(record: IntelligenceRecord, orchestration:
   assertRef("orchestration.planRef", orchestration?.planRef);
   if (orchestration.agentRunId != null) {
     assertRef("orchestration.agentRunId", orchestration.agentRunId);
-    assertDeterministic("orchestration.agentRunId", orchestration.agentRunId);
   }
   return Object.freeze({ ...record, stage: "orchestrated", orchestration: Object.freeze({ planRef: orchestration.planRef, agentRunId: orchestration.agentRunId ?? null }) });
 }
@@ -170,7 +193,6 @@ export function settleIntelligence(record: IntelligenceRecord, outcome: OutcomeF
   requireStage(record, "orchestrated");
   assertRef("outcome.outcomeRef", outcome?.outcomeRef);
   assertRef("outcome.settledAtRef", outcome?.settledAtRef);
-  assertDeterministic("outcome.settledAtRef", outcome.settledAtRef);
   if (outcome.goalMovementRef != null) assertRef("outcome.goalMovementRef", outcome.goalMovementRef);
   return Object.freeze({ ...record, stage: "settled", outcome: Object.freeze({ ...outcome, goalMovementRef: outcome.goalMovementRef ?? null }) });
 }

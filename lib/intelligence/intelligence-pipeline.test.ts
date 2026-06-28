@@ -96,14 +96,14 @@ describe("collectIntelligenceFeedback (回灌)", () => {
     r = advanceToAnalyzed(r, analysis);
     r = advanceToDecided(r, decision);
     r = advanceToOrchestrated(r, orchestration);
-    r = settleIntelligence(r, { outcomeRef: "outcome:kept", settledAtRef: "window:2026-07-05", goalMovementRef: "move:+1pct" });
+    r = settleIntelligence(r, { outcomeRef: "outcome:kept", settledAtRef: "window:2026-07-05", goalMovementRef: "move:up-1pct" });
     await store.put(r);
     // a not-yet-settled record (must be excluded)
     await store.put(advanceToAnalyzed(perceived("case-2:2026-06-28"), analysis));
 
     const feedback = await collectIntelligenceFeedback("w1", { store });
     expect(feedback).toHaveLength(1);
-    expect(feedback[0]).toMatchObject({ goalRef: "goal:recovery", strategyRef: "strategy:remind", outcomeRef: "outcome:kept", goalMovementRef: "move:+1pct" });
+    expect(feedback[0]).toMatchObject({ goalRef: "goal:recovery", strategyRef: "strategy:remind", outcomeRef: "outcome:kept", goalMovementRef: "move:up-1pct" });
 
     expect(await collectIntelligenceFeedback("w1", { store, goalRef: "goal:other" })).toHaveLength(0);
     expect(await collectIntelligenceFeedback("w1", { store, goalRef: "goal:recovery" })).toHaveLength(1);
