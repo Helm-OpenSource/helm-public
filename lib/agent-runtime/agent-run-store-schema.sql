@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS `helm_agent_run_steps` (
   `error_code`      VARCHAR(64)  NULL,
   `state`           VARCHAR(32)  NOT NULL,
   PRIMARY KEY (`seq`),
-  UNIQUE KEY `uq_agent_run_steps_ws_step` (`workspace_id`, `step_id`),
+  -- step idempotency is scoped to the run (matches InMemoryAgentRunStore): the same literal
+  -- stepId in a different run within the same workspace is a distinct row.
+  UNIQUE KEY `uq_agent_run_steps_ws_run_step` (`workspace_id`, `agent_run_id`, `step_id`),
   KEY `idx_agent_run_steps_ws_run` (`workspace_id`, `agent_run_id`, `step_index`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

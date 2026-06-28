@@ -21,7 +21,8 @@ function fakeClient() {
         return runs.filter((r) => r.workspace_id === v[0]) as T; // already in insertion order
       }
       if (query.includes("step_id FROM `helm_agent_run_steps`") && query.includes("LIMIT 1")) {
-        return steps.filter((r) => r.workspace_id === v[0] && r.step_id === v[1]) as T;
+        // step idempotency scoped to (workspace_id, agent_run_id, step_id)
+        return steps.filter((r) => r.workspace_id === v[0] && r.agent_run_id === v[1] && r.step_id === v[2]) as T;
       }
       // read steps for a run, ordered by index
       return steps
@@ -106,6 +107,43 @@ describe("MysqlAgentRunStore (Tier 1.1 durable)", () => {
     await store.appendStep({ agentRunId: "r2", workspaceId: "w2", lifecycle: "observing", step: step(0) });
     expect((await store.listRuns("w1")).map((r) => r.agentRunId)).toEqual(["r1"]);
     expect(await store.getRun("w2", "r1")).toBeNull();
+  });
+
+  it("scopes step idempotency to the run: same literal stepId in two runs both persist (Codex)", async () => {
+    const c = fakeClient();
+    const store = new MysqlAgentRunStore(c);
+    const shared: AgentStep = { ...step(0), stepId: "step:shared:0" };
+    await store.appendStep({ agentRunId: "rA", workspaceId: "w1", lifecycle: "observing", step: shared });
+    await store.appendStep({ agentRunId: "rB", workspaceId: "w1", lifecycle: "observing", step: shared });
+    expect((await store.getRun("w1", "rA"))?.steps).toHaveLength(1);
+    expect((await store.getRun("w1", "rB"))?.steps).toHaveLength(1);
+    expect(c.steps).toHaveLength(2); // not suppressed across runs
+  });
+
+  it("rethrows a non-duplicate insert error instead of returning a partial record (Codex)", async () => {
+    const c = fakeClient();
+    const realExec = c.$executeRawUnsafe.bind(c);
+    c.$executeRawUnsafe = async (query: string, ...v: unknown[]) => {
+      if (query.includes("INSERT INTO `helm_agent_run_steps`")) throw new Error("ER_NO_SUCH_TABLE: schema drift");
+      return realExec(query, ...v);
+    };
+    const store = new MysqlAgentRunStore(c);
+    await expect(
+      store.appendStep({ agentRunId: "r1", workspaceId: "w1", lifecycle: "observing", step: step(0) }),
+    ).rejects.toThrow(/schema drift/);
+  });
+
+  it("swallows ONLY a duplicate-key race on the step insert", async () => {
+    const c = fakeClient();
+    const realExec = c.$executeRawUnsafe.bind(c);
+    c.$executeRawUnsafe = async (query: string, ...v: unknown[]) => {
+      if (query.includes("INSERT INTO `helm_agent_run_steps`")) throw new Error("Duplicate entry 'w1-step' for key 'uq'");
+      return realExec(query, ...v);
+    };
+    const store = new MysqlAgentRunStore(c);
+    // duplicate-key race must NOT throw (another writer won); run still returns
+    const rec = await store.appendStep({ agentRunId: "r1", workspaceId: "w1", lifecycle: "completed", step: step(0) });
+    expect(rec.lifecycle).toBe("completed");
   });
 
   it("fails closed on missing workspaceId / agentRunId / stepId", async () => {

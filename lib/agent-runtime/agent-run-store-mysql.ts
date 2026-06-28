@@ -38,6 +38,14 @@ function sanitizeTableIdentifier(raw: string): string {
   return raw;
 }
 
+/** Only a unique-constraint violation is a safe "another writer won" race. Every other DB
+ * error (schema drift, overflow, permission, transient) MUST surface — an audit/run ledger
+ * cannot silently turn a failed write into a successful-but-missing-step append. */
+function isDuplicateKeyError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return /duplicate entry/i.test(msg) || /\b1062\b/.test(msg) || /unique constraint/i.test(msg) || /\bP2002\b/.test(msg);
+}
+
 /** Table names, tenant-prefixed + backtick-quoted (identifier injection-safe). */
 export function buildAgentRunTableNames(
   tenantKey = process.env.AGENT_RUN_STORE_TABLE_TENANT_KEY ?? "helm",
@@ -137,7 +145,8 @@ export class MysqlAgentRunStore implements AgentRunStore {
           input.agentRunId,
           input.lifecycle,
         );
-      } catch {
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) throw error; // real failure must surface, not be swallowed
         // concurrent first-insert race on unique (workspace_id, agent_run_id) → fall through to update
         await this.client.$executeRawUnsafe(
           `UPDATE ${this.tables.runs} SET lifecycle = ? WHERE workspace_id = ? AND agent_run_id = ?`,
@@ -155,10 +164,12 @@ export class MysqlAgentRunStore implements AgentRunStore {
       );
     }
 
-    // 2) append the step, idempotent on (workspace_id, step_id).
+    // 2) append the step, idempotent on (workspace_id, agent_run_id, step_id) — scoped to the
+    //    run to match InMemoryAgentRunStore (the same literal stepId in another run persists).
     const stepExists = await this.client.$queryRawUnsafe<{ step_id: string }[]>(
-      `SELECT step_id FROM ${this.tables.steps} WHERE workspace_id = ? AND step_id = ? LIMIT 1`,
+      `SELECT step_id FROM ${this.tables.steps} WHERE workspace_id = ? AND agent_run_id = ? AND step_id = ? LIMIT 1`,
       input.workspaceId,
+      input.agentRunId,
       input.step.stepId,
     );
     if (!stepExists[0]) {
@@ -182,8 +193,10 @@ export class MysqlAgentRunStore implements AgentRunStore {
           tr?.errorCode ?? null,
           input.step.state,
         );
-      } catch {
-        // duplicate-key race on (workspace_id, step_id): another writer won — keep the survivor.
+      } catch (error) {
+        // Only a duplicate-key race (another writer won) is safe to ignore; every other DB
+        // error must surface so a failed write never returns a record missing the step.
+        if (!isDuplicateKeyError(error)) throw error;
       }
     }
 
