@@ -57,9 +57,17 @@ const step = (runId: string, index: number, over: Partial<AgentStep> = {}): Agen
 
 // One identical sequence exercised against any AgentRunStore; returns a normalized snapshot.
 async function runSequence(store: AgentRunStore) {
-  // run r1 in w1: two steps, lifecycle advances to completed
-  await store.appendStep({ agentRunId: "r1", workspaceId: "w1", lifecycle: "observing", step: step("r1", 0) });
-  await store.appendStep({ agentRunId: "r1", workspaceId: "w1", lifecycle: "completed", step: step("r1", 1) });
+  // run r1 in w1: three steps exercising ALL decision kinds + toolResult presence/absence,
+  // so the parity covers the full AgentStep round-trip (Codex follow-up), not just structure.
+  await store.appendStep({ agentRunId: "r1", workspaceId: "w1", lifecycle: "observing", step: step("r1", 0) }); // call_tool + toolResult
+  await store.appendStep({
+    agentRunId: "r1", workspaceId: "w1", lifecycle: "awaiting_review",
+    step: { index: 1, stepId: "step:r1:1", decision: { kind: "await_review", reasonCode: "needs_human" }, state: "awaiting_review" },
+  });
+  await store.appendStep({
+    agentRunId: "r1", workspaceId: "w1", lifecycle: "completed",
+    step: { index: 2, stepId: "step:r1:2", decision: { kind: "finish", resultRef: "result:done" }, state: "completed" },
+  });
   // idempotent re-append of r1 step 0 (must not duplicate)
   await store.appendStep({ agentRunId: "r1", workspaceId: "w1", lifecycle: "completed", step: step("r1", 0) });
   // run r2 in w1 reusing the SAME literal stepId pattern as r1 (per-run scope: must persist)
@@ -71,10 +79,12 @@ async function runSequence(store: AgentRunStore) {
   const w2List = await store.listRuns("w2");
   const r1 = await store.getRun("w1", "r1");
   const missing = await store.getRun("w1", "ghost");
+  // full per-step projection: decision + toolResult must round-trip identically across impls.
+  const projectStep = (s: AgentStep) => ({ index: s.index, stepId: s.stepId, decision: s.decision, toolResult: s.toolResult ?? null });
   return {
     w1Runs: w1List.map((r) => ({ id: r.agentRunId, lifecycle: r.lifecycle, steps: r.steps.length })),
     w2Runs: w2List.map((r) => ({ id: r.agentRunId, lifecycle: r.lifecycle, steps: r.steps.length })),
-    r1Steps: r1?.steps.map((s) => ({ index: s.index, stepId: s.stepId })) ?? null,
+    r1Steps: r1?.steps.map(projectStep) ?? null,
     missingIsNull: missing === null,
   };
 }
@@ -88,11 +98,16 @@ describe("AgentRunStore contract parity (Cycle-3)", () => {
 
   it("the equivalence covers the contract-critical invariants (anchored, not just mutual)", async () => {
     const snap = await runSequence(new InMemoryAgentRunStore());
-    // r1 deduped to 2 steps; r2 persisted despite reusing r1's literal stepId (per-run scope)
+    // r1 has 3 distinct steps (call_tool/await_review/finish), step 0 re-append deduped;
+    // r2 persisted despite reusing r1's literal stepId (per-run scope)
     expect(snap.w1Runs).toEqual([
-      { id: "r1", lifecycle: "completed", steps: 2 },
+      { id: "r1", lifecycle: "completed", steps: 3 },
       { id: "r2", lifecycle: "awaiting_review", steps: 1 },
     ]);
+    // all three decision kinds round-tripped on r1
+    expect(snap.r1Steps?.map((s) => s.decision.kind)).toEqual(["call_tool", "await_review", "finish"]);
+    expect(snap.r1Steps?.[0].toolResult).toEqual({ status: "ok", observationRef: "obs:r1:0" });
+    expect(snap.r1Steps?.[1].toolResult).toBeNull();
     // workspace isolation: w2 has its own r1
     expect(snap.w2Runs).toEqual([{ id: "r1", lifecycle: "observing", steps: 1 }]);
     expect(snap.missingIsNull).toBe(true);
