@@ -8,9 +8,12 @@
  *
  * Mirrors the established durable-store pattern (MysqlNpaSeatOpsRepository): raw
  * $queryRawUnsafe/$executeRawUnsafe, find-then-insert idempotency, and a duplicate-key race
- * on the unique index degrades to a dedupe read — the same stepId NEVER produces two rows.
- * Two tables: agent_runs (per-run lifecycle, insertion order) + agent_run_steps (append-only
- * steps, unique on (workspace_id, step_id)). Workspace-scoped on every query.
+ * on the unique index degrades to a dedupe read. Step idempotency is PER-RUN, matching
+ * InMemoryAgentRunStore: the unique key is (workspace_id, agent_run_id, step_id), so a
+ * duplicate stepId within the SAME run is suppressed, while the same literal stepId in a
+ * DIFFERENT run is a valid distinct row. Two tables: agent_runs (per-run lifecycle, insertion
+ * order) + agent_run_steps (append-only steps, unique on (workspace_id, agent_run_id, step_id)).
+ * Workspace-scoped on every query.
  *
  * Reference-only: only ids / enums / reference tokens are persisted (the loop already forbids
  * inline content in argsRef/resultRef/reasonCode/observationRef) — no PII, no raw values.
