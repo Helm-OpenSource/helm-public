@@ -122,6 +122,7 @@ import {
   completeFirstLoginIdentityCompletionAction,
   completeTrialSignupVerificationAction,
   loginAction,
+  passwordLoginAction,
   requestPhoneLoginCodeAction,
   startTrialSignupAction,
   loginWithPhoneCodeAction,
@@ -977,6 +978,40 @@ describe("auth verification code attempt cap", () => {
         }),
       }),
     );
+  });
+});
+
+describe("password login action", () => {
+  it("returns a user-facing unavailable error when user lookup fails", async () => {
+    mocks.db.user.findFirst.mockRejectedValue(new Error("database unavailable"));
+
+    const result = await passwordLoginAction({
+      identifier: "owner@example.com",
+      password: "Password123",
+      locale: "en-US",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Unable to sign in right now. Please try again later.",
+    });
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps missing users on the generic credential error path", async () => {
+    mocks.db.user.findFirst.mockResolvedValue(null);
+
+    const result = await passwordLoginAction({
+      identifier: "missing@example.com",
+      password: "Password123",
+      locale: "en-US",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Incorrect email/phone or password.",
+    });
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
   });
 });
 
