@@ -1202,11 +1202,23 @@ export async function passwordLoginAction(input: z.infer<typeof passwordLoginSch
       : "邮箱/手机号或密码不正确。",
   };
 
-  // Durable per-identifier rate limit. Checked and incremented for ANY
-  // identifier (existent or not) so the lockout cannot be used to probe which
-  // accounts exist. Fails open if the table/DB is unavailable.
+  const temporarilyUnavailable = {
+    ok: false as const,
+    error: english
+      ? "Unable to sign in right now. Please try again later."
+      : "当前无法完成登录，请稍后再试。",
+  };
+
   const identifier = parsed.data.identifier;
-  const lock = await getLoginLockStatus(identifier);
+  let lock: Awaited<ReturnType<typeof getLoginLockStatus>>;
+  try {
+    // Durable per-identifier rate limit. Checked for ANY identifier (existent
+    // or not) so the lockout cannot be used to probe which accounts exist.
+    lock = await getLoginLockStatus(identifier);
+  } catch {
+    return temporarilyUnavailable;
+  }
+
   if (lock.locked) {
     return {
       ok: false as const,
@@ -1216,7 +1228,13 @@ export async function passwordLoginAction(input: z.infer<typeof passwordLoginSch
     };
   }
 
-  const user = await findUserByIdentifier(identifier);
+  let user: Awaited<ReturnType<typeof findUserByIdentifier>>;
+  try {
+    user = await findUserByIdentifier(identifier);
+  } catch {
+    return temporarilyUnavailable;
+  }
+
   if (
     !user ||
     user.memberships.length === 0 ||
