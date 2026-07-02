@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  Fragment,
+  useEffect,
   useMemo,
   useState,
   type Dispatch,
@@ -56,6 +58,41 @@ type InviteGuidance = {
   description: string;
   acceptanceHint: string;
 };
+
+type AliyunSeatBinding = {
+  helmUserId: string;
+  helmUserEmail: string | null;
+  aliyunAgentId: string;
+  status: "ACTIVE" | "DISABLED";
+};
+
+type AliyunSeatBindingDraft = {
+  rowKey: string;
+  aliyunAgentId: string;
+  accessKeyId: string;
+  accessKeySecret: string;
+  error: string | null;
+};
+
+declare global {
+  interface Window {
+    __HELM_ALIYUN_SEAT_BINDING_API_PATH__?: string;
+  }
+}
+
+function getAliyunSeatBindingApiPath(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const value = window.__HELM_ALIYUN_SEAT_BINDING_API_PATH__;
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.startsWith("/api/") ? trimmed : null;
+}
 
 type PermissionsRoleGuideCardProps = {
   english: boolean;
@@ -256,6 +293,29 @@ function MemberGoalProfileEditor({
   );
 }
 
+function normalizeBindingEmail(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function inviteDetailRowKey(input: {
+  dingtalkUserId: string;
+  placeholderEmail: string | null;
+}): string {
+  return normalizeBindingEmail(input.placeholderEmail) || input.dingtalkUserId;
+}
+
+function isAliyunSeatBinding(value: unknown): value is AliyunSeatBinding {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const row = value as Partial<AliyunSeatBinding>;
+  return (
+    typeof row.helmUserId === "string" &&
+    typeof row.aliyunAgentId === "string" &&
+    (row.status === "ACTIVE" || row.status === "DISABLED")
+  );
+}
+
 export function PermissionsRoleGuideCard({
   english,
 }: PermissionsRoleGuideCardProps) {
@@ -346,6 +406,16 @@ export function TeamPermissionsCard({
   const [selectedInviteUserIds, setSelectedInviteUserIds] = useState<string[]>(
     [],
   );
+  const [aliyunSeatBindingAvailable, setAliyunSeatBindingAvailable] =
+    useState(false);
+  const [aliyunSeatBindingsByEmail, setAliyunSeatBindingsByEmail] = useState<
+    Record<string, AliyunSeatBinding>
+  >({});
+  const [aliyunSeatBindingDraft, setAliyunSeatBindingDraft] =
+    useState<AliyunSeatBindingDraft | null>(null);
+  const [aliyunSeatBindingPendingKey, setAliyunSeatBindingPendingKey] =
+    useState<string | null>(null);
+  const aliyunSeatBindingApiPath = getAliyunSeatBindingApiPath();
   const activeSelectedInviteUserIds = useMemo(
     () =>
       selectedInviteUserIds.filter((userId) =>
@@ -361,6 +431,192 @@ export function TeamPermissionsCard({
   const allPendingSelected =
     pendingInviteUserIds.length > 0 &&
     pendingInviteUserIds.every((userId) => selectedInviteUserIdSet.has(userId));
+
+  useEffect(() => {
+    if (!canManageConnectors || !aliyunSeatBindingApiPath) {
+      setAliyunSeatBindingAvailable(false);
+      setAliyunSeatBindingsByEmail({});
+      return;
+    }
+
+    let cancelled = false;
+    void fetch(aliyunSeatBindingApiPath, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          return null;
+        }
+        return (await response.json().catch(() => null)) as {
+          ok?: unknown;
+          bindings?: unknown;
+        } | null;
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        if (!payload?.ok || !Array.isArray(payload.bindings)) {
+          setAliyunSeatBindingAvailable(false);
+          setAliyunSeatBindingsByEmail({});
+          return;
+        }
+
+        const next: Record<string, AliyunSeatBinding> = {};
+        for (const binding of payload.bindings) {
+          if (!isAliyunSeatBinding(binding)) continue;
+          const emailKey = normalizeBindingEmail(binding.helmUserEmail);
+          if (emailKey) {
+            next[emailKey] = binding;
+          }
+        }
+        setAliyunSeatBindingAvailable(true);
+        setAliyunSeatBindingsByEmail(next);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAliyunSeatBindingAvailable(false);
+        setAliyunSeatBindingsByEmail({});
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aliyunSeatBindingApiPath, canManageConnectors]);
+
+  const openAliyunSeatBindingDraft = (rowKey: string, aliyunAgentId = "") => {
+    setAliyunSeatBindingDraft({
+      rowKey,
+      aliyunAgentId,
+      accessKeyId: "",
+      accessKeySecret: "",
+      error: null,
+    });
+  };
+
+  const submitAliyunSeatBinding = async (item: {
+    dingtalkUserId: string;
+    placeholderEmail: string | null;
+  }) => {
+    if (!aliyunSeatBindingDraft) return;
+    const rowKey = inviteDetailRowKey(item);
+    if (aliyunSeatBindingDraft.rowKey !== rowKey) return;
+    const helmUserEmail = normalizeBindingEmail(item.placeholderEmail);
+    if (!helmUserEmail) {
+      setAliyunSeatBindingDraft((current) =>
+        current ? { ...current, error: english ? "Missing Helm user email" : "缺少 Helm 用户邮箱" } : current,
+      );
+      return;
+    }
+    setAliyunSeatBindingPendingKey(rowKey);
+    try {
+      if (!aliyunSeatBindingApiPath) {
+        throw new Error("Aliyun seat binding API is not configured");
+      }
+      const response = await fetch(aliyunSeatBindingApiPath, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "bind",
+          helmUserEmail,
+          aliyunAgentId: aliyunSeatBindingDraft.aliyunAgentId,
+          accessKeyId: aliyunSeatBindingDraft.accessKeyId,
+          accessKeySecret: aliyunSeatBindingDraft.accessKeySecret,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: unknown;
+        helmUserId?: unknown;
+        aliyunAgentId?: unknown;
+        error?: unknown;
+      } | null;
+      if (!response.ok || !payload?.ok) {
+        setAliyunSeatBindingDraft((current) =>
+          current
+            ? {
+                ...current,
+                error:
+                  typeof payload?.error === "string"
+                    ? payload.error
+                    : english
+                      ? "Binding failed"
+                      : "绑定失败",
+              }
+            : current,
+        );
+        return;
+      }
+      const helmUserId = typeof payload.helmUserId === "string" ? payload.helmUserId : "";
+      const aliyunAgentId =
+        typeof payload.aliyunAgentId === "string" ? payload.aliyunAgentId : aliyunSeatBindingDraft.aliyunAgentId;
+      setAliyunSeatBindingsByEmail((current) => ({
+        ...current,
+        [helmUserEmail]: {
+          helmUserId,
+          helmUserEmail,
+          aliyunAgentId,
+          status: "ACTIVE",
+        },
+      }));
+      setAliyunSeatBindingDraft(null);
+    } finally {
+      setAliyunSeatBindingPendingKey(null);
+    }
+  };
+
+  const unbindAliyunSeat = async (item: {
+    dingtalkUserId: string;
+    placeholderEmail: string | null;
+  }) => {
+    const rowKey = inviteDetailRowKey(item);
+    const helmUserEmail = normalizeBindingEmail(item.placeholderEmail);
+    const binding = helmUserEmail ? aliyunSeatBindingsByEmail[helmUserEmail] : undefined;
+    if (!binding) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(english ? "Unbind this Aliyun seat?" : "确认解绑该阿里云坐席？")
+    ) {
+      return;
+    }
+    setAliyunSeatBindingPendingKey(rowKey);
+    try {
+      if (!aliyunSeatBindingApiPath) {
+        throw new Error("Aliyun seat binding API is not configured");
+      }
+      const response = await fetch(aliyunSeatBindingApiPath, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "unbind",
+          helmUserEmail,
+          helmUserId: binding.helmUserId,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as { ok?: unknown } | null;
+      if (!response.ok || !payload?.ok) {
+        setAliyunSeatBindingDraft({
+          rowKey,
+          aliyunAgentId: binding.aliyunAgentId,
+          accessKeyId: "",
+          accessKeySecret: "",
+          error: english ? "Unbind failed" : "解绑失败",
+        });
+        return;
+      }
+      setAliyunSeatBindingsByEmail((current) => {
+        const next = { ...current };
+        delete next[helmUserEmail];
+        return next;
+      });
+    } finally {
+      setAliyunSeatBindingPendingKey(null);
+    }
+  };
 
   return (
     <Card>
@@ -520,109 +776,225 @@ export function TeamPermissionsCard({
                 <tbody>
                   {dingtalkDirectoryInviteDryRun &&
                   dingtalkDirectoryInviteDryRun.details.length ? (
-                    dingtalkDirectoryInviteDryRun.details.map((item) => (
-                      <tr
-                        key={`${item.dingtalkUserId}:${item.placeholderEmail ?? "none"}`}
-                        className="border-t border-[color:var(--border)]"
-                      >
-                        <td className="px-3 py-2 text-[color:var(--foreground)]">
-                          {item.name}
-                        </td>
-                        <td className="px-3 py-2 text-[color:var(--muted)]">
-                          {item.normalizedPhone ??
-                            item.mobile ??
-                            (english ? "Missing" : "缺失")}
-                        </td>
-                        <td className="px-3 py-2 text-[color:var(--muted)]">
-                          {item.title ?? (english ? "-" : "无")}
-                        </td>
-                        <td className="px-3 py-2 text-[color:var(--muted)]">
-                          {item.deptIds.length
-                            ? item.deptIds.join(", ")
-                            : english
-                              ? "-"
-                              : "无"}
-                        </td>
-                        <td className="px-3 py-2 text-[color:var(--muted)]">
-                          {item.placeholderEmail ?? (english ? "-" : "无")}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`rounded-full px-2 py-1 text-[11px] font-medium ${
-                              item.messageStatus === "SENT"
-                                ? "bg-[color:var(--status-success-bg)] text-[color:var(--status-success-text)]"
-                                : "bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning-text)]"
-                            }`}
+                    dingtalkDirectoryInviteDryRun.details.map((item) => {
+                      const rowKey = inviteDetailRowKey(item);
+                      const emailKey = normalizeBindingEmail(item.placeholderEmail);
+                      const binding = emailKey ? aliyunSeatBindingsByEmail[emailKey] : undefined;
+                      const draftOpen = aliyunSeatBindingDraft?.rowKey === rowKey;
+                      const seatPending = aliyunSeatBindingPendingKey === rowKey;
+                      return (
+                        <Fragment key={`${item.dingtalkUserId}:${item.placeholderEmail ?? "none"}`}>
+                          <tr
+                            className="border-t border-[color:var(--border)]"
                           >
-                            {item.messageStatus === "SENT"
-                              ? english
-                                ? "Invited"
-                                : "已邀请"
-                              : english
-                                ? "Pending invite"
-                                : "待邀请"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          {item.messageStatus === "SENT" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              type="button"
-                              disabled={dingtalkInvitePending}
-                              onClick={() =>
-                                inviteSelectedDingTalkDirectoryUsers([
-                                  item.dingtalkUserId,
-                                ])
-                              }
-                            >
-                              {english ? "Re-invite" : "重新邀请"}
-                            </Button>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedInviteUserIdSet.has(
-                                  item.dingtalkUserId,
-                                )}
-                                onChange={(event) =>
-                                  setSelectedInviteUserIds((current) => {
-                                    if (event.target.checked) {
-                                      return current.includes(item.dingtalkUserId)
-                                        ? current
-                                        : [...current, item.dingtalkUserId];
+                            <td className="px-3 py-2 text-[color:var(--foreground)]">
+                              {item.name}
+                            </td>
+                            <td className="px-3 py-2 text-[color:var(--muted)]">
+                              {item.normalizedPhone ??
+                                item.mobile ??
+                                (english ? "Missing" : "缺失")}
+                            </td>
+                            <td className="px-3 py-2 text-[color:var(--muted)]">
+                              {item.title ?? (english ? "-" : "无")}
+                            </td>
+                            <td className="px-3 py-2 text-[color:var(--muted)]">
+                              {item.deptIds.length
+                                ? item.deptIds.join(", ")
+                                : english
+                                  ? "-"
+                                  : "无"}
+                            </td>
+                            <td className="px-3 py-2 text-[color:var(--muted)]">
+                              {item.placeholderEmail ?? (english ? "-" : "无")}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-col items-start gap-1">
+                                <span
+                                  className={`rounded-full px-2 py-1 text-[11px] font-medium ${
+                                    item.messageStatus === "SENT"
+                                      ? "bg-[color:var(--status-success-bg)] text-[color:var(--status-success-text)]"
+                                      : "bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning-text)]"
+                                  }`}
+                                >
+                                  {item.messageStatus === "SENT"
+                                    ? english
+                                      ? "Invited"
+                                      : "已邀请"
+                                    : english
+                                      ? "Pending invite"
+                                      : "待邀请"}
+                                </span>
+                                {binding ? (
+                                  <span className="rounded-full bg-[color:var(--status-success-bg)] px-2 py-1 text-[11px] font-medium text-[color:var(--status-success-text)]">
+                                    {english ? "Aliyun seat" : "阿里云坐席"} · {binding.aliyunAgentId}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {item.messageStatus === "SENT" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    type="button"
+                                    disabled={dingtalkInvitePending}
+                                    onClick={() =>
+                                      inviteSelectedDingTalkDirectoryUsers([
+                                        item.dingtalkUserId,
+                                      ])
                                     }
-                                    return current.filter(
-                                      (userId) =>
-                                        userId !== item.dingtalkUserId,
-                                    );
-                                  })
-                                }
-                                disabled={dingtalkInvitePending}
-                                aria-label={
-                                  english
-                                    ? `Select ${item.name}`
-                                    : `选择 ${item.name}`
-                                }
-                              />
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                type="button"
-                                disabled={dingtalkInvitePending}
-                                onClick={() =>
-                                  inviteSelectedDingTalkDirectoryUsers([
-                                    item.dingtalkUserId,
-                                  ])
-                                }
-                              >
-                                {english ? "Invite" : "邀请"}
-                              </Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                                  >
+                                    {english ? "Re-invite" : "重新邀请"}
+                                  </Button>
+                                ) : (
+                                  <>
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedInviteUserIdSet.has(
+                                        item.dingtalkUserId,
+                                      )}
+                                      onChange={(event) =>
+                                        setSelectedInviteUserIds((current) => {
+                                          if (event.target.checked) {
+                                            return current.includes(item.dingtalkUserId)
+                                              ? current
+                                              : [...current, item.dingtalkUserId];
+                                          }
+                                          return current.filter(
+                                            (userId) =>
+                                              userId !== item.dingtalkUserId,
+                                          );
+                                        })
+                                      }
+                                      disabled={dingtalkInvitePending}
+                                      aria-label={
+                                        english
+                                          ? `Select ${item.name}`
+                                          : `选择 ${item.name}`
+                                      }
+                                    />
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      type="button"
+                                      disabled={dingtalkInvitePending}
+                                      onClick={() =>
+                                        inviteSelectedDingTalkDirectoryUsers([
+                                          item.dingtalkUserId,
+                                        ])
+                                      }
+                                    >
+                                      {english ? "Invite" : "邀请"}
+                                    </Button>
+                                  </>
+                                )}
+                                {aliyunSeatBindingAvailable && binding ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    type="button"
+                                    disabled={seatPending}
+                                    onClick={() => unbindAliyunSeat(item)}
+                                  >
+                                    {english ? "Unbind seat" : "解绑坐席"}
+                                  </Button>
+                                ) : null}
+                                {aliyunSeatBindingAvailable && !binding ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    type="button"
+                                    disabled={seatPending || !item.placeholderEmail}
+                                    onClick={() => openAliyunSeatBindingDraft(rowKey)}
+                                  >
+                                    {english ? "Bind seat" : "绑定坐席"}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                          {draftOpen ? (
+                            <tr className="border-t border-[color:var(--border)] bg-[color:var(--surface-subtle)]/60">
+                              <td className="px-3 py-3" colSpan={7}>
+                                <div className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
+                                  <Input
+                                    value={aliyunSeatBindingDraft.aliyunAgentId}
+                                    onChange={(event) =>
+                                      setAliyunSeatBindingDraft((current) =>
+                                        current
+                                          ? { ...current, aliyunAgentId: event.target.value, error: null }
+                                          : current,
+                                      )
+                                    }
+                                    placeholder={english ? "Seat ID" : "坐席ID"}
+                                    disabled={seatPending}
+                                  />
+                                  <Input
+                                    value={aliyunSeatBindingDraft.accessKeyId}
+                                    onChange={(event) =>
+                                      setAliyunSeatBindingDraft((current) =>
+                                        current
+                                          ? { ...current, accessKeyId: event.target.value, error: null }
+                                          : current,
+                                      )
+                                    }
+                                    placeholder="AK"
+                                    type="password"
+                                    autoComplete="off"
+                                    disabled={seatPending}
+                                  />
+                                  <Input
+                                    value={aliyunSeatBindingDraft.accessKeySecret}
+                                    onChange={(event) =>
+                                      setAliyunSeatBindingDraft((current) =>
+                                        current
+                                          ? { ...current, accessKeySecret: event.target.value, error: null }
+                                          : current,
+                                      )
+                                    }
+                                    placeholder="SK"
+                                    type="password"
+                                    autoComplete="off"
+                                    disabled={seatPending}
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      type="button"
+                                      disabled={
+                                        seatPending ||
+                                        !aliyunSeatBindingDraft.aliyunAgentId ||
+                                        !aliyunSeatBindingDraft.accessKeyId ||
+                                        !aliyunSeatBindingDraft.accessKeySecret
+                                      }
+                                      onClick={() => submitAliyunSeatBinding(item)}
+                                    >
+                                      {english ? "Save" : "保存"}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      type="button"
+                                      disabled={seatPending}
+                                      onClick={() => setAliyunSeatBindingDraft(null)}
+                                    >
+                                      {english ? "Cancel" : "取消"}
+                                    </Button>
+                                  </div>
+                                </div>
+                                {aliyunSeatBindingDraft.error ? (
+                                  <p className="mt-2 text-xs font-medium text-[color:var(--status-danger-text)]">
+                                    {aliyunSeatBindingDraft.error}
+                                  </p>
+                                ) : null}
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })
                   ) : (
                     <tr>
                       <td

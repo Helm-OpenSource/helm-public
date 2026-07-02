@@ -5,7 +5,7 @@
 import "@testing-library/jest-dom/vitest";
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeamPermissionsCard } from "@/features/settings/components/permissions-settings";
 
 const baseProps = {
@@ -90,6 +90,41 @@ const baseProps = {
   updateMemberRole: () => undefined,
 };
 
+const dingtalkDryRunWithInviteDetail = {
+  recordedAt: new Date("2026-07-02T08:00:00.000Z"),
+  processed: 1,
+  createdUsers: 0,
+  reusedUsers: 1,
+  upsertedMemberships: 1,
+  sentMessages: 1,
+  skipped: 0,
+  skippedNoMobile: 0,
+  nameCollisionResolved: 0,
+  errors: [],
+  details: [
+    {
+      dingtalkUserId: "dt-user-1",
+      unionId: null,
+      name: "坐席一",
+      mobile: "5550100001",
+      normalizedPhone: "+15550100001",
+      title: "回款顾问",
+      jobNumber: "A001",
+      deptIds: [1001],
+      isLeader: false,
+      placeholderEmail: "agent1-zj@example.com",
+      userResolution: "REUSED_BY_PLACEHOLDER_EMAIL" as const,
+      membershipStatus: "INVITED_UPSERTED" as const,
+      messageStatus: "SENT" as const,
+      note: null,
+    },
+  ],
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("team permissions member goal profile", () => {
   it("renders goal profile editor when canManageMembers is true", () => {
     render(
@@ -114,5 +149,31 @@ describe("team permissions member goal profile", () => {
 
     expect(screen.queryByText("目标与职责")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "保存目标与职责" })).not.toBeInTheDocument();
+  });
+
+  it("shows Aliyun seat binding action in the pending invite detail action column", async () => {
+    window.__HELM_ALIYUN_SEAT_BINDING_API_PATH__ = "/api/tenant-seat-binding";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, bindings: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    render(
+      createElement(TeamPermissionsCard, {
+        ...baseProps,
+        canManageConnectors: true,
+        canManageMembers: true,
+        dingtalkDirectoryInviteDryRun: dingtalkDryRunWithInviteDetail,
+      }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "绑定坐席" }),
+    ).toBeInTheDocument();
   });
 });
