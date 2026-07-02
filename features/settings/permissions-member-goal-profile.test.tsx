@@ -152,7 +152,6 @@ describe("team permissions member goal profile", () => {
   });
 
   it("shows Aliyun seat binding action in the pending invite detail action column", async () => {
-    window.__HELM_ALIYUN_SEAT_BINDING_API_PATH__ = "/api/tenant-seat-binding";
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(

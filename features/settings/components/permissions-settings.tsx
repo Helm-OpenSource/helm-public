@@ -74,25 +74,7 @@ type AliyunSeatBindingDraft = {
   error: string | null;
 };
 
-declare global {
-  interface Window {
-    __HELM_ALIYUN_SEAT_BINDING_API_PATH__?: string;
-  }
-}
-
-function getAliyunSeatBindingApiPath(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const value = window.__HELM_ALIYUN_SEAT_BINDING_API_PATH__;
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.startsWith("/api/") ? trimmed : null;
-}
+const ALIYUN_SEAT_BINDING_API_PATH = "/api/extensions/aliyun-ccc/seat-binding";
 
 type PermissionsRoleGuideCardProps = {
   english: boolean;
@@ -415,7 +397,6 @@ export function TeamPermissionsCard({
     useState<AliyunSeatBindingDraft | null>(null);
   const [aliyunSeatBindingPendingKey, setAliyunSeatBindingPendingKey] =
     useState<string | null>(null);
-  const aliyunSeatBindingApiPath = getAliyunSeatBindingApiPath();
   const activeSelectedInviteUserIds = useMemo(
     () =>
       selectedInviteUserIds.filter((userId) =>
@@ -433,14 +414,14 @@ export function TeamPermissionsCard({
     pendingInviteUserIds.every((userId) => selectedInviteUserIdSet.has(userId));
 
   useEffect(() => {
-    if (!canManageConnectors || !aliyunSeatBindingApiPath) {
+    if (!canManageConnectors) {
       setAliyunSeatBindingAvailable(false);
       setAliyunSeatBindingsByEmail({});
       return;
     }
 
     let cancelled = false;
-    void fetch(aliyunSeatBindingApiPath, {
+    void fetch(ALIYUN_SEAT_BINDING_API_PATH, {
       method: "GET",
       headers: { Accept: "application/json" },
     })
@@ -481,7 +462,7 @@ export function TeamPermissionsCard({
     return () => {
       cancelled = true;
     };
-  }, [aliyunSeatBindingApiPath, canManageConnectors]);
+  }, [canManageConnectors]);
 
   const openAliyunSeatBindingDraft = (rowKey: string, aliyunAgentId = "") => {
     setAliyunSeatBindingDraft({
@@ -509,10 +490,7 @@ export function TeamPermissionsCard({
     }
     setAliyunSeatBindingPendingKey(rowKey);
     try {
-      if (!aliyunSeatBindingApiPath) {
-        throw new Error("Aliyun seat binding API is not configured");
-      }
-      const response = await fetch(aliyunSeatBindingApiPath, {
+      const response = await fetch(ALIYUN_SEAT_BINDING_API_PATH, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -582,10 +560,7 @@ export function TeamPermissionsCard({
     }
     setAliyunSeatBindingPendingKey(rowKey);
     try {
-      if (!aliyunSeatBindingApiPath) {
-        throw new Error("Aliyun seat binding API is not configured");
-      }
-      const response = await fetch(aliyunSeatBindingApiPath, {
+      const response = await fetch(ALIYUN_SEAT_BINDING_API_PATH, {
         method: "POST",
         headers: {
           Accept: "application/json",
