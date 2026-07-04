@@ -22,6 +22,18 @@
 
 Full argument: [HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md).
 
+Public-safe requirements for the current business narrative:
+[HELM_PUBLIC_BUSINESS_NARRATIVE_REQUIREMENTS.md](docs/product/HELM_PUBLIC_BUSINESS_NARRATIVE_REQUIREMENTS.md).
+Helm may enter through compliant sales-process signals and turn them into Sales
+Process Intelligence, AI Diagnostic, ecosystem delivery, and industry Pack
+compounding; it must not be described as a headset company, AI reseller, CRM
+replacement, or outsourcing company.
+The Trust Center / AI Shelf public-safe synthetic contract is checked by
+`docs/product/fixtures/ai-shelf-trust-center-contract.fixture.json` and
+`npm run check:ai-shelf-trust-center-contract`; it is not legal advice,
+supplier certification, reseller authorization, customer deployment, or a
+production receipt.
+
 ---
 
 ## Why enterprise leaders should care

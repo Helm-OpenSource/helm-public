@@ -22,6 +22,15 @@
 
 完整论述见 [HELM_FOR_DELIVERY_ENGINEERS_V1.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md)。
 
+最新商业叙事的 public-safe 需求见
+[HELM_PUBLIC_BUSINESS_NARRATIVE_REQUIREMENTS.md](docs/product/HELM_PUBLIC_BUSINESS_NARRATIVE_REQUIREMENTS.md)：
+Helm 可以从合规销售过程信号切入，形成 Sales Process Intelligence、AI Diagnostic、
+生态交付和行业 Pack 复利；但不得被讲成耳机公司、AI 产品分销商、CRM 替代或外包公司。
+其中 Trust Center / AI Shelf 的 public-safe 合成契约由
+`docs/product/fixtures/ai-shelf-trust-center-contract.fixture.json` 与
+`npm run check:ai-shelf-trust-center-contract` 机器验证；这不是法律意见、供应商认证、
+转售授权、客户部署或生产回执。
+
 ---
 
 ## 企业一号位为什么会关心

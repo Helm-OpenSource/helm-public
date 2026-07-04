@@ -47,6 +47,10 @@ connector 授权、写回、外发或审批证明。
 - [README](../README.md) / [README English](../README.en.md)
 - [开发者上手指引 / Developer quickstart](getting-started.md) / [English](getting-started.en.md)
 - [面向交付工程师的 Helm / Helm for delivery engineers](positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md) / [English](positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md)
+- [公开商业叙事需求 / Public business narrative requirements](product/HELM_PUBLIC_BUSINESS_NARRATIVE_REQUIREMENTS.md)
+- [Trust Center 需求 / Trust Center requirements](product/HELM_TRUST_CENTER_REQUIREMENTS.md)
+- [AI 精选货架上架契约 / AI Shelf listing contract](product/HELM_AI_SHELF_LISTING_CONTRACT.md)
+- [Trust Center / AI Shelf public-safe fixture](product/fixtures/ai-shelf-trust-center-contract.fixture.json) — 由 `npm run check:ai-shelf-trust-center-contract` 验证；不是法律意见、认证、转售授权、客户部署或生产回执。
 - [交付工程师黄金路径要求 / Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
 - [交付工程师初始化诊断要求 / Delivery engineer setup diagnostic requirements](product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md)
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
@@ -62,6 +66,10 @@ connector 授权、写回、外发或审批证明。
 - [LLM 智能深化 v1 / LLM intelligence deepening v1](product/HELM_LLM_INTELLIGENCE_DEEPENING_V1.md)
 - [LLM 智能深化 v2 / LLM intelligence deepening v2](product/HELM_LLM_INTELLIGENCE_DEEPENING_V2.md)
 - [开源与商业边界 / Open source and commercial boundary](product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)
+- [公开商业叙事需求 / Public business narrative requirements](product/HELM_PUBLIC_BUSINESS_NARRATIVE_REQUIREMENTS.md)
+- [Trust Center 需求 / Trust Center requirements](product/HELM_TRUST_CENTER_REQUIREMENTS.md)
+- [AI 精选货架上架契约 / AI Shelf listing contract](product/HELM_AI_SHELF_LISTING_CONTRACT.md)
+- [Trust Center / AI Shelf public-safe fixture](product/fixtures/ai-shelf-trust-center-contract.fixture.json) — synthetic contract only; not legal advice, certification, reseller authorization, customer deployment, or production receipt.
 - [开源与 Cloud trial 发布姿态 / Open source and cloud trial launch posture](product/HELM_OPEN_SOURCE_AND_CLOUD_TRIAL_LAUNCH_PLAN_V1.md)
 - [发布现实对齐 / Release reality alignment](product/HELM_RELEASE_REALITY_ALIGNMENT.md)
 - [认证生态清单 / Certified ecosystem checklist](product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md)
