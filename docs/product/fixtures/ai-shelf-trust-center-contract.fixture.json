@@ -1,0 +1,149 @@
+{
+  "fixtureKind": "public_safe_ai_shelf_trust_center_contract",
+  "fixtureVersion": 1,
+  "publicSafety": {
+    "classification": "synthetic_public_safe",
+    "containsRealCustomer": false,
+    "containsRealPerson": false,
+    "containsPrivateDomain": false,
+    "containsCredential": false,
+    "containsProductionReceipt": false,
+    "containsDeploymentAuthorization": false,
+    "containsPrivatePartnerList": false,
+    "containsPricing": false,
+    "containsRevenueShare": false,
+    "containsResellerTerms": false
+  },
+  "salesProcessSignal": {
+    "signalId": "synthetic-sales-process-signal-001",
+    "sourceType": "synthetic_fixture",
+    "captureMode": "synthetic",
+    "consentPosture": "not_required_for_synthetic",
+    "dataShape": "alias_only",
+    "aliases": {
+      "seller": "seller_alias_01",
+      "buyer": "buyer_alias_01",
+      "workspace": "workspace_alias_public_demo"
+    },
+    "signalTypes": [
+      "objection",
+      "need_candidate",
+      "risk_signal",
+      "follow_up_window"
+    ],
+    "summary": "Synthetic alias-only sales-process signal used to route an AI Diagnostic need into a public-safe review packet.",
+    "rawPayloadIncluded": false,
+    "transcriptIncluded": false,
+    "audioIncluded": false,
+    "customerNameIncluded": false,
+    "personNameIncluded": false,
+    "privateDomainIncluded": false
+  },
+  "trustCenterEvidenceMap": {
+    "consentRef": "docs/product/HELM_TRUST_CENTER_REQUIREMENTS.md#4-授权与告知要求",
+    "noticeRef": "docs/product/HELM_TRUST_CENTER_REQUIREMENTS.md#4-授权与告知要求",
+    "retentionRef": "docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md",
+    "withdrawalRef": "docs/product/HELM_TRUST_CENTER_REQUIREMENTS.md#5-保留期撤销与删除",
+    "auditRef": "npm run check:public-release",
+    "certStatusRef": "docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md",
+    "forbiddenActionsRef": "docs/product/HELM_TRUST_CENTER_REQUIREMENTS.md#7-禁止项"
+  },
+  "aiShelfListingCandidate": {
+    "listingId": "synthetic-sales-process-diagnostic-assistant",
+    "displayName": "Synthetic sales-process diagnostic assistant",
+    "capabilityCategory": "diagnostic_tool",
+    "problemFit": "Routes alias-only sales-process signals into an AI Diagnostic review packet.",
+    "notFor": [
+      "reseller program",
+      "marketplace listing",
+      "pricing or revenue-share offer",
+      "covert or unauthorized capture device",
+      "customer deployment readiness claim"
+    ],
+    "inputRequirements": {
+      "acceptedDataShape": "alias_only",
+      "minimumAuthorization": "synthetic_only",
+      "redactionRequired": true
+    },
+    "permissionPosture": "synthetic_only",
+    "dataBoundary": {
+      "containsPersonalData": false,
+      "containsCustomerData": false,
+      "containsAudio": false,
+      "containsTranscript": false,
+      "containsCrmSnapshot": false,
+      "usesExternalApi": false
+    },
+    "integrationPath": "offline_fixture",
+    "evidenceRefs": [
+      "docs/product/HELM_AI_SHELF_LISTING_CONTRACT.md",
+      "docs/product/HELM_TRUST_CENTER_REQUIREMENTS.md",
+      "docs/product/fixtures/ai-shelf-trust-center-contract.fixture.json",
+      "npm run check:ai-shelf-trust-center-contract"
+    ],
+    "reviewOwner": "helm-core-reviewer",
+    "certificationStatus": "candidate",
+    "trustCenterRefs": {
+      "consentRef": "docs/product/HELM_TRUST_CENTER_REQUIREMENTS.md#4-授权与告知要求",
+      "noticeRef": "docs/product/HELM_TRUST_CENTER_REQUIREMENTS.md#4-授权与告知要求",
+      "retentionRef": "docs/legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md",
+      "withdrawalRef": "docs/product/HELM_TRUST_CENTER_REQUIREMENTS.md#5-保留期撤销与删除",
+      "auditRef": "npm run check:public-release",
+      "certStatusRef": "docs/product/HELM_CERTIFIED_ECOSYSTEM_CHECKLIST.md"
+    },
+    "rollbackPath": "Remove or hide the listing candidate, route follow-up to private review, then rerun public-safe guards.",
+    "customerVisibleClaim": "Synthetic public reference only; not legal advice, supplier certification, reseller authorization, customer deployment readiness, SLA, pricing, or revenue-share offer.",
+    "commercialBoundary": {
+      "noReseller": true,
+      "noMarketplace": true,
+      "noPricing": true,
+      "noRevenueShare": true,
+      "noProcurementApproval": true,
+      "noSla": true
+    }
+  },
+  "aiDiagnosticRouteRefs": [
+    {
+      "routeId": "synthetic-sales-process-need",
+      "routeRef": "docs/product/HELM_DIAGNOSTIC_AUTOMATION_EVIDENCE_LAYER_REQUIREMENTS.md",
+      "status": "review_packet_candidate"
+    },
+    {
+      "routeId": "trust-reviewed-ai-shelf-candidate",
+      "routeRef": "docs/product/HELM_AI_SHELF_LISTING_CONTRACT.md#8-与-trust-center-和认证生态的关系",
+      "status": "public_reference_only"
+    }
+  ],
+  "grayDeviceRedlines": {
+    "covertDevice": "blocked",
+    "disguisedDevice": "blocked",
+    "modifiedDevice": "blocked",
+    "remoteControlDevice": "blocked",
+    "cheatingDevice": "blocked",
+    "hiddenRecording": "blocked",
+    "hiddenCollection": "blocked",
+    "unauthorizedConnector": "blocked"
+  },
+  "forbiddenFlags": {
+    "containsRealCustomer": false,
+    "containsRealPerson": false,
+    "containsPrivateDomain": false,
+    "containsCredential": false,
+    "containsProductionReceipt": false,
+    "containsDeploymentAuthorization": false,
+    "isReseller": false,
+    "isMarketplace": false,
+    "hasPricing": false,
+    "hasRevenueShare": false,
+    "hasResellerTerms": false,
+    "sellsGrayDevice": false,
+    "recommendsGrayDevice": false,
+    "sourcesGrayDevice": false,
+    "listsGrayDevice": false,
+    "adaptsGrayDevice": false,
+    "usesCovertRecording": false,
+    "usesUnauthorizedConnector": false,
+    "autoProcures": false,
+    "autoDeploys": false
+  }
+}
