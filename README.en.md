@@ -212,6 +212,7 @@ More detail in [docs/getting-started.en.md](docs/getting-started.en.md).
 | `/reports` | Weekly recap: last 2 weeks at a glance + next week's focus |
 | `/settings` | Workspace console: connectors, policies, pilot mode, retention, self-serve export |
 | `/health` | User-visible degraded surface: DB / LLM / connector / capture / audit trace |
+| `/trust-center` | Public trust posture: authorization / notice / retention / audit / withdrawal / certification / forbidden actions and gray-device redlines on one page; renders the machine-checked synthetic contract, not legal advice or a compliance statement |
 
 **Tech stack**: Next.js 16 (App Router) + React 19 · MySQL + Prisma · Tailwind CSS 4 + Radix UI · TypeScript (strict mode) · Vitest + Playwright
 
