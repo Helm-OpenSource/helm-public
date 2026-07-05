@@ -138,7 +138,7 @@ Completing these 6 steps means you have inspected the core forkable engineering 
 
 **Doesn't sell**:
 
-- ❌ SaaS direct to end customers (Helm Inc. doesn't compete with delivery engineers)
+- ❌ SaaS direct to end customers (you sell to end customers; Helm Inc. keeps a small set of named direct lighthouse engagements to harden the methodology and Packs, and doesn't compete with you beyond those)
 - ❌ License fees on fork / commercial use / self-hosting
 - ❌ Vertical pack sales (any vertical you want to build, you fork and sell)
 - ❌ Agent marketplace / plugin store
