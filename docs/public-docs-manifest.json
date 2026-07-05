@@ -6,6 +6,7 @@
     "docs/_planning/CASE_MANAGEMENT_SAMPLE_EXTRACTION_SPEC_V1.md",
     "docs/_planning/HELM_PUBLIC_BILINGUALIZATION_CHANGELOG.md",
     "docs/_planning/HELM_PUBLIC_BILINGUALIZATION_PLAN.md",
+    "docs/_planning/HELM_SELF_TENANT_MINIMAL_LIVE_FOUNDER_DECISION_2026-07-05.md",
     "docs/codex/README.md",
     "docs/contracts/helm-core-sdk.contract.json",
     "docs/getting-started.en.md",
@@ -48,6 +49,7 @@
     "docs/product/HELM_PERMISSION_POLICY_IMPLEMENTATION_PLAN.md",
     "docs/product/HELM_PUBLIC_BUSINESS_NARRATIVE_REQUIREMENTS.md",
     "docs/product/HELM_RELEASE_REALITY_ALIGNMENT.md",
+    "docs/product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md",
     "docs/product/HELM_SIGNAL_FIRST_MILE_METHOD.md",
     "docs/product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md",
     "docs/product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md",
@@ -61,6 +63,7 @@
     "docs/reviews/HELM_PERMISSION_MANAGEMENT_RESEARCH_2026-06-08.md",
     "docs/reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md",
     "docs/reviews/HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md",
+    "docs/reviews/HELM_SELF_TENANT_MINIMAL_LIVE_GATE_RECEIPT_2026-07-05.md",
     "docs/roadmap/HELM_PUBLIC_ROADMAP.md"
   ]
 }

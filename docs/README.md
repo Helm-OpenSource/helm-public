@@ -84,6 +84,7 @@ connector 授权、写回、外发或审批证明。
 - [经营信号首公里 quickstart / Signal First Mile quickstart](product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md)
 - [运营信号流图要求 / Operating signal flow map requirements](product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md)
 - [专家能力反馈闭环 / Expert capability feedback loop](product/HELM_EXPERT_CAPABILITY_FEEDBACK_LOOP.md)
+- [自身租户运营 Runbook / Self-tenant operating runbook](product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md) — minimal-live 自用范围由 founder 决策与 gate 回执定义；不是客户部署指南或探测器启用说明
 
 ## 贡献与运营 / Contribution And Operations
 
@@ -108,6 +109,7 @@ connector 授权、写回、外发或审批证明。
 - [D2 Docker fresh-clone smoke 回执 / D2 Docker fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_D2_SMOKE_2026-06-01.md)
 - [Node fresh-clone smoke 回执 / Node fresh-clone smoke receipt](reviews/HELM_DELIVERY_ENGINEER_NODE_FRESH_CLONE_SMOKE_2026-06-01.md)
 - [权限管理研究 / Permission management research](reviews/HELM_PERMISSION_MANAGEMENT_RESEARCH_2026-06-08.md)
+- [自身租户最小活体 gate 回执 / Self-tenant minimal-live gate receipt](reviews/HELM_SELF_TENANT_MINIMAL_LIVE_GATE_RECEIPT_2026-07-05.md) — 配套 [founder 决策记录](_planning/HELM_SELF_TENANT_MINIMAL_LIVE_FOUNDER_DECISION_2026-07-05.md)；只授权标准 review-first 界面的最小活体自用
 
 ## 不属于本公开文档面 / Not In This Public Docs Surface
 
