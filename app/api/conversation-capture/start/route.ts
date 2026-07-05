@@ -1,4 +1,4 @@
-import { ActorType, CaptureSourceType, ObjectType, UsageType } from "@prisma/client";
+import { ActorType, CaptureConsentMethod, CaptureSourceType, ObjectType, UsageType } from "@prisma/client";
 import { z } from "zod";
 import { ensureWorkspaceProcessingAllowed, recordUsageLedgerEntry } from "@/lib/billing/foundation";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
@@ -18,6 +18,15 @@ const schema = z.object({
   objectId: z.string().trim().optional().nullable(),
   sourceType: z.nativeEnum(CaptureSourceType).optional(),
   sourceId: z.string().trim().optional().nullable(),
+  consent: z
+    .object({
+      confirmed: z.boolean(),
+      counterpartyNotified: z.boolean(),
+      noticeTextVersion: z.string().trim().min(1).max(80).optional().nullable(),
+      method: z.nativeEnum(CaptureConsentMethod).optional(),
+    })
+    .optional()
+    .nullable(),
 });
 
 export async function POST(request: Request) {
@@ -61,6 +70,7 @@ export async function POST(request: Request) {
       objectId: parsed.data.objectId ?? null,
       sourceType: parsed.data.sourceType,
       sourceId: parsed.data.sourceId ?? null,
+      consent: parsed.data.consent ?? null,
     });
 
     await recordUsageLedgerEntry({
