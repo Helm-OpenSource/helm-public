@@ -307,7 +307,7 @@ Pipedrive, Zoho, Dynamics, Notion, Coda, Tencent Meeting, Webex, Yonyou, Kingdee
 - Third-party plugin runtime / sandbox; current extension seam only serves first-party / private-tenant extensions
 - Multi-turn chat history persistence · cross-workspace auto-aggregation
 - LLM as final ranker on commitment paths
-- SaaS direct sales to end customers (Helm Inc. does not compete with delivery engineers)
+- SaaS direct sales to end customers (Helm Inc. keeps only a small set of named direct lighthouse engagements to harden the methodology and industry Packs; beyond those named engagements it does not compete with delivery engineers)
 
 ---
 

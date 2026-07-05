@@ -53,7 +53,7 @@ Helm 当前不是：
 - 完整自动执行平面
 - 通用聊天产品
 - 通用 CRM / ERP / 项目管理平台
-- SaaS 直销给端客户的产品（Helm Inc. 不和交付工程师抢生意；商业模式收敛到 open-core 维护 / Helm Cloud / Helm Enterprise / Certified Delivery Partner 生态认证）
+- SaaS 直销给端客户的产品（Helm Inc. 仅保留少量具名直营灯塔客户，用于打磨方法论与行业 Pack，在其之外不和交付工程师抢生意；商业模式收敛到 open-core 维护 / Helm Cloud / Helm Enterprise / Certified Delivery Partner 生态认证 / 具名直营灯塔交付）
 
 ## 4. 当前阶段状态
 
