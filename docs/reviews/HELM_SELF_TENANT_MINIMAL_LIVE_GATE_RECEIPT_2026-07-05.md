@@ -2,6 +2,7 @@
 status: active
 owner: founder / helm-core
 created: 2026-07-05
+review_after: 2026-08-05
 public_safety: Public-safe gate receipt over deterministic fixtures. No customer data, real internal business data, or deployment evidence.
 ---
 
