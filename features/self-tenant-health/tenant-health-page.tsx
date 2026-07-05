@@ -7,6 +7,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BoundaryBar } from "@/components/shared/boundary-bar";
+import { EffectModeBadge } from "@/components/shared/effect-mode-badge";
 import { PageHeader } from "@/components/shared/page-header";
 import { suppressSmallCount } from "@/lib/self-tenant-health/privacy";
 import type {
@@ -152,6 +154,30 @@ export function TenantHealthPage({
         }}
       />
 
+      <BoundaryBar
+        english={english}
+        copy={{
+          observed: {
+            zh: "客户工作区的只读健康遥测：别名、分桶、计数与健康状态。",
+            en: "Read-only health telemetry over customer workspaces: aliases, buckets, counts, and health states.",
+          },
+          wontDo: {
+            zh: "不读取租户会议、CRM 记录、提问原文或模型输出，也不自动介入任何租户。",
+            en: "Never reads tenant meetings, CRM records, question text, or model outputs, and never intervenes in any tenant automatically.",
+          },
+          decider: {
+            zh: "支持介入由运营者复核本页信号后人工决定。",
+            en: "Support intervention is a human decision made by the operator after reviewing these signals.",
+          },
+          negatives: [
+            { zh: "无客户明文", en: "No customer plaintext" },
+            { zh: "无自动外发", en: "No auto-send" },
+            { zh: "无自动写回", en: "No auto-writeback" },
+            { zh: "小样本抑制", en: "Small counts suppressed" },
+          ],
+        }}
+      />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           label={english ? "Tenants observed" : "观察租户"}
@@ -211,9 +237,12 @@ export function TenantHealthPage({
                             : "暂无介入原因"}
                       </p>
                     </div>
-                    <Badge variant={healthBadgeVariant(row.healthState)}>
-                      {healthLabel(row.healthState, english)}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <EffectModeBadge mode="suggestion_only" english={english} />
+                      <Badge variant={healthBadgeVariant(row.healthState)}>
+                        {healthLabel(row.healthState, english)}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               ))}

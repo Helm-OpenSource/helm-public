@@ -600,3 +600,32 @@ Helm 不追求花哨 BI。
 - 企业级视觉定位（非开发工具、非聊天应用）
 - 结构重于装饰的设计原则
 - 高信息密度的operating界面
+
+## 14. 设计语言统一基线：边界即组件（2026-07，借鉴 NPA Pack）
+
+行业 Pack（NPA 催收工作台）在实践中把本文件的"边界必须可见"升级成了**可机器校验的组件系统**。这套做法回流为 Core 的统一设计语言基线，逐步应用到所有经营 surface。
+
+### 14.1 已回流的组件
+
+- **`components/shared/boundary-bar.tsx`（页级边界声明栏）**：三段式固定结构——①你看到的是什么 ②系统不会做什么 ③下一步由谁决定——外加显式负面清单 pill（如"无自动外发 / 无自动写回"）。**fail-closed**：文案缺段或负面清单为空串时渲染红色错误态并显示 errorCode，绝不静默降级成默认话术。
+- **`components/shared/effect-mode-badge.tsx`（效果模式角标）**：每个被呈现的条目可声明 `suggestion_only / shadow_suggestion / human_action / receipt`，使"建议 ≠ 承诺 ≠ 回执"在视觉上不可混淆。未知模式渲染为显式 danger 态。
+
+首个应用面：`/operating/tenant-health`（自身租户健康页）。
+
+### 14.2 统一原则（来自 NPA 实践）
+
+1. **边界是组件，不是段落**：边界声明用共享组件承载，文案结构受契约约束，可被测试与门禁断言（`data-boundary-bar` / `data-boundary-negative-item` / `data-effect-mode`）。
+2. **fail-closed 的诚实呈现**：数据不足显式呈现"不足"态；解析失败"坏给人看"；禁止编造补位与静默默认。
+3. **状态词收敛**：状态字面量以词表为真值，surface 不得自造状态词。
+4. **禁止死链**：跳转目标未上线时渲染"目标未上线 + 原因码"占位，不产出链接。
+5. **色彩纪律不回退**：Pack 层的 raw Tailwind 状态色（如 `bg-red-50`）在回流时一律改为 `--status-*` token；租户自定义 hex 永不进 Core。
+
+### 14.3 逐步统一 roadmap
+
+| 阶段 | 内容 |
+|---|---|
+| 已落地 | BoundaryBar + EffectModeBadge 组件与 tenant-health 首个应用面 |
+| 下一步 | 高误解风险 surface 优先接入 BoundaryBar：`/approvals`、`/capture`、`/operating`；建议类列表逐步补 EffectModeBadge |
+| 后续 | 评估五态就绪徽章（live / refit / planned / contract_only / no_go）在导航层的 Core 版本；状态词表机制 |
+
+新增经营 surface 默认应带 BoundaryBar；建议/动作/回执混排的列表默认应带 EffectModeBadge。
