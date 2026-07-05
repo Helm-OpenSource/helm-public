@@ -56,7 +56,7 @@ Helm currently is **not**:
 - A complete auto-execution surface
 - A general-purpose chat product
 - A general-purpose CRM / ERP / project-management platform
-- A SaaS product sold directly to end customers (Helm Inc. does not compete with delivery engineers; commercial model is open-core maintenance / Helm Cloud / Helm Enterprise / Certified Delivery Partner ecosystem)
+- A SaaS product sold directly to end customers (Helm Inc. keeps only a small set of named direct lighthouse engagements to harden the methodology and industry Packs, and does not compete with delivery engineers beyond them; commercial model is open-core maintenance / Helm Cloud / Helm Enterprise / Certified Delivery Partner ecosystem / named direct lighthouse delivery)
 
 ## 4. Current Stage
 
