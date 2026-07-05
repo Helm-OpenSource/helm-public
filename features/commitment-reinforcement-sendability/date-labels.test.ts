@@ -1,7 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatReinforcementSendabilityDateLabel } from "./date-labels";
 
 describe("formatReinforcementSendabilityDateLabel", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("keeps Chinese date labels on the existing formatter path", () => {
     const label = formatReinforcementSendabilityDateLabel(
       "2026-07-06T03:30:00.000Z",

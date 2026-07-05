@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "helm.component-contract/v1",
+  "contractKey": "helm-core-sdk",
+  "contractVersion": "2026-06-03.core-sdk-v1",
+  "component": "core",
+  "repo": "Helm-OpenSource/helm-public",
+  "packageName": "helm-console",
+  "sdkVersion": "0.1.0",
+  "compatibilityRange": ">=0.0.0 <1.0.0",
+  "status": "public_safe_handoff",
+  "boundary": {
+    "businessDataIncluded": false,
+    "customerOverlayIncluded": false,
+    "customerRuntimeConfigIncluded": false,
+    "piiIncluded": false,
+    "sensitiveRuntimeValuesIncluded": false
+  },
+  "dependencyDirection": {
+    "allowed": "Overlay -> Pack SDK -> Core SDK",
+    "forbidden": [
+      "Core -> Pack",
+      "Core -> Overlay"
+    ]
+  },
+  "stableInterfaces": [
+    {
+      "interfaceKey": "pack-contribution-registry",
+      "sourceRef": "lib/extensions/registry-contract.ts",
+      "symbols": [
+        "PackContributions",
+        "registerPackContributions",
+        "__resetPackRegistryForTest"
+      ]
+    },
+    {
+      "interfaceKey": "extension-api-route-registry",
+      "sourceRef": "lib/extensions/api-route-registry.ts",
+      "symbols": [
+        "ExtensionApiRoute",
+        "registerExtensionApiRoutes",
+        "resolveExtensionApiRoute",
+        "listRegisteredExtensionApiRoutes"
+      ]
+    }
+  ],
+  "guardrails": [
+    "Core exposes public-safe contracts only; industry Pack logic must stay outside this repo.",
+    "Registered Pack and Overlay contributions are loaded at composition roots; Core must remain usable with an empty registry.",
+    "No customer names, private hosts, private auth material, sensitive runtime values, raw payloads, or production deployment metadata belong in this contract."
+  ],
+  "validationCommands": [
+    "npm run check:public-release",
+    "npm run check:boundaries",
+    "npm run typecheck",
+    "npm run lint"
+  ]
+}
