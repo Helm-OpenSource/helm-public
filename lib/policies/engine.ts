@@ -56,6 +56,12 @@ type CreateGovernedActionInput = {
   sourceId?: string;
   metadata?: Record<string, unknown>;
   resultPreview?: string;
+  // Who authored the proposed content. Defaults to AI: every built-in flow
+  // today composes the draft for the user, and the human review gate exists
+  // precisely to review that AI-authored content. A flow where a human writes
+  // the content themselves must declare USER explicitly — that is what arms
+  // the high-risk self-approval block in approveApprovalTask.
+  contentAuthorship?: ActorType;
 };
 
 type ApprovalActionResult = {
@@ -65,6 +71,30 @@ type ApprovalActionResult = {
   requiresApproval: boolean;
   reason: string;
 };
+
+// Separation-of-duties review gate errors. Both are governance denials the
+// feature layer should surface as a decision result, not as a crash.
+export class SelfApprovalNotAllowedError extends Error {
+  constructor(english: boolean) {
+    super(
+      english
+        ? "Separation of duties: the person who initiated a high-risk action cannot approve it. Ask another reviewer."
+        : "职责分离：高风险动作的发起人不能自行批准，请交由其他复核人处理。",
+    );
+    this.name = "SelfApprovalNotAllowedError";
+  }
+}
+
+export class HighRiskApprovalIdentityError extends Error {
+  constructor(english: boolean) {
+    super(
+      english
+        ? "High-risk approvals must be made by a real signed-in user identity, not a system or AI actor."
+        : "高风险动作的最终批准必须由真实登录用户身份发起，不能由系统或 AI 身份代批。",
+    );
+    this.name = "HighRiskApprovalIdentityError";
+  }
+}
 
 export async function createGovernedAction(input: CreateGovernedActionInput): Promise<ApprovalActionResult> {
   await assertWorkspaceGovernedActionManagementServiceAccess({
@@ -121,6 +151,8 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
       policyName: decision.appliedPolicyName ?? policy?.name ?? null,
       policySnapshot: jsonStringify(policySnapshot),
       recommendationLogId: input.recommendationLogId,
+      createdByUserId: input.actorUserId ?? null,
+      contentAuthorship: input.contentAuthorship ?? ActorType.AI,
       status: decision.blocked
         ? ActionStatus.BLOCKED
         : decision.requiresApproval
@@ -617,6 +649,30 @@ export async function approveApprovalTask(
     english: options?.english ?? false,
   });
 
+  const english = options?.english ?? false;
+  const approvingActorType = options?.actorType ?? ActorType.USER;
+  // Separation-of-duties gate.
+  // selfApproval = the same user who triggered the action's creation is now
+  // approving it. This is always recorded (shadow observation) so a workspace
+  // can see how often its review gate collapses to one person. It only
+  // hard-blocks when the content was explicitly declared human-authored:
+  // a human reviewing AI-authored content they triggered IS the review gate,
+  // but a human approving their own hand-written high-risk content defeats it.
+  // Legacy rows without creator attribution pass through unchanged.
+  const selfApproval = Boolean(
+    actorUserId &&
+      task.actionItem.createdByUserId &&
+      actorUserId === task.actionItem.createdByUserId,
+  );
+  if (task.isHighRisk) {
+    if (approvingActorType !== ActorType.USER || !actorUserId) {
+      throw new HighRiskApprovalIdentityError(english);
+    }
+    if (selfApproval && task.actionItem.contentAuthorship === ActorType.USER) {
+      throw new SelfApprovalNotAllowedError(english);
+    }
+  }
+
   const now = new Date();
   const draftContent =
     editedContent ?? task.editableContent ?? task.actionItem.draftContent ?? task.actionItem.description ?? task.actionItem.title;
@@ -667,7 +723,12 @@ export async function approveApprovalTask(
     summary: options?.english
       ? `Approved action for execution: ${task.actionItem.title}`
       : `已批准动作待执行：${task.actionItem.title}`,
-    payload: { editedContent },
+    payload: {
+      editedContent,
+      selfApproval,
+      createdByUserId: task.actionItem.createdByUserId ?? null,
+      contentAuthorship: task.actionItem.contentAuthorship ?? null,
+    },
   });
 
   await logEvent({
@@ -683,6 +744,7 @@ export async function approveApprovalTask(
       riskLevel: task.actionItem.riskLevel,
       edited: Boolean(editedContent),
       decisionReason,
+      selfApproval,
     },
     sourcePage: "/approvals",
   });

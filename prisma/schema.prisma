@@ -1172,6 +1172,7 @@ model User {
   ownedOpportunities                   Opportunity[]                     @relation("OpportunityOwner")
   ownedMeetings                        Meeting[]                         @relation("MeetingOwner")
   assignedActions                      ActionItem[]                      @relation("ActionOwner")
+  createdActions                       ActionItem[]                      @relation("ActionCreator")
   approvalQueue                        ApprovalTask[]                    @relation("ApprovalApprover")
   approvalReviews                      ApprovalTask[]                    @relation("ApprovalReviewer")
   notifications                        Notification[]
@@ -3350,6 +3351,14 @@ model ActionItem {
   policyName           String?
   policySnapshot       String?             @db.LongText
   recommendationLogId  String?
+  // Creator attribution for the separation-of-duties review gate.
+  // createdByUserId = the user on whose behalf the action was created (the
+  // trigger). contentAuthorship = who actually authored the proposed content:
+  // defaults to AI because today every built-in flow composes the draft for
+  // the user; flows where a human writes the content must declare USER
+  // explicitly. Nullable so legacy rows stay valid.
+  createdByUserId      String?
+  contentAuthorship    ActorType?
   executedAt           DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
@@ -3358,6 +3367,7 @@ model ActionItem {
   opportunity          Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   contact              Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
   owner                User?               @relation("ActionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy            User?               @relation("ActionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   recommendationLog    RecommendationLog?  @relation(fields: [recommendationLogId], references: [id], onDelete: SetNull)
   approvalTask         ApprovalTask?
 }
