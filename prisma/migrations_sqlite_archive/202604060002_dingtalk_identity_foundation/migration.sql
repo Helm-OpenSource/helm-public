@@ -1,3 +1,0 @@
--- SQLite stores Prisma enums as TEXT in this repository's schema model.
--- Widening ConnectorProvider / ImportSourceType for DingTalk foundation
--- requires Prisma client regeneration but no table DDL.

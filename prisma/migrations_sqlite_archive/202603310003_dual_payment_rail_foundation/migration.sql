@@ -1,4 +1,0 @@
--- SQLite stores enums as TEXT in Prisma migrations.
--- Extending PaymentProvider from STRIPE-only to STRIPE / ALIPAY / WECHAT_PAY
--- does not require a table rewrite for the existing BillingAccount.paymentProvider column.
--- This migration exists to freeze the dual payment rail foundation in the schema history.

@@ -286,7 +286,7 @@ npm run quality:regression
 正常——种子数据里要先登录。如果连 `/login` 都不能提交，检查 `CONNECTOR_TOKEN_SECRET` 是否填了。
 
 ### 不想跑 MySQL，想用 SQLite
-**不支持**。SQLite 主线已迁出，仅保留作为只读档案。请用 MySQL 8.4。
+**不支持**。SQLite 已完全退役（schema 与迁移档案已从仓库移除，历史保留在 git 记录中）。请用 MySQL 8.4。
 
 ---
 
@@ -303,6 +303,8 @@ npm run quality:regression
 | `scripts/` | 验证、自检、维护脚本 |
 | `tests/e2e/` | Playwright E2E |
 | `docs/` | 产品 / 架构 / 实现文档 |
+| `report-skills/` | BI 报表主动推送 skill 包规范（资产随扩展分布） |
+| `external-resource-kit/` | 外部资源接入套件（独立于产品运行时，入口 `kit:dry-run`） |
 
 ---
 
