@@ -18,8 +18,10 @@ import {
   approveApprovalTask,
   blockApprovedAction,
   executeActionItem,
+  HighRiskApprovalIdentityError,
   markApprovalManual,
   rejectApprovalTask,
+  SelfApprovalNotAllowedError,
   setActionTypeAutoPolicy,
 } from "@/lib/policies/engine";
 
@@ -49,10 +51,19 @@ export async function approveTaskAction(taskId: string, editedContent?: string) 
     return { ok: false, error: english ? "Approval task not found" : "审批任务不存在" };
   }
 
-  await approveApprovalTask(task.id, user.name, user.id, editedContent, {
-    actorType: ActorType.USER,
-    english,
-  });
+  try {
+    await approveApprovalTask(task.id, user.name, user.id, editedContent, {
+      actorType: ActorType.USER,
+      english,
+    });
+  } catch (error) {
+    // Separation-of-duties denials are governance decisions, not crashes:
+    // return them to the reviewer as a readable result.
+    if (error instanceof SelfApprovalNotAllowedError || error instanceof HighRiskApprovalIdentityError) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
 
   revalidatePath("/approvals");
   revalidatePath("/dashboard");
