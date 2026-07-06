@@ -84,3 +84,7 @@ Design must preserve Helm's public Core boundaries:
 - proposal is not a contract
 - proactive support is not automatic high-risk execution
 - review-first wording must remain visible before user-facing actions
+
+## 7. Design-Language Unification: Boundary As Component (2026-07)
+
+The NPA industry pack matured "boundaries must be visible" into a machine-checkable component system, now ported back into Core as the unification baseline: `components/shared/boundary-bar.tsx` (page-level three-segment boundary declaration — what you see / what the system will not do / who decides next — plus an explicit negative list, fail-closed with visible error codes) and `components/shared/effect-mode-badge.tsx` (suggestion_only / shadow_suggestion / human_action / receipt marks so recommendation vs commitment stays visually unmistakable; unknown modes render as danger). First applied surface: `/operating/tenant-health`. Rollout continues with `/approvals`, `/capture`, and `/operating`; raw Tailwind status colors from pack surfaces are normalized to `--status-*` tokens on the way in, and tenant-custom hex values never enter Core.
