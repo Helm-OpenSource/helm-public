@@ -1,3 +1,4 @@
+import { resolveGroupScopeUserIds } from "@/lib/auth/group-scope";
 import "server-only";
 
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
@@ -38,6 +39,14 @@ export async function loadInternalOperatingHomePageData() {
   });
   const english = isEnglishLocale(locale);
   const user = session.user;
+  const groupScopeUserIds = await resolveGroupScopeUserIds({
+    workspaceId: workspace.id,
+    membership: {
+      userId: session.membership.userId,
+      role: session.membership.role,
+      groupTag: session.membership.groupTag ?? null,
+    },
+  });
   const [
     model,
     runtimeOverview,
@@ -48,6 +57,7 @@ export async function loadInternalOperatingHomePageData() {
     getInternalOperatingWorkspaceData(workspace.id, english, {
       workspace,
       membershipRole: session.membership.role,
+      groupScopeUserIds,
     }),
     getInternalOperatingRuntimeOverview(workspace.id),
     getDingTalkWorkflowHealth(workspace.id),

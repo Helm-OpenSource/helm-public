@@ -114,6 +114,7 @@ export type SettingsClientProps = {
       status: MembershipStatus;
       joinedAt: Date;
       title: string | null;
+      groupTag: string | null;
       goalTitle: string | null;
       goalDescription: string | null;
       goalItemsJson: string | null;
