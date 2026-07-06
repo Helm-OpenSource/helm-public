@@ -35,6 +35,9 @@ const {
     memoryEntry: {
       create: vi.fn(),
     },
+    executionReceipt: {
+      upsert: vi.fn(),
+    },
     contact: {
       update: vi.fn(),
     },
@@ -137,6 +140,7 @@ describe("policy engine rejection taxonomy", () => {
     dbMock.approvalTask.updateMany.mockResolvedValue({ count: 1 });
     dbMock.actionItem.update.mockResolvedValue({});
     dbMock.memoryEntry.create.mockResolvedValue({});
+    dbMock.executionReceipt.upsert.mockResolvedValue({ id: "receipt-1" });
   });
 
   it("persists the classified rejection reason and derives the text from its label", async () => {

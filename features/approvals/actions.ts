@@ -24,6 +24,11 @@ import {
   SelfApprovalNotAllowedError,
   setActionTypeAutoPolicy,
 } from "@/lib/policies/engine";
+import {
+  ReceiptSelfVerificationError,
+  verifyExecutionReceipt,
+} from "@/lib/receipts/execution-receipt.service";
+import { ExecutionReceiptSubjectType } from "@prisma/client";
 
 async function resolveApprovalTaskForWorkspace(taskId: string, workspaceId: string) {
   return db.approvalTask.findFirst({
@@ -176,6 +181,45 @@ export async function rejectTaskAction(input: z.infer<typeof rejectSchema>) {
     english,
     rejectionReasonCode: parsed.data.reasonCode,
   });
+  return { ok: true };
+}
+
+// Receipt-level separation of duties: a reviewer other than the executor
+// confirms the closed action's receipt, upgrading it from SELF_REPORTED to
+// VERIFIED. Self-verification is refused as a readable governance result.
+export async function verifyExecutedTaskReceiptAction(taskId: string) {
+  const { user, membership, workspace } = await getCurrentWorkspaceSession();
+  const english = workspace.defaultLocale === "en-US";
+
+  if (!canReviewWorkspaceGovernedActions(membership.role)) {
+    return { ok: false, error: getGovernedActionReviewDeniedMessage(english) };
+  }
+
+  const task = await resolveApprovalTaskForWorkspace(taskId, workspace.id);
+  if (!task) {
+    return { ok: false, error: english ? "Approval task not found" : "审批任务不存在" };
+  }
+
+  try {
+    await verifyExecutionReceipt({
+      workspaceId: workspace.id,
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: task.actionItemId,
+      verifierUserId: user.id,
+      verifierName: user.name,
+      english,
+    });
+  } catch (error) {
+    if (error instanceof ReceiptSelfVerificationError) {
+      return { ok: false, error: error.message };
+    }
+    if (error instanceof Error && error.message.includes(english ? "not found" : "不存在")) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
+
+  revalidatePath("/approvals");
   return { ok: true };
 }
 

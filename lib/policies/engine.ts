@@ -4,6 +4,8 @@ import {
   ActionType,
   ActorType,
   ApprovalStatus,
+  ExecutionReceiptOutcome,
+  ExecutionReceiptSubjectType,
   MemoryEntityType,
   MemoryType,
   NotificationType,
@@ -31,6 +33,7 @@ import {
 import { db } from "@/lib/db";
 import { resolvePolicyDecision } from "@/lib/policies";
 import { getRejectionReasonLabel } from "@/lib/policies/rejection-reason";
+import { recordExecutionReceipt } from "@/lib/receipts/execution-receipt.service";
 import { submitRecommendationFeedback } from "@/lib/recommendations/recommendation-feedback.service";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 
@@ -607,6 +610,28 @@ export async function executeActionItem(
     });
   }
 
+  // v1.1 receipt discipline: every executed action closes with a canonical
+  // structured receipt. It starts SELF_REPORTED; a different reviewer can
+  // upgrade it to VERIFIED via the receipt verification action.
+  await recordExecutionReceipt({
+    workspaceId: action.workspaceId,
+    subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+    subjectId: action.id,
+    actionItemId: action.id,
+    outcome: ExecutionReceiptOutcome.SUCCESS,
+    actionTaken: action.actionType,
+    evidenceRefs: [
+      action.approvalTask ? `approval-task:${action.approvalTask.id}` : null,
+      action.meetingId ? `meeting:${action.meetingId}` : null,
+      action.opportunityId ? `opportunity:${action.opportunityId}` : null,
+      action.contactId ? `contact:${action.contactId}` : null,
+    ].filter((ref): ref is string => Boolean(ref)),
+    note: actor.decisionReason ?? null,
+    executedByUserId: actor.actorUserId ?? null,
+    executedByActorType: actor.actorType,
+    actorName: actor.actorName,
+  });
+
   revalidateCorePaths({
     contactId: action.contactId,
     opportunityId: action.opportunityId,
@@ -853,6 +878,27 @@ export async function blockApprovedAction(
     payload: { reason: decisionReason },
   });
 
+  // v1.1 receipt discipline: a blocked action closes as NOT_EXECUTED so the
+  // receipt chain records that nothing happened, and why.
+  await recordExecutionReceipt({
+    workspaceId: action.workspaceId,
+    subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+    subjectId: action.id,
+    actionItemId: action.id,
+    outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+    actionTaken: action.actionType,
+    evidenceRefs: [
+      action.approvalTask ? `approval-task:${action.approvalTask.id}` : null,
+      action.meetingId ? `meeting:${action.meetingId}` : null,
+      action.opportunityId ? `opportunity:${action.opportunityId}` : null,
+      action.contactId ? `contact:${action.contactId}` : null,
+    ].filter((ref): ref is string => Boolean(ref)),
+    note: decisionReason,
+    executedByUserId: actorUserId ?? null,
+    executedByActorType: options?.actorType ?? ActorType.USER,
+    actorName,
+  });
+
   revalidateCorePaths({
     contactId: action.contactId,
     opportunityId: action.opportunityId,
@@ -992,6 +1038,29 @@ export async function rejectApprovalTask(
     actionSourceId: task.actionItem.sourceId,
     authorUserId: actorUserId ?? null,
     decisionReason: effectiveReason,
+  });
+
+  // v1.1 receipt discipline: a rejection also closes with a canonical receipt
+  // carrying the classified reason — rejected is a learning signal, not a
+  // silent terminal state.
+  await recordExecutionReceipt({
+    workspaceId: task.workspaceId,
+    subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+    subjectId: task.actionItemId,
+    actionItemId: task.actionItemId,
+    outcome: ExecutionReceiptOutcome.REJECTED,
+    actionTaken: task.actionItem.actionType,
+    evidenceRefs: [
+      `approval-task:${task.id}`,
+      task.actionItem.meetingId ? `meeting:${task.actionItem.meetingId}` : null,
+      task.actionItem.opportunityId ? `opportunity:${task.actionItem.opportunityId}` : null,
+      task.actionItem.contactId ? `contact:${task.actionItem.contactId}` : null,
+    ].filter((ref): ref is string => Boolean(ref)),
+    rejectionReasonCode: rejectionReasonCode ?? undefined,
+    note: effectiveReason,
+    executedByUserId: actorUserId ?? null,
+    executedByActorType: options?.actorType ?? ActorType.USER,
+    actorName,
   });
 
   revalidateCorePaths({
