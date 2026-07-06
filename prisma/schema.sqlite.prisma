@@ -1045,6 +1045,7 @@ enum CaptureProcessingStatus {
 enum TranscriptSourceType {
   MANUAL_TEXT
   OPENAI_ASR
+  DASHSCOPE_ASR
   FALLBACK_DEMO
   EXTERNAL_INGEST
 }
