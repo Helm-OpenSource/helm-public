@@ -4,6 +4,10 @@
 
 ## 中文主文本 / Chinese Main Text
 
+> **现状更新（2026-07-06）**: 迁移源仓库已退役。本回执中对迁移源的引用是
+> 历史出处记录；退役后的历史审计以源仓库的归档快照为准，日常开发与发布
+> 事实源均在当前拆分仓库内。
+
 本回执是 2026-05-30 `helm-public` sanitized public mirror staging output 的历史记录。
 当前仓库定位已经是 `Helm-OpenSource/helm-public` open-source Core，而不是 mirror
 staging repository。
