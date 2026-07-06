@@ -108,6 +108,10 @@ type TeamPermissionsCardProps = {
     goalItems: string[];
     jobResponsibilities: string;
   }) => void;
+  updateMemberGroupTag: (input: {
+    membershipId: string;
+    groupTag: string;
+  }) => void;
   updateMemberLifecycle: (
     membershipId: string,
     nextStatus: TeamPermissionsStatus,
@@ -118,6 +122,53 @@ type TeamPermissionsCardProps = {
     nextRole: TeamPermissionsRole,
   ) => void;
 };
+
+function MemberGroupTagEditor({
+  english,
+  membership,
+  pending,
+  updateMemberGroupTag,
+}: {
+  english: boolean;
+  membership: SettingsMembership;
+  pending: boolean;
+  updateMemberGroupTag: TeamPermissionsCardProps["updateMemberGroupTag"];
+}) {
+  const [groupTag, setGroupTag] = useState(membership.groupTag ?? "");
+  return (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3"
+      data-testid={`member-group-tag-${membership.id}`}
+    >
+      <p className="text-sm font-semibold text-[color:var(--foreground)]">
+        {english ? "Group tag" : "分组标签"}
+      </p>
+      <Input
+        value={groupTag}
+        onChange={(event) => setGroupTag(event.target.value)}
+        placeholder={english ? "e.g. store-a (empty = full view)" : "如 门店A（留空 = 全局视图）"}
+        disabled={pending}
+        className="w-56"
+      />
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={pending}
+        onClick={() =>
+          updateMemberGroupTag({ membershipId: membership.id, groupTag })
+        }
+      >
+        {english ? "Save group" : "保存分组"}
+      </Button>
+      <p className="w-full text-xs leading-5 text-[color:var(--muted-foreground)]">
+        {english
+          ? "Group-tagged non-admin members see their own group's advancement on /operating; admins and untagged members keep the full view."
+          : "带分组标签的非管理员成员在经营总盘只看本组推进；管理员与未分组成员保持全局视图。"}
+      </p>
+    </div>
+  );
+}
 
 type MemberGoalProfileEditorProps = {
   english: boolean;
@@ -367,6 +418,7 @@ export function TeamPermissionsCard({
   setMemberDraft,
   transferOwnership,
   updateMemberGoalProfile,
+  updateMemberGroupTag,
   updateMemberLifecycle,
   updateMemberRole,
 }: TeamPermissionsCardProps) {
@@ -1152,6 +1204,15 @@ export function TeamPermissionsCard({
                       membership={membership}
                       pending={pending}
                       updateMemberGoalProfile={updateMemberGoalProfile}
+                    />
+                  ) : null}
+                  {canManageMembers ? (
+                    <MemberGroupTagEditor
+                      key={`${membership.id}:${membership.groupTag ?? ""}`}
+                      english={english}
+                      membership={membership}
+                      pending={pending}
+                      updateMemberGroupTag={updateMemberGroupTag}
                     />
                   ) : null}
                 </div>
