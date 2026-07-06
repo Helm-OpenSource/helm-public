@@ -58,6 +58,7 @@ const PUBLIC_PAGE_PREFIXES = [
   "/programs",
   "/terms",
   "/trial",
+  "/trust-center",
 ] as const;
 
 function matchesPrefix(pathname: string, prefix: string) {

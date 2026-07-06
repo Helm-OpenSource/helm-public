@@ -259,6 +259,7 @@ ASR 支持两个 provider：默认 `openai`（transcription path），以及 `AS
 | `/reports` | 周复盘：过去两周一页看完 + 下周该抓什么 |
 | `/settings` | 工作区控制台：连接器、策略、试点模式、保留期、自助导出 |
 | `/health` | 公开可演示健康摘要：只展示可达性、workspace-first、先复核和审计守卫姿态；不暴露内部运行探测或隐藏采用 |
+| `/trust-center` | 公开信任姿态：授权 / 告知 / 保留期 / 审计 / 撤销 / 认证 / 禁止项与灰色设备红线一页看清；渲染机器校验的合成契约，不构成法律意见或合规声明 |
 
 **技术栈**：Next.js 16 (App Router) + React 19 · MySQL + Prisma · Tailwind CSS 4 + Radix UI · TypeScript（严格模式） · Vitest + Playwright
 
