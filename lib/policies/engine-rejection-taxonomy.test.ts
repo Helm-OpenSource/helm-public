@@ -17,6 +17,7 @@ const {
     assertWorkspacePolicyServiceAccess: vi.fn(),
   },
   dbMock: {
+    $transaction: vi.fn(),
     policyRule: {
       findFirst: vi.fn(),
       updateMany: vi.fn(),
@@ -137,10 +138,21 @@ function buildPendingApprovalTask(overrides?: { recommendationLogId?: string | n
 describe("policy engine rejection taxonomy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbMock.$transaction.mockImplementation(async (fn) => fn(dbMock));
     dbMock.approvalTask.updateMany.mockResolvedValue({ count: 1 });
     dbMock.actionItem.update.mockResolvedValue({});
     dbMock.memoryEntry.create.mockResolvedValue({});
-    dbMock.executionReceipt.upsert.mockResolvedValue({ id: "receipt-1" });
+    dbMock.executionReceipt.upsert.mockResolvedValue({
+      id: "receipt-1",
+      subjectType: "ACTION_ITEM",
+      subjectId: "action-1",
+      outcome: "REJECTED",
+      actionTaken: "CREATE_TASK",
+      rejectionReasonCode: null,
+      evidenceRefs: null,
+      qualityScore: 55,
+      qualityFlags: null,
+    });
   });
 
   it("persists the classified rejection reason and derives the text from its label", async () => {

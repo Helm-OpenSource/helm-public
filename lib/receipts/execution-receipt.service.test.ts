@@ -37,7 +37,10 @@ import {
 describe("execution receipt service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    dbMock.executionReceipt.upsert.mockResolvedValue({ id: "receipt-1" });
+    dbMock.executionReceipt.upsert.mockImplementation(async (args: { create: Record<string, unknown> }) => ({
+      id: "receipt-1",
+      ...args.create,
+    }));
   });
 
   it("upserts one canonical receipt per subject with a computed quality score", async () => {
