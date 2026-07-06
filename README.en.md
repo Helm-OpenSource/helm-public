@@ -235,7 +235,7 @@ More detail in [docs/getting-started.en.md](docs/getting-started.en.md).
 | **Enterprise IM** | WeCom | Alpha | OAuth callback foundation + read-only meeting ingest; calendar / message / send remain bounded |
 | **Email** | Gmail | Stable | OAuth + IMAP read; outbound goes through review |
 | **Email** | Aliyun Mail | Stable | IMAP sync + system SMTP (manual explicit send) |
-| **Meetings** | Recording / transcript / operating intent | Alpha | Browser-recorded MVP + external transcript ingest + OpenAI ASR; not a real-time meeting platform, no native Zoom / Tencent Meeting audio |
+| **Meetings** | Recording / transcript / operating intent | Alpha | Browser-recorded MVP + external transcript ingest + OpenAI / DashScope (Qwen) ASR; not a real-time meeting platform, no native Zoom / Tencent Meeting audio |
 | **Payments** | Stripe | Stable | Real API (subscription / payment link) |
 | **Payments** | Alipay | Stable | Real gateway + RSA-SHA256 signature |
 | **Payments** | WeChat Pay | Alpha | Adapter in place; ops needs to confirm keys and callbacks before production |

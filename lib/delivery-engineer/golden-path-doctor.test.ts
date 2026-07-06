@@ -373,6 +373,45 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
     );
   });
 
+  it("passes the China ASR boundary when the dashscope provider is configured", () => {
+    const envFile = [
+      'HELM_DEPLOYMENT_REGION="cn"',
+      'HELM_DATA_RESIDENCY="cn"',
+      'NPM_REGISTRY="https://registry.npmmirror.com"',
+      'ASR_ENABLED="true"',
+      'ASR_PROVIDER="dashscope"',
+      'DASHSCOPE_API_KEY="synthetic-test-key"',
+    ].join("\n");
+    const summary = runDeliveryEngineerGoldenPathDoctor({
+      rootDir: ROOT,
+      regionProfile: "cn",
+      env: {},
+      exists: (absolutePath) => {
+        const relativePath = path.relative(ROOT, absolutePath);
+        return Object.prototype.hasOwnProperty.call(
+          buildFileMap({ ".env": envFile }),
+          relativePath,
+        );
+      },
+      readFile: (absolutePath) => {
+        const relativePath = path.relative(ROOT, absolutePath);
+        const files = buildFileMap({ ".env": envFile });
+        const content = files[relativePath];
+        if (content === undefined) {
+          throw new Error(`missing fixture file ${relativePath}`);
+        }
+        return content;
+      },
+      listDirectory: () => [],
+    });
+
+    const check = summary.checks.find(
+      (item) => item.id === "config:asr-openai-china-boundary",
+    );
+    expect(check?.status).toBe("pass");
+    expect(check?.detail).toContain("dashscope");
+  });
+
   it("keeps the China delivery profile and OpenAI-only ASR precheck visible", () => {
     const summary = runWithFiles(buildFileMap());
 

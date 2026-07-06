@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { RecommendationJudgementCard } from "@/components/recommendations/recommendation-judgement-card";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { BlockerCard } from "@/components/shared/blocker-card";
+import { BoundaryBar } from "@/components/shared/boundary-bar";
 import { CommitmentCard } from "@/components/shared/commitment-card";
 import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -1397,6 +1398,29 @@ export function ApprovalsClient({
           }
         />
       </div>
+
+      <BoundaryBar
+        english={english}
+        copy={{
+          observed: {
+            zh: "等待你确认的草稿与动作队列。",
+            en: "The queue of drafts and actions waiting for your confirmation.",
+          },
+          wontDo: {
+            zh: "在你点击确认之前，系统不会通过、发送或结算任何一条。",
+            en: "Until you click confirm, the system passes, sends, or settles nothing.",
+          },
+          decider: {
+            zh: "每一条的最终决定权都在你。",
+            en: "The final decision on every item is yours.",
+          },
+          negatives: [
+            { zh: "无自动通过", en: "No auto-approve" },
+            { zh: "无自动外发", en: "No auto-send" },
+            { zh: "无自动结算", en: "No auto-settle" },
+          ],
+        }}
+      />
 
       <CustomerAssetFocusStrip
         eyebrow={english ? "Customer-visible draft" : "客户可见草稿"}

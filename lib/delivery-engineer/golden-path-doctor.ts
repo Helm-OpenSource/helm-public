@@ -633,14 +633,30 @@ function asrChinaBoundaryStatus(
     };
   }
 
+  const asrProvider = envValue(env, "ASR_PROVIDER");
+  if (asrProvider === "dashscope") {
+    const hasDashScopeKey = envValue(env, "DASHSCOPE_API_KEY").length > 0;
+    return {
+      id: "config:asr-openai-china-boundary",
+      title: "ASR China boundary",
+      status: hasDashScopeKey ? "pass" : "warn",
+      detail: hasDashScopeKey
+        ? "ASR_PROVIDER=dashscope with DASHSCOPE_API_KEY set; capture audio stays on the in-region DashScope endpoint (no public audio URL, no OpenAI egress)"
+        : "ASR_PROVIDER=dashscope but DASHSCOPE_API_KEY is not set; the capture ASR path cannot run",
+      nextAction: hasDashScopeKey
+        ? "keep counterparty consent and PII handling in the delivery path; this preflight is not a production compliance statement"
+        : "set DASHSCOPE_API_KEY (or keep ASR_ENABLED=false) before China customer delivery",
+    };
+  }
+
   return {
     id: "config:asr-openai-china-boundary",
     title: "ASR China boundary",
     status: "warn",
     detail:
-      "China profile requested and ASR_ENABLED=true, but the current capture ASR implementation is OpenAI-only",
+      "China profile requested and ASR_ENABLED=true, but the selected capture ASR provider is OpenAI-only",
     nextAction:
-      "keep ASR_ENABLED=false for China customer delivery unless an approved ASR provider, outbound consent, and PII handling path are implemented",
+      "set ASR_PROVIDER=dashscope with DASHSCOPE_API_KEY for an in-region path, or keep ASR_ENABLED=false for China customer delivery",
   };
 }
 

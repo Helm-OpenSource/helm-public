@@ -2,7 +2,7 @@ import { ActorType, type CaptureSession, type CaptureSourceType, type ObjectType
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/analytics";
 import { writeAuditLog } from "@/lib/audit";
-import { isCaptureASRConfigured, transcribeCaptureAudioWithOpenAI } from "@/lib/conversation-capture/asr-provider";
+import { isCaptureASRConfigured, transcribeCaptureAudio } from "@/lib/conversation-capture/asr-provider";
 import { jsonStringify } from "@/lib/utils";
 import { type MemoryActorContext, splitIntoSentences } from "@/lib/memory/shared";
 
@@ -103,7 +103,7 @@ export function buildSegments(input: {
 export async function generateConversationTranscript(input: BuildTranscriptInput) {
   const manualText = input.transcriptText?.trim() || "";
   let fullText = manualText;
-  let sourceType: "MANUAL_TEXT" | "OPENAI_ASR" | "FALLBACK_DEMO" | "EXTERNAL_INGEST" =
+  let sourceType: "MANUAL_TEXT" | "OPENAI_ASR" | "DASHSCOPE_ASR" | "FALLBACK_DEMO" | "EXTERNAL_INGEST" =
     input.session.sourceType !== "MANUAL_CAPTURE" && manualText ? "EXTERNAL_INGEST" : "MANUAL_TEXT";
   let provider: string | null = input.transcriptProvider ?? null;
   let model: string | null = input.transcriptModel ?? null;
@@ -111,7 +111,7 @@ export async function generateConversationTranscript(input: BuildTranscriptInput
 
   if (input.audioFile && isCaptureASRConfigured()) {
     try {
-      const asr = await transcribeCaptureAudioWithOpenAI({
+      const asr = await transcribeCaptureAudio({
         workspaceId: input.workspaceId,
         userId: input.actorUserId,
         audioFile: input.audioFile,

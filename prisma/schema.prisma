@@ -1014,6 +1014,11 @@ enum SourceType {
   OPENCLAW
 }
 
+enum CaptureConsentMethod {
+  UI_CHECKBOX
+  EXTERNAL_ATTESTATION
+}
+
 enum CaptureSessionStatus {
   RECORDING
   PROCESSING
@@ -1052,6 +1057,7 @@ enum CaptureProcessingStatus {
 enum TranscriptSourceType {
   MANUAL_TEXT
   OPENAI_ASR
+  DASHSCOPE_ASR
   FALLBACK_DEMO
   EXTERNAL_INGEST
 }
@@ -1182,6 +1188,7 @@ model User {
   preferenceSignals                    PreferenceSignal[]
   llmCallLogs                          LLMCallLog[]
   captureSessions                      CaptureSession[]
+  captureConsentRecords                CaptureConsentRecord[]
   usageLedgerEntries                   UsageLedger[]
   authVerificationCodes                AuthVerificationCode[]
   authSessions                         AuthSession[]
@@ -1337,6 +1344,7 @@ model Workspace {
   preferenceSignals                    PreferenceSignal[]
   llmCallLogs                          LLMCallLog[]
   captureSessions                      CaptureSession[]
+  captureConsentRecords                CaptureConsentRecord[]
   conversationTranscripts              ConversationTranscript[]
   conversationInsights                 ConversationInsight[]
   importSources                        ImportSource[]
@@ -1606,25 +1614,25 @@ model SalesReferral {
 // 不是给普通客户租户使用的 CRM；只允许在 reserved workspace 内可见和写入。
 // 不替代外部 CRM；只承载 Helm 自营 GTM 判断、证据和下一步动作。
 model GtmLead {
-  id                       String                @id @default(cuid())
-  workspaceId              String
-  leadKey                  String
-  sourceType               GtmLeadSourceType
-  sourceRef                String?
-  referrerMembershipId     String?
-  companyName              String
-  industry                 String?
-  icpFit                   GtmLeadIcpFit         @default(UNKNOWN)
-  readinessStage           GtmLeadReadinessStage @default(UNKNOWN)
-  ownerMembershipId        String?
-  stage                    GtmLeadStage          @default(CAPTURED)
-  nextAction               String?
-  blocker                  String?
-  evidenceRefsJson         String?               @db.LongText
-  internalNotes            String?               @db.LongText
-  createdAt                DateTime              @default(now())
-  updatedAt                DateTime              @updatedAt
-  workspace                Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                   String                @id @default(cuid())
+  workspaceId          String
+  leadKey              String
+  sourceType           GtmLeadSourceType
+  sourceRef            String?
+  referrerMembershipId String?
+  companyName          String
+  industry             String?
+  icpFit               GtmLeadIcpFit         @default(UNKNOWN)
+  readinessStage       GtmLeadReadinessStage @default(UNKNOWN)
+  ownerMembershipId    String?
+  stage                GtmLeadStage          @default(CAPTURED)
+  nextAction           String?
+  blocker              String?
+  evidenceRefsJson     String?               @db.LongText
+  internalNotes        String?               @db.LongText
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, leadKey])
   @@index([workspaceId, stage])
@@ -1638,30 +1646,30 @@ model GtmLead {
 //   customerVisibleSummary (review 后才可示) /
 //   trialInitializationPayload (review gate 通过才能复制进试用 workspace)。
 model CustomerDemandBrief {
-  id                              String                                          @id @default(cuid())
+  id                              String                                        @id @default(cuid())
   workspaceId                     String
   leadId                          String
   briefKey                        String
   entryMode                       CustomerDemandBriefEntryMode
   prefillSource                   String?
-  customerSummary                 String                                          @db.LongText
-  businessPressureTagsJson        String                                          @db.LongText
-  currentResourceTagsJson         String                                          @db.LongText
-  resourceEvidenceReadinessJson   String                                          @db.LongText
-  painToControlLineCandidatesJson String                                          @db.LongText
-  roleMapJson                     String                                          @db.LongText
-  firstLoopCandidatesJson         String                                          @db.LongText
-  successCriteria                 String                                          @db.LongText
-  riskBoundaryTagsJson            String                                          @db.LongText
-  customerVisibleSummary          String                                          @db.LongText
-  internalSalesNotes              String?                                         @db.LongText
-  trialInitializationPayloadJson  String?                                         @db.LongText
-  sourceTraceJson                 String                                          @db.LongText
-  reviewStatus                    CustomerDemandBriefReviewStatus                 @default(DRAFT)
-  customerConfirmationStatus      CustomerDemandBriefCustomerConfirmationStatus   @default(NOT_INVITED)
-  createdAt                       DateTime                                        @default(now())
-  updatedAt                       DateTime                                        @updatedAt
-  workspace                       Workspace                                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customerSummary                 String                                        @db.LongText
+  businessPressureTagsJson        String                                        @db.LongText
+  currentResourceTagsJson         String                                        @db.LongText
+  resourceEvidenceReadinessJson   String                                        @db.LongText
+  painToControlLineCandidatesJson String                                        @db.LongText
+  roleMapJson                     String                                        @db.LongText
+  firstLoopCandidatesJson         String                                        @db.LongText
+  successCriteria                 String                                        @db.LongText
+  riskBoundaryTagsJson            String                                        @db.LongText
+  customerVisibleSummary          String                                        @db.LongText
+  internalSalesNotes              String?                                       @db.LongText
+  trialInitializationPayloadJson  String?                                       @db.LongText
+  sourceTraceJson                 String                                        @db.LongText
+  reviewStatus                    CustomerDemandBriefReviewStatus               @default(DRAFT)
+  customerConfirmationStatus      CustomerDemandBriefCustomerConfirmationStatus @default(NOT_INVITED)
+  createdAt                       DateTime                                      @default(now())
+  updatedAt                       DateTime                                      @updatedAt
+  workspace                       Workspace                                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, briefKey])
   @@index([workspaceId, leadId])
@@ -1675,21 +1683,21 @@ model CustomerDemandBrief {
 // helmJudgementScope / humanReviewRequirement / manualActionPlan /
 // verificationSignal / nonCommitmentNotes。
 model OperatingControlLineCandidate {
-  id                       String                                          @id @default(cuid())
-  workspaceId              String
-  briefId                  String
-  candidateKey             String
-  painTag                  String
-  controlLineTemplate      OperatingControlLineCandidateTemplate
-  targetBusinessObject     String
-  resourceInputsJson       String                                          @db.LongText
-  evidenceReadiness        OperatingControlLineCandidateEvidenceReadiness  @default(DECLARED)
-  status                   OperatingControlLineCandidateStatus             @default(DRAFT)
-  evidenceNotesJson        String                                          @db.LongText
-  reviewerNotes            String?
-  createdAt                DateTime                                        @default(now())
-  updatedAt                DateTime                                        @updatedAt
-  workspace                Workspace                                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                   String                                         @id @default(cuid())
+  workspaceId          String
+  briefId              String
+  candidateKey         String
+  painTag              String
+  controlLineTemplate  OperatingControlLineCandidateTemplate
+  targetBusinessObject String
+  resourceInputsJson   String                                         @db.LongText
+  evidenceReadiness    OperatingControlLineCandidateEvidenceReadiness @default(DECLARED)
+  status               OperatingControlLineCandidateStatus            @default(DRAFT)
+  evidenceNotesJson    String                                         @db.LongText
+  reviewerNotes        String?
+  createdAt            DateTime                                       @default(now())
+  updatedAt            DateTime                                       @updatedAt
+  workspace            Workspace                                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, candidateKey])
   @@index([workspaceId, briefId])
@@ -1708,25 +1716,25 @@ model OperatingControlLineCandidate {
 //   - 客户永远不能改 internalSalesNotes / contribution / accrual / settlement /
 //     reviewer decision；这些字段不进 proposedChanges 的允许清单
 model CustomerContextUpdateRequest {
-  id                       String                                          @id @default(cuid())
-  workspaceId              String
-  leadId                   String
-  briefId                  String?
-  controlLineCandidateId   String?
-  requestKey               String
-  origin                   CustomerContextUpdateRequestOrigin
-  scope                    CustomerContextUpdateRequestScope
-  proposedChangesJson      String                                          @db.LongText
-  materiality              CustomerContextUpdateRequestMateriality
-  reviewStatus             CustomerContextUpdateRequestReviewStatus        @default(REVIEW_REQUIRED)
-  reviewerActor            String?
-  reviewerDecisionNote     String?
-  appliedAt                DateTime?
-  supersededByRequestId    String?
-  sourceTraceJson          String                                          @db.LongText
-  createdAt                DateTime                                        @default(now())
-  updatedAt                DateTime                                        @updatedAt
-  workspace                Workspace                                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                     String                                   @id @default(cuid())
+  workspaceId            String
+  leadId                 String
+  briefId                String?
+  controlLineCandidateId String?
+  requestKey             String
+  origin                 CustomerContextUpdateRequestOrigin
+  scope                  CustomerContextUpdateRequestScope
+  proposedChangesJson    String                                   @db.LongText
+  materiality            CustomerContextUpdateRequestMateriality
+  reviewStatus           CustomerContextUpdateRequestReviewStatus @default(REVIEW_REQUIRED)
+  reviewerActor          String?
+  reviewerDecisionNote   String?
+  appliedAt              DateTime?
+  supersededByRequestId  String?
+  sourceTraceJson        String                                   @db.LongText
+  createdAt              DateTime                                 @default(now())
+  updatedAt              DateTime                                 @updatedAt
+  workspace              Workspace                                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, requestKey])
   @@index([workspaceId, briefId])
@@ -1739,27 +1747,27 @@ model CustomerContextUpdateRequest {
 // 风险与边界备注。Review-first：诊断不是承诺成功方案；only after human review
 // 才能让 lead 进入 FIRST_LOOP_PROPOSED 阶段。
 model DiagnosticSession {
-  id                              String                  @id @default(cuid())
-  workspaceId                     String
-  leadId                          String
-  briefId                         String?
-  controlLineCandidateId          String?
-  diagnosticKey                   String
-  workspaceCandidate              String?
-  businessGoal                    String
-  availableResourcesJson          String                  @db.LongText
-  roleReadinessJson               String                  @db.LongText
-  firstLoopCandidateType          FirstLoopType?
-  firstLoopCandidateNote          String?
-  riskNotesJson                   String                  @db.LongText
-  boundaryNotesJson               String                  @db.LongText
-  status                          DiagnosticSessionStatus @default(DRAFT)
-  reviewerActor                   String?
-  reviewerDecisionNote            String?
-  sourceTraceJson                 String                  @db.LongText
-  createdAt                       DateTime                @default(now())
-  updatedAt                       DateTime                @updatedAt
-  workspace                       Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                     String                  @id @default(cuid())
+  workspaceId            String
+  leadId                 String
+  briefId                String?
+  controlLineCandidateId String?
+  diagnosticKey          String
+  workspaceCandidate     String?
+  businessGoal           String
+  availableResourcesJson String                  @db.LongText
+  roleReadinessJson      String                  @db.LongText
+  firstLoopCandidateType FirstLoopType?
+  firstLoopCandidateNote String?
+  riskNotesJson          String                  @db.LongText
+  boundaryNotesJson      String                  @db.LongText
+  status                 DiagnosticSessionStatus @default(DRAFT)
+  reviewerActor          String?
+  reviewerDecisionNote   String?
+  sourceTraceJson        String                  @db.LongText
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  workspace              Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, diagnosticKey])
   @@index([workspaceId, leadId])
@@ -3113,9 +3121,9 @@ model Company {
   industry                   String?
   website                    String?
   description                String?
-  definitionSuggestionJson   String?                     @db.LongText
+  definitionSuggestionJson   String?                    @db.LongText
   definitionSuggestedAt      DateTime?
-  definitionAcceptedJson     String?                   @db.LongText
+  definitionAcceptedJson     String?                    @db.LongText
   definitionAcceptedAt       DateTime?
   maturityScore              Int                        @default(0)
   cooperationMaturity        String?
@@ -4532,10 +4540,28 @@ model CaptureSession {
   linkedMeeting    Meeting?                @relation("CaptureSessionMeeting", fields: [linkedMeetingId], references: [id], onDelete: SetNull)
   transcript       ConversationTranscript?
   insights         ConversationInsight[]
+  consentRecord    CaptureConsentRecord?
 
   @@index([workspaceId, createdAt])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, objectType, objectId])
+}
+
+model CaptureConsentRecord {
+  id                   String               @id @default(cuid())
+  workspaceId          String
+  captureSessionId     String               @unique
+  confirmedByUserId    String?
+  confirmedByName      String
+  method               CaptureConsentMethod @default(UI_CHECKBOX)
+  noticeTextVersion    String               @default("capture-consent-notice/v1")
+  counterpartyNotified Boolean              @default(false)
+  confirmedAt          DateTime             @default(now())
+  workspace            Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  captureSession       CaptureSession       @relation(fields: [captureSessionId], references: [id], onDelete: Cascade)
+  confirmedByUser      User?                @relation(fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, confirmedAt])
 }
 
 model ConversationTranscript {

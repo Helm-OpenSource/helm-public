@@ -11,6 +11,7 @@
 export const EFFECT_MODES = [
   "suggestion_only",
   "shadow_suggestion",
+  "draft_only",
   "human_action",
   "receipt",
 ] as const;
@@ -43,6 +44,11 @@ const EFFECT_MODE_PRESENTATION: Record<
     variant: "approval",
     zh: "建议（shadow）",
     en: "Suggestion (shadow)",
+  },
+  draft_only: {
+    variant: "info",
+    zh: "仅草稿",
+    en: "Draft only",
   },
   human_action: {
     variant: "warning",

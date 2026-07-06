@@ -235,8 +235,10 @@ open http://localhost:3000    # 5. 访问
 | **PROFILE** | `HELM_DEPLOYMENT_REGION`、`HELM_DATA_RESIDENCY`、`NPM_CONFIG_REGISTRY` | public-safe region / residency / npm registry override 姿态；不构成生产合规声明 |
 | **OPTIONAL_CONNECTORS** | DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支付 | 按需开启 |
 
-ASR 目前只走 OpenAI transcription path；`delivery:doctor` 会预检 `.env.example`
-没有声明通用 / Qwen ASR provider，避免把 Qwen LLM 默认值误读成 ASR 支持。
+ASR 支持两个 provider：默认 `openai`（transcription path），以及 `ASR_PROVIDER=dashscope`
+（Qwen `qwen3-asr-flash`，OpenAI 兼容 chat 端点 + base64 内联音频，音频不出境、不产生
+公网 URL；需 `DASHSCOPE_API_KEY`）。`delivery:doctor --region cn` 会按 provider 判定
+中国交付红线：OpenAI-only 仍要求 `ASR_ENABLED=false`。
 
 ---
 
@@ -285,7 +287,7 @@ L2 路径。详见 [数据接入体验](docs/product/HELM_DATA_INTAKE_EXPERIENCE
 | **企业 IM** | WeCom（企业微信） | Alpha | OAuth callback foundation + meetings read-only ingest；calendar / message / send 仍保持边界 |
 | **邮件** | Gmail | Stable | OAuth + IMAP 读取；外发走复核 |
 | **邮件** | 阿里邮箱 | Stable | IMAP 同步 + 系统 SMTP（手动显式发送） |
-| **会议** | 录音 / 转写 / 经营理解 | Alpha | 浏览器录音 MVP + 外部 transcript ingest + OpenAI ASR；不是实时会议录音转写平台，不含 Zoom / 腾讯会议原生音频接入 |
+| **会议** | 录音 / 转写 / 经营理解 | Alpha | 浏览器录音 MVP + 外部 transcript ingest + OpenAI / DashScope(Qwen) ASR；不是实时会议录音转写平台，不含 Zoom / 腾讯会议原生音频接入 |
 | **支付** | Stripe | Stable | 真 API（订阅 / 支付链接） |
 | **支付** | 支付宝 | Stable | 真网关 + RSA-SHA256 签名 |
 | **支付** | 微信支付 | Alpha | 适配器已落，生产前需运维确认密钥与回调 |
