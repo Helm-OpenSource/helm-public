@@ -1,6 +1,6 @@
 "use server";
 
-import { ActorType } from "@prisma/client";
+import { ActorType, RejectionReasonCode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
@@ -153,6 +153,7 @@ export async function blockApprovedTaskAction(input: z.infer<typeof blockSchema>
 const rejectSchema = z.object({
   taskId: z.string(),
   reason: z.string().optional(),
+  reasonCode: z.nativeEnum(RejectionReasonCode).optional(),
 });
 
 export async function rejectTaskAction(input: z.infer<typeof rejectSchema>) {
@@ -173,6 +174,7 @@ export async function rejectTaskAction(input: z.infer<typeof rejectSchema>) {
   await rejectApprovalTask(parsed.data.taskId, user.name, user.id, parsed.data.reason, {
     actorType: ActorType.USER,
     english,
+    rejectionReasonCode: parsed.data.reasonCode,
   });
   return { ok: true };
 }

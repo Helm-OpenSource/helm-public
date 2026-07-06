@@ -38,6 +38,11 @@ import { ProactiveMechanismPanel } from "@/components/shared/proactive-mechanism
 import { ReportingProtocolPanel } from "@/components/shared/reporting-protocol-panel";
 import { RiskBadge } from "@/components/shared/risk-badge";
 import { ApprovalBadge } from "@/components/shared/status-badges";
+import type { RejectionReasonCode } from "@prisma/client";
+import {
+  REJECTION_REASON_CODES,
+  getRejectionReasonShortLabel,
+} from "@/lib/policies/rejection-reason";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -3438,24 +3443,41 @@ export function ApprovalsClient({
                         <Wand2 className="h-4 w-4" />
                         {english ? "Approve edited draft" : "编辑后批准待执行"}
                       </Button>
-                      <Button
+                      <Select
+                        value=""
                         disabled={pending}
-                        variant="secondary"
-                        onClick={() =>
+                        onValueChange={(value) =>
                           runAction(
                             () =>
                               rejectTaskAction({
                                 taskId: selected.id,
-                                reason: english
-                                  ? "Needs manual rewrite"
-                                  : "需人工重写",
+                                reasonCode: value as RejectionReasonCode,
                               }),
                             english ? "Action rejected" : "动作已拒绝",
                           )
                         }
                       >
-                        {english ? "Reject" : "拒绝"}
-                      </Button>
+                        <SelectTrigger
+                          aria-label={
+                            english
+                              ? "Reject with a classified reason"
+                              : "选择拒绝原因并拒绝"
+                          }
+                        >
+                          <SelectValue
+                            placeholder={
+                              english ? "Reject (pick reason)" : "拒绝（选原因）"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REJECTION_REASON_CODES.map((code) => (
+                            <SelectItem key={code} value={code}>
+                              {getRejectionReasonShortLabel(code, english)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button
                         disabled={pending}
                         variant="secondary"

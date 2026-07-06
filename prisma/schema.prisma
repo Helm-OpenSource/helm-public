@@ -772,6 +772,19 @@ enum ApprovalStatus {
   WITHDRAWN
 }
 
+// Structured rejection taxonomy for the review gate. A rejected suggestion is
+// the highest-value learning signal only when the reviewer records WHY it was
+// wrong; free text alone cannot be aggregated. OTHER keeps the gate usable
+// when none of the named classes fit.
+enum RejectionReasonCode {
+  DIAGNOSIS_ERROR
+  BOUNDARY_ERROR
+  OWNER_DISAGREEMENT
+  EVIDENCE_MISSING
+  EXECUTION_UNFIT
+  OTHER
+}
+
 enum ActorType {
   USER
   SYSTEM
@@ -3388,6 +3401,7 @@ model ApprovalTask {
   editableContent String?
   resultPreview   String?
   decisionReason  String?
+  rejectionReasonCode RejectionReasonCode?
   reviewedAt      DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -4664,6 +4678,7 @@ model RecommendationFeedback {
   feedbackType        RecommendationFeedbackType
   edited              Boolean                    @default(false)
   resultNote          String?
+  rejectionReasonCode RejectionReasonCode?
   actionItemId        String?
   approvalTaskId      String?
   createdAt           DateTime                   @default(now())
