@@ -35,6 +35,8 @@ export async function getInternalOperatingWorkspaceData(
       systemKey?: string | null;
     } | null;
     membershipRole?: WorkspaceRole | null;
+    /** null/undefined = unrestricted (owner view); array = group members only. */
+    groupScopeUserIds?: string[] | null;
   },
 ) {
   const gtmReadable =
@@ -51,6 +53,9 @@ export async function getInternalOperatingWorkspaceData(
     db.opportunity.findMany({
       where: {
         workspaceId,
+        ...(options?.groupScopeUserIds
+          ? { ownerId: { in: options.groupScopeUserIds } }
+          : {}),
       },
       include: {
         company: true,

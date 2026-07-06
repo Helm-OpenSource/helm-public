@@ -376,6 +376,11 @@ const memberGoalProfileSchema = z.object({
   jobResponsibilities: optionalTextField(1200),
 });
 
+const memberGroupTagSchema = z.object({
+  membershipId: z.string().min(1),
+  groupTag: optionalTextField(60),
+});
+
 const ownershipTransferSchema = z.object({
   membershipId: z.string().min(1),
 });
@@ -1569,6 +1574,70 @@ export async function updateOrganizationMemberGoalProfileAction(
 
   revalidatePath("/settings");
   revalidatePath("/dashboard");
+
+  return {
+    ok: true,
+    member: updatedMembership,
+  };
+}
+
+export async function updateMemberGroupTagAction(
+  input: z.infer<typeof memberGroupTagSchema>,
+) {
+  const user = await requireCurrentUser();
+  const workspace = await getCurrentWorkspace();
+  const membership = await getCurrentMembership();
+  const english = workspace.defaultLocale === "en-US";
+  const parsed = memberGroupTagSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: english ? "Invalid member group tag payload" : "成员分组标签参数错误",
+    };
+  }
+
+  if (!canManageWorkspaceMembers(membership.role)) {
+    return { ok: false, error: getMembershipManagementDeniedMessage(english) };
+  }
+
+  const targetMembership = await findFirstMembershipWithExistingUser({
+    where: {
+      id: parsed.data.membershipId,
+      workspaceId: workspace.id,
+    },
+  });
+
+  if (!targetMembership) {
+    return { ok: false, error: english ? "Team member not found" : "没有找到该团队成员" };
+  }
+
+  const groupTag = parsed.data.groupTag?.trim() || null;
+
+  const updatedMembership = await db.membership.update({
+    where: { id: targetMembership.id },
+    data: { groupTag },
+    select: { id: true, groupTag: true },
+  });
+
+  await writeAuditLog({
+    workspaceId: workspace.id,
+    userId: user.id,
+    actor: user.name,
+    actorType: ActorType.USER,
+    actionType: "ORGANIZATION_MEMBER_GROUP_TAG_UPDATED",
+    targetType: "Membership",
+    targetId: targetMembership.id,
+    summary: english
+      ? `Updated member group tag for ${targetMembership.user.email}`
+      : `已更新 ${targetMembership.user.email} 的成员分组标签`,
+    payload: { groupTagPresent: Boolean(groupTag) },
+    sourcePage: "/settings",
+  });
+
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  revalidatePath("/operating");
 
   return {
     ok: true,

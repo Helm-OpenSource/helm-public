@@ -115,7 +115,7 @@ const zh = {
     start: "开始录制",
     consentTitle: "录制前请先确认对方授权",
     consentDescription:
-      "当前工作区要求每次会前明确授权确认。一句「我授权录制和转写」就够，但必须有。",
+      "当前工作区要求每次会前明确授权确认。一句「我授权录制和转写」就够，但必须有。勾选即表示你已完成对被录方的口头告知并获得同意；该确认将随会话记录存档。",
     consentCheckbox: "我已确认本次会议的录音 / 转写授权",
   },
 };
@@ -241,7 +241,7 @@ const en = {
     start: "Start recording",
     consentTitle: "Confirm recording consent before you press record",
     consentDescription:
-      "This workspace requires an explicit consent confirmation each time. \"I authorize recording and transcription\" is enough, but it has to be stated.",
+      "This workspace requires an explicit consent confirmation each time. \"I authorize recording and transcription\" is enough, but it has to be stated. Ticking the box confirms you have verbally notified the recorded party and obtained consent; the confirmation is archived with the session.",
     consentCheckbox:
       "I have confirmed recording / transcription consent for this session",
   },
