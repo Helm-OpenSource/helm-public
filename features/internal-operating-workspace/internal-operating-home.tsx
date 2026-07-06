@@ -8,6 +8,8 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
+import { BoundaryBar } from "@/components/shared/boundary-bar";
+import { EffectModeBadge } from "@/components/shared/effect-mode-badge";
 import { OperatingFoundationSummaryCard } from "@/components/shared/operating-foundation-summary";
 import { PageHeader } from "@/components/shared/page-header";
 import { TenantResourceOperatingImpactPanel } from "@/components/shared/tenant-resource-operating-impact-panel";
@@ -136,6 +138,29 @@ export function InternalOperatingHome({
             </Button>
           </>
         }
+      />
+
+      <BoundaryBar
+        english={english}
+        copy={{
+          observed: {
+            zh: "经营总盘：判断、决策与边界三层的只读汇总视图。",
+            en: "The operating overview: a read-only rollup of judgements, decisions, and boundaries.",
+          },
+          wontDo: {
+            zh: "不会代表你执行、外发或改写任何业务系统。",
+            en: "Never executes, sends, or rewrites any business system on your behalf.",
+          },
+          decider: {
+            zh: "所有推进动作由你在复核闸确认后发生。",
+            en: "Every advancing action happens only after you confirm it at the review gate.",
+          },
+          negatives: [
+            { zh: "无自动外发", en: "No auto-send" },
+            { zh: "无自动写回", en: "No auto-writeback" },
+            { zh: "无自动承诺", en: "No auto-commitment" },
+          ],
+        }}
       />
 
       <OperatingSignalFlowMap locale={locale} />
@@ -546,9 +571,12 @@ export function InternalOperatingHome({
                           }
                           className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-3 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
                         >
-                          <p className="text-xs font-medium text-[color:var(--foreground)]">
-                            {draft.label}
-                          </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs font-medium text-[color:var(--foreground)]">
+                              {draft.label}
+                            </p>
+                            <EffectModeBadge mode="draft_only" english={english} />
+                          </div>
                           <p className="mt-1 text-[11px] leading-5 text-[color:var(--muted-foreground)]">
                             {draft.statusLabel}
                           </p>
