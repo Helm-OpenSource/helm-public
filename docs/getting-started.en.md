@@ -165,6 +165,15 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · Alipay · WeChat Pay.
 
 Leave them all blank on a first run.
 
+### OPTIONAL_SCHEDULERS (all off by default)
+
+| Variable | Purpose |
+|---|---|
+| `SIGNAL_COLLECTION_SCHEDULER_ENABLED` | Signal collection scheduler; only starts when `true` |
+| `LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED` | Daily follow-through sweep for the light task chain: produces **internal reminders and audit entries** for overdue / stalled action items and commitments — no external sends, no task-state mutation. Deployment-level switch that sweeps every workspace in the database; validate the cadence on an internal workspace first, see [the self-tenant operating runbook §5](./product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md) |
+
+Neither scheduler affects a first run; leave them blank / `false`.
+
 ### China delivery profile preflight (optional)
 
 If this fork is being prepared for a China customer delivery, first align the
