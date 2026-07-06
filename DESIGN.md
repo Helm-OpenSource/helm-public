@@ -625,7 +625,8 @@ Helm 不追求花哨 BI。
 | 阶段 | 内容 |
 |---|---|
 | 已落地 | BoundaryBar + EffectModeBadge 组件与 tenant-health 首个应用面 |
-| 下一步 | 高误解风险 surface 优先接入 BoundaryBar：`/approvals`、`/capture`、`/operating`；建议类列表逐步补 EffectModeBadge |
-| 后续 | 评估五态就绪徽章（live / refit / planned / contract_only / no_go）在导航层的 Core 版本；状态词表机制 |
+| 已落地（第二批，2026-07-06） | `/approvals` 与 `/operating` 接入 BoundaryBar；`/operating` 草稿候选卡接入 `draft_only` 角标（EFFECT_MODES 扩展） |
+| 顺延 | `/capture` 的 BoundaryBar 接入：该页 `SupportSurfaceNote` 已承载"做什么/绝不做什么/会后"三段边界，双份并列会重复——待与共享组件 SupportSurfaceNote 的关系收敛后再接（替换或差异化，不并列） |
+| 后续 | 建议类列表逐步补 EffectModeBadge；评估五态就绪徽章（live / refit / planned / contract_only / no_go）在导航层的 Core 版本；状态词表机制 |
 
 新增经营 surface 默认应带 BoundaryBar；建议/动作/回执混排的列表默认应带 EffectModeBadge。

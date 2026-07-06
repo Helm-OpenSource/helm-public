@@ -1002,6 +1002,11 @@ enum SourceType {
   OPENCLAW
 }
 
+enum CaptureConsentMethod {
+  UI_CHECKBOX
+  EXTERNAL_ATTESTATION
+}
+
 enum CaptureSessionStatus {
   RECORDING
   PROCESSING
@@ -1137,49 +1142,50 @@ enum PreferenceSignalType {
 }
 
 model User {
-  id                           String                    @id @default(cuid())
-  email                        String                    @unique
-  phone                        String?                   @unique
-  name                         String
-  title                        String?
-  avatar                       String?
-  emailVerifiedAt              DateTime?
-  phoneVerifiedAt              DateTime?
-  passwordHash                 String?
-  passwordSetAt                DateTime?
-  lastLoginAt                  DateTime?
-  createdAt                    DateTime                  @default(now())
-  updatedAt                    DateTime                  @updatedAt
-  memberships                  Membership[]
-  ownedContacts                Contact[]                 @relation("ContactOwner")
-  ownedOpportunities           Opportunity[]             @relation("OpportunityOwner")
-  ownedMeetings                Meeting[]                 @relation("MeetingOwner")
-  assignedActions              ActionItem[]              @relation("ActionOwner")
-  approvalQueue                ApprovalTask[]            @relation("ApprovalApprover")
-  approvalReviews              ApprovalTask[]            @relation("ApprovalReviewer")
-  notifications                Notification[]
-  auditLogs                    AuditLog[]                @relation("AuditActorUser")
-  connectors                   Connector[]
-  importSources                ImportSource[]
-  importJobs                   ImportJob[]
-  eventLogs                    EventLog[]
-  usageSnapshots               DailyUsageSnapshot[]
-  memoryCorrections            MemoryCorrection[]        @relation("MemoryCorrectionUser")
-  ownedCommitments             Commitment[]              @relation("CommitmentOwner")
-  recommendationLogs           RecommendationLog[]
-  recommendationFeedbacks      RecommendationFeedback[]
-  preferenceSignals            PreferenceSignal[]
-  llmCallLogs                  LLMCallLog[]
-  captureSessions              CaptureSession[]
-  usageLedgerEntries           UsageLedger[]
-  authVerificationCodes        AuthVerificationCode[]
-  authSessions                 AuthSession[]
-  participantPortalAccesses    ParticipantPortalAccess[]
-  reviewedProgramApplications  ProgramApplication[]      @relation("ProgramApplicationReviewedBy")
-  createdBiReportSubscriptions BiReportSubscription[]    @relation("BiReportSubscriptionCreatedBy")
-  ownedBiReportBusinessSignals BiReportBusinessSignal[]  @relation("BiReportBusinessSignalOwner")
+  id                                       String                            @id @default(cuid())
+  email                                    String                            @unique
+  phone                                    String?                           @unique
+  name                                     String
+  title                                    String?
+  avatar                                   String?
+  emailVerifiedAt                          DateTime?
+  phoneVerifiedAt                          DateTime?
+  passwordHash                             String?
+  passwordSetAt                            DateTime?
+  lastLoginAt                              DateTime?
+  createdAt                                DateTime                          @default(now())
+  updatedAt                                DateTime                          @updatedAt
+  memberships                              Membership[]
+  ownedContacts                            Contact[]                         @relation("ContactOwner")
+  ownedOpportunities                       Opportunity[]                     @relation("OpportunityOwner")
+  ownedMeetings                            Meeting[]                         @relation("MeetingOwner")
+  assignedActions                          ActionItem[]                      @relation("ActionOwner")
+  approvalQueue                            ApprovalTask[]                    @relation("ApprovalApprover")
+  approvalReviews                          ApprovalTask[]                    @relation("ApprovalReviewer")
+  notifications                            Notification[]
+  auditLogs                                AuditLog[]                        @relation("AuditActorUser")
+  connectors                               Connector[]
+  importSources                            ImportSource[]
+  importJobs                               ImportJob[]
+  eventLogs                                EventLog[]
+  usageSnapshots                           DailyUsageSnapshot[]
+  memoryCorrections                        MemoryCorrection[]                @relation("MemoryCorrectionUser")
+  ownedCommitments                         Commitment[]                      @relation("CommitmentOwner")
+  recommendationLogs                       RecommendationLog[]
+  recommendationFeedbacks                  RecommendationFeedback[]
+  preferenceSignals                        PreferenceSignal[]
+  llmCallLogs                              LLMCallLog[]
+  captureSessions                          CaptureSession[]
+  usageLedgerEntries                       UsageLedger[]
+  authVerificationCodes                    AuthVerificationCode[]
+  authSessions                             AuthSession[]
+  participantPortalAccesses                ParticipantPortalAccess[]
+  reviewedProgramApplications              ProgramApplication[]              @relation("ProgramApplicationReviewedBy")
+  createdBiReportSubscriptions             BiReportSubscription[]            @relation("BiReportSubscriptionCreatedBy")
+  ownedBiReportBusinessSignals             BiReportBusinessSignal[]          @relation("BiReportBusinessSignalOwner")
   reviewedBiReportBusinessHandoffDecisions BiReportBusinessHandoffDecision[] @relation("BiReportBusinessHandoffDecisionReviewedBy")
-  authoredBiReportHandoffExecutionLogs BiReportHandoffExecutionLog[] @relation("BiReportHandoffExecutionLogAuthor")
+  authoredBiReportHandoffExecutionLogs     BiReportHandoffExecutionLog[]     @relation("BiReportHandoffExecutionLogAuthor")
+  captureConsentRecords                    CaptureConsentRecord[]
 }
 
 model AuthEnrollment {
@@ -1325,6 +1331,7 @@ model Workspace {
   preferenceSignals                    PreferenceSignal[]
   llmCallLogs                          LLMCallLog[]
   captureSessions                      CaptureSession[]
+  captureConsentRecords                CaptureConsentRecord[]
   conversationTranscripts              ConversationTranscript[]
   conversationInsights                 ConversationInsight[]
   importSources                        ImportSource[]
@@ -1571,25 +1578,25 @@ model SalesReferral {
 
 // GTMLead — Helm reserved tenant 自营增长闭环起点（V2.3 §7.1）。
 model GtmLead {
-  id                       String                @id @default(cuid())
-  workspaceId              String
-  leadKey                  String
-  sourceType               GtmLeadSourceType
-  sourceRef                String?
-  referrerMembershipId     String?
-  companyName              String
-  industry                 String?
-  icpFit                   GtmLeadIcpFit         @default(UNKNOWN)
-  readinessStage           GtmLeadReadinessStage @default(UNKNOWN)
-  ownerMembershipId        String?
-  stage                    GtmLeadStage          @default(CAPTURED)
-  nextAction               String?
-  blocker                  String?
-  evidenceRefsJson         String?
-  internalNotes            String?
-  createdAt                DateTime              @default(now())
-  updatedAt                DateTime              @updatedAt
-  workspace                Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                   String                @id @default(cuid())
+  workspaceId          String
+  leadKey              String
+  sourceType           GtmLeadSourceType
+  sourceRef            String?
+  referrerMembershipId String?
+  companyName          String
+  industry             String?
+  icpFit               GtmLeadIcpFit         @default(UNKNOWN)
+  readinessStage       GtmLeadReadinessStage @default(UNKNOWN)
+  ownerMembershipId    String?
+  stage                GtmLeadStage          @default(CAPTURED)
+  nextAction           String?
+  blocker              String?
+  evidenceRefsJson     String?
+  internalNotes        String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, leadKey])
   @@index([workspaceId, stage])
@@ -1598,7 +1605,7 @@ model GtmLead {
 
 // CustomerDemandBrief — V2.3 §7.2 reserved tenant handoff 对象。
 model CustomerDemandBrief {
-  id                              String                                          @id @default(cuid())
+  id                              String                                        @id @default(cuid())
   workspaceId                     String
   leadId                          String
   briefKey                        String
@@ -1617,11 +1624,11 @@ model CustomerDemandBrief {
   internalSalesNotes              String?
   trialInitializationPayloadJson  String?
   sourceTraceJson                 String
-  reviewStatus                    CustomerDemandBriefReviewStatus                 @default(DRAFT)
-  customerConfirmationStatus      CustomerDemandBriefCustomerConfirmationStatus   @default(NOT_INVITED)
-  createdAt                       DateTime                                        @default(now())
-  updatedAt                       DateTime                                        @updatedAt
-  workspace                       Workspace                                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reviewStatus                    CustomerDemandBriefReviewStatus               @default(DRAFT)
+  customerConfirmationStatus      CustomerDemandBriefCustomerConfirmationStatus @default(NOT_INVITED)
+  createdAt                       DateTime                                      @default(now())
+  updatedAt                       DateTime                                      @updatedAt
+  workspace                       Workspace                                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, briefKey])
   @@index([workspaceId, leadId])
@@ -1630,21 +1637,21 @@ model CustomerDemandBrief {
 
 // OperatingControlLineCandidate — V2.3 §7.4 Phase 3 起点。
 model OperatingControlLineCandidate {
-  id                       String                                          @id @default(cuid())
-  workspaceId              String
-  briefId                  String
-  candidateKey             String
-  painTag                  String
-  controlLineTemplate      OperatingControlLineCandidateTemplate
-  targetBusinessObject     String
-  resourceInputsJson       String
-  evidenceReadiness        OperatingControlLineCandidateEvidenceReadiness  @default(DECLARED)
-  status                   OperatingControlLineCandidateStatus             @default(DRAFT)
-  evidenceNotesJson        String
-  reviewerNotes            String?
-  createdAt                DateTime                                        @default(now())
-  updatedAt                DateTime                                        @updatedAt
-  workspace                Workspace                                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                   String                                         @id @default(cuid())
+  workspaceId          String
+  briefId              String
+  candidateKey         String
+  painTag              String
+  controlLineTemplate  OperatingControlLineCandidateTemplate
+  targetBusinessObject String
+  resourceInputsJson   String
+  evidenceReadiness    OperatingControlLineCandidateEvidenceReadiness @default(DECLARED)
+  status               OperatingControlLineCandidateStatus            @default(DRAFT)
+  evidenceNotesJson    String
+  reviewerNotes        String?
+  createdAt            DateTime                                       @default(now())
+  updatedAt            DateTime                                       @updatedAt
+  workspace            Workspace                                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, candidateKey])
   @@index([workspaceId, briefId])
@@ -1653,25 +1660,25 @@ model OperatingControlLineCandidate {
 
 // CustomerContextUpdateRequest — V2.3 §7.3 客户改写跟踪。
 model CustomerContextUpdateRequest {
-  id                       String                                          @id @default(cuid())
-  workspaceId              String
-  leadId                   String
-  briefId                  String?
-  controlLineCandidateId   String?
-  requestKey               String
-  origin                   CustomerContextUpdateRequestOrigin
-  scope                    CustomerContextUpdateRequestScope
-  proposedChangesJson      String
-  materiality              CustomerContextUpdateRequestMateriality
-  reviewStatus             CustomerContextUpdateRequestReviewStatus        @default(REVIEW_REQUIRED)
-  reviewerActor            String?
-  reviewerDecisionNote     String?
-  appliedAt                DateTime?
-  supersededByRequestId    String?
-  sourceTraceJson          String
-  createdAt                DateTime                                        @default(now())
-  updatedAt                DateTime                                        @updatedAt
-  workspace                Workspace                                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                     String                                   @id @default(cuid())
+  workspaceId            String
+  leadId                 String
+  briefId                String?
+  controlLineCandidateId String?
+  requestKey             String
+  origin                 CustomerContextUpdateRequestOrigin
+  scope                  CustomerContextUpdateRequestScope
+  proposedChangesJson    String
+  materiality            CustomerContextUpdateRequestMateriality
+  reviewStatus           CustomerContextUpdateRequestReviewStatus @default(REVIEW_REQUIRED)
+  reviewerActor          String?
+  reviewerDecisionNote   String?
+  appliedAt              DateTime?
+  supersededByRequestId  String?
+  sourceTraceJson        String
+  createdAt              DateTime                                 @default(now())
+  updatedAt              DateTime                                 @updatedAt
+  workspace              Workspace                                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, requestKey])
   @@index([workspaceId, briefId])
@@ -1681,27 +1688,27 @@ model CustomerContextUpdateRequest {
 
 // DiagnosticSession — V2.3 §7.5 Phase 4 起点。
 model DiagnosticSession {
-  id                              String                  @id @default(cuid())
-  workspaceId                     String
-  leadId                          String
-  briefId                         String?
-  controlLineCandidateId          String?
-  diagnosticKey                   String
-  workspaceCandidate              String?
-  businessGoal                    String
-  availableResourcesJson          String
-  roleReadinessJson               String
-  firstLoopCandidateType          FirstLoopType?
-  firstLoopCandidateNote          String?
-  riskNotesJson                   String
-  boundaryNotesJson               String
-  status                          DiagnosticSessionStatus @default(DRAFT)
-  reviewerActor                   String?
-  reviewerDecisionNote            String?
-  sourceTraceJson                 String
-  createdAt                       DateTime                @default(now())
-  updatedAt                       DateTime                @updatedAt
-  workspace                       Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                     String                  @id @default(cuid())
+  workspaceId            String
+  leadId                 String
+  briefId                String?
+  controlLineCandidateId String?
+  diagnosticKey          String
+  workspaceCandidate     String?
+  businessGoal           String
+  availableResourcesJson String
+  roleReadinessJson      String
+  firstLoopCandidateType FirstLoopType?
+  firstLoopCandidateNote String?
+  riskNotesJson          String
+  boundaryNotesJson      String
+  status                 DiagnosticSessionStatus @default(DRAFT)
+  reviewerActor          String?
+  reviewerDecisionNote   String?
+  sourceTraceJson        String
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  workspace              Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, diagnosticKey])
   @@index([workspaceId, leadId])
@@ -3992,15 +3999,15 @@ model BiReportSubscription {
 }
 
 model BiReportRun {
-  id                       String               @id @default(cuid())
+  id                       String                   @id @default(cuid())
   subscriptionId           String
   workspaceId              String
   extensionKey             String?
   scheduledFor             DateTime
-  dedupeKey                String               @unique
-  status                   BiReportRunStatus    @default(PENDING)
+  dedupeKey                String                   @unique
+  status                   BiReportRunStatus        @default(PENDING)
   severity                 BiReportSeverity?
-  rowCount                 Int                  @default(0)
+  rowCount                 Int                      @default(0)
   querySummaryJson         String?
   metricsJson              String?
   criteriaResultJson       String?
@@ -4008,12 +4015,12 @@ model BiReportRun {
   analysisJson             String?
   llmMetaJson              String?
   errorSummary             String?
-  startedAt                DateTime             @default(now())
+  startedAt                DateTime                 @default(now())
   finishedAt               DateTime?
-  createdAt                DateTime             @default(now())
-  updatedAt                DateTime             @updatedAt
-  subscription             BiReportSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  workspace                Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  subscription             BiReportSubscription     @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  workspace                Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   deliveries               BiReportDelivery[]
   businessSignals          BiReportBusinessSignal[]
 
@@ -4406,10 +4413,28 @@ model CaptureSession {
   linkedMeeting    Meeting?                @relation("CaptureSessionMeeting", fields: [linkedMeetingId], references: [id], onDelete: SetNull)
   transcript       ConversationTranscript?
   insights         ConversationInsight[]
+  consentRecord    CaptureConsentRecord?
 
   @@index([workspaceId, createdAt])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, objectType, objectId])
+}
+
+model CaptureConsentRecord {
+  id                   String               @id @default(cuid())
+  workspaceId          String
+  captureSessionId     String               @unique
+  confirmedByUserId    String?
+  confirmedByName      String
+  method               CaptureConsentMethod @default(UI_CHECKBOX)
+  noticeTextVersion    String               @default("capture-consent-notice/v1")
+  counterpartyNotified Boolean              @default(false)
+  confirmedAt          DateTime             @default(now())
+  workspace            Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  captureSession       CaptureSession       @relation(fields: [captureSessionId], references: [id], onDelete: Cascade)
+  confirmedByUser      User?                @relation(fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, confirmedAt])
 }
 
 model ConversationTranscript {

@@ -1,5 +1,6 @@
 import {
   ActorType,
+  CaptureConsentMethod,
   CaptureProcessingStatus,
   CaptureSessionStatus,
   CaptureSourceType,
@@ -26,12 +27,20 @@ type CaptureActorInput = {
   sourcePage?: string;
 };
 
+export type CaptureConsentInput = {
+  confirmed: boolean;
+  counterpartyNotified: boolean;
+  noticeTextVersion?: string | null;
+  method?: CaptureConsentMethod;
+};
+
 export type StartCaptureSessionInput = CaptureActorInput & {
   title?: string | null;
   objectType?: ObjectType | null;
   objectId?: string | null;
   sourceType?: CaptureSourceType;
   sourceId?: string | null;
+  consent?: CaptureConsentInput | null;
 };
 
 export async function startCaptureSession(input: StartCaptureSessionInput) {
@@ -41,6 +50,25 @@ export async function startCaptureSession(input: StartCaptureSessionInput) {
     actorType: input.actorType,
     english: input.english ?? false,
   });
+
+  const workspaceConsentPolicy = await db.workspace.findUnique({
+    where: { id: input.workspaceId },
+    select: { captureConsentRequired: true },
+  });
+  const consent = input.consent ?? null;
+  if (
+    workspaceConsentPolicy?.captureConsentRequired &&
+    !(consent?.confirmed && consent.counterpartyNotified)
+  ) {
+    // Fail-closed: without a recorded consent confirmation covering the
+    // recorded parties, no capture session starts in a consent-required
+    // workspace.
+    throw new Error(
+      input.english
+        ? "Recording consent must be confirmed (including counterparty notice) before capture starts in this workspace."
+        : "本工作区开始采集前，必须先确认录音 / 转写授权并完成被录方告知。",
+    );
+  }
 
   const created = await db.captureSession.create({
     data: {
@@ -57,6 +85,20 @@ export async function startCaptureSession(input: StartCaptureSessionInput) {
     },
   });
 
+  if (consent?.confirmed) {
+    await db.captureConsentRecord.create({
+      data: {
+        workspaceId: input.workspaceId,
+        captureSessionId: created.id,
+        confirmedByUserId: input.actorUserId ?? undefined,
+        confirmedByName: input.actorName,
+        method: consent.method ?? CaptureConsentMethod.UI_CHECKBOX,
+        noticeTextVersion: consent.noticeTextVersion ?? undefined,
+        counterpartyNotified: consent.counterpartyNotified,
+      },
+    });
+  }
+
   await writeAuditLog({
     workspaceId: input.workspaceId,
     userId: input.actorUserId,
@@ -72,6 +114,7 @@ export async function startCaptureSession(input: StartCaptureSessionInput) {
       objectType: created.objectType,
       objectId: created.objectId,
       sourceType: created.sourceType,
+      consentRecorded: Boolean(consent?.confirmed),
     },
     sourcePage: input.sourcePage,
     relatedObjectType: created.objectType ?? undefined,
