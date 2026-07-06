@@ -1,12 +1,15 @@
 import "server-only";
 
 import {
+  ActionStatus,
   ActionType,
   ActorType,
+  ApprovalStatus,
   SourceType,
   type FirstLoopType,
   type Workspace,
 } from "@prisma/client";
+import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { createGovernedAction } from "@/lib/policies/engine";
 import { assertReservedWorkspaceForDiagnosticSession } from "./queries";
@@ -23,9 +26,19 @@ import { assertReservedWorkspaceForDiagnosticSession } from "./queries";
 // the execution receipt on closure. Advice-only boundary: the packet is a
 // review-first suggestion; nothing executes without the approval gate.
 //
-// Idempotent: one work packet per session (keyed by sourceId), so re-running
-// the bridge cannot flood the approval queue.
+// Idempotent AND concurrency-safe: the DiagnosticSessionWorkPacket claim
+// ledger (unique diagnosticSessionId) is the arbiter — one work packet per
+// session, racing calls resolve to a single winner and the loser withdraws
+// its duplicate. Re-running the bridge cannot flood the approval queue.
 // ---------------------------------------------------------------------------
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: string }).code === "P2002"
+  );
+}
 
 type ReservedWorkspaceLike = Pick<Workspace, "workspaceClass" | "systemKey"> & {
   status?: Workspace["status"] | null;
@@ -80,16 +93,23 @@ export async function createFirstLoopWorkPacketFromDiagnosticSession(input: {
 
   const sourceId = buildDiagnosticSessionWorkPacketSourceId(session.id);
 
-  const existing = await db.actionItem.findFirst({
-    where: { workspaceId: input.workspaceId, sourceId },
-    select: { id: true, approvalTask: { select: { id: true } } },
-  });
-  if (existing) {
+  const resolveExistingPacket = async (actionItemId: string) => {
+    const actionItem = await db.actionItem.findFirst({
+      where: { id: actionItemId, workspaceId: input.workspaceId },
+      select: { id: true, approvalTask: { select: { id: true } } },
+    });
     return {
-      actionItemId: existing.id,
-      approvalTaskId: existing.approvalTask?.id,
-      created: false,
+      actionItemId,
+      approvalTaskId: actionItem?.approvalTask?.id,
+      created: false as const,
     };
+  };
+
+  const existingPacket = await db.diagnosticSessionWorkPacket.findUnique({
+    where: { diagnosticSessionId: session.id },
+  });
+  if (existingPacket) {
+    return resolveExistingPacket(existingPacket.actionItemId);
   }
 
   const label = FIRST_LOOP_TYPE_LABELS[session.firstLoopCandidateType];
@@ -121,6 +141,66 @@ export async function createFirstLoopWorkPacketFromDiagnosticSession(input: {
       generatedFrom: "diagnostic_session_first_loop",
     },
   });
+
+  try {
+    await db.diagnosticSessionWorkPacket.create({
+      data: {
+        workspaceId: input.workspaceId,
+        diagnosticSessionId: session.id,
+        actionItemId: result.actionItemId,
+      },
+    });
+  } catch (error) {
+    if (!isUniqueConstraintViolation(error)) {
+      throw error;
+    }
+    // A concurrent bridge call won the unique claim between our lookup and
+    // this insert. Withdraw the duplicate we just created (audit-visible, no
+    // deletion) and hand back the winner's packet.
+    await db.actionItem.update({
+      where: { id: result.actionItemId },
+      data: {
+        status: ActionStatus.WITHDRAWN,
+        executionStatus: "withdrawn",
+        statusReason: english
+          ? "Duplicate first-loop packet from a concurrent bridge call; superseded by the existing packet"
+          : "并发生成的重复首环任务，已撤回，沿用既有任务",
+      },
+    });
+    if (result.approvalTaskId) {
+      await db.approvalTask.update({
+        where: { id: result.approvalTaskId },
+        data: {
+          status: ApprovalStatus.WITHDRAWN,
+          reviewedAt: new Date(),
+          decisionReason: english
+            ? "Withdrawn: duplicate first-loop packet"
+            : "已撤回：重复的首环任务",
+        },
+      });
+    }
+    await writeAuditLog({
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId ?? undefined,
+      actor: input.actorName,
+      actorType: ActorType.USER,
+      actionType: "DIAGNOSTIC_FIRST_LOOP_DUPLICATE_WITHDRAWN",
+      targetType: "ActionItem",
+      targetId: result.actionItemId,
+      summary: english
+        ? "Concurrent first-loop packet duplicate withdrawn"
+        : "并发重复的首环任务已撤回",
+      payload: { diagnosticSessionId: session.id },
+    });
+
+    const winner = await db.diagnosticSessionWorkPacket.findUnique({
+      where: { diagnosticSessionId: session.id },
+    });
+    if (!winner) {
+      throw error;
+    }
+    return resolveExistingPacket(winner.actionItemId);
+  }
 
   return {
     actionItemId: result.actionItemId,

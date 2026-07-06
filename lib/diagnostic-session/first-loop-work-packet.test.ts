@@ -1,17 +1,28 @@
 import { ActionStatus, ActionType, SourceType } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dbMock, engineMock } = vi.hoisted(() => ({
+const { dbMock, engineMock, auditMock } = vi.hoisted(() => ({
   dbMock: {
     diagnosticSession: {
       findFirst: vi.fn(),
     },
+    diagnosticSessionWorkPacket: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
     actionItem: {
       findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+    approvalTask: {
+      update: vi.fn(),
     },
   },
   engineMock: {
     createGovernedAction: vi.fn(),
+  },
+  auditMock: {
+    writeAuditLog: vi.fn(),
   },
 }));
 
@@ -21,6 +32,10 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/policies/engine", () => ({
   createGovernedAction: engineMock.createGovernedAction,
+}));
+
+vi.mock("@/lib/audit", () => ({
+  writeAuditLog: auditMock.writeAuditLog,
 }));
 
 import {
@@ -56,7 +71,11 @@ function buildSession(overrides?: Partial<Record<string, unknown>>) {
 describe("createFirstLoopWorkPacketFromDiagnosticSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbMock.diagnosticSessionWorkPacket.findUnique.mockResolvedValue(null);
+    dbMock.diagnosticSessionWorkPacket.create.mockResolvedValue({ id: "packet-1" });
     dbMock.actionItem.findFirst.mockResolvedValue(null);
+    dbMock.actionItem.update.mockResolvedValue({});
+    dbMock.approvalTask.update.mockResolvedValue({});
     engineMock.createGovernedAction.mockResolvedValue({
       actionItemId: "action-1",
       approvalTaskId: "task-1",
@@ -93,8 +112,13 @@ describe("createFirstLoopWorkPacketFromDiagnosticSession", () => {
     );
   });
 
-  it("is idempotent: an existing packet for the session is returned, not duplicated", async () => {
+  it("is idempotent: an existing claim for the session is returned, not duplicated", async () => {
     dbMock.diagnosticSession.findFirst.mockResolvedValue(buildSession());
+    dbMock.diagnosticSessionWorkPacket.findUnique.mockResolvedValue({
+      id: "packet-existing",
+      diagnosticSessionId: "session-1",
+      actionItemId: "action-existing",
+    });
     dbMock.actionItem.findFirst.mockResolvedValue({
       id: "action-existing",
       approvalTask: { id: "task-existing" },
@@ -114,6 +138,54 @@ describe("createFirstLoopWorkPacketFromDiagnosticSession", () => {
       created: false,
     });
     expect(engineMock.createGovernedAction).not.toHaveBeenCalled();
+  });
+
+  it("resolves a concurrent race to one packet: the loser withdraws its duplicate", async () => {
+    dbMock.diagnosticSession.findFirst.mockResolvedValue(buildSession());
+    // Our lookup misses, but by insert time a concurrent call has claimed the
+    // session: the unique index rejects with P2002.
+    dbMock.diagnosticSessionWorkPacket.create.mockRejectedValue({ code: "P2002" });
+    dbMock.diagnosticSessionWorkPacket.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "packet-winner",
+        diagnosticSessionId: "session-1",
+        actionItemId: "action-winner",
+      });
+    dbMock.actionItem.findFirst.mockResolvedValue({
+      id: "action-winner",
+      approvalTask: { id: "task-winner" },
+    });
+
+    const result = await createFirstLoopWorkPacketFromDiagnosticSession({
+      workspace: RESERVED_WORKSPACE,
+      workspaceId: "workspace-1",
+      sessionId: "session-1",
+      actorName: "Founder",
+      actorUserId: "user-1",
+    });
+
+    expect(result).toEqual({
+      actionItemId: "action-winner",
+      approvalTaskId: "task-winner",
+      created: false,
+    });
+    // The duplicate we created is withdrawn, not silently kept or deleted.
+    expect(dbMock.actionItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "action-1" },
+        data: expect.objectContaining({ status: "WITHDRAWN" }),
+      }),
+    );
+    expect(dbMock.approvalTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "task-1" },
+        data: expect.objectContaining({ status: "WITHDRAWN" }),
+      }),
+    );
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: "DIAGNOSTIC_FIRST_LOOP_DUPLICATE_WITHDRAWN" }),
+    );
   });
 
   it("refuses sessions that have not passed the first-loop gate", async () => {
