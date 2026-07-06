@@ -350,6 +350,11 @@ export function deriveKnowledgeUsableLevel(
 
 export type ActiveReferenceContext = {
   ownerApproval: boolean;
+  // Owner decision 2026-07-07 (requirements §20 Q2): L5 active reference
+  // requires DUAL owner approval — two distinct owner identities (e.g. the
+  // customer owner and the delivery owner). Fewer than two distinct refs
+  // blocks, regardless of the ownerApproval flag.
+  ownerApprovalRefs: readonly string[];
   policyGatePassed: boolean;
   receiptGatePassed: boolean;
   rollbackPathDefined: boolean;
@@ -397,6 +402,12 @@ export function isKnowledgeActiveReferenceAllowed(
   }
   if (!context.ownerApproval) {
     blockedBy.push("owner_approval_missing");
+  }
+  const distinctOwnerApprovers = new Set(
+    context.ownerApprovalRefs.map((ref) => ref.trim()).filter((ref) => ref !== ""),
+  );
+  if (distinctOwnerApprovers.size < 2) {
+    blockedBy.push("dual_owner_approval_missing");
   }
   if (!context.policyGatePassed) {
     blockedBy.push("policy_gate_failed");
