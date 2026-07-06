@@ -283,6 +283,13 @@ export function CaptureSessionPanel({
           title,
           objectType,
           objectId,
+          consent: consentConfirmed
+            ? {
+                confirmed: true,
+                counterpartyNotified: true,
+                noticeTextVersion: "capture-consent-notice/v1",
+              }
+            : undefined,
         }),
       });
       const payload = await response.json();
