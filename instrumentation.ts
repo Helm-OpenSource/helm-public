@@ -31,6 +31,15 @@ export async function register() {
 
   startEngineeringDeliveryReviewCron();
 
+  // Advice-only follow-through sweep for the light task chain (ActionItem /
+  // Commitment). Opt-in via LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED; internal
+  // notifications and audit only, no external send.
+  const { startLightChainFollowThroughCron } = await import(
+    "@/lib/task-follow-through/light-chain-follow-through-cron"
+  );
+
+  startLightChainFollowThroughCron();
+
   // T019.code P0 #2b — wire DB-derived spend provider so the LLM
   // spend-tracker can use max(in-memory, DB) on multi-instance
   // deployments. The provider is cached with 60s TTL inside spend-tracker;
