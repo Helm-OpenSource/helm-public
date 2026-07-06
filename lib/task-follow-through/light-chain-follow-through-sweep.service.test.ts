@@ -31,7 +31,10 @@ vi.mock("@/lib/audit", () => ({
   writeAuditLog: auditMock.writeAuditLog,
 }));
 
-import { runLightChainFollowThroughSweepForWorkspace } from "@/lib/task-follow-through/light-chain-follow-through-sweep.service";
+import {
+  LIGHT_CHAIN_SWEEP_MAX_ITEMS,
+  runLightChainFollowThroughSweepForWorkspace,
+} from "@/lib/task-follow-through/light-chain-follow-through-sweep.service";
 
 const NOW = new Date("2026-07-06T09:00:00Z");
 
@@ -42,7 +45,6 @@ function daysAgo(days: number): Date {
 describe("light chain follow-through sweep", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    dbMock.notification.findFirst.mockResolvedValue(null);
     dbMock.notification.create.mockResolvedValue({ id: "n-1" });
   });
 
@@ -81,8 +83,12 @@ describe("light chain follow-through sweep", () => {
           title: expect.stringContaining("需管理关注"),
           userId: "user-1",
           url: "/approvals?followThrough=action-item:a-1",
+          dedupeKey: "follow-through:action_item:a-1:2026-07-06",
         }),
       }),
+    );
+    expect(dbMock.actionItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: LIGHT_CHAIN_SWEEP_MAX_ITEMS }),
     );
     expect(auditMock.writeAuditLog).toHaveBeenCalledTimes(1);
     expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
@@ -99,7 +105,7 @@ describe("light chain follow-through sweep", () => {
     expect(dbMock.commitment.update).not.toHaveBeenCalled();
   });
 
-  it("deduplicates reminders already sent within the window", async () => {
+  it("deduplicates atomically via the unique dedupe key (P2002)", async () => {
     dbMock.actionItem.findMany.mockResolvedValue([
       {
         id: "a-1",
@@ -111,7 +117,7 @@ describe("light chain follow-through sweep", () => {
       },
     ]);
     dbMock.commitment.findMany.mockResolvedValue([]);
-    dbMock.notification.findFirst.mockResolvedValue({ id: "existing" });
+    dbMock.notification.create.mockRejectedValue({ code: "P2002" });
 
     const result = await runLightChainFollowThroughSweepForWorkspace({
       workspaceId: "workspace-1",
@@ -120,7 +126,25 @@ describe("light chain follow-through sweep", () => {
 
     expect(result.notificationsCreated).toBe(0);
     expect(result.notificationsDeduplicated).toBe(1);
-    expect(dbMock.notification.create).not.toHaveBeenCalled();
+  });
+
+  it("propagates non-unique-constraint notification failures", async () => {
+    dbMock.actionItem.findMany.mockResolvedValue([
+      {
+        id: "a-1",
+        title: "跟进门店培训",
+        status: ActionStatus.PENDING_APPROVAL,
+        dueDate: daysAgo(2),
+        updatedAt: daysAgo(2),
+        ownerId: null,
+      },
+    ]);
+    dbMock.commitment.findMany.mockResolvedValue([]);
+    dbMock.notification.create.mockRejectedValue(new Error("db down"));
+
+    await expect(
+      runLightChainFollowThroughSweepForWorkspace({ workspaceId: "workspace-1", now: NOW }),
+    ).rejects.toThrow("db down");
   });
 
   it("writes no audit entry when there is nothing to follow through", async () => {

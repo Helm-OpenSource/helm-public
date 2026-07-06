@@ -3700,10 +3700,16 @@ model Notification {
   title       String
   body        String
   url         String?
+  // Stable idempotency key for system-generated reminders (nullable so
+  // existing human/product notifications are unaffected). Unique per
+  // workspace: concurrent sweeps cannot double-notify the same subject.
+  dedupeKey   String?
   readAt      DateTime?
   createdAt   DateTime         @default(now())
   workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, dedupeKey])
 }
 
 model EventLog {
