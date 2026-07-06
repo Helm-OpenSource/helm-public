@@ -122,6 +122,7 @@ import {
   executeApprovedTaskAction,
   enableAutoExecutionForTaskTypeAction,
   rejectTaskAction,
+  verifyExecutedTaskReceiptAction,
 } from "@/features/approvals/actions";
 import { getApprovalDraftEditCopy } from "@/features/approvals/approval-draft-display";
 import { buildApprovalFirstLoopDisplayModel } from "@/features/approvals/approval-first-loop-display";
@@ -3411,7 +3412,24 @@ export function ApprovalsClient({
                         {english ? "Mark blocked" : "标记阻断"}
                       </Button>
                     </>
-                  ) : selectedActionExecuted || selectedActionBlocked ? null : (
+                  ) : selectedActionExecuted || selectedActionBlocked ? (
+                    <Button
+                      disabled={pending}
+                      variant="secondary"
+                      onClick={() =>
+                        runAction(
+                          () => verifyExecutedTaskReceiptAction(selected.id),
+                          english
+                            ? "Receipt verified by a second reviewer"
+                            : "回执已由他人验收确认",
+                        )
+                      }
+                    >
+                      {english
+                        ? "Verify receipt (another reviewer)"
+                        : "验收回执（需他人确认）"}
+                    </Button>
+                  ) : (
                     <>
                       <Button
                         disabled={pending}

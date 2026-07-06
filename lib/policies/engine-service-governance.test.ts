@@ -316,7 +316,7 @@ describe("policy engine service governance", () => {
 
     await expect(
       executeActionItem("action-1", { actorName: "Reviewer", actorType: ActorType.USER, actorUserId: "user-1" }),
-    ).rejects.toThrow(/approved state/i);
+    ).rejects.toThrow(/关闭状态/);
     expect(dbMock.actionItem.update).not.toHaveBeenCalled();
   });
 

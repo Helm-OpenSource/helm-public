@@ -773,6 +773,27 @@ enum RejectionReasonCode {
   OTHER
 }
 
+// v1.1 receipt discipline: the structured outcome of a closed work item.
+enum ExecutionReceiptOutcome {
+  SUCCESS
+  PARTIAL_SUCCESS
+  FAILURE
+  NOT_EXECUTED
+  REJECTED
+}
+
+enum ExecutionReceiptSubjectType {
+  ACTION_ITEM
+  HUMAN_ACTION_EXECUTION
+}
+
+// A receipt starts SELF_REPORTED; it becomes VERIFIED only when someone other
+// than the executor confirms it — the receipt-level separation-of-duties gate.
+enum ExecutionReceiptVerificationState {
+  SELF_REPORTED
+  VERIFIED
+}
+
 enum ActorType {
   USER
   SYSTEM
@@ -1312,6 +1333,7 @@ model Workspace {
   meetingNotes                         MeetingNote[]
   actionItems                          ActionItem[]
   approvalTasks                        ApprovalTask[]
+  executionReceipts                        ExecutionReceipt[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -3325,6 +3347,7 @@ model ActionItem {
   createdBy            User?               @relation("ActionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   recommendationLog    RecommendationLog?  @relation(fields: [recommendationLogId], references: [id], onDelete: SetNull)
   approvalTask         ApprovalTask?
+  executionReceipt     ExecutionReceipt?
 }
 
 model ApprovalTask {
@@ -3350,6 +3373,41 @@ model ApprovalTask {
   actionItem      ActionItem     @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
   approver        User?          @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
   reviewedBy      User?          @relation("ApprovalReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+}
+
+// Structured execution receipt for the light task chain (AgentOS v1.1 receipt
+// discipline). One canonical receipt per subject. Free text is supplementary;
+// the structured fields are the data the learning loop is allowed to read.
+// The helm-v2 official-write chain keeps its own richer proof/ack objects;
+// projecting those into this table is deliberately next-layer work.
+model ExecutionReceipt {
+  id                  String                            @id @default(cuid())
+  workspaceId         String
+  subjectType         ExecutionReceiptSubjectType
+  subjectId           String
+  actionItemId        String?  @unique
+  outcome             ExecutionReceiptOutcome
+  actionTaken         String
+  evidenceRefs        String?
+  rejectionReasonCode RejectionReasonCode?
+  nextStep            String?
+  note                String?
+  // Identity snapshots kept as plain columns (no FK) so attribution survives
+  // user deletion; the receipt chain is audit-grade data.
+  executedByUserId    String?
+  executedByActorType ActorType?
+  verifiedByUserId    String?
+  verificationState   ExecutionReceiptVerificationState @default(SELF_REPORTED)
+  qualityScore        Int                               @default(0)
+  qualityFlags        String?
+  createdAt           DateTime                          @default(now())
+  updatedAt           DateTime                          @updatedAt
+  workspace           Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actionItem          ActionItem?                       @relation(fields: [actionItemId], references: [id], onDelete: SetNull)
+
+  @@unique([subjectType, subjectId])
+  @@index([workspaceId, outcome])
+  @@index([workspaceId, verificationState])
 }
 
 model AuditLog {
