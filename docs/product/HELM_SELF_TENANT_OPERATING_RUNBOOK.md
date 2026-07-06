@@ -62,7 +62,39 @@ public_safety: Public-safe runbook skeleton. Real internal operating data, real 
 停止录入即回滚开始；`/settings` 自助导出后删除内部工作区即完成回滚。
 回滚责任人：founder。无代码或 schema 回滚。
 
-### 5. 本文档不证明
+### 5. 催办扫描与回执影子指标（自身租户先行）
+
+owner 决策（2026-07-06）：轻量任务链催办扫描在**自身租户部署先开启**，
+POC / 演示环境保持关闭；回执覆盖率作为**工程影子指标**观测，
+**不进入已冻结的 POC 验收口径**（是否修订进正式判据待 POC 中期复盘）。
+
+启用方式：在部署环境设置 `LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED=true`。
+注意这是**部署级**开关（会扫描该数据库内所有有未结任务的工作区），
+不是按工作区粒度；边界保持 advice-only——只产内部提醒与审计，
+不外发、不改任务状态。
+
+回执影子指标（对 `ExecutionReceipt` 直接统计，无需额外开发）：
+
+```sql
+-- 回执结构质量概览（按工作区）
+SELECT COUNT(*)                                                        AS receipts,
+       SUM(CASE WHEN evidenceRefs IS NOT NULL THEN 1 ELSE 0 END)       AS with_evidence,
+       SUM(CASE WHEN verificationState = 'VERIFIED' THEN 1 ELSE 0 END) AS verified,
+       ROUND(AVG(qualityScore), 1)                                     AS avg_quality
+FROM ExecutionReceipt
+WHERE workspaceId = @workspace_id;
+
+-- 覆盖率分母：已关闭的治理动作数
+SELECT COUNT(*) AS closed_actions
+FROM ActionItem
+WHERE workspaceId = @workspace_id
+  AND status IN ('EXECUTED', 'BLOCKED');
+```
+
+观测口径参考（非承诺）：结构化回执覆盖率、evidenceRefs 非空率、
+他人验收（VERIFIED）率、平均质量分。
+
+### 6. 本文档不证明
 
 - 不是客户部署指南、商业发布批准或生产运维手册。
 - 不是 dogfood 探测器（TPQR 族）的启用说明——那条线仍在
@@ -88,3 +120,4 @@ guide, not detector enablement, and not a commercial release approval.
 | 日期 | 变化 |
 |---|---|
 | 2026-07-05 | 初版：工作区隔离、四类事件录入路径、90 秒演示剧本骨架、回滚。 |
+| 2026-07-06 | 新增 §5：催办扫描自身租户先行启用方式与回执影子指标（不进冻结验收口径）。 |
