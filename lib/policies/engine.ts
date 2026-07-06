@@ -33,7 +33,10 @@ import {
 import { db } from "@/lib/db";
 import { resolvePolicyDecision } from "@/lib/policies";
 import { getRejectionReasonLabel } from "@/lib/policies/rejection-reason";
-import { recordExecutionReceipt } from "@/lib/receipts/execution-receipt.service";
+import {
+  auditExecutionReceiptRecorded,
+  recordExecutionReceipt,
+} from "@/lib/receipts/execution-receipt.service";
 import { submitRecommendationFeedback } from "@/lib/recommendations/recommendation-feedback.service";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 
@@ -98,6 +101,39 @@ export class HighRiskApprovalIdentityError extends Error {
         : "高风险动作的最终批准必须由真实登录用户身份发起，不能由系统或 AI 身份代批。",
     );
     this.name = "HighRiskApprovalIdentityError";
+  }
+}
+
+// Closed-state guard errors for the execution surface: readable governance
+// results, not crashes.
+export class ActionNoLongerExecutableError extends Error {
+  constructor(english: boolean) {
+    super(
+      english
+        ? "Cannot execute this action: it is already closed (blocked, rejected, withdrawn, or manual) or was just closed by another reviewer."
+        : "无法执行该动作：它已处于关闭状态（阻断 / 拒绝 / 撤回 / 人工），或刚被其他复核人关闭。",
+    );
+    this.name = "ActionNoLongerExecutableError";
+  }
+}
+
+export class ActionNoLongerBlockableError extends Error {
+  constructor(english: boolean) {
+    super(
+      english
+        ? "Cannot block this action: it has already been executed or closed."
+        : "无法标记阻断：该动作已执行或已关闭。",
+    );
+    this.name = "ActionNoLongerBlockableError";
+  }
+}
+
+// Internal sentinel: a conditional terminal-state claim inside a closure
+// transaction lost the race. Never surfaces to callers.
+class ClosureClaimLostError extends Error {
+  constructor() {
+    super("closure claim lost");
+    this.name = "ClosureClaimLostError";
   }
 }
 
@@ -345,6 +381,18 @@ export async function executeActionItem(
     return action;
   }
 
+  // Closed-state guard: BLOCKED / REJECTED / WITHDRAWN / MANUAL are terminal
+  // for execution. Without this, a stale page or a concurrent request could
+  // flip a blocked action back to executed and overwrite its receipt.
+  if (
+    action.status === ActionStatus.BLOCKED ||
+    action.status === ActionStatus.REJECTED ||
+    action.status === ActionStatus.WITHDRAWN ||
+    action.status === ActionStatus.MANUAL
+  ) {
+    throw new ActionNoLongerExecutableError(actor.english ?? false);
+  }
+
   // Boundary guard: when an action required approval it carries an approval
   // task, and execution is only permitted once that task is approved (its
   // terminal "EXECUTED" = approved state). A task that is still PENDING (not
@@ -501,28 +549,96 @@ export async function executeActionItem(
     }
   }
 
-  await db.actionItem.update({
-    where: { id: action.id },
-    data: {
-      status: ActionStatus.EXECUTED,
-      executionStatus: "executed",
-      draftContent,
-      executedAt: now,
-      statusReason: actor.decisionReason ?? (action.approvalTask ? "已批准执行" : "按策略自动执行"),
-    },
-  });
+  // Atomic closure (receipt-chain v1.1 is fail-closed): the transition to
+  // EXECUTED is a conditional write over the open statuses, and the canonical
+  // receipt commits in the same transaction — a closed task without a receipt
+  // must be impossible, and a concurrently closed task cannot be re-closed.
+  let executionReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
+  try {
+    executionReceipt = await db.$transaction(async (tx) => {
+      const claimed = await tx.actionItem.updateMany({
+        where: {
+          id: action.id,
+          status: {
+            in: [ActionStatus.SUGGESTED, ActionStatus.PENDING_APPROVAL, ActionStatus.APPROVED],
+          },
+        },
+        data: {
+          status: ActionStatus.EXECUTED,
+          executionStatus: "executed",
+          draftContent,
+          executedAt: now,
+          statusReason: actor.decisionReason ?? (action.approvalTask ? "已批准执行" : "按策略自动执行"),
+        },
+      });
+      if (claimed.count === 0) {
+        throw new ClosureClaimLostError();
+      }
 
-  if (action.approvalTask && !approvalAlreadyReviewed) {
-    await db.approvalTask.update({
-      where: { id: action.approvalTask.id },
-      data: {
-        status: ApprovalStatus.EXECUTED,
-        reviewedAt: now,
-        reviewedById: actor.actorUserId ?? undefined,
-        editableContent: draftContent,
-        decisionReason: actor.decisionReason ?? "已批准执行",
-      },
+      if (action.approvalTask && !approvalAlreadyReviewed) {
+        await tx.approvalTask.update({
+          where: { id: action.approvalTask.id },
+          data: {
+            status: ApprovalStatus.EXECUTED,
+            reviewedAt: now,
+            reviewedById: actor.actorUserId ?? undefined,
+            editableContent: draftContent,
+            decisionReason: actor.decisionReason ?? "已批准执行",
+          },
+        });
+      }
+
+      // v1.1 receipt discipline: every executed action closes with a canonical
+      // structured receipt. It starts SELF_REPORTED; a different reviewer can
+      // upgrade it to VERIFIED via the receipt verification action.
+      return await recordExecutionReceipt(
+        {
+          workspaceId: action.workspaceId,
+          subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+          subjectId: action.id,
+          actionItemId: action.id,
+          outcome: ExecutionReceiptOutcome.SUCCESS,
+          actionTaken: action.actionType,
+          evidenceRefs: [
+            action.approvalTask ? `approval-task:${action.approvalTask.id}` : null,
+            action.meetingId ? `meeting:${action.meetingId}` : null,
+            action.opportunityId ? `opportunity:${action.opportunityId}` : null,
+            action.contactId ? `contact:${action.contactId}` : null,
+          ].filter((ref): ref is string => Boolean(ref)),
+          note: actor.decisionReason ?? null,
+          executedByUserId: actor.actorUserId ?? null,
+          executedByActorType: actor.actorType,
+          actorName: actor.actorName,
+        },
+        { client: tx },
+      );
     });
+  } catch (error) {
+    if (error instanceof ClosureClaimLostError) {
+      const current = await db.actionItem.findUnique({
+        where: { id: action.id },
+        select: { status: true },
+      });
+      if (current?.status === ActionStatus.EXECUTED) {
+        // A concurrent executor won the claim; same idempotent result as the
+        // early-return double-execute path.
+        return action;
+      }
+      throw new ActionNoLongerExecutableError(actor.english ?? false);
+    }
+    throw error;
+  }
+
+  if (executionReceipt) {
+    await auditExecutionReceiptRecorded(
+      {
+        workspaceId: action.workspaceId,
+        executedByUserId: actor.actorUserId ?? null,
+        executedByActorType: actor.actorType,
+        actorName: actor.actorName,
+      },
+      executionReceipt,
+    );
   }
 
   await writeAuditLog({
@@ -609,28 +725,6 @@ export async function executeActionItem(
       editedContent: actor.editedContent ?? null,
     });
   }
-
-  // v1.1 receipt discipline: every executed action closes with a canonical
-  // structured receipt. It starts SELF_REPORTED; a different reviewer can
-  // upgrade it to VERIFIED via the receipt verification action.
-  await recordExecutionReceipt({
-    workspaceId: action.workspaceId,
-    subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
-    subjectId: action.id,
-    actionItemId: action.id,
-    outcome: ExecutionReceiptOutcome.SUCCESS,
-    actionTaken: action.actionType,
-    evidenceRefs: [
-      action.approvalTask ? `approval-task:${action.approvalTask.id}` : null,
-      action.meetingId ? `meeting:${action.meetingId}` : null,
-      action.opportunityId ? `opportunity:${action.opportunityId}` : null,
-      action.contactId ? `contact:${action.contactId}` : null,
-    ].filter((ref): ref is string => Boolean(ref)),
-    note: actor.decisionReason ?? null,
-    executedByUserId: actor.actorUserId ?? null,
-    executedByActorType: actor.actorType,
-    actorName: actor.actorName,
-  });
 
   revalidateCorePaths({
     contactId: action.contactId,
@@ -843,14 +937,70 @@ export async function blockApprovedAction(
 
   const decisionReason = reason ?? (options?.english ? "Execution blocked" : "执行已阻断");
 
-  await db.actionItem.update({
-    where: { id: action.id },
-    data: {
-      status: ActionStatus.BLOCKED,
-      executionStatus: "blocked",
-      statusReason: decisionReason,
-    },
-  });
+  // Atomic closure: only an open action can be blocked; the NOT_EXECUTED
+  // receipt commits with the state change (fail-closed, same as execution).
+  let blockReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
+  try {
+    blockReceipt = await db.$transaction(async (tx) => {
+      const claimed = await tx.actionItem.updateMany({
+        where: {
+          id: action.id,
+          status: {
+            in: [ActionStatus.SUGGESTED, ActionStatus.PENDING_APPROVAL, ActionStatus.APPROVED],
+          },
+        },
+        data: {
+          status: ActionStatus.BLOCKED,
+          executionStatus: "blocked",
+          statusReason: decisionReason,
+        },
+      });
+      if (claimed.count === 0) {
+        throw new ClosureClaimLostError();
+      }
+
+      // v1.1 receipt discipline: a blocked action closes as NOT_EXECUTED so
+      // the receipt chain records that nothing happened, and why.
+      return await recordExecutionReceipt(
+        {
+          workspaceId: action.workspaceId,
+          subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+          subjectId: action.id,
+          actionItemId: action.id,
+          outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+          actionTaken: action.actionType,
+          evidenceRefs: [
+            action.approvalTask ? `approval-task:${action.approvalTask.id}` : null,
+            action.meetingId ? `meeting:${action.meetingId}` : null,
+            action.opportunityId ? `opportunity:${action.opportunityId}` : null,
+            action.contactId ? `contact:${action.contactId}` : null,
+          ].filter((ref): ref is string => Boolean(ref)),
+          note: decisionReason,
+          executedByUserId: actorUserId ?? null,
+          executedByActorType: options?.actorType ?? ActorType.USER,
+          actorName,
+        },
+        { client: tx },
+      );
+    });
+  } catch (error) {
+    if (error instanceof ClosureClaimLostError) {
+      throw new ActionNoLongerBlockableError(options?.english ?? false);
+    }
+    throw error;
+  }
+
+  if (blockReceipt) {
+    await auditExecutionReceiptRecorded(
+      {
+        workspaceId: action.workspaceId,
+        executedByUserId: actorUserId ?? null,
+        executedByActorType: options?.actorType ?? ActorType.USER,
+        actorName,
+      },
+      blockReceipt,
+    );
+  }
 
   await writeActionMemory(action.workspaceId, {
     companyId: action.meeting?.companyId ?? action.opportunity?.companyId ?? action.contact?.companyId ?? null,
@@ -876,27 +1026,6 @@ export async function blockApprovedAction(
     targetId: action.id,
     summary: `${action.title} 已阻断`,
     payload: { reason: decisionReason },
-  });
-
-  // v1.1 receipt discipline: a blocked action closes as NOT_EXECUTED so the
-  // receipt chain records that nothing happened, and why.
-  await recordExecutionReceipt({
-    workspaceId: action.workspaceId,
-    subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
-    subjectId: action.id,
-    actionItemId: action.id,
-    outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
-    actionTaken: action.actionType,
-    evidenceRefs: [
-      action.approvalTask ? `approval-task:${action.approvalTask.id}` : null,
-      action.meetingId ? `meeting:${action.meetingId}` : null,
-      action.opportunityId ? `opportunity:${action.opportunityId}` : null,
-      action.contactId ? `contact:${action.contactId}` : null,
-    ].filter((ref): ref is string => Boolean(ref)),
-    note: decisionReason,
-    executedByUserId: actorUserId ?? null,
-    executedByActorType: options?.actorType ?? ActorType.USER,
-    actorName,
   });
 
   revalidateCorePaths({
@@ -946,30 +1075,77 @@ export async function rejectApprovalTask(
         ? "Rejected for execution"
         : "已拒绝执行");
 
-  // Atomic PENDING -> rejected claim: only a still-pending task may be rejected,
-  // and a concurrent approve/reject race resolves to a single winner.
-  const claimed = await db.approvalTask.updateMany({
-    where: { id: task.id, status: ApprovalStatus.PENDING },
-    data: {
-      status: ApprovalStatus.REJECTED,
-      reviewedAt: new Date(),
-      reviewedById: actorUserId ?? undefined,
-      decisionReason: effectiveReason,
-      rejectionReasonCode: rejectionReasonCode ?? undefined,
-    },
-  });
-  if (claimed.count === 0) {
-    throw new Error("Approval task is no longer pending and cannot be rejected");
+  // Atomic PENDING -> rejected claim: only a still-pending task may be
+  // rejected, a concurrent approve/reject race resolves to a single winner,
+  // and the REJECTED receipt commits with the state change (fail-closed) —
+  // rejected is a learning signal, not a silent terminal state.
+  let rejectionReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
+  try {
+    rejectionReceipt = await db.$transaction(async (tx) => {
+      const claimed = await tx.approvalTask.updateMany({
+        where: { id: task.id, status: ApprovalStatus.PENDING },
+        data: {
+          status: ApprovalStatus.REJECTED,
+          reviewedAt: new Date(),
+          reviewedById: actorUserId ?? undefined,
+          decisionReason: effectiveReason,
+          rejectionReasonCode: rejectionReasonCode ?? undefined,
+        },
+      });
+      if (claimed.count === 0) {
+        throw new ClosureClaimLostError();
+      }
+
+      await tx.actionItem.update({
+        where: { id: task.actionItemId },
+        data: {
+          status: ActionStatus.BLOCKED,
+          executionStatus: "blocked",
+          statusReason: effectiveReason,
+        },
+      });
+
+      return await recordExecutionReceipt(
+        {
+          workspaceId: task.workspaceId,
+          subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+          subjectId: task.actionItemId,
+          actionItemId: task.actionItemId,
+          outcome: ExecutionReceiptOutcome.REJECTED,
+          actionTaken: task.actionItem.actionType,
+          evidenceRefs: [
+            `approval-task:${task.id}`,
+            task.actionItem.meetingId ? `meeting:${task.actionItem.meetingId}` : null,
+            task.actionItem.opportunityId ? `opportunity:${task.actionItem.opportunityId}` : null,
+            task.actionItem.contactId ? `contact:${task.actionItem.contactId}` : null,
+          ].filter((ref): ref is string => Boolean(ref)),
+          rejectionReasonCode: rejectionReasonCode ?? undefined,
+          note: effectiveReason,
+          executedByUserId: actorUserId ?? null,
+          executedByActorType: options?.actorType ?? ActorType.USER,
+          actorName,
+        },
+        { client: tx },
+      );
+    });
+  } catch (error) {
+    if (error instanceof ClosureClaimLostError) {
+      throw new Error("Approval task is no longer pending and cannot be rejected");
+    }
+    throw error;
   }
 
-  await db.actionItem.update({
-    where: { id: task.actionItemId },
-    data: {
-      status: ActionStatus.BLOCKED,
-      executionStatus: "blocked",
-      statusReason: effectiveReason,
-    },
-  });
+  if (rejectionReceipt) {
+    await auditExecutionReceiptRecorded(
+      {
+        workspaceId: task.workspaceId,
+        executedByUserId: actorUserId ?? null,
+        executedByActorType: options?.actorType ?? ActorType.USER,
+        actorName,
+      },
+      rejectionReceipt,
+    );
+  }
 
   await writeActionMemory(task.workspaceId, {
     companyId: null,
@@ -1038,29 +1214,6 @@ export async function rejectApprovalTask(
     actionSourceId: task.actionItem.sourceId,
     authorUserId: actorUserId ?? null,
     decisionReason: effectiveReason,
-  });
-
-  // v1.1 receipt discipline: a rejection also closes with a canonical receipt
-  // carrying the classified reason — rejected is a learning signal, not a
-  // silent terminal state.
-  await recordExecutionReceipt({
-    workspaceId: task.workspaceId,
-    subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
-    subjectId: task.actionItemId,
-    actionItemId: task.actionItemId,
-    outcome: ExecutionReceiptOutcome.REJECTED,
-    actionTaken: task.actionItem.actionType,
-    evidenceRefs: [
-      `approval-task:${task.id}`,
-      task.actionItem.meetingId ? `meeting:${task.actionItem.meetingId}` : null,
-      task.actionItem.opportunityId ? `opportunity:${task.actionItem.opportunityId}` : null,
-      task.actionItem.contactId ? `contact:${task.actionItem.contactId}` : null,
-    ].filter((ref): ref is string => Boolean(ref)),
-    rejectionReasonCode: rejectionReasonCode ?? undefined,
-    note: effectiveReason,
-    executedByUserId: actorUserId ?? null,
-    executedByActorType: options?.actorType ?? ActorType.USER,
-    actorName,
   });
 
   revalidateCorePaths({
