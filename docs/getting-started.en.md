@@ -287,7 +287,7 @@ Run `npx playwright install chromium` locally too, to ensure browsers are instal
 Expected — the seed data requires a sign-in. If even `/login` won't submit, double-check that `CONNECTOR_TOKEN_SECRET` is set.
 
 ### Don't want MySQL — can I use SQLite?
-**No.** SQLite has been retired from the mainline; the SQLite schema is kept as a read-only archive only. Use MySQL 8.4.
+**No.** SQLite has been fully retired; the SQLite schema and migration archive have been removed from the repository (history remains in git). Use MySQL 8.4.
 
 ---
 
@@ -304,6 +304,8 @@ Expected — the seed data requires a sign-in. If even `/login` won't submit, do
 | `scripts/` | Verification, self-check, maintenance |
 | `tests/e2e/` | Playwright E2E |
 | `docs/` | Product / architecture / implementation docs (mostly Chinese) |
+| `report-skills/` | BI-report proactive-push skill package spec (assets live per extension) |
+| `external-resource-kit/` | External resource intake kit (standalone from product runtime; entry `kit:dry-run`) |
 
 ---
 
