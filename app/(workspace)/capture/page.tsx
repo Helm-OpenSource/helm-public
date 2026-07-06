@@ -30,6 +30,8 @@ import {
 import { formatDateLabel, trimText } from "@/lib/utils";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 import { CaptureResultPanel } from "@/features/conversation-capture/capture-result-panel";
+import { SalesDailyJudgementCardView } from "@/features/conversation-capture/sales-daily-judgement-card";
+import { getSalesDailyJudgementCardForUser } from "@/lib/sales-process-signal/daily-judgement-loader";
 import { formatCapturePageDateLabel } from "@/features/conversation-capture/capture-page-date-labels";
 import { formatCaptureDisplayText } from "@/features/conversation-capture/display-copy";
 import { StartRecordingButton } from "@/features/conversation-capture/start-recording-button";
@@ -40,7 +42,7 @@ export default async function CapturePage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const workspace = await getCurrentWorkspace();
-  await requireCurrentUser();
+  const currentUser = await requireCurrentUser();
   const requestLocale = await getRequestUiLocaleCandidate();
   const uiConfig = normalizeWorkspaceUiConfig({
     ...workspace,
@@ -59,6 +61,12 @@ export default async function CapturePage({
 
   const sessions: Awaited<ReturnType<typeof getRecentCaptureSessions>> =
     await getRecentCaptureSessions(workspace.id, 12);
+  const salesDailyCard = await getSalesDailyJudgementCardForUser({
+    workspaceId: workspace.id,
+    userId: currentUser.id,
+    english,
+    now: new Date(),
+  });
   const selectedSessionId = requestedSessionId ?? sessions[0]?.id ?? null;
   const selectedSession = selectedSessionId
     ? await getCaptureSessionDetails(workspace.id, selectedSessionId)
@@ -179,6 +187,8 @@ export default async function CapturePage({
           />
         </CardContent>
       </Card>
+
+      <SalesDailyJudgementCardView card={salesDailyCard} english={english} />
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Card>

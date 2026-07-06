@@ -1491,6 +1491,7 @@ model Membership {
   role                   WorkspaceRole
   status                 MembershipStatus @default(ACTIVE)
   title                  String?
+  groupTag               String?
   goalTitle              String?
   goalDescription        String?          @db.LongText
   goalItemsJson          String?          @db.LongText
