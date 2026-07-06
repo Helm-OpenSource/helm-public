@@ -121,6 +121,7 @@ import {
   switchOrganizationAction,
   updateOrganizationMembershipLifecycleAction,
   updateOrganizationMemberGoalProfileAction,
+  updateMemberGroupTagAction,
   updateOrganizationMembershipRoleAction,
   updateBeneficiaryPayoutProfileStatusAction,
   updateCustomEngagementStatusAction,
@@ -1873,6 +1874,24 @@ export function SettingsClient({
           ? "Member goal profile updated"
           : "成员目标与职责已更新",
       );
+      router.refresh();
+    });
+  };
+
+  const updateMemberGroupTag = (input: {
+    membershipId: string;
+    groupTag: string;
+  }) => {
+    startTransition(async () => {
+      const result = await updateMemberGroupTagAction(input);
+      if (!result.ok) {
+        toast.error(
+          result.error ??
+            (english ? "Failed to update member group tag" : "更新成员分组标签失败"),
+        );
+        return;
+      }
+      toast.success(english ? "Member group tag updated" : "成员分组标签已更新");
       router.refresh();
     });
   };
@@ -7368,6 +7387,7 @@ export function SettingsClient({
               setMemberDraft={setMemberDraft}
               transferOwnership={transferOwnership}
               updateMemberGoalProfile={updateMemberGoalProfile}
+              updateMemberGroupTag={updateMemberGroupTag}
               updateMemberLifecycle={updateMemberLifecycle}
               updateMemberRole={updateMemberRole}
             />
