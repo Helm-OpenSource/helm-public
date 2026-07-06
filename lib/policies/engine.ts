@@ -11,6 +11,7 @@ import {
   RecommendationFeedbackType,
   SourceType,
   type ApprovalTask,
+  type RejectionReasonCode,
   type RiskLevel,
 } from "@prisma/client";
 import { addDays, addHours } from "date-fns";
@@ -29,6 +30,7 @@ import {
 } from "@/lib/bi-report-skill/handoff-receipt";
 import { db } from "@/lib/db";
 import { resolvePolicyDecision } from "@/lib/policies";
+import { getRejectionReasonLabel } from "@/lib/policies/rejection-reason";
 import { submitRecommendationFeedback } from "@/lib/recommendations/recommendation-feedback.service";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 
@@ -867,6 +869,9 @@ export async function rejectApprovalTask(
   options?: {
     actorType?: ActorType;
     english?: boolean;
+    // Structured rejection taxonomy (v1.1 receipt chain): a rejection without
+    // a classified reason cannot feed learning. Free text stays supplementary.
+    rejectionReasonCode?: RejectionReasonCode;
   },
 ) {
   const task = await db.approvalTask.findUnique({
@@ -885,6 +890,16 @@ export async function rejectApprovalTask(
     english: options?.english ?? false,
   });
 
+  const english = options?.english ?? false;
+  const rejectionReasonCode = options?.rejectionReasonCode ?? null;
+  const effectiveReason =
+    reason ??
+    (rejectionReasonCode
+      ? getRejectionReasonLabel(rejectionReasonCode, english)
+      : english
+        ? "Rejected for execution"
+        : "已拒绝执行");
+
   // Atomic PENDING -> rejected claim: only a still-pending task may be rejected,
   // and a concurrent approve/reject race resolves to a single winner.
   const claimed = await db.approvalTask.updateMany({
@@ -893,7 +908,8 @@ export async function rejectApprovalTask(
       status: ApprovalStatus.REJECTED,
       reviewedAt: new Date(),
       reviewedById: actorUserId ?? undefined,
-      decisionReason: reason ?? "已拒绝执行",
+      decisionReason: effectiveReason,
+      rejectionReasonCode: rejectionReasonCode ?? undefined,
     },
   });
   if (claimed.count === 0) {
@@ -905,7 +921,7 @@ export async function rejectApprovalTask(
     data: {
       status: ActionStatus.BLOCKED,
       executionStatus: "blocked",
-      statusReason: reason ?? "审批已拒绝，动作未执行",
+      statusReason: effectiveReason,
     },
   });
 
@@ -920,7 +936,7 @@ export async function rejectApprovalTask(
         ? MemoryEntityType.CONTACT
         : MemoryEntityType.OPPORTUNITY,
     title: `${task.actionItem.title} 已被拒绝`,
-    content: reason ? `审批已拒绝，原因：${reason}` : "审批已拒绝，该动作未被执行。",
+    content: `审批已拒绝，原因：${effectiveReason}`,
   });
 
   await writeAuditLog({
@@ -932,7 +948,7 @@ export async function rejectApprovalTask(
     targetType: "ApprovalTask",
     targetId: task.id,
     summary: `已拒绝动作：${task.actionItem.title}`,
-    payload: { reason },
+    payload: { reason: effectiveReason, rejectionReasonCode },
   });
 
   await logEvent({
@@ -946,7 +962,8 @@ export async function rejectApprovalTask(
       actionItemId: task.actionItemId,
       actionType: task.actionItem.actionType,
       riskLevel: task.actionItem.riskLevel,
-      reason,
+      reason: effectiveReason,
+      rejectionReasonCode,
     },
     sourcePage: "/approvals",
   });
@@ -958,7 +975,8 @@ export async function rejectApprovalTask(
       userId: actorUserId,
       actorName,
       feedbackType: RecommendationFeedbackType.REJECTED,
-      resultNote: reason ?? "审批已拒绝",
+      resultNote: effectiveReason,
+      rejectionReasonCode: rejectionReasonCode ?? undefined,
       actionItemId: task.actionItemId,
       approvalTaskId: task.id,
       sourcePage: "/approvals",
@@ -973,7 +991,7 @@ export async function rejectApprovalTask(
     actionMetadata: task.actionItem.metadata,
     actionSourceId: task.actionItem.sourceId,
     authorUserId: actorUserId ?? null,
-    decisionReason: reason ?? "审批已拒绝",
+    decisionReason: effectiveReason,
   });
 
   revalidateCorePaths({

@@ -5,6 +5,7 @@ import {
   ObjectType,
   RecommendationFeedbackType,
   RecommendationStatus,
+  type RejectionReasonCode,
   RiskLevel,
 } from "@prisma/client";
 import type { MemoryRetrievalPackSurfaceTrace } from "@/lib/memory/retrieval-pack-adapter";
@@ -157,6 +158,9 @@ export type RecommendationFeedbackInput = {
   feedbackType: RecommendationFeedbackType;
   edited?: boolean;
   resultNote?: string | null;
+  // Structured rejection taxonomy: set when feedbackType is REJECTED so the
+  // learning loop can aggregate WHY suggestions get rejected, not just count.
+  rejectionReasonCode?: RejectionReasonCode | null;
   actionItemId?: string | null;
   approvalTaskId?: string | null;
   sourcePage?: string | null;
