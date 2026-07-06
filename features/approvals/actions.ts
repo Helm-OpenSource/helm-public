@@ -15,6 +15,8 @@ import {
 } from "@/lib/auth/settings-governance";
 import { db } from "@/lib/db";
 import {
+  ActionNoLongerBlockableError,
+  ActionNoLongerExecutableError,
   approveApprovalTask,
   blockApprovedAction,
   executeActionItem,
@@ -25,6 +27,7 @@ import {
   setActionTypeAutoPolicy,
 } from "@/lib/policies/engine";
 import {
+  ExecutionReceiptNotFoundError,
   ReceiptSelfVerificationError,
   verifyExecutionReceipt,
 } from "@/lib/receipts/execution-receipt.service";
@@ -92,20 +95,29 @@ export async function executeApprovedTaskAction(taskId: string, editedContent?: 
     return { ok: false, error: english ? "Approval task not found" : "审批任务不存在" };
   }
 
-  await executeActionItem(task.actionItemId, {
-    actorName: user.name,
-    actorType: ActorType.USER,
-    actorUserId: user.id,
-    english,
-    editedContent,
-    decisionReason: editedContent
-      ? english
-        ? "Executed after approval with edited content"
-        : "已批准后按编辑内容执行"
-      : english
-        ? "Executed after approval"
-        : "已批准后执行",
-  });
+  try {
+    await executeActionItem(task.actionItemId, {
+      actorName: user.name,
+      actorType: ActorType.USER,
+      actorUserId: user.id,
+      english,
+      editedContent,
+      decisionReason: editedContent
+        ? english
+          ? "Executed after approval with edited content"
+          : "已批准后按编辑内容执行"
+        : english
+          ? "Executed after approval"
+          : "已批准后执行",
+    });
+  } catch (error) {
+    // Closed-state denials (stale page / concurrent closure) are governance
+    // results, not crashes.
+    if (error instanceof ActionNoLongerExecutableError) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
 
   await writeAuditLog({
     workspaceId: workspace.id,
@@ -147,10 +159,17 @@ export async function blockApprovedTaskAction(input: z.infer<typeof blockSchema>
     return { ok: false, error: english ? "Approval task not found" : "审批任务不存在" };
   }
 
-  await blockApprovedAction(task.actionItemId, user.name, user.id, parsed.data.reason, {
-    actorType: ActorType.USER,
-    english,
-  });
+  try {
+    await blockApprovedAction(task.actionItemId, user.name, user.id, parsed.data.reason, {
+      actorType: ActorType.USER,
+      english,
+    });
+  } catch (error) {
+    if (error instanceof ActionNoLongerBlockableError) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
 
   return { ok: true };
 }
@@ -210,10 +229,10 @@ export async function verifyExecutedTaskReceiptAction(taskId: string) {
       english,
     });
   } catch (error) {
-    if (error instanceof ReceiptSelfVerificationError) {
-      return { ok: false, error: error.message };
-    }
-    if (error instanceof Error && error.message.includes(english ? "not found" : "不存在")) {
+    if (
+      error instanceof ReceiptSelfVerificationError ||
+      error instanceof ExecutionReceiptNotFoundError
+    ) {
       return { ok: false, error: error.message };
     }
     throw error;

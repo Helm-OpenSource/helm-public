@@ -1,5 +1,4 @@
 import { ActionStatus, ActorType, CommitmentStatus, NotificationType } from "@prisma/client";
-import { subDays } from "date-fns";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
 import {
@@ -9,11 +8,29 @@ import {
 } from "@/lib/task-follow-through/light-chain-follow-through";
 
 // Advice-only sweep over the light task chain. For each finding it creates an
-// INTERNAL reminder notification (deduplicated per subject per 24h) and one
-// audit entry per sweep. Boundaries: no external send, no task-state
-// mutation, no write to Commitment.overdueFlag (read-only invariant).
+// INTERNAL reminder notification (deduplicated per subject per day through a
+// unique dedupe key, so concurrent sweeps cannot double-notify) and one audit
+// entry per sweep. Boundaries: no external send, no task-state mutation, no
+// write to Commitment.overdueFlag (read-only invariant).
 
-const NOTIFICATION_DEDUPE_HOURS = 24;
+// Per-workspace query ceiling. A sweep is an advice surface, not an exhaustive
+// report: when a workspace exceeds this, the sweep processes the first page
+// and marks the audit entry as truncated instead of silently claiming
+// full coverage.
+export const LIGHT_CHAIN_SWEEP_MAX_ITEMS = 500;
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: string }).code === "P2002"
+  );
+}
+
+function buildFindingDedupeKey(finding: LightChainFollowThroughFinding, now: Date): string {
+  const dayStamp = now.toISOString().slice(0, 10);
+  return `follow-through:${finding.subjectType}:${finding.subjectId}:${dayStamp}`;
+}
 
 function findingUrl(finding: LightChainFollowThroughFinding): string {
   return finding.subjectType === "action_item"
@@ -40,6 +57,7 @@ export type LightChainFollowThroughSweepResult = {
   findings: LightChainFollowThroughFinding[];
   notificationsCreated: number;
   notificationsDeduplicated: number;
+  truncated: boolean;
 };
 
 export async function runLightChainFollowThroughSweepForWorkspace(input: {
@@ -65,6 +83,8 @@ export async function runLightChainFollowThroughSweepForWorkspace(input: {
         updatedAt: true,
         ownerId: true,
       },
+      orderBy: { updatedAt: "asc" },
+      take: LIGHT_CHAIN_SWEEP_MAX_ITEMS,
     }),
     db.commitment.findMany({
       where: {
@@ -79,8 +99,14 @@ export async function runLightChainFollowThroughSweepForWorkspace(input: {
         dueDate: true,
         ownerUserId: true,
       },
+      orderBy: { dueDate: "asc" },
+      take: LIGHT_CHAIN_SWEEP_MAX_ITEMS,
     }),
   ]);
+
+  const truncated =
+    actionItems.length >= LIGHT_CHAIN_SWEEP_MAX_ITEMS ||
+    commitments.length >= LIGHT_CHAIN_SWEEP_MAX_ITEMS;
 
   const findings = classifyLightChainFollowThrough({
     actionItems,
@@ -93,31 +119,29 @@ export async function runLightChainFollowThroughSweepForWorkspace(input: {
   let notificationsDeduplicated = 0;
 
   for (const finding of findings) {
-    const url = findingUrl(finding);
-    const existing = await db.notification.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        url,
-        createdAt: { gte: subDays(now, NOTIFICATION_DEDUPE_HOURS / 24) },
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      notificationsDeduplicated += 1;
-      continue;
+    // Atomic dedupe: the unique (workspaceId, dedupeKey) index is the only
+    // arbiter — concurrent sweeps or multiple instances resolve to exactly
+    // one reminder per subject per day.
+    try {
+      await db.notification.create({
+        data: {
+          workspaceId: input.workspaceId,
+          userId: finding.ownerUserId ?? undefined,
+          type: NotificationType.REMINDER,
+          title: findingTitle(finding),
+          body: finding.advice,
+          url: findingUrl(finding),
+          dedupeKey: buildFindingDedupeKey(finding, now),
+        },
+      });
+      notificationsCreated += 1;
+    } catch (error) {
+      if (isUniqueConstraintViolation(error)) {
+        notificationsDeduplicated += 1;
+        continue;
+      }
+      throw error;
     }
-
-    await db.notification.create({
-      data: {
-        workspaceId: input.workspaceId,
-        userId: finding.ownerUserId ?? undefined,
-        type: NotificationType.REMINDER,
-        title: findingTitle(finding),
-        body: finding.advice,
-        url,
-      },
-    });
-    notificationsCreated += 1;
   }
 
   if (findings.length > 0) {
@@ -137,6 +161,8 @@ export async function runLightChainFollowThroughSweepForWorkspace(input: {
         managerAttentionCount: findings.filter((finding) => finding.managerAttentionRequired).length,
         notificationsCreated,
         notificationsDeduplicated,
+        truncated,
+        maxItemsPerQuery: LIGHT_CHAIN_SWEEP_MAX_ITEMS,
         boundary: "advice-only sweep: internal notifications and audit only; no external send, no task-state mutation",
       },
     });
@@ -147,6 +173,7 @@ export async function runLightChainFollowThroughSweepForWorkspace(input: {
     findings,
     notificationsCreated,
     notificationsDeduplicated,
+    truncated,
   };
 }
 
@@ -181,15 +208,37 @@ export async function runLightChainFollowThroughSweep(input?: {
     select: { id: true },
   });
 
+  // Failure isolation: one workspace's error must not starve the rest of the
+  // fleet of their reminders. Failures are logged, audited best-effort, and
+  // the sweep continues.
   const results: LightChainFollowThroughSweepResult[] = [];
   for (const workspace of workspaces) {
-    results.push(
-      await runLightChainFollowThroughSweepForWorkspace({
-        workspaceId: workspace.id,
-        now: input?.now,
-        config: input?.config,
-      }),
-    );
+    try {
+      results.push(
+        await runLightChainFollowThroughSweepForWorkspace({
+          workspaceId: workspace.id,
+          now: input?.now,
+          config: input?.config,
+        }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[light-chain-follow-through] workspace ${workspace.id} sweep failed: ${message}`);
+      try {
+        await writeAuditLog({
+          workspaceId: workspace.id,
+          actor: "Helm Follow-Through",
+          actorType: ActorType.SYSTEM,
+          actionType: "LIGHT_CHAIN_FOLLOW_THROUGH_SWEEP_FAILED",
+          targetType: "Workspace",
+          targetId: workspace.id,
+          summary: "轻量任务链催办扫描失败，本工作区本轮跳过",
+          payload: { error: message },
+        });
+      } catch {
+        // best-effort audit; the console line above is the fallback signal
+      }
+    }
   }
   return results;
 }

@@ -287,7 +287,7 @@ export function CaptureSessionPanel({
             ? {
                 confirmed: true,
                 counterpartyNotified: true,
-                noticeTextVersion: "capture-consent-notice/v1",
+                noticeTextVersion: "capture-consent-notice/v2",
               }
             : undefined,
         }),

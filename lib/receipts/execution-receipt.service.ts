@@ -3,12 +3,25 @@ import {
   ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
   ExecutionReceiptVerificationState,
+  type ExecutionReceipt,
+  type PrismaClient,
   type RejectionReasonCode,
 } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 import { computeExecutionReceiptQuality } from "@/lib/receipts/execution-receipt-quality";
+
+// Structural client type so the upsert can run inside a caller-owned
+// transaction (Prisma.TransactionClient is structurally compatible).
+export type ExecutionReceiptDbClient = Pick<PrismaClient, "executionReceipt">;
+
+export class ExecutionReceiptNotFoundError extends Error {
+  constructor(english: boolean) {
+    super(english ? "Execution receipt not found" : "回执不存在");
+    this.name = "ExecutionReceiptNotFoundError";
+  }
+}
 
 // Receipt-level separation of duties: a receipt can only be VERIFIED by
 // someone other than its executor. Surfaced as a decision result, not a crash.
@@ -61,7 +74,16 @@ function buildQualityInput(receipt: {
 // closed work item. Callers are expected to have already asserted workspace
 // access on the enclosing flow; this service still scopes every query by
 // workspaceId as defense in depth.
-export async function recordExecutionReceipt(input: RecordExecutionReceiptInput) {
+//
+// Fail-closed contract: when the caller closes a task's terminal state, it
+// must pass its transaction client via options.client so the receipt commits
+// (or rolls back) together with the state change — a closed task without a
+// receipt must be impossible. With a caller-owned client the audit entry is
+// deferred: call auditExecutionReceiptRecorded AFTER the transaction commits.
+export async function recordExecutionReceipt(
+  input: RecordExecutionReceiptInput,
+  options?: { client?: ExecutionReceiptDbClient },
+) {
   const evidenceRefs = input.evidenceRefs?.filter((ref) => ref.trim().length > 0) ?? [];
   const quality = buildQualityInput({
     outcome: input.outcome,
@@ -91,7 +113,7 @@ export async function recordExecutionReceipt(input: RecordExecutionReceiptInput)
     qualityFlags: quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
   };
 
-  const receipt = await db.executionReceipt.upsert({
+  const receipt = await (options?.client ?? db).executionReceipt.upsert({
     where: {
       subjectType_subjectId: {
         subjectType: input.subjectType,
@@ -102,6 +124,34 @@ export async function recordExecutionReceipt(input: RecordExecutionReceiptInput)
     update: data,
   });
 
+  if (!options?.client) {
+    await auditExecutionReceiptRecorded(input, receipt);
+  }
+
+  return receipt;
+}
+
+// Audit entry for a recorded receipt. Split from the write so transactional
+// callers can log AFTER commit — an audit row must never describe a receipt
+// that was rolled back.
+export async function auditExecutionReceiptRecorded(
+  input: Pick<
+    RecordExecutionReceiptInput,
+    "workspaceId" | "executedByUserId" | "executedByActorType" | "actorName"
+  >,
+  receipt: Pick<
+    ExecutionReceipt,
+    | "id"
+    | "subjectType"
+    | "subjectId"
+    | "outcome"
+    | "actionTaken"
+    | "rejectionReasonCode"
+    | "evidenceRefs"
+    | "qualityScore"
+    | "qualityFlags"
+  >,
+) {
   await writeAuditLog({
     workspaceId: input.workspaceId,
     userId: input.executedByUserId ?? undefined,
@@ -110,19 +160,17 @@ export async function recordExecutionReceipt(input: RecordExecutionReceiptInput)
     actionType: "EXECUTION_RECEIPT_RECORDED",
     targetType: "ExecutionReceipt",
     targetId: receipt.id,
-    summary: `回执已记录：${input.actionTaken}（${input.outcome}）`,
+    summary: `回执已记录：${receipt.actionTaken}（${receipt.outcome}）`,
     payload: {
-      subjectType: input.subjectType,
-      subjectId: input.subjectId,
-      outcome: input.outcome,
-      rejectionReasonCode: input.rejectionReasonCode ?? null,
-      evidenceRefCount: evidenceRefs.length,
-      qualityScore: quality.score,
-      qualityFlags: quality.flags,
+      subjectType: receipt.subjectType,
+      subjectId: receipt.subjectId,
+      outcome: receipt.outcome,
+      rejectionReasonCode: receipt.rejectionReasonCode ?? null,
+      evidenceRefCount: safeParseJson<string[]>(receipt.evidenceRefs, []).length,
+      qualityScore: receipt.qualityScore,
+      qualityFlags: safeParseJson<string[]>(receipt.qualityFlags, []),
     },
   });
-
-  return receipt;
 }
 
 export type VerifyExecutionReceiptInput = {
@@ -147,7 +195,7 @@ export async function verifyExecutionReceipt(input: VerifyExecutionReceiptInput)
   });
 
   if (!receipt) {
-    throw new Error(english ? "Execution receipt not found" : "回执不存在");
+    throw new ExecutionReceiptNotFoundError(english);
   }
 
   if (receipt.executedByUserId && receipt.executedByUserId === input.verifierUserId) {
