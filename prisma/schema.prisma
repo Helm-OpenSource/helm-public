@@ -1347,6 +1347,7 @@ model Workspace {
   actionItems                          ActionItem[]
   approvalTasks                        ApprovalTask[]
   executionReceipts                    ExecutionReceipt[]
+  diagnosticSessionWorkPackets         DiagnosticSessionWorkPacket[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -3467,6 +3468,21 @@ model ExecutionReceipt {
   @@unique([subjectType, subjectId])
   @@index([workspaceId, outcome])
   @@index([workspaceId, verificationState])
+}
+
+// One-to-one claim ledger between a diagnostic session and its governed work
+// packet. The unique diagnosticSessionId is the concurrency arbiter for the
+// first-loop bridge: two racing bridge calls resolve to one packet and the
+// loser withdraws its duplicate.
+model DiagnosticSessionWorkPacket {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  diagnosticSessionId String    @unique
+  actionItemId        String
+  createdAt           DateTime  @default(now())
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 model AuditLog {
