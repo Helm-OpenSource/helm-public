@@ -970,6 +970,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "check:agentic-sarp",
   "check:ai-shelf-trust-center-contract",
   "sarp:proof",
+  "public-mirror:build",
   "db:generate",
   "db:migrate",
   "db:prepare",
