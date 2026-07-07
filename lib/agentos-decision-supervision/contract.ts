@@ -77,6 +77,11 @@ export function validateDecisionObject(decision: DecisionObject): DecisionValida
   ) {
     hardErrors.push("owner_gate_insufficient_for_risk");
   }
+  // Owner decision 2026-07-07 (requirements §19 Q3): dual approval is enabled —
+  // critical risk may never settle for a single approval.
+  if (decision.riskLevel === "critical" && decision.ownerGate !== "dual_approval_required") {
+    hardErrors.push("critical_risk_requires_dual_approval");
+  }
 
   if (decision.knowledgeRefs.length === 0 || decision.evidenceRefs.length === 0) {
     reasons.push("uncited_decision");
@@ -213,26 +218,46 @@ export type DecisionAdvanceVerdict = {
 export function canDecisionAdvance(
   decision: DecisionObject,
   gateResults: readonly ControlGateResult[],
+  // The postures MUST be supplied by the caller: re-deriving with neutral
+  // postures here would silently drop the conflict / staleness / failed-receipt
+  // gates that deriveRequiredControlGates adds, letting a decision advance past
+  // exactly the risks the postures exist to surface (fail-closed regression
+  // fixed 2026-07-07).
+  knowledgePosture: DecisionKnowledgePosture,
+  receiptPosture: DecisionReceiptPosture,
 ): DecisionAdvanceVerdict {
   const validation = validateDecisionObject(decision);
-  const required = deriveRequiredControlGates(
-    decision,
-    NEUTRAL_KNOWLEDGE_POSTURE,
-    NEUTRAL_RECEIPT_POSTURE,
-  );
+  const required = deriveRequiredControlGates(decision, knowledgePosture, receiptPosture);
+
+  const requiresDualApproval =
+    decision.ownerGate === "dual_approval_required" || decision.riskLevel === "critical";
 
   const blockedBy: ControlGateType[] = [];
   const missingGates: ControlGateType[] = [];
+  let dualApprovalUnsatisfied = false;
   for (const gate of required) {
     const result = gateResults.find((entry) => entry.gateType === gate.gateType);
     if (!result) {
       missingGates.push(gate.gateType);
     } else if (!result.passed) {
       blockedBy.push(gate.gateType);
+    } else if (gate.gateType === "owner_gate" && requiresDualApproval) {
+      // Dual approval demands two DISTINCT approver identities on the passed
+      // owner gate; a bare passed=true can never satisfy it (fail-closed).
+      const distinctApprovers = new Set(
+        (result.approverRefs ?? []).map((ref) => ref.trim()).filter((ref) => ref !== ""),
+      );
+      if (distinctApprovers.size < 2) {
+        blockedBy.push(gate.gateType);
+        dualApprovalUnsatisfied = true;
+      }
     }
   }
 
   const reasons = [...validation.reasons];
+  if (dualApprovalUnsatisfied) {
+    reasons.push("dual_approval_not_satisfied");
+  }
   if (!validation.valid) {
     reasons.push("decision_invalid");
   }

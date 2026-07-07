@@ -18,6 +18,8 @@
 //     L5 active-reference). Approval of content never implies automation.
 // ---------------------------------------------------------------------------
 
+import { RECEIPT_OUTCOMES, type ReceiptOutcome } from "../receipts/receipt-outcome";
+
 export const KNOWLEDGE_SOURCE_TYPES = [
   "document",
   "meeting",
@@ -244,18 +246,12 @@ export type ReceiptDerivedKnowledge = {
   verified: boolean;
 };
 
-// Receipt evidence shape consumed by the governance functions. Mirrors the
-// receipt-chain feedback taxonomy: verified outcomes teach, self-reported
-// outcomes only suggest.
-export const KNOWLEDGE_RECEIPT_OUTCOMES = [
-  "verified_success",
-  "verified_failure",
-  "rejected",
-  "blocked",
-  "self_reported_only",
-] as const;
+// Receipt evidence shape consumed by the governance functions. The outcome
+// taxonomy is shared with the decision/supervision contract (owner decision
+// 2026-07-07: one receipt-outcome enum across both contracts).
+export const KNOWLEDGE_RECEIPT_OUTCOMES = RECEIPT_OUTCOMES;
 
-export type KnowledgeReceiptOutcome = (typeof KNOWLEDGE_RECEIPT_OUTCOMES)[number];
+export type KnowledgeReceiptOutcome = ReceiptOutcome;
 
 export type KnowledgeReceiptEvidence = {
   receiptRef: string;

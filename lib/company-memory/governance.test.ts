@@ -311,6 +311,7 @@ describe("deriveKnowledgeUsableLevel", () => {
 describe("isKnowledgeActiveReferenceAllowed", () => {
   const fullContext: ActiveReferenceContext = {
     ownerApproval: true,
+    ownerApprovalRefs: ["owner:customer-a", "owner:delivery-b"],
     policyGatePassed: true,
     receiptGatePassed: true,
     rollbackPathDefined: true,
@@ -331,6 +332,14 @@ describe("isKnowledgeActiveReferenceAllowed", () => {
       { override: { receiptGatePassed: false }, reason: "receipt_gate_failed" },
       { override: { rollbackPathDefined: false }, reason: "rollback_path_missing" },
       { override: { monitoringInPlace: false }, reason: "monitoring_missing" },
+      {
+        override: { ownerApprovalRefs: ["owner:customer-a"] },
+        reason: "dual_owner_approval_missing",
+      },
+      {
+        override: { ownerApprovalRefs: ["owner:customer-a", "owner:customer-a"] },
+        reason: "dual_owner_approval_missing",
+      },
     ] as const) {
       const verdict = isKnowledgeActiveReferenceAllowed(card, {
         ...fullContext,

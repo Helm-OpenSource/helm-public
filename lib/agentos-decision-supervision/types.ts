@@ -20,6 +20,8 @@
 // suggestion, a draft, a review gate, or a downgrade/freeze candidate.
 // ---------------------------------------------------------------------------
 
+import { RECEIPT_OUTCOMES, type ReceiptOutcome } from "../receipts/receipt-outcome";
+
 export const DECISION_TYPES = [
   "diagnosis",
   "prioritization",
@@ -179,6 +181,10 @@ export type ControlGateResult = {
   gateType: ControlGateType;
   passed: boolean;
   evidenceRefs: readonly string[];
+  // Distinct approver identities backing an owner_gate result. Required (>= 2
+  // distinct refs) when the decision demands dual approval; a passed owner
+  // gate without them cannot satisfy a dual_approval_required decision.
+  approverRefs?: readonly string[];
 };
 
 export const INTERVENTION_TYPES = [
@@ -282,15 +288,11 @@ export type DecisionEvaluation = {
 
 // Receipt evidence taxonomy consumed by evaluation and promotion functions.
 // Verified outcomes teach; self-reported outcomes only suggest.
-export const DECISION_RECEIPT_OUTCOMES = [
-  "verified_success",
-  "verified_failure",
-  "rejected",
-  "blocked",
-  "self_reported_only",
-] as const;
+// Shared with the company-memory contract (owner decision 2026-07-07: one
+// receipt-outcome enum across both contracts).
+export const DECISION_RECEIPT_OUTCOMES = RECEIPT_OUTCOMES;
 
-export type DecisionReceiptOutcome = (typeof DECISION_RECEIPT_OUTCOMES)[number];
+export type DecisionReceiptOutcome = ReceiptOutcome;
 
 export type DecisionReceiptEvidence = {
   receiptRef: string;

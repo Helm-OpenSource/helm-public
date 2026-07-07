@@ -174,6 +174,13 @@ describe("deriveRequiredControlGates", () => {
 });
 
 describe("canDecisionAdvance", () => {
+  const advance = (
+    decision: Parameters<typeof canDecisionAdvance>[0],
+    gateResults: Parameters<typeof canDecisionAdvance>[1],
+    knowledgePosture = NEUTRAL_KNOWLEDGE_POSTURE,
+    receiptPosture = NEUTRAL_RECEIPT_POSTURE,
+  ) => canDecisionAdvance(decision, gateResults, knowledgePosture, receiptPosture);
+
   const activeCandidate = buildDecision({
     allowedActionLevel: "active_candidate",
     riskLevel: "medium",
@@ -190,7 +197,7 @@ describe("canDecisionAdvance", () => {
   ];
 
   it("advances only when every required gate passed", () => {
-    const verdict = canDecisionAdvance(activeCandidate, passAll(ALL_GATES));
+    const verdict = advance(activeCandidate, passAll(ALL_GATES));
     expect(verdict.canAdvance).toBe(true);
     expect(verdict.blockedBy).toEqual([]);
     expect(verdict.missingGates).toEqual([]);
@@ -201,7 +208,7 @@ describe("canDecisionAdvance", () => {
       allowedActionLevel: "shadow",
       knowledgeRefs: [],
     });
-    const verdict = canDecisionAdvance(uncited, passAll(ALL_GATES));
+    const verdict = advance(uncited, passAll(ALL_GATES));
     expect(verdict.canAdvance).toBe(false);
     expect(verdict.reasons).toContain("uncited_decision");
   });
@@ -209,11 +216,11 @@ describe("canDecisionAdvance", () => {
   it("critical risk cannot bypass owner approval, even with high confidence", () => {
     const critical = buildDecision({
       riskLevel: "critical",
-      ownerGate: "approval_required",
+      ownerGate: "dual_approval_required",
       confidence: "high",
     });
     // Owner gate result missing entirely: fail closed, do not assume a pass.
-    const verdict = canDecisionAdvance(
+    const verdict = advance(
       critical,
       passAll(["citation_gate", "policy_gate"]),
     );
@@ -221,7 +228,7 @@ describe("canDecisionAdvance", () => {
     expect(verdict.missingGates).toContain("owner_gate");
 
     // Owner gate explicitly failed: still blocked.
-    const failed = canDecisionAdvance(critical, [
+    const failed = advance(critical, [
       ...passAll(["citation_gate", "policy_gate"]),
       { gateType: "owner_gate", passed: false, evidenceRefs: [] },
     ]);
@@ -229,16 +236,96 @@ describe("canDecisionAdvance", () => {
     expect(failed.blockedBy).toContain("owner_gate");
 
     // Declaring no owner gate at critical risk is structurally invalid.
-    const ungated = canDecisionAdvance(
+    const ungated = advance(
       buildDecision({ riskLevel: "critical", ownerGate: "none", confidence: "high" }),
       passAll(ALL_GATES),
     );
     expect(ungated.canAdvance).toBe(false);
     expect(ungated.reasons).toContain("owner_gate_insufficient_for_risk");
+
+    // Owner decision 2026-07-07: critical may never settle for single approval.
+    const singleGated = advance(
+      buildDecision({
+        riskLevel: "critical",
+        ownerGate: "approval_required",
+        confidence: "high",
+      }),
+      passAll(ALL_GATES),
+    );
+    expect(singleGated.canAdvance).toBe(false);
+    expect(singleGated.reasons).toContain("critical_risk_requires_dual_approval");
+  });
+
+  it("conflicted or stale knowledge posture fail-closes advancement without an owner gate", () => {
+    // Regression (2026-07-07 review): postures must reach canDecisionAdvance —
+    // a low-risk, ungated decision whose cited knowledge is conflicted must be
+    // blocked on the posture-derived owner gate, not silently advanced.
+    const ungated = buildDecision({ riskLevel: "low", ownerGate: "none" });
+    for (const posture of [
+      { ...NEUTRAL_KNOWLEDGE_POSTURE, hasConflict: true },
+      { ...NEUTRAL_KNOWLEDGE_POSTURE, hasStaleOrExpired: true },
+    ]) {
+      const verdict = advance(
+        ungated,
+        passAll(["citation_gate", "policy_gate"]),
+        posture,
+      );
+      expect(verdict.canAdvance).toBe(false);
+      expect(verdict.missingGates).toContain("owner_gate");
+    }
+  });
+
+  it("rejected or failed receipts fail-close advancement without a receipt gate", () => {
+    // Regression (2026-07-07 review): a recommend-level decision (below the
+    // shadow threshold) with unresolved rejected/failed receipts must be
+    // blocked on the posture-derived receipt gate.
+    const recommend = buildDecision({ allowedActionLevel: "recommend" });
+    const verdict = advance(
+      recommend,
+      passAll(["citation_gate", "policy_gate", "owner_gate"]),
+      NEUTRAL_KNOWLEDGE_POSTURE,
+      { ...NEUTRAL_RECEIPT_POSTURE, rejectedOrFailedReceiptCount: 1 },
+    );
+    expect(verdict.canAdvance).toBe(false);
+    expect(verdict.missingGates).toContain("receipt_gate");
+  });
+
+  it("dual approval demands two distinct approver identities on the owner gate", () => {
+    const critical = buildDecision({
+      riskLevel: "critical",
+      ownerGate: "dual_approval_required",
+    });
+    const gatesWithOwnerApprovers = (approverRefs: readonly string[]) => [
+      ...passAll(ALL_GATES.filter((gate) => gate !== "owner_gate")),
+      { gateType: "owner_gate" as const, passed: true, evidenceRefs: [], approverRefs },
+    ];
+
+    // A passed owner gate without approver identities cannot satisfy dual approval.
+    const bare = advance(critical, passAll(ALL_GATES));
+    expect(bare.canAdvance).toBe(false);
+    expect(bare.reasons).toContain("dual_approval_not_satisfied");
+
+    const single = advance(critical, gatesWithOwnerApprovers(["owner:alpha"]));
+    expect(single.canAdvance).toBe(false);
+    expect(single.reasons).toContain("dual_approval_not_satisfied");
+
+    const duplicated = advance(
+      critical,
+      gatesWithOwnerApprovers(["owner:alpha", "owner:alpha"]),
+    );
+    expect(duplicated.canAdvance).toBe(false);
+    expect(duplicated.reasons).toContain("dual_approval_not_satisfied");
+
+    const dual = advance(
+      critical,
+      gatesWithOwnerApprovers(["owner:alpha", "owner:beta"]),
+    );
+    expect(dual.canAdvance).toBe(true);
+    expect(dual.blockedBy).toEqual([]);
   });
 
   it("a failed receipt gate blocks an active candidate", () => {
-    const verdict = canDecisionAdvance(activeCandidate, [
+    const verdict = advance(activeCandidate, [
       ...passAll(ALL_GATES.filter((gate) => gate !== "receipt_gate")),
       { gateType: "receipt_gate", passed: false, evidenceRefs: [] },
     ]);
