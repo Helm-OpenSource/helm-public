@@ -1,9 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatCompanyDetailDateLabel } from "@/features/companies/company-detail-date-labels";
 import { formatDateLabel } from "@/lib/utils";
 
 describe("formatCompanyDetailDateLabel", () => {
   const sampleDate = new Date(2026, 6, 9, 9, 15);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 20, 12, 0));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("formats company detail dates with English month labels", () => {
     expect(formatCompanyDetailDateLabel(sampleDate, true, formatDateLabel)).toBe("Jul 9 09:15");

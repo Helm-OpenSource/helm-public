@@ -33,7 +33,6 @@ import type {
   HelmV21OperatorDebuggerTakeoverRequest,
   HelmV21PersistedPayload,
   HelmV21ProjectSkillLibraryReadModel,
-  HelmV21PromptBudgetDecision,
   HelmV21ResumeAsk,
   HelmV21RuntimeOperatorControlSummary,
   HelmV21RuntimeSwarmOperatorControlSurface,
@@ -55,7 +54,6 @@ import type {
   HelmV21VerificationDecision,
   HelmV2AgentId,
   HelmV2ApprovalTier,
-  HelmV2SourceType,
 } from "@/lib/helm-v2/contracts";
 import { buildBenchmarkMatrixReadModel } from "@/lib/helm-v2/benchmark-matrix";
 import { buildConsolidationQueueAuditSummary } from "@/lib/helm-v2/consolidation-queue-audit-summary";
@@ -183,6 +181,43 @@ import {
   buildRuntimeContinuityState,
   parseRuntimeRemediationTrace,
 } from "@/lib/helm-v2/runtime-upgrade-state";
+import {
+  DEFAULT_TOKEN_BUDGET,
+  buildPersistedPayloadDraft,
+  buildVerificationDecision,
+  selectPayloadsForBudget,
+  toPersistedPayloadContract,
+  type PersistedPayloadDraft,
+} from "@/lib/helm-v2/runtime-upgrade-payloads";
+export {
+  buildPersistedPayloadDraft,
+  buildVerificationDecision,
+  estimateTokenCount,
+  selectPayloadsForBudget,
+  toPersistedPayloadContract,
+} from "@/lib/helm-v2/runtime-upgrade-payloads";
+import {
+  ACTIVE_RUNTIME_JOB_STATUSES,
+  REFLECTION_JOB_TYPES,
+  buildConsolidationLifecycleOutputSummary,
+  buildPromotedRuntimeFacts,
+  buildReflectionJobInputSummary,
+  buildReflectionJobOutputSummary,
+  buildReflectionLifecycleOutputSummary,
+  buildReflectionMemoryCandidateContract,
+  buildRuntimeJobEventPrefix,
+  buildRuntimeMemoryPromotionKey,
+  isActiveRuntimeJobStatus,
+  isReflectionJobType,
+  isReflectionMemoryCandidate,
+  parseRuntimeStringList,
+} from "@/lib/helm-v2/runtime-upgrade-reflection";
+export {
+  buildPromotedRuntimeFacts,
+  buildReflectionJobOutputSummary,
+  buildReflectionMemoryCandidateContract,
+  isReflectionMemoryCandidate,
+} from "@/lib/helm-v2/runtime-upgrade-reflection";
 export {
   buildBudgetPosture,
   buildContinuitySnapshot,
@@ -217,22 +252,12 @@ import { buildProjectSkillLibraryReadModel } from "@/lib/worker-skill-resource/p
 import { jsonStringify, safeParseJson, trimText } from "@/lib/utils";
 import { parseWorkspaceFeatureFlags } from "@/lib/workspace-ops";
 
-const DEFAULT_TOKEN_BUDGET = 6000;
 const RUNTIME_BOUNDARY_NOTE =
   "Helm v2.1 runtime remains review-first: context is selectively loaded, verification is explicit, and no high-risk external send or official write is auto-approved here.";
 const CONSOLIDATION_BOUNDARY_NOTE =
   "Consolidation jobs stay candidate-only and auditable. They do not rewrite canonical memory without an explicit review path.";
-const CONSOLIDATION_SINGLE_AGENT_FALLBACK_NOTE =
-  "Rollback keeps the current single-agent consolidation path, preserves candidate traces, and does not auto-mutate canonical memory.";
 const REFLECTION_BOUNDARY_NOTE =
   "Reflection stays review-first and evidence-first. It can compact trusted runtime state into notebook-friendly carry-forward context, but it does not auto-promote memory, rewrite canonical truth, or send anything externally.";
-const REFLECTION_JOB_TYPES = [
-  "meeting_reflection",
-  "retro_reflection",
-  "execution_reflection",
-  "nightly_workspace_reflection",
-] as const;
-const ACTIVE_RUNTIME_JOB_STATUSES = ["QUEUED", "RUNNING", "PAUSED"] as const;
 const PAUSEABLE_RUNTIME_JOB_STATUSES = new Set<string>(["QUEUED", "RUNNING"]);
 const RESUMABLE_RUNTIME_JOB_STATUSES = new Set<string>(["PAUSED"]);
 const SWARM_SPAWN_REQUESTED_EVENT_TYPE = "swarm.spawn.requested" as const;
@@ -440,23 +465,6 @@ type MeetingRuntimeUpgradeMeeting = {
     confirmations?: string | null;
     meetingGoal?: string | null;
   } | null;
-};
-
-type PersistedPayloadDraft = {
-  payloadKey: string;
-  sourceType: HelmV2SourceType | "artifact" | "session_notebook" | "signal_event";
-  sourceId: string;
-  label: string;
-  loadPolicy: HelmV21PersistedPayload["loadPolicy"];
-  text: string;
-  loadedByDefault: boolean;
-};
-
-type VerificationInput = {
-  facts: Array<{ title?: string; content?: string; evidence?: string[] }>;
-  inferredCount: number;
-  riskFlags: Array<{ severity?: "low" | "medium" | "high"; promiseRisk?: boolean; reason?: string }>;
-  promotedMemoryCount: number;
 };
 
 type WorldModelInput = {
@@ -2298,134 +2306,6 @@ type WorkspaceBusinessLoopGapReadoutInput = {
   } | null;
 };
 
-export function estimateTokenCount(text: string) {
-  return Math.max(1, Math.ceil(text.length / 4));
-}
-
-export function buildPersistedPayloadDraft(input: {
-  key: string;
-  sourceType: PersistedPayloadDraft["sourceType"];
-  sourceId: string;
-  label: string;
-  loadPolicy: PersistedPayloadDraft["loadPolicy"];
-  text: string;
-  loadedByDefault: boolean;
-}): PersistedPayloadDraft | null {
-  const normalized = trimText(input.text, 24000).trim();
-  if (!normalized) return null;
-
-  return {
-    payloadKey: input.key,
-    sourceType: input.sourceType,
-    sourceId: input.sourceId,
-    label: input.label,
-    loadPolicy: input.loadPolicy,
-    text: normalized,
-    loadedByDefault: input.loadedByDefault,
-  };
-}
-
-export function toPersistedPayloadContract(draft: PersistedPayloadDraft): HelmV21PersistedPayload {
-  return {
-    payloadKey: draft.payloadKey,
-    handle: `payload://${draft.sourceType}/${draft.sourceId}/${draft.payloadKey}`,
-    sourceType: draft.sourceType,
-    sourceId: draft.sourceId,
-    label: draft.label,
-    loadPolicy: draft.loadPolicy,
-    preview: trimText(draft.text, 320),
-    summary: trimText(draft.text.replace(/\s+/g, " "), 160),
-    byteSize: Buffer.byteLength(draft.text, "utf8"),
-    estimatedTokens: estimateTokenCount(draft.text),
-    loadedByDefault: draft.loadedByDefault,
-  };
-}
-
-export function selectPayloadsForBudget(
-  payloads: HelmV21PersistedPayload[],
-  tokenBudgetLimit = DEFAULT_TOKEN_BUDGET,
-): HelmV21PromptBudgetDecision {
-  const weight = {
-    always_on: 0,
-    stage_triggered: 1,
-    on_demand: 2,
-    never_auto_load: 3,
-  } as const;
-
-  const ordered = [...payloads].sort((left, right) => {
-    const weightDelta = weight[left.loadPolicy] - weight[right.loadPolicy];
-    if (weightDelta !== 0) return weightDelta;
-    if (left.loadedByDefault !== right.loadedByDefault) return left.loadedByDefault ? -1 : 1;
-    return left.estimatedTokens - right.estimatedTokens;
-  });
-
-  const loadedHandles: string[] = [];
-  const prunedHandles: string[] = [];
-  let used = 0;
-
-  for (const payload of ordered) {
-    const shouldAttemptLoad = payload.loadPolicy !== "never_auto_load" && (payload.loadedByDefault || payload.loadPolicy !== "on_demand");
-    if (!shouldAttemptLoad) {
-      prunedHandles.push(payload.handle);
-      continue;
-    }
-
-    if (used + payload.estimatedTokens <= tokenBudgetLimit) {
-      used += payload.estimatedTokens;
-      loadedHandles.push(payload.handle);
-      continue;
-    }
-
-    prunedHandles.push(payload.handle);
-  }
-
-  return {
-    tokenBudgetLimit,
-    tokenBudgetUsed: used,
-    prunedTokenCount: Math.max(0, payloads.reduce((sum, item) => sum + item.estimatedTokens, 0) - used),
-    loadedHandles,
-    prunedHandles,
-    reasoning:
-      "Budget governor keeps always_on and stage_triggered context first, prunes overflow into traceable handles, and does not silently auto-load never_auto_load sources.",
-  };
-}
-
-export function buildVerificationDecision(input: VerificationInput): HelmV21VerificationDecision {
-  const missingEvidence = input.facts.filter((fact) => (fact.evidence?.length ?? 0) === 0).length;
-  const promiseRiskCount = input.riskFlags.filter((item) => item.promiseRisk || item.severity === "high").length;
-  const evidenceCoverage = input.facts.length === 0 ? 0 : Math.round(((input.facts.length - missingEvidence) / input.facts.length) * 100);
-  const truthScore = Math.max(
-    0,
-    Math.min(
-      100,
-      evidenceCoverage - promiseRiskCount * 15 - Math.max(0, input.inferredCount - input.promotedMemoryCount) * 5,
-    ),
-  );
-
-  const blockedReasons: string[] = [];
-  if (missingEvidence > 0) blockedReasons.push(`${missingEvidence} confirmed facts are still missing evidence refs.`);
-  if (promiseRiskCount > 0) blockedReasons.push(`${promiseRiskCount} promise-sensitive or high-severity risk items still require explicit boundary review.`);
-
-  const status =
-    blockedReasons.length === 0 ? "passed" : promiseRiskCount > 0 ? "blocked" : "needs_review";
-
-  return {
-    status,
-    truthScore,
-    summary:
-      status === "passed"
-        ? "Verification passed: confirmed facts stay source-grounded enough for promotion and downstream review."
-        : status === "blocked"
-          ? "Verification blocked direct trust upgrade: promise-sensitive or conflict-prone signals still need explicit operator attention."
-          : "Verification requires review: some confirmed facts still lack enough grounding for silent promotion.",
-    blockedReasons,
-    boundaryNotes: [
-      "Verification is a runtime review layer, not autonomous decision authority.",
-      "Risky or promise-sensitive content remains approval-gated and non-commitment by default.",
-    ],
-  };
-}
-
 function buildRuntimePostureFromDebuggerState(input: {
   runThread: HelmV21RunThreadContract;
   recovery: RuntimeRecoveryState;
@@ -2882,180 +2762,6 @@ export function buildRuntimeCacheHealth(
     entries,
     hitRate: entries === 0 ? 0 : Math.round((hits / entries) * 100),
     tokensSaved,
-  };
-}
-
-function parseRuntimeStringList(value?: string | null) {
-  return safeParseJson<string[]>(value, []);
-}
-
-function isReflectionJobType(jobType?: string | null) {
-  return Boolean(jobType && REFLECTION_JOB_TYPES.includes(jobType as (typeof REFLECTION_JOB_TYPES)[number]));
-}
-
-export function isReflectionMemoryCandidate(input: {
-  sourceVerification?: string | null;
-  sourceStatus?: string | null;
-}) {
-  return (
-    input.sourceVerification === "human_confirmed_reflection" ||
-    input.sourceStatus === "trusted_runtime_compaction"
-  );
-}
-
-function isActiveRuntimeJobStatus(status: string) {
-  return ACTIVE_RUNTIME_JOB_STATUSES.includes(status as (typeof ACTIVE_RUNTIME_JOB_STATUSES)[number]);
-}
-
-function buildRuntimeJobEventPrefix(jobType: string) {
-  return isReflectionJobType(jobType) ? "reflection.job" : "consolidation.job";
-}
-
-function buildConsolidationLifecycleOutputSummary(input: {
-  lifecycleState: "queued" | "paused" | "resumed";
-  source:
-    | "manual_operator_queue"
-    | "review_confirmed"
-    | "review_rejected"
-    | "operating_resume";
-}) {
-  const sourceLabel =
-    input.source === "manual_operator_queue"
-      ? "manual operator queue"
-      : input.source === "review_confirmed"
-        ? "confirmed meeting review"
-        : input.source === "review_rejected"
-          ? "rejected meeting review"
-          : "operator resume";
-
-  if (input.lifecycleState === "paused") {
-    return `Paused for queue audit and controlled follow-through after ${sourceLabel}. ${CONSOLIDATION_SINGLE_AGENT_FALLBACK_NOTE}`;
-  }
-
-  if (input.lifecycleState === "resumed") {
-    return `Resumed into the same candidate-only consolidation queue after ${sourceLabel}. ${CONSOLIDATION_SINGLE_AGENT_FALLBACK_NOTE}`;
-  }
-
-  return `Queued for candidate-only consolidation after ${sourceLabel}. Review-first promotion still stays explicit. ${CONSOLIDATION_SINGLE_AGENT_FALLBACK_NOTE}`;
-}
-
-function buildReflectionLifecycleOutputSummary(input: {
-  lifecycleState: "paused" | "resumed";
-}) {
-  return input.lifecycleState === "paused"
-    ? "Paused reflection for operator review. The reflection path stays trusted-state-only, review-first, and never auto-promotes memory."
-    : "Resumed reflection inside the same trusted-state compaction path. The flow remains review-first and does not rewrite canonical truth.";
-}
-
-function buildRuntimeMemoryPromotionKey(input: {
-  workspaceId: string;
-  candidateId: string;
-  memoryItemId?: string | null;
-}) {
-  return `${input.workspaceId}:memory-promotion:${input.memoryItemId ?? input.candidateId}`;
-}
-
-export function buildPromotedRuntimeFacts(
-  candidates: Array<{
-    id?: string | null;
-    status?: string | null;
-    summary: string;
-    evidenceRefs?: string[] | string | null;
-  }>,
-  promotions: Array<{
-    memoryCandidateId?: string | null;
-    status?: string | null;
-  }> = [],
-) {
-  const promotedIds = new Set(
-    promotions
-      .filter((item) => item.status === "PROMOTED" && item.memoryCandidateId)
-      .map((item) => item.memoryCandidateId as string),
-  );
-
-  return candidates
-    .filter((item) => item.status === "PROMOTED" || (item.id ? promotedIds.has(item.id) : false))
-    .map((item) => ({
-      summary: item.summary,
-      evidenceRefs: Array.isArray(item.evidenceRefs)
-        ? item.evidenceRefs.map(String)
-        : parseRuntimeStringList(item.evidenceRefs ?? null),
-    }))
-    .filter((item) => item.summary);
-}
-
-function buildReflectionJobInputSummary(input: {
-  sessionLabel: string;
-  trigger: "manual_operator_queue" | "meeting_human_confirmed";
-}) {
-  return input.trigger === "meeting_human_confirmed"
-    ? `Reflection queued after human-confirmed meeting review for ${input.sessionLabel}. Only trusted runtime state, verification posture and promoted facts are carried forward here.`
-    : `Operator requested reflection for ${input.sessionLabel}. Only trusted runtime state, verification posture and promoted facts are compacted here.`;
-}
-
-export function buildReflectionJobOutputSummary(input: {
-  meetingLabel?: string | null;
-  notebookState: RuntimeNotebookState;
-}) {
-  return trimText(
-    [
-      `Reflection compacted trusted carry-forward context for ${input.meetingLabel ?? "the current runtime session"}.`,
-      `Focus: ${input.notebookState.objective}.`,
-      input.notebookState.confirmedFacts.length > 0
-        ? `Confirmed: ${input.notebookState.confirmedFacts.slice(0, 2).join(" / ")}.`
-        : null,
-      input.notebookState.blockers.length > 0
-        ? `Blockers: ${input.notebookState.blockers.slice(0, 2).join(" / ")}.`
-        : null,
-      input.notebookState.nextActions.length > 0
-        ? `Next: ${input.notebookState.nextActions.slice(0, 2).join(" / ")}.`
-        : null,
-      "This stays review-first, candidate-only and does not auto-promote memory or rewrite canonical truth.",
-    ]
-      .filter(Boolean)
-      .join(" "),
-    500,
-  );
-}
-
-export function buildReflectionMemoryCandidateContract(input: {
-  meetingLabel?: string | null;
-  notebookState: RuntimeNotebookState;
-}) {
-  const summary = trimText(
-    [
-      `Carry forward ${input.meetingLabel ?? "this runtime session"} with focus on ${input.notebookState.objective}.`,
-      input.notebookState.confirmedFacts.length > 0
-        ? `Confirmed: ${input.notebookState.confirmedFacts.slice(0, 2).join(" / ")}.`
-        : null,
-      input.notebookState.blockers.length > 0
-        ? `Blockers: ${input.notebookState.blockers.slice(0, 2).join(" / ")}.`
-        : null,
-      input.notebookState.nextActions.length > 0
-        ? `Next: ${input.notebookState.nextActions.slice(0, 2).join(" / ")}.`
-        : null,
-    ]
-      .filter(Boolean)
-      .join(" "),
-    420,
-  );
-
-  return {
-    summary,
-    sourceVerification: "human_confirmed_reflection",
-    sourceStatus: "trusted_runtime_compaction",
-    status: "VERIFIED" as const,
-    reviewerNote:
-      "Reflection candidate is derived only from trusted runtime state. It stays review-safe carry-forward context until a separate review path chooses to promote any resulting memory truth.",
-    evidenceRefs: jsonStringify(input.notebookState.evidenceRefs),
-    confidence:
-      input.notebookState.confirmedFacts.length > 0
-        ? input.notebookState.evidenceRefs.length > 0
-          ? 84
-          : 76
-        : input.notebookState.evidenceRefs.length > 0
-          ? 72
-          : 64,
   };
 }
 
