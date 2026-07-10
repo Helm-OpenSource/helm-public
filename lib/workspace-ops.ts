@@ -36,6 +36,25 @@ export function parseWorkspaceFeatureFlags(raw: string | null | undefined): Work
   };
 }
 
+/**
+ * 工作区默认落地页(登录后 /dashboard 的可配置重定向;行业中立,由 tenant 在
+ * workspace.configuration JSON 里声明 defaultLandingPath)。
+ * fail-closed 校验:仅接受站内绝对路径("/x..."),拒绝协议/双斜杠/回到 /dashboard 自环;
+ * 非法或缺失一律 null(保持原生 dashboard 行为)。
+ */
+export function resolveWorkspaceDefaultLandingPath(
+  rawConfiguration: string | null | undefined,
+): string | null {
+  const parsed = safeParseJson<{ defaultLandingPath?: unknown } | null>(rawConfiguration, null);
+  const value = parsed?.defaultLandingPath;
+  if (typeof value !== "string") return null;
+  const path = value.trim();
+  if (!path.startsWith("/") || path.startsWith("//")) return null;
+  if (path.includes(":") || path.includes("\\") || path.length > 200) return null;
+  if (path === "/dashboard" || path.startsWith("/dashboard?")) return null;
+  return path;
+}
+
 export function serializeWorkspaceFeatureFlags(flags: WorkspaceFeatureFlags) {
   return JSON.stringify(flags);
 }

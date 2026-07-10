@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolveWorkspaceDefaultLandingPath,
   normalizeWorkspaceUiConfig,
   parseWorkspaceFeatureFlags,
 } from "@/lib/workspace-ops";
@@ -54,5 +55,20 @@ describe("workspace ops", () => {
       diagnosticsCenter: true,
       swarmReadOnlyWorkers: true,
     });
+  });
+});
+
+describe("resolveWorkspaceDefaultLandingPath", () => {
+  it("returns a valid internal path", () => {
+    expect(resolveWorkspaceDefaultLandingPath(JSON.stringify({ defaultLandingPath: "/tenant-os/home" }))).toBe("/tenant-os/home");
+  });
+  it("rejects external / malformed / self-loop targets", () => {
+    expect(resolveWorkspaceDefaultLandingPath(JSON.stringify({ defaultLandingPath: "https://evil.example" }))).toBeNull();
+    expect(resolveWorkspaceDefaultLandingPath(JSON.stringify({ defaultLandingPath: "//evil.example" }))).toBeNull();
+    expect(resolveWorkspaceDefaultLandingPath(JSON.stringify({ defaultLandingPath: "javascript:alert(1)" }))).toBeNull();
+    expect(resolveWorkspaceDefaultLandingPath(JSON.stringify({ defaultLandingPath: "/dashboard" }))).toBeNull();
+    expect(resolveWorkspaceDefaultLandingPath(JSON.stringify({ defaultLandingPath: 42 }))).toBeNull();
+    expect(resolveWorkspaceDefaultLandingPath(null)).toBeNull();
+    expect(resolveWorkspaceDefaultLandingPath("not-json")).toBeNull();
   });
 });
