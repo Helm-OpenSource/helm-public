@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { resolveWorkspaceDefaultLandingPath } from "@/lib/workspace-ops";
 import { OperatingFoundationSummaryCard } from "@/components/shared/operating-foundation-summary";
 import { PageHeader } from "@/components/shared/page-header";
 import { ProactiveMechanismPanel } from "@/components/shared/proactive-mechanism-panel";
@@ -18,6 +21,13 @@ export default async function DashboardPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
+  // 工作区可配置默认落地页(如租户 OS 首页);?stay=1 为运营逃生口,保留原生 dashboard 可达。
+  const stayParam = Array.isArray(params.stay) ? params.stay[0] : params.stay;
+  if (stayParam !== "1") {
+    const { workspace } = await getCurrentWorkspaceSession();
+    const landingPath = resolveWorkspaceDefaultLandingPath(workspace.configuration);
+    if (landingPath) redirect(landingPath);
+  }
   const entry = Array.isArray(params.entry) ? params.entry[0] : params.entry;
   const connectorBindingStatus =
     typeof params.connector_binding_status === "string"
