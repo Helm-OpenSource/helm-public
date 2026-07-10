@@ -20,10 +20,12 @@ effects, review-first boundaries, or runtime event contracts.
 ### Task List
 
 - [x] Extract payload budgeting and verification into one pure module.
-- [ ] Extract reflection candidate and job-summary calculations into one pure
+- [x] Extract reflection candidate and job-summary calculations into one pure
   module.
-- [ ] Run the focused runtime-upgrade suite after each extraction.
-- [ ] Run public typecheck and strict lint for every touched source file.
+- [x] Run the focused runtime-upgrade suite after each extraction.
+- [x] Run public typecheck and strict lint for every touched source file.
+  Strict lint passes; full typecheck remains blocked by the same pre-existing
+  Prisma client/schema drift reproduced on canonical `main`.
 
 ### Later Checkpoints
 
