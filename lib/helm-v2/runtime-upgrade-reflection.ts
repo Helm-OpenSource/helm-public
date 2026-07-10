@@ -1,3 +1,4 @@
+import type { buildRuntimeNotebookState } from "@/lib/helm-v2/runtime-upgrade-continuity";
 import { jsonStringify, safeParseJson, trimText } from "@/lib/utils";
 
 export const REFLECTION_JOB_TYPES = [
@@ -12,13 +13,10 @@ export const ACTIVE_RUNTIME_JOB_STATUSES = ["QUEUED", "RUNNING", "PAUSED"] as co
 const CONSOLIDATION_SINGLE_AGENT_FALLBACK_NOTE =
   "Rollback keeps the current single-agent consolidation path, preserves candidate traces, and does not auto-mutate canonical memory.";
 
-type RuntimeReflectionNotebookState = {
-  objective: string;
-  confirmedFacts: string[];
-  blockers: string[];
-  nextActions: string[];
-  evidenceRefs: string[];
-};
+type RuntimeReflectionNotebookState = Pick<
+  ReturnType<typeof buildRuntimeNotebookState>,
+  "objective" | "confirmedFacts" | "blockers" | "nextActions" | "evidenceRefs"
+>;
 
 export function parseRuntimeStringList(value?: string | null) {
   return safeParseJson<string[]>(value, []);

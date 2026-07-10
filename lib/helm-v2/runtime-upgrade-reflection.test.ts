@@ -48,4 +48,37 @@ describe("runtime upgrade reflection", () => {
       { summary: "Linked", evidenceRefs: ["e2"] },
     ]);
   });
+
+  it("fails closed to empty evidence refs when persisted JSON is invalid", () => {
+    expect(
+      buildPromotedRuntimeFacts([
+        {
+          id: "invalid-json",
+          status: "PROMOTED",
+          summary: "Still promoted",
+          evidenceRefs: "not-json",
+        },
+      ]),
+    ).toEqual([{ summary: "Still promoted", evidenceRefs: [] }]);
+  });
+
+  it("keeps reflection output and candidate summaries within their limits", () => {
+    const longNotebookState = {
+      ...notebookState,
+      objective: "x".repeat(700),
+    };
+    const output = buildReflectionJobOutputSummary({
+      meetingLabel: "Long review",
+      notebookState: longNotebookState,
+    });
+    const candidate = buildReflectionMemoryCandidateContract({
+      meetingLabel: "Long review",
+      notebookState: longNotebookState,
+    });
+
+    expect(output).toHaveLength(503);
+    expect(output).toMatch(/\.\.\.$/);
+    expect(candidate.summary).toHaveLength(423);
+    expect(candidate.summary).toMatch(/\.\.\.$/);
+  });
 });

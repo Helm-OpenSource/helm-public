@@ -29,6 +29,38 @@ describe("runtime upgrade payloads", () => {
     });
   });
 
+  it("drops blank payload drafts and prunes payloads one token over budget", () => {
+    expect(
+      buildPersistedPayloadDraft({
+        key: "blank",
+        sourceType: "artifact",
+        sourceId: "artifact-1",
+        label: "Blank artifact",
+        loadPolicy: "always_on",
+        text: "   \n\t  ",
+        loadedByDefault: true,
+      }),
+    ).toBeNull();
+
+    const draft = buildPersistedPayloadDraft({
+      key: "bounded",
+      sourceType: "artifact",
+      sourceId: "artifact-2",
+      label: "Bounded artifact",
+      loadPolicy: "always_on",
+      text: "12345678",
+      loadedByDefault: true,
+    });
+    const contract = toPersistedPayloadContract(draft!);
+
+    expect(contract.estimatedTokens).toBe(2);
+    expect(selectPayloadsForBudget([contract], 1)).toMatchObject({
+      tokenBudgetUsed: 0,
+      loadedHandles: [],
+      prunedHandles: [contract.handle],
+    });
+  });
+
   it("blocks verification when promise-sensitive risks remain", () => {
     const decision = buildVerificationDecision({
       facts: [{ title: "Confirmed", evidence: ["evidence://1"] }],
@@ -40,5 +72,20 @@ describe("runtime upgrade payloads", () => {
     expect(decision.status).toBe("blocked");
     expect(decision.truthScore).toBe(85);
     expect(decision.blockedReasons).toHaveLength(1);
+  });
+
+  it("requires review when confirmed facts lack evidence without promise risk", () => {
+    const decision = buildVerificationDecision({
+      facts: [{ title: "Unverified" }],
+      inferredCount: 0,
+      riskFlags: [],
+      promotedMemoryCount: 0,
+    });
+
+    expect(decision.status).toBe("needs_review");
+    expect(decision.truthScore).toBe(0);
+    expect(decision.blockedReasons).toEqual([
+      "1 confirmed facts are still missing evidence refs.",
+    ]);
   });
 });
