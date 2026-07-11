@@ -139,17 +139,58 @@ npm run eval:operating-harness-p0
 - 所有现有 Signal First Mile、Operating Signal Flow、Judgement Fusion 和 Expert
   Capability eval 保持通过。
 
+## 9. P1 Harness Composition And Shadow Evaluation
+
+P1 把已有 Core 能力组合成 content-bound `HarnessManifest`，但不新建第二套
+permission、source governance 或 eval framework。`HarnessManifest` 只存组件 ref、revision ref
+与 hash，不内嵌 prompt、客户数据、凭据或执行权限。
+
+Protected components 必须在演化循环之外：
+
+- canonical schema、privacy policy、source-governance policy 和 permission policy；
+- evaluator、held-out registry 和 owner-promotion gate；
+- kill switch 与 memory-governance policy。
+
+Mutable components 只能通过 `HarnessRevision.changes` 显式声明：signal normalizer、object
+linker、judgement fusion、expert/context/retrieval policy、skill binding 和 tool binding。调用方
+不能自行把 protected component 标成 mutable。
+
+P1 revision 状态只有 `seed | shadow_candidate | killed`，不表达 active 或 auto-promoted。
+`shadow_candidate` 必须绑定 parent、fallback 和 rollback manifest；所有 revision 仍然
+`ownerReviewRequired: true` 且 `promotionTriggered: false`。
+
+Shadow evaluator 直接复用 `expert-capability` 的 pre-registration、A/B 隔离、held-out
+attempt budget 与 baseline 裁决，并复用 P0 七项指标。任一 source-class gate、protected
+component、content binding、boundary、reviewer completeness、held-out lift 或 canonical metric
+regression 失败，都必须 fail closed。通过也只产生 owner-review-eligible receipt，不授予
+production authority。
+
+P1 receipt 中的七项指标明确标记为 `heldout_corpus_projection`：`precision` 的 accepted
+denominator 只计算通过 boundary 且无 hallucinated evidence 的 held-out output；
+`reviewerCompleteness` 表示 B 集 gold grading 已完成；`feedbackToEvalConversionRate` 表示已经进入
+A-correction replay set 的 edit/reject feedback 完整度。这三者是 eval-corpus 证据，不是生产运营
+telemetry，不得用于宣称真实客户环境的七项指标已成立。
+
+```bash
+npm run eval:operating-harness-p1
+```
+
+P1 仍不是 runtime scheduler、deployment manifest、model router、自动改 prompt、自动发布或客户运行
+证明。
+
 ## English Reference
 
 P0 establishes one public-safe canonical operating-signal chain and makes lifecycle state a
-deterministic projection rather than a second source of truth. It reuses existing feedback,
-promotion, governance, and held-out evaluation contracts. It does not add a production runtime,
-model training, automatic learning, customer data, writeback, external send, approval, commitment,
-or memory promotion.
+deterministic projection rather than a second source of truth. P1 composes existing Core components
+through content-bound manifests and revisions, then reuses the existing pre-registered held-out
+evaluator to issue shadow-only receipts. Neither phase adds production runtime authority, model
+training, automatic learning, customer data, writeback, external send, approval, commitment, or
+memory promotion.
 
 ## 变更记录 / Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-07-12 | Added P1 content-bound manifest/revision composition and shadow-only evaluation requirements |
 | 2026-07-12 | Added the P0b deterministic state projector, legacy reference adapter, and seven-metric calculator |
 | 2026-07-12 | Created P0 canonical spine, derived-state, metric, compatibility, and boundary requirements |

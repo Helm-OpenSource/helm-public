@@ -707,6 +707,8 @@ describe("public release guard fixture coverage", () => {
           "vitest run lib/operating-harness/contracts.test.ts --config vitest.public.config.ts",
         "eval:operating-harness-p0":
           "vitest run lib/operating-harness/contracts.test.ts lib/operating-harness/canonical.test.ts --config vitest.public.config.ts",
+        "eval:operating-harness-p1":
+          "vitest run lib/operating-harness/contracts.test.ts lib/operating-harness/canonical.test.ts lib/operating-harness/harness.test.ts --config vitest.public.config.ts",
         [`seed:${tenantSlug}-workspace`]: `tsx ${tenantPrivateRoot}/scripts/seed-workspace.ts`,
         "proof-pack:build": `tsx ${commercialPrivateRoot}/build.ts`,
       },
@@ -757,6 +759,8 @@ describe("public release guard fixture coverage", () => {
         "vitest run lib/operating-harness/contracts.test.ts --config vitest.public.config.ts",
       "eval:operating-harness-p0":
         "vitest run lib/operating-harness/contracts.test.ts lib/operating-harness/canonical.test.ts --config vitest.public.config.ts",
+      "eval:operating-harness-p1":
+        "vitest run lib/operating-harness/contracts.test.ts lib/operating-harness/canonical.test.ts lib/operating-harness/harness.test.ts --config vitest.public.config.ts",
       "check:public-commit-metadata":
         "node --import tsx scripts/public-commit-metadata-check.ts",
       "check:public-release":

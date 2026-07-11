@@ -957,6 +957,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "eval:expert-capability-feedback-loop",
   "eval:operating-harness-contracts",
   "eval:operating-harness-p0",
+  "eval:operating-harness-p1",
   "eval:cross-system-accountability-gap",
   "eval:llm-critic-boundaries",
   "eval:llm-v2-boundaries",

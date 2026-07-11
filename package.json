@@ -23,6 +23,7 @@
     "eval:expert-capability-feedback-loop": "tsx scripts/expert-capability-feedback-loop-eval.ts",
     "eval:operating-harness-contracts": "vitest run lib/operating-harness/contracts.test.ts --config vitest.public.config.ts",
     "eval:operating-harness-p0": "vitest run lib/operating-harness/contracts.test.ts lib/operating-harness/canonical.test.ts --config vitest.public.config.ts",
+    "eval:operating-harness-p1": "vitest run lib/operating-harness/contracts.test.ts lib/operating-harness/canonical.test.ts lib/operating-harness/harness.test.ts --config vitest.public.config.ts",
     "eval:cross-system-accountability-gap": "tsx scripts/cross-system-accountability-gap-eval.ts",
     "eval:llm-critic-boundaries": "vitest run lib/evals/llm-critic-evals.test.ts",
     "eval:llm-v2-boundaries": "vitest run lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts",
