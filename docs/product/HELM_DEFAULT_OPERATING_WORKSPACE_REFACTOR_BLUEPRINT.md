@@ -264,7 +264,7 @@ type MainlineDescriptor = {
 
 1. **契约层无动作回调**：类型 / AST 门禁，不做源码文本 ban。
 2. **首个可操作区块 = 需要你拍板**；`approvals` 永不进退役批次；移动端首屏约束（§2）。
-3. **fail 语义方向性**:信息展示 fail-open（降级面板不空屏）；角色路由 fail-safe 向低信息面（GENERIC）；shellMode 异常恢复完整 Core chrome；单一生效 provider 无绑定或冲突一律回 Core。
+3. **fail 语义方向性**：信息展示 fail-open（降级面板不空屏）；角色路由 fail-safe 向低信息面（GENERIC）；shellMode 异常恢复完整 Core chrome；单一生效 provider 无绑定或冲突一律回 Core。
 4. **公开仓红线**：零客户专属标识、零私有部署信息、零真实租户材料（多租户通用术语不受限）。本文档自身即受检对象；`check:public-release` 是机器化执行通道。
 5. **能力真值**：徽标与契约词表无执行态；建议态不得写成执行态。
 6. **PII 仅 ref；金额只给分档；无个人排名。**
