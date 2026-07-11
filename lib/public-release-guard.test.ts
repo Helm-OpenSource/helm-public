@@ -705,6 +705,8 @@ describe("public release guard fixture coverage", () => {
           "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
         "eval:operating-harness-contracts":
           "vitest run lib/operating-harness/contracts.test.ts --config vitest.public.config.ts",
+        "eval:operating-harness-p0":
+          "vitest run lib/operating-harness/contracts.test.ts lib/operating-harness/canonical.test.ts --config vitest.public.config.ts",
         [`seed:${tenantSlug}-workspace`]: `tsx ${tenantPrivateRoot}/scripts/seed-workspace.ts`,
         "proof-pack:build": `tsx ${commercialPrivateRoot}/build.ts`,
       },
@@ -753,6 +755,8 @@ describe("public release guard fixture coverage", () => {
         "node templates/signal-first-mile/signal-quality-eval.js templates/signal-first-mile/signal-ledger.sample.json templates/signal-first-mile/signal-quality-goldens.sample.json",
       "eval:operating-harness-contracts":
         "vitest run lib/operating-harness/contracts.test.ts --config vitest.public.config.ts",
+      "eval:operating-harness-p0":
+        "vitest run lib/operating-harness/contracts.test.ts lib/operating-harness/canonical.test.ts --config vitest.public.config.ts",
       "check:public-commit-metadata":
         "node --import tsx scripts/public-commit-metadata-check.ts",
       "check:public-release":
