@@ -42,6 +42,12 @@ export type HarnessShadowEvaluationInput = {
   candidateManifest: HarnessManifest;
   baselineRevision: HarnessRevision;
   candidateRevision: HarnessRevision;
+  baselineParentManifest?: HarnessManifest;
+  baselineParentRevision?: HarnessRevision;
+  baselineFallbackManifest?: HarnessManifest;
+  baselineFallbackRevision?: HarnessRevision;
+  fallbackManifest?: HarnessManifest;
+  fallbackRevision?: HarnessRevision;
   expertEvaluation: {
     preRegistration: PreRegistration;
     runInput: RunInput;
@@ -251,8 +257,10 @@ export function evaluateHarnessShadow(
       validateHarnessRevisionBinding({
         revision: input.baselineRevision,
         manifest: input.baselineManifest,
-        parentRevision: null,
-        parentManifest: null,
+        parentRevision: input.baselineParentRevision ?? null,
+        parentManifest: input.baselineParentManifest ?? null,
+        fallbackRevision: input.baselineFallbackRevision,
+        fallbackManifest: input.baselineFallbackManifest,
       }),
     ),
     ...safeValidation("candidate_revision", () =>
@@ -261,6 +269,8 @@ export function evaluateHarnessShadow(
         manifest: input.candidateManifest,
         parentRevision: input.baselineRevision,
         parentManifest: input.baselineManifest,
+        fallbackRevision: input.fallbackRevision,
+        fallbackManifest: input.fallbackManifest,
       }),
     ),
   );
@@ -268,7 +278,9 @@ export function evaluateHarnessShadow(
   const baselineRevision = asRecord(input.baselineRevision);
   const candidateRevision = asRecord(input.candidateRevision);
   const candidateManifest = asRecord(input.candidateManifest);
-  if (baselineRevision.status !== "seed") hardGateFailures.push("baseline_revision_not_seed");
+  if (!new Set(["seed", "shadow_candidate"]).has(String(baselineRevision.status ?? ""))) {
+    hardGateFailures.push("baseline_revision_not_comparable");
+  }
   if (candidateRevision.status !== "shadow_candidate") {
     hardGateFailures.push("candidate_revision_not_shadow_candidate");
   }

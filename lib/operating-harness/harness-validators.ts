@@ -77,6 +77,7 @@ export const harnessRevisionSchema = z
     status: z.enum(["seed", "shadow_candidate", "killed"]),
     changes: z.array(componentChangeSchema),
     derivedFromFeedbackIds: z.array(safeRefSchema),
+    derivedFromWeaknessIds: z.array(safeRefSchema).optional(),
     createdBy: z.enum(["human", "agent_proposal"]),
     fallbackRevisionId: safeRefSchema.nullable(),
     rollbackManifestHash: sha256Schema.nullable(),
@@ -243,6 +244,8 @@ export function validateHarnessRevisionBinding(input: {
   manifest: unknown;
   parentRevision: unknown | null;
   parentManifest: unknown | null;
+  fallbackRevision?: unknown | null;
+  fallbackManifest?: unknown | null;
 }): ValidationResult {
   const errors = [
     ...validateHarnessManifest(input.manifest).errors,
@@ -311,6 +314,9 @@ export function validateHarnessRevisionBinding(input: {
   for (const duplicate of duplicateValues(revision.derivedFromFeedbackIds)) {
     errors.push(`duplicate_revision_feedback_ref:${duplicate}`);
   }
+  for (const duplicate of duplicateValues(revision.derivedFromWeaknessIds ?? [])) {
+    errors.push(`duplicate_revision_weakness_ref:${duplicate}`);
+  }
   for (const duplicate of duplicateValues(
     revision.changes.map((change) => change.componentKind),
   )) {
@@ -326,6 +332,15 @@ export function validateHarnessRevisionBinding(input: {
     }
     if (revision.changes.length > 0) errors.push("seed_revision_has_changes");
     if (input.parentRevision || input.parentManifest) errors.push("seed_revision_received_parent");
+    if (revision.fallbackRevisionId !== null) {
+      errors.push("seed_revision_has_fallback_revision");
+    }
+    if (revision.rollbackManifestHash !== null) {
+      errors.push("seed_revision_has_rollback_manifest");
+    }
+    if (input.fallbackRevision !== undefined || input.fallbackManifest !== undefined) {
+      errors.push("seed_revision_received_fallback");
+    }
   } else {
     if (!parentRevisionParsed?.success || !parentManifestParsed?.success) {
       errors.push("non_seed_revision_missing_valid_parent");
@@ -360,11 +375,115 @@ export function validateHarnessRevisionBinding(input: {
     if (revision.parentManifestHash !== parentManifest.contentHash) {
       errors.push("parent_manifest_hash_mismatch");
     }
-    if (revision.fallbackRevisionId !== parentRevision.revisionId) {
-      errors.push("fallback_revision_must_equal_parent");
+    const inheritedFallbackRevisionId =
+      parentRevision.status === "seed"
+        ? parentRevision.revisionId
+        : parentRevision.fallbackRevisionId;
+    const inheritedFallbackManifestHash =
+      parentRevision.status === "seed"
+        ? parentManifest.contentHash
+        : parentRevision.rollbackManifestHash;
+    if (revision.fallbackRevisionId !== inheritedFallbackRevisionId) {
+      errors.push("fallback_revision_not_inherited_from_parent");
     }
-    if (revision.rollbackManifestHash !== parentManifest.contentHash) {
-      errors.push("rollback_manifest_must_equal_parent");
+    if (revision.rollbackManifestHash !== inheritedFallbackManifestHash) {
+      errors.push("fallback_manifest_not_inherited_from_parent");
+    }
+    const fallbackRevisionProvided = input.fallbackRevision !== undefined;
+    const fallbackManifestProvided = input.fallbackManifest !== undefined;
+    if (fallbackRevisionProvided !== fallbackManifestProvided) {
+      errors.push("fallback_pair_incomplete");
+    }
+    const fallbackRevisionInput = fallbackRevisionProvided
+      ? input.fallbackRevision
+      : fallbackManifestProvided
+        ? null
+        : input.parentRevision;
+    const fallbackManifestInput = fallbackManifestProvided
+      ? input.fallbackManifest
+      : fallbackRevisionProvided
+        ? null
+        : input.parentManifest;
+    const fallbackGraphErrors = [
+      ...validateJsonInputGraph(fallbackRevisionInput).map(
+        (error) => `fallback_revision:${error}`,
+      ),
+      ...validateJsonInputGraph(fallbackManifestInput).map(
+        (error) => `fallback_manifest:${error}`,
+      ),
+    ];
+    if (fallbackGraphErrors.length > 0) {
+      return result([...errors, ...fallbackGraphErrors]);
+    }
+    errors.push(
+      ...collectUnsafeInputErrors(fallbackRevisionInput).map(
+        (error) => `fallback_revision:${error}`,
+      ),
+      ...collectUnsafeInputErrors(fallbackManifestInput).map(
+        (error) => `fallback_manifest:${error}`,
+      ),
+      ...validateHarnessManifest(fallbackManifestInput).errors.map(
+        (error) => `fallback_manifest:${error}`,
+      ),
+    );
+    if (isRecord(fallbackRevisionInput)) {
+      errors.push(
+        ...validateRawContentHash(
+          fallbackRevisionInput,
+          computeHarnessRevisionContentHash as (content: never) => string,
+          "fallback_revision_content_hash_mismatch",
+        ),
+      );
+    }
+    const fallbackRevisionParsed = harnessRevisionSchema.safeParse(fallbackRevisionInput);
+    const fallbackManifestParsed = harnessManifestSchema.safeParse(fallbackManifestInput);
+    if (!fallbackRevisionParsed.success || !fallbackManifestParsed.success) {
+      errors.push("fallback_revision_or_manifest_invalid");
+    } else {
+      const fallbackRevision = fallbackRevisionParsed.data;
+      const fallbackManifest = fallbackManifestParsed.data;
+      if (fallbackRevision.status !== "seed") errors.push("fallback_revision_not_seed");
+      if (fallbackRevision.manifestId !== fallbackManifest.manifestId) {
+        errors.push("fallback_revision_manifest_id_mismatch");
+      }
+      if (fallbackRevision.manifestHash !== fallbackManifest.contentHash) {
+        errors.push("fallback_revision_manifest_hash_mismatch");
+      }
+      if (fallbackManifest.manifestId !== manifest.manifestId) {
+        errors.push("fallback_manifest_lineage_id_mismatch");
+      }
+      if (fallbackManifest.canonicalChainRef !== manifest.canonicalChainRef) {
+        errors.push("fallback_canonical_chain_changed");
+      }
+      if (
+        !sameStringSet(fallbackManifest.allowedSourceClasses, manifest.allowedSourceClasses)
+      ) {
+        errors.push("fallback_protected_source_classes_changed");
+      }
+      if (!sameStringSet(fallbackManifest.intendedUses, manifest.intendedUses)) {
+        errors.push("fallback_protected_intended_uses_changed");
+      }
+      const fallbackComponents = componentMap(fallbackManifest);
+      const currentComponents = componentMap(manifest);
+      for (const kind of PROTECTED_HARNESS_COMPONENT_KINDS) {
+        const fallbackComponent = fallbackComponents.get(kind);
+        const currentComponent = currentComponents.get(kind);
+        if (
+          !fallbackComponent ||
+          !currentComponent ||
+          fallbackComponent.componentRef !== currentComponent.componentRef ||
+          fallbackComponent.revisionRef !== currentComponent.revisionRef ||
+          fallbackComponent.contentHash !== currentComponent.contentHash
+        ) {
+          errors.push(`fallback_protected_component_mismatch:${kind}`);
+        }
+      }
+      if (revision.fallbackRevisionId !== fallbackRevision.revisionId) {
+        errors.push("fallback_revision_id_mismatch");
+      }
+      if (revision.rollbackManifestHash !== fallbackManifest.contentHash) {
+        errors.push("rollback_manifest_hash_mismatch");
+      }
     }
 
     const current = componentMap(manifest);

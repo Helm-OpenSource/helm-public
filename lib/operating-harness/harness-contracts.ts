@@ -116,6 +116,7 @@ export type HarnessRevision = {
   status: HarnessRevisionStatus;
   changes: HarnessComponentChange[];
   derivedFromFeedbackIds: string[];
+  derivedFromWeaknessIds?: string[];
   createdBy: "human" | "agent_proposal";
   fallbackRevisionId: string | null;
   rollbackManifestHash: string | null;
@@ -177,7 +178,11 @@ export function computeHarnessManifestContentHash(
 export function computeHarnessRevisionContentHash(
   content: HarnessRevisionContent,
 ): string {
-  return sha256(canonicalJson(content));
+  const normalized = { ...content };
+  if (normalized.derivedFromWeaknessIds === undefined) {
+    delete normalized.derivedFromWeaknessIds;
+  }
+  return sha256(canonicalJson(normalized));
 }
 
 export function computeHarnessShadowReceiptContentHash(

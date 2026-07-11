@@ -12,8 +12,13 @@ import {
   computeHarnessManifestContentHash,
   computeHarnessRevisionContentHash,
   computeHarnessShadowReceiptContentHash,
+  type HarnessManifest,
+  type HarnessRevision,
 } from "./harness-contracts";
-import { sha256 } from "../expert-capability/hashing";
+import {
+  computePreRegistrationContentHash,
+  sha256,
+} from "../expert-capability/hashing";
 import {
   syntheticFleetHarnessSource,
   syntheticHarnessPair,
@@ -53,6 +58,93 @@ function shadowInput() {
   return {
     ...pair,
     expertEvaluation: expertEvaluationInput(),
+    sourceBindings: [{ source: syntheticHarnessSource(), promotion: null }],
+  };
+}
+
+function stampManifest(
+  manifest: Omit<HarnessManifest, "contentHash">,
+): HarnessManifest {
+  return {
+    ...manifest,
+    contentHash: computeHarnessManifestContentHash(manifest),
+  };
+}
+
+function stampRevision(
+  revision: Omit<HarnessRevision, "contentHash">,
+): HarnessRevision {
+  return {
+    ...revision,
+    contentHash: computeHarnessRevisionContentHash(revision),
+  };
+}
+
+function secondGenerationShadowInput() {
+  const pair = syntheticHarnessPair();
+  const { contentHash: _candidateManifestHash, ...candidateManifestContent } =
+    pair.candidateManifest;
+  const candidateManifest = stampManifest({
+    ...candidateManifestContent,
+    components: pair.candidateManifest.components.map((component) =>
+      component.componentKind === "judgement_fusion"
+        ? {
+            ...component,
+            revisionRef: "judgement_fusion:v3",
+            contentHash: sha256("judgement_fusion:judgement_fusion:v3"),
+          }
+        : component,
+    ),
+    createdAt: "2026-06-04T05:00:00.000Z",
+  });
+  const { contentHash: _candidateRevisionHash, ...candidateRevisionContent } =
+    pair.candidateRevision;
+  const candidateRevision = stampRevision({
+    ...candidateRevisionContent,
+    revisionId: "oh-expert-v2",
+    manifestHash: candidateManifest.contentHash,
+    parentRevisionId: pair.candidateRevision.revisionId,
+    parentManifestHash: pair.candidateManifest.contentHash,
+    changes: [
+      {
+        componentKind: "judgement_fusion",
+        fromRevisionRef: "judgement_fusion:v2",
+        toRevisionRef: "judgement_fusion:v3",
+        rationaleCode: "heldout_failure",
+        evidenceRefs: ["weakness:heldout-001"],
+      },
+    ],
+    derivedFromFeedbackIds: [],
+    derivedFromWeaknessIds: ["weakness:heldout-001"],
+    fallbackRevisionId: pair.baselineRevision.revisionId,
+    rollbackManifestHash: pair.baselineManifest.contentHash,
+    createdAt: "2026-06-04T05:00:00.000Z",
+  });
+  const expertEvaluation = expertEvaluationInput();
+  expertEvaluation.preRegistration = {
+    ...expertEvaluation.preRegistration,
+    previousExpertRevisionId: pair.candidateRevision.revisionId,
+  };
+  expertEvaluation.preRegistration.contentHash = computePreRegistrationContentHash(
+    expertEvaluation.preRegistration,
+  );
+  expertEvaluation.runInput = {
+    ...expertEvaluation.runInput,
+    candidateRevisionId: candidateRevision.revisionId,
+    candidateRevisionCreatedAt: candidateRevision.createdAt,
+    ranAt: "2026-06-04T06:00:00.000Z",
+  };
+
+  return {
+    baselineManifest: pair.candidateManifest,
+    baselineRevision: pair.candidateRevision,
+    baselineParentManifest: pair.baselineManifest,
+    baselineParentRevision: pair.baselineRevision,
+    candidateManifest,
+    candidateRevision,
+    fallbackManifest: pair.baselineManifest,
+    fallbackRevision: pair.baselineRevision,
+    expertEvaluation,
     sourceBindings: [{ source: syntheticHarnessSource(), promotion: null }],
   };
 }
@@ -296,17 +388,249 @@ describe("operating harness manifest and revision", () => {
     ).toContain("parent_revision_killed");
   });
 
+  it("rejects fallback revisions and manifests whose declared hashes do not bind content", () => {
+    const pair = syntheticHarnessPair();
+    const fallbackManifest = {
+      ...pair.baselineManifest,
+      contentHash: sha256("attacker-declared-fallback-manifest"),
+    };
+    const fallbackRevision = {
+      ...pair.baselineRevision,
+      manifestHash: fallbackManifest.contentHash,
+      contentHash: sha256("attacker-declared-fallback-revision"),
+    };
+    const { contentHash: _candidateHash, ...candidateContent } = pair.candidateRevision;
+    const candidateRevision = stampRevision({
+      ...candidateContent,
+      rollbackManifestHash: fallbackManifest.contentHash,
+    });
+
+    const validation = validateHarnessRevisionBinding({
+      revision: candidateRevision,
+      manifest: pair.candidateManifest,
+      parentRevision: pair.baselineRevision,
+      parentManifest: pair.baselineManifest,
+      fallbackRevision,
+      fallbackManifest,
+    });
+
+    expect(validation.errors).toEqual(
+      expect.arrayContaining([
+        "fallback_manifest:harness_manifest_content_hash_mismatch",
+        "fallback_revision_content_hash_mismatch",
+      ]),
+    );
+  });
+
+  it("requires the rollback fallback to remain a safe seed revision", () => {
+    const pair = syntheticHarnessPair();
+    const { contentHash: _candidateHash, ...candidateContent } = pair.candidateRevision;
+    const candidateRevision = stampRevision({
+      ...candidateContent,
+      fallbackRevisionId: pair.candidateRevision.revisionId,
+      rollbackManifestHash: pair.candidateManifest.contentHash,
+    });
+
+    expect(
+      validateHarnessRevisionBinding({
+        revision: candidateRevision,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+        fallbackRevision: pair.candidateRevision,
+        fallbackManifest: pair.candidateManifest,
+      }).errors,
+    ).toContain("fallback_revision_not_seed");
+  });
+
+  it("requires explicit fallback revision and manifest inputs to be supplied as a pair", () => {
+    const pair = syntheticHarnessPair();
+
+    expect(
+      validateHarnessRevisionBinding({
+        revision: pair.candidateRevision,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+        fallbackRevision: pair.baselineRevision,
+      }).errors,
+    ).toContain("fallback_pair_incomplete");
+  });
+
+  it("rejects cyclic fallback manifests before parsing or hashing", () => {
+    const pair = syntheticHarnessPair();
+    const cyclicFallback = structuredClone(pair.baselineManifest) as unknown as Record<
+      string,
+      unknown
+    >;
+    cyclicFallback.self = cyclicFallback;
+
+    expect(() =>
+      validateHarnessRevisionBinding({
+        revision: pair.candidateRevision,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+        fallbackRevision: pair.baselineRevision,
+        fallbackManifest: cyclicFallback,
+      }),
+    ).not.toThrow();
+    expect(
+      validateHarnessRevisionBinding({
+        revision: pair.candidateRevision,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+        fallbackRevision: pair.baselineRevision,
+        fallbackManifest: cyclicFallback,
+      }).errors,
+    ).toContain("fallback_manifest:input_graph_contains_reused_reference");
+  });
+
+  it("keeps the P1 revision schema backward compatible while rejecting duplicate weakness refs", () => {
+    const pair = syntheticHarnessPair();
+    const { contentHash: _baselineHash, derivedFromWeaknessIds: _weaknesses, ...p1Content } =
+      pair.baselineRevision;
+    const p1Revision = stampRevision(p1Content);
+
+    expect(
+      validateHarnessRevisionBinding({
+        revision: p1Revision,
+        manifest: pair.baselineManifest,
+        parentRevision: null,
+        parentManifest: null,
+      }),
+    ).toEqual({ ok: true, errors: [] });
+
+    const { contentHash: _candidateHash, ...candidateContent } = pair.candidateRevision;
+    const duplicateWeaknessRevision = stampRevision({
+      ...candidateContent,
+      derivedFromWeaknessIds: ["weakness:heldout-001", "weakness:heldout-001"],
+    });
+    expect(
+      validateHarnessRevisionBinding({
+        revision: duplicateWeaknessRevision,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+      }).errors,
+    ).toContain("duplicate_revision_weakness_ref:weakness:heldout-001");
+  });
+
+  it("rejects a content-bound fallback from a foreign harness lineage", () => {
+    const pair = syntheticHarnessPair();
+    const { contentHash: _fallbackManifestHash, ...fallbackManifestContent } =
+      pair.baselineManifest;
+    const fallbackManifest = stampManifest({
+      ...fallbackManifestContent,
+      manifestId: "harness:foreign-core",
+      canonicalChainRef: "helm.operating-harness.foreign-chain.v1",
+    });
+    const { contentHash: _fallbackRevisionHash, ...fallbackRevisionContent } =
+      pair.baselineRevision;
+    const fallbackRevision = stampRevision({
+      ...fallbackRevisionContent,
+      revisionId: "foreign-seed-v0",
+      manifestId: fallbackManifest.manifestId,
+      manifestHash: fallbackManifest.contentHash,
+    });
+    const { contentHash: _candidateHash, ...candidateContent } = pair.candidateRevision;
+    const candidateRevision = stampRevision({
+      ...candidateContent,
+      fallbackRevisionId: fallbackRevision.revisionId,
+      rollbackManifestHash: fallbackManifest.contentHash,
+    });
+
+    expect(
+      validateHarnessRevisionBinding({
+        revision: candidateRevision,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+        fallbackRevision,
+        fallbackManifest,
+      }).errors,
+    ).toEqual(
+      expect.arrayContaining([
+        "fallback_revision_not_inherited_from_parent",
+        "fallback_manifest_not_inherited_from_parent",
+        "fallback_manifest_lineage_id_mismatch",
+        "fallback_canonical_chain_changed",
+      ]),
+    );
+  });
+
+  it("rejects a fallback whose protected component bindings differ", () => {
+    const pair = syntheticHarnessPair();
+    const { contentHash: _fallbackManifestHash, ...fallbackManifestContent } =
+      pair.baselineManifest;
+    const fallbackManifest = stampManifest({
+      ...fallbackManifestContent,
+      components: pair.baselineManifest.components.map((component) =>
+        component.componentKind === "evaluator"
+          ? {
+              ...component,
+              revisionRef: "evaluator:foreign-v2",
+              contentHash: sha256("evaluator:foreign-v2"),
+            }
+          : component,
+      ),
+    });
+    const { contentHash: _fallbackRevisionHash, ...fallbackRevisionContent } =
+      pair.baselineRevision;
+    const fallbackRevision = stampRevision({
+      ...fallbackRevisionContent,
+      manifestHash: fallbackManifest.contentHash,
+    });
+    const { contentHash: _candidateHash, ...candidateContent } = pair.candidateRevision;
+    const candidateRevision = stampRevision({
+      ...candidateContent,
+      rollbackManifestHash: fallbackManifest.contentHash,
+    });
+
+    expect(
+      validateHarnessRevisionBinding({
+        revision: candidateRevision,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+        fallbackRevision,
+        fallbackManifest,
+      }).errors,
+    ).toContain("fallback_protected_component_mismatch:evaluator");
+  });
+
+  it("rejects seed revisions with dangling fallback pointers", () => {
+    const pair = syntheticHarnessPair();
+    const { contentHash: _baselineHash, ...baselineContent } = pair.baselineRevision;
+    const seedWithFallback = stampRevision({
+      ...baselineContent,
+      fallbackRevisionId: "revision:does-not-exist",
+      rollbackManifestHash: sha256("manifest:does-not-exist"),
+    });
+
+    expect(
+      validateHarnessRevisionBinding({
+        revision: seedWithFallback,
+        manifest: pair.baselineManifest,
+        parentRevision: null,
+        parentManifest: null,
+      }).errors,
+    ).toEqual(
+      expect.arrayContaining([
+        "seed_revision_has_fallback_revision",
+        "seed_revision_has_rollback_manifest",
+      ]),
+    );
+  });
+
   it("requires a seed trust root to be human-authored", () => {
     const pair = syntheticHarnessPair();
     const { contentHash: _baselineHash, ...baselineContent } = pair.baselineRevision;
-    const agentSeedContent = {
+    const agentSeed = stampRevision({
       ...baselineContent,
-      createdBy: "agent_proposal" as const,
-    };
-    const agentSeed = {
-      ...agentSeedContent,
-      contentHash: computeHarnessRevisionContentHash(agentSeedContent),
-    };
+      createdBy: "agent_proposal",
+    });
 
     expect(
       validateHarnessRevisionBinding({
@@ -316,6 +640,33 @@ describe("operating harness manifest and revision", () => {
         parentManifest: null,
       }).errors,
     ).toContain("seed_revision_not_human_authored");
+  });
+
+  it("keeps revision hashes stable when an optional weakness field is undefined", () => {
+    const pair = syntheticHarnessPair();
+    const { contentHash: _candidateHash, ...candidateContent } = pair.candidateRevision;
+    const inMemory = stampRevision({
+      ...candidateContent,
+      derivedFromWeaknessIds: undefined,
+    });
+    const roundTripped = JSON.parse(JSON.stringify(inMemory)) as HarnessRevision;
+
+    expect(
+      validateHarnessRevisionBinding({
+        revision: inMemory,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+      }).ok,
+    ).toBe(true);
+    expect(
+      validateHarnessRevisionBinding({
+        revision: roundTripped,
+        manifest: pair.candidateManifest,
+        parentRevision: pair.baselineRevision,
+        parentManifest: pair.baselineManifest,
+      }).ok,
+    ).toBe(true);
   });
 });
 
@@ -475,5 +826,24 @@ describe("operating harness shadow evaluation", () => {
     expect(metricReceipt.hardGateFailures).toContain("expert_evaluator_exception");
     expect(metricReceipt.expertEvaluation.candidateWeighted).toBe(0);
     expect(validateHarnessShadowReceipt(metricReceipt)).toEqual({ ok: true, errors: [] });
+  });
+
+  it("evaluates a second shadow candidate against its content-bound candidate parent", () => {
+    const receipt = evaluateHarnessShadow(secondGenerationShadowInput());
+
+    expect(receipt.verdict).toBe("shadow_pass");
+    expect(receipt.eligibleForOwnerReview).toBe(true);
+    expect(receipt.hardGateFailures).toEqual([]);
+    expect(receipt.baselineRevisionId).toBe("oh-expert-v1");
+    expect(receipt.candidateRevisionId).toBe("oh-expert-v2");
+  });
+
+  it("uses an explicit allowlist for comparable baseline revision states", () => {
+    const input = shadowInput();
+    (input.baselineRevision as unknown as Record<string, unknown>).status = "future_state";
+
+    expect(evaluateHarnessShadow(input).hardGateFailures).toContain(
+      "baseline_revision_not_comparable",
+    );
   });
 });
