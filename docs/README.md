@@ -78,6 +78,7 @@ connector 授权、写回、外发或审批证明。
 - [交付工程师黄金路径要求 / Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
 - [交付工程师初始化诊断要求 / Delivery engineer setup diagnostic requirements](product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md)
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
+- [默认经营工作区重构蓝图 / Default operating workspace refactor blueprint](product/HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md) — design-only 设计蓝图；不是实现、API freeze、路由删除批准或执行授权
 - [Solution extension 协议 / Solution extension protocol](product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)
 - [扩展目录与命名协议 / Extension directory and naming protocol](product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md)
 - [经营信号首公里方法 / Signal First Mile method](product/HELM_SIGNAL_FIRST_MILE_METHOD.md)
