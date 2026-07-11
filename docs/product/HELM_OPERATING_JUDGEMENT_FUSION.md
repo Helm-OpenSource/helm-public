@@ -37,6 +37,11 @@ Reused verbatim: `OperatingSignalFlowEvent`, the 6 `objectKind`s, `evidenceCover
 `expert-capability` `ExpertOutput`, `PreRegistration`, content hashing,
 `validatePreRegistration`, `validateEvaluationRun`, `validateJudgementPacket`.
 
+Canonical-spine posture: `OperatingSignalFlowEvent` remains a legacy/reference fusion input in
+v0.1. New consumers should first map observations through the additive canonical contracts in
+`lib/operating-harness/`; lifecycle state stays a derived readout and is not copied into canonical
+`SignalEvent` records. See `HELM_OPERATING_HARNESS_REQUIREMENTS.md`.
+
 ## Contracts (`lib/operating-judgement-fusion`)
 
 - `OperatingJudgement` / `JudgementFusionInput` / `JudgementFusionResult` (`contract.ts`).
