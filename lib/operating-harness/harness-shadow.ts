@@ -12,7 +12,7 @@ import {
   type EvalReport,
   type RoleAggregate,
 } from "../expert-capability/evaluator";
-import { sha256 } from "../expert-capability/hashing";
+import { canonicalJson, sha256 } from "../expert-capability/hashing";
 import type { EvalCasePromotion } from "../expert-capability/validators";
 import {
   validateOperatingSignalImprovementGate,
@@ -297,6 +297,9 @@ export function evaluateHarnessShadow(
     : [];
 
   const sourceBindings = Array.isArray(input.sourceBindings) ? input.sourceBindings : [];
+  const sourceBindingRootHash = sha256(
+    canonicalJson(sourceBindings.map((binding) => sha256(canonicalJson(binding)))),
+  );
   if (sourceBindings.length === 0) hardGateFailures.push("source_binding_missing");
   const seenSourceIds = new Set<string>();
   sourceBindings.forEach((binding, index) => {
@@ -442,6 +445,7 @@ export function evaluateHarnessShadow(
     candidateQuality: candidateQuality.metrics,
     baselineQuality: baselineQuality.metrics,
     sourceGateCount: sourceBindings.length,
+    sourceBindingRootHash,
     verdict,
     hardGateFailures: uniqueFailures,
     eligibleForOwnerReview: verdict === "shadow_pass",

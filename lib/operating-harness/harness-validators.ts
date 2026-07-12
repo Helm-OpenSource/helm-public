@@ -134,6 +134,7 @@ export const harnessShadowReceiptSchema = z
     candidateQuality: qualityMetricsSchema,
     baselineQuality: qualityMetricsSchema,
     sourceGateCount: z.number().int().min(0),
+    sourceBindingRootHash: sha256Schema.optional(),
     verdict: z.enum(["shadow_pass", "inconclusive", "fail"]),
     hardGateFailures: z.array(z.string().min(1)),
     eligibleForOwnerReview: z.boolean(),

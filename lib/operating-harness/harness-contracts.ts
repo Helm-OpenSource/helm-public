@@ -157,6 +157,9 @@ export type HarnessShadowReceipt = {
   candidateQuality: OperatingHarnessQualityMetrics;
   baselineQuality: OperatingHarnessQualityMetrics;
   sourceGateCount: number;
+  // Optional only for P1 receipt compatibility. P2 consumers must reproduce the
+  // receipt from bound source inputs; absence never means "source unconstrained".
+  sourceBindingRootHash?: string;
   verdict: HarnessShadowVerdict;
   hardGateFailures: string[];
   eligibleForOwnerReview: boolean;
@@ -188,5 +191,9 @@ export function computeHarnessRevisionContentHash(
 export function computeHarnessShadowReceiptContentHash(
   content: HarnessShadowReceiptContent,
 ): string {
-  return sha256(canonicalJson(content));
+  const normalized = { ...content };
+  if (normalized.sourceBindingRootHash === undefined) {
+    delete normalized.sourceBindingRootHash;
+  }
+  return sha256(canonicalJson(normalized));
 }
