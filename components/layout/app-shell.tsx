@@ -86,13 +86,21 @@ export function AppShell({
         data-demo-mode={resolvedDemoMode}
         data-experience-mode={experienceMode}
       >
-        <ShellChromeGate profiles={shellChromeProfiles}>
+        {shellChromeProfiles.length === 0 ? (
           <Sidebar
             workspaceName={workspaceName}
             pendingApprovals={pendingApprovals}
             navExtensionClusters={navExtensionClusters}
           />
-        </ShellChromeGate>
+        ) : (
+          <ShellChromeGate profiles={shellChromeProfiles}>
+            <Sidebar
+              workspaceName={workspaceName}
+              pendingApprovals={pendingApprovals}
+              navExtensionClusters={navExtensionClusters}
+            />
+          </ShellChromeGate>
+        )}
         <div className="min-w-0 flex-1 overflow-x-hidden px-0 pb-6">
           <Topbar
             workspaceName={workspaceName}
