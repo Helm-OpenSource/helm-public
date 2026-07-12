@@ -10,6 +10,8 @@ export type WorkspaceFeatureFlags = {
   llmEnhancement: boolean;
   evolutionSignals: boolean;
   swarmReadOnlyWorkers: boolean;
+  /** 控制塔 home：/dashboard 内容开关（默认关 = 旧版视图即回滚态）。 */
+  controlTowerHome: boolean;
 };
 
 export const defaultWorkspaceFeatureFlags: WorkspaceFeatureFlags = {
@@ -20,6 +22,7 @@ export const defaultWorkspaceFeatureFlags: WorkspaceFeatureFlags = {
   llmEnhancement: true,
   evolutionSignals: true,
   swarmReadOnlyWorkers: false,
+  controlTowerHome: false,
 };
 
 export function parseWorkspaceFeatureFlags(raw: string | null | undefined): WorkspaceFeatureFlags {
@@ -33,6 +36,8 @@ export function parseWorkspaceFeatureFlags(raw: string | null | undefined): Work
     evolutionSignals: parsed?.evolutionSignals ?? defaultWorkspaceFeatureFlags.evolutionSignals,
     swarmReadOnlyWorkers:
       parsed?.swarmReadOnlyWorkers ?? defaultWorkspaceFeatureFlags.swarmReadOnlyWorkers,
+    controlTowerHome:
+      parsed?.controlTowerHome ?? defaultWorkspaceFeatureFlags.controlTowerHome,
   };
 }
 
