@@ -400,29 +400,31 @@ export function createHarnessEvolutionReviewPacket(input: {
   packet: HarnessEvolutionReviewPacket;
 } {
   const fallback = fallbackFromContext(input.parentContext);
-  const errors = validateHarnessImprovementProposalBinding({
+  const proposalBindingErrors = validateHarnessImprovementProposalBinding({
     proposal: input.proposal,
     weaknesses: input.weaknesses,
     weaknessEvidence: input.weaknessEvidence,
     parentContext: input.parentContext,
   }).errors;
+  const errors = [...proposalBindingErrors];
   if (!(Date.parse(input.proposal.createdAt) < Date.parse(input.candidateRevision.createdAt))) {
     errors.push("candidate_not_created_after_proposal");
   }
   errors.push(...candidateMatchesProposal(input));
+  let candidateBindingErrors: string[] = [];
   if (!fallback.revision || !fallback.manifest) {
+    candidateBindingErrors = ["review_missing_last_safe_fallback_binding"];
     errors.push("review_missing_last_safe_fallback_binding");
   } else {
-    errors.push(
-      ...validateHarnessRevisionBinding({
-        revision: input.candidateRevision,
-        manifest: input.candidateManifest,
-        parentRevision: input.parentContext.revision,
-        parentManifest: input.parentContext.manifest,
-        fallbackRevision: fallback.revision,
-        fallbackManifest: fallback.manifest,
-      }).errors.map((error) => `candidate:${error}`),
-    );
+    candidateBindingErrors = validateHarnessRevisionBinding({
+      revision: input.candidateRevision,
+      manifest: input.candidateManifest,
+      parentRevision: input.parentContext.revision,
+      parentManifest: input.parentContext.manifest,
+      fallbackRevision: fallback.revision,
+      fallbackManifest: fallback.manifest,
+    }).errors;
+    errors.push(...candidateBindingErrors.map((error) => `candidate:${error}`));
   }
   const shadowReceipt = evaluateHarnessShadow({
     baselineManifest: input.parentContext.manifest,
@@ -448,13 +450,7 @@ export function createHarnessEvolutionReviewPacket(input: {
   const hardGateFailures = unique(errors);
   const freshHeldoutConfirmed = !heldoutReused;
   const rollbackPassed =
-    Boolean(fallback.revision && fallback.manifest) &&
-    !hardGateFailures.some(
-      (error) =>
-        error.includes("fallback") ||
-        error.includes("rollback") ||
-        error.startsWith("candidate:"),
-    );
+    proposalBindingErrors.length === 0 && candidateBindingErrors.length === 0;
   const shadowPassed =
     shadowReceipt.verdict === "shadow_pass" && hardGateFailures.length === 0;
   const decision =

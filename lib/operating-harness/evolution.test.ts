@@ -629,6 +629,63 @@ describe("operating harness P2 fresh-heldout owner packet", () => {
     ).toEqual({ ok: true, errors: [] });
   });
 
+  it("keeps the rollback gate consistent when proposal binding fails", () => {
+    const pipeline = proposalAndCandidate();
+    const { contentHash: _proposalHash, ...proposalContent } = pipeline.proposal;
+    const invalidProposalContent = {
+      ...proposalContent,
+      createdAt: "2026-06-04T03:30:00.000Z",
+    };
+    const invalidProposal = {
+      ...invalidProposalContent,
+      contentHash: computeHarnessImprovementProposalContentHash(
+        invalidProposalContent,
+      ),
+    };
+    const expertEvaluation = freshExpertEvaluation(
+      pipeline.candidateRevision.revisionId,
+      pipeline.candidateRevision.createdAt,
+      pipeline.context.revision.revisionId,
+    );
+    const sourceBindings = [{ source: syntheticHarnessSource(), promotion: null }];
+    const review = createHarnessEvolutionReviewPacket({
+      packetId: "evolution-review:invalid-proposal-order",
+      proposal: invalidProposal,
+      weaknesses: pipeline.mined.weaknesses,
+      weaknessEvidence: [pipeline.mined.evidence],
+      parentContext: pipeline.context,
+      candidateManifest: pipeline.candidateManifest,
+      candidateRevision: pipeline.candidateRevision,
+      expertEvaluation,
+      sourceBindings,
+      createdAt: "2026-06-04T06:05:00.000Z",
+    });
+    const binding = validateHarnessEvolutionReviewPacketBinding({
+      packet: review.packet,
+      proposal: invalidProposal,
+      weaknesses: pipeline.mined.weaknesses,
+      weaknessEvidence: [pipeline.mined.evidence],
+      parentContext: pipeline.context,
+      candidateManifest: pipeline.candidateManifest,
+      candidateRevision: pipeline.candidateRevision,
+      fallbackManifest: pipeline.context.fallbackManifest!,
+      fallbackRevision: pipeline.context.fallbackRevision!,
+      shadowReceipt: review.shadowReceipt,
+      expertEvaluation,
+      sourceBindings,
+    });
+
+    expect(review.packet.decision).toBe("rejected");
+    expect(
+      review.packet.controlGateResults.find(
+        (gate) => gate.gateType === "rollback_gate",
+      )?.passed,
+    ).toBe(false);
+    expect(binding.errors).not.toContain(
+      "review_packet_rollback_gate_result_mismatch",
+    );
+  });
+
   it("rejects reuse of the weakness-development held-out set", () => {
     const pipeline = proposalAndCandidate();
     const reused = baseExpertEvaluation();
