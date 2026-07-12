@@ -267,6 +267,12 @@ calibration、evidence、reviewer、boundary、feedback-to-eval、de-identificat
 public synthetic fixture 固定为 `not_ready`。即使全部阈值达到，也只返回
 `ready_for_p3_design_review`，不会记录 owner approval、触发实现或授予 production authority。
 
+Owner 已在 2026-07-12 以范围限定的 override 授权 P3a/P3b/P3d/P3e 建设。implementation
+authorization 与 evidence readiness 分离：P3a 可交付 public deterministic read model，P3b/P3d/P3e
+可建设 registry、shadow adapter 与 self-dogfood pilot，但 readiness evaluator、隐私门、owner gate、
+rollback 和生产权限语义不得因此降级。P3a 当前合同见
+[Enterprise Operating Context Model](HELM_ENTERPRISE_OPERATING_CONTEXT_MODEL.md)。
+
 详细阈值、derived operating-context 架构、跨仓职责、实施切片和 abort 条件见
 [P3 数据门控升级计划](HELM_OPERATING_HARNESS_P3_DATA_GATED_PLAN.md)。
 
@@ -284,6 +290,7 @@ customer data, writeback, external send, approval, commitment, or memory promoti
 
 | Date | Change |
 | --- | --- |
+| 2026-07-12 | Recorded the scoped P3a/P3b/P3d/P3e owner implementation override without changing evidence readiness or production authority |
 | 2026-07-12 | Added the machine-checkable P3 data-readiness gate and linked deferred implementation plan |
 | 2026-07-12 | Added the P2 replay-proven weakness, additive proposal, fresh-heldout, and owner-review-only evolution loop |
 | 2026-07-12 | Added P1 content-bound manifest/revision composition and shadow-only evaluation requirements |

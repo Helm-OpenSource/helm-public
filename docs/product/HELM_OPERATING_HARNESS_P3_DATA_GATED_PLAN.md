@@ -1,12 +1,12 @@
 ---
 status: draft
-interface_status: planning contract; P3 implementation is not authorized
+interface_status: P3a/P3b/P3d/P3e implementation owner-authorized; evidence readiness and production activation remain gated
 owner: Product / Delivery Engineering / Engineering
 created: 2026-07-12
 review_after: 2026-08-12
-public_safety: Public-safe aggregate readiness evidence and deferred architecture only. No customer data, production connector, model training, online learning, automatic adoption, writeback, external send, approval, commitment, or memory promotion.
+public_safety: Public-safe aggregate readiness evidence, P3a deterministic context contract, and owner-authorized P3b/P3d/P3e implementation boundaries. No customer data, production activation, model training, automatic adoption, writeback, external send, approval, commitment, or memory promotion.
 archive_trigger:
-  - P3 design is owner-approved and superseded by an implemented, validated plan linked from docs/STATUS.md.
+  - A successor P3 plan supersedes this contract and is linked from docs/STATUS.md.
 ---
 
 # Helm Operating Harness P3 Data-Gated Plan / P3 数据门控升级计划
@@ -18,6 +18,12 @@ archive_trigger:
 当前裁决是 **`not_ready`**。P0、P1、P2 已形成 public-safe implementation 与堆叠 PR，
 但尚未形成足够的多版本、多对象、多独立 held-out、去人名 self-dogfood、反馈转 eval、校准和
 rollback drill 证据。时间经过、模型参数升级或增加 synthetic case 都不能替代这些证据。
+
+2026-07-12 owner override 已单独授权建设 P3a public context contract、P3b operational evidence
+registry、P3d model-assisted shadow adapter 与 P3e self-dogfood pilot。该授权允许实现 dormant/read-only/
+shadow 能力，但不把本节的 `not_ready` 改成 ready，不授予 production promotion、客户数据训练、自动对客
+动作、writeback、external send、approval 或 memory promotion。P3c deterministic baseline 作为 P3a/P3d
+之间的 public 评测基线继续推进，不需要模型权限。
 
 P3 readiness evaluator 只允许两个结果：
 
@@ -181,16 +187,19 @@ P3 设计评审通过后，优先定义下列 additive public contracts；名称
 - additive contracts、strict validators、synthetic temporal fixtures；
 - deterministic projector：canonical records -> context snapshot；
 - content-addressed replay；
-- legacy `WorldModelSnapshot` read adapter，仅用于迁移审计；
-- rule baseline 与 held-out eval；
+- legacy `WorldModelSnapshot` metadata audit adapter，仅用于隔离迁移审计；
+- synthetic contract baseline 与 replay eval；真实 pre-registered held-out lift 留给 P3c；
 - 不接 DB、不调用模型。
 
 退出标准：相同 canonical input + manifest 必须生成同一 snapshot hash；任何 cross-tenant、raw/private、
 state-authority、writeback 或 unsupported relation 输入 fail closed。
 
+Owner override 已授权本切片实现；当前实现合同见
+[Enterprise Operating Context Model](HELM_ENTERPRISE_OPERATING_CONTEXT_MODEL.md)。
+
 ### P3b - Operational Evidence Registry
 
-仓库：`helm-control-plane`，须另开需求与 owner review。
+仓库：`helm-control-plane`，已获 owner 实现授权；仍须独立 worktree/PR 和运行面验证。
 
 - 从真实 registry 生成 readiness evidence，而不是人工填写 scalar；
 - owner attestation、trusted timestamp、window completeness、receipt resolution；
@@ -224,6 +233,8 @@ state-authority、writeback 或 unsupported relation 输入 fail closed。
 退出标准：至少三个全新 B 集上持续超过上一版专家与强规则 baseline；ECE、evidence、reviewer、boundary
 同时达标。tie 或一次性 lift 不能证明模型复杂度合理。
 
+Owner override 只授权建设 provider-neutral、shadow-only 路径；在上述退出标准达到前不得启用生产采用。
+
 ### P3e - Owner-Gated Dogfood Pilot
 
 仓库：`helm-control-plane`；customer overlay 不在首轮。
@@ -236,6 +247,9 @@ state-authority、writeback 或 unsupported relation 输入 fail closed。
 
 退出标准：连续窗口满足 readiness policy；任何事故立即回到 deterministic baseline。客户 pilot 必须另行
 设计，不由 self-dogfood 自动外推。
+
+Owner override 已授权 Helm self-dogfood pilot 的实现与受控运行准备，不授权 customer fleet 进入改进
+闭环，也不授权将内部组织诊断用于 HR/绩效判断。
 
 ## 7. 算法与模型选择原则
 
@@ -307,4 +321,5 @@ strong deterministic baseline on unseen data.
 
 | Date | Change |
 | --- | --- |
+| 2026-07-12 | Recorded owner implementation authorization for P3a/P3b/P3d/P3e while preserving independent evidence-readiness and production-activation gates |
 | 2026-07-12 | Created the data-gated P3 readiness policy, deferred architecture, implementation slices, and abort conditions |
