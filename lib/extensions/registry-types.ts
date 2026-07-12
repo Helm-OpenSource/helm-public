@@ -20,6 +20,7 @@ import type { AttentionItem } from "@/lib/shell/attention-feed";
 import type { OperationSuggestion } from "@/lib/shell/operation-suggestion";
 import type { RoleHomeRoutingTable } from "@/lib/shell/role-home-routing";
 import type { WorkstationDescriptor } from "@/lib/shell/workstation";
+import type { AgentRunAuditEntry } from "@/lib/shell/run-trajectory-audit";
 
 export type WorkspaceLike = {
   id: string;
@@ -324,6 +325,26 @@ export type WorkstationSourceContribution = {
     english: boolean;
     signal?: AbortSignal;
   }) => Promise<ReadonlyArray<WorkstationDescriptor>>;
+};
+
+/**
+ * Run-trajectory audit source (blueprint Phase 5, **concat**, experimental).
+ * Projects an overlay's AgentRunCapsule / SARP receipts into read-only,
+ * de-identified audit entries. Read-only, no control semantics (verdict is a
+ * statement, never an action); no callbacks, no secrets/PII. Same §4.4
+ * aggregation as attention/workstations. `experimental`.
+ */
+export type AgentRunAuditSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildRunAuditEntries: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<AgentRunAuditEntry>>;
 };
 
 export type ExtensionIndustryDemoReadoutPage = {
