@@ -8,9 +8,11 @@ export default async function ApprovalsPage({
 }) {
   const {
     actionGovernance,
+    candidateGovernance,
     approvalId,
     evidenceOpen,
     tasks,
+    governedCandidates,
     learningPanels,
     businessLoopGapSummary,
     firstLoopModel,
@@ -21,6 +23,8 @@ export default async function ApprovalsPage({
   return (
     <ApprovalsClient
       actionGovernance={actionGovernance}
+      candidateGovernance={candidateGovernance}
+      governedCandidates={governedCandidates}
       tasks={tasks}
       learningPanels={learningPanels}
       businessLoopGapSummary={businessLoopGapSummary}
