@@ -154,7 +154,7 @@ function hasValidSha256(value: unknown): value is string {
   return typeof value === "string" && SHA256_PATTERN.test(value);
 }
 
-function validateJsonInputGraph(input: unknown): string[] {
+export function validateJsonInputGraph(input: unknown): string[] {
   try {
     const seen = new WeakSet<object>();
     const stack: Array<{ value: unknown; depth: number }> = [{ value: input, depth: 0 }];
