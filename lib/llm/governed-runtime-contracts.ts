@@ -361,16 +361,29 @@ export function evaluateCapabilityGrant(input: {
     return denyGrant("blocked_side_effect", grant);
   }
 
-  const decision =
-    grant.effectMode === "read_only"
-      ? "allow_read"
-      : grant.effectMode === "draft_only"
-        ? "allow_draft"
-        : "allow_review";
-  return {
-    decision,
-    reason: "allowed",
-    grantRef: grant.grantRef,
-    effectMode: grant.effectMode,
-  };
+  switch (grant.effectMode) {
+    case "read_only":
+      return {
+        decision: "allow_read",
+        reason: "allowed",
+        grantRef: grant.grantRef,
+        effectMode: grant.effectMode,
+      };
+    case "draft_only":
+      return {
+        decision: "allow_draft",
+        reason: "allowed",
+        grantRef: grant.grantRef,
+        effectMode: grant.effectMode,
+      };
+    case "review_required":
+      return {
+        decision: "allow_review",
+        reason: "allowed",
+        grantRef: grant.grantRef,
+        effectMode: grant.effectMode,
+      };
+    default:
+      return denyGrant("blocked_side_effect", grant);
+  }
 }
