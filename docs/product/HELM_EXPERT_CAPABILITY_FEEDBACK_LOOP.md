@@ -259,6 +259,12 @@ Gap review 结论：
 
 ### 11.1 `JudgementPacket`
 
+The P0 canonical runtime-facing packet type now lives in
+`lib/operating-harness/contracts.ts`. Existing expert-capability fixtures continue to use the
+smaller `ExpertOutput` body for backward-compatible offline scoring; adapters must not create a
+second feedback or promotion schema, and `FeedbackRecord` remains the owner of the human review
+fact.
+
 | Field | Requirement |
 |---|---|
 | `packetId` | Stable id |
