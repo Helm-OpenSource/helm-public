@@ -2,6 +2,7 @@ import type {
   AgentLifecycleState,
   AgentStep,
 } from "@/lib/agent-runtime/agent-loop";
+import { isTerminalAgentState } from "@/lib/agent-runtime/agent-loop";
 import {
   InMemoryAgentRunStore,
   type AgentRunRecord,
@@ -12,6 +13,20 @@ import {
 export const AGENT_RUN_LEASE_DURATION_MS = 60_000 as const;
 export const AGENT_RUN_HEARTBEAT_INTERVAL_MS = 20_000 as const;
 export const AGENT_RUN_MAX_ATTEMPTS = 3 as const;
+
+export class StaleAgentRunLeaseError extends Error {
+  constructor() {
+    super("stale lease holder rejected by fencing epoch");
+    this.name = "StaleAgentRunLeaseError";
+  }
+}
+
+export class AgentRunAttemptLimitError extends Error {
+  constructor(operationRef: string) {
+    super(`recoverable agent run attempt limit exceeded: ${operationRef}`);
+    this.name = "AgentRunAttemptLimitError";
+  }
+}
 
 export type AgentRunLease = Readonly<{
   workerRef: string;
@@ -217,7 +232,7 @@ export class InMemoryRecoverableAgentRunStore
       lease.fencingEpoch !== handle.fencingEpoch ||
       nowMs >= timestampMs("lease.expiresAt", lease.expiresAt)
     ) {
-      throw new Error("stale lease holder rejected by fencing epoch");
+      throw new StaleAgentRunLeaseError();
     }
     return { control, lease, nowMs };
   }
@@ -382,7 +397,7 @@ export class InMemoryRecoverableAgentRunStore
       throw new Error("recoverable agent run attempt kind mismatch");
     }
     if (existing && existing.attemptCount >= AGENT_RUN_MAX_ATTEMPTS) {
-      throw new Error("recoverable agent run attempt limit exceeded");
+      throw new AgentRunAttemptLimitError(input.operationRef);
     }
     const attempt = Object.freeze({
       operationRef: input.operationRef,
@@ -468,7 +483,11 @@ export class InMemoryRecoverableAgentRunStore
       control.checkpoint &&
       input.nextStepIndex === control.checkpoint.nextStepIndex &&
       (input.checkpointRef !== control.checkpoint.checkpointRef ||
-        input.lifecycle !== control.checkpoint.lifecycle)
+        input.lifecycle !== control.checkpoint.lifecycle) &&
+      !(
+        !isTerminalAgentState(control.checkpoint.lifecycle) &&
+        isTerminalAgentState(input.lifecycle)
+      )
     ) {
       throw new Error("conflicting checkpoint at the same step index");
     }
