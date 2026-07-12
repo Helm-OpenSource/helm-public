@@ -18,6 +18,8 @@ import type { MainlineReadout } from "@/lib/shell/operating-mainline";
 import type { NorthstarKpi } from "@/lib/shell/northstar-kpi";
 import type { AttentionItem } from "@/lib/shell/attention-feed";
 import type { OperationSuggestion } from "@/lib/shell/operation-suggestion";
+import type { RoleHomeRoutingTable } from "@/lib/shell/role-home-routing";
+import type { WorkstationDescriptor } from "@/lib/shell/workstation";
 
 export type WorkspaceLike = {
   id: string;
@@ -284,6 +286,44 @@ export type OperationSuggestionSourceContribution = {
     english: boolean;
     signal?: AbortSignal;
   }) => Promise<ReadonlyArray<OperationSuggestion>>;
+};
+
+/**
+ * Role-home routing provider (blueprint Phase 3, **single-winner**, experimental).
+ * Produces the roleCategory → control_tower | workstation routing table (with a
+ * mandatory generic fallback). Selected via the binding-is-authorization model
+ * (§4.3) exactly like the mainline; no valid binding ⇒ Core default routing.
+ */
+export type RoleHomeRoutingProviderContribution = {
+  providerId: string;
+  contractVersion: string;
+  priority: number;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildRoleHomeRouting: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+  }) => Promise<RoleHomeRoutingTable>;
+};
+
+/**
+ * Workstation source (blueprint Phase 3/§4.1.5, **concat**, experimental).
+ * Registers which workstations exist, whose home lands there, and how to
+ * navigate — the workstation PAGE itself is not in the contract (§4.1.5).
+ * Navigate-only, no callbacks. Same §4.4 aggregation as attention.
+ */
+export type WorkstationSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildWorkstations: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<WorkstationDescriptor>>;
 };
 
 export type ExtensionIndustryDemoReadoutPage = {

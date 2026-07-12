@@ -21,6 +21,8 @@ import {
   getRegisteredMainlineProviders,
   getRegisteredNorthstarKpiSources,
   getRegisteredOperationSuggestionSources,
+  getRegisteredRoleHomeRoutingProviders,
+  getRegisteredWorkstationSources,
 } from "@/lib/extensions/registry-contract";
 import { resolveReportsExtensionAccessSafely } from "@/lib/extensions/registry";
 import type {
@@ -29,6 +31,7 @@ import type {
   NorthstarKpiSourceContribution,
   OperationSuggestionSourceContribution,
   WorkspaceLike,
+  WorkstationSourceContribution,
 } from "@/lib/extensions/registry-types";
 
 import {
@@ -54,6 +57,16 @@ import {
   validateOperationSuggestions,
   type OperationSuggestion,
 } from "./operation-suggestion";
+import {
+  buildCoreDefaultRoleHomeRouting,
+  validateRoleHomeRoutingTable,
+  type RoleHomeRoutingTable,
+} from "./role-home-routing";
+import {
+  buildCoreDefaultWorkstations,
+  validateWorkstations,
+  type WorkstationDescriptor,
+} from "./workstation";
 import {
   selectSingleWinner,
   type ProviderCandidate,
@@ -555,6 +568,187 @@ export async function resolveShellOperationSuggestions(input: {
 
   return {
     suggestions: merged,
+    unreturnedProviderIds,
+    nonConformantProviderIds,
+    droppedForCap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: role-home routing (single-winner) + workstations (concat)
+// ---------------------------------------------------------------------------
+
+export const SHELL_ROLE_HOME_ROUTING_SURFACE_KEY = "role-home-routing";
+export const SHELL_ROLE_HOME_ROUTING_CONTRACT_VERSION =
+  "role-home-routing.v1-experimental";
+export const SHELL_WORKSTATION_SURFACE_KEY = "workstation";
+export const SHELL_WORKSTATION_CONTRACT_VERSION = "workstation.v1-experimental";
+
+export type ShellRoleHomeRoutingResolution = {
+  table: RoleHomeRoutingTable;
+  selection: ProviderSelection;
+  /** Set when a *selected* provider's table was rejected and Core default substituted. */
+  droppedProviderId: string | null;
+};
+
+/**
+ * Role-home routing (single-winner, mirrors resolveShellMainline). A provider
+ * only wins with a valid surface-scoped binding (§4.3); otherwise the Core
+ * default routing is used. A winning provider's table must pass
+ * `validateRoleHomeRoutingTable` (fallback must be generic — fail-safe); any
+ * conformance failure or thrown build fails open to the Core default routing.
+ */
+export async function resolveShellRoleHomeRouting(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  binding: SurfaceBinding | null;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellRoleHomeRoutingResolution> {
+  const providers = getRegisteredRoleHomeRoutingProviders();
+
+  const candidates: ProviderCandidate[] = await Promise.all(
+    providers.map(async (provider): Promise<ProviderCandidate> => {
+      const access = await resolveReportsExtensionAccessSafely(
+        { id: provider.providerId, getAccess: provider.getAccess },
+        input.workspace,
+        { accessContext: input.accessContext },
+      );
+      return {
+        providerId: provider.providerId,
+        contractVersion: provider.contractVersion,
+        priority: provider.priority,
+        provenance: provider.provenance,
+        enabled: true,
+        accessOk: access.ok,
+        contractCompatible:
+          provider.contractVersion === SHELL_ROLE_HOME_ROUTING_CONTRACT_VERSION,
+      };
+    }),
+  );
+
+  const selection = selectSingleWinner({
+    surfaceKey: SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
+    candidates,
+    binding: input.binding,
+  });
+
+  const coreFallback = (droppedProviderId: string | null): ShellRoleHomeRoutingResolution => ({
+    table: buildCoreDefaultRoleHomeRouting(),
+    selection,
+    droppedProviderId,
+  });
+
+  if (selection.winner === "core_default") return coreFallback(null);
+
+  const winnerId = selection.winner.providerId;
+  const provider = providers.find((p) => p.providerId === winnerId);
+  if (!provider) return coreFallback(null);
+
+  try {
+    const table = await provider.buildRoleHomeRouting({
+      workspace: input.workspace,
+      english: input.english,
+    });
+    const issues = validateRoleHomeRoutingTable(table);
+    if (issues.length > 0) {
+      console.error(
+        `[shell-experience] role-home-routing provider ${winnerId} produced ${issues.length} conformance issue(s); failing open to Core default`,
+        { workspaceId: input.workspace.id, issues: issues.slice(0, 8) },
+      );
+      return coreFallback(winnerId);
+    }
+    return { table, selection, droppedProviderId: null };
+  } catch (error) {
+    console.error(
+      `[shell-experience] role-home-routing provider ${winnerId} buildRoleHomeRouting threw; failing open to Core default`,
+      error,
+    );
+    return coreFallback(winnerId);
+  }
+}
+
+export type ShellWorkstationResolution = {
+  workstations: ReadonlyArray<WorkstationDescriptor>;
+  unreturnedProviderIds: ReadonlyArray<string>;
+  nonConformantProviderIds: ReadonlyArray<string>;
+  droppedForCap: number;
+};
+
+/**
+ * Workstations (concat, mirrors resolveShellOperationSuggestions). Merge every
+ * eligible source's workstation descriptors under the §4.4 budget; drop
+ * non-conformant descriptors (not the whole source); cross-source dedupe by
+ * workstation key (first writer wins). Empty store ⇒ Core default (empty) —
+ * mirror parity.
+ */
+export async function resolveShellWorkstations(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellWorkstationResolution> {
+  const sources = getRegisteredWorkstationSources();
+  if (sources.length === 0) {
+    return {
+      workstations: buildCoreDefaultWorkstations(),
+      unreturnedProviderIds: [],
+      nonConformantProviderIds: [],
+      droppedForCap: 0,
+    };
+  }
+
+  const { eligible, droppedForCap } = await resolveEligibleSources({
+    sources: sources as ReadonlyArray<WorkstationSourceContribution>,
+    compatVersion: SHELL_WORKSTATION_CONTRACT_VERSION,
+    workspace: input.workspace,
+    accessContext: input.accessContext,
+    maxSources: SHELL_SURFACE_MAX_SOURCES,
+  });
+
+  const unreturnedProviderIds: string[] = [];
+  const nonConformantProviderIds: string[] = [];
+  const merged: WorkstationDescriptor[] = [];
+  const seenKeys = new Set<string>();
+
+  const outcomes = await Promise.all(
+    eligible.map(async (source) => ({
+      providerId: source.providerId,
+      outcome: await runSourceWithTimeout(
+        (signal) =>
+          source.buildWorkstations({
+            workspace: input.workspace,
+            english: input.english,
+            signal,
+          }),
+        SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+        (error) =>
+          console.error(
+            `[shell-experience] workstation source ${source.providerId} build threw; dropping source`,
+            error,
+          ),
+      ),
+    })),
+  );
+
+  for (const { providerId, outcome } of outcomes) {
+    if (outcome.kind === "unreturned") {
+      unreturnedProviderIds.push(providerId);
+      continue;
+    }
+    const issues = validateWorkstations(outcome.items);
+    const badKeys = new Set(
+      issues.map((i) => i.workstationKey).filter((k): k is string => k !== null),
+    );
+    if (issues.length > 0) nonConformantProviderIds.push(providerId);
+    for (const ws of outcome.items) {
+      if (badKeys.has(ws.key)) continue; // drop only the offending descriptor
+      if (seenKeys.has(ws.key)) continue; // cross-source dedupe, first writer wins
+      seenKeys.add(ws.key);
+      merged.push(ws);
+    }
+  }
+
+  return {
+    workstations: merged,
     unreturnedProviderIds,
     nonConformantProviderIds,
     droppedForCap,

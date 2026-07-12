@@ -630,3 +630,228 @@ describe("resolveShellOperationSuggestions — concat aggregation (Phase 4)", ()
     expect(res.suggestions[0].title).toBe("first");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3 — role-home routing (single-winner) + workstations (concat)
+// ---------------------------------------------------------------------------
+
+import {
+  resolveShellRoleHomeRouting,
+  resolveShellWorkstations,
+  SHELL_ROLE_HOME_ROUTING_CONTRACT_VERSION,
+  SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
+  SHELL_WORKSTATION_CONTRACT_VERSION,
+} from "./resolve-shell-experience";
+import type {
+  RoleHomeRoutingProviderContribution,
+  WorkstationSourceContribution,
+} from "@/lib/extensions/registry-types";
+import { buildCoreDefaultRoleHomeRouting, type RoleHomeRoutingTable } from "./role-home-routing";
+import type { WorkstationDescriptor } from "./workstation";
+
+function providerTable(overrides: Partial<RoleHomeRoutingTable> = {}): RoleHomeRoutingTable {
+  return {
+    routes: [{ roleCategory: "COLLECTOR", destination: { kind: "workstation", workstationKey: "collection" } }],
+    fallback: { kind: "generic" },
+    ...overrides,
+  };
+}
+
+function roleHomeProvider(
+  overrides: Partial<RoleHomeRoutingProviderContribution> = {},
+  buildImpl?: RoleHomeRoutingProviderContribution["buildRoleHomeRouting"],
+): RoleHomeRoutingProviderContribution {
+  return {
+    providerId: "example-provider",
+    contractVersion: SHELL_ROLE_HOME_ROUTING_CONTRACT_VERSION,
+    priority: 10,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildRoleHomeRouting: buildImpl ?? vi.fn(async () => providerTable()),
+    ...overrides,
+  };
+}
+
+const rhBind = (providerId: string) => ({
+  surfaceKey: SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
+  providerId,
+});
+
+describe("resolveShellRoleHomeRouting — single-winner (Phase 3)", () => {
+  it("empty store + null binding ⇒ Core default routing (parity)", async () => {
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: null });
+    expect(res.selection.winner).toBe("core_default");
+    expect(res.droppedProviderId).toBeNull();
+    expect(JSON.stringify(res.table)).toBe(JSON.stringify(buildCoreDefaultRoleHomeRouting()));
+  });
+
+  it("registered provider WITHOUT a binding stays on Core default", async () => {
+    const provider = roleHomeProvider();
+    registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: null });
+    expect(res.selection.winner).toBe("core_default");
+    expect(provider.buildRoleHomeRouting).not.toHaveBeenCalled();
+  });
+
+  it("valid binding + eligible + conformant ⇒ provider table wins", async () => {
+    const provider = roleHomeProvider();
+    registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+    expect(res.selection.winner).toEqual({ providerId: "example-provider" });
+    expect(res.table.routes[0].destination).toEqual({ kind: "workstation", workstationKey: "collection" });
+    expect(res.droppedProviderId).toBeNull();
+  });
+
+  it("bound provider with failing access ⇒ Core default, build not called", async () => {
+    const provider = roleHomeProvider({ getAccess: vi.fn(async () => ({ ok: false })) });
+    registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+    expect(res.selection.winner).toBe("core_default");
+    expect(provider.buildRoleHomeRouting).not.toHaveBeenCalled();
+  });
+
+  it("bound provider on incompatible version ⇒ Core default", async () => {
+    const provider = roleHomeProvider({ contractVersion: "role-home-routing.v0" });
+    registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+    expect(res.selection.winner).toBe("core_default");
+  });
+
+  it("provider table with a non-generic fallback ⇒ fail-open to Core default + droppedProviderId", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const provider = roleHomeProvider(
+        {},
+        vi.fn(async () => providerTable({ fallback: { kind: "control_tower" } })),
+      );
+      registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+      const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+      expect(res.droppedProviderId).toBe("example-provider");
+      expect(JSON.stringify(res.table)).toBe(JSON.stringify(buildCoreDefaultRoleHomeRouting()));
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("provider build throws ⇒ fail-open to Core default + droppedProviderId", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const provider = roleHomeProvider(
+        {},
+        vi.fn(async () => {
+          throw new Error("boom");
+        }),
+      );
+      registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+      const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+      expect(res.droppedProviderId).toBe("example-provider");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});
+
+function aWorkstation(overrides: Partial<WorkstationDescriptor> = {}): WorkstationDescriptor {
+  return {
+    key: "collection",
+    label: "催收工位",
+    href: "/operating",
+    roleCategories: ["COLLECTOR"],
+    ...overrides,
+  };
+}
+
+function workstationSource(
+  overrides: Partial<WorkstationSourceContribution> = {},
+): WorkstationSourceContribution {
+  return {
+    providerId: "ws-a",
+    contractVersion: SHELL_WORKSTATION_CONTRACT_VERSION,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildWorkstations: vi.fn(async () => [aWorkstation()]),
+    ...overrides,
+  };
+}
+
+describe("resolveShellWorkstations — concat (Phase 3)", () => {
+  it("empty store ⇒ Core default (empty) — mirror parity", async () => {
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations).toEqual([]);
+  });
+
+  it("merges workstations from multiple eligible sources", async () => {
+    registerPackContributions("p", {
+      workstationSources: [
+        workstationSource({ providerId: "ws-a", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "a" })]) }),
+        workstationSource({ providerId: "ws-b", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "b" })]) }),
+      ],
+    });
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations.map((w) => w.key).sort()).toEqual(["a", "b"]);
+  });
+
+  it("skips access-denied and version-incompatible sources", async () => {
+    const denied = workstationSource({ providerId: "ws-denied", getAccess: vi.fn(async () => ({ ok: false })) });
+    const legacy = workstationSource({ providerId: "ws-legacy", contractVersion: "workstation.v0" });
+    registerPackContributions("p", { workstationSources: [denied, legacy] });
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations).toEqual([]);
+    expect(denied.buildWorkstations).not.toHaveBeenCalled();
+    expect(legacy.getAccess).not.toHaveBeenCalled();
+  });
+
+  it("a source that throws is dropped and recorded as unreturned", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        workstationSources: [
+          workstationSource({ providerId: "ws-good", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "good" })]) }),
+          workstationSource({
+            providerId: "ws-bad",
+            buildWorkstations: vi.fn(async () => {
+              throw new Error("boom");
+            }),
+          }),
+        ],
+      });
+      const res = await resolveShellWorkstations({ workspace, english: true });
+      expect(res.workstations.map((w) => w.key)).toEqual(["good"]);
+      expect(res.unreturnedProviderIds).toEqual(["ws-bad"]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("drops only the non-conformant descriptor, keeps the rest", async () => {
+    registerPackContributions("p", {
+      workstationSources: [
+        workstationSource({
+          providerId: "ws-mixed",
+          buildWorkstations: vi.fn(async () => [
+            aWorkstation({ key: "clean" }),
+            aWorkstation({ key: "bad", href: "https://evil.example" }),
+          ]),
+        }),
+      ],
+    });
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations.map((w) => w.key)).toEqual(["clean"]);
+    expect(res.nonConformantProviderIds).toEqual(["ws-mixed"]);
+  });
+
+  it("dedupes by workstation key across sources (first writer wins)", async () => {
+    registerPackContributions("p", {
+      workstationSources: [
+        workstationSource({ providerId: "ws-a", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "dup", label: "first" })]) }),
+        workstationSource({ providerId: "ws-b", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "dup", label: "second" })]) }),
+      ],
+    });
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations).toHaveLength(1);
+    expect(res.workstations[0].label).toBe("first");
+  });
+});
