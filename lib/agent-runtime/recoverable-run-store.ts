@@ -1,8 +1,10 @@
-import type {
-  AgentLifecycleState,
-  AgentStep,
+import { isDeepStrictEqual } from "node:util";
+
+import {
+  isTerminalAgentState,
+  type AgentLifecycleState,
+  type AgentStep,
 } from "@/lib/agent-runtime/agent-loop";
-import { isTerminalAgentState } from "@/lib/agent-runtime/agent-loop";
 import {
   InMemoryAgentRunStore,
   type AgentRunRecord,
@@ -170,7 +172,10 @@ function assertReference(name: string, value: string): void {
 
 function timestampMs(name: string, value: string): number {
   const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed) || !value.includes("T")) {
+  if (
+    !Number.isFinite(parsed) ||
+    !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+  ) {
     throw new Error(`recoverable agent run requires an ISO timestamp for ${name}`);
   }
   return parsed;
@@ -181,7 +186,7 @@ function freezeLease(lease: AgentRunLease): AgentRunLease {
 }
 
 function sameStep(left: AgentStep, right: AgentStep): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return isDeepStrictEqual(left, right);
 }
 
 export class InMemoryRecoverableAgentRunStore

@@ -29,6 +29,18 @@ function step(index: number, observationRef = `obs:${index}`): AgentStep {
 }
 
 describe("InMemoryRecoverableAgentRunStore", () => {
+  it("requires explicit-offset timestamps", async () => {
+    const store = new InMemoryRecoverableAgentRunStore();
+    await expect(
+      store.acquireLease({
+        workspaceId,
+        agentRunId,
+        workerRef: "worker:a",
+        now: "2026-07-12T00:00:00",
+      }),
+    ).rejects.toThrow(/ISO timestamp/i);
+  });
+
   it("grants one 60-second lease, heartbeats at the 20-second cadence, and fences competitors", async () => {
     expect(AGENT_RUN_LEASE_DURATION_MS).toBe(60_000);
     expect(AGENT_RUN_HEARTBEAT_INTERVAL_MS).toBe(20_000);

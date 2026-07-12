@@ -46,15 +46,23 @@ function assertDeterministicId(name: string, value: string): void {
 
 // --- lifecycle state machine --------------------------------------------------
 
-export type AgentLifecycleState =
-  | "created"
-  | "deciding"
-  | "invoking_tool"
-  | "observing"
-  | "awaiting_review"
-  | "completed"
-  | "failed"
-  | "blocked";
+export const AGENT_LIFECYCLE_STATES = [
+  "created",
+  "deciding",
+  "invoking_tool",
+  "observing",
+  "awaiting_review",
+  "completed",
+  "failed",
+  "blocked",
+] as const;
+export type AgentLifecycleState = (typeof AGENT_LIFECYCLE_STATES)[number];
+
+export function isAgentLifecycleState(
+  value: unknown,
+): value is AgentLifecycleState {
+  return AGENT_LIFECYCLE_STATES.includes(value as AgentLifecycleState);
+}
 
 /** Allowed transitions. Terminal states (completed/failed/blocked) have no exits. */
 const ALLOWED_TRANSITIONS: Readonly<Record<AgentLifecycleState, ReadonlySet<AgentLifecycleState>>> = {
