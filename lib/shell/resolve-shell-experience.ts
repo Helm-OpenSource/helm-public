@@ -20,12 +20,14 @@ import {
   getRegisteredAttentionSources,
   getRegisteredMainlineProviders,
   getRegisteredNorthstarKpiSources,
+  getRegisteredOperationSuggestionSources,
 } from "@/lib/extensions/registry-contract";
 import { resolveReportsExtensionAccessSafely } from "@/lib/extensions/registry";
 import type {
   AttentionSourceContribution,
   ExtensionAccessContext,
   NorthstarKpiSourceContribution,
+  OperationSuggestionSourceContribution,
   WorkspaceLike,
 } from "@/lib/extensions/registry-types";
 
@@ -47,6 +49,11 @@ import {
   validateAttentionItems,
   type AttentionItem,
 } from "./attention-feed";
+import {
+  buildCoreDefaultOperationSuggestions,
+  validateOperationSuggestions,
+  type OperationSuggestion,
+} from "./operation-suggestion";
 import {
   selectSingleWinner,
   type ProviderCandidate,
@@ -447,6 +454,107 @@ export async function resolveShellAttention(input: {
 
   return {
     items: merged,
+    unreturnedProviderIds,
+    nonConformantProviderIds,
+    droppedForCap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Concat surface: operation suggestions (blueprint Phase 4)
+// ---------------------------------------------------------------------------
+
+export const SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION =
+  "operation-suggestion.v1-experimental";
+export const SHELL_OPERATION_SUGGESTION_SURFACE_KEY = "operation-suggestion";
+
+export type ShellOperationSuggestionResolution = {
+  suggestions: ReadonlyArray<OperationSuggestion>;
+  /** Provider ids whose build failed/timed out (dropped from the merge). */
+  unreturnedProviderIds: ReadonlyArray<string>;
+  /** Provider ids some of whose items failed conformance and were dropped. */
+  nonConformantProviderIds: ReadonlyArray<string>;
+  droppedForCap: number;
+};
+
+/**
+ * Operation suggestions: merge every eligible source's suggestions (concat).
+ * Same §4.4 budget as the other concat surfaces (per-source timeout with
+ * per-source AbortSignal; failed/timed-out sources dropped and recorded — no
+ * "unreturned item" convention here). Each source's items are
+ * conformance-filtered (a non-conformant / suspected-secret / suspected-PII
+ * item is dropped, not the whole source — fail-closed). Cross-source dedupe by
+ * suggestion key (first writer wins). Empty store ⇒ Core default (empty) —
+ * mirror parity. Read/navigate-only: suggestion ≠ execution.
+ */
+export async function resolveShellOperationSuggestions(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellOperationSuggestionResolution> {
+  const sources = getRegisteredOperationSuggestionSources();
+  if (sources.length === 0) {
+    return {
+      suggestions: buildCoreDefaultOperationSuggestions(),
+      unreturnedProviderIds: [],
+      nonConformantProviderIds: [],
+      droppedForCap: 0,
+    };
+  }
+
+  const { eligible, droppedForCap } = await resolveEligibleSources({
+    sources: sources as ReadonlyArray<OperationSuggestionSourceContribution>,
+    compatVersion: SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION,
+    workspace: input.workspace,
+    accessContext: input.accessContext,
+    maxSources: SHELL_SURFACE_MAX_SOURCES,
+  });
+
+  const unreturnedProviderIds: string[] = [];
+  const nonConformantProviderIds: string[] = [];
+  const merged: OperationSuggestion[] = [];
+  const seenKeys = new Set<string>();
+
+  const outcomes = await Promise.all(
+    eligible.map(async (source) => ({
+      providerId: source.providerId,
+      outcome: await runSourceWithTimeout(
+        (signal) =>
+          source.buildOperationSuggestions({
+            workspace: input.workspace,
+            english: input.english,
+            signal,
+          }),
+        SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+        (error) =>
+          console.error(
+            `[shell-experience] operation-suggestion source ${source.providerId} build threw; dropping source`,
+            error,
+          ),
+      ),
+    })),
+  );
+
+  for (const { providerId, outcome } of outcomes) {
+    if (outcome.kind === "unreturned") {
+      unreturnedProviderIds.push(providerId);
+      continue;
+    }
+    const issues = validateOperationSuggestions(outcome.items);
+    const badKeys = new Set(
+      issues.map((i) => i.suggestionKey).filter((k): k is string => k !== null),
+    );
+    if (issues.length > 0) nonConformantProviderIds.push(providerId);
+    for (const suggestion of outcome.items) {
+      if (badKeys.has(suggestion.key)) continue; // drop only the offending item (fail-closed on secret/PII)
+      if (seenKeys.has(suggestion.key)) continue; // cross-source dedupe, first writer wins
+      seenKeys.add(suggestion.key);
+      merged.push(suggestion);
+    }
+  }
+
+  return {
+    suggestions: merged,
     unreturnedProviderIds,
     nonConformantProviderIds,
     droppedForCap,

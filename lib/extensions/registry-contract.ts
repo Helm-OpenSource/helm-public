@@ -42,6 +42,7 @@ import type {
   ExtensionIndustryDemoReadoutPage,
   MainlineProviderContribution,
   NorthstarKpiSourceContribution,
+  OperationSuggestionSourceContribution,
   ReportsExtensionDescriptor,
   SolutionExtensionCatalogEntry,
   WorkspaceNavExtensionDescriptor,
@@ -141,6 +142,11 @@ export type PackContributions = {
    * concurrently and merged by `resolveShellAttention` under the §4.4 budget.
    */
   attentionSources?: ReadonlyArray<AttentionSourceContribution>;
+  /**
+   * Operation-suggestion sources (blueprint Phase 4, experimental, **concat**).
+   * Infrequent-operation suggestions merged by `resolveShellOperationSuggestions`.
+   */
+  operationSuggestionSources?: ReadonlyArray<OperationSuggestionSourceContribution>;
   biReportP0ProcessService?: BiReportP0ProcessService;
   implementationConsole?: ImplementationConsoleContribution;
   signalCollectionJobs?: () => ReadonlyArray<SignalCollectionJob>;
@@ -167,6 +173,7 @@ type MutableStore = {
   mainlineProviders: MainlineProviderContribution[];
   northstarKpiSources: NorthstarKpiSourceContribution[];
   attentionSources: AttentionSourceContribution[];
+  operationSuggestionSources: OperationSuggestionSourceContribution[];
   biReportP0ProcessService: BiReportP0ProcessService | null;
   implementationConsole: ImplementationConsoleContribution | null;
   signalCollectionJobProviders: Array<() => ReadonlyArray<SignalCollectionJob>>;
@@ -184,6 +191,7 @@ function emptyStore(): MutableStore {
     mainlineProviders: [],
     northstarKpiSources: [],
     attentionSources: [],
+    operationSuggestionSources: [],
     biReportP0ProcessService: null,
     implementationConsole: null,
     signalCollectionJobProviders: [],
@@ -227,6 +235,8 @@ export function registerPackContributions(
     s.northstarKpiSources.push(...contributions.northstarKpiSources);
   if (contributions.attentionSources)
     s.attentionSources.push(...contributions.attentionSources);
+  if (contributions.operationSuggestionSources)
+    s.operationSuggestionSources.push(...contributions.operationSuggestionSources);
   if (contributions.biReportP0ProcessService)
     s.biReportP0ProcessService = contributions.biReportP0ProcessService;
   if (contributions.implementationConsole)
@@ -275,6 +285,9 @@ export function getRegisteredNorthstarKpiSources(): ReadonlyArray<NorthstarKpiSo
 }
 export function getRegisteredAttentionSources(): ReadonlyArray<AttentionSourceContribution> {
   return store().attentionSources;
+}
+export function getRegisteredOperationSuggestionSources(): ReadonlyArray<OperationSuggestionSourceContribution> {
+  return store().operationSuggestionSources;
 }
 export function getRegisteredBiReportP0ProcessService(): BiReportP0ProcessService | null {
   return store().biReportP0ProcessService;
