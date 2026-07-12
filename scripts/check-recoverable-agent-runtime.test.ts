@@ -72,6 +72,25 @@ describe("recoverable agent runtime boundary guard", () => {
     );
   });
 
+  it("rejects regression to split step and checkpoint writes", () => {
+    const result = withRuntimeFixture((repoRoot) => {
+      const runnerPath = path.join(
+        repoRoot,
+        "lib/agent-runtime/recoverable-runner.ts",
+      );
+      writeFileSync(
+        runnerPath,
+        readFileSync(runnerPath, "utf8")
+          .replaceAll("store.commitProgressWithLease", "store.writeCheckpoint")
+          .concat("\nvoid store.appendStepWithLease;\n"),
+      );
+    });
+
+    expect(result.violations.map((violation) => violation.rule)).toContain(
+      "RECOVERABLE-RUNTIME-F",
+    );
+  });
+
   it("rejects weakened lease, heartbeat, retry, transaction, or fencing markers", () => {
     const result = withRuntimeFixture((repoRoot) => {
       const storePath = path.join(

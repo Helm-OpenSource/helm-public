@@ -26,6 +26,10 @@ const RUNNER_READ_ONLY_MARKERS = [
   'kind: "read_tool"',
 ] as const;
 
+const RUNNER_ATOMIC_PROGRESS_MARKER = "store.commitProgressWithLease";
+const RUNNER_SPLIT_PROGRESS_PATTERN =
+  /\bstore\.(?:appendStepWithLease|setLifecycleWithLease|writeCheckpoint)\b/;
+
 const RUNNER_FORBIDDEN_PATTERNS: ReadonlyArray<{
   pattern: RegExp;
   detail: string;
@@ -62,6 +66,7 @@ const MYSQL_CONCURRENCY_MARKERS = [
   "StaleAgentRunLeaseError",
   "fencingEpoch",
   "sameLease",
+  "atomic-progress",
 ] as const;
 
 const SQL_RECOVERY_MARKERS = [
@@ -149,6 +154,17 @@ export function runRecoverableAgentRuntimeCheck(
         file: REQUIRED_FILES.runner,
         rule: "RECOVERABLE-RUNTIME-B",
         detail: forbidden.detail,
+      });
+    }
+    if (
+      !runner.includes(RUNNER_ATOMIC_PROGRESS_MARKER) ||
+      RUNNER_SPLIT_PROGRESS_PATTERN.test(runner)
+    ) {
+      violations.push({
+        file: REQUIRED_FILES.runner,
+        rule: "RECOVERABLE-RUNTIME-F",
+        detail:
+          "Runner progress must commit lifecycle, optional step, and checkpoint through the atomic store primitive.",
       });
     }
   }

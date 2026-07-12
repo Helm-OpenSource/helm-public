@@ -23,6 +23,7 @@ import {
   type AgentRunLease,
   type AgentRunLeaseAcquisition,
   type AgentRunLeaseHandle,
+  type AgentRunProgressCommit,
   type AgentRunRecoveryState,
   type RecoverableAgentRunStore,
 } from "@/lib/agent-runtime/recoverable-run-store";
@@ -699,6 +700,141 @@ export class MysqlRecoverableAgentRunStore
       );
       if (!record) throw new Error("recoverable agent run vanished");
       return record;
+    });
+  }
+
+  async commitProgressWithLease(input: {
+    handle: AgentRunLeaseHandle;
+    now: string;
+    lifecycle: AgentLifecycleState;
+    step?: AgentStep;
+    checkpointRef: string;
+    nextStepIndex: number;
+  }): Promise<AgentRunProgressCommit> {
+    assertReference("checkpointRef", input.checkpointRef);
+    return this.client.$transaction(async (transaction) => {
+      const row = await this.readControl(
+        transaction,
+        input.handle.workspaceId,
+        input.handle.agentRunId,
+        true,
+      );
+      if (!row) throw new StaleAgentRunLeaseError();
+      const nowMs = this.requireLease(row, input.handle, input.now);
+      const transactionalBase = new MysqlAgentRunStore(transaction as never, {
+        runs: this.tables.runs,
+        steps: this.tables.steps,
+      });
+      const current = await transactionalBase.getRun(
+        input.handle.workspaceId,
+        input.handle.agentRunId,
+      );
+      const existingStep = input.step
+        ? current?.steps.find(
+            (candidate) => candidate.stepId === input.step?.stepId,
+          )
+        : undefined;
+      if (input.step && input.step.state !== input.lifecycle) {
+        throw new Error("recoverable agent run step lifecycle is inconsistent");
+      }
+      if (input.step && existingStep && !sameStep(existingStep, input.step)) {
+        throw new Error("conflicting step payload for an existing stepId");
+      }
+      if (
+        input.step &&
+        !existingStep &&
+        input.step.index !== (current?.steps.length ?? 0)
+      ) {
+        throw new Error("recoverable agent run step index is not contiguous");
+      }
+      const projectedStepCount =
+        (current?.steps.length ?? 0) + (input.step && !existingStep ? 1 : 0);
+      if (
+        !Number.isInteger(input.nextStepIndex) ||
+        input.nextStepIndex < 0 ||
+        input.nextStepIndex !== projectedStepCount
+      ) {
+        throw new Error("recoverable agent run checkpoint does not match persisted steps");
+      }
+      const existingCheckpoint = rowCheckpoint(row);
+      if (
+        existingCheckpoint &&
+        input.nextStepIndex < existingCheckpoint.nextStepIndex
+      ) {
+        throw new Error("recoverable agent run checkpoint cannot move backward");
+      }
+      if (
+        existingCheckpoint &&
+        input.nextStepIndex === existingCheckpoint.nextStepIndex &&
+        (input.checkpointRef !== existingCheckpoint.checkpointRef ||
+          input.lifecycle !== existingCheckpoint.lifecycle) &&
+        !(
+          !isTerminalAgentState(existingCheckpoint.lifecycle) &&
+          isTerminalAgentState(input.lifecycle)
+        )
+      ) {
+        throw new Error("conflicting checkpoint at the same step index");
+      }
+
+      let record: AgentRunRecord;
+      if (input.step) {
+        record = await transactionalBase.appendStep({
+          workspaceId: input.handle.workspaceId,
+          agentRunId: input.handle.agentRunId,
+          lifecycle: input.lifecycle,
+          step: input.step,
+        });
+        await transaction.$executeRawUnsafe(
+          `UPDATE ${this.tables.steps}
+           SET fencing_epoch = COALESCE(fencing_epoch, ?)
+           WHERE workspace_id = ? AND agent_run_id = ? AND step_id = ?
+           /* recoverable:stamp-step-fence */`,
+          input.handle.fencingEpoch,
+          input.handle.workspaceId,
+          input.handle.agentRunId,
+          input.step.stepId,
+        );
+      } else {
+        await transaction.$executeRawUnsafe(
+          `UPDATE ${this.tables.runs} SET lifecycle = ?
+           WHERE workspace_id = ? AND agent_run_id = ?
+           /* recoverable:set-lifecycle */`,
+          input.lifecycle,
+          input.handle.workspaceId,
+          input.handle.agentRunId,
+        );
+        const persisted = await transactionalBase.getRun(
+          input.handle.workspaceId,
+          input.handle.agentRunId,
+        );
+        if (!persisted) throw new Error("recoverable agent run vanished");
+        record = persisted;
+      }
+
+      await transaction.$executeRawUnsafe(
+        `UPDATE ${this.tables.runs}
+         SET checkpoint_ref = ?, checkpoint_next_step_index = ?,
+             checkpoint_lifecycle = ?, checkpoint_written_at_ms = ?,
+             checkpoint_fencing_epoch = ?, lifecycle = ?
+         WHERE workspace_id = ? AND agent_run_id = ?
+         /* recoverable:write-checkpoint atomic-progress */`,
+        input.checkpointRef,
+        input.nextStepIndex,
+        input.lifecycle,
+        nowMs,
+        input.handle.fencingEpoch,
+        input.lifecycle,
+        input.handle.workspaceId,
+        input.handle.agentRunId,
+      );
+      const checkpoint: AgentRunCheckpoint = Object.freeze({
+        checkpointRef: input.checkpointRef,
+        nextStepIndex: input.nextStepIndex,
+        lifecycle: input.lifecycle,
+        writtenAt: input.now,
+        fencingEpoch: input.handle.fencingEpoch,
+      });
+      return Object.freeze({ run: record, checkpoint });
     });
   }
 

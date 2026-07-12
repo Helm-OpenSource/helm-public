@@ -195,6 +195,38 @@ describe("InMemoryRecoverableAgentRunStore", () => {
     });
   });
 
+  it("commits a step and its checkpoint as one progress transition", async () => {
+    const store = new InMemoryRecoverableAgentRunStore();
+    const acquisition = await store.acquireLease({
+      workspaceId,
+      agentRunId,
+      workerRef: "worker:a",
+      now: at(0),
+    });
+    if (!acquisition.acquired) throw new Error("expected lease");
+
+    const committed = await store.commitProgressWithLease({
+      handle: acquisition.handle,
+      now: at(1_000),
+      lifecycle: "observing",
+      step: step(0),
+      checkpointRef: "checkpoint:atomic",
+      nextStepIndex: 1,
+    });
+
+    expect(committed.run.steps).toHaveLength(1);
+    expect(committed.checkpoint).toMatchObject({
+      checkpointRef: "checkpoint:atomic",
+      nextStepIndex: 1,
+      lifecycle: "observing",
+      fencingEpoch: 1,
+    });
+    expect(await store.getRecoveryState(workspaceId, agentRunId)).toMatchObject({
+      lifecycle: "observing",
+      checkpoint: { nextStepIndex: 1, lifecycle: "observing" },
+    });
+  });
+
   it("persists at most three attempts per deterministic operation", async () => {
     const store = new InMemoryRecoverableAgentRunStore();
     const acquisition = await store.acquireLease({

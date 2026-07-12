@@ -404,6 +404,37 @@ describe("MysqlRecoverableAgentRunStore", () => {
     expect(client.steps).toHaveLength(1);
   });
 
+  it("commits the step and checkpoint inside one MySQL transaction", async () => {
+    const client = fakeTransactionalClient();
+    const store = new MysqlRecoverableAgentRunStore(client as never);
+    const acquired = await store.acquireLease({
+      workspaceId,
+      agentRunId,
+      workerRef: "worker:first",
+      now: at(0),
+    });
+    if (!acquired.acquired) throw new Error("expected lease");
+    const transactionsBeforeCommit = client.transactionCalls;
+
+    const committed = await store.commitProgressWithLease({
+      handle: acquired.handle,
+      now: at(1_000),
+      lifecycle: "observing",
+      step: step(),
+      checkpointRef: `checkpoint:${agentRunId}:1:observing`,
+      nextStepIndex: 1,
+    });
+
+    expect(client.transactionCalls - transactionsBeforeCommit).toBe(1);
+    expect(committed.run.steps).toHaveLength(1);
+    expect(committed.checkpoint).toMatchObject({
+      nextStepIndex: 1,
+      lifecycle: "observing",
+      fencingEpoch: 1,
+    });
+    expect(client.steps[0]?.fencing_epoch).toBe(1);
+  });
+
   it("sanitizes table names and ships fresh plus upgrade schema", () => {
     expect(buildRecoverableAgentRunTableNames("helm")).toEqual({
       runs: "`helm_agent_runs`",

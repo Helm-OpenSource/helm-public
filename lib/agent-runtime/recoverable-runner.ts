@@ -257,18 +257,13 @@ export async function runRecoverableAgentLoop(input: {
       );
       if (currentRecovery?.cancellation) {
         state = { steps: [...state.steps], lifecycle: "blocked" };
-        await store.setLifecycleWithLease({
+        activeCheckpointRef = checkpointRef(ctx.agentRunId, state);
+        await store.commitProgressWithLease({
           handle,
           now: clock(),
           lifecycle: state.lifecycle,
-        });
-        activeCheckpointRef = checkpointRef(ctx.agentRunId, state);
-        await store.writeCheckpoint({
-          handle,
-          now: clock(),
           checkpointRef: activeCheckpointRef,
           nextStepIndex: state.steps.length,
-          lifecycle: state.lifecycle,
         });
         outcome = result({
           ctx,
@@ -320,18 +315,13 @@ export async function runRecoverableAgentLoop(input: {
       } catch (error) {
         if (!(error instanceof RetryExhaustedError)) throw error;
         state = { steps: [...state.steps], lifecycle: "failed" };
-        await store.setLifecycleWithLease({
+        activeCheckpointRef = checkpointRef(ctx.agentRunId, state);
+        await store.commitProgressWithLease({
           handle,
           now: clock(),
           lifecycle: state.lifecycle,
-        });
-        activeCheckpointRef = checkpointRef(ctx.agentRunId, state);
-        await store.writeCheckpoint({
-          handle,
-          now: clock(),
           checkpointRef: activeCheckpointRef,
           nextStepIndex: state.steps.length,
-          lifecycle: state.lifecycle,
         });
         outcome = result({
           ctx,
@@ -344,28 +334,15 @@ export async function runRecoverableAgentLoop(input: {
       }
 
       heartbeat.assertHealthy();
-      if (advanced.step) {
-        await store.appendStepWithLease({
-          handle,
-          now: clock(),
-          lifecycle: advanced.state.lifecycle,
-          step: advanced.step,
-        });
-      } else {
-        await store.setLifecycleWithLease({
-          handle,
-          now: clock(),
-          lifecycle: advanced.state.lifecycle,
-        });
-      }
       state = advanced.state;
       activeCheckpointRef = checkpointRef(ctx.agentRunId, state);
-      await store.writeCheckpoint({
+      await store.commitProgressWithLease({
         handle,
         now: clock(),
+        lifecycle: state.lifecycle,
+        ...(advanced.step ? { step: advanced.step } : {}),
         checkpointRef: activeCheckpointRef,
         nextStepIndex: state.steps.length,
-        lifecycle: state.lifecycle,
       });
       if (!advanced.terminal) continue;
       outcome = result({

@@ -59,6 +59,11 @@ export type AgentRunCheckpoint = Readonly<{
   fencingEpoch: number;
 }>;
 
+export type AgentRunProgressCommit = Readonly<{
+  run: AgentRunRecord;
+  checkpoint: AgentRunCheckpoint;
+}>;
+
 export type AgentRunAttemptKind = "model" | "read_tool";
 
 export type AgentRunAttempt = Readonly<{
@@ -134,6 +139,14 @@ export interface RecoverableAgentRunStore extends AgentRunStore {
     now: string;
     lifecycle: AgentLifecycleState;
   }): Promise<AgentRunRecord>;
+  commitProgressWithLease(input: {
+    handle: AgentRunLeaseHandle;
+    now: string;
+    lifecycle: AgentLifecycleState;
+    step?: AgentStep;
+    checkpointRef: string;
+    nextStepIndex: number;
+  }): Promise<AgentRunProgressCommit>;
   writeCheckpoint(input: {
     handle: AgentRunLeaseHandle;
     now: string;
@@ -457,6 +470,92 @@ export class InMemoryRecoverableAgentRunStore
     );
     if (!record) throw new Error("recoverable agent run vanished");
     return record;
+  }
+
+  async commitProgressWithLease(input: {
+    handle: AgentRunLeaseHandle;
+    now: string;
+    lifecycle: AgentLifecycleState;
+    step?: AgentStep;
+    checkpointRef: string;
+    nextStepIndex: number;
+  }): Promise<AgentRunProgressCommit> {
+    assertReference("checkpointRef", input.checkpointRef);
+    const { control } = this.requireCurrentLease(input.handle, input.now);
+    const current = await this.getRun(
+      input.handle.workspaceId,
+      input.handle.agentRunId,
+    );
+    const existingStep = input.step
+      ? current?.steps.find((candidate) => candidate.stepId === input.step?.stepId)
+      : undefined;
+    if (input.step && input.step.state !== input.lifecycle) {
+      throw new Error("recoverable agent run step lifecycle is inconsistent");
+    }
+    if (input.step && existingStep && !sameStep(existingStep, input.step)) {
+      throw new Error("conflicting step payload for an existing stepId");
+    }
+    if (
+      input.step &&
+      !existingStep &&
+      input.step.index !== (current?.steps.length ?? 0)
+    ) {
+      throw new Error("recoverable agent run step index is not contiguous");
+    }
+    const projectedStepCount =
+      (current?.steps.length ?? 0) + (input.step && !existingStep ? 1 : 0);
+    if (
+      !Number.isInteger(input.nextStepIndex) ||
+      input.nextStepIndex < 0 ||
+      input.nextStepIndex !== projectedStepCount
+    ) {
+      throw new Error("recoverable agent run checkpoint does not match persisted steps");
+    }
+    if (
+      control.checkpoint &&
+      input.nextStepIndex < control.checkpoint.nextStepIndex
+    ) {
+      throw new Error("recoverable agent run checkpoint cannot move backward");
+    }
+    if (
+      control.checkpoint &&
+      input.nextStepIndex === control.checkpoint.nextStepIndex &&
+      (input.checkpointRef !== control.checkpoint.checkpointRef ||
+        input.lifecycle !== control.checkpoint.lifecycle) &&
+      !(
+        !isTerminalAgentState(control.checkpoint.lifecycle) &&
+        isTerminalAgentState(input.lifecycle)
+      )
+    ) {
+      throw new Error("conflicting checkpoint at the same step index");
+    }
+
+    const persisted = input.step
+      ? await this.base.appendStep({
+          workspaceId: input.handle.workspaceId,
+          agentRunId: input.handle.agentRunId,
+          lifecycle: input.lifecycle,
+          step: input.step,
+        })
+      : Object.freeze({
+          agentRunId: input.handle.agentRunId,
+          workspaceId: input.handle.workspaceId,
+          lifecycle: input.lifecycle,
+          steps: current?.steps ?? Object.freeze([]),
+        });
+    const checkpoint = Object.freeze({
+      checkpointRef: input.checkpointRef,
+      nextStepIndex: input.nextStepIndex,
+      lifecycle: input.lifecycle,
+      writtenAt: input.now,
+      fencingEpoch: input.handle.fencingEpoch,
+    });
+    control.lifecycle = input.lifecycle;
+    control.checkpoint = checkpoint;
+    return Object.freeze({
+      run: Object.freeze({ ...persisted, lifecycle: input.lifecycle }),
+      checkpoint,
+    });
   }
 
   async writeCheckpoint(input: {

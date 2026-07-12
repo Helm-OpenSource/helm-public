@@ -39,6 +39,20 @@ function persistedReadStep(index: number): AgentStep {
   };
 }
 
+class AtomicProgressOnlyStore extends InMemoryRecoverableAgentRunStore {
+  override async appendStepWithLease(): Promise<never> {
+    throw new Error("runner used non-atomic append path");
+  }
+
+  override async setLifecycleWithLease(): Promise<never> {
+    throw new Error("runner used non-atomic lifecycle path");
+  }
+
+  override async writeCheckpoint(): Promise<never> {
+    throw new Error("runner used non-atomic checkpoint path");
+  }
+}
+
 afterEach(() => resetAgentToolsForTest());
 
 describe("runRecoverableAgentLoop", () => {
@@ -136,7 +150,7 @@ describe("runRecoverableAgentLoop", () => {
   });
 
   it("honors a cancellation request before planning and checkpoints the blocked state", async () => {
-    const store = new InMemoryRecoverableAgentRunStore();
+    const store = new AtomicProgressOnlyStore();
     await store.requestCancellation({
       workspaceId,
       agentRunId,
@@ -161,6 +175,23 @@ describe("runRecoverableAgentLoop", () => {
     expect(planned).toBe(false);
     expect((await store.getRecoveryState(workspaceId, agentRunId))?.checkpoint).toMatchObject(
       { nextStepIndex: 0, lifecycle: "blocked" },
+    );
+  });
+
+  it("persists normal steps without using the split append/checkpoint path", async () => {
+    const store = new AtomicProgressOnlyStore();
+    const result = await runRecoverableAgentLoop({
+      ctx,
+      workerRef: "worker:atomic",
+      store,
+      clock: () => at(1_000),
+      plan: () => ({ kind: "finish", resultRef: "result:atomic" }),
+    });
+
+    expect(result.terminationReason).toBe("finished");
+    expect(result.steps).toHaveLength(1);
+    expect((await store.getRecoveryState(workspaceId, agentRunId))?.checkpoint).toMatchObject(
+      { nextStepIndex: 1, lifecycle: "completed" },
     );
   });
 
