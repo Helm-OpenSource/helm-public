@@ -152,6 +152,24 @@ describe("governed runtime private-context contracts", () => {
         tenantUrlIncluded: false,
       }),
     ).toBeTruthy();
+
+    expect(
+      contextEgressDecisionReceiptSchema.parse({
+        receiptId: "receipt:egress:audit-missing",
+        sourceBundleId: buildReceipt.bundleId,
+        contextProjectionReceiptId: "receipt:projection:audit-missing",
+        modelProfileKey: "remote-projected-review",
+        consentGranted: true,
+        promptPreviewHash: "sha256:prompt-preview-audit-missing",
+        auditRef: null,
+        redactionStatus: "redacted",
+        decision: "block",
+        reason: "audit_missing",
+        rawContentIncluded: false,
+        credentialIncluded: false,
+        tenantUrlIncluded: false,
+      }),
+    ).toBeTruthy();
   });
 });
 

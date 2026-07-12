@@ -93,6 +93,7 @@ export const CONTEXT_EGRESS_FAILURE_REASONS = [
   "profile_blocked",
   "consent_missing",
   "prompt_preview_missing",
+  "audit_missing",
   "redaction_failed",
   "injection_scan_failed",
   "projection_not_remote_safe",
