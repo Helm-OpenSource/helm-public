@@ -84,6 +84,7 @@ connector 授权、写回、外发或审批证明。
 - [经营信号首公里方法 / Signal First Mile method](product/HELM_SIGNAL_FIRST_MILE_METHOD.md)
 - [经营信号首公里 quickstart / Signal First Mile quickstart](product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md)
 - [经营智能 Harness 要求 / Operating Harness requirements](product/HELM_OPERATING_HARNESS_REQUIREMENTS.md)
+- [经营智能 Harness P3 数据门控计划 / Operating Harness P3 data-gated plan](product/HELM_OPERATING_HARNESS_P3_DATA_GATED_PLAN.md)
 - [运营信号流图要求 / Operating signal flow map requirements](product/HELM_OPERATING_SIGNAL_FLOW_MAP_REQUIREMENTS.md)
 - [专家能力反馈闭环 / Expert capability feedback loop](product/HELM_EXPERT_CAPABILITY_FEEDBACK_LOOP.md)
 - [自身租户运营 Runbook / Self-tenant operating runbook](product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md) — minimal-live 自用范围由 founder 决策与 gate 回执定义；不是客户部署指南或探测器启用说明

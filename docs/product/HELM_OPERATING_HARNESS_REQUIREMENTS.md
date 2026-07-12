@@ -256,6 +256,16 @@ npm run eval:operating-harness-p2
 P2 仍不证明模型已变强、线上指标已提升、结论可泛化或企业世界模型已经存在。它只证明一次
 weakness 到新 held-out owner-review packet 的 public-safe、offline、replayable 治理链。
 
+## 11. P3 Readiness
+
+P3 不按日期或模型发布节奏启动。机器门必须从完整 evidence window 派生多独立 held-out、稳定 lift、
+calibration、evidence、reviewer、boundary、feedback-to-eval、de-identification 和 rollback 指标；当前
+public synthetic fixture 固定为 `not_ready`。即使全部阈值达到，也只返回
+`ready_for_p3_design_review`，不会记录 owner approval、触发实现或授予 production authority。
+
+详细阈值、derived operating-context 架构、跨仓职责、实施切片和 abort 条件见
+[P3 数据门控升级计划](HELM_OPERATING_HARNESS_P3_DATA_GATED_PLAN.md)。
+
 ## English Reference
 
 P0 establishes one public-safe canonical operating-signal chain and makes lifecycle state a
@@ -270,6 +280,7 @@ customer data, writeback, external send, approval, commitment, or memory promoti
 
 | Date | Change |
 | --- | --- |
+| 2026-07-12 | Added the machine-checkable P3 data-readiness gate and linked deferred implementation plan |
 | 2026-07-12 | Added the P2 replay-proven weakness, additive proposal, fresh-heldout, and owner-review-only evolution loop |
 | 2026-07-12 | Added P1 content-bound manifest/revision composition and shadow-only evaluation requirements |
 | 2026-07-12 | Added the P0b deterministic state projector, legacy reference adapter, and seven-metric calculator |
