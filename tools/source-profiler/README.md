@@ -14,11 +14,10 @@ It is **not** a server-side ingest service, a connector, or an auto-writer.
 - [Boundaries](docs/BOUNDARIES.md) — trust model, public vs private, overlay ownership, guards.
 - [Integration](docs/INTEGRATION.md) — Signal First Mile, Cross-System Accountability, and the boundary to a future server-side Auto-Discovery (separate plan).
 
-## Boundaries (v1)
+## Boundaries
 
 - **Read-only.** Never executes scanned code, never writes to external systems,
-  never reads database rows. (DB catalog introspection in a later slice is
-  catalog-only.)
+  never reads database rows. DB discovery is catalog-snapshot-only.
 - **No network in the deterministic layer.** Enforced by
   `scripts/check-source-profiler-boundaries.ts`.
 - **Candidates, not conclusions.** Every proposed mapping is a `candidate`; only
@@ -37,15 +36,21 @@ npm run source-profiler -- --scope .helm-profiler/source-profiler.scope.json \
   --source . --output .helm-profiler/runs
 ```
 
-Outputs per run: `run.json`, `code-scan.json`, `mapping-candidates.json`.
+Outputs per run: `run.json`, `code-scan.json`, `mapping-candidates.json`, and the
+CONFIDENTIAL local `review-packet.json`. With `--ai-provider local`, the same
+production bridge also writes `source-to-signal-proposals.json`; every proposal
+is `needs_review`, evidence-bound, confidence-capped by structural parsing, and
+explicitly forbidden from execution or connector authority.
 
 ## Layers
 
 1. **Deterministic profiler** — the only trusted layer (scope enforcement,
    secret preflight, structural scan, mapping proposer).
-2. **AI overlay** (later slice) — optional, consent-gated; produces candidate
-   reasoning only, never ground truth.
-3. **DB catalog** (later slice) — optional, catalog-only introspection.
+2. **AI overlay + v3 proposer** — optional and consent-gated; consumes only the
+   redacted packet, validates the whole provider response strictly, and emits
+   candidate reasoning plus a `SourceToSignalProposalBundle`, never ground truth.
+3. **DB catalog** — optional, allowlisted catalog-snapshot introspection only;
+   row data is not accepted.
 
 ## Layout
 

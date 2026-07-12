@@ -7,7 +7,12 @@
  * only ever see a REDACTED packet (no real names, no row data).
  */
 
-import type { SignalFamily, TargetEntity } from "../contract/governance";
+import { z } from "zod";
+
+import {
+  signalFamilySchema,
+  targetEntitySchema,
+} from "../contract/governance";
 
 export type AiProviderKind = "local" | "openai" | "anthropic" | "custom";
 
@@ -21,16 +26,31 @@ export type AiPromptInput = {
   redactedPacketJson: string;
 };
 
-export type AiSuggestion = {
-  /** DiscoveredObject id (stable hash) the suggestion concerns. */
-  sourceObjectId: string;
-  targetEntity: TargetEntity;
-  signalFamily: SignalFamily;
-  /** Free-text reasoning produced by the model. */
-  reasoning: string;
-  /** 0-100 model-reported confidence. */
-  confidence: number;
-};
+export const aiSuggestionSchema = z
+  .object({
+    /** DiscoveredObject id (stable hash) the suggestion concerns. */
+    sourceObjectId: z.string().min(1),
+    targetEntity: targetEntitySchema,
+    signalFamily: signalFamilySchema,
+    /** Free-text reasoning produced by the model. */
+    reasoning: z.string().min(1),
+    /** 0-100 model-reported confidence. */
+    confidence: z.number().int().min(0).max(100),
+  })
+  .strict();
+export type AiSuggestion = z.infer<typeof aiSuggestionSchema>;
+
+export type AiProviderResponseFailure = "parse_failure" | "schema_failure";
+
+export class AiProviderResponseError extends Error {
+  readonly failure: AiProviderResponseFailure;
+
+  constructor(failure: AiProviderResponseFailure, message: string) {
+    super(message);
+    this.name = "AiProviderResponseError";
+    this.failure = failure;
+  }
+}
 
 export interface AiProvider {
   readonly kind: AiProviderKind;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES,
   DEFAULT_SAFE_MODEL_CAPABILITY_PROFILE,
   parseJudgementProposalBundle,
   parseSourceToSignalProposalBundle,
@@ -200,6 +201,10 @@ describe("LLM intelligence v3 contracts", () => {
     const parsed = parseSourceToSignalProposalBundle({
       proposalId: "source-proposal-1",
       sourceSummaryRefs: ["schema-summary-1"],
+      sourceCandidateRef: "candidate-1",
+      candidateOrigin: "ai",
+      modelProfileKey: "synthetic-local-v3",
+      redactionProvenance: "public_safe_synthetic",
       targetSignalFamily: "advancement",
       targetEntity: "Opportunity",
       reviewState: "needs_review",
@@ -207,10 +212,44 @@ describe("LLM intelligence v3 contracts", () => {
       evidenceRefs: ["field-ref-1"],
       mappingRationale: ["Deal amount and stage fields suggest opportunity progression."],
       missingEvidence: [],
-      forbiddenCapabilityRefs: ["connector_activation"],
+      forbiddenCapabilityRefs: [...V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES],
     });
 
     expect(parsed.reviewState).toBe("needs_review");
-    expect(parsed.forbiddenCapabilityRefs).toEqual(["connector_activation"]);
+    expect(parsed.forbiddenCapabilityRefs).toEqual(
+      V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES,
+    );
+  });
+
+  it("rejects open-vocabulary and incomplete source-to-signal proposals", () => {
+    const base = {
+      proposalId: "source-proposal-strict",
+      sourceSummaryRefs: ["schema-summary-1"],
+      sourceCandidateRef: "candidate-1",
+      candidateOrigin: "ai",
+      modelProfileKey: "synthetic-local-v3",
+      redactionProvenance: "public_safe_synthetic",
+      targetSignalFamily: "advancement",
+      targetEntity: "Opportunity",
+      reviewState: "needs_review",
+      confidence: 72,
+      evidenceRefs: ["field-ref-1"],
+      mappingRationale: ["Synthetic structural evidence requires human review."],
+      missingEvidence: [],
+      forbiddenCapabilityRefs: [...V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES],
+    };
+
+    expect(() =>
+      parseSourceToSignalProposalBundle({ ...base, targetEntity: "UnknownEntity" }),
+    ).toThrow();
+    expect(() =>
+      parseSourceToSignalProposalBundle({ ...base, targetSignalFamily: "sales_magic" }),
+    ).toThrow();
+    expect(() =>
+      parseSourceToSignalProposalBundle({
+        ...base,
+        forbiddenCapabilityRefs: ["connector_activation"],
+      }),
+    ).toThrow();
   });
 });

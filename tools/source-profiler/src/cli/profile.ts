@@ -18,7 +18,7 @@ import { buildReviewPacket } from "../review/review-packet";
 import { redactReviewPacket } from "../review/redact";
 import { buildOverlayDraft } from "../overlay/overlay-draft";
 import { materializeOverlayDraft } from "../overlay/materialize";
-import { runAiOverlay } from "../ai/overlay";
+import { proposeSourceToSignalBundles } from "../ai/source-to-signal-proposer";
 import { parseDbCatalogSnapshot } from "../db/types";
 import { introspectFromSnapshot } from "../db/introspect";
 import { catalogToDiscoveredObjects } from "../db/catalog-to-objects";
@@ -30,6 +30,7 @@ import type { CodeScanSummary } from "../contract/code-scan";
 import type { SchemaIntrospectionSummary } from "../contract/schema-introspection";
 import type { AuditEntry, SourceProfileRun } from "../contract/run";
 import { shortHash } from "../util/hash";
+import type { ModelCapabilityProfile } from "../../../../lib/llm/intelligence-contracts-v3";
 
 export type ProfileCommandInput = {
   cwd: string;
@@ -60,6 +61,8 @@ export type ProfileCommandResult = {
   overlayDraft?: OverlayPatchDraft;
   materializedFiles?: string[];
   aiCandidateCount?: number;
+  sourceToSignalProposalCount?: number;
+  sourceToSignalStatus?: string;
   dbTableCount?: number;
 };
 
@@ -117,6 +120,8 @@ export async function runProfileCommand(input: ProfileCommandInput): Promise<Pro
 
   // Optional AI overlay (advisory, candidate-only). Remote sees redacted only.
   let aiCandidateCount: number | undefined;
+  let sourceToSignalProposalCount: number | undefined;
+  let sourceToSignalStatus: string | undefined;
   if (input.aiProvider) {
     const seedRun: SourceProfileRun = { ...result.run, audit, modalities };
     const seedPacket = buildReviewPacket({
@@ -127,17 +132,37 @@ export async function runProfileCommand(input: ProfileCommandInput): Promise<Pro
       source: manifest.root,
       workspace: input.workspace,
     });
-    const ai = await runAiOverlay({
+    const modelProfile = sourceProfilerModelProfile(input.aiProvider);
+    const ai = await proposeSourceToSignalBundles({
       packet: seedPacket,
+      modelProfile,
       providerKind: input.aiProvider,
       consent: input.aiConsent ?? false,
+      redactionProvenance:
+        input.aiProvider === "local" ? "local_redacted" : "remote_redacted_projection",
       now,
     });
-    candidates.push(...ai.candidates);
+    candidates.push(...ai.mappingCandidates);
     audit.push(...ai.audit);
-    aiCandidateCount = ai.candidates.length;
-    writeFileSync(path.join(runDir, "ai-prompt-preview.txt"), `${ai.promptPreview}\n`, "utf8");
-    artifactRefs.push("ai-prompt-preview.txt");
+    aiCandidateCount = ai.mappingCandidates.length;
+    sourceToSignalProposalCount = ai.proposals.length;
+    sourceToSignalStatus = ai.status;
+    if (ai.promptPreview) {
+      writeFileSync(
+        path.join(runDir, "ai-prompt-preview.txt"),
+        `${ai.promptPreview}\n`,
+        "utf8",
+      );
+      artifactRefs.push("ai-prompt-preview.txt");
+    }
+    writeJson(path.join(runDir, "source-to-signal-proposals.json"), {
+      schemaVersion: "helm.source-profiler.source-to-signal-proposals.v3",
+      status: ai.status,
+      reason: ai.reason,
+      modelProfileKey: modelProfile.profileKey,
+      proposals: ai.proposals,
+    });
+    artifactRefs.push("source-to-signal-proposals.json");
   }
 
   const run: SourceProfileRun = { ...result.run, audit, modalities };
@@ -199,7 +224,37 @@ export async function runProfileCommand(input: ProfileCommandInput): Promise<Pro
     overlayDraft,
     materializedFiles,
     aiCandidateCount,
+    sourceToSignalProposalCount,
+    sourceToSignalStatus,
     dbTableCount,
+  };
+}
+
+function sourceProfilerModelProfile(providerKind: AiProviderKind): ModelCapabilityProfile {
+  if (providerKind === "local") {
+    return {
+      profileKey: "source-profiler-local-v3",
+      contextMode: "local_rich_private",
+      providerMode: "local",
+      reasoningDepth: "standard",
+      toolCoordination: "direct",
+      multiPassAllowed: false,
+      remoteEgressPolicy: "blocked",
+      budgetClass: "standard",
+      allowedWorkflowClasses: ["source_to_signal_proposal"],
+    };
+  }
+
+  return {
+    profileKey: `source-profiler-${providerKind}-preview-v3`,
+    contextMode: "remote_projected_review_required",
+    providerMode: "remote",
+    reasoningDepth: "standard",
+    toolCoordination: "direct",
+    multiPassAllowed: false,
+    remoteEgressPolicy: "projection_requires_consent",
+    budgetClass: "standard",
+    allowedWorkflowClasses: ["source_to_signal_proposal"],
   };
 }
 

@@ -22,6 +22,10 @@
  *   SP-C candidate-only— AI overlay files (src/ai/**) may not assert acceptance
  *                        or claim deterministic origin (AI output is never truth).
  *   SP-D synthetic     — fixtures contain no real secrets/PII.
+ *   SP-E no-authority  — proposer/overlay code cannot import or call execution,
+ *                        approval, feedback, promotion, writeback, or activation paths.
+ *   SP-F projected-only— a full ReviewPacket cannot be serialized or dispatched
+ *                        to an AI provider/transport.
  *
  * Exit code 0 = pass, 1 = violations found.
  *
@@ -70,6 +74,36 @@ const ACCEPTED_STATE_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: "asserts-rejected", re: /state\s*:\s*['"]rejected_by_human['"]/ },
 ];
 
+const UNSAFE_V3_STATE_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
+  {
+    id: "unsafe-v3-review-state",
+    re: /reviewState\s*:\s*['"](?:approved|committed|executed|auto_promote|production_ready)['"]/i,
+  },
+];
+
+const AUTHORITY_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
+  { id: "crm-import", re: /\brunCrmImport\s*\(|crm-orchestrator\.service/ },
+  { id: "connector-activation", re: /\bactivateConnector\s*\(|features\/connectors\/actions/ },
+  { id: "approval-create", re: /\b(?:createApprovalTask|approvalTask\.create)\s*\(/ },
+  { id: "external-send", re: /\b(?:externalSend|sendEmail)\s*\(/ },
+  { id: "writeback", re: /\bwriteback\s*\(/i },
+  {
+    id: "learning-write",
+    re: /\b(?:memoryPromotion|preferenceSignal|patternFact|recommendationFeedback)\.(?:create|update|upsert)\s*\(/,
+  },
+];
+
+const RAW_PACKET_EGRESS_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
+  {
+    id: "packet-provider-dispatch",
+    re: /\b(?:provider\.suggest|transport)\s*\(\s*(?:input\.)?(?:packet|reviewPacket)\b/,
+  },
+  {
+    id: "packet-serialization",
+    re: /JSON\.stringify\s*\(\s*(?:input\.)?(?:packet|reviewPacket)\b/,
+  },
+];
+
 // Reused from the profiler's own secret rules (kept in sync conceptually).
 const FIXTURE_SECRET_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: "private_key", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
@@ -114,9 +148,14 @@ export function runSourceProfilerBoundariesCheck(repoRoot: string): Violation[] 
       }
       // SP-C-state: tooling never finalizes a human decision — anywhere in the tool.
       check(ACCEPTED_STATE_PATTERNS, line, i, rel, "SP-C", violations);
+      check(UNSAFE_V3_STATE_PATTERNS, line, i, rel, "SP-C", violations);
       // SP-C-origin: AI overlay must not claim deterministic origin.
       if (inAiDir && /origin\s*:\s*['"]deterministic['"]/.test(line)) {
         pushIfNotBypassed(violations, "SP-C", rel, i, line, "ai output claims deterministic origin");
+      }
+      check(AUTHORITY_PATTERNS, line, i, rel, "SP-E", violations);
+      if (inAiDir) {
+        check(RAW_PACKET_EGRESS_PATTERNS, line, i, rel, "SP-F", violations);
       }
     }
   }

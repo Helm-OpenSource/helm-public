@@ -292,6 +292,57 @@ export function projectRichLocalContextBundle(input: {
 
 const confidenceSchema = z.number().int().min(0).max(100);
 
+export const V3_SOURCE_TARGET_SIGNAL_FAMILIES = [
+  "commitment",
+  "advancement",
+  "risk",
+  "pacing",
+  "receipt",
+  "evidence_gap",
+  "boundary_attempt",
+] as const;
+export const v3SourceTargetSignalFamilySchema = z.enum(
+  V3_SOURCE_TARGET_SIGNAL_FAMILIES,
+);
+
+export const V3_SOURCE_TARGET_ENTITIES = [
+  "Company",
+  "Contact",
+  "Opportunity",
+  "Meeting",
+  "Note",
+  "Task",
+] as const;
+export const v3SourceTargetEntitySchema = z.enum(V3_SOURCE_TARGET_ENTITIES);
+
+export const V3_SOURCE_PROPOSAL_ORIGINS = ["deterministic", "ai"] as const;
+export const v3SourceProposalOriginSchema = z.enum(V3_SOURCE_PROPOSAL_ORIGINS);
+
+export const V3_SOURCE_PROPOSAL_REDACTION_PROVENANCE = [
+  "public_safe_synthetic",
+  "local_redacted",
+  "remote_redacted_projection",
+] as const;
+export const v3SourceProposalRedactionProvenanceSchema = z.enum(
+  V3_SOURCE_PROPOSAL_REDACTION_PROVENANCE,
+);
+export type V3SourceProposalRedactionProvenance = z.infer<
+  typeof v3SourceProposalRedactionProvenanceSchema
+>;
+
+export const V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES = [
+  "connector_activation",
+  "external_send",
+  "writeback",
+  "run_crm_import",
+  "memory_promotion",
+  "preference_signal_write",
+  "pattern_fact_write",
+] as const;
+export const v3SourceProposalForbiddenCapabilitySchema = z.enum(
+  V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES,
+);
+
 export const judgementProposalBundleSchema = z
   .object({
     proposalId: z.string().min(1),
@@ -315,16 +366,34 @@ export const sourceToSignalProposalBundleSchema = z
   .object({
     proposalId: z.string().min(1),
     sourceSummaryRefs: z.array(z.string().min(1)).min(1),
-    targetSignalFamily: z.string().min(1),
-    targetEntity: z.string().min(1),
+    sourceCandidateRef: z.string().min(1),
+    candidateOrigin: v3SourceProposalOriginSchema,
+    modelProfileKey: z.string().min(1),
+    redactionProvenance: v3SourceProposalRedactionProvenanceSchema,
+    targetSignalFamily: v3SourceTargetSignalFamilySchema,
+    targetEntity: v3SourceTargetEntitySchema,
     reviewState: v3ReviewStateSchema,
     confidence: confidenceSchema,
-    evidenceRefs: z.array(z.string().min(1)).default([]),
-    mappingRationale: z.array(z.string().min(1)).default([]),
+    evidenceRefs: z.array(z.string().min(1)).min(1),
+    mappingRationale: z.array(z.string().min(1)).min(1),
     missingEvidence: z.array(missingEvidenceNoteSchema).default([]),
-    forbiddenCapabilityRefs: z.array(z.string().min(1)).default([]),
+    forbiddenCapabilityRefs: z
+      .array(v3SourceProposalForbiddenCapabilitySchema)
+      .min(V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES.length),
   })
-  .strict();
+  .strict()
+  .superRefine((proposal, ctx) => {
+    const forbidden = new Set(proposal.forbiddenCapabilityRefs);
+    for (const capability of V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES) {
+      if (!forbidden.has(capability)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["forbiddenCapabilityRefs"],
+          message: `source-to-signal proposals must forbid ${capability}`,
+        });
+      }
+    }
+  });
 export type SourceToSignalProposalBundle = z.infer<typeof sourceToSignalProposalBundleSchema>;
 
 export function parseSourceToSignalProposalBundle(input: unknown): SourceToSignalProposalBundle {

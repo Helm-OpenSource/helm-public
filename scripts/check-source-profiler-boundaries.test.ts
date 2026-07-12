@@ -99,4 +99,45 @@ describe("source-profiler boundary guard", () => {
       rmSync(repo, { recursive: true, force: true });
     }
   });
+
+  it("rejects unsafe v3 review states and direct authority paths", () => {
+    const repo = mkdtempSync(path.join(os.tmpdir(), "sp-guard-v3-authority-"));
+    try {
+      const aiDir = path.join(repo, "tools/source-profiler/src/ai");
+      mkdirSync(aiDir, { recursive: true });
+      writeFileSync(
+        path.join(aiDir, "unsafe-proposer.ts"),
+        [
+          'export const result = { reviewState: "production_ready" };',
+          "export const run = () => runCrmImport();",
+          "export const activate = () => activateConnector();",
+          "export const approve = () => approvalTask.create({});",
+        ].join("\n"),
+      );
+      const rules = runSourceProfilerBoundariesCheck(repo).map((v) => v.rule);
+      expect(rules).toContain("SP-C");
+      expect(rules).toContain("SP-E");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects full ReviewPacket serialization or provider dispatch", () => {
+    const repo = mkdtempSync(path.join(os.tmpdir(), "sp-guard-v3-egress-"));
+    try {
+      const aiDir = path.join(repo, "tools/source-profiler/src/ai");
+      mkdirSync(aiDir, { recursive: true });
+      writeFileSync(
+        path.join(aiDir, "unsafe-egress.ts"),
+        [
+          "export const serialize = (reviewPacket: unknown) => JSON.stringify(reviewPacket);",
+          "export const send = (provider: any, packet: any) => provider.suggest(packet);",
+        ].join("\n"),
+      );
+      const rules = runSourceProfilerBoundariesCheck(repo).map((v) => v.rule);
+      expect(rules).toContain("SP-F");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
 });
