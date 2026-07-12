@@ -244,6 +244,13 @@ export function validateSignalEvent(input: unknown): ValidationResult {
   if (Object.keys(input).some((key) => LEGACY_SIGNAL_STATE_FIELDS.has(key))) {
     errors.push("signal_event_contains_authoritative_state");
   }
+  if (
+    Array.isArray(input.evidenceRefs) &&
+    input.evidenceRefs.every((ref): ref is string => typeof ref === "string") &&
+    new Set(input.evidenceRefs).size !== input.evidenceRefs.length
+  ) {
+    errors.push("duplicate_signal_evidence_ref");
+  }
 
   const parsed = signalEventSchema.safeParse(input);
   errors.push(...parseErrors(parsed, "invalid_signal_event"));

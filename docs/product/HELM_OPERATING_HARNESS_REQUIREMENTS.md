@@ -75,7 +75,8 @@ P0 projector 至少覆盖：
 
 正确拦截的越界尝试计入辅助指标 `boundaryAttemptCount`，但不计入
 `boundaryIncidentCount`。若分母为零或 held-out 分数缺失，指标必须返回 `null` 并标记
-incomplete，不能以 `1.0` 或“通过”代替缺失证据。
+incomplete，不能以 `1.0` 或“通过”代替缺失证据。若 boundary observation 为空，
+`boundaryIncidentCount` 和 `boundaryAttemptCount` 同样返回 `null`，不能把“未测量”记为零事故。
 
 ## 5. Harness 与演化循环边界
 
@@ -117,6 +118,12 @@ P0 按两个原子切片交付：P0a 只落 canonical contracts、validators、s
 npm run eval:operating-harness-contracts
 ```
 
+P0b 使用组合入口重放 contracts、projector、adapter 和 metrics：
+
+```bash
+npm run eval:operating-harness-p0
+```
+
 明确不做：DB migration、生产 runtime、scheduler、LLM 调用、神经网络、Harness 自动改写、
 客户数据、Pack/Overlay 修改、自动对客动作或 memory promotion。
 
@@ -144,4 +151,5 @@ or memory promotion.
 
 | Date | Change |
 | --- | --- |
+| 2026-07-12 | Added the P0b deterministic state projector, legacy reference adapter, and seven-metric calculator |
 | 2026-07-12 | Created P0 canonical spine, derived-state, metric, compatibility, and boundary requirements |
