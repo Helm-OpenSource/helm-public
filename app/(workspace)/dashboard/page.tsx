@@ -1,18 +1,18 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
-import { resolveWorkspaceDefaultLandingPath } from "@/lib/workspace-ops";
-import { OperatingFoundationSummaryCard } from "@/components/shared/operating-foundation-summary";
-import { PageHeader } from "@/components/shared/page-header";
-import { ProactiveMechanismPanel } from "@/components/shared/proactive-mechanism-panel";
-import { ReportingProtocolPanel } from "@/components/shared/reporting-protocol-panel";
-import { TenantResourceOperatingImpactPanel } from "@/components/shared/tenant-resource-operating-impact-panel";
-import { Button } from "@/components/ui/button";
+import {
+  parseWorkspaceFeatureFlags,
+  resolveWorkspaceDefaultLandingPath,
+} from "@/lib/workspace-ops";
 import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
+import { getWorkspaceRolePresetDefinition } from "@/lib/definitions/workspace-role-preset-catalog";
+import { buildCoreDefaultMainline } from "@/lib/shell/operating-mainline";
+import { resolveNorthstarText } from "@/lib/shell/northstar-text";
+import { resolveRoleLens } from "@/lib/shell/role-home";
 import { loadDashboardPageData } from "@/features/dashboard/page-loader";
 import { buildDashboardViewModel } from "@/features/dashboard/view-model";
-import { DashboardHomeWorkEntrySurface } from "@/features/dashboard/home-work-entry-surface";
-import { DashboardHomeImplementationConsolePanel } from "@/features/dashboard/home-implementation-console-panel";
+import { ControlTowerView } from "@/features/dashboard/control-tower/control-tower-view";
+import { LegacyHomeView } from "@/features/dashboard/legacy-home-view";
 import { ConnectorBindingSuccessSheet } from "@/features/dashboard/connector-binding-success-sheet";
 
 export default async function DashboardPage({
@@ -21,7 +21,8 @@ export default async function DashboardPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
-  // 工作区可配置默认落地页(如租户 OS 首页);?stay=1 为运营逃生口,保留原生 dashboard 可达。
+  // 优先级链（蓝图 §2.1）：①defaultLandingPath 决定落点 ②?stay=1 逃生口
+  // ③controlTowerHome 内容开关 ④角色分流仅内容层视图选择（无 redirect）。
   const stayParam = Array.isArray(params.stay) ? params.stay[0] : params.stay;
   if (stayParam !== "1") {
     const { workspace } = await getCurrentWorkspaceSession();
@@ -42,99 +43,69 @@ export default async function DashboardPage({
         ? params.connector_binding_message[0]
         : undefined;
   const pageData = await loadDashboardPageData();
-  const {
-    pageStory,
-    tenantResourceImpactReadout,
-    locale,
-    demoMode,
-    english,
-  } = pageData;
+  const { locale, demoMode, english, workspace, membership } = pageData;
 
   const viewModel = buildDashboardViewModel({ pageData, entry });
-  const {
-    operatingFoundationSummary,
-    dashboardHomeWorkEntry,
-    dashboardProtocol,
-    founderProactiveFlow,
-  } = viewModel;
+  const featureFlags = parseWorkspaceFeatureFlags(workspace.featureFlagsJson);
 
   const demoQuickPathToMeetings = demoMode
-    ? getDemoModeProfiles(locale)
+    ? (getDemoModeProfiles(locale)
         .find((profile) => profile.mode === demoMode)
-        ?.quickPath.find((item) => item.href === "/meetings")
+        ?.quickPath.find((item) => item.href === "/meetings") ?? null)
     : null;
 
+  const connectorSheet = (
+    <ConnectorBindingSuccessSheet
+      english={english}
+      status={connectorBindingStatus}
+      message={connectorBindingMessage}
+    />
+  );
+
+  if (!featureFlags.controlTowerHome) {
+    return (
+      <LegacyHomeView
+        pageData={pageData}
+        viewModel={viewModel}
+        demoQuickPathToMeetings={demoQuickPathToMeetings}
+        connectorSheet={connectorSheet}
+      />
+    );
+  }
+
+  // 角色 lens：授权先行（页面权限不受此影响）；custom preset 经 basePresetKey
+  // 归并；解析失败落 GENERIC（fail-safe 向最低信息面）。
+  const presetDefinition = getWorkspaceRolePresetDefinition(
+    membership.rolePresetKey,
+    workspace.configuration,
+  );
+  const basePresetKey = presetDefinition?.basePresetKey ?? null;
+  const lens = resolveRoleLens(basePresetKey);
+
+  // 主线计数语义（诚实口径，contract 级 countCaliber=daily_schedule）：
+  // judgement/review = home-work-entry 的今日排片数（非全量积压，UI 显式标注）；
+  // advance 尚无真实全量计数源 → pending_source，不用截断样本冒充。
+  const workEntry = viewModel.dashboardHomeWorkEntry;
+  const mainline = buildCoreDefaultMainline({
+    asOf: new Date().toISOString(),
+    english,
+    counts: {
+      judgementPending: workEntry.topWorkItems.length,
+      reviewQueue: workEntry.reviewItems.length,
+      advanceInFlight: null,
+    },
+  });
+
   return (
-    <div className="space-y-6" data-source-page="/dashboard">
-      <ConnectorBindingSuccessSheet
-        english={english}
-        status={connectorBindingStatus}
-        message={connectorBindingMessage}
-      />
-
-      <PageHeader
-        eyebrow={pageStory.eyebrow}
-        title={
-          pageStory.title ??
-          (english ? "Today's 3 calls that need you" : "今天必须由你拍板的 3 件事")
-        }
-        description={pageStory.description}
-        actions={
-          demoQuickPathToMeetings ? (
-            <Button asChild size="sm" variant="secondary">
-              <Link href={demoQuickPathToMeetings.href}>
-                {demoQuickPathToMeetings.label}
-              </Link>
-            </Button>
-          ) : null
-        }
-      />
-
-      <DashboardHomeWorkEntrySurface
-        model={dashboardHomeWorkEntry}
-        english={english}
-      />
-
-      {tenantResourceImpactReadout.totalResources > 0 ? (
-        <TenantResourceOperatingImpactPanel
-          readout={tenantResourceImpactReadout}
-          english={english}
-          surface="dashboard"
-        />
-      ) : null}
-
-      <details className="group rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-          <span>
-            {english
-              ? "Open customer assets, evidence and coordination context"
-              : "展开客户资产变化、依据和协作背景"}
-          </span>
-          <span className="rounded-full border border-[color:var(--border)] px-2.5 py-1 text-xs text-[color:var(--muted-foreground)] transition group-open:bg-[color:var(--surface-subtle)]">
-            {english ? "Details" : "详情"}
-          </span>
-        </summary>
-        <div className="mt-5 space-y-5">
-          <DashboardHomeImplementationConsolePanel english={english} />
-
-          <OperatingFoundationSummaryCard
-            label={operatingFoundationSummary.label}
-            title={operatingFoundationSummary.title}
-            summary={operatingFoundationSummary.summary}
-            items={operatingFoundationSummary.items}
-            connections={operatingFoundationSummary.connections}
-            note={operatingFoundationSummary.note}
-          />
-
-          <ReportingProtocolPanel protocol={dashboardProtocol} english={english} />
-
-          <ProactiveMechanismPanel
-            title={english ? "Prepared context" : "已准备的背景"}
-            flows={[founderProactiveFlow]}
-            english={english}
-          />
-        </div>
-      </details>
-    </div>
+    <ControlTowerView
+      english={english}
+      lens={lens}
+      basePresetKey={basePresetKey}
+      mainline={mainline}
+      northstarText={resolveNorthstarText(workspace.focusAreas, english)}
+      viewModel={viewModel}
+      tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
+      connectorSheet={connectorSheet}
+    />
   );
 }

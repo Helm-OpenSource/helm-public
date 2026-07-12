@@ -20,6 +20,7 @@ const workspaceFeatureFlagLabels = {
   llmEnhancement: { en: "LLM enhancement", zh: "模型增强" },
   evolutionSignals: { en: "Evolution signals", zh: "演进信号" },
   swarmReadOnlyWorkers: { en: "Swarm read-only workers", zh: "只读协作者" },
+  controlTowerHome: { en: "Control tower home", zh: "控制塔首页" },
 } as const;
 
 type PilotDraft = {

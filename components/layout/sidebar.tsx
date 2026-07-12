@@ -27,15 +27,57 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getDemoModeProfile } from "@/lib/demo/demo-modes";
 import type { WorkspaceNavExtensionCluster } from "@/lib/extensions/registry";
+import {
+  getDestinationCatalog,
+  type DestinationEntry,
+} from "@/lib/shell/role-home";
+
+const CATALOG_ICON_BY_PREFIX: Array<[string, React.ReactNode]> = [
+  ["/dashboard", <Compass key="i" className="h-4 w-4" />],
+  ["/approvals", <CheckSquare key="i" className="h-4 w-4" />],
+  ["/opportunities", <Orbit key="i" className="h-4 w-4" />],
+  ["/customer-success", <Activity key="i" className="h-4 w-4" />],
+  ["/meetings", <CalendarDays key="i" className="h-4 w-4" />],
+  ["/inbox", <Inbox key="i" className="h-4 w-4" />],
+  ["/memory", <MemoryStick key="i" className="h-4 w-4" />],
+  ["/reports", <ReceiptText key="i" className="h-4 w-4" />],
+  ["/companies", <BriefcaseBusiness key="i" className="h-4 w-4" />],
+  ["/search", <Sparkles key="i" className="h-4 w-4" />],
+  ["/imports", <Upload key="i" className="h-4 w-4" />],
+  ["/diagnostics", <Sparkles key="i" className="h-4 w-4" />],
+];
+
+function catalogIcon(href: string): React.ReactNode {
+  const hit = CATALOG_ICON_BY_PREFIX.find(([prefix]) => href.startsWith(prefix));
+  return hit ? hit[1] : <Target className="h-4 w-4" />;
+}
+
+function toNavItems(
+  entries: ReadonlyArray<DestinationEntry>,
+  english: boolean,
+  excludeHrefs: ReadonlyArray<string> = [],
+) {
+  return entries
+    .filter((entry) => !entry.href.startsWith("/settings"))
+    .filter((entry) => !excludeHrefs.some((ex) => entry.href.startsWith(ex)))
+    .map((entry) => ({
+      // pathname-only 高亮判定：导航项去掉 query（/dashboard?stay=1 → /dashboard）
+      href: entry.href.split("?")[0],
+      icon: catalogIcon(entry.href),
+      label: english ? entry.labelEn : entry.labelZh,
+    }));
+}
 
 export function Sidebar({
   workspaceName,
   pendingApprovals,
   navExtensionClusters = [],
+  basePresetKey = null,
 }: {
   workspaceName: string;
   pendingApprovals: number;
   navExtensionClusters?: ReadonlyArray<WorkspaceNavExtensionCluster>;
+  basePresetKey?: string | null;
 }) {
   const {
     locale,
@@ -181,6 +223,51 @@ export function Sidebar({
     },
   ];
 
+  // 控制塔模式：导航改消费逐 preset 目的地目录三层（主区/次区/收纳），
+  // 收敛固定三段陈列（蓝图批1）。navExtensionClusters/设置区不变；
+  // 收纳层与既有设置区链接去重（settingsLinks 已含 imports/diagnostics 等），
+  // 去重后为空则整段省略，避免双入口。
+  const settingsHrefs = settingsLinks.map((item) => item.href);
+  const catalog = featureFlags.controlTowerHome
+    ? getDestinationCatalog(basePresetKey)
+    : null;
+  const drawerItems = catalog
+    ? toNavItems(catalog.drawer, english, settingsHrefs)
+    : [];
+  const renderedSections = catalog
+    ? [
+        {
+          key: "primary",
+          label: english ? "Daily core" : "主区",
+          items: toNavItems(catalog.primary, english),
+        },
+        ...(catalog.secondary.length > 0
+          ? [
+              {
+                key: "secondary",
+                label: english ? "Periodic" : "次区",
+                items: toNavItems(catalog.secondary, english),
+              },
+            ]
+          : []),
+        ...(drawerItems.length > 0
+          ? [
+              {
+                key: "drawer",
+                label: english ? "Drawer" : "收纳",
+                items: drawerItems,
+              },
+            ]
+          : []),
+      ].map((section) => ({
+        ...section,
+        items: section.items.map((item) => ({
+          ...item,
+          activeDescendantExclusions: undefined as string[] | undefined,
+        })),
+      }))
+    : navSections;
+
   return (
     <aside className="sticky top-0 hidden h-screen w-[288px] shrink-0 px-4 py-4 lg:flex">
       <div className="workspace-shell-panel flex h-full w-full flex-col rounded-[32px] border px-4 py-5">
@@ -241,7 +328,7 @@ export function Sidebar({
         </div>
 
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto pr-1">
-          {navSections.map((section) => (
+          {renderedSections.map((section) => (
             <div key={section.key} className="space-y-1">
               <p className="px-1 pb-1 text-xs font-medium text-[color:var(--muted-foreground)]">
                 {section.label}

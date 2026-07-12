@@ -44,6 +44,7 @@ type AppShellProps = {
   };
   navExtensionClusters: ReadonlyArray<WorkspaceNavExtensionCluster>;
   shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
+  basePresetKey: string | null;
   children: React.ReactNode;
 };
 
@@ -65,6 +66,7 @@ export function AppShell({
   quickCreateData,
   navExtensionClusters,
   shellChromeProfiles,
+  basePresetKey,
   children,
 }: AppShellProps) {
   const resolvedDemoMode = demoMode ?? "default";
@@ -91,6 +93,7 @@ export function AppShell({
             workspaceName={workspaceName}
             pendingApprovals={pendingApprovals}
             navExtensionClusters={navExtensionClusters}
+            basePresetKey={basePresetKey}
           />
         ) : (
           <ShellChromeGate profiles={shellChromeProfiles}>
@@ -98,6 +101,7 @@ export function AppShell({
               workspaceName={workspaceName}
               pendingApprovals={pendingApprovals}
               navExtensionClusters={navExtensionClusters}
+              basePresetKey={basePresetKey}
             />
           </ShellChromeGate>
         )}
