@@ -176,23 +176,13 @@ export async function runRecoverableAgentLoop(input: {
   const { ctx, plan, store } = input;
   const clock = input.clock ?? (() => new Date().toISOString());
   const existing = await store.getRun(ctx.workspaceId, ctx.agentRunId);
-  const recovery = await store.getRecoveryState(ctx.workspaceId, ctx.agentRunId);
+  const initialRecovery = await store.getRecoveryState(
+    ctx.workspaceId,
+    ctx.agentRunId,
+  );
   const initialState: AgentLoopState = existing
     ? { steps: [...existing.steps], lifecycle: existing.lifecycle }
     : { steps: [], lifecycle: "created" };
-  assertRecoveryConsistency({
-    state: initialState,
-    checkpoint: recovery?.checkpoint ?? null,
-  });
-  if (isTerminalAgentState(initialState.lifecycle)) {
-    return result({
-      ctx,
-      state: initialState,
-      terminationReason: "already_terminal",
-      fencingEpoch: recovery?.fencingEpoch ?? null,
-      checkpointRef: recovery?.checkpoint?.checkpointRef ?? null,
-    });
-  }
 
   const acquisition = await store.acquireLease({
     workspaceId: ctx.workspaceId,
@@ -206,7 +196,7 @@ export async function runRecoverableAgentLoop(input: {
       state: initialState,
       terminationReason: "lease_unavailable",
       fencingEpoch: acquisition.lease.fencingEpoch,
-      checkpointRef: recovery?.checkpoint?.checkpointRef ?? null,
+      checkpointRef: initialRecovery?.checkpoint?.checkpointRef ?? null,
     });
   }
 

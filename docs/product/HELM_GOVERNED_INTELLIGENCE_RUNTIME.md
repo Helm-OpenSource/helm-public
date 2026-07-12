@@ -238,6 +238,7 @@ side-effect executor 证明。
 
 | 日期 | 变化 |
 |---|---|
+| 2026-07-12 | 将 checkpoint 一致性断言推迟到持有 lease 后执行，contender 在 owner 原子提交瞬间只返回 `lease_unavailable`，不再因启动双读撕裂误判损坏。 |
 | 2026-07-12 | 增加可持久化单步 primitive、fenced recoverable store / runner、原子 lifecycle / step / checkpoint progress commit、MySQL schema + migration、恢复回归测试与静态 drift guard；不声明生产 worker 或迁移已部署。 |
 | 2026-07-12 | 增加 private-context / isolation / capability strict contracts、conformance validator 与 receipt-to-prompt guard。 |
 | 2026-07-12 | 冻结 v4 public-safe architecture、contracts、runtime isolation、rollout 和 acceptance gates。 |

@@ -8,6 +8,7 @@ import {
 import {
   AGENT_RUN_HEARTBEAT_INTERVAL_MS,
   InMemoryRecoverableAgentRunStore,
+  type AgentRunLeaseHandle,
 } from "@/lib/agent-runtime/recoverable-run-store";
 import { runRecoverableAgentLoop } from "@/lib/agent-runtime/recoverable-runner";
 
@@ -50,6 +51,31 @@ class AtomicProgressOnlyStore extends InMemoryRecoverableAgentRunStore {
 
   override async writeCheckpoint(): Promise<never> {
     throw new Error("runner used non-atomic checkpoint path");
+  }
+}
+
+class CommitDuringInitialReadStore extends InMemoryRecoverableAgentRunStore {
+  private ownerHandle: AgentRunLeaseHandle | null = null;
+
+  armCommit(handle: AgentRunLeaseHandle): void {
+    this.ownerHandle = handle;
+  }
+
+  override async getRun(workspace: string, run: string) {
+    const snapshot = await super.getRun(workspace, run);
+    const handle = this.ownerHandle;
+    if (handle) {
+      this.ownerHandle = null;
+      await super.commitProgressWithLease({
+        handle,
+        now: at(1_000),
+        lifecycle: "observing",
+        step: persistedReadStep(0),
+        checkpointRef: `checkpoint:${agentRunId}:1:observing`,
+        nextStepIndex: 1,
+      });
+    }
+    return snapshot;
   }
 }
 
@@ -298,5 +324,30 @@ describe("runRecoverableAgentLoop", () => {
     });
     expect(result.terminationReason).toBe("lease_unavailable");
     expect(planned).toBe(false);
+  });
+
+  it("returns lease_unavailable when an owner commits between contender startup reads", async () => {
+    const store = new CommitDuringInitialReadStore();
+    const owner = await store.acquireLease({
+      workspaceId,
+      agentRunId,
+      workerRef: "worker:owner",
+      now: at(0),
+    });
+    if (!owner.acquired) throw new Error("expected owner lease");
+    store.armCommit(owner.handle);
+
+    const result = await runRecoverableAgentLoop({
+      ctx,
+      workerRef: "worker:contender",
+      store,
+      clock: () => at(2_000),
+      plan: () => {
+        throw new Error("contender must not plan");
+      },
+    });
+
+    expect(result.terminationReason).toBe("lease_unavailable");
+    expect((await store.getRun(workspaceId, agentRunId))?.steps).toHaveLength(1);
   });
 });
