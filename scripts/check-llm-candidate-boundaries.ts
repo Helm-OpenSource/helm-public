@@ -19,11 +19,11 @@ const TEST_FILE_PATTERN = /\.(test|spec)\.tsx?$/;
 const BYPASS_TOKEN = "@bypass-llm-candidate-boundary";
 
 const CANDIDATE_AWARE_PATTERN =
-  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate)\b/;
+  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate|ModelCapabilityProfile|RichLocalContextBundle|ContextProjectionReceipt|JudgementProposalBundle|SourceToSignalProposalBundle)\b/;
 const UNSAFE_REVIEW_STATE_PATTERN =
   /reviewState\s*:\s*["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
 const UNSAFE_STATE_ENUM_DEFINITION_PATTERN =
-  /\b(?:JUDGEMENT_REVIEW_STATES|judgementReviewStateSchema|COUNTERFACTUAL_REVIEW_STATES|counterfactualReviewStateSchema)\b[\s\S]{0,500}["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
+  /\b(?:JUDGEMENT_REVIEW_STATES|judgementReviewStateSchema|COUNTERFACTUAL_REVIEW_STATES|counterfactualReviewStateSchema|V3_REVIEW_STATES|v3ReviewStateSchema)\b[\s\S]{0,500}["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
 
 // v2 terms-to-avoid: banned public-contract / UI identifiers. Use the approved
 // alternatives (capabilityRequested, capabilityRef, missingSignalNote,
@@ -56,6 +56,13 @@ const SELECTOR_RECEIPT_PATTERN = /\b(LLMContextSelectionReceipt|selectorReceipt|
 const SELECTOR_RECEIPT_SINK_PATTERN =
   /\buserPrompt\s*:|JSON\.stringify|executeLLMTask|build\w*ReviewPrompt/;
 const SELECTOR_RECEIPT_DEFINING_FILE = "lib/llm/intelligence-contracts-v2.ts";
+
+// v3 rule F: rich local context is a local/private input surface. Prompt
+// builders must consume only a projected SelectedContextStub, never the rich
+// bundle itself.
+const RICH_CONTEXT_PATTERN = /\b(RichLocalContextBundle|richLocalContextBundle|richContextBundle)\b/;
+const RICH_CONTEXT_SINK_PATTERN =
+  /\buserPrompt\s*:|JSON\.stringify|executeLLMTask|build\w*(?:Prompt|ReviewPrompt)/;
 
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
@@ -198,6 +205,19 @@ export function runLlmCandidateBoundaryCheck(
         rule: "LLM-CANDIDATE-E",
         detail:
           "Selection receipt content is audit-only; it must not be serialized, prompt-built, or dispatched. Only intelligence-contracts-v2.ts may reference it (projectSelectedContextStub). Use SelectedContextStub.",
+      });
+    }
+
+    if (
+      repoRelative !== "lib/llm/intelligence-contracts-v3.ts" &&
+      RICH_CONTEXT_PATTERN.test(content) &&
+      RICH_CONTEXT_SINK_PATTERN.test(content)
+    ) {
+      violations.push({
+        file: repoRelative,
+        rule: "LLM-CANDIDATE-F",
+        detail:
+          "Rich local context must not be serialized, prompt-built, or dispatched. Project it to SelectedContextStub before any remote LLM path.",
       });
     }
   }
