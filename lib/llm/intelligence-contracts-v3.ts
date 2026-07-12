@@ -69,7 +69,60 @@ export const modelCapabilityProfileSchema = z
     budgetClass: reasoningBudgetClassSchema,
     allowedWorkflowClasses: z.array(llmWorkflowClassSchema).default([]),
   })
-  .strict();
+  .strict()
+  .superRefine((profile, ctx) => {
+    if (profile.contextMode === "local_rich_private" && profile.providerMode !== "local") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["providerMode"],
+        message: "local_rich_private context requires a local provider",
+      });
+    }
+
+    if (
+      profile.contextMode === "remote_projected_review_required" &&
+      profile.providerMode !== "remote"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["providerMode"],
+        message: "remote_projected_review_required context requires a remote provider",
+      });
+    }
+
+    if (profile.providerMode === "remote" && profile.contextMode !== "remote_projected_review_required") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["contextMode"],
+        message: "remote providers may consume only projected review-required context",
+      });
+    }
+
+    if (profile.providerMode !== "remote" && profile.remoteEgressPolicy !== "blocked") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["remoteEgressPolicy"],
+        message: "non-remote providers must keep remote egress blocked",
+      });
+    }
+
+    if (profile.providerMode === "disabled") {
+      const disabledProfileIsConsistent =
+        profile.contextMode === "disabled_deterministic" &&
+        profile.reasoningDepth === "deterministic" &&
+        profile.toolCoordination === "none" &&
+        profile.multiPassAllowed === false &&
+        profile.remoteEgressPolicy === "blocked" &&
+        profile.budgetClass === "blocked" &&
+        profile.allowedWorkflowClasses.length === 0;
+      if (!disabledProfileIsConsistent) {
+        ctx.addIssue({
+          code: "custom",
+          message: "disabled providers must use the deterministic blocked profile posture",
+        });
+      }
+    }
+  });
 export type ModelCapabilityProfile = z.infer<typeof modelCapabilityProfileSchema>;
 
 export const DEFAULT_SAFE_MODEL_CAPABILITY_PROFILE: ModelCapabilityProfile = {
@@ -97,7 +150,7 @@ export function resolveModelCapabilityProfile(
 
   const candidate = registry[key];
   const parsed = modelCapabilityProfileSchema.safeParse(candidate);
-  if (!parsed.success) {
+  if (!parsed.success || parsed.data.profileKey !== key) {
     return { ...DEFAULT_SAFE_MODEL_CAPABILITY_PROFILE, profileKey: `unknown:${key}` };
   }
 

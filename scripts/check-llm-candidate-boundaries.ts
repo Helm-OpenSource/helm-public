@@ -64,6 +64,9 @@ const RICH_CONTEXT_PATTERN =
   /\b(RichLocalContextBundle|richLocalContextBundle|richContextBundle|LLMTaskTrajectoryReceipt|trajectoryReceipt)\b/;
 const RICH_CONTEXT_SINK_PATTERN =
   /\buserPrompt\s*:|JSON\.stringify|executeLLMTask|build\w*(?:Prompt|ReviewPrompt)/;
+const CONTEXT_PROJECTION_RECEIPT_PATTERN = /\bContextProjectionReceipt\b/;
+const CONTEXT_PROJECTION_RECEIPT_SINK_PATTERN =
+  /JSON\.stringify\(\s*(?:contextProjectionReceipt|projectionReceipt|receipt)\b|\buserPrompt\s*:\s*(?:contextProjectionReceipt|projectionReceipt|receipt)\b/i;
 
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
@@ -210,7 +213,6 @@ export function runLlmCandidateBoundaryCheck(
     }
 
     if (
-      repoRelative !== "lib/llm/intelligence-contracts-v3.ts" &&
       RICH_CONTEXT_PATTERN.test(content) &&
       RICH_CONTEXT_SINK_PATTERN.test(content)
     ) {
@@ -219,6 +221,18 @@ export function runLlmCandidateBoundaryCheck(
         rule: "LLM-CANDIDATE-F",
         detail:
           "Rich local context and trajectory receipts must not be serialized, prompt-built, or dispatched. Project to a safe stub or summary before any remote LLM path.",
+      });
+    }
+
+    if (
+      CONTEXT_PROJECTION_RECEIPT_PATTERN.test(content) &&
+      CONTEXT_PROJECTION_RECEIPT_SINK_PATTERN.test(content)
+    ) {
+      violations.push({
+        file: repoRelative,
+        rule: "LLM-CANDIDATE-F",
+        detail:
+          "Context projection receipts are audit-only; prompt builders may consume only their validated SelectedContextStub projection.",
       });
     }
   }

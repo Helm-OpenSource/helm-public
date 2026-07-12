@@ -228,6 +228,21 @@ describe("check-llm-candidate-boundaries", () => {
     expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
   });
 
+  it("rejects serializing a context projection receipt into a prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { ContextProjectionReceipt } from "@/lib/llm/intelligence-contracts-v3";
+        export function buildPrompt(projectionReceipt: ContextProjectionReceipt) {
+          return { userPrompt: JSON.stringify(projectionReceipt) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-F")).toBe(true);
+  });
+
   it("rejects passing a trajectory receipt directly into a prompt", () => {
     writeFile(
       "lib/llm-workflows/example.ts",

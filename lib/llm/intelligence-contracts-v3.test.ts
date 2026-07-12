@@ -38,6 +38,48 @@ describe("LLM intelligence v3 contracts", () => {
     expect(profile.multiPassAllowed).toBe(true);
   });
 
+  it("fails profiles closed when the registry key and declared profile key disagree", () => {
+    const profile = resolveModelCapabilityProfile("local-frontier-reviewer", {
+      "local-frontier-reviewer": {
+        profileKey: "different-profile",
+        contextMode: "local_rich_private",
+        providerMode: "local",
+        reasoningDepth: "deep",
+        toolCoordination: "programmatic",
+        multiPassAllowed: true,
+        remoteEgressPolicy: "blocked",
+        budgetClass: "premium",
+        allowedWorkflowClasses: ["multi_pass_review"],
+      },
+    });
+
+    expect(profile).toEqual({
+      ...DEFAULT_SAFE_MODEL_CAPABILITY_PROFILE,
+      profileKey: "unknown:local-frontier-reviewer",
+    });
+  });
+
+  it("rejects contradictory local-rich and remote provider profiles", () => {
+    const profile = resolveModelCapabilityProfile("contradictory-profile", {
+      "contradictory-profile": {
+        profileKey: "contradictory-profile",
+        contextMode: "local_rich_private",
+        providerMode: "remote",
+        reasoningDepth: "deep",
+        toolCoordination: "programmatic",
+        multiPassAllowed: true,
+        remoteEgressPolicy: "projection_requires_consent",
+        budgetClass: "premium",
+        allowedWorkflowClasses: ["multi_pass_review"],
+      },
+    });
+
+    expect(profile).toEqual({
+      ...DEFAULT_SAFE_MODEL_CAPABILITY_PROFILE,
+      profileKey: "unknown:contradictory-profile",
+    });
+  });
+
   it("projects a rich local bundle into a remote-safe selected context stub", () => {
     const receipt = projectRichLocalContextBundle({
       bundle: {
