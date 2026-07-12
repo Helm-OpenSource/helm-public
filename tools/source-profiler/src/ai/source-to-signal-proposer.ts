@@ -66,9 +66,21 @@ export async function proposeSourceToSignalBundles(
 
   const profile = profileResult.data;
   const remote = isRemoteProvider(input.providerKind);
+  const provenanceMatchesProvider = remote
+    ? input.redactionProvenance !== "local_redacted"
+    : input.redactionProvenance !== "remote_redacted_projection";
+  const syntheticProvenanceIsAttested =
+    input.redactionProvenance !== "public_safe_synthetic" ||
+    isSyntheticPacket(packetResult.data);
   const profileMatchesProvider = remote
     ? profile.providerMode === "remote" && profile.remoteEgressPolicy !== "blocked"
     : profile.providerMode === "local";
+  if (!provenanceMatchesProvider) {
+    return failed("profile_mismatch", "redaction_provenance_provider_mismatch");
+  }
+  if (!syntheticProvenanceIsAttested) {
+    return failed("profile_mismatch", "synthetic_provenance_not_attested");
+  }
   if (
     !profileMatchesProvider ||
     !profile.allowedWorkflowClasses.includes("source_to_signal_proposal")
@@ -179,6 +191,15 @@ export async function proposeSourceToSignalBundles(
     promptPreview: overlay.promptPreview,
     audit: overlay.audit,
   };
+}
+
+function isSyntheticPacket(packet: ReviewPacket): boolean {
+  const metadata = packet.requiredMetadata;
+  return (
+    metadata.workspace === "synthetic" &&
+    metadata.source.startsWith("synthetic-") &&
+    metadata.actor.startsWith("synthetic-")
+  );
 }
 
 function routeKey(sourceObjectId: string, targetEntity: string, signalFamily: string): string {

@@ -4,7 +4,7 @@ import { executeMultiPassReview } from "@/lib/llm-workflows/multi-pass-review.wo
 
 describe("LLM v3 disabled deterministic snapshot", () => {
   it("keeps an unknown profile on a stable fail-closed path with zero provider calls", async () => {
-    const executeRemoteTask = vi.fn();
+    const testOnlyRemoteExecutor = vi.fn();
 
     const result = await executeMultiPassReview({
       workspaceId: "workspace-synthetic",
@@ -23,12 +23,12 @@ describe("LLM v3 disabled deterministic snapshot", () => {
       uncertainty: "high",
       riskClass: "read",
       evidenceCompleteness: "missing",
-      executeRemoteTask,
+      testOnlyRemoteExecutor,
       traceId: "trace-disabled",
       now: () => new Date("2026-07-12T00:00:00.000Z"),
     });
 
-    expect(executeRemoteTask).not.toHaveBeenCalled();
+    expect(testOnlyRemoteExecutor).not.toHaveBeenCalled();
     expect(result).toEqual({
       boundaryDecision: "review_required",
       requiredHumanReview: true,

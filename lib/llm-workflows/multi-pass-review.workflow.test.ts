@@ -12,7 +12,7 @@ import type {
 } from "@/lib/llm/intelligence-contracts-v3";
 
 const profile: ModelCapabilityProfile = {
-  profileKey: "local-frontier-reviewer",
+  profileKey: "synthetic-local-frontier-reviewer",
   contextMode: "local_rich_private",
   providerMode: "local",
   reasoningDepth: "deep",
@@ -158,8 +158,8 @@ describe("multi-pass review arbiter", () => {
 describe("executeMultiPassReview", () => {
   it("runs generator, critic, and adversary through the registered LLM chain", async () => {
     const roles = ["generator", "critic", "adversary"] as const;
-    const executeRemoteTask = vi.fn(async (task) => {
-      const roleName = roles[executeRemoteTask.mock.calls.length - 1] ?? "adversary";
+    const testOnlyRemoteExecutor = vi.fn(async (task) => {
+      const roleName = roles[testOnlyRemoteExecutor.mock.calls.length - 1] ?? "adversary";
       return {
         output: role(roleName),
         provider: "openai",
@@ -190,15 +190,15 @@ describe("executeMultiPassReview", () => {
         promptPreviewAccepted: true,
         auditRef: "synthetic-egress-audit",
       },
-      executeRemoteTask,
+      testOnlyRemoteExecutor,
       recordBoundaryDecision: (receipt) => receipts.push(receipt),
       traceId: "trace-synthetic",
     });
 
     expect(result.boundaryDecision).toBe("allow_candidate");
     expect(result.roleOutputs.map((output) => output.role)).toEqual(roles);
-    expect(executeRemoteTask).toHaveBeenCalledTimes(3);
-    for (const [task] of executeRemoteTask.mock.calls) {
+    expect(testOnlyRemoteExecutor).toHaveBeenCalledTimes(3);
+    for (const [task] of testOnlyRemoteExecutor.mock.calls) {
       expect(task.taskType).toBe("MULTI_PASS_REVIEW");
       expect(task.promptKey).toBe("multi-pass-review");
       expect(task.promptVersion).toBe("multi-pass-review-v1");
@@ -216,8 +216,39 @@ describe("executeMultiPassReview", () => {
     });
   });
 
+  it("rejects the test-only remote executor outside the test runtime", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const testOnlyRemoteExecutor = vi.fn();
+    try {
+      const result = await executeMultiPassReview({
+        workspaceId: "workspace-synthetic",
+        profileKey: remoteProfile.profileKey,
+        profileRegistry: remoteRegistry,
+        contextStub,
+        proposalSummary: "Synthetic proposal.",
+        businessValue: "high",
+        uncertainty: "high",
+        riskClass: "read",
+        evidenceCompleteness: "partial",
+        egressPolicy: {
+          consentGranted: true,
+          promptPreviewAccepted: true,
+          auditRef: "synthetic-egress-audit",
+        },
+        testOnlyRemoteExecutor,
+      });
+
+      expect(result.boundaryDecision).toBe("review_required");
+      expect(result.reason).toBe("provider_failure");
+      expect(testOnlyRemoteExecutor).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
   it("blocks remote dispatch without consent and prompt preview", async () => {
-    const executeRemoteTask = vi.fn();
+    const testOnlyRemoteExecutor = vi.fn();
 
     const result = await executeMultiPassReview({
       workspaceId: "workspace-synthetic",
@@ -229,16 +260,16 @@ describe("executeMultiPassReview", () => {
       uncertainty: "high",
       riskClass: "read",
       evidenceCompleteness: "partial",
-      executeRemoteTask,
+      testOnlyRemoteExecutor,
     });
 
     expect(result.boundaryDecision).toBe("quarantine");
     expect(result.reason).toBe("egress_failure");
-    expect(executeRemoteTask).not.toHaveBeenCalled();
+    expect(testOnlyRemoteExecutor).not.toHaveBeenCalled();
   });
 
   it("fails closed when a role call returns an output-schema fallback", async () => {
-    const executeRemoteTask = vi.fn(async (task) => ({
+    const testOnlyRemoteExecutor = vi.fn(async (task) => ({
       output: role("generator", "needs_review"),
       provider: "openai",
       model: "synthetic-model",
@@ -267,7 +298,7 @@ describe("executeMultiPassReview", () => {
         promptPreviewAccepted: true,
         auditRef: "synthetic-egress-audit",
       },
-      executeRemoteTask,
+      testOnlyRemoteExecutor,
     });
 
     expect(result.boundaryDecision).toBe("review_required");
@@ -279,7 +310,7 @@ describe("executeMultiPassReview", () => {
     ["output_parse_failed", "parse_failure"],
     ["provider_error", "provider_failure"],
   ] as const)("maps %s to the fail-closed reason %s", async (fallbackReason, expectedReason) => {
-    const executeRemoteTask = vi.fn(async (task) => ({
+    const testOnlyRemoteExecutor = vi.fn(async (task) => ({
       output: role("generator", "needs_review"),
       provider: "openai",
       model: "synthetic-model",
@@ -308,7 +339,7 @@ describe("executeMultiPassReview", () => {
         promptPreviewAccepted: true,
         auditRef: "synthetic-egress-audit",
       },
-      executeRemoteTask,
+      testOnlyRemoteExecutor,
     });
 
     expect(result.boundaryDecision).toBe("review_required");
@@ -316,7 +347,7 @@ describe("executeMultiPassReview", () => {
   });
 
   it("quarantines instruction-like projected context before dispatch", async () => {
-    const executeRemoteTask = vi.fn();
+    const testOnlyRemoteExecutor = vi.fn();
     const result = await executeMultiPassReview({
       workspaceId: "workspace-synthetic",
       profileKey: remoteProfile.profileKey,
@@ -332,17 +363,17 @@ describe("executeMultiPassReview", () => {
         promptPreviewAccepted: true,
         auditRef: "synthetic-egress-audit",
       },
-      executeRemoteTask,
+      testOnlyRemoteExecutor,
     });
 
     expect(result.boundaryDecision).toBe("quarantine");
     expect(result.reason).toBe("egress_failure");
     expect(result.boundaryReceipt.egress.blockedReason).toBe("prompt_injection_scan_failed");
-    expect(executeRemoteTask).not.toHaveBeenCalled();
+    expect(testOnlyRemoteExecutor).not.toHaveBeenCalled();
   });
 
   it("keeps side-effect risk review-required even with candidate consensus", async () => {
-    const executeLocalRole = vi.fn(async ({ role: roleName }) => role(roleName));
+    const executeSyntheticLocalRole = vi.fn(async ({ role: roleName }) => role(roleName));
     const localRegistry: ModelCapabilityProfileRegistry = { [profile.profileKey]: profile };
 
     const result = await executeMultiPassReview({
@@ -355,17 +386,42 @@ describe("executeMultiPassReview", () => {
       uncertainty: "high",
       riskClass: "external_write",
       evidenceCompleteness: "partial",
-      executeLocalRole,
+      executeSyntheticLocalRole,
     });
 
-    expect(executeLocalRole).toHaveBeenCalledTimes(3);
+    expect(executeSyntheticLocalRole).toHaveBeenCalledTimes(3);
     expect(result.boundaryDecision).toBe("review_required");
     expect(result.requiredHumanReview).toBe(true);
     expect(result.reason).toBe("budget_review_required");
   });
 
+  it("does not treat an arbitrary local callback as a live local-model runtime", async () => {
+    const nonSyntheticProfile = {
+      ...profile,
+      profileKey: "local-private-reviewer",
+    };
+    const executeSyntheticLocalRole = vi.fn(async ({ role: roleName }) => role(roleName));
+
+    const result = await executeMultiPassReview({
+      workspaceId: "workspace-synthetic",
+      profileKey: nonSyntheticProfile.profileKey,
+      profileRegistry: { [nonSyntheticProfile.profileKey]: nonSyntheticProfile },
+      contextStub,
+      proposalSummary: "Synthetic candidate for human review.",
+      businessValue: "high",
+      uncertainty: "high",
+      riskClass: "read",
+      evidenceCompleteness: "partial",
+      executeSyntheticLocalRole,
+    });
+
+    expect(executeSyntheticLocalRole).not.toHaveBeenCalled();
+    expect(result.boundaryDecision).toBe("review_required");
+    expect(result.reason).toBe("provider_failure");
+  });
+
   it("does not dispatch for an unknown model profile", async () => {
-    const executeRemoteTask = vi.fn();
+    const testOnlyRemoteExecutor = vi.fn();
 
     const result = await executeMultiPassReview({
       workspaceId: "workspace-synthetic",
@@ -377,11 +433,11 @@ describe("executeMultiPassReview", () => {
       uncertainty: "medium",
       riskClass: "read",
       evidenceCompleteness: "complete",
-      executeRemoteTask,
+      testOnlyRemoteExecutor,
     });
 
     expect(result.boundaryDecision).toBe("review_required");
     expect(result.reason).toBe("profile_mismatch");
-    expect(executeRemoteTask).not.toHaveBeenCalled();
+    expect(testOnlyRemoteExecutor).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 import {
   buildMultiPassReviewPrompt,
   llmPromptVersions,
@@ -18,7 +16,6 @@ import {
 } from "@/lib/llm/intelligence-contracts-v2";
 import {
   MULTI_PASS_ROLES,
-  modelProviderModeSchema,
   multiPassRoleOutputSchema,
   resolveModelCapabilityProfile,
   type LLMWorkflowClass,
@@ -28,10 +25,14 @@ import {
   type MultiPassRoleOutput,
   type V3ReviewState,
 } from "@/lib/llm/intelligence-contracts-v3";
+import {
+  multiPassBoundaryReceiptSchema,
+  type MultiPassBoundaryReceipt,
+  type MultiPassRoleCallReceipt,
+} from "@/lib/llm/multi-pass-contract";
 import { scanContextForPromptInjection } from "@/lib/llm/overlay-context-hygiene";
 import {
   buildReasoningBudgetAuditSummary,
-  reasoningBudgetDecisionSchema,
   resolveReasoningBudgetDecision,
   resolveReasoningBudgetMaxOutputTokens,
   type EvidenceCompleteness,
@@ -45,6 +46,8 @@ import type {
 import type { LLMTrajectoryRiskClass } from "@/lib/llm/intelligence-contracts-v3";
 
 export type { MultiPassRole, MultiPassRoleOutput } from "@/lib/llm/intelligence-contracts-v3";
+export { multiPassBoundaryReceiptSchema } from "@/lib/llm/multi-pass-contract";
+export type { MultiPassBoundaryReceipt } from "@/lib/llm/multi-pass-contract";
 
 export type MultiPassFailureReason =
   | "provider_failure"
@@ -164,62 +167,11 @@ export function arbitrateMultiPassReview(input: MultiPassReviewInput): MultiPass
   };
 }
 
-const multiPassRoleCallReceiptSchema = z
-  .object({
-    role: z.enum(MULTI_PASS_ROLES),
-    success: z.boolean(),
-    fallbackReason: z.string().min(1).nullable(),
-    promptKey: z.string().min(1),
-    promptVersion: z.string().min(1),
-  })
-  .strict();
-
-export const multiPassBoundaryReceiptSchema = z
-  .object({
-    receiptId: z.string().min(1),
-    traceId: z.string().min(1).nullable(),
-    createdAt: z.string().datetime(),
-    profileKey: z.string().min(1),
-    providerMode: modelProviderModeSchema,
-    promptKey: z.literal("multi-pass-review"),
-    promptVersion: z.string().min(1),
-    budgetDecision: reasoningBudgetDecisionSchema,
-    egress: z
-      .object({
-        redacted: z.boolean(),
-        consentGranted: z.boolean(),
-        promptPreviewAccepted: z.boolean(),
-        auditRef: z.string().min(1).nullable(),
-        blockedReason: z.string().min(1).nullable(),
-      })
-      .strict(),
-    roleCalls: z.array(multiPassRoleCallReceiptSchema).default([]),
-    boundaryDecision: z.enum(["allow_candidate", "review_required", "reject", "quarantine"]),
-    requiredHumanReview: z.boolean(),
-    reason: z.enum([
-      "provider_failure",
-      "parse_failure",
-      "schema_failure",
-      "egress_failure",
-      "profile_mismatch",
-      "role_conflict",
-      "guard_rejected",
-      "candidate_consensus",
-      "budget_review_required",
-    ]),
-    rawPromptIncluded: z.literal(false),
-    rawCustomerDataIncluded: z.literal(false),
-    tenantUrlIncluded: z.literal(false),
-    productionReceiptIncluded: z.literal(false),
-  })
-  .strict();
-export type MultiPassBoundaryReceipt = z.infer<typeof multiPassBoundaryReceiptSchema>;
-
 type MultiPassRemoteExecutor = (
   input: LLMTaskInput<MultiPassRoleOutput>,
 ) => Promise<LLMTaskExecutionResult<MultiPassRoleOutput>>;
 
-export type MultiPassLocalRoleRequest = {
+export type MultiPassSyntheticLocalRoleRequest = {
   readonly role: MultiPassRole;
   readonly contextStub: SelectedContextStub;
   readonly proposalSummary: string;
@@ -243,8 +195,12 @@ export type ExecuteMultiPassReviewInput = {
     readonly promptPreviewAccepted?: boolean;
     readonly auditRef?: string;
   };
-  readonly executeRemoteTask?: MultiPassRemoteExecutor;
-  readonly executeLocalRole?: (request: MultiPassLocalRoleRequest) => Promise<unknown>;
+  /** Unit-test seam only. Production remote execution always uses executeLLMTask. */
+  readonly testOnlyRemoteExecutor?: MultiPassRemoteExecutor;
+  /** Public-safe synthetic harness only; not a local private-model runtime. */
+  readonly executeSyntheticLocalRole?: (
+    request: MultiPassSyntheticLocalRoleRequest,
+  ) => Promise<unknown>;
   readonly recordBoundaryDecision?: (receipt: MultiPassBoundaryReceipt) => void;
   readonly traceId?: string;
   readonly now?: () => Date;
@@ -257,7 +213,7 @@ export type MultiPassReviewExecutionResult = MultiPassReviewResult & {
   readonly boundaryReceipt: MultiPassBoundaryReceipt;
 };
 
-type RoleCallReceipt = z.infer<typeof multiPassRoleCallReceiptSchema>;
+type RoleCallReceipt = MultiPassRoleCallReceipt;
 
 function failureFromFallbackReason(reason?: string | null): MultiPassFailureReason {
   if (reason === "output_parse_failed") return "parse_failure";
@@ -423,8 +379,17 @@ export async function executeMultiPassReview(
     egress.safeStub.tokenBudget.maxOutputTokens ?? Number.POSITIVE_INFINITY,
   );
   const budgetAudit = buildReasoningBudgetAuditSummary(profile, budgetDecision);
+  if (input.testOnlyRemoteExecutor && process.env.NODE_ENV !== "test") {
+    return finish(
+      arbitrateMultiPassReview({
+        profile,
+        roleOutputs: [],
+        failure: { reason: "provider_failure" },
+      }),
+    );
+  }
   const remoteExecutor: MultiPassRemoteExecutor =
-    input.executeRemoteTask ?? ((task) => executeLLMTask(task));
+    input.testOnlyRemoteExecutor ?? ((task) => executeLLMTask(task));
 
   for (const role of MULTI_PASS_ROLES) {
     const prompt = buildMultiPassReviewPrompt({
@@ -435,7 +400,10 @@ export async function executeMultiPassReview(
     });
 
     if (profile.providerMode === "local") {
-      if (!input.executeLocalRole) {
+      const syntheticLocalExecutionAllowed =
+        profile.profileKey.startsWith("synthetic-") &&
+        egress.safeStub.privacyClass === "public_safe_synthetic";
+      if (!input.executeSyntheticLocalRole || !syntheticLocalExecutionAllowed) {
         return finish(
           arbitrateMultiPassReview({
             profile,
@@ -445,7 +413,7 @@ export async function executeMultiPassReview(
         );
       }
       try {
-        const rawOutput = await input.executeLocalRole({
+        const rawOutput = await input.executeSyntheticLocalRole({
           role,
           contextStub: egress.safeStub,
           proposalSummary: egress.safeJudgementSummary,

@@ -109,6 +109,58 @@ describe("proposeSourceToSignalBundles", () => {
     expect(calls).toBe(0);
   });
 
+  it.each([
+    {
+      label: "a private packet claiming public synthetic provenance",
+      provenance: "public_safe_synthetic" as const,
+      makePacket: () => {
+        const packet = packetFromSql(
+          "CREATE TABLE deals (id INTEGER PRIMARY KEY, amount DECIMAL(10,2), stage VARCHAR(20));",
+        );
+        return {
+          ...packet,
+          requiredMetadata: {
+            ...packet.requiredMetadata,
+            workspace: "local",
+            source: "local-repo",
+            actor: "local-operator",
+          },
+        };
+      },
+    },
+    {
+      label: "a local provider claiming remote projection provenance",
+      provenance: "remote_redacted_projection" as const,
+      makePacket: () =>
+        packetFromSql(
+          "CREATE TABLE deals (id INTEGER PRIMARY KEY, amount DECIMAL(10,2), stage VARCHAR(20));",
+        ),
+    },
+  ])("blocks $label before dispatch", async ({ provenance, makePacket }) => {
+    let calls = 0;
+    const provider: AiProvider = {
+      kind: "local",
+      async suggest() {
+        calls += 1;
+        return [];
+      },
+    };
+
+    const result = await proposeSourceToSignalBundles({
+      packet: makePacket(),
+      modelProfile: localProfile,
+      providerKind: "local",
+      provider,
+      consent: false,
+      redactionProvenance: provenance,
+      now: fixedNow,
+    });
+
+    expect(result.status).toBe("profile_mismatch");
+    expect(result.proposals).toEqual([]);
+    expect(calls).toBe(0);
+  });
+
   it("fails the entire result closed on an unknown source object", async () => {
     const provider: AiProvider = {
       kind: "local",
