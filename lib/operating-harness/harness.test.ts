@@ -295,6 +295,28 @@ describe("operating harness manifest and revision", () => {
       }).errors,
     ).toContain("parent_revision_killed");
   });
+
+  it("requires a seed trust root to be human-authored", () => {
+    const pair = syntheticHarnessPair();
+    const { contentHash: _baselineHash, ...baselineContent } = pair.baselineRevision;
+    const agentSeedContent = {
+      ...baselineContent,
+      createdBy: "agent_proposal" as const,
+    };
+    const agentSeed = {
+      ...agentSeedContent,
+      contentHash: computeHarnessRevisionContentHash(agentSeedContent),
+    };
+
+    expect(
+      validateHarnessRevisionBinding({
+        revision: agentSeed,
+        manifest: pair.baselineManifest,
+        parentRevision: null,
+        parentManifest: null,
+      }).errors,
+    ).toContain("seed_revision_not_human_authored");
+  });
 });
 
 describe("operating harness shadow evaluation", () => {

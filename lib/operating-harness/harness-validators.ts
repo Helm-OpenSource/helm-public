@@ -318,6 +318,9 @@ export function validateHarnessRevisionBinding(input: {
   }
 
   if (revision.status === "seed") {
+    if (revision.createdBy !== "human") {
+      errors.push("seed_revision_not_human_authored");
+    }
     if (revision.parentRevisionId || revision.parentManifestHash) {
       errors.push("seed_revision_has_parent");
     }
