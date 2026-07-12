@@ -256,12 +256,11 @@ export function projectRichLocalContextBundle(input: {
     selectedEvidenceRefs: remoteSafe ? projectedEvidenceRefs : [],
     missingEvidence: bundle.missingEvidence,
     policySnapshotHash: bundle.policySnapshotHash,
-    privacyClass:
-      bundle.origin === "public_safe_synthetic" && bundle.redactionStatus === "synthetic"
+    privacyClass: !remoteSafe
+      ? "blocked"
+      : bundle.origin === "public_safe_synthetic" && bundle.redactionStatus === "synthetic"
         ? "public_safe_synthetic"
-        : remoteSafe
-          ? "redacted_review"
-          : "blocked",
+        : "redacted_review",
     tokenBudget: tokenBudgetSchema.parse(input.tokenBudget),
   });
 

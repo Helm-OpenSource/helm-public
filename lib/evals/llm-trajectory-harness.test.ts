@@ -214,4 +214,23 @@ describe("LLM trajectory harness eval", () => {
       ),
     ).toEqual([]);
   });
+
+  it("reports malformed receipts as schema failures instead of privacy leaks", () => {
+    const result = evaluateLLMTaskTrajectory({ receiptId: "malformed" });
+
+    expect(result.verdict).toBe("fail");
+    expect(result.failures).toEqual(["schema_failure"]);
+  });
+
+  it.each(["reject", "quarantine"] as const)(
+    "does not pass a trajectory whose deterministic boundary decision is %s",
+    (decision) => {
+      const result = evaluateLLMTaskTrajectory(
+        baseReceipt({ boundaryDecisions: [decision] }),
+      );
+
+      expect(result.verdict).toBe("fail");
+      expect(result.failures).toContain("boundary_decision_conflict");
+    },
+  );
 });

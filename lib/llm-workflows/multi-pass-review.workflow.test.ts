@@ -96,4 +96,31 @@ describe("multi-pass review arbiter", () => {
     expect(result.boundaryDecision).toBe("reject");
     expect(result.requiredHumanReview).toBe(true);
   });
+
+  it("fails closed when a role is emitted more than once", () => {
+    const result = arbitrateMultiPassReview({
+      profile,
+      roleOutputs: [
+        role("generator"),
+        role("generator", "rejected_by_guard"),
+        role("critic"),
+        role("adversary"),
+      ],
+    });
+
+    expect(result.boundaryDecision).toBe("review_required");
+    expect(result.requiredHumanReview).toBe(true);
+    expect(result.reason).toBe("role_conflict");
+  });
+
+  it("fails closed when the profile budget is blocked", () => {
+    const result = arbitrateMultiPassReview({
+      profile: { ...profile, budgetClass: "blocked" },
+      roleOutputs: [role("generator"), role("critic"), role("adversary")],
+    });
+
+    expect(result.boundaryDecision).toBe("review_required");
+    expect(result.requiredHumanReview).toBe(true);
+    expect(result.reason).toBe("profile_mismatch");
+  });
 });

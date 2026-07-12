@@ -117,6 +117,37 @@ describe("LLM intelligence v3 contracts", () => {
     expect(receipt.sourceBundleId).toBe("bundle-1");
   });
 
+  it("marks a synthetic projection blocked when selected evidence is not remote-safe", () => {
+    const receipt = projectRichLocalContextBundle({
+      bundle: {
+        bundleId: "bundle-blocked",
+        createdAt: "2026-07-12T00:00:00.000Z",
+        origin: "public_safe_synthetic",
+        policySnapshotHash: "policy-hash",
+        objectRef: { objectType: "opportunity", objectId: "synthetic-opp" },
+        localContextRefs: [
+          {
+            refId: "private-evidence",
+            kind: "timeline",
+            sourceHash: "hash-private",
+            derivedSummary: "Synthetic fixture marked private to exercise the boundary.",
+            privacyClass: "private_runtime",
+          },
+        ],
+        missingEvidence: [],
+        redactionStatus: "synthetic",
+        rawContentIncluded: false,
+      },
+      selectedEvidenceRefs: ["private-evidence"],
+      tokenBudget: { maxInputTokens: 1200, maxOutputTokens: 400 },
+      receiptId: "projection-blocked",
+    });
+
+    expect(receipt.remoteSafe).toBe(false);
+    expect(receipt.selectedContextStub.privacyClass).toBe("blocked");
+    expect(receipt.selectedContextStub.selectedEvidenceRefs).toEqual([]);
+  });
+
   it("rejects raw prompt-shaped fields in rich local bundle payloads", () => {
     expect(() =>
       richLocalContextBundleSchema.parse({

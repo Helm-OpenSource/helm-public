@@ -62,8 +62,13 @@ function profileAllowsMultiPass(profile: ModelCapabilityProfile): boolean {
     profile.multiPassAllowed &&
     profile.allowedWorkflowClasses.includes(REQUIRED_WORKFLOW_CLASS) &&
     profile.providerMode !== "disabled" &&
-    profile.contextMode !== "disabled_deterministic"
+    profile.contextMode !== "disabled_deterministic" &&
+    profile.budgetClass !== "blocked"
   );
+}
+
+function hasDuplicateRoles(roleOutputs: readonly MultiPassRoleOutput[]): boolean {
+  return new Set(roleOutputs.map((output) => output.role)).size !== roleOutputs.length;
 }
 
 export function arbitrateMultiPassReview(input: MultiPassReviewInput): MultiPassReviewResult {
@@ -83,6 +88,15 @@ export function arbitrateMultiPassReview(input: MultiPassReviewInput): MultiPass
       boundaryDecision: "review_required",
       requiredHumanReview: true,
       reason: "profile_mismatch",
+      roleStates,
+    };
+  }
+
+  if (hasDuplicateRoles(input.roleOutputs)) {
+    return {
+      boundaryDecision: "review_required",
+      requiredHumanReview: true,
+      reason: "role_conflict",
       roleStates,
     };
   }
