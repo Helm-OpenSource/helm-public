@@ -480,6 +480,46 @@ describe("operating harness P2 proposal and materialization", () => {
     );
   });
 
+  it("does not let a generic heldout-lift gap justify arbitrary tool changes", () => {
+    const mined = mineHarnessWeaknesses(weaknessShadowInput());
+    const base = mined.weaknesses[0];
+    const { contentHash: _hash, ...baseContent } = base;
+    const heldoutContent = {
+      ...baseContent,
+      weaknessId: "weakness:heldout-lift-tool-bypass",
+      weaknessCode: "heldout_lift_gap" as const,
+      observedValue: 0,
+      thresholdOperator: "min" as const,
+      thresholdValue: 0.05,
+    };
+    const heldoutWeakness = {
+      ...heldoutContent,
+      contentHash: computeHarnessWeaknessContentHash(heldoutContent),
+    };
+    const result = createHarnessImprovementProposal({
+      proposalId: "proposal:heldout-tool-bypass",
+      parentContext: revisionContext(),
+      weaknesses: [heldoutWeakness],
+      weaknessEvidence: [mined.evidence],
+      componentChanges: [
+        {
+          componentKind: "tool_binding",
+          fromRevisionRef: "tool_binding:v1",
+          toRevisionRef: "tool_binding:v2",
+          toContentHash: sha256("tool_binding:v2"),
+          rationaleCode: "heldout_failure",
+          evidenceRefs: [heldoutWeakness.weaknessId],
+        },
+      ],
+      createdAt: "2026-06-04T04:15:00.000Z",
+    });
+
+    expect(result.proposal).toBeNull();
+    expect(result.errors).toContain(
+      "proposal_component_not_allowed_for_weakness:tool_binding",
+    );
+  });
+
   it("replays weakness evidence instead of trusting a restamped source receipt", () => {
     const evaluationInput = weaknessShadowInput();
     const mined = mineHarnessWeaknesses(evaluationInput);

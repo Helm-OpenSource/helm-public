@@ -130,16 +130,7 @@ export const HARNESS_WEAKNESS_ALLOWED_COMPONENTS: Record<
   ],
   reviewer_completeness_gap: [],
   boundary_incident: ["judgement_fusion", "expert_policy", "tool_binding"],
-  heldout_lift_gap: [
-    "signal_normalizer",
-    "object_linker",
-    "judgement_fusion",
-    "expert_policy",
-    "context_policy",
-    "memory_retrieval_policy",
-    "skill_binding",
-    "tool_binding",
-  ],
+  heldout_lift_gap: ["judgement_fusion", "expert_policy"],
   feedback_to_eval_conversion_gap: [],
 };
 
