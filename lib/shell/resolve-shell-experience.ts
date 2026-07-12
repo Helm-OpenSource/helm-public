@@ -30,7 +30,6 @@ import type {
   ExtensionAccessContext,
   NorthstarKpiSourceContribution,
   OperationSuggestionSourceContribution,
-  RoleHomeRoutingProviderContribution,
   WorkspaceLike,
   WorkstationSourceContribution,
 } from "@/lib/extensions/registry-types";
