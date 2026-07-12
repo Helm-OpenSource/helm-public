@@ -39,6 +39,7 @@ import type {
   BiReportP0ProcessProductionRow,
   BiReportP0ProcessSopRow,
   ExtensionIndustryDemoReadoutPage,
+  MainlineProviderContribution,
   ReportsExtensionDescriptor,
   SolutionExtensionCatalogEntry,
   WorkspaceNavExtensionDescriptor,
@@ -121,6 +122,13 @@ export type PackContributions = {
     build: () => BiBoardContribution;
   };
   industryDemoReadouts?: ReadonlyArray<IndustryDemoReadoutContribution>;
+  /**
+   * Single-winner operating-mainline providers (blueprint Phase 2, experimental).
+   * Registered contributions form the *candidate pool*; the runtime picks at
+   * most one via the binding-is-authorization model (§4.3). With no valid
+   * binding — the default — the Core default provider is used.
+   */
+  mainlineProviders?: ReadonlyArray<MainlineProviderContribution>;
   biReportP0ProcessService?: BiReportP0ProcessService;
   implementationConsole?: ImplementationConsoleContribution;
   signalCollectionJobs?: () => ReadonlyArray<SignalCollectionJob>;
@@ -144,6 +152,7 @@ type MutableStore = {
   accountBindings: NonNullable<PackContributions["accountBinding"]>[];
   biBoards: NonNullable<PackContributions["biBoard"]>[];
   industryDemoReadouts: IndustryDemoReadoutContribution[];
+  mainlineProviders: MainlineProviderContribution[];
   biReportP0ProcessService: BiReportP0ProcessService | null;
   implementationConsole: ImplementationConsoleContribution | null;
   signalCollectionJobProviders: Array<() => ReadonlyArray<SignalCollectionJob>>;
@@ -158,6 +167,7 @@ function emptyStore(): MutableStore {
     accountBindings: [],
     biBoards: [],
     industryDemoReadouts: [],
+    mainlineProviders: [],
     biReportP0ProcessService: null,
     implementationConsole: null,
     signalCollectionJobProviders: [],
@@ -195,6 +205,8 @@ export function registerPackContributions(
   if (contributions.biBoard) s.biBoards.push(contributions.biBoard);
   if (contributions.industryDemoReadouts)
     s.industryDemoReadouts.push(...contributions.industryDemoReadouts);
+  if (contributions.mainlineProviders)
+    s.mainlineProviders.push(...contributions.mainlineProviders);
   if (contributions.biReportP0ProcessService)
     s.biReportP0ProcessService = contributions.biReportP0ProcessService;
   if (contributions.implementationConsole)
@@ -234,6 +246,9 @@ export function getRegisteredBiBoards(): ReadonlyArray<
 }
 export function getRegisteredIndustryDemoReadouts(): ReadonlyArray<IndustryDemoReadoutContribution> {
   return store().industryDemoReadouts;
+}
+export function getRegisteredMainlineProviders(): ReadonlyArray<MainlineProviderContribution> {
+  return store().mainlineProviders;
 }
 export function getRegisteredBiReportP0ProcessService(): BiReportP0ProcessService | null {
   return store().biReportP0ProcessService;

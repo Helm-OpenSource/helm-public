@@ -6,8 +6,8 @@ import {
 } from "@/lib/workspace-ops";
 import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
 import { getWorkspaceRolePresetDefinition } from "@/lib/definitions/workspace-role-preset-catalog";
-import { buildCoreDefaultMainline } from "@/lib/shell/operating-mainline";
 import { resolveNorthstarText } from "@/lib/shell/northstar-text";
+import { resolveShellMainline } from "@/lib/shell/resolve-shell-experience";
 import { resolveRoleLens } from "@/lib/shell/role-home";
 import { loadDashboardPageData } from "@/features/dashboard/page-loader";
 import { buildDashboardViewModel } from "@/features/dashboard/view-model";
@@ -86,13 +86,21 @@ export default async function DashboardPage({
   // judgement/review = home-work-entry 的今日排片数（非全量积压，UI 显式标注）；
   // advance 尚无真实全量计数源 → pending_source，不用截断样本冒充。
   const workEntry = viewModel.dashboardHomeWorkEntry;
-  const mainline = buildCoreDefaultMainline({
-    asOf: new Date().toISOString(),
+  // 经营主线经统一读侧入口（蓝图 §4.4）：注册的 mainline provider 按绑定授权
+  // 模型（§4.3）至多选一；Phase 2a 尚无绑定写入面 → binding=null → 恒回 Core
+  // default，与既有直接 build 逐字节一致。绑定读取由后续切片接入。
+  const { readout: mainline } = await resolveShellMainline({
+    workspace,
     english,
-    counts: {
-      judgementPending: workEntry.topWorkItems.length,
-      reviewQueue: workEntry.reviewItems.length,
-      advanceInFlight: null,
+    binding: null,
+    coreDefault: {
+      asOf: new Date().toISOString(),
+      english,
+      counts: {
+        judgementPending: workEntry.topWorkItems.length,
+        reviewQueue: workEntry.reviewItems.length,
+        advanceInFlight: null,
+      },
     },
   });
 

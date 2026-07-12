@@ -14,6 +14,7 @@ import type {
   PermissionFailureCode,
   PermissionSubject,
 } from "@/lib/auth/permission-policy";
+import type { MainlineReadout } from "@/lib/shell/operating-mainline";
 
 export type WorkspaceLike = {
   id: string;
@@ -178,6 +179,45 @@ export type WorkspaceNavExtensionDescriptor = {
   id: string;
   getAccess: ExtensionAccessProbe;
   buildCluster: (english: boolean) => WorkspaceNavExtensionCluster;
+};
+
+/**
+ * Shell-surface stability marker (Default Operating Workspace blueprint,
+ * Phase 2). `experimental` = the shape is open into `PackContributions` but the
+ * contract is **not frozen** — freezing (removing `experimental`) requires a
+ * second real *external* consumer per blueprint §3.2 (Core default provider +
+ * one private Overlay do not constitute two independent consumers).
+ */
+export type ShellSurfaceStability = "experimental";
+
+/**
+ * Single-winner "operating mainline" surface provider (blueprint §4.2).
+ *
+ * The readout is data-only: `MainlineReadout` carries no action-callback fields
+ * and `validateMainlineReadout` runtime-rejects any function-typed node field
+ * (iron law §4.1.1 — surfaces are read/navigate only). `getAccess` /
+ * `buildMainline` are the provider-side build functions (the §4.2
+ * `MainlineDescriptor` shape), not per-item action callbacks.
+ *
+ * Selection follows the binding-is-authorization model (§4.3): a provider only
+ * wins with an explicit, valid, surface-scoped binding; otherwise the Core
+ * default provider is used. `priority` is diagnostic ordering / admin
+ * recommendation only and never auto-takes-over.
+ */
+export type MainlineProviderContribution = {
+  providerId: string;
+  /** Incompatible versions must not enter the candidate set (§4.3.2). */
+  contractVersion: string;
+  /** Diagnostic ordering / candidate recommendation only — not runtime takeover. */
+  priority: number;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  /** Reuses the existing 2500ms access-probe timeout wrapper (§4.2). */
+  getAccess: ExtensionAccessProbe;
+  buildMainline: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+  }) => Promise<MainlineReadout>;
 };
 
 export type ExtensionIndustryDemoReadoutPage = {
