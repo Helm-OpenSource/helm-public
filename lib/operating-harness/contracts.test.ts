@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { sha256 } from "../expert-capability/hashing";
 import {
   validateEvalCasePromotion,
   validateFeedbackRecord,
@@ -74,6 +75,30 @@ describe("operating harness canonical contracts", () => {
         "evidence_content_must_not_be_included",
       ]),
     );
+  });
+
+  it("rejects an evidence snapshot swap unless the evidence receipt is restamped", () => {
+    const swapped = {
+      ...syntheticEvidenceRef(),
+      sourceSnapshotHash: sha256("different source snapshot"),
+    };
+
+    const validation = validateEvidenceRef(swapped);
+
+    expect(validation.ok).toBe(false);
+    expect(validation.errors).toContain("evidence_ref_content_hash_mismatch");
+  });
+
+  it("requires the signal receipt to cover its evidence binding root", () => {
+    const rebound = {
+      ...syntheticSignalEvent(),
+      evidenceRootHash: sha256("different evidence binding root"),
+    };
+
+    const validation = validateSignalEvent(rebound);
+
+    expect(validation.ok).toBe(false);
+    expect(validation.errors).toContain("signal_event_content_hash_mismatch");
   });
 
   it("rejects cross-tenant or person-level business object aliases", () => {

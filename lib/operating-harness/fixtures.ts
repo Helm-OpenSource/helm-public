@@ -7,18 +7,24 @@ import {
   JUDGEMENT_PACKET_SCHEMA_VERSION,
   SIGNAL_EVENT_SCHEMA_VERSION,
   computeBusinessObjectAliasContentHash,
+  computeEvidenceBindingRootHash,
+  computeEvidenceRefContentHash,
   computeJudgementPacketContentHash,
   computeSignalEventContentHash,
   type BusinessObjectAlias,
   type EvidenceRef,
+  type EvidenceRefContent,
   type JudgementPacket,
   type SignalEvent,
 } from "./contracts";
 
 export const OPERATING_HARNESS_SYNTHETIC_NOW = "2026-07-12T00:00:00.000Z";
 
-export function syntheticEvidenceRef(overrides: Partial<EvidenceRef> = {}): EvidenceRef {
-  return {
+export function syntheticEvidenceRef(
+  overrides: Partial<Omit<EvidenceRef, "contentHash">> & { contentHash?: string } = {},
+): EvidenceRef {
+  const { contentHash, ...contentOverrides } = overrides;
+  const content: EvidenceRefContent = {
     schemaVersion: EVIDENCE_REF_SCHEMA_VERSION,
     evidenceRef: "evidence:crm-row-17",
     tenantScopeRef: "tenant:synthetic-1",
@@ -29,8 +35,12 @@ export function syntheticEvidenceRef(overrides: Partial<EvidenceRef> = {}): Evid
     sensitivity: "public",
     redactionStatus: "synthetic",
     consentScopeRef: null,
-    contentIncluded: false,
-    ...overrides,
+    contentIncluded: false as const,
+    ...contentOverrides,
+  };
+  return {
+    ...content,
+    contentHash: contentHash ?? computeEvidenceRefContentHash(content),
   };
 }
 
@@ -55,6 +65,7 @@ export function syntheticBusinessObjectAlias(
 export function syntheticSignalEvent(
   overrides: Partial<Omit<SignalEvent, "contentHash">> = {},
 ): SignalEvent {
+  const evidence = syntheticEvidenceRef();
   const content = {
     schemaVersion: SIGNAL_EVENT_SCHEMA_VERSION,
     signalId: "signal:event-17",
@@ -65,7 +76,8 @@ export function syntheticSignalEvent(
     signalFamily: "risk",
     observedAt: OPERATING_HARNESS_SYNTHETIC_NOW,
     capturedAt: OPERATING_HARNESS_SYNTHETIC_NOW,
-    evidenceRefs: ["evidence:crm-row-17"],
+    evidenceRefs: [evidence.evidenceRef],
+    evidenceRootHash: computeEvidenceBindingRootHash([evidence]),
     businessObjectAliasRef: "object:deal-alias-17",
     redactionStatus: "synthetic" as const,
     boundaryNote: "Synthetic, advice-only operating signal input.",

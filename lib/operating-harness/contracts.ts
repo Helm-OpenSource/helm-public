@@ -32,7 +32,11 @@ export type EvidenceRef = {
   redactionStatus: PublicSafeRedactionStatus;
   consentScopeRef: string | null;
   contentIncluded: false;
+  contentHash: string;
 };
+
+export type EvidenceRefContent = Omit<EvidenceRef, "contentHash">;
+export type EvidenceBinding = Pick<EvidenceRef, "evidenceRef" | "contentHash">;
 
 export const BUSINESS_OBJECT_RESOLUTION_METHODS = [
   "deterministic_key",
@@ -76,6 +80,7 @@ export type SignalEvent = {
   observedAt: string;
   capturedAt: string;
   evidenceRefs: string[];
+  evidenceRootHash: string;
   businessObjectAliasRef: string | null;
   redactionStatus: PublicSafeRedactionStatus;
   boundaryNote: string;
@@ -117,6 +122,19 @@ export type JudgementPacket = {
 };
 
 export type JudgementPacketContent = Omit<JudgementPacket, "contentHash">;
+
+export function computeEvidenceRefContentHash(content: EvidenceRefContent): string {
+  return sha256(canonicalJson(content));
+}
+
+export function computeEvidenceBindingRootHash(
+  evidenceBindings: readonly EvidenceBinding[],
+): string {
+  const canonicalBindings = evidenceBindings
+    .map(({ evidenceRef, contentHash }) => ({ evidenceRef, contentHash }))
+    .sort((left, right) => left.evidenceRef.localeCompare(right.evidenceRef));
+  return sha256(canonicalJson(canonicalBindings));
+}
 
 export function computeBusinessObjectAliasContentHash(
   content: BusinessObjectAliasContent,

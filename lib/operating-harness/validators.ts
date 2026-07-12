@@ -20,11 +20,13 @@ import {
   PUBLIC_SAFE_REDACTION_STATUSES,
   SIGNAL_EVENT_SCHEMA_VERSION,
   computeBusinessObjectAliasContentHash,
+  computeEvidenceRefContentHash,
   computeJudgementPacketContentHash,
   computeSignalEventContentHash,
   type BusinessObjectAlias,
   type BusinessObjectAliasContent,
   type EvidenceRef,
+  type EvidenceRefContent,
   type JudgementPacket,
   type JudgementPacketContent,
   type SignalEvent,
@@ -66,6 +68,7 @@ export const evidenceRefSchema = z
     redactionStatus: z.enum(PUBLIC_SAFE_REDACTION_STATUSES),
     consentScopeRef: safeRefSchema.nullable(),
     contentIncluded: z.literal(false),
+    contentHash: sha256Schema,
   })
   .strict();
 
@@ -96,6 +99,7 @@ export const signalEventSchema = z
     observedAt: timestampSchema,
     capturedAt: timestampSchema,
     evidenceRefs: z.array(safeRefSchema),
+    evidenceRootHash: sha256Schema,
     businessObjectAliasRef: safeRefSchema.nullable(),
     redactionStatus: z.enum(PUBLIC_SAFE_REDACTION_STATUSES),
     boundaryNote: z.string().min(1).max(1000),
@@ -195,6 +199,12 @@ export function validateEvidenceRef(input: unknown): ValidationResult {
 
   const parsed = evidenceRefSchema.safeParse(input);
   errors.push(...parseErrors(parsed, "invalid_evidence_ref"));
+  if (parsed.success) {
+    const { contentHash, ...content } = parsed.data;
+    if (contentHash !== computeEvidenceRefContentHash(content as EvidenceRefContent)) {
+      errors.push("evidence_ref_content_hash_mismatch");
+    }
+  }
   return result(errors);
 }
 
