@@ -40,6 +40,7 @@ import type {
   BiReportP0ProcessProductionRow,
   BiReportP0ProcessSopRow,
   ExtensionIndustryDemoReadoutPage,
+  AgentRunAuditSourceContribution,
   MainlineProviderContribution,
   NorthstarKpiSourceContribution,
   OperationSuggestionSourceContribution,
@@ -160,6 +161,11 @@ export type PackContributions = {
    * `resolveShellWorkstations` under the §4.4 budget.
    */
   workstationSources?: ReadonlyArray<WorkstationSourceContribution>;
+  /**
+   * Run-trajectory audit sources (blueprint Phase 5, experimental, **concat**).
+   * Read-only agent-run audit entries merged by `resolveShellRunTrajectoryAudit`.
+   */
+  agentRunAuditSources?: ReadonlyArray<AgentRunAuditSourceContribution>;
   biReportP0ProcessService?: BiReportP0ProcessService;
   implementationConsole?: ImplementationConsoleContribution;
   signalCollectionJobs?: () => ReadonlyArray<SignalCollectionJob>;
@@ -189,6 +195,7 @@ type MutableStore = {
   operationSuggestionSources: OperationSuggestionSourceContribution[];
   roleHomeRoutingProviders: RoleHomeRoutingProviderContribution[];
   workstationSources: WorkstationSourceContribution[];
+  agentRunAuditSources: AgentRunAuditSourceContribution[];
   biReportP0ProcessService: BiReportP0ProcessService | null;
   implementationConsole: ImplementationConsoleContribution | null;
   signalCollectionJobProviders: Array<() => ReadonlyArray<SignalCollectionJob>>;
@@ -209,6 +216,7 @@ function emptyStore(): MutableStore {
     operationSuggestionSources: [],
     roleHomeRoutingProviders: [],
     workstationSources: [],
+    agentRunAuditSources: [],
     biReportP0ProcessService: null,
     implementationConsole: null,
     signalCollectionJobProviders: [],
@@ -258,6 +266,8 @@ export function registerPackContributions(
     s.roleHomeRoutingProviders.push(...contributions.roleHomeRoutingProviders);
   if (contributions.workstationSources)
     s.workstationSources.push(...contributions.workstationSources);
+  if (contributions.agentRunAuditSources)
+    s.agentRunAuditSources.push(...contributions.agentRunAuditSources);
   if (contributions.biReportP0ProcessService)
     s.biReportP0ProcessService = contributions.biReportP0ProcessService;
   if (contributions.implementationConsole)
@@ -315,6 +325,9 @@ export function getRegisteredRoleHomeRoutingProviders(): ReadonlyArray<RoleHomeR
 }
 export function getRegisteredWorkstationSources(): ReadonlyArray<WorkstationSourceContribution> {
   return store().workstationSources;
+}
+export function getRegisteredAgentRunAuditSources(): ReadonlyArray<AgentRunAuditSourceContribution> {
+  return store().agentRunAuditSources;
 }
 export function getRegisteredBiReportP0ProcessService(): BiReportP0ProcessService | null {
   return store().biReportP0ProcessService;

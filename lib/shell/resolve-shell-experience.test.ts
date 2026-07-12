@@ -855,3 +855,126 @@ describe("resolveShellWorkstations — concat (Phase 3)", () => {
     expect(res.workstations[0].label).toBe("first");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 5 — run-trajectory audit (concat)
+// ---------------------------------------------------------------------------
+
+import {
+  resolveShellRunTrajectoryAudit,
+  SHELL_RUN_TRAJECTORY_AUDIT_CONTRACT_VERSION,
+} from "./resolve-shell-experience";
+import type { AgentRunAuditSourceContribution } from "@/lib/extensions/registry-types";
+import type { AgentRunAuditEntry } from "./run-trajectory-audit";
+
+function anAuditEntry(overrides: Partial<AgentRunAuditEntry> = {}): AgentRunAuditEntry {
+  return {
+    runId: "run-1",
+    actor: "operator-role",
+    mode: "shadow",
+    intentSummary: "过程信号复核",
+    asOf: "2026-07-13T00:00:00.000Z",
+    verdict: "pass",
+    trajectoryFailureClasses: [],
+    boundaryDecisionCount: 2,
+    blockedActionCount: 0,
+    quarantined: false,
+    href: "/diagnostics",
+    basisRef: "provider:run-1",
+    ...overrides,
+  };
+}
+
+function auditSource(
+  overrides: Partial<AgentRunAuditSourceContribution> = {},
+): AgentRunAuditSourceContribution {
+  return {
+    providerId: "audit-a",
+    contractVersion: SHELL_RUN_TRAJECTORY_AUDIT_CONTRACT_VERSION,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildRunAuditEntries: vi.fn(async () => [anAuditEntry()]),
+    ...overrides,
+  };
+}
+
+describe("resolveShellRunTrajectoryAudit — concat (Phase 5)", () => {
+  it("empty store ⇒ Core default (empty) — mirror parity", async () => {
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries).toEqual([]);
+    expect(res.unreturnedProviderIds).toEqual([]);
+  });
+
+  it("merges audit entries from multiple eligible sources", async () => {
+    registerPackContributions("p", {
+      agentRunAuditSources: [
+        auditSource({ providerId: "audit-a", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "a" })]) }),
+        auditSource({ providerId: "audit-b", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "b" })]) }),
+      ],
+    });
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries.map((e) => e.runId).sort()).toEqual(["a", "b"]);
+  });
+
+  it("skips access-denied and version-incompatible sources", async () => {
+    const denied = auditSource({ providerId: "audit-denied", getAccess: vi.fn(async () => ({ ok: false })) });
+    const legacy = auditSource({ providerId: "audit-legacy", contractVersion: "run-trajectory-audit.v0" });
+    registerPackContributions("p", { agentRunAuditSources: [denied, legacy] });
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries).toEqual([]);
+    expect(denied.buildRunAuditEntries).not.toHaveBeenCalled();
+    expect(legacy.getAccess).not.toHaveBeenCalled();
+  });
+
+  it("a source that throws is dropped and recorded as unreturned", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        agentRunAuditSources: [
+          auditSource({ providerId: "audit-good", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "good" })]) }),
+          auditSource({
+            providerId: "audit-bad",
+            buildRunAuditEntries: vi.fn(async () => {
+              throw new Error("boom");
+            }),
+          }),
+        ],
+      });
+      const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+      expect(res.entries.map((e) => e.runId)).toEqual(["good"]);
+      expect(res.unreturnedProviderIds).toEqual(["audit-bad"]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("drops only the suspected-PII entry (fail-closed), keeps the rest", async () => {
+    registerPackContributions("p", {
+      agentRunAuditSources: [
+        auditSource({
+          providerId: "audit-mixed",
+          buildRunAuditEntries: vi.fn(async () => [
+            anAuditEntry({ runId: "clean" }),
+            anAuditEntry({ runId: "leaky", intentSummary: "联系客户 13800138000" }),
+          ]),
+        }),
+      ],
+    });
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries.map((e) => e.runId)).toEqual(["clean"]);
+    expect(res.nonConformantProviderIds).toEqual(["audit-mixed"]);
+  });
+
+  it("dedupes by runId across sources (first writer wins)", async () => {
+    registerPackContributions("p", {
+      agentRunAuditSources: [
+        auditSource({ providerId: "audit-a", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "dup", actor: "first" })]) }),
+        auditSource({ providerId: "audit-b", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "dup", actor: "second" })]) }),
+      ],
+    });
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries).toHaveLength(1);
+    expect(res.entries[0].actor).toBe("first");
+  });
+});

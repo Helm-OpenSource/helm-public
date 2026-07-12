@@ -17,6 +17,7 @@ import "server-only";
  */
 
 import {
+  getRegisteredAgentRunAuditSources,
   getRegisteredAttentionSources,
   getRegisteredMainlineProviders,
   getRegisteredNorthstarKpiSources,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/extensions/registry-contract";
 import { resolveReportsExtensionAccessSafely } from "@/lib/extensions/registry";
 import type {
+  AgentRunAuditSourceContribution,
   AttentionSourceContribution,
   ExtensionAccessContext,
   NorthstarKpiSourceContribution,
@@ -67,6 +69,11 @@ import {
   validateWorkstations,
   type WorkstationDescriptor,
 } from "./workstation";
+import {
+  buildCoreDefaultRunTrajectoryAudit,
+  validateAgentRunAuditEntries,
+  type AgentRunAuditEntry,
+} from "./run-trajectory-audit";
 import {
   selectSingleWinner,
   type ProviderCandidate,
@@ -749,6 +756,102 @@ export async function resolveShellWorkstations(input: {
 
   return {
     workstations: merged,
+    unreturnedProviderIds,
+    nonConformantProviderIds,
+    droppedForCap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: run-trajectory audit (concat)
+// ---------------------------------------------------------------------------
+
+export const SHELL_RUN_TRAJECTORY_AUDIT_SURFACE_KEY = "run-trajectory-audit";
+export const SHELL_RUN_TRAJECTORY_AUDIT_CONTRACT_VERSION =
+  "run-trajectory-audit.v1-experimental";
+
+export type ShellRunTrajectoryAuditResolution = {
+  entries: ReadonlyArray<AgentRunAuditEntry>;
+  unreturnedProviderIds: ReadonlyArray<string>;
+  nonConformantProviderIds: ReadonlyArray<string>;
+  droppedForCap: number;
+};
+
+/**
+ * Run-trajectory audit (concat, mirrors resolveShellOperationSuggestions).
+ * Merge every eligible source's read-only audit entries under the §4.4 budget;
+ * drop non-conformant / suspected-secret / suspected-PII entries (not the whole
+ * source — fail-closed); cross-source dedupe by runId (first writer wins). Empty
+ * store ⇒ Core default (empty) — mirror parity. Read-only, no control semantics.
+ */
+export async function resolveShellRunTrajectoryAudit(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellRunTrajectoryAuditResolution> {
+  const sources = getRegisteredAgentRunAuditSources();
+  if (sources.length === 0) {
+    return {
+      entries: buildCoreDefaultRunTrajectoryAudit(),
+      unreturnedProviderIds: [],
+      nonConformantProviderIds: [],
+      droppedForCap: 0,
+    };
+  }
+
+  const { eligible, droppedForCap } = await resolveEligibleSources({
+    sources: sources as ReadonlyArray<AgentRunAuditSourceContribution>,
+    compatVersion: SHELL_RUN_TRAJECTORY_AUDIT_CONTRACT_VERSION,
+    workspace: input.workspace,
+    accessContext: input.accessContext,
+    maxSources: SHELL_SURFACE_MAX_SOURCES,
+  });
+
+  const unreturnedProviderIds: string[] = [];
+  const nonConformantProviderIds: string[] = [];
+  const merged: AgentRunAuditEntry[] = [];
+  const seenRunIds = new Set<string>();
+
+  const outcomes = await Promise.all(
+    eligible.map(async (source) => ({
+      providerId: source.providerId,
+      outcome: await runSourceWithTimeout(
+        (signal) =>
+          source.buildRunAuditEntries({
+            workspace: input.workspace,
+            english: input.english,
+            signal,
+          }),
+        SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+        (error) =>
+          console.error(
+            `[shell-experience] run-trajectory-audit source ${source.providerId} build threw; dropping source`,
+            error,
+          ),
+      ),
+    })),
+  );
+
+  for (const { providerId, outcome } of outcomes) {
+    if (outcome.kind === "unreturned") {
+      unreturnedProviderIds.push(providerId);
+      continue;
+    }
+    const issues = validateAgentRunAuditEntries(outcome.items);
+    const badRunIds = new Set(
+      issues.map((i) => i.runId).filter((k): k is string => k !== null),
+    );
+    if (issues.length > 0) nonConformantProviderIds.push(providerId);
+    for (const entry of outcome.items) {
+      if (badRunIds.has(entry.runId)) continue; // drop only the offending entry (fail-closed on secret/PII)
+      if (seenRunIds.has(entry.runId)) continue; // cross-source dedupe, first writer wins
+      seenRunIds.add(entry.runId);
+      merged.push(entry);
+    }
+  }
+
+  return {
+    entries: merged,
     unreturnedProviderIds,
     nonConformantProviderIds,
     droppedForCap,
