@@ -68,6 +68,14 @@ const CONTEXT_PROJECTION_RECEIPT_PATTERN = /\bContextProjectionReceipt\b/;
 const CONTEXT_PROJECTION_RECEIPT_SINK_PATTERN =
   /JSON\.stringify\(\s*(?:contextProjectionReceipt|projectionReceipt|receipt)\b|\buserPrompt\s*:\s*(?:contextProjectionReceipt|projectionReceipt|receipt)\b/i;
 
+const V3_MULTI_PASS_WORKFLOW_PATTERN = /\bexecuteMultiPassReview\b/;
+const V3_MULTI_PASS_REQUIRED_MARKERS = [
+  'taskType: "MULTI_PASS_REVIEW"',
+  "llmPromptVersions.multiPassReview",
+  "executeLLMTask",
+  "buildReasoningBudgetAuditSummary",
+] as const;
+
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
     pattern: /^\s*import\s+.*recommendation-feedback\.service/m,
@@ -234,6 +242,19 @@ export function runLlmCandidateBoundaryCheck(
         detail:
           "Context projection receipts are audit-only; prompt builders may consume only their validated SelectedContextStub projection.",
       });
+    }
+
+    if (V3_MULTI_PASS_WORKFLOW_PATTERN.test(content)) {
+      const missingMarkers = V3_MULTI_PASS_REQUIRED_MARKERS.filter(
+        (marker) => !content.includes(marker),
+      );
+      if (missingMarkers.length > 0) {
+        violations.push({
+          file: repoRelative,
+          rule: "LLM-CANDIDATE-G",
+          detail: `V3 multi-pass workflow must stay on the registered prompt/version/budget/call-log chain; missing ${missingMarkers.join(", ")}.`,
+        });
+      }
     }
   }
 

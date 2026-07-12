@@ -278,4 +278,20 @@ describe("check-llm-candidate-boundaries", () => {
     expect(result.ok).toBe(false);
     expect(result.violations[0]?.detail).toContain("external sends");
   });
+
+  it("rejects a v3 multi-pass workflow that bypasses the registered execution chain", () => {
+    writeFile(
+      "lib/llm-workflows/multi-pass-review.workflow.ts",
+      `
+        import type { ModelCapabilityProfile } from "@/lib/llm/intelligence-contracts-v3";
+        export async function executeMultiPassReview(profile: ModelCapabilityProfile) {
+          return { profile, reviewState: "candidate" };
+        }
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-G")).toBe(true);
+  });
 });
