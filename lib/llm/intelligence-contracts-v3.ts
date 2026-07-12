@@ -176,6 +176,20 @@ export const V3_REVIEW_STATES = ["candidate", "needs_review", "rejected_by_guard
 export const v3ReviewStateSchema = z.enum(V3_REVIEW_STATES);
 export type V3ReviewState = z.infer<typeof v3ReviewStateSchema>;
 
+export const MULTI_PASS_ROLES = ["generator", "critic", "adversary"] as const;
+export const multiPassRoleSchema = z.enum(MULTI_PASS_ROLES);
+export type MultiPassRole = z.infer<typeof multiPassRoleSchema>;
+
+export const multiPassRoleOutputSchema = z
+  .object({
+    role: multiPassRoleSchema,
+    reviewState: v3ReviewStateSchema,
+    evidenceRefs: z.array(z.string().min(1)).default([]),
+    notes: z.array(z.string().min(1)).default([]),
+  })
+  .strict();
+export type MultiPassRoleOutput = z.infer<typeof multiPassRoleOutputSchema>;
+
 export const PUBLIC_SAFE_REDACTION_STATUSES = ["synthetic", "redacted", "alias_only"] as const;
 export const publicSafeRedactionStatusSchema = z.enum(PUBLIC_SAFE_REDACTION_STATUSES);
 export type PublicSafeRedactionStatus = z.infer<typeof publicSafeRedactionStatusSchema>;

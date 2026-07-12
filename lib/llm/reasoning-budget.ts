@@ -1,8 +1,12 @@
-import type {
-  LLMTrajectoryRiskClass,
-  ModelCapabilityProfile,
-  ReasoningBudgetClass,
-  ReasoningDepth,
+import { z } from "zod";
+
+import {
+  reasoningBudgetClassSchema,
+  reasoningDepthSchema,
+  type LLMTrajectoryRiskClass,
+  type ModelCapabilityProfile,
+  type ReasoningBudgetClass,
+  type ReasoningDepth,
 } from "@/lib/llm/intelligence-contracts-v3";
 
 export type ReasoningBudgetFactor = "low" | "medium" | "high";
@@ -10,18 +14,22 @@ export type EvidenceCompleteness = "complete" | "partial" | "missing";
 
 export type ReasoningBudgetBoundaryDecision = "allow_candidate" | "review_required";
 
-export type ReasoningBudgetDecision = {
-  readonly reasoningDepth: ReasoningDepth;
-  readonly budgetClass: ReasoningBudgetClass;
-  readonly multiPassRecommended: boolean;
-  readonly boundaryDecision: ReasoningBudgetBoundaryDecision;
-  readonly reason:
-    | "profile_disabled"
-    | "low_value_low_uncertainty"
-    | "high_value_uncertain"
-    | "side_effect_review_required"
-    | "standard_review";
-};
+export const reasoningBudgetDecisionSchema = z
+  .object({
+    reasoningDepth: reasoningDepthSchema,
+    budgetClass: reasoningBudgetClassSchema,
+    multiPassRecommended: z.boolean(),
+    boundaryDecision: z.enum(["allow_candidate", "review_required"]),
+    reason: z.enum([
+      "profile_disabled",
+      "low_value_low_uncertainty",
+      "high_value_uncertain",
+      "side_effect_review_required",
+      "standard_review",
+    ]),
+  })
+  .strict();
+export type ReasoningBudgetDecision = z.infer<typeof reasoningBudgetDecisionSchema>;
 
 export type ReasoningBudgetInput = {
   readonly profile: ModelCapabilityProfile;
@@ -124,4 +132,32 @@ export function resolveReasoningBudgetDecision(
     boundaryDecision: sideEffectRisk ? "review_required" : "allow_candidate",
     reason: sideEffectRisk ? "side_effect_review_required" : "standard_review",
   };
+}
+
+const MAX_OUTPUT_TOKENS_BY_DEPTH: Readonly<Record<ReasoningDepth, number>> = {
+  deterministic: 512,
+  economy: 1024,
+  standard: 2048,
+  deep: 3072,
+};
+
+export function resolveReasoningBudgetMaxOutputTokens(
+  decision: ReasoningBudgetDecision,
+): number {
+  return MAX_OUTPUT_TOKENS_BY_DEPTH[reasoningBudgetDecisionSchema.parse(decision).reasoningDepth];
+}
+
+export function buildReasoningBudgetAuditSummary(
+  profile: ModelCapabilityProfile,
+  decision: ReasoningBudgetDecision,
+): string {
+  const parsed = reasoningBudgetDecisionSchema.parse(decision);
+  const profileKey = profile.profileKey.replace(/[^a-zA-Z0-9._:-]+/g, "_").slice(0, 80);
+  return [
+    `profile=${profileKey}`,
+    `depth=${parsed.reasoningDepth}`,
+    `budget=${parsed.budgetClass}`,
+    `boundary=${parsed.boundaryDecision}`,
+    `reason=${parsed.reason}`,
+  ].join(" ");
 }

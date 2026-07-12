@@ -12,7 +12,8 @@ export type LLMTaskType =
   | "BI_REPORT_ANALYSIS"
   | "BI_REPORT_REVIEW"
   | "JUDGEMENT_BOUNDARY_REVIEW"
-  | "COUNTERFACTUAL_REVIEW";
+  | "COUNTERFACTUAL_REVIEW"
+  | "MULTI_PASS_REVIEW";
 
 export type LLMProvider = "openai" | "qwen";
 

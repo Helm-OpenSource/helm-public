@@ -76,6 +76,25 @@ describe("rate-limiter · per-user reasoning tier (stricter)", () => {
     ).toThrow(RateLimitedError);
   });
 
+  it("uses reasoning tier capacity for MULTI_PASS_REVIEW", () => {
+    for (let i = 0; i < LIMITS.userReasoning.capacity; i += 1) {
+      applyRateLimitPolicy({
+        taskType: "MULTI_PASS_REVIEW",
+        workspaceId: "ws-multi-pass",
+        userId: "u-multi-pass",
+        now: 0,
+      });
+    }
+    expect(() =>
+      applyRateLimitPolicy({
+        taskType: "MULTI_PASS_REVIEW",
+        workspaceId: "ws-multi-pass",
+        userId: "u-multi-pass",
+        now: 0,
+      }),
+    ).toThrow(RateLimitedError);
+  });
+
   it("briefing tier and reasoning tier buckets are independent", () => {
     // Briefing-tier user hits 10 calls without exhausting reasoning capacity
     for (let i = 0; i < 10; i += 1) {

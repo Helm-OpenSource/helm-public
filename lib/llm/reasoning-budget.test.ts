@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveReasoningBudgetDecision } from "@/lib/llm/reasoning-budget";
+import {
+  buildReasoningBudgetAuditSummary,
+  reasoningBudgetDecisionSchema,
+  resolveReasoningBudgetDecision,
+  resolveReasoningBudgetMaxOutputTokens,
+} from "@/lib/llm/reasoning-budget";
 import type { ModelCapabilityProfile } from "@/lib/llm/intelligence-contracts-v3";
 
 const deepProfile: ModelCapabilityProfile = {
@@ -84,5 +89,33 @@ describe("reasoning budget resolver", () => {
     expect(decision.multiPassRecommended).toBe(false);
     expect(decision.boundaryDecision).toBe("review_required");
     expect(decision.reason).toBe("profile_disabled");
+  });
+
+  it("exposes a strict decision contract", () => {
+    const decision = resolveReasoningBudgetDecision({
+      profile: deepProfile,
+      businessValue: "medium",
+      uncertainty: "medium",
+      riskClass: "read",
+      evidenceCompleteness: "partial",
+    });
+
+    expect(reasoningBudgetDecisionSchema.parse(decision)).toEqual(decision);
+    expect(() => reasoningBudgetDecisionSchema.parse({ ...decision, connectorActivation: true })).toThrow();
+  });
+
+  it("maps reasoning depth to bounded output tokens and a public-safe audit summary", () => {
+    const decision = resolveReasoningBudgetDecision({
+      profile: deepProfile,
+      businessValue: "high",
+      uncertainty: "high",
+      riskClass: "read",
+      evidenceCompleteness: "partial",
+    });
+
+    expect(resolveReasoningBudgetMaxOutputTokens(decision)).toBe(3072);
+    expect(buildReasoningBudgetAuditSummary(deepProfile, decision)).toBe(
+      "profile=local-frontier-reviewer depth=deep budget=premium boundary=allow_candidate reason=high_value_uncertain",
+    );
   });
 });

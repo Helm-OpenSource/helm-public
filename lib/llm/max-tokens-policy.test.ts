@@ -19,6 +19,10 @@ describe("max-tokens-policy · resolveDefaultMaxOutputTokens", () => {
   it("returns per-task default for memory extraction", () => {
     expect(resolveDefaultMaxOutputTokens("MEETING_MEMORY_EXTRACTION")).toBe(2048);
   });
+
+  it("registers a bounded default for multi-pass review", () => {
+    expect(resolveDefaultMaxOutputTokens("MULTI_PASS_REVIEW")).toBe(3072);
+  });
 });
 
 describe("max-tokens-policy · resolveSanityCeiling", () => {
