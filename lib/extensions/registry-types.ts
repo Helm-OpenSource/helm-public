@@ -17,6 +17,7 @@ import type {
 import type { MainlineReadout } from "@/lib/shell/operating-mainline";
 import type { NorthstarKpi } from "@/lib/shell/northstar-kpi";
 import type { AttentionItem } from "@/lib/shell/attention-feed";
+import type { OperationSuggestion } from "@/lib/shell/operation-suggestion";
 
 export type WorkspaceLike = {
   id: string;
@@ -261,6 +262,28 @@ export type AttentionSourceContribution = {
     roleCategory?: string | null;
     signal?: AbortSignal;
   }) => Promise<ReadonlyArray<AttentionItem>>;
+};
+
+/**
+ * Operation-suggestion source (blueprint Phase 4, **concat**, experimental).
+ * Surfaces infrequent operations (initialization / connector setup / one-off
+ * config) as structured, de-identified suggestions a human hands to a general
+ * agent (Claude Code / CodeX / 悟空 / WorkBuddy). Suggestion ≠ execution: items
+ * are read/navigate-only, `agentBrief` is a declarative spec (not a callback,
+ * no secrets/PII), and Helm never executes it. Same §4.4 aggregation as
+ * attention. `experimental`.
+ */
+export type OperationSuggestionSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildOperationSuggestions: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<OperationSuggestion>>;
 };
 
 export type ExtensionIndustryDemoReadoutPage = {

@@ -502,3 +502,131 @@ describe("resolveShellAttention — concat aggregation with unreturned items (§
     expect(denied.buildAttention).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Concat surface — operation suggestions (Phase 4)
+// ---------------------------------------------------------------------------
+
+import {
+  resolveShellOperationSuggestions,
+  SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION,
+} from "./resolve-shell-experience";
+import type { OperationSuggestionSourceContribution } from "@/lib/extensions/registry-types";
+import type { OperationSuggestion } from "./operation-suggestion";
+
+function aSuggestion(overrides: Partial<OperationSuggestion> = {}): OperationSuggestion {
+  return {
+    key: "init-focus-areas",
+    category: "initialization",
+    title: "设置工作区关注领域",
+    rationale: "冷启动需先声明关注领域",
+    readiness: "ready",
+    preconditionRefs: [],
+    agentBrief: "在 /settings 配置 focusAreas",
+    verificationRef: "/settings",
+    href: "/settings",
+    basisRef: "provider:init-focus-areas",
+    ...overrides,
+  };
+}
+
+function opSuggestionSource(
+  overrides: Partial<OperationSuggestionSourceContribution> = {},
+): OperationSuggestionSourceContribution {
+  return {
+    providerId: "ops-a",
+    contractVersion: SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildOperationSuggestions: vi.fn(async () => [aSuggestion()]),
+    ...overrides,
+  };
+}
+
+describe("resolveShellOperationSuggestions — concat aggregation (Phase 4)", () => {
+  it("empty store ⇒ Core default (empty) — mirror parity", async () => {
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions).toEqual([]);
+    expect(res.unreturnedProviderIds).toEqual([]);
+    expect(res.droppedForCap).toBe(0);
+  });
+
+  it("merges suggestions from multiple eligible sources (concat)", async () => {
+    registerPackContributions("p", {
+      operationSuggestionSources: [
+        opSuggestionSource({ providerId: "ops-a", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "a" })]) }),
+        opSuggestionSource({ providerId: "ops-b", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "b" })]) }),
+      ],
+    });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions.map((s) => s.key).sort()).toEqual(["a", "b"]);
+  });
+
+  it("silently skips access-denied sources", async () => {
+    const denied = opSuggestionSource({ providerId: "ops-denied", getAccess: vi.fn(async () => ({ ok: false })) });
+    registerPackContributions("p", { operationSuggestionSources: [denied] });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions).toEqual([]);
+    expect(denied.buildOperationSuggestions).not.toHaveBeenCalled();
+  });
+
+  it("excludes version-incompatible sources up front", async () => {
+    const legacy = opSuggestionSource({ providerId: "ops-legacy", contractVersion: "operation-suggestion.v0" });
+    registerPackContributions("p", { operationSuggestionSources: [legacy] });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions).toEqual([]);
+    expect(legacy.getAccess).not.toHaveBeenCalled();
+  });
+
+  it("a source whose build throws is dropped and recorded as unreturned", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        operationSuggestionSources: [
+          opSuggestionSource({ providerId: "ops-good", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "good" })]) }),
+          opSuggestionSource({
+            providerId: "ops-bad",
+            buildOperationSuggestions: vi.fn(async () => {
+              throw new Error("boom");
+            }),
+          }),
+        ],
+      });
+      const res = await resolveShellOperationSuggestions({ workspace, english: true });
+      expect(res.suggestions.map((s) => s.key)).toEqual(["good"]);
+      expect(res.unreturnedProviderIds).toEqual(["ops-bad"]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("drops only the suspected-secret item (fail-closed), keeps the rest", async () => {
+    registerPackContributions("p", {
+      operationSuggestionSources: [
+        opSuggestionSource({
+          providerId: "ops-mixed",
+          buildOperationSuggestions: vi.fn(async () => [
+            aSuggestion({ key: "clean" }),
+            aSuggestion({ key: "leaky", agentBrief: `run with ${"token"}=${`sk-${"ABCDEF0123456789abcdef"}`}` }),
+          ]),
+        }),
+      ],
+    });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions.map((s) => s.key)).toEqual(["clean"]);
+    expect(res.nonConformantProviderIds).toEqual(["ops-mixed"]);
+  });
+
+  it("dedupes by suggestion key across sources (first writer wins)", async () => {
+    registerPackContributions("p", {
+      operationSuggestionSources: [
+        opSuggestionSource({ providerId: "ops-a", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "dup", title: "first" })]) }),
+        opSuggestionSource({ providerId: "ops-b", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "dup", title: "second" })]) }),
+      ],
+    });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions).toHaveLength(1);
+    expect(res.suggestions[0].title).toBe("first");
+  });
+});
