@@ -604,7 +604,7 @@ export function evaluateHarnessP3Readiness(input: unknown): HarnessP3ReadinessRe
         ? record.contentHash
         : sha256("invalid:p3-readiness-evidence");
     const createdAt =
-      typeof record.asOf === "string" && !Number.isNaN(Date.parse(record.asOf))
+      typeof record.asOf === "string" && timestampSchema.safeParse(record.asOf).success
         ? record.asOf
         : "1970-01-01T00:00:00.000Z";
     return buildReport({

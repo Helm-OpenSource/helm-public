@@ -5,6 +5,8 @@ owner: Product / Delivery Engineering / Engineering
 created: 2026-07-12
 review_after: 2026-07-26
 public_safety: Public-safe contracts, adapters, projectors, and synthetic evaluation only. No customer data, production connector, model training, automatic learning, writeback, external send, approval, commitment, or memory promotion.
+archive_trigger:
+  - A successor Operating Harness requirements document is merged, validated, and linked from docs/STATUS.md.
 ---
 
 # Helm Operating Harness Requirements / Helm 经营智能 Harness 要求

@@ -141,6 +141,19 @@ describe("operating harness P3 data readiness", () => {
     expect(validateHarnessP3ReadinessReport(report).ok).toBe(true);
   });
 
+  it("emits a schema-valid fail-closed report for a non-ISO asOf value", () => {
+    const invalid = {
+      ...syntheticCurrentP3ReadinessEvidence(),
+      asOf: "2026-07-12",
+    };
+    const report = evaluateHarnessP3Readiness(invalid);
+
+    expect(report.decision).toBe("not_ready");
+    expect(report.failures).toContain("input_invalid");
+    expect(report.createdAt).toBe("1970-01-01T00:00:00.000Z");
+    expect(validateHarnessP3ReadinessReport(report).ok).toBe(true);
+  });
+
   it("returns only ready-for-design-review when every data gate is satisfied", () => {
     const report = evaluateHarnessP3Readiness(matureEvidence());
 

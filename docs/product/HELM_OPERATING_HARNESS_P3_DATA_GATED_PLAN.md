@@ -5,6 +5,8 @@ owner: Product / Delivery Engineering / Engineering
 created: 2026-07-12
 review_after: 2026-08-12
 public_safety: Public-safe aggregate readiness evidence and deferred architecture only. No customer data, production connector, model training, online learning, automatic adoption, writeback, external send, approval, commitment, or memory promotion.
+archive_trigger:
+  - P3 design is owner-approved and superseded by an implemented, validated plan linked from docs/STATUS.md.
 ---
 
 # Helm Operating Harness P3 Data-Gated Plan / P3 数据门控升级计划
@@ -81,7 +83,7 @@ legacy derived snapshot。
 | Qualifying runs | 至少 5 个；均为 fresh-heldout、weakness replayed、owner-reviewed candidate |
 | Independent B | 至少 5 个不同 set ref，且至少 5 个不同 content hash |
 | Revisions | 至少 3 个 candidate revision |
-| Business objects | 至少 3 个 object kind，且每种至少出现在 2 个独立 qualifying run |
+| Business objects | 至少 3 个 object kind 达到覆盖门；计入门槛的每种至少出现在 2 个独立 qualifying run |
 | Source families | 至少 2 个；客户 fleet 与 OSS 为 0 |
 | Operational de-identified | 至少 3 个去人名 self-dogfood / promoted operational run |
 | Recent stability | 最近 3 个 run 全部通过，且每个 held-out lift `>= 0.05` |
