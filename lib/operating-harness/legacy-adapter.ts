@@ -2,6 +2,7 @@ import type { OperatingSignalFlowEvent } from "../operating-signal-flow/contract
 import type { BusinessObjectAlias, EvidenceRef, SignalEvent } from "./contracts";
 import {
   SIGNAL_EVENT_SCHEMA_VERSION,
+  computeEvidenceBindingRootHash,
   computeSignalEventContentHash,
 } from "./contracts";
 import {
@@ -69,9 +70,15 @@ export function adaptOperatingSignalFlowEvent(
     }
   }
 
-  const canonicalEvidenceRefs = new Set(input.evidenceRefs.map((item) => item.evidenceRef));
+  const canonicalEvidenceByRef = new Map<string, EvidenceRef>();
+  for (const evidence of input.evidenceRefs) {
+    if (canonicalEvidenceByRef.has(evidence.evidenceRef)) {
+      throw new Error(`duplicate_canonical_evidence_ref:${evidence.evidenceRef}`);
+    }
+    canonicalEvidenceByRef.set(evidence.evidenceRef, evidence);
+  }
   for (const ref of input.event.evidenceRefs) {
-    if (!canonicalEvidenceRefs.has(ref)) {
+    if (!canonicalEvidenceByRef.has(ref)) {
       throw new Error(`missing_canonical_evidence_ref:${ref}`);
     }
   }
@@ -106,6 +113,9 @@ export function adaptOperatingSignalFlowEvent(
     observedAt: input.event.occurredAt,
     capturedAt: input.capturedAt,
     evidenceRefs: [...input.event.evidenceRefs],
+    evidenceRootHash: computeEvidenceBindingRootHash(
+      input.event.evidenceRefs.map((ref) => canonicalEvidenceByRef.get(ref)!),
+    ),
     businessObjectAliasRef: input.businessObjectAlias?.aliasRef ?? null,
     redactionStatus: input.event.redactionStatus,
     boundaryNote: input.event.boundaryNote,

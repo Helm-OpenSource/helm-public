@@ -195,6 +195,55 @@ describe("operating harness derived state", () => {
     expect(projection.reasons).toContain("feedback_not_eval_eligible:defer");
   });
 
+  it("keeps deferred feedback review-pending when no promotion was attempted", () => {
+    const projection = projectOperatingSignalState({
+      signalEvent: syntheticSignalEvent(),
+      evidenceRefs: [syntheticEvidenceRef()],
+      businessObjectAlias: syntheticBusinessObjectAlias(),
+      judgementPacket: syntheticJudgementPacket(),
+      feedbackRecord: syntheticFeedbackRecord({ correctionType: "defer" }),
+      evalCasePromotion: null,
+    });
+
+    expect(projection.state).toBe("REVIEW_PENDING");
+    expect(projection.reasons).toContain("human_review_deferred");
+  });
+
+  it("quarantines a restamped evidence receipt that conflicts with the signal root", () => {
+    const projection = projectOperatingSignalState({
+      signalEvent: syntheticSignalEvent(),
+      evidenceRefs: [
+        syntheticEvidenceRef({
+          sourceSnapshotHash: sha256("different but internally valid snapshot"),
+        }),
+      ],
+      businessObjectAlias: syntheticBusinessObjectAlias(),
+      judgementPacket: null,
+      feedbackRecord: null,
+      evalCasePromotion: null,
+    });
+
+    expect(projection.state).toBe("QUARANTINED");
+    expect(projection.reasons).toContain("signal_evidence_root_hash_mismatch");
+  });
+
+  it("quarantines duplicate supplied evidence receipts", () => {
+    const evidence = syntheticEvidenceRef();
+    const projection = projectOperatingSignalState({
+      signalEvent: syntheticSignalEvent(),
+      evidenceRefs: [evidence, structuredClone(evidence)],
+      businessObjectAlias: syntheticBusinessObjectAlias(),
+      judgementPacket: null,
+      feedbackRecord: null,
+      evalCasePromotion: null,
+    });
+
+    expect(projection.state).toBe("QUARANTINED");
+    expect(projection.reasons).toContain(
+      "duplicate_supplied_evidence_ref:evidence:crm-row-17",
+    );
+  });
+
   it("quarantines downstream artifacts created before evidence or object linking is ready", () => {
     const beforeEvidence = projectOperatingSignalState({
       signalEvent: syntheticSignalEvent({ evidenceRefs: ["evidence:missing"] }),

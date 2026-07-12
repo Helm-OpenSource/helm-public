@@ -10,6 +10,7 @@ import type {
   JudgementPacket,
   SignalEvent,
 } from "./contracts";
+import { computeEvidenceBindingRootHash } from "./contracts";
 import {
   validateBusinessObjectAlias,
   validateEvidenceRef,
@@ -96,7 +97,20 @@ export function projectOperatingSignalState(
     ]);
   }
 
-  const suppliedEvidence = new Set(input.evidenceRefs.map((item) => item.evidenceRef));
+  const suppliedEvidenceByRef = new Map<string, EvidenceRef>();
+  const duplicateEvidenceRefs: string[] = [];
+  for (const evidence of input.evidenceRefs) {
+    if (suppliedEvidenceByRef.has(evidence.evidenceRef)) {
+      duplicateEvidenceRefs.push(`duplicate_supplied_evidence_ref:${evidence.evidenceRef}`);
+    } else {
+      suppliedEvidenceByRef.set(evidence.evidenceRef, evidence);
+    }
+  }
+  if (duplicateEvidenceRefs.length > 0) {
+    return projection(input.signalEvent.signalId, "QUARANTINED", duplicateEvidenceRefs);
+  }
+
+  const suppliedEvidence = new Set(suppliedEvidenceByRef.keys());
   const signalEvidence = new Set(input.signalEvent.evidenceRefs);
   const missingEvidenceRefs = input.signalEvent.evidenceRefs.filter(
     (ref) => !suppliedEvidence.has(ref),
@@ -110,6 +124,18 @@ export function projectOperatingSignalState(
       ]);
     }
     return projection(input.signalEvent.signalId, "MISSING_EVIDENCE", reasons);
+  }
+
+  const attachedEvidence = input.signalEvent.evidenceRefs.map(
+    (ref) => suppliedEvidenceByRef.get(ref)!,
+  );
+  if (
+    computeEvidenceBindingRootHash(attachedEvidence) !==
+    input.signalEvent.evidenceRootHash
+  ) {
+    return projection(input.signalEvent.signalId, "QUARANTINED", [
+      "signal_evidence_root_hash_mismatch",
+    ]);
   }
 
   if (!input.signalEvent.businessObjectAliasRef || !input.businessObjectAlias) {
@@ -173,6 +199,11 @@ export function projectOperatingSignalState(
   }
 
   if (!input.evalCasePromotion && relationshipErrors.length === 0) {
+    if (input.feedbackRecord?.correctionType === "defer") {
+      return projection(input.signalEvent.signalId, "REVIEW_PENDING", [
+        "human_review_deferred",
+      ]);
+    }
     return projection(input.signalEvent.signalId, "HUMAN_DECIDED");
   }
 
