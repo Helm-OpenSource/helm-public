@@ -179,10 +179,11 @@ type MainlineNode = {
   stage: MainlineNodeStage;    // §1.3 四态；无执行态
   status: ShellReadoutStatus;
   inFlightCount: number | null;
-  oldestBlockedSince: string | null; // ISO-8601 时刻；UI 据 asOfRef 渲染"最老卡点时长"。
+  oldestBlockedSince: string | null; // ISO-8601 时刻；"最老卡点时长" = asOf − oldestBlockedSince，
+                                     // 由 UI 确定性计算（两端均为 ISO-8601，不做推断）。
                                      // 语义：status!=="measured" 时必须为 null；
                                      // measured 且无卡点对象时为 null（渲染"无卡点"）；
-                                     // measured 且有卡点时必填，且不得晚于 asOfRef 所指时刻
+                                     // measured 且有卡点时必填，且不得晚于 asOf 时刻
   oldestBlockedRef: string | null;   // 该卡点对象的证据引用，仅 ref，不含 PII；
                                      // 与 oldestBlockedSince 同 null / 同非 null
   needsHuman: number | null;         // team/node 级聚合，无个人排名
@@ -197,7 +198,8 @@ type MainlineDescriptor = {
   provenance: string;
   getAccess: ExtensionAccessProbe;   // 复用现有 2500ms 超时包装
   buildMainline(input: { workspace: WorkspaceLike; english: boolean }): Promise<{
-    asOfRef: string;
+    asOf: string;       // ISO-8601 数据快照时刻（可计算锚点：时长/新鲜度均以此为基准）
+    asOfBasisRef?: string; // 该快照的证据引用（可选，仅 ref）
     nodes: ReadonlyArray<MainlineNode>;   // 建议 4–8 节点
   }>;
 };
