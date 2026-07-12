@@ -149,6 +149,37 @@ describe("LLM intelligence v3 contracts", () => {
     expect(receipt.selectedContextStub.selectedEvidenceRefs).toEqual([]);
   });
 
+  it("keeps a blocked evidence marker terminal during projection", () => {
+    const receipt = projectRichLocalContextBundle({
+      bundle: {
+        bundleId: "bundle-terminal-block",
+        createdAt: "2026-07-12T00:00:00.000Z",
+        origin: "local_private",
+        policySnapshotHash: "policy-blocked",
+        objectRef: { objectType: "opportunity", objectId: "opp-blocked" },
+        localContextRefs: [
+          {
+            refId: "blocked-evidence",
+            kind: "source_summary",
+            sourceHash: "blocked-hash",
+            derivedSummary: "Blocked evidence must never be projected.",
+            privacyClass: "blocked",
+          },
+        ],
+        missingEvidence: [],
+        redactionStatus: "redacted",
+        rawContentIncluded: false,
+      },
+      selectedEvidenceRefs: ["blocked-evidence"],
+      tokenBudget: { maxInputTokens: 1000, maxOutputTokens: 200 },
+      receiptId: "projection-terminal-block",
+    });
+
+    expect(receipt.remoteSafe).toBe(false);
+    expect(receipt.selectedContextStub.privacyClass).toBe("blocked");
+    expect(receipt.selectedContextStub.selectedEvidenceRefs).toEqual([]);
+  });
+
   it("rejects raw prompt-shaped fields in rich local bundle payloads", () => {
     expect(() =>
       richLocalContextBundleSchema.parse({

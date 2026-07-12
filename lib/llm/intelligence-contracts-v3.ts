@@ -263,7 +263,10 @@ export function projectRichLocalContextBundle(input: {
   const remoteSafe =
     bundle.rawContentIncluded === false &&
     droppedEvidenceRefs.length === 0 &&
-    selectedRefs.every((ref) => ref.privacyClass !== "private_runtime");
+    selectedRefs.every(
+      (ref) =>
+        ref.privacyClass !== "private_runtime" && ref.privacyClass !== "blocked",
+    );
 
   const selectedContextStub: SelectedContextStub = selectedContextStubSchema.parse({
     objectRef: bundle.objectRef,
