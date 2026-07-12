@@ -12,6 +12,10 @@ import {
   canAccessTenantHealthWorkspace,
   isHelmReservedWorkspace,
 } from "@/lib/workspace-identity";
+import {
+  parseShellChromeProfiles,
+  type ShellChromeProfile,
+} from "@/lib/shell/shell-chrome";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 import { DatabaseConnectionBanner } from "@/components/shared/database-connection-banner";
 
@@ -40,6 +44,7 @@ export default async function WorkspaceLayout({
         navExtensionClusters: Awaited<
           ReturnType<typeof resolveWorkspaceNavExtensions>
         >["clusters"];
+        shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
       }
     | null = null;
   let databaseErrorMessage: string | null = null;
@@ -81,6 +86,7 @@ export default async function WorkspaceLayout({
       alerts: layoutData.alerts,
       quickCreateData: layoutData.quickCreateData,
       navExtensionClusters: navExtensions.clusters,
+      shellChromeProfiles: parseShellChromeProfiles(workspace.configuration),
     };
   } catch (error) {
     // 检查是否是数据库连接错误
