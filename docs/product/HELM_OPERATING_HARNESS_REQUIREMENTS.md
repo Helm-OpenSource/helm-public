@@ -158,6 +158,8 @@ linker、judgement fusion、expert/context/retrieval policy、skill binding 和 
 P1 revision 状态只有 `seed | shadow_candidate | killed`，不表达 active 或 auto-promoted。
 `shadow_candidate` 必须绑定 parent、fallback 和 rollback manifest；所有 revision 仍然
 `ownerReviewRequired: true` 且 `promotionTriggered: false`。
+`parentRevisionId=null` 的 seed 是 owner 明确建立并冻结的 trust root；public validator 只能校验其
+内容绑定与后续谱系，不能替代 owner 身份、签名或外部 registry 对 seed 真实性的确认。
 
 Shadow evaluator 直接复用 `expert-capability` 的 pre-registration、A/B 隔离、held-out
 attempt budget 与 baseline 裁决，并复用 P0 七项指标。任一 source-class gate、protected

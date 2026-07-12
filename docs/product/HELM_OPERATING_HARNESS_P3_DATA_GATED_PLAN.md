@@ -43,6 +43,14 @@ npm run eval:operating-harness-p3-readiness
 npm run eval:operating-harness-p3-readiness -- /path/to/evidence.json
 ```
 
+CI 或人工启动门若要求当前证据必须达到设计评审条件，应显式使用：
+
+```bash
+npm run eval:operating-harness-p3-readiness -- /path/to/evidence.json --require-ready
+```
+
+默认命令允许以退出码 0 诚实报告 `not_ready`；`--require-ready` 才会在未达门时返回非零退出码。
+
 消费者必须使用 report-binding validator 将报告重新从 evidence 计算；单独验证一份自洽 report
 不足以证明 readiness。
 
@@ -69,24 +77,26 @@ legacy derived snapshot。
 | Gate | Required evidence |
 | --- | --- |
 | Prerequisites | P0、P1、P2 均已 merge 到 main，带 gate ref/hash |
-| Owner attestation | owner-review receipt + registry snapshot hash + trusted ordering timestamp |
+| Owner attestation | owner-review receipt + registry snapshot hash；签字时间不得早于完整窗口结束，也不得晚于 `asOf` |
 | Qualifying runs | 至少 5 个；均为 fresh-heldout、weakness replayed、owner-reviewed candidate |
 | Independent B | 至少 5 个不同 set ref，且至少 5 个不同 content hash |
 | Revisions | 至少 3 个 candidate revision |
-| Business objects | 至少 3 个 object kind |
+| Business objects | 至少 3 个 object kind，且每种至少出现在 2 个独立 qualifying run |
 | Source families | 至少 2 个；客户 fleet 与 OSS 为 0 |
 | Operational de-identified | 至少 3 个去人名 self-dogfood / promoted operational run |
 | Recent stability | 最近 3 个 run 全部通过，且每个 held-out lift `>= 0.05` |
-| Calibration | qualifying sample 总数 `>= 100`，每个 run `>= 10`，weighted ECE `<= 0.10` |
+| Calibration | qualifying sample 总数 `>= 100`，每个 run `>= 10`；weighted ECE 与任一 run ECE 均 `<= 0.10` |
 | Evidence | 所有窗口 run 的最低 evidence coverage `>= 0.90` |
 | Human review | 所有窗口 run 的 reviewer completeness `= 1.0` |
 | Boundaries | boundary incident 总数 `= 0`，protected mutation `= 0`，production authority `= 0` |
-| Feedback | eligible edit/reject `>= 30`，promoted eval cases `>= 10`，conversion `>= 0.30` |
+| Feedback | eligible edit/reject `>= 30`，至少 2 个独立 feedback receipt，promoted eval cases `>= 10`，conversion `>= 0.30` |
 | De-identification | 至少 3 个 scanner clean + human signoff + performance wall promotion receipt |
-| Recovery | 至少 2 个不同 candidate 的 kill-switch + exact fallback restore + owner-reviewed drill |
+| Recovery | 至少 2 个 qualifying candidate 的窗口内演练；kill-switch + 非自身 fallback + exact restore + owner review |
 
-Rejected/inconclusive run 不能用大样本稀释 calibration；重复 receipt、重复 signoff、同一 owner review
-跨 run/rollback/attestation 复用均失败。窗口必须完整，run 时间必须在窗口内，窗口不能晚于 `asOf`。
+Rejected/inconclusive run 不能用大样本稀释 calibration；qualifying run 之间也不能互相稀释超限 ECE。
+重复 receipt、重复 signoff，以及同一回执跨 run、rollback、attestation、feedback 或 promotion 复用均失败。
+同一 held-out ref 绑定多个 hash、或同一 hash 换 ref，同样失败。窗口必须完整，run 与 rollback drill 时间
+必须在窗口内，窗口不能晚于 `asOf`。
 
 ## 4. 不可改变的架构约束
 
