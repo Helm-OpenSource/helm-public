@@ -9,6 +9,15 @@ export function canReviewWorkspaceGovernedActions(role: WorkspaceRole | null | u
   return workspaceRoleHasCapability(role, WORKSPACE_CAPABILITIES.REVIEW_GOVERNED_ACTIONS);
 }
 
+export function canPromoteWorkspaceGovernedCandidates(
+  role: WorkspaceRole | null | undefined,
+) {
+  return workspaceRoleHasCapability(
+    role,
+    WORKSPACE_CAPABILITIES.PROMOTE_GOVERNED_CANDIDATES,
+  );
+}
+
 export function getGovernedActionManagementDeniedMessage(english: boolean) {
   return english
     ? "Only owner, admin, or operator can create or update governed workspace actions."
@@ -19,4 +28,10 @@ export function getGovernedActionReviewDeniedMessage(english: boolean) {
   return english
     ? "Only owner, admin, operator, or reviewer can review governed workspace actions."
     : "只有组织负责人、管理员、运营角色或复核人可以复核受治理的工作区动作。";
+}
+
+export function getGovernedCandidatePromotionDeniedMessage(english: boolean) {
+  return english
+    ? "Only owner, admin, or operator can promote a confirmed governed candidate into the internal task approval chain."
+    : "只有组织负责人、管理员或运营角色可以把已确认候选晋级到内部任务审批链。";
 }

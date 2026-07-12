@@ -7,6 +7,12 @@ import {
 
 import { getCurrentAuditTraceContext } from "@/lib/audit/trace-context";
 import { db } from "@/lib/db";
+import {
+  GOVERNED_CANDIDATE_ARTIFACT_SCHEMA_VERSION,
+  GOVERNED_CANDIDATE_ARTIFACT_TYPE,
+  GOVERNED_CANDIDATE_REVIEW_POSTURE,
+  governedJudgementArtifactSchema,
+} from "@/lib/governed-intelligence/governed-candidate-artifact";
 import { serializeCandidateCanonicalJson } from "@/lib/llm/candidate-canonical-json";
 import {
   capabilityGrantSchema,
@@ -21,8 +27,6 @@ export const GOVERNED_CANDIDATE_MATERIALIZER_PRINCIPAL =
   "runtime:governed-candidate-materializer";
 export const GOVERNED_CANDIDATE_MATERIALIZE_CAPABILITY =
   "materialize_governed_candidate_draft";
-const ARTIFACT_TYPE = "governed_judgement_candidate.json";
-const REVIEW_POSTURE = "governed_intelligence_candidate_review_required";
 const AUDIT_ACTION = "GOVERNED_INTELLIGENCE_CANDIDATE_MATERIALIZED";
 const UNSAFE_PERSISTED_TEXT_PATTERN =
   /\bhttps?:\/\/|\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/|\b(?:password|secret|token|api[_-]?key|credential)\s*[:=]/i;
@@ -52,8 +56,8 @@ function buildPersistenceProjection(
   candidate: GovernedJudgementCandidate,
 ): CandidatePersistenceProjection {
   return {
-    artifactsJson: jsonStringify({
-      schemaVersion: "helm.governed-judgement-artifact/v1",
+    artifactsJson: jsonStringify(governedJudgementArtifactSchema.parse({
+      schemaVersion: GOVERNED_CANDIDATE_ARTIFACT_SCHEMA_VERSION,
       candidateId: candidate.candidateId,
       sourceCandidateRef: candidate.sourceCandidateRef,
       sourceCandidateContentHash: candidate.sourceCandidateContentHash,
@@ -68,7 +72,7 @@ function buildPersistenceProjection(
       promotionAllowed: false,
       externalEffectAllowed: false,
       contentHash: candidate.contentHash,
-    }),
+    })),
     evidenceRefs: jsonStringify(candidate.verifiedEvidenceRefs),
     sourceProvenance: jsonStringify({
       sourceCandidateRef: candidate.sourceCandidateRef,
@@ -145,10 +149,10 @@ async function resolveExistingMaterialization(
   });
   if (
     existing.workspaceId !== input.workspaceId ||
-    existing.artifactType !== ARTIFACT_TYPE ||
+    existing.artifactType !== GOVERNED_CANDIDATE_ARTIFACT_TYPE ||
     existing.status !== ArtifactBundleStatus.DRAFT ||
     existing.systemOfRecordWrite !== false ||
-    existing.reviewPosture !== REVIEW_POSTURE ||
+    existing.reviewPosture !== GOVERNED_CANDIDATE_REVIEW_POSTURE ||
     existing.artifactsJson !== input.projection.artifactsJson ||
     existing.evidenceRefs !== input.projection.evidenceRefs ||
     existing.sourceProvenance !== input.projection.sourceProvenance ||
@@ -180,7 +184,7 @@ async function materializeOnce(input: {
       data: {
         id: input.artifactBundleId,
         workspaceId: input.workspaceId,
-        artifactType: ARTIFACT_TYPE,
+        artifactType: GOVERNED_CANDIDATE_ARTIFACT_TYPE,
         title: "Governed judgement candidate",
         status: ArtifactBundleStatus.DRAFT,
         systemOfRecordWrite: false,
@@ -191,7 +195,7 @@ async function materializeOnce(input: {
         sourceProvenance: input.projection.sourceProvenance,
         confidence: input.candidate.proposal.confidence,
         openQuestions: input.projection.openQuestions,
-        reviewPosture: REVIEW_POSTURE,
+        reviewPosture: GOVERNED_CANDIDATE_REVIEW_POSTURE,
       },
     });
     const review = await tx.artifactReview.create({

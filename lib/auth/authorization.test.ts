@@ -120,6 +120,34 @@ describe("workspace capability matrix", () => {
     ).toBe(false);
   });
 
+  it("keeps governed candidate promotion on operator-class roles", () => {
+    for (const role of [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.ADMIN,
+      WorkspaceRole.OPERATOR,
+    ]) {
+      expect(
+        workspaceRoleHasCapability(
+          role,
+          WORKSPACE_CAPABILITIES.PROMOTE_GOVERNED_CANDIDATES,
+        ),
+      ).toBe(true);
+    }
+
+    for (const role of [
+      WorkspaceRole.BILLING_ADMIN,
+      WorkspaceRole.REVIEWER,
+      WorkspaceRole.MEMBER,
+    ]) {
+      expect(
+        workspaceRoleHasCapability(
+          role,
+          WORKSPACE_CAPABILITIES.PROMOTE_GOVERNED_CANDIDATES,
+        ),
+      ).toBe(false);
+    }
+  });
+
   it("keeps insight governance on the operator-class surface", () => {
     for (const role of [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.OPERATOR]) {
       expect(

@@ -3,6 +3,7 @@ import { WorkspaceCapability, WORKSPACE_CAPABILITIES, workspaceRoleHasCapability
 import {
   getGovernedActionManagementDeniedMessage,
   getGovernedActionReviewDeniedMessage,
+  getGovernedCandidatePromotionDeniedMessage,
 } from "@/lib/auth/action-governance";
 import { getCaptureManagementDeniedMessage } from "@/lib/auth/capture-runtime-governance";
 import {
@@ -267,6 +268,21 @@ export async function assertWorkspaceGovernedActionReviewServiceAccess(input: {
     actorType: input.actorType,
     capability: WORKSPACE_CAPABILITIES.REVIEW_GOVERNED_ACTIONS,
     deniedMessage: getGovernedActionReviewDeniedMessage(input.english),
+  });
+}
+
+export async function assertWorkspaceGovernedCandidatePromotionServiceAccess(input: {
+  workspaceId: string;
+  userId?: string | null;
+  actorType?: ActorType | null;
+  english: boolean;
+}) {
+  return assertWorkspaceUserCapability({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    actorType: input.actorType,
+    capability: WORKSPACE_CAPABILITIES.PROMOTE_GOVERNED_CANDIDATES,
+    deniedMessage: getGovernedCandidatePromotionDeniedMessage(input.english),
   });
 }
 
