@@ -213,6 +213,64 @@ describe("check-llm-candidate-boundaries", () => {
     expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-F")).toBe(true);
   });
 
+  it("rejects passing a private context build receipt into a prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { PrivateContextBuildReceipt } from "@/lib/llm/governed-runtime-contracts";
+        export function buildPrompt(receipt: PrivateContextBuildReceipt) {
+          return { userPrompt: JSON.stringify(receipt) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-H")).toBe(true);
+  });
+
+  it("rejects passing a context egress decision receipt into a prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { ContextEgressDecisionReceipt } from "@/lib/llm/governed-runtime-contracts";
+        export function buildPrompt(receipt: ContextEgressDecisionReceipt) {
+          return { userPrompt: JSON.stringify(receipt) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-H")).toBe(true);
+  });
+
+  it("rejects passing a private context receipt through a system prompt sink", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { ContextEgressDecisionReceipt } from "@/lib/llm/governed-runtime-contracts";
+        export function renderPrompt(receipt: ContextEgressDecisionReceipt) {
+          return { systemPrompt: JSON.stringify(receipt) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-H")).toBe(true);
+  });
+
+  it("allows private context receipts to be serialized for local audit storage", () => {
+    writeFile(
+      "lib/llm/example.ts",
+      `
+        import type { PrivateContextBuildReceipt } from "@/lib/llm/governed-runtime-contracts";
+        export function serializeAuditReceipt(receipt: PrivateContextBuildReceipt) {
+          return JSON.stringify(receipt);
+        }
+      `,
+    );
+    expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
+  });
+
   it("allows projected v3 stubs to enter prompt builders", () => {
     writeFile(
       "lib/llm-workflows/example.ts",

@@ -19,7 +19,7 @@ const TEST_FILE_PATTERN = /\.(test|spec)\.tsx?$/;
 const BYPASS_TOKEN = "@bypass-llm-candidate-boundary";
 
 const CANDIDATE_AWARE_PATTERN =
-  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate|ModelCapabilityProfile|RichLocalContextBundle|ContextProjectionReceipt|JudgementProposalBundle|SourceToSignalProposalBundle|LLMTaskTrajectoryReceipt)\b/;
+  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate|ModelCapabilityProfile|RichLocalContextBundle|ContextProjectionReceipt|JudgementProposalBundle|SourceToSignalProposalBundle|LLMTaskTrajectoryReceipt|PrivateContextAdapterManifest|PrivateContextBuildReceipt|ContextEgressDecisionReceipt|RuntimeIsolationProfile|CapabilityGrant)\b/;
 const UNSAFE_REVIEW_STATE_PATTERN =
   /reviewState\s*:\s*["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
 const UNSAFE_STATE_ENUM_DEFINITION_PATTERN =
@@ -67,6 +67,14 @@ const RICH_CONTEXT_SINK_PATTERN =
 const CONTEXT_PROJECTION_RECEIPT_PATTERN = /\bContextProjectionReceipt\b/;
 const CONTEXT_PROJECTION_RECEIPT_SINK_PATTERN =
   /JSON\.stringify\(\s*(?:contextProjectionReceipt|projectionReceipt|receipt)\b|\buserPrompt\s*:\s*(?:contextProjectionReceipt|projectionReceipt|receipt)\b/i;
+
+// v4 rule H: private adapter build and egress receipts are audit/conformance
+// records. A prompt may consume only the already validated SelectedContextStub,
+// never these receipts or their local/private summaries.
+const PRIVATE_CONTEXT_RECEIPT_PATTERN =
+  /\b(PrivateContextBuildReceipt|ContextEgressDecisionReceipt|privateContextBuildReceipt|contextEgressDecisionReceipt)\b/;
+const PRIVATE_CONTEXT_RECEIPT_SINK_PATTERN =
+  /\b(?:userPrompt|systemPrompt)\s*:|executeLLMTask|(?:build|render|create|compose)\w*(?:Prompt|ReviewPrompt)/;
 
 const V3_MULTI_PASS_WORKFLOW_PATTERN = /\bexecuteMultiPassReview\b/;
 const V3_MULTI_PASS_REQUIRED_MARKERS = [
@@ -241,6 +249,18 @@ export function runLlmCandidateBoundaryCheck(
         rule: "LLM-CANDIDATE-F",
         detail:
           "Context projection receipts are audit-only; prompt builders may consume only their validated SelectedContextStub projection.",
+      });
+    }
+
+    if (
+      PRIVATE_CONTEXT_RECEIPT_PATTERN.test(content) &&
+      PRIVATE_CONTEXT_RECEIPT_SINK_PATTERN.test(content)
+    ) {
+      violations.push({
+        file: repoRelative,
+        rule: "LLM-CANDIDATE-H",
+        detail:
+          "Private context build and egress receipts are audit-only; remote prompts may consume only the validated SelectedContextStub projection.",
       });
     }
 
