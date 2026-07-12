@@ -29,6 +29,8 @@ export type ConflictReceipt = {
   reason:
     | "binding_provider_not_found"
     | "binding_provider_not_eligible"
+    | "binding_surface_mismatch"
+    | "duplicate_provider_id"
     | "multiple_top_recommendations_without_binding";
   detail: string;
 };
@@ -42,7 +44,12 @@ export type ProviderSelection = {
 };
 
 export function isEligible(candidate: ProviderCandidate): boolean {
-  return candidate.enabled && candidate.accessOk && candidate.contractCompatible;
+  return (
+    candidate.enabled &&
+    candidate.accessOk &&
+    candidate.contractCompatible &&
+    Number.isFinite(candidate.priority)
+  );
 }
 
 export function selectSingleWinner(input: {
@@ -50,7 +57,25 @@ export function selectSingleWinner(input: {
   candidates: ReadonlyArray<ProviderCandidate>;
   binding: SurfaceBinding | null;
 }): ProviderSelection {
-  const { surfaceKey, candidates, binding } = input;
+  const { surfaceKey, binding } = input;
+  // 重复 providerId 属注册面缺陷：整组重复者全部剔除并出回执，不隐式取先者。
+  const idCounts = new Map<string, number>();
+  for (const c of input.candidates) {
+    idCounts.set(c.providerId, (idCounts.get(c.providerId) ?? 0) + 1);
+  }
+  const duplicateIds = [...idCounts.entries()]
+    .filter(([, n]) => n > 1)
+    .map(([id]) => id);
+  const candidates = input.candidates.filter(
+    (c) => !duplicateIds.includes(c.providerId),
+  );
+  const duplicateReceipt: ConflictReceipt | null = duplicateIds.length
+    ? {
+        surfaceKey,
+        reason: "duplicate_provider_id",
+        detail: `duplicates=${duplicateIds.join(",")}`,
+      }
+    : null;
   const eligible = candidates.filter(isEligible);
   const recommendations = [...eligible]
     .sort(
@@ -59,19 +84,27 @@ export function selectSingleWinner(input: {
     )
     .map((c) => c.providerId);
 
-  // 诊断信号（不影响选择结果）：无绑定时若存在并列最高推荐，出回执提示需要显式绑定。
-  let conflictReceipt: ConflictReceipt | null = null;
+  // 诊断信号（不影响选择结果）：无绑定/绑定错 surface 时回 Core，并按情况出回执。
   if (!binding || binding.surfaceKey !== surfaceKey) {
-    const topPriority = eligible.length
-      ? Math.max(...eligible.map((c) => c.priority))
-      : null;
-    const tied = eligible.filter((c) => c.priority === topPriority);
-    if (tied.length > 1) {
+    let conflictReceipt: ConflictReceipt | null = duplicateReceipt;
+    if (binding && binding.surfaceKey !== surfaceKey) {
       conflictReceipt = {
         surfaceKey,
-        reason: "multiple_top_recommendations_without_binding",
-        detail: `candidates=${tied.map((c) => c.providerId).join(",")}`,
+        reason: "binding_surface_mismatch",
+        detail: `binding.surfaceKey=${binding.surfaceKey} bound=${binding.providerId}`,
       };
+    } else if (!conflictReceipt) {
+      const topPriority = eligible.length
+        ? Math.max(...eligible.map((c) => c.priority))
+        : null;
+      const tied = eligible.filter((c) => c.priority === topPriority);
+      if (tied.length > 1) {
+        conflictReceipt = {
+          surfaceKey,
+          reason: "multiple_top_recommendations_without_binding",
+          detail: `candidates=${tied.map((c) => c.providerId).join(",")}`,
+        };
+      }
     }
     return {
       winner: "core_default",

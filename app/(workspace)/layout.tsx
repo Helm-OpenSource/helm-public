@@ -13,7 +13,6 @@ import {
   isHelmReservedWorkspace,
 } from "@/lib/workspace-identity";
 import { getWorkspaceRolePresetDefinition } from "@/lib/definitions/workspace-role-preset-catalog";
-import { resolveRoleLens, type RoleLens } from "@/lib/shell/role-home";
 import {
   parseShellChromeProfiles,
   type ShellChromeProfile,
@@ -47,7 +46,7 @@ export default async function WorkspaceLayout({
           ReturnType<typeof resolveWorkspaceNavExtensions>
         >["clusters"];
         shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
-        roleLens: RoleLens;
+        basePresetKey: string | null;
       }
     | null = null;
   let databaseErrorMessage: string | null = null;
@@ -90,13 +89,12 @@ export default async function WorkspaceLayout({
       quickCreateData: layoutData.quickCreateData,
       navExtensionClusters: navExtensions.clusters,
       shellChromeProfiles: parseShellChromeProfiles(workspace.configuration),
-      // 角色 lens 仅用于导航目录（授权先行，导航不授权）；解析失败落 GENERIC。
-      roleLens: resolveRoleLens(
+      // basePresetKey 仅用于导航目录（授权先行，导航不授权）；解析失败 → null → GENERIC。
+      basePresetKey:
         getWorkspaceRolePresetDefinition(
           membership.rolePresetKey,
           workspace.configuration,
         )?.basePresetKey ?? null,
-      ),
     };
   } catch (error) {
     // 检查是否是数据库连接错误

@@ -18,6 +18,7 @@ export function LegacyHomeView({
   pageData,
   viewModel,
   demoQuickPathToMeetings,
+  connectorSheet,
 }: {
   pageData: Pick<
     DashboardPageData,
@@ -31,6 +32,8 @@ export function LegacyHomeView({
     | "founderProactiveFlow"
   >;
   demoQuickPathToMeetings: { href: string; label: string } | null;
+  /** 原 page 中 ConnectorBindingSuccessSheet 位于根节点内首位；层级保持原样 */
+  connectorSheet: React.ReactNode;
 }) {
   const { english, pageStory, tenantResourceImpactReadout } = pageData;
   const {
@@ -42,6 +45,8 @@ export function LegacyHomeView({
 
   return (
     <div className="space-y-6" data-source-page="/dashboard">
+      {connectorSheet}
+
       <PageHeader
         eyebrow={pageStory.eyebrow}
         title={

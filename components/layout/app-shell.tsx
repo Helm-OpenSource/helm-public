@@ -6,7 +6,6 @@ import { Topbar } from "@/components/layout/topbar";
 import type { DemoMode } from "@/lib/demo/demo-modes";
 import type { WorkspaceNavExtensionCluster } from "@/lib/extensions/registry";
 import type { UiLocale } from "@/lib/i18n/config";
-import type { RoleLens } from "@/lib/shell/role-home";
 import type { ShellChromeProfile } from "@/lib/shell/shell-chrome";
 import type { WorkspaceFeatureFlags } from "@/lib/workspace-ops";
 
@@ -45,7 +44,7 @@ type AppShellProps = {
   };
   navExtensionClusters: ReadonlyArray<WorkspaceNavExtensionCluster>;
   shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
-  roleLens: RoleLens;
+  basePresetKey: string | null;
   children: React.ReactNode;
 };
 
@@ -67,7 +66,7 @@ export function AppShell({
   quickCreateData,
   navExtensionClusters,
   shellChromeProfiles,
-  roleLens,
+  basePresetKey,
   children,
 }: AppShellProps) {
   const resolvedDemoMode = demoMode ?? "default";
@@ -94,7 +93,7 @@ export function AppShell({
             workspaceName={workspaceName}
             pendingApprovals={pendingApprovals}
             navExtensionClusters={navExtensionClusters}
-            roleLens={roleLens}
+            basePresetKey={basePresetKey}
           />
         ) : (
           <ShellChromeGate profiles={shellChromeProfiles}>
@@ -102,7 +101,7 @@ export function AppShell({
               workspaceName={workspaceName}
               pendingApprovals={pendingApprovals}
               navExtensionClusters={navExtensionClusters}
-              roleLens={roleLens}
+              basePresetKey={basePresetKey}
             />
           </ShellChromeGate>
         )}

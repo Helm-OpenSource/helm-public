@@ -30,7 +30,6 @@ import type { WorkspaceNavExtensionCluster } from "@/lib/extensions/registry";
 import {
   getDestinationCatalog,
   type DestinationEntry,
-  type RoleLens,
 } from "@/lib/shell/role-home";
 
 const CATALOG_ICON_BY_PREFIX: Array<[string, React.ReactNode]> = [
@@ -53,11 +52,17 @@ function catalogIcon(href: string): React.ReactNode {
   return hit ? hit[1] : <Target className="h-4 w-4" />;
 }
 
-function toNavItems(entries: ReadonlyArray<DestinationEntry>, english: boolean) {
+function toNavItems(
+  entries: ReadonlyArray<DestinationEntry>,
+  english: boolean,
+  excludeHrefs: ReadonlyArray<string> = [],
+) {
   return entries
     .filter((entry) => !entry.href.startsWith("/settings"))
+    .filter((entry) => !excludeHrefs.some((ex) => entry.href.startsWith(ex)))
     .map((entry) => ({
-      href: entry.href,
+      // pathname-only 高亮判定：导航项去掉 query（/dashboard?stay=1 → /dashboard）
+      href: entry.href.split("?")[0],
       icon: catalogIcon(entry.href),
       label: english ? entry.labelEn : entry.labelZh,
     }));
@@ -67,12 +72,12 @@ export function Sidebar({
   workspaceName,
   pendingApprovals,
   navExtensionClusters = [],
-  roleLens = "generic",
+  basePresetKey = null,
 }: {
   workspaceName: string;
   pendingApprovals: number;
   navExtensionClusters?: ReadonlyArray<WorkspaceNavExtensionCluster>;
-  roleLens?: RoleLens;
+  basePresetKey?: string | null;
 }) {
   const {
     locale,
@@ -218,11 +223,17 @@ export function Sidebar({
     },
   ];
 
-  // 控制塔模式：导航改消费角色目的地目录三层（主区/次区/收纳），
-  // 收敛固定三段陈列（蓝图批1）。navExtensionClusters/设置区不变。
+  // 控制塔模式：导航改消费逐 preset 目的地目录三层（主区/次区/收纳），
+  // 收敛固定三段陈列（蓝图批1）。navExtensionClusters/设置区不变；
+  // 收纳层与既有设置区链接去重（settingsLinks 已含 imports/diagnostics 等），
+  // 去重后为空则整段省略，避免双入口。
+  const settingsHrefs = settingsLinks.map((item) => item.href);
   const catalog = featureFlags.controlTowerHome
-    ? getDestinationCatalog(roleLens)
+    ? getDestinationCatalog(basePresetKey)
     : null;
+  const drawerItems = catalog
+    ? toNavItems(catalog.drawer, english, settingsHrefs)
+    : [];
   const renderedSections = catalog
     ? [
         {
@@ -239,11 +250,15 @@ export function Sidebar({
               },
             ]
           : []),
-        {
-          key: "drawer",
-          label: english ? "Drawer" : "收纳",
-          items: toNavItems(catalog.drawer, english),
-        },
+        ...(drawerItems.length > 0
+          ? [
+              {
+                key: "drawer",
+                label: english ? "Drawer" : "收纳",
+                items: drawerItems,
+              },
+            ]
+          : []),
       ].map((section) => ({
         ...section,
         items: section.items.map((item) => ({

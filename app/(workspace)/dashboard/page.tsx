@@ -7,6 +7,7 @@ import {
 import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
 import { getWorkspaceRolePresetDefinition } from "@/lib/definitions/workspace-role-preset-catalog";
 import { buildCoreDefaultMainline } from "@/lib/shell/operating-mainline";
+import { resolveNorthstarText } from "@/lib/shell/northstar-text";
 import { resolveRoleLens } from "@/lib/shell/role-home";
 import { loadDashboardPageData } from "@/features/dashboard/page-loader";
 import { buildDashboardViewModel } from "@/features/dashboard/view-model";
@@ -63,27 +64,27 @@ export default async function DashboardPage({
 
   if (!featureFlags.controlTowerHome) {
     return (
-      <>
-        {connectorSheet}
-        <LegacyHomeView
-          pageData={pageData}
-          viewModel={viewModel}
-          demoQuickPathToMeetings={demoQuickPathToMeetings}
-        />
-      </>
+      <LegacyHomeView
+        pageData={pageData}
+        viewModel={viewModel}
+        demoQuickPathToMeetings={demoQuickPathToMeetings}
+        connectorSheet={connectorSheet}
+      />
     );
   }
 
   // 角色 lens：授权先行（页面权限不受此影响）；custom preset 经 basePresetKey
-  // 归并；解析失败落 GENERIC（fail-safe 向低信息面）。
+  // 归并；解析失败落 GENERIC（fail-safe 向最低信息面）。
   const presetDefinition = getWorkspaceRolePresetDefinition(
     membership.rolePresetKey,
     workspace.configuration,
   );
-  const lens = resolveRoleLens(presetDefinition?.basePresetKey ?? null);
+  const basePresetKey = presetDefinition?.basePresetKey ?? null;
+  const lens = resolveRoleLens(basePresetKey);
 
-  // 主线计数语义（诚实口径）：judgement/review 取"今日排片"卡数（daily-3 模型
-  // 的真实排片数，非全量积压）；advance 尚无真实全量计数源 → pending_source。
+  // 主线计数语义（诚实口径，contract 级 countCaliber=daily_schedule）：
+  // judgement/review = home-work-entry 的今日排片数（非全量积压，UI 显式标注）；
+  // advance 尚无真实全量计数源 → pending_source，不用截断样本冒充。
   const workEntry = viewModel.dashboardHomeWorkEntry;
   const mainline = buildCoreDefaultMainline({
     asOf: new Date().toISOString(),
@@ -96,15 +97,15 @@ export default async function DashboardPage({
   });
 
   return (
-    <>
-      {connectorSheet}
-      <ControlTowerView
-        english={english}
-        lens={lens}
-        mainline={mainline}
-        viewModel={viewModel}
-        tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
-      />
-    </>
+    <ControlTowerView
+      english={english}
+      lens={lens}
+      basePresetKey={basePresetKey}
+      mainline={mainline}
+      northstarText={resolveNorthstarText(workspace.focusAreas, english)}
+      viewModel={viewModel}
+      tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
+      connectorSheet={connectorSheet}
+    />
   );
 }

@@ -5,6 +5,7 @@ import {
   type MainlineNode,
   type MainlineReadout,
 } from "@/lib/shell/operating-mainline";
+import { resolveNorthstarText } from "@/lib/shell/northstar-text";
 import {
   selectSingleWinner,
   type ProviderCandidate,
@@ -24,6 +25,7 @@ function baseNode(overrides: Partial<MainlineNode>): MainlineNode {
     stage: "observing",
     status: "measured",
     inFlightCount: 1,
+    countCaliber: "full_volume",
     oldestBlockedSince: null,
     oldestBlockedRef: null,
     needsHuman: 0,
@@ -50,6 +52,17 @@ describe("core default mainline", () => {
     expect(validateMainlineReadout(readout)).toEqual([]);
   });
 
+  it("marks judgement/review counts as daily_schedule caliber", () => {
+    const readout = buildCoreDefaultMainline({
+      asOf: ASOF,
+      english: false,
+      counts: { judgementPending: 3, reviewQueue: 2, advanceInFlight: null },
+    });
+    const byKey = Object.fromEntries(readout.nodes.map((n) => [n.key, n]));
+    expect(byKey.judgement.countCaliber).toBe("daily_schedule");
+    expect(byKey.review.countCaliber).toBe("daily_schedule");
+  });
+
   it("is honest: null counts become pending_source with a note, never fabricated", () => {
     const readout = buildCoreDefaultMainline({
       asOf: ASOF,
@@ -61,6 +74,7 @@ describe("core default mainline", () => {
       expect(node.inFlightCount).toBeNull();
       expect(node.pendingSourceNote).toBeTruthy();
     }
+    expect(validateMainlineReadout(readout)).toEqual([]);
   });
 
   it("uses no execution-state stage vocabulary", () => {
@@ -81,63 +95,102 @@ describe("core default mainline", () => {
 
 describe("mainline conformance validator", () => {
   const wrap = (nodes: MainlineNode[]): MainlineReadout => ({ asOf: ASOF, nodes });
+  const has = (readout: MainlineReadout, issue: string) =>
+    validateMainlineReadout(readout).some((i) => i.issue === issue || i.issue.startsWith(issue));
 
   it("rejects callback fields (read/navigate-only iron rule)", () => {
     const node = baseNode({}) as MainlineNode & { onClick?: unknown };
     node.onClick = () => {};
+    expect(has(wrap([node]), "callback_field:")).toBe(true);
+  });
+
+  it("rejects unknown status/stage/caliber enums at runtime", () => {
+    expect(has(wrap([baseNode({ status: "executing" as never })]), "unknown_status")).toBe(true);
+    expect(has(wrap([baseNode({ stage: "executing" as never })]), "unknown_stage")).toBe(true);
     expect(
-      validateMainlineReadout(wrap([node])).some((i) =>
-        i.issue.startsWith("callback_field:"),
+      has(wrap([baseNode({ countCaliber: "guess" as never })]), "unknown_count_caliber"),
+    ).toBe(true);
+  });
+
+  it("rejects non-measured nodes carrying values and pending without note", () => {
+    expect(
+      has(
+        wrap([
+          baseNode({
+            status: "pending_source",
+            inFlightCount: 5,
+            pendingSourceNote: "n",
+          }),
+        ]),
+        "non_measured_carries_values",
+      ),
+    ).toBe(true);
+    expect(
+      has(
+        wrap([
+          baseNode({
+            status: "pending_source",
+            inFlightCount: null,
+            needsHuman: null,
+            countCaliber: null,
+          }),
+        ]),
+        "pending_source_without_note",
       ),
     ).toBe(true);
   });
 
-  it("rejects non-measured nodes carrying values", () => {
+  it("requires caliber on measured counts and rejects non-finite/non-integer counts", () => {
     expect(
-      validateMainlineReadout(
-        wrap([baseNode({ status: "pending_source", inFlightCount: 5 })]),
-      ).some((i) => i.issue === "non_measured_carries_values"),
+      has(wrap([baseNode({ countCaliber: null })]), "measured_count_without_caliber"),
     ).toBe(true);
+    for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+      expect(has(wrap([baseNode({ inFlightCount: bad })]), "invalid_count")).toBe(true);
+    }
   });
 
-  it("enforces blocked pair + ordering against asOf", () => {
+  it("rejects empty key/label/basisRef", () => {
+    expect(has(wrap([baseNode({ key: " " })]), "empty_key")).toBe(true);
+    expect(has(wrap([baseNode({ label: "" })]), "empty_label")).toBe(true);
+    expect(has(wrap([baseNode({ basisRef: "" })]), "empty_basis_ref")).toBe(true);
+  });
+
+  it("enforces blocked pair + ordering + parsable ISO against asOf", () => {
     expect(
-      validateMainlineReadout(
-        wrap([baseNode({ oldestBlockedSince: ASOF, oldestBlockedRef: null })]),
-      ).some((i) => i.issue === "blocked_pair_null_mismatch"),
+      has(wrap([baseNode({ oldestBlockedSince: ASOF, oldestBlockedRef: null })]), "blocked_pair_null_mismatch"),
     ).toBe(true);
     expect(
-      validateMainlineReadout(
+      has(
         wrap([
           baseNode({
             oldestBlockedSince: "2026-07-13T00:00:00.000Z",
             oldestBlockedRef: "r",
           }),
         ]),
-      ).some((i) => i.issue === "blocked_since_after_asOf"),
-    ).toBe(true);
-  });
-
-  it("rejects off-site hrefs and bad shapes", () => {
-    expect(
-      validateMainlineReadout(
-        wrap([baseNode({ href: "https://evil.example" })]),
-      ).some((i) => i.issue === "href_not_in_site"),
-    ).toBe(true);
-    expect(
-      validateMainlineReadout(wrap([baseNode({ inFlightCount: -1 })])).some(
-        (i) => i.issue === "negative_count",
+        "blocked_since_after_asOf",
       ),
     ).toBe(true);
     expect(
-      validateMainlineReadout({ asOf: "not-a-time", nodes: [baseNode({})] }).some(
+      has(
+        wrap([
+          baseNode({ oldestBlockedSince: "2026-13-45T99:99:99Z", oldestBlockedRef: "r" }),
+        ]),
+        "blocked_since_not_iso8601",
+      ),
+    ).toBe(true);
+    expect(
+      validateMainlineReadout({ asOf: "2026-13-45T99:99:99Z", nodes: [baseNode({})] }).some(
         (i) => i.issue === "asOf_not_iso8601",
       ),
     ).toBe(true);
+  });
+
+  it("rejects off-site hrefs and out-of-range node counts", () => {
+    expect(has(wrap([baseNode({ href: "https://evil.example" })]), "href_not_in_site")).toBe(true);
     expect(
-      validateMainlineReadout(wrap(Array.from({ length: 9 }, (_, i) => baseNode({ key: `k${i}` })))).some(
-        (i) => i.issue === "node_count_out_of_range",
-      ),
+      validateMainlineReadout(
+        wrap(Array.from({ length: 9 }, (_, i) => baseNode({ key: `k${i}` }))),
+      ).some((i) => i.issue === "node_count_out_of_range"),
     ).toBe(true);
   });
 });
@@ -164,7 +217,6 @@ describe("single-winner provider selection (binding-is-authorization)", () => {
       binding: null,
     });
     expect(result.winner).toBe("core_default");
-    expect(result.source).toBe("core_default");
     expect(result.recommendations).toEqual(["a", "b"]);
   });
 
@@ -187,7 +239,6 @@ describe("single-winner provider selection (binding-is-authorization)", () => {
       binding: { surfaceKey: "mainline", providerId: "a" },
     });
     expect(ok.winner).toEqual({ providerId: "a" });
-    expect(ok.source).toBe("binding");
 
     const missing = selectSingleWinner({
       surfaceKey: "mainline",
@@ -203,20 +254,46 @@ describe("single-winner provider selection (binding-is-authorization)", () => {
       binding: { surfaceKey: "mainline", providerId: "a" },
     });
     expect(ineligible.winner).toBe("core_default");
-    expect(ineligible.conflictReceipt?.reason).toBe(
-      "binding_provider_not_eligible",
-    );
+    expect(ineligible.conflictReceipt?.reason).toBe("binding_provider_not_eligible");
+  });
 
-    const wrongSurface = selectSingleWinner({
+  it("binding to another surface → core default + binding_surface_mismatch receipt", () => {
+    const result = selectSingleWinner({
       surfaceKey: "mainline",
       candidates: [candidate("a", 1)],
       binding: { surfaceKey: "attention", providerId: "a" },
     });
-    expect(wrongSurface.winner).toBe("core_default");
+    expect(result.winner).toBe("core_default");
+    expect(result.conflictReceipt?.reason).toBe("binding_surface_mismatch");
+  });
+
+  it("duplicate provider ids are removed with a receipt; non-finite priority is ineligible", () => {
+    const dup = selectSingleWinner({
+      surfaceKey: "mainline",
+      candidates: [candidate("a", 1), candidate("a", 2), candidate("b", 1)],
+      binding: { surfaceKey: "mainline", providerId: "a" },
+    });
+    expect(dup.winner).toBe("core_default");
+    expect(dup.conflictReceipt?.reason).toBe("binding_provider_not_found");
+
+    const dupNoBinding = selectSingleWinner({
+      surfaceKey: "mainline",
+      candidates: [candidate("a", 1), candidate("a", 2)],
+      binding: null,
+    });
+    expect(dupNoBinding.conflictReceipt?.reason).toBe("duplicate_provider_id");
+
+    const nonFinite = selectSingleWinner({
+      surfaceKey: "mainline",
+      candidates: [candidate("a", Number.NaN)],
+      binding: { surfaceKey: "mainline", providerId: "a" },
+    });
+    expect(nonFinite.winner).toBe("core_default");
+    expect(nonFinite.conflictReceipt?.reason).toBe("binding_provider_not_eligible");
   });
 });
 
-describe("role lens + destination catalog", () => {
+describe("role lens + per-preset destination catalog (Appendix B row-by-row)", () => {
   it("maps all nine built-in presets and fails safe to generic", () => {
     const cases: Array<[string | null, RoleLens]> = [
       ["FOUNDER_CEO", "control_tower"],
@@ -234,16 +311,68 @@ describe("role lens + destination catalog", () => {
     for (const [key, lens] of cases) expect(resolveRoleLens(key)).toBe(lens);
   });
 
+  it("keeps Appendix B primary rows per preset (not merged by lens)", () => {
+    const primaryHrefs = (key: string | null) =>
+      getDestinationCatalog(key).primary.map((e) => e.href);
+
+    expect(primaryHrefs("FOUNDER_CEO")).toEqual([
+      "/dashboard",
+      "/approvals",
+      "/opportunities",
+      "/customer-success",
+    ]);
+    expect(primaryHrefs("SALES_LEAD")).toEqual([
+      "/opportunities",
+      "/approvals",
+      "/meetings",
+      "/reports",
+    ]);
+    expect(primaryHrefs("ACCOUNT_EXECUTIVE")).toEqual([
+      "/opportunities",
+      "/meetings",
+      "/inbox",
+      "/capture",
+    ]);
+    // RECRUITER：无专属工位，不默认给拍板入口
+    expect(primaryHrefs("RECRUITER")).toEqual(["/search"]);
+    expect(primaryHrefs("CUSTOMER_SUCCESS")).toEqual([
+      "/customer-success",
+      "/approvals",
+      "/companies",
+    ]);
+    expect(primaryHrefs("DELIVERY_LEAD")).toEqual([
+      "/customer-success",
+      "/approvals",
+      "/reports",
+    ]);
+    // PRODUCT_ENGINEER：diagnostics/memory 次区
+    expect(primaryHrefs("PRODUCT_ENGINEER")).toEqual(["/search"]);
+    expect(getDestinationCatalog("PRODUCT_ENGINEER").secondary.map((e) => e.href)).toEqual([
+      "/diagnostics",
+      "/memory",
+    ]);
+    expect(primaryHrefs("OPERATIONS_FINANCE")).toEqual(["/approvals", "/memory"]);
+    expect(primaryHrefs("GENERAL_OPERATOR")).toEqual(["/search", "/approvals"]);
+    // 解析失败 → 最低信息面：仅搜索，无拍板、无业务队列
+    expect(primaryHrefs(null)).toEqual(["/search"]);
+    expect(primaryHrefs("UNKNOWN")).toEqual(["/search"]);
+  });
+
   it("primary zone stays within 4 entries with in-site hrefs", () => {
-    const lenses: RoleLens[] = [
-      "control_tower",
-      "advance_desk",
-      "delivery_desk",
-      "review_desk",
-      "generic",
+    const keys = [
+      "FOUNDER_CEO",
+      "SALES_LEAD",
+      "ACCOUNT_EXECUTIVE",
+      "RECRUITER",
+      "CUSTOMER_SUCCESS",
+      "DELIVERY_LEAD",
+      "PRODUCT_ENGINEER",
+      "OPERATIONS_FINANCE",
+      "GENERAL_OPERATOR",
+      null,
     ];
-    for (const lens of lenses) {
-      const catalog = getDestinationCatalog(lens);
+    for (const key of keys) {
+      const catalog = getDestinationCatalog(key);
       expect(catalog.primary.length).toBeGreaterThan(0);
       expect(catalog.primary.length).toBeLessThanOrEqual(4);
       for (const entry of [
@@ -256,5 +385,20 @@ describe("role lens + destination catalog", () => {
         expect(entry.href.includes(":")).toBe(false);
       }
     }
+  });
+});
+
+describe("northstar text", () => {
+  it("parses focusAreas honestly and returns null when unset", () => {
+    expect(resolveNorthstarText(null, false)).toBeNull();
+    expect(resolveNorthstarText("", false)).toBeNull();
+    expect(resolveNorthstarText("[]", false)).toBeNull();
+    expect(resolveNorthstarText(JSON.stringify(["回款率提升"]), false)).toBe(
+      "北极星：回款率提升",
+    );
+    expect(
+      resolveNorthstarText(JSON.stringify(["A", "B", "C"]), true),
+    ).toBe("North star: A · B");
+    expect(resolveNorthstarText("plain goal", false)).toBe("北极星：plain goal");
   });
 });

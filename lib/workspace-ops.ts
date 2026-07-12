@@ -36,8 +36,8 @@ export function parseWorkspaceFeatureFlags(raw: string | null | undefined): Work
     evolutionSignals: parsed?.evolutionSignals ?? defaultWorkspaceFeatureFlags.evolutionSignals,
     swarmReadOnlyWorkers:
       parsed?.swarmReadOnlyWorkers ?? defaultWorkspaceFeatureFlags.swarmReadOnlyWorkers,
-    controlTowerHome:
-      parsed?.controlTowerHome ?? defaultWorkspaceFeatureFlags.controlTowerHome,
+    // 回滚不变量：仅字面 true 开启控制塔；"true"/1 等非法 truthy 值一律回旧版视图。
+    controlTowerHome: parsed?.controlTowerHome === true,
   };
 }
 

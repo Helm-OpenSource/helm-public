@@ -56,6 +56,21 @@ describe("workspace ops", () => {
       swarmReadOnlyWorkers: true,
     });
   });
+
+  it("controlTowerHome only accepts literal true (rollback invariant)", () => {
+    expect(parseWorkspaceFeatureFlags(null).controlTowerHome).toBe(false);
+    expect(
+      parseWorkspaceFeatureFlags(JSON.stringify({ controlTowerHome: true }))
+        .controlTowerHome,
+    ).toBe(true);
+    for (const bad of ["true", 1, "yes", {}, [], "false", 0, null]) {
+      expect(
+        parseWorkspaceFeatureFlags(JSON.stringify({ controlTowerHome: bad }))
+          .controlTowerHome,
+      ).toBe(false);
+    }
+    expect(parseWorkspaceFeatureFlags("not-json").controlTowerHome).toBe(false);
+  });
 });
 
 describe("resolveWorkspaceDefaultLandingPath", () => {
