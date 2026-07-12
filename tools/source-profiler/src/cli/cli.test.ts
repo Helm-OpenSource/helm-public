@@ -77,4 +77,42 @@ describe("runProfileCommand", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("writes grounded v3 source-to-signal proposals for the local AI path", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "sp-v3-proposals-"));
+    try {
+      writeFileSync(
+        path.join(dir, "schema.sql"),
+        "CREATE TABLE deals (id INTEGER PRIMARY KEY, amount DECIMAL(10,2), stage VARCHAR(20));",
+      );
+      const result = await runProfileCommand({
+        cwd: dir,
+        source: ".",
+        output: "out",
+        aiProvider: "local",
+        now: () => new Date("2026-06-07T00:00:00.000Z"),
+      });
+
+      expect(result.sourceToSignalStatus).toBe("produced");
+      expect(result.sourceToSignalProposalCount).toBeGreaterThan(0);
+      expect(result.artifactRefs).toContain("source-to-signal-proposals.json");
+      const artifact = JSON.parse(
+        readFileSync(
+          path.join(result.runDir, "source-to-signal-proposals.json"),
+          "utf8",
+        ),
+      ) as {
+        status: string;
+        proposals: Array<{ reviewState: string; targetEntity: string }>;
+      };
+      expect(artifact.status).toBe("produced");
+      expect(artifact.proposals).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ reviewState: "needs_review", targetEntity: "Opportunity" }),
+        ]),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

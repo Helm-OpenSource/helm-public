@@ -198,6 +198,66 @@ describe("check-llm-candidate-boundaries", () => {
     expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
   });
 
+  it("rejects passing rich local context directly into a prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { RichLocalContextBundle } from "@/lib/llm/intelligence-contracts-v3";
+        export function buildPrompt(bundle: RichLocalContextBundle) {
+          return { userPrompt: JSON.stringify(bundle) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-F")).toBe(true);
+  });
+
+  it("allows projected v3 stubs to enter prompt builders", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { SelectedContextStub } from "@/lib/llm/intelligence-contracts-v2";
+        import type { ContextProjectionReceipt } from "@/lib/llm/intelligence-contracts-v3";
+        export function buildPrompt(receipt: ContextProjectionReceipt, stub: SelectedContextStub) {
+          void receipt.remoteSafe;
+          return { userPrompt: JSON.stringify(stub.selectedEvidenceRefs) };
+        }
+      `,
+    );
+    expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
+  });
+
+  it("rejects serializing a context projection receipt into a prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { ContextProjectionReceipt } from "@/lib/llm/intelligence-contracts-v3";
+        export function buildPrompt(projectionReceipt: ContextProjectionReceipt) {
+          return { userPrompt: JSON.stringify(projectionReceipt) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-F")).toBe(true);
+  });
+
+  it("rejects passing a trajectory receipt directly into a prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { LLMTaskTrajectoryReceipt } from "@/lib/llm/intelligence-contracts-v3";
+        export function buildPrompt(receipt: LLMTaskTrajectoryReceipt) {
+          return { userPrompt: JSON.stringify(receipt) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-F")).toBe(true);
+  });
+
   it("rejects assignment-style external fetch calls from critic modules", () => {
     writeFile(
       "lib/llm-workflows/example.ts",
@@ -217,5 +277,21 @@ describe("check-llm-candidate-boundaries", () => {
 
     expect(result.ok).toBe(false);
     expect(result.violations[0]?.detail).toContain("external sends");
+  });
+
+  it("rejects a v3 multi-pass workflow that bypasses the registered execution chain", () => {
+    writeFile(
+      "lib/llm-workflows/multi-pass-review.workflow.ts",
+      `
+        import type { ModelCapabilityProfile } from "@/lib/llm/intelligence-contracts-v3";
+        export async function executeMultiPassReview(profile: ModelCapabilityProfile) {
+          return { profile, reviewState: "candidate" };
+        }
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-G")).toBe(true);
   });
 });

@@ -1,0 +1,217 @@
+{
+  "fixtureKind": "llm_v3_review",
+  "fixtureVersion": "llm-v3-review.synthetic/v1",
+  "generatedAt": "2026-07-12T08:00:00.000Z",
+  "syntheticOnly": true,
+  "judgementProposal": {
+    "proposalId": "judgement-candidate-synthetic-001",
+    "objectRef": {
+      "objectType": "Opportunity",
+      "objectId": "synthetic-opportunity-001",
+      "label": "Synthetic renewal review"
+    },
+    "reviewState": "candidate",
+    "confidence": 78,
+    "evidenceRefs": [
+      "synthetic-evidence-timeline-001",
+      "synthetic-evidence-note-002"
+    ],
+    "missingEvidence": [
+      {
+        "gapId": "synthetic-gap-owner-confirmation",
+        "missingSignalNote": "需要人工确认责任人与时点 / Human confirmation of owner and timing is still missing."
+      }
+    ],
+    "counterEvidenceNeeded": [
+      "核对是否存在更新的客户异议记录 / Check for a newer synthetic objection note."
+    ],
+    "nextSafeActions": [
+      "进入人工复核队列 / Place the candidate in the human review queue.",
+      "补齐缺失证据后重新评估 / Re-evaluate after the missing evidence is supplied."
+    ],
+    "forbiddenCapabilityRefs": [
+      "connector_activation",
+      "external_send",
+      "writeback",
+      "run_crm_import",
+      "memory_promotion",
+      "preference_signal_write",
+      "pattern_fact_write"
+    ]
+  },
+  "sourceToSignalProposal": {
+    "proposalId": "source-proposal-synthetic-001",
+    "sourceSummaryRefs": [
+      "synthetic-schema-summary-001"
+    ],
+    "sourceCandidateRef": "candidate-source-synthetic-001",
+    "candidateOrigin": "ai",
+    "modelProfileKey": "synthetic-local-v3",
+    "redactionProvenance": "public_safe_synthetic",
+    "targetSignalFamily": "risk",
+    "targetEntity": "Opportunity",
+    "reviewState": "candidate",
+    "confidence": 72,
+    "evidenceRefs": [
+      "synthetic-schema-field-stage",
+      "synthetic-schema-field-updated-at"
+    ],
+    "mappingRationale": [
+      "阶段停留与更新时间可形成待复核的节奏风险候选 / Stage age and update time can form a review-only pacing risk candidate."
+    ],
+    "missingEvidence": [
+      {
+        "gapId": "synthetic-gap-field-semantics",
+        "missingSignalNote": "字段业务语义仍需交付工程师确认 / A delivery engineer must confirm the field semantics."
+      }
+    ],
+    "forbiddenCapabilityRefs": [
+      "connector_activation",
+      "external_send",
+      "writeback",
+      "run_crm_import",
+      "memory_promotion",
+      "preference_signal_write",
+      "pattern_fact_write"
+    ]
+  },
+  "trajectoryReceipt": {
+    "receiptId": "trajectory-receipt-synthetic-001",
+    "taskId": "task-synthetic-llm-review-001",
+    "createdAt": "2026-07-12T08:00:00.000Z",
+    "modelProfileKey": "synthetic-local-v3",
+    "redactionStatus": "synthetic",
+    "rawPromptIncluded": false,
+    "rawCustomerDataIncluded": false,
+    "tenantUrlIncluded": false,
+    "productionReceiptIncluded": false,
+    "boundaryDecisions": [
+      "allow_candidate"
+    ],
+    "steps": [
+      {
+        "stepId": "trajectory-plan-001",
+        "stepType": "plan",
+        "summary": "先检查公开合成输入与候选边界 / Inspect public synthetic input and candidate boundaries first.",
+        "evidenceRefs": [
+          "synthetic-task-intent-001"
+        ],
+        "riskClass": "read",
+        "blocked": false
+      },
+      {
+        "stepId": "trajectory-context-002",
+        "stepType": "context_selection",
+        "summary": "仅选择 public-safe synthetic evidence refs / Select public-safe synthetic evidence refs only.",
+        "evidenceRefs": [
+          "synthetic-evidence-timeline-001",
+          "synthetic-schema-summary-001"
+        ],
+        "riskClass": "read",
+        "blocked": false
+      },
+      {
+        "stepId": "trajectory-model-003",
+        "stepType": "model_call",
+        "summary": "生成候选判断，不生成批准或外部动作 / Generate a candidate judgement without approval or external action.",
+        "evidenceRefs": [
+          "judgement-candidate-synthetic-001"
+        ],
+        "riskClass": "local_draft",
+        "blocked": false
+      },
+      {
+        "stepId": "trajectory-validation-004",
+        "stepType": "validation_receipt",
+        "summary": "运行 deterministic trajectory evaluator / Run the deterministic trajectory evaluator.",
+        "evidenceRefs": [
+          "synthetic-trajectory-eval-001"
+        ],
+        "riskClass": "read",
+        "blocked": false
+      },
+      {
+        "stepId": "trajectory-boundary-005",
+        "stepType": "boundary_decision",
+        "summary": "allow_candidate 仅允许进入人工复核 / allow_candidate only permits entry to human review.",
+        "evidenceRefs": [
+          "multi-pass-receipt-synthetic-001"
+        ],
+        "riskClass": "read",
+        "blocked": false
+      },
+      {
+        "stepId": "trajectory-claim-006",
+        "stepType": "final_claim",
+        "summary": "合成候选已准备好供人工复核，未获批准 / Synthetic candidate is ready for human review and is not approved.",
+        "evidenceRefs": [
+          "synthetic-trajectory-eval-001"
+        ],
+        "riskClass": "read",
+        "blocked": false
+      }
+    ],
+    "finalClaim": {
+      "claimedDone": true,
+      "claimedReleaseReady": false,
+      "claimedApprovalGranted": false,
+      "promotedCandidate": false,
+      "intentMatched": true,
+      "selfCertified": false,
+      "claimedSourceTruthWithoutEvidence": false
+    }
+  },
+  "multiPassBoundaryReceipt": {
+    "receiptId": "multi-pass-receipt-synthetic-001",
+    "traceId": "trace-synthetic-llm-review-001",
+    "createdAt": "2026-07-12T08:00:00.000Z",
+    "profileKey": "synthetic-local-v3",
+    "providerMode": "local",
+    "promptKey": "multi-pass-review",
+    "promptVersion": "multi-pass-review-v1",
+    "budgetDecision": {
+      "reasoningDepth": "deep",
+      "budgetClass": "premium",
+      "multiPassRecommended": true,
+      "boundaryDecision": "allow_candidate",
+      "reason": "high_value_uncertain"
+    },
+    "egress": {
+      "redacted": true,
+      "consentGranted": false,
+      "promptPreviewAccepted": false,
+      "auditRef": null,
+      "blockedReason": "remote_egress_not_used"
+    },
+    "roleCalls": [
+      {
+        "role": "generator",
+        "success": true,
+        "fallbackReason": null,
+        "promptKey": "multi-pass-review",
+        "promptVersion": "multi-pass-review-v1"
+      },
+      {
+        "role": "critic",
+        "success": true,
+        "fallbackReason": null,
+        "promptKey": "multi-pass-review",
+        "promptVersion": "multi-pass-review-v1"
+      },
+      {
+        "role": "adversary",
+        "success": true,
+        "fallbackReason": null,
+        "promptKey": "multi-pass-review",
+        "promptVersion": "multi-pass-review-v1"
+      }
+    ],
+    "boundaryDecision": "allow_candidate",
+    "requiredHumanReview": false,
+    "reason": "candidate_consensus",
+    "rawPromptIncluded": false,
+    "rawCustomerDataIncluded": false,
+    "tenantUrlIncluded": false,
+    "productionReceiptIncluded": false
+  }
+}

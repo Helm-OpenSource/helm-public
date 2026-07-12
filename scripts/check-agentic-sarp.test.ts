@@ -6,7 +6,7 @@ describe("check-agentic-sarp", () => {
   it("passes the built-in SARP boundary fixture set", () => {
     const result = runAgenticSarpBoundaryCheck();
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(5);
+    expect(result.total).toBe(9);
     expect(result.failures).toEqual([]);
     expect(result.receipts.map((receipt) => receipt.verdict)).toEqual([
       "pass",
@@ -14,7 +14,12 @@ describe("check-agentic-sarp", () => {
       "escalate",
       "advisory",
       "block",
+      "block",
+      "block",
+      "block",
+      "block",
     ]);
+    expect(result.fixtures.every((fixture) => fixture.capsule.llmTrajectoryReceipt)).toBe(true);
   });
 
   it("fails when a fixture verdict does not match", () => {

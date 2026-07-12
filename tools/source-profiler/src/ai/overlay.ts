@@ -12,7 +12,12 @@ import type { ReviewPacket } from "../contract/review-packet";
 import type { SignalMappingCandidate } from "../contract/mapping";
 import type { AuditEntry } from "../contract/run";
 import type { AiProvider, AiProviderKind } from "./types";
-import { isRemoteProvider } from "./types";
+import { z } from "zod";
+import {
+  AiProviderResponseError,
+  aiSuggestionSchema,
+  isRemoteProvider,
+} from "./types";
 import { redactReviewPacket } from "../review/redact";
 import { buildAiPrompt, previewPrompt } from "./prompt";
 import { evaluateAiConsent } from "./consent";
@@ -29,6 +34,14 @@ export type AiOverlayInput = {
 };
 
 export type AiOverlayResult = {
+  status:
+    | "produced"
+    | "blocked"
+    | "provider_failure"
+    | "parse_failure"
+    | "schema_failure"
+    | "evidence_failure";
+  reason: string | null;
   candidates: SignalMappingCandidate[];
   promptPreview: string;
   audit: AuditEntry[];
@@ -52,7 +65,13 @@ export async function runAiOverlay(input: AiOverlayInput): Promise<AiOverlayResu
       `AI overlay blocked — provider kind "${input.provider.kind}" does not match requested "${input.providerKind}"; preview only`,
       "warn",
     );
-    return { candidates: [], promptPreview, audit };
+    return {
+      status: "blocked",
+      reason: "provider_kind_mismatch",
+      candidates: [],
+      promptPreview,
+      audit,
+    };
   }
   const effectiveKind = input.provider?.kind ?? input.providerKind;
 
@@ -60,7 +79,13 @@ export async function runAiOverlay(input: AiOverlayInput): Promise<AiOverlayResu
   for (const reason of consent.reasons) add(reason, consent.allowed ? "info" : "warn");
   if (!consent.allowed) {
     add("AI overlay blocked — consent not satisfied; preview only", "warn");
-    return { candidates: [], promptPreview, audit };
+    return {
+      status: "blocked",
+      reason: "consent_required",
+      candidates: [],
+      promptPreview,
+      audit,
+    };
   }
 
   const provider = resolveProvider(input);
@@ -69,32 +94,89 @@ export async function runAiOverlay(input: AiOverlayInput): Promise<AiOverlayResu
       `remote provider "${effectiveKind}" consented but no transport configured; preview only, nothing sent`,
       "warn",
     );
-    return { candidates: [], promptPreview, audit };
+    return {
+      status: "blocked",
+      reason: "provider_not_configured",
+      candidates: [],
+      promptPreview,
+      audit,
+    };
   }
 
   let suggestions;
   try {
     suggestions = await provider.suggest(prompt);
   } catch (error) {
+    if (error instanceof AiProviderResponseError) {
+      add(`AI provider ${error.failure}: ${error.message}`, "error");
+      return {
+        status: error.failure,
+        reason: error.failure,
+        candidates: [],
+        promptPreview,
+        audit,
+      };
+    }
     add(`AI provider error: ${(error as Error).message}`, "error");
-    return { candidates: [], promptPreview, audit };
+    return {
+      status: "provider_failure",
+      reason: "provider_failure",
+      candidates: [],
+      promptPreview,
+      audit,
+    };
   }
 
-  const candidates: SignalMappingCandidate[] = suggestions.map((s) => ({
-    id: shortHash(`ai:${s.sourceObjectId}:${s.targetEntity}:${s.signalFamily}`),
-    sourceObjectId: s.sourceObjectId,
-    targetEntity: s.targetEntity,
-    signalFamily: s.signalFamily,
-    fieldMappings: [],
-    confidence: s.confidence,
-    rationale: s.reasoning || "AI suggestion (advisory only).",
-    origin: "ai",
-    state: "candidate",
-    evidenceRefs: [s.sourceObjectId],
-  }));
+  const parsedSuggestions = z.array(aiSuggestionSchema).safeParse(suggestions);
+  if (!parsedSuggestions.success) {
+    add("AI provider schema_failure: suggestion array failed strict validation", "error");
+    return {
+      status: "schema_failure",
+      reason: "schema_failure",
+      candidates: [],
+      promptPreview,
+      audit,
+    };
+  }
+
+  const objectById = new Map(input.packet.codeScan.objects.map((object) => [object.id, object]));
+  if (parsedSuggestions.data.some((suggestion) => !objectById.has(suggestion.sourceObjectId))) {
+    add("AI provider evidence_failure: suggestion references an unknown source object", "error");
+    return {
+      status: "evidence_failure",
+      reason: "unknown_source_object",
+      candidates: [],
+      promptPreview,
+      audit,
+    };
+  }
+
+  const candidates: SignalMappingCandidate[] = parsedSuggestions.data.map((suggestion) => {
+    const object = objectById.get(suggestion.sourceObjectId);
+    return {
+      id: shortHash(
+        `ai:${suggestion.sourceObjectId}:${suggestion.targetEntity}:${suggestion.signalFamily}`,
+      ),
+      sourceObjectId: suggestion.sourceObjectId,
+      targetEntity: suggestion.targetEntity,
+      signalFamily: suggestion.signalFamily,
+      fieldMappings: [],
+      confidence: Math.min(suggestion.confidence, object?.parseConfidence ?? 0),
+      rationale: suggestion.reasoning,
+      origin: "ai",
+      state: "candidate",
+      evidenceRefs: [suggestion.sourceObjectId],
+    };
+  });
   add(`AI overlay produced ${candidates.length} advisory candidate(s) via "${provider.kind}"`);
 
-  return { candidates, promptPreview, audit };
+  return {
+    status: "produced",
+    reason: null,
+    candidates,
+    promptPreview,
+    audit,
+  };
 }
 
 function resolveProvider(input: AiOverlayInput): AiProvider | null {

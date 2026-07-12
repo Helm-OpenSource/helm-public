@@ -6,8 +6,54 @@ import {
   type BuildAgentRunCapsuleInput,
 } from "./run-capsule";
 import { runSarpReview } from "./sarp-eval";
+import type { LLMTaskTrajectoryReceipt } from "../llm/intelligence-contracts-v3";
 
 const fixedNow = () => new Date("2026-06-07T00:00:00.000Z");
+
+function trajectoryReceipt(
+  overrides: Partial<LLMTaskTrajectoryReceipt> = {},
+): LLMTaskTrajectoryReceipt {
+  return {
+    receiptId: "trajectory-1",
+    taskId: "run-1",
+    createdAt: "2026-06-07T00:00:00.000Z",
+    modelProfileKey: "synthetic-v3-reviewer",
+    redactionStatus: "synthetic",
+    rawPromptIncluded: false,
+    rawCustomerDataIncluded: false,
+    tenantUrlIncluded: false,
+    productionReceiptIncluded: false,
+    boundaryDecisions: ["allow_candidate"],
+    steps: [
+      {
+        stepId: "context-1",
+        stepType: "context_selection",
+        summary: "Selected public-safe synthetic context.",
+        evidenceRefs: ["synthetic-evidence-1"],
+        riskClass: "read",
+        blocked: false,
+      },
+      {
+        stepId: "validation-1",
+        stepType: "validation_receipt",
+        summary: "Validated the synthetic candidate.",
+        evidenceRefs: ["synthetic-validation-1"],
+        riskClass: "read",
+        blocked: false,
+      },
+    ],
+    finalClaim: {
+      claimedDone: true,
+      claimedReleaseReady: false,
+      claimedApprovalGranted: false,
+      promotedCandidate: false,
+      intentMatched: true,
+      selfCertified: false,
+      claimedSourceTruthWithoutEvidence: false,
+    },
+    ...overrides,
+  };
+}
 
 function baseInput(overrides: Partial<BuildAgentRunCapsuleInput> = {}): BuildAgentRunCapsuleInput {
   return {
@@ -109,6 +155,78 @@ describe("buildAgentRunCapsule", () => {
     expect(() => agentRunCapsuleSchema.parse({ ...capsule, sarpReceipt })).toThrow(
       /sarpReceipt.capsuleRunId must match runId/,
     );
+  });
+
+  it("accepts a strict public-safe LLM trajectory receipt for the same run", () => {
+    const receipt = trajectoryReceipt();
+    const capsule = buildAgentRunCapsule(
+      baseInput({
+        llmTrajectoryReceipt: receipt,
+      }),
+    );
+
+    expect(capsule.llmTrajectoryReceipt).toEqual(receipt);
+    expect(agentRunCapsuleSchema.parse(capsule)).toEqual(capsule);
+  });
+
+  it("rejects an LLM trajectory receipt whose taskId does not match runId", () => {
+    expect(() =>
+      buildAgentRunCapsule(
+        baseInput({
+          llmTrajectoryReceipt: trajectoryReceipt({ taskId: "different-run" }),
+        }),
+      ),
+    ).toThrow(/llmTrajectoryReceipt\.taskId must match runId/);
+  });
+
+  it.each([
+    "rawPromptIncluded",
+    "rawCustomerDataIncluded",
+    "tenantUrlIncluded",
+    "productionReceiptIncluded",
+  ] as const)("rejects an LLM trajectory receipt with %s=true", (field) => {
+    const receipt = { ...trajectoryReceipt(), [field]: true };
+    expect(() =>
+      agentRunCapsuleSchema.parse({
+        ...buildAgentRunCapsule(baseInput()),
+        llmTrajectoryReceipt: receipt,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects unknown fields in the attached LLM trajectory receipt", () => {
+    expect(() =>
+      agentRunCapsuleSchema.parse({
+        ...buildAgentRunCapsule(baseInput()),
+        llmTrajectoryReceipt: {
+          ...trajectoryReceipt(),
+          rawPromptBody: "synthetic-but-forbidden",
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("withholds an attached LLM trajectory receipt when capsule redaction is unproven", () => {
+    const capsule = buildAgentRunCapsule(
+      baseInput({
+        redactionStatus: "unknown",
+        llmTrajectoryReceipt: trajectoryReceipt(),
+      }),
+    );
+
+    expect(capsule.quarantined).toBe(true);
+    expect(capsule.llmTrajectoryReceipt).toBeUndefined();
+  });
+
+  it("rejects a directly constructed unproven-redaction capsule with an attached trajectory", () => {
+    const quarantined = buildAgentRunCapsule(baseInput({ redactionStatus: "unknown" }));
+
+    expect(() =>
+      agentRunCapsuleSchema.parse({
+        ...quarantined,
+        llmTrajectoryReceipt: trajectoryReceipt(),
+      }),
+    ).toThrow(/requires proven capsule redaction/);
   });
 });
 
