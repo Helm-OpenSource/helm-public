@@ -31,6 +31,7 @@ export type ConflictReceipt = {
     | "binding_provider_not_eligible"
     | "binding_surface_mismatch"
     | "duplicate_provider_id"
+    | "non_finite_priority"
     | "multiple_top_recommendations_without_binding";
   detail: string;
 };
@@ -76,6 +77,17 @@ export function selectSingleWinner(input: {
         detail: `duplicates=${duplicateIds.join(",")}`,
       }
     : null;
+  // 非有限 priority 属注册面缺陷：剔除不静默——出回执。
+  const nonFinitePriorityIds = candidates
+    .filter((c) => !Number.isFinite(c.priority))
+    .map((c) => c.providerId);
+  const nonFiniteReceipt: ConflictReceipt | null = nonFinitePriorityIds.length
+    ? {
+        surfaceKey,
+        reason: "non_finite_priority",
+        detail: `providers=${nonFinitePriorityIds.join(",")}`,
+      }
+    : null;
   const eligible = candidates.filter(isEligible);
   const recommendations = [...eligible]
     .sort(
@@ -86,7 +98,9 @@ export function selectSingleWinner(input: {
 
   // 诊断信号（不影响选择结果）：无绑定/绑定错 surface 时回 Core，并按情况出回执。
   if (!binding || binding.surfaceKey !== surfaceKey) {
-    let conflictReceipt: ConflictReceipt | null = duplicateReceipt;
+    // 回执优先级：绑定错 surface > 重复注册 > 非法 priority > 并列最高推荐。
+    let conflictReceipt: ConflictReceipt | null =
+      duplicateReceipt ?? nonFiniteReceipt;
     if (binding && binding.surfaceKey !== surfaceKey) {
       conflictReceipt = {
         surfaceKey,
@@ -111,6 +125,20 @@ export function selectSingleWinner(input: {
       source: "core_default",
       recommendations,
       conflictReceipt,
+    };
+  }
+
+  // 绑定指向被重复注册的 providerId：回执给根因（duplicate），不掩盖为 not_found。
+  if (duplicateIds.includes(binding.providerId)) {
+    return {
+      winner: "core_default",
+      source: "core_default",
+      recommendations,
+      conflictReceipt: {
+        surfaceKey,
+        reason: "duplicate_provider_id",
+        detail: `bound=${binding.providerId} duplicates=${duplicateIds.join(",")}`,
+      },
     };
   }
 

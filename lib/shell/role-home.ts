@@ -68,17 +68,16 @@ const DRAWER_COMMON: DestinationEntry[] = [
  * - "销售域过滤"等查询级过滤是 Phase 2+ 的工作台内能力，不在导航层伪造
  */
 const CATALOG_BY_PRESET: Record<RolePresetKey, DestinationCatalog> = {
+  // 附录 B："主线卡带 · 需你拍板 · 复核队列 · 周期复盘深链"。
+  // 主线卡带与需你拍板是 /dashboard 控制塔内的段①②，同一 destination 承载；
+  // 推进/交付工作台入口由控制塔段③"工位总览"提供，不占 FOUNDER 主区。
   FOUNDER_CEO: {
     primary: [
-      D("/dashboard", "控制塔", "Control tower"),
+      D("/dashboard", "控制塔（主线·拍板）", "Control tower (mainline · calls)"),
       D("/approvals", "复核队列", "Review queue"),
-      D("/opportunities", "推进工作台", "Advance desk"),
-      D("/customer-success", "交付工作台", "Delivery desk"),
+      D("/reports", "周期复盘深链", "Periodic review deep links"),
     ],
-    secondary: [
-      D("/reports", "周期复盘", "Periodic review"),
-      D("/memory", "改进候选", "Improvement candidates"),
-    ],
+    secondary: [D("/memory", "改进候选", "Improvement candidates")],
     drawer: DRAWER_COMMON,
   },
   SALES_LEAD: {

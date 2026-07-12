@@ -267,14 +267,15 @@ describe("single-winner provider selection (binding-is-authorization)", () => {
     expect(result.conflictReceipt?.reason).toBe("binding_surface_mismatch");
   });
 
-  it("duplicate provider ids are removed with a receipt; non-finite priority is ineligible", () => {
+  it("duplicate provider ids surface the root cause on every path", () => {
+    // 绑定指向重复 id：回执 = duplicate（根因），不掩盖为 not_found
     const dup = selectSingleWinner({
       surfaceKey: "mainline",
       candidates: [candidate("a", 1), candidate("a", 2), candidate("b", 1)],
       binding: { surfaceKey: "mainline", providerId: "a" },
     });
     expect(dup.winner).toBe("core_default");
-    expect(dup.conflictReceipt?.reason).toBe("binding_provider_not_found");
+    expect(dup.conflictReceipt?.reason).toBe("duplicate_provider_id");
 
     const dupNoBinding = selectSingleWinner({
       surfaceKey: "mainline",
@@ -282,14 +283,24 @@ describe("single-winner provider selection (binding-is-authorization)", () => {
       binding: null,
     });
     expect(dupNoBinding.conflictReceipt?.reason).toBe("duplicate_provider_id");
+  });
 
-    const nonFinite = selectSingleWinner({
+  it("non-finite priority is never silent: receipt without binding, ineligible with binding", () => {
+    const silentless = selectSingleWinner({
+      surfaceKey: "mainline",
+      candidates: [candidate("a", Number.NaN), candidate("b", 1)],
+      binding: null,
+    });
+    expect(silentless.winner).toBe("core_default");
+    expect(silentless.conflictReceipt?.reason).toBe("non_finite_priority");
+
+    const bound = selectSingleWinner({
       surfaceKey: "mainline",
       candidates: [candidate("a", Number.NaN)],
       binding: { surfaceKey: "mainline", providerId: "a" },
     });
-    expect(nonFinite.winner).toBe("core_default");
-    expect(nonFinite.conflictReceipt?.reason).toBe("binding_provider_not_eligible");
+    expect(bound.winner).toBe("core_default");
+    expect(bound.conflictReceipt?.reason).toBe("binding_provider_not_eligible");
   });
 });
 
@@ -315,11 +326,14 @@ describe("role lens + per-preset destination catalog (Appendix B row-by-row)", (
     const primaryHrefs = (key: string | null) =>
       getDestinationCatalog(key).primary.map((e) => e.href);
 
+    // 附录 B：主线卡带·需你拍板（同为 /dashboard 控制塔段①②）·复核队列·周期复盘深链
     expect(primaryHrefs("FOUNDER_CEO")).toEqual([
       "/dashboard",
       "/approvals",
-      "/opportunities",
-      "/customer-success",
+      "/reports",
+    ]);
+    expect(getDestinationCatalog("FOUNDER_CEO").secondary.map((e) => e.href)).toEqual([
+      "/memory",
     ]);
     expect(primaryHrefs("SALES_LEAD")).toEqual([
       "/opportunities",
