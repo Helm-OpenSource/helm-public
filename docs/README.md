@@ -65,6 +65,7 @@ connector 授权、写回、外发或审批证明。
 - [外部智能体输入 PRD / External agent intake PRD](product/HELM_EXTERNAL_AGENT_INTAKE_PRD.md)
 - [LLM 智能深化 v1 / LLM intelligence deepening v1](product/HELM_LLM_INTELLIGENCE_DEEPENING_V1.md)
 - [LLM 智能深化 v2 / LLM intelligence deepening v2](product/HELM_LLM_INTELLIGENCE_DEEPENING_V2.md)
+- [LLM 智能深化 v3 / LLM intelligence deepening v3](product/HELM_LLM_INTELLIGENCE_DEEPENING_V3.md)
 - [开源与商业边界 / Open source and commercial boundary](product/HELM_OPEN_SOURCE_COMMERCIAL_BOUNDARY_PLAN.md)
 - [公开商业叙事需求 / Public business narrative requirements](product/HELM_PUBLIC_BUSINESS_NARRATIVE_REQUIREMENTS.md)
 - [Trust Center 需求 / Trust Center requirements](product/HELM_TRUST_CENTER_REQUIREMENTS.md)
