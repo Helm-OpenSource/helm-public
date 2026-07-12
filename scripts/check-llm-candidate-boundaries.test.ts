@@ -228,6 +228,21 @@ describe("check-llm-candidate-boundaries", () => {
     expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
   });
 
+  it("rejects passing a trajectory receipt directly into a prompt", () => {
+    writeFile(
+      "lib/llm-workflows/example.ts",
+      `
+        import type { LLMTaskTrajectoryReceipt } from "@/lib/llm/intelligence-contracts-v3";
+        export function buildPrompt(receipt: LLMTaskTrajectoryReceipt) {
+          return { userPrompt: JSON.stringify(receipt) };
+        }
+      `,
+    );
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-F")).toBe(true);
+  });
+
   it("rejects assignment-style external fetch calls from critic modules", () => {
     writeFile(
       "lib/llm-workflows/example.ts",

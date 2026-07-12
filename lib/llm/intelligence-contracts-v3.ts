@@ -264,3 +264,77 @@ export type SourceToSignalProposalBundle = z.infer<typeof sourceToSignalProposal
 export function parseSourceToSignalProposalBundle(input: unknown): SourceToSignalProposalBundle {
   return sourceToSignalProposalBundleSchema.parse(input);
 }
+
+export const LLM_TASK_TRAJECTORY_STEP_TYPES = [
+  "plan",
+  "context_selection",
+  "tool_call",
+  "model_call",
+  "file_change_summary",
+  "validation_receipt",
+  "blocked_action",
+  "boundary_decision",
+  "final_claim",
+] as const;
+export const llmTaskTrajectoryStepTypeSchema = z.enum(LLM_TASK_TRAJECTORY_STEP_TYPES);
+export type LLMTaskTrajectoryStepType = z.infer<typeof llmTaskTrajectoryStepTypeSchema>;
+
+export const LLM_TRAJECTORY_RISK_CLASSES = [
+  "read",
+  "local_draft",
+  "repo_write",
+  "external_write",
+  "activation",
+  "commitment",
+] as const;
+export const llmTrajectoryRiskClassSchema = z.enum(LLM_TRAJECTORY_RISK_CLASSES);
+export type LLMTrajectoryRiskClass = z.infer<typeof llmTrajectoryRiskClassSchema>;
+
+export const llmTaskTrajectoryStepSchema = z
+  .object({
+    stepId: z.string().min(1),
+    stepType: llmTaskTrajectoryStepTypeSchema,
+    summary: z.string().min(1),
+    evidenceRefs: z.array(z.string().min(1)).default([]),
+    riskClass: llmTrajectoryRiskClassSchema,
+    blocked: z.boolean().default(false),
+  })
+  .strict();
+export type LLMTaskTrajectoryStep = z.infer<typeof llmTaskTrajectoryStepSchema>;
+
+export const llmTaskFinalClaimSchema = z
+  .object({
+    claimedDone: z.boolean(),
+    claimedReleaseReady: z.boolean(),
+    claimedApprovalGranted: z.boolean(),
+    promotedCandidate: z.boolean(),
+    intentMatched: z.boolean(),
+    selfCertified: z.boolean(),
+    claimedSourceTruthWithoutEvidence: z.boolean(),
+  })
+  .strict();
+export type LLMTaskFinalClaim = z.infer<typeof llmTaskFinalClaimSchema>;
+
+export const llmTaskTrajectoryReceiptSchema = z
+  .object({
+    receiptId: z.string().min(1),
+    taskId: z.string().min(1),
+    createdAt: z.string().datetime(),
+    modelProfileKey: z.string().min(1),
+    redactionStatus: publicSafeRedactionStatusSchema,
+    rawPromptIncluded: z.literal(false),
+    rawCustomerDataIncluded: z.literal(false),
+    tenantUrlIncluded: z.literal(false),
+    productionReceiptIncluded: z.literal(false),
+    boundaryDecisions: z
+      .array(z.enum(["allow_candidate", "review_required", "reject", "quarantine"]))
+      .default([]),
+    steps: z.array(llmTaskTrajectoryStepSchema).default([]),
+    finalClaim: llmTaskFinalClaimSchema,
+  })
+  .strict();
+export type LLMTaskTrajectoryReceipt = z.infer<typeof llmTaskTrajectoryReceiptSchema>;
+
+export function parseLLMTaskTrajectoryReceipt(input: unknown): LLMTaskTrajectoryReceipt {
+  return llmTaskTrajectoryReceiptSchema.parse(input);
+}
