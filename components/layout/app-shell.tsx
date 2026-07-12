@@ -1,10 +1,12 @@
 import { WorkspaceUiProvider } from "@/components/providers/workspace-ui-provider";
 import { DemoTourBanner } from "@/components/layout/demo-tour-banner";
+import { ShellChromeGate } from "@/components/layout/shell-chrome-gate";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import type { DemoMode } from "@/lib/demo/demo-modes";
 import type { WorkspaceNavExtensionCluster } from "@/lib/extensions/registry";
 import type { UiLocale } from "@/lib/i18n/config";
+import type { ShellChromeProfile } from "@/lib/shell/shell-chrome";
 import type { WorkspaceFeatureFlags } from "@/lib/workspace-ops";
 
 type AppShellProps = {
@@ -41,6 +43,7 @@ type AppShellProps = {
     }>;
   };
   navExtensionClusters: ReadonlyArray<WorkspaceNavExtensionCluster>;
+  shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
   children: React.ReactNode;
 };
 
@@ -61,6 +64,7 @@ export function AppShell({
   alerts,
   quickCreateData,
   navExtensionClusters,
+  shellChromeProfiles,
   children,
 }: AppShellProps) {
   const resolvedDemoMode = demoMode ?? "default";
@@ -82,11 +86,13 @@ export function AppShell({
         data-demo-mode={resolvedDemoMode}
         data-experience-mode={experienceMode}
       >
-        <Sidebar
-          workspaceName={workspaceName}
-          pendingApprovals={pendingApprovals}
-          navExtensionClusters={navExtensionClusters}
-        />
+        <ShellChromeGate profiles={shellChromeProfiles}>
+          <Sidebar
+            workspaceName={workspaceName}
+            pendingApprovals={pendingApprovals}
+            navExtensionClusters={navExtensionClusters}
+          />
+        </ShellChromeGate>
         <div className="min-w-0 flex-1 overflow-x-hidden px-0 pb-6">
           <Topbar
             workspaceName={workspaceName}
