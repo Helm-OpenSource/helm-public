@@ -44,8 +44,10 @@ import type {
   NorthstarKpiSourceContribution,
   OperationSuggestionSourceContribution,
   ReportsExtensionDescriptor,
+  RoleHomeRoutingProviderContribution,
   SolutionExtensionCatalogEntry,
   WorkspaceNavExtensionDescriptor,
+  WorkstationSourceContribution,
   ExtensionAccessProbe,
 } from "./registry-types";
 
@@ -147,6 +149,17 @@ export type PackContributions = {
    * Infrequent-operation suggestions merged by `resolveShellOperationSuggestions`.
    */
   operationSuggestionSources?: ReadonlyArray<OperationSuggestionSourceContribution>;
+  /**
+   * Single-winner role-home routing providers (blueprint Phase 3, experimental).
+   * Candidate pool; the runtime picks one via the binding model (§4.3), else
+   * the Core default routing.
+   */
+  roleHomeRoutingProviders?: ReadonlyArray<RoleHomeRoutingProviderContribution>;
+  /**
+   * Workstation sources (blueprint Phase 3, experimental, **concat**). Merged by
+   * `resolveShellWorkstations` under the §4.4 budget.
+   */
+  workstationSources?: ReadonlyArray<WorkstationSourceContribution>;
   biReportP0ProcessService?: BiReportP0ProcessService;
   implementationConsole?: ImplementationConsoleContribution;
   signalCollectionJobs?: () => ReadonlyArray<SignalCollectionJob>;
@@ -174,6 +187,8 @@ type MutableStore = {
   northstarKpiSources: NorthstarKpiSourceContribution[];
   attentionSources: AttentionSourceContribution[];
   operationSuggestionSources: OperationSuggestionSourceContribution[];
+  roleHomeRoutingProviders: RoleHomeRoutingProviderContribution[];
+  workstationSources: WorkstationSourceContribution[];
   biReportP0ProcessService: BiReportP0ProcessService | null;
   implementationConsole: ImplementationConsoleContribution | null;
   signalCollectionJobProviders: Array<() => ReadonlyArray<SignalCollectionJob>>;
@@ -192,6 +207,8 @@ function emptyStore(): MutableStore {
     northstarKpiSources: [],
     attentionSources: [],
     operationSuggestionSources: [],
+    roleHomeRoutingProviders: [],
+    workstationSources: [],
     biReportP0ProcessService: null,
     implementationConsole: null,
     signalCollectionJobProviders: [],
@@ -237,6 +254,10 @@ export function registerPackContributions(
     s.attentionSources.push(...contributions.attentionSources);
   if (contributions.operationSuggestionSources)
     s.operationSuggestionSources.push(...contributions.operationSuggestionSources);
+  if (contributions.roleHomeRoutingProviders)
+    s.roleHomeRoutingProviders.push(...contributions.roleHomeRoutingProviders);
+  if (contributions.workstationSources)
+    s.workstationSources.push(...contributions.workstationSources);
   if (contributions.biReportP0ProcessService)
     s.biReportP0ProcessService = contributions.biReportP0ProcessService;
   if (contributions.implementationConsole)
@@ -288,6 +309,12 @@ export function getRegisteredAttentionSources(): ReadonlyArray<AttentionSourceCo
 }
 export function getRegisteredOperationSuggestionSources(): ReadonlyArray<OperationSuggestionSourceContribution> {
   return store().operationSuggestionSources;
+}
+export function getRegisteredRoleHomeRoutingProviders(): ReadonlyArray<RoleHomeRoutingProviderContribution> {
+  return store().roleHomeRoutingProviders;
+}
+export function getRegisteredWorkstationSources(): ReadonlyArray<WorkstationSourceContribution> {
+  return store().workstationSources;
 }
 export function getRegisteredBiReportP0ProcessService(): BiReportP0ProcessService | null {
   return store().biReportP0ProcessService;
