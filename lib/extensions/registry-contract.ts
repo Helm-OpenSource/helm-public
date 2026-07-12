@@ -35,11 +35,13 @@ export type { ExtensionApiRoute, ApiRouteMethod } from "./api-route-registry";
 
 import type {
   AccountBindingContribution,
+  AttentionSourceContribution,
   BiBoardContribution,
   BiReportP0ProcessProductionRow,
   BiReportP0ProcessSopRow,
   ExtensionIndustryDemoReadoutPage,
   MainlineProviderContribution,
+  NorthstarKpiSourceContribution,
   ReportsExtensionDescriptor,
   SolutionExtensionCatalogEntry,
   WorkspaceNavExtensionDescriptor,
@@ -129,6 +131,16 @@ export type PackContributions = {
    * binding — the default — the Core default provider is used.
    */
   mainlineProviders?: ReadonlyArray<MainlineProviderContribution>;
+  /**
+   * Northstar-KPI sources (blueprint Phase 2, experimental, **concat**). Every
+   * eligible source's KPIs are merged by `resolveShellNorthstarKpis`.
+   */
+  northstarKpiSources?: ReadonlyArray<NorthstarKpiSourceContribution>;
+  /**
+   * Attention sources (blueprint Phase 2, experimental, **concat**). Collected
+   * concurrently and merged by `resolveShellAttention` under the §4.4 budget.
+   */
+  attentionSources?: ReadonlyArray<AttentionSourceContribution>;
   biReportP0ProcessService?: BiReportP0ProcessService;
   implementationConsole?: ImplementationConsoleContribution;
   signalCollectionJobs?: () => ReadonlyArray<SignalCollectionJob>;
@@ -153,6 +165,8 @@ type MutableStore = {
   biBoards: NonNullable<PackContributions["biBoard"]>[];
   industryDemoReadouts: IndustryDemoReadoutContribution[];
   mainlineProviders: MainlineProviderContribution[];
+  northstarKpiSources: NorthstarKpiSourceContribution[];
+  attentionSources: AttentionSourceContribution[];
   biReportP0ProcessService: BiReportP0ProcessService | null;
   implementationConsole: ImplementationConsoleContribution | null;
   signalCollectionJobProviders: Array<() => ReadonlyArray<SignalCollectionJob>>;
@@ -168,6 +182,8 @@ function emptyStore(): MutableStore {
     biBoards: [],
     industryDemoReadouts: [],
     mainlineProviders: [],
+    northstarKpiSources: [],
+    attentionSources: [],
     biReportP0ProcessService: null,
     implementationConsole: null,
     signalCollectionJobProviders: [],
@@ -207,6 +223,10 @@ export function registerPackContributions(
     s.industryDemoReadouts.push(...contributions.industryDemoReadouts);
   if (contributions.mainlineProviders)
     s.mainlineProviders.push(...contributions.mainlineProviders);
+  if (contributions.northstarKpiSources)
+    s.northstarKpiSources.push(...contributions.northstarKpiSources);
+  if (contributions.attentionSources)
+    s.attentionSources.push(...contributions.attentionSources);
   if (contributions.biReportP0ProcessService)
     s.biReportP0ProcessService = contributions.biReportP0ProcessService;
   if (contributions.implementationConsole)
@@ -249,6 +269,12 @@ export function getRegisteredIndustryDemoReadouts(): ReadonlyArray<IndustryDemoR
 }
 export function getRegisteredMainlineProviders(): ReadonlyArray<MainlineProviderContribution> {
   return store().mainlineProviders;
+}
+export function getRegisteredNorthstarKpiSources(): ReadonlyArray<NorthstarKpiSourceContribution> {
+  return store().northstarKpiSources;
+}
+export function getRegisteredAttentionSources(): ReadonlyArray<AttentionSourceContribution> {
+  return store().attentionSources;
 }
 export function getRegisteredBiReportP0ProcessService(): BiReportP0ProcessService | null {
   return store().biReportP0ProcessService;

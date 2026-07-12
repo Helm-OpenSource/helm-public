@@ -15,6 +15,8 @@ import type {
   PermissionSubject,
 } from "@/lib/auth/permission-policy";
 import type { MainlineReadout } from "@/lib/shell/operating-mainline";
+import type { NorthstarKpi } from "@/lib/shell/northstar-kpi";
+import type { AttentionItem } from "@/lib/shell/attention-feed";
 
 export type WorkspaceLike = {
   id: string;
@@ -218,6 +220,47 @@ export type MainlineProviderContribution = {
     workspace: WorkspaceLike;
     english: boolean;
   }) => Promise<MainlineReadout>;
+};
+
+/**
+ * Northstar-KPI source (blueprint §4.2, **concat** surface — multiple eligible
+ * providers' KPIs are merged, unlike the single-winner mainline). Data-only:
+ * `NorthstarKpi` carries no callback fields and no raw currency (currency is
+ * `currency_band` only). `experimental` until a second real external consumer.
+ */
+export type NorthstarKpiSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildKpis: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<NorthstarKpi>>;
+};
+
+/**
+ * Attention source (blueprint §4.2/§4.4, **concat** surface). Items are
+ * de-identified (label = ref only, no PII), navigate-only, role-filtered. The
+ * aggregator (`resolveShellAttention`) collects sources concurrently under a
+ * per-source timeout + aggregate deadline, dedupes across sources, and renders
+ * an "unreturned source" item for any source that misses the budget (§4.4).
+ * `signal` is aborted when the aggregate deadline fires. `experimental`.
+ */
+export type AttentionSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildAttention: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    roleCategory?: string | null;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<AttentionItem>>;
 };
 
 export type ExtensionIndustryDemoReadoutPage = {
