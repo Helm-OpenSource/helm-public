@@ -36,6 +36,7 @@ function matureEvidence(): HarnessP3ReadinessEvidence {
         : (["self_dogfood_health"] as const),
     businessObjectKinds: [
       `object:${["deal", "delivery", "review"][index % 3]}`,
+      `object:${["delivery", "review", "deal"][index % 3]}`,
     ],
     evidenceMode:
       index < 2
@@ -59,7 +60,7 @@ function matureEvidence(): HarnessP3ReadinessEvidence {
     operationalAttestation: {
       ownerReviewReceiptRef: "owner-attestation:p3-readiness-001",
       registrySnapshotHash: `sha256:${"8".repeat(64)}`,
-      signedAt: "2026-07-12T07:30:00.000Z",
+      signedAt: "2026-07-12T08:00:00.000Z",
     },
     asOf: "2026-07-12T08:00:00.000Z",
     prerequisites: (["P0", "P1", "P2"] as const).map((phase, index) => ({
@@ -166,6 +167,16 @@ describe("operating harness P3 data readiness", () => {
     expect(evaluateHarnessP3Readiness(future).decision).toBe("not_ready");
   });
 
+  it("requires owner attestation after the complete evaluation window", () => {
+    const evidence = mutateEvidence(matureEvidence(), (draft) => {
+      draft.operationalAttestation.signedAt = "2026-07-01T00:00:00.000Z";
+    });
+
+    expect(evaluateHarnessP3Readiness(evidence).failures).toContain(
+      "operational_attestation_missing",
+    );
+  });
+
   it("rejects fleet or OSS evidence from the improvement corpus", () => {
     const evidence = mutateEvidence(matureEvidence(), (draft) => {
       draft.evaluationWindow.runs[0].sourceClasses = ["fleet_customer_health"];
@@ -248,6 +259,19 @@ describe("operating harness P3 data readiness", () => {
     );
   });
 
+  it("does not let a high-volume qualifying run hide another run's bad ECE", () => {
+    const evidence = mutateEvidence(matureEvidence(), (draft) => {
+      draft.evaluationWindow.runs[0].expectedCalibrationError = 0.9;
+      draft.evaluationWindow.runs[0].calibrationSampleCount = 10;
+      draft.evaluationWindow.runs[1].expectedCalibrationError = 0;
+      draft.evaluationWindow.runs[1].calibrationSampleCount = 1_000_000;
+    });
+
+    expect(evaluateHarnessP3Readiness(evidence).failures).toContain(
+      "calibration_error_above_limit",
+    );
+  });
+
   it("requires feedback volume and feedback-to-eval conversion", () => {
     const evidence = mutateEvidence(matureEvidence(), (draft) => {
       draft.feedbackSummary.eligibleEditRejectCount = 40;
@@ -300,6 +324,63 @@ describe("operating harness P3 data readiness", () => {
       ]),
     );
     expect(evaluateHarnessP3Readiness(evidence).failures).toContain("input_invalid");
+  });
+
+  it("rejects receipt reuse across attestation, feedback, promotion, run, and rollback", () => {
+    const evidence = mutateEvidence(matureEvidence(), (draft) => {
+      const shared = draft.operationalAttestation.ownerReviewReceiptRef!;
+      draft.feedbackSummary.receiptRefs[0] = shared;
+      draft.deidentifiedPromotions[0].humanSignoffRef = shared;
+    });
+
+    expect(validateHarnessP3ReadinessEvidence(evidence).errors).toContain(
+      `cross_category_owner_review_receipt_reused:${evidence.operationalAttestation.ownerReviewReceiptRef}`,
+    );
+  });
+
+  it("rejects contradictory heldout ref-to-hash evidence", () => {
+    const evidence = mutateEvidence(matureEvidence(), (draft) => {
+      draft.evaluationWindow.runs[1].heldoutSetRef =
+        draft.evaluationWindow.runs[0].heldoutSetRef;
+    });
+
+    expect(validateHarnessP3ReadinessEvidence(evidence).errors).toContain(
+      `p3_heldout_ref_hash_conflict:${evidence.evaluationWindow.runs[0].heldoutSetRef}`,
+    );
+  });
+
+  it("requires rollback drills for evaluated candidates and a distinct in-window fallback", () => {
+    const evidence = mutateEvidence(matureEvidence(), (draft) => {
+      draft.rollbackDrills[0].candidateRevisionId = "oh-expert-phantom";
+      draft.rollbackDrills[1].fallbackRevisionId =
+        draft.rollbackDrills[1].candidateRevisionId;
+      draft.rollbackDrills[1].completedAt = "2030-01-01T00:00:00.000Z";
+    });
+    const report = evaluateHarnessP3Readiness(evidence);
+
+    expect(report.failures).toEqual(
+      expect.arrayContaining([
+        "rollback_drill_failed",
+        "insufficient_rollback_drills",
+      ]),
+    );
+  });
+
+  it("counts an object kind only after it appears in multiple independent runs", () => {
+    const evidence = mutateEvidence(matureEvidence(), (draft) => {
+      draft.evaluationWindow.runs[0].businessObjectKinds = [
+        "object:one-off-a",
+        "object:one-off-b",
+        "object:one-off-c",
+      ];
+      for (const run of draft.evaluationWindow.runs.slice(1)) {
+        run.businessObjectKinds = ["object:shared-a", "object:shared-b"];
+      }
+    });
+    const report = evaluateHarnessP3Readiness(evidence);
+
+    expect(report.metrics.distinctBusinessObjectKindCount).toBe(2);
+    expect(report.failures).toContain("insufficient_business_object_kinds");
   });
 
   it("requires a complete evidence window and derived counts", () => {

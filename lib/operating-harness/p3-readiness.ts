@@ -190,6 +190,7 @@ const p3ReadinessPolicyContent = {
   minIndependentHeldoutSets: 5,
   minCandidateRevisions: 3,
   minBusinessObjectKinds: 3,
+  minObjectKindRunOccurrences: 2,
   minSourceFamilies: 2,
   minOperationalDeidentifiedRuns: 3,
   recentRunWindow: 3,
@@ -480,9 +481,27 @@ export function validateHarnessP3ReadinessEvidence(input: unknown): {
     evidence.operationalAttestation.ownerReviewReceiptRef,
     ...evidence.evaluationWindow.runs.map((item) => item.ownerReviewReceiptRef),
     ...evidence.rollbackDrills.map((item) => item.ownerReviewReceiptRef),
+    ...evidence.feedbackSummary.receiptRefs,
+    ...evidence.deidentifiedPromotions.map((item) => item.humanSignoffRef),
   ].filter((item): item is string => item !== null);
   for (const duplicate of duplicates(crossCategoryOwnerReviewRefs)) {
     errors.push(`cross_category_owner_review_receipt_reused:${duplicate}`);
+  }
+  const hashesByHeldoutRef = new Map<string, Set<string>>();
+  const refsByHeldoutHash = new Map<string, Set<string>>();
+  for (const run of evidence.evaluationWindow.runs) {
+    const hashes = hashesByHeldoutRef.get(run.heldoutSetRef) ?? new Set<string>();
+    hashes.add(run.heldoutSetHash);
+    hashesByHeldoutRef.set(run.heldoutSetRef, hashes);
+    const refs = refsByHeldoutHash.get(run.heldoutSetHash) ?? new Set<string>();
+    refs.add(run.heldoutSetRef);
+    refsByHeldoutHash.set(run.heldoutSetHash, refs);
+  }
+  for (const [ref, hashes] of hashesByHeldoutRef) {
+    if (hashes.size > 1) errors.push(`p3_heldout_ref_hash_conflict:${ref}`);
+  }
+  for (const [hash, refs] of refsByHeldoutHash) {
+    if (refs.size > 1) errors.push(`p3_heldout_hash_ref_conflict:${hash}`);
   }
   if (evidence.feedbackSummary.promotedEvalCaseCount > evidence.feedbackSummary.eligibleEditRejectCount) {
     errors.push("promoted_eval_count_exceeds_eligible_feedback");
@@ -571,15 +590,6 @@ function validPromotion(promotion: HarnessP3DeidentifiedPromotion): boolean {
   );
 }
 
-function successfulRollback(drill: HarnessP3RollbackDrill): boolean {
-  return (
-    drill.killSwitchActivated &&
-    drill.ownerReviewed &&
-    drill.ownerReviewReceiptRef.length > 0 &&
-    drill.expectedManifestHash === drill.restoredManifestHash
-  );
-}
-
 export function evaluateHarnessP3Readiness(input: unknown): HarnessP3ReadinessReport {
   const validation = validateHarnessP3ReadinessEvidence(input);
   const parsed = p3ReadinessEvidenceSchema.safeParse(input);
@@ -638,7 +648,21 @@ export function evaluateHarnessP3Readiness(input: unknown): HarnessP3ReadinessRe
       : evidence.feedbackSummary.promotedEvalCaseCount /
         evidence.feedbackSummary.eligibleEditRejectCount;
   const validPromotions = evidence.deidentifiedPromotions.filter(validPromotion);
-  const successfulRollbackDrillEvidence = evidence.rollbackDrills.filter(successfulRollback);
+  const qualifyingCandidateIds = new Set(
+    qualifyingRuns.map((run) => run.candidateRevisionId),
+  );
+  const successfulRollbackDrillEvidence = evidence.rollbackDrills.filter(
+    (drill) =>
+      drill.killSwitchActivated &&
+      drill.ownerReviewed &&
+      drill.ownerReviewReceiptRef.length > 0 &&
+      drill.expectedManifestHash === drill.restoredManifestHash &&
+      drill.fallbackRevisionId !== drill.candidateRevisionId &&
+      qualifyingCandidateIds.has(drill.candidateRevisionId) &&
+      Date.parse(drill.completedAt) >= Date.parse(evidence.evaluationWindow.windowStart) &&
+      Date.parse(drill.completedAt) <= Date.parse(evidence.evaluationWindow.windowEnd) &&
+      Date.parse(drill.completedAt) <= Date.parse(evidence.asOf),
+  );
   const successfulRollbackDrills = Math.min(
     successfulRollbackDrillEvidence.length,
     new Set(successfulRollbackDrillEvidence.map((item) => item.candidateRevisionId)).size,
@@ -649,6 +673,12 @@ export function evaluateHarnessP3Readiness(input: unknown): HarnessP3ReadinessRe
         sourceClass === "fleet_customer_health" || sourceClass === "oss_governance",
     ),
   ).length;
+  const objectKindRunOccurrences = new Map<string, number>();
+  for (const run of qualifyingRuns) {
+    for (const kind of new Set(run.businessObjectKinds)) {
+      objectKindRunOccurrences.set(kind, (objectKindRunOccurrences.get(kind) ?? 0) + 1);
+    }
+  }
   const metrics: HarnessP3ReadinessMetrics = {
     evaluatedRunCount: runs.length,
     qualifyingRunCount: qualifyingRuns.length,
@@ -656,9 +686,9 @@ export function evaluateHarnessP3Readiness(input: unknown): HarnessP3ReadinessRe
     distinctCandidateRevisionCount: new Set(
       qualifyingRuns.map((run) => run.candidateRevisionId),
     ).size,
-    distinctBusinessObjectKindCount: new Set(
-      qualifyingRuns.flatMap((run) => run.businessObjectKinds),
-    ).size,
+    distinctBusinessObjectKindCount: [...objectKindRunOccurrences.values()].filter(
+      (count) => count >= HARNESS_P3_READINESS_POLICY.minObjectKindRunOccurrences,
+    ).length,
     distinctSourceFamilyCount: new Set(
       qualifyingRuns.flatMap((run) => run.sourceClasses),
     ).size,
@@ -707,6 +737,8 @@ export function evaluateHarnessP3Readiness(input: unknown): HarnessP3ReadinessRe
     !evidence.operationalAttestation.ownerReviewReceiptRef ||
     !evidence.operationalAttestation.registrySnapshotHash ||
     !evidence.operationalAttestation.signedAt ||
+    Date.parse(evidence.operationalAttestation.signedAt) <
+      Date.parse(evidence.evaluationWindow.windowEnd) ||
     Date.parse(evidence.operationalAttestation.signedAt) > Date.parse(evidence.asOf)
   ) {
     failures.push("operational_attestation_missing");
@@ -773,7 +805,10 @@ export function evaluateHarnessP3Readiness(input: unknown): HarnessP3ReadinessRe
   }
   if (
     metrics.weightedExpectedCalibrationError === null ||
-    metrics.weightedExpectedCalibrationError > policy.maxExpectedCalibrationError
+    metrics.weightedExpectedCalibrationError > policy.maxExpectedCalibrationError ||
+    qualifyingRuns.some(
+      (run) => run.expectedCalibrationError > policy.maxExpectedCalibrationError,
+    )
   ) {
     failures.push("calibration_error_above_limit");
   }
