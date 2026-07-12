@@ -1,5 +1,8 @@
 import { recordLLMCall } from "@/lib/observability/llm-call-log.service";
-import { isLlmOutputParseError } from "@/lib/llm/output-parse-error";
+import {
+  isLlmOutputParseError,
+  isLlmOutputSchemaError,
+} from "@/lib/llm/output-parse-error";
 import { getWorkspaceLLMConfig } from "@/lib/llm/config";
 import { appendLLMContextAuditToInputSummary, buildLLMContextAudit } from "@/lib/llm/context-audit";
 import {
@@ -391,7 +394,9 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     // failure so the call ledger reflects what actually happened.
     const fallbackReason = isLlmOutputParseError(error)
       ? "output_parse_failed"
-      : "provider_error";
+      : isLlmOutputSchemaError(error)
+        ? "output_schema_failed"
+        : "provider_error";
 
     await recordLLMCallSafely({
       workspaceId: input.workspaceId,

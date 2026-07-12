@@ -20,8 +20,19 @@ export class LlmOutputParseError extends Error {
   }
 }
 
+export class LlmOutputSchemaError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LlmOutputSchemaError";
+  }
+}
+
 export function isLlmOutputParseError(error: unknown): error is LlmOutputParseError {
   return error instanceof LlmOutputParseError;
+}
+
+export function isLlmOutputSchemaError(error: unknown): error is LlmOutputSchemaError {
+  return error instanceof LlmOutputSchemaError;
 }
 
 export function parseLlmJsonOrThrow<T>(rawText: string): T {

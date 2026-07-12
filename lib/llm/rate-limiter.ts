@@ -14,7 +14,8 @@
  *   - per-IP (trial): 30 / minute
  *
  * The reasoning tier applies to RECOMMENDATION_EXPLANATION and the heavier
- * BI_REPORT_REVIEW / BI_REPORT_ANALYSIS tasks. Everything else is briefing tier.
+ * BI_REPORT_REVIEW / BI_REPORT_ANALYSIS / MULTI_PASS_REVIEW tasks. Everything
+ * else is briefing tier.
  *
  * See HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 (internal) §二 Gap 2.
  */
@@ -60,6 +61,7 @@ const REASONING_TASKS = new Set<LLMTaskType>([
   "RECOMMENDATION_EXPLANATION",
   "BI_REPORT_ANALYSIS",
   "BI_REPORT_REVIEW",
+  "MULTI_PASS_REVIEW",
 ]);
 
 const TIER_LIMITS = {

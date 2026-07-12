@@ -49,6 +49,7 @@ vi.mock("@/lib/llm/qwen-adapter", () => ({
 }));
 
 import { executeLLMTask } from "@/lib/llm/provider-registry";
+import { LlmOutputSchemaError } from "@/lib/llm/output-parse-error";
 
 describe("provider registry logging guard", () => {
   beforeEach(() => {
@@ -191,5 +192,28 @@ describe("provider registry logging guard", () => {
     expect(result.fallbackUsed).toBe(false);
     expect(result.provider).toBe("qwen");
     expect(result.output).toEqual({ summary: "qwen-ok" });
+  });
+
+  it("records strict output-schema failures as an explicit fallback reason", async () => {
+    mocks.adapterRun.mockRejectedValue(new LlmOutputSchemaError("unexpected field"));
+
+    const result = await executeLLMTask({
+      taskType: "MULTI_PASS_REVIEW",
+      workspaceId: "workspace_demo",
+      promptKey: "multi-pass-review",
+      promptVersion: "multi-pass-review-v1",
+      systemPrompt: "system",
+      userPrompt: "user",
+      parseOutput: () => ({ ok: true }),
+      fallbackOutput: { ok: false },
+      outputMode: "json",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.fallbackUsed).toBe(true);
+    expect(result.fallbackReason).toBe("output_schema_failed");
+    expect(mocks.recordLLMCall).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackReason: "output_schema_failed" }),
+    );
   });
 });

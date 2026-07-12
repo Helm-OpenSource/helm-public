@@ -25,6 +25,10 @@ import {
   type AgentRedactionStatus,
 } from "./contracts";
 import { sarpReviewReceiptSchema } from "./sarp-contracts";
+import {
+  llmTaskTrajectoryReceiptSchema,
+  type LLMTaskTrajectoryReceipt,
+} from "../llm/intelligence-contracts-v3";
 
 export const capsuleRepoSchema = z
   .object({
@@ -91,6 +95,7 @@ export const agentRunCapsuleSchema = z
     validationReceipts: z.array(capsuleValidationReceiptSchema).default([]),
     humanReceipts: z.array(z.string()).default([]),
     nextSafeActions: z.array(z.string()).default([]),
+    llmTrajectoryReceipt: llmTaskTrajectoryReceiptSchema.optional(),
     sarpReceipt: sarpReviewReceiptSchema.optional(),
     quarantined: z.boolean().default(false),
   })
@@ -101,6 +106,26 @@ export const agentRunCapsuleSchema = z
         code: "custom",
         path: ["sarpReceipt", "capsuleRunId"],
         message: "sarpReceipt.capsuleRunId must match runId",
+      });
+    }
+    if (
+      capsule.llmTrajectoryReceipt &&
+      capsule.llmTrajectoryReceipt.taskId !== capsule.runId
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["llmTrajectoryReceipt", "taskId"],
+        message: "llmTrajectoryReceipt.taskId must match runId",
+      });
+    }
+    if (
+      capsule.llmTrajectoryReceipt &&
+      !isRedactionSafe(capsule.redactionStatus)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["llmTrajectoryReceipt"],
+        message: "llmTrajectoryReceipt requires proven capsule redaction",
       });
     }
   });
@@ -123,6 +148,7 @@ export type BuildAgentRunCapsuleInput = {
   validationReceipts?: Array<z.infer<typeof capsuleValidationReceiptSchema>>;
   humanReceipts?: string[];
   nextSafeActions?: string[];
+  llmTrajectoryReceipt?: LLMTaskTrajectoryReceipt;
   now?: () => Date;
 };
 
@@ -191,6 +217,7 @@ export function buildAgentRunCapsule(input: BuildAgentRunCapsuleInput): AgentRun
     validationReceipts: input.validationReceipts ?? [],
     humanReceipts: input.humanReceipts ?? [],
     nextSafeActions,
+    llmTrajectoryReceipt: safe ? input.llmTrajectoryReceipt : undefined,
     quarantined: !safe,
   };
 

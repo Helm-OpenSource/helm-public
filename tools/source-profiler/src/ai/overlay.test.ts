@@ -34,6 +34,7 @@ const fixedNow = () => new Date("2026-06-07T00:00:00.000Z");
 describe("runAiOverlay — local provider", () => {
   it("produces advisory candidate-only mappings with origin ai", async () => {
     const out = await runAiOverlay({ packet: packet(), providerKind: "local", consent: false, now: fixedNow });
+    expect(out.status).toBe("produced");
     expect(out.candidates.length).toBeGreaterThan(0);
     expect(out.candidates.every((c) => c.origin === "ai")).toBe(true);
     expect(out.candidates.every((c) => c.state === "candidate")).toBe(true);
@@ -44,6 +45,7 @@ describe("runAiOverlay — local provider", () => {
 describe("runAiOverlay — remote consent ceremony", () => {
   it("blocks remote without consent and emits no candidates", async () => {
     const out = await runAiOverlay({ packet: packet(), providerKind: "openai", consent: false, now: fixedNow });
+    expect(out.status).toBe("blocked");
     expect(out.candidates).toEqual([]);
     expect(out.audit.some((a) => a.level === "warn" && /consent/i.test(a.message))).toBe(true);
   });
@@ -72,6 +74,7 @@ describe("runAiOverlay — remote consent ceremony", () => {
       now: fixedNow,
     });
     expect(out.candidates.length).toBe(1);
+    expect(out.status).toBe("produced");
     expect(out.candidates[0].origin).toBe("ai");
     // The prompt sent to the transport must not contain the real table name.
     expect(sentPrompt).not.toContain("deals");
@@ -92,6 +95,7 @@ describe("runAiOverlay — remote consent ceremony", () => {
       now: fixedNow,
     });
     expect(called).toBe(0); // transport must never be invoked
+    expect(out.status).toBe("blocked");
     expect(out.candidates).toEqual([]);
     expect(out.audit.some((a) => /does not match|consent/i.test(a.message))).toBe(true);
   });
@@ -111,7 +115,66 @@ describe("runAiOverlay — remote consent ceremony", () => {
       now: fixedNow,
     });
     expect(called).toBe(0);
+    expect(out.status).toBe("blocked");
     expect(out.candidates).toEqual([]);
     expect(out.audit.some((a) => a.level === "warn" && /consent/i.test(a.message))).toBe(true);
+  });
+
+  it("fails closed when a provider references an unknown source object", async () => {
+    const provider: AiProvider = {
+      kind: "local",
+      async suggest() {
+        return [
+          {
+            sourceObjectId: "unknown-object",
+            targetEntity: "Opportunity",
+            signalFamily: "advancement",
+            reasoning: "unbound output",
+            confidence: 80,
+          },
+        ];
+      },
+    };
+
+    const out = await runAiOverlay({
+      packet: packet(),
+      providerKind: "local",
+      consent: false,
+      provider,
+      now: fixedNow,
+    });
+
+    expect(out.status).toBe("evidence_failure");
+    expect(out.candidates).toEqual([]);
+  });
+
+  it("fails closed when an injected provider returns an extra unsafe field", async () => {
+    const sourceObjectId = packet().codeScan.objects[0]?.id ?? "missing";
+    const provider: AiProvider = {
+      kind: "local",
+      async suggest() {
+        return [
+          {
+            sourceObjectId,
+            targetEntity: "Opportunity",
+            signalFamily: "advancement",
+            reasoning: "strict validation required",
+            confidence: 80,
+            activateConnector: true,
+          } as never,
+        ];
+      },
+    };
+
+    const out = await runAiOverlay({
+      packet: packet(),
+      providerKind: "local",
+      consent: false,
+      provider,
+      now: fixedNow,
+    });
+
+    expect(out.status).toBe("schema_failure");
+    expect(out.candidates).toEqual([]);
   });
 });

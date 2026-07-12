@@ -55,6 +55,7 @@ export type SarpProofFixtureResult = {
   readonly passed: boolean;
   readonly capsulePath: string;
   readonly receiptPath: string;
+  readonly trajectoryReceiptPath: string | null;
 };
 
 export type SarpProofManifest = {
@@ -73,6 +74,8 @@ export type SarpProofManifest = {
     readonly failedFixtureCount: number;
     readonly verdicts: Record<SarpVerdictCode, number>;
     readonly humanReviewRequiredCount: number;
+    readonly trajectoryReceiptCount: number;
+    readonly legacyFixtureCount: number;
   };
   readonly fixtureResults: readonly SarpProofFixtureResult[];
 };
@@ -145,8 +148,17 @@ function writeCapsuleAndReceipt(
   const slug = slugForFixture(fixture.name);
   const capsulePath = `capsules/${slug}.agent-run-capsule.json`;
   const receiptPath = `receipts/${slug}.sarp-receipt.json`;
+  const trajectoryReceiptPath = fixture.capsule.llmTrajectoryReceipt
+    ? `trajectories/${slug}.llm-task-trajectory-receipt.json`
+    : null;
   writeJson(path.join(outputDir, capsulePath), fixture.capsule);
   writeJson(path.join(outputDir, receiptPath), receipt);
+  if (trajectoryReceiptPath && fixture.capsule.llmTrajectoryReceipt) {
+    writeJson(
+      path.join(outputDir, trajectoryReceiptPath),
+      fixture.capsule.llmTrajectoryReceipt,
+    );
+  }
   return {
     name: fixture.name,
     expectedVerdict: fixture.expectedVerdict,
@@ -154,6 +166,7 @@ function writeCapsuleAndReceipt(
     passed: receipt.verdict === fixture.expectedVerdict,
     capsulePath,
     receiptPath,
+    trajectoryReceiptPath,
   };
 }
 
@@ -174,10 +187,19 @@ function filesForManifest(fixtureResults: readonly SarpProofFixtureResult[]): Sa
     { path: "fixture-summary.json", purpose: "synthetic fixture verdict comparison" },
     { path: "boundary-note.md", purpose: "explicit non-claim and forbidden-action boundary" },
     { path: "next-safe-actions.md", purpose: "review-first follow-up checklist" },
-    ...fixtureResults.flatMap((fixture) => [
-      { path: fixture.capsulePath, purpose: `${fixture.name} synthetic AgentRunCapsule` },
-      { path: fixture.receiptPath, purpose: `${fixture.name} deterministic SARP receipt` },
-    ]),
+    ...fixtureResults.flatMap((fixture) => {
+      const files: SarpProofFile[] = [
+        { path: fixture.capsulePath, purpose: `${fixture.name} synthetic AgentRunCapsule` },
+        { path: fixture.receiptPath, purpose: `${fixture.name} deterministic SARP receipt` },
+      ];
+      if (fixture.trajectoryReceiptPath) {
+        files.push({
+          path: fixture.trajectoryReceiptPath,
+          purpose: `${fixture.name} public-safe LLM task trajectory receipt`,
+        });
+      }
+      return files;
+    }),
   ];
 }
 
@@ -258,6 +280,12 @@ export async function writeSarpProofPackage(
       failedFixtureCount: fixtureResults.length - passedFixtureCount,
       verdicts: summarizeVerdicts(receipts),
       humanReviewRequiredCount: receipts.filter((receipt) => receipt.humanReviewRequired).length,
+      trajectoryReceiptCount: fixtureResults.filter(
+        (fixture) => fixture.trajectoryReceiptPath !== null,
+      ).length,
+      legacyFixtureCount: fixtureResults.filter(
+        (fixture) => fixture.trajectoryReceiptPath === null,
+      ).length,
     },
     fixtureResults,
   };

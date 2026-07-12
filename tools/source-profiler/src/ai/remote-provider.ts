@@ -8,8 +8,17 @@
  * to wire one (preview-only) by default.
  */
 
-import type { AiProvider, AiPromptInput, AiSuggestion, AiProviderKind, AiTransport } from "./types";
-import { targetEntitySchema, signalFamilySchema } from "../contract/governance";
+import { z } from "zod";
+
+import {
+  AiProviderResponseError,
+  aiSuggestionSchema,
+  type AiProvider,
+  type AiPromptInput,
+  type AiSuggestion,
+  type AiProviderKind,
+  type AiTransport,
+} from "./types";
 
 export type RemoteProviderConfig = {
   kind: Exclude<AiProviderKind, "local">;
@@ -27,35 +36,20 @@ export function createRemoteProvider({ kind, transport }: RemoteProviderConfig):
   };
 }
 
-function parseSuggestions(raw: string): AiSuggestion[] {
+export function parseSuggestions(raw: string): AiSuggestion[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return [];
+    throw new AiProviderResponseError("parse_failure", "provider response is not valid JSON");
   }
-  if (!Array.isArray(parsed)) return [];
-  const out: AiSuggestion[] = [];
-  for (const item of parsed) {
-    if (!item || typeof item !== "object") continue;
-    const rec = item as Record<string, unknown>;
-    const targetEntity = targetEntitySchema.safeParse(rec.targetEntity);
-    const signalFamily = signalFamilySchema.safeParse(rec.signalFamily);
-    if (!targetEntity.success || !signalFamily.success) continue;
-    if (typeof rec.sourceObjectId !== "string") continue;
-    out.push({
-      sourceObjectId: rec.sourceObjectId,
-      targetEntity: targetEntity.data,
-      signalFamily: signalFamily.data,
-      reasoning: typeof rec.reasoning === "string" ? rec.reasoning : "",
-      confidence: clampConfidence(rec.confidence),
-    });
-  }
-  return out;
-}
 
-function clampConfidence(value: unknown): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(100, Math.round(n)));
+  const result = z.array(aiSuggestionSchema).safeParse(parsed);
+  if (!result.success) {
+    throw new AiProviderResponseError(
+      "schema_failure",
+      "provider response does not match the strict suggestion schema",
+    );
+  }
+  return result.data;
 }

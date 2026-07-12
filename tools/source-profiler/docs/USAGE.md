@@ -50,7 +50,14 @@ npm run source-profiler -- \
 | `review-packet.json` | CONFIDENTIAL packet a human reviews (P0-REQ-07 metadata). |
 | `review-packet.redacted.json` | (with `--redact`) shareable, aliased export. |
 | `ai-prompt-preview.txt` | (with `--ai-provider`) exactly what would be sent. |
+| `source-to-signal-proposals.json` | (with `--ai-provider`) v3 candidate bundles plus fail-closed status/reason; local-private unless generated from public synthetic input. |
 | `overlay-draft.json` | (with `--emit-overlay-draft`) the deployment draft. |
+
+The remote provider option remains preview-only until a deployment explicitly
+wires a transport. Invalid JSON, extra fields, mixed valid/invalid items,
+unknown source references, or profile/consent mismatch produce no proposals.
+The local provider exercises the complete redaction, grounding, contract, and
+artifact path without network egress; it does not prove live-model quality.
 
 ## Scope manifest
 

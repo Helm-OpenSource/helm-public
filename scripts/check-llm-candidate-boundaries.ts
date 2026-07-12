@@ -19,11 +19,11 @@ const TEST_FILE_PATTERN = /\.(test|spec)\.tsx?$/;
 const BYPASS_TOKEN = "@bypass-llm-candidate-boundary";
 
 const CANDIDATE_AWARE_PATTERN =
-  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate)\b/;
+  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate|ModelCapabilityProfile|RichLocalContextBundle|ContextProjectionReceipt|JudgementProposalBundle|SourceToSignalProposalBundle|LLMTaskTrajectoryReceipt)\b/;
 const UNSAFE_REVIEW_STATE_PATTERN =
   /reviewState\s*:\s*["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
 const UNSAFE_STATE_ENUM_DEFINITION_PATTERN =
-  /\b(?:JUDGEMENT_REVIEW_STATES|judgementReviewStateSchema|COUNTERFACTUAL_REVIEW_STATES|counterfactualReviewStateSchema)\b[\s\S]{0,500}["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
+  /\b(?:JUDGEMENT_REVIEW_STATES|judgementReviewStateSchema|COUNTERFACTUAL_REVIEW_STATES|counterfactualReviewStateSchema|V3_REVIEW_STATES|v3ReviewStateSchema)\b[\s\S]{0,500}["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
 
 // v2 terms-to-avoid: banned public-contract / UI identifiers. Use the approved
 // alternatives (capabilityRequested, capabilityRef, missingSignalNote,
@@ -56,6 +56,25 @@ const SELECTOR_RECEIPT_PATTERN = /\b(LLMContextSelectionReceipt|selectorReceipt|
 const SELECTOR_RECEIPT_SINK_PATTERN =
   /\buserPrompt\s*:|JSON\.stringify|executeLLMTask|build\w*ReviewPrompt/;
 const SELECTOR_RECEIPT_DEFINING_FILE = "lib/llm/intelligence-contracts-v2.ts";
+
+// v3 rule F: rich local context and trajectory receipts are local/private or
+// audit/eval input surfaces. Prompt builders must consume only a projected
+// SelectedContextStub or candidate summary, never those receipts directly.
+const RICH_CONTEXT_PATTERN =
+  /\b(RichLocalContextBundle|richLocalContextBundle|richContextBundle|LLMTaskTrajectoryReceipt|trajectoryReceipt)\b/;
+const RICH_CONTEXT_SINK_PATTERN =
+  /\buserPrompt\s*:|JSON\.stringify|executeLLMTask|build\w*(?:Prompt|ReviewPrompt)/;
+const CONTEXT_PROJECTION_RECEIPT_PATTERN = /\bContextProjectionReceipt\b/;
+const CONTEXT_PROJECTION_RECEIPT_SINK_PATTERN =
+  /JSON\.stringify\(\s*(?:contextProjectionReceipt|projectionReceipt|receipt)\b|\buserPrompt\s*:\s*(?:contextProjectionReceipt|projectionReceipt|receipt)\b/i;
+
+const V3_MULTI_PASS_WORKFLOW_PATTERN = /\bexecuteMultiPassReview\b/;
+const V3_MULTI_PASS_REQUIRED_MARKERS = [
+  'taskType: "MULTI_PASS_REVIEW"',
+  "llmPromptVersions.multiPassReview",
+  "executeLLMTask",
+  "buildReasoningBudgetAuditSummary",
+] as const;
 
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
@@ -199,6 +218,43 @@ export function runLlmCandidateBoundaryCheck(
         detail:
           "Selection receipt content is audit-only; it must not be serialized, prompt-built, or dispatched. Only intelligence-contracts-v2.ts may reference it (projectSelectedContextStub). Use SelectedContextStub.",
       });
+    }
+
+    if (
+      RICH_CONTEXT_PATTERN.test(content) &&
+      RICH_CONTEXT_SINK_PATTERN.test(content)
+    ) {
+      violations.push({
+        file: repoRelative,
+        rule: "LLM-CANDIDATE-F",
+        detail:
+          "Rich local context and trajectory receipts must not be serialized, prompt-built, or dispatched. Project to a safe stub or summary before any remote LLM path.",
+      });
+    }
+
+    if (
+      CONTEXT_PROJECTION_RECEIPT_PATTERN.test(content) &&
+      CONTEXT_PROJECTION_RECEIPT_SINK_PATTERN.test(content)
+    ) {
+      violations.push({
+        file: repoRelative,
+        rule: "LLM-CANDIDATE-F",
+        detail:
+          "Context projection receipts are audit-only; prompt builders may consume only their validated SelectedContextStub projection.",
+      });
+    }
+
+    if (V3_MULTI_PASS_WORKFLOW_PATTERN.test(content)) {
+      const missingMarkers = V3_MULTI_PASS_REQUIRED_MARKERS.filter(
+        (marker) => !content.includes(marker),
+      );
+      if (missingMarkers.length > 0) {
+        violations.push({
+          file: repoRelative,
+          rule: "LLM-CANDIDATE-G",
+          detail: `V3 multi-pass workflow must stay on the registered prompt/version/budget/call-log chain; missing ${missingMarkers.join(", ")}.`,
+        });
+      }
     }
   }
 
