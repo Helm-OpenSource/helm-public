@@ -65,6 +65,7 @@ export type SettingsClientProps = {
       connectedSources: string | null;
       focusAreas: string | null;
       defaultStrategies: string | null;
+      configuration?: string | null;
       defaultLLMProvider?: string | null;
       defaultLLMModel?: string | null;
       extractionModel?: string | null;

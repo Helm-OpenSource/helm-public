@@ -16,13 +16,11 @@ import {
 } from "@/features/settings/actions";
 import type { MemberDefinitionDraft } from "@/lib/definitions/member-definition";
 import {
-  ROLE_PRESET_KEYS,
-  getRolePresetDefinition,
-  listRolePresetOptions,
-  localizeRolePreset,
-  suggestRolePresetKeyFromText,
-  type RolePresetKey,
-} from "@/lib/definitions/role-presets";
+  getWorkspaceRolePresetDefinition,
+  listWorkspaceRolePresetOptions,
+  localizeWorkspaceRolePreset,
+  resolveWorkspaceRolePresetKey,
+} from "@/lib/definitions/workspace-role-preset-catalog";
 import { safeParseJson } from "@/lib/utils";
 
 type MemberDefinitionCardProps = {
@@ -31,6 +29,7 @@ type MemberDefinitionCardProps = {
     name: string;
     profileType: string | null;
     focusAreas: string | null;
+    configuration: string | null;
   };
   currentMembership: {
     id: string;
@@ -62,7 +61,7 @@ type MemberDefinitionDisplayState = {
 
 type LocalEditorSnapshot = {
   serverKey: string;
-  rolePresetKey: RolePresetKey;
+  rolePresetKey: string;
   title: string;
   customNotes: string;
   editor: DefinitionEditorState;
@@ -227,7 +226,10 @@ function MemberDefinitionCardBody({
   const router = useRouter();
   const english = locale === "en-US";
   const [, startTransition] = useTransition();
-  const rolePresetOptions = useMemo(() => listRolePresetOptions(locale), [locale]);
+  const rolePresetOptions = useMemo(
+    () => listWorkspaceRolePresetOptions(workspace.configuration, locale),
+    [locale, workspace.configuration],
+  );
   const displayState = resolveMemberDefinitionDisplayState({
     acceptedDefinition,
     draftDefinition,
@@ -235,21 +237,31 @@ function MemberDefinitionCardBody({
     draftJson: currentMembership.definitionDraftJson,
   });
   const initialDefinition = displayState.definition;
-  const initialRolePresetKey =
-    initialDefinition?.rolePresetKey ??
-    (currentMembership.rolePresetKey as RolePresetKey | null) ??
-    suggestRolePresetKeyFromText(
-      currentMembership.title,
-      currentMembership.persona,
-      workspace.profileType,
-    );
-  const [rolePresetKey, setRolePresetKey] = useState<RolePresetKey>(initialRolePresetKey);
+  const initialRolePresetKey = resolveWorkspaceRolePresetKey({
+    rawConfiguration: workspace.configuration,
+    requestedRolePresetKey:
+      initialDefinition?.rolePresetKey ?? currentMembership.rolePresetKey,
+    title: currentMembership.title,
+    persona: currentMembership.persona,
+    workspaceProfileType: workspace.profileType,
+  });
+  const [rolePresetKey, setRolePresetKey] = useState(initialRolePresetKey);
   const [title, setTitle] = useState(currentMembership.title ?? "");
   const [customNotes, setCustomNotes] = useState(initialDefinition?.customNotes ?? "");
   const [editor, setEditor] = useState<DefinitionEditorState>(buildEditorState(initialDefinition));
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  const localizedPreset = localizeRolePreset(getRolePresetDefinition(rolePresetKey), locale);
+  const rolePresetDefinition = getWorkspaceRolePresetDefinition(
+    rolePresetKey,
+    workspace.configuration,
+  );
+  const localizedPreset = rolePresetDefinition
+    ? localizeWorkspaceRolePreset(rolePresetDefinition, locale)
+    : {
+        summary: english
+          ? "The selected role preset is no longer available in this workspace."
+          : "当前工作区已不再提供所选角色预设。",
+      };
   const focusAreas = safeParseJson<string[]>(workspace.focusAreas, []).filter(Boolean);
   const localDraftStorageKey = `helm:member-definition-editor:${currentMembership.id}`;
   const canPersistDefinition = isEditorComplete(editor);
@@ -268,12 +280,16 @@ function MemberDefinitionCardBody({
       }
 
       const snapshot = JSON.parse(rawSnapshot) as Partial<LocalEditorSnapshot>;
-      const snapshotRolePresetKey = snapshot.rolePresetKey as RolePresetKey | undefined;
+      const snapshotRolePresetKey =
+        typeof snapshot.rolePresetKey === "string" ? snapshot.rolePresetKey : null;
 
       if (
         snapshot.serverKey !== storageVersionKey ||
         !snapshotRolePresetKey ||
-        !ROLE_PRESET_KEYS.includes(snapshotRolePresetKey) ||
+        !getWorkspaceRolePresetDefinition(
+          snapshotRolePresetKey,
+          workspace.configuration,
+        ) ||
         !isDefinitionEditorState(snapshot.editor)
       ) {
         return;
@@ -296,7 +312,7 @@ function MemberDefinitionCardBody({
         window.clearTimeout(restoreTimer);
       }
     };
-  }, [localDraftStorageKey, storageVersionKey]);
+  }, [localDraftStorageKey, storageVersionKey, workspace.configuration]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !hasUnsavedChanges) {
@@ -435,7 +451,7 @@ function MemberDefinitionCardBody({
             <Select
               value={rolePresetKey}
               onValueChange={(value) => {
-                setRolePresetKey(value as RolePresetKey);
+                setRolePresetKey(value);
                 setHasUnsavedChanges(true);
               }}
             >

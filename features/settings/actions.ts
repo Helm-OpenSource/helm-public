@@ -109,11 +109,10 @@ import {
 import { findFirstMembershipWithExistingUser } from "@/lib/auth/membership-with-user";
 import { buildMemberDefinitionDraft, type MemberDefinitionDraft } from "@/lib/definitions/member-definition";
 import {
-  ROLE_PRESET_KEYS,
-  getRolePresetDefinition,
-  localizeRolePreset,
-  suggestRolePresetKeyFromText,
-} from "@/lib/definitions/role-presets";
+  getWorkspaceRolePresetDefinition,
+  localizeWorkspaceRolePreset,
+  resolveWorkspaceRolePresetKey,
+} from "@/lib/definitions/workspace-role-preset-catalog";
 import { resolveUiLocale, UI_LOCALE_COOKIE } from "@/lib/i18n/config";
 import {
   fetchDingTalkAppAccessToken,
@@ -336,7 +335,7 @@ const membershipSchema = z.object({
   name: optionalTextField(40),
   role: z.enum(["OWNER", "BILLING_ADMIN", "ADMIN", "OPERATOR", "REVIEWER", "MEMBER"]),
   title: optionalTextField(60),
-  rolePresetKey: z.enum(ROLE_PRESET_KEYS).optional(),
+  rolePresetKey: z.string().trim().min(1).max(96).optional(),
 }).superRefine((value, ctx) => {
   const raw = value.email?.trim() ?? "";
   if (!raw) {
@@ -406,13 +405,13 @@ const authSessionRevokeScopeSchema = z.object({
 });
 
 const memberDefinitionDraftSchema = z.object({
-  rolePresetKey: z.enum(ROLE_PRESET_KEYS),
+  rolePresetKey: z.string().trim().min(1).max(96),
   title: optionalTextField(60),
   customNotes: optionalTextField(240),
 });
 
 const memberDefinitionAcceptSchema = z.object({
-  rolePresetKey: z.enum(ROLE_PRESET_KEYS),
+  rolePresetKey: z.string().trim().min(1).max(96),
   title: optionalTextField(60),
   customNotes: optionalTextField(240),
   mission: z.string().trim().min(1).max(600),
@@ -971,6 +970,12 @@ function getMembershipRoleGuardMessage(
   }
 }
 
+function getRolePresetCatalogGuardMessage(english: boolean) {
+  return english
+    ? "This role preset is not available in the current workspace catalog."
+    : "当前工作区没有这个角色预设。";
+}
+
 export async function createOrganizationAction(input: z.infer<typeof organizationSchema>) {
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
@@ -1096,15 +1101,32 @@ export async function addOrganizationMemberAction(input: z.infer<typeof membersh
     };
   }
   const locale = resolveUiLocale(workspace.defaultLocale);
-  const resolvedRolePresetKey =
-    parsed.data.rolePresetKey ??
-    suggestRolePresetKeyFromText(parsed.data.title, workspace.profileType, workspace.description);
-  const localizedRolePreset = localizeRolePreset(getRolePresetDefinition(resolvedRolePresetKey), locale);
+  const requestedRolePreset = parsed.data.rolePresetKey
+    ? getWorkspaceRolePresetDefinition(parsed.data.rolePresetKey, workspace.configuration)
+    : null;
+  if (parsed.data.rolePresetKey && !requestedRolePreset) {
+    return { ok: false, error: getRolePresetCatalogGuardMessage(english) };
+  }
+  const resolvedRolePresetKey = requestedRolePreset?.key ?? resolveWorkspaceRolePresetKey({
+    rawConfiguration: workspace.configuration,
+    title: parsed.data.title,
+    persona: workspace.description,
+    workspaceProfileType: workspace.profileType,
+  });
+  const rolePresetDefinition = requestedRolePreset ?? getWorkspaceRolePresetDefinition(
+    resolvedRolePresetKey,
+    workspace.configuration,
+  );
+  if (!rolePresetDefinition) {
+    return { ok: false, error: getRolePresetCatalogGuardMessage(english) };
+  }
+  const localizedRolePreset = localizeWorkspaceRolePreset(rolePresetDefinition, locale);
   const memberDefinitionDraft = buildMemberDefinitionDraft({
     locale,
     workspaceName: workspace.name,
     workspaceProfileType: workspace.profileType,
     focusAreasJson: workspace.focusAreas,
+    workspaceConfigurationJson: workspace.configuration,
     rolePresetKey: resolvedRolePresetKey,
     title: parsed.data.title,
     persona: parsed.data.title ?? localizedRolePreset.label,
@@ -3456,15 +3478,20 @@ export async function generateCurrentMemberDefinitionDraftAction(
     return { ok: false, error: english ? "Definition input is incomplete" : "定义输入不完整" };
   }
 
-  const localizedRolePreset = localizeRolePreset(
-    getRolePresetDefinition(parsed.data.rolePresetKey),
-    locale,
+  const rolePresetDefinition = getWorkspaceRolePresetDefinition(
+    parsed.data.rolePresetKey,
+    workspace.configuration,
   );
+  if (!rolePresetDefinition) {
+    return { ok: false, error: getRolePresetCatalogGuardMessage(english) };
+  }
+  const localizedRolePreset = localizeWorkspaceRolePreset(rolePresetDefinition, locale);
   const draft = buildMemberDefinitionDraft({
     locale,
     workspaceName: workspace.name,
     workspaceProfileType: workspace.profileType,
     focusAreasJson: workspace.focusAreas,
+    workspaceConfigurationJson: workspace.configuration,
     rolePresetKey: parsed.data.rolePresetKey,
     title: parsed.data.title,
     persona: membership.persona ?? localizedRolePreset.label,
@@ -3518,10 +3545,14 @@ export async function saveCurrentMemberDefinitionDraftAction(
     return { ok: false, error: english ? "Definition draft is incomplete" : "定义草稿还不完整" };
   }
 
-  const localizedRolePreset = localizeRolePreset(
-    getRolePresetDefinition(parsed.data.rolePresetKey),
-    locale,
+  const rolePresetDefinition = getWorkspaceRolePresetDefinition(
+    parsed.data.rolePresetKey,
+    workspace.configuration,
   );
+  if (!rolePresetDefinition) {
+    return { ok: false, error: getRolePresetCatalogGuardMessage(english) };
+  }
+  const localizedRolePreset = localizeWorkspaceRolePreset(rolePresetDefinition, locale);
   const draft: MemberDefinitionDraft = {
     version: 1,
     locale,
@@ -3590,10 +3621,14 @@ export async function acceptCurrentMemberDefinitionAction(
     return { ok: false, error: english ? "Definition input is incomplete" : "定义输入不完整" };
   }
 
-  const localizedRolePreset = localizeRolePreset(
-    getRolePresetDefinition(parsed.data.rolePresetKey),
-    locale,
+  const rolePresetDefinition = getWorkspaceRolePresetDefinition(
+    parsed.data.rolePresetKey,
+    workspace.configuration,
   );
+  if (!rolePresetDefinition) {
+    return { ok: false, error: getRolePresetCatalogGuardMessage(english) };
+  }
+  const localizedRolePreset = localizeWorkspaceRolePreset(rolePresetDefinition, locale);
   const acceptedDefinition = {
     version: 1 as const,
     locale,
