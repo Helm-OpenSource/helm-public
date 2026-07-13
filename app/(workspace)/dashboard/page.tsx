@@ -5,7 +5,7 @@ import {
   resolveWorkspaceDefaultLandingPath,
 } from "@/lib/workspace-ops";
 import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
-import { getWorkspaceRolePresetDefinition } from "@/lib/definitions/workspace-role-preset-catalog";
+import { resolveMemberBasePresetKey } from "@/lib/definitions/workspace-role-preset-catalog";
 import { resolveNorthstarText } from "@/lib/shell/northstar-text";
 import { resolveShellMainline } from "@/lib/shell/resolve-shell-experience";
 import { resolveRoleLens } from "@/lib/shell/role-home";
@@ -73,13 +73,14 @@ export default async function DashboardPage({
     );
   }
 
-  // 角色 lens：授权先行（页面权限不受此影响）；custom preset 经 basePresetKey
-  // 归并；解析失败落 GENERIC（fail-safe 向最低信息面）。
-  const presetDefinition = getWorkspaceRolePresetDefinition(
-    membership.rolePresetKey,
-    workspace.configuration,
-  );
-  const basePresetKey = presetDefinition?.basePresetKey ?? null;
+  // 角色 lens：授权先行（页面权限不受此影响）；custom preset 经 basePresetKey 归并；
+  // 无 preset 受控兜底(OWNER→控制塔,其余→GENERIC),与 layout/sidebar 同一 helper 防漂移
+  // (CodeX 运行审计 P1:OWNER 无 preset 曾落空白 generic)。
+  const basePresetKey = resolveMemberBasePresetKey({
+    rolePresetKey: membership.rolePresetKey,
+    workspaceRole: membership.role,
+    rawConfiguration: workspace.configuration,
+  });
   const lens = resolveRoleLens(basePresetKey);
 
   // 主线计数语义（诚实口径，contract 级 countCaliber=daily_schedule）：
