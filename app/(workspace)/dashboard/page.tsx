@@ -13,6 +13,7 @@ import { loadDashboardPageData } from "@/features/dashboard/page-loader";
 import { buildDashboardViewModel } from "@/features/dashboard/view-model";
 import { ControlTowerView } from "@/features/dashboard/control-tower/control-tower-view";
 import { AttentionInbox } from "@/features/exceptions/attention-inbox";
+import { NorthstarKpiPanel } from "@/features/northstar/northstar-kpi-panel";
 import { LegacyHomeView } from "@/features/dashboard/legacy-home-view";
 import { ConnectorBindingSuccessSheet } from "@/features/dashboard/connector-binding-success-sheet";
 
@@ -118,6 +119,9 @@ export default async function DashboardPage({
         tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
         connectorSheet={connectorSheet}
       />
+      {/* 北极星 KPI(read-only)——northstarKpiSources surface 首个 Core 消费者;经营控制塔指标行。
+          金额只给分档、三态禁造数;无 provider 时一行诚实说明,不占版面。 */}
+      <NorthstarKpiPanel workspace={workspace} english={english} />
       {/* 异常工作台 · Agent 收件箱(read-only)——attention surface 首个 Core 消费者。
           控制塔操作者首页之下即异常台;只汇集与导航,不代执行;无 provider 时诚实空态。 */}
       <AttentionInbox workspace={workspace} english={english} />
