@@ -98,6 +98,103 @@ describe("check-llm-candidate-boundaries", () => {
     expect(result.violations[0]?.detail).toContain("must not directly write");
   });
 
+  it("allows only transactional DRAFT/PENDING candidate materialization", () => {
+    writeFile(
+      "lib/llm/governed-candidate-materializer.ts",
+      `
+        import type { GovernedJudgementCandidate } from "@/lib/llm/governed-runtime-contracts";
+        export async function materializeGovernedJudgementCandidate(candidate: GovernedJudgementCandidate) {
+          return db.$transaction(async (tx) => {
+            await tx.artifactBundle.create({ data: { status: ArtifactBundleStatus.DRAFT, systemOfRecordWrite: false } });
+            await tx.artifactReview.create({ data: { status: ArtifactReviewStatus.PENDING } });
+            await tx.auditLog.create({ data: { targetId: candidate.candidateId } });
+          });
+        }
+      `,
+    );
+
+    expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
+  });
+
+  it("rejects governed candidate materialization that creates an action or approval", () => {
+    writeFile(
+      "lib/llm/governed-candidate-materializer.ts",
+      `
+        import type { GovernedJudgementCandidate } from "@/lib/llm/governed-runtime-contracts";
+        export async function materializeGovernedJudgementCandidate(candidate: GovernedJudgementCandidate) {
+          await db.actionItem.create({ data: { title: candidate.candidateId } });
+        }
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-I")).toBe(true);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-B")).toBe(true);
+  });
+
+  it("allows only capability-gated pending CREATE_TASK promotion", () => {
+    writeFile(
+      "lib/governed-intelligence/governed-candidate-review.ts",
+      `
+        export async function promoteGovernedJudgementCandidateToTask() {
+          await assertWorkspaceGovernedCandidatePromotionServiceAccess({ actorType: ActorType.USER });
+          return db.$transaction(async (tx) => {
+            if (review.status !== ArtifactReviewStatus.CONFIRMED) return null;
+            await tx.artifactBundle.updateMany({ data: { status: ArtifactBundleStatus.CONSUMED } });
+            const action = await tx.actionItem.create({ data: {
+              actionType: ActionType.CREATE_TASK,
+              executionMode: ActionExecutionMode.REQUIRES_APPROVAL,
+              contentAuthorship: ActorType.AI
+            } });
+            return tx.approvalTask.create({ data: {
+              actionItemId: action.id,
+              status: ApprovalStatus.PENDING,
+              autoExecute: false
+            } });
+          });
+        }
+      `,
+    );
+
+    expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
+  });
+
+  it("rejects candidate promotion that executes or skips pending approval", () => {
+    writeFile(
+      "lib/governed-intelligence/governed-candidate-review.ts",
+      `
+        export async function promoteGovernedJudgementCandidateToTask() {
+          return executeActionItem("action-1");
+        }
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-J")).toBe(
+      true,
+    );
+  });
+
+  it("rejects LLM candidate modules importing the human promotion service", () => {
+    writeFile(
+      "lib/llm/example.ts",
+      `
+        import type { GovernedJudgementCandidate } from "@/lib/llm/governed-runtime-contracts";
+        import { promoteGovernedJudgementCandidateToTask } from "@/lib/governed-intelligence/governed-candidate-review";
+        export type Candidate = GovernedJudgementCandidate;
+        void promoteGovernedJudgementCandidateToTask;
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-B")).toBe(
+      true,
+    );
+  });
+
   it("does not reject boundary wording inside prompt text", () => {
     writeFile(
       "lib/llm/example.ts",
