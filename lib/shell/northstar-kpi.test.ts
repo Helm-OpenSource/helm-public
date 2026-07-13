@@ -29,6 +29,13 @@ describe("validateNorthstarKpis", () => {
     expect(validateNorthstarKpis([kpi()])).toEqual([]);
   });
 
+  it("accepts the new numeric units index / rate (value non-null, bandLabel null)", () => {
+    expect(validateNorthstarKpis([kpi({ unit: "index", value: 108, bandLabel: null })])).toEqual([]);
+    expect(validateNorthstarKpis([kpi({ unit: "rate", value: 3, bandLabel: null })])).toEqual([]);
+    // still numeric-unit rules: a band label on index/rate is rejected
+    expect(has([kpi({ unit: "index", value: 108, bandLabel: "x" })], "band_label_on_non_currency_unit")).toBe(true);
+  });
+
   it("passes a currency_band KPI carrying only a band label", () => {
     expect(
       validateNorthstarKpis([
