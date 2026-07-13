@@ -4300,6 +4300,7 @@ model BiReportBusinessSignal {
   @@index([workspaceId, signalType, severity, createdAt])
   @@index([sourceRunId])
   @@index([ownerUserId, status, createdAt])
+  @@index([workspaceId, signalKey, status], map: "bireportbusinesssignal_workspace_signalkey_status_idx")
 }
 
 model BiReportSignalNotification {

@@ -23,7 +23,10 @@ CREATE TABLE IF NOT EXISTS `bireportbusinesssignal` (
   KEY `bireportbusinesssignal_workspace_skill_status_created_idx` (`workspaceId`, `skillKey`, `status`, `createdAt`),
   KEY `bireportbusinesssignal_workspace_signaltype_severity_created_idx` (`workspaceId`, `signalType`, `severity`, `createdAt`),
   KEY `bireportbusinesssignal_sourcerunid_idx` (`sourceRunId`),
-  KEY `bireportbusinesssignal_owner_status_created_idx` (`ownerUserId`, `status`, `createdAt`)
+  KEY `bireportbusinesssignal_owner_status_created_idx` (`ownerUserId`, `status`, `createdAt`),
+  -- Support the createBiReportBusinessSignal live-signal dedup lookup by
+  -- workspace, signal key, and status. Additive; DROP INDEX to roll back.
+  KEY `bireportbusinesssignal_workspace_signalkey_status_idx` (`workspaceId`, `signalKey`, `status`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `bireportsignalnotification` (
