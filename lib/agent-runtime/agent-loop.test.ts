@@ -4,6 +4,7 @@ import {
   type AgentDecision,
   type AgentLoopState,
   type AgentToolResult,
+  advanceAgentLoopStep,
   buildSequencePlanner,
   getAgentTool,
   isTerminalAgentState,
@@ -46,6 +47,98 @@ describe("agent tool registry (Tier 1.2)", () => {
 });
 
 describe("supervised agent loop (Tier 1.2)", () => {
+  it("advances one persistable step at a time and resumes from prior state", async () => {
+    registerAgentTool({
+      name: "read_ctx",
+      riskLevel: "read",
+      invoke: () => okResult,
+    });
+    const plan = buildSequencePlanner([
+      { kind: "call_tool", toolName: "read_ctx", argsRef: "args:read:1" },
+      { kind: "finish", resultRef: "result:done" },
+    ]);
+
+    const first = await advanceAgentLoopStep({
+      ctx,
+      plan,
+      state: { steps: [], lifecycle: "created" },
+    });
+    expect(first.step).toMatchObject({
+      index: 0,
+      stepId: "step:run:case-triage:w1:0001:0",
+      state: "observing",
+    });
+    expect(first.terminal).toBeNull();
+
+    const second = await advanceAgentLoopStep({
+      ctx,
+      plan,
+      state: first.state,
+    });
+    expect(second.step).toMatchObject({ index: 1, state: "completed" });
+    expect(second.terminal).toEqual({
+      finalState: "completed",
+      terminationReason: "finished",
+    });
+  });
+
+  it("fails closed at maxSteps without fabricating another step", async () => {
+    const state = {
+      lifecycle: "observing" as const,
+      steps: [
+        {
+          index: 0,
+          stepId: "step:run:case-triage:w1:0001:0",
+          decision: {
+            kind: "call_tool" as const,
+            toolName: "read_ctx",
+            argsRef: "args:read:1",
+          },
+          toolResult: okResult,
+          state: "observing" as const,
+        },
+      ],
+    };
+    const result = await advanceAgentLoopStep({
+      ctx: { ...ctx, maxSteps: 1 },
+      plan: () => ({ kind: "finish" }),
+      state,
+    });
+    expect(result.step).toBeNull();
+    expect(result.state.steps).toHaveLength(1);
+    expect(result.terminal).toEqual({
+      finalState: "failed",
+      terminationReason: "max_steps_exceeded",
+    });
+  });
+
+  it("allows a recoverable caller to route non-read tools to review", async () => {
+    let invoked = false;
+    registerAgentTool({
+      name: "write_local_draft",
+      riskLevel: "local_draft",
+      invoke: () => {
+        invoked = true;
+        return okResult;
+      },
+    });
+    const result = await advanceAgentLoopStep({
+      ctx,
+      plan: () => ({
+        kind: "call_tool",
+        toolName: "write_local_draft",
+        argsRef: "args:draft:1",
+      }),
+      state: { steps: [], lifecycle: "created" },
+      canInvokeTool: (tool) => tool.riskLevel === "read",
+    });
+    expect(result.terminal).toEqual({
+      finalState: "awaiting_review",
+      terminationReason: "await_review",
+    });
+    expect(invoked).toBe(false);
+  });
+
   it("rejects non-deterministic run ids and non-positive maxSteps", async () => {
     await expect(
       runAgentLoop({ ctx: { ...ctx, agentRunId: "run:550e8400-e29b-41d4-a716-446655440000" }, plan: () => ({ kind: "finish" }) }),

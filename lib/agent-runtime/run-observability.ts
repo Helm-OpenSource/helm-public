@@ -14,19 +14,11 @@
  * reference-only (it only echoes ids the loop already minted — no PII, no wall clock).
  */
 
-import type { AgentLifecycleState } from "@/lib/agent-runtime/agent-loop";
+import {
+  AGENT_LIFECYCLE_STATES,
+  type AgentLifecycleState,
+} from "@/lib/agent-runtime/agent-loop";
 import { getAgentRunStore, type AgentRunRecord } from "@/lib/agent-runtime/run-store";
-
-const LIFECYCLE_STATES: readonly AgentLifecycleState[] = [
-  "created",
-  "deciding",
-  "invoking_tool",
-  "observing",
-  "awaiting_review",
-  "completed",
-  "failed",
-  "blocked",
-];
 
 /** Lifecycle states that an operator must look at (a human gate or a failure). */
 const ATTENTION_STATES: ReadonlySet<AgentLifecycleState> = new Set([
@@ -53,7 +45,7 @@ export type AgentRunsSummary = Readonly<{
 
 function emptyByLifecycle(): Record<AgentLifecycleState, number> {
   const counts = {} as Record<AgentLifecycleState, number>;
-  for (const state of LIFECYCLE_STATES) counts[state] = 0;
+  for (const state of AGENT_LIFECYCLE_STATES) counts[state] = 0;
   return counts;
 }
 

@@ -46,15 +46,23 @@ function assertDeterministicId(name: string, value: string): void {
 
 // --- lifecycle state machine --------------------------------------------------
 
-export type AgentLifecycleState =
-  | "created"
-  | "deciding"
-  | "invoking_tool"
-  | "observing"
-  | "awaiting_review"
-  | "completed"
-  | "failed"
-  | "blocked";
+export const AGENT_LIFECYCLE_STATES = [
+  "created",
+  "deciding",
+  "invoking_tool",
+  "observing",
+  "awaiting_review",
+  "completed",
+  "failed",
+  "blocked",
+] as const;
+export type AgentLifecycleState = (typeof AGENT_LIFECYCLE_STATES)[number];
+
+export function isAgentLifecycleState(
+  value: unknown,
+): value is AgentLifecycleState {
+  return AGENT_LIFECYCLE_STATES.includes(value as AgentLifecycleState);
+}
 
 /** Allowed transitions. Terminal states (completed/failed/blocked) have no exits. */
 const ALLOWED_TRANSITIONS: Readonly<Record<AgentLifecycleState, ReadonlySet<AgentLifecycleState>>> = {
@@ -187,6 +195,30 @@ export type AgentLoopTerminationReason =
   | "invalid_output_ref"
   | "max_steps_exceeded";
 
+export type AgentLoopTerminal = Readonly<{
+  finalState: AgentLifecycleState;
+  terminationReason: AgentLoopTerminationReason;
+}>;
+
+export type AgentLoopAdvanceResult = Readonly<{
+  state: AgentLoopState;
+  /** The single new step produced by this transition, or null when the step budget ended. */
+  step: AgentStep | null;
+  terminal: AgentLoopTerminal | null;
+}>;
+
+export type AgentPlannerExecutor = (input: {
+  plan: AgentPlanner;
+  state: AgentLoopState;
+  ctx: AgentRunContext;
+}) => AgentDecision | Promise<AgentDecision>;
+
+export type AgentToolExecutor = (input: {
+  tool: AgentToolDefinition;
+  invocation: AgentToolInvocation;
+  ctx: AgentRunContext;
+}) => AgentToolResult | Promise<AgentToolResult>;
+
 export type AgentLoopResult = Readonly<{
   agentRunId: string;
   /** The authoritative workspace the loop ran in (carried from ctx). Persisters MUST use
@@ -196,6 +228,165 @@ export type AgentLoopResult = Readonly<{
   steps: readonly AgentStep[];
   terminationReason: AgentLoopTerminationReason;
 }>;
+
+function assertAgentRunContext(ctx: AgentRunContext): void {
+  assertDeterministicId("agentRunId", ctx.agentRunId);
+  if (ctx.traceId) assertDeterministicId("traceId", ctx.traceId);
+  if (!Number.isInteger(ctx.maxSteps) || ctx.maxSteps < 1) {
+    throw new Error("agent loop requires a positive integer maxSteps");
+  }
+}
+
+function appendStepToState(
+  state: AgentLoopState,
+  ctx: AgentRunContext,
+  decision: AgentDecision,
+  lifecycle: AgentLifecycleState,
+  toolResult?: AgentToolResult,
+): { state: AgentLoopState; step: AgentStep } {
+  const index = state.steps.length;
+  const step: AgentStep = {
+    index,
+    stepId: `step:${ctx.agentRunId}:${index}`,
+    decision,
+    ...(toolResult ? { toolResult } : {}),
+    state: lifecycle,
+  };
+  return {
+    state: { steps: [...state.steps, step], lifecycle },
+    step,
+  };
+}
+
+/**
+ * Advance exactly one persistable agent step. This is the recovery seam: callers may
+ * persist `step` and `state.lifecycle` before invoking the primitive again. The default
+ * planner/tool executors preserve `runAgentLoop` behavior; recoverable runtimes can wrap
+ * model/read calls with durable attempt accounting and restrict invocation to read tools.
+ */
+export async function advanceAgentLoopStep(input: {
+  ctx: AgentRunContext;
+  plan: AgentPlanner;
+  state: AgentLoopState;
+  executePlanner?: AgentPlannerExecutor;
+  executeTool?: AgentToolExecutor;
+  canInvokeTool?: (tool: AgentToolDefinition) => boolean;
+}): Promise<AgentLoopAdvanceResult> {
+  const { ctx, plan, state } = input;
+  assertAgentRunContext(ctx);
+  if (isTerminalAgentState(state.lifecycle)) {
+    throw new Error(`cannot advance terminal agent lifecycle: ${state.lifecycle}`);
+  }
+
+  if (state.steps.length >= ctx.maxSteps) {
+    const lifecycle = transitionAgentState(state.lifecycle, "failed");
+    return {
+      state: { steps: [...state.steps], lifecycle },
+      step: null,
+      terminal: {
+        finalState: lifecycle,
+        terminationReason: "max_steps_exceeded",
+      },
+    };
+  }
+
+  let lifecycle = transitionAgentState(state.lifecycle, "deciding");
+  const decidingState: AgentLoopState = {
+    steps: [...state.steps],
+    lifecycle,
+  };
+  const executePlanner: AgentPlannerExecutor =
+    input.executePlanner ??
+    ((executorInput) =>
+      executorInput.plan(
+        {
+          steps: [...executorInput.state.steps],
+          lifecycle: executorInput.state.lifecycle,
+        },
+        executorInput.ctx,
+      ));
+  const decision = await executePlanner({ plan, state: decidingState, ctx });
+
+  const finishWithStep = (
+    nextLifecycle: AgentLifecycleState,
+    terminationReason: AgentLoopTerminationReason | null,
+    toolResult?: AgentToolResult,
+  ): AgentLoopAdvanceResult => {
+    const appended = appendStepToState(
+      state,
+      ctx,
+      decision,
+      nextLifecycle,
+      toolResult,
+    );
+    return {
+      ...appended,
+      terminal: terminationReason
+        ? { finalState: nextLifecycle, terminationReason }
+        : null,
+    };
+  };
+
+  if (decision.kind === "finish") {
+    if (
+      decision.resultRef !== undefined &&
+      !isReferenceToken(decision.resultRef)
+    ) {
+      lifecycle = transitionAgentState(lifecycle, "failed");
+      return finishWithStep(lifecycle, "invalid_output_ref");
+    }
+    lifecycle = transitionAgentState(lifecycle, "completed");
+    return finishWithStep(lifecycle, "finished");
+  }
+
+  if (decision.kind === "await_review") {
+    if (!isReferenceToken(decision.reasonCode)) {
+      lifecycle = transitionAgentState(lifecycle, "failed");
+      return finishWithStep(lifecycle, "invalid_output_ref");
+    }
+    lifecycle = transitionAgentState(lifecycle, "awaiting_review");
+    return finishWithStep(lifecycle, "await_review");
+  }
+
+  if (!isReferenceToken(decision.argsRef)) {
+    lifecycle = transitionAgentState(lifecycle, "failed");
+    return finishWithStep(lifecycle, "tool_error");
+  }
+
+  const tool = getAgentTool(decision.toolName);
+  if (!tool) {
+    lifecycle = transitionAgentState(lifecycle, "blocked");
+    return finishWithStep(lifecycle, "tool_not_registered");
+  }
+  if (AGENT_FORBIDDEN_RISKS.has(tool.riskLevel)) {
+    lifecycle = transitionAgentState(lifecycle, "blocked");
+    return finishWithStep(lifecycle, "blocked_forbidden_risk");
+  }
+  if (
+    !AGENT_PUBLIC_CORE_AUTOMATABLE_RISKS.has(tool.riskLevel) ||
+    (input.canInvokeTool && !input.canInvokeTool(tool))
+  ) {
+    lifecycle = transitionAgentState(lifecycle, "awaiting_review");
+    return finishWithStep(lifecycle, "await_review");
+  }
+
+  lifecycle = transitionAgentState(lifecycle, "invoking_tool");
+  const invocation = {
+    toolName: decision.toolName,
+    argsRef: decision.argsRef,
+  };
+  const executeTool: AgentToolExecutor =
+    input.executeTool ??
+    ((executorInput) =>
+      executorInput.tool.invoke(executorInput.invocation, executorInput.ctx));
+  const result = await executeTool({ tool, invocation, ctx });
+  if (result.status === "error" || !isReferenceToken(result.observationRef)) {
+    lifecycle = transitionAgentState(lifecycle, "failed");
+    return finishWithStep(lifecycle, "tool_error", result);
+  }
+  lifecycle = transitionAgentState(lifecycle, "observing");
+  return finishWithStep(lifecycle, null, result);
+}
 
 /**
  * Run a bounded, supervised agent loop. Each step: planner decides → if a tool call,
@@ -209,104 +400,18 @@ export async function runAgentLoop(input: {
   plan: AgentPlanner;
 }): Promise<AgentLoopResult> {
   const { ctx, plan } = input;
-  assertDeterministicId("agentRunId", ctx.agentRunId);
-  if (ctx.traceId) assertDeterministicId("traceId", ctx.traceId); // audit correlation must stay deterministic too
-  if (!Number.isInteger(ctx.maxSteps) || ctx.maxSteps < 1) {
-    throw new Error("agent loop requires a positive integer maxSteps");
-  }
-
-  const steps: AgentStep[] = [];
-  let lifecycle: AgentLifecycleState = "created";
-
-  const record = (decision: AgentDecision, state: AgentLifecycleState, toolResult?: AgentToolResult) => {
-    const index = steps.length;
-    steps.push({
-      index,
-      stepId: `step:${ctx.agentRunId}:${index}`,
-      decision,
-      ...(toolResult ? { toolResult } : {}),
-      state,
+  assertAgentRunContext(ctx);
+  let state: AgentLoopState = { steps: [], lifecycle: "created" };
+  for (;;) {
+    const advanced = await advanceAgentLoopStep({ ctx, plan, state });
+    state = advanced.state;
+    if (!advanced.terminal) continue;
+    return Object.freeze({
+      agentRunId: ctx.agentRunId,
+      workspaceId: ctx.workspaceId,
+      finalState: advanced.terminal.finalState,
+      steps: Object.freeze([...state.steps]),
+      terminationReason: advanced.terminal.terminationReason,
     });
-  };
-
-  const finish = (
-    finalState: AgentLifecycleState,
-    terminationReason: AgentLoopTerminationReason,
-  ): AgentLoopResult =>
-    Object.freeze({ agentRunId: ctx.agentRunId, workspaceId: ctx.workspaceId, finalState, steps: Object.freeze([...steps]), terminationReason });
-
-  for (let i = 0; i < ctx.maxSteps; i += 1) {
-    lifecycle = transitionAgentState(lifecycle, "deciding");
-    const decision = await plan({ steps: [...steps], lifecycle }, ctx);
-
-    if (decision.kind === "finish") {
-      // resultRef is optional, but when present it must be a reference token (no inline
-      // content / PII) — same fail-closed rule applied to argsRef / observationRef.
-      if (decision.resultRef !== undefined && !isReferenceToken(decision.resultRef)) {
-        lifecycle = transitionAgentState(lifecycle, "failed");
-        record(decision, lifecycle);
-        return finish(lifecycle, "invalid_output_ref");
-      }
-      lifecycle = transitionAgentState(lifecycle, "completed");
-      record(decision, lifecycle);
-      return finish(lifecycle, "finished");
-    }
-
-    if (decision.kind === "await_review") {
-      // reasonCode is the human-review marker; it must be a reference token, not free text.
-      if (!isReferenceToken(decision.reasonCode)) {
-        lifecycle = transitionAgentState(lifecycle, "failed");
-        record(decision, lifecycle);
-        return finish(lifecycle, "invalid_output_ref");
-      }
-      lifecycle = transitionAgentState(lifecycle, "awaiting_review");
-      record(decision, lifecycle);
-      return finish(lifecycle, "await_review");
-    }
-
-    // decision.kind === "call_tool"
-    if (!isReferenceToken(decision.argsRef)) {
-      lifecycle = transitionAgentState(lifecycle, "failed");
-      record(decision, lifecycle);
-      return finish(lifecycle, "tool_error");
-    }
-
-    const tool = getAgentTool(decision.toolName);
-    if (!tool) {
-      lifecycle = transitionAgentState(lifecycle, "blocked");
-      record(decision, lifecycle);
-      return finish(lifecycle, "tool_not_registered");
-    }
-
-    if (AGENT_FORBIDDEN_RISKS.has(tool.riskLevel)) {
-      lifecycle = transitionAgentState(lifecycle, "blocked");
-      record(decision, lifecycle);
-      return finish(lifecycle, "blocked_forbidden_risk");
-    }
-
-    if (!AGENT_PUBLIC_CORE_AUTOMATABLE_RISKS.has(tool.riskLevel)) {
-      // e.g. repo_write — allowed to exist, but never auto-run in public Core: route to human review.
-      lifecycle = transitionAgentState(lifecycle, "awaiting_review");
-      record(decision, lifecycle);
-      return finish(lifecycle, "await_review");
-    }
-
-    lifecycle = transitionAgentState(lifecycle, "invoking_tool");
-    const result = await tool.invoke({ toolName: decision.toolName, argsRef: decision.argsRef }, ctx);
-
-    if (result.status === "error" || !isReferenceToken(result.observationRef)) {
-      lifecycle = transitionAgentState(lifecycle, "failed");
-      record(decision, lifecycle, result);
-      return finish(lifecycle, "tool_error");
-    }
-
-    lifecycle = transitionAgentState(lifecycle, "observing");
-    record(decision, lifecycle, result);
-    // back to the top of the loop (observing -> deciding) for the next step.
   }
-
-  // Exhausted the step budget without the planner finishing → fail closed.
-  // Every loop continuation leaves lifecycle at "observing", from which "failed" is legal.
-  lifecycle = transitionAgentState(lifecycle, "failed");
-  return finish(lifecycle, "max_steps_exceeded");
 }

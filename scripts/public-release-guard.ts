@@ -899,7 +899,7 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "self-check":
     "npm run public:smoke:static && npm run check:secret-history",
   "check:boundaries":
-    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract",
+    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract",
   "check:source-profiler-boundaries":
     "node --import tsx scripts/check-source-profiler-boundaries.ts",
   "check:golden-path-docs":
@@ -908,6 +908,8 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
     "node --import tsx scripts/check-diagnostics-risk.ts",
   "check:llm-candidate-boundaries":
     "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+  "check:recoverable-agent-runtime":
+    "node --import tsx scripts/check-recoverable-agent-runtime.ts",
   "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
   "check:ai-shelf-trust-center-contract":
     "node --import tsx scripts/check-ai-shelf-trust-center-contract.ts",
@@ -921,9 +923,11 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
     "vitest run lib/llm/intelligence-contracts-v3.test.ts lib/llm/reasoning-budget.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
   "eval:governed-runtime-contracts":
     "vitest run lib/llm/governed-runtime-contracts.test.ts scripts/check-llm-candidate-boundaries.test.ts --config vitest.public.config.ts",
+  "eval:recoverable-agent-runtime":
+    "vitest run lib/agent-runtime/agent-loop.test.ts lib/agent-runtime/recoverable-run-store.test.ts lib/agent-runtime/recoverable-runner.test.ts lib/agent-runtime/recoverable-run-store-mysql.test.ts scripts/check-recoverable-agent-runtime.test.ts --config vitest.public.config.ts",
   test: "vitest run --config vitest.public.config.ts",
   "test:public:guards":
-    "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts scripts/check-ai-shelf-trust-center-contract.test.ts scripts/sarp-proof.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm/intelligence-contracts-v3.test.ts lib/llm/governed-runtime-contracts.test.ts lib/llm/reasoning-budget.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
+    "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-recoverable-agent-runtime.test.ts scripts/check-agentic-sarp.test.ts scripts/check-ai-shelf-trust-center-contract.test.ts scripts/sarp-proof.test.ts lib/agent-runtime/agent-loop.test.ts lib/agent-runtime/recoverable-run-store.test.ts lib/agent-runtime/recoverable-runner.test.ts lib/agent-runtime/recoverable-run-store-mysql.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm/intelligence-contracts-v3.test.ts lib/llm/governed-runtime-contracts.test.ts lib/llm/reasoning-budget.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
   "quality:regression": "npm run test:public:guards && npm run public:smoke:static",
   "public:e2e:smoke": "npm run public:smoke:static",
   e2e: "npm run public:e2e:smoke",
@@ -972,6 +976,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "eval:llm-trajectory-harness",
   "eval:llm-v3-boundaries",
   "eval:governed-runtime-contracts",
+  "eval:recoverable-agent-runtime",
   "kit:dry-run",
   "pack:fixture-check",
   "source-profiler",
@@ -981,6 +986,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "diagnostics:doctor",
   "check:diagnostics-risk",
   "check:llm-candidate-boundaries",
+  "check:recoverable-agent-runtime",
   "check:agentic-sarp",
   "check:ai-shelf-trust-center-contract",
   "sarp:proof",

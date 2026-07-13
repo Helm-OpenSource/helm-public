@@ -110,7 +110,8 @@ raw-content assertion 不为 false 时必须 fail closed。
 
 - 60 秒 lease、20 秒 heartbeat、单调 fencing epoch；
 - request-cancel 与 checkpoint；
-- 每步先持久化，再进入下一步；
+- 每个进度转换把 lifecycle、可选 step 与 checkpoint 在一个 store transaction 中原子持久化，
+  成功后才进入下一步；
 - 最多三次幂等 retry，只覆盖 model / read tool；
 - side-effect step 不进入该 retry loop；
 - stale lease holder 的 append / checkpoint 必须拒绝。
@@ -199,11 +200,24 @@ microVM 级 sandbox 项目。
 
 - 已成立：public-safe requirements freeze；strict `PrivateContextAdapterManifest`、
   `PrivateContextBuildReceipt`、`ContextEgressDecisionReceipt`、`RuntimeIsolationProfile`、
-  `CapabilityGrant`；private-context conformance validator；receipt-to-prompt static guard。
-- 已成形但仍需下一层：这些契约可供私有 Overlay 实现消费，但尚无真实 Helm-self context
-  read、OCI worker、recoverable run controller 或 candidate materialization 接线。
+  `CapabilityGrant`；private-context conformance validator；receipt-to-prompt static guard；兼容既有
+  `runAgentLoop` 的单步状态转换 primitive；带 60 秒 lease、20 秒 heartbeat、单调 fencing、
+  cancel、checkpoint 和三次 model / read-tool 重试上限的 generic recoverable runner；以及
+  lifecycle / optional-step / checkpoint 原子 progress commit、InMemory / MySQL store parity、
+  fresh schema、one-time migration 和并发 / 恢复回归测试。
+- 已成形但仍需下一层：public Core 的 recoverable runtime 可以逐步持久化并在 lease 过期后
+  从一致 checkpoint 恢复，但 MySQL migration 尚未被声明为已应用到任何生产环境；真实
+  Helm-self context adapter 属于独立私有 Overlay 证据，isolated OCI worker、candidate
+  materialization、人工晋级和 side-effect executor 仍未接线。MySQL contract parity 当前由
+  transactional fake 覆盖；真实 InnoDB 双连接并发与 row-lock 集成测试仍是下一层证据。
 - 刻意未做：真实 context、provider runtime、execution lease、side-effect adapter、客户外发、
   connector activation、official memory promotion 和生产部署声明。
+
+`scripts/check-recoverable-agent-runtime.ts` 只提供词法层 defense-in-depth：它锁定 read-only
+tool policy、原子 progress commit、重试 / lease 常量、MySQL transaction + `FOR UPDATE` +
+fencing marker，以及 fresh schema / migration 的恢复字段。它不等同于进程隔离或 sandbox；
+生产隔离仍必须由后续 rootless OCI worker、最小权限凭据、egress proxy 与独立
+side-effect executor 证明。
 
 ## PR Order
 
@@ -224,6 +238,8 @@ microVM 级 sandbox 项目。
 
 | 日期 | 变化 |
 |---|---|
+| 2026-07-12 | 将 checkpoint 一致性断言推迟到持有 lease 后执行，contender 在 owner 原子提交瞬间只返回 `lease_unavailable`，不再因启动双读撕裂误判损坏。 |
+| 2026-07-12 | 增加可持久化单步 primitive、fenced recoverable store / runner、原子 lifecycle / step / checkpoint progress commit、MySQL schema + migration、恢复回归测试与静态 drift guard；不声明生产 worker 或迁移已部署。 |
 | 2026-07-12 | 增加 private-context / isolation / capability strict contracts、conformance validator 与 receipt-to-prompt guard。 |
 | 2026-07-12 | 冻结 v4 public-safe architecture、contracts、runtime isolation、rollout 和 acceptance gates。 |
 

@@ -173,7 +173,7 @@ describe("public mirror tree builder", () => {
       license: "Apache-2.0",
       scripts: {
         "check:boundaries":
-          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract",
+          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract",
         "check:source-profiler-boundaries":
           "node --import tsx scripts/check-source-profiler-boundaries.ts",
         "check:golden-path-docs":
@@ -182,6 +182,8 @@ describe("public mirror tree builder", () => {
           "node --import tsx scripts/check-diagnostics-risk.ts",
         "check:llm-candidate-boundaries":
           "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+        "check:recoverable-agent-runtime":
+          "node --import tsx scripts/check-recoverable-agent-runtime.ts",
         "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
         "check:ai-shelf-trust-center-contract":
           "node --import tsx scripts/check-ai-shelf-trust-center-contract.ts",
@@ -208,6 +210,8 @@ describe("public mirror tree builder", () => {
           "vitest run lib/llm/intelligence-contracts-v3.test.ts lib/llm/reasoning-budget.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
         "eval:governed-runtime-contracts":
           "vitest run lib/llm/governed-runtime-contracts.test.ts scripts/check-llm-candidate-boundaries.test.ts --config vitest.public.config.ts",
+        "eval:recoverable-agent-runtime":
+          "vitest run lib/agent-runtime/agent-loop.test.ts lib/agent-runtime/recoverable-run-store.test.ts lib/agent-runtime/recoverable-runner.test.ts lib/agent-runtime/recoverable-run-store-mysql.test.ts scripts/check-recoverable-agent-runtime.test.ts --config vitest.public.config.ts",
         "public:e2e:smoke": "npm run public:smoke:static",
         "public:smoke:static":
           "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
@@ -219,7 +223,7 @@ describe("public mirror tree builder", () => {
           "npm run public:smoke:static && npm run check:secret-history",
         test: "vitest run --config vitest.public.config.ts",
         "test:public:guards":
-          "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts scripts/check-ai-shelf-trust-center-contract.test.ts scripts/sarp-proof.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm/intelligence-contracts-v3.test.ts lib/llm/governed-runtime-contracts.test.ts lib/llm/reasoning-budget.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
+          "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-recoverable-agent-runtime.test.ts scripts/check-agentic-sarp.test.ts scripts/check-ai-shelf-trust-center-contract.test.ts scripts/sarp-proof.test.ts lib/agent-runtime/agent-loop.test.ts lib/agent-runtime/recoverable-run-store.test.ts lib/agent-runtime/recoverable-runner.test.ts lib/agent-runtime/recoverable-run-store-mysql.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm/intelligence-contracts-v3.test.ts lib/llm/governed-runtime-contracts.test.ts lib/llm/reasoning-budget.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
         typecheck: "tsc --noEmit --project tsconfig.public.json",
       },
     });
@@ -312,7 +316,7 @@ describe("public mirror tree builder", () => {
       "npm run public:smoke:static && npm run check:secret-history",
     );
     expect(scripts["check:boundaries"]).toBe(
-      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract",
+      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract",
     );
     expect(scripts["check:source-profiler-boundaries"]).toBe(
       "node --import tsx scripts/check-source-profiler-boundaries.ts",
@@ -325,6 +329,9 @@ describe("public mirror tree builder", () => {
     );
     expect(scripts["check:llm-candidate-boundaries"]).toBe(
       "node --import tsx scripts/check-llm-candidate-boundaries.ts",
+    );
+    expect(scripts["check:recoverable-agent-runtime"]).toBe(
+      "node --import tsx scripts/check-recoverable-agent-runtime.ts",
     );
     expect(scripts["check:agentic-sarp"]).toBe(
       "node --import tsx scripts/check-agentic-sarp.ts",
@@ -348,9 +355,12 @@ describe("public mirror tree builder", () => {
     expect(scripts["eval:governed-runtime-contracts"]).toBe(
       "vitest run lib/llm/governed-runtime-contracts.test.ts scripts/check-llm-candidate-boundaries.test.ts --config vitest.public.config.ts",
     );
+    expect(scripts["eval:recoverable-agent-runtime"]).toBe(
+      "vitest run lib/agent-runtime/agent-loop.test.ts lib/agent-runtime/recoverable-run-store.test.ts lib/agent-runtime/recoverable-runner.test.ts lib/agent-runtime/recoverable-run-store-mysql.test.ts scripts/check-recoverable-agent-runtime.test.ts --config vitest.public.config.ts",
+    );
     expect(scripts.test).toBe("vitest run --config vitest.public.config.ts");
     expect(scripts["test:public:guards"]).toBe(
-      "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-agentic-sarp.test.ts scripts/check-ai-shelf-trust-center-contract.test.ts scripts/sarp-proof.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm/intelligence-contracts-v3.test.ts lib/llm/governed-runtime-contracts.test.ts lib/llm/reasoning-budget.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
+      "vitest run lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-recoverable-agent-runtime.test.ts scripts/check-agentic-sarp.test.ts scripts/check-ai-shelf-trust-center-contract.test.ts scripts/sarp-proof.test.ts lib/agent-runtime/agent-loop.test.ts lib/agent-runtime/recoverable-run-store.test.ts lib/agent-runtime/recoverable-runner.test.ts lib/agent-runtime/recoverable-run-store-mysql.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm/intelligence-contracts-v3.test.ts lib/llm/governed-runtime-contracts.test.ts lib/llm/reasoning-budget.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
     );
     expect(scripts["quality:regression"]).toBe(
       "npm run test:public:guards && npm run public:smoke:static",
