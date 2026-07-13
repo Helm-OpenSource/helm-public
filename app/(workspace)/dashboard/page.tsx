@@ -12,6 +12,7 @@ import { resolveRoleLens } from "@/lib/shell/role-home";
 import { loadDashboardPageData } from "@/features/dashboard/page-loader";
 import { buildDashboardViewModel } from "@/features/dashboard/view-model";
 import { ControlTowerView } from "@/features/dashboard/control-tower/control-tower-view";
+import { AttentionInbox } from "@/features/exceptions/attention-inbox";
 import { LegacyHomeView } from "@/features/dashboard/legacy-home-view";
 import { ConnectorBindingSuccessSheet } from "@/features/dashboard/connector-binding-success-sheet";
 
@@ -106,15 +107,20 @@ export default async function DashboardPage({
   });
 
   return (
-    <ControlTowerView
-      english={english}
-      lens={lens}
-      basePresetKey={basePresetKey}
-      mainline={mainline}
-      northstarText={resolveNorthstarText(workspace.focusAreas, english)}
-      viewModel={viewModel}
-      tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
-      connectorSheet={connectorSheet}
-    />
+    <div className="space-y-8">
+      <ControlTowerView
+        english={english}
+        lens={lens}
+        basePresetKey={basePresetKey}
+        mainline={mainline}
+        northstarText={resolveNorthstarText(workspace.focusAreas, english)}
+        viewModel={viewModel}
+        tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
+        connectorSheet={connectorSheet}
+      />
+      {/* 异常工作台 · Agent 收件箱(read-only)——attention surface 首个 Core 消费者。
+          控制塔操作者首页之下即异常台;只汇集与导航,不代执行;无 provider 时诚实空态。 */}
+      <AttentionInbox workspace={workspace} english={english} />
+    </div>
   );
 }
