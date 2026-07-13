@@ -1,3 +1,5 @@
+import { WorkspaceRole } from "@prisma/client";
+
 import type { UiLocale } from "@/lib/i18n/config";
 import { safeParseJson } from "@/lib/utils";
 import {
@@ -273,6 +275,33 @@ export function getWorkspaceRolePresetDefinition(
       (preset) => preset.key === normalizedKey,
     ) ?? null
   );
+}
+
+/**
+ * Resolve a member's base preset key for role-home routing, with a **controlled
+ * fallback** when no preset is assigned (existing / un-migrated members, or seed
+ * data without `rolePresetKey`).
+ *
+ * An OWNER with no preset must NOT fall to the blank GENERIC home (search-only) —
+ * they own the workspace and get the control tower (`FOUNDER_CEO`). Other roles
+ * keep the `null → GENERIC` fail-safe (blueprint §1.4). This is a read-time
+ * backfill (non-destructive); it does not write the preset back.
+ *
+ * (CodeX runtime audit P1: enabling controlTowerHome dropped OWNERs whose
+ * `rolePresetKey` was never set into an empty generic workspace.)
+ */
+export function resolveMemberBasePresetKey(input: {
+  rolePresetKey: string | null | undefined;
+  workspaceRole: WorkspaceRole;
+  rawConfiguration: string | null | undefined;
+}): RolePresetKey | null {
+  const explicit = getWorkspaceRolePresetDefinition(
+    input.rolePresetKey,
+    input.rawConfiguration,
+  )?.basePresetKey;
+  if (explicit) return explicit;
+  if (input.workspaceRole === WorkspaceRole.OWNER) return "FOUNDER_CEO";
+  return null;
 }
 
 export function localizeWorkspaceRolePreset(
