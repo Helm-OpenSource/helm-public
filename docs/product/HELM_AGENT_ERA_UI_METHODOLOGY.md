@@ -81,7 +81,10 @@ In the Agent era UI transforms into a **human–Agent co-control plane** (not me
 
 > **Helm 不内置 Codex / Claude Code**，而是让自己 **agent-addressable**：任何符合变更包契约的通用 Agent 都能操作它。这既提升交付工程师体验，又不把 Helm 扩张成另一个通用 Agent 平台。
 
-（现有 `operationSuggestionSources` surface 的 `agentBrief` 自由文本是 v1 雏形；v2 目标是把它升级为上述结构化变更包契约——见蓝图后续 Phase。）
+`operationSuggestionSources` 的 experimental v2 契约已要求上述 11 字段
+`changePacket`，并 fail-closed 拒绝旧 `agentBrief`、嵌套回调、疑似 PII / secret
+以及缺失 dry-run / 审批边界的高影响包。该成立范围仍仅是类型、validator 与
+resolver；实施队列 UI、外部 Agent handoff、凭据授权、执行和回执读回尚未成立。
 
 ## 4. 初始化模式 / Initialization Pattern
 
@@ -139,10 +142,16 @@ Helm 默认界面即 §1 五主面。**第一阶段 Public Core 只做到**：
 
 **衡量**：新增能力中"未新建专用屏"占比↑；Agent 自主 + 人确认 vs 纯人工操作占比（协作率）；不频繁操作由变更包服务 vs 新建屏占比；首个判断中位时间 / 异常解决时间 / 决策停留时间；有审计回执的 Agent 动作占比。
 
-**映射到已建 surface**（蓝图 Phase 1–5 的 7 个 experimental shell surface 是本方法论的实现底座）：经营控制塔 = `mainline` + `northstarKpiSources`；决策队列 = `/approvals` + mainline `suggestion_ready_pending_human`；异常工作台 = `attentionSources`；回执与审计 = `agentRunAuditSources`（语义事件，§7）；实施队列 = `operationSuggestionSources`（v2 升级为变更包，§3）；IA 路由 = `roleHomeRouting` + `workstationSources`。
+**映射到已建 surface 契约**（蓝图 Phase 1–5 的 7 个 experimental shell surface 是本方法论的契约底座，不等于各主面 UI 已上线）：经营控制塔 = `mainline` + `northstarKpiSources`；决策队列 = `/approvals` + mainline `suggestion_ready_pending_human`；异常工作台 = `attentionSources`；回执与审计 = `agentRunAuditSources`（语义事件，§7）；实施队列 = `operationSuggestionSources`（v2 结构化 `changePacket`，§3）；IA 路由 = `roleHomeRouting` + `workstationSources`。
 
 **反模式**：为每个动作造按钮 / 为每个能力造屏；公开徽标表达"执行中/已自动/急停"；把不频繁操作做成一次性向导屏（应交变更包）；变更包里塞可执行回调 / 真凭据；审计面展示模型思维链或泄漏 PII；把直接判断面（查询/探索/模拟/接管）也塌缩成队列；宣称"底层逻辑不变"而不落 §6 的底层升级。
 
 ## 附：与既有治理的衔接 / Appendix
 
 自动化等级阶梯（observer → shadow → active）是 §2 路由的运行时依据；[AI 推荐治理](HELM_AI_RECOMMENDATION_GOVERNANCE.md)、[智能体化治理要求](HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md) 提供决策队列 / 回执审计的治理契约。本方法论**不新增运行时能力**，只规范呈现与协作 IA + 底层升级要求；执行仍按代码、测试、回执与 review 分阶段落地。
+
+## 变更记录 / Change Log
+
+- 2026-07-13：`operationSuggestionSources` 升级到 experimental v2；以 11 字段
+  `changePacket` 替代自由文本 `agentBrief`，并明确这仍是 public Core 契约层，
+  不是实施队列 UI、外部 Agent 执行或客户部署证明。

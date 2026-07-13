@@ -512,7 +512,42 @@ import {
   SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION,
 } from "./resolve-shell-experience";
 import type { OperationSuggestionSourceContribution } from "@/lib/extensions/registry-types";
-import type { OperationSuggestion } from "./operation-suggestion";
+import type {
+  AgentReadyChangePacket,
+  OperationSuggestion,
+} from "./operation-suggestion";
+
+function aChangePacket(
+  overrides: Partial<AgentReadyChangePacket> = {},
+): AgentReadyChangePacket {
+  return {
+    goal: "Declare the workspace focus areas",
+    currentState: "No focus areas are configured",
+    prerequisites: [],
+    requiredPermissions: ["workspace.settings.write"],
+    proposedChanges: ["Set focusAreas through the existing settings owner"],
+    effectLevel: "configuration_change",
+    forbiddenActions: ["Do not change connector authorization or send external messages"],
+    dryRun: {
+      required: true,
+      procedure: "Preview the settings diff without saving",
+      expectedResult: "The diff only changes focusAreas",
+    },
+    approvalPolicy: {
+      required: true,
+      approverRole: "workspace_owner",
+      checkpoints: ["Review the generated settings diff"],
+      separationOfDutiesRequired: false,
+    },
+    rollback: {
+      strategy: "restore_previous_state",
+      procedure: "Restore the previous focusAreas value",
+      verification: "Re-read the workspace settings",
+    },
+    expectedReceipts: ["plan", "dry_run", "change_diff", "verification"],
+    ...overrides,
+  };
+}
 
 function aSuggestion(overrides: Partial<OperationSuggestion> = {}): OperationSuggestion {
   return {
@@ -522,7 +557,7 @@ function aSuggestion(overrides: Partial<OperationSuggestion> = {}): OperationSug
     rationale: "冷启动需先声明关注领域",
     readiness: "ready",
     preconditionRefs: [],
-    agentBrief: "在 /settings 配置 focusAreas",
+    changePacket: aChangePacket(),
     verificationRef: "/settings",
     href: "/settings",
     basisRef: "provider:init-focus-areas",
@@ -572,7 +607,10 @@ describe("resolveShellOperationSuggestions — concat aggregation (Phase 4)", ()
   });
 
   it("excludes version-incompatible sources up front", async () => {
-    const legacy = opSuggestionSource({ providerId: "ops-legacy", contractVersion: "operation-suggestion.v0" });
+    const legacy = opSuggestionSource({
+      providerId: "ops-legacy",
+      contractVersion: "operation-suggestion.v1-experimental",
+    });
     registerPackContributions("p", { operationSuggestionSources: [legacy] });
     const res = await resolveShellOperationSuggestions({ workspace, english: true });
     expect(res.suggestions).toEqual([]);
@@ -608,7 +646,14 @@ describe("resolveShellOperationSuggestions — concat aggregation (Phase 4)", ()
           providerId: "ops-mixed",
           buildOperationSuggestions: vi.fn(async () => [
             aSuggestion({ key: "clean" }),
-            aSuggestion({ key: "leaky", agentBrief: `run with ${"token"}=${`sk-${"ABCDEF0123456789abcdef"}`}` }),
+            aSuggestion({
+              key: "leaky",
+              changePacket: aChangePacket({
+                proposedChanges: [
+                  `run with ${"token"}=${`sk-${"ABCDEF0123456789abcdef"}`}`,
+                ],
+              }),
+            }),
           ]),
         }),
       ],

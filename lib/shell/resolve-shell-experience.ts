@@ -507,7 +507,7 @@ export async function resolveShellAttention(input: {
 // ---------------------------------------------------------------------------
 
 export const SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION =
-  "operation-suggestion.v1-experimental";
+  "operation-suggestion.v2-experimental";
 export const SHELL_OPERATION_SUGGESTION_SURFACE_KEY = "operation-suggestion";
 
 export type ShellOperationSuggestionResolution = {
@@ -524,10 +524,10 @@ export type ShellOperationSuggestionResolution = {
  * Same §4.4 budget as the other concat surfaces (per-source timeout with
  * per-source AbortSignal; failed/timed-out sources dropped and recorded — no
  * "unreturned item" convention here). Each source's items are
- * conformance-filtered (a non-conformant / suspected-secret / suspected-PII
+ * conformance-filtered (a malformed change packet or suspected-secret / PII
  * item is dropped, not the whole source — fail-closed). Cross-source dedupe by
  * suggestion key (first writer wins). Empty store ⇒ Core default (empty) —
- * mirror parity. Read/navigate-only: suggestion ≠ execution.
+ * mirror parity. Read/navigate-only: packet ≠ execution.
  */
 export async function resolveShellOperationSuggestions(input: {
   workspace: WorkspaceLike;

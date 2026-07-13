@@ -147,7 +147,8 @@ export type PackContributions = {
   attentionSources?: ReadonlyArray<AttentionSourceContribution>;
   /**
    * Operation-suggestion sources (blueprint Phase 4, experimental, **concat**).
-   * Infrequent-operation suggestions merged by `resolveShellOperationSuggestions`.
+   * Agent-ready Change Packets for infrequent operations, merged by
+   * `resolveShellOperationSuggestions`; packet handoff never grants execution.
    */
   operationSuggestionSources?: ReadonlyArray<OperationSuggestionSourceContribution>;
   /**

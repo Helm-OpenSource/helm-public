@@ -268,13 +268,12 @@ export type AttentionSourceContribution = {
 };
 
 /**
- * Operation-suggestion source (blueprint Phase 4, **concat**, experimental).
- * Surfaces infrequent operations (initialization / connector setup / one-off
- * config) as structured, de-identified suggestions a human hands to a general
- * agent (Claude Code / CodeX / 悟空 / WorkBuddy). Suggestion ≠ execution: items
- * are read/navigate-only, `agentBrief` is a declarative spec (not a callback,
- * no secrets/PII), and Helm never executes it. Same §4.4 aggregation as
- * attention. `experimental`.
+ * Operation-suggestion source (methodology v2 / Phase 4, **concat**,
+ * experimental). Infrequent operations are de-identified Agent-ready Change
+ * Packets with goal, permissions, bounded changes, dry-run, approval, rollback
+ * and receipt requirements. Packet ≠ execution: items are read/navigate-only,
+ * carry no callbacks or credentials, and Helm never executes them. Same §4.4
+ * aggregation as attention. `experimental`.
  */
 export type OperationSuggestionSourceContribution = {
   providerId: string;
