@@ -123,7 +123,7 @@ import {
 import { sendDingTalkInviteMessage } from "@/lib/connectors/dingtalk-directory-invite";
 import { getLatestDingTalkDirectoryInviteDryRunSnapshot } from "@/lib/connectors/dingtalk-directory-invite-snapshot";
 import { safeParseJson } from "@/lib/utils";
-import { defaultWorkspaceFeatureFlags, serializeWorkspaceFeatureFlags } from "@/lib/workspace-ops";
+import { defaultWorkspaceFeatureFlags, parseWorkspaceFeatureFlags, serializeWorkspaceFeatureFlags } from "@/lib/workspace-ops";
 import {
   assertHelmReservedWorkspaceAccess,
   getHelmReservedWorkspaceDeniedMessage,
@@ -4062,6 +4062,11 @@ const workspaceOperationalControlsSchema = z.object({
     captureAudio: z.boolean(),
     llmEnhancement: z.boolean(),
     evolutionSignals: z.boolean(),
+    // 必须声明 canonical WorkspaceFeatureFlags 的全部字段:z.object 默认剥离未声明键,
+    // 少声明会导致客户端提交的 controlTowerHome/swarmReadOnlyWorkers 被静默剥离,持久化时
+    // 再从 baseline 重建 → 开关"保存成功"却回落默认(CodeX 运行审计 P1)。
+    swarmReadOnlyWorkers: z.boolean(),
+    controlTowerHome: z.boolean(),
   }),
 });
 
@@ -4104,8 +4109,10 @@ export async function updateWorkspaceOperationalControlsAction(
       pilotMode: parsed.data.pilotMode,
       captureConsentRequired: parsed.data.captureConsentRequired,
       dataRetentionDays: parsed.data.dataRetentionDays,
+      // merge 基线 = **现有持久化值**(非 defaults):这样本 action 不管理的 flag 不被重置,
+      // 且已声明的 flag 正确 round-trip(CodeX 运行审计 P1)。
       featureFlagsJson: serializeWorkspaceFeatureFlags({
-        ...defaultWorkspaceFeatureFlags,
+        ...parseWorkspaceFeatureFlags(current?.featureFlagsJson),
         ...parsed.data.featureFlags,
       }),
     },
