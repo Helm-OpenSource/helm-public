@@ -38,7 +38,12 @@ export type NorthstarKpiUnit =
   | "ratio"
   | "currency_band"
   | "duration_seconds"
-  | "days";
+  | "days"
+  // 由第二真实消费者(overlay provider)反馈补入(experimental 契约演进):
+  // index = 无量纲归一指数(如成本指数,以基线为 100);rate = 每周期速率(周期由 label 承载,
+  // 如"策略迭代速度/周")。二者均为数值单位(value 非空、bandLabel 必为 null,同 count/ratio)。
+  | "index"
+  | "rate";
 
 const UNIT_VALUES: ReadonlySet<string> = new Set([
   "count",
@@ -47,6 +52,8 @@ const UNIT_VALUES: ReadonlySet<string> = new Set([
   "currency_band",
   "duration_seconds",
   "days",
+  "index",
+  "rate",
 ]);
 
 export type NorthstarKpi = {
