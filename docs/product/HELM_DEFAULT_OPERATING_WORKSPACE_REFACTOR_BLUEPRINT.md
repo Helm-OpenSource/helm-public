@@ -11,6 +11,7 @@ public_safety: Tenant-neutral design blueprint for the default operating workspa
 > **语言 / Language**：**中文主文本** + English abstract
 > **基线 / Baseline**：`origin/main@79ef569`（本文所有文件路径、行为描述与附录 A 页面清单均以该提交为准）
 > **文档性质**：设计蓝图（design-only）。本文**不是**实现、**不是** API freeze、**不是**任何路由的删除批准、**不是**执行授权。方向批准与各阶段授权由私有 control-plane 的 owner gate 记录，本文不承载授权状态。
+> **方法论上位 / Methodology**：本蓝图落"建哪些 surface"；其设计第一性原理（surface 原型、操作分流决策程序、边界铁律）见 [Agent 时代 UI / IA 设计方法论](HELM_AGENT_ERA_UI_METHODOLOGY.md) / see the [Agent-Era UI / IA Design Methodology](HELM_AGENT_ERA_UI_METHODOLOGY.md) for the archetypes and decision procedure this blueprint instantiates.
 
 ## English abstract
 

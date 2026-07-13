@@ -61,8 +61,9 @@ function toNavItems(
     .filter((entry) => !entry.href.startsWith("/settings"))
     .filter((entry) => !excludeHrefs.some((ex) => entry.href.startsWith(ex)))
     .map((entry) => ({
-      // pathname-only 高亮判定：导航项去掉 query（/dashboard?stay=1 → /dashboard）
-      href: entry.href.split("?")[0],
+      // 保留目的地 query（如控制塔 escape /dashboard?stay=1），导航才能到达/留在控制塔；
+      // 高亮判定按 pathname 在 isNavLinkActive 内部剥 query 处理，二者不再耦合。
+      href: entry.href,
       icon: catalogIcon(entry.href),
       label: english ? entry.labelEn : entry.labelZh,
     }));
