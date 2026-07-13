@@ -5,11 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RoleFoundationPreview } from "@/features/settings/role-foundation-preview";
 import type { MemberDefinitionDraft } from "@/lib/definitions/member-definition";
 import {
-  getRolePresetDefinition,
-  localizeRolePreset,
-  suggestRolePresetKeyFromText,
-  type RolePresetKey,
-} from "@/lib/definitions/role-presets";
+  getWorkspaceRolePresetDefinition,
+  localizeWorkspaceRolePreset,
+  resolveWorkspaceRolePresetKey,
+} from "@/lib/definitions/workspace-role-preset-catalog";
 import { safeParseJson } from "@/lib/utils";
 
 type CurrentRoleFoundationCardProps = {
@@ -17,6 +16,7 @@ type CurrentRoleFoundationCardProps = {
   workspace: {
     profileType: string | null;
     focusAreas: string | null;
+    configuration?: string | null;
   };
   membership: {
     title: string | null;
@@ -34,17 +34,18 @@ function resolveRolePresetKey(input: {
   title: string | null;
   persona: string | null;
   workspaceProfileType: string | null;
+  workspaceConfiguration?: string | null;
 }) {
-  return (
-    input.acceptedDefinition?.rolePresetKey ??
-    input.draftDefinition?.rolePresetKey ??
-    (input.membershipRolePresetKey as RolePresetKey | null) ??
-    suggestRolePresetKeyFromText(
-      input.title,
-      input.persona,
-      input.workspaceProfileType,
-    )
-  );
+  return resolveWorkspaceRolePresetKey({
+    rawConfiguration: input.workspaceConfiguration,
+    requestedRolePresetKey:
+      input.acceptedDefinition?.rolePresetKey ??
+      input.draftDefinition?.rolePresetKey ??
+      input.membershipRolePresetKey,
+    title: input.title,
+    persona: input.persona,
+    workspaceProfileType: input.workspaceProfileType,
+  });
 }
 
 export function CurrentRoleFoundationCard({
@@ -69,8 +70,16 @@ export function CurrentRoleFoundationCard({
     title: membership.title,
     persona: membership.persona,
     workspaceProfileType: workspace.profileType,
+    workspaceConfiguration: workspace.configuration,
   });
-  const preset = localizeRolePreset(getRolePresetDefinition(rolePresetKey), locale);
+  const presetDefinition = getWorkspaceRolePresetDefinition(
+    rolePresetKey,
+    workspace.configuration,
+  );
+  if (!presetDefinition) {
+    throw new Error("workspace role preset catalog has no usable definition");
+  }
+  const preset = localizeWorkspaceRolePreset(presetDefinition, locale);
 
   const statusBadge = acceptedDefinition
     ? {
@@ -139,7 +148,7 @@ export function CurrentRoleFoundationCard({
 
         <RoleFoundationPreview
           locale={locale}
-          rolePresetKey={rolePresetKey}
+          rolePresetKey={preset.basePresetKey}
           workspaceProfileType={workspace.profileType}
           focusAreas={focusAreas}
         />

@@ -228,9 +228,9 @@ import type {
   SettingsSummaryConnection,
 } from "@/features/settings/types/settings-client-props";
 import {
-  listRolePresetOptions,
-  suggestRolePresetKeyFromText,
-} from "@/lib/definitions/role-presets";
+  listWorkspaceRolePresetOptions,
+  resolveWorkspaceRolePresetKey,
+} from "@/lib/definitions/workspace-role-preset-catalog";
 
 const isDefined = <T,>(value: T | undefined): value is T => value !== undefined;
 
@@ -427,7 +427,10 @@ export function SettingsClient({
     name: "",
     role: "MEMBER" as keyof typeof roleLabels,
     title: "",
-    rolePresetKey: suggestRolePresetKeyFromText(data.workspace?.profileType),
+    rolePresetKey: resolveWorkspaceRolePresetKey({
+      rawConfiguration: data.workspace?.configuration,
+      workspaceProfileType: data.workspace?.profileType,
+    }),
   });
   const [publisherDraft, setPublisherDraft] = useState({
     displayName: "",
@@ -591,7 +594,10 @@ export function SettingsClient({
   const policyGuidesByLocale = getLocalizedPolicyGuides(locale);
   const riskLabelsByLocale = getLocalizedRiskLabels(locale);
   const roleLabelsByLocale = getLocalizedRoleLabels(locale);
-  const rolePresetOptions = listRolePresetOptions(locale);
+  const rolePresetOptions = listWorkspaceRolePresetOptions(
+    data.workspace?.configuration,
+    locale,
+  );
   const skillBoundaryLabels: Record<string, string> = {
     internal_only: english ? "Internal only" : "仅限内部",
     draft_only: english ? "Draft only" : "仅限草稿",
@@ -1775,9 +1781,10 @@ export function SettingsClient({
         name: "",
         role: "MEMBER",
         title: "",
-        rolePresetKey: suggestRolePresetKeyFromText(
-          data.workspace?.profileType,
-        ),
+        rolePresetKey: resolveWorkspaceRolePresetKey({
+          rawConfiguration: data.workspace?.configuration,
+          workspaceProfileType: data.workspace?.profileType,
+        }),
       });
       router.refresh();
     });
@@ -7359,6 +7366,7 @@ export function SettingsClient({
                       (english ? "Current workspace" : "当前工作区"),
                     profileType: data.workspace?.profileType ?? null,
                     focusAreas: data.workspace?.focusAreas ?? null,
+                    configuration: data.workspace?.configuration ?? null,
                   }}
                   currentMembership={currentMembership}
                 />
