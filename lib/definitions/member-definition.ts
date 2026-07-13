@@ -1,16 +1,15 @@
 import type { UiLocale } from "@/lib/i18n/config";
 import { safeParseJson } from "@/lib/utils";
 import {
-  getRolePresetDefinition,
-  localizeRolePreset,
-  suggestRolePresetKeyFromText,
-  type RolePresetKey,
-} from "@/lib/definitions/role-presets";
+  getWorkspaceRolePresetDefinition,
+  localizeWorkspaceRolePreset,
+  resolveWorkspaceRolePresetKey,
+} from "@/lib/definitions/workspace-role-preset-catalog";
 
 export type MemberDefinitionDraft = {
   version: 1;
   locale: UiLocale;
-  rolePresetKey: RolePresetKey;
+  rolePresetKey: string;
   roleLabel: string;
   title: string | null;
   mission: string;
@@ -32,7 +31,8 @@ type BuildMemberDefinitionDraftInput = {
   workspaceName: string;
   workspaceProfileType?: string | null;
   focusAreasJson?: string | null;
-  rolePresetKey?: RolePresetKey | null;
+  workspaceConfigurationJson?: string | null;
+  rolePresetKey?: string | null;
   title?: string | null;
   persona?: string | null;
   customNotes?: string | null;
@@ -43,10 +43,21 @@ export function buildMemberDefinitionDraft(
 ): MemberDefinitionDraft {
   const english = input.locale === "en-US";
   const focusAreas = safeParseJson<string[]>(input.focusAreasJson, []).filter(Boolean);
-  const resolvedRolePresetKey =
-    input.rolePresetKey ??
-    suggestRolePresetKeyFromText(input.title, input.persona, input.workspaceProfileType);
-  const preset = localizeRolePreset(getRolePresetDefinition(resolvedRolePresetKey), input.locale);
+  const resolvedRolePresetKey = resolveWorkspaceRolePresetKey({
+    rawConfiguration: input.workspaceConfigurationJson,
+    requestedRolePresetKey: input.rolePresetKey,
+    title: input.title,
+    persona: input.persona,
+    workspaceProfileType: input.workspaceProfileType,
+  });
+  const presetDefinition = getWorkspaceRolePresetDefinition(
+    resolvedRolePresetKey,
+    input.workspaceConfigurationJson,
+  );
+  if (!presetDefinition) {
+    throw new Error("workspace role preset catalog has no usable definition");
+  }
+  const preset = localizeWorkspaceRolePreset(presetDefinition, input.locale);
 
   const workspaceContextLine =
     focusAreas.length > 0
@@ -89,7 +100,7 @@ export function buildMemberDefinitionDraft(
               : `把 ${focusAreas.join("、")} 收成一个明确的下一步经营动作。`,
           ]
         : []),
-    ],
+    ].slice(0, 8),
     mainJudgements: preset.mainJudgements,
     handoffEdges: preset.handoffEdges,
     successSignals: preset.successSignals,

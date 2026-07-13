@@ -110,4 +110,49 @@ describe("CurrentRoleFoundationCard", () => {
     expect(markup).toContain("Suggestion only");
     expect(markup).toContain("Approval review");
   });
+
+  it("renders a workspace-specific role while using its built-in foundation", () => {
+    const workspaceConfiguration = JSON.stringify({
+      rolePresetCatalog: {
+        includeDefaultPresets: false,
+        presets: [
+          {
+            key: "TENANT_ASSET_OPERATIONS_OWNER",
+            basePresetKey: "FOUNDER_CEO",
+            label: {
+              zh: "资产运营负责人",
+              en: "Asset operations owner",
+            },
+            mission: {
+              zh: "把资产运营目标收成同一条主线。",
+              en: "Keep asset operating goals on one line.",
+            },
+            matchers: ["资产运营负责人"],
+          },
+        ],
+      },
+    });
+
+    const markup = renderToStaticMarkup(
+      createElement(CurrentRoleFoundationCard, {
+        locale: "zh-CN",
+        workspace: {
+          profileType: "资产运营",
+          focusAreas: JSON.stringify(["高风险升级"]),
+          configuration: workspaceConfiguration,
+        },
+        membership: {
+          title: "资产运营负责人",
+          persona: null,
+          rolePresetKey: "TENANT_ASSET_OPERATIONS_OWNER",
+          definitionDraftJson: null,
+          definitionAcceptedJson: null,
+        },
+      }),
+    );
+
+    expect(markup).toContain("资产运营负责人");
+    expect(markup).toContain("基于预设的起点");
+    expect(markup).toContain("角色基础与初始技能建议");
+  });
 });
