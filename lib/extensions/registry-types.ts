@@ -15,6 +15,12 @@ import type {
   PermissionSubject,
 } from "@/lib/auth/permission-policy";
 import type { MainlineReadout } from "@/lib/shell/operating-mainline";
+import type { NorthstarKpi } from "@/lib/shell/northstar-kpi";
+import type { AttentionItem } from "@/lib/shell/attention-feed";
+import type { OperationSuggestion } from "@/lib/shell/operation-suggestion";
+import type { RoleHomeRoutingTable } from "@/lib/shell/role-home-routing";
+import type { WorkstationDescriptor } from "@/lib/shell/workstation";
+import type { AgentRunAuditEntry } from "@/lib/shell/run-trajectory-audit";
 
 export type WorkspaceLike = {
   id: string;
@@ -218,6 +224,126 @@ export type MainlineProviderContribution = {
     workspace: WorkspaceLike;
     english: boolean;
   }) => Promise<MainlineReadout>;
+};
+
+/**
+ * Northstar-KPI source (blueprint §4.2, **concat** surface — multiple eligible
+ * providers' KPIs are merged, unlike the single-winner mainline). Data-only:
+ * `NorthstarKpi` carries no callback fields and no raw currency (currency is
+ * `currency_band` only). `experimental` until a second real external consumer.
+ */
+export type NorthstarKpiSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildKpis: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<NorthstarKpi>>;
+};
+
+/**
+ * Attention source (blueprint §4.2/§4.4, **concat** surface). Items are
+ * de-identified (label = ref only, no PII), navigate-only, role-filtered. The
+ * aggregator (`resolveShellAttention`) collects sources concurrently under a
+ * per-source timeout + aggregate deadline, dedupes across sources, and renders
+ * an "unreturned source" item for any source that misses the budget (§4.4).
+ * `signal` is aborted when the aggregate deadline fires. `experimental`.
+ */
+export type AttentionSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildAttention: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    roleCategory?: string | null;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<AttentionItem>>;
+};
+
+/**
+ * Operation-suggestion source (methodology v2 / Phase 4, **concat**,
+ * experimental). Infrequent operations are de-identified Agent-ready Change
+ * Packets with goal, permissions, bounded changes, dry-run, approval, rollback
+ * and receipt requirements. Packet ≠ execution: items are read/navigate-only,
+ * carry no callbacks or credentials, and Helm never executes them. Same §4.4
+ * aggregation as attention. `experimental`.
+ */
+export type OperationSuggestionSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildOperationSuggestions: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<OperationSuggestion>>;
+};
+
+/**
+ * Role-home routing provider (blueprint Phase 3, **single-winner**, experimental).
+ * Produces the roleCategory → control_tower | workstation routing table (with a
+ * mandatory generic fallback). Selected via the binding-is-authorization model
+ * (§4.3) exactly like the mainline; no valid binding ⇒ Core default routing.
+ */
+export type RoleHomeRoutingProviderContribution = {
+  providerId: string;
+  contractVersion: string;
+  priority: number;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildRoleHomeRouting: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+  }) => Promise<RoleHomeRoutingTable>;
+};
+
+/**
+ * Workstation source (blueprint Phase 3/§4.1.5, **concat**, experimental).
+ * Registers which workstations exist, whose home lands there, and how to
+ * navigate — the workstation PAGE itself is not in the contract (§4.1.5).
+ * Navigate-only, no callbacks. Same §4.4 aggregation as attention.
+ */
+export type WorkstationSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildWorkstations: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<WorkstationDescriptor>>;
+};
+
+/**
+ * Run-trajectory audit source (blueprint Phase 5, **concat**, experimental).
+ * Projects an overlay's AgentRunCapsule / SARP receipts into read-only,
+ * de-identified audit entries. Read-only, no control semantics (verdict is a
+ * statement, never an action); no callbacks, no secrets/PII. Same §4.4
+ * aggregation as attention/workstations. `experimental`.
+ */
+export type AgentRunAuditSourceContribution = {
+  providerId: string;
+  contractVersion: string;
+  provenance: string;
+  stability: ShellSurfaceStability;
+  getAccess: ExtensionAccessProbe;
+  buildRunAuditEntries: (input: {
+    workspace: WorkspaceLike;
+    english: boolean;
+    signal?: AbortSignal;
+  }) => Promise<ReadonlyArray<AgentRunAuditEntry>>;
 };
 
 export type ExtensionIndustryDemoReadoutPage = {

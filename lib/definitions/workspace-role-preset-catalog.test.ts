@@ -1,9 +1,41 @@
 import { describe, expect, it } from "vitest";
+import { WorkspaceRole } from "@prisma/client";
 import {
   getWorkspaceRolePresetDefinition,
   listWorkspaceRolePresetOptions,
+  resolveMemberBasePresetKey,
   resolveWorkspaceRolePresetKey,
 } from "@/lib/definitions/workspace-role-preset-catalog";
+
+describe("resolveMemberBasePresetKey — controlled fallback for missing preset (CodeX P1)", () => {
+  it("OWNER with no preset falls back to FOUNDER_CEO (control tower, not blank generic)", () => {
+    expect(
+      resolveMemberBasePresetKey({
+        rolePresetKey: null,
+        workspaceRole: WorkspaceRole.OWNER,
+        rawConfiguration: null,
+      }),
+    ).toBe("FOUNDER_CEO");
+  });
+
+  it("non-OWNER with no preset keeps the null → GENERIC fail-safe", () => {
+    for (const role of [WorkspaceRole.OPERATOR, WorkspaceRole.BILLING_ADMIN]) {
+      expect(
+        resolveMemberBasePresetKey({ rolePresetKey: null, workspaceRole: role, rawConfiguration: null }),
+      ).toBeNull();
+    }
+  });
+
+  it("an explicit valid preset always wins over the role fallback", () => {
+    expect(
+      resolveMemberBasePresetKey({
+        rolePresetKey: "GENERAL_OPERATOR",
+        workspaceRole: WorkspaceRole.OWNER,
+        rawConfiguration: null,
+      }),
+    ).toBe("GENERAL_OPERATOR");
+  });
+});
 
 const tenantCatalogConfiguration = JSON.stringify({
   rolePresetCatalog: {

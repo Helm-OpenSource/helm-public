@@ -651,6 +651,9 @@ async function main() {
         workspaceId: workspace.id,
         userId: userMap["founder@demo.com"].id,
         role: WorkspaceRole.OWNER,
+        // rolePresetKey 必填:控制塔开启后,无 preset 的 OWNER 会落空白 generic home
+        // (CodeX 运行审计 P1)。合成数据须写实——OWNER=创始人/COO→FOUNDER_CEO 控制塔。
+        rolePresetKey: "FOUNDER_CEO",
         title: "创始人 / COO",
         persona: "创始人 / COO",
       },
@@ -658,6 +661,7 @@ async function main() {
         workspaceId: workspace.id,
         userId: userMap["ops@demo.com"].id,
         role: WorkspaceRole.OPERATOR,
+        rolePresetKey: "GENERAL_OPERATOR",
         title: "运营协调",
         persona: "顾问 / 服务商",
       },
