@@ -449,4 +449,101 @@ describe("check-llm-candidate-boundaries", () => {
     expect(result.ok).toBe(false);
     expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-G")).toBe(true);
   });
+
+  it("rejects closeout candidate materialization that creates a human execution", () => {
+    writeFile(
+      "lib/governed-intelligence/capability-closeout-materializer.ts",
+      `
+        export async function materialize() {
+          evaluateCapabilityGrant();
+          if (decision.decision !== "allow_draft") return null;
+          return db.$transaction(async (tx) => {
+            if (source.status !== ArtifactBundleStatus.CONFIRMED) return null;
+            await tx.artifactBundle.create({ data: { status: ArtifactBundleStatus.DRAFT, systemOfRecordWrite: false } });
+            await tx.artifactReview.create({ data: { status: ArtifactReviewStatus.PENDING } });
+            await tx.auditLog.create({ data: {} });
+            await tx.humanActionExecution.create({ data: {} });
+          });
+        }
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-L")).toBe(
+      true,
+    );
+  });
+
+  it("rejects an external-send handoff that performs a network send", () => {
+    writeFile(
+      "lib/governed-intelligence/capability-closeout-review.ts",
+      `
+        export async function prepareGovernedExternalSendHumanExecution() {
+          await assertWorkspaceGovernedActionManagementServiceAccess({ actorType: ActorType.USER });
+          if (Date.parse(candidate.rateLimitReceipt.expiresAt) < Date.now()) return null;
+          await db.humanActionExecution.create({ data: {
+            actionType: HumanActionExecutionType.MANUAL_EMAIL_SEND,
+            status: HumanActionExecutionStatus.READY,
+            acknowledgementStatus: HumanActionExecutionAckStatus.PENDING,
+            executedAt: null
+          } });
+          const receipt = { automaticSendAllowed: false, sendPerformed: false };
+          await fetch("https://example.invalid/send");
+          return receipt;
+        }
+        type ConfirmedJudgementSource = {};
+        export async function projectConfirmedArtifactToMemoryCandidate() {
+          await assertWorkspaceMemoryServiceAccess();
+          if (review.status !== ArtifactReviewStatus.CONFIRMED) return null;
+          await tx.runtimeSession.findFirst();
+          await tx.memoryCandidate.create({ data: { status: RuntimeMemoryCandidateStatus.PENDING_VERIFICATION } });
+          await tx.auditLog.create({ data: { actionType: "GOVERNED_MEMORY_CANDIDATE_PROJECTED" } });
+          return { memoryPromotionCreated: false, canonicalMemoryWritten: false };
+        }
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-M")).toBe(
+      true,
+    );
+  });
+
+  it("rejects confirmed-Artifact projection that creates MemoryPromotion", () => {
+    writeFile(
+      "lib/governed-intelligence/capability-closeout-review.ts",
+      `
+        export async function prepareGovernedExternalSendHumanExecution() {
+          await assertWorkspaceGovernedActionManagementServiceAccess({ actorType: ActorType.USER });
+          if (Date.parse(candidate.rateLimitReceipt.expiresAt) < Date.now()) return null;
+          return tx.humanActionExecution.create({ data: {
+            actionType: HumanActionExecutionType.MANUAL_EMAIL_SEND,
+            status: HumanActionExecutionStatus.READY,
+            acknowledgementStatus: HumanActionExecutionAckStatus.PENDING,
+            executedAt: null,
+            automaticSendAllowed: false,
+            sendPerformed: false
+          } });
+        }
+        type ConfirmedJudgementSource = {};
+        export async function projectConfirmedArtifactToMemoryCandidate() {
+          await assertWorkspaceMemoryServiceAccess();
+          if (review.status !== ArtifactReviewStatus.CONFIRMED) return null;
+          await tx.runtimeSession.findFirst();
+          await tx.memoryCandidate.create({ data: { status: RuntimeMemoryCandidateStatus.PENDING_VERIFICATION } });
+          await tx.memoryPromotion.create({ data: {} });
+          await tx.auditLog.create({ data: { actionType: "GOVERNED_MEMORY_CANDIDATE_PROJECTED" } });
+          return { memoryPromotionCreated: false, canonicalMemoryWritten: false };
+        }
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-N")).toBe(
+      true,
+    );
+  });
 });
