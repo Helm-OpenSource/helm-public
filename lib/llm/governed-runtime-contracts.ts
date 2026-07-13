@@ -1,6 +1,17 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
-import { publicSafeRedactionStatusSchema } from "@/lib/llm/intelligence-contracts-v3";
+import { serializeCandidateCanonicalJson } from "@/lib/llm/candidate-canonical-json";
+import {
+  judgementProposalBundleSchema,
+  llmTaskTrajectoryReceiptSchema,
+  multiPassRoleOutputSchema,
+  publicSafeRedactionStatusSchema,
+  V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES,
+  type JudgementProposalBundle,
+  type LLMTaskTrajectoryReceipt,
+  type MultiPassRoleOutput,
+} from "@/lib/llm/intelligence-contracts-v3";
 import { runtimePermissionProfileSchema } from "@/lib/llm/runtime-permission";
 
 const safeRefSchema = z
@@ -317,6 +328,301 @@ export type CapabilityGrantDecision = Readonly<{
   grantRef: string | null;
   effectMode: z.infer<typeof runtimePermissionProfileSchema>;
 }>;
+
+export const GOVERNED_JUDGEMENT_CANDIDATE_SCHEMA_VERSION =
+  "helm.governed-judgement-candidate/v1" as const;
+export const GOVERNED_JUDGEMENT_CANDIDATE_ROLES = [
+  "generator",
+  "critic",
+  "adversary",
+] as const;
+export const governedCandidateBoundaryDecisionSchema = z.enum([
+  "allow_candidate",
+  "review_required",
+  "reject",
+]);
+const GOVERNED_CANDIDATE_MAX_TOTAL_TEXT = 256_000;
+const GOVERNED_CANDIDATE_MAX_TRAJECTORY_STEPS = 100;
+
+type GovernedCandidateBoundaryDecision = z.infer<
+  typeof governedCandidateBoundaryDecisionSchema
+>;
+
+function deriveGovernedCandidateDecision(roleOutputs: MultiPassRoleOutput[]): {
+  reviewState: "candidate" | "needs_review" | "rejected_by_guard";
+  boundaryDecision: GovernedCandidateBoundaryDecision;
+} {
+  if (roleOutputs.some(({ reviewState }) => reviewState === "rejected_by_guard")) {
+    return {
+      reviewState: "rejected_by_guard",
+      boundaryDecision: "reject",
+    };
+  }
+  if (
+    roleOutputs.length === GOVERNED_JUDGEMENT_CANDIDATE_ROLES.length &&
+    roleOutputs.every(({ reviewState }) => reviewState === "candidate")
+  ) {
+    return { reviewState: "candidate", boundaryDecision: "allow_candidate" };
+  }
+  return { reviewState: "needs_review", boundaryDecision: "review_required" };
+}
+
+function exceedsGovernedCandidateTextBudget(
+  value: unknown,
+  remaining: { value: number },
+): boolean {
+  if (typeof value === "string") {
+    remaining.value -= value.length;
+    return remaining.value < 0;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) =>
+      exceedsGovernedCandidateTextBudget(item, remaining),
+    );
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) =>
+      exceedsGovernedCandidateTextBudget(item, remaining),
+    );
+  }
+  return false;
+}
+
+type GovernedCandidateHashInput = Readonly<{
+  sourceCandidateRef: string;
+  sourceCandidateContentHash: string;
+  sourceBundleRef: string;
+  sourceBuildReceiptRef: string;
+  verifiedEvidenceRefs: string[];
+  proposal: JudgementProposalBundle;
+  roleOutputs: MultiPassRoleOutput[];
+  trajectoryReceipt: LLMTaskTrajectoryReceipt;
+  reviewState: "candidate" | "needs_review" | "rejected_by_guard";
+  boundaryDecision: GovernedCandidateBoundaryDecision;
+  requiredHumanReview: true;
+  promotionAllowed: false;
+  externalEffectAllowed: false;
+}>;
+
+export function computeGovernedJudgementCandidateContentHash(
+  input: GovernedCandidateHashInput,
+): string {
+  const serialized = serializeCandidateCanonicalJson(input);
+  return `sha256:${createHash("sha256").update(serialized).digest("hex")}`;
+}
+
+export const governedJudgementCandidateSchema = z
+  .object({
+    schemaVersion: z.literal(GOVERNED_JUDGEMENT_CANDIDATE_SCHEMA_VERSION),
+    candidateId: safeRefSchema,
+    sourceCandidateRef: safeRefSchema,
+    sourceCandidateContentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    sourceBundleRef: safeRefSchema,
+    sourceBuildReceiptRef: safeRefSchema,
+    verifiedEvidenceRefs: z.array(safeRefSchema).max(100),
+    proposal: judgementProposalBundleSchema,
+    roleOutputs: z.array(multiPassRoleOutputSchema).min(1).max(3),
+    trajectoryReceipt: llmTaskTrajectoryReceiptSchema,
+    reviewState: z.enum(["candidate", "needs_review", "rejected_by_guard"]),
+    boundaryDecision: governedCandidateBoundaryDecisionSchema,
+    requiredHumanReview: z.literal(true),
+    promotionAllowed: z.literal(false),
+    externalEffectAllowed: z.literal(false),
+    contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  })
+  .strict()
+  .superRefine((candidate, ctx) => {
+    if (
+      candidate.trajectoryReceipt.steps.length >
+        GOVERNED_CANDIDATE_MAX_TRAJECTORY_STEPS ||
+      candidate.proposal.evidenceRefs.length > 100 ||
+      candidate.proposal.missingEvidence.length > 100 ||
+      candidate.proposal.counterEvidenceNeeded.length > 50 ||
+      candidate.proposal.nextSafeActions.length > 50 ||
+      candidate.roleOutputs.some(
+        ({ evidenceRefs, notes }) =>
+          evidenceRefs.length > 100 || notes.length > 20,
+      ) ||
+      exceedsGovernedCandidateTextBudget(candidate, {
+        value: GOVERNED_CANDIDATE_MAX_TOTAL_TEXT,
+      })
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "governed candidate exceeds materialization size limits",
+      });
+      return;
+    }
+    const expectedDecision = deriveGovernedCandidateDecision(
+      candidate.roleOutputs,
+    );
+    if (
+      candidate.roleOutputs.some(
+        ({ role }, index) =>
+          role !== GOVERNED_JUDGEMENT_CANDIDATE_ROLES[index],
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["roleOutputs"],
+        message: "governed candidate roles must be an ordered role prefix",
+      });
+    }
+    if (
+      candidate.reviewState !== expectedDecision.reviewState ||
+      candidate.proposal.reviewState !== expectedDecision.reviewState ||
+      candidate.boundaryDecision !== expectedDecision.boundaryDecision
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["boundaryDecision"],
+        message: "governed candidate decision must match deterministic arbitration",
+      });
+    }
+    if (
+      candidate.boundaryDecision === "allow_candidate" &&
+      candidate.proposal.evidenceRefs.length === 0
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["proposal", "evidenceRefs"],
+        message: "an allow-candidate decision requires grounded evidence",
+      });
+    }
+    if (
+      candidate.trajectoryReceipt.taskId !== candidate.sourceCandidateRef ||
+      candidate.trajectoryReceipt.boundaryDecisions.length !== 1 ||
+      candidate.trajectoryReceipt.boundaryDecisions[0] !==
+        candidate.boundaryDecision
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["trajectoryReceipt"],
+        message: "trajectory must bind the source candidate and boundary decision",
+      });
+    }
+    if (
+      candidate.trajectoryReceipt.steps.some(
+        ({ riskClass }) => riskClass !== "read",
+      ) ||
+      candidate.trajectoryReceipt.finalClaim.claimedReleaseReady ||
+      candidate.trajectoryReceipt.finalClaim.claimedApprovalGranted ||
+      candidate.trajectoryReceipt.finalClaim.promotedCandidate ||
+      candidate.trajectoryReceipt.finalClaim.selfCertified ||
+      candidate.trajectoryReceipt.finalClaim.claimedSourceTruthWithoutEvidence
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["trajectoryReceipt"],
+        message: "materializable trajectories must stay read-only and non-authoritative",
+      });
+    }
+    const verifiedRefs = new Set(candidate.verifiedEvidenceRefs);
+    const usedRefs = [
+      ...candidate.proposal.evidenceRefs,
+      ...candidate.roleOutputs.flatMap(({ evidenceRefs }) => evidenceRefs),
+      ...candidate.trajectoryReceipt.steps.flatMap(
+        ({ evidenceRefs }) => evidenceRefs,
+      ),
+    ];
+    if (
+      verifiedRefs.size !== candidate.verifiedEvidenceRefs.length ||
+      usedRefs.some((ref) => !verifiedRefs.has(ref))
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["verifiedEvidenceRefs"],
+        message: "all candidate evidence must be present in the verified ref set",
+      });
+    }
+    if (
+      candidate.proposal.forbiddenCapabilityRefs.length !==
+        V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES.length ||
+      candidate.proposal.forbiddenCapabilityRefs.some(
+        (capability, index) =>
+          capability !== V3_SOURCE_PROPOSAL_FORBIDDEN_CAPABILITIES[index],
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["proposal", "forbiddenCapabilityRefs"],
+        message: "governed judgement candidates must carry the exact deny set",
+      });
+    }
+    const expectedHash = computeGovernedJudgementCandidateContentHash({
+      sourceCandidateRef: candidate.sourceCandidateRef,
+      sourceCandidateContentHash: candidate.sourceCandidateContentHash,
+      sourceBundleRef: candidate.sourceBundleRef,
+      sourceBuildReceiptRef: candidate.sourceBuildReceiptRef,
+      verifiedEvidenceRefs: candidate.verifiedEvidenceRefs,
+      proposal: candidate.proposal,
+      roleOutputs: candidate.roleOutputs,
+      trajectoryReceipt: candidate.trajectoryReceipt,
+      reviewState: candidate.reviewState,
+      boundaryDecision: candidate.boundaryDecision,
+      requiredHumanReview: true,
+      promotionAllowed: false,
+      externalEffectAllowed: false,
+    });
+    if (
+      candidate.contentHash !== expectedHash ||
+      candidate.candidateId !==
+        `governed-candidate:${expectedHash.slice(-24)}`
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["contentHash"],
+        message: "governed candidate id and content hash must match canonical content",
+      });
+    }
+  });
+export type GovernedJudgementCandidate = z.infer<
+  typeof governedJudgementCandidateSchema
+>;
+
+type BuildGovernedJudgementCandidateInput = Omit<
+  GovernedCandidateHashInput,
+  | "reviewState"
+  | "boundaryDecision"
+  | "requiredHumanReview"
+  | "promotionAllowed"
+  | "externalEffectAllowed"
+>;
+
+export function buildGovernedJudgementCandidate(
+  input: BuildGovernedJudgementCandidateInput,
+): GovernedJudgementCandidate {
+  const proposal = judgementProposalBundleSchema.parse(input.proposal);
+  const roleOutputs = z.array(multiPassRoleOutputSchema).min(1).max(3).parse(
+    input.roleOutputs,
+  );
+  const trajectoryReceipt = llmTaskTrajectoryReceiptSchema.parse(
+    input.trajectoryReceipt,
+  );
+  const decision = deriveGovernedCandidateDecision(roleOutputs);
+  const hashInput: GovernedCandidateHashInput = {
+    sourceCandidateRef: input.sourceCandidateRef,
+    sourceCandidateContentHash: input.sourceCandidateContentHash,
+    sourceBundleRef: input.sourceBundleRef,
+    sourceBuildReceiptRef: input.sourceBuildReceiptRef,
+    verifiedEvidenceRefs: [...input.verifiedEvidenceRefs],
+    proposal,
+    roleOutputs,
+    trajectoryReceipt,
+    reviewState: decision.reviewState,
+    boundaryDecision: decision.boundaryDecision,
+    requiredHumanReview: true,
+    promotionAllowed: false,
+    externalEffectAllowed: false,
+  };
+  const contentHash = computeGovernedJudgementCandidateContentHash(hashInput);
+  return governedJudgementCandidateSchema.parse({
+    schemaVersion: GOVERNED_JUDGEMENT_CANDIDATE_SCHEMA_VERSION,
+    candidateId: `governed-candidate:${contentHash.slice(-24)}`,
+    ...hashInput,
+    contentHash,
+  });
+}
 
 function denyGrant(
   reason: CapabilityGrantDecision["reason"],

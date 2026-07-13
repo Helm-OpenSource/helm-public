@@ -19,7 +19,7 @@ const TEST_FILE_PATTERN = /\.(test|spec)\.tsx?$/;
 const BYPASS_TOKEN = "@bypass-llm-candidate-boundary";
 
 const CANDIDATE_AWARE_PATTERN =
-  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate|ModelCapabilityProfile|RichLocalContextBundle|ContextProjectionReceipt|JudgementProposalBundle|SourceToSignalProposalBundle|LLMTaskTrajectoryReceipt|PrivateContextAdapterManifest|PrivateContextBuildReceipt|ContextEgressDecisionReceipt|RuntimeIsolationProfile|CapabilityGrant)\b/;
+  /\b(JudgementCandidate|LLMCriticResult|judgementCandidate|llmCriticResult|reviewJudgementBoundaryWithLLM|CounterfactualReviewerOutput|reviewCounterfactualWithLLM|SelectedContextStub|LLMContextSelectionReceipt|RuntimePermissionProfile|resolveRuntimePermissionForCapability|SkillRevisionCandidate|ModelCapabilityProfile|RichLocalContextBundle|ContextProjectionReceipt|JudgementProposalBundle|SourceToSignalProposalBundle|LLMTaskTrajectoryReceipt|PrivateContextAdapterManifest|PrivateContextBuildReceipt|ContextEgressDecisionReceipt|RuntimeIsolationProfile|CapabilityGrant|GovernedJudgementCandidate|materializeGovernedJudgementCandidate)\b/;
 const UNSAFE_REVIEW_STATE_PATTERN =
   /reviewState\s*:\s*["'](?:approved|committed|executed|auto_promote|production_ready)["']/i;
 const UNSAFE_STATE_ENUM_DEFINITION_PATTERN =
@@ -83,6 +83,19 @@ const V3_MULTI_PASS_REQUIRED_MARKERS = [
   "executeLLMTask",
   "buildReasoningBudgetAuditSummary",
 ] as const;
+const GOVERNED_CANDIDATE_MATERIALIZER_FILE =
+  "lib/llm/governed-candidate-materializer.ts";
+const GOVERNED_CANDIDATE_MATERIALIZER_REQUIRED_MARKERS = [
+  "db.$transaction",
+  "tx.artifactBundle.create",
+  "tx.artifactReview.create",
+  "tx.auditLog.create",
+  "ArtifactBundleStatus.DRAFT",
+  "ArtifactReviewStatus.PENDING",
+  "systemOfRecordWrite: false",
+] as const;
+const GOVERNED_CANDIDATE_MATERIALIZER_FORBIDDEN_WRITE_PATTERN =
+  /\b(?:db|tx|prisma)\.(?:actionItem|approvalRequest|approvalTask|memoryItem|memoryPromotion|recommendationFeedback|preferenceSignal|patternFact|officialWriteIntent|humanActionExecution)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/;
 
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
@@ -96,7 +109,7 @@ const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   },
   {
     pattern:
-      /\b(?:db|tx|prisma)\.(?:preferenceSignal|patternFact|approvalTask|memoryPromotion|recommendationFeedback)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/,
+      /\b(?:db|tx|prisma)\.(?:actionItem|approvalRequest|approvalTask|memoryItem|preferenceSignal|patternFact|memoryPromotion|recommendationFeedback|officialWriteIntent|humanActionExecution)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/,
     detail:
       "Candidate/Critic modules must not directly write feedback, preference, approval, pattern, or memory-promotion records.",
   },
@@ -273,6 +286,28 @@ export function runLlmCandidateBoundaryCheck(
           file: repoRelative,
           rule: "LLM-CANDIDATE-G",
           detail: `V3 multi-pass workflow must stay on the registered prompt/version/budget/call-log chain; missing ${missingMarkers.join(", ")}.`,
+        });
+      }
+    }
+
+    if (repoRelative === GOVERNED_CANDIDATE_MATERIALIZER_FILE) {
+      const missingMarkers =
+        GOVERNED_CANDIDATE_MATERIALIZER_REQUIRED_MARKERS.filter(
+          (marker) => !content.includes(marker),
+        );
+      if (missingMarkers.length > 0) {
+        violations.push({
+          file: repoRelative,
+          rule: "LLM-CANDIDATE-I",
+          detail: `Governed candidate materialization must stay transactional and DRAFT/PENDING-only; missing ${missingMarkers.join(", ")}.`,
+        });
+      }
+      if (GOVERNED_CANDIDATE_MATERIALIZER_FORBIDDEN_WRITE_PATTERN.test(content)) {
+        violations.push({
+          file: repoRelative,
+          rule: "LLM-CANDIDATE-I",
+          detail:
+            "Governed candidate materialization may write only ArtifactBundle(DRAFT), ArtifactReview(PENDING), and its audit row.",
         });
       }
     }

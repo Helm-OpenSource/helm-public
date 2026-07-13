@@ -98,6 +98,41 @@ describe("check-llm-candidate-boundaries", () => {
     expect(result.violations[0]?.detail).toContain("must not directly write");
   });
 
+  it("allows only transactional DRAFT/PENDING candidate materialization", () => {
+    writeFile(
+      "lib/llm/governed-candidate-materializer.ts",
+      `
+        import type { GovernedJudgementCandidate } from "@/lib/llm/governed-runtime-contracts";
+        export async function materializeGovernedJudgementCandidate(candidate: GovernedJudgementCandidate) {
+          return db.$transaction(async (tx) => {
+            await tx.artifactBundle.create({ data: { status: ArtifactBundleStatus.DRAFT, systemOfRecordWrite: false } });
+            await tx.artifactReview.create({ data: { status: ArtifactReviewStatus.PENDING } });
+            await tx.auditLog.create({ data: { targetId: candidate.candidateId } });
+          });
+        }
+      `,
+    );
+
+    expect(runLlmCandidateBoundaryCheck(tempRoot).ok).toBe(true);
+  });
+
+  it("rejects governed candidate materialization that creates an action or approval", () => {
+    writeFile(
+      "lib/llm/governed-candidate-materializer.ts",
+      `
+        import type { GovernedJudgementCandidate } from "@/lib/llm/governed-runtime-contracts";
+        export async function materializeGovernedJudgementCandidate(candidate: GovernedJudgementCandidate) {
+          await db.actionItem.create({ data: { title: candidate.candidateId } });
+        }
+      `,
+    );
+
+    const result = runLlmCandidateBoundaryCheck(tempRoot);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-I")).toBe(true);
+    expect(result.violations.some((v) => v.rule === "LLM-CANDIDATE-B")).toBe(true);
+  });
+
   it("does not reject boundary wording inside prompt text", () => {
     writeFile(
       "lib/llm/example.ts",
