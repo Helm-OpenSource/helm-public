@@ -4,7 +4,9 @@ import type { WorkspaceLike } from "@/lib/extensions/registry-types";
 import {
   resolveShellRoleHomeRouting,
   resolveShellWorkstations,
+  SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
 } from "@/lib/shell/resolve-shell-experience";
+import { resolveWorkspaceSurfaceBinding } from "@/lib/shell/surface-binding-store";
 
 import { ROUTING_SECTION_COPY, destinationLabel, t } from "./routing-copy";
 
@@ -12,8 +14,8 @@ import { ROUTING_SECTION_COPY, destinationLabel, t } from "./routing-copy";
  * 工位与角色路由（read-only 消费者）—— 蓝图 Phase 3 roleHomeRouting + workstations surface
  * 的**首个 Core 渲染消费者**（方法论 v2 §1 IA 路由的可见性面）。
  *
- * 只读:roleHomeRouting 单一生效(binding=null → Core 默认路由);workstations concat 聚合。
- * **不授权、不改路由**。空/默认 → 诚实展示 Core 默认(无工位)。
+ * 只读:roleHomeRouting 单一生效(按持久化绑定授权,无绑定/失效 → Core 默认路由);
+ * workstations concat 聚合。**不授权、不改路由**。空/默认 → 诚实展示 Core 默认(无工位)。
  */
 export async function WorkspaceRoutingView({
   workspace,
@@ -22,8 +24,12 @@ export async function WorkspaceRoutingView({
   workspace: WorkspaceLike;
   english: boolean;
 }) {
+  const routingBinding = await resolveWorkspaceSurfaceBinding(
+    workspace.id,
+    SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
+  );
   const [{ table }, { workstations }] = await Promise.all([
-    resolveShellRoleHomeRouting({ workspace, english, binding: null }),
+    resolveShellRoleHomeRouting({ workspace, english, binding: routingBinding }),
     resolveShellWorkstations({ workspace, english }),
   ]);
   const c = ROUTING_SECTION_COPY;
