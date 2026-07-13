@@ -73,7 +73,9 @@ const CATALOG_BY_PRESET: Record<RolePresetKey, DestinationCatalog> = {
   // 推进/交付工作台入口由控制塔段③"工位总览"提供，不占 FOUNDER 主区。
   FOUNDER_CEO: {
     primary: [
-      D("/dashboard", "控制塔（主线·拍板）", "Control tower (mainline · calls)"),
+      // ?stay=1 逃生口：配了 defaultLandingPath 的租户里,/dashboard 会重定向到落地页,
+      // 唯有 ?stay=1 能到达/留在控制塔(见 dashboard/page.tsx 优先级链 + resolveWorkspaceDefaultLandingPath)。
+      D("/dashboard?stay=1", "控制塔（主线·拍板）", "Control tower (mainline · calls)"),
       D("/approvals", "复核队列", "Review queue"),
       D("/reports", "周期复盘深链", "Periodic review deep links"),
     ],

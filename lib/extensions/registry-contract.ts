@@ -35,14 +35,20 @@ export type { ExtensionApiRoute, ApiRouteMethod } from "./api-route-registry";
 
 import type {
   AccountBindingContribution,
+  AttentionSourceContribution,
   BiBoardContribution,
   BiReportP0ProcessProductionRow,
   BiReportP0ProcessSopRow,
   ExtensionIndustryDemoReadoutPage,
+  AgentRunAuditSourceContribution,
   MainlineProviderContribution,
+  NorthstarKpiSourceContribution,
+  OperationSuggestionSourceContribution,
   ReportsExtensionDescriptor,
+  RoleHomeRoutingProviderContribution,
   SolutionExtensionCatalogEntry,
   WorkspaceNavExtensionDescriptor,
+  WorkstationSourceContribution,
   ExtensionAccessProbe,
 } from "./registry-types";
 
@@ -129,6 +135,38 @@ export type PackContributions = {
    * binding — the default — the Core default provider is used.
    */
   mainlineProviders?: ReadonlyArray<MainlineProviderContribution>;
+  /**
+   * Northstar-KPI sources (blueprint Phase 2, experimental, **concat**). Every
+   * eligible source's KPIs are merged by `resolveShellNorthstarKpis`.
+   */
+  northstarKpiSources?: ReadonlyArray<NorthstarKpiSourceContribution>;
+  /**
+   * Attention sources (blueprint Phase 2, experimental, **concat**). Collected
+   * concurrently and merged by `resolveShellAttention` under the §4.4 budget.
+   */
+  attentionSources?: ReadonlyArray<AttentionSourceContribution>;
+  /**
+   * Operation-suggestion sources (blueprint Phase 4, experimental, **concat**).
+   * Agent-ready Change Packets for infrequent operations, merged by
+   * `resolveShellOperationSuggestions`; packet handoff never grants execution.
+   */
+  operationSuggestionSources?: ReadonlyArray<OperationSuggestionSourceContribution>;
+  /**
+   * Single-winner role-home routing providers (blueprint Phase 3, experimental).
+   * Candidate pool; the runtime picks one via the binding model (§4.3), else
+   * the Core default routing.
+   */
+  roleHomeRoutingProviders?: ReadonlyArray<RoleHomeRoutingProviderContribution>;
+  /**
+   * Workstation sources (blueprint Phase 3, experimental, **concat**). Merged by
+   * `resolveShellWorkstations` under the §4.4 budget.
+   */
+  workstationSources?: ReadonlyArray<WorkstationSourceContribution>;
+  /**
+   * Run-trajectory audit sources (blueprint Phase 5, experimental, **concat**).
+   * Read-only agent-run audit entries merged by `resolveShellRunTrajectoryAudit`.
+   */
+  agentRunAuditSources?: ReadonlyArray<AgentRunAuditSourceContribution>;
   biReportP0ProcessService?: BiReportP0ProcessService;
   implementationConsole?: ImplementationConsoleContribution;
   signalCollectionJobs?: () => ReadonlyArray<SignalCollectionJob>;
@@ -153,6 +191,12 @@ type MutableStore = {
   biBoards: NonNullable<PackContributions["biBoard"]>[];
   industryDemoReadouts: IndustryDemoReadoutContribution[];
   mainlineProviders: MainlineProviderContribution[];
+  northstarKpiSources: NorthstarKpiSourceContribution[];
+  attentionSources: AttentionSourceContribution[];
+  operationSuggestionSources: OperationSuggestionSourceContribution[];
+  roleHomeRoutingProviders: RoleHomeRoutingProviderContribution[];
+  workstationSources: WorkstationSourceContribution[];
+  agentRunAuditSources: AgentRunAuditSourceContribution[];
   biReportP0ProcessService: BiReportP0ProcessService | null;
   implementationConsole: ImplementationConsoleContribution | null;
   signalCollectionJobProviders: Array<() => ReadonlyArray<SignalCollectionJob>>;
@@ -168,6 +212,12 @@ function emptyStore(): MutableStore {
     biBoards: [],
     industryDemoReadouts: [],
     mainlineProviders: [],
+    northstarKpiSources: [],
+    attentionSources: [],
+    operationSuggestionSources: [],
+    roleHomeRoutingProviders: [],
+    workstationSources: [],
+    agentRunAuditSources: [],
     biReportP0ProcessService: null,
     implementationConsole: null,
     signalCollectionJobProviders: [],
@@ -207,6 +257,18 @@ export function registerPackContributions(
     s.industryDemoReadouts.push(...contributions.industryDemoReadouts);
   if (contributions.mainlineProviders)
     s.mainlineProviders.push(...contributions.mainlineProviders);
+  if (contributions.northstarKpiSources)
+    s.northstarKpiSources.push(...contributions.northstarKpiSources);
+  if (contributions.attentionSources)
+    s.attentionSources.push(...contributions.attentionSources);
+  if (contributions.operationSuggestionSources)
+    s.operationSuggestionSources.push(...contributions.operationSuggestionSources);
+  if (contributions.roleHomeRoutingProviders)
+    s.roleHomeRoutingProviders.push(...contributions.roleHomeRoutingProviders);
+  if (contributions.workstationSources)
+    s.workstationSources.push(...contributions.workstationSources);
+  if (contributions.agentRunAuditSources)
+    s.agentRunAuditSources.push(...contributions.agentRunAuditSources);
   if (contributions.biReportP0ProcessService)
     s.biReportP0ProcessService = contributions.biReportP0ProcessService;
   if (contributions.implementationConsole)
@@ -249,6 +311,24 @@ export function getRegisteredIndustryDemoReadouts(): ReadonlyArray<IndustryDemoR
 }
 export function getRegisteredMainlineProviders(): ReadonlyArray<MainlineProviderContribution> {
   return store().mainlineProviders;
+}
+export function getRegisteredNorthstarKpiSources(): ReadonlyArray<NorthstarKpiSourceContribution> {
+  return store().northstarKpiSources;
+}
+export function getRegisteredAttentionSources(): ReadonlyArray<AttentionSourceContribution> {
+  return store().attentionSources;
+}
+export function getRegisteredOperationSuggestionSources(): ReadonlyArray<OperationSuggestionSourceContribution> {
+  return store().operationSuggestionSources;
+}
+export function getRegisteredRoleHomeRoutingProviders(): ReadonlyArray<RoleHomeRoutingProviderContribution> {
+  return store().roleHomeRoutingProviders;
+}
+export function getRegisteredWorkstationSources(): ReadonlyArray<WorkstationSourceContribution> {
+  return store().workstationSources;
+}
+export function getRegisteredAgentRunAuditSources(): ReadonlyArray<AgentRunAuditSourceContribution> {
+  return store().agentRunAuditSources;
 }
 export function getRegisteredBiReportP0ProcessService(): BiReportP0ProcessService | null {
   return store().biReportP0ProcessService;
