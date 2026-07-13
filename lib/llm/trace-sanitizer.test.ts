@@ -43,9 +43,10 @@ describe("LLM trace sanitizer", () => {
 
   it("summarizes chat requests without prompt text or user ids", () => {
     const summary = summarizeChatRequestForTrace({
-      model: "qwen3.6-plus",
+      model: "qwen3.7-max",
       temperature: 0.1,
       max_completion_tokens: 500,
+      enable_thinking: false,
       messages: [
         { role: "system", content: "private system prompt" },
         { role: "user", content: "private tenant payload" },
@@ -58,9 +59,10 @@ describe("LLM trace sanitizer", () => {
     });
 
     expect(summary).toEqual({
-      model: "qwen3.6-plus",
+      model: "qwen3.7-max",
       temperature: 0.1,
       maxCompletionTokens: 500,
+      thinkingEnabled: false,
       messageCount: 2,
       messageRoles: ["system", "user"],
       responseFormat: {
@@ -103,4 +105,3 @@ describe("LLM trace sanitizer", () => {
     });
   });
 });
-
