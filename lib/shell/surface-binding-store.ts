@@ -95,3 +95,52 @@ export async function resolveWorkspaceSurfaceBinding(
   if (!row) return null;
   return { surfaceKey: row.surfaceKey, providerId: row.providerId };
 }
+
+export type SurfaceBindingCandidate = BindableProviderDescriptor & {
+  /** contractVersion 是否与该 surface 精确匹配(§4.3.2);不匹配则不可绑定。 */
+  compatible: boolean;
+  /** 当前是否就是被绑定的 provider。 */
+  bound: boolean;
+};
+
+export type WorkspaceSurfaceBindingRow = {
+  surfaceKey: SingleWinnerSurfaceKey;
+  /** 当前持久化绑定的 providerId;null = Core default。 */
+  boundProviderId: string | null;
+  /** 该绑定指向的 provider 是否仍已注册(否则读侧 fail-open 回 Core)。 */
+  boundProviderRegistered: boolean;
+  candidates: ReadonlyArray<SurfaceBindingCandidate>;
+};
+
+/**
+ * 聚合每个单一生效 surface 的当前绑定 + 候选 provider(供绑定写入面渲染)。
+ * 候选来自运行时注册表;绑定来自持久化表。不做 access 探测(运行时按主体在 resolve 时评估)。
+ */
+export async function loadWorkspaceSurfaceBindings(
+  workspaceId: string,
+): Promise<ReadonlyArray<WorkspaceSurfaceBindingRow>> {
+  const rows = await db.workspaceSurfaceBinding.findMany({
+    where: { workspaceId },
+    select: { surfaceKey: true, providerId: true },
+  });
+  const boundBySurface = new Map(rows.map((r) => [r.surfaceKey, r.providerId]));
+
+  return SINGLE_WINNER_SURFACE_KEYS.map((surfaceKey) => {
+    const required = requiredContractVersionForSurface(surfaceKey);
+    const boundProviderId = boundBySurface.get(surfaceKey) ?? null;
+    const candidates = listBindableProvidersForSurface(surfaceKey);
+    return {
+      surfaceKey,
+      boundProviderId,
+      boundProviderRegistered:
+        boundProviderId === null
+          ? true
+          : candidates.some((c) => c.providerId === boundProviderId),
+      candidates: candidates.map((c) => ({
+        ...c,
+        compatible: c.contractVersion === required,
+        bound: c.providerId === boundProviderId,
+      })),
+    };
+  });
+}
