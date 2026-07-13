@@ -109,6 +109,7 @@ describe("provider registry logging guard", () => {
     expect(result.success).toBe(true);
     expect(result.fallbackUsed).toBe(false);
     expect(result.output).toEqual({ summary: "done" });
+    expect(result.rawOutput).toBe('{"summary":"done"}');
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toContain("Failed to record LLM call log");
   });
@@ -215,5 +216,88 @@ describe("provider registry logging guard", () => {
     expect(mocks.recordLLMCall).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackReason: "output_schema_failed" }),
     );
+  });
+
+  it("omits input and output content when metadata-only observability is requested", async () => {
+    mocks.adapterRun.mockResolvedValue({
+      output: { disposition: "review" },
+      rawOutput: '{"disposition":"review","private":"do-not-log"}',
+      modelVersion: "gpt-4.1-mini",
+      usage: { promptTokens: 10, completionTokens: 4 },
+    });
+
+    const result = await executeLLMTask({
+      taskType: "MULTI_PASS_REVIEW",
+      workspaceId: "workspace_demo",
+      promptKey: "model-shadow-review",
+      promptVersion: "v1",
+      systemPrompt: "system-private-marker",
+      userPrompt: "user-private-marker",
+      inputSummary: "input-summary-private-marker",
+      parseOutput: (rawText) => JSON.parse(rawText) as { disposition: string },
+      fallbackOutput: { disposition: "defer" },
+      outputMode: "json",
+      observabilityPolicy: "metadata_only",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ disposition: "review" });
+    expect(result.rawOutput).toBeNull();
+    expect(mocks.adapterRun).toHaveBeenCalledWith(
+      expect.objectContaining({ inputSummary: null }),
+    );
+    const logged = JSON.stringify(mocks.recordLLMCall.mock.calls);
+    expect(logged).not.toContain("input-summary-private-marker");
+    expect(logged).not.toContain("system-private-marker");
+    expect(logged).not.toContain("user-private-marker");
+    expect(logged).not.toContain("do-not-log");
+    expect(mocks.recordLLMCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outputSummary: "LLM call succeeded; content omitted by metadata-only policy.",
+      }),
+    );
+  });
+
+  it("omits provider error details from metadata-only logs and results", async () => {
+    mocks.adapterRun.mockRejectedValue(new Error("provider-private-error-marker"));
+
+    const result = await executeLLMTask({
+      taskType: "MULTI_PASS_REVIEW",
+      workspaceId: "workspace_demo",
+      promptKey: "model-shadow-review",
+      promptVersion: "v1",
+      systemPrompt: "system",
+      userPrompt: "user",
+      parseOutput: () => ({ disposition: "review" }),
+      fallbackOutput: { disposition: "defer" },
+      outputMode: "json",
+      observabilityPolicy: "metadata_only",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.fallbackReason).toBe("provider_error");
+    expect(result.errorMessage).toBe(
+      "LLM execution failure details omitted by metadata-only policy.",
+    );
+    const logged = JSON.stringify(mocks.recordLLMCall.mock.calls);
+    expect(logged).not.toContain("provider-private-error-marker");
+  });
+
+  it("rejects an unknown observability policy before provider dispatch", async () => {
+    await expect(
+      executeLLMTask({
+        taskType: "MULTI_PASS_REVIEW",
+        workspaceId: "workspace_demo",
+        promptKey: "model-shadow-review",
+        promptVersion: "v1",
+        systemPrompt: "system",
+        userPrompt: "user",
+        parseOutput: () => ({ disposition: "review" }),
+        fallbackOutput: { disposition: "defer" },
+        observabilityPolicy: "raw_content" as never,
+      }),
+    ).rejects.toThrow("unsupported_observability_policy");
+    expect(mocks.adapterRun).not.toHaveBeenCalled();
+    expect(mocks.recordLLMCall).not.toHaveBeenCalled();
   });
 });
