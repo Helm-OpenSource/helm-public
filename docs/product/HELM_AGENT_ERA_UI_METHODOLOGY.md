@@ -1,3 +1,11 @@
+---
+status: active
+owner: helm-core
+created: 2026-07-13
+review_after: 2026-08-13
+public_safety: Tenant-neutral Agent-era UI / IA design methodology. Design philosophy only; no implementation, no API freeze, no execution authorization. Contains no customer identifiers, private deployment information, or real tenant material.
+---
+
 # Helm Agent 时代 UI / IA 设计方法论 / Helm Agent-Era UI / IA Design Methodology
 
 > 本文把"Agent 时代企业软件 UI 不消失而转型"这一论断，收敛为 Helm 的**可执行 IA / UI 设计方法论**：surface 原型、操作分流决策程序、边界铁律与衡量口径。它是 [默认经营工作区重构蓝图](HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md) 的**方法论上位**——蓝图落"建哪些 surface"，本文答"任何新能力该落哪类 surface、为什么、边界是什么"。
