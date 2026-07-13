@@ -12,7 +12,7 @@ import {
   canAccessTenantHealthWorkspace,
   isHelmReservedWorkspace,
 } from "@/lib/workspace-identity";
-import { getWorkspaceRolePresetDefinition } from "@/lib/definitions/workspace-role-preset-catalog";
+import { resolveMemberBasePresetKey } from "@/lib/definitions/workspace-role-preset-catalog";
 import {
   parseShellChromeProfiles,
   type ShellChromeProfile,
@@ -89,12 +89,13 @@ export default async function WorkspaceLayout({
       quickCreateData: layoutData.quickCreateData,
       navExtensionClusters: navExtensions.clusters,
       shellChromeProfiles: parseShellChromeProfiles(workspace.configuration),
-      // basePresetKey 仅用于导航目录（授权先行，导航不授权）；解析失败 → null → GENERIC。
-      basePresetKey:
-        getWorkspaceRolePresetDefinition(
-          membership.rolePresetKey,
-          workspace.configuration,
-        )?.basePresetKey ?? null,
+      // basePresetKey 仅用于导航目录（授权先行，导航不授权）；解析失败 → 受控兜底：
+      // OWNER 无 preset → 控制塔(FOUNDER_CEO),其余 → null → GENERIC(CodeX 运行审计 P1)。
+      basePresetKey: resolveMemberBasePresetKey({
+        rolePresetKey: membership.rolePresetKey,
+        workspaceRole: membership.role,
+        rawConfiguration: workspace.configuration,
+      }),
     };
   } catch (error) {
     // 检查是否是数据库连接错误

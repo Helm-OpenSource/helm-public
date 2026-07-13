@@ -243,3 +243,830 @@ describe("resolveShellMainline — binding-is-authorization (blueprint §4.3/§4
     expect(res.selection.conflictReceipt?.reason).toBe("binding_provider_not_found");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Concat surfaces — northstar KPIs + attention feed (§4.2 / §4.4)
+// ---------------------------------------------------------------------------
+
+import {
+  resolveShellNorthstarKpis,
+  resolveShellAttention,
+  SHELL_ATTENTION_CONTRACT_VERSION,
+  SHELL_NORTHSTAR_KPI_CONTRACT_VERSION,
+  SHELL_SURFACE_MAX_SOURCES,
+  SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+} from "./resolve-shell-experience";
+import type {
+  AttentionSourceContribution,
+  NorthstarKpiSourceContribution,
+} from "@/lib/extensions/registry-types";
+import type { NorthstarKpi } from "./northstar-kpi";
+import type { AttentionItem } from "./attention-feed";
+
+function aKpi(overrides: Partial<NorthstarKpi> = {}): NorthstarKpi {
+  return {
+    key: "recovery_rate",
+    label: "回收率",
+    status: "measured",
+    unit: "percent",
+    value: 42,
+    bandLabel: null,
+    direction: "up_good",
+    href: "/operating",
+    basisRef: "provider:recovery_rate",
+    ...overrides,
+  };
+}
+
+function kpiSource(
+  overrides: Partial<NorthstarKpiSourceContribution> = {},
+): NorthstarKpiSourceContribution {
+  return {
+    providerId: "kpi-a",
+    contractVersion: SHELL_NORTHSTAR_KPI_CONTRACT_VERSION,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildKpis: vi.fn(async () => [aKpi()]),
+    ...overrides,
+  };
+}
+
+function anItem(overrides: Partial<AttentionItem> = {}): AttentionItem {
+  return {
+    key: "case-42",
+    severity: "warning",
+    label: "案件 #42 待跟进",
+    roleCategory: "operator",
+    href: "/approvals",
+    basisRef: "provider:case-42",
+    ...overrides,
+  };
+}
+
+function attentionSource(
+  overrides: Partial<AttentionSourceContribution> = {},
+): AttentionSourceContribution {
+  return {
+    providerId: "att-a",
+    contractVersion: SHELL_ATTENTION_CONTRACT_VERSION,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildAttention: vi.fn(async () => [anItem()]),
+    ...overrides,
+  };
+}
+
+describe("resolveShellNorthstarKpis — concat aggregation (§4.2/§4.4)", () => {
+  it("empty store ⇒ Core default (empty) — mirror parity", async () => {
+    const res = await resolveShellNorthstarKpis({ workspace, english: true });
+    expect(res.kpis).toEqual([]);
+    expect(res.unreturnedProviderIds).toEqual([]);
+    expect(res.droppedForCap).toBe(0);
+  });
+
+  it("merges KPIs from multiple eligible sources (concat)", async () => {
+    registerPackContributions("p", {
+      northstarKpiSources: [
+        kpiSource({ providerId: "kpi-a", buildKpis: vi.fn(async () => [aKpi({ key: "a" })]) }),
+        kpiSource({ providerId: "kpi-b", buildKpis: vi.fn(async () => [aKpi({ key: "b" })]) }),
+      ],
+    });
+    const res = await resolveShellNorthstarKpis({ workspace, english: true });
+    expect(res.kpis.map((k) => k.key).sort()).toEqual(["a", "b"]);
+  });
+
+  it("silently skips access-denied sources (not yours ≠ unavailable)", async () => {
+    const denied = kpiSource({ providerId: "kpi-denied", getAccess: vi.fn(async () => ({ ok: false })) });
+    registerPackContributions("p", { northstarKpiSources: [denied] });
+    const res = await resolveShellNorthstarKpis({ workspace, english: true });
+    expect(res.kpis).toEqual([]);
+    expect(res.unreturnedProviderIds).toEqual([]);
+    expect(denied.buildKpis).not.toHaveBeenCalled();
+  });
+
+  it("excludes version-incompatible sources up front", async () => {
+    const legacy = kpiSource({ providerId: "kpi-legacy", contractVersion: "northstar-kpi.v0" });
+    registerPackContributions("p", { northstarKpiSources: [legacy] });
+    const res = await resolveShellNorthstarKpis({ workspace, english: true });
+    expect(res.kpis).toEqual([]);
+    expect(legacy.getAccess).not.toHaveBeenCalled();
+  });
+
+  it("a source whose build throws is dropped and recorded as unreturned", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        northstarKpiSources: [
+          kpiSource({ providerId: "kpi-good", buildKpis: vi.fn(async () => [aKpi({ key: "good" })]) }),
+          kpiSource({
+            providerId: "kpi-bad",
+            buildKpis: vi.fn(async () => {
+              throw new Error("build boom");
+            }),
+          }),
+        ],
+      });
+      const res = await resolveShellNorthstarKpis({ workspace, english: true });
+      expect(res.kpis.map((k) => k.key)).toEqual(["good"]);
+      expect(res.unreturnedProviderIds).toEqual(["kpi-bad"]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("drops only the non-conformant item, keeps the rest, records the provider", async () => {
+    registerPackContributions("p", {
+      northstarKpiSources: [
+        kpiSource({
+          providerId: "kpi-mixed",
+          buildKpis: vi.fn(async () => [
+            aKpi({ key: "ok" }),
+            aKpi({ key: "bad", unit: "currency_band", value: 999, bandLabel: "¥1k" }), // raw value on currency_band
+          ]),
+        }),
+      ],
+    });
+    const res = await resolveShellNorthstarKpis({ workspace, english: true });
+    expect(res.kpis.map((k) => k.key)).toEqual(["ok"]);
+    expect(res.nonConformantProviderIds).toEqual(["kpi-mixed"]);
+  });
+
+  it("dedupes by KPI key across sources (first writer wins)", async () => {
+    registerPackContributions("p", {
+      northstarKpiSources: [
+        kpiSource({ providerId: "kpi-a", buildKpis: vi.fn(async () => [aKpi({ key: "dup", value: 1 })]) }),
+        kpiSource({ providerId: "kpi-b", buildKpis: vi.fn(async () => [aKpi({ key: "dup", value: 2 })]) }),
+      ],
+    });
+    const res = await resolveShellNorthstarKpis({ workspace, english: true });
+    expect(res.kpis).toHaveLength(1);
+    expect(res.kpis[0].value).toBe(1);
+  });
+
+  it("caps fan-out at SHELL_SURFACE_MAX_SOURCES and reports the drop", async () => {
+    const many = Array.from({ length: SHELL_SURFACE_MAX_SOURCES + 3 }, (_, i) =>
+      kpiSource({ providerId: `kpi-${i}`, buildKpis: vi.fn(async () => [aKpi({ key: `k${i}` })]) }),
+    );
+    registerPackContributions("p", { northstarKpiSources: many });
+    const res = await resolveShellNorthstarKpis({ workspace, english: true });
+    expect(res.droppedForCap).toBe(3);
+    expect(res.kpis).toHaveLength(SHELL_SURFACE_MAX_SOURCES);
+  });
+
+  it("a source that never returns is dropped at the per-source timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      registerPackContributions("p", {
+        northstarKpiSources: [
+          kpiSource({ providerId: "kpi-hang", buildKpis: vi.fn(() => new Promise<never[]>(() => {})) }),
+        ],
+      });
+      const pending = resolveShellNorthstarKpis({ workspace, english: true });
+      await vi.advanceTimersByTimeAsync(SHELL_SURFACE_SOURCE_TIMEOUT_MS + 50);
+      const res = await pending;
+      expect(res.kpis).toEqual([]);
+      expect(res.unreturnedProviderIds).toEqual(["kpi-hang"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("resolveShellAttention — concat aggregation with unreturned items (§4.4)", () => {
+  it("empty store ⇒ Core default (empty) — mirror parity", async () => {
+    const res = await resolveShellAttention({ workspace, english: true });
+    expect(res.items).toEqual([]);
+    expect(res.unreturnedProviderIds).toEqual([]);
+  });
+
+  it("merges items from multiple sources; same item.key across providers is kept (namespaced dedupe)", async () => {
+    registerPackContributions("p", {
+      attentionSources: [
+        attentionSource({ providerId: "att-a", buildAttention: vi.fn(async () => [anItem({ key: "shared" })]) }),
+        attentionSource({ providerId: "att-b", buildAttention: vi.fn(async () => [anItem({ key: "shared" })]) }),
+      ],
+    });
+    const res = await resolveShellAttention({ workspace, english: true });
+    expect(res.items).toHaveLength(2); // both kept: providerId::key differs
+  });
+
+  it("renders an 'unreturned source' item when a source build throws (§4.4 — never silent)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        attentionSources: [
+          attentionSource({ providerId: "att-ok", buildAttention: vi.fn(async () => [anItem({ key: "ok" })]) }),
+          attentionSource({
+            providerId: "att-bad",
+            buildAttention: vi.fn(async () => {
+              throw new Error("att boom");
+            }),
+          }),
+        ],
+      });
+      const res = await resolveShellAttention({ workspace, english: true });
+      expect(res.unreturnedProviderIds).toEqual(["att-bad"]);
+      const unreturned = res.items.find((i) => i.key.startsWith("unreturned:att-bad"));
+      expect(unreturned).toBeDefined();
+      expect(unreturned?.severity).toBe("info");
+      expect(res.items.some((i) => i.key === "ok")).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("drops only the suspected-PII item (fail-closed), keeps the rest", async () => {
+    registerPackContributions("p", {
+      attentionSources: [
+        attentionSource({
+          providerId: "att-mixed",
+          buildAttention: vi.fn(async () => [
+            anItem({ key: "clean" }),
+            anItem({ key: "leaky", label: "客户 13800138000" }),
+          ]),
+        }),
+      ],
+    });
+    const res = await resolveShellAttention({ workspace, english: true });
+    expect(res.items.map((i) => i.key)).toEqual(["clean"]);
+    expect(res.nonConformantProviderIds).toEqual(["att-mixed"]);
+  });
+
+  it("silently skips access-denied attention sources", async () => {
+    const denied = attentionSource({ providerId: "att-denied", getAccess: vi.fn(async () => ({ ok: false })) });
+    registerPackContributions("p", { attentionSources: [denied] });
+    const res = await resolveShellAttention({ workspace, english: true });
+    expect(res.items).toEqual([]);
+    expect(denied.buildAttention).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Concat surface — operation suggestions (Phase 4)
+// ---------------------------------------------------------------------------
+
+import {
+  resolveShellOperationSuggestions,
+  SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION,
+} from "./resolve-shell-experience";
+import type { OperationSuggestionSourceContribution } from "@/lib/extensions/registry-types";
+import type {
+  AgentReadyChangePacket,
+  OperationSuggestion,
+} from "./operation-suggestion";
+
+function aChangePacket(
+  overrides: Partial<AgentReadyChangePacket> = {},
+): AgentReadyChangePacket {
+  return {
+    goal: "Declare the workspace focus areas",
+    currentState: "No focus areas are configured",
+    prerequisites: [],
+    requiredPermissions: ["workspace.settings.write"],
+    proposedChanges: ["Set focusAreas through the existing settings owner"],
+    effectLevel: "configuration_change",
+    forbiddenActions: ["Do not change connector authorization or send external messages"],
+    dryRun: {
+      required: true,
+      procedure: "Preview the settings diff without saving",
+      expectedResult: "The diff only changes focusAreas",
+    },
+    approvalPolicy: {
+      required: true,
+      approverRole: "workspace_owner",
+      checkpoints: ["Review the generated settings diff"],
+      separationOfDutiesRequired: false,
+    },
+    rollback: {
+      strategy: "restore_previous_state",
+      procedure: "Restore the previous focusAreas value",
+      verification: "Re-read the workspace settings",
+    },
+    expectedReceipts: ["plan", "dry_run", "change_diff", "verification"],
+    ...overrides,
+  };
+}
+
+function aSuggestion(overrides: Partial<OperationSuggestion> = {}): OperationSuggestion {
+  return {
+    key: "init-focus-areas",
+    category: "initialization",
+    title: "设置工作区关注领域",
+    rationale: "冷启动需先声明关注领域",
+    readiness: "ready",
+    preconditionRefs: [],
+    changePacket: aChangePacket(),
+    verificationRef: "/settings",
+    href: "/settings",
+    basisRef: "provider:init-focus-areas",
+    ...overrides,
+  };
+}
+
+function opSuggestionSource(
+  overrides: Partial<OperationSuggestionSourceContribution> = {},
+): OperationSuggestionSourceContribution {
+  return {
+    providerId: "ops-a",
+    contractVersion: SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildOperationSuggestions: vi.fn(async () => [aSuggestion()]),
+    ...overrides,
+  };
+}
+
+describe("resolveShellOperationSuggestions — concat aggregation (Phase 4)", () => {
+  it("empty store ⇒ Core default (empty) — mirror parity", async () => {
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions).toEqual([]);
+    expect(res.unreturnedProviderIds).toEqual([]);
+    expect(res.droppedForCap).toBe(0);
+  });
+
+  it("merges suggestions from multiple eligible sources (concat)", async () => {
+    registerPackContributions("p", {
+      operationSuggestionSources: [
+        opSuggestionSource({ providerId: "ops-a", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "a" })]) }),
+        opSuggestionSource({ providerId: "ops-b", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "b" })]) }),
+      ],
+    });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions.map((s) => s.key).sort()).toEqual(["a", "b"]);
+  });
+
+  it("silently skips access-denied sources", async () => {
+    const denied = opSuggestionSource({ providerId: "ops-denied", getAccess: vi.fn(async () => ({ ok: false })) });
+    registerPackContributions("p", { operationSuggestionSources: [denied] });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions).toEqual([]);
+    expect(denied.buildOperationSuggestions).not.toHaveBeenCalled();
+  });
+
+  it("excludes version-incompatible sources up front", async () => {
+    const legacy = opSuggestionSource({
+      providerId: "ops-legacy",
+      contractVersion: "operation-suggestion.v1-experimental",
+    });
+    registerPackContributions("p", { operationSuggestionSources: [legacy] });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions).toEqual([]);
+    expect(legacy.getAccess).not.toHaveBeenCalled();
+  });
+
+  it("a source whose build throws is dropped and recorded as unreturned", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        operationSuggestionSources: [
+          opSuggestionSource({ providerId: "ops-good", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "good" })]) }),
+          opSuggestionSource({
+            providerId: "ops-bad",
+            buildOperationSuggestions: vi.fn(async () => {
+              throw new Error("boom");
+            }),
+          }),
+        ],
+      });
+      const res = await resolveShellOperationSuggestions({ workspace, english: true });
+      expect(res.suggestions.map((s) => s.key)).toEqual(["good"]);
+      expect(res.unreturnedProviderIds).toEqual(["ops-bad"]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("drops only the suspected-secret item (fail-closed), keeps the rest", async () => {
+    registerPackContributions("p", {
+      operationSuggestionSources: [
+        opSuggestionSource({
+          providerId: "ops-mixed",
+          buildOperationSuggestions: vi.fn(async () => [
+            aSuggestion({ key: "clean" }),
+            aSuggestion({
+              key: "leaky",
+              changePacket: aChangePacket({
+                proposedChanges: [
+                  `run with ${"token"}=${`sk-${"ABCDEF0123456789abcdef"}`}`,
+                ],
+              }),
+            }),
+          ]),
+        }),
+      ],
+    });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions.map((s) => s.key)).toEqual(["clean"]);
+    expect(res.nonConformantProviderIds).toEqual(["ops-mixed"]);
+  });
+
+  it("dedupes by suggestion key across sources (first writer wins)", async () => {
+    registerPackContributions("p", {
+      operationSuggestionSources: [
+        opSuggestionSource({ providerId: "ops-a", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "dup", title: "first" })]) }),
+        opSuggestionSource({ providerId: "ops-b", buildOperationSuggestions: vi.fn(async () => [aSuggestion({ key: "dup", title: "second" })]) }),
+      ],
+    });
+    const res = await resolveShellOperationSuggestions({ workspace, english: true });
+    expect(res.suggestions).toHaveLength(1);
+    expect(res.suggestions[0].title).toBe("first");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3 — role-home routing (single-winner) + workstations (concat)
+// ---------------------------------------------------------------------------
+
+import {
+  resolveShellRoleHomeRouting,
+  resolveShellWorkstations,
+  SHELL_ROLE_HOME_ROUTING_CONTRACT_VERSION,
+  SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
+  SHELL_WORKSTATION_CONTRACT_VERSION,
+} from "./resolve-shell-experience";
+import type {
+  RoleHomeRoutingProviderContribution,
+  WorkstationSourceContribution,
+} from "@/lib/extensions/registry-types";
+import { buildCoreDefaultRoleHomeRouting, type RoleHomeRoutingTable } from "./role-home-routing";
+import type { WorkstationDescriptor } from "./workstation";
+
+function providerTable(overrides: Partial<RoleHomeRoutingTable> = {}): RoleHomeRoutingTable {
+  return {
+    routes: [{ roleCategory: "COLLECTOR", destination: { kind: "workstation", workstationKey: "collection" } }],
+    fallback: { kind: "generic" },
+    ...overrides,
+  };
+}
+
+function roleHomeProvider(
+  overrides: Partial<RoleHomeRoutingProviderContribution> = {},
+  buildImpl?: RoleHomeRoutingProviderContribution["buildRoleHomeRouting"],
+): RoleHomeRoutingProviderContribution {
+  return {
+    providerId: "example-provider",
+    contractVersion: SHELL_ROLE_HOME_ROUTING_CONTRACT_VERSION,
+    priority: 10,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildRoleHomeRouting: buildImpl ?? vi.fn(async () => providerTable()),
+    ...overrides,
+  };
+}
+
+const rhBind = (providerId: string) => ({
+  surfaceKey: SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
+  providerId,
+});
+
+describe("resolveShellRoleHomeRouting — single-winner (Phase 3)", () => {
+  it("empty store + null binding ⇒ Core default routing (parity)", async () => {
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: null });
+    expect(res.selection.winner).toBe("core_default");
+    expect(res.droppedProviderId).toBeNull();
+    expect(JSON.stringify(res.table)).toBe(JSON.stringify(buildCoreDefaultRoleHomeRouting()));
+  });
+
+  it("registered provider WITHOUT a binding stays on Core default", async () => {
+    const provider = roleHomeProvider();
+    registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: null });
+    expect(res.selection.winner).toBe("core_default");
+    expect(provider.buildRoleHomeRouting).not.toHaveBeenCalled();
+  });
+
+  it("valid binding + eligible + conformant ⇒ provider table wins", async () => {
+    const provider = roleHomeProvider();
+    registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+    expect(res.selection.winner).toEqual({ providerId: "example-provider" });
+    expect(res.table.routes[0].destination).toEqual({ kind: "workstation", workstationKey: "collection" });
+    expect(res.droppedProviderId).toBeNull();
+  });
+
+  it("bound provider with failing access ⇒ Core default, build not called", async () => {
+    const provider = roleHomeProvider({ getAccess: vi.fn(async () => ({ ok: false })) });
+    registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+    expect(res.selection.winner).toBe("core_default");
+    expect(provider.buildRoleHomeRouting).not.toHaveBeenCalled();
+  });
+
+  it("bound provider on incompatible version ⇒ Core default", async () => {
+    const provider = roleHomeProvider({ contractVersion: "role-home-routing.v0" });
+    registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+    const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+    expect(res.selection.winner).toBe("core_default");
+  });
+
+  it("provider table with a non-generic fallback ⇒ fail-open to Core default + droppedProviderId", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const provider = roleHomeProvider(
+        {},
+        vi.fn(async () => providerTable({ fallback: { kind: "control_tower" } })),
+      );
+      registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+      const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+      expect(res.droppedProviderId).toBe("example-provider");
+      expect(JSON.stringify(res.table)).toBe(JSON.stringify(buildCoreDefaultRoleHomeRouting()));
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("provider build throws ⇒ fail-open to Core default + droppedProviderId", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const provider = roleHomeProvider(
+        {},
+        vi.fn(async () => {
+          throw new Error("boom");
+        }),
+      );
+      registerPackContributions("p", { roleHomeRoutingProviders: [provider] });
+      const res = await resolveShellRoleHomeRouting({ workspace, english: true, binding: rhBind("example-provider") });
+      expect(res.droppedProviderId).toBe("example-provider");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});
+
+function aWorkstation(overrides: Partial<WorkstationDescriptor> = {}): WorkstationDescriptor {
+  return {
+    key: "collection",
+    label: "催收工位",
+    href: "/operating",
+    roleCategories: ["COLLECTOR"],
+    ...overrides,
+  };
+}
+
+function workstationSource(
+  overrides: Partial<WorkstationSourceContribution> = {},
+): WorkstationSourceContribution {
+  return {
+    providerId: "ws-a",
+    contractVersion: SHELL_WORKSTATION_CONTRACT_VERSION,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildWorkstations: vi.fn(async () => [aWorkstation()]),
+    ...overrides,
+  };
+}
+
+describe("resolveShellWorkstations — concat (Phase 3)", () => {
+  it("empty store ⇒ Core default (empty) — mirror parity", async () => {
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations).toEqual([]);
+  });
+
+  it("merges workstations from multiple eligible sources", async () => {
+    registerPackContributions("p", {
+      workstationSources: [
+        workstationSource({ providerId: "ws-a", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "a" })]) }),
+        workstationSource({ providerId: "ws-b", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "b" })]) }),
+      ],
+    });
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations.map((w) => w.key).sort()).toEqual(["a", "b"]);
+  });
+
+  it("skips access-denied and version-incompatible sources", async () => {
+    const denied = workstationSource({ providerId: "ws-denied", getAccess: vi.fn(async () => ({ ok: false })) });
+    const legacy = workstationSource({ providerId: "ws-legacy", contractVersion: "workstation.v0" });
+    registerPackContributions("p", { workstationSources: [denied, legacy] });
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations).toEqual([]);
+    expect(denied.buildWorkstations).not.toHaveBeenCalled();
+    expect(legacy.getAccess).not.toHaveBeenCalled();
+  });
+
+  it("a source that throws is dropped and recorded as unreturned", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        workstationSources: [
+          workstationSource({ providerId: "ws-good", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "good" })]) }),
+          workstationSource({
+            providerId: "ws-bad",
+            buildWorkstations: vi.fn(async () => {
+              throw new Error("boom");
+            }),
+          }),
+        ],
+      });
+      const res = await resolveShellWorkstations({ workspace, english: true });
+      expect(res.workstations.map((w) => w.key)).toEqual(["good"]);
+      expect(res.unreturnedProviderIds).toEqual(["ws-bad"]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("drops only the non-conformant descriptor, keeps the rest", async () => {
+    registerPackContributions("p", {
+      workstationSources: [
+        workstationSource({
+          providerId: "ws-mixed",
+          buildWorkstations: vi.fn(async () => [
+            aWorkstation({ key: "clean" }),
+            aWorkstation({ key: "bad", href: "https://evil.example" }),
+          ]),
+        }),
+      ],
+    });
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations.map((w) => w.key)).toEqual(["clean"]);
+    expect(res.nonConformantProviderIds).toEqual(["ws-mixed"]);
+  });
+
+  it("dedupes by workstation key across sources (first writer wins)", async () => {
+    registerPackContributions("p", {
+      workstationSources: [
+        workstationSource({ providerId: "ws-a", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "dup", label: "first" })]) }),
+        workstationSource({ providerId: "ws-b", buildWorkstations: vi.fn(async () => [aWorkstation({ key: "dup", label: "second" })]) }),
+      ],
+    });
+    const res = await resolveShellWorkstations({ workspace, english: true });
+    expect(res.workstations).toHaveLength(1);
+    expect(res.workstations[0].label).toBe("first");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 5 — run-trajectory audit (concat)
+// ---------------------------------------------------------------------------
+
+import {
+  resolveShellRunTrajectoryAudit,
+  SHELL_RUN_TRAJECTORY_AUDIT_CONTRACT_VERSION,
+} from "./resolve-shell-experience";
+import type { AgentRunAuditSourceContribution } from "@/lib/extensions/registry-types";
+import type { AgentRunAuditEntry } from "./run-trajectory-audit";
+
+function anAuditEntry(overrides: Partial<AgentRunAuditEntry> = {}): AgentRunAuditEntry {
+  return {
+    runId: "run-1",
+    actor: "operator-role",
+    mode: "shadow",
+    intentSummary: "过程信号复核",
+    asOf: "2026-07-13T00:00:00.000Z",
+    verdict: "pass",
+    trajectoryFailureClasses: [],
+    boundaryDecisionCount: 2,
+    blockedActionCount: 0,
+    quarantined: false,
+    href: "/diagnostics",
+    basisRef: "provider:run-1",
+    ...overrides,
+  };
+}
+
+function auditSource(
+  overrides: Partial<AgentRunAuditSourceContribution> = {},
+): AgentRunAuditSourceContribution {
+  return {
+    providerId: "audit-a",
+    contractVersion: SHELL_RUN_TRAJECTORY_AUDIT_CONTRACT_VERSION,
+    provenance: "test",
+    stability: "experimental",
+    getAccess: vi.fn(async () => ({ ok: true })),
+    buildRunAuditEntries: vi.fn(async () => [anAuditEntry()]),
+    ...overrides,
+  };
+}
+
+describe("resolveShellRunTrajectoryAudit — concat (Phase 5)", () => {
+  it("empty store ⇒ Core default (empty) — mirror parity", async () => {
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries).toEqual([]);
+    expect(res.unreturnedProviderIds).toEqual([]);
+  });
+
+  it("merges audit entries from multiple eligible sources", async () => {
+    registerPackContributions("p", {
+      agentRunAuditSources: [
+        auditSource({ providerId: "audit-a", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "a" })]) }),
+        auditSource({ providerId: "audit-b", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "b" })]) }),
+      ],
+    });
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries.map((e) => e.runId).sort()).toEqual(["a", "b"]);
+  });
+
+  it("skips access-denied and version-incompatible sources", async () => {
+    const denied = auditSource({ providerId: "audit-denied", getAccess: vi.fn(async () => ({ ok: false })) });
+    const legacy = auditSource({ providerId: "audit-legacy", contractVersion: "run-trajectory-audit.v0" });
+    registerPackContributions("p", { agentRunAuditSources: [denied, legacy] });
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries).toEqual([]);
+    expect(denied.buildRunAuditEntries).not.toHaveBeenCalled();
+    expect(legacy.getAccess).not.toHaveBeenCalled();
+  });
+
+  it("a source that throws is dropped and recorded as unreturned", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        agentRunAuditSources: [
+          auditSource({ providerId: "audit-good", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "good" })]) }),
+          auditSource({
+            providerId: "audit-bad",
+            buildRunAuditEntries: vi.fn(async () => {
+              throw new Error("boom");
+            }),
+          }),
+        ],
+      });
+      const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+      expect(res.entries.map((e) => e.runId)).toEqual(["good"]);
+      expect(res.unreturnedProviderIds).toEqual(["audit-bad"]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("drops only the suspected-PII entry (fail-closed), keeps the rest", async () => {
+    registerPackContributions("p", {
+      agentRunAuditSources: [
+        auditSource({
+          providerId: "audit-mixed",
+          buildRunAuditEntries: vi.fn(async () => [
+            anAuditEntry({ runId: "clean" }),
+            anAuditEntry({ runId: "leaky", intentSummary: "联系客户 13800138000" }),
+          ]),
+        }),
+      ],
+    });
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries.map((e) => e.runId)).toEqual(["clean"]);
+    expect(res.nonConformantProviderIds).toEqual(["audit-mixed"]);
+  });
+
+  it("dedupes by runId across sources (first writer wins)", async () => {
+    registerPackContributions("p", {
+      agentRunAuditSources: [
+        auditSource({ providerId: "audit-a", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "dup", actor: "first" })]) }),
+        auditSource({ providerId: "audit-b", buildRunAuditEntries: vi.fn(async () => [anAuditEntry({ runId: "dup", actor: "second" })]) }),
+      ],
+    });
+    const res = await resolveShellRunTrajectoryAudit({ workspace, english: true });
+    expect(res.entries).toHaveLength(1);
+    expect(res.entries[0].actor).toBe("first");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CodeX P2 regression — a provider that RESOLVES with a malformed value
+// (null / non-array / array-with-null) must be dropped, NEVER crash the resolver.
+// ---------------------------------------------------------------------------
+
+describe("concat resolvers survive malformed (resolved, not thrown) provider results", () => {
+  it("attention: null / non-array / array-with-null are dropped; clean sources still merge", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        attentionSources: [
+          attentionSource({ providerId: "att-null", buildAttention: vi.fn(async () => null as never) }),
+          attentionSource({ providerId: "att-obj", buildAttention: vi.fn(async () => ({ not: "an array" }) as never) }),
+          attentionSource({
+            providerId: "att-holey",
+            buildAttention: vi.fn(async () => [null as never, anItem({ key: "kept" })]),
+          }),
+          attentionSource({ providerId: "att-ok", buildAttention: vi.fn(async () => [anItem({ key: "ok" })]) }),
+        ],
+      });
+      // must not reject
+      const res = await resolveShellAttention({ workspace, english: true });
+      const keys = res.items.map((i) => i.key).sort();
+      expect(keys).toEqual(["kept", "ok"]); // holey array kept its valid item; garbage sources contributed nothing
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("operation-suggestions & workstations & audit: malformed results do not throw", async () => {
+    registerPackContributions("p", {
+      operationSuggestionSources: [
+        opSuggestionSource({ providerId: "ops-bad", buildOperationSuggestions: vi.fn(async () => "nope" as never) }),
+      ],
+      workstationSources: [
+        workstationSource({ providerId: "ws-bad", buildWorkstations: vi.fn(async () => [undefined as never]) }),
+      ],
+      agentRunAuditSources: [
+        auditSource({ providerId: "audit-bad", buildRunAuditEntries: vi.fn(async () => null as never) }),
+      ],
+    });
+    await expect(resolveShellOperationSuggestions({ workspace, english: true })).resolves.toMatchObject({ suggestions: [] });
+    await expect(resolveShellWorkstations({ workspace, english: true })).resolves.toMatchObject({ workstations: [] });
+    await expect(resolveShellRunTrajectoryAudit({ workspace, english: true })).resolves.toMatchObject({ entries: [] });
+  });
+});

@@ -16,11 +16,24 @@ import "server-only";
  * 由 resolve-shell-experience.test.ts 与 registry-core-only-mirror-parity 平价证明。
  */
 
-import { getRegisteredMainlineProviders } from "@/lib/extensions/registry-contract";
+import {
+  getRegisteredAgentRunAuditSources,
+  getRegisteredAttentionSources,
+  getRegisteredMainlineProviders,
+  getRegisteredNorthstarKpiSources,
+  getRegisteredOperationSuggestionSources,
+  getRegisteredRoleHomeRoutingProviders,
+  getRegisteredWorkstationSources,
+} from "@/lib/extensions/registry-contract";
 import { resolveReportsExtensionAccessSafely } from "@/lib/extensions/registry";
 import type {
+  AgentRunAuditSourceContribution,
+  AttentionSourceContribution,
   ExtensionAccessContext,
+  NorthstarKpiSourceContribution,
+  OperationSuggestionSourceContribution,
   WorkspaceLike,
+  WorkstationSourceContribution,
 } from "@/lib/extensions/registry-types";
 
 import {
@@ -29,6 +42,38 @@ import {
   type CoreDefaultMainlineInput,
   type MainlineReadout,
 } from "./operating-mainline";
+import {
+  buildCoreDefaultNorthstarKpis,
+  validateNorthstarKpis,
+  type NorthstarKpi,
+} from "./northstar-kpi";
+import {
+  attentionDedupeKey,
+  buildCoreDefaultAttention,
+  makeUnreturnedSourceItem,
+  validateAttentionItems,
+  type AttentionItem,
+} from "./attention-feed";
+import {
+  buildCoreDefaultOperationSuggestions,
+  validateOperationSuggestions,
+  type OperationSuggestion,
+} from "./operation-suggestion";
+import {
+  buildCoreDefaultRoleHomeRouting,
+  validateRoleHomeRoutingTable,
+  type RoleHomeRoutingTable,
+} from "./role-home-routing";
+import {
+  buildCoreDefaultWorkstations,
+  validateWorkstations,
+  type WorkstationDescriptor,
+} from "./workstation";
+import {
+  buildCoreDefaultRunTrajectoryAudit,
+  validateAgentRunAuditEntries,
+  type AgentRunAuditEntry,
+} from "./run-trajectory-audit";
 import {
   selectSingleWinner,
   type ProviderCandidate,
@@ -141,4 +186,696 @@ export async function resolveShellMainline(input: {
     );
     return coreFallback(winnerId);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Concat surfaces: northstar KPIs + attention feed (blueprint §4.2 / §4.4)
+// ---------------------------------------------------------------------------
+
+/** Experimental concat-surface contract versions (exact-match compat, §4.3.2). */
+export const SHELL_NORTHSTAR_KPI_CONTRACT_VERSION = "northstar-kpi.v1-experimental";
+export const SHELL_ATTENTION_CONTRACT_VERSION = "attention.v1-experimental";
+
+export const SHELL_ATTENTION_SURFACE_KEY = "attention";
+export const SHELL_NORTHSTAR_KPI_SURFACE_KEY = "northstar-kpi";
+
+/**
+ * §4.4 aggregation budget. `SOURCE_TIMEOUT_MS` (matching the access-probe
+ * wrapper) is a **per-source** ceiling: on timeout the source's `AbortSignal`
+ * is aborted (cooperative providers cancel in-flight work, §4.4 "贯穿取消") and
+ * the source is treated as unreturned. `MAX_SOURCES` bounds fan-out.
+ *
+ * Honest scope note: all eligible sources run concurrently (bounded only by
+ * `MAX_SOURCES`), so aggregate wall-time is bounded by the per-source timeout —
+ * one straggler cannot extend the whole read. An explicit *aggregate deadline*
+ * + a smaller *concurrency pool* become load-bearing only together (a capped
+ * pool serializes batches, so the batch total could exceed one source timeout);
+ * both are deferred to a future hardening slice and intentionally NOT faked
+ * here with an inert timer.
+ */
+export const SHELL_SURFACE_SOURCE_TIMEOUT_MS = 2_500;
+export const SHELL_SURFACE_MAX_SOURCES = 20;
+
+type SourceOutcome<TItem> =
+  | { kind: "items"; items: ReadonlyArray<TItem> }
+  | { kind: "unreturned"; reason: "timeout" | "error" };
+
+/**
+ * Sanitize a provider build result at the aggregation boundary. A provider can
+ * resolve **successfully** with a runtime-invalid value (`null`, a non-array, or
+ * an array containing `null` / non-object items); the per-surface conformance
+ * validators iterate + `Object.entries(item)` and would THROW on such a value,
+ * rejecting the whole resolver instead of dropping the offending source. We
+ * therefore coerce to a clean array of non-null objects here, so the promised
+ * "drop the source, don't fail the surface" behavior holds even when a provider
+ * returns garbage rather than throwing. (Mainline's single-winner path validates
+ * inside its own try/catch, so it is already protected.)
+ */
+function sanitizeSourceItems<TItem>(items: unknown): ReadonlyArray<TItem> {
+  if (!Array.isArray(items)) return [];
+  return items.filter(
+    (item): item is TItem => item != null && typeof item === "object",
+  );
+}
+
+/**
+ * Race a source build against a per-source timeout; never throws. The build
+ * receives an `AbortSignal` that is aborted when the timeout fires, so a
+ * cooperative provider can cancel its in-flight work instead of leaking it.
+ * A malformed-but-resolved result is sanitized (see `sanitizeSourceItems`).
+ */
+async function runSourceWithTimeout<TItem>(
+  build: (signal: AbortSignal) => Promise<ReadonlyArray<TItem>>,
+  timeoutMs: number,
+  onError: (error: unknown) => void,
+): Promise<SourceOutcome<TItem>> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<SourceOutcome<TItem>>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve({ kind: "unreturned", reason: "timeout" });
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      build(controller.signal)
+        .then((items): SourceOutcome<TItem> => ({
+          kind: "items",
+          items: sanitizeSourceItems<TItem>(items),
+        }))
+        .catch((error): SourceOutcome<TItem> => {
+          onError(error);
+          return { kind: "unreturned", reason: "error" };
+        }),
+      timeout,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+type ShellSourceLike = {
+  providerId: string;
+  contractVersion: string;
+  getAccess: (
+    workspace: WorkspaceLike,
+    context?: ExtensionAccessContext,
+  ) => Promise<{ ok: boolean }>;
+};
+
+/** Eligibility for a concat source: access ok (2500ms wrapped) + exact contract match. */
+async function resolveEligibleSources<TSource extends ShellSourceLike>(input: {
+  sources: ReadonlyArray<TSource>;
+  compatVersion: string;
+  workspace: WorkspaceLike;
+  accessContext?: ExtensionAccessContext;
+  maxSources: number;
+}): Promise<{ eligible: TSource[]; droppedForCap: number }> {
+  // Version-incompatible sources are excluded up front (never enter the set, §4.3.2);
+  // a source denied by access is silently skipped (not "unavailable" — it is not yours).
+  const compatible = input.sources.filter(
+    (s) => s.contractVersion === input.compatVersion,
+  );
+  const capped = compatible.slice(0, input.maxSources);
+  const droppedForCap = compatible.length - capped.length;
+
+  const accessOks = await Promise.all(
+    capped.map((source) =>
+      resolveReportsExtensionAccessSafely(
+        { id: source.providerId, getAccess: source.getAccess },
+        input.workspace,
+        { accessContext: input.accessContext },
+      ).then((access) => access.ok),
+    ),
+  );
+  return {
+    eligible: capped.filter((_, index) => accessOks[index]),
+    droppedForCap,
+  };
+}
+
+export type ShellNorthstarKpiResolution = {
+  kpis: ReadonlyArray<NorthstarKpi>;
+  /** Provider ids whose build failed/timed out (dropped from the merge). */
+  unreturnedProviderIds: ReadonlyArray<string>;
+  /** Provider ids some of whose items failed conformance and were dropped. */
+  nonConformantProviderIds: ReadonlyArray<string>;
+  droppedForCap: number;
+};
+
+/**
+ * Northstar KPIs: merge every eligible source's KPIs (concat). Each source runs
+ * under the per-source timeout; failed/timed-out sources are dropped (KPIs have
+ * no "unreturned item" convention — that is attention-specific, §4.4). Each
+ * source's items are conformance-filtered (a non-conformant item is dropped,
+ * not the whole source). Cross-source dedupe by KPI key (first writer wins).
+ * Empty store ⇒ Core default (empty) — mirror parity.
+ */
+export async function resolveShellNorthstarKpis(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellNorthstarKpiResolution> {
+  const sources = getRegisteredNorthstarKpiSources();
+  if (sources.length === 0) {
+    return {
+      kpis: buildCoreDefaultNorthstarKpis(),
+      unreturnedProviderIds: [],
+      nonConformantProviderIds: [],
+      droppedForCap: 0,
+    };
+  }
+
+  const { eligible, droppedForCap } = await resolveEligibleSources({
+    sources: sources as ReadonlyArray<NorthstarKpiSourceContribution>,
+    compatVersion: SHELL_NORTHSTAR_KPI_CONTRACT_VERSION,
+    workspace: input.workspace,
+    accessContext: input.accessContext,
+    maxSources: SHELL_SURFACE_MAX_SOURCES,
+  });
+
+  const unreturnedProviderIds: string[] = [];
+  const nonConformantProviderIds: string[] = [];
+  const merged: NorthstarKpi[] = [];
+  const seenKeys = new Set<string>();
+
+  const outcomes = await Promise.all(
+    eligible.map(async (source) => ({
+      providerId: source.providerId,
+      outcome: await runSourceWithTimeout(
+        (signal) =>
+          source.buildKpis({
+            workspace: input.workspace,
+            english: input.english,
+            signal,
+          }),
+        SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+        (error) =>
+          console.error(
+            `[shell-experience] northstar-kpi source ${source.providerId} buildKpis threw; dropping source`,
+            error,
+          ),
+      ),
+    })),
+  );
+
+  for (const { providerId, outcome } of outcomes) {
+    if (outcome.kind === "unreturned") {
+      unreturnedProviderIds.push(providerId);
+      continue;
+    }
+    const issues = validateNorthstarKpis(outcome.items);
+    const badKeys = new Set(
+      issues.map((i) => i.kpiKey).filter((k): k is string => k !== null),
+    );
+    if (issues.length > 0) nonConformantProviderIds.push(providerId);
+    for (const kpi of outcome.items) {
+      if (badKeys.has(kpi.key)) continue; // drop only the offending item
+      if (seenKeys.has(kpi.key)) continue; // cross-source dedupe, first writer wins
+      seenKeys.add(kpi.key);
+      merged.push(kpi);
+    }
+  }
+
+  return {
+    kpis: merged,
+    unreturnedProviderIds,
+    nonConformantProviderIds,
+    droppedForCap,
+  };
+}
+
+export type ShellAttentionResolution = {
+  items: ReadonlyArray<AttentionItem>;
+  unreturnedProviderIds: ReadonlyArray<string>;
+  nonConformantProviderIds: ReadonlyArray<string>;
+  droppedForCap: number;
+};
+
+/**
+ * Attention feed: concurrently collect every eligible source under the §4.4
+ * budget (per-source 2500ms timeout; each source's `AbortSignal` is aborted on
+ * its own timeout so cooperative providers cancel in-flight work), merge,
+ * dedupe cross-source by `providerId::item.key`, drop non-conformant items
+ * (fail-closed on suspected PII), and render an "unreturned source" item for
+ * any eligible source that misses the budget (§4.4 — never silently swallowed).
+ * Empty store ⇒ Core default (empty) — mirror parity.
+ */
+export async function resolveShellAttention(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  roleCategory?: string | null;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellAttentionResolution> {
+  const sources = getRegisteredAttentionSources();
+  if (sources.length === 0) {
+    return {
+      items: buildCoreDefaultAttention(),
+      unreturnedProviderIds: [],
+      nonConformantProviderIds: [],
+      droppedForCap: 0,
+    };
+  }
+
+  const { eligible, droppedForCap } = await resolveEligibleSources({
+    sources: sources as ReadonlyArray<AttentionSourceContribution>,
+    compatVersion: SHELL_ATTENTION_CONTRACT_VERSION,
+    workspace: input.workspace,
+    accessContext: input.accessContext,
+    maxSources: SHELL_SURFACE_MAX_SOURCES,
+  });
+
+  const unreturnedProviderIds: string[] = [];
+  const nonConformantProviderIds: string[] = [];
+  const merged: AttentionItem[] = [];
+  const seenKeys = new Set<string>();
+
+  const outcomes = await Promise.all(
+    eligible.map(async (source) => ({
+      providerId: source.providerId,
+      outcome: await runSourceWithTimeout(
+        (signal) =>
+          source.buildAttention({
+            workspace: input.workspace,
+            english: input.english,
+            roleCategory: input.roleCategory ?? null,
+            signal,
+          }),
+        SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+        (error) =>
+          console.error(
+            `[shell-experience] attention source ${source.providerId} buildAttention threw; showing unreturned item`,
+            error,
+          ),
+      ),
+    })),
+  );
+
+  for (const { providerId, outcome } of outcomes) {
+    if (outcome.kind === "unreturned") {
+      unreturnedProviderIds.push(providerId);
+      merged.push(
+        makeUnreturnedSourceItem({ providerId, english: input.english, reason: outcome.reason }),
+      );
+      continue;
+    }
+    const issues = validateAttentionItems(outcome.items);
+    const badKeys = new Set(
+      issues.map((i) => i.itemKey).filter((k): k is string => k !== null),
+    );
+    if (issues.length > 0) nonConformantProviderIds.push(providerId);
+    for (const item of outcome.items) {
+      if (badKeys.has(item.key)) continue; // drop only the offending item (fail-closed on PII)
+      const dedupeKey = attentionDedupeKey(providerId, item);
+      if (seenKeys.has(dedupeKey)) continue; // cross-source dedupe
+      seenKeys.add(dedupeKey);
+      merged.push(item);
+    }
+  }
+
+  return {
+    items: merged,
+    unreturnedProviderIds,
+    nonConformantProviderIds,
+    droppedForCap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Concat surface: operation suggestions (blueprint Phase 4)
+// ---------------------------------------------------------------------------
+
+export const SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION =
+  "operation-suggestion.v2-experimental";
+export const SHELL_OPERATION_SUGGESTION_SURFACE_KEY = "operation-suggestion";
+
+export type ShellOperationSuggestionResolution = {
+  suggestions: ReadonlyArray<OperationSuggestion>;
+  /** Provider ids whose build failed/timed out (dropped from the merge). */
+  unreturnedProviderIds: ReadonlyArray<string>;
+  /** Provider ids some of whose items failed conformance and were dropped. */
+  nonConformantProviderIds: ReadonlyArray<string>;
+  droppedForCap: number;
+};
+
+/**
+ * Operation suggestions: merge every eligible source's suggestions (concat).
+ * Same §4.4 budget as the other concat surfaces (per-source timeout with
+ * per-source AbortSignal; failed/timed-out sources dropped and recorded — no
+ * "unreturned item" convention here). Each source's items are
+ * conformance-filtered (a malformed change packet or suspected-secret / PII
+ * item is dropped, not the whole source — fail-closed). Cross-source dedupe by
+ * suggestion key (first writer wins). Empty store ⇒ Core default (empty) —
+ * mirror parity. Read/navigate-only: packet ≠ execution.
+ */
+export async function resolveShellOperationSuggestions(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellOperationSuggestionResolution> {
+  const sources = getRegisteredOperationSuggestionSources();
+  if (sources.length === 0) {
+    return {
+      suggestions: buildCoreDefaultOperationSuggestions(),
+      unreturnedProviderIds: [],
+      nonConformantProviderIds: [],
+      droppedForCap: 0,
+    };
+  }
+
+  const { eligible, droppedForCap } = await resolveEligibleSources({
+    sources: sources as ReadonlyArray<OperationSuggestionSourceContribution>,
+    compatVersion: SHELL_OPERATION_SUGGESTION_CONTRACT_VERSION,
+    workspace: input.workspace,
+    accessContext: input.accessContext,
+    maxSources: SHELL_SURFACE_MAX_SOURCES,
+  });
+
+  const unreturnedProviderIds: string[] = [];
+  const nonConformantProviderIds: string[] = [];
+  const merged: OperationSuggestion[] = [];
+  const seenKeys = new Set<string>();
+
+  const outcomes = await Promise.all(
+    eligible.map(async (source) => ({
+      providerId: source.providerId,
+      outcome: await runSourceWithTimeout(
+        (signal) =>
+          source.buildOperationSuggestions({
+            workspace: input.workspace,
+            english: input.english,
+            signal,
+          }),
+        SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+        (error) =>
+          console.error(
+            `[shell-experience] operation-suggestion source ${source.providerId} build threw; dropping source`,
+            error,
+          ),
+      ),
+    })),
+  );
+
+  for (const { providerId, outcome } of outcomes) {
+    if (outcome.kind === "unreturned") {
+      unreturnedProviderIds.push(providerId);
+      continue;
+    }
+    const issues = validateOperationSuggestions(outcome.items);
+    const badKeys = new Set(
+      issues.map((i) => i.suggestionKey).filter((k): k is string => k !== null),
+    );
+    if (issues.length > 0) nonConformantProviderIds.push(providerId);
+    for (const suggestion of outcome.items) {
+      if (badKeys.has(suggestion.key)) continue; // drop only the offending item (fail-closed on secret/PII)
+      if (seenKeys.has(suggestion.key)) continue; // cross-source dedupe, first writer wins
+      seenKeys.add(suggestion.key);
+      merged.push(suggestion);
+    }
+  }
+
+  return {
+    suggestions: merged,
+    unreturnedProviderIds,
+    nonConformantProviderIds,
+    droppedForCap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: role-home routing (single-winner) + workstations (concat)
+// ---------------------------------------------------------------------------
+
+export const SHELL_ROLE_HOME_ROUTING_SURFACE_KEY = "role-home-routing";
+export const SHELL_ROLE_HOME_ROUTING_CONTRACT_VERSION =
+  "role-home-routing.v1-experimental";
+export const SHELL_WORKSTATION_SURFACE_KEY = "workstation";
+export const SHELL_WORKSTATION_CONTRACT_VERSION = "workstation.v1-experimental";
+
+export type ShellRoleHomeRoutingResolution = {
+  table: RoleHomeRoutingTable;
+  selection: ProviderSelection;
+  /** Set when a *selected* provider's table was rejected and Core default substituted. */
+  droppedProviderId: string | null;
+};
+
+/**
+ * Role-home routing (single-winner, mirrors resolveShellMainline). A provider
+ * only wins with a valid surface-scoped binding (§4.3); otherwise the Core
+ * default routing is used. A winning provider's table must pass
+ * `validateRoleHomeRoutingTable` (fallback must be generic — fail-safe); any
+ * conformance failure or thrown build fails open to the Core default routing.
+ */
+export async function resolveShellRoleHomeRouting(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  binding: SurfaceBinding | null;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellRoleHomeRoutingResolution> {
+  const providers = getRegisteredRoleHomeRoutingProviders();
+
+  const candidates: ProviderCandidate[] = await Promise.all(
+    providers.map(async (provider): Promise<ProviderCandidate> => {
+      const access = await resolveReportsExtensionAccessSafely(
+        { id: provider.providerId, getAccess: provider.getAccess },
+        input.workspace,
+        { accessContext: input.accessContext },
+      );
+      return {
+        providerId: provider.providerId,
+        contractVersion: provider.contractVersion,
+        priority: provider.priority,
+        provenance: provider.provenance,
+        enabled: true,
+        accessOk: access.ok,
+        contractCompatible:
+          provider.contractVersion === SHELL_ROLE_HOME_ROUTING_CONTRACT_VERSION,
+      };
+    }),
+  );
+
+  const selection = selectSingleWinner({
+    surfaceKey: SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
+    candidates,
+    binding: input.binding,
+  });
+
+  const coreFallback = (droppedProviderId: string | null): ShellRoleHomeRoutingResolution => ({
+    table: buildCoreDefaultRoleHomeRouting(),
+    selection,
+    droppedProviderId,
+  });
+
+  if (selection.winner === "core_default") return coreFallback(null);
+
+  const winnerId = selection.winner.providerId;
+  const provider = providers.find((p) => p.providerId === winnerId);
+  if (!provider) return coreFallback(null);
+
+  try {
+    const table = await provider.buildRoleHomeRouting({
+      workspace: input.workspace,
+      english: input.english,
+    });
+    const issues = validateRoleHomeRoutingTable(table);
+    if (issues.length > 0) {
+      console.error(
+        `[shell-experience] role-home-routing provider ${winnerId} produced ${issues.length} conformance issue(s); failing open to Core default`,
+        { workspaceId: input.workspace.id, issues: issues.slice(0, 8) },
+      );
+      return coreFallback(winnerId);
+    }
+    return { table, selection, droppedProviderId: null };
+  } catch (error) {
+    console.error(
+      `[shell-experience] role-home-routing provider ${winnerId} buildRoleHomeRouting threw; failing open to Core default`,
+      error,
+    );
+    return coreFallback(winnerId);
+  }
+}
+
+export type ShellWorkstationResolution = {
+  workstations: ReadonlyArray<WorkstationDescriptor>;
+  unreturnedProviderIds: ReadonlyArray<string>;
+  nonConformantProviderIds: ReadonlyArray<string>;
+  droppedForCap: number;
+};
+
+/**
+ * Workstations (concat, mirrors resolveShellOperationSuggestions). Merge every
+ * eligible source's workstation descriptors under the §4.4 budget; drop
+ * non-conformant descriptors (not the whole source); cross-source dedupe by
+ * workstation key (first writer wins). Empty store ⇒ Core default (empty) —
+ * mirror parity.
+ */
+export async function resolveShellWorkstations(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellWorkstationResolution> {
+  const sources = getRegisteredWorkstationSources();
+  if (sources.length === 0) {
+    return {
+      workstations: buildCoreDefaultWorkstations(),
+      unreturnedProviderIds: [],
+      nonConformantProviderIds: [],
+      droppedForCap: 0,
+    };
+  }
+
+  const { eligible, droppedForCap } = await resolveEligibleSources({
+    sources: sources as ReadonlyArray<WorkstationSourceContribution>,
+    compatVersion: SHELL_WORKSTATION_CONTRACT_VERSION,
+    workspace: input.workspace,
+    accessContext: input.accessContext,
+    maxSources: SHELL_SURFACE_MAX_SOURCES,
+  });
+
+  const unreturnedProviderIds: string[] = [];
+  const nonConformantProviderIds: string[] = [];
+  const merged: WorkstationDescriptor[] = [];
+  const seenKeys = new Set<string>();
+
+  const outcomes = await Promise.all(
+    eligible.map(async (source) => ({
+      providerId: source.providerId,
+      outcome: await runSourceWithTimeout(
+        (signal) =>
+          source.buildWorkstations({
+            workspace: input.workspace,
+            english: input.english,
+            signal,
+          }),
+        SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+        (error) =>
+          console.error(
+            `[shell-experience] workstation source ${source.providerId} build threw; dropping source`,
+            error,
+          ),
+      ),
+    })),
+  );
+
+  for (const { providerId, outcome } of outcomes) {
+    if (outcome.kind === "unreturned") {
+      unreturnedProviderIds.push(providerId);
+      continue;
+    }
+    const issues = validateWorkstations(outcome.items);
+    const badKeys = new Set(
+      issues.map((i) => i.workstationKey).filter((k): k is string => k !== null),
+    );
+    if (issues.length > 0) nonConformantProviderIds.push(providerId);
+    for (const ws of outcome.items) {
+      if (badKeys.has(ws.key)) continue; // drop only the offending descriptor
+      if (seenKeys.has(ws.key)) continue; // cross-source dedupe, first writer wins
+      seenKeys.add(ws.key);
+      merged.push(ws);
+    }
+  }
+
+  return {
+    workstations: merged,
+    unreturnedProviderIds,
+    nonConformantProviderIds,
+    droppedForCap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: run-trajectory audit (concat)
+// ---------------------------------------------------------------------------
+
+export const SHELL_RUN_TRAJECTORY_AUDIT_SURFACE_KEY = "run-trajectory-audit";
+export const SHELL_RUN_TRAJECTORY_AUDIT_CONTRACT_VERSION =
+  "run-trajectory-audit.v1-experimental";
+
+export type ShellRunTrajectoryAuditResolution = {
+  entries: ReadonlyArray<AgentRunAuditEntry>;
+  unreturnedProviderIds: ReadonlyArray<string>;
+  nonConformantProviderIds: ReadonlyArray<string>;
+  droppedForCap: number;
+};
+
+/**
+ * Run-trajectory audit (concat, mirrors resolveShellOperationSuggestions).
+ * Merge every eligible source's read-only audit entries under the §4.4 budget;
+ * drop non-conformant / suspected-secret / suspected-PII entries (not the whole
+ * source — fail-closed); cross-source dedupe by runId (first writer wins). Empty
+ * store ⇒ Core default (empty) — mirror parity. Read-only, no control semantics.
+ */
+export async function resolveShellRunTrajectoryAudit(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  accessContext?: ExtensionAccessContext;
+}): Promise<ShellRunTrajectoryAuditResolution> {
+  const sources = getRegisteredAgentRunAuditSources();
+  if (sources.length === 0) {
+    return {
+      entries: buildCoreDefaultRunTrajectoryAudit(),
+      unreturnedProviderIds: [],
+      nonConformantProviderIds: [],
+      droppedForCap: 0,
+    };
+  }
+
+  const { eligible, droppedForCap } = await resolveEligibleSources({
+    sources: sources as ReadonlyArray<AgentRunAuditSourceContribution>,
+    compatVersion: SHELL_RUN_TRAJECTORY_AUDIT_CONTRACT_VERSION,
+    workspace: input.workspace,
+    accessContext: input.accessContext,
+    maxSources: SHELL_SURFACE_MAX_SOURCES,
+  });
+
+  const unreturnedProviderIds: string[] = [];
+  const nonConformantProviderIds: string[] = [];
+  const merged: AgentRunAuditEntry[] = [];
+  const seenRunIds = new Set<string>();
+
+  const outcomes = await Promise.all(
+    eligible.map(async (source) => ({
+      providerId: source.providerId,
+      outcome: await runSourceWithTimeout(
+        (signal) =>
+          source.buildRunAuditEntries({
+            workspace: input.workspace,
+            english: input.english,
+            signal,
+          }),
+        SHELL_SURFACE_SOURCE_TIMEOUT_MS,
+        (error) =>
+          console.error(
+            `[shell-experience] run-trajectory-audit source ${source.providerId} build threw; dropping source`,
+            error,
+          ),
+      ),
+    })),
+  );
+
+  for (const { providerId, outcome } of outcomes) {
+    if (outcome.kind === "unreturned") {
+      unreturnedProviderIds.push(providerId);
+      continue;
+    }
+    const issues = validateAgentRunAuditEntries(outcome.items);
+    const badRunIds = new Set(
+      issues.map((i) => i.runId).filter((k): k is string => k !== null),
+    );
+    if (issues.length > 0) nonConformantProviderIds.push(providerId);
+    for (const entry of outcome.items) {
+      if (badRunIds.has(entry.runId)) continue; // drop only the offending entry (fail-closed on secret/PII)
+      if (seenRunIds.has(entry.runId)) continue; // cross-source dedupe, first writer wins
+      seenRunIds.add(entry.runId);
+      merged.push(entry);
+    }
+  }
+
+  return {
+    entries: merged,
+    unreturnedProviderIds,
+    nonConformantProviderIds,
+    droppedForCap,
+  };
 }
