@@ -1338,6 +1338,7 @@ model Workspace {
   createdAt                            DateTime                              @default(now())
   updatedAt                            DateTime                              @updatedAt
   solutionExtensions                   WorkspaceSolutionExtension[]
+  surfaceBindings                      WorkspaceSurfaceBinding[]
   memberships                          Membership[]
   contacts                             Contact[]
   companies                            Company[]
@@ -1475,6 +1476,24 @@ model WorkspaceSolutionExtension {
   @@unique([workspaceId, extensionKey])
   @@index([workspaceId, status, updatedAt])
   @@index([extensionKey, status])
+}
+
+// 单一生效 shell surface 的绑定授权(蓝图 §4.3 绑定即授权)。
+// 每个 workspace 对每个 surfaceKey 至多一条绑定,指向要生效的 provider。
+// 无绑定 → Core default(读侧 selectSingleWinner);绑定失效/越权/版本不兼容
+// 在 resolve 时 fail-open 回 Core + 冲突回执。写入走 MANAGE_WORKSPACE_SETUP + 审计
+// (与扩展启停同能力、同审计路径)。providerId 只是标识,授权由 capability 决定,非自声明。
+model WorkspaceSurfaceBinding {
+  id          String    @id @default(cuid())
+  workspaceId String
+  surfaceKey  String
+  providerId  String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, surfaceKey])
+  @@index([workspaceId])
 }
 
 model PaymentWebhookCallbackEvent {

@@ -7,7 +7,11 @@ import {
 import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
 import { resolveMemberBasePresetKey } from "@/lib/definitions/workspace-role-preset-catalog";
 import { resolveNorthstarText } from "@/lib/shell/northstar-text";
-import { resolveShellMainline } from "@/lib/shell/resolve-shell-experience";
+import {
+  resolveShellMainline,
+  SHELL_MAINLINE_SURFACE_KEY,
+} from "@/lib/shell/resolve-shell-experience";
+import { resolveWorkspaceSurfaceBinding } from "@/lib/shell/surface-binding-store";
 import { resolveRoleLens } from "@/lib/shell/role-home";
 import { loadDashboardPageData } from "@/features/dashboard/page-loader";
 import { buildDashboardViewModel } from "@/features/dashboard/view-model";
@@ -90,12 +94,16 @@ export default async function DashboardPage({
   // advance 尚无真实全量计数源 → pending_source，不用截断样本冒充。
   const workEntry = viewModel.dashboardHomeWorkEntry;
   // 经营主线经统一读侧入口（蓝图 §4.4）：注册的 mainline provider 按绑定授权
-  // 模型（§4.3）至多选一；Phase 2a 尚无绑定写入面 → binding=null → 恒回 Core
-  // default，与既有直接 build 逐字节一致。绑定读取由后续切片接入。
+  // 模型（§4.3）至多选一。绑定从持久化的 WorkspaceSurfaceBinding 读取；无绑定/失效/
+  // 越权/版本不兼容 → selectSingleWinner fail-open 回 Core default（与既有直接 build 一致）。
+  const mainlineBinding = await resolveWorkspaceSurfaceBinding(
+    workspace.id,
+    SHELL_MAINLINE_SURFACE_KEY,
+  );
   const { readout: mainline } = await resolveShellMainline({
     workspace,
     english,
-    binding: null,
+    binding: mainlineBinding,
     coreDefault: {
       asOf: new Date().toISOString(),
       english,
