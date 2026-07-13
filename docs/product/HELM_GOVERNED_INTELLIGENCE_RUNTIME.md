@@ -195,6 +195,16 @@ microVM 级 sandbox 项目。
 - Action：0 auto-approve、0 automatic feedback、0 external-send、0 connector activation、
   0 memory promotion；每次执行都有 approval、entitlement、idempotency 和 execution receipt。
 
+## 当前参考实现状态
+
+- 已成立：public-safe requirements freeze；strict `PrivateContextAdapterManifest`、
+  `PrivateContextBuildReceipt`、`ContextEgressDecisionReceipt`、`RuntimeIsolationProfile`、
+  `CapabilityGrant`；private-context conformance validator；receipt-to-prompt static guard。
+- 已成形但仍需下一层：这些契约可供私有 Overlay 实现消费，但尚无真实 Helm-self context
+  read、OCI worker、recoverable run controller 或 candidate materialization 接线。
+- 刻意未做：真实 context、provider runtime、execution lease、side-effect adapter、客户外发、
+  connector activation、official memory promotion 和生产部署声明。
+
 ## PR Order
 
 1. Requirements freeze。
@@ -214,6 +224,7 @@ microVM 级 sandbox 项目。
 
 | 日期 | 变化 |
 |---|---|
+| 2026-07-12 | 增加 private-context / isolation / capability strict contracts、conformance validator 与 receipt-to-prompt guard。 |
 | 2026-07-12 | 冻结 v4 public-safe architecture、contracts、runtime isolation、rollout 和 acceptance gates。 |
 
 ---
