@@ -113,6 +113,64 @@ const GOVERNED_CANDIDATE_PROMOTION_REQUIRED_MARKERS = [
 ] as const;
 const GOVERNED_CANDIDATE_PROMOTION_FORBIDDEN_PATTERN =
   /\b(?:executeActionItem|createGovernedAction|runCrmImport|activateConnector|externalSend|sendEmail)\s*\(|\bActionType\.(?:DRAFT_EXTERNAL_EMAIL|DRAFT_INTERNAL_NOTE|CREATE_MEETING|UPDATE_OPPORTUNITY_STAGE|ASSIGN_OWNER|CHANGE_DUE_DATE|SEND_MEETING_SUMMARY|GENERATE_REPLY_DRAFT|SCHEDULE_INTERVIEW)\b|\b(?:db|tx|prisma)\.(?:memoryItem|memoryPromotion|recommendationFeedback|preferenceSignal|patternFact|officialWriteIntent|humanActionExecution)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/;
+const GOVERNED_CLOSEOUT_CONTRACT_FILE =
+  "lib/governed-intelligence/capability-closeout-contracts.ts";
+const GOVERNED_CLOSEOUT_CONTRACT_REQUIRED_MARKERS = [
+  'requiredHumanClick: z.literal(true)',
+  'automaticSendAllowed: z.literal(false)',
+  'sendPerformed: z.literal(false)',
+  "WORKSPACE_CAPABILITIES.MANAGE_CONNECTORS",
+  'oauthCompletionAllowed: z.literal(false)',
+  'credentialEntryAllowed: z.literal(false)',
+  'activationAllowed: z.literal(false)',
+  'connectedStateTransitionAllowed: z.literal(false)',
+  'candidateStatus: z.literal("pending_verification")',
+  'memoryPromotionCreated: z.literal(false)',
+  'canonicalMemoryWritten: z.literal(false)',
+] as const;
+const GOVERNED_CLOSEOUT_MATERIALIZER_FILE =
+  "lib/governed-intelligence/capability-closeout-materializer.ts";
+const GOVERNED_CLOSEOUT_MATERIALIZER_REQUIRED_MARKERS = [
+  "evaluateCapabilityGrant",
+  'decision.decision !== "allow_draft"',
+  "db.$transaction",
+  "tx.artifactBundle.create",
+  "tx.artifactReview.create",
+  "tx.auditLog.create",
+  "ArtifactBundleStatus.DRAFT",
+  "ArtifactReviewStatus.PENDING",
+  "systemOfRecordWrite: false",
+  "ArtifactReviewStatus.CONFIRMED",
+] as const;
+const GOVERNED_CLOSEOUT_MATERIALIZER_FORBIDDEN_WRITE_PATTERN =
+  /\b(?:db|tx|prisma)\.(?:actionItem|approvalRequest|approvalTask|humanActionExecution|memoryCandidate|memoryItem|memoryPromotion|officialWriteIntent|connector|importSource|recommendationFeedback|preferenceSignal|patternFact)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/;
+const GOVERNED_CLOSEOUT_REVIEW_FILE =
+  "lib/governed-intelligence/capability-closeout-review.ts";
+const GOVERNED_EXTERNAL_SEND_HANDOFF_REQUIRED_MARKERS = [
+  "assertWorkspaceGovernedActionManagementServiceAccess",
+  "actorType: ActorType.USER",
+  "rateLimitReceipt.expiresAt",
+  "HumanActionExecutionType.MANUAL_EMAIL_SEND",
+  "HumanActionExecutionStatus.READY",
+  "HumanActionExecutionAckStatus.PENDING",
+  "executedAt: null",
+  "automaticSendAllowed: false",
+  "sendPerformed: false",
+] as const;
+const GOVERNED_EXTERNAL_SEND_HANDOFF_FORBIDDEN_PATTERN =
+  /(?<![\w.])(?:externalSend|sendEmail|fetch)\s*\(|^\s*import\s+.*(?:nodemailer|features\/connectors\/actions)|\bHumanActionExecutionStatus\.EXECUTED\b|\bHumanActionExecutionAckStatus\.ACKNOWLEDGED\b|\b(?:db|tx|prisma)\.(?:connector|importSource|memoryItem|memoryPromotion|officialWriteIntent)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/m;
+const GOVERNED_MEMORY_PROJECTION_REQUIRED_MARKERS = [
+  "assertWorkspaceMemoryServiceAccess",
+  "ArtifactReviewStatus.CONFIRMED",
+  "tx.runtimeSession.findFirst",
+  "tx.memoryCandidate.create",
+  "RuntimeMemoryCandidateStatus.PENDING_VERIFICATION",
+  "memoryPromotionCreated: false",
+  "canonicalMemoryWritten: false",
+  'actionType: "GOVERNED_MEMORY_CANDIDATE_PROJECTED"',
+] as const;
+const GOVERNED_MEMORY_PROJECTION_FORBIDDEN_PATTERN =
+  /\b(?:db|tx|prisma)\.(?:memoryItem|memoryPromotion|humanActionExecution|connector|importSource|officialWriteIntent)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(|(?<![\w.])(?:externalSend|sendEmail|fetch)\s*\(/;
 
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
@@ -371,6 +429,114 @@ export function runLlmCandidateBoundaryCheck(
         rule: "LLM-CANDIDATE-J",
         detail:
           "Human candidate promotion must not execute, send, write back, activate connectors, or write feedback, pattern, memory, or official intents.",
+      });
+    }
+  }
+
+  const closeoutContractFile = path.join(
+    repoRoot,
+    GOVERNED_CLOSEOUT_CONTRACT_FILE,
+  );
+  if (fs.existsSync(closeoutContractFile)) {
+    const content = fs.readFileSync(closeoutContractFile, "utf8");
+    const missingMarkers = GOVERNED_CLOSEOUT_CONTRACT_REQUIRED_MARKERS.filter(
+      (marker) => !content.includes(marker),
+    );
+    if (missingMarkers.length > 0 || UNSAFE_REVIEW_STATE_PATTERN.test(content)) {
+      violations.push({
+        file: GOVERNED_CLOSEOUT_CONTRACT_FILE,
+        rule: "LLM-CANDIDATE-K",
+        detail: `Capability-closeout contracts must stay strict, candidate-only, and explicitly non-executing; missing ${missingMarkers.join(", ") || "safe review state"}.`,
+      });
+    }
+  }
+
+  const closeoutMaterializerFile = path.join(
+    repoRoot,
+    GOVERNED_CLOSEOUT_MATERIALIZER_FILE,
+  );
+  if (fs.existsSync(closeoutMaterializerFile)) {
+    const content = fs.readFileSync(closeoutMaterializerFile, "utf8");
+    const missingMarkers =
+      GOVERNED_CLOSEOUT_MATERIALIZER_REQUIRED_MARKERS.filter(
+        (marker) => !content.includes(marker),
+      );
+    if (missingMarkers.length > 0) {
+      violations.push({
+        file: GOVERNED_CLOSEOUT_MATERIALIZER_FILE,
+        rule: "LLM-CANDIDATE-L",
+        detail: `Capability-closeout materialization must remain grant-gated and DRAFT/PENDING-only; missing ${missingMarkers.join(", ")}.`,
+      });
+    }
+    if (GOVERNED_CLOSEOUT_MATERIALIZER_FORBIDDEN_WRITE_PATTERN.test(content)) {
+      violations.push({
+        file: GOVERNED_CLOSEOUT_MATERIALIZER_FILE,
+        rule: "LLM-CANDIDATE-L",
+        detail:
+          "Capability-closeout materialization may write only ArtifactBundle(DRAFT), ArtifactReview(PENDING), and its audit row.",
+      });
+    }
+  }
+
+  const closeoutReviewFile = path.join(repoRoot, GOVERNED_CLOSEOUT_REVIEW_FILE);
+  if (fs.existsSync(closeoutReviewFile)) {
+    const content = fs.readFileSync(closeoutReviewFile, "utf8");
+    const sendStart = content.indexOf(
+      "export async function prepareGovernedExternalSendHumanExecution",
+    );
+    const sendEnd = content.indexOf(
+      "type ConfirmedJudgementSource",
+      Math.max(0, sendStart),
+    );
+    const sendContent =
+      sendStart >= 0
+        ? content.slice(
+            sendStart,
+            sendEnd > sendStart ? sendEnd : undefined,
+          )
+        : "";
+    const missingSendMarkers =
+      GOVERNED_EXTERNAL_SEND_HANDOFF_REQUIRED_MARKERS.filter(
+        (marker) => !sendContent.includes(marker),
+      );
+    if (missingSendMarkers.length > 0) {
+      violations.push({
+        file: GOVERNED_CLOSEOUT_REVIEW_FILE,
+        rule: "LLM-CANDIDATE-M",
+        detail: `External-send handoff must remain explicit-human, READY/PENDING, and non-sending; missing ${missingSendMarkers.join(", ")}.`,
+      });
+    }
+    if (GOVERNED_EXTERNAL_SEND_HANDOFF_FORBIDDEN_PATTERN.test(sendContent)) {
+      violations.push({
+        file: GOVERNED_CLOSEOUT_REVIEW_FILE,
+        rule: "LLM-CANDIDATE-M",
+        detail:
+          "External-send handoff must not send, mark execution complete, activate connectors, write official intents, or promote memory.",
+      });
+    }
+
+    const memoryStart = content.indexOf(
+      "export async function projectConfirmedArtifactToMemoryCandidate",
+    );
+    const memoryContent =
+      memoryStart >= 0 ? content.slice(memoryStart) : "";
+    const missingMemoryMarkers =
+      GOVERNED_MEMORY_PROJECTION_REQUIRED_MARKERS.filter(
+        (marker) => !memoryContent.includes(marker),
+      );
+    if (missingMemoryMarkers.length > 0) {
+      violations.push({
+        file: GOVERNED_CLOSEOUT_REVIEW_FILE,
+        rule: "LLM-CANDIDATE-N",
+        detail: `Confirmed-Artifact memory projection must stay human-gated and PENDING_VERIFICATION-only; missing ${missingMemoryMarkers.join(", ")}.`,
+      });
+    }
+    if (GOVERNED_MEMORY_PROJECTION_FORBIDDEN_PATTERN.test(memoryContent)) {
+      violations.push({
+        file: GOVERNED_CLOSEOUT_REVIEW_FILE,
+        rule: "LLM-CANDIDATE-N",
+        detail:
+          "Memory projection must not create canonical memory, MemoryPromotion, sends, connector state, or official intents.",
       });
     }
   }

@@ -249,12 +249,18 @@ microVM 级 sandbox 项目。
   `GovernedJudgementCandidate`、canonical hash、workspace-scoped draft grant 和
   `ArtifactBundle(DRAFT) + ArtifactReview(PENDING)` 原子幂等 materializer；以及 strict
   persisted-artifact read model、人工 confirm / reject、独立 promotion capability、policy ceiling
-  和只生成 `CREATE_TASK + ApprovalTask(PENDING)` 的原子幂等桥。
+  和只生成 `CREATE_TASK + ApprovalTask(PENDING)` 的原子幂等桥；以及 strict external-send
+  draft / connector-scope / memory-projection contract、从已确认 judgement Artifact 派生
+  DRAFT + PENDING closeout Artifact 的 capability-gated materializer、人工 closeout review、
+  只生成 `HumanActionExecution(READY/PENDING)` 的外发 handoff，及只生成
+  `MemoryCandidate(PENDING_VERIFICATION)` 的确定性 memory projection。
 - 已成形但仍需下一层：public Core 的 recoverable runtime 可以逐步持久化并在 lease 过期后
   从一致 checkpoint 恢复，但 MySQL migration 尚未被声明为已应用到任何生产环境；真实
   Helm-self context adapter 与 isolated OCI worker 属于独立私有 Overlay 证据；public review
-  页面与 promotion service 已有 Core 接口，但仍无真实私有 intake 调用方，side-effect executor
-  未在本仓接线，也没有任何 promotion / approval / execution 的真实运行回执。
+  页面与 promotion service 已有 Core 接口，但仍无真实私有 intake 调用方；external-send
+  handoff 不发送消息，connector 候选不完成 OAuth、凭据录入或 `CONNECTED` 转换，memory
+  projection 不创建 `MemoryPromotion` 或 canonical memory；side-effect executor 未在本仓接线，
+  也没有任何 promotion / approval / execution 的真实运行回执。
   MySQL contract parity 当前由
   transactional fake 覆盖；真实 InnoDB 双连接并发与 row-lock 集成测试仍是下一层证据。
 - 刻意未做：真实 context、provider runtime、execution lease、side-effect adapter、客户外发、
@@ -285,6 +291,7 @@ side-effect executor 证明。
 
 | 日期 | 变化 |
 |---|---|
+| 2026-07-13 | 增加 external-send draft、connector scope/risk candidate 与 memory projection strict contracts；新增 capability-gated DRAFT/PENDING closeout materializer、人工 review、READY/PENDING human-send handoff 和 PENDING_VERIFICATION memory projection，并以静态 guard 禁止直接发送、connector activation、MemoryPromotion 和 canonical memory 写入。 |
 | 2026-07-12 | 增加 strict candidate Artifact read model、人工 confirm / reject、独立 promotion capability、policy ceiling，以及只创建内部 CREATE_TASK + PENDING ApprovalTask 的原子幂等晋级桥和 `/approvals` 复核面；不自动批准或执行。 |
 | 2026-07-12 | 增加 strict governed judgement candidate、canonical hash、workspace-scoped draft capability gate，以及只写 DRAFT Artifact + PENDING Review + 最小审计的原子幂等 materializer；不创建动作、审批、memory 或执行意图。 |
 | 2026-07-12 | 将 checkpoint 一致性断言推迟到持有 lease 后执行，contender 在 owner 原子提交瞬间只返回 `lease_unavailable`，不再因启动双读撕裂误判损坏。 |
