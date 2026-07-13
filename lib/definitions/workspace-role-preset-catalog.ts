@@ -76,6 +76,14 @@ type RawCatalogResolution = {
 
 const DEFAULT_BASE_PRESET_KEY: RolePresetKey = "GENERAL_OPERATOR";
 const ROLE_PRESET_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,96}$/;
+const MAX_CUSTOM_ROLE_PRESETS = 50;
+const MAX_METADATA_KEY_LENGTH = 96;
+const MAX_LABEL_LENGTH = 120;
+const MAX_DESCRIPTION_LENGTH = 600;
+const MAX_LIST_ITEMS = 8;
+const MAX_LIST_ITEM_LENGTH = 200;
+const MAX_MATCHERS = 20;
+const MAX_MATCHER_LENGTH = 120;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -85,12 +93,12 @@ export function isBuiltInRolePresetKey(value: string | null | undefined): value 
   return Boolean(value && (ROLE_PRESET_KEYS as readonly string[]).includes(value));
 }
 
-function normalizeString(value: unknown): string | null {
+function normalizeString(value: unknown, maxLength = MAX_DESCRIPTION_LENGTH): string | null {
   if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
-  return trimmed || null;
+  return trimmed && trimmed.length <= maxLength ? trimmed : null;
 }
 
 function normalizeRolePresetKey(value: unknown): string | null {
@@ -106,8 +114,12 @@ function normalizeBasePresetKey(value: unknown): RolePresetKey {
   return isBuiltInRolePresetKey(key) ? key : DEFAULT_BASE_PRESET_KEY;
 }
 
-function asLocalizedText(value: unknown, fallback: LocalizedText): LocalizedText {
-  const scalar = normalizeString(value);
+function asLocalizedText(
+  value: unknown,
+  fallback: LocalizedText,
+  maxLength = MAX_DESCRIPTION_LENGTH,
+): LocalizedText {
+  const scalar = normalizeString(value, maxLength);
   if (scalar) {
     return { zh: scalar, en: scalar };
   }
@@ -117,16 +129,23 @@ function asLocalizedText(value: unknown, fallback: LocalizedText): LocalizedText
   }
 
   return {
-    zh: normalizeString(value.zh) ?? fallback.zh,
-    en: normalizeString(value.en) ?? fallback.en,
+    zh: normalizeString(value.zh, maxLength) ?? fallback.zh,
+    en: normalizeString(value.en, maxLength) ?? fallback.en,
   };
 }
 
-function normalizeStringList(value: unknown): string[] | null {
+function normalizeStringList(
+  value: unknown,
+  maxItems = MAX_LIST_ITEMS,
+  maxItemLength = MAX_LIST_ITEM_LENGTH,
+): string[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  const items = value.map(normalizeString).filter(Boolean) as string[];
+  const items = value
+    .slice(0, maxItems)
+    .map((item) => normalizeString(item, maxItemLength))
+    .filter(Boolean) as string[];
   return items.length > 0 ? items : null;
 }
 
@@ -178,7 +197,11 @@ function normalizeCustomPreset(
 
   const basePresetKey = normalizeBasePresetKey(value.basePresetKey);
   const fallback = fromBuiltInPreset(getRolePresetDefinition(basePresetKey));
-  const matchers = normalizeStringList(value.matchers) ?? [
+  const matchers = normalizeStringList(
+    value.matchers,
+    MAX_MATCHERS,
+    MAX_MATCHER_LENGTH,
+  ) ?? [
     key,
     fallback.label.zh,
     fallback.label.en,
@@ -187,7 +210,7 @@ function normalizeCustomPreset(
   seenKeys.add(key);
   return {
     key,
-    label: asLocalizedText(value.label, fallback.label),
+    label: asLocalizedText(value.label, fallback.label, MAX_LABEL_LENGTH),
     summary: asLocalizedText(value.summary, fallback.summary),
     mission: asLocalizedText(value.mission, fallback.mission),
     ownedOutcomes: asLocalizedList(value.ownedOutcomes, fallback.ownedOutcomes),
@@ -196,14 +219,14 @@ function normalizeCustomPreset(
     successSignals: asLocalizedList(value.successSignals, fallback.successSignals),
     boundaryNotes: asLocalizedList(value.boundaryNotes, fallback.boundaryNotes),
     defaultWorkspaceProfileType:
-      normalizeString(value.defaultWorkspaceProfileType) ??
+      normalizeString(value.defaultWorkspaceProfileType, MAX_LABEL_LENGTH) ??
       fallback.defaultWorkspaceProfileType,
     matchers,
     basePresetKey,
-    workspaceRole: normalizeString(value.workspaceRole),
-    roleCategory: normalizeString(value.roleCategory),
-    permissionsProfileKey: normalizeString(value.permissionsProfileKey),
-    iaProfileKey: normalizeString(value.iaProfileKey),
+    workspaceRole: normalizeString(value.workspaceRole, MAX_METADATA_KEY_LENGTH),
+    roleCategory: normalizeString(value.roleCategory, MAX_METADATA_KEY_LENGTH),
+    permissionsProfileKey: normalizeString(value.permissionsProfileKey, MAX_METADATA_KEY_LENGTH),
+    iaProfileKey: normalizeString(value.iaProfileKey, MAX_METADATA_KEY_LENGTH),
   };
 }
 
@@ -230,6 +253,7 @@ function parseRawCatalog(rawConfiguration: string | null | undefined): RawCatalo
           : []
       : [];
   const customPresets = catalogPresets
+    .slice(0, MAX_CUSTOM_ROLE_PRESETS)
     .map((item) => normalizeCustomPreset(item, seenKeys))
     .filter(Boolean) as WorkspaceRolePresetDefinition[];
 
@@ -374,9 +398,12 @@ export function resolveWorkspaceRolePresetKey(input: {
     }
   }
 
-  return catalog[0]?.key ?? suggestRolePresetKeyFromText(
+  const suggestedKey = suggestRolePresetKeyFromText(
     input.title,
     input.persona,
     input.workspaceProfileType,
   );
+  return catalog.some((preset) => preset.key === suggestedKey)
+    ? suggestedKey
+    : (catalog[0]?.key ?? suggestedKey);
 }

@@ -99,6 +99,9 @@ describe("workspace role preset catalog", () => {
 
     expect(options.map((option) => option.key)).toContain("GENERAL_OPERATOR");
     expect(options.map((option) => option.label)).toContain("通用运营成员");
+    expect(resolveWorkspaceRolePresetKey({ rawConfiguration: null })).toBe(
+      "GENERAL_OPERATOR",
+    );
   });
 
   it("uses a workspace catalog without leaking default presets into the option list", () => {
@@ -130,5 +133,23 @@ describe("workspace role preset catalog", () => {
     expect(
       getWorkspaceRolePresetDefinition("GENERAL_OPERATOR", tenantCatalogConfiguration),
     ).toBeNull();
+  });
+
+  it("bounds the number and visible text size of workspace-provided presets", () => {
+    const oversizedCatalog = JSON.stringify({
+      rolePresetCatalog: {
+        includeDefaultPresets: false,
+        presets: Array.from({ length: 60 }, (_, index) => ({
+          key: `TENANT_ROLE_${index}`,
+          basePresetKey: "GENERAL_OPERATOR",
+          label: index === 0 ? "x".repeat(121) : `Synthetic role ${index}`,
+        })),
+      },
+    });
+
+    const options = listWorkspaceRolePresetOptions(oversizedCatalog, "en-US");
+
+    expect(options).toHaveLength(50);
+    expect(options[0]?.label).toBe("General operator");
   });
 });
