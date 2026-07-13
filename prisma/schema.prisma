@@ -4296,11 +4296,15 @@ model BiReportBusinessSignal {
   handoffDecisions       BiReportBusinessHandoffDecision[]
   handoffExecutionLogs   BiReportHandoffExecutionLog[]
 
+  // Batch persistence treats (workspaceId, signalKey) as one lifecycle identity.
+  // status is intentionally excluded so refreshes cannot create a second row
+  // after a lifecycle transition. The unique key also prevents concurrent
+  // persist attempts from creating duplicate logical signals.
+  @@unique([workspaceId, signalKey], map: "bireportbusinesssignal_workspace_signalkey_key")
   @@index([workspaceId, skillKey, status, createdAt])
   @@index([workspaceId, signalType, severity, createdAt])
   @@index([sourceRunId])
   @@index([ownerUserId, status, createdAt])
-  @@index([workspaceId, signalKey, status], map: "bireportbusinesssignal_workspace_signalkey_status_idx")
 }
 
 model BiReportSignalNotification {
