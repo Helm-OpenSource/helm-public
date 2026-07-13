@@ -1,4 +1,5 @@
 import { DiagnosticsClient } from "@/features/diagnostics/diagnostics-client";
+import { OperationSuggestionQueue } from "@/features/implementation/operation-suggestion-queue";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { getWorkspaceBusinessLoopGapReadout } from "@/lib/helm-v2/runtime-upgrade";
 import { getDiagnosticsData } from "@/features/diagnostics/queries";
@@ -31,10 +32,15 @@ export default async function DiagnosticsPage() {
   ]);
 
   return (
-    <DiagnosticsClient
-      data={data}
-      businessLoopGapSummary={businessLoopGapReadout.businessLoopGapSummary}
-      firstLoopModel={firstLoopModel}
-    />
+    <div className="space-y-8">
+      <DiagnosticsClient
+        data={data}
+        businessLoopGapSummary={businessLoopGapReadout.businessLoopGapSummary}
+        firstLoopModel={firstLoopModel}
+      />
+      {/* 实施队列 · 变更包(read-only)——operation-suggestion surface 首个 Core 消费者。
+          诊断(L0)之下即实施变更包(L1),契合方法论 §8;无 provider 时诚实空态。 */}
+      <OperationSuggestionQueue workspace={workspace} english={locale === "en-US"} />
+    </div>
   );
 }
