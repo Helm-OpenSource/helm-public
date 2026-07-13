@@ -32,6 +32,11 @@ const registry = new Map<string, LLMProviderAdapter>([
   ["qwen", qwenAdapter],
 ]);
 
+const METADATA_ONLY_SUCCESS_SUMMARY =
+  "LLM call succeeded; content omitted by metadata-only policy.";
+const METADATA_ONLY_ERROR_MESSAGE =
+  "LLM execution failure details omitted by metadata-only policy.";
+
 export function getProviderAdapter(provider: string) {
   return registry.get(provider) ?? null;
 }
@@ -46,6 +51,11 @@ export function listRegisteredProviders() {
 }
 
 export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Promise<LLMTaskExecutionResult<TOutput>> {
+  const observabilityPolicy = input.observabilityPolicy ?? "standard";
+  if (observabilityPolicy !== "standard" && observabilityPolicy !== "metadata_only") {
+    throw new Error("unsupported_observability_policy");
+  }
+  const metadataOnly = observabilityPolicy === "metadata_only";
   const workspaceConfig = await getWorkspaceLLMConfig(input.workspaceId);
   const routed = resolveModelForTask(workspaceConfig, input.taskType, input.modelHint);
 
@@ -71,7 +81,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     userPrompt: input.userPrompt,
   });
   const inputSummary = appendLLMContextAuditToInputSummary({
-    inputSummary: input.inputSummary,
+    inputSummary: metadataOnly ? null : input.inputSummary,
     audit: contextAudit,
   });
 
@@ -281,6 +291,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
   try {
     const result = await adapter.run({
       ...input,
+      inputSummary: metadataOnly ? null : input.inputSummary,
       maxOutputTokens: effectiveMaxOutputTokens,
       provider: adapter.provider,
       model: routed.model,
@@ -365,7 +376,9 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
       outputMode: input.outputMode ?? "text",
       inputSummary,
-      outputSummary: trimText(result.rawOutput, 220),
+      outputSummary: metadataOnly
+        ? METADATA_ONLY_SUCCESS_SUMMARY
+        : trimText(result.rawOutput, 220),
       tokenUsagePrompt: result.usage?.promptTokens,
       tokenUsageCompletion: result.usage?.completionTokens,
       latencyMs,
@@ -384,7 +397,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       fallbackUsed: false,
       latencyMs,
       usage: result.usage,
-      rawOutput: result.rawOutput,
+      rawOutput: metadataOnly ? null : result.rawOutput,
       budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
     };
   } catch (error) {
@@ -398,6 +411,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
         ? "output_schema_failed"
         : "provider_error";
 
+    const errorMessage = metadataOnly ? METADATA_ONLY_ERROR_MESSAGE : message;
     await recordLLMCallSafely({
       workspaceId: input.workspaceId,
       userId: input.userId,
@@ -415,7 +429,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       latencyMs,
       success: false,
       fallbackReason,
-      errorMessage: message,
+      errorMessage,
     });
 
     return {
@@ -429,7 +443,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       success: false,
       fallbackUsed: true,
       fallbackReason,
-      errorMessage: message,
+      errorMessage,
       latencyMs,
       rawOutput: null,
       budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,

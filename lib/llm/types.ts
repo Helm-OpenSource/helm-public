@@ -42,6 +42,13 @@ export type LLMTaskInput<TOutput> = {
   modelHint?: string | null;
   temperature?: number;
   maxOutputTokens?: number;
+  /**
+   * `metadata_only` excludes caller summaries and provider content from the
+   * call log, discards raw output from the returned execution result, and
+   * redacts provider error details. Parsed structured output is still
+   * returned. Omitted or `standard` preserves the existing behavior.
+   */
+  observabilityPolicy?: "standard" | "metadata_only";
 };
 
 export type LLMResolvedTask<TOutput> = LLMTaskInput<TOutput> & {
