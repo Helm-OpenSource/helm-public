@@ -141,6 +141,7 @@ export function summarizeChatRequestForTrace(requestBody: {
   model?: unknown;
   temperature?: unknown;
   max_completion_tokens?: unknown;
+  enable_thinking?: unknown;
   messages?: unknown;
   response_format?: unknown;
   user?: unknown;
@@ -150,6 +151,9 @@ export function summarizeChatRequestForTrace(requestBody: {
     model: requestBody.model,
     temperature: requestBody.temperature,
     maxCompletionTokens: requestBody.max_completion_tokens,
+    ...(typeof requestBody.enable_thinking === "boolean"
+      ? { thinkingEnabled: requestBody.enable_thinking }
+      : {}),
     messageCount: messages.length,
     messageRoles: messages
       .map((message) =>
@@ -244,6 +248,10 @@ export function createOpenAICompatibleAdapter(input: {
         model: taskInput.model,
         temperature: taskInput.temperature ?? 0.2,
         max_completion_tokens: taskInput.maxOutputTokens ?? 900,
+        // DashScope structured output requires hybrid Qwen models to skip thinking.
+        ...(input.provider === "qwen" && taskInput.outputMode === "json"
+          ? { enable_thinking: false }
+          : {}),
         messages: [
           { role: "system", content: taskInput.systemPrompt },
           { role: "user", content: taskInput.userPrompt },
