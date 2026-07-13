@@ -12,7 +12,9 @@ import {
   getWorkspaceGovernanceDeniedMessage,
 } from "@/lib/auth/settings-governance";
 import {
+  canPromoteWorkspaceGovernedCandidates,
   canReviewWorkspaceGovernedActions,
+  getGovernedCandidatePromotionDeniedMessage,
   getGovernedActionReviewDeniedMessage,
 } from "@/lib/auth/action-governance";
 import { getApprovalLearningPanels } from "@/lib/evolution/evolution-insights.service";
@@ -26,6 +28,7 @@ import {
 import type { BusinessLoopGapSummary } from "@/lib/operating-system/operating-gap";
 import { resolveApprovalsExtensions } from "@/lib/extensions/registry";
 import { getApprovalTasksData } from "@/features/approvals/queries";
+import { listGovernedJudgementCandidateReviews } from "@/lib/governed-intelligence/governed-candidate-review";
 import { resolveOptionalApprovalsReadModel } from "@/features/approvals/optional-read-model";
 
 function buildFallbackBusinessLoopGapSummary(): BusinessLoopGapSummary {
@@ -81,7 +84,16 @@ export async function loadApprovalsPageData(
   });
   const english = locale === "en-US";
   const { approvalId, evidenceOpen } = (await searchParams) ?? {};
+  const canReviewCandidates = canReviewWorkspaceGovernedActions(
+    membership.role,
+  );
   const tasks = await getApprovalTasksData(workspace.id, english);
+  const governedCandidates = canReviewCandidates
+    ? await resolveOptionalApprovalsReadModel(
+        listGovernedJudgementCandidateReviews(workspace.id),
+        [],
+      )
+    : [];
   const actionTypes = tasks.map(
     (task) => task.actionItem.actionType as ActionType,
   );
@@ -125,6 +137,7 @@ export async function loadApprovalsPageData(
 
   return {
     tasks,
+    governedCandidates,
     learningPanels,
     businessLoopGapSummary,
     firstLoopModel,
@@ -132,10 +145,17 @@ export async function loadApprovalsPageData(
     approvalId: approvalId ?? null,
     evidenceOpen: evidenceOpen === "1",
     actionGovernance: {
-      canReview: canReviewWorkspaceGovernedActions(membership.role),
+      canReview: canReviewCandidates,
       canChangePolicy: canManageWorkspacePolicies(membership.role),
       reviewDeniedMessage: getGovernedActionReviewDeniedMessage(english),
       policyDeniedMessage: getWorkspaceGovernanceDeniedMessage(english),
+    },
+    candidateGovernance: {
+      canReview: canReviewWorkspaceGovernedActions(membership.role),
+      canPromote: canPromoteWorkspaceGovernedCandidates(membership.role),
+      reviewDeniedMessage: getGovernedActionReviewDeniedMessage(english),
+      promotionDeniedMessage:
+        getGovernedCandidatePromotionDeniedMessage(english),
     },
   };
 }

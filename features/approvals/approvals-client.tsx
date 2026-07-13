@@ -132,6 +132,8 @@ import {
 } from "@/features/approvals/approval-learning-display";
 import { formatApprovalDateLabel } from "@/features/approvals/approval-date-labels";
 import { resolveApprovalObjectDetailHref } from "@/features/approvals/approval-object-detail-link";
+import { GovernedCandidateReviewPanel } from "@/features/governed-candidates/governed-candidate-review-panel";
+import type { GovernedCandidateReviewListItem } from "@/lib/governed-intelligence/governed-candidate-review";
 
 type ApprovalsClientProps = {
   actionGovernance: {
@@ -140,6 +142,13 @@ type ApprovalsClientProps = {
     reviewDeniedMessage: string;
     policyDeniedMessage: string;
   };
+  candidateGovernance: {
+    canReview: boolean;
+    canPromote: boolean;
+    reviewDeniedMessage: string;
+    promotionDeniedMessage: string;
+  };
+  governedCandidates: GovernedCandidateReviewListItem[];
   tasks: Array<{
     id: string;
     status: "PENDING" | "EXECUTED" | "REJECTED" | "WITHDRAWN";
@@ -353,6 +362,8 @@ function formatRecommendationPolicyResult(value: string, english: boolean) {
 
 export function ApprovalsClient({
   actionGovernance,
+  candidateGovernance,
+  governedCandidates,
   tasks,
   learningPanels,
   businessLoopGapSummary,
@@ -2136,7 +2147,14 @@ export function ApprovalsClient({
         </Card>
       ) : null}
 
-      <Card id="approval-queue" className="order-5 workspace-panel">
+      {candidateGovernance.canReview || candidateGovernance.canPromote ? (
+        <GovernedCandidateReviewPanel
+          items={governedCandidates}
+          governance={candidateGovernance}
+        />
+      ) : null}
+
+      <Card id="approval-queue" className="order-6 workspace-panel">
         <CardContent className="space-y-5 py-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-2">
@@ -2270,7 +2288,7 @@ export function ApprovalsClient({
         </CardContent>
       </Card>
 
-      <div className="order-6 grid gap-4 lg:grid-cols-[1fr_420px]">
+      <div className="order-7 grid gap-4 lg:grid-cols-[1fr_420px]">
         <div className="space-y-4">
           {filtered.length ? (
             filtered.map((task) => {

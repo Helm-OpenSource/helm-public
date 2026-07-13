@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { WorkspaceRole } from "@prisma/client";
 import {
   canManageWorkspaceGovernedActions,
+  canPromoteWorkspaceGovernedCandidates,
   canReviewWorkspaceGovernedActions,
   getGovernedActionManagementDeniedMessage,
   getGovernedActionReviewDeniedMessage,
+  getGovernedCandidatePromotionDeniedMessage,
 } from "@/lib/auth/action-governance";
 
 describe("action governance", () => {
@@ -33,10 +35,34 @@ describe("action governance", () => {
     }
   });
 
+  it("keeps candidate promotion separate from reviewer-only access", () => {
+    for (const role of [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.ADMIN,
+      WorkspaceRole.OPERATOR,
+    ]) {
+      expect(canPromoteWorkspaceGovernedCandidates(role)).toBe(true);
+    }
+
+    for (const role of [
+      WorkspaceRole.BILLING_ADMIN,
+      WorkspaceRole.REVIEWER,
+      WorkspaceRole.MEMBER,
+    ]) {
+      expect(canPromoteWorkspaceGovernedCandidates(role)).toBe(false);
+    }
+  });
+
   it("returns explicit deny wording", () => {
     expect(getGovernedActionManagementDeniedMessage(true)).toContain("governed workspace actions");
     expect(getGovernedActionManagementDeniedMessage(false)).toContain("受治理的工作区动作");
     expect(getGovernedActionReviewDeniedMessage(true)).toContain("review governed workspace actions");
     expect(getGovernedActionReviewDeniedMessage(false)).toContain("复核受治理的工作区动作");
+    expect(getGovernedCandidatePromotionDeniedMessage(true)).toContain(
+      "promote a confirmed governed candidate",
+    );
+    expect(getGovernedCandidatePromotionDeniedMessage(false)).toContain(
+      "晋级到内部任务审批链",
+    );
   });
 });

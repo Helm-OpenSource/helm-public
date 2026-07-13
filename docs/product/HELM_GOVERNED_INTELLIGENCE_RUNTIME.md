@@ -155,6 +155,29 @@ Policy ceiling：
 - `AUTO_WITHIN_THRESHOLD` 降为 `REQUIRES_APPROVAL`；
 - `REQUIRES_APPROVAL` 保持不变。
 
+PR7 把该 ceiling 落为显式的人类复核与晋级桥：
+
+- `/approvals` 只读取 strict persisted-artifact projection；畸形或 drifted artifact
+  只显示 contract-blocked，不暴露 raw payload，也不提供动作；
+- `ArtifactReview(PENDING)` 只能由具备 `REVIEW_GOVERNED_ACTIONS` 的真实用户原子转换为
+  `CONFIRMED` 或 `REJECTED`，并同步 ArtifactBundle 终态和最小审计；
+- `PROMOTE_GOVERNED_CANDIDATES` 是独立 capability，仅 OWNER / ADMIN / OPERATOR 具备，
+  REVIEWER 保持 review-only；
+- 只有 human-confirmed Artifact 才可被第二次显式点击晋级；并发或重复点击通过 conditional
+  bundle claim 复用同一个结果；
+- 晋级只创建一个 `CREATE_TASK` ActionItem 和一个 `ApprovalTask(PENDING)`，强制
+  `REQUIRES_APPROVAL`、`autoExecute:false`、AI content authorship 和 human initiator attribution；
+- `FORBIDDEN` / `SUGGEST_ONLY` 不消费 Artifact、不创建任务；`AUTO_WITHIN_THRESHOLD` 只会
+  被降级为待审批，不会自动执行；
+- 晋级审计只保存 artifact / candidate / hash / approval refs，不产生 feedback、preference、
+  pattern、memory、official-write intent、connector、send 或 writeback。
+
+该 UI / service 是 public Core 的 review-first bridge，不是 live private intake。没有来自 Overlay
+adapter 的真实候选时，页面只显示空态；它也不证明现有 ApprovalTask 已被批准或执行。
+晋级步骤本身不写 memory；若该 ApprovalTask 之后被另一条显式人工审批 / 执行链放行，既有
+`CREATE_TASK` executor 会按当前产品语义写内部 draft memory 与 execution receipt。该后续行为
+不是 official memory promotion，也不授予本次 candidate promotion 自动执行权。
+
 ## Runtime Isolation Requirements
 
 真实数据 / 真实 provider 的 review worker 必须在独立 rootless OCI container 中运行：
@@ -224,11 +247,14 @@ microVM 级 sandbox 项目。
   lifecycle / optional-step / checkpoint 原子 progress commit、InMemory / MySQL store parity、
   fresh schema、one-time migration 和并发 / 恢复回归测试；以及 strict
   `GovernedJudgementCandidate`、canonical hash、workspace-scoped draft grant 和
-  `ArtifactBundle(DRAFT) + ArtifactReview(PENDING)` 原子幂等 materializer。
+  `ArtifactBundle(DRAFT) + ArtifactReview(PENDING)` 原子幂等 materializer；以及 strict
+  persisted-artifact read model、人工 confirm / reject、独立 promotion capability、policy ceiling
+  和只生成 `CREATE_TASK + ApprovalTask(PENDING)` 的原子幂等桥。
 - 已成形但仍需下一层：public Core 的 recoverable runtime 可以逐步持久化并在 lease 过期后
   从一致 checkpoint 恢复，但 MySQL migration 尚未被声明为已应用到任何生产环境；真实
-  Helm-self context adapter 属于独立私有 Overlay 证据；materializer 尚无私有 intake /
-  页面调用方，isolated OCI worker、人工晋级和 side-effect executor 仍未在本仓接线。
+  Helm-self context adapter 与 isolated OCI worker 属于独立私有 Overlay 证据；public review
+  页面与 promotion service 已有 Core 接口，但仍无真实私有 intake 调用方，side-effect executor
+  未在本仓接线，也没有任何 promotion / approval / execution 的真实运行回执。
   MySQL contract parity 当前由
   transactional fake 覆盖；真实 InnoDB 双连接并发与 row-lock 集成测试仍是下一层证据。
 - 刻意未做：真实 context、provider runtime、execution lease、side-effect adapter、客户外发、
@@ -259,6 +285,7 @@ side-effect executor 证明。
 
 | 日期 | 变化 |
 |---|---|
+| 2026-07-12 | 增加 strict candidate Artifact read model、人工 confirm / reject、独立 promotion capability、policy ceiling，以及只创建内部 CREATE_TASK + PENDING ApprovalTask 的原子幂等晋级桥和 `/approvals` 复核面；不自动批准或执行。 |
 | 2026-07-12 | 增加 strict governed judgement candidate、canonical hash、workspace-scoped draft capability gate，以及只写 DRAFT Artifact + PENDING Review + 最小审计的原子幂等 materializer；不创建动作、审批、memory 或执行意图。 |
 | 2026-07-12 | 将 checkpoint 一致性断言推迟到持有 lease 后执行，contender 在 owner 原子提交瞬间只返回 `lease_unavailable`，不再因启动双读撕裂误判损坏。 |
 | 2026-07-12 | 增加可持久化单步 primitive、fenced recoverable store / runner、原子 lifecycle / step / checkpoint progress commit、MySQL schema + migration、恢复回归测试与静态 drift guard；不声明生产 worker 或迁移已部署。 |

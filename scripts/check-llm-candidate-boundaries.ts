@@ -96,6 +96,23 @@ const GOVERNED_CANDIDATE_MATERIALIZER_REQUIRED_MARKERS = [
 ] as const;
 const GOVERNED_CANDIDATE_MATERIALIZER_FORBIDDEN_WRITE_PATTERN =
   /\b(?:db|tx|prisma)\.(?:actionItem|approvalRequest|approvalTask|memoryItem|memoryPromotion|recommendationFeedback|preferenceSignal|patternFact|officialWriteIntent|humanActionExecution)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/;
+const GOVERNED_CANDIDATE_PROMOTION_FILE =
+  "lib/governed-intelligence/governed-candidate-review.ts";
+const GOVERNED_CANDIDATE_PROMOTION_REQUIRED_MARKERS = [
+  "assertWorkspaceGovernedCandidatePromotionServiceAccess",
+  "actorType: ActorType.USER",
+  "db.$transaction",
+  "artifactBundle.updateMany",
+  "ArtifactReviewStatus.CONFIRMED",
+  "ArtifactBundleStatus.CONSUMED",
+  "ActionType.CREATE_TASK",
+  "ActionExecutionMode.REQUIRES_APPROVAL",
+  "ApprovalStatus.PENDING",
+  "autoExecute: false",
+  "contentAuthorship: ActorType.AI",
+] as const;
+const GOVERNED_CANDIDATE_PROMOTION_FORBIDDEN_PATTERN =
+  /\b(?:executeActionItem|createGovernedAction|runCrmImport|activateConnector|externalSend|sendEmail)\s*\(|\bActionType\.(?:DRAFT_EXTERNAL_EMAIL|DRAFT_INTERNAL_NOTE|CREATE_MEETING|UPDATE_OPPORTUNITY_STAGE|ASSIGN_OWNER|CHANGE_DUE_DATE|SEND_MEETING_SUMMARY|GENERATE_REPLY_DRAFT|SCHEDULE_INTERVIEW)\b|\b(?:db|tx|prisma)\.(?:memoryItem|memoryPromotion|recommendationFeedback|preferenceSignal|patternFact|officialWriteIntent|humanActionExecution)\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/;
 
 const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
@@ -120,6 +137,12 @@ const FORBIDDEN_CODE_PATTERNS: Array<{ pattern: RegExp; detail: string }> = [
   {
     pattern: /^\s*import\s+.*(?:features\/connectors\/actions|activateConnector)/im,
     detail: "Candidate/Critic modules must not activate connectors.",
+  },
+  {
+    pattern:
+      /^\s*import\s+[\s\S]{0,400}?from\s+["'][^"']*governed-intelligence\/governed-candidate-review["']/m,
+    detail:
+      "LLM candidate modules must not import the human candidate review or promotion service.",
   },
   {
     pattern:
@@ -310,6 +333,45 @@ export function runLlmCandidateBoundaryCheck(
             "Governed candidate materialization may write only ArtifactBundle(DRAFT), ArtifactReview(PENDING), and its audit row.",
         });
       }
+    }
+  }
+
+  const promotionFile = path.join(repoRoot, GOVERNED_CANDIDATE_PROMOTION_FILE);
+  if (fs.existsSync(promotionFile)) {
+    const content = fs.readFileSync(promotionFile, "utf8");
+    // Rule J intentionally scans only the named promotion export. The end
+    // anchor is part of the guard contract and is covered by its fixture test.
+    const promotionStart = content.indexOf(
+      "export async function promoteGovernedJudgementCandidateToTask",
+    );
+    const promotionEnd = content.indexOf(
+      "export type GovernedCandidateReviewListItem",
+      Math.max(0, promotionStart),
+    );
+    const promotionContent =
+      promotionStart >= 0
+        ? content.slice(
+            promotionStart,
+            promotionEnd > promotionStart ? promotionEnd : undefined,
+          )
+        : "";
+    const missingMarkers = GOVERNED_CANDIDATE_PROMOTION_REQUIRED_MARKERS.filter(
+      (marker) => !promotionContent.includes(marker),
+    );
+    if (missingMarkers.length > 0) {
+      violations.push({
+        file: GOVERNED_CANDIDATE_PROMOTION_FILE,
+        rule: "LLM-CANDIDATE-J",
+        detail: `Human candidate promotion must stay capability-gated, transactional, CREATE_TASK-only, and pending-approval-only; missing ${missingMarkers.join(", ")}.`,
+      });
+    }
+    if (GOVERNED_CANDIDATE_PROMOTION_FORBIDDEN_PATTERN.test(promotionContent)) {
+      violations.push({
+        file: GOVERNED_CANDIDATE_PROMOTION_FILE,
+        rule: "LLM-CANDIDATE-J",
+        detail:
+          "Human candidate promotion must not execute, send, write back, activate connectors, or write feedback, pattern, memory, or official intents.",
+      });
     }
   }
 
