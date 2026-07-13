@@ -26,7 +26,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { RolePresetKey } from "@/lib/definitions/role-presets";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
 import { formatPermissionDateLabel } from "./permissions-date-labels";
 import { Info, RoleGuide } from "./settings-display";
@@ -43,11 +42,11 @@ type TeamPermissionsMemberDraft = {
   name: string;
   role: TeamPermissionsRole;
   title: string;
-  rolePresetKey: RolePresetKey;
+  rolePresetKey: string;
 };
 
 type RolePresetOption = {
-  key: RolePresetKey;
+  key: string;
   label: string;
   summary: string;
 };
@@ -1097,7 +1096,7 @@ export function TeamPermissionsCard({
                 onValueChange={(value) =>
                   setMemberDraft((current) => ({
                     ...current,
-                    rolePresetKey: value as RolePresetKey,
+                    rolePresetKey: value,
                   }))
                 }
               >
