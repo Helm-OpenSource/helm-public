@@ -83,8 +83,9 @@ In the Agent era UI transforms into a **human–Agent co-control plane** (not me
 
 `operationSuggestionSources` 的 experimental v2 契约已要求上述 11 字段
 `changePacket`，并 fail-closed 拒绝旧 `agentBrief`、嵌套回调、疑似 PII / secret
-以及缺失 dry-run / 审批边界的高影响包。该成立范围仍仅是类型、validator 与
-resolver；实施队列 UI、外部 Agent handoff、凭据授权、执行和回执读回尚未成立。
+以及缺失 dry-run / 审批边界的高影响包。`/diagnostics` 已在诊断面之后提供首个
+Core 只读实施队列消费者，展示边界、11 字段与诚实空态；真实 provider、外部
+Agent handoff、凭据授权、执行和回执读回尚未成立。
 
 ## 4. 初始化模式 / Initialization Pattern
 
@@ -152,6 +153,8 @@ Helm 默认界面即 §1 五主面。**第一阶段 Public Core 只做到**：
 
 ## 变更记录 / Change Log
 
+- 2026-07-13：`/diagnostics` 接入首个只读实施队列消费者；只建立变更包展示与
+  内部详情导航，不建立执行、批准、凭据托管或回执自动回流。
 - 2026-07-13：`operationSuggestionSources` 升级到 experimental v2；以 11 字段
-  `changePacket` 替代自由文本 `agentBrief`，并明确这仍是 public Core 契约层，
-  不是实施队列 UI、外部 Agent 执行或客户部署证明。
+  `changePacket` 替代自由文本 `agentBrief`，先建立 public Core 契约层；该层本身
+  不构成实施队列 UI、外部 Agent 执行或客户部署证明。
