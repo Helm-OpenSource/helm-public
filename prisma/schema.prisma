@@ -4296,11 +4296,20 @@ model BiReportBusinessSignal {
   handoffDecisions       BiReportBusinessHandoffDecision[]
   handoffExecutionLogs   BiReportHandoffExecutionLog[]
 
+  // G1 batch-upsert dedup identity (P3). signalKey is a per-window key (#377),
+  // so (workspaceId, signalKey) is logically unique per incident. This UNIQUE
+  // key is what INSERT ... ON DUPLICATE KEY UPDATE collides on to REFRESH a
+  // re-run in place. It supersedes the non-unique
+  // (workspaceId, signalKey, status) probe index (PR #270): the two leading
+  // columns already cover the dedup SELECT and are near-unique, so keeping both
+  // would only double write-path index maintenance. status is intentionally NOT
+  // part of the unique key — including it would let a status transition create
+  // a second row on the next upsert, breaking dedup.
+  @@unique([workspaceId, signalKey], map: "bireportbusinesssignal_workspace_signalkey_key")
   @@index([workspaceId, skillKey, status, createdAt])
   @@index([workspaceId, signalType, severity, createdAt])
   @@index([sourceRunId])
   @@index([ownerUserId, status, createdAt])
-  @@index([workspaceId, signalKey, status], map: "bireportbusinesssignal_workspace_signalkey_status_idx")
 }
 
 model BiReportSignalNotification {

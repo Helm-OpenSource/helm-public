@@ -11,6 +11,7 @@ const { dbMock } = vi.hoisted(() => ({
     biReportBusinessHandoffDecision: {
       updateMany: vi.fn(),
     },
+    $executeRawUnsafe: vi.fn(),
   },
 }));
 
@@ -33,6 +34,7 @@ import {
   advanceBiReportBusinessSignalStatus,
   buildBiReportBusinessSignalInput,
   createBiReportBusinessSignal,
+  createBiReportBusinessSignalsBatch,
   listRecentBiReportBusinessSignals,
   mapBiReportBusinessSignalRow,
 } from "@/lib/bi-report-skill/business-signal";
@@ -605,5 +607,174 @@ describe("bi report business signal storage", () => {
     });
     expect(signalInput.ownerUserName).toBe("负责人");
     expect(signalInput.ownerUserEmail).toBe("owner@example.com");
+  });
+
+  describe("createBiReportBusinessSignalsBatch (P3 batch upsert)", () => {
+    function persistedRow(signalKey: string, overrides: Record<string, unknown> = {}) {
+      return {
+        id: `row-${signalKey}`,
+        workspaceId: "workspace-1",
+        sourceRunId: "run-1",
+        skillKey: "bi_seat_process",
+        signalType: "seat_process.case_assignment",
+        signalKey,
+        title: "title",
+        summary: "summary",
+        severity: "WARN",
+        continuityStatus: null,
+        dimensionsJson: null,
+        metricsJson: null,
+        evidenceJson: JSON.stringify({}),
+        recommendedActionsJson: JSON.stringify([]),
+        status: "open",
+        ownerUserId: null,
+        ownerUserName: null,
+        ownerUserEmail: null,
+        createdAt: new Date("2026-07-13T09:00:00Z"),
+        updatedAt: new Date("2026-07-13T09:00:00Z"),
+        ...overrides,
+      };
+    }
+
+    it("emits ON DUPLICATE KEY UPDATE with all rows in one chunked statement", async () => {
+      dbMock.$executeRawUnsafe.mockResolvedValue(2);
+      dbMock.biReportBusinessSignal.findFirst
+        .mockResolvedValueOnce(persistedRow("k:2026-07-13:a"))
+        .mockResolvedValueOnce(persistedRow("k:2026-07-13:b"));
+
+      const result = await createBiReportBusinessSignalsBatch([
+        {
+          workspaceId: "workspace-1",
+          sourceRunId: "run-1",
+          skillKey: "bi_seat_process",
+          signalType: "seat_process.case_assignment",
+          signalKey: "k:2026-07-13:a",
+          title: "a",
+          summary: "a",
+          severity: "WARN",
+          evidence: { x: 1 },
+        },
+        {
+          workspaceId: "workspace-1",
+          sourceRunId: "run-1",
+          skillKey: "bi_seat_process",
+          signalType: "seat_process.case_assignment",
+          signalKey: "k:2026-07-13:b",
+          title: "b",
+          summary: "b",
+          severity: "ALERT",
+          evidence: { x: 2 },
+        },
+      ]);
+
+      expect(result).toEqual({ persisted: 2, skippedClear: 0, tableMissing: false });
+      expect(dbMock.$executeRawUnsafe).toHaveBeenCalledTimes(1);
+      const [sql, ...params] = dbMock.$executeRawUnsafe.mock.calls[0]!;
+      expect(sql).toContain("INSERT INTO `bireportbusinesssignal`");
+      expect(sql).toContain("ON DUPLICATE KEY UPDATE");
+      // refresh columns present, identity columns (workspaceId/signalKey/status) absent from the UPDATE set
+      expect(sql).toContain("`severity` = VALUES(`severity`)");
+      expect(sql).toContain("`title` = VALUES(`title`)");
+      expect(sql).not.toContain("`workspaceId` = VALUES(`workspaceId`)");
+      expect(sql).not.toContain("`signalKey` = VALUES(`signalKey`)");
+      expect(sql).not.toContain("`status` = VALUES(`status`)");
+      // 2 rows * (1 id + 17 columns) = 36 positional params
+      expect(params).toHaveLength(36);
+      // closure sync runs once per persisted signal AFTER the write
+      expect(operatingClosureKernelMock.syncBiReportSignalToOperatingClosure).toHaveBeenCalledTimes(2);
+    });
+
+    it("drops CLEAR signals before the write and reports them as skipped", async () => {
+      dbMock.$executeRawUnsafe.mockResolvedValue(1);
+      dbMock.biReportBusinessSignal.findFirst.mockResolvedValueOnce(persistedRow("k:2026-07-13:live"));
+
+      const result = await createBiReportBusinessSignalsBatch([
+        {
+          workspaceId: "workspace-1",
+          sourceRunId: "run-1",
+          skillKey: "bi_seat_process",
+          signalType: "seat_process.case_assignment",
+          signalKey: "k:2026-07-13:clear",
+          title: "c",
+          summary: "c",
+          severity: "CLEAR",
+        },
+        {
+          workspaceId: "workspace-1",
+          sourceRunId: "run-1",
+          skillKey: "bi_seat_process",
+          signalType: "seat_process.case_assignment",
+          signalKey: "k:2026-07-13:live",
+          title: "l",
+          summary: "l",
+          severity: "WARN",
+        },
+      ]);
+
+      expect(result).toEqual({ persisted: 1, skippedClear: 1, tableMissing: false });
+      const [, ...params] = dbMock.$executeRawUnsafe.mock.calls[0]!;
+      expect(params).toHaveLength(18); // one row only
+    });
+
+    it("chunks by the configured size (multiple statements)", async () => {
+      dbMock.$executeRawUnsafe.mockResolvedValue(1);
+      dbMock.biReportBusinessSignal.findFirst.mockResolvedValue(persistedRow("k"));
+
+      const inputs = Array.from({ length: 5 }, (_, i) => ({
+        workspaceId: "workspace-1",
+        sourceRunId: "run-1",
+        skillKey: "bi_seat_process",
+        signalType: "seat_process.case_assignment",
+        signalKey: `k:2026-07-13:${i}`,
+        title: `t${i}`,
+        summary: `s${i}`,
+        severity: "WARN" as const,
+      }));
+
+      const result = await createBiReportBusinessSignalsBatch(inputs, { chunkSize: 2 });
+
+      expect(result.persisted).toBe(5);
+      expect(dbMock.$executeRawUnsafe).toHaveBeenCalledTimes(3); // 2 + 2 + 1
+    });
+
+    it("swallows a missing-table error like the single-row path", async () => {
+      dbMock.$executeRawUnsafe.mockRejectedValue(
+        new Error("The table `bireportbusinesssignal` does not exist in the current database."),
+      );
+
+      const result = await createBiReportBusinessSignalsBatch([
+        {
+          workspaceId: "workspace-1",
+          sourceRunId: "run-1",
+          skillKey: "bi_seat_process",
+          signalType: "seat_process.case_assignment",
+          signalKey: "k:2026-07-13:a",
+          title: "a",
+          summary: "a",
+          severity: "WARN",
+        },
+      ]);
+
+      expect(result).toEqual({ persisted: 0, skippedClear: 0, tableMissing: true });
+      expect(operatingClosureKernelMock.syncBiReportSignalToOperatingClosure).not.toHaveBeenCalled();
+    });
+
+    it("is a no-op when every input is CLEAR (no statement issued)", async () => {
+      const result = await createBiReportBusinessSignalsBatch([
+        {
+          workspaceId: "workspace-1",
+          sourceRunId: "run-1",
+          skillKey: "bi_seat_process",
+          signalType: "seat_process.case_assignment",
+          signalKey: "k:2026-07-13:a",
+          title: "a",
+          summary: "a",
+          severity: "CLEAR",
+        },
+      ]);
+
+      expect(result).toEqual({ persisted: 0, skippedClear: 1, tableMissing: false });
+      expect(dbMock.$executeRawUnsafe).not.toHaveBeenCalled();
+    });
   });
 });

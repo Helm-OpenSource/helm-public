@@ -20,13 +20,21 @@ CREATE TABLE IF NOT EXISTS `bireportbusinesssignal` (
   `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
+  -- G1 batch-upsert dedup identity (P3): signalKey is a per-window key (#377) so
+  -- (workspaceId, signalKey) is logically unique per incident. This UNIQUE key is
+  -- what `INSERT ... ON DUPLICATE KEY UPDATE` collides on to refresh a re-run in
+  -- place. It supersedes the non-unique (workspaceId, signalKey, status) probe
+  -- index (PR #270); keeping both would only double write-path index maintenance.
+  -- PREREQ: only safe once (workspaceId, signalKey) has no duplicate rows. Prod
+  -- measured 170 duplicate (workspaceId, signalKey) groups (window key #377 +
+  -- concurrency #374 insert race, no unique guard) — the duplicate-key cleanup
+  -- (#3: drop legacy-timestamp rows AND collapse window-key dupes to newest per
+  -- group) must run first. Fresh/local DBs are always duplicate-free.
+  UNIQUE KEY `bireportbusinesssignal_workspace_signalkey_key` (`workspaceId`, `signalKey`),
   KEY `bireportbusinesssignal_workspace_skill_status_created_idx` (`workspaceId`, `skillKey`, `status`, `createdAt`),
   KEY `bireportbusinesssignal_workspace_signaltype_severity_created_idx` (`workspaceId`, `signalType`, `severity`, `createdAt`),
   KEY `bireportbusinesssignal_sourcerunid_idx` (`sourceRunId`),
-  KEY `bireportbusinesssignal_owner_status_created_idx` (`ownerUserId`, `status`, `createdAt`),
-  -- Support the createBiReportBusinessSignal live-signal dedup lookup by
-  -- workspace, signal key, and status. Additive; DROP INDEX to roll back.
-  KEY `bireportbusinesssignal_workspace_signalkey_status_idx` (`workspaceId`, `signalKey`, `status`)
+  KEY `bireportbusinesssignal_owner_status_created_idx` (`ownerUserId`, `status`, `createdAt`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `bireportsignalnotification` (

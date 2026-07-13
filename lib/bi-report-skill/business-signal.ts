@@ -151,6 +151,218 @@ export async function createBiReportBusinessSignal(input: {
   }
 }
 
+/**
+ * Column set written by the batch upsert. `id`, `createdAt`, `updatedAt` are
+ * managed by the statement itself (id via app-generated UUID on INSERT;
+ * timestamps via table defaults / ON UPDATE), so they are NOT in this list.
+ *
+ * Order here is the single source of truth for both the VALUES tuple and the
+ * ON DUPLICATE KEY UPDATE clause below — keep them aligned.
+ */
+const BATCH_UPSERT_COLUMNS = [
+  "workspaceId",
+  "sourceRunId",
+  "skillKey",
+  "signalType",
+  "signalKey",
+  "title",
+  "summary",
+  "severity",
+  "continuityStatus",
+  "dimensionsJson",
+  "metricsJson",
+  "evidenceJson",
+  "recommendedActionsJson",
+  "status",
+  "ownerUserId",
+  "ownerUserName",
+  "ownerUserEmail",
+] as const;
+
+/**
+ * Mutable columns refreshed on a duplicate-key hit. This mirrors the in-place
+ * refresh semantics of `createBiReportBusinessSignal` (the find-then-update
+ * path): a re-run of the same incident (same `(workspaceId, signalKey)`)
+ * UPDATEs the live row instead of inserting a second one.
+ *
+ * Deliberately excluded from the UPDATE set (INSERT-only / immutable):
+ *  - `workspaceId`, `signalKey`  — the dedup identity; part of the unique key.
+ *  - `skillKey`, `signalType`, `status` — identity/lifecycle columns that the
+ *    single-row path also never rewrites on refresh (status transitions are
+ *    owned by advanceBiReportBusinessSignalStatus, not the persist path).
+ */
+const BATCH_UPSERT_UPDATE_COLUMNS = [
+  "sourceRunId",
+  "title",
+  "summary",
+  "severity",
+  "continuityStatus",
+  "dimensionsJson",
+  "metricsJson",
+  "evidenceJson",
+  "recommendedActionsJson",
+  "ownerUserId",
+  "ownerUserName",
+  "ownerUserEmail",
+] as const;
+
+const DEFAULT_BATCH_UPSERT_CHUNK_SIZE = 500;
+
+export type CreateBiReportBusinessSignalInput = Parameters<typeof createBiReportBusinessSignal>[0];
+
+export type CreateBiReportBusinessSignalsBatchResult = {
+  /** Rows sent to at least one INSERT ... ON DUPLICATE KEY UPDATE statement. */
+  persisted: number;
+  /** Inputs dropped before the write (severity === "CLEAR"). */
+  skippedClear: number;
+  /** True when the table is absent (missing-table error swallowed, matching the single-row path). */
+  tableMissing: boolean;
+};
+
+/**
+ * Batch variant of {@link createBiReportBusinessSignal} for high-fan-out jobs
+ * (G1 native-seat-process persists ~35k signals per round). Instead of one
+ * dedup SELECT + one INSERT/UPDATE per signal (~70k public-RDS round trips),
+ * this collapses the whole set into a handful of chunked
+ * `INSERT ... ON DUPLICATE KEY UPDATE` statements.
+ *
+ * IDEMPOTENCY / REFRESH SEMANTICS (identical to the single-row path):
+ *  - Requires the `(workspaceId, signalKey)` UNIQUE key (added in this PR) so a
+ *    re-run of the same incident collides on the key and UPDATEs the live row
+ *    in place — a re-run REFRESHES, it does not skip and does not duplicate.
+ *    (This is why we use ON DUPLICATE KEY UPDATE, NOT createMany +
+ *    skipDuplicates, which would silently drop the refresh.)
+ *  - severity === "CLEAR" produces no row (same as the single-row path).
+ *
+ * SIDE EFFECTS: the operating-closure sync (`syncBiReportSignalToOperatingClosure`)
+ * is still run once per persisted signal AFTER the batch write, preserving the
+ * routing / notification / action-item closure behavior of the single-row path.
+ * The batch only optimizes the persistence round trips, not the closure fan-out.
+ *
+ * DEPLOYMENT ORDER (see PR description): the `(workspaceId, signalKey)` UNIQUE
+ * key MUST exist before this path is exercised, which in turn requires the
+ * duplicate-key cleanup to have run. Callers gate this behind a feature flag so
+ * the safe default remains the per-row path until the unique key is live.
+ */
+export async function createBiReportBusinessSignalsBatch(
+  inputs: CreateBiReportBusinessSignalInput[],
+  options?: { chunkSize?: number },
+): Promise<CreateBiReportBusinessSignalsBatchResult> {
+  const skippedClear = inputs.filter((input) => input.severity === "CLEAR").length;
+  const writable = inputs.filter((input) => input.severity !== "CLEAR");
+
+  const result: CreateBiReportBusinessSignalsBatchResult = {
+    persisted: 0,
+    skippedClear,
+    tableMissing: false,
+  };
+
+  if (writable.length === 0) {
+    return result;
+  }
+
+  const chunkSize = normalizeChunkSize(options?.chunkSize);
+
+  // Rows we successfully wrote, paired with the routing context needed for the
+  // post-write closure sync. Re-read from the DB so downstream closure logic
+  // sees the canonical persisted row (including server timestamps).
+  const persistedKeys: Array<{
+    workspaceId: string;
+    signalKey: string;
+    extensionKey: string | null;
+    signalRouting: CreateBiReportBusinessSignalInput["signalRouting"];
+  }> = [];
+
+  try {
+    for (let start = 0; start < writable.length; start += chunkSize) {
+      const chunk = writable.slice(start, start + chunkSize);
+      await executeBatchUpsertChunk(chunk);
+      for (const input of chunk) {
+        persistedKeys.push({
+          workspaceId: input.workspaceId,
+          signalKey: input.signalKey,
+          extensionKey: input.extensionKey ?? null,
+          signalRouting: input.signalRouting,
+        });
+      }
+    }
+  } catch (error) {
+    if (isMissingBiReportBusinessSignalTableError(error)) {
+      return { persisted: 0, skippedClear, tableMissing: true };
+    }
+    throw error;
+  }
+
+  result.persisted = persistedKeys.length;
+
+  // Post-write closure sync, once per persisted signal (matches single-row path).
+  for (const key of persistedKeys) {
+    const row = await db.biReportBusinessSignal.findFirst({
+      where: { workspaceId: key.workspaceId, signalKey: key.signalKey },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!row) {
+      continue;
+    }
+    await syncBiReportSignalToOperatingClosure({
+      signal: mapBiReportBusinessSignalRow(row),
+      extensionKey: key.extensionKey,
+      signalRouting: key.signalRouting,
+    });
+  }
+
+  return result;
+}
+
+function normalizeChunkSize(raw: number | undefined): number {
+  if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < 1) {
+    return DEFAULT_BATCH_UPSERT_CHUNK_SIZE;
+  }
+  return raw;
+}
+
+async function executeBatchUpsertChunk(chunk: CreateBiReportBusinessSignalInput[]): Promise<void> {
+  const columns = BATCH_UPSERT_COLUMNS;
+  // Each row is `id` + the shared column set. id is app-generated (matches the
+  // single-row path's crypto.randomUUID()) so fresh inserts get a stable UUID.
+  const placeholdersPerRow = `(${["?", ...columns.map(() => "?")].join(", ")})`;
+  const values: unknown[] = [];
+
+  for (const input of chunk) {
+    values.push(crypto.randomUUID());
+    values.push(input.workspaceId);
+    values.push(input.sourceRunId);
+    values.push(input.skillKey);
+    values.push(input.signalType);
+    values.push(input.signalKey);
+    values.push(input.title);
+    values.push(input.summary);
+    values.push(input.severity);
+    values.push(input.continuityStatus ?? null);
+    values.push(stringifyJson(input.dimensions ?? null));
+    values.push(stringifyJson(input.metrics ?? null));
+    values.push(stringifyJson(input.evidence ?? null));
+    values.push(stringifyJson(input.recommendedActions ?? []));
+    values.push(input.status ?? "open");
+    values.push(input.ownerUserId ?? null);
+    values.push(input.ownerUserName ?? null);
+    values.push(input.ownerUserEmail ?? null);
+  }
+
+  const insertColumns = ["id", ...columns].map((column) => `\`${column}\``).join(", ");
+  const rowPlaceholders = chunk.map(() => placeholdersPerRow).join(", ");
+  const updateClause = BATCH_UPSERT_UPDATE_COLUMNS.map(
+    (column) => `\`${column}\` = VALUES(\`${column}\`)`,
+  ).join(", ");
+
+  const sql =
+    `INSERT INTO \`bireportbusinesssignal\` (${insertColumns}) ` +
+    `VALUES ${rowPlaceholders} ` +
+    `ON DUPLICATE KEY UPDATE ${updateClause}`;
+
+  await db.$executeRawUnsafe(sql, ...values);
+}
+
 export function buildBiReportBusinessSignalInput(input: {
   workspaceId: string;
   sourceRunId: string;
