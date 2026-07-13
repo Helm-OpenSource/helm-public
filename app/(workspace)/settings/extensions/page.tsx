@@ -18,6 +18,7 @@ import {
 import {
   setWorkspaceSolutionExtensionStatusAction,
 } from "@/features/settings/solution-extension-actions";
+import { SurfaceBindingsCard } from "@/features/settings/surface-bindings-card";
 import { getSolutionExtensionCatalog } from "@/lib/extensions/solution-extension-catalog";
 
 export default async function SettingsExtensionsPage() {
@@ -138,6 +139,8 @@ export default async function SettingsExtensionsPage() {
           })}
         </CardContent>
       </Card>
+
+      <SurfaceBindingsCard workspaceId={workspace.id} english={english} />
 
       <details className="group rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
