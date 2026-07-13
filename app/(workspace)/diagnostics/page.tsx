@@ -1,6 +1,7 @@
 import { DiagnosticsClient } from "@/features/diagnostics/diagnostics-client";
 import { OperationSuggestionQueue } from "@/features/implementation/operation-suggestion-queue";
 import { RunTrajectoryAuditView } from "@/features/audit/run-trajectory-audit-view";
+import { WorkspaceRoutingView } from "@/features/workspace-routing/workspace-routing-view";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { getWorkspaceBusinessLoopGapReadout } from "@/lib/helm-v2/runtime-upgrade";
 import { getDiagnosticsData } from "@/features/diagnostics/queries";
@@ -45,6 +46,8 @@ export default async function DiagnosticsPage() {
       {/* 回执与审计 · 运行轨迹(read-only)——run-trajectory-audit surface 首个 Core 消费者。
           与实施队列同处 L0-L2 治理簇;语义事件非模型思维(§7);无 provider 时诚实空态。 */}
       <RunTrajectoryAuditView workspace={workspace} english={locale === "en-US"} />
+      {/* 工位与角色路由(read-only)——roleHomeRouting + workstations surface 首个 Core 消费者;IA 可见性面。 */}
+      <WorkspaceRoutingView workspace={workspace} english={locale === "en-US"} />
     </div>
   );
 }
