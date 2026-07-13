@@ -978,3 +978,50 @@ describe("resolveShellRunTrajectoryAudit — concat (Phase 5)", () => {
     expect(res.entries[0].actor).toBe("first");
   });
 });
+
+// ---------------------------------------------------------------------------
+// CodeX P2 regression — a provider that RESOLVES with a malformed value
+// (null / non-array / array-with-null) must be dropped, NEVER crash the resolver.
+// ---------------------------------------------------------------------------
+
+describe("concat resolvers survive malformed (resolved, not thrown) provider results", () => {
+  it("attention: null / non-array / array-with-null are dropped; clean sources still merge", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      registerPackContributions("p", {
+        attentionSources: [
+          attentionSource({ providerId: "att-null", buildAttention: vi.fn(async () => null as never) }),
+          attentionSource({ providerId: "att-obj", buildAttention: vi.fn(async () => ({ not: "an array" }) as never) }),
+          attentionSource({
+            providerId: "att-holey",
+            buildAttention: vi.fn(async () => [null as never, anItem({ key: "kept" })]),
+          }),
+          attentionSource({ providerId: "att-ok", buildAttention: vi.fn(async () => [anItem({ key: "ok" })]) }),
+        ],
+      });
+      // must not reject
+      const res = await resolveShellAttention({ workspace, english: true });
+      const keys = res.items.map((i) => i.key).sort();
+      expect(keys).toEqual(["kept", "ok"]); // holey array kept its valid item; garbage sources contributed nothing
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("operation-suggestions & workstations & audit: malformed results do not throw", async () => {
+    registerPackContributions("p", {
+      operationSuggestionSources: [
+        opSuggestionSource({ providerId: "ops-bad", buildOperationSuggestions: vi.fn(async () => "nope" as never) }),
+      ],
+      workstationSources: [
+        workstationSource({ providerId: "ws-bad", buildWorkstations: vi.fn(async () => [undefined as never]) }),
+      ],
+      agentRunAuditSources: [
+        auditSource({ providerId: "audit-bad", buildRunAuditEntries: vi.fn(async () => null as never) }),
+      ],
+    });
+    await expect(resolveShellOperationSuggestions({ workspace, english: true })).resolves.toMatchObject({ suggestions: [] });
+    await expect(resolveShellWorkstations({ workspace, english: true })).resolves.toMatchObject({ workstations: [] });
+    await expect(resolveShellRunTrajectoryAudit({ workspace, english: true })).resolves.toMatchObject({ entries: [] });
+  });
+});

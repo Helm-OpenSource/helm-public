@@ -221,9 +221,28 @@ type SourceOutcome<TItem> =
   | { kind: "unreturned"; reason: "timeout" | "error" };
 
 /**
+ * Sanitize a provider build result at the aggregation boundary. A provider can
+ * resolve **successfully** with a runtime-invalid value (`null`, a non-array, or
+ * an array containing `null` / non-object items); the per-surface conformance
+ * validators iterate + `Object.entries(item)` and would THROW on such a value,
+ * rejecting the whole resolver instead of dropping the offending source. We
+ * therefore coerce to a clean array of non-null objects here, so the promised
+ * "drop the source, don't fail the surface" behavior holds even when a provider
+ * returns garbage rather than throwing. (Mainline's single-winner path validates
+ * inside its own try/catch, so it is already protected.)
+ */
+function sanitizeSourceItems<TItem>(items: unknown): ReadonlyArray<TItem> {
+  if (!Array.isArray(items)) return [];
+  return items.filter(
+    (item): item is TItem => item != null && typeof item === "object",
+  );
+}
+
+/**
  * Race a source build against a per-source timeout; never throws. The build
  * receives an `AbortSignal` that is aborted when the timeout fires, so a
  * cooperative provider can cancel its in-flight work instead of leaking it.
+ * A malformed-but-resolved result is sanitized (see `sanitizeSourceItems`).
  */
 async function runSourceWithTimeout<TItem>(
   build: (signal: AbortSignal) => Promise<ReadonlyArray<TItem>>,
@@ -241,7 +260,10 @@ async function runSourceWithTimeout<TItem>(
   try {
     return await Promise.race([
       build(controller.signal)
-        .then((items): SourceOutcome<TItem> => ({ kind: "items", items }))
+        .then((items): SourceOutcome<TItem> => ({
+          kind: "items",
+          items: sanitizeSourceItems<TItem>(items),
+        }))
         .catch((error): SourceOutcome<TItem> => {
           onError(error);
           return { kind: "unreturned", reason: "error" };
