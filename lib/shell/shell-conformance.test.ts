@@ -327,8 +327,9 @@ describe("role lens + per-preset destination catalog (Appendix B row-by-row)", (
       getDestinationCatalog(key).primary.map((e) => e.href);
 
     // 附录 B：主线卡带·需你拍板（同为 /dashboard 控制塔段①②）·复核队列·周期复盘深链
+    // 控制塔入口带 ?stay=1 逃生口:配了 defaultLandingPath 的租户才进得去控制塔(CodeX P1)。
     expect(primaryHrefs("FOUNDER_CEO")).toEqual([
-      "/dashboard",
+      "/dashboard?stay=1",
       "/approvals",
       "/reports",
     ]);
