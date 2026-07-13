@@ -8,118 +8,141 @@ public_safety: Tenant-neutral Agent-era UI / IA design methodology. Design philo
 
 # Helm Agent 时代 UI / IA 设计方法论 / Helm Agent-Era UI / IA Design Methodology
 
-> 本文把"Agent 时代企业软件 UI 不消失而转型"这一论断，收敛为 Helm 的**可执行 IA / UI 设计方法论**：surface 原型、操作分流决策程序、边界铁律与衡量口径。它是 [默认经营工作区重构蓝图](HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md) 的**方法论上位**——蓝图落"建哪些 surface"，本文答"任何新能力该落哪类 surface、为什么、边界是什么"。
+> 本文把"Agent 时代企业软件 UI 不消失而转型"这一论断，收敛为 Helm 的**可执行 IA / UI 设计方法论**：控制面职责、按风险分流的路由矩阵、Agent-ready 变更包、初始化模式、边界铁律、底层升级要求与衡量口径。它是 [默认经营工作区重构蓝图](HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md) 的**方法论上位**——蓝图落"建哪些 surface"，本文答"任何新能力该落哪类 surface、为什么、边界是什么"。
 >
-> This document distills the thesis "enterprise-software UI does not disappear in the Agent era — it transforms" into Helm's **actionable IA / UI design methodology**: surface archetypes, an operation-routing decision procedure, boundary rules, and measurement. It is the methodological layer above the [Default Operating Workspace Refactor Blueprint](HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md): the blueprint decides *which* surfaces to build; this decides *where any new capability belongs, why, and under what boundaries*.
+> This document distills the thesis "enterprise-software UI does not disappear in the Agent era — it transforms" into Helm's **actionable IA / UI design methodology**: the responsibilities of a co-control plane, a risk-based routing matrix, the Agent-ready Change Packet, the initialization pattern, boundary rules, substrate requirements, and measurement. It is the methodological layer above the [Default Operating Workspace Refactor Blueprint](HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md).
 
 ## 0. 论断 / Thesis
 
-过去，UI 是**人的操作入口**：填表单、点按钮，人是执行者，界面是每个动作的输入面。
+过去，UI 是**人的唯一操作入口**：填表单、点按钮，人是执行者，界面是每个动作的输入面。
 
-Agent 时代，UI **不消失而转型**为**监督面**：Agent 自动处理业务流程，**人只在关键节点确认**。系统底层逻辑不变——变的是执行主体，从"人操作"升级为"**人与 Agent 共同执行**"。
+Agent 时代，UI **不消失而转型**——不是退化为"审批中心"，而是升级为**人与 Agent 的共同控制面（co-control plane）**。它承担六件事：
 
-因此，UI 的默认形态从"每个功能一个操作屏"转为三类**监督性 surface** + 两类**支撑性 surface**（§1），而**不频繁操作根本不需要专用屏**——它们作为结构化**操作建议**交由通用 Agent 执行（§2）。这不是把旧界面换皮，而是**重排信息架构的第一性原理**：先问"这个交互是什么性质"，再决定"落哪类 surface"，多数情况下答案不是"造一个新屏"。
+1. **表达业务意图**（人告诉系统"要达到什么状态"）；
+2. **展示 Agent 的行动计划及影响**（做什么、动哪些对象、什么副作用）；
+3. **授予有边界、可撤销的权限**（最小权限 + 临时授权）；
+4. **处理异常与关键判断**（Agent 处理不了或不该自主处理的）；
+5. **支持人工接管与直接操作**（事实查询、探索分析、策略模拟、紧急接管仍需直接界面）；
+6. **展示执行回执、证据与审计轨迹**（谁提出、谁批准、Agent 做了什么、结果与能否回滚）。
 
-In the Agent era, UI transforms into a **supervision layer**: Agents run business processes; humans confirm only at key nodes. The default UI shape shifts from "one operation screen per feature" to three **supervisory** surfaces + two **supporting** surfaces (§1), and **infrequent operations need no dedicated screen at all** — they are surfaced as structured **operation suggestions** executed via a general-purpose Agent (§2). This re-orders IA from first principles: ask *what kind of interaction is this* before deciding *which surface it lands on* — and most often the answer is not "build a new screen."
+所以 UI **不会只剩审批队列**——但它的重心从"逐项人工操作"移到"频繁判断 + 监督 Agent 执行"。一句话概括本方法论：
 
-## 1. Surface 原型：三台一箱 + 两支撑面 / Surface Archetypes
+> **UI 服务于频繁判断，通用 Agent 代办低频程序，领域 Agent 承担持续流程，回执体系建立人机协作的信任。**
 
-任何面向经营者的界面，归入以下五类 surface 原型之一。**不再按"功能"切屏，而按"人与 Agent 的协作性质"切 surface。**
+In the Agent era UI transforms into a **human–Agent co-control plane** (not merely an approval center). It carries six responsibilities: express business intent; show the Agent's plan and impact; grant bounded, revocable permissions; handle exceptions and key judgements; support human takeover and direct operation (fact-query, exploration, strategy simulation, emergency takeover still need direct interfaces); and surface receipts, evidence, and audit trails. UI serves frequent **judgement**; general Agents handle low-frequency **procedures**; domain Agents run continuous **processes**; the **receipt** system builds human–Agent trust.
 
-| # | 原型 / Archetype | 性质 | 人的角色 | Helm 已建 surface |
-|---|---|---|---|---|
-| A | **监督台** Supervision desk | 一眼看全盘经营健康与卡点 | 看，判断"哪里堵" | 控制塔 home（经营主线 mainline + 北极星 KPI）|
-| B | **审批台** Approval desk | 建议 → 决策，关键节点人工确认 | **拍板**（review-first 红线）| `/approvals`（+ mainline `suggestion_ready_pending_human` 档）|
-| C | **异常处理台 / Agent 收件箱** Exception desk / Agent inbox | 汇集 Agent 无法自主处理的异常/待关注任务 | 处理例外 | 注意力流 attention surface |
-| D | **运行轨迹审计面** Run-trajectory audit | 看 Agent 究竟做了什么 | 追责 / 建信任 | 运行轨迹审计 surface（AgentRunCapsule/SARP 投影）|
-| E | **操作建议面** Operation-suggestion surface | 不频繁操作作为可交通用 Agent 执行的结构化建议 | 经通用 Agent 补完 | 操作建议 surface |
+## 1. 五主面 / The Five Primary Surfaces
 
-A/B/C 是**监督性主面**（日常经营的三个核心动作：看全盘、拍板、处理异常）；D/E 是**支撑面**（问责与长尾操作）。角色分流（roleHomeRouting）把每个角色**默认落在其最相关的台**；工位（workstations）登记"哪些台存在、谁的家在哪"。
+按"人与 Agent 的协作性质"切 surface（不再按功能切屏）：
 
-Surfaces A/B/C are the three daily supervisory actions (see the whole, decide, handle exceptions); D/E support them (accountability + the long tail). Role-home routing lands each role on its most relevant desk; workstation descriptors register which desks exist and whose home is where.
+| 主面 / Surface | 承载 | 人的角色 |
+|---|---|---|
+| **① 经营控制塔** Operating control tower | 当前主线、关键判断、风险与推进状态 | 看全盘、判断"哪里堵" |
+| **② 决策队列** Decision queue | **真正需要人拍板**的事项（不做普通通知堆积） | 拍板（review-first 红线）|
+| **③ 实施队列** Implementation queue | 初始化 / 配置 / 资源接入 / 升级等**可交通用 Agent 的变更包** | 授权 + 确认关键步 |
+| **④ 异常工作台** Exception workbench | 失败、冲突、权限不足、证据缺失、人工接管 | 处置例外、接管 |
+| **⑤ 回执与审计** Receipts & audit | 谁提出、谁批准、Agent 做了什么、产出什么、能否回滚 | 追责、建信任 |
 
-## 2. IA 核心原则：操作按"频率 × 可重复性"分流 / Core IA Principle: route operations by frequency × repeatability
+外加保留**直接界面**：事实查询、探索分析、策略模拟、canonical action 页——这些**不塌缩**为队列，因为它们是人的判断本身。
 
-**并非每个操作都配得上一个屏。** 按频率与可重复性把操作分三类，各有归宿：
+## 2. 路由原则：风险 × 标准化 × 可逆性（不止频率）/ Routing by risk × standardization × reversibility
 
-1. **高频、可重复、在流程内的操作** → **Agent 自主执行**（在其授权阶梯内 observer→shadow→active），人**在关键节点确认**（落 B 审批台）。不为每个动作造按钮。
-2. **异常 / 需人判断的在途事项** → **Agent 收件箱**（C 异常台）：severity 分级、角色过滤、导航到既有人审流程。
-3. **不频繁 / 一次性 / 初始化操作**（安装初始化、连接器接入、数据播种、一次性迁移、一次性配置）→ **不建专用 UI**，而作为**结构化操作建议**（E 操作建议面）：每条自带 `做什么 / 为什么 / 前置条件 / 证据引用 / 期望结果 / 验证方式`，由人**通过通用 Agent（Claude Code / CodeX / 悟空 / WorkBuddy）执行补完**。**Helm 决定"做什么"（建议），通用 Agent 执行"怎么做"（人监督），结果回流为证据。**
+**不能只按频率判断。** 频率决定"谁来做"，但风险、标准化程度、可逆性共同决定"怎么交互、谁保留控制"：
 
-第 3 条是本方法论最强的 IA 简化：它把历来"长尾罕见管理屏"整类**塌缩**为"一个操作建议面 + 通用 Agent 执行"。**UI 表面积收缩，系统能力不减**——新增一个罕见运维能力，默认产出一条操作建议，而非一个新屏。
+| 工作类型 | 合适的交互方式 |
+|---|---|
+| 高频、标准、低风险、可逆 | **领域 Agent** 后台自动执行，UI 展示摘要与异常 |
+| 低频、标准、低风险、可逆 | **通用 Agent**（Codex / Claude Code / 悟空 / WorkBuddy）按**标准变更包**执行 |
+| 高频但高风险 | 受约束自动化 + 抽样复核 + **额度与策略闸门** |
+| 低频、高风险、不可逆 | Agent 准备方案与 **dry-run**，人审批或**亲自执行** |
+| 高歧义、探索性 | **人在 UI 中判断**，Agent 提供分析与候选方案 |
 
-> **判据（frequency × repeatability 矩阵）**：高频 → Agent 跑 + 审批台确认；低频但**每次形态相似** → 操作建议（模板化，通用 Agent 高效执行）；低频且**每次都不同** → 操作建议 + 更重的人工判断，仍不建专用屏。唯一该建专用屏的：**高频、且是经营主线一等公民的能力面**（如复核台本身）。
+**原则**：
 
-Principle 3 is the methodology's strongest IA simplification: it collapses the historical long tail of rare admin screens into one operation-suggestion surface + general-agent execution. UI surface area shrinks while capability does not. A new rare operational capability yields a *suggestion*, not a *screen*.
+> **高频标准流程适合领域 Agent；低频标准流程适合通用 Agent；高风险与高歧义流程始终保留人工控制面。**
 
-## 3. 设计决策程序 / Design Decision Procedure
+## 3. 操作建议 → Agent-ready 变更包 / Operation suggestion → Agent-ready Change Packet
+
+不频繁 / 一次性操作**不建专用屏**，作为结构化建议交通用 Agent 执行。但"操作建议"**不能只是自然语言提示**（如"请配置数据库"）——它必须是标准化的 **Agent-ready Change Packet**，让任何符合契约的通用 Agent 无需自己猜步骤、权限与成功标准。至少包含：
+
+| 字段 | 含义 |
+|---|---|
+| `goal` | 要达到什么**状态** |
+| `currentState` | 当前诊断结果 |
+| `prerequisites` | 缺少哪些依赖 |
+| `requiredPermissions` | 需要什么权限（最小集） |
+| `proposedChanges` | 准备修改什么 |
+| `effectLevel` | 只读 / 配置变更 / 外部副作用 |
+| `forbiddenActions` | 明确禁止什么 |
+| `dryRun` | 如何预演 |
+| `approvalPolicy` | 哪些步骤需要谁确认 |
+| `rollback` | 失败后如何恢复 |
+| `expectedReceipts` | 完成后必须返回什么证据 |
+
+> **Helm 不内置 Codex / Claude Code**，而是让自己 **agent-addressable**：任何符合变更包契约的通用 Agent 都能操作它。这既提升交付工程师体验，又不把 Helm 扩张成另一个通用 Agent 平台。
+
+（现有 `operationSuggestionSources` surface 的 `agentBrief` 自由文本是 v1 雏形；v2 目标是把它升级为上述结构化变更包契约——见蓝图后续 Phase。）
+
+## 4. 初始化模式 / Initialization Pattern
+
+安装与初始化尤其适合变更包模式，但要区分**安装前**与**安装后**：
+
+1. **安装前**：仓库提供 `doctor`、环境契约、配置 schema 与 bootstrap manifest。
+2. **首次启动后**：`/setup` 诊断材料、资源与权限状态。
+3. **Helm 生成初始化变更包**（而非要求交付工程师逐页填表）。
+4. **用户把变更包交给自己选择的通用 Agent。**
+5. **Agent 先返回**计划、配置 diff、权限需求与 dry-run。
+6. **人只确认**涉及凭据、生产环境或不可逆变化的步骤。
+7. **Agent 执行**幂等命令并完成验证。
+8. **Helm 读取执行回执**，更新资源状态、失败原因与下一步建议。
+
+## 5. 设计决策程序 / Design Decision Procedure
 
 面对任何新能力 / 新交互，按序回答：
 
-1. **这是什么性质的交互？** —— (a) 一条在途业务流程 / (b) 一次决策或审批 / (c) 一个异常待办 / (d) 一次不频繁 / 一次性操作 / (e) 一项问责或审计需求。
-2. **路由到原型：**
-   - (a) → **A 监督台**呈现状态 + 让 Agent 跑；把它作为经营主线的一个节点暴露（不为其造独立操作屏）。
-   - (b) → **B 审批台**（建议 → 人工确认；继承职责分离 + 拒绝分类 + 执行回执）。
-   - (c) → **C 异常台 / Agent 收件箱**（attention item：severity + roleCategory + 导航）。
-   - (d) → **E 操作建议面**（结构化建议交通用 Agent）。
-   - (e) → **D 运行轨迹审计面**（只读运行记录）。
-3. **默认不建专用屏**——除非它是"高频且经营主线一等公民"的能力面（§2 判据）。若要建，先证明五原型都不合适。
-4. **套用边界铁律（§4）**：只读/只导航、徽标无执行态、关键节点人工确认、建议≠执行、无 PII/secret、fail-closed/fail-open 方向性。
-5. **登记与路由**：新能力若落某台，用 roleHomeRouting 决定哪些角色的家落此台、用 workstation 登记其存在；**不新增游离于五原型之外的顶级导航项**。
+1. **这是什么性质的交互？** —— 在途业务流程 / 决策拍板 / 变更实施 / 异常处置 / 问责审计 / 或**人的直接判断（查询/探索/模拟/接管）**。
+2. **按 §2 矩阵定"谁做、怎么交互"**：频率×风险×标准化×可逆性 → 领域 Agent 自动 / 通用 Agent 变更包 / 受约束自动化+闸门 / 人审批或亲执 / 人在 UI 判断。
+3. **路由到 §1 五主面之一**；直接判断类保留**直接界面**，不塌缩为队列。
+4. **默认不建专用屏**——除非它是高频经营主线一等公民、或不可塌缩的直接判断面。
+5. **套边界铁律（§6）**，并按 §7 记录可审计语义事件。
 
-This procedure is the operational core: classify the interaction, route to an archetype, default to *no new screen*, apply the boundary rules, and register via role-home routing rather than adding free-floating navigation.
+## 6. 边界铁律 + 底层必须升级 / Boundaries + the substrate MUST evolve
 
-## 4. 边界铁律（自 surface 契约继承）/ Boundary Rules (inherited from the surface contracts)
+**呈现契约边界**（自 surface 契约继承）：只读/只导航、徽标无执行态、人在关键节点确认、建议≠执行、无 PII/secret（fail-closed）、fail 方向性（信息 fail-open / 路由 fail-safe / 单一生效无绑定回 Core / 三态禁造数）。
 
-方法论与蓝图 §4.1 的 surface 契约**同一套边界**，任何 surface 设计不得违反：
+**修正一个常见误述**：说"系统底层逻辑不变"**不准确**。业务对象与核心规则可以延续，但软件**底层必须新增或强化**才能安全承接人机协作：
 
-- **只读 / 只导航**：surface 数据条目只有数据字段与站内 `href`（导航到既有人审流程）；**契约层无动作回调字段**。
-- **徽标无执行态**：接管程度词表最高到"建议已就绪·待人工确认"；公开面**不表达自动执行 / 急停**（Core 无自动执行链路，展示即虚假能力宣称）。
-- **人在关键节点确认**：高风险动作必须真实用户身份确认；"本人撰写 + 本人批准"的高风险自批阻断（职责分离）。
-- **建议 ≠ 执行**：操作建议的 `agentBrief` 是给通用 Agent 的**声明式规格**，不是可执行回调；Helm 绝不代执行。
-- **无 PII / secret**：脱敏仅 ref；疑似手机号/身份证/邮箱/令牌/密钥一律 **fail-closed 拒**（审计面与操作建议面尤重）。
-- **fail 方向性**：信息展示 fail-open（降级不空屏）；角色路由 fail-safe 向最低信息面；单一生效 provider 无绑定 / 冲突一律回 Core default；三态禁造数（`measured | pending_source | no_data`）。
+- 可被 Agent 调用的**工具与命令契约**（agent-addressable）；
+- **最小权限**与**临时授权**（有边界、可撤销）；
+- **幂等、重试、超时、取消**；
+- **dry-run 与变更 diff**；
+- **人机职责分离**与**禁止自批**；
+- **执行回执、审计与证据链**；
+- **回滚与补偿**机制；
+- **并发冲突与状态一致性**。
 
-**诚实边界**：surface 契约是**形状约束 + provider 选择**，不是执行隔离保证——provider 仍是进程内函数，当前无插件 sandbox。方法论约束的是**呈现与协作契约**，不替代运行时权限与授权。
+## 7. 运行轨迹 = 可审计语义事件（非模型思维）/ Trajectory = auditable semantic events, not model thinking
 
-## 5. 衡量 / Measurement
+运行轨迹审计面**不展示模型的思维过程 / 推理链**，而展示**可审计的语义事件**：调用了什么工具、读取与修改了什么对象、通过了什么策略、由谁批准、结果与证据是什么。审计的对象是**行为与授权**，不是 token 级思考。
 
-方法论落地的可观测口径（与蓝图 UX 门互补）：
+## 8. Public Core 分阶段落点 / Public Core staging
 
-- **屏数 / 点击到决策深度下降**：新增能力中"未新建专用屏"的占比（越高越好）。
-- **协作率**：Agent 自主执行 + 人确认的动作占比 vs 纯人工操作占比（飞轮成熟度）。
-- **长尾覆盖**：不频繁操作由**操作建议**服务的比例 vs 新建屏的比例。
-- **监督效率**：首个判断中位时间、异常解决时间、审批停留时间。
-- **问责覆盖**：有运行轨迹审计记录的 Agent 动作占比。
+Helm 默认界面即 §1 五主面。**第一阶段 Public Core 只做到**：
 
-## 6. 映射到 Helm 已建 surface / Mapping to Helm's Built Surfaces
+- **L0**：只读诊断（`/setup` doctor、资源与权限状态）。
+- **L1**：生成 Agent handoff / 变更包（§3）。
+- **L2**：展示外部 Agent 返回的 dry-run 与执行回执。
 
-本方法论不是空想——Helm 公开 Core 已建的 7 个 experimental shell surface **就是**这套原型的实现（蓝图 Phase 1–5）：
+**暂不内置**：凭据托管、通用执行器、完整 Agent orchestration。——既提升交付工程师体验，又不把 Helm 扩张成通用 Agent 平台。
 
-| 方法论原型 | Helm surface（PackContributions，experimental）|
-|---|---|
-| A 监督台 | `mainline`（经营主线，单一生效）· `northstarKpiSources`（北极星 KPI，concat）|
-| B 审批台 | `/approvals` + mainline `suggestion_ready_pending_human` 档 |
-| C 异常台 / Agent 收件箱 | `attentionSources`（注意力流，concat）|
-| D 运行轨迹审计面 | `agentRunAuditSources`（AgentRunCapsule/SARP 投影，concat）|
-| E 操作建议面 | `operationSuggestionSources`（concat）|
-| IA 路由 | `roleHomeRouting`（单一生效）· `workstationSources`（concat）|
+## 9. 衡量 · 映射 · 反模式 / Measurement · Mapping · Anti-patterns
 
-每个 surface 都遵 §4 边界（validator + Core 默认 + 空 store 镜像平价 + fail-closed）。第二真实消费者（如 overlay provider）接入后，契约方可脱 experimental 冻结。
+**衡量**：新增能力中"未新建专用屏"占比↑；Agent 自主 + 人确认 vs 纯人工操作占比（协作率）；不频繁操作由变更包服务 vs 新建屏占比；首个判断中位时间 / 异常解决时间 / 决策停留时间；有审计回执的 Agent 动作占比。
 
-The seven experimental shell surfaces already built in public Core (blueprint Phases 1–5) *are* the implementation of these archetypes. Each obeys the §4 boundaries. A contract un-freezes from `experimental` only after a second real consumer registers.
+**映射到已建 surface**（蓝图 Phase 1–5 的 7 个 experimental shell surface 是本方法论的实现底座）：经营控制塔 = `mainline` + `northstarKpiSources`；决策队列 = `/approvals` + mainline `suggestion_ready_pending_human`；异常工作台 = `attentionSources`；回执与审计 = `agentRunAuditSources`（语义事件，§7）；实施队列 = `operationSuggestionSources`（v2 升级为变更包，§3）；IA 路由 = `roleHomeRouting` + `workstationSources`。
 
-## 7. 反模式 / Anti-patterns
+**反模式**：为每个动作造按钮 / 为每个能力造屏；公开徽标表达"执行中/已自动/急停"；把不频繁操作做成一次性向导屏（应交变更包）；变更包里塞可执行回调 / 真凭据；审计面展示模型思维链或泄漏 PII；把直接判断面（查询/探索/模拟/接管）也塌缩成队列；宣称"底层逻辑不变"而不落 §6 的底层升级。
 
-- **为每个动作造按钮 / 为每个能力造屏**——回到"人操作入口"旧范式；应路由到五原型。
-- **在公开徽标表达"执行中 / 已自动完成 / 急停"**——over-claim 执行能力，违背徽标无执行态。
-- **把不频繁操作做成一次性向导屏**——应作为操作建议交通用 Agent；一次性向导是长尾屏膨胀之源。
-- **操作建议里塞可执行回调 / 真凭据**——建议≠执行；`agentBrief` 只描述，不携带 secret。
-- **新增游离于五原型之外的顶级导航项**——IA 熵增；先证明五原型都不合适。
-- **审计 / 异常面泄漏 PII**——必须脱敏仅 ref，fail-closed。
+## 附：与既有治理的衔接 / Appendix
 
-## 附：与既有治理的衔接 / Appendix: ties to existing governance
-
-- 自动化等级阶梯（observer → shadow → active）决定"Agent 自主 vs 人确认"的分界，是 §2 第 1 条的运行时依据。
-- [AI 推荐治理](HELM_AI_RECOMMENDATION_GOVERNANCE.md)、[智能体化治理要求](HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md) 提供 B/D 面的治理契约（建议、证据、人审、owner 决策边界；AgentRunCapsule / SARP）。
-- 本方法论**不新增运行时能力**，只规范呈现与协作 IA；执行仍按代码、测试、回执与 review 分阶段落地。
+自动化等级阶梯（observer → shadow → active）是 §2 路由的运行时依据；[AI 推荐治理](HELM_AI_RECOMMENDATION_GOVERNANCE.md)、[智能体化治理要求](HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md) 提供决策队列 / 回执审计的治理契约。本方法论**不新增运行时能力**，只规范呈现与协作 IA + 底层升级要求；执行仍按代码、测试、回执与 review 分阶段落地。
