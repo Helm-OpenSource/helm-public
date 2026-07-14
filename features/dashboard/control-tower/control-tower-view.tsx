@@ -30,6 +30,7 @@ export function ControlTowerView({
   english,
   lens,
   basePresetKey,
+  workstationHomeEntry,
   mainline,
   northstarText,
   viewModel,
@@ -39,6 +40,7 @@ export function ControlTowerView({
   english: boolean;
   lens: RoleLens;
   basePresetKey: string | null;
+  workstationHomeEntry?: { href: string; label: string } | null;
   mainline: MainlineReadout;
   northstarText: string | null;
   viewModel: Pick<
@@ -52,7 +54,10 @@ export function ControlTowerView({
   /** ConnectorBindingSuccessSheet，与旧版一致置于根节点内首位 */
   connectorSheet: React.ReactNode;
 }) {
-  const catalog = getDestinationCatalog(basePresetKey);
+  const catalog = withPrimaryWorkstationEntry(
+    getDestinationCatalog(basePresetKey),
+    workstationHomeEntry,
+  );
   const scopedNorthstarText = resolveAssetScopedNorthstarText(
     northstarText,
     mainline.assetScope,
@@ -295,6 +300,26 @@ function DeskEntryPills({
       ) : null}
     </>
   );
+}
+
+function withPrimaryWorkstationEntry(
+  catalog: DestinationCatalog,
+  entry: { href: string; label: string } | null | undefined,
+): DestinationCatalog {
+  if (!entry) return catalog;
+  const primary = [
+    {
+      href: entry.href,
+      labelZh: entry.label,
+      labelEn: entry.label,
+    },
+    ...catalog.primary.filter((item) => item.href !== entry.href),
+  ].slice(0, 4);
+  return {
+    primary,
+    secondary: catalog.secondary,
+    drawer: catalog.drawer,
+  };
 }
 
 function DeskEntries({
