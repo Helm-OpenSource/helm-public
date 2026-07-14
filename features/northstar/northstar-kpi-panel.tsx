@@ -1,6 +1,9 @@
 import "server-only";
 
-import type { WorkspaceLike } from "@/lib/extensions/registry-types";
+import type {
+  ShellRuntimeContext,
+  WorkspaceLike,
+} from "@/lib/extensions/registry-types";
 import { resolveShellNorthstarKpis } from "@/lib/shell/resolve-shell-experience";
 
 import { DIRECTION_COPY, KPI_SECTION_COPY, formatKpiValue, t } from "./kpi-copy";
@@ -21,11 +24,17 @@ const DIRECTION_CLASS: Record<"up" | "down" | "neutral", string> = {
 export async function NorthstarKpiPanel({
   workspace,
   english,
+  runtimeContext,
 }: {
   workspace: WorkspaceLike;
   english: boolean;
+  runtimeContext?: ShellRuntimeContext;
 }) {
-  const { kpis } = await resolveShellNorthstarKpis({ workspace, english });
+  const { kpis } = await resolveShellNorthstarKpis({
+    workspace,
+    english,
+    runtimeContext,
+  });
   if (kpis.length === 0) {
     // 空态克制:控制塔已有主线,KPI 无源时不占版面,仅一行诚实说明。
     return (
