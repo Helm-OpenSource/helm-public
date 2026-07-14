@@ -60,14 +60,32 @@ export type MainlineNode = {
   pendingSourceNote?: string;
 };
 
+export type MainlineAssetScopeOption = {
+  value: string;
+  label: string;
+  href: string;
+  current: boolean;
+  basisRef: string;
+};
+
+export type MainlineAssetScopeControl = {
+  label: string;
+  currentValue: string;
+  defaulted: boolean;
+  basisRef: string;
+  options: ReadonlyArray<MainlineAssetScopeOption>;
+};
+
 export type MainlineReadout = {
   asOf: string;
   asOfBasisRef?: string;
   nodes: ReadonlyArray<MainlineNode>;
+  assetScope?: MainlineAssetScopeControl;
 };
 
 const MIN_NODES = 1;
 const MAX_NODES = 8;
+const MAX_ASSET_SCOPE_OPTIONS = 12;
 
 const ISO_TIMESTAMP_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -106,6 +124,55 @@ export function validateMainlineReadout(
   }
   if (readout.nodes.length < MIN_NODES || readout.nodes.length > MAX_NODES) {
     issues.push({ nodeKey: null, issue: "node_count_out_of_range" });
+  }
+  if (readout.assetScope) {
+    const control = readout.assetScope;
+    if (!isNonEmptyString(control.label)) {
+      issues.push({ nodeKey: null, issue: "asset_scope_empty_label" });
+    }
+    if (!isNonEmptyString(control.currentValue)) {
+      issues.push({ nodeKey: null, issue: "asset_scope_empty_current_value" });
+    }
+    if (!isNonEmptyString(control.basisRef)) {
+      issues.push({ nodeKey: null, issue: "asset_scope_empty_basis_ref" });
+    }
+    if (typeof control.defaulted !== "boolean") {
+      issues.push({ nodeKey: null, issue: "asset_scope_defaulted_not_boolean" });
+    }
+    if (
+      !Array.isArray(control.options) ||
+      control.options.length < 1 ||
+      control.options.length > MAX_ASSET_SCOPE_OPTIONS
+    ) {
+      issues.push({ nodeKey: null, issue: "asset_scope_option_count_out_of_range" });
+    } else {
+      const seenValues = new Set<string>();
+      for (const option of control.options) {
+        const optionKey = isNonEmptyString(option.value) ? option.value : null;
+        if (!isNonEmptyString(option.value)) {
+          issues.push({ nodeKey: null, issue: "asset_scope_option_empty_value" });
+        } else if (seenValues.has(option.value)) {
+          issues.push({ nodeKey: null, issue: "asset_scope_option_duplicate_value" });
+        } else {
+          seenValues.add(option.value);
+        }
+        if (!isNonEmptyString(option.label)) {
+          issues.push({ nodeKey: null, issue: "asset_scope_option_empty_label" });
+        }
+        if (!isNonEmptyString(option.basisRef)) {
+          issues.push({ nodeKey: null, issue: "asset_scope_option_empty_basis_ref" });
+        }
+        if (typeof option.current !== "boolean") {
+          issues.push({ nodeKey: null, issue: "asset_scope_option_current_not_boolean" });
+        }
+        if (!isInSitePath(option.href)) {
+          issues.push({ nodeKey: null, issue: `asset_scope_option_href_not_in_site:${optionKey ?? "unknown"}` });
+        }
+      }
+      if (!seenValues.has(control.currentValue)) {
+        issues.push({ nodeKey: null, issue: "asset_scope_current_value_not_in_options" });
+      }
+    }
   }
   const seenKeys = new Set<string>();
   for (const node of readout.nodes) {

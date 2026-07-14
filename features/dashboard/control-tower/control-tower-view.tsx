@@ -114,6 +114,10 @@ export function ControlTowerView({
             : "全部为建议——未经人工复核不执行、不外发。"
         }
       />
+      <AssetScopeSwitch
+        control={mainline.assetScope}
+        english={english}
+      />
 
       {/* 段① 经营主线（北极星一行 + 纯展示卡带摘要，不可点击） */}
       <div className="space-y-2">
@@ -205,6 +209,49 @@ export function ControlTowerView({
         </div>
       </details>
     </div>
+  );
+}
+
+function AssetScopeSwitch({
+  control,
+  english,
+}: {
+  control: MainlineReadout["assetScope"];
+  english: boolean;
+}) {
+  if (!control || control.options.length < 2) return null;
+  return (
+    <nav
+      aria-label={english ? "Operating asset" : "运营资产"}
+      className="flex flex-wrap items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs"
+      data-shell-asset-scope
+    >
+      <span className="font-medium text-[color:var(--foreground)]">
+        {control.label}
+      </span>
+      {control.options.map((option) => (
+        <Link
+          key={option.value}
+          href={option.href}
+          aria-current={option.current ? "page" : undefined}
+          className={
+            "rounded-md border px-2.5 py-1 transition " +
+            (option.current
+              ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
+              : "border-[color:var(--border)] text-[color:var(--foreground)] hover:bg-[color:var(--surface-subtle)]")
+          }
+        >
+          {option.label}
+        </Link>
+      ))}
+      {control.defaulted ? (
+        <span className="text-[color:var(--muted-foreground)]">
+          {english
+            ? "Unknown asset was reset to the default."
+            : "未知资产参数已回退到默认资产。"}
+        </span>
+      ) : null}
+    </nav>
   );
 }
 
