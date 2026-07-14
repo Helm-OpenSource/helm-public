@@ -17,13 +17,12 @@ const DEFAULT_LANDING = "/dashboard";
  * 工作区着陆路径(角色感知)—— role-home-routing surface 的读侧消费者(蓝图 §4.2 Phase 3）。
  *
  * 按注册的 role-home-routing 目的地为当前成员选落点:
- *  - workstation 目的地 → 该工位 href（overlay 原生页；如光潽管理 preset → /guangpu/home 可点击原生
- *    控制塔、GENERAL_OPERATOR → /guangpu/seat-desk）。
+ *  - workstation 目的地 → 该工位 href（overlay 贡献的站内原生页;工位 key 与 href 均由 provider 提供）。
  *  - control_tower / generic / 无绑定 / 任何异常 → `/dashboard`（Core 默认，逐字节零回归）。
  *
- * 单一生效 + 绑定授权（§4.3）:仅当租户显式绑定 role-home-routing→provider 且解析出 workstation
- * 目的地时才非默认;**Core 默认路由无 workstation 目的地**，故未绑定的租户恒 `/dashboard`（天生租户限定）。
- * fail-safe:任一步抛错 → `/dashboard`（着陆绝不空屏）。
+ * 单一生效 + 绑定授权（§4.3）:仅当某租户显式绑定 role-home-routing→provider 且解析出 workstation
+ * 目的地时才非默认;**Core 默认路由无 workstation 目的地**，故未绑定的租户恒 `/dashboard`。
+ * 本模块租户无关:不硬编码任何租户/工位,一切经注册表 + 绑定解析。fail-safe:任一步抛错 → `/dashboard`。
  */
 export async function resolveWorkspaceLandingPath(): Promise<string> {
   try {
