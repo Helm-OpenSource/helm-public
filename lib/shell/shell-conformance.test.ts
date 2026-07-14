@@ -193,6 +193,54 @@ describe("mainline conformance validator", () => {
       ).some((i) => i.issue === "node_count_out_of_range"),
     ).toBe(true);
   });
+
+  it("accepts read-only asset-scope navigation and rejects unsafe option hrefs", () => {
+    const readout: MainlineReadout = {
+      ...wrap([baseNode({})]),
+      assetScope: {
+        label: "运营资产",
+        currentValue: "0039",
+        defaulted: false,
+        basisRef: "test:asset-scope",
+        options: [
+          {
+            value: "0039",
+            label: "0039",
+            href: "/dashboard?stay=1&assetScope=0039",
+            current: true,
+            basisRef: "test:asset-scope:0039",
+          },
+          {
+            value: "0038",
+            label: "0038",
+            href: "/dashboard?stay=1&assetScope=0038",
+            current: false,
+            basisRef: "test:asset-scope:0038",
+          },
+        ],
+      },
+    };
+
+    expect(validateMainlineReadout(readout)).toEqual([]);
+    expect(
+      has(
+        {
+          ...readout,
+          assetScope: {
+            ...readout.assetScope!,
+            options: [
+              ...readout.assetScope!.options.slice(0, 1),
+              {
+                ...readout.assetScope!.options[1],
+                href: "https://evil.example",
+              },
+            ],
+          },
+        },
+        "asset_scope_option_href_not_in_site",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("single-winner provider selection (binding-is-authorization)", () => {
