@@ -4,6 +4,7 @@ import { ROLE_PRESET_KEYS } from "@/lib/definitions/role-presets";
 import { resolveRoleLens } from "./role-home";
 import {
   buildCoreDefaultRoleHomeRouting,
+  resolveRoleHomeDestinationFromCandidates,
   resolveRoleHomeDestination,
   validateRoleHomeRoutingTable,
   type RoleHomeRoutingTable,
@@ -80,6 +81,28 @@ describe("resolveRoleHomeDestination", () => {
     expect(resolveRoleHomeDestination(t, "UNKNOWN")).toEqual({ kind: "generic" });
     expect(resolveRoleHomeDestination(t, null)).toEqual({ kind: "generic" });
     expect(resolveRoleHomeDestination(t, "  ")).toEqual({ kind: "generic" });
+  });
+});
+
+describe("resolveRoleHomeDestinationFromCandidates", () => {
+  const t = table({
+    routes: [
+      { roleCategory: "FOUNDER_CEO", destination: { kind: "control_tower" } },
+      { roleCategory: "ADMIN", destination: { kind: "control_tower" } },
+      { roleCategory: "OPERATOR", destination: { kind: "workstation", workstationKey: "collection" } },
+    ],
+  });
+
+  it("tries candidate categories in order before falling back", () => {
+    expect(resolveRoleHomeDestinationFromCandidates(t, [null, "ADMIN"])).toEqual({ kind: "control_tower" });
+    expect(resolveRoleHomeDestinationFromCandidates(t, ["UNKNOWN", "OPERATOR"])).toEqual({
+      kind: "workstation",
+      workstationKey: "collection",
+    });
+  });
+
+  it("keeps the table fallback when no candidate is routed", () => {
+    expect(resolveRoleHomeDestinationFromCandidates(t, [null, "UNKNOWN", " "])).toEqual({ kind: "generic" });
   });
 });
 

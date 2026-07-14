@@ -116,6 +116,25 @@ export function resolveRoleHomeDestination(
 }
 
 /**
+ * Resolve a route from the first explicitly routed category in priority order.
+ *
+ * Callers often have both a tenant role preset category and a coarse
+ * WorkspaceRole. A table miss for the first candidate must not immediately
+ * collapse to fallback if a lower-priority candidate is explicitly routed.
+ */
+export function resolveRoleHomeDestinationFromCandidates(
+  table: RoleHomeRoutingTable,
+  roleCategories: ReadonlyArray<string | null | undefined>,
+): RoleHomeDestination {
+  for (const roleCategory of roleCategories) {
+    if (!isNonEmptyString(roleCategory)) continue;
+    const route = table.routes.find((r) => r.roleCategory === roleCategory);
+    if (route) return route.destination;
+  }
+  return table.fallback;
+}
+
+/**
  * Core 默认路由：由 Phase 1 的 resolveRoleLens 逐 preset 派生——非 generic lens
  * 的角色家 = 控制塔（desk lens 在控制塔内以对应 lens 渲染）；generic lens → GENERIC 面。
  * Core 本体无工位 → 无 workstation 目的地（工位由 Overlay provider 贡献）。fallback = generic。

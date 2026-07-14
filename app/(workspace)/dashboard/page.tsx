@@ -7,9 +7,13 @@ import {
 import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
 import { resolveMemberBasePresetKey } from "@/lib/definitions/workspace-role-preset-catalog";
 import { resolveNorthstarText } from "@/lib/shell/northstar-text";
+import { resolveRoleHomeDestinationFromCandidates } from "@/lib/shell/role-home-routing";
 import {
   resolveShellMainline,
+  resolveShellRoleHomeRouting,
+  resolveShellWorkstations,
   SHELL_MAINLINE_SURFACE_KEY,
+  SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
 } from "@/lib/shell/resolve-shell-experience";
 import { resolveWorkspaceSurfaceBinding } from "@/lib/shell/surface-binding-store";
 import { resolveRoleLens } from "@/lib/shell/role-home";
@@ -84,7 +88,34 @@ export default async function DashboardPage({
     workspaceRole: membership.role,
     rawConfiguration: workspace.configuration,
   });
-  const lens = resolveRoleLens(basePresetKey);
+  const routingBinding = await resolveWorkspaceSurfaceBinding(
+    workspace.id,
+    SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
+  );
+  const [{ table: roleHomeRouting }, { workstations }] = await Promise.all([
+    resolveShellRoleHomeRouting({ workspace, english, binding: routingBinding }),
+    resolveShellWorkstations({ workspace, english }),
+  ]);
+  const roleHomeDestination = resolveRoleHomeDestinationFromCandidates(
+    roleHomeRouting,
+    [basePresetKey, membership.role],
+  );
+  const lens =
+    roleHomeDestination.kind === "control_tower"
+      ? "control_tower"
+      : roleHomeDestination.kind === "workstation"
+        ? "delivery_desk"
+        : resolveRoleLens(basePresetKey);
+  const catalogPresetKey =
+    roleHomeDestination.kind === "control_tower" && !basePresetKey
+      ? "FOUNDER_CEO"
+      : roleHomeDestination.kind === "workstation" && !basePresetKey
+        ? "GENERAL_OPERATOR"
+        : basePresetKey;
+  const workstationHomeEntry =
+    roleHomeDestination.kind === "workstation"
+      ? (workstations.find((item) => item.key === roleHomeDestination.workstationKey) ?? null)
+      : null;
 
   // 主线计数语义（诚实口径，contract 级 countCaliber=daily_schedule）：
   // judgement/review = home-work-entry 的今日排片数（非全量积压，UI 显式标注）；
@@ -118,7 +149,12 @@ export default async function DashboardPage({
       <ControlTowerView
         english={english}
         lens={lens}
-        basePresetKey={basePresetKey}
+        basePresetKey={catalogPresetKey}
+        workstationHomeEntry={
+          workstationHomeEntry?.href
+            ? { href: workstationHomeEntry.href, label: workstationHomeEntry.label }
+            : null
+        }
         mainline={mainline}
         northstarText={resolveNorthstarText(workspace.focusAreas, english)}
         viewModel={viewModel}
