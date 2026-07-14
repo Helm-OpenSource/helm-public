@@ -5,7 +5,10 @@ import {
   type MainlineNode,
   type MainlineReadout,
 } from "@/lib/shell/operating-mainline";
-import { resolveNorthstarText } from "@/lib/shell/northstar-text";
+import {
+  resolveAssetScopedNorthstarText,
+  resolveNorthstarText,
+} from "@/lib/shell/northstar-text";
 import {
   selectSingleWinner,
   type ProviderCandidate,
@@ -463,5 +466,40 @@ describe("northstar text", () => {
       resolveNorthstarText(JSON.stringify(["A", "B", "C"]), true),
     ).toBe("North star: A · B");
     expect(resolveNorthstarText("plain goal", false)).toBe("北极星：plain goal");
+  });
+
+  it("renders workspace northstar text against the current asset scope", () => {
+    const assetScope = {
+      label: "运营资产",
+      currentValue: "0038",
+      defaulted: false,
+      basisRef: "tenant:asset-scope",
+      options: [
+        {
+          value: "0039",
+          label: "0039",
+          href: "/dashboard?assetScope=0039",
+          current: false,
+          basisRef: "tenant:asset-scope:0039",
+        },
+        {
+          value: "0038",
+          label: "0038",
+          href: "/dashboard?assetScope=0038",
+          current: true,
+          basisRef: "tenant:asset-scope:0038",
+        },
+      ],
+    };
+
+    expect(
+      resolveAssetScopedNorthstarText(
+        "北极星：0039资产冷启动、资产日切与逾期口径",
+        assetScope,
+      ),
+    ).toBe("北极星：0038资产冷启动、资产日切与逾期口径");
+    expect(
+      resolveAssetScopedNorthstarText("北极星：资产冷启动", assetScope),
+    ).toBe("北极星：资产冷启动");
   });
 });

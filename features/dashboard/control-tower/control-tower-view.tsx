@@ -10,6 +10,7 @@ import { MainlineStrip } from "@/features/dashboard/control-tower/mainline-strip
 import type { DashboardPageData } from "@/features/dashboard/page-loader";
 import type { DashboardViewModel } from "@/features/dashboard/view-model";
 import type { MainlineReadout } from "@/lib/shell/operating-mainline";
+import { resolveAssetScopedNorthstarText } from "@/lib/shell/northstar-text";
 import {
   getDestinationCatalog,
   type DestinationCatalog,
@@ -52,6 +53,10 @@ export function ControlTowerView({
   connectorSheet: React.ReactNode;
 }) {
   const catalog = getDestinationCatalog(basePresetKey);
+  const scopedNorthstarText = resolveAssetScopedNorthstarText(
+    northstarText,
+    mainline.assetScope,
+  );
 
   if (lens === "generic") {
     return (
@@ -122,7 +127,7 @@ export function ControlTowerView({
       {/* 段① 经营主线（北极星一行 + 纯展示卡带摘要，不可点击） */}
       <div className="space-y-2">
         <p className="text-xs text-[color:var(--muted-foreground)]">
-          {northstarText ??
+          {scopedNorthstarText ??
             (english ? (
               <>
                 No north-star goal set —{" "}
