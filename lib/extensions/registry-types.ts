@@ -29,6 +29,15 @@ export type WorkspaceLike = {
   workspaceClass?: string | null;
 };
 
+export type ShellRuntimeContext = {
+  /**
+   * Optional read-model scope selected by the current shell surface route.
+   * Providers must treat this as untrusted user input and apply their own
+   * allow-list / fail-closed semantics before using it in queries.
+   */
+  assetScope?: string | null;
+};
+
 export type ExtensionAccessContext = {
   subject?: PermissionSubject | null;
   traceId?: string;
@@ -223,6 +232,7 @@ export type MainlineProviderContribution = {
   buildMainline: (input: {
     workspace: WorkspaceLike;
     english: boolean;
+    runtimeContext?: ShellRuntimeContext;
   }) => Promise<MainlineReadout>;
 };
 
@@ -241,6 +251,7 @@ export type NorthstarKpiSourceContribution = {
   buildKpis: (input: {
     workspace: WorkspaceLike;
     english: boolean;
+    runtimeContext?: ShellRuntimeContext;
     signal?: AbortSignal;
   }) => Promise<ReadonlyArray<NorthstarKpi>>;
 };
@@ -263,6 +274,7 @@ export type AttentionSourceContribution = {
     workspace: WorkspaceLike;
     english: boolean;
     roleCategory?: string | null;
+    runtimeContext?: ShellRuntimeContext;
     signal?: AbortSignal;
   }) => Promise<ReadonlyArray<AttentionItem>>;
 };

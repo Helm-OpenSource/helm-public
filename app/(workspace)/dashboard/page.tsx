@@ -20,6 +20,11 @@ import { AttentionInbox } from "@/features/exceptions/attention-inbox";
 import { NorthstarKpiPanel } from "@/features/northstar/northstar-kpi-panel";
 import { LegacyHomeView } from "@/features/dashboard/legacy-home-view";
 import { ConnectorBindingSuccessSheet } from "@/features/dashboard/connector-binding-success-sheet";
+import type { ShellRuntimeContext } from "@/lib/extensions/registry-types";
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -29,25 +34,17 @@ export default async function DashboardPage({
   const params = (await searchParams) ?? {};
   // 优先级链（蓝图 §2.1）：①defaultLandingPath 决定落点 ②?stay=1 逃生口
   // ③controlTowerHome 内容开关 ④角色分流仅内容层视图选择（无 redirect）。
-  const stayParam = Array.isArray(params.stay) ? params.stay[0] : params.stay;
+  const stayParam = firstParam(params.stay);
   if (stayParam !== "1") {
     const { workspace } = await getCurrentWorkspaceSession();
     const landingPath = resolveWorkspaceDefaultLandingPath(workspace.configuration);
     if (landingPath) redirect(landingPath);
   }
-  const entry = Array.isArray(params.entry) ? params.entry[0] : params.entry;
-  const connectorBindingStatus =
-    typeof params.connector_binding_status === "string"
-      ? params.connector_binding_status
-      : Array.isArray(params.connector_binding_status)
-        ? params.connector_binding_status[0]
-        : undefined;
-  const connectorBindingMessage =
-    typeof params.connector_binding_message === "string"
-      ? params.connector_binding_message
-      : Array.isArray(params.connector_binding_message)
-        ? params.connector_binding_message[0]
-        : undefined;
+  const entry = firstParam(params.entry);
+  const assetScope = firstParam(params.assetScope)?.trim() || null;
+  const runtimeContext: ShellRuntimeContext = { assetScope };
+  const connectorBindingStatus = firstParam(params.connector_binding_status);
+  const connectorBindingMessage = firstParam(params.connector_binding_message);
   const pageData = await loadDashboardPageData();
   const { locale, demoMode, english, workspace, membership } = pageData;
 
@@ -104,6 +101,7 @@ export default async function DashboardPage({
     workspace,
     english,
     binding: mainlineBinding,
+    runtimeContext,
     coreDefault: {
       asOf: new Date().toISOString(),
       english,
@@ -129,10 +127,18 @@ export default async function DashboardPage({
       />
       {/* 北极星 KPI(read-only)——northstarKpiSources surface 首个 Core 消费者;经营控制塔指标行。
           金额只给分档、三态禁造数;无 provider 时一行诚实说明,不占版面。 */}
-      <NorthstarKpiPanel workspace={workspace} english={english} />
+      <NorthstarKpiPanel
+        workspace={workspace}
+        english={english}
+        runtimeContext={runtimeContext}
+      />
       {/* 异常工作台 · Agent 收件箱(read-only)——attention surface 首个 Core 消费者。
           控制塔操作者首页之下即异常台;只汇集与导航,不代执行;无 provider 时诚实空态。 */}
-      <AttentionInbox workspace={workspace} english={english} />
+      <AttentionInbox
+        workspace={workspace}
+        english={english}
+        runtimeContext={runtimeContext}
+      />
     </div>
   );
 }

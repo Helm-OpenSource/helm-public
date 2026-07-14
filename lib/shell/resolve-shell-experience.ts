@@ -32,6 +32,7 @@ import type {
   ExtensionAccessContext,
   NorthstarKpiSourceContribution,
   OperationSuggestionSourceContribution,
+  ShellRuntimeContext,
   WorkspaceLike,
   WorkstationSourceContribution,
 } from "@/lib/extensions/registry-types";
@@ -118,6 +119,7 @@ export async function resolveShellMainline(input: {
   coreDefault: CoreDefaultMainlineInput;
   binding: SurfaceBinding | null;
   accessContext?: ExtensionAccessContext;
+  runtimeContext?: ShellRuntimeContext;
 }): Promise<ShellMainlineResolution> {
   const providers = getRegisteredMainlineProviders();
 
@@ -169,6 +171,7 @@ export async function resolveShellMainline(input: {
     const readout = await provider.buildMainline({
       workspace: input.workspace,
       english: input.english,
+      runtimeContext: input.runtimeContext,
     });
     const issues = validateMainlineReadout(readout);
     if (issues.length > 0) {
@@ -336,6 +339,7 @@ export async function resolveShellNorthstarKpis(input: {
   workspace: WorkspaceLike;
   english: boolean;
   accessContext?: ExtensionAccessContext;
+  runtimeContext?: ShellRuntimeContext;
 }): Promise<ShellNorthstarKpiResolution> {
   const sources = getRegisteredNorthstarKpiSources();
   if (sources.length === 0) {
@@ -368,6 +372,7 @@ export async function resolveShellNorthstarKpis(input: {
           source.buildKpis({
             workspace: input.workspace,
             english: input.english,
+            runtimeContext: input.runtimeContext,
             signal,
           }),
         SHELL_SURFACE_SOURCE_TIMEOUT_MS,
@@ -427,6 +432,7 @@ export async function resolveShellAttention(input: {
   english: boolean;
   roleCategory?: string | null;
   accessContext?: ExtensionAccessContext;
+  runtimeContext?: ShellRuntimeContext;
 }): Promise<ShellAttentionResolution> {
   const sources = getRegisteredAttentionSources();
   if (sources.length === 0) {
@@ -460,6 +466,7 @@ export async function resolveShellAttention(input: {
             workspace: input.workspace,
             english: input.english,
             roleCategory: input.roleCategory ?? null,
+            runtimeContext: input.runtimeContext,
             signal,
           }),
         SHELL_SURFACE_SOURCE_TIMEOUT_MS,

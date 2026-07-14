@@ -1,6 +1,9 @@
 import "server-only";
 
-import type { WorkspaceLike } from "@/lib/extensions/registry-types";
+import type {
+  ShellRuntimeContext,
+  WorkspaceLike,
+} from "@/lib/extensions/registry-types";
 import { resolveShellAttention } from "@/lib/shell/resolve-shell-experience";
 
 import { AttentionItemCard } from "./attention-item-card";
@@ -18,12 +21,19 @@ export async function AttentionInbox({
   workspace,
   english,
   roleCategory,
+  runtimeContext,
 }: {
   workspace: WorkspaceLike;
   english: boolean;
   roleCategory?: string | null;
+  runtimeContext?: ShellRuntimeContext;
 }) {
-  const { items } = await resolveShellAttention({ workspace, english, roleCategory });
+  const { items } = await resolveShellAttention({
+    workspace,
+    english,
+    roleCategory,
+    runtimeContext,
+  });
   const sorted = [...items].sort(
     (a, b) => severityRank(a.severity) - severityRank(b.severity) || a.key.localeCompare(b.key),
   );
