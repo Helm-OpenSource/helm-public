@@ -1,3 +1,5 @@
+import type { MainlineAssetScopeControl } from "@/lib/shell/operating-mainline";
+
 /**
  * 北极星一行的文案解析（蓝图 §2 段①）。
  * 数据源 = workspace.focusAreas（既有配置字段）；未配置/解析失败 → null，
@@ -27,4 +29,33 @@ export function resolveNorthstarText(
   const shown = items.slice(0, 2).join(english ? " · " : "、");
   const prefix = english ? "North star: " : "北极星：";
   return `${prefix}${shown}`;
+}
+
+export function resolveAssetScopedNorthstarText(
+  northstarText: string | null,
+  assetScope: MainlineAssetScopeControl | undefined,
+): string | null {
+  if (!northstarText || !assetScope || assetScope.options.length < 2) {
+    return northstarText;
+  }
+  const current = assetScope.options.find((option) => option.current);
+  const currentLabel = current?.label || assetScope.currentValue;
+  if (!currentLabel.trim()) return northstarText;
+
+  let scoped = northstarText;
+  for (const option of assetScope.options) {
+    if (option.value === assetScope.currentValue) continue;
+    for (const candidate of [option.label, option.value]) {
+      if (!candidate || candidate === currentLabel) continue;
+      scoped = scoped.replace(
+        new RegExp(`(^|\\D)${escapeRegExp(candidate)}(?!\\d)`, "g"),
+        (_match, prefix: string) => `${prefix}${currentLabel}`,
+      );
+    }
+  }
+  return scoped;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
