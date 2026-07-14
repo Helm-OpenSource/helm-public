@@ -18,6 +18,7 @@ import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import {
   buildPilotReadinessModel,
   getOperatingSkillById,
+  getOperatingSkillDisplayCopy,
   getOperatingSkillsForSurface,
   type WorkspaceFirstLoopModel,
 } from "@/lib/operating-system";
@@ -2471,34 +2472,37 @@ export function DiagnosticsClient({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 xl:grid-cols-2">
-          {diagnosticsSkills.map((skill) => (
-            <div
-              key={skill.id}
-              className="theme-surface-panel rounded-2xl px-4 py-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-[color:var(--foreground)]">
-                  {diagnosticsText(skill.name)}
-                </p>
-                <Badge variant="info">
-                  {skill.defaultBoundary === "auto"
-                    ? english
-                      ? "Auto"
-                      : "自动"
-                    : skill.defaultBoundary === "approval"
+          {diagnosticsSkills.map((skill) => {
+            const skillCopy = getOperatingSkillDisplayCopy(skill, english);
+            return (
+              <div
+                key={skill.id}
+                className="theme-surface-panel rounded-2xl px-4 py-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-medium text-[color:var(--foreground)]">
+                    {diagnosticsText(skillCopy.name)}
+                  </p>
+                  <Badge variant="info">
+                    {skill.defaultBoundary === "auto"
                       ? english
-                        ? "Approval"
-                        : "审批"
-                      : english
-                        ? "Manual"
-                        : "人工"}
-                </Badge>
+                        ? "Auto"
+                        : "自动"
+                      : skill.defaultBoundary === "approval"
+                        ? english
+                          ? "Approval"
+                          : "审批"
+                        : english
+                          ? "Manual"
+                          : "人工"}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {diagnosticsText(skillCopy.summary)}
+                </p>
               </div>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                {diagnosticsText(skill.summary)}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 

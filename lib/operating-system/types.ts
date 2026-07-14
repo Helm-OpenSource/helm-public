@@ -25,6 +25,8 @@ export type OperatingSkillDefinition = {
   id: OperatingSkillId;
   name: string;
   summary: string;
+  nameEn?: string;
+  summaryEn?: string;
   category: OperatingSkillCategory;
   reads: string[];
   writes: string[];

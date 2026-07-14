@@ -128,6 +128,9 @@ const SKILL_CATALOG: OperatingSkillDefinition[] = [
     id: "pilot-readiness-diagnostics",
     name: "试点 就绪度 诊断",
     summary: "把客户记忆、会议采集、关系接入和待确认动作压成能否继续放量的判断。",
+    nameEn: "Pilot readiness diagnostics",
+    summaryEn:
+      "Turns customer memory, meeting capture, relationship intake, and pending confirmations into a scale-readiness judgment.",
     category: "diagnostics",
     reads: ["recommendationQuality", "memoryQuality", "llmOverview", "captureOverview", "crmSources", "approvalTasks"],
     writes: ["diagnosticsReadiness"],
@@ -150,6 +153,16 @@ export function getOperatingSkillsForSurface(
   surface: OperatingSkillDefinition["defaultSurface"],
 ) {
   return SKILL_CATALOG.filter((item) => item.defaultSurface === surface);
+}
+
+export function getOperatingSkillDisplayCopy(
+  skill: OperatingSkillDefinition,
+  english: boolean,
+) {
+  return {
+    name: english ? skill.nameEn ?? skill.name : skill.name,
+    summary: english ? skill.summaryEn ?? skill.summary : skill.summary,
+  };
 }
 
 export function getOperatingSkillForActionType(actionType: ActionType) {
