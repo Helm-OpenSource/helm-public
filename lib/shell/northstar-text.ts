@@ -26,7 +26,10 @@ export function resolveNorthstarText(
     items = [focusAreas.trim()];
   }
   if (items.length === 0) return null;
-  const shown = items.slice(0, 2).join(english ? " · " : "、");
+  const shown = items
+    .slice(0, 2)
+    .map((item) => localizeNorthstarItem(item, english))
+    .join(english ? " · " : "、");
   const prefix = english ? "North star: " : "北极星：";
   return `${prefix}${shown}`;
 }
@@ -58,4 +61,15 @@ export function resolveAssetScopedNorthstarText(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function localizeNorthstarItem(item: string, english: boolean): string {
+  if (!english) return item;
+  return item
+    .replace(/^(\d{4})资产冷启动/g, "$1 asset cold start")
+    .replace(/^(\d{4})资产/g, "$1 asset ")
+    .replace(/资产冷启动/g, "asset cold start")
+    .replace(/资产日切/g, "asset daily cut")
+    .replace(/逾期口径/g, "overdue-calculation policy")
+    .replace(/与/g, " and ");
 }

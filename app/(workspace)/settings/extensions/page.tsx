@@ -20,11 +20,22 @@ import {
 } from "@/features/settings/solution-extension-actions";
 import { SurfaceBindingsCard } from "@/features/settings/surface-bindings-card";
 import { getSolutionExtensionCatalog } from "@/lib/extensions/solution-extension-catalog";
+import {
+  getDeploymentProfileDefaultLocaleCandidate,
+  getRequestUiLocaleCandidate,
+} from "@/lib/i18n/request-locale.server";
+import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 
 export default async function SettingsExtensionsPage() {
   const workspace = await getCurrentWorkspace();
   const membership = await getCurrentMembership();
-  const english = workspace.defaultLocale === "en-US";
+  const requestLocale = await getRequestUiLocaleCandidate();
+  const { locale } = normalizeWorkspaceUiConfig({
+    ...workspace,
+    requestLocale,
+    deploymentProfileDefaultLocale: getDeploymentProfileDefaultLocaleCandidate(),
+  });
+  const english = locale === "en-US";
 
   if (!canManageWorkspaceSetup(membership.role)) {
     redirect("/settings?status=denied&message=extensions");

@@ -465,6 +465,14 @@ describe("northstar text", () => {
     expect(
       resolveNorthstarText(JSON.stringify(["A", "B", "C"]), true),
     ).toBe("North star: A · B");
+    expect(
+      resolveNorthstarText(
+        JSON.stringify(["0039资产冷启动", "资产日切与逾期口径"]),
+        true,
+      ),
+    ).toBe(
+      "North star: 0039 asset cold start · asset daily cut and overdue-calculation policy",
+    );
     expect(resolveNorthstarText("plain goal", false)).toBe("北极星：plain goal");
   });
 
