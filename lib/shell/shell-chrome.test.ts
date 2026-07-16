@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FULL_SHELL_CHROME,
+  parseShellBrandLabel,
   parseShellChromeProfiles,
   resolveShellChrome,
 } from "@/lib/shell/shell-chrome";
@@ -147,5 +148,34 @@ describe("resolveShellChrome", () => {
       (FULL_SHELL_CHROME as { sidebar: string }).sidebar = "hidden";
     }).toThrow();
     expect(FULL_SHELL_CHROME.sidebar).toBe("visible");
+  });
+});
+
+describe("parseShellBrandLabel", () => {
+  const cfg = (v: unknown) => JSON.stringify({ shellBrandLabel: v });
+
+  it("returns the trimmed label for a valid declaration", () => {
+    expect(parseShellBrandLabel(cfg("Anson Helm"))).toBe("Anson Helm");
+    expect(parseShellBrandLabel(cfg("  Anson Helm  "))).toBe("Anson Helm");
+  });
+
+  it("fail-closed: undeclared / non-string / blank / overlong / multiline → null", () => {
+    expect(parseShellBrandLabel(null)).toBeNull();
+    expect(parseShellBrandLabel("")).toBeNull();
+    expect(parseShellBrandLabel("{}")).toBeNull();
+    expect(parseShellBrandLabel("not json")).toBeNull();
+    expect(parseShellBrandLabel(cfg(42))).toBeNull();
+    expect(parseShellBrandLabel(cfg("   "))).toBeNull();
+    expect(parseShellBrandLabel(cfg("x".repeat(41)))).toBeNull();
+    expect(parseShellBrandLabel(cfg("a\nb"))).toBeNull();
+  });
+
+  it("coexists with shellChromeProfiles in the same configuration payload", () => {
+    const both = JSON.stringify({
+      shellBrandLabel: "Anson Helm",
+      shellChromeProfiles: [{ pathPrefix: "/x", sidebar: "hidden" }],
+    });
+    expect(parseShellBrandLabel(both)).toBe("Anson Helm");
+    expect(parseShellChromeProfiles(both)).toEqual([{ pathPrefix: "/x", sidebar: "hidden" }]);
   });
 });

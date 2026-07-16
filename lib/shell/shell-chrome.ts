@@ -32,6 +32,34 @@ const MAX_PREFIX_LENGTH = 200;
 // configuration 是共享 JSON 字段；解析前先限总长，防止误配超大文本拖慢每次
 // layout 请求。超限视为非法配置 → 整组失效。
 const MAX_RAW_CONFIGURATION_LENGTH = 20_000;
+const MAX_BRAND_LABEL_LENGTH = 40;
+
+/**
+ * 从 workspace.configuration 解析租户品牌行覆盖(shell 左上角/移动端抽屉标题的
+ * `messages.shell.brand` 文案)。展示层白标,与 shellChromeProfiles 同一配置载体。
+ * fail-closed:未声明 / 非 string / 空白 / 超长(>40) / 含换行 → null(回默认品牌)。
+ */
+export function parseShellBrandLabel(
+  rawConfiguration: string | null | undefined,
+): string | null {
+  if (typeof rawConfiguration !== "string" || rawConfiguration.length === 0) {
+    return null;
+  }
+  if (rawConfiguration.length > MAX_RAW_CONFIGURATION_LENGTH) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawConfiguration);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const raw = (parsed as { shellBrandLabel?: unknown }).shellBrandLabel;
+  if (typeof raw !== "string") return null;
+  const label = raw.trim();
+  if (label.length === 0 || label.length > MAX_BRAND_LABEL_LENGTH) return null;
+  if (/[\r\n]/.test(label)) return null;
+  return label;
+}
 
 export const FULL_SHELL_CHROME: ShellChromeResolution = Object.freeze({
   sidebar: "visible",
