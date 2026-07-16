@@ -71,11 +71,14 @@ function toNavItems(
 
 export function Sidebar({
   workspaceName,
+  brandLabel = null,
   pendingApprovals,
   navExtensionClusters = [],
   basePresetKey = null,
 }: {
   workspaceName: string;
+  /** 租户品牌行覆盖;null → messages.shell.brand。 */
+  brandLabel?: string | null;
   pendingApprovals: number;
   navExtensionClusters?: ReadonlyArray<WorkspaceNavExtensionCluster>;
   basePresetKey?: string | null;
@@ -278,7 +281,7 @@ export function Sidebar({
           </div>
           <div>
             <p className="text-sm font-semibold tracking-tight text-[color:var(--foreground)]">
-              {messages.shell.brand}
+              {brandLabel ?? messages.shell.brand}
             </p>
             <p className="text-xs demo-mode-soft-text">{workspaceName}</p>
           </div>

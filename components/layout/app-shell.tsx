@@ -11,6 +11,8 @@ import type { WorkspaceFeatureFlags } from "@/lib/workspace-ops";
 
 type AppShellProps = {
   workspaceName: string;
+  /** 租户品牌行覆盖(workspace.configuration.shellBrandLabel);null → 默认品牌。 */
+  brandLabel?: string | null;
   userName: string;
   roleLabel: string;
   locale: UiLocale;
@@ -50,6 +52,7 @@ type AppShellProps = {
 
 export function AppShell({
   workspaceName,
+  brandLabel = null,
   userName,
   roleLabel,
   locale,
@@ -91,6 +94,7 @@ export function AppShell({
         {shellChromeProfiles.length === 0 ? (
           <Sidebar
             workspaceName={workspaceName}
+            brandLabel={brandLabel}
             pendingApprovals={pendingApprovals}
             navExtensionClusters={navExtensionClusters}
             basePresetKey={basePresetKey}
@@ -99,6 +103,7 @@ export function AppShell({
           <ShellChromeGate profiles={shellChromeProfiles}>
             <Sidebar
               workspaceName={workspaceName}
+              brandLabel={brandLabel}
               pendingApprovals={pendingApprovals}
               navExtensionClusters={navExtensionClusters}
               basePresetKey={basePresetKey}
@@ -108,6 +113,7 @@ export function AppShell({
         <div className="min-w-0 flex-1 overflow-x-hidden px-0 pb-6">
           <Topbar
             workspaceName={workspaceName}
+            brandLabel={brandLabel}
             userName={userName}
             roleLabel={roleLabel}
             notificationCount={notificationCount}

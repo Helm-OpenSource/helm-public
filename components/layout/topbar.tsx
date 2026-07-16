@@ -67,6 +67,8 @@ import { buildSearchIntentHref } from "@/features/search/ask-helm-entry-routing"
 
 type TopbarProps = {
   workspaceName: string;
+  /** 租户品牌行覆盖;null → messages.shell.brand。 */
+  brandLabel?: string | null;
   userName: string;
   roleLabel: string;
   notificationCount: number;
@@ -120,6 +122,7 @@ type MeetingFormState = {
 
 export function Topbar({
   workspaceName,
+  brandLabel = null,
   userName,
   roleLabel,
   notificationCount,
@@ -1063,7 +1066,7 @@ export function Topbar({
           closeLabel={english ? "Close navigation" : "关闭导航"}
         >
           <SheetHeader>
-            <SheetTitle>{messages.shell.brand}</SheetTitle>
+            <SheetTitle>{brandLabel ?? messages.shell.brand}</SheetTitle>
             <SheetDescription>
               {english
                 ? "Navigate today, customer work, reviews, memory and the workspace foundation."

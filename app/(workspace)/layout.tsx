@@ -14,6 +14,7 @@ import {
 } from "@/lib/workspace-identity";
 import { resolveMemberBasePresetKey } from "@/lib/definitions/workspace-role-preset-catalog";
 import {
+  parseShellBrandLabel,
   parseShellChromeProfiles,
   type ShellChromeProfile,
 } from "@/lib/shell/shell-chrome";
@@ -28,6 +29,7 @@ export default async function WorkspaceLayout({
   let shellProps:
     | {
         workspaceName: string;
+        brandLabel: string | null;
         userName: string;
         roleLabel: string;
         locale: ReturnType<typeof normalizeWorkspaceUiConfig>["locale"];
@@ -78,6 +80,8 @@ export default async function WorkspaceLayout({
 
     shellProps = {
       workspaceName: workspace.name,
+      // 租户品牌行覆盖(workspace.configuration.shellBrandLabel,fail-closed);null → 默认品牌。
+      brandLabel: parseShellBrandLabel(workspace.configuration),
       userName: user.name,
       roleLabel:
         (layoutData.membership ? roleLabels[layoutData.membership.role] : roleLabels[membership.role]) ??
