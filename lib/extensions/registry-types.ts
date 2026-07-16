@@ -193,7 +193,10 @@ export type ResolvedWorkspaceNavExtensionsType = {
 export type WorkspaceNavExtensionDescriptor = {
   id: string;
   getAccess: ExtensionAccessProbe;
-  buildCluster: (english: boolean) => WorkspaceNavExtensionCluster;
+  buildCluster: (
+    english: boolean,
+    accessContext?: ExtensionAccessContext,
+  ) => WorkspaceNavExtensionCluster;
 };
 
 /**
