@@ -67,6 +67,13 @@ export default async function WorkspaceLayout({
     const navExtensions = await resolveWorkspaceNavExtensions({
       workspace,
       english,
+      // Thread the member role subject so role-aware nav clusters filter by role
+      // (fail-open: unmapped roles still see all clusters).
+      membership: {
+        id: membership.id,
+        role: membership.role,
+        rolePresetKey: membership.rolePresetKey,
+      },
     });
 
     shellProps = {
