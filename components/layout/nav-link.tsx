@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { isNavLinkActive } from "@/components/layout/nav-link-active";
 import { cn } from "@/lib/utils";
 
@@ -19,8 +19,10 @@ export function NavLink({
   trailing?: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const active = isNavLinkActive(pathname, href, {
     activeDescendantExclusions,
+    currentQuery: searchParams?.toString() ?? null,
   });
 
   return (
@@ -45,7 +47,7 @@ export function NavLink({
       </span>
       <span
         className={cn(
-          "min-w-0 flex-1 text-[17px] tracking-tight",
+          "min-w-0 flex-1 text-[15px] tracking-tight",
           active ? "text-white font-medium" : "text-[color:var(--foreground)]",
         )}
       >
