@@ -135,6 +135,39 @@ export function resolveRoleHomeDestinationFromCandidates(
 }
 
 /**
+ * Build the ordered identity candidates used by role-home routing.
+ *
+ * Tenant persona/title are the most specific facts and therefore win over the
+ * reusable Core preset and coarse WorkspaceRole. Empty and duplicate values are
+ * removed so every consumer resolves the same deterministic candidate chain.
+ */
+export function buildRoleHomeCandidateKeys(input: {
+  persona?: string | null;
+  title?: string | null;
+  rolePresetKey?: string | null;
+  basePresetKey?: string | null;
+  workspaceRole?: string | null;
+}): string[] {
+  const candidates = [
+    input.persona,
+    input.title,
+    input.rolePresetKey,
+    input.basePresetKey,
+    input.workspaceRole,
+  ];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const candidate of candidates) {
+    if (!isNonEmptyString(candidate)) continue;
+    const normalized = candidate.trim();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+/**
  * Core 默认路由：由 Phase 1 的 resolveRoleLens 逐 preset 派生——非 generic lens
  * 的角色家 = 控制塔（desk lens 在控制塔内以对应 lens 渲染）；generic lens → GENERIC 面。
  * Core 本体无工位 → 无 workstation 目的地（工位由 Overlay provider 贡献）。fallback = generic。

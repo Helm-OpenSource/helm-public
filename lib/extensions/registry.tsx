@@ -172,12 +172,19 @@ export function buildReportsExtensionFallbackSurface(input: {
  * when no membership is available → callers keep their prior fail-open behavior, and a
  * caller-supplied accessContext always wins. Additive & tenant-safe: extensions that
  * ignore the subject are unaffected; only wrappers that read subject.workspaceRole /
- * rolePresetKey change behavior. Fail-open is preserved downstream (unknown role → show).
+ * rolePresetKey / persona / title change behavior. Fail-open is preserved downstream
+ * (unknown role → show).
  */
 function membershipAccessContext(
   workspace: WorkspaceLike,
   membership:
-    | { id?: string; role?: string; rolePresetKey?: string | null }
+    | {
+        id?: string;
+        role?: string;
+        rolePresetKey?: string | null;
+        persona?: string | null;
+        title?: string | null;
+      }
     | null
     | undefined,
 ): ExtensionAccessContext | undefined {
@@ -188,6 +195,8 @@ function membershipAccessContext(
     membershipId: membership.id,
     workspaceRole: membership.role,
     rolePresetKey: membership.rolePresetKey ?? null,
+    persona: membership.persona ?? null,
+    title: membership.title ?? null,
   };
   return { subject: subject as ExtensionAccessContext["subject"] };
 }
@@ -209,6 +218,7 @@ export async function resolveReportsExtensions(input: {
     status?: string;
     rolePresetKey?: string | null;
     persona?: string | null;
+    title?: string | null;
   } | null;
 }): Promise<ResolvedReportsExtensions> {
   const reportsExtensions: ReadonlyArray<ReportsExtensionDescriptor> =
@@ -357,7 +367,13 @@ export async function resolveWorkspaceNavExtensions(input: {
   workspace: WorkspaceLike;
   english: boolean;
   accessContext?: ExtensionAccessContext;
-  membership?: { id?: string; role?: string; rolePresetKey?: string | null } | null;
+  membership?: {
+    id?: string;
+    role?: string;
+    rolePresetKey?: string | null;
+    persona?: string | null;
+    title?: string | null;
+  } | null;
 }): Promise<ResolvedWorkspaceNavExtensions> {
   const workspaceNavExtensions = getRegisteredWorkspaceNavExtensions();
   // Thread the caller's member role subject so role-aware nav getAccess wrappers can act

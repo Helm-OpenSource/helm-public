@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ROLE_PRESET_KEYS } from "@/lib/definitions/role-presets";
 import { resolveRoleLens } from "./role-home";
 import {
+  buildRoleHomeCandidateKeys,
   buildCoreDefaultRoleHomeRouting,
   resolveRoleHomeDestinationFromCandidates,
   resolveRoleHomeDestination,
@@ -103,6 +104,37 @@ describe("resolveRoleHomeDestinationFromCandidates", () => {
 
   it("keeps the table fallback when no candidate is routed", () => {
     expect(resolveRoleHomeDestinationFromCandidates(t, [null, "UNKNOWN", " "])).toEqual({ kind: "generic" });
+  });
+});
+
+describe("buildRoleHomeCandidateKeys", () => {
+  it("prioritizes tenant persona and title before preset and coarse workspace role", () => {
+    expect(
+      buildRoleHomeCandidateKeys({
+        persona: "质检投诉",
+        title: "质检专员",
+        rolePresetKey: "OPERATIONS_FINANCE",
+        basePresetKey: "OPERATIONS_FINANCE",
+        workspaceRole: "REVIEWER",
+      }),
+    ).toEqual([
+      "质检投诉",
+      "质检专员",
+      "OPERATIONS_FINANCE",
+      "REVIEWER",
+    ]);
+  });
+
+  it("drops blanks and duplicate candidates without changing priority", () => {
+    expect(
+      buildRoleHomeCandidateKeys({
+        persona: "人工坐席",
+        title: "人工坐席",
+        rolePresetKey: " ",
+        basePresetKey: "GENERAL_OPERATOR",
+        workspaceRole: "OPERATOR",
+      }),
+    ).toEqual(["人工坐席", "GENERAL_OPERATOR", "OPERATOR"]);
   });
 });
 

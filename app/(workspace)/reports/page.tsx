@@ -91,6 +91,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       status: membership.status,
       rolePresetKey: membership.rolePresetKey,
       persona: membership.persona,
+      title: membership.title,
     },
   });
 

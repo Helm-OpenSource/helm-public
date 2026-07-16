@@ -90,6 +90,8 @@ export type PermissionSubject = {
   readonly membershipStatus?: MembershipStatus;
   readonly workspaceRole?: WorkspaceRole;
   readonly rolePresetKey?: string | null;
+  readonly persona?: string | null;
+  readonly title?: string | null;
   readonly serviceKey?: string;
   readonly serviceScopes?: readonly string[];
   readonly policyVersion?: string;

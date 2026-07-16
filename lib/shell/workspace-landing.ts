@@ -9,7 +9,10 @@ import {
   resolveShellRoleHomeRouting,
   resolveShellWorkstations,
 } from "@/lib/shell/resolve-shell-experience";
-import { resolveRoleHomeDestination } from "@/lib/shell/role-home-routing";
+import {
+  buildRoleHomeCandidateKeys,
+  resolveRoleHomeDestinationFromCandidates,
+} from "@/lib/shell/role-home-routing";
 
 const DEFAULT_LANDING = "/dashboard";
 
@@ -29,7 +32,7 @@ export async function resolveWorkspaceLandingPath(): Promise<string> {
     const { workspace, user } = await getCurrentWorkspaceSession();
     const membership = await db.membership.findFirst({
       where: { workspaceId: workspace.id, userId: user.id },
-      select: { rolePresetKey: true, role: true },
+      select: { rolePresetKey: true, role: true, persona: true, title: true },
     });
     if (!membership) return DEFAULT_LANDING;
 
@@ -48,7 +51,16 @@ export async function resolveWorkspaceLandingPath(): Promise<string> {
       english: false,
       binding,
     });
-    const destination = resolveRoleHomeDestination(table, presetKey);
+    const destination = resolveRoleHomeDestinationFromCandidates(
+      table,
+      buildRoleHomeCandidateKeys({
+        persona: membership.persona,
+        title: membership.title,
+        rolePresetKey: membership.rolePresetKey,
+        basePresetKey: presetKey,
+        workspaceRole: membership.role,
+      }),
+    );
 
     if (destination.kind === "workstation") {
       const { workstations } = await resolveShellWorkstations({ workspace, english: false });
