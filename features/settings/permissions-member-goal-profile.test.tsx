@@ -5,7 +5,8 @@
 import "@testing-library/jest-dom/vitest";
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TeamPermissionsCard } from "@/features/settings/components/permissions-settings";
 
 const baseProps = {
@@ -121,6 +122,15 @@ const dingtalkDryRunWithInviteDetail = {
   ],
 };
 
+beforeEach(() => {
+  Object.defineProperties(HTMLElement.prototype, {
+    hasPointerCapture: { configurable: true, value: () => false },
+    releasePointerCapture: { configurable: true, value: () => undefined },
+    setPointerCapture: { configurable: true, value: () => undefined },
+    scrollIntoView: { configurable: true, value: () => undefined },
+  });
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -174,5 +184,65 @@ describe("team permissions member goal profile", () => {
     expect(
       await screen.findByRole("button", { name: "绑定坐席" }),
     ).toBeInTheDocument();
+  });
+
+  it("requires an explicit skill group selection before provisioning one Aliyun seat", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            bindings: [],
+            skillGroups: [
+              {
+                skillGroupId: "skill-collection@hangzhou_call",
+                skillGroupName: "collection",
+                displayName: "催收一组",
+              },
+            ],
+            skillGroupLookup: { ok: true },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            helmUserId: "user-agent-1",
+            aliyunAgentId: "agent-1@hangzhou_call",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(
+      createElement(TeamPermissionsCard, {
+        ...baseProps,
+        canManageConnectors: true,
+        canManageMembers: true,
+        dingtalkDirectoryInviteDryRun: dingtalkDryRunWithInviteDetail,
+      }),
+    );
+
+    await user.click(await screen.findByRole("button", { name: "绑定坐席" }));
+    const provisionButton = await screen.findByRole("button", { name: "自动开通" });
+    expect(provisionButton).toBeDisabled();
+
+    await user.click(screen.getByRole("combobox", { name: "技能组" }));
+    await user.click(await screen.findByRole("option", { name: "催收一组" }));
+    expect(provisionButton).toBeEnabled();
+    await user.click(provisionButton);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const provisionRequest = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(JSON.parse(String(provisionRequest.body))).toEqual({
+      action: "provision",
+      helmUserEmail: "agent1-zj@example.com",
+      skillGroupRef: "skill-collection@hangzhou_call",
+    });
   });
 });
