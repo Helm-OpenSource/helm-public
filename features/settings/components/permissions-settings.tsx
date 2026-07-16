@@ -65,8 +65,15 @@ type AliyunSeatBinding = {
   status: "ACTIVE" | "DISABLED";
 };
 
+type AliyunSeatSkillGroup = {
+  skillGroupId: string;
+  skillGroupName: string;
+  displayName: string;
+};
+
 type AliyunSeatBindingDraft = {
   rowKey: string;
+  skillGroupRef: string;
   aliyunAgentId: string;
   accessKeyId: string;
   accessKeySecret: string;
@@ -348,6 +355,18 @@ function isAliyunSeatBinding(value: unknown): value is AliyunSeatBinding {
   );
 }
 
+function isAliyunSeatSkillGroup(value: unknown): value is AliyunSeatSkillGroup {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Partial<AliyunSeatSkillGroup>;
+  return (
+    typeof row.skillGroupId === "string" &&
+    row.skillGroupId.length > 0 &&
+    typeof row.skillGroupName === "string" &&
+    typeof row.displayName === "string" &&
+    row.displayName.length > 0
+  );
+}
+
 export function PermissionsRoleGuideCard({
   english,
 }: PermissionsRoleGuideCardProps) {
@@ -444,6 +463,9 @@ export function TeamPermissionsCard({
   const [aliyunSeatBindingsByEmail, setAliyunSeatBindingsByEmail] = useState<
     Record<string, AliyunSeatBinding>
   >({});
+  const [aliyunSeatSkillGroups, setAliyunSeatSkillGroups] = useState<
+    AliyunSeatSkillGroup[]
+  >([]);
   const [aliyunSeatBindingDraft, setAliyunSeatBindingDraft] =
     useState<AliyunSeatBindingDraft | null>(null);
   const [aliyunSeatBindingPendingKey, setAliyunSeatBindingPendingKey] =
@@ -468,6 +490,7 @@ export function TeamPermissionsCard({
     if (!canManageConnectors) {
       setAliyunSeatBindingAvailable(false);
       setAliyunSeatBindingsByEmail({});
+      setAliyunSeatSkillGroups([]);
       return;
     }
 
@@ -483,6 +506,7 @@ export function TeamPermissionsCard({
         return (await response.json().catch(() => null)) as {
           ok?: unknown;
           bindings?: unknown;
+          skillGroups?: unknown;
         } | null;
       })
       .then((payload) => {
@@ -490,6 +514,7 @@ export function TeamPermissionsCard({
         if (!payload?.ok || !Array.isArray(payload.bindings)) {
           setAliyunSeatBindingAvailable(false);
           setAliyunSeatBindingsByEmail({});
+          setAliyunSeatSkillGroups([]);
           return;
         }
 
@@ -503,11 +528,17 @@ export function TeamPermissionsCard({
         }
         setAliyunSeatBindingAvailable(true);
         setAliyunSeatBindingsByEmail(next);
+        setAliyunSeatSkillGroups(
+          Array.isArray(payload.skillGroups)
+            ? payload.skillGroups.filter(isAliyunSeatSkillGroup)
+            : [],
+        );
       })
       .catch(() => {
         if (cancelled) return;
         setAliyunSeatBindingAvailable(false);
         setAliyunSeatBindingsByEmail({});
+        setAliyunSeatSkillGroups([]);
       });
 
     return () => {
@@ -518,10 +549,16 @@ export function TeamPermissionsCard({
   const openAliyunSeatBindingDraft = (rowKey: string, aliyunAgentId = "") => {
     setAliyunSeatBindingDraft({
       rowKey,
+      skillGroupRef: "",
       aliyunAgentId,
       accessKeyId: "",
       accessKeySecret: "",
-      error: null,
+      error:
+        aliyunSeatSkillGroups.length === 0
+          ? english
+            ? "No CCC skill groups are available; use manual binding or check the CCC directory."
+            : "未读取到 CCC 技能组；请改用手工绑定或检查 CCC 技能组目录。"
+          : null,
     });
   };
 
@@ -595,6 +632,85 @@ export function TeamPermissionsCard({
     }
   };
 
+  const provisionAliyunSeat = async (item: {
+    dingtalkUserId: string;
+    placeholderEmail: string | null;
+  }) => {
+    if (!aliyunSeatBindingDraft?.skillGroupRef) return;
+    const rowKey = inviteDetailRowKey(item);
+    if (aliyunSeatBindingDraft.rowKey !== rowKey) return;
+    const helmUserEmail = normalizeBindingEmail(item.placeholderEmail);
+    if (!helmUserEmail) {
+      setAliyunSeatBindingDraft((current) =>
+        current
+          ? { ...current, error: english ? "Missing Helm user email" : "缺少 Helm 用户邮箱" }
+          : current,
+      );
+      return;
+    }
+
+    setAliyunSeatBindingPendingKey(rowKey);
+    try {
+      const response = await fetch(ALIYUN_SEAT_BINDING_API_PATH, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "provision",
+          helmUserEmail,
+          skillGroupRef: aliyunSeatBindingDraft.skillGroupRef,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: unknown;
+        helmUserId?: unknown;
+        aliyunAgentId?: unknown;
+        error?: unknown;
+      } | null;
+      if (!response.ok || !payload?.ok) {
+        setAliyunSeatBindingDraft((current) =>
+          current
+            ? {
+                ...current,
+                error:
+                  typeof payload?.error === "string"
+                    ? payload.error
+                    : english
+                      ? "Provisioning failed"
+                      : "自动开通失败",
+              }
+            : current,
+        );
+        return;
+      }
+
+      const helmUserId = typeof payload.helmUserId === "string" ? payload.helmUserId : "";
+      const aliyunAgentId = typeof payload.aliyunAgentId === "string" ? payload.aliyunAgentId : "";
+      if (!helmUserId || !aliyunAgentId) {
+        setAliyunSeatBindingDraft((current) =>
+          current
+            ? { ...current, error: english ? "Invalid provisioning response" : "开通返回无效" }
+            : current,
+        );
+        return;
+      }
+      setAliyunSeatBindingsByEmail((current) => ({
+        ...current,
+        [helmUserEmail]: {
+          helmUserId,
+          helmUserEmail,
+          aliyunAgentId,
+          status: "ACTIVE",
+        },
+      }));
+      setAliyunSeatBindingDraft(null);
+    } finally {
+      setAliyunSeatBindingPendingKey(null);
+    }
+  };
+
   const unbindAliyunSeat = async (item: {
     dingtalkUserId: string;
     placeholderEmail: string | null;
@@ -627,6 +743,7 @@ export function TeamPermissionsCard({
       if (!response.ok || !payload?.ok) {
         setAliyunSeatBindingDraft({
           rowKey,
+          skillGroupRef: "",
           aliyunAgentId: binding.aliyunAgentId,
           accessKeyId: "",
           accessKeySecret: "",
@@ -944,60 +1061,45 @@ export function TeamPermissionsCard({
                           {draftOpen ? (
                             <tr className="border-t border-[color:var(--border)] bg-[color:var(--surface-subtle)]/60">
                               <td className="px-3 py-3" colSpan={7}>
-                                <div className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
-                                  <Input
-                                    value={aliyunSeatBindingDraft.aliyunAgentId}
-                                    onChange={(event) =>
-                                      setAliyunSeatBindingDraft((current) =>
-                                        current
-                                          ? { ...current, aliyunAgentId: event.target.value, error: null }
-                                          : current,
-                                      )
-                                    }
-                                    placeholder={english ? "Seat ID" : "坐席ID"}
-                                    disabled={seatPending}
-                                  />
-                                  <Input
-                                    value={aliyunSeatBindingDraft.accessKeyId}
-                                    onChange={(event) =>
-                                      setAliyunSeatBindingDraft((current) =>
-                                        current
-                                          ? { ...current, accessKeyId: event.target.value, error: null }
-                                          : current,
-                                      )
-                                    }
-                                    placeholder="AK"
-                                    type="password"
-                                    autoComplete="off"
-                                    disabled={seatPending}
-                                  />
-                                  <Input
-                                    value={aliyunSeatBindingDraft.accessKeySecret}
-                                    onChange={(event) =>
-                                      setAliyunSeatBindingDraft((current) =>
-                                        current
-                                          ? { ...current, accessKeySecret: event.target.value, error: null }
-                                          : current,
-                                      )
-                                    }
-                                    placeholder="SK"
-                                    type="password"
-                                    autoComplete="off"
-                                    disabled={seatPending}
-                                  />
-                                  <div className="flex items-center gap-2">
+                                <div className="space-y-3">
+                                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+                                    <Select
+                                      value={aliyunSeatBindingDraft.skillGroupRef}
+                                      onValueChange={(skillGroupRef) =>
+                                        setAliyunSeatBindingDraft((current) =>
+                                          current
+                                            ? { ...current, skillGroupRef, error: null }
+                                            : current,
+                                        )
+                                      }
+                                      disabled={seatPending || aliyunSeatSkillGroups.length === 0}
+                                    >
+                                      <SelectTrigger aria-label={english ? "Skill group" : "技能组"}>
+                                        <SelectValue
+                                          placeholder={english ? "Select skill group" : "选择技能组"}
+                                        />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {aliyunSeatSkillGroups.map((skillGroup) => (
+                                          <SelectItem
+                                            key={skillGroup.skillGroupId}
+                                            value={skillGroup.skillGroupId}
+                                          >
+                                            {skillGroup.displayName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                     <Button
                                       size="sm"
                                       type="button"
                                       disabled={
                                         seatPending ||
-                                        !aliyunSeatBindingDraft.aliyunAgentId ||
-                                        !aliyunSeatBindingDraft.accessKeyId ||
-                                        !aliyunSeatBindingDraft.accessKeySecret
+                                        !aliyunSeatBindingDraft.skillGroupRef
                                       }
-                                      onClick={() => submitAliyunSeatBinding(item)}
+                                      onClick={() => provisionAliyunSeat(item)}
                                     >
-                                      {english ? "Save" : "保存"}
+                                      {english ? "Provision" : "自动开通"}
                                     </Button>
                                     <Button
                                       size="sm"
@@ -1007,6 +1109,62 @@ export function TeamPermissionsCard({
                                       onClick={() => setAliyunSeatBindingDraft(null)}
                                     >
                                       {english ? "Cancel" : "取消"}
+                                    </Button>
+                                  </div>
+                                  <div className="grid gap-2 border-t border-[color:var(--border)] pt-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+                                    <Input
+                                      value={aliyunSeatBindingDraft.aliyunAgentId}
+                                      onChange={(event) =>
+                                        setAliyunSeatBindingDraft((current) =>
+                                          current
+                                            ? { ...current, aliyunAgentId: event.target.value, error: null }
+                                            : current,
+                                        )
+                                      }
+                                      placeholder={english ? "Seat ID" : "坐席ID"}
+                                      disabled={seatPending}
+                                    />
+                                    <Input
+                                      value={aliyunSeatBindingDraft.accessKeyId}
+                                      onChange={(event) =>
+                                        setAliyunSeatBindingDraft((current) =>
+                                          current
+                                            ? { ...current, accessKeyId: event.target.value, error: null }
+                                            : current,
+                                        )
+                                      }
+                                      placeholder="AK"
+                                      type="password"
+                                      autoComplete="off"
+                                      disabled={seatPending}
+                                    />
+                                    <Input
+                                      value={aliyunSeatBindingDraft.accessKeySecret}
+                                      onChange={(event) =>
+                                        setAliyunSeatBindingDraft((current) =>
+                                          current
+                                            ? { ...current, accessKeySecret: event.target.value, error: null }
+                                            : current,
+                                        )
+                                      }
+                                      placeholder="SK"
+                                      type="password"
+                                      autoComplete="off"
+                                      disabled={seatPending}
+                                    />
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      type="button"
+                                      disabled={
+                                        seatPending ||
+                                        !aliyunSeatBindingDraft.aliyunAgentId ||
+                                        !aliyunSeatBindingDraft.accessKeyId ||
+                                        !aliyunSeatBindingDraft.accessKeySecret
+                                      }
+                                      onClick={() => submitAliyunSeatBinding(item)}
+                                    >
+                                      {english ? "Save binding" : "保存绑定"}
                                     </Button>
                                   </div>
                                 </div>
