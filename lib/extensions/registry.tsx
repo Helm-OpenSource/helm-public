@@ -168,7 +168,7 @@ export function buildReportsExtensionFallbackSurface(input: {
 /**
  * Build an ExtensionAccessContext carrying the caller's member role subject, so an
  * extension's getAccess (and any overlay role-visibility wrapper composed onto it —
- * e.g. Guangpu's reports/nav role filter) can resolve WHO is asking. Returns undefined
+ * e.g. an overlay's reports/nav role filter) can resolve WHO is asking. Returns undefined
  * when no membership is available → callers keep their prior fail-open behavior, and a
  * caller-supplied accessContext always wins. Additive & tenant-safe: extensions that
  * ignore the subject are unaffected; only wrappers that read subject.workspaceRole /
