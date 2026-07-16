@@ -2,7 +2,7 @@ import { ActionType, ObjectType, RecommendationFeedbackType, RecommendationStatu
 import { startOfDay, subDays } from "date-fns";
 import recommendationGoldenCases from "@/evals/recommendation/golden-samples.json";
 import { db } from "@/lib/db";
-import { average, includesEvalText, includesInAny, toRate } from "@/lib/evals/shared";
+import { includesEvalText, includesInAny, toRate } from "@/lib/evals/shared";
 import { safeParseJson } from "@/lib/utils";
 
 type RecommendationGoldenCase = {
@@ -246,16 +246,38 @@ export async function runRecommendationGoldenEval(prisma: PrismaClient = db): Pr
 }
 
 export async function getRecommendationQualityOverview(workspaceId: string, windowStart = startOfDay(subDays(new Date(), 29)), prisma: PrismaClient = db): Promise<RecommendationQualityOverview> {
-  const [recommendations, eventLogs, goldenSummary] = await Promise.all([
-    prisma.recommendationLog.findMany({
+  const [recommendationGroups, editedFeedbacks, eventLogs, goldenSummary] = await Promise.all([
+    prisma.recommendationLog.groupBy({
+      by: ["actionType", "status"],
       where: {
         workspaceId,
         createdAt: {
           gte: windowStart,
         },
       },
-      include: {
-        feedbacks: true,
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        score: true,
+      },
+    }),
+    prisma.recommendationFeedback.findMany({
+      where: {
+        workspaceId,
+        feedbackType: RecommendationFeedbackType.EDITED_AND_APPROVED,
+        recommendationLog: {
+          createdAt: {
+            gte: windowStart,
+          },
+        },
+      },
+      select: {
+        recommendationLog: {
+          select: {
+            actionType: true,
+          },
+        },
       },
     }),
     prisma.eventLog.findMany({
@@ -274,45 +296,40 @@ export async function getRecommendationQualityOverview(workspaceId: string, wind
     runRecommendationGoldenEval(prisma),
   ]);
 
-  const generated = recommendations.length;
-  const accepted = recommendations.filter(
-    (item) => item.status === RecommendationStatus.ACCEPTED || item.status === RecommendationStatus.EXECUTED,
-  ).length;
-  const rejected = recommendations.filter((item) => item.status === RecommendationStatus.REJECTED).length;
-  const editedApproved = recommendations.reduce((sum, item) => {
-    return sum + item.feedbacks.filter((feedback) => feedback.feedbackType === RecommendationFeedbackType.EDITED_AND_APPROVED).length;
-  }, 0);
   const actionCreated = eventLogs.filter((event) => event.eventName === "recommendation_action_created").length;
   const explanationViewed = eventLogs.filter((event) => event.eventName === "recommendation_explanation_viewed").length;
   const cardViewed = eventLogs.filter((event) => event.eventName === "recommendation_card_viewed").length;
+  const editedApprovedByActionType = editedFeedbacks.reduce((acc, feedback) => {
+    const actionType = feedback.recommendationLog.actionType;
+    acc.set(actionType, (acc.get(actionType) ?? 0) + 1);
+    return acc;
+  }, new Map<ActionType, number>());
 
   const groupedByActionType = Array.from(
-    recommendations.reduce((acc, recommendation) => {
-      const current = acc.get(recommendation.actionType) ?? {
-        actionType: recommendation.actionType,
+    recommendationGroups.reduce((acc, group) => {
+      const current = acc.get(group.actionType) ?? {
+        actionType: group.actionType,
         generated: 0,
         accepted: 0,
         rejected: 0,
-        editedApproved: 0,
-        scores: [] as number[],
+        scoreTotal: 0,
       };
 
-      current.generated += 1;
-      current.scores.push(recommendation.score);
+      current.generated += group._count._all;
+      current.scoreTotal += group._sum.score ?? 0;
       if (
-        recommendation.status === RecommendationStatus.ACCEPTED ||
-        recommendation.status === RecommendationStatus.EXECUTED
+        group.status === RecommendationStatus.ACCEPTED ||
+        group.status === RecommendationStatus.EXECUTED
       ) {
-        current.accepted += 1;
+        current.accepted += group._count._all;
       }
-      if (recommendation.status === RecommendationStatus.REJECTED) {
-        current.rejected += 1;
+      if (group.status === RecommendationStatus.REJECTED) {
+        current.rejected += group._count._all;
       }
-      current.editedApproved += recommendation.feedbacks.filter((feedback) => feedback.feedbackType === RecommendationFeedbackType.EDITED_AND_APPROVED).length;
 
-      acc.set(recommendation.actionType, current);
+      acc.set(group.actionType, current);
       return acc;
-    }, new Map<string, { actionType: string; generated: number; accepted: number; rejected: number; editedApproved: number; scores: number[] }>() ).values(),
+    }, new Map<ActionType, { actionType: ActionType; generated: number; accepted: number; rejected: number; scoreTotal: number }>() ).values(),
   ).map((item) => {
     const actionCreatedCount = eventLogs.filter((event) => {
       if (event.eventName !== "recommendation_action_created") return false;
@@ -325,13 +342,24 @@ export async function getRecommendationQualityOverview(workspaceId: string, wind
       generated: item.generated,
       accepted: item.accepted,
       rejected: item.rejected,
-      editedApproved: item.editedApproved,
+      editedApproved: editedApprovedByActionType.get(item.actionType) ?? 0,
       actionCreated: actionCreatedCount,
       acceptanceRate: toRate(item.accepted, item.generated),
       rejectionRate: toRate(item.rejected, item.generated),
-      averageScore: average(item.scores),
+      scoreTotal: item.scoreTotal,
+      averageScore: item.generated
+        ? Math.round((item.scoreTotal / item.generated) * 10) / 10
+        : 0,
     };
   }).sort((left, right) => right.generated - left.generated);
+  const generated = groupedByActionType.reduce((sum, item) => sum + item.generated, 0);
+  const accepted = groupedByActionType.reduce((sum, item) => sum + item.accepted, 0);
+  const rejected = groupedByActionType.reduce((sum, item) => sum + item.rejected, 0);
+  const editedApproved = editedFeedbacks.length;
+  const scoreTotal = groupedByActionType.reduce(
+    (sum, item) => sum + item.scoreTotal,
+    0,
+  );
 
   return {
     generated,
@@ -346,7 +374,7 @@ export async function getRecommendationQualityOverview(workspaceId: string, wind
     actionCreationRate: toRate(actionCreated, generated),
     explanationViewRate: toRate(explanationViewed, generated),
     editedApprovalRate: toRate(editedApproved, generated),
-    averageScore: average(recommendations.map((item) => item.score)),
+    averageScore: generated ? Math.round((scoreTotal / generated) * 10) / 10 : 0,
     byActionType: groupedByActionType.map((item) => ({
       actionType: item.actionType,
       generated: item.generated,
