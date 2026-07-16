@@ -165,6 +165,33 @@ export function buildReportsExtensionFallbackSurface(input: {
   );
 }
 
+/**
+ * Build an ExtensionAccessContext carrying the caller's member role subject, so an
+ * extension's getAccess (and any overlay role-visibility wrapper composed onto it —
+ * e.g. an overlay's reports/nav role filter) can resolve WHO is asking. Returns undefined
+ * when no membership is available → callers keep their prior fail-open behavior, and a
+ * caller-supplied accessContext always wins. Additive & tenant-safe: extensions that
+ * ignore the subject are unaffected; only wrappers that read subject.workspaceRole /
+ * rolePresetKey change behavior. Fail-open is preserved downstream (unknown role → show).
+ */
+function membershipAccessContext(
+  workspace: WorkspaceLike,
+  membership:
+    | { id?: string; role?: string; rolePresetKey?: string | null }
+    | null
+    | undefined,
+): ExtensionAccessContext | undefined {
+  if (!membership) return undefined;
+  const subject = {
+    actorType: "user" as const,
+    workspaceId: workspace.id,
+    membershipId: membership.id,
+    workspaceRole: membership.role,
+    rolePresetKey: membership.rolePresetKey ?? null,
+  };
+  return { subject: subject as ExtensionAccessContext["subject"] };
+}
+
 export async function resolveReportsExtensions(input: {
   workspace: WorkspaceLike;
   english: boolean;
@@ -191,11 +218,16 @@ export async function resolveReportsExtensions(input: {
     ? input.requestedTab[0]
     : input.requestedTab;
 
+  // Thread the caller's member role subject so role-aware getAccess wrappers can act
+  // (a caller-supplied accessContext wins; no membership → undefined → fail-open unchanged).
+  const accessContext =
+    input.accessContext ?? membershipAccessContext(input.workspace, input.membership);
+
   const accessResults = await Promise.all(
     reportsExtensions.map(async (descriptor) => ({
       descriptor,
       access: await resolveReportsExtensionAccessSafely(descriptor, input.workspace, {
-        accessContext: input.accessContext,
+        accessContext,
       }),
     })),
   );
@@ -325,12 +357,17 @@ export async function resolveWorkspaceNavExtensions(input: {
   workspace: WorkspaceLike;
   english: boolean;
   accessContext?: ExtensionAccessContext;
+  membership?: { id?: string; role?: string; rolePresetKey?: string | null } | null;
 }): Promise<ResolvedWorkspaceNavExtensions> {
   const workspaceNavExtensions = getRegisteredWorkspaceNavExtensions();
+  // Thread the caller's member role subject so role-aware nav getAccess wrappers can act
+  // (caller accessContext wins; no membership → undefined → fail-open unchanged).
+  const accessContext =
+    input.accessContext ?? membershipAccessContext(input.workspace, input.membership);
   const accessResults = await Promise.all(
     workspaceNavExtensions.map(async (descriptor) => ({
       descriptor,
-      access: await descriptor.getAccess(input.workspace, input.accessContext),
+      access: await descriptor.getAccess(input.workspace, accessContext),
     })),
   );
 
