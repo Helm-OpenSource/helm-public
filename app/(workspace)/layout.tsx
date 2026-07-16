@@ -29,6 +29,7 @@ export default async function WorkspaceLayout({
   let shellProps:
     | {
         workspaceName: string;
+        brandLabel: string | null;
         userName: string;
         roleLabel: string;
         locale: ReturnType<typeof normalizeWorkspaceUiConfig>["locale"];
