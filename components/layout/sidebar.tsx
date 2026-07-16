@@ -365,7 +365,10 @@ export function Sidebar({
                     icon={<ExtensionNavIcon iconKey={item.iconKey} />}
                     label={item.label}
                     trailing={
-                      item.statusBadge ? (
+                      // "muted" (e.g. the ubiquitous 只读) is the default read-only
+                      // state — noise, not signal — so we suppress its pill entirely.
+                      // Only informative tones (live / planned / blocked) render.
+                      item.statusBadge && item.statusBadge.tone !== "muted" ? (
                         <span
                           className={cn(
                             "rounded-full px-2 py-0.5 text-[11px] font-medium",
@@ -373,8 +376,6 @@ export function Sidebar({
                               "bg-[color:var(--status-success-bg)] text-[color:var(--status-success-text)]",
                             item.statusBadge.tone === "planned" &&
                               "bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning-text)]",
-                            item.statusBadge.tone === "muted" &&
-                              "bg-[color:var(--surface-subtle)] text-[color:var(--muted-foreground)]",
                             item.statusBadge.tone === "blocked" &&
                               "bg-[color:var(--status-danger-bg)] text-[color:var(--status-danger-text)]",
                           )}

@@ -33,3 +33,48 @@ describe("isNavLinkActive — query is a pathname relationship (CodeX P1)", () =
     ).toBe(false);
   });
 });
+
+describe("isNavLinkActive — sibling ?tab= links are single-active", () => {
+  it("only the link whose tab matches the current tab is active", () => {
+    // Two sibling extension tabs share /reports; on /reports?tab=a only 'a' is active.
+    expect(
+      isNavLinkActive("/reports", "/reports?tab=a", { currentQuery: "tab=a" }),
+    ).toBe(true);
+    expect(
+      isNavLinkActive("/reports", "/reports?tab=b", { currentQuery: "tab=a" }),
+    ).toBe(false);
+  });
+
+  it("accepts a leading '?' on currentQuery", () => {
+    expect(
+      isNavLinkActive("/reports", "/reports?tab=a", { currentQuery: "?tab=a" }),
+    ).toBe(true);
+    expect(
+      isNavLinkActive("/reports", "/reports?tab=b", { currentQuery: "?tab=a" }),
+    ).toBe(false);
+  });
+
+  it("ignores unrelated query params when comparing tabs", () => {
+    expect(
+      isNavLinkActive("/reports", "/reports?tab=a", {
+        currentQuery: "tab=a&range=30d",
+      }),
+    ).toBe(true);
+  });
+
+  it("falls back to pathname match when the current location has no tab", () => {
+    // e.g. landed on /reports with no tab — the query-tab links still highlight on
+    // pathname (matching prior behavior); no disambiguation is possible.
+    expect(
+      isNavLinkActive("/reports", "/reports?tab=a", { currentQuery: "" }),
+    ).toBe(true);
+    expect(isNavLinkActive("/reports", "/reports?tab=a")).toBe(true);
+  });
+
+  it("does not gate links without a tab in their href", () => {
+    // A plain /reports link stays active on /reports?tab=a (pathname relationship).
+    expect(
+      isNavLinkActive("/reports", "/reports", { currentQuery: "tab=a" }),
+    ).toBe(true);
+  });
+});
