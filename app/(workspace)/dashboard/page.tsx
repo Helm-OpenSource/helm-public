@@ -7,7 +7,10 @@ import {
 import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
 import { resolveMemberBasePresetKey } from "@/lib/definitions/workspace-role-preset-catalog";
 import { resolveNorthstarText } from "@/lib/shell/northstar-text";
-import { resolveRoleHomeDestinationFromCandidates } from "@/lib/shell/role-home-routing";
+import {
+  buildRoleHomeCandidateKeys,
+  resolveRoleHomeDestinationFromCandidates,
+} from "@/lib/shell/role-home-routing";
 import {
   resolveShellMainline,
   resolveShellRoleHomeRouting,
@@ -98,7 +101,13 @@ export default async function DashboardPage({
   ]);
   const roleHomeDestination = resolveRoleHomeDestinationFromCandidates(
     roleHomeRouting,
-    [basePresetKey, membership.role],
+    buildRoleHomeCandidateKeys({
+      persona: membership.persona,
+      title: membership.title,
+      rolePresetKey: membership.rolePresetKey,
+      basePresetKey,
+      workspaceRole: membership.role,
+    }),
   );
   const lens =
     roleHomeDestination.kind === "control_tower"

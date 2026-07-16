@@ -142,4 +142,56 @@ describe("subject-aware extension access", () => {
       __resetPackRegistryForTest();
     }
   });
+
+  it("builds the navigation access subject with tenant persona and title", async () => {
+    __resetPackRegistryForTest();
+    let receivedAccessContext: ExtensionAccessContext | undefined;
+    try {
+      registerPackContributions("role-aware", {
+        workspaceNavExtensions: [
+          {
+            id: "role-aware-nav",
+            getAccess: async (_workspace, context) => {
+              receivedAccessContext = context;
+              return { ok: true };
+            },
+            buildCluster: () => ({
+              extensionKey: "role-aware",
+              label: "Role aware",
+              items: [
+                {
+                  key: "role-home",
+                  href: "/role-home",
+                  label: "Role home",
+                  iconKey: "shield-check",
+                },
+              ],
+            }),
+          },
+        ],
+      });
+
+      await resolveWorkspaceNavExtensions({
+        workspace,
+        english: true,
+        membership: {
+          id: "membership-quality",
+          role: "REVIEWER",
+          rolePresetKey: "OPERATIONS_FINANCE",
+          persona: "质检投诉",
+          title: "质检专员",
+        },
+      });
+
+      expect(receivedAccessContext?.subject).toMatchObject({
+        membershipId: "membership-quality",
+        workspaceRole: "REVIEWER",
+        rolePresetKey: "OPERATIONS_FINANCE",
+        persona: "质检投诉",
+        title: "质检专员",
+      });
+    } finally {
+      __resetPackRegistryForTest();
+    }
+  });
 });

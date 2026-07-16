@@ -75,6 +75,8 @@ export default async function WorkspaceLayout({
         id: membership.id,
         role: membership.role,
         rolePresetKey: membership.rolePresetKey,
+        persona: membership.persona,
+        title: membership.title,
       },
     });
 
