@@ -79,6 +79,7 @@ describe("subject-aware extension access", () => {
 
   it("passes access context through workspace navigation extension resolution", async () => {
     __resetPackRegistryForTest();
+    let receivedBuildContext: ExtensionAccessContext | undefined;
     try {
       registerPackContributions("sample", {
         workspaceNavExtensions: [
@@ -95,18 +96,21 @@ describe("subject-aware extension access", () => {
                 dataClassifications: ["workspace_internal"],
               },
             }),
-            buildCluster: () => ({
-              extensionKey: "case-management-sample",
-              label: "Case Management",
-              items: [
-                {
-                  key: "case-day-board",
-                  href: "/cases",
-                  label: "Cases",
-                  iconKey: "shield-check",
-                },
-              ],
-            }),
+            buildCluster: (_english, context) => {
+              receivedBuildContext = context;
+              return {
+                extensionKey: "case-management-sample",
+                label: "Case Management",
+                items: [
+                  {
+                    key: "case-day-board",
+                    href: "/cases",
+                    label: "Cases",
+                    iconKey: "shield-check",
+                  },
+                ],
+              };
+            },
           },
         ],
       });
@@ -133,6 +137,7 @@ describe("subject-aware extension access", () => {
           },
         ],
       });
+      expect(receivedBuildContext).toEqual({ subject, traceId: "trace-nav" });
     } finally {
       __resetPackRegistryForTest();
     }

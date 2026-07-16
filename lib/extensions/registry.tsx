@@ -374,7 +374,7 @@ export async function resolveWorkspaceNavExtensions(input: {
   const clusters: WorkspaceNavExtensionCluster[] = [];
   for (const { descriptor, access } of accessResults) {
     if (!access.ok) continue;
-    const cluster = descriptor.buildCluster(input.english);
+    const cluster = descriptor.buildCluster(input.english, accessContext);
     if (cluster.items.length === 0) continue;
     clusters.push(cluster);
   }
