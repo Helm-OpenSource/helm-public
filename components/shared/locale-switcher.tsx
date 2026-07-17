@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Languages } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { updateWorkspaceOperationalControlsAction } from "@/features/settings/actions";
+import { updatePublicLocaleAction } from "@/features/auth/actions";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 
 type LocaleSwitcherProps = {
@@ -15,7 +15,7 @@ type LocaleSwitcherProps = {
 
 export function LocaleSwitcher({ className, iconOnly }: LocaleSwitcherProps) {
   const router = useRouter();
-  const { locale, messages, featureFlags, pilotMode, captureConsentRequired, dataRetentionDays } = useWorkspaceUi();
+  const { locale, messages, featureFlags } = useWorkspaceUi();
   const [pending, startTransition] = useTransition();
 
   if (!featureFlags.multilingualUi) {
@@ -29,13 +29,7 @@ export function LocaleSwitcher({ className, iconOnly }: LocaleSwitcherProps) {
         disabled={pending}
         onValueChange={(value) => {
           startTransition(async () => {
-            const result = await updateWorkspaceOperationalControlsAction({
-              defaultLocale: value === "en-US" ? "en-US" : "zh-CN",
-              pilotMode,
-              captureConsentRequired,
-              dataRetentionDays,
-              featureFlags,
-            });
+            const result = await updatePublicLocaleAction(value === "en-US" ? "en-US" : "zh-CN");
             if (!result.ok) {
               toast.error(result.error ?? (locale === "en-US" ? "Failed to switch UI language" : "语言切换失败"));
               return;
