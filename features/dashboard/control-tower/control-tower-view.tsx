@@ -19,12 +19,15 @@ import {
 
 /**
  * 控制塔内容层分流（蓝图 §2，Phase 1）——同一 URL、无 redirect：
- * - 管理角色（control_tower lens）：四段完整控制塔。段①主线为**纯展示摘要**
- *   （不可点击），首个可操作区块 = 段②"需要你拍板"。
+ * - 管理角色（control_tower lens）：按关心程度三层——①需要你处理（拍板 +
+ *   异常收件箱，唯一可被"消化"的内容）②经营态势（北极星一行 + 主线摘要 +
+ *   KPI，纯只读）③工位总览与折叠收纳。可操作内容置顶，只读态势居次。
  * - 一线角色（advance/delivery/review desk lens）：工位家视图——需拍板 +
  *   主区入口卡；不渲染主线卡带与改进候选（不给组合 KPI 面）。
  * - GENERIC（解析失败/无专属工位）：最低信息面——仅主区入口（搜索/收纳），
  *   不渲染需拍板 surface 与任何聚合读出。
+ * northstarKpiSlot/attentionSlot 由页面注入（二者是独立异步 server component，
+ * 在此处只决定版面位置）：控制塔 lens 内嵌入对应层；其余 lens 维持旧行为置尾。
  */
 export function ControlTowerView({
   english,
@@ -36,6 +39,8 @@ export function ControlTowerView({
   viewModel,
   tenantResourceImpactReadout,
   connectorSheet,
+  northstarKpiSlot,
+  attentionSlot,
 }: {
   english: boolean;
   lens: RoleLens;
@@ -53,6 +58,10 @@ export function ControlTowerView({
   tenantResourceImpactReadout: DashboardPageData["tenantResourceImpactReadout"];
   /** ConnectorBindingSuccessSheet，与旧版一致置于根节点内首位 */
   connectorSheet: React.ReactNode;
+  /** 北极星 KPI 面板（read-only），版面位置由本组件按 lens 决定 */
+  northstarKpiSlot: React.ReactNode;
+  /** 异常工作台 · Agent 收件箱（read-only），版面位置由本组件按 lens 决定 */
+  attentionSlot: React.ReactNode;
 }) {
   const catalog = withPrimaryWorkstationEntry(
     getDestinationCatalog(basePresetKey),
@@ -77,6 +86,8 @@ export function ControlTowerView({
           }
         />
         <DeskEntries catalog={catalog} english={english} />
+        {northstarKpiSlot}
+        {attentionSlot}
       </div>
     );
   }
@@ -104,6 +115,8 @@ export function ControlTowerView({
           english={english}
         />
         <DeskEntries catalog={catalog} english={english} />
+        {northstarKpiSlot}
+        {attentionSlot}
       </div>
     );
   }
@@ -129,8 +142,20 @@ export function ControlTowerView({
         english={english}
       />
 
-      {/* 段① 经营主线（北极星一行 + 纯展示卡带摘要，不可点击） */}
-      <div className="space-y-2">
+      {/* 层① 需要你处理——首屏即可操作：先拍板，后异常收件箱。
+          这是首页唯一能被用户"消化掉"的内容，权重最高。 */}
+      <DashboardHomeWorkEntrySurface
+        model={viewModel.dashboardHomeWorkEntry}
+        english={english}
+      />
+      {attentionSlot}
+
+      {/* 层② 经营态势（纯只读）——北极星一行 + 主线卡带摘要 + KPI 面板
+          归并为一层，回答"整体推进得怎么样"，居可操作内容之后。 */}
+      <section
+        aria-label={english ? "Operating picture" : "经营态势"}
+        className="space-y-2"
+      >
         <p className="text-xs text-[color:var(--muted-foreground)]">
           {scopedNorthstarText ??
             (english ? (
@@ -150,15 +175,10 @@ export function ControlTowerView({
             ))}
         </p>
         <MainlineStrip readout={mainline} english={english} />
-      </div>
+        {northstarKpiSlot}
+      </section>
 
-      {/* 段② 需要你拍板（首个可操作区块） */}
-      <DashboardHomeWorkEntrySurface
-        model={viewModel.dashboardHomeWorkEntry}
-        english={english}
-      />
-
-      {/* 段③ 我的工位 */}
+      {/* 层③ 我的工位（导航层） */}
       <section
         aria-label={english ? "Desks" : "工位"}
         className="rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4"
@@ -169,7 +189,7 @@ export function ControlTowerView({
         <DeskEntryPills catalog={catalog} english={english} />
       </section>
 
-      {/* 段④ 待复核的系统改进候选（默认折叠；归并旧四面板 + 租户资源面板） */}
+      {/* 层④ 收纳——待复核的系统改进候选（默认折叠；归并旧四面板 + 租户资源面板） */}
       <details className="group rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
           <span>
