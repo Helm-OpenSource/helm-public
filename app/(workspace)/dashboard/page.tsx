@@ -153,37 +153,41 @@ export default async function DashboardPage({
     },
   });
 
+  // 北极星 KPI(read-only)——northstarKpiSources surface 首个 Core 消费者;
+  // 金额只给分档、三态禁造数;无 provider 时一行诚实说明,不占版面。
+  // 异常工作台 · Agent 收件箱(read-only)——attention surface 首个 Core 消费者;
+  // 只汇集与导航,不代执行;无 provider 时诚实空态。
+  // 二者版面位置由 ControlTowerView 按 lens 决定:控制塔 lens 下异常台紧随
+  // "等你拍板"(可操作内容置顶)、KPI 归入经营态势层;其余 lens 维持置尾。
   return (
-    <div className="space-y-8">
-      <ControlTowerView
-        english={english}
-        lens={lens}
-        basePresetKey={catalogPresetKey}
-        workstationHomeEntry={
-          workstationHomeEntry?.href
-            ? { href: workstationHomeEntry.href, label: workstationHomeEntry.label }
-            : null
-        }
-        mainline={mainline}
-        northstarText={resolveNorthstarText(workspace.focusAreas, english)}
-        viewModel={viewModel}
-        tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
-        connectorSheet={connectorSheet}
-      />
-      {/* 北极星 KPI(read-only)——northstarKpiSources surface 首个 Core 消费者;经营控制塔指标行。
-          金额只给分档、三态禁造数;无 provider 时一行诚实说明,不占版面。 */}
-      <NorthstarKpiPanel
-        workspace={workspace}
-        english={english}
-        runtimeContext={runtimeContext}
-      />
-      {/* 异常工作台 · Agent 收件箱(read-only)——attention surface 首个 Core 消费者。
-          控制塔操作者首页之下即异常台;只汇集与导航,不代执行;无 provider 时诚实空态。 */}
-      <AttentionInbox
-        workspace={workspace}
-        english={english}
-        runtimeContext={runtimeContext}
-      />
-    </div>
+    <ControlTowerView
+      english={english}
+      lens={lens}
+      basePresetKey={catalogPresetKey}
+      workstationHomeEntry={
+        workstationHomeEntry?.href
+          ? { href: workstationHomeEntry.href, label: workstationHomeEntry.label }
+          : null
+      }
+      mainline={mainline}
+      northstarText={resolveNorthstarText(workspace.focusAreas, english)}
+      viewModel={viewModel}
+      tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
+      connectorSheet={connectorSheet}
+      northstarKpiSlot={
+        <NorthstarKpiPanel
+          workspace={workspace}
+          english={english}
+          runtimeContext={runtimeContext}
+        />
+      }
+      attentionSlot={
+        <AttentionInbox
+          workspace={workspace}
+          english={english}
+          runtimeContext={runtimeContext}
+        />
+      }
+    />
   );
 }
