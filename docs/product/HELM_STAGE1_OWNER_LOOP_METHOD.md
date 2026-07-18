@@ -1,5 +1,5 @@
 ---
-status: implemented_reference_slice
+status: active / implemented-reference-slice
 owner: helm-core
 created: 2026-07-18
 review_after: 2026-08-18

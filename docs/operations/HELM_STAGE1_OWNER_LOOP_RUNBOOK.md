@@ -1,5 +1,5 @@
 ---
-status: active_reference_runbook
+status: active / reference-runbook
 owner: helm-core
 created: 2026-07-18
 review_after: 2026-08-18
