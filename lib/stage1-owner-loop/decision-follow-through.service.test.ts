@@ -113,6 +113,7 @@ function command(
     automationLevel: "assist",
     allowedToolRefs: ["tool:task-draft"],
     externalSideEffects: [],
+    policyEnvelopeRef: null,
     status: "owner_confirmed",
     ...overrides,
   };

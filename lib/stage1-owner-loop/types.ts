@@ -218,6 +218,7 @@ export type OwnerCommandDraft = {
   automationLevel: WorkPacketAutomationLevel;
   allowedToolRefs: readonly string[];
   externalSideEffects: readonly string[];
+  policyEnvelopeRef: string | null;
   status: OwnerCommandStatus;
 };
 
@@ -298,6 +299,8 @@ export const DECISION_FOLLOW_THROUGH_STATES = [
   "BLOCKED",
   "EXPIRED",
   "SUPERSEDED",
+  "EVALUATED",
+  "INCONSISTENT",
 ] as const;
 
 export type DecisionFollowThroughState =

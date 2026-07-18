@@ -518,6 +518,7 @@ export async function dispatchStage1DecisionWorkPacket(input: {
       automationLevel: input.command.automationLevel,
       allowedToolRefs: input.command.allowedToolRefs,
       externalSideEffects: input.command.externalSideEffects,
+      policyEnvelopeRef: input.command.policyEnvelopeRef,
     },
     resultPreview: input.command.acceptanceCriteria.join("; "),
   });

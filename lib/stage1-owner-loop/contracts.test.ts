@@ -3,6 +3,7 @@ import {
   authorizeAutonomousAction,
   authorizeObservation,
   projectDecisionFollowThroughState,
+  validateAutonomyPolicyEnvelope,
   validateEvidenceAnswerPacket,
   validateEnterpriseObservationProgram,
   validateObservationSource,
@@ -87,6 +88,33 @@ describe("Stage 1 observation authorization", () => {
         .reasons,
     ).toContain("authorization_mismatch");
   });
+
+  it("fails closed on invalid enums and source retention beyond owner authorization", () => {
+    expect(
+      validateEnterpriseObservationProgram({
+        ...program,
+        status: "unexpected" as EnterpriseObservationProgram["status"],
+      }).errors,
+    ).toContain("program_status_invalid");
+    expect(
+      validateObservationSource({
+        ...source,
+        accessMode: "write_api" as ObservationSource["accessMode"],
+      }).errors,
+    ).toContain("access_mode_invalid");
+    expect(
+      authorizeObservation({
+        program,
+        source: { ...source, retentionDays: 31 },
+        now: "2026-07-18T00:00:00.000Z",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        allowed: false,
+        reasons: expect.arrayContaining(["retention_exceeds_authorization"]),
+      }),
+    );
+  });
 });
 
 describe("Stage 1 evidence discipline", () => {
@@ -121,6 +149,45 @@ describe("Stage 1 evidence discipline", () => {
         "evidence_ref_required",
         "completeness_required",
       ]),
+    );
+  });
+
+  it("requires traceable receipt references and non-blank statement evidence", () => {
+    expect(
+      validateSourceObservationReceipt({
+        ...receipt,
+        receiptId: "",
+        workspaceRef: "",
+        sourceRef: "",
+        programRef: "",
+      }).errors,
+    ).toEqual(
+      expect.arrayContaining([
+        "receipt_id_required",
+        "workspace_ref_required",
+        "source_ref_required",
+        "program_ref_required",
+      ]),
+    );
+
+    const blankEvidence: EvidenceAnswerPacket = {
+      answerId: "answer:blank",
+      workspaceRef: program.workspaceRef,
+      questionRef: "question:blank",
+      answer: "Unsupported",
+      facts: [{ statement: "Claimed fact", evidenceRefs: ["  "], freshness: "fresh" }],
+      inferences: [],
+      unknowns: [],
+      conflicts: [],
+      evidenceRefs: [""],
+      freshness: "fresh",
+      confidence: "high",
+      generatedAt: "2026-07-18T00:00:00.000Z",
+      reviewRequired: false,
+      refusalReason: null,
+    };
+    expect(validateEvidenceAnswerPacket(blankEvidence).errors).toEqual(
+      expect.arrayContaining(["statement_evidence_required", "answer_evidence_required"]),
     );
   });
 
@@ -179,6 +246,7 @@ describe("Stage 1 owner command and state projection", () => {
     automationLevel: "assist",
     allowedToolRefs: ["tool:read-only-console"],
     externalSideEffects: [],
+    policyEnvelopeRef: null,
     status: "owner_confirmed",
   };
 
@@ -200,6 +268,31 @@ describe("Stage 1 owner command and state projection", () => {
         "escalation_owner_required",
       ]),
     );
+  });
+
+  it("requires command identity and policy binding for declared external side effects", () => {
+    expect(
+      validateOwnerCommandDraft({
+        ...command,
+        commandId: "",
+        workspaceRef: "",
+        externalSideEffects: ["send_message"],
+      }).errors,
+    ).toEqual(
+      expect.arrayContaining([
+        "command_id_required",
+        "workspace_ref_required",
+        "external_side_effect_requires_policy_envelope",
+      ]),
+    );
+    expect(
+      validateOwnerCommandDraft({
+        ...command,
+        automationLevel: "active_candidate",
+        externalSideEffects: ["send_message"],
+        policyEnvelopeRef: "policy-envelope:1",
+      }),
+    ).toEqual({ valid: true, errors: [] });
   });
 
   it("projects existing records without creating a second state machine", () => {
@@ -236,6 +329,28 @@ describe("Stage 1 owner command and state projection", () => {
         receiptVerified: false,
       }),
     ).toBe("BLOCKED");
+    expect(
+      projectDecisionFollowThroughState({
+        decisionStatus: "evaluated",
+        ownerConfirmedAt: null,
+        actionStatus: null,
+        actionExecutionStatus: null,
+        approvalStatus: null,
+        receiptPresent: false,
+        receiptVerified: false,
+      }),
+    ).toBe("EVALUATED");
+    expect(
+      projectDecisionFollowThroughState({
+        decisionStatus: "owner_confirmed",
+        ownerConfirmedAt: "2026-07-18T00:00:00.000Z",
+        actionStatus: "EXECUTED",
+        actionExecutionStatus: "executed",
+        approvalStatus: "EXECUTED",
+        receiptPresent: false,
+        receiptVerified: false,
+      }),
+    ).toBe("INCONSISTENT");
   });
 });
 
@@ -276,6 +391,93 @@ describe("Public autonomy boundary", () => {
     observedStopConditions: [],
     externalSideEffect: true,
   };
+
+  it("rejects malformed policy windows and enforces the declared local time window", () => {
+    expect(
+      validateAutonomyPolicyEnvelope({ ...envelope, validUntil: "not-a-date" }).errors,
+    ).toContain("policy_window_invalid");
+    expect(
+      authorizeAutonomousAction({
+        envelope: {
+          ...envelope,
+          runtimeActivationRef: "activation:private-control-plane",
+          validUntil: "not-a-date",
+        },
+        request,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        authorized: false,
+        reasons: expect.arrayContaining(["policy_window_invalid"]),
+      }),
+    );
+    expect(
+      authorizeAutonomousAction({
+        envelope: {
+          ...envelope,
+          runtimeActivationRef: "activation:private-control-plane",
+          allowedTimeWindows: ["09:00-10:00Z"],
+        },
+        request: { ...request, requestedAt: "2026-07-18T23:00:00.000Z" },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        authorized: false,
+        reasons: expect.arrayContaining(["outside_allowed_time_window"]),
+      }),
+    );
+  });
+
+  it("supports explicit IANA-zone and overnight policy windows", () => {
+    expect(
+      authorizeAutonomousAction({
+        envelope: {
+          ...envelope,
+          runtimeActivationRef: "activation:private-control-plane",
+          allowedTimeWindows: ["22:00-06:00@Asia/Shanghai"],
+        },
+        request: { ...request, requestedAt: "2026-07-18T15:00:00.000Z" },
+      }),
+    ).toEqual({ authorized: true, reasons: [], externalReceiptRequired: true });
+  });
+
+  it("requires finite confidence plus amount and channel declarations", () => {
+    const activated = {
+      ...envelope,
+      runtimeActivationRef: "activation:private-control-plane",
+      maximumAmount: 100,
+      currency: "CNY",
+    };
+    expect(
+      authorizeAutonomousAction({ envelope: activated, request }).reasons,
+    ).toEqual(expect.arrayContaining(["amount_declaration_required"]));
+    expect(
+      authorizeAutonomousAction({
+        envelope: { ...envelope, runtimeActivationRef: "activation:private-control-plane" },
+        request: { ...request, channel: null },
+      }).reasons,
+    ).toEqual(expect.arrayContaining(["channel_declaration_required"]));
+    expect(
+      authorizeAutonomousAction({
+        envelope: { ...envelope, runtimeActivationRef: "activation:private-control-plane" },
+        request: { ...request, confidence: Number.NaN },
+      }).reasons,
+    ).toEqual(expect.arrayContaining(["confidence_invalid"]));
+  });
+
+  it("treats every observed stop condition as fail-closed, including unknown ones", () => {
+    expect(
+      authorizeAutonomousAction({
+        envelope: { ...envelope, runtimeActivationRef: "activation:private-control-plane" },
+        request: { ...request, observedStopConditions: ["regulator_inquiry"] },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        authorized: false,
+        reasons: ["stop:unrecognized:regulator_inquiry"],
+      }),
+    );
+  });
 
   it("denies autonomy in Public without a private runtime activation reference", () => {
     expect(authorizeAutonomousAction({ envelope, request })).toEqual({
