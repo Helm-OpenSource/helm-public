@@ -25,6 +25,7 @@ import {
 import { evaluateStage1DecisionRecord } from "./decision-evaluation.service";
 import {
   beginObservationSourceRun,
+  completeObservationSourceRun,
   createEnterpriseObservationProgram,
   registerObservationSource,
   revokeEnterpriseObservationProgram,
@@ -144,8 +145,20 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       beginObservationSourceRun(input),
       beginObservationSourceRun(input),
     ]);
+    const completed = await completeObservationSourceRun({
+      workspaceId,
+      runId: first.id,
+      observedAt: new Date("2026-07-18T01:02:00.000Z"),
+      summaryHash: "sha256:synthetic-crm-window",
+      completenessPercent: 100,
+      freshness: "fresh",
+      outcome: "success",
+      evidenceRefs: ["evidence:synthetic-crm-window"],
+      errorCodes: [],
+    });
 
     expect(first.id).toBe(second.id);
+    expect(completed.status).toBe("SUCCEEDED");
     expect(
       await db.observationSourceRun.count({
         where: { workspaceId, executionKey: "same-window" },
