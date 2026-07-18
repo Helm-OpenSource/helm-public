@@ -127,6 +127,7 @@ export function Stage1OwnerLoopConsole({
 
         <div className="mt-5 grid min-h-24 grid-cols-2 border-y border-[color:var(--border)] md:grid-cols-4 md:divide-x md:divide-[color:var(--border)]">
           <Metric
+            metricKey="source-health"
             icon={Database}
             label={english ? "Source health" : "来源健康"}
             value={`${readout.observation.healthy}/${readout.observation.totalSources}`}
@@ -137,6 +138,7 @@ export function Stage1OwnerLoopConsole({
             }
           />
           <Metric
+            metricKey="owner-decisions"
             icon={BookOpenCheck}
             label={english ? "Owner decisions" : "待拍板决策"}
             value={String(readout.decisions.pendingOwner)}
@@ -147,6 +149,7 @@ export function Stage1OwnerLoopConsole({
             }
           />
           <Metric
+            metricKey="open-supervision"
             icon={AlertTriangle}
             label={english ? "Open supervision" : "监督异常"}
             value={String(readout.supervision.open)}
@@ -158,6 +161,7 @@ export function Stage1OwnerLoopConsole({
             attention={readout.supervision.critical > 0}
           />
           <Metric
+            metricKey="verified-receipts"
             icon={CheckCircle2}
             label={english ? "Verified receipts" : "已验收回执"}
             value={`${readout.receipts.verified}/${readout.receipts.workPackets}`}
@@ -290,12 +294,14 @@ export function Stage1OwnerLoopConsole({
 }
 
 function Metric({
+  metricKey,
   icon: Icon,
   label,
   value,
   detail,
   attention = false,
 }: {
+  metricKey: string;
   icon: typeof Database;
   label: string;
   value: string;
@@ -303,7 +309,10 @@ function Metric({
   attention?: boolean;
 }) {
   return (
-    <div className="min-w-0 px-3 py-4 first:pl-0 last:pr-0 md:px-5">
+    <div
+      className="min-w-0 px-3 py-4 first:pl-0 last:pr-0 md:px-5"
+      data-stage1-owner-loop-metric={metricKey}
+    >
       <div className="flex items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
         <Icon className="size-3.5" aria-hidden="true" />
         <span>{label}</span>

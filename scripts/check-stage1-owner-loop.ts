@@ -17,6 +17,7 @@ const REQUIRED_FILES = [
   "features/dashboard/stage1-owner-loop-query.ts",
   "features/dashboard/stage1-owner-loop-readout.ts",
   "features/dashboard/stage1-owner-loop-console.tsx",
+  "tests/e2e/stage1-owner-loop.spec.ts",
   "prisma/migrations/20260718080000_stage1_owner_loop/migration.sql",
   "docs/product/HELM_STAGE1_OWNER_LOOP_METHOD.md",
   "docs/operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md",
@@ -59,6 +60,16 @@ const REQUIRED_TOKENS: ReadonlyArray<{
       'data-stage1-owner-loop-console="true"',
       "本面板不执行、不外发、不产生承诺",
       "this surface does not execute, send, or create commitments",
+    ],
+  },
+  {
+    file: "tests/e2e/stage1-owner-loop.spec.ts",
+    tokens: [
+      'openDemoWorkspace(page, "founder")',
+      'openDemoWorkspace(page, "sales")',
+      'data-stage1-owner-loop-console="true"',
+      'data-stage1-owner-loop-metric="${metricKey}"',
+      "browserErrors",
     ],
   },
   {
