@@ -1,8 +1,11 @@
 import {
+  ActionStatus,
   ActorType,
+  ApprovalStatus,
   ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
   ExecutionReceiptVerificationState,
+  MemoryStatus,
   WorkspaceRole,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -19,6 +22,7 @@ import {
   createStage1DecisionRecord,
   dispatchStage1DecisionWorkPacket,
 } from "./decision-follow-through.service";
+import { evaluateStage1DecisionRecord } from "./decision-evaluation.service";
 import {
   beginObservationSourceRun,
   createEnterpriseObservationProgram,
@@ -35,6 +39,9 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
   let workspaceId = "";
   let ownerUserId = "";
   let reviewerUserId = "";
+  let dispatchedDecisionRecordId = "";
+  let dispatchedDecisionKey = "";
+  let dispatchedActionItemId = "";
 
   beforeAll(async () => {
     if (process.env.DATABASE_URL !== integrationDatabaseUrl) {
@@ -80,6 +87,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
   afterAll(async () => {
     if (!workspaceId) return;
     await db.$transaction(async (tx) => {
+      await tx.memoryFact.deleteMany({ where: { workspaceId } });
       await tx.executionReceipt.deleteMany({ where: { workspaceId } });
       await tx.decisionWorkPacketClaim.deleteMany({ where: { workspaceId } });
       await tx.approvalTask.deleteMany({ where: { workspaceId } });
@@ -277,6 +285,9 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
         actorUserId: ownerUserId,
       });
     const [first, second] = await Promise.all([dispatch(), dispatch()]);
+    dispatchedDecisionRecordId = record.id;
+    dispatchedDecisionKey = record.decisionKey;
+    dispatchedActionItemId = first.actionItemId;
 
     expect(first.actionItemId).toBe(second.actionItemId);
     expect(
@@ -294,6 +305,90 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
         where: { workspaceId, decisionRecordId: record.id },
       }),
     ).toBe(1);
+  });
+
+  it("commits one decision evaluation and observed memory under concurrent replay", async () => {
+    expect(dispatchedDecisionRecordId).not.toBe("");
+    expect(dispatchedActionItemId).not.toBe("");
+    await db.$transaction([
+      db.approvalTask.update({
+        where: { actionItemId: dispatchedActionItemId },
+        data: {
+          status: ApprovalStatus.EXECUTED,
+          reviewedById: reviewerUserId,
+          reviewedAt: new Date("2026-07-18T01:55:00.000Z"),
+        },
+      }),
+      db.actionItem.update({
+        where: { id: dispatchedActionItemId },
+        data: {
+          status: ActionStatus.EXECUTED,
+          executionStatus: "completed",
+          executedAt: new Date("2026-07-18T02:00:00.000Z"),
+        },
+      }),
+    ]);
+    await recordExecutionReceipt({
+      workspaceId,
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: dispatchedActionItemId,
+      actionItemId: dispatchedActionItemId,
+      outcome: ExecutionReceiptOutcome.SUCCESS,
+      actionTaken: "SYNTHETIC_DECISION_FOLLOW_THROUGH",
+      evidenceRefs: ["evidence:synthetic-recovery"],
+      executedByUserId: ownerUserId,
+      executedByActorType: ActorType.USER,
+      actorName: "Stage 1 Owner",
+    });
+    await verifyExecutionReceipt({
+      workspaceId,
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: dispatchedActionItemId,
+      verifierUserId: reviewerUserId,
+      verifierName: "Stage 1 Reviewer",
+    });
+
+    const evaluate = () =>
+      evaluateStage1DecisionRecord({
+        workspaceId,
+        decisionRecordId: dispatchedDecisionRecordId,
+        followedAiRecommendation: true,
+        outcome: {
+          outcomeRef: `business-outcome:synthetic-recovery-${suffix}`,
+          result: "success",
+        },
+        actorName: "Helm Evaluation Runtime",
+        actorType: ActorType.AI,
+      });
+    const results = await Promise.all([evaluate(), evaluate()]);
+
+    expect(results.map((result) => result.created).sort()).toEqual([
+      false,
+      true,
+    ]);
+    expect(results[0].evaluation).toEqual(results[1].evaluation);
+    expect(results[0].evaluation.automationImpact).toBe("promote_candidate");
+    expect(
+      await db.memoryFact.count({
+        where: {
+          workspaceId,
+          objectId: dispatchedActionItemId,
+          sourceId: `evaluation:${dispatchedDecisionKey}`,
+          status: MemoryStatus.OBSERVED,
+          confirmedByUser: false,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await db.decisionRecord.findUnique({
+        where: { id: dispatchedDecisionRecordId },
+        select: { status: true, evaluationJson: true, evaluatedAt: true },
+      }),
+    ).toMatchObject({
+      status: "EVALUATED",
+      evaluationJson: expect.any(String),
+      evaluatedAt: expect.any(Date),
+    });
   });
 
   it("never downgrades a verified receipt during concurrent record and verify", async () => {
