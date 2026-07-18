@@ -316,6 +316,12 @@ export function validateOwnerCommandDraft(command: OwnerCommandDraft): ContractV
     errors.push("command_status_invalid");
   }
   if (
+    command.policyEnvelopeRef !== null &&
+    !isNonEmpty(command.policyEnvelopeRef)
+  ) {
+    errors.push("policy_envelope_ref_invalid");
+  }
+  if (
     uniqueNonEmpty(command.externalSideEffects).length > 0 &&
     !isNonEmpty(command.policyEnvelopeRef)
   ) {

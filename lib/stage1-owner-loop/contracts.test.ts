@@ -288,6 +288,12 @@ describe("Stage 1 owner command and state projection", () => {
     expect(
       validateOwnerCommandDraft({
         ...command,
+        policyEnvelopeRef: "  ",
+      }).errors,
+    ).toContain("policy_envelope_ref_invalid");
+    expect(
+      validateOwnerCommandDraft({
+        ...command,
         automationLevel: "active_candidate",
         externalSideEffects: ["send_message"],
         policyEnvelopeRef: "policy-envelope:1",
