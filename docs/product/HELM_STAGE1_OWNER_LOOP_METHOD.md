@@ -285,7 +285,7 @@ Public Core。
 - 不声明一把手问答运行面已经完整成立。
 - 不声明客户 Company Memory 或企业世界模型已构建完成。
 - 不声明自动外发、自动承诺、自动付款或自动高风险写入。
-- 不声明安小信、Helm-self、Sales Process Pack 或任何 Overlay 已部署。
+- 不声明 Helm-self、Sales Process Pack 或任何租户 Overlay 已部署。
 - 不声明合成测试、页面截图或本地迁移等于生产运行证据。
 
 ## English Reference
