@@ -46,6 +46,7 @@
     "check:recoverable-agent-runtime": "node --import tsx scripts/check-recoverable-agent-runtime.ts",
     "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
     "check:ai-shelf-trust-center-contract": "node --import tsx scripts/check-ai-shelf-trust-center-contract.ts",
+    "check:stage1-owner-loop": "node --import tsx scripts/check-stage1-owner-loop.ts && vitest run lib/stage1-owner-loop features/dashboard/stage1-owner-loop-readout.test.ts features/dashboard/stage1-owner-loop-console-accessibility.test.ts --config vitest.public.config.ts",
     "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
     "self-check": "npm run public:smoke:static && npm run check:secret-history",
     "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
@@ -68,7 +69,7 @@
     "quality:regression": "npm run test:public:guards && npm run public:smoke:static",
     "public:e2e:smoke": "npm run public:smoke:static",
     "e2e": "npm run public:e2e:smoke",
-    "check:boundaries": "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract",
+    "check:boundaries": "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop",
     "public:smoke:static": "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
     "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands"
   },
