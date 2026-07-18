@@ -1,4 +1,4 @@
-import type { ActorType } from "@prisma/client";
+import type { ActorType, Prisma } from "@prisma/client";
 import { jsonStringify } from "@/lib/utils";
 import {
   getCurrentAuditTraceContext,
@@ -28,15 +28,18 @@ type AuditInput = {
   trace?: Partial<AuditTraceContext> | null;
 };
 
-export async function writeAuditLog(input: AuditInput) {
-  const { db } = await import("@/lib/db");
+export async function writeAuditLog(
+  input: AuditInput,
+  options?: { client?: Prisma.TransactionClient },
+) {
+  const client = options?.client ?? (await import("@/lib/db")).db;
   const ambient = getCurrentAuditTraceContext();
   const trace = {
     traceId: input.trace?.traceId ?? ambient?.traceId ?? null,
     requestId: input.trace?.requestId ?? ambient?.requestId ?? null,
     parentEventId: input.trace?.parentEventId ?? ambient?.parentEventId ?? null,
   };
-  return db.auditLog.create({
+  return client.auditLog.create({
     data: {
       workspaceId: input.workspaceId,
       userId: input.userId ?? undefined,

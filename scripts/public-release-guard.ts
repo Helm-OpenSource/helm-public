@@ -899,7 +899,7 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "self-check":
     "npm run public:smoke:static && npm run check:secret-history",
   "check:boundaries":
-    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract",
+    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop",
   "check:source-profiler-boundaries":
     "node --import tsx scripts/check-source-profiler-boundaries.ts",
   "check:golden-path-docs":
@@ -913,6 +913,8 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "check:agentic-sarp": "node --import tsx scripts/check-agentic-sarp.ts",
   "check:ai-shelf-trust-center-contract":
     "node --import tsx scripts/check-ai-shelf-trust-center-contract.ts",
+  "check:stage1-owner-loop":
+    "node --import tsx scripts/check-stage1-owner-loop.ts && vitest run lib/stage1-owner-loop features/dashboard/stage1-owner-loop-readout.test.ts features/dashboard/stage1-owner-loop-console-accessibility.test.ts --config vitest.public.config.ts",
   "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
   "eval:llm-critic-boundaries":
     "vitest run lib/evals/llm-critic-evals.test.ts",
@@ -989,6 +991,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "check:recoverable-agent-runtime",
   "check:agentic-sarp",
   "check:ai-shelf-trust-center-contract",
+  "check:stage1-owner-loop",
   "sarp:proof",
   "public-mirror:build",
   "db:generate",

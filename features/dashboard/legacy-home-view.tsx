@@ -7,6 +7,7 @@ import { TenantResourceOperatingImpactPanel } from "@/components/shared/tenant-r
 import { Button } from "@/components/ui/button";
 import { DashboardHomeWorkEntrySurface } from "@/features/dashboard/home-work-entry-surface";
 import { DashboardHomeImplementationConsolePanel } from "@/features/dashboard/home-implementation-console-panel";
+import { Stage1OwnerLoopConsole } from "@/features/dashboard/stage1-owner-loop-console";
 import type { DashboardPageData } from "@/features/dashboard/page-loader";
 import type { DashboardViewModel } from "@/features/dashboard/view-model";
 
@@ -22,7 +23,10 @@ export function LegacyHomeView({
 }: {
   pageData: Pick<
     DashboardPageData,
-    "english" | "pageStory" | "tenantResourceImpactReadout"
+    | "english"
+    | "pageStory"
+    | "tenantResourceImpactReadout"
+    | "stage1OwnerLoopReadout"
   >;
   viewModel: Pick<
     DashboardViewModel,
@@ -35,7 +39,12 @@ export function LegacyHomeView({
   /** 原 page 中 ConnectorBindingSuccessSheet 位于根节点内首位；层级保持原样 */
   connectorSheet: React.ReactNode;
 }) {
-  const { english, pageStory, tenantResourceImpactReadout } = pageData;
+  const {
+    english,
+    pageStory,
+    tenantResourceImpactReadout,
+    stage1OwnerLoopReadout,
+  } = pageData;
   const {
     operatingFoundationSummary,
     dashboardHomeWorkEntry,
@@ -51,7 +60,9 @@ export function LegacyHomeView({
         eyebrow={pageStory.eyebrow}
         title={
           pageStory.title ??
-          (english ? "Today's 3 calls that need you" : "今天必须由你拍板的 3 件事")
+          (english
+            ? "Today's 3 calls that need you"
+            : "今天必须由你拍板的 3 件事")
         }
         description={pageStory.description}
         actions={
@@ -69,6 +80,13 @@ export function LegacyHomeView({
         model={dashboardHomeWorkEntry}
         english={english}
       />
+
+      {stage1OwnerLoopReadout ? (
+        <Stage1OwnerLoopConsole
+          readout={stage1OwnerLoopReadout}
+          english={english}
+        />
+      ) : null}
 
       {tenantResourceImpactReadout.totalResources > 0 ? (
         <TenantResourceOperatingImpactPanel
@@ -101,7 +119,10 @@ export function LegacyHomeView({
             note={operatingFoundationSummary.note}
           />
 
-          <ReportingProtocolPanel protocol={dashboardProtocol} english={english} />
+          <ReportingProtocolPanel
+            protocol={dashboardProtocol}
+            english={english}
+          />
 
           <ProactiveMechanismPanel
             title={english ? "Prepared context" : "已准备的背景"}

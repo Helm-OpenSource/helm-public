@@ -172,6 +172,67 @@ describe("policy engine service governance", () => {
     });
   });
 
+  it("uses the supplied transaction client for an atomic review-first action", async () => {
+    const transactionClient = {
+      policyRule: { findFirst: vi.fn().mockResolvedValue(null) },
+      actionItem: {
+        create: vi.fn().mockResolvedValue({
+          id: "action-tx-1",
+          status: ActionStatus.PENDING_APPROVAL,
+        }),
+      },
+      approvalTask: {
+        create: vi.fn().mockResolvedValue({
+          id: "approval-tx-1",
+          status: ApprovalStatus.PENDING,
+          channel: "内部动作",
+        }),
+      },
+      notification: { create: vi.fn().mockResolvedValue({ id: "notice-1" }) },
+      auditLog: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
+    };
+    serviceGovernanceMock.assertWorkspaceGovernedActionManagementServiceAccess.mockResolvedValue(
+      undefined,
+    );
+    policiesMock.resolvePolicyDecision.mockReturnValue({
+      appliedPolicyName: "default",
+      appliedPolicyMode: "REVIEW_REQUIRED",
+      appliedRiskThreshold: "HIGH",
+      mode: "REVIEW_REQUIRED",
+      resolvedBy: "risk_level",
+      reason: "High-risk actions require review.",
+      requiresApproval: true,
+      blocked: false,
+    });
+
+    const result = await createGovernedAction(
+      {
+        workspaceId: "workspace-1",
+        actorName: "Owner",
+        actorUserId: "user-1",
+        actorType: ActorType.USER,
+        actionType: ActionType.CREATE_TASK,
+        title: "Create governed task",
+        riskLevel: RiskLevel.HIGH,
+      },
+      { client: transactionClient as never },
+    );
+
+    expect(result).toMatchObject({
+      actionItemId: "action-tx-1",
+      approvalTaskId: "approval-tx-1",
+    });
+    expect(transactionClient.actionItem.create).toHaveBeenCalledOnce();
+    expect(transactionClient.approvalTask.create).toHaveBeenCalledOnce();
+    expect(transactionClient.notification.create).toHaveBeenCalledOnce();
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(expect.any(Object), {
+      client: transactionClient,
+    });
+    expect(dbMock.actionItem.create).not.toHaveBeenCalled();
+    expect(analyticsMock.logEvent).not.toHaveBeenCalled();
+    expect(nextCacheMock.revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("re-checks governed-action review before executing an action", async () => {
     dbMock.actionItem.findUnique.mockResolvedValue({
       id: "action-1",

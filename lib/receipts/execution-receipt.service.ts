@@ -9,12 +9,21 @@ import {
 } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 import { computeExecutionReceiptQuality } from "@/lib/receipts/execution-receipt-quality";
 
 // Structural client type so the upsert can run inside a caller-owned
 // transaction (Prisma.TransactionClient is structurally compatible).
 export type ExecutionReceiptDbClient = Pick<PrismaClient, "executionReceipt">;
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: string }).code === "P2002"
+  );
+}
 
 export class ExecutionReceiptNotFoundError extends Error {
   constructor(english: boolean) {
@@ -33,6 +42,17 @@ export class ReceiptSelfVerificationError extends Error {
         : "回执不能由执行人本人验收，请交由其他复核人确认。",
     );
     this.name = "ReceiptSelfVerificationError";
+  }
+}
+
+export class ReceiptChangedDuringVerificationError extends Error {
+  constructor(english: boolean) {
+    super(
+      english
+        ? "The receipt changed during verification. Review the latest receipt before confirming it."
+        : "回执在验收过程中发生变化，请重新核验最新回执后再确认。",
+    );
+    this.name = "ReceiptChangedDuringVerificationError";
   }
 }
 
@@ -113,18 +133,68 @@ export async function recordExecutionReceipt(
     qualityFlags: quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
   };
 
-  const receipt = await (options?.client ?? db).executionReceipt.upsert({
-    where: {
-      subjectType_subjectId: {
-        subjectType: input.subjectType,
-        subjectId: input.subjectId,
-      },
+  const client = options?.client ?? db;
+  const where = {
+    subjectType_subjectId: {
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
     },
-    create: data,
-    update: data,
-  });
+  } as const;
+  const existing = await client.executionReceipt.findUnique({ where });
+  let receipt: ExecutionReceipt;
+  let changed = false;
 
-  if (!options?.client) {
+  if (
+    existing?.verificationState === ExecutionReceiptVerificationState.VERIFIED
+  ) {
+    // A VERIFIED receipt is accepted truth. A stale re-execution, block, or
+    // retry may not overwrite it or reset it to SELF_REPORTED.
+    receipt = existing;
+  } else if (existing) {
+    const claimed = await client.executionReceipt.updateMany({
+      where: {
+        id: existing.id,
+        verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      },
+      data,
+    });
+    if (claimed.count === 1) {
+      changed = true;
+      receipt = await client.executionReceipt.findUniqueOrThrow({ where });
+    } else {
+      // Verification won the race after our read. Return the now-immutable
+      // receipt instead of downgrading it.
+      receipt = await client.executionReceipt.findUniqueOrThrow({ where });
+    }
+  } else {
+    try {
+      receipt = await client.executionReceipt.create({ data });
+      changed = true;
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error;
+      // Another writer created the canonical row. Re-enter once so the same
+      // VERIFIED immutability and conditional-update rules apply.
+      const raced = await client.executionReceipt.findUnique({ where });
+      if (!raced) throw error;
+      if (
+        raced.verificationState === ExecutionReceiptVerificationState.VERIFIED
+      ) {
+        receipt = raced;
+      } else {
+        const claimed = await client.executionReceipt.updateMany({
+          where: {
+            id: raced.id,
+            verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+          },
+          data,
+        });
+        changed = claimed.count === 1;
+        receipt = await client.executionReceipt.findUniqueOrThrow({ where });
+      }
+    }
+  }
+
+  if (!options?.client && changed) {
     await auditExecutionReceiptRecorded(input, receipt);
   }
 
@@ -218,14 +288,37 @@ export async function verifyExecutionReceipt(input: VerifyExecutionReceiptInput)
     verificationState: ExecutionReceiptVerificationState.VERIFIED,
   });
 
-  const updated = await db.executionReceipt.update({
+  const claimed = await runWithWriteConflictRetry(() =>
+    db.executionReceipt.updateMany({
+      where: {
+        id: receipt.id,
+        workspaceId: input.workspaceId,
+        verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+        updatedAt: receipt.updatedAt,
+      },
+      data: {
+        verifiedByUserId: input.verifierUserId,
+        verificationState: ExecutionReceiptVerificationState.VERIFIED,
+        qualityScore: quality.score,
+        qualityFlags:
+          quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
+      },
+    }),
+  );
+  if (claimed.count !== 1) {
+    const current = await db.executionReceipt.findUniqueOrThrow({
+      where: { id: receipt.id },
+    });
+    if (
+      current.verificationState ===
+      ExecutionReceiptVerificationState.VERIFIED
+    ) {
+      return current;
+    }
+    throw new ReceiptChangedDuringVerificationError(english);
+  }
+  const updated = await db.executionReceipt.findUniqueOrThrow({
     where: { id: receipt.id },
-    data: {
-      verifiedByUserId: input.verifierUserId,
-      verificationState: ExecutionReceiptVerificationState.VERIFIED,
-      qualityScore: quality.score,
-      qualityFlags: quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
-    },
   });
 
   await writeAuditLog({

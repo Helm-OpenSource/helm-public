@@ -44,7 +44,9 @@ export default async function DashboardPage({
   const stayParam = firstParam(params.stay);
   if (stayParam !== "1") {
     const { workspace } = await getCurrentWorkspaceSession();
-    const landingPath = resolveWorkspaceDefaultLandingPath(workspace.configuration);
+    const landingPath = resolveWorkspaceDefaultLandingPath(
+      workspace.configuration,
+    );
     if (landingPath) redirect(landingPath);
   }
   const entry = firstParam(params.entry);
@@ -96,7 +98,11 @@ export default async function DashboardPage({
     SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
   );
   const [{ table: roleHomeRouting }, { workstations }] = await Promise.all([
-    resolveShellRoleHomeRouting({ workspace, english, binding: routingBinding }),
+    resolveShellRoleHomeRouting({
+      workspace,
+      english,
+      binding: routingBinding,
+    }),
     resolveShellWorkstations({ workspace, english }),
   ]);
   const roleHomeDestination = resolveRoleHomeDestinationFromCandidates(
@@ -123,7 +129,9 @@ export default async function DashboardPage({
         : basePresetKey;
   const workstationHomeEntry =
     roleHomeDestination.kind === "workstation"
-      ? (workstations.find((item) => item.key === roleHomeDestination.workstationKey) ?? null)
+      ? (workstations.find(
+          (item) => item.key === roleHomeDestination.workstationKey,
+        ) ?? null)
       : null;
 
   // 主线计数语义（诚实口径，contract 级 countCaliber=daily_schedule）：
@@ -166,13 +174,17 @@ export default async function DashboardPage({
       basePresetKey={catalogPresetKey}
       workstationHomeEntry={
         workstationHomeEntry?.href
-          ? { href: workstationHomeEntry.href, label: workstationHomeEntry.label }
+          ? {
+              href: workstationHomeEntry.href,
+              label: workstationHomeEntry.label,
+            }
           : null
       }
       mainline={mainline}
       northstarText={resolveNorthstarText(workspace.focusAreas, english)}
       viewModel={viewModel}
       tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
+      stage1OwnerLoopReadout={pageData.stage1OwnerLoopReadout}
       connectorSheet={connectorSheet}
       northstarKpiSlot={
         <NorthstarKpiPanel

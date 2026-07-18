@@ -4,10 +4,7 @@ import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { logPageViewEvent } from "@/lib/analytics";
 import { resolveWorkspaceDemoMode } from "@/lib/demo/demo-modes";
 import { getEvolutionInsights } from "@/lib/evolution/evolution-insights.service";
-import {
-  isEnglishLocale,
-  resolveWorkspaceUiLocale,
-} from "@/lib/i18n/config";
+import { isEnglishLocale, resolveWorkspaceUiLocale } from "@/lib/i18n/config";
 import {
   getDeploymentProfileDefaultLocaleCandidate,
   getRequestUiLocaleCandidate,
@@ -22,6 +19,7 @@ import { getWorkspaceBusinessLoopGapReadout } from "@/lib/helm-v2/runtime-upgrad
 import { getWorkspaceFirstLoopModel } from "@/lib/operating-system/first-loop-query";
 import { getWorkspaceTenantResourceOperatingImpactReadout } from "@/lib/tenant-resources/workspace-operating-impact-query";
 import { getDashboardData } from "@/features/dashboard/queries";
+import { getWorkspaceStage1OwnerLoopReadout } from "@/features/dashboard/stage1-owner-loop-query";
 import { getInternalOperatingWorkspaceData } from "@/features/internal-operating-workspace/queries";
 
 export async function loadDashboardPageData() {
@@ -31,7 +29,8 @@ export async function loadDashboardPageData() {
   const locale = resolveWorkspaceUiLocale({
     requestLocale,
     workspaceDefaultLocale: workspace.defaultLocale,
-    deploymentProfileDefaultLocale: getDeploymentProfileDefaultLocaleCandidate(),
+    deploymentProfileDefaultLocale:
+      getDeploymentProfileDefaultLocaleCandidate(),
   });
   const english = isEnglishLocale(locale);
   const user = session.user;
@@ -46,6 +45,7 @@ export async function loadDashboardPageData() {
     businessLoopGapReadout,
     firstLoopModel,
     tenantResourceImpactReadout,
+    stage1OwnerLoopReadout,
   ] = await Promise.all([
     getDashboardData(workspace.id, user.id),
     getTodayFocusRecommendations({
@@ -89,6 +89,10 @@ export async function loadDashboardPageData() {
       membershipRole: session.membership.role,
       english,
     }),
+    getWorkspaceStage1OwnerLoopReadout({
+      workspaceId: workspace.id,
+      membershipRole: session.membership.role,
+    }),
   ]);
 
   await logPageViewEvent({
@@ -108,6 +112,7 @@ export async function loadDashboardPageData() {
     businessLoopGapReadout,
     firstLoopModel,
     tenantResourceImpactReadout,
+    stage1OwnerLoopReadout,
     user,
     workspace,
     membership: session.membership,
@@ -115,4 +120,6 @@ export async function loadDashboardPageData() {
   };
 }
 
-export type DashboardPageData = Awaited<ReturnType<typeof loadDashboardPageData>>;
+export type DashboardPageData = Awaited<
+  ReturnType<typeof loadDashboardPageData>
+>;

@@ -18,6 +18,9 @@ import {
   CaptureProcessingStatus,
   CaptureSessionStatus,
   CaptureSourceType,
+  ExecutionReceiptOutcome,
+  ExecutionReceiptSubjectType,
+  ExecutionReceiptVerificationState,
   AccessState,
   RevenueBeneficiaryType,
   RevenueRuleCadence,
@@ -490,6 +493,273 @@ async function seedSettlementOperationsProofPack(input: {
   });
 }
 
+async function seedStage1OwnerLoopDemo(input: {
+  workspaceId: string;
+  ownerUserId: string;
+  operatorUserId: string;
+}) {
+  const authorizationRef = "authorization:synthetic-owner-observation-v1";
+  const program = await prisma.enterpriseObservationProgram.create({
+    data: {
+      workspaceId: input.workspaceId,
+      purpose: "只读观察合成经营数据，为一把手决策提供证据",
+      scopeRefs: json(["scope:synthetic-sales", "scope:synthetic-finance"]),
+      dataCategories: json(["synthetic-opportunity", "synthetic-cash-position"]),
+      startsAt: subDays(now, 7),
+      expiresAt: addDays(now, 30),
+      retentionDays: 30,
+      authorizationRef,
+      status: "ACTIVE",
+      auditRefs: json(["audit:synthetic-owner-authorization"]),
+    },
+  });
+
+  const healthySource = await prisma.observationSource.create({
+    data: {
+      workspaceId: input.workspaceId,
+      programId: program.id,
+      sourceKey: "synthetic-crm",
+      sourceKind: "crm",
+      accessMode: "read_only_api",
+      ownerRef: input.ownerUserId,
+      freshnessSlaMinutes: 60,
+      sensitivity: "internal",
+      authorizationRef,
+      secretRef: "secret-manager:synthetic-crm",
+      retentionDays: 30,
+      status: "ACTIVE",
+      lastObservedAt: addMinutes(now, -12),
+    },
+  });
+  const staleSource = await prisma.observationSource.create({
+    data: {
+      workspaceId: input.workspaceId,
+      programId: program.id,
+      sourceKey: "synthetic-finance",
+      sourceKind: "finance",
+      accessMode: "scheduled_snapshot",
+      ownerRef: input.ownerUserId,
+      freshnessSlaMinutes: 24 * 60,
+      sensitivity: "confidential",
+      authorizationRef,
+      secretRef: "secret-manager:synthetic-finance",
+      retentionDays: 30,
+      status: "ACTIVE",
+      lastObservedAt: subDays(now, 2),
+    },
+  });
+  await prisma.observationSourceRun.createMany({
+    data: [
+      {
+        workspaceId: input.workspaceId,
+        programId: program.id,
+        sourceId: healthySource.id,
+        executionKey: "synthetic-crm-latest",
+        authorizationVersion: 1,
+        windowStart: addMinutes(now, -30),
+        windowEnd: addMinutes(now, -12),
+        status: "SUCCEEDED",
+        observedAt: addMinutes(now, -12),
+        summaryHash: "sha256:synthetic-crm-summary",
+        completenessPercent: 96,
+        freshness: "FRESH",
+        outcome: "SUCCESS",
+        evidenceRefs: json(["evidence:synthetic-crm-pipeline"]),
+        errorCodes: json([]),
+      },
+      {
+        workspaceId: input.workspaceId,
+        programId: program.id,
+        sourceId: staleSource.id,
+        executionKey: "synthetic-finance-stale",
+        authorizationVersion: 1,
+        windowStart: subDays(now, 3),
+        windowEnd: subDays(now, 2),
+        status: "SUCCEEDED",
+        observedAt: subDays(now, 2),
+        summaryHash: "sha256:synthetic-finance-summary",
+        completenessPercent: 88,
+        freshness: "STALE",
+        outcome: "PARTIAL_SUCCESS",
+        evidenceRefs: json(["evidence:synthetic-cash-position"]),
+        errorCodes: json(["SOURCE_FRESHNESS_SLA_MISSED"]),
+      },
+    ],
+  });
+
+  await prisma.decisionRecord.create({
+    data: {
+      workspaceId: input.workspaceId,
+      decisionKey: "decision:synthetic-cash-priority",
+      decisionType: "prioritization",
+      businessQuestion: "本周应优先保现金流还是扩大试点投入？",
+      problemCategoryRef: "synthetic-cash-priority",
+      contextRefs: json(["context:synthetic-weekly-operations"]),
+      knowledgeRefs: json(["knowledge:synthetic-capital-policy"]),
+      evidenceRefs: json(["evidence:synthetic-cash-position"]),
+      policyRefs: json(["policy:review-first"]),
+      receiptRefs: json([]),
+      alternatives: json(["保持现金缓冲", "扩大试点投入"]),
+      recommendedOption: "保持现金缓冲，并在获得新回执后复核",
+      confidence: "medium",
+      riskLevel: "high",
+      allowedActionLevel: "draft_task",
+      ownerGate: "approval_required",
+      rollbackPath: "在派发前撤销建议并重新收集财务证据",
+      factsJson: json([
+        {
+          statement: "合成财务来源已超过时效 SLA",
+          evidenceRefs: ["evidence:synthetic-cash-position"],
+          freshness: "stale",
+        },
+      ]),
+      inferencesJson: json([
+        {
+          statement: "现金缓冲可能低于计划",
+          evidenceRefs: ["evidence:synthetic-cash-position"],
+          freshness: "stale",
+        },
+      ]),
+      unknownsJson: json(["最新银行余额尚未观察"]),
+      risksJson: json(["过期证据可能导致优先级判断偏差"]),
+      status: "EVIDENCE_READY",
+      validUntil: addDays(now, 2),
+    },
+  });
+
+  const followedDecision = await prisma.decisionRecord.create({
+    data: {
+      workspaceId: input.workspaceId,
+      decisionKey: "decision:synthetic-renewal-recovery",
+      decisionType: "intervention",
+      businessQuestion: "是否启动高风险续约机会的恢复计划？",
+      problemCategoryRef: "synthetic-renewal-risk",
+      contextRefs: json(["context:synthetic-sales-review"]),
+      knowledgeRefs: json(["knowledge:synthetic-renewal-playbook"]),
+      evidenceRefs: json(["evidence:synthetic-crm-pipeline"]),
+      policyRefs: json(["policy:review-first"]),
+      receiptRefs: json(["receipt:synthetic-renewal-recovery"]),
+      alternatives: json(["启动恢复计划", "继续观察"]),
+      recommendedOption: "启动恢复计划",
+      confidence: "high",
+      riskLevel: "medium",
+      allowedActionLevel: "draft_task",
+      ownerGate: "approval_required",
+      rollbackPath: "停止恢复任务并回到只读观察",
+      factsJson: json([
+        {
+          statement: "合成续约机会连续两周没有下一步",
+          evidenceRefs: ["evidence:synthetic-crm-pipeline"],
+          freshness: "fresh",
+        },
+      ]),
+      inferencesJson: json([]),
+      unknownsJson: json([]),
+      risksJson: json(["客户优先级可能继续下降"]),
+      ownerRef: input.ownerUserId,
+      ownerConclusion: "启动恢复计划并由运营复核结果",
+      ownerConfirmedAt: subDays(now, 1),
+      status: "OWNER_CONFIRMED",
+      validUntil: addDays(now, 5),
+    },
+  });
+  const action = await prisma.actionItem.create({
+    data: {
+      workspaceId: input.workspaceId,
+      ownerId: input.operatorUserId,
+      actionType: ActionType.CREATE_TASK,
+      title: "完成合成续约机会恢复计划",
+      description: "根据一把手已确认决策形成的 public-safe 合成 Work Packet",
+      aiReason: "续约机会连续两周没有下一步",
+      metadata: json({
+        stage1DecisionRecordId: followedDecision.id,
+        acceptanceCriteria: ["恢复计划有独立验收回执"],
+        evidenceRequirements: ["evidence:synthetic-recovery-plan"],
+      }),
+      sourceType: SourceType.SYSTEM_INFERENCE,
+      sourceId: `decision-record:${followedDecision.id}`,
+      riskLevel: RiskLevel.MEDIUM,
+      dueDate: addDays(now, 2),
+      executionMode: ActionExecutionMode.REQUIRES_APPROVAL,
+      requiresApproval: true,
+      status: ActionStatus.EXECUTED,
+      executionStatus: "completed",
+      policyName: "stage1-owner-confirmed-work-packet",
+      createdByUserId: input.ownerUserId,
+      contentAuthorship: ActorType.AI,
+      executedAt: addHours(now, -4),
+    },
+  });
+  await prisma.approvalTask.create({
+    data: {
+      workspaceId: input.workspaceId,
+      actionItemId: action.id,
+      approverId: input.ownerUserId,
+      reviewedById: input.ownerUserId,
+      status: ApprovalStatus.EXECUTED,
+      isHighRisk: false,
+      autoExecute: false,
+      decisionReason: "合成恢复计划边界清晰",
+      reviewedAt: addHours(now, -5),
+    },
+  });
+  await prisma.decisionWorkPacketClaim.create({
+    data: {
+      workspaceId: input.workspaceId,
+      decisionRecordId: followedDecision.id,
+      actionItemId: action.id,
+      ownerCommandJson: json({
+        goal: "恢复高风险续约机会",
+        acceptanceCriteria: ["恢复计划有独立验收回执"],
+        externalSideEffects: [],
+        automationLevel: "assist",
+      }),
+    },
+  });
+  await prisma.executionReceipt.create({
+    data: {
+      workspaceId: input.workspaceId,
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: action.id,
+      actionItemId: action.id,
+      outcome: ExecutionReceiptOutcome.SUCCESS,
+      actionTaken: "SYNTHETIC_RENEWAL_RECOVERY_PLAN",
+      evidenceRefs: json(["evidence:synthetic-recovery-plan"]),
+      nextStep: "等待下一次 CRM 观察确认客户回复",
+      executedByUserId: input.operatorUserId,
+      executedByActorType: ActorType.USER,
+      verifiedByUserId: input.ownerUserId,
+      verificationState: ExecutionReceiptVerificationState.VERIFIED,
+      qualityScore: 92,
+      qualityFlags: json([]),
+    },
+  });
+
+  await prisma.supervisionSignalRecord.create({
+    data: {
+      workspaceId: input.workspaceId,
+      decisionRecordId: followedDecision.id,
+      signalKey: "signal:synthetic-finance-stale",
+      signalType: "process_deviation",
+      observedObjectRef: "source:synthetic-finance",
+      baselineRef: "sla:synthetic-finance-daily",
+      evidenceRefs: json(["evidence:synthetic-cash-position"]),
+      severity: "warning",
+      confidence: "high",
+      recommendedRoute: "owner_review",
+      ownerRef: input.ownerUserId,
+      deadlineOrSla: addHours(now, 8),
+      status: "open",
+      observedFact: "合成财务来源已超过每日时效 SLA",
+      interpretation: "现金优先级判断需要更新证据",
+      expectedState: "每日完成一次只读快照",
+      actualState: "最近一次快照为两天前",
+      responsibilityScopeRef: "team:synthetic-finance",
+      escalationCondition: "超过 8 小时仍无新快照则升级给一把手",
+    },
+  });
+}
+
 async function main() {
   const forceReset =
     process.env.SEED_FORCE_RESET === "1" ||
@@ -682,6 +952,12 @@ async function main() {
         persona: "阶段性外部顾问",
       },
     ],
+  });
+
+  await seedStage1OwnerLoopDemo({
+    workspaceId: workspace.id,
+    ownerUserId: userMap["founder@demo.com"].id,
+    operatorUserId: userMap["ops@demo.com"].id,
   });
 
   const companyInputs = [

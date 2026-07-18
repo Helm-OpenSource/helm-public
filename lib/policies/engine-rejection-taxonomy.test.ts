@@ -37,7 +37,10 @@ const {
       create: vi.fn(),
     },
     executionReceipt: {
-      upsert: vi.fn(),
+      findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+      create: vi.fn(),
+      updateMany: vi.fn(),
     },
     contact: {
       update: vi.fn(),
@@ -142,7 +145,8 @@ describe("policy engine rejection taxonomy", () => {
     dbMock.approvalTask.updateMany.mockResolvedValue({ count: 1 });
     dbMock.actionItem.update.mockResolvedValue({});
     dbMock.memoryEntry.create.mockResolvedValue({});
-    dbMock.executionReceipt.upsert.mockResolvedValue({
+    dbMock.executionReceipt.findUnique.mockResolvedValue(null);
+    dbMock.executionReceipt.create.mockResolvedValue({
       id: "receipt-1",
       subjectType: "ACTION_ITEM",
       subjectId: "action-1",

@@ -5,6 +5,7 @@ created: 2026-06-01
 review_after: 2026-07-01
 public_safety: Curated public Core docs index. Do not add broad mirror carry-over docs without updating docs/public-docs-manifest.json and passing check:public-docs.
 ---
+
 # Helm Public Docs
 
 > **语言 / Language**: **中文主文本** + **English reference**
@@ -54,6 +55,8 @@ connector 授权、写回、外发或审批证明。
 - [交付工程师黄金路径要求 / Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
 - [交付工程师初始化诊断要求 / Delivery engineer setup diagnostic requirements](product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md)
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
+- [Stage 1 一把手经营闭环方法 / Stage 1 owner operating loop method](product/HELM_STAGE1_OWNER_LOOP_METHOD.md)
+- [Stage 1 一把手经营闭环 Runbook / Stage 1 owner operating loop runbook](operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md)
 - [经营信号首公里 15 分钟跑通 / Signal First Mile quickstart](product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md)
 - [公开路线图 / Public roadmap](roadmap/HELM_PUBLIC_ROADMAP.md)
 
@@ -80,6 +83,7 @@ connector 授权、写回、外发或审批证明。
 - [交付工程师黄金路径要求 / Delivery engineer Golden Path requirements](product/HELM_DELIVERY_ENGINEER_GOLDEN_PATH_REQUIREMENTS.md)
 - [交付工程师初始化诊断要求 / Delivery engineer setup diagnostic requirements](product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md)
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
+- [Stage 1 一把手经营闭环方法 / Stage 1 owner operating loop method](product/HELM_STAGE1_OWNER_LOOP_METHOD.md) — owner-authorized、read-only 到 review-first 的公共参考切片；不是生产连接器或自治授权
 - [默认经营工作区重构蓝图 / Default operating workspace refactor blueprint](product/HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md) — design-only 设计蓝图；不是实现、API freeze、路由删除批准或执行授权
 - [Solution extension 协议 / Solution extension protocol](product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)
 - [扩展目录与命名协议 / Extension directory and naming protocol](product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md)
@@ -101,6 +105,7 @@ connector 授权、写回、外发或审批证明。
 - [公开试点数据政策 / Public trial data policy](legal/HELM_PUBLIC_TRIAL_DATA_POLICY_V1.md)
 - [试点响应与值守姿态 / Trial response and on-call posture](operations/ON_CALL_AND_RESPONSE_SLA.md)
 - [公开发布节奏作业手册 / Public release train runbook](operations/HELM_PUBLIC_RELEASE_TRAIN_RUNBOOK.md)
+- [Stage 1 一把手经营闭环 Runbook / Stage 1 owner operating loop runbook](operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md)
 - [公开维护者状态基线 / Public maintainer status baseline](operations/HELM_PUBLIC_MAINTAINER_STATUS_2026-06-02.md)
 - [开源增长 7 日运营计划 / Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md)
 - [OPC 周报包模板 / OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md)
