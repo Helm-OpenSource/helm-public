@@ -1349,6 +1349,12 @@ model Workspace {
   approvalTasks                        ApprovalTask[]
   executionReceipts                    ExecutionReceipt[]
   diagnosticSessionWorkPackets         DiagnosticSessionWorkPacket[]
+  enterpriseObservationPrograms        EnterpriseObservationProgram[]
+  observationSources                   ObservationSource[]
+  observationSourceRuns                ObservationSourceRun[]
+  decisionRecords                      DecisionRecord[]
+  supervisionSignalRecords             SupervisionSignalRecord[]
+  decisionWorkPacketClaims             DecisionWorkPacketClaim[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -3427,6 +3433,7 @@ model ActionItem {
   recommendationLog    RecommendationLog?  @relation(fields: [recommendationLogId], references: [id], onDelete: SetNull)
   approvalTask         ApprovalTask?
   executionReceipt     ExecutionReceipt?
+  decisionWorkPacketClaim DecisionWorkPacketClaim?
 }
 
 model ApprovalTask {
@@ -3502,6 +3509,186 @@ model DiagnosticSessionWorkPacket {
   workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+}
+
+// Owner-authorized, time-bounded read-only observation program. The runSequence
+// is an atomic authorization claim: starting a source run increments it only
+// while the program is ACTIVE and inside its authorization window. Revocation
+// races therefore have one database winner instead of a check-then-act gap.
+model EnterpriseObservationProgram {
+  id                   String                 @id @default(cuid())
+  workspaceId          String
+  purpose              String                 @db.LongText
+  scopeRefs            String                 @db.LongText
+  dataCategories       String                 @db.LongText
+  startsAt             DateTime
+  expiresAt            DateTime
+  retentionDays        Int
+  authorizationRef     String
+  status               String                 @default("DRAFT")
+  authorizationVersion Int                    @default(1)
+  runSequence          Int                    @default(0)
+  revokedAt            DateTime?
+  revokedByRef         String?
+  revocationReason     String?                @db.LongText
+  auditRefs            String?                @db.LongText
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  workspace            Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sources              ObservationSource[]
+  runs                 ObservationSourceRun[]
+
+  @@index([workspaceId, status, expiresAt])
+  @@index([authorizationRef])
+}
+
+// Source registration stores only a secret manager reference. Public Core
+// deliberately has no column for raw connector credentials.
+model ObservationSource {
+  id                  String                       @id @default(cuid())
+  workspaceId         String
+  programId           String
+  sourceKey           String
+  sourceKind          String
+  accessMode          String
+  ownerRef            String
+  freshnessSlaMinutes Int
+  sensitivity         String
+  authorizationRef    String
+  secretRef           String
+  retentionDays       Int
+  status              String                       @default("DRAFT")
+  lastObservedAt      DateTime?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  workspace           Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  program             EnterpriseObservationProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  runs                ObservationSourceRun[]
+
+  @@unique([workspaceId, sourceKey])
+  @@index([programId, status])
+}
+
+// Immutable completion receipt for one authorized observation attempt. A run
+// may move RUNNING -> SUCCEEDED/PARTIAL/FAILED/CANCELLED once; terminal rows
+// are not overwritten by retries.
+model ObservationSourceRun {
+  id                   String                       @id @default(cuid())
+  workspaceId          String
+  programId            String
+  sourceId             String
+  executionKey         String
+  authorizationVersion Int
+  windowStart          DateTime
+  windowEnd            DateTime
+  status               String                       @default("RUNNING")
+  observedAt           DateTime?
+  summaryHash          String?
+  completenessPercent  Int?
+  freshness            String                       @default("UNKNOWN")
+  outcome              String                       @default("UNKNOWN")
+  evidenceRefs         String?                      @db.LongText
+  errorCodes           String?                      @db.LongText
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  workspace            Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  program              EnterpriseObservationProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  source               ObservationSource            @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, executionKey])
+  @@index([workspaceId, status, createdAt])
+  @@index([programId, status])
+}
+
+// Workspace-level runtime record for the public DecisionObject contract. JSON
+// columns retain the public-safe structured arrays without creating a second
+// business-object schema; ActionItem remains the execution state machine.
+model DecisionRecord {
+  id                 String                    @id @default(cuid())
+  workspaceId        String
+  decisionKey        String
+  decisionType       String
+  businessQuestion   String                    @db.LongText
+  problemCategoryRef String?
+  contextRefs        String                    @db.LongText
+  knowledgeRefs      String                    @db.LongText
+  evidenceRefs       String                    @db.LongText
+  policyRefs         String                    @db.LongText
+  receiptRefs        String                    @db.LongText
+  alternatives       String                    @db.LongText
+  recommendedOption  String?                   @db.LongText
+  confidence         String
+  riskLevel          String
+  allowedActionLevel String
+  ownerGate          String
+  rollbackPath       String?                   @db.LongText
+  factsJson          String                    @db.LongText
+  inferencesJson     String                    @db.LongText
+  unknownsJson       String                    @db.LongText
+  risksJson          String                    @db.LongText
+  ownerRef           String?
+  ownerConclusion    String?                   @db.LongText
+  ownerConfirmedAt   DateTime?
+  status             String                    @default("DRAFT")
+  validUntil         DateTime?
+  evaluationJson     String?                   @db.LongText
+  evaluatedAt        DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  workspace          Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  supervisionSignals SupervisionSignalRecord[]
+  workPacketClaim    DecisionWorkPacketClaim?
+
+  @@unique([workspaceId, decisionKey])
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, ownerRef, status])
+}
+
+model SupervisionSignalRecord {
+  id                     String          @id @default(cuid())
+  workspaceId            String
+  decisionRecordId       String?
+  signalKey              String
+  signalType             String
+  observedObjectRef      String
+  baselineRef            String?
+  evidenceRefs           String          @db.LongText
+  severity               String
+  confidence             String
+  recommendedRoute       String
+  ownerRef               String?
+  deadlineOrSla          DateTime?
+  status                 String
+  observedFact           String          @db.LongText
+  interpretation         String?         @db.LongText
+  expectedState          String?         @db.LongText
+  actualState            String          @db.LongText
+  responsibilityScopeRef String?
+  escalationCondition    String          @db.LongText
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  workspace              Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decisionRecord         DecisionRecord? @relation(fields: [decisionRecordId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, signalKey])
+  @@index([workspaceId, status, severity, createdAt], map: "SupervisionSignal_ws_status_severity_created_idx")
+  @@index([decisionRecordId, createdAt])
+}
+
+// One effective ActionItem per confirmed decision. The unique decisionRecordId
+// is the concurrency arbiter; duplicate contenders are auditably withdrawn.
+model DecisionWorkPacketClaim {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  decisionRecordId String         @unique
+  actionItemId     String         @unique
+  ownerCommandJson String         @db.LongText
+  createdAt        DateTime       @default(now())
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decisionRecord   DecisionRecord @relation(fields: [decisionRecordId], references: [id], onDelete: Cascade)
+  actionItem       ActionItem     @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
 }
 
 model AuditLog {

@@ -10,7 +10,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { dbMock, auditMock } = vi.hoisted(() => ({
   dbMock: {
     executionReceipt: {
-      upsert: vi.fn(),
+      findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+      create: vi.fn(),
+      updateMany: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
     },
@@ -37,10 +40,14 @@ import {
 describe("execution receipt service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    dbMock.executionReceipt.upsert.mockImplementation(async (args: { create: Record<string, unknown> }) => ({
-      id: "receipt-1",
-      ...args.create,
-    }));
+    dbMock.executionReceipt.findUnique.mockResolvedValue(null);
+    dbMock.executionReceipt.create.mockImplementation(
+      async (args: { data: Record<string, unknown> }) => ({
+        id: "receipt-1",
+        ...args.data,
+      }),
+    );
+    dbMock.executionReceipt.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it("upserts one canonical receipt per subject with a computed quality score", async () => {
@@ -59,15 +66,9 @@ describe("execution receipt service", () => {
       actorName: "Reviewer",
     });
 
-    expect(dbMock.executionReceipt.upsert).toHaveBeenCalledWith(
+    expect(dbMock.executionReceipt.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
-          subjectType_subjectId: {
-            subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
-            subjectId: "action-1",
-          },
-        },
-        create: expect.objectContaining({
+        data: expect.objectContaining({
           outcome: ExecutionReceiptOutcome.REJECTED,
           rejectionReasonCode: RejectionReasonCode.DIAGNOSIS_ERROR,
           evidenceRefs: JSON.stringify(["approval-task:task-1"], null, 2),
@@ -85,6 +86,94 @@ describe("execution receipt service", () => {
         }),
       }),
     );
+  });
+
+  it("never overwrites or downgrades an already VERIFIED receipt", async () => {
+    const verified = {
+      id: "receipt-verified",
+      workspaceId: "workspace-1",
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: "action-1",
+      actionItemId: "action-1",
+      outcome: ExecutionReceiptOutcome.SUCCESS,
+      actionTaken: "CREATE_TASK",
+      evidenceRefs: JSON.stringify(["evidence:accepted"]),
+      rejectionReasonCode: null,
+      nextStep: null,
+      note: null,
+      executedByUserId: "user-1",
+      executedByActorType: ActorType.USER,
+      verifiedByUserId: "user-2",
+      verificationState: ExecutionReceiptVerificationState.VERIFIED,
+      qualityScore: 100,
+      qualityFlags: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    dbMock.executionReceipt.findUnique.mockResolvedValue(verified);
+
+    const result = await recordExecutionReceipt({
+      workspaceId: "workspace-1",
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: "action-1",
+      actionItemId: "action-1",
+      outcome: ExecutionReceiptOutcome.FAILURE,
+      actionTaken: "CREATE_TASK",
+      executedByUserId: "user-3",
+      executedByActorType: ActorType.USER,
+    });
+
+    expect(result).toBe(verified);
+    expect(dbMock.executionReceipt.updateMany).not.toHaveBeenCalled();
+    expect(dbMock.executionReceipt.create).not.toHaveBeenCalled();
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("does not claim an audit write when verification wins the update race", async () => {
+    const selfReported = {
+      id: "receipt-1",
+      workspaceId: "workspace-1",
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: "action-1",
+      actionItemId: "action-1",
+      outcome: ExecutionReceiptOutcome.SUCCESS,
+      actionTaken: "CREATE_TASK",
+      evidenceRefs: null,
+      rejectionReasonCode: null,
+      nextStep: null,
+      note: null,
+      executedByUserId: "user-1",
+      executedByActorType: ActorType.USER,
+      verifiedByUserId: null,
+      verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      qualityScore: 40,
+      qualityFlags: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const verified = {
+      ...selfReported,
+      verifiedByUserId: "user-2",
+      verificationState: ExecutionReceiptVerificationState.VERIFIED,
+      qualityScore: 80,
+    };
+    dbMock.executionReceipt.findUnique.mockResolvedValue(selfReported);
+    dbMock.executionReceipt.updateMany.mockResolvedValue({ count: 0 });
+    dbMock.executionReceipt.findUniqueOrThrow.mockResolvedValue(verified);
+
+    const result = await recordExecutionReceipt({
+      workspaceId: "workspace-1",
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: "action-1",
+      actionItemId: "action-1",
+      outcome: ExecutionReceiptOutcome.FAILURE,
+      actionTaken: "CREATE_TASK",
+      executedByUserId: "user-3",
+      executedByActorType: ActorType.USER,
+    });
+
+    expect(result).toBe(verified);
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
   });
 
   it("refuses executor self-verification", async () => {

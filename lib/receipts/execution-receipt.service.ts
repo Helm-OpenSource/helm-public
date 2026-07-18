@@ -16,6 +16,14 @@ import { computeExecutionReceiptQuality } from "@/lib/receipts/execution-receipt
 // transaction (Prisma.TransactionClient is structurally compatible).
 export type ExecutionReceiptDbClient = Pick<PrismaClient, "executionReceipt">;
 
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: string }).code === "P2002"
+  );
+}
+
 export class ExecutionReceiptNotFoundError extends Error {
   constructor(english: boolean) {
     super(english ? "Execution receipt not found" : "回执不存在");
@@ -113,18 +121,68 @@ export async function recordExecutionReceipt(
     qualityFlags: quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
   };
 
-  const receipt = await (options?.client ?? db).executionReceipt.upsert({
-    where: {
-      subjectType_subjectId: {
-        subjectType: input.subjectType,
-        subjectId: input.subjectId,
-      },
+  const client = options?.client ?? db;
+  const where = {
+    subjectType_subjectId: {
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
     },
-    create: data,
-    update: data,
-  });
+  } as const;
+  const existing = await client.executionReceipt.findUnique({ where });
+  let receipt: ExecutionReceipt;
+  let changed = false;
 
-  if (!options?.client) {
+  if (
+    existing?.verificationState === ExecutionReceiptVerificationState.VERIFIED
+  ) {
+    // A VERIFIED receipt is accepted truth. A stale re-execution, block, or
+    // retry may not overwrite it or reset it to SELF_REPORTED.
+    receipt = existing;
+  } else if (existing) {
+    const claimed = await client.executionReceipt.updateMany({
+      where: {
+        id: existing.id,
+        verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      },
+      data,
+    });
+    if (claimed.count === 1) {
+      changed = true;
+      receipt = await client.executionReceipt.findUniqueOrThrow({ where });
+    } else {
+      // Verification won the race after our read. Return the now-immutable
+      // receipt instead of downgrading it.
+      receipt = await client.executionReceipt.findUniqueOrThrow({ where });
+    }
+  } else {
+    try {
+      receipt = await client.executionReceipt.create({ data });
+      changed = true;
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error;
+      // Another writer created the canonical row. Re-enter once so the same
+      // VERIFIED immutability and conditional-update rules apply.
+      const raced = await client.executionReceipt.findUnique({ where });
+      if (!raced) throw error;
+      if (
+        raced.verificationState === ExecutionReceiptVerificationState.VERIFIED
+      ) {
+        receipt = raced;
+      } else {
+        const claimed = await client.executionReceipt.updateMany({
+          where: {
+            id: raced.id,
+            verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+          },
+          data,
+        });
+        changed = claimed.count === 1;
+        receipt = await client.executionReceipt.findUniqueOrThrow({ where });
+      }
+    }
+  }
+
+  if (!options?.client && changed) {
     await auditExecutionReceiptRecorded(input, receipt);
   }
 
