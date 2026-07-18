@@ -6,6 +6,7 @@ import { ReportingProtocolPanel } from "@/components/shared/reporting-protocol-p
 import { TenantResourceOperatingImpactPanel } from "@/components/shared/tenant-resource-operating-impact-panel";
 import { DashboardHomeWorkEntrySurface } from "@/features/dashboard/home-work-entry-surface";
 import { DashboardHomeImplementationConsolePanel } from "@/features/dashboard/home-implementation-console-panel";
+import { Stage1OwnerLoopConsole } from "@/features/dashboard/stage1-owner-loop-console";
 import { MainlineStrip } from "@/features/dashboard/control-tower/mainline-strip";
 import type { DashboardPageData } from "@/features/dashboard/page-loader";
 import type { DashboardViewModel } from "@/features/dashboard/view-model";
@@ -38,6 +39,7 @@ export function ControlTowerView({
   northstarText,
   viewModel,
   tenantResourceImpactReadout,
+  stage1OwnerLoopReadout,
   connectorSheet,
   northstarKpiSlot,
   attentionSlot,
@@ -56,6 +58,7 @@ export function ControlTowerView({
     | "founderProactiveFlow"
   >;
   tenantResourceImpactReadout: DashboardPageData["tenantResourceImpactReadout"];
+  stage1OwnerLoopReadout: DashboardPageData["stage1OwnerLoopReadout"];
   /** ConnectorBindingSuccessSheet，与旧版一致置于根节点内首位 */
   connectorSheet: React.ReactNode;
   /** 北极星 KPI 面板（read-only），版面位置由本组件按 lens 决定 */
@@ -74,7 +77,11 @@ export function ControlTowerView({
 
   if (lens === "generic") {
     return (
-      <div className="space-y-6" data-source-page="/dashboard" data-shell-view="generic-home">
+      <div
+        className="space-y-6"
+        data-source-page="/dashboard"
+        data-shell-view="generic-home"
+      >
         {connectorSheet}
         <PageHeader
           eyebrow={english ? "Workspace" : "工作台"}
@@ -94,7 +101,11 @@ export function ControlTowerView({
 
   if (lens !== "control_tower") {
     return (
-      <div className="space-y-6" data-source-page="/dashboard" data-shell-view="workstation-home">
+      <div
+        className="space-y-6"
+        data-source-page="/dashboard"
+        data-shell-view="workstation-home"
+      >
         {connectorSheet}
         <PageHeader
           eyebrow={english ? "My desk" : "我的工位"}
@@ -122,7 +133,11 @@ export function ControlTowerView({
   }
 
   return (
-    <div className="space-y-6" data-source-page="/dashboard" data-shell-view="control-tower">
+    <div
+      className="space-y-6"
+      data-source-page="/dashboard"
+      data-shell-view="control-tower"
+    >
       {connectorSheet}
       <PageHeader
         eyebrow={english ? "Control tower" : "控制塔"}
@@ -137,10 +152,7 @@ export function ControlTowerView({
             : "全部为建议——未经人工复核不执行、不外发。"
         }
       />
-      <AssetScopeSwitch
-        control={mainline.assetScope}
-        english={english}
-      />
+      <AssetScopeSwitch control={mainline.assetScope} english={english} />
 
       {/* 层① 需要你处理——首屏即可操作：先拍板，后异常收件箱。
           这是首页唯一能被用户"消化掉"的内容，权重最高。 */}
@@ -149,6 +161,12 @@ export function ControlTowerView({
         english={english}
       />
       {attentionSlot}
+      {stage1OwnerLoopReadout ? (
+        <Stage1OwnerLoopConsole
+          readout={stage1OwnerLoopReadout}
+          english={english}
+        />
+      ) : null}
 
       {/* 层② 经营态势（纯只读）——北极星一行 + 主线卡带摘要 + KPI 面板
           归并为一层，回答"整体推进得怎么样"，居可操作内容之后。 */}
