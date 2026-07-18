@@ -186,6 +186,15 @@ describe("Stage 1 owner-loop dashboard readout", () => {
     expect(readout.posture).toBe("attention_required");
   });
 
+  it("does not miss elevated risk when legacy data uses uppercase values", () => {
+    const readout = build({
+      decisions: [decision({ riskLevel: "CRITICAL", status: "DRAFT" })],
+      decisionStatusCounts: [{ status: "DRAFT", _count: { _all: 1 } }],
+    });
+
+    expect(readout.decisions.items[0]?.needsAttention).toBe(true);
+  });
+
   it("counts only unresolved supervision signals as active attention", () => {
     const readout = build({
       supervisionSignals: [

@@ -318,6 +318,7 @@ export function buildStage1OwnerLoopReadout(input: {
       evaluated,
       items: input.decisions.slice(0, 5).map((decision) => {
         const projection = decisionProjection(decision);
+        const normalizedRiskLevel = decision.riskLevel.trim().toLowerCase();
         return {
           id: decision.id,
           decisionKey: decision.decisionKey,
@@ -331,8 +332,8 @@ export function buildStage1OwnerLoopReadout(input: {
             projection === "EVIDENCE_READY" ||
             projection === "RECEIPT_MISSING" ||
             projection === "BLOCKED" ||
-            decision.riskLevel === "high" ||
-            decision.riskLevel === "critical",
+            normalizedRiskLevel === "high" ||
+            normalizedRiskLevel === "critical",
         };
       }),
     },
