@@ -3592,8 +3592,8 @@ model ObservationSourceRun {
   createdAt            DateTime                     @default(now())
   updatedAt            DateTime                     @updatedAt
   workspace            Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  program              EnterpriseObservationProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  source               ObservationSource            @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  program              EnterpriseObservationProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  source               ObservationSource            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
 
   @@unique([sourceId, executionKey])
   @@index([workspaceId, status, createdAt])
@@ -3676,7 +3676,7 @@ model SupervisionSignalRecord {
 }
 
 // One effective ActionItem per confirmed decision. The unique decisionRecordId
-// is the concurrency arbiter; duplicate contenders are auditably withdrawn.
+// is the concurrency arbiter; a losing contender transaction rolls back in full.
 model DecisionWorkPacketClaim {
   id               String         @id @default(cuid())
   workspaceId      String

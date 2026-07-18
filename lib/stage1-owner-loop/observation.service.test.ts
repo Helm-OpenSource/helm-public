@@ -40,6 +40,7 @@ import {
   beginObservationSourceRun,
   completeObservationSourceRun,
   createEnterpriseObservationProgram,
+  registerObservationSource,
   revokeEnterpriseObservationProgram,
 } from "./observation.service";
 
@@ -204,6 +205,70 @@ describe("Stage 1 observation runtime", () => {
       dbMock.enterpriseObservationProgram.updateMany,
     ).not.toHaveBeenCalled();
     expect(dbMock.observationSourceRun.create).not.toHaveBeenCalled();
+  });
+
+  it("normalizes the source and execution keys before the idempotency lookup", async () => {
+    const existing = run({ status: "SUCCEEDED", outcome: "SUCCESS" });
+    dbMock.observationSource.findUnique.mockResolvedValue({
+      ...source(),
+      program: program(),
+    });
+    dbMock.observationSourceRun.findUnique.mockResolvedValue(existing);
+
+    const result = await beginObservationSourceRun({
+      workspaceId: "workspace-1",
+      sourceKey: "  crm-readonly  ",
+      executionKey: "  execution-1  ",
+      windowStart: existing.windowStart,
+      windowEnd: existing.windowEnd,
+      now,
+    });
+
+    expect(result).toBe(existing);
+    expect(dbMock.observationSource.findUnique).toHaveBeenCalledWith({
+      where: {
+        workspaceId_sourceKey: {
+          workspaceId: "workspace-1",
+          sourceKey: "crm-readonly",
+        },
+      },
+      include: { program: true },
+    });
+    expect(dbMock.observationSourceRun.findUnique).toHaveBeenCalledWith({
+      where: {
+        sourceId_executionKey: {
+          sourceId: "source-1",
+          executionKey: "execution-1",
+        },
+      },
+    });
+  });
+
+  it("fails source registration when revocation wins the transactional active-program claim", async () => {
+    dbMock.enterpriseObservationProgram.findFirst.mockResolvedValue(program());
+    dbMock.enterpriseObservationProgram.updateMany.mockResolvedValue({
+      count: 0,
+    });
+
+    await expect(
+      registerObservationSource({
+        workspaceId: "workspace-1",
+        programId: "program-1",
+        sourceKey: "crm-readonly",
+        sourceKind: "crm",
+        accessMode: "read_only_api",
+        ownerRef: "owner-1",
+        freshnessSlaMinutes: 60,
+        sensitivity: "confidential",
+        authorizationRef: "authorization:owner-1",
+        secretRef: "secret-manager:crm-readonly",
+        retentionDays: 30,
+        actorName: "Owner",
+        actorUserId: "owner-1",
+      }),
+    ).rejects.toMatchObject({ reasons: ["program_not_active"] });
+
+    expect(dbMock.observationSource.create).not.toHaveBeenCalled();
   });
 
   it("fails closed when revocation wins the atomic authorization claim", async () => {

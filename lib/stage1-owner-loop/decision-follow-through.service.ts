@@ -1,18 +1,13 @@
 import "server-only";
 
-import {
-  ActionStatus,
-  ActionType,
-  ActorType,
-  ApprovalStatus,
-  SourceType,
-} from "@prisma/client";
+import { ActionType, ActorType, SourceType } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import {
   assertWorkspaceGovernedActionManagementServiceAccess,
   assertWorkspaceInsightServiceAccess,
 } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
+import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import {
   routeSupervisionSignal,
   validateDecisionObject,
@@ -40,6 +35,20 @@ function isUniqueConstraintViolation(error: unknown): boolean {
     error !== null &&
     (error as { code?: string }).code === "P2002"
   );
+}
+
+function buildDecisionWorkPacketTitle(input: {
+  businessQuestion: string;
+  english: boolean;
+}): string {
+  const title = input.english
+    ? `Decision follow-through: ${input.businessQuestion}`
+    : `决策督办：${input.businessQuestion}`;
+  return title.length <= 191 ? title : `${title.slice(0, 188)}...`;
+}
+
+function sameInstant(left: Date | null, right: Date | null): boolean {
+  return left?.getTime() === right?.getTime();
 }
 
 export class Stage1DecisionGateError extends Error {
@@ -174,59 +183,102 @@ export async function createStage1DecisionRecord(input: {
     ["draft_task", "shadow", "active_candidate"].includes(
       validation.maxActionLevel,
     );
-  return db.$transaction(async (tx) => {
-    const record = await tx.decisionRecord.create({
-      data: {
-        workspaceId: input.workspaceId,
-        decisionKey: input.decision.decisionId,
-        decisionType: input.decision.decisionType,
-        businessQuestion: input.decision.businessQuestion,
-        problemCategoryRef: input.decision.problemCategoryRef,
-        contextRefs: jsonStringify(input.decision.contextRefs),
-        knowledgeRefs: jsonStringify(input.decision.knowledgeRefs),
-        evidenceRefs: jsonStringify(input.decision.evidenceRefs),
-        policyRefs: jsonStringify(input.decision.policyRefs),
-        receiptRefs: jsonStringify(input.decision.receiptRefs),
-        alternatives: jsonStringify(input.decision.alternatives),
-        recommendedOption: input.decision.recommendedOption,
-        confidence: input.decision.confidence,
-        riskLevel: input.decision.riskLevel,
-        allowedActionLevel: validation.maxActionLevel,
-        ownerGate: input.decision.ownerGate,
-        rollbackPath: input.decision.rollbackPath,
-        factsJson: jsonStringify(input.facts),
-        inferencesJson: jsonStringify(input.inferences),
-        unknownsJson: jsonStringify(input.unknowns),
-        risksJson: jsonStringify(input.risks),
-        status: evidenceReady ? "EVIDENCE_READY" : "DRAFT",
-        validUntil: input.decision.expiryOrReviewAt
-          ? new Date(input.decision.expiryOrReviewAt)
-          : null,
-      },
+  const decisionKey = input.decision.decisionId.trim();
+  const validUntil = input.decision.expiryOrReviewAt
+    ? new Date(input.decision.expiryOrReviewAt)
+    : null;
+  const immutablePayload = {
+    decisionType: input.decision.decisionType,
+    businessQuestion: input.decision.businessQuestion,
+    problemCategoryRef: input.decision.problemCategoryRef,
+    contextRefs: jsonStringify(input.decision.contextRefs),
+    knowledgeRefs: jsonStringify(input.decision.knowledgeRefs),
+    evidenceRefs: jsonStringify(input.decision.evidenceRefs),
+    policyRefs: jsonStringify(input.decision.policyRefs),
+    receiptRefs: jsonStringify(input.decision.receiptRefs),
+    alternatives: jsonStringify(input.decision.alternatives),
+    recommendedOption: input.decision.recommendedOption,
+    confidence: input.decision.confidence,
+    riskLevel: input.decision.riskLevel,
+    allowedActionLevel: validation.maxActionLevel,
+    ownerGate: input.decision.ownerGate,
+    rollbackPath: input.decision.rollbackPath,
+    factsJson: jsonStringify(input.facts),
+    inferencesJson: jsonStringify(input.inferences),
+    unknownsJson: jsonStringify(input.unknowns),
+    risksJson: jsonStringify(input.risks),
+    validUntil,
+  };
+  try {
+    return await db.$transaction(async (tx) => {
+      const record = await tx.decisionRecord.create({
+        data: {
+          workspaceId: input.workspaceId,
+          decisionKey,
+          ...immutablePayload,
+          status: evidenceReady ? "EVIDENCE_READY" : "DRAFT",
+        },
+      });
+      await writeAuditLog(
+        {
+          workspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          actor: input.actorName,
+          actorType: input.actorType ?? ActorType.AI,
+          actionType: "STAGE1_DECISION_RECORDED",
+          targetType: "DecisionRecord",
+          targetId: record.id,
+          summary: evidenceReady
+            ? "Decision evidence is ready for owner confirmation"
+            : "Decision draft recorded but cannot advance beyond observation",
+          payload: {
+            decisionKey: record.decisionKey,
+            status: record.status,
+            allowedActionLevel: record.allowedActionLevel,
+            validationReasons: validation.reasons,
+          },
+        },
+        { client: tx },
+      );
+      return record;
     });
-    await writeAuditLog(
-      {
-        workspaceId: input.workspaceId,
-        userId: input.actorUserId,
-        actor: input.actorName,
-        actorType: input.actorType ?? ActorType.AI,
-        actionType: "STAGE1_DECISION_RECORDED",
-        targetType: "DecisionRecord",
-        targetId: record.id,
-        summary: evidenceReady
-          ? "Decision evidence is ready for owner confirmation"
-          : "Decision draft recorded but cannot advance beyond observation",
-        payload: {
-          decisionKey: record.decisionKey,
-          status: record.status,
-          allowedActionLevel: record.allowedActionLevel,
-          validationReasons: validation.reasons,
+  } catch (error) {
+    if (!isUniqueConstraintViolation(error)) throw error;
+    const existing = await db.decisionRecord.findUnique({
+      where: {
+        workspaceId_decisionKey: {
+          workspaceId: input.workspaceId,
+          decisionKey,
         },
       },
-      { client: tx },
-    );
-    return record;
-  });
+    });
+    if (!existing) throw error;
+    const matches =
+      existing.decisionType === immutablePayload.decisionType &&
+      existing.businessQuestion === immutablePayload.businessQuestion &&
+      existing.problemCategoryRef === immutablePayload.problemCategoryRef &&
+      existing.contextRefs === immutablePayload.contextRefs &&
+      existing.knowledgeRefs === immutablePayload.knowledgeRefs &&
+      existing.evidenceRefs === immutablePayload.evidenceRefs &&
+      existing.policyRefs === immutablePayload.policyRefs &&
+      existing.receiptRefs === immutablePayload.receiptRefs &&
+      existing.alternatives === immutablePayload.alternatives &&
+      existing.recommendedOption === immutablePayload.recommendedOption &&
+      existing.confidence === immutablePayload.confidence &&
+      existing.riskLevel === immutablePayload.riskLevel &&
+      existing.allowedActionLevel === immutablePayload.allowedActionLevel &&
+      existing.ownerGate === immutablePayload.ownerGate &&
+      existing.rollbackPath === immutablePayload.rollbackPath &&
+      existing.factsJson === immutablePayload.factsJson &&
+      existing.inferencesJson === immutablePayload.inferencesJson &&
+      existing.unknownsJson === immutablePayload.unknownsJson &&
+      existing.risksJson === immutablePayload.risksJson &&
+      sameInstant(existing.validUntil, immutablePayload.validUntil);
+    if (!matches) {
+      throw new Stage1DecisionGateError(["decision_idempotency_conflict"]);
+    }
+    return existing;
+  }
 }
 
 export async function confirmStage1DecisionRecord(input: {
@@ -375,56 +427,101 @@ export async function recordStage1SupervisionSignal(input: {
   // Resolve the route through the closed contract to prove it can only become
   // a status update or a gated intervention draft. The persisted field remains
   // the signal's declared route; this function never executes the intervention.
-  routeSupervisionSignal(input.signal);
+  const route = routeSupervisionSignal(input.signal) as
+    ReturnType<typeof routeSupervisionSignal> | undefined;
+  if (!route) reasons.push("invalid_recommended_route");
+  if (reasons.length > 0) throw new Stage1DecisionGateError(reasons);
 
-  return db.$transaction(async (tx) => {
-    const record = await tx.supervisionSignalRecord.create({
-      data: {
-        workspaceId: input.workspaceId,
-        decisionRecordId: input.decisionRecordId ?? null,
-        signalKey: input.signal.signalId,
-        signalType: input.signal.signalType,
-        observedObjectRef: input.signal.observedObjectRef,
-        baselineRef: input.signal.baselineRef,
-        evidenceRefs: jsonStringify(input.signal.evidenceRefs),
-        severity: input.signal.severity,
-        confidence: input.signal.confidence,
-        recommendedRoute: input.signal.recommendedRoute,
-        ownerRef: input.signal.ownerRef,
-        deadlineOrSla: input.signal.deadlineOrSla
-          ? new Date(input.signal.deadlineOrSla)
-          : null,
-        status: input.signal.status,
-        observedFact: input.signal.observedFact,
-        interpretation: input.signal.interpretation,
-        expectedState: input.expectedState ?? null,
-        actualState: input.actualState.trim(),
-        responsibilityScopeRef: input.responsibilityScopeRef ?? null,
-        escalationCondition: input.escalationCondition.trim(),
-      },
+  const signalKey = input.signal.signalId.trim();
+  const deadlineOrSla = input.signal.deadlineOrSla
+    ? new Date(input.signal.deadlineOrSla)
+    : null;
+  const immutablePayload = {
+    decisionRecordId: input.decisionRecordId ?? null,
+    signalType: input.signal.signalType,
+    observedObjectRef: input.signal.observedObjectRef,
+    baselineRef: input.signal.baselineRef,
+    evidenceRefs: jsonStringify(input.signal.evidenceRefs),
+    severity: input.signal.severity,
+    confidence: input.signal.confidence,
+    recommendedRoute: input.signal.recommendedRoute,
+    ownerRef: input.signal.ownerRef,
+    deadlineOrSla,
+    status: input.signal.status,
+    observedFact: input.signal.observedFact,
+    interpretation: input.signal.interpretation,
+    expectedState: input.expectedState ?? null,
+    actualState: input.actualState.trim(),
+    responsibilityScopeRef: input.responsibilityScopeRef ?? null,
+    escalationCondition: input.escalationCondition.trim(),
+  };
+
+  try {
+    return await db.$transaction(async (tx) => {
+      const record = await tx.supervisionSignalRecord.create({
+        data: {
+          workspaceId: input.workspaceId,
+          signalKey,
+          ...immutablePayload,
+        },
+      });
+      await writeAuditLog(
+        {
+          workspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          actor: input.actorName ?? "Helm Supervision Runtime",
+          actorType: input.actorType ?? ActorType.AI,
+          actionType: "STAGE1_SUPERVISION_SIGNAL_RECORDED",
+          targetType: "SupervisionSignalRecord",
+          targetId: record.id,
+          summary: input.english
+            ? "Evidence-bounded supervision signal recorded without execution"
+            : "证据化监督信号已记录，未触发自动执行",
+          payload: {
+            signalKey: record.signalKey,
+            severity: record.severity,
+            recommendedRoute: record.recommendedRoute,
+          },
+        },
+        { client: tx },
+      );
+      return record;
     });
-    await writeAuditLog(
-      {
-        workspaceId: input.workspaceId,
-        userId: input.actorUserId,
-        actor: input.actorName ?? "Helm Supervision Runtime",
-        actorType: input.actorType ?? ActorType.AI,
-        actionType: "STAGE1_SUPERVISION_SIGNAL_RECORDED",
-        targetType: "SupervisionSignalRecord",
-        targetId: record.id,
-        summary: input.english
-          ? "Evidence-bounded supervision signal recorded without execution"
-          : "证据化监督信号已记录，未触发自动执行",
-        payload: {
-          signalKey: record.signalKey,
-          severity: record.severity,
-          recommendedRoute: record.recommendedRoute,
+  } catch (error) {
+    if (!isUniqueConstraintViolation(error)) throw error;
+    const existing = await db.supervisionSignalRecord.findUnique({
+      where: {
+        workspaceId_signalKey: {
+          workspaceId: input.workspaceId,
+          signalKey,
         },
       },
-      { client: tx },
-    );
-    return record;
-  });
+    });
+    if (!existing) throw error;
+    const matches =
+      existing.decisionRecordId === immutablePayload.decisionRecordId &&
+      existing.signalType === immutablePayload.signalType &&
+      existing.observedObjectRef === immutablePayload.observedObjectRef &&
+      existing.baselineRef === immutablePayload.baselineRef &&
+      existing.evidenceRefs === immutablePayload.evidenceRefs &&
+      existing.severity === immutablePayload.severity &&
+      existing.confidence === immutablePayload.confidence &&
+      existing.recommendedRoute === immutablePayload.recommendedRoute &&
+      existing.ownerRef === immutablePayload.ownerRef &&
+      sameInstant(existing.deadlineOrSla, immutablePayload.deadlineOrSla) &&
+      existing.status === immutablePayload.status &&
+      existing.observedFact === immutablePayload.observedFact &&
+      existing.interpretation === immutablePayload.interpretation &&
+      existing.expectedState === immutablePayload.expectedState &&
+      existing.actualState === immutablePayload.actualState &&
+      existing.responsibilityScopeRef ===
+        immutablePayload.responsibilityScopeRef &&
+      existing.escalationCondition === immutablePayload.escalationCondition;
+    if (!matches) {
+      throw new Stage1DecisionGateError(["supervision_idempotency_conflict"]);
+    }
+    return existing;
+  }
 }
 
 export async function dispatchStage1DecisionWorkPacket(input: {
@@ -487,135 +584,103 @@ export async function dispatchStage1DecisionWorkPacket(input: {
     throw new Stage1DecisionGateError(["owner_confirmation_required"]);
   }
 
-  const result = await createGovernedAction({
-    workspaceId: input.workspaceId,
-    actorName: input.actorName,
-    actorUserId: input.actorUserId,
-    actorType: ActorType.USER,
-    english: input.english,
-    actionType: ActionType.CREATE_TASK,
-    title: input.english
-      ? `Decision follow-through: ${decision.businessQuestion}`
-      : `决策督办：${decision.businessQuestion}`,
-    description: `${input.command.goal}\n\n${input.command.action}`,
-    aiReason: input.english
-      ? "The owner confirmed this evidence-bounded decision. The work packet remains review-first and requires an independent execution receipt."
-      : "一把手已确认该证据化决策。本 Work Packet 仍走复核优先链，并要求独立执行回执。",
-    riskLevel: "HIGH",
-    dueDate: new Date(input.command.dueAt),
-    sourceType: SourceType.SYSTEM_INFERENCE,
-    sourceId: `decision-record:${decision.id}`,
-    contentAuthorship: ActorType.AI,
-    metadata: {
-      generatedFrom: "stage1_decision_follow_through",
-      decisionRecordId: decision.id,
-      commandId: input.command.commandId,
-      executionTargetRef: input.command.executionTargetRef,
-      acceptanceCriteria: input.command.acceptanceCriteria,
-      evidenceRequirements: input.command.evidenceRequirements,
-      invalidationConditions: input.command.invalidationConditions,
-      escalationOwnerRef: input.command.escalationOwnerRef,
-      automationLevel: input.command.automationLevel,
-      allowedToolRefs: input.command.allowedToolRefs,
-      externalSideEffects: input.command.externalSideEffects,
-      policyEnvelopeRef: input.command.policyEnvelopeRef,
-    },
-    resultPreview: input.command.acceptanceCriteria.join("; "),
-  });
-
-  const withdrawContender = async (reason: string) => {
-    await db.$transaction(async (tx) => {
-      await tx.actionItem.updateMany({
-        where: {
-          id: result.actionItemId,
-          workspaceId: input.workspaceId,
-          status: {
-            in: [ActionStatus.PENDING_APPROVAL, ActionStatus.SUGGESTED],
-          },
-        },
-        data: {
-          status: ActionStatus.WITHDRAWN,
-          executionStatus: "withdrawn",
-          statusReason: reason,
-        },
+  try {
+    return await runWithWriteConflictRetry(async () => {
+      const committed = await db.decisionWorkPacketClaim.findUnique({
+        where: { decisionRecordId: decision.id },
       });
-      if (result.approvalTaskId) {
-        await tx.approvalTask.updateMany({
-          where: { id: result.approvalTaskId, status: ApprovalStatus.PENDING },
+      if (committed) return resolveExisting(committed.actionItemId);
+
+      const created = await db.$transaction(async (tx) => {
+        const governedAction = await createGovernedAction(
+          {
+            workspaceId: input.workspaceId,
+            actorName: input.actorName,
+            actorUserId: input.actorUserId,
+            actorType: ActorType.USER,
+            english: input.english,
+            actionType: ActionType.CREATE_TASK,
+            title: buildDecisionWorkPacketTitle({
+              businessQuestion: decision.businessQuestion,
+              english: input.english ?? false,
+            }),
+            description: `${input.command.goal}\n\n${input.command.action}`,
+            aiReason: input.english
+              ? "The owner confirmed this evidence-bounded decision. The work packet remains review-first and requires an independent execution receipt."
+              : "一把手已确认该证据化决策。本 Work Packet 仍走复核优先链，并要求独立执行回执。",
+            riskLevel: "HIGH",
+            dueDate: new Date(input.command.dueAt),
+            sourceType: SourceType.SYSTEM_INFERENCE,
+            sourceId: `decision-record:${decision.id}`,
+            contentAuthorship: ActorType.AI,
+            metadata: {
+              generatedFrom: "stage1_decision_follow_through",
+              decisionRecordId: decision.id,
+              commandId: input.command.commandId,
+              executionTargetRef: input.command.executionTargetRef,
+              acceptanceCriteria: input.command.acceptanceCriteria,
+              evidenceRequirements: input.command.evidenceRequirements,
+              invalidationConditions: input.command.invalidationConditions,
+              escalationOwnerRef: input.command.escalationOwnerRef,
+              automationLevel: input.command.automationLevel,
+              allowedToolRefs: input.command.allowedToolRefs,
+              externalSideEffects: input.command.externalSideEffects,
+              policyEnvelopeRef: input.command.policyEnvelopeRef,
+            },
+            resultPreview: input.command.acceptanceCriteria.join("; "),
+          },
+          { client: tx },
+        );
+        await tx.decisionWorkPacketClaim.create({
           data: {
-            status: ApprovalStatus.WITHDRAWN,
-            reviewedAt: new Date(),
-            decisionReason: reason,
+            workspaceId: input.workspaceId,
+            decisionRecordId: decision.id,
+            actionItemId: governedAction.actionItemId,
+            ownerCommandJson: jsonStringify(input.command),
           },
         });
-      }
-      await writeAuditLog(
-        {
-          workspaceId: input.workspaceId,
-          userId: input.actorUserId,
-          actor: input.actorName,
-          actorType: ActorType.USER,
-          actionType: "STAGE1_DECISION_PACKET_WITHDRAWN",
-          targetType: "ActionItem",
-          targetId: result.actionItemId,
-          summary: reason,
-          payload: { decisionRecordId: decision.id },
-        },
-        { client: tx },
-      );
-    });
-  };
-
-  try {
-    await db.$transaction(async (tx) => {
-      await tx.decisionWorkPacketClaim.create({
-        data: {
-          workspaceId: input.workspaceId,
-          decisionRecordId: decision.id,
-          actionItemId: result.actionItemId,
-          ownerCommandJson: jsonStringify(input.command),
-        },
-      });
-      const advanced = await tx.decisionRecord.updateMany({
-        where: {
-          id: decision.id,
-          workspaceId: input.workspaceId,
-          status: "OWNER_CONFIRMED",
-          ownerRef: input.actorUserId,
-        },
-        data: { status: "DISPATCHED" },
-      });
-      if (advanced.count !== 1) {
-        throw new Stage1DecisionGateError(["decision_dispatch_claim_lost"]);
-      }
-      await writeAuditLog(
-        {
-          workspaceId: input.workspaceId,
-          userId: input.actorUserId,
-          actor: input.actorName,
-          actorType: ActorType.USER,
-          actionType: "STAGE1_DECISION_WORK_PACKET_DISPATCHED",
-          targetType: "DecisionRecord",
-          targetId: decision.id,
-          summary: input.english
-            ? "Owner-confirmed decision dispatched as a governed work packet"
-            : "一把手确认的决策已派发为治理 Work Packet",
-          payload: {
-            actionItemId: result.actionItemId,
-            approvalTaskId: result.approvalTaskId,
-            commandId: input.command.commandId,
+        const advanced = await tx.decisionRecord.updateMany({
+          where: {
+            id: decision.id,
+            workspaceId: input.workspaceId,
+            status: "OWNER_CONFIRMED",
+            ownerRef: input.actorUserId,
           },
-        },
-        { client: tx },
-      );
+          data: { status: "DISPATCHED" },
+        });
+        if (advanced.count !== 1) {
+          throw new Stage1DecisionGateError(["decision_dispatch_claim_lost"]);
+        }
+        await writeAuditLog(
+          {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            actor: input.actorName,
+            actorType: ActorType.USER,
+            actionType: "STAGE1_DECISION_WORK_PACKET_DISPATCHED",
+            targetType: "DecisionRecord",
+            targetId: decision.id,
+            summary: input.english
+              ? "Owner-confirmed decision dispatched as a governed work packet"
+              : "一把手确认的决策已派发为治理 Work Packet",
+            payload: {
+              actionItemId: governedAction.actionItemId,
+              approvalTaskId: governedAction.approvalTaskId,
+              commandId: input.command.commandId,
+            },
+          },
+          { client: tx },
+        );
+        return governedAction;
+      });
+      return {
+        actionItemId: created.actionItemId,
+        approvalTaskId: created.approvalTaskId,
+        created: true,
+      };
     });
   } catch (error) {
     const duplicate = isUniqueConstraintViolation(error);
-    await withdrawContender(
-      duplicate
-        ? "Concurrent duplicate decision work packet; existing packet retained"
-        : "Decision work packet claim failed; contender withdrawn",
-    );
     if (!duplicate) throw error;
     const winner = await db.decisionWorkPacketClaim.findUnique({
       where: { decisionRecordId: decision.id },
@@ -623,9 +688,4 @@ export async function dispatchStage1DecisionWorkPacket(input: {
     if (!winner) throw error;
     return resolveExisting(winner.actionItemId);
   }
-  return {
-    actionItemId: result.actionItemId,
-    approvalTaskId: result.approvalTaskId,
-    created: true,
-  };
 }

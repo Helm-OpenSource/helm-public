@@ -4,6 +4,7 @@ import { ActorType } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { assertWorkspacePolicyServiceAccess } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
+import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 import {
   authorizeObservation,
@@ -231,75 +232,94 @@ export async function registerObservationSource(input: {
     actorType: ActorType.USER,
     english: input.english ?? false,
   });
-  const program = await db.enterpriseObservationProgram.findFirst({
-    where: { id: input.programId, workspaceId: input.workspaceId },
-  });
-  if (!program)
-    throw new ObservationAuthorizationDeniedError(["program_not_found"]);
+  return runWithWriteConflictRetry(() =>
+    db.$transaction(async (tx) => {
+      const program = await tx.enterpriseObservationProgram.findFirst({
+        where: { id: input.programId, workspaceId: input.workspaceId },
+      });
+      if (!program)
+        throw new ObservationAuthorizationDeniedError(["program_not_found"]);
 
-  const sourceContract: ObservationSource = {
-    sourceId: input.sourceKey,
-    workspaceRef: `workspace:${input.workspaceId}`,
-    programRef: program.id,
-    sourceKind: input.sourceKind,
-    accessMode: input.accessMode,
-    ownerRef: input.ownerRef,
-    freshnessSlaMinutes: input.freshnessSlaMinutes,
-    sensitivity: input.sensitivity,
-    authorizationRef: input.authorizationRef,
-    secretRef: input.secretRef,
-    retentionDays: input.retentionDays,
-    status: "active",
-  };
-  const authorization = authorizeObservation({
-    program: toProgramContract(program),
-    source: sourceContract,
-    now: new Date().toISOString(),
-  });
-  if (!authorization.allowed) {
-    throw new ObservationAuthorizationDeniedError(authorization.reasons);
-  }
-
-  return db.$transaction(async (tx) => {
-    const source = await tx.observationSource.create({
-      data: {
-        workspaceId: input.workspaceId,
-        programId: program.id,
-        sourceKey: input.sourceKey.trim(),
-        sourceKind: input.sourceKind.trim(),
-        accessMode: input.accessMode.toUpperCase(),
-        ownerRef: input.ownerRef.trim(),
+      const sourceContract: ObservationSource = {
+        sourceId: input.sourceKey,
+        workspaceRef: `workspace:${input.workspaceId}`,
+        programRef: program.id,
+        sourceKind: input.sourceKind,
+        accessMode: input.accessMode,
+        ownerRef: input.ownerRef,
         freshnessSlaMinutes: input.freshnessSlaMinutes,
-        sensitivity: input.sensitivity.toUpperCase(),
-        authorizationRef: input.authorizationRef.trim(),
-        secretRef: input.secretRef.trim(),
+        sensitivity: input.sensitivity,
+        authorizationRef: input.authorizationRef,
+        secretRef: input.secretRef,
         retentionDays: input.retentionDays,
-        status: "ACTIVE",
-      },
-    });
-    await writeAuditLog(
-      {
-        workspaceId: input.workspaceId,
-        userId: actorUserId,
-        actor: input.actorName,
-        actorType: ActorType.USER,
-        actionType: "OBSERVATION_SOURCE_REGISTERED",
-        targetType: "ObservationSource",
-        targetId: source.id,
-        summary: input.english
-          ? "Read-only observation source registered"
-          : "只读观察来源已登记",
-        payload: {
-          sourceKey: source.sourceKey,
-          accessMode: source.accessMode,
-          secretRef: source.secretRef,
-          authorizationRef: source.authorizationRef,
+        status: "active",
+      };
+      const authorization = authorizeObservation({
+        program: toProgramContract(program),
+        source: sourceContract,
+        now: new Date().toISOString(),
+      });
+      if (!authorization.allowed) {
+        throw new ObservationAuthorizationDeniedError(authorization.reasons);
+      }
+
+      // Serialize source registration against authorization revocation. A
+      // revocation that wins this claim prevents a late ACTIVE source insert.
+      const activeProgramClaim =
+        await tx.enterpriseObservationProgram.updateMany({
+          where: {
+            id: program.id,
+            workspaceId: input.workspaceId,
+            status: "ACTIVE",
+            revokedAt: null,
+            authorizationVersion: program.authorizationVersion,
+          },
+          data: { updatedAt: new Date() },
+        });
+      if (activeProgramClaim.count !== 1) {
+        throw new ObservationAuthorizationDeniedError(["program_not_active"]);
+      }
+
+      const source = await tx.observationSource.create({
+        data: {
+          workspaceId: input.workspaceId,
+          programId: program.id,
+          sourceKey: input.sourceKey.trim(),
+          sourceKind: input.sourceKind.trim(),
+          accessMode: input.accessMode.toUpperCase(),
+          ownerRef: input.ownerRef.trim(),
+          freshnessSlaMinutes: input.freshnessSlaMinutes,
+          sensitivity: input.sensitivity.toUpperCase(),
+          authorizationRef: input.authorizationRef.trim(),
+          secretRef: input.secretRef.trim(),
+          retentionDays: input.retentionDays,
+          status: "ACTIVE",
         },
-      },
-      { client: tx },
-    );
-    return source;
-  });
+      });
+      await writeAuditLog(
+        {
+          workspaceId: input.workspaceId,
+          userId: actorUserId,
+          actor: input.actorName,
+          actorType: ActorType.USER,
+          actionType: "OBSERVATION_SOURCE_REGISTERED",
+          targetType: "ObservationSource",
+          targetId: source.id,
+          summary: input.english
+            ? "Read-only observation source registered"
+            : "只读观察来源已登记",
+          payload: {
+            sourceKey: source.sourceKey,
+            accessMode: source.accessMode,
+            secretRef: source.secretRef,
+            authorizationRef: source.authorizationRef,
+          },
+        },
+        { client: tx },
+      );
+      return source;
+    }),
+  );
 }
 
 export async function revokeEnterpriseObservationProgram(input: {
@@ -321,74 +341,74 @@ export async function revokeEnterpriseObservationProgram(input: {
     throw new ObservationContractError(["revocation_reason_required"]);
   const now = new Date();
 
-  const result = await db.$transaction(async (tx) => {
-    const claimed = await tx.enterpriseObservationProgram.updateMany({
-      where: {
-        id: input.programId,
-        workspaceId: input.workspaceId,
-        status: "ACTIVE",
-        revokedAt: null,
-      },
-      data: {
-        status: "REVOKED",
-        revokedAt: now,
-        revokedByRef: actorUserId,
-        revocationReason: input.reason.trim(),
-        authorizationVersion: { increment: 1 },
-      },
-    });
-    const program = await tx.enterpriseObservationProgram.findFirst({
-      where: { id: input.programId, workspaceId: input.workspaceId },
-    });
-    if (!program)
-      throw new ObservationAuthorizationDeniedError(["program_not_found"]);
-    if (claimed.count === 0 && program.status !== "REVOKED") {
-      throw new ObservationAuthorizationDeniedError(["program_not_active"]);
-    }
-    if (claimed.count > 0) {
-      await tx.observationSource.updateMany({
+  const result = await runWithWriteConflictRetry(() =>
+    db.$transaction(async (tx) => {
+      const claimed = await tx.enterpriseObservationProgram.updateMany({
         where: {
+          id: input.programId,
           workspaceId: input.workspaceId,
-          programId: input.programId,
           status: "ACTIVE",
-        },
-        data: { status: "REVOKED" },
-      });
-      await tx.observationSourceRun.updateMany({
-        where: {
-          workspaceId: input.workspaceId,
-          programId: input.programId,
-          status: "RUNNING",
+          revokedAt: null,
         },
         data: {
-          status: "CANCELLED",
-          outcome: "FAILURE",
-          freshness: "UNKNOWN",
-          observedAt: now,
-          errorCodes: jsonStringify(["authorization_revoked"]),
+          status: "REVOKED",
+          revokedAt: now,
+          revokedByRef: actorUserId,
+          revocationReason: input.reason.trim(),
+          authorizationVersion: { increment: 1 },
         },
       });
-    }
-    if (claimed.count > 0) {
-      await writeAuditLog(
-        {
-          workspaceId: input.workspaceId,
-          userId: actorUserId,
-          actor: input.actorName,
-          actorType: ActorType.USER,
-          actionType: "ENTERPRISE_OBSERVATION_REVOKED",
-          targetType: "EnterpriseObservationProgram",
-          targetId: program.id,
-          summary: input.english
-            ? "Owner revoked the observation program; active sources and runs were stopped"
-            : "一把手已撤销观察计划，活动来源与运行已停止",
-          payload: { reason: input.reason.trim(), revokedAt: now },
-        },
-        { client: tx },
-      );
-    }
-    return program;
-  });
+      const program = await tx.enterpriseObservationProgram.findFirst({
+        where: { id: input.programId, workspaceId: input.workspaceId },
+      });
+      if (!program)
+        throw new ObservationAuthorizationDeniedError(["program_not_found"]);
+      if (claimed.count === 0 && program.status !== "REVOKED") {
+        throw new ObservationAuthorizationDeniedError(["program_not_active"]);
+      }
+      if (claimed.count > 0) {
+        await tx.observationSource.updateMany({
+          where: {
+            workspaceId: input.workspaceId,
+            programId: input.programId,
+            status: "ACTIVE",
+          },
+          data: { status: "REVOKED" },
+        });
+        await tx.observationSourceRun.updateMany({
+          where: {
+            workspaceId: input.workspaceId,
+            programId: input.programId,
+            status: "RUNNING",
+          },
+          data: {
+            status: "CANCELLED",
+            outcome: "FAILURE",
+            freshness: "UNKNOWN",
+            observedAt: now,
+            errorCodes: jsonStringify(["authorization_revoked"]),
+          },
+        });
+        await writeAuditLog(
+          {
+            workspaceId: input.workspaceId,
+            userId: actorUserId,
+            actor: input.actorName,
+            actorType: ActorType.USER,
+            actionType: "ENTERPRISE_OBSERVATION_REVOKED",
+            targetType: "EnterpriseObservationProgram",
+            targetId: program.id,
+            summary: input.english
+              ? "Owner revoked the observation program; active sources and runs were stopped"
+              : "一把手已撤销观察计划，活动来源与运行已停止",
+            payload: { reason: input.reason.trim(), revokedAt: now },
+          },
+          { client: tx },
+        );
+      }
+      return program;
+    }),
+  );
   return result;
 }
 
@@ -400,99 +420,104 @@ export async function beginObservationSourceRun(input: {
   windowEnd: Date;
   now?: Date;
 }) {
-  if (!input.executionKey.trim())
+  const sourceKey = input.sourceKey.trim();
+  const executionKey = input.executionKey.trim();
+  if (!sourceKey) throw new ObservationContractError(["source_key_required"]);
+  if (!executionKey)
     throw new ObservationContractError(["execution_key_required"]);
   if (input.windowStart > input.windowEnd) {
     throw new ObservationContractError(["observation_window_reversed"]);
   }
   const now = input.now ?? new Date();
 
-  try {
-    return await db.$transaction(async (tx) => {
-      const source = await tx.observationSource.findUnique({
+  return runWithWriteConflictRetry(async () => {
+    try {
+      return await db.$transaction(async (tx) => {
+        const source = await tx.observationSource.findUnique({
+          where: {
+            workspaceId_sourceKey: {
+              workspaceId: input.workspaceId,
+              sourceKey,
+            },
+          },
+          include: { program: true },
+        });
+        if (!source)
+          throw new ObservationAuthorizationDeniedError(["source_not_found"]);
+
+        const existing = await tx.observationSourceRun.findUnique({
+          where: {
+            sourceId_executionKey: {
+              sourceId: source.id,
+              executionKey,
+            },
+          },
+        });
+        if (existing) return existing;
+
+        const authorization = authorizeObservation({
+          program: toProgramContract(source.program),
+          source: toSourceContract(source),
+          now: now.toISOString(),
+        });
+        if (!authorization.allowed) {
+          throw new ObservationAuthorizationDeniedError(authorization.reasons);
+        }
+
+        const claimed = await tx.enterpriseObservationProgram.updateMany({
+          where: {
+            id: source.programId,
+            workspaceId: input.workspaceId,
+            status: "ACTIVE",
+            revokedAt: null,
+            startsAt: { lte: now },
+            expiresAt: { gt: now },
+            authorizationVersion: source.program.authorizationVersion,
+          },
+          data: { runSequence: { increment: 1 } },
+        });
+        if (claimed.count !== 1) {
+          throw new ObservationAuthorizationDeniedError([
+            "authorization_claim_lost",
+          ]);
+        }
+
+        return tx.observationSourceRun.create({
+          data: {
+            workspaceId: input.workspaceId,
+            programId: source.programId,
+            sourceId: source.id,
+            executionKey,
+            authorizationVersion: source.program.authorizationVersion,
+            windowStart: input.windowStart,
+            windowEnd: input.windowEnd,
+            status: "RUNNING",
+          },
+        });
+      });
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error;
+      const source = await db.observationSource.findUnique({
         where: {
           workspaceId_sourceKey: {
             workspaceId: input.workspaceId,
-            sourceKey: input.sourceKey,
+            sourceKey,
           },
         },
-        include: { program: true },
       });
-      if (!source)
-        throw new ObservationAuthorizationDeniedError(["source_not_found"]);
-
-      const existing = await tx.observationSourceRun.findUnique({
+      if (!source) throw error;
+      const winner = await db.observationSourceRun.findUnique({
         where: {
           sourceId_executionKey: {
             sourceId: source.id,
-            executionKey: input.executionKey,
+            executionKey,
           },
         },
       });
-      if (existing) return existing;
-
-      const authorization = authorizeObservation({
-        program: toProgramContract(source.program),
-        source: toSourceContract(source),
-        now: now.toISOString(),
-      });
-      if (!authorization.allowed) {
-        throw new ObservationAuthorizationDeniedError(authorization.reasons);
-      }
-
-      const claimed = await tx.enterpriseObservationProgram.updateMany({
-        where: {
-          id: source.programId,
-          workspaceId: input.workspaceId,
-          status: "ACTIVE",
-          revokedAt: null,
-          startsAt: { lte: now },
-          expiresAt: { gt: now },
-          authorizationVersion: source.program.authorizationVersion,
-        },
-        data: { runSequence: { increment: 1 } },
-      });
-      if (claimed.count !== 1) {
-        throw new ObservationAuthorizationDeniedError([
-          "authorization_claim_lost",
-        ]);
-      }
-
-      return tx.observationSourceRun.create({
-        data: {
-          workspaceId: input.workspaceId,
-          programId: source.programId,
-          sourceId: source.id,
-          executionKey: input.executionKey.trim(),
-          authorizationVersion: source.program.authorizationVersion,
-          windowStart: input.windowStart,
-          windowEnd: input.windowEnd,
-          status: "RUNNING",
-        },
-      });
-    });
-  } catch (error) {
-    if (!isUniqueConstraintViolation(error)) throw error;
-    const source = await db.observationSource.findUnique({
-      where: {
-        workspaceId_sourceKey: {
-          workspaceId: input.workspaceId,
-          sourceKey: input.sourceKey,
-        },
-      },
-    });
-    if (!source) throw error;
-    const winner = await db.observationSourceRun.findUnique({
-      where: {
-        sourceId_executionKey: {
-          sourceId: source.id,
-          executionKey: input.executionKey,
-        },
-      },
-    });
-    if (!winner) throw error;
-    return winner;
-  }
+      if (!winner) throw error;
+      return winner;
+    }
+  });
 }
 
 export async function completeObservationSourceRun(input: {

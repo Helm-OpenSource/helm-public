@@ -157,8 +157,8 @@ ALTER TABLE `EnterpriseObservationProgram` ADD CONSTRAINT `EnterpriseObservation
 ALTER TABLE `ObservationSource` ADD CONSTRAINT `ObservationSource_workspaceId_fkey` FOREIGN KEY (`workspaceId`) REFERENCES `Workspace`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `ObservationSource` ADD CONSTRAINT `ObservationSource_programId_fkey` FOREIGN KEY (`programId`) REFERENCES `EnterpriseObservationProgram`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `ObservationSourceRun` ADD CONSTRAINT `ObservationSourceRun_workspaceId_fkey` FOREIGN KEY (`workspaceId`) REFERENCES `Workspace`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE `ObservationSourceRun` ADD CONSTRAINT `ObservationSourceRun_programId_fkey` FOREIGN KEY (`programId`) REFERENCES `EnterpriseObservationProgram`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE `ObservationSourceRun` ADD CONSTRAINT `ObservationSourceRun_sourceId_fkey` FOREIGN KEY (`sourceId`) REFERENCES `ObservationSource`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `ObservationSourceRun` ADD CONSTRAINT `ObservationSourceRun_programId_fkey` FOREIGN KEY (`programId`) REFERENCES `EnterpriseObservationProgram`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `ObservationSourceRun` ADD CONSTRAINT `ObservationSourceRun_sourceId_fkey` FOREIGN KEY (`sourceId`) REFERENCES `ObservationSource`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE `DecisionRecord` ADD CONSTRAINT `DecisionRecord_workspaceId_fkey` FOREIGN KEY (`workspaceId`) REFERENCES `Workspace`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `SupervisionSignalRecord` ADD CONSTRAINT `SupervisionSignalRecord_workspaceId_fkey` FOREIGN KEY (`workspaceId`) REFERENCES `Workspace`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `SupervisionSignalRecord` ADD CONSTRAINT `SupervisionSignalRecord_decisionRecordId_fkey` FOREIGN KEY (`decisionRecordId`) REFERENCES `DecisionRecord`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;

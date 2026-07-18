@@ -13,6 +13,7 @@ import {
   RecommendationFeedbackType,
   SourceType,
   type ApprovalTask,
+  type Prisma,
   type RejectionReasonCode,
   type RiskLevel,
 } from "@prisma/client";
@@ -80,6 +81,25 @@ type ApprovalActionResult = {
   reason: string;
 };
 
+type CreateGovernedActionOptions = {
+  /**
+   * Allows a caller to include the action, approval, notification, audit and
+   * its own claim in one database transaction. This mode is deliberately
+   * limited to review-required actions: automatic execution and other
+   * post-commit side effects must never run inside a caller-owned transaction.
+   */
+  client?: Prisma.TransactionClient;
+};
+
+export class TransactionalGovernedActionMustRequireReviewError extends Error {
+  constructor() {
+    super(
+      "A caller-owned governed-action transaction is only allowed for a non-blocked review-required action.",
+    );
+    this.name = "TransactionalGovernedActionMustRequireReviewError";
+  }
+}
+
 // Separation-of-duties review gate errors. Both are governance denials the
 // feature layer should surface as a decision result, not as a crash.
 export class SelfApprovalNotAllowedError extends Error {
@@ -137,7 +157,10 @@ class ClosureClaimLostError extends Error {
   }
 }
 
-export async function createGovernedAction(input: CreateGovernedActionInput): Promise<ApprovalActionResult> {
+export async function createGovernedAction(
+  input: CreateGovernedActionInput,
+  options?: CreateGovernedActionOptions,
+): Promise<ApprovalActionResult> {
   await assertWorkspaceGovernedActionManagementServiceAccess({
     workspaceId: input.workspaceId,
     userId: input.actorUserId,
@@ -145,7 +168,8 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
     english: input.english ?? false,
   });
 
-  const policy = await db.policyRule.findFirst({
+  const client = options?.client ?? db;
+  const policy = await client.policyRule.findFirst({
     where: {
       workspaceId: input.workspaceId,
       actionType: input.actionType,
@@ -158,6 +182,10 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
     policy,
   });
 
+  if (options?.client && (!decision.requiresApproval || decision.blocked)) {
+    throw new TransactionalGovernedActionMustRequireReviewError();
+  }
+
   const policySnapshot = {
     policyId: policy?.id ?? null,
     policyName: decision.appliedPolicyName,
@@ -168,7 +196,7 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
     reason: decision.reason,
   };
 
-  const created = await db.actionItem.create({
+  const created = await client.actionItem.create({
     data: {
       workspaceId: input.workspaceId,
       meetingId: input.meetingId,
@@ -211,25 +239,29 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
     },
   });
 
-  await writeAuditLog({
-    workspaceId: input.workspaceId,
-    userId: input.actorUserId,
-    actor: "Helm AI",
-    actorType: ActorType.AI,
-    actionType: "AI_GENERATED_ACTION",
-    targetType: "ActionItem",
-    targetId: created.id,
-    summary: `AI 生成动作建议：${input.title}`,
-    payload: {
-      policy: policy?.name,
-      decision,
-      input,
+  await writeAuditLog(
+    {
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      actor: "Helm AI",
+      actorType: ActorType.AI,
+      actionType: "AI_GENERATED_ACTION",
+      targetType: "ActionItem",
+      targetId: created.id,
+      summary: `AI 生成动作建议：${input.title}`,
+      payload: {
+        policy: policy?.name,
+        decision,
+        input,
+      },
     },
-  });
+    options?.client ? { client: options.client } : undefined,
+  );
 
   if (
-    input.actionType === ActionType.DRAFT_EXTERNAL_EMAIL ||
-    input.actionType === ActionType.GENERATE_REPLY_DRAFT
+    !options?.client &&
+    (input.actionType === ActionType.DRAFT_EXTERNAL_EMAIL ||
+      input.actionType === ActionType.GENERATE_REPLY_DRAFT)
   ) {
     await logEvent({
       workspaceId: input.workspaceId,
@@ -251,7 +283,7 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
   let approvalTask: ApprovalTask | null = null;
 
   if (decision.requiresApproval) {
-    approvalTask = await db.approvalTask.create({
+    approvalTask = await client.approvalTask.create({
       data: {
         workspaceId: input.workspaceId,
         actionItemId: created.id,
@@ -268,7 +300,7 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
       },
     });
 
-    await db.notification.create({
+    await client.notification.create({
       data: {
         workspaceId: input.workspaceId,
         type: NotificationType.APPROVAL,
@@ -278,22 +310,24 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
       },
     });
 
-    await logEvent({
-      workspaceId: input.workspaceId,
-      userId: input.actorUserId,
-      eventName: "approval_submitted",
-      eventCategory: "approval",
-      targetType: "ApprovalTask",
-      targetId: approvalTask.id,
-      metadata: {
-        actionItemId: created.id,
-        actionType: input.actionType,
-        riskLevel: input.riskLevel,
-        channel: approvalTask.channel,
-        decision,
-      },
-      sourcePage: "/approvals",
-    });
+    if (!options?.client) {
+      await logEvent({
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        eventName: "approval_submitted",
+        eventCategory: "approval",
+        targetType: "ApprovalTask",
+        targetId: approvalTask.id,
+        metadata: {
+          actionItemId: created.id,
+          actionType: input.actionType,
+          riskLevel: input.riskLevel,
+          channel: approvalTask.channel,
+          decision,
+        },
+        sourcePage: "/approvals",
+      });
+    }
   } else if (decision.blocked) {
     await writeActionMemory(input.workspaceId, {
       companyId: null,
@@ -328,7 +362,9 @@ export async function createGovernedAction(input: CreateGovernedActionInput): Pr
     });
   }
 
-  revalidateCorePaths();
+  if (!options?.client) {
+    revalidateCorePaths();
+  }
 
   return {
     actionItemId: created.id,

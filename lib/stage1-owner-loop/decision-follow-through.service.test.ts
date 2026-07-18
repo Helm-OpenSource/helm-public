@@ -1,4 +1,4 @@
-import { ActionStatus, ActorType, ApprovalStatus } from "@prisma/client";
+import { ActorType } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DecisionObject } from "@/lib/agentos-decision-supervision/types";
 import type { OwnerCommandDraft } from "./types";
@@ -10,10 +10,11 @@ const { dbMock, auditMock, serviceGovernanceMock, policyEngineMock } =
       decisionRecord: {
         create: vi.fn(),
         findFirst: vi.fn(),
+        findUnique: vi.fn(),
         findUniqueOrThrow: vi.fn(),
         updateMany: vi.fn(),
       },
-      supervisionSignalRecord: { create: vi.fn() },
+      supervisionSignalRecord: { create: vi.fn(), findUnique: vi.fn() },
       decisionWorkPacketClaim: {
         create: vi.fn(),
         findUnique: vi.fn(),
@@ -84,7 +85,29 @@ function decisionRow(overrides: Record<string, unknown> = {}) {
     id: "decision-1",
     workspaceId: "workspace-1",
     decisionKey: "decision-key-1",
+    decisionType: "prioritization",
     businessQuestion: "Which delivery risk should the owner address first?",
+    problemCategoryRef: "delivery-risk",
+    contextRefs: JSON.stringify(["context:weekly-ops"], null, 2),
+    knowledgeRefs: JSON.stringify(["knowledge:delivery-policy"], null, 2),
+    evidenceRefs: JSON.stringify(["evidence:project-delay"], null, 2),
+    policyRefs: JSON.stringify(["policy:review-first"], null, 2),
+    receiptRefs: JSON.stringify([], null, 2),
+    alternatives: JSON.stringify(
+      ["Escalate now", "Observe one more day"],
+      null,
+      2,
+    ),
+    recommendedOption: "Escalate now",
+    confidence: "medium",
+    riskLevel: "high",
+    allowedActionLevel: "draft_task",
+    ownerGate: "approval_required",
+    rollbackPath: "Withdraw the work packet before execution",
+    factsJson: JSON.stringify([], null, 2),
+    inferencesJson: JSON.stringify([], null, 2),
+    unknownsJson: JSON.stringify([], null, 2),
+    risksJson: JSON.stringify([], null, 2),
     ownerRef: "owner-1",
     ownerConclusion: "Escalate now",
     ownerConfirmedAt: new Date("2026-07-18T00:00:00.000Z"),
@@ -170,6 +193,54 @@ describe("Stage 1 decision follow-through runtime", () => {
       expect.objectContaining({ actionType: "STAGE1_DECISION_RECORDED" }),
       { client: dbMock },
     );
+  });
+
+  it("returns the original decision for an identical idempotency key", async () => {
+    const uniqueError = Object.assign(new Error("duplicate"), {
+      code: "P2002",
+    });
+    const stored = decisionRow({ status: "EVIDENCE_READY" });
+    dbMock.$transaction.mockRejectedValueOnce(uniqueError);
+    dbMock.decisionRecord.findUnique.mockResolvedValue(stored);
+
+    const result = await createStage1DecisionRecord({
+      workspaceId: "workspace-1",
+      decision: decision(),
+      facts: [],
+      inferences: [],
+      unknowns: [],
+      risks: [],
+      actorName: "Helm Decision Runtime",
+      actorType: ActorType.AI,
+    });
+
+    expect(result).toBe(stored);
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects an idempotency key reused for different decision evidence", async () => {
+    const uniqueError = Object.assign(new Error("duplicate"), {
+      code: "P2002",
+    });
+    dbMock.$transaction.mockRejectedValueOnce(uniqueError);
+    dbMock.decisionRecord.findUnique.mockResolvedValue(
+      decisionRow({
+        evidenceRefs: JSON.stringify(["evidence:other"], null, 2),
+      }),
+    );
+
+    await expect(
+      createStage1DecisionRecord({
+        workspaceId: "workspace-1",
+        decision: decision(),
+        facts: [],
+        inferences: [],
+        unknowns: [],
+        risks: [],
+        actorName: "Helm Decision Runtime",
+        actorType: ActorType.AI,
+      }),
+    ).rejects.toMatchObject({ reasons: ["decision_idempotency_conflict"] });
   });
 
   it("persists an expired terminal state before refusing owner confirmation", async () => {
@@ -285,18 +356,20 @@ describe("Stage 1 decision follow-through runtime", () => {
         actorType: ActorType.USER,
         contentAuthorship: ActorType.AI,
       }),
+      { client: dbMock },
     );
     expect(dbMock.decisionRecord.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "DISPATCHED" } }),
     );
   });
 
-  it("withdraws a concurrent losing packet and returns the winner", async () => {
+  it("rolls back a concurrent losing packet transaction and returns the winner", async () => {
     const uniqueError = Object.assign(new Error("duplicate"), {
       code: "P2002",
     });
     dbMock.decisionRecord.findFirst.mockResolvedValue(decisionRow());
     dbMock.decisionWorkPacketClaim.findUnique
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         decisionRecordId: "decision-1",
@@ -310,11 +383,7 @@ describe("Stage 1 decision follow-through runtime", () => {
       actionItemId: "action-loser",
       approvalTaskId: "approval-loser",
     });
-    dbMock.$transaction
-      .mockRejectedValueOnce(uniqueError)
-      .mockImplementationOnce((callback: (tx: typeof dbMock) => unknown) =>
-        callback(dbMock),
-      );
+    dbMock.decisionWorkPacketClaim.create.mockRejectedValueOnce(uniqueError);
 
     const result = await dispatchStage1DecisionWorkPacket({
       workspaceId: "workspace-1",
@@ -329,18 +398,14 @@ describe("Stage 1 decision follow-through runtime", () => {
       approvalTaskId: "approval-winner",
       created: false,
     });
-    expect(dbMock.actionItem.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ id: "action-loser" }),
-        data: expect.objectContaining({ status: ActionStatus.WITHDRAWN }),
-      }),
+    expect(policyEngineMock.createGovernedAction).toHaveBeenCalledWith(
+      expect.any(Object),
+      {
+        client: dbMock,
+      },
     );
-    expect(dbMock.approvalTask.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "approval-loser", status: ApprovalStatus.PENDING },
-        data: expect.objectContaining({ status: ApprovalStatus.WITHDRAWN }),
-      }),
-    );
+    expect(dbMock.actionItem.updateMany).not.toHaveBeenCalled();
+    expect(dbMock.approvalTask.updateMany).not.toHaveBeenCalled();
   });
 
   it("records supervision as advice-only evidence with an audit", async () => {
@@ -384,5 +449,147 @@ describe("Stage 1 decision follow-through runtime", () => {
       }),
       { client: dbMock },
     );
+  });
+
+  it("rejects a runtime supervision route outside the closed route set", async () => {
+    await expect(
+      recordStage1SupervisionSignal({
+        workspaceId: "workspace-1",
+        signal: {
+          signalId: "signal-invalid-route",
+          tenantRef: "workspace:workspace-1",
+          signalType: "stuck_work",
+          observedObjectRef: "action:1",
+          baselineRef: "baseline:sla",
+          evidenceRefs: ["evidence:overdue"],
+          severity: "warning",
+          confidence: "medium",
+          recommendedRoute: "auto_execute",
+          ownerRef: "owner-1",
+          deadlineOrSla: null,
+          status: "open",
+          observedFact: "The action is overdue",
+          interpretation: "Delivery may be blocked",
+        } as never,
+        actualState: "Still in progress",
+        escalationCondition: "Escalate tomorrow",
+      }),
+    ).rejects.toMatchObject({ reasons: ["invalid_recommended_route"] });
+
+    expect(dbMock.supervisionSignalRecord.create).not.toHaveBeenCalled();
+  });
+
+  it("returns the original supervision signal for an identical idempotency key", async () => {
+    const uniqueError = Object.assign(new Error("duplicate"), {
+      code: "P2002",
+    });
+    const stored = {
+      id: "signal-record-1",
+      workspaceId: "workspace-1",
+      signalKey: "signal-1",
+      decisionRecordId: null,
+      signalType: "stuck_work",
+      observedObjectRef: "action:1",
+      baselineRef: "baseline:sla",
+      evidenceRefs: JSON.stringify(["evidence:overdue"], null, 2),
+      severity: "warning",
+      confidence: "medium",
+      recommendedRoute: "owner_review",
+      ownerRef: "owner-1",
+      deadlineOrSla: new Date("2026-07-20T00:00:00.000Z"),
+      status: "open",
+      observedFact: "The action is overdue by two days",
+      interpretation: "Delivery may be blocked",
+      expectedState: "Completed by SLA",
+      actualState: "Still in progress",
+      responsibilityScopeRef: "team:delivery",
+      escalationCondition: "Escalate if still open tomorrow",
+    };
+    dbMock.$transaction.mockRejectedValueOnce(uniqueError);
+    dbMock.supervisionSignalRecord.findUnique.mockResolvedValue(stored);
+
+    const result = await recordStage1SupervisionSignal({
+      workspaceId: "workspace-1",
+      signal: {
+        signalId: "signal-1",
+        tenantRef: "workspace:workspace-1",
+        signalType: "stuck_work",
+        observedObjectRef: "action:1",
+        baselineRef: "baseline:sla",
+        evidenceRefs: ["evidence:overdue"],
+        severity: "warning",
+        confidence: "medium",
+        recommendedRoute: "owner_review",
+        ownerRef: "owner-1",
+        deadlineOrSla: "2026-07-20T00:00:00.000Z",
+        status: "open",
+        observedFact: "The action is overdue by two days",
+        interpretation: "Delivery may be blocked",
+      },
+      expectedState: "Completed by SLA",
+      actualState: "Still in progress",
+      responsibilityScopeRef: "team:delivery",
+      escalationCondition: "Escalate if still open tomorrow",
+    });
+
+    expect(result).toBe(stored);
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects a supervision key reused for a different observed fact", async () => {
+    const uniqueError = Object.assign(new Error("duplicate"), {
+      code: "P2002",
+    });
+    dbMock.$transaction.mockRejectedValueOnce(uniqueError);
+    dbMock.supervisionSignalRecord.findUnique.mockResolvedValue({
+      id: "signal-record-1",
+      workspaceId: "workspace-1",
+      signalKey: "signal-1",
+      decisionRecordId: null,
+      signalType: "stuck_work",
+      observedObjectRef: "action:1",
+      baselineRef: "baseline:sla",
+      evidenceRefs: JSON.stringify(["evidence:overdue"], null, 2),
+      severity: "warning",
+      confidence: "medium",
+      recommendedRoute: "owner_review",
+      ownerRef: "owner-1",
+      deadlineOrSla: new Date("2026-07-20T00:00:00.000Z"),
+      status: "open",
+      observedFact: "A different fact",
+      interpretation: "Delivery may be blocked",
+      expectedState: "Completed by SLA",
+      actualState: "Still in progress",
+      responsibilityScopeRef: "team:delivery",
+      escalationCondition: "Escalate if still open tomorrow",
+    });
+
+    await expect(
+      recordStage1SupervisionSignal({
+        workspaceId: "workspace-1",
+        signal: {
+          signalId: "signal-1",
+          tenantRef: "workspace:workspace-1",
+          signalType: "stuck_work",
+          observedObjectRef: "action:1",
+          baselineRef: "baseline:sla",
+          evidenceRefs: ["evidence:overdue"],
+          severity: "warning",
+          confidence: "medium",
+          recommendedRoute: "owner_review",
+          ownerRef: "owner-1",
+          deadlineOrSla: "2026-07-20T00:00:00.000Z",
+          status: "open",
+          observedFact: "The action is overdue by two days",
+          interpretation: "Delivery may be blocked",
+        },
+        expectedState: "Completed by SLA",
+        actualState: "Still in progress",
+        responsibilityScopeRef: "team:delivery",
+        escalationCondition: "Escalate if still open tomorrow",
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["supervision_idempotency_conflict"],
+    });
   });
 });
