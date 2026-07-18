@@ -32,6 +32,7 @@ vi.mock("@/lib/audit", () => ({
 }));
 
 import {
+  ReceiptChangedDuringVerificationError,
   ReceiptSelfVerificationError,
   recordExecutionReceipt,
   verifyExecutionReceipt,
@@ -207,6 +208,7 @@ describe("execution receipt service", () => {
   });
 
   it("upgrades a receipt to VERIFIED when a different reviewer confirms it", async () => {
+    const updatedAt = new Date("2026-07-18T00:00:00.000Z");
     dbMock.executionReceipt.findFirst.mockResolvedValue({
       id: "receipt-1",
       workspaceId: "workspace-1",
@@ -221,8 +223,13 @@ describe("execution receipt service", () => {
       executedByUserId: "user-1",
       verifiedByUserId: null,
       verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      updatedAt,
     });
-    dbMock.executionReceipt.update.mockResolvedValue({ id: "receipt-1" });
+    dbMock.executionReceipt.updateMany.mockResolvedValue({ count: 1 });
+    dbMock.executionReceipt.findUniqueOrThrow.mockResolvedValue({
+      id: "receipt-1",
+      verificationState: ExecutionReceiptVerificationState.VERIFIED,
+    });
 
     await verifyExecutionReceipt({
       workspaceId: "workspace-1",
@@ -232,9 +239,14 @@ describe("execution receipt service", () => {
       verifierName: "Reviewer",
     });
 
-    expect(dbMock.executionReceipt.update).toHaveBeenCalledWith(
+    expect(dbMock.executionReceipt.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "receipt-1" },
+        where: {
+          id: "receipt-1",
+          workspaceId: "workspace-1",
+          verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+          updatedAt,
+        },
         data: expect.objectContaining({
           verifiedByUserId: "user-2",
           verificationState: ExecutionReceiptVerificationState.VERIFIED,
@@ -244,6 +256,88 @@ describe("execution receipt service", () => {
     expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ actionType: "EXECUTION_RECEIPT_VERIFIED" }),
     );
+  });
+
+  it("requires a fresh review when the receipt changes during verification", async () => {
+    const updatedAt = new Date("2026-07-18T00:00:00.000Z");
+    const changedAt = new Date("2026-07-18T00:00:01.000Z");
+    dbMock.executionReceipt.findFirst.mockResolvedValue({
+      id: "receipt-1",
+      workspaceId: "workspace-1",
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: "action-1",
+      outcome: ExecutionReceiptOutcome.SUCCESS,
+      actionTaken: "CREATE_TASK",
+      evidenceRefs: JSON.stringify(["meeting:m-1"]),
+      rejectionReasonCode: null,
+      nextStep: null,
+      note: null,
+      executedByUserId: "user-1",
+      verifiedByUserId: null,
+      verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      updatedAt,
+    });
+    dbMock.executionReceipt.updateMany.mockResolvedValue({ count: 0 });
+    dbMock.executionReceipt.findUniqueOrThrow.mockResolvedValue({
+      id: "receipt-1",
+      verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      updatedAt: changedAt,
+    });
+
+    await expect(
+      verifyExecutionReceipt({
+        workspaceId: "workspace-1",
+        subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+        subjectId: "action-1",
+        verifierUserId: "user-2",
+        verifierName: "Reviewer",
+      }),
+    ).rejects.toBeInstanceOf(ReceiptChangedDuringVerificationError);
+
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("converges a database write conflict to the latest receipt state", async () => {
+    const updatedAt = new Date("2026-07-18T00:00:00.000Z");
+    dbMock.executionReceipt.findFirst.mockResolvedValue({
+      id: "receipt-1",
+      workspaceId: "workspace-1",
+      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+      subjectId: "action-1",
+      outcome: ExecutionReceiptOutcome.SUCCESS,
+      actionTaken: "CREATE_TASK",
+      evidenceRefs: JSON.stringify(["meeting:m-1"]),
+      rejectionReasonCode: null,
+      nextStep: null,
+      note: null,
+      executedByUserId: "user-1",
+      verifiedByUserId: null,
+      verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      updatedAt,
+    });
+    dbMock.executionReceipt.updateMany
+      .mockRejectedValueOnce(
+        new Error("Record has changed since last read in table 'executionreceipt'"),
+      )
+      .mockResolvedValueOnce({ count: 0 });
+    dbMock.executionReceipt.findUniqueOrThrow.mockResolvedValue({
+      id: "receipt-1",
+      verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      updatedAt: new Date("2026-07-18T00:00:01.000Z"),
+    });
+
+    await expect(
+      verifyExecutionReceipt({
+        workspaceId: "workspace-1",
+        subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+        subjectId: "action-1",
+        verifierUserId: "user-2",
+        verifierName: "Reviewer",
+      }),
+    ).rejects.toBeInstanceOf(ReceiptChangedDuringVerificationError);
+
+    expect(dbMock.executionReceipt.updateMany).toHaveBeenCalledTimes(2);
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
   });
 
   it("is idempotent for the same verifier", async () => {

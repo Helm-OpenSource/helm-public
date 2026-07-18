@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 import { computeExecutionReceiptQuality } from "@/lib/receipts/execution-receipt-quality";
 
@@ -41,6 +42,17 @@ export class ReceiptSelfVerificationError extends Error {
         : "回执不能由执行人本人验收，请交由其他复核人确认。",
     );
     this.name = "ReceiptSelfVerificationError";
+  }
+}
+
+export class ReceiptChangedDuringVerificationError extends Error {
+  constructor(english: boolean) {
+    super(
+      english
+        ? "The receipt changed during verification. Review the latest receipt before confirming it."
+        : "回执在验收过程中发生变化，请重新核验最新回执后再确认。",
+    );
+    this.name = "ReceiptChangedDuringVerificationError";
   }
 }
 
@@ -276,14 +288,37 @@ export async function verifyExecutionReceipt(input: VerifyExecutionReceiptInput)
     verificationState: ExecutionReceiptVerificationState.VERIFIED,
   });
 
-  const updated = await db.executionReceipt.update({
+  const claimed = await runWithWriteConflictRetry(() =>
+    db.executionReceipt.updateMany({
+      where: {
+        id: receipt.id,
+        workspaceId: input.workspaceId,
+        verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+        updatedAt: receipt.updatedAt,
+      },
+      data: {
+        verifiedByUserId: input.verifierUserId,
+        verificationState: ExecutionReceiptVerificationState.VERIFIED,
+        qualityScore: quality.score,
+        qualityFlags:
+          quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
+      },
+    }),
+  );
+  if (claimed.count !== 1) {
+    const current = await db.executionReceipt.findUniqueOrThrow({
+      where: { id: receipt.id },
+    });
+    if (
+      current.verificationState ===
+      ExecutionReceiptVerificationState.VERIFIED
+    ) {
+      return current;
+    }
+    throw new ReceiptChangedDuringVerificationError(english);
+  }
+  const updated = await db.executionReceipt.findUniqueOrThrow({
     where: { id: receipt.id },
-    data: {
-      verifiedByUserId: input.verifierUserId,
-      verificationState: ExecutionReceiptVerificationState.VERIFIED,
-      qualityScore: quality.score,
-      qualityFlags: quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
-    },
   });
 
   await writeAuditLog({
