@@ -30,6 +30,13 @@ import {
   type PrivateMainlineLedger,
 } from "../lib/work-unit-governance/mainline-ledger";
 import {
+  buildPrivateMainlineStoreAppendEnvelope,
+  buildPublicCoreNoopPrivateMainlineStore,
+  privateMainlineStoreBindingSchema,
+  validatePrivateMainlineStoreBinding,
+  type PrivateMainlineStoreBinding,
+} from "../lib/work-unit-governance/private-mainline-store";
+import {
   buildOwnerLifecycleReadout,
   ownerReviewReceiptSchema,
   planOwnerLifecycleEvent,
@@ -130,6 +137,12 @@ export type WorkUnitGovernanceProofPackageFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernancePrivateMainlineStoreFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceFailure = {
   readonly name: string;
   readonly check:
@@ -142,6 +155,7 @@ export type WorkUnitGovernanceFailure = {
     | "activation-handoff"
     | "repair-learning"
     | "proof-package"
+    | "private-mainline-store"
     | "checklist";
   readonly detail: string;
 };
@@ -160,6 +174,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly activationHandoffFixtures: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly repairLearningFixtures: readonly WorkUnitGovernanceRepairLearningFixture[];
   readonly proofPackageFixtures: readonly WorkUnitGovernanceProofPackageFixture[];
+  readonly privateMainlineStoreFixtures: readonly WorkUnitGovernancePrivateMainlineStoreFixture[];
   readonly failures: readonly WorkUnitGovernanceFailure[];
 };
 
@@ -500,6 +515,167 @@ export function buildDefaultWorkUnitLedgerFixtures(): readonly WorkUnitGovernanc
           waiverReason: "No human owner reviewed this.",
         }),
       expectedRules: ["finding-waiver-needs-human-owner"],
+    },
+  ];
+}
+
+function privateMainlineStoreBinding(
+  overrides: Partial<PrivateMainlineStoreBinding> = {},
+): PrivateMainlineStoreBinding {
+  return privateMainlineStoreBindingSchema.parse({
+    schemaVersion: "helm.private-mainline-store-binding.v1",
+    bindingRef: "synthetic-binding:private-mainline-store",
+    storeMode: "private_control_plane",
+    storeRef: "synthetic://private-mainline-store",
+    authorityRef: "synthetic://owner-plane/work-unit-mainline",
+    capabilities: {
+      appendOnly: true,
+      snapshotBoundReceipts: true,
+      conflictKeySerialization: true,
+      humanOwnerReceiptRequired: true,
+      activationAuthoritySeparated: true,
+      privateStorePersists: true,
+      publicCoreCarriesRealInstance: false,
+      publicCorePersists: false,
+      publicCoreWritesPrivateMainline: false,
+      publicCoreSendsExternally: false,
+      publicCoreActivatesRuntime: false,
+    },
+    ...overrides,
+  });
+}
+
+function publicCoreNoopMainlineStoreBinding(
+  overrides: Partial<PrivateMainlineStoreBinding> = {},
+): PrivateMainlineStoreBinding {
+  return privateMainlineStoreBindingSchema.parse({
+    ...privateMainlineStoreBinding({
+      storeMode: "public_core_noop",
+      storeRef: "public-core:no-private-mainline-store",
+      authorityRef: undefined,
+      capabilities: {
+        appendOnly: true,
+        snapshotBoundReceipts: true,
+        conflictKeySerialization: true,
+        humanOwnerReceiptRequired: true,
+        activationAuthoritySeparated: true,
+        privateStorePersists: false,
+        publicCoreCarriesRealInstance: false,
+        publicCorePersists: false,
+        publicCoreWritesPrivateMainline: false,
+        publicCoreSendsExternally: false,
+        publicCoreActivatesRuntime: false,
+      },
+    }),
+    ...overrides,
+  });
+}
+
+export function buildDefaultWorkUnitPrivateMainlineStoreFixtures(): readonly WorkUnitGovernancePrivateMainlineStoreFixture[] {
+  return [
+    {
+      name: "private-mainline-store-envelope-is-handoff-only",
+      run: () => {
+        const workUnit = acceptedSyntheticWorkUnit();
+        const envelope = buildPrivateMainlineStoreAppendEnvelope({
+          binding: privateMainlineStoreBinding(),
+          ledger: SYNTHETIC_LEDGER,
+          workUnit,
+          event: syntheticMainlineEvent({ workUnit }),
+          requestedBy: { actorType: "system", actorRef: "mainline-handoff-builder" },
+          requestedAt: FIXTURE_TIME,
+        });
+        if (!envelope.ok) return envelope.violations;
+
+        const violations: WorkUnitViolation[] = [];
+        if (
+          envelope.envelope.readinessClaim !== "not_readiness" ||
+          !envelope.envelope.privateStoreRequired ||
+          envelope.envelope.publicCoreCarriesRealInstance ||
+          envelope.envelope.publicCorePersists ||
+          envelope.envelope.publicCoreWritesPrivateMainline ||
+          envelope.envelope.createsExternalEffect ||
+          envelope.envelope.sendsExternally ||
+          envelope.envelope.writesTarget ||
+          envelope.envelope.activatesRuntime ||
+          envelope.envelope.grantsApproval ||
+          envelope.appendPlan.publicCorePersists ||
+          envelope.appendPlan.publicCoreWritesPrivateMainline ||
+          envelope.appendPlan.createsExternalEffect
+        ) {
+          violations.push({
+            rule: "private-mainline-store-envelope-side-effect",
+            detail: envelope.envelope.envelopeId,
+          });
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "private-mainline-store-public-noop-cannot-append",
+      run: () => {
+        const workUnit = acceptedSyntheticWorkUnit();
+        const envelope = buildPrivateMainlineStoreAppendEnvelope({
+          binding: publicCoreNoopMainlineStoreBinding(),
+          ledger: SYNTHETIC_LEDGER,
+          workUnit,
+          event: syntheticMainlineEvent({ workUnit }),
+          requestedBy: { actorType: "system", actorRef: "mainline-handoff-builder" },
+          requestedAt: FIXTURE_TIME,
+        });
+        if (!envelope.ok) return envelope.violations;
+
+        const appendResult = buildPublicCoreNoopPrivateMainlineStore().append(envelope.envelope);
+        return appendResult.ok
+          ? [{ rule: "private-mainline-store-public-noop-wrote", detail: envelope.envelope.eventId }]
+          : appendResult.violations;
+      },
+      expectedRules: ["public-core-private-mainline-store-is-noop"],
+    },
+    {
+      name: "private-mainline-store-missing-governance-capability-is-blocked",
+      run: () =>
+        validatePrivateMainlineStoreBinding({
+          ...privateMainlineStoreBinding(),
+          authorityRef: undefined,
+          capabilities: {
+            ...privateMainlineStoreBinding().capabilities,
+            appendOnly: false,
+            conflictKeySerialization: false,
+            humanOwnerReceiptRequired: false,
+          },
+        }),
+      expectedRules: [
+        "private-store-authority-required",
+        "private-store-append-only-required",
+        "private-store-conflict-serialization-required",
+        "private-store-human-owner-receipt-required",
+      ],
+    },
+    {
+      name: "private-mainline-store-public-core-side-effect-claim-is-blocked",
+      run: () =>
+        validatePrivateMainlineStoreBinding({
+          ...publicCoreNoopMainlineStoreBinding(),
+          capabilities: {
+            ...publicCoreNoopMainlineStoreBinding().capabilities,
+            privateStorePersists: true,
+            publicCoreCarriesRealInstance: true,
+            publicCorePersists: true,
+            publicCoreWritesPrivateMainline: true,
+            publicCoreSendsExternally: true,
+            publicCoreActivatesRuntime: true,
+          },
+        }),
+      expectedRules: [
+        "public-core-noop-cannot-persist-private-store",
+        "private-store-public-core-real-instance-forbidden",
+        "private-store-public-core-persistence-forbidden",
+        "private-store-public-core-write-forbidden",
+        "private-store-public-core-send-forbidden",
+        "private-store-public-core-activation-forbidden",
+      ],
     },
   ];
 }
@@ -1047,6 +1223,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly activationHandoffFixtures?: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly repairLearningFixtures?: readonly WorkUnitGovernanceRepairLearningFixture[];
   readonly proofPackageFixtures?: readonly WorkUnitGovernanceProofPackageFixture[];
+  readonly privateMainlineStoreFixtures?: readonly WorkUnitGovernancePrivateMainlineStoreFixture[];
 } = {}): WorkUnitGovernanceCheckResult {
   const workUnitFixtures =
     options.workUnitFixtures ?? buildDefaultWorkUnitGovernanceFixtures();
@@ -1066,6 +1243,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.repairLearningFixtures ?? buildDefaultWorkUnitRepairLearningFixtures();
   const proofPackageFixtures =
     options.proofPackageFixtures ?? buildDefaultWorkUnitProofPackageFixtures();
+  const privateMainlineStoreFixtures =
+    options.privateMainlineStoreFixtures ?? buildDefaultWorkUnitPrivateMainlineStoreFixtures();
 
   const failures: WorkUnitGovernanceFailure[] = [];
 
@@ -1175,6 +1354,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of privateMainlineStoreFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "private-mainline-store",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   const actualRequirementIds = hwuAcceptanceChecklist.map((item) => item.requirementId);
   if (actualRequirementIds.join("|") !== EXPECTED_REQUIREMENT_IDS.join("|")) {
     failures.push({
@@ -1194,6 +1384,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     activationHandoffFixtures.length +
     repairLearningFixtures.length +
     proofPackageFixtures.length +
+    privateMainlineStoreFixtures.length +
     1;
 
   return {
@@ -1210,6 +1401,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     activationHandoffFixtures,
     repairLearningFixtures,
     proofPackageFixtures,
+    privateMainlineStoreFixtures,
     failures,
   };
 }

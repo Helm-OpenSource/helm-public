@@ -5,6 +5,7 @@ import {
   buildDefaultWorkUnitGovernanceFixtures,
   buildDefaultWorkUnitLedgerFixtures,
   buildDefaultWorkUnitOwnerLifecycleFixtures,
+  buildDefaultWorkUnitPrivateMainlineStoreFixtures,
   buildDefaultWorkUnitProofPackageFixtures,
   buildDefaultWorkUnitRepairLearningFixtures,
   buildDefaultWorkUnitRuntimeFixtures,
@@ -17,7 +18,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(37);
+    expect(result.total).toBe(41);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -64,6 +65,12 @@ describe("check-work-unit-governance", () => {
       "proof-package-raw-private-entry-is-blocked",
       "proof-package-requires-all-hwu-coverage",
       "proof-package-clean",
+    ]);
+    expect(result.privateMainlineStoreFixtures.map((fixture) => fixture.name)).toEqual([
+      "private-mainline-store-envelope-is-handoff-only",
+      "private-mainline-store-public-noop-cannot-append",
+      "private-mainline-store-missing-governance-capability-is-blocked",
+      "private-mainline-store-public-core-side-effect-claim-is-blocked",
     ]);
   });
 
@@ -282,6 +289,36 @@ describe("check-work-unit-governance", () => {
         name: "proof-package-snapshot-mismatch-is-blocked",
         check: "proof-package",
         detail: "missing expected rule(s): proof-package-snapshot-mismatch",
+      },
+    ]);
+  });
+
+  it("fails when a private mainline store fixture no longer detects its boundary rule", () => {
+    const storeFixture = buildDefaultWorkUnitPrivateMainlineStoreFixtures()[1];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
+      activationHandoffFixtures: [],
+      repairLearningFixtures: [],
+      proofPackageFixtures: [],
+      privateMainlineStoreFixtures: [
+        {
+          ...storeFixture,
+          run: () => [],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "private-mainline-store-public-noop-cannot-append",
+        check: "private-mainline-store",
+        detail: "missing expected rule(s): public-core-private-mainline-store-is-noop",
       },
     ]);
   });
