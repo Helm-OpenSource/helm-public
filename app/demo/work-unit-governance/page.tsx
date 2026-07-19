@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { WorkUnitActivationHandoffPanel } from "@/features/work-unit-governance/work-unit-activation-handoff-panel";
 import { WorkUnitMainlineLedgerPanel } from "@/features/work-unit-governance/work-unit-mainline-ledger-panel";
 import { WorkUnitOwnerLifecyclePanel } from "@/features/work-unit-governance/work-unit-owner-lifecycle-panel";
+import { WorkUnitPrivatePlaneHandoffPanel } from "@/features/work-unit-governance/work-unit-private-plane-handoff-panel";
 import { WorkUnitProofPackagePanel } from "@/features/work-unit-governance/work-unit-proof-package-panel";
 import { WorkUnitRepairLearningPanel } from "@/features/work-unit-governance/work-unit-repair-learning-panel";
 import { WorkUnitReviewConsole } from "@/features/work-unit-governance/work-unit-review-console";
@@ -15,6 +16,7 @@ import { resolveUiLocale } from "@/lib/i18n/config";
 import { buildActivationHandoffReadout } from "@/lib/work-unit-governance/activation-handoff";
 import { buildPrivateMainlineLedgerReadout } from "@/lib/work-unit-governance/mainline-ledger";
 import { buildOwnerLifecycleReadout } from "@/lib/work-unit-governance/owner-lifecycle";
+import { buildPrivatePlaneHandoffReadout } from "@/lib/work-unit-governance/private-plane-handoff";
 import { buildWorkUnitProofPackageReadout } from "@/lib/work-unit-governance/proof-package";
 import { buildRepairLearningReadout } from "@/lib/work-unit-governance/repair-learning-loop";
 import { buildWorkUnitRuntimeReadout } from "@/lib/work-unit-governance/runtime";
@@ -75,6 +77,7 @@ export default async function WorkUnitGovernanceDemoPage() {
   const proofPackageReadout = buildWorkUnitProofPackageReadout(
     buildSyntheticWorkUnitProofPackage(proofWorkUnit),
   );
+  const privatePlaneHandoffReadout = buildPrivatePlaneHandoffReadout();
   const failedWorkUnit = buildSyntheticFailedWorkUnit();
   const repairedWorkUnit = buildSyntheticRepairedWorkUnit(failedWorkUnit);
   const learningFinding = buildSyntheticLearningFinding(failedWorkUnit);
@@ -128,8 +131,8 @@ export default async function WorkUnitGovernanceDemoPage() {
           english={english}
           copy={{
             observed: {
-              zh: "一个公开合成工作包、检查回执、负责人动作计划、公司主线投影形状和生效交接包。",
-              en: "One public synthetic work package, check receipt, owner action plan, company-mainline projection shape, and activation handoff.",
+              zh: "一个公开合成工作包、检查回执、负责人动作计划、公司主线投影形状、生效交接包和私有面交接边界。",
+              en: "One public synthetic work package, check receipt, owner action plan, company-mainline projection shape, activation handoff, and private-plane handoff boundary.",
             },
             wontDo: {
               zh: "不保存真实批准、不写私有主线、不触发运行时、不连接客户系统。",
@@ -159,6 +162,11 @@ export default async function WorkUnitGovernanceDemoPage() {
         <WorkUnitActivationHandoffPanel readout={activationReadout} english={english} />
 
         <WorkUnitProofPackagePanel readout={proofPackageReadout} english={english} />
+
+        <WorkUnitPrivatePlaneHandoffPanel
+          readout={privatePlaneHandoffReadout}
+          english={english}
+        />
 
         <footer className="flex items-start gap-2 border-t border-[color:var(--border)] py-5 text-xs leading-6 text-[color:var(--muted-foreground)]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--accent)]" aria-hidden />
