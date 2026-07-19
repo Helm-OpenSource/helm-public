@@ -5,6 +5,7 @@ import {
   buildDefaultWorkUnitGovernanceFixtures,
   buildDefaultWorkUnitLedgerFixtures,
   buildDefaultWorkUnitOwnerLifecycleFixtures,
+  buildDefaultWorkUnitRepairLearningFixtures,
   buildDefaultWorkUnitRuntimeFixtures,
   buildDefaultWorkUnitTerminologyFixtures,
   runWorkUnitGovernanceBoundaryCheck,
@@ -15,7 +16,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(26);
+    expect(result.total).toBe(32);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -47,6 +48,14 @@ describe("check-work-unit-governance", () => {
       "activation-handoff-ai-authorization-is-blocked",
       "activation-handoff-customer-effect-needs-remediation",
       "activation-handoff-stale-mainline-is-blocked",
+    ]);
+    expect(result.repairLearningFixtures.map((fixture) => fixture.name)).toEqual([
+      "repair-learning-never-executes-public-core-side-effects",
+      "repair-learning-ai-repair-returns-to-candidate",
+      "repair-learning-ai-repair-cannot-change-check-rules",
+      "repair-learning-finding-needs-asset-or-owner-waiver",
+      "repair-learning-ai-waiver-is-blocked",
+      "repair-learning-clean-asset",
     ]);
   });
 
@@ -208,6 +217,34 @@ describe("check-work-unit-governance", () => {
         name: "activation-handoff-ai-authorization-is-blocked",
         check: "activation-handoff",
         detail: "missing expected rule(s): activation-authorization-needs-human-owner",
+      },
+    ]);
+  });
+
+  it("fails when a repair learning fixture no longer detects its boundary rule", () => {
+    const repairFixture = buildDefaultWorkUnitRepairLearningFixtures()[2];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
+      activationHandoffFixtures: [],
+      repairLearningFixtures: [
+        {
+          ...repairFixture,
+          run: () => [],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "repair-learning-ai-repair-cannot-change-check-rules",
+        check: "repair-learning",
+        detail: "missing expected rule(s): ai-repair-cannot-change-check-rules",
       },
     ]);
   });

@@ -37,6 +37,11 @@ import {
   type OwnerReviewReceipt,
 } from "../lib/work-unit-governance/owner-lifecycle";
 import {
+  buildRepairLearningReadout,
+  validateLearningFindingResolution,
+  validateWorkUnitRepairCandidate,
+} from "../lib/work-unit-governance/repair-learning-loop";
+import {
   buildPrivateMainlineProjection,
   buildWorkUnitRuntimeReadout,
   planWorkUnitRuntimeEvent,
@@ -44,8 +49,13 @@ import {
 import {
   buildSyntheticActivationAuthorityReceipt,
   buildSyntheticActivationHandoffRequest,
+  buildSyntheticFailedWorkUnit,
+  buildSyntheticLearningAssetDraft,
+  buildSyntheticLearningFinding,
   buildSyntheticOwnerLifecyclePolicy,
   buildSyntheticPromotedWorkUnit,
+  buildSyntheticRepairedWorkUnit,
+  buildSyntheticRepairCandidateRecord,
   buildSyntheticWorkUnit,
   syntheticAcceptedDecision,
   syntheticReceipt,
@@ -102,6 +112,12 @@ export type WorkUnitGovernanceActivationHandoffFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernanceRepairLearningFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceFailure = {
   readonly name: string;
   readonly check:
@@ -112,6 +128,7 @@ export type WorkUnitGovernanceFailure = {
     | "ledger"
     | "owner-lifecycle"
     | "activation-handoff"
+    | "repair-learning"
     | "checklist";
   readonly detail: string;
 };
@@ -128,6 +145,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly ledgerFixtures: readonly WorkUnitGovernanceLedgerFixture[];
   readonly ownerLifecycleFixtures: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
   readonly activationHandoffFixtures: readonly WorkUnitGovernanceActivationHandoffFixture[];
+  readonly repairLearningFixtures: readonly WorkUnitGovernanceRepairLearningFixture[];
   readonly failures: readonly WorkUnitGovernanceFailure[];
 };
 
@@ -729,6 +747,145 @@ export function buildDefaultWorkUnitActivationHandoffFixtures(): readonly WorkUn
   ];
 }
 
+export function buildDefaultWorkUnitRepairLearningFixtures(): readonly WorkUnitGovernanceRepairLearningFixture[] {
+  return [
+    {
+      name: "repair-learning-never-executes-public-core-side-effects",
+      run: () => {
+        const original = buildSyntheticFailedWorkUnit();
+        const repaired = buildSyntheticRepairedWorkUnit(original);
+        const finding = buildSyntheticLearningFinding(original);
+        const readout = buildRepairLearningReadout({
+          original,
+          repaired,
+          repair: buildSyntheticRepairCandidateRecord({ original, repaired }),
+          findings: [finding],
+          learningDrafts: [buildSyntheticLearningAssetDraft({ finding })],
+        });
+        const violations: WorkUnitViolation[] = [];
+        if (
+          readout.publicCoreCarriesRealInstance ||
+          readout.publicCorePersists ||
+          readout.createsExternalEffect ||
+          readout.sendsExternally ||
+          readout.writesTarget ||
+          readout.grantsApproval ||
+          readout.changesCheckRules
+        ) {
+          violations.push({
+            rule: "repair-learning-public-core-side-effect",
+            detail: "readout",
+          });
+        }
+        for (const actionItem of readout.actions) {
+          if (
+            actionItem.publicCoreExecutes ||
+            actionItem.publicCorePersists ||
+            actionItem.createsExternalEffect ||
+            actionItem.sendsExternally ||
+            actionItem.writesTarget ||
+            actionItem.grantsApproval ||
+            actionItem.changesCheckRules
+          ) {
+            violations.push({
+              rule: "repair-learning-action-side-effect",
+              detail: actionItem.actionId,
+            });
+          }
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "repair-learning-ai-repair-returns-to-candidate",
+      run: () => {
+        const original = buildSyntheticFailedWorkUnit();
+        const candidate = buildSyntheticRepairedWorkUnit(original);
+        const snapshotHash = computeWorkUnitSnapshotHash(candidate);
+        const repaired = buildSyntheticRepairedWorkUnit(original, {
+          status: "accepted_by_human",
+          decisionSnapshotHash: snapshotHash,
+          decision: syntheticAcceptedDecision(snapshotHash, {
+            actorType: "ai",
+            actorRef: "agent-1",
+          }),
+        });
+        return validateWorkUnitRepairCandidate({
+          original,
+          repaired,
+          repair: buildSyntheticRepairCandidateRecord({ original, repaired }),
+        });
+      },
+      expectedRules: ["ai-cannot-authoritative-state", "repair-must-return-new-candidate"],
+    },
+    {
+      name: "repair-learning-ai-repair-cannot-change-check-rules",
+      run: () => {
+        const original = buildSyntheticFailedWorkUnit();
+        const repaired = buildSyntheticRepairedWorkUnit(original);
+        return validateWorkUnitRepairCandidate({
+          original,
+          repaired,
+          repair: buildSyntheticRepairCandidateRecord({
+            original,
+            repaired,
+            overrides: {
+              changesCheckRules: true,
+              checkRuleChangeRefs: ["synthetic://guard/relaxed-renewal-cost"],
+            },
+          }),
+        });
+      },
+      expectedRules: ["ai-repair-cannot-change-check-rules"],
+    },
+    {
+      name: "repair-learning-finding-needs-asset-or-owner-waiver",
+      run: () =>
+        validateLearningFindingResolution({
+          finding: buildSyntheticLearningFinding(buildSyntheticFailedWorkUnit()),
+        }),
+      expectedRules: ["learning-finding-needs-executable-asset-or-owner-waiver"],
+    },
+    {
+      name: "repair-learning-ai-waiver-is-blocked",
+      run: () => {
+        const original = buildSyntheticFailedWorkUnit();
+        const finding = buildSyntheticLearningFinding(original);
+        return validateLearningFindingResolution({
+          finding,
+          draft: buildSyntheticLearningAssetDraft({
+            finding,
+            overrides: {
+              disposition: {
+                findingId: finding.findingId,
+                disposition: "owner_waived",
+                summary: "AI attempted to waive a synthetic finding.",
+                recordedBy: { actorType: "ai", actorRef: "agent-1" },
+                recordedAt: FIXTURE_TIME,
+                waiverReason: "No human owner approved this waiver.",
+              },
+            },
+          }),
+        });
+      },
+      expectedRules: ["finding-waiver-needs-human-owner"],
+    },
+    {
+      name: "repair-learning-clean-asset",
+      run: () => {
+        const original = buildSyntheticFailedWorkUnit();
+        const finding = buildSyntheticLearningFinding(original);
+        return validateLearningFindingResolution({
+          finding,
+          draft: buildSyntheticLearningAssetDraft({ finding }),
+        });
+      },
+      expectedRules: [],
+    },
+  ];
+}
+
 function compareExpectedRules(options: {
   readonly name: string;
   readonly check: WorkUnitGovernanceFailure["check"];
@@ -767,6 +924,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly ledgerFixtures?: readonly WorkUnitGovernanceLedgerFixture[];
   readonly ownerLifecycleFixtures?: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
   readonly activationHandoffFixtures?: readonly WorkUnitGovernanceActivationHandoffFixture[];
+  readonly repairLearningFixtures?: readonly WorkUnitGovernanceRepairLearningFixture[];
 } = {}): WorkUnitGovernanceCheckResult {
   const workUnitFixtures =
     options.workUnitFixtures ?? buildDefaultWorkUnitGovernanceFixtures();
@@ -782,6 +940,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.ownerLifecycleFixtures ?? buildDefaultWorkUnitOwnerLifecycleFixtures();
   const activationHandoffFixtures =
     options.activationHandoffFixtures ?? buildDefaultWorkUnitActivationHandoffFixtures();
+  const repairLearningFixtures =
+    options.repairLearningFixtures ?? buildDefaultWorkUnitRepairLearningFixtures();
 
   const failures: WorkUnitGovernanceFailure[] = [];
 
@@ -869,6 +1029,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of repairLearningFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "repair-learning",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   const actualRequirementIds = hwuAcceptanceChecklist.map((item) => item.requirementId);
   if (actualRequirementIds.join("|") !== EXPECTED_REQUIREMENT_IDS.join("|")) {
     failures.push({
@@ -886,6 +1057,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     ledgerFixtures.length +
     ownerLifecycleFixtures.length +
     activationHandoffFixtures.length +
+    repairLearningFixtures.length +
     1;
 
   return {
@@ -900,6 +1072,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     ledgerFixtures,
     ownerLifecycleFixtures,
     activationHandoffFixtures,
+    repairLearningFixtures,
     failures,
   };
 }
