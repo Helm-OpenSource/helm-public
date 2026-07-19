@@ -5,6 +5,7 @@ import {
   buildDefaultWorkUnitGovernanceFixtures,
   buildDefaultWorkUnitLedgerFixtures,
   buildDefaultWorkUnitOwnerLifecycleFixtures,
+  buildDefaultWorkUnitOwnerNotificationFixtures,
   buildDefaultWorkUnitPrivateMainlineStoreFixtures,
   buildDefaultWorkUnitProofPackageFixtures,
   buildDefaultWorkUnitRepairLearningFixtures,
@@ -18,7 +19,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(41);
+    expect(result.total).toBe(46);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -43,6 +44,13 @@ describe("check-work-unit-governance", () => {
       "owner-lifecycle-ai-decision-is-blocked",
       "owner-lifecycle-proxy-needs-receipted-authorization",
       "owner-lifecycle-stale-related-mainline-change-needs-review",
+    ]);
+    expect(result.ownerNotificationFixtures.map((fixture) => fixture.name)).toEqual([
+      "owner-notification-envelope-is-handoff-only",
+      "owner-notification-public-noop-cannot-dispatch",
+      "owner-notification-missing-governance-capability-is-blocked",
+      "owner-notification-public-core-side-effect-claim-is-blocked",
+      "owner-notification-closed-work-unit-does-not-trigger-review",
     ]);
     expect(result.activationHandoffFixtures.map((fixture) => fixture.name)).toEqual([
       "activation-handoff-never-executes-public-core-side-effects",
@@ -232,6 +240,37 @@ describe("check-work-unit-governance", () => {
         name: "activation-handoff-ai-authorization-is-blocked",
         check: "activation-handoff",
         detail: "missing expected rule(s): activation-authorization-needs-human-owner",
+      },
+    ]);
+  });
+
+  it("fails when an owner notification fixture no longer detects its boundary rule", () => {
+    const ownerNotificationFixture = buildDefaultWorkUnitOwnerNotificationFixtures()[1];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
+      ownerNotificationFixtures: [
+        {
+          ...ownerNotificationFixture,
+          run: () => [],
+        },
+      ],
+      activationHandoffFixtures: [],
+      repairLearningFixtures: [],
+      proofPackageFixtures: [],
+      privateMainlineStoreFixtures: [],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "owner-notification-public-noop-cannot-dispatch",
+        check: "owner-notification",
+        detail: "missing expected rule(s): public-core-owner-notification-dispatcher-is-noop",
       },
     ]);
   });
