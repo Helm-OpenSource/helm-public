@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDefaultWorkUnitGovernanceFixtures,
+  buildDefaultWorkUnitLedgerFixtures,
   buildDefaultWorkUnitRuntimeFixtures,
   buildDefaultWorkUnitTerminologyFixtures,
   runWorkUnitGovernanceBoundaryCheck,
@@ -12,7 +13,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(14);
+    expect(result.total).toBe(17);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -26,6 +27,11 @@ describe("check-work-unit-governance", () => {
       "runtime-readout-never-executes-public-core-side-effects",
       "ai-runtime-acceptance-is-blocked",
       "private-mainline-projection-is-shape-only",
+    ]);
+    expect(result.ledgerFixtures.map((fixture) => fixture.name)).toEqual([
+      "ledger-append-plan-never-writes-from-public-core",
+      "ledger-conflict-key-needs-supersede-baseline",
+      "ledger-review-finding-waiver-needs-owner",
     ]);
   });
 
@@ -41,6 +47,7 @@ describe("check-work-unit-governance", () => {
       transitionFixtures: [],
       terminologyFixtures: [],
       runtimeFixtures: [],
+      ledgerFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -65,6 +72,7 @@ describe("check-work-unit-governance", () => {
         },
       ],
       runtimeFixtures: [],
+      ledgerFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -89,6 +97,7 @@ describe("check-work-unit-governance", () => {
           run: () => [],
         },
       ],
+      ledgerFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -97,6 +106,31 @@ describe("check-work-unit-governance", () => {
         name: "ai-runtime-acceptance-is-blocked",
         check: "runtime",
         detail: "missing expected rule(s): human-owner-runtime-command-required",
+      },
+    ]);
+  });
+
+  it("fails when a ledger fixture no longer detects its boundary rule", () => {
+    const ledgerFixture = buildDefaultWorkUnitLedgerFixtures()[1];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [
+        {
+          ...ledgerFixture,
+          run: () => [],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "ledger-conflict-key-needs-supersede-baseline",
+        check: "ledger",
+        detail: "missing expected rule(s): conflict-key-active-event-needs-supersede",
       },
     ]);
   });

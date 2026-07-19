@@ -1,10 +1,17 @@
 import {
+  computeWorkUnitSnapshotHash,
   helmWorkUnitSchema,
   type HelmWorkUnit,
   type WorkUnitActor,
   type WorkUnitDecision,
   type WorkUnitReceipt,
 } from "./contracts";
+import {
+  planPrivateMainlineLedgerAppend,
+  privateMainlineLedgerEventSchema,
+  type PrivateMainlineLedger,
+  type PrivateMainlineLedgerSnapshot,
+} from "./mainline-ledger";
 
 export const WORK_UNIT_SYNTHETIC_TIME = "2026-07-19T00:00:00.000Z";
 
@@ -102,4 +109,63 @@ export function syntheticReceipt(
     summary: "Synthetic human-owner receipt shape.",
     publicCoreCarriesRealInstance: false,
   };
+}
+
+export function buildSyntheticAcceptedWorkUnit(
+  overrides: Partial<HelmWorkUnit> = {},
+): HelmWorkUnit {
+  const candidate = buildSyntheticWorkUnit({
+    ...overrides,
+    status: "candidate",
+    decision: undefined,
+    decisionSnapshotHash: undefined,
+    mergeReceipt: undefined,
+    activationReceipt: undefined,
+  });
+  const snapshotHash = computeWorkUnitSnapshotHash(candidate);
+
+  return buildSyntheticWorkUnit({
+    ...overrides,
+    status: "accepted_by_human",
+    decisionSnapshotHash: snapshotHash,
+    decision: syntheticAcceptedDecision(snapshotHash),
+  });
+}
+
+export function buildSyntheticPrivateMainlineLedger(): PrivateMainlineLedgerSnapshot {
+  const ledger: PrivateMainlineLedger = {
+    schemaVersion: "helm.private-mainline-ledger.v1",
+    ledgerRef: "synthetic-ledger:work-unit-mainline",
+    events: [],
+    publicCoreCarriesRealInstance: false,
+  };
+  const workUnit = buildSyntheticAcceptedWorkUnit();
+  const snapshotHash = computeWorkUnitSnapshotHash(workUnit);
+  const event = privateMainlineLedgerEventSchema.parse({
+    schemaVersion: "helm.private-mainline-ledger-event.v1",
+    ledgerRef: ledger.ledgerRef,
+    eventId: `ledger-event:${workUnit.id}:mainline`,
+    workUnitId: workUnit.id,
+    eventType: "mainline_recorded",
+    actor: { actorType: "human_owner", actorRef: "owner-1" },
+    at: WORK_UNIT_SYNTHETIC_TIME,
+    snapshotHash,
+    conflictKeys: workUnit.conflictKeys,
+    baselineEventIds: [],
+    supersedesEventIds: [],
+    auditRefs: ["synthetic://audit/mainline"],
+    receipt: syntheticReceipt("mainline-receipt-1", snapshotHash),
+    publicCoreCarriesRealInstance: false,
+    createsExternalEffect: false,
+  });
+  const plan = planPrivateMainlineLedgerAppend({ ledger, workUnit, event });
+  if (!plan.ok) {
+    throw new Error(
+      `synthetic_private_mainline_ledger_invalid:${plan.violations
+        .map((violation) => violation.rule)
+        .join(",")}`,
+    );
+  }
+
+  return plan.nextLedger;
 }
