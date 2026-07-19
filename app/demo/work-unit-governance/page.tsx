@@ -6,13 +6,17 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { BoundaryBar } from "@/components/shared/boundary-bar";
 import { Badge } from "@/components/ui/badge";
 import { WorkUnitMainlineLedgerPanel } from "@/features/work-unit-governance/work-unit-mainline-ledger-panel";
+import { WorkUnitOwnerLifecyclePanel } from "@/features/work-unit-governance/work-unit-owner-lifecycle-panel";
 import { WorkUnitReviewConsole } from "@/features/work-unit-governance/work-unit-review-console";
 import { resolveUiLocale } from "@/lib/i18n/config";
 import { buildPrivateMainlineLedgerReadout } from "@/lib/work-unit-governance/mainline-ledger";
+import { buildOwnerLifecycleReadout } from "@/lib/work-unit-governance/owner-lifecycle";
 import { buildWorkUnitRuntimeReadout } from "@/lib/work-unit-governance/runtime";
 import {
+  buildSyntheticOwnerLifecyclePolicy,
   buildSyntheticPrivateMainlineLedger,
   buildSyntheticWorkUnit,
+  WORK_UNIT_SYNTHETIC_TIME,
 } from "@/lib/work-unit-governance/synthetic-fixtures";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +39,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function WorkUnitGovernanceDemoPage() {
   const locale = resolveUiLocale((await cookies()).get("helm-ui-locale")?.value);
   const english = locale === "en-US";
-  const readout = buildWorkUnitRuntimeReadout(buildSyntheticWorkUnit());
+  const syntheticWorkUnit = buildSyntheticWorkUnit();
+  const readout = buildWorkUnitRuntimeReadout(syntheticWorkUnit);
+  const ownerReadout = buildOwnerLifecycleReadout({
+    workUnit: syntheticWorkUnit,
+    policy: buildSyntheticOwnerLifecyclePolicy(),
+    receipts: [],
+    now: WORK_UNIT_SYNTHETIC_TIME,
+  });
   const ledgerReadout = buildPrivateMainlineLedgerReadout(
     buildSyntheticPrivateMainlineLedger(),
   );
@@ -100,6 +111,8 @@ export default async function WorkUnitGovernanceDemoPage() {
         />
 
         <WorkUnitReviewConsole readout={readout} english={english} />
+
+        <WorkUnitOwnerLifecyclePanel readout={ownerReadout} english={english} />
 
         <WorkUnitMainlineLedgerPanel readout={ledgerReadout} english={english} />
 
