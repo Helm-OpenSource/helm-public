@@ -19,6 +19,12 @@ import {
   type WorkUnitViolation,
 } from "../lib/work-unit-governance/contracts";
 import {
+  planPrivateMainlineLedgerAppend,
+  privateMainlineLedgerEventSchema,
+  validateReviewFindingDisposition,
+  type PrivateMainlineLedger,
+} from "../lib/work-unit-governance/mainline-ledger";
+import {
   buildPrivateMainlineProjection,
   buildWorkUnitRuntimeReadout,
   planWorkUnitRuntimeEvent,
@@ -62,9 +68,21 @@ export type WorkUnitGovernanceRuntimeFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernanceLedgerFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceFailure = {
   readonly name: string;
-  readonly check: "work-unit" | "transition" | "terminology" | "runtime" | "checklist";
+  readonly check:
+    | "work-unit"
+    | "transition"
+    | "terminology"
+    | "runtime"
+    | "ledger"
+    | "checklist";
   readonly detail: string;
 };
 
@@ -77,6 +95,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly transitionFixtures: readonly WorkUnitGovernanceTransitionFixture[];
   readonly terminologyFixtures: readonly WorkUnitGovernanceTerminologyFixture[];
   readonly runtimeFixtures: readonly WorkUnitGovernanceRuntimeFixture[];
+  readonly ledgerFixtures: readonly WorkUnitGovernanceLedgerFixture[];
   readonly failures: readonly WorkUnitGovernanceFailure[];
 };
 
@@ -295,6 +314,132 @@ export function buildDefaultWorkUnitRuntimeFixtures(): readonly WorkUnitGovernan
   ];
 }
 
+const SYNTHETIC_LEDGER: PrivateMainlineLedger = {
+  schemaVersion: "helm.private-mainline-ledger.v1",
+  ledgerRef: "synthetic-ledger:work-unit-mainline",
+  events: [],
+  publicCoreCarriesRealInstance: false,
+};
+
+function syntheticMainlineEvent(input: {
+  readonly workUnit: HelmWorkUnit;
+  readonly eventId?: string;
+  readonly baselineEventIds?: readonly string[];
+  readonly supersedesEventIds?: readonly string[];
+}) {
+  const snapshotHash = computeWorkUnitSnapshotHash(input.workUnit);
+  return privateMainlineLedgerEventSchema.parse({
+    schemaVersion: "helm.private-mainline-ledger-event.v1",
+    ledgerRef: SYNTHETIC_LEDGER.ledgerRef,
+    eventId: input.eventId ?? `ledger-event:${input.workUnit.id}:mainline`,
+    workUnitId: input.workUnit.id,
+    eventType: "mainline_recorded",
+    actor: { actorType: "human_owner", actorRef: "owner-1" },
+    at: FIXTURE_TIME,
+    snapshotHash,
+    conflictKeys: input.workUnit.conflictKeys,
+    baselineEventIds: input.baselineEventIds ?? [],
+    supersedesEventIds: input.supersedesEventIds ?? [],
+    auditRefs: ["synthetic://audit/mainline"],
+    receipt: syntheticReceipt("mainline-receipt-1", snapshotHash),
+    publicCoreCarriesRealInstance: false,
+    createsExternalEffect: false,
+  });
+}
+
+function acceptedSyntheticWorkUnit(overrides: Partial<HelmWorkUnit> = {}): HelmWorkUnit {
+  const candidate = buildSyntheticWorkUnit({
+    ...overrides,
+    status: "candidate",
+    decision: undefined,
+    decisionSnapshotHash: undefined,
+    mergeReceipt: undefined,
+    activationReceipt: undefined,
+  });
+  const snapshotHash = computeWorkUnitSnapshotHash(candidate);
+  return buildSyntheticWorkUnit({
+    ...overrides,
+    status: "accepted_by_human",
+    decisionSnapshotHash: snapshotHash,
+    decision: syntheticAcceptedDecision(snapshotHash),
+  });
+}
+
+export function buildDefaultWorkUnitLedgerFixtures(): readonly WorkUnitGovernanceLedgerFixture[] {
+  return [
+    {
+      name: "ledger-append-plan-never-writes-from-public-core",
+      run: () => {
+        const workUnit = acceptedSyntheticWorkUnit();
+        const plan = planPrivateMainlineLedgerAppend({
+          ledger: SYNTHETIC_LEDGER,
+          workUnit,
+          event: syntheticMainlineEvent({ workUnit }),
+        });
+        if (!plan.ok) return plan.violations;
+
+        const violations: WorkUnitViolation[] = [];
+        if (
+          plan.publicCorePersists ||
+          plan.publicCoreWritesPrivateMainline ||
+          plan.createsExternalEffect ||
+          plan.nextLedger.publicCoreCarriesRealInstance
+        ) {
+          violations.push({
+            rule: "ledger-public-core-side-effect",
+            detail: "append plan must remain shape-only",
+          });
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "ledger-conflict-key-needs-supersede-baseline",
+      run: () => {
+        const firstWorkUnit = acceptedSyntheticWorkUnit();
+        const firstEvent = syntheticMainlineEvent({ workUnit: firstWorkUnit });
+        const firstPlan = planPrivateMainlineLedgerAppend({
+          ledger: SYNTHETIC_LEDGER,
+          workUnit: firstWorkUnit,
+          event: firstEvent,
+        });
+        if (!firstPlan.ok) return firstPlan.violations;
+
+        const secondWorkUnit = acceptedSyntheticWorkUnit({
+          id: "hwu-synthetic-002",
+          objective: "Supersede a synthetic mainline entry.",
+        });
+        const blockedPlan = planPrivateMainlineLedgerAppend({
+          ledger: firstPlan.nextLedger,
+          workUnit: secondWorkUnit,
+          event: syntheticMainlineEvent({
+            workUnit: secondWorkUnit,
+            eventId: "ledger-event:hwu-synthetic-002:mainline",
+          }),
+        });
+        return blockedPlan.ok
+          ? [{ rule: "ledger-conflict-was-not-blocked", detail: secondWorkUnit.id }]
+          : blockedPlan.violations;
+      },
+      expectedRules: ["conflict-key-active-event-needs-supersede"],
+    },
+    {
+      name: "ledger-review-finding-waiver-needs-owner",
+      run: () =>
+        validateReviewFindingDisposition({
+          findingId: "finding-ai-waiver",
+          disposition: "owner_waived",
+          summary: "AI attempted to waive a synthetic review finding.",
+          recordedBy: { actorType: "ai", actorRef: "agent-1" },
+          recordedAt: FIXTURE_TIME,
+          waiverReason: "No human owner reviewed this.",
+        }),
+      expectedRules: ["finding-waiver-needs-human-owner"],
+    },
+  ];
+}
+
 function compareExpectedRules(options: {
   readonly name: string;
   readonly check: WorkUnitGovernanceFailure["check"];
@@ -330,6 +475,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly transitionFixtures?: readonly WorkUnitGovernanceTransitionFixture[];
   readonly terminologyFixtures?: readonly WorkUnitGovernanceTerminologyFixture[];
   readonly runtimeFixtures?: readonly WorkUnitGovernanceRuntimeFixture[];
+  readonly ledgerFixtures?: readonly WorkUnitGovernanceLedgerFixture[];
 } = {}): WorkUnitGovernanceCheckResult {
   const workUnitFixtures =
     options.workUnitFixtures ?? buildDefaultWorkUnitGovernanceFixtures();
@@ -339,6 +485,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.terminologyFixtures ?? buildDefaultWorkUnitTerminologyFixtures();
   const runtimeFixtures =
     options.runtimeFixtures ?? buildDefaultWorkUnitRuntimeFixtures();
+  const ledgerFixtures =
+    options.ledgerFixtures ?? buildDefaultWorkUnitLedgerFixtures();
 
   const failures: WorkUnitGovernanceFailure[] = [];
 
@@ -393,6 +541,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of ledgerFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "ledger",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   const actualRequirementIds = hwuAcceptanceChecklist.map((item) => item.requirementId);
   if (actualRequirementIds.join("|") !== EXPECTED_REQUIREMENT_IDS.join("|")) {
     failures.push({
@@ -407,6 +566,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     transitionFixtures.length +
     terminologyFixtures.length +
     runtimeFixtures.length +
+    ledgerFixtures.length +
     1;
 
   return {
@@ -418,6 +578,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     transitionFixtures,
     terminologyFixtures,
     runtimeFixtures,
+    ledgerFixtures,
     failures,
   };
 }

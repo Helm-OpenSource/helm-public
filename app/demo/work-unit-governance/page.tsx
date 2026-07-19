@@ -5,10 +5,15 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 
 import { BoundaryBar } from "@/components/shared/boundary-bar";
 import { Badge } from "@/components/ui/badge";
+import { WorkUnitMainlineLedgerPanel } from "@/features/work-unit-governance/work-unit-mainline-ledger-panel";
 import { WorkUnitReviewConsole } from "@/features/work-unit-governance/work-unit-review-console";
 import { resolveUiLocale } from "@/lib/i18n/config";
+import { buildPrivateMainlineLedgerReadout } from "@/lib/work-unit-governance/mainline-ledger";
 import { buildWorkUnitRuntimeReadout } from "@/lib/work-unit-governance/runtime";
-import { buildSyntheticWorkUnit } from "@/lib/work-unit-governance/synthetic-fixtures";
+import {
+  buildSyntheticPrivateMainlineLedger,
+  buildSyntheticWorkUnit,
+} from "@/lib/work-unit-governance/synthetic-fixtures";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -31,6 +36,9 @@ export default async function WorkUnitGovernanceDemoPage() {
   const locale = resolveUiLocale((await cookies()).get("helm-ui-locale")?.value);
   const english = locale === "en-US";
   const readout = buildWorkUnitRuntimeReadout(buildSyntheticWorkUnit());
+  const ledgerReadout = buildPrivateMainlineLedgerReadout(
+    buildSyntheticPrivateMainlineLedger(),
+  );
 
   return (
     <div className="surface-grid min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
@@ -92,6 +100,8 @@ export default async function WorkUnitGovernanceDemoPage() {
         />
 
         <WorkUnitReviewConsole readout={readout} english={english} />
+
+        <WorkUnitMainlineLedgerPanel readout={ledgerReadout} english={english} />
 
         <footer className="flex items-start gap-2 border-t border-[color:var(--border)] py-5 text-xs leading-6 text-[color:var(--muted-foreground)]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--accent)]" aria-hidden />
