@@ -24,6 +24,13 @@ import {
   validateActivationHandoffRequest,
 } from "../lib/work-unit-governance/activation-handoff";
 import {
+  activationRuntimeBindingSchema,
+  buildActivationRuntimeExecutionEnvelope,
+  buildPublicCoreNoopActivationRuntimeExecutor,
+  validateActivationRuntimeBinding,
+  type ActivationRuntimeBinding,
+} from "../lib/work-unit-governance/activation-runtime-binding";
+import {
   planPrivateMainlineLedgerAppend,
   privateMainlineLedgerEventSchema,
   validateReviewFindingDisposition,
@@ -138,6 +145,12 @@ export type WorkUnitGovernanceActivationHandoffFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernanceActivationRuntimeFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceRepairLearningFixture = {
   readonly name: string;
   readonly run: () => readonly WorkUnitViolation[];
@@ -167,6 +180,7 @@ export type WorkUnitGovernanceFailure = {
     | "owner-lifecycle"
     | "owner-notification"
     | "activation-handoff"
+    | "activation-runtime"
     | "repair-learning"
     | "proof-package"
     | "private-mainline-store"
@@ -187,6 +201,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly ownerLifecycleFixtures: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
   readonly ownerNotificationFixtures: readonly WorkUnitGovernanceOwnerNotificationFixture[];
   readonly activationHandoffFixtures: readonly WorkUnitGovernanceActivationHandoffFixture[];
+  readonly activationRuntimeFixtures: readonly WorkUnitGovernanceActivationRuntimeFixture[];
   readonly repairLearningFixtures: readonly WorkUnitGovernanceRepairLearningFixture[];
   readonly proofPackageFixtures: readonly WorkUnitGovernanceProofPackageFixture[];
   readonly privateMainlineStoreFixtures: readonly WorkUnitGovernancePrivateMainlineStoreFixture[];
@@ -1172,6 +1187,230 @@ export function buildDefaultWorkUnitActivationHandoffFixtures(): readonly WorkUn
   ];
 }
 
+function activationRuntimeBinding(
+  overrides: Partial<ActivationRuntimeBinding> = {},
+): ActivationRuntimeBinding {
+  return activationRuntimeBindingSchema.parse({
+    schemaVersion: "helm.activation-runtime-binding.v1",
+    bindingRef: "synthetic-binding:activation-runtime",
+    executorMode: "private_control_plane",
+    executorRef: "synthetic://private-activation-runtime",
+    authorityRef: "synthetic://activation-authority",
+    executionPolicyRef: "synthetic://activation-policy",
+    receiptStoreRef: "synthetic://activation-receipts",
+    capabilities: {
+      snapshotBoundExecution: true,
+      mainlineReceiptRequired: true,
+      humanOwnerAuthorizationRequired: true,
+      activationAuthoritySeparated: true,
+      rollbackOrRemediationRequired: true,
+      targetRefResolvedOutsidePublicCore: true,
+      privateExecutorActivatesRuntime: true,
+      privateExecutorPersistsReceipt: true,
+      publicCoreCarriesRealInstance: false,
+      publicCorePersists: false,
+      publicCoreSendsExternally: false,
+      publicCoreWritesTarget: false,
+      publicCoreActivatesRuntime: false,
+      publicCoreGrantsApproval: false,
+    },
+    ...overrides,
+  });
+}
+
+function publicCoreNoopActivationRuntimeBinding(
+  overrides: Partial<ActivationRuntimeBinding> = {},
+): ActivationRuntimeBinding {
+  return activationRuntimeBindingSchema.parse({
+    ...activationRuntimeBinding({
+      executorMode: "public_core_noop",
+      executorRef: "public-core:no-activation-runtime-executor",
+      authorityRef: undefined,
+      executionPolicyRef: undefined,
+      receiptStoreRef: undefined,
+      capabilities: {
+        snapshotBoundExecution: true,
+        mainlineReceiptRequired: true,
+        humanOwnerAuthorizationRequired: true,
+        activationAuthoritySeparated: true,
+        rollbackOrRemediationRequired: true,
+        targetRefResolvedOutsidePublicCore: true,
+        privateExecutorActivatesRuntime: false,
+        privateExecutorPersistsReceipt: false,
+        publicCoreCarriesRealInstance: false,
+        publicCorePersists: false,
+        publicCoreSendsExternally: false,
+        publicCoreWritesTarget: false,
+        publicCoreActivatesRuntime: false,
+        publicCoreGrantsApproval: false,
+      },
+    }),
+    ...overrides,
+  });
+}
+
+export function buildDefaultWorkUnitActivationRuntimeFixtures(): readonly WorkUnitGovernanceActivationRuntimeFixture[] {
+  return [
+    {
+      name: "activation-runtime-envelope-is-handoff-only",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit({
+          activationScope: "production_runtime",
+        });
+        const request = buildSyntheticActivationHandoffRequest(workUnit);
+        const envelope = buildActivationRuntimeExecutionEnvelope({
+          binding: activationRuntimeBinding(),
+          workUnit,
+          request,
+          receipt: buildSyntheticActivationAuthorityReceipt(workUnit, request),
+          requestedBy: { actorType: "system", actorRef: "activation-runtime-envelope-builder" },
+          requestedAt: FIXTURE_TIME,
+          reason: "Synthetic activation was independently authorized.",
+        });
+        if (!envelope.ok) return envelope.violations;
+
+        const violations: WorkUnitViolation[] = [];
+        if (
+          envelope.envelope.activationClaim !== "not_activation" ||
+          envelope.envelope.readinessClaim !== "not_readiness" ||
+          !envelope.envelope.privateExecutorRequired ||
+          !envelope.envelope.privateExecutionReceiptRequired ||
+          envelope.envelope.targetRefSafety !== "opaque_ref_only" ||
+          envelope.envelope.publicCoreCarriesRealInstance ||
+          envelope.envelope.publicCorePersists ||
+          envelope.envelope.createsExternalEffect ||
+          envelope.envelope.sendsExternally ||
+          envelope.envelope.writesTarget ||
+          envelope.envelope.activatesRuntime ||
+          envelope.envelope.grantsApproval ||
+          envelope.publicCorePersists ||
+          envelope.writesTarget ||
+          envelope.activatesRuntime ||
+          envelope.grantsApproval
+        ) {
+          violations.push({
+            rule: "activation-runtime-envelope-side-effect",
+            detail: envelope.envelope.envelopeId,
+          });
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "activation-runtime-public-noop-cannot-execute",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit({
+          activationScope: "production_runtime",
+        });
+        const request = buildSyntheticActivationHandoffRequest(workUnit);
+        const envelope = buildActivationRuntimeExecutionEnvelope({
+          binding: publicCoreNoopActivationRuntimeBinding(),
+          workUnit,
+          request,
+          receipt: buildSyntheticActivationAuthorityReceipt(workUnit, request),
+          requestedBy: { actorType: "system", actorRef: "activation-runtime-envelope-builder" },
+          requestedAt: FIXTURE_TIME,
+          reason: "Synthetic activation was independently authorized.",
+        });
+        if (!envelope.ok) return envelope.violations;
+
+        const executeResult = buildPublicCoreNoopActivationRuntimeExecutor().execute(
+          envelope.envelope,
+        );
+        return executeResult.ok
+          ? [{ rule: "activation-runtime-public-noop-activated", detail: envelope.envelope.envelopeId }]
+          : executeResult.violations;
+      },
+      expectedRules: ["public-core-activation-runtime-executor-is-noop"],
+    },
+    {
+      name: "activation-runtime-missing-governance-capability-is-blocked",
+      run: () =>
+        validateActivationRuntimeBinding({
+          ...activationRuntimeBinding(),
+          authorityRef: undefined,
+          executionPolicyRef: undefined,
+          receiptStoreRef: undefined,
+          capabilities: {
+            ...activationRuntimeBinding().capabilities,
+            snapshotBoundExecution: false,
+            humanOwnerAuthorizationRequired: false,
+            activationAuthoritySeparated: false,
+            rollbackOrRemediationRequired: false,
+            targetRefResolvedOutsidePublicCore: false,
+            privateExecutorActivatesRuntime: false,
+            privateExecutorPersistsReceipt: false,
+          },
+        }),
+      expectedRules: [
+        "activation-runtime-private-authority-required",
+        "activation-runtime-private-policy-required",
+        "activation-runtime-private-receipt-store-required",
+        "activation-runtime-snapshot-bound-required",
+        "activation-runtime-human-owner-authorization-required",
+        "activation-runtime-authority-separation-required",
+        "activation-runtime-recovery-plan-required",
+        "activation-runtime-target-ref-private-resolution-required",
+        "activation-runtime-private-executor-required",
+        "activation-runtime-private-receipt-persistence-required",
+      ],
+    },
+    {
+      name: "activation-runtime-public-core-side-effect-claim-is-blocked",
+      run: () =>
+        validateActivationRuntimeBinding({
+          ...publicCoreNoopActivationRuntimeBinding(),
+          capabilities: {
+            ...publicCoreNoopActivationRuntimeBinding().capabilities,
+            privateExecutorActivatesRuntime: true,
+            privateExecutorPersistsReceipt: true,
+            publicCoreCarriesRealInstance: true,
+            publicCorePersists: true,
+            publicCoreSendsExternally: true,
+            publicCoreWritesTarget: true,
+            publicCoreActivatesRuntime: true,
+            publicCoreGrantsApproval: true,
+          },
+        }),
+      expectedRules: [
+        "public-core-activation-runtime-cannot-activate",
+        "public-core-activation-runtime-cannot-persist-receipt",
+        "activation-runtime-public-core-real-instance-forbidden",
+        "activation-runtime-public-core-persistence-forbidden",
+        "activation-runtime-public-core-send-forbidden",
+        "activation-runtime-public-core-write-forbidden",
+        "activation-runtime-public-core-activation-forbidden",
+        "activation-runtime-public-core-approval-forbidden",
+      ],
+    },
+    {
+      name: "activation-runtime-raw-target-ref-is-blocked",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit({
+          activationScope: "production_runtime",
+        });
+        const request = buildSyntheticActivationHandoffRequest(workUnit, {
+          targetRef: "https://example.invalid/activate",
+        });
+        const envelope = buildActivationRuntimeExecutionEnvelope({
+          binding: activationRuntimeBinding(),
+          workUnit,
+          request,
+          receipt: buildSyntheticActivationAuthorityReceipt(workUnit, request),
+          requestedBy: { actorType: "system", actorRef: "activation-runtime-envelope-builder" },
+          requestedAt: FIXTURE_TIME,
+          reason: "Synthetic activation was independently authorized.",
+        });
+        return envelope.ok
+          ? [{ rule: "activation-runtime-raw-target-ref-was-not-blocked", detail: request.handoffId }]
+          : envelope.violations;
+      },
+      expectedRules: ["activation-runtime-target-ref-must-be-opaque"],
+    },
+  ];
+}
+
 export function buildDefaultWorkUnitRepairLearningFixtures(): readonly WorkUnitGovernanceRepairLearningFixture[] {
   return [
     {
@@ -1457,6 +1696,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly ownerLifecycleFixtures?: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
   readonly ownerNotificationFixtures?: readonly WorkUnitGovernanceOwnerNotificationFixture[];
   readonly activationHandoffFixtures?: readonly WorkUnitGovernanceActivationHandoffFixture[];
+  readonly activationRuntimeFixtures?: readonly WorkUnitGovernanceActivationRuntimeFixture[];
   readonly repairLearningFixtures?: readonly WorkUnitGovernanceRepairLearningFixture[];
   readonly proofPackageFixtures?: readonly WorkUnitGovernanceProofPackageFixture[];
   readonly privateMainlineStoreFixtures?: readonly WorkUnitGovernancePrivateMainlineStoreFixture[];
@@ -1477,6 +1717,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.ownerNotificationFixtures ?? buildDefaultWorkUnitOwnerNotificationFixtures();
   const activationHandoffFixtures =
     options.activationHandoffFixtures ?? buildDefaultWorkUnitActivationHandoffFixtures();
+  const activationRuntimeFixtures =
+    options.activationRuntimeFixtures ?? buildDefaultWorkUnitActivationRuntimeFixtures();
   const repairLearningFixtures =
     options.repairLearningFixtures ?? buildDefaultWorkUnitRepairLearningFixtures();
   const proofPackageFixtures =
@@ -1581,6 +1823,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of activationRuntimeFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "activation-runtime",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   for (const fixture of repairLearningFixtures) {
     failures.push(
       ...compareExpectedRules({
@@ -1632,6 +1885,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     ownerLifecycleFixtures.length +
     ownerNotificationFixtures.length +
     activationHandoffFixtures.length +
+    activationRuntimeFixtures.length +
     repairLearningFixtures.length +
     proofPackageFixtures.length +
     privateMainlineStoreFixtures.length +
@@ -1650,6 +1904,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     ownerLifecycleFixtures,
     ownerNotificationFixtures,
     activationHandoffFixtures,
+    activationRuntimeFixtures,
     repairLearningFixtures,
     proofPackageFixtures,
     privateMainlineStoreFixtures,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDefaultWorkUnitActivationHandoffFixtures,
+  buildDefaultWorkUnitActivationRuntimeFixtures,
   buildDefaultWorkUnitGovernanceFixtures,
   buildDefaultWorkUnitLedgerFixtures,
   buildDefaultWorkUnitOwnerLifecycleFixtures,
@@ -19,7 +20,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(46);
+    expect(result.total).toBe(51);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -58,6 +59,13 @@ describe("check-work-unit-governance", () => {
       "activation-handoff-ai-authorization-is-blocked",
       "activation-handoff-customer-effect-needs-remediation",
       "activation-handoff-stale-mainline-is-blocked",
+    ]);
+    expect(result.activationRuntimeFixtures.map((fixture) => fixture.name)).toEqual([
+      "activation-runtime-envelope-is-handoff-only",
+      "activation-runtime-public-noop-cannot-execute",
+      "activation-runtime-missing-governance-capability-is-blocked",
+      "activation-runtime-public-core-side-effect-claim-is-blocked",
+      "activation-runtime-raw-target-ref-is-blocked",
     ]);
     expect(result.repairLearningFixtures.map((fixture) => fixture.name)).toEqual([
       "repair-learning-never-executes-public-core-side-effects",
@@ -240,6 +248,38 @@ describe("check-work-unit-governance", () => {
         name: "activation-handoff-ai-authorization-is-blocked",
         check: "activation-handoff",
         detail: "missing expected rule(s): activation-authorization-needs-human-owner",
+      },
+    ]);
+  });
+
+  it("fails when an activation runtime fixture no longer detects its boundary rule", () => {
+    const activationRuntimeFixture = buildDefaultWorkUnitActivationRuntimeFixtures()[1];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
+      ownerNotificationFixtures: [],
+      activationHandoffFixtures: [],
+      activationRuntimeFixtures: [
+        {
+          ...activationRuntimeFixture,
+          run: () => [],
+        },
+      ],
+      repairLearningFixtures: [],
+      proofPackageFixtures: [],
+      privateMainlineStoreFixtures: [],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "activation-runtime-public-noop-cannot-execute",
+        check: "activation-runtime",
+        detail: "missing expected rule(s): public-core-activation-runtime-executor-is-noop",
       },
     ]);
   });
