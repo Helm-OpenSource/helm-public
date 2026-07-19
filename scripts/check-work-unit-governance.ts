@@ -68,6 +68,13 @@ import {
   validateWorkUnitRepairCandidate,
 } from "../lib/work-unit-governance/repair-learning-loop";
 import {
+  buildLearningAssetStoreEnvelope,
+  buildPublicCoreNoopLearningAssetStore,
+  learningAssetStoreBindingSchema,
+  validateLearningAssetStoreBinding,
+  type LearningAssetStoreBinding,
+} from "../lib/work-unit-governance/learning-asset-store-binding";
+import {
   buildPrivateMainlineProjection,
   buildWorkUnitRuntimeReadout,
   planWorkUnitRuntimeEvent,
@@ -157,6 +164,12 @@ export type WorkUnitGovernanceRepairLearningFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernanceLearningAssetStoreFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceProofPackageFixture = {
   readonly name: string;
   readonly run: () => readonly WorkUnitViolation[];
@@ -182,6 +195,7 @@ export type WorkUnitGovernanceFailure = {
     | "activation-handoff"
     | "activation-runtime"
     | "repair-learning"
+    | "learning-asset-store"
     | "proof-package"
     | "private-mainline-store"
     | "checklist";
@@ -203,6 +217,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly activationHandoffFixtures: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly activationRuntimeFixtures: readonly WorkUnitGovernanceActivationRuntimeFixture[];
   readonly repairLearningFixtures: readonly WorkUnitGovernanceRepairLearningFixture[];
+  readonly learningAssetStoreFixtures: readonly WorkUnitGovernanceLearningAssetStoreFixture[];
   readonly proofPackageFixtures: readonly WorkUnitGovernanceProofPackageFixture[];
   readonly privateMainlineStoreFixtures: readonly WorkUnitGovernancePrivateMainlineStoreFixture[];
   readonly failures: readonly WorkUnitGovernanceFailure[];
@@ -1550,6 +1565,251 @@ export function buildDefaultWorkUnitRepairLearningFixtures(): readonly WorkUnitG
   ];
 }
 
+function learningAssetStoreBinding(
+  overrides: Partial<LearningAssetStoreBinding> = {},
+): LearningAssetStoreBinding {
+  return learningAssetStoreBindingSchema.parse({
+    schemaVersion: "helm.learning-asset-store-binding.v1",
+    bindingRef: "synthetic-binding:learning-asset-store",
+    storeMode: "private_control_plane",
+    storeRef: "synthetic://private-learning-assets",
+    authorityRef: "synthetic://learning-authority",
+    applicationPolicyRef: "synthetic://learning-application-policy",
+    receiptStoreRef: "synthetic://learning-asset-receipts",
+    capabilities: {
+      findingRequired: true,
+      draftValidated: true,
+      snapshotBoundAssets: true,
+      ownerWaiverRequiresHumanReceipt: true,
+      applicationPolicyRequired: true,
+      privateStorePersists: true,
+      privateStoreAppliesAsset: true,
+      publicCoreCarriesRealInstance: false,
+      publicCorePersists: false,
+      publicCoreSendsExternally: false,
+      publicCoreWritesTarget: false,
+      publicCoreChangesCheckRules: false,
+      publicCoreAppliesAsset: false,
+      publicCoreGrantsApproval: false,
+    },
+    ...overrides,
+  });
+}
+
+function publicCoreNoopLearningAssetStoreBinding(
+  overrides: Partial<LearningAssetStoreBinding> = {},
+): LearningAssetStoreBinding {
+  return learningAssetStoreBindingSchema.parse({
+    ...learningAssetStoreBinding({
+      storeMode: "public_core_noop",
+      storeRef: "public-core:no-learning-asset-store",
+      authorityRef: undefined,
+      applicationPolicyRef: undefined,
+      receiptStoreRef: undefined,
+      capabilities: {
+        findingRequired: true,
+        draftValidated: true,
+        snapshotBoundAssets: true,
+        ownerWaiverRequiresHumanReceipt: true,
+        applicationPolicyRequired: true,
+        privateStorePersists: false,
+        privateStoreAppliesAsset: false,
+        publicCoreCarriesRealInstance: false,
+        publicCorePersists: false,
+        publicCoreSendsExternally: false,
+        publicCoreWritesTarget: false,
+        publicCoreChangesCheckRules: false,
+        publicCoreAppliesAsset: false,
+        publicCoreGrantsApproval: false,
+      },
+    }),
+    ...overrides,
+  });
+}
+
+export function buildDefaultWorkUnitLearningAssetStoreFixtures(): readonly WorkUnitGovernanceLearningAssetStoreFixture[] {
+  return [
+    {
+      name: "learning-asset-store-envelope-is-handoff-only",
+      run: () => {
+        const workUnit = buildSyntheticFailedWorkUnit();
+        const finding = buildSyntheticLearningFinding(workUnit);
+        const envelope = buildLearningAssetStoreEnvelope({
+          binding: learningAssetStoreBinding(),
+          finding,
+          draft: buildSyntheticLearningAssetDraft({ finding }),
+          requestedBy: { actorType: "system", actorRef: "learning-asset-envelope-builder" },
+          requestedAt: FIXTURE_TIME,
+          reason: "Synthetic finding was converted into an executable asset draft.",
+        });
+        if (!envelope.ok) return envelope.violations;
+
+        const violations: WorkUnitViolation[] = [];
+        if (
+          envelope.envelope.applicationClaim !== "not_applied" ||
+          envelope.envelope.readinessClaim !== "not_readiness" ||
+          !envelope.envelope.privateStoreRequired ||
+          !envelope.envelope.privateReceiptRequired ||
+          !envelope.envelope.privateApplicationRequired ||
+          envelope.envelope.publicCoreCarriesRealInstance ||
+          envelope.envelope.publicCorePersists ||
+          envelope.envelope.createsExternalEffect ||
+          envelope.envelope.sendsExternally ||
+          envelope.envelope.writesTarget ||
+          envelope.envelope.changesCheckRules ||
+          envelope.envelope.appliesAsset ||
+          envelope.envelope.grantsApproval ||
+          envelope.publicCorePersists ||
+          envelope.writesTarget ||
+          envelope.appliesAsset ||
+          envelope.grantsApproval
+        ) {
+          violations.push({
+            rule: "learning-asset-store-envelope-side-effect",
+            detail: envelope.envelope.envelopeId,
+          });
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "learning-asset-store-public-noop-cannot-record",
+      run: () => {
+        const workUnit = buildSyntheticFailedWorkUnit();
+        const finding = buildSyntheticLearningFinding(workUnit);
+        const envelope = buildLearningAssetStoreEnvelope({
+          binding: publicCoreNoopLearningAssetStoreBinding(),
+          finding,
+          draft: buildSyntheticLearningAssetDraft({ finding }),
+          requestedBy: { actorType: "system", actorRef: "learning-asset-envelope-builder" },
+          requestedAt: FIXTURE_TIME,
+          reason: "Synthetic finding was converted into an executable asset draft.",
+        });
+        if (!envelope.ok) return envelope.violations;
+
+        const recordResult = buildPublicCoreNoopLearningAssetStore().record(envelope.envelope);
+        return recordResult.ok
+          ? [{ rule: "learning-asset-store-public-noop-recorded", detail: envelope.envelope.envelopeId }]
+          : recordResult.violations;
+      },
+      expectedRules: ["public-core-learning-asset-store-is-noop"],
+    },
+    {
+      name: "learning-asset-store-missing-governance-capability-is-blocked",
+      run: () =>
+        validateLearningAssetStoreBinding({
+          ...learningAssetStoreBinding(),
+          authorityRef: undefined,
+          applicationPolicyRef: undefined,
+          receiptStoreRef: undefined,
+          capabilities: {
+            ...learningAssetStoreBinding().capabilities,
+            findingRequired: false,
+            draftValidated: false,
+            snapshotBoundAssets: false,
+            ownerWaiverRequiresHumanReceipt: false,
+            applicationPolicyRequired: false,
+            privateStorePersists: false,
+            privateStoreAppliesAsset: false,
+          },
+        }),
+      expectedRules: [
+        "learning-asset-store-private-authority-required",
+        "learning-asset-store-application-policy-required",
+        "learning-asset-store-private-receipt-store-required",
+        "learning-asset-store-finding-required",
+        "learning-asset-store-draft-validation-required",
+        "learning-asset-store-snapshot-bound-required",
+        "learning-asset-store-human-waiver-receipt-required",
+        "learning-asset-store-private-persistence-required",
+        "learning-asset-store-private-application-required",
+      ],
+    },
+    {
+      name: "learning-asset-store-public-core-side-effect-claim-is-blocked",
+      run: () =>
+        validateLearningAssetStoreBinding({
+          ...publicCoreNoopLearningAssetStoreBinding(),
+          capabilities: {
+            ...publicCoreNoopLearningAssetStoreBinding().capabilities,
+            privateStorePersists: true,
+            privateStoreAppliesAsset: true,
+            publicCoreCarriesRealInstance: true,
+            publicCorePersists: true,
+            publicCoreSendsExternally: true,
+            publicCoreWritesTarget: true,
+            publicCoreChangesCheckRules: true,
+            publicCoreAppliesAsset: true,
+            publicCoreGrantsApproval: true,
+          },
+        }),
+      expectedRules: [
+        "public-core-learning-asset-store-cannot-persist",
+        "public-core-learning-asset-store-cannot-apply",
+        "learning-asset-store-public-core-real-instance-forbidden",
+        "learning-asset-store-public-core-persistence-forbidden",
+        "learning-asset-store-public-core-send-forbidden",
+        "learning-asset-store-public-core-write-forbidden",
+        "learning-asset-store-public-core-check-rule-change-forbidden",
+        "learning-asset-store-public-core-application-forbidden",
+        "learning-asset-store-public-core-approval-forbidden",
+      ],
+    },
+    {
+      name: "learning-asset-store-raw-asset-ref-is-blocked",
+      run: () => {
+        const workUnit = buildSyntheticFailedWorkUnit();
+        const finding = buildSyntheticLearningFinding(workUnit);
+        const envelope = buildLearningAssetStoreEnvelope({
+          binding: learningAssetStoreBinding(),
+          finding,
+          draft: buildSyntheticLearningAssetDraft({
+            finding,
+            overrides: {
+              disposition: {
+                findingId: finding.findingId,
+                disposition: "asset_recorded",
+                assetKind: "check",
+                assetRef: "https://example.invalid/guard",
+                summary: "Prepare a synthetic renewal-cost guard asset.",
+                recordedBy: { actorType: "system", actorRef: "guard-writer" },
+                recordedAt: FIXTURE_TIME,
+              },
+            },
+          }),
+          requestedBy: { actorType: "system", actorRef: "learning-asset-envelope-builder" },
+          requestedAt: FIXTURE_TIME,
+          reason: "Synthetic finding was converted into an executable asset draft.",
+        });
+        return envelope.ok
+          ? [{ rule: "learning-asset-store-raw-asset-ref-was-not-blocked", detail: finding.findingId }]
+          : envelope.violations;
+      },
+      expectedRules: ["learning-asset-store-asset-ref-must-be-opaque"],
+    },
+    {
+      name: "learning-asset-store-ai-request-is-blocked",
+      run: () => {
+        const workUnit = buildSyntheticFailedWorkUnit();
+        const finding = buildSyntheticLearningFinding(workUnit);
+        const envelope = buildLearningAssetStoreEnvelope({
+          binding: learningAssetStoreBinding(),
+          finding,
+          draft: buildSyntheticLearningAssetDraft({ finding }),
+          requestedBy: { actorType: "ai", actorRef: "agent-1" },
+          requestedAt: FIXTURE_TIME,
+          reason: "AI attempted to request learning-asset persistence.",
+        });
+        return envelope.ok
+          ? [{ rule: "learning-asset-store-ai-request-was-not-blocked", detail: finding.findingId }]
+          : envelope.violations;
+      },
+      expectedRules: ["learning-asset-store-ai-request-not-authoritative"],
+    },
+  ];
+}
+
 export function buildDefaultWorkUnitProofPackageFixtures(): readonly WorkUnitGovernanceProofPackageFixture[] {
   return [
     {
@@ -1698,6 +1958,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly activationHandoffFixtures?: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly activationRuntimeFixtures?: readonly WorkUnitGovernanceActivationRuntimeFixture[];
   readonly repairLearningFixtures?: readonly WorkUnitGovernanceRepairLearningFixture[];
+  readonly learningAssetStoreFixtures?: readonly WorkUnitGovernanceLearningAssetStoreFixture[];
   readonly proofPackageFixtures?: readonly WorkUnitGovernanceProofPackageFixture[];
   readonly privateMainlineStoreFixtures?: readonly WorkUnitGovernancePrivateMainlineStoreFixture[];
 } = {}): WorkUnitGovernanceCheckResult {
@@ -1721,6 +1982,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.activationRuntimeFixtures ?? buildDefaultWorkUnitActivationRuntimeFixtures();
   const repairLearningFixtures =
     options.repairLearningFixtures ?? buildDefaultWorkUnitRepairLearningFixtures();
+  const learningAssetStoreFixtures =
+    options.learningAssetStoreFixtures ?? buildDefaultWorkUnitLearningAssetStoreFixtures();
   const proofPackageFixtures =
     options.proofPackageFixtures ?? buildDefaultWorkUnitProofPackageFixtures();
   const privateMainlineStoreFixtures =
@@ -1845,6 +2108,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of learningAssetStoreFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "learning-asset-store",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   for (const fixture of proofPackageFixtures) {
     failures.push(
       ...compareExpectedRules({
@@ -1887,6 +2161,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     activationHandoffFixtures.length +
     activationRuntimeFixtures.length +
     repairLearningFixtures.length +
+    learningAssetStoreFixtures.length +
     proofPackageFixtures.length +
     privateMainlineStoreFixtures.length +
     1;
@@ -1906,6 +2181,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     activationHandoffFixtures,
     activationRuntimeFixtures,
     repairLearningFixtures,
+    learningAssetStoreFixtures,
     proofPackageFixtures,
     privateMainlineStoreFixtures,
     failures,
