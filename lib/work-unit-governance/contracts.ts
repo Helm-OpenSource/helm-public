@@ -621,7 +621,7 @@ export const hwuAcceptanceChecklist = [
   {
     requirementId: "HWU-06",
     title: "Required owners",
-    proof: "owner mode and high-risk owner guard",
+    proof: "owner mode, authorized proxy receipts, timeout escalation, and high-risk owner guard",
   },
   {
     requirementId: "HWU-07",
@@ -646,7 +646,7 @@ export const hwuAcceptanceChecklist = [
   {
     requirementId: "HWU-11",
     title: "Owner lifecycle",
-    proof: "owner absence and stale baseline checks",
+    proof: "owner absence, timeout escalation, owner change, proxy receipt, and stale baseline checks",
   },
   {
     requirementId: "HWU-12",
@@ -661,7 +661,7 @@ export const hwuAcceptanceChecklist = [
   {
     requirementId: "HWU-14",
     title: "Audit and receipts",
-    proof: "append-only receipt references",
+    proof: "append-only ledger events plus owner review and authorization receipt shapes",
   },
   {
     requirementId: "HWU-15",

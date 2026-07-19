@@ -25,11 +25,19 @@ import {
   type PrivateMainlineLedger,
 } from "../lib/work-unit-governance/mainline-ledger";
 import {
+  buildOwnerLifecycleReadout,
+  ownerReviewReceiptSchema,
+  planOwnerLifecycleEvent,
+  validateOwnerLifecycleReceipts,
+  type OwnerReviewReceipt,
+} from "../lib/work-unit-governance/owner-lifecycle";
+import {
   buildPrivateMainlineProjection,
   buildWorkUnitRuntimeReadout,
   planWorkUnitRuntimeEvent,
 } from "../lib/work-unit-governance/runtime";
 import {
+  buildSyntheticOwnerLifecyclePolicy,
   buildSyntheticWorkUnit,
   syntheticAcceptedDecision,
   syntheticReceipt,
@@ -74,6 +82,12 @@ export type WorkUnitGovernanceLedgerFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernanceOwnerLifecycleFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceFailure = {
   readonly name: string;
   readonly check:
@@ -82,6 +96,7 @@ export type WorkUnitGovernanceFailure = {
     | "terminology"
     | "runtime"
     | "ledger"
+    | "owner-lifecycle"
     | "checklist";
   readonly detail: string;
 };
@@ -96,6 +111,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly terminologyFixtures: readonly WorkUnitGovernanceTerminologyFixture[];
   readonly runtimeFixtures: readonly WorkUnitGovernanceRuntimeFixture[];
   readonly ledgerFixtures: readonly WorkUnitGovernanceLedgerFixture[];
+  readonly ownerLifecycleFixtures: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
   readonly failures: readonly WorkUnitGovernanceFailure[];
 };
 
@@ -440,6 +456,147 @@ export function buildDefaultWorkUnitLedgerFixtures(): readonly WorkUnitGovernanc
   ];
 }
 
+function ownerReviewReceiptFor(
+  workUnit: HelmWorkUnit,
+  ownerRef: string,
+  overrides: Partial<OwnerReviewReceipt> = {},
+): OwnerReviewReceipt {
+  return ownerReviewReceiptSchema.parse({
+    schemaVersion: "helm.owner-review-receipt.v1",
+    receiptId: `owner-review:${ownerRef}`,
+    ownerRef,
+    actor: { actorType: "human_owner", actorRef: ownerRef },
+    decision: "accepted",
+    snapshotHash: computeWorkUnitSnapshotHash(workUnit),
+    decidedAt: FIXTURE_TIME,
+    rationale: "Synthetic owner reviewed this exact snapshot.",
+    publicCoreCarriesRealInstance: false,
+    ...overrides,
+  });
+}
+
+export function buildDefaultWorkUnitOwnerLifecycleFixtures(): readonly WorkUnitGovernanceOwnerLifecycleFixture[] {
+  return [
+    {
+      name: "owner-lifecycle-never-sends-or-approves",
+      run: () => {
+        const readout = buildOwnerLifecycleReadout({
+          workUnit: buildSyntheticWorkUnit(),
+          policy: buildSyntheticOwnerLifecyclePolicy(),
+          receipts: [],
+          now: FIXTURE_TIME,
+        });
+        const violations: WorkUnitViolation[] = [];
+        if (
+          readout.publicCorePersists ||
+          readout.sendsNotification ||
+          readout.createsExternalEffect ||
+          readout.grantsApproval
+        ) {
+          violations.push({
+            rule: "owner-lifecycle-public-core-side-effect",
+            detail: "readout",
+          });
+        }
+        for (const action of readout.actions) {
+          if (
+            action.publicCoreExecutes ||
+            action.sendsNotification ||
+            action.createsExternalEffect ||
+            action.grantsApproval
+          ) {
+            violations.push({
+              rule: "owner-lifecycle-action-side-effect",
+              detail: action.actionId,
+            });
+          }
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "owner-lifecycle-ai-decision-is-blocked",
+      run: () => {
+        const plan = planOwnerLifecycleEvent({
+          workUnit: buildSyntheticWorkUnit(),
+          policy: buildSyntheticOwnerLifecyclePolicy(),
+          receipts: [],
+          now: FIXTURE_TIME,
+          event: {
+            commandId: "record_owner_decision",
+            actor: { actorType: "ai", actorRef: "agent-1" },
+            at: FIXTURE_TIME,
+            ownerRef: "owner-1",
+            decision: "accepted",
+            rationale: "AI attempted to approve a synthetic candidate.",
+          },
+        });
+        return plan.ok
+          ? [{ rule: "owner-lifecycle-ai-decision-was-not-blocked", detail: "record_owner_decision" }]
+          : plan.violations;
+      },
+      expectedRules: ["human-owner-lifecycle-command-required"],
+    },
+    {
+      name: "owner-lifecycle-proxy-needs-receipted-authorization",
+      run: () => {
+        const workUnit = buildSyntheticWorkUnit();
+        return validateOwnerLifecycleReceipts({
+          workUnit,
+          policy: buildSyntheticOwnerLifecyclePolicy({
+            authorizedProxies: [
+              {
+                ownerRef: "owner-1",
+                proxy: {
+                  ownerRef: "proxy-1",
+                  ownerType: "authorized_human_proxy",
+                  displayName: "Synthetic delegated reviewer",
+                },
+                authorizedBy: { actorType: "human_owner", actorRef: "owner-1" },
+                authorizationReceiptRef: "owner-proxy-auth:owner-1:proxy-1",
+                authorizedAt: FIXTURE_TIME,
+                publicCoreCarriesRealInstance: false,
+              },
+            ],
+          }),
+          receipts: [
+            ownerReviewReceiptFor(workUnit, "owner-1", {
+              actor: { actorType: "authorized_human_proxy", actorRef: "proxy-1" },
+              authorizationReceiptRef: undefined,
+            }),
+          ],
+          now: FIXTURE_TIME,
+        });
+      },
+      expectedRules: ["proxy-receipt-needs-authorization"],
+    },
+    {
+      name: "owner-lifecycle-stale-related-mainline-change-needs-review",
+      run: () => {
+        const original = buildSyntheticWorkUnit();
+        const drifted = buildSyntheticWorkUnit({
+          relatedMainlineChanges: [
+            {
+              mainlineRef: "mainline:quote:Q-001:v2",
+              conflictKeys: ["quote:Q-001"],
+              changedAt: "2026-07-19T01:00:00.000Z",
+            },
+          ],
+        });
+        const readout = buildOwnerLifecycleReadout({
+          workUnit: drifted,
+          policy: buildSyntheticOwnerLifecyclePolicy(),
+          receipts: [ownerReviewReceiptFor(original, "owner-1")],
+          now: "2026-07-19T02:00:00.000Z",
+        });
+        return readout.blockers;
+      },
+      expectedRules: ["owner-review-stale-related-mainline-change"],
+    },
+  ];
+}
+
 function compareExpectedRules(options: {
   readonly name: string;
   readonly check: WorkUnitGovernanceFailure["check"];
@@ -476,6 +633,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly terminologyFixtures?: readonly WorkUnitGovernanceTerminologyFixture[];
   readonly runtimeFixtures?: readonly WorkUnitGovernanceRuntimeFixture[];
   readonly ledgerFixtures?: readonly WorkUnitGovernanceLedgerFixture[];
+  readonly ownerLifecycleFixtures?: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
 } = {}): WorkUnitGovernanceCheckResult {
   const workUnitFixtures =
     options.workUnitFixtures ?? buildDefaultWorkUnitGovernanceFixtures();
@@ -487,6 +645,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.runtimeFixtures ?? buildDefaultWorkUnitRuntimeFixtures();
   const ledgerFixtures =
     options.ledgerFixtures ?? buildDefaultWorkUnitLedgerFixtures();
+  const ownerLifecycleFixtures =
+    options.ownerLifecycleFixtures ?? buildDefaultWorkUnitOwnerLifecycleFixtures();
 
   const failures: WorkUnitGovernanceFailure[] = [];
 
@@ -552,6 +712,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of ownerLifecycleFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "owner-lifecycle",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   const actualRequirementIds = hwuAcceptanceChecklist.map((item) => item.requirementId);
   if (actualRequirementIds.join("|") !== EXPECTED_REQUIREMENT_IDS.join("|")) {
     failures.push({
@@ -567,6 +738,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     terminologyFixtures.length +
     runtimeFixtures.length +
     ledgerFixtures.length +
+    ownerLifecycleFixtures.length +
     1;
 
   return {
@@ -579,6 +751,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     terminologyFixtures,
     runtimeFixtures,
     ledgerFixtures,
+    ownerLifecycleFixtures,
     failures,
   };
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDefaultWorkUnitGovernanceFixtures,
   buildDefaultWorkUnitLedgerFixtures,
+  buildDefaultWorkUnitOwnerLifecycleFixtures,
   buildDefaultWorkUnitRuntimeFixtures,
   buildDefaultWorkUnitTerminologyFixtures,
   runWorkUnitGovernanceBoundaryCheck,
@@ -13,7 +14,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(17);
+    expect(result.total).toBe(21);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -33,6 +34,12 @@ describe("check-work-unit-governance", () => {
       "ledger-conflict-key-needs-supersede-baseline",
       "ledger-review-finding-waiver-needs-owner",
     ]);
+    expect(result.ownerLifecycleFixtures.map((fixture) => fixture.name)).toEqual([
+      "owner-lifecycle-never-sends-or-approves",
+      "owner-lifecycle-ai-decision-is-blocked",
+      "owner-lifecycle-proxy-needs-receipted-authorization",
+      "owner-lifecycle-stale-related-mainline-change-needs-review",
+    ]);
   });
 
   it("fails when a negative work-unit fixture no longer detects its boundary rule", () => {
@@ -48,6 +55,7 @@ describe("check-work-unit-governance", () => {
       terminologyFixtures: [],
       runtimeFixtures: [],
       ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -73,6 +81,7 @@ describe("check-work-unit-governance", () => {
       ],
       runtimeFixtures: [],
       ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -98,6 +107,7 @@ describe("check-work-unit-governance", () => {
         },
       ],
       ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -123,6 +133,7 @@ describe("check-work-unit-governance", () => {
           run: () => [],
         },
       ],
+      ownerLifecycleFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -131,6 +142,32 @@ describe("check-work-unit-governance", () => {
         name: "ledger-conflict-key-needs-supersede-baseline",
         check: "ledger",
         detail: "missing expected rule(s): conflict-key-active-event-needs-supersede",
+      },
+    ]);
+  });
+
+  it("fails when an owner lifecycle fixture no longer detects its boundary rule", () => {
+    const ownerLifecycleFixture = buildDefaultWorkUnitOwnerLifecycleFixtures()[1];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [],
+      ownerLifecycleFixtures: [
+        {
+          ...ownerLifecycleFixture,
+          run: () => [],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "owner-lifecycle-ai-decision-is-blocked",
+        check: "owner-lifecycle",
+        detail: "missing expected rule(s): human-owner-lifecycle-command-required",
       },
     ]);
   });

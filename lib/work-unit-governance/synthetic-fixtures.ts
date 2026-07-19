@@ -12,6 +12,10 @@ import {
   type PrivateMainlineLedger,
   type PrivateMainlineLedgerSnapshot,
 } from "./mainline-ledger";
+import {
+  ownerLifecyclePolicySchema,
+  type OwnerLifecyclePolicy,
+} from "./owner-lifecycle";
 
 export const WORK_UNIT_SYNTHETIC_TIME = "2026-07-19T00:00:00.000Z";
 
@@ -168,4 +172,17 @@ export function buildSyntheticPrivateMainlineLedger(): PrivateMainlineLedgerSnap
   }
 
   return plan.nextLedger;
+}
+
+export function buildSyntheticOwnerLifecyclePolicy(
+  overrides: Partial<OwnerLifecyclePolicy> = {},
+): OwnerLifecyclePolicy {
+  return ownerLifecyclePolicySchema.parse({
+    schemaVersion: "helm.owner-lifecycle-policy.v1",
+    reviewDueAt: "2026-07-19T01:00:00.000Z",
+    escalationOwnerRefs: ["owner-escalation-1"],
+    authorizedProxies: [],
+    publicCoreCarriesRealInstance: false,
+    ...overrides,
+  });
 }
