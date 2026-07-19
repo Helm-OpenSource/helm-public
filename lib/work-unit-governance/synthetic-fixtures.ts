@@ -7,6 +7,12 @@ import {
   type WorkUnitReceipt,
 } from "./contracts";
 import {
+  activationAuthorityReceiptSchema,
+  activationHandoffRequestSchema,
+  type ActivationAuthorityReceipt,
+  type ActivationHandoffRequest,
+} from "./activation-handoff";
+import {
   planPrivateMainlineLedgerAppend,
   privateMainlineLedgerEventSchema,
   type PrivateMainlineLedger,
@@ -133,6 +139,71 @@ export function buildSyntheticAcceptedWorkUnit(
     status: "accepted_by_human",
     decisionSnapshotHash: snapshotHash,
     decision: syntheticAcceptedDecision(snapshotHash),
+  });
+}
+
+export function buildSyntheticPromotedWorkUnit(
+  overrides: Partial<HelmWorkUnit> = {},
+): HelmWorkUnit {
+  const accepted = buildSyntheticAcceptedWorkUnit(overrides);
+  const snapshotHash = computeWorkUnitSnapshotHash(accepted);
+
+  return buildSyntheticWorkUnit({
+    ...overrides,
+    status: "promoted_to_mainline",
+    decisionSnapshotHash: snapshotHash,
+    decision: syntheticAcceptedDecision(snapshotHash),
+    mergeReceipt: syntheticReceipt("mainline-receipt-1", snapshotHash),
+  });
+}
+
+export function buildSyntheticActivationHandoffRequest(
+  workUnit: HelmWorkUnit,
+  overrides: Partial<ActivationHandoffRequest> = {},
+): ActivationHandoffRequest {
+  return activationHandoffRequestSchema.parse({
+    schemaVersion: "helm.activation-handoff-request.v1",
+    handoffId: `activation-handoff:${workUnit.id}`,
+    workUnitId: workUnit.id,
+    requestedScope: workUnit.activationScope,
+    targetRef: `synthetic://activation-target/${workUnit.id}`,
+    requestedBy: { actorType: "human_owner", actorRef: "owner-1" },
+    requestedAt: WORK_UNIT_SYNTHETIC_TIME,
+    snapshotHash: computeWorkUnitSnapshotHash(workUnit),
+    mainlineReceiptRef: workUnit.mergeReceipt?.receiptId ?? "missing-mainline-receipt",
+    rollbackOrRemediationPlan: workUnit.rollbackOrRemediationPlan,
+    publicCoreCarriesRealInstance: false,
+    createsExternalEffect: false,
+    sendsExternally: false,
+    writesTarget: false,
+    activatesRuntime: false,
+    ...overrides,
+  });
+}
+
+export function buildSyntheticActivationAuthorityReceipt(
+  workUnit: HelmWorkUnit,
+  request: ActivationHandoffRequest,
+  overrides: Partial<ActivationAuthorityReceipt> = {},
+): ActivationAuthorityReceipt {
+  return activationAuthorityReceiptSchema.parse({
+    schemaVersion: "helm.activation-authority-receipt.v1",
+    receiptId: `activation-authority:${workUnit.id}`,
+    handoffId: request.handoffId,
+    workUnitId: workUnit.id,
+    authorizedScope: request.requestedScope,
+    actor: { actorType: "human_owner", actorRef: "owner-1" },
+    authorizedAt: WORK_UNIT_SYNTHETIC_TIME,
+    snapshotHash: request.snapshotHash,
+    rationale: "Synthetic human owner authorized private-plane activation review.",
+    authorizationBasisRefs: [request.mainlineReceiptRef],
+    publicCoreCarriesRealInstance: false,
+    createsExternalEffect: false,
+    sendsExternally: false,
+    writesTarget: false,
+    activatesRuntime: false,
+    grantsApproval: false,
+    ...overrides,
   });
 }
 
