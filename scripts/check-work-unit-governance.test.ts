@@ -4,6 +4,7 @@ import {
   buildDefaultWorkUnitActivationHandoffFixtures,
   buildDefaultWorkUnitActivationRuntimeFixtures,
   buildDefaultWorkUnitGovernanceFixtures,
+  buildDefaultWorkUnitLearningAssetStoreFixtures,
   buildDefaultWorkUnitLedgerFixtures,
   buildDefaultWorkUnitOwnerLifecycleFixtures,
   buildDefaultWorkUnitOwnerNotificationFixtures,
@@ -20,7 +21,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(51);
+    expect(result.total).toBe(57);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -74,6 +75,14 @@ describe("check-work-unit-governance", () => {
       "repair-learning-finding-needs-asset-or-owner-waiver",
       "repair-learning-ai-waiver-is-blocked",
       "repair-learning-clean-asset",
+    ]);
+    expect(result.learningAssetStoreFixtures.map((fixture) => fixture.name)).toEqual([
+      "learning-asset-store-envelope-is-handoff-only",
+      "learning-asset-store-public-noop-cannot-record",
+      "learning-asset-store-missing-governance-capability-is-blocked",
+      "learning-asset-store-public-core-side-effect-claim-is-blocked",
+      "learning-asset-store-raw-asset-ref-is-blocked",
+      "learning-asset-store-ai-request-is-blocked",
     ]);
     expect(result.proofPackageFixtures.map((fixture) => fixture.name)).toEqual([
       "proof-package-never-grants-readiness-or-approval",
@@ -339,6 +348,39 @@ describe("check-work-unit-governance", () => {
         name: "repair-learning-ai-repair-cannot-change-check-rules",
         check: "repair-learning",
         detail: "missing expected rule(s): ai-repair-cannot-change-check-rules",
+      },
+    ]);
+  });
+
+  it("fails when a learning asset store fixture no longer detects its boundary rule", () => {
+    const storeFixture = buildDefaultWorkUnitLearningAssetStoreFixtures()[1];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
+      ownerNotificationFixtures: [],
+      activationHandoffFixtures: [],
+      activationRuntimeFixtures: [],
+      repairLearningFixtures: [],
+      learningAssetStoreFixtures: [
+        {
+          ...storeFixture,
+          run: () => [],
+        },
+      ],
+      proofPackageFixtures: [],
+      privateMainlineStoreFixtures: [],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "learning-asset-store-public-noop-cannot-record",
+        check: "learning-asset-store",
+        detail: "missing expected rule(s): public-core-learning-asset-store-is-noop",
       },
     ]);
   });
