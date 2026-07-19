@@ -8,12 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { WorkUnitActivationHandoffPanel } from "@/features/work-unit-governance/work-unit-activation-handoff-panel";
 import { WorkUnitMainlineLedgerPanel } from "@/features/work-unit-governance/work-unit-mainline-ledger-panel";
 import { WorkUnitOwnerLifecyclePanel } from "@/features/work-unit-governance/work-unit-owner-lifecycle-panel";
+import { WorkUnitProofPackagePanel } from "@/features/work-unit-governance/work-unit-proof-package-panel";
 import { WorkUnitRepairLearningPanel } from "@/features/work-unit-governance/work-unit-repair-learning-panel";
 import { WorkUnitReviewConsole } from "@/features/work-unit-governance/work-unit-review-console";
 import { resolveUiLocale } from "@/lib/i18n/config";
 import { buildActivationHandoffReadout } from "@/lib/work-unit-governance/activation-handoff";
 import { buildPrivateMainlineLedgerReadout } from "@/lib/work-unit-governance/mainline-ledger";
 import { buildOwnerLifecycleReadout } from "@/lib/work-unit-governance/owner-lifecycle";
+import { buildWorkUnitProofPackageReadout } from "@/lib/work-unit-governance/proof-package";
 import { buildRepairLearningReadout } from "@/lib/work-unit-governance/repair-learning-loop";
 import { buildWorkUnitRuntimeReadout } from "@/lib/work-unit-governance/runtime";
 import {
@@ -27,6 +29,7 @@ import {
   buildSyntheticRepairedWorkUnit,
   buildSyntheticRepairCandidateRecord,
   buildSyntheticWorkUnit,
+  buildSyntheticWorkUnitProofPackage,
   WORK_UNIT_SYNTHETIC_TIME,
 } from "@/lib/work-unit-governance/synthetic-fixtures";
 
@@ -68,6 +71,10 @@ export default async function WorkUnitGovernanceDemoPage() {
     workUnit: promotedWorkUnit,
     request: buildSyntheticActivationHandoffRequest(promotedWorkUnit),
   });
+  const proofWorkUnit = buildSyntheticPromotedWorkUnit();
+  const proofPackageReadout = buildWorkUnitProofPackageReadout(
+    buildSyntheticWorkUnitProofPackage(proofWorkUnit),
+  );
   const failedWorkUnit = buildSyntheticFailedWorkUnit();
   const repairedWorkUnit = buildSyntheticRepairedWorkUnit(failedWorkUnit);
   const learningFinding = buildSyntheticLearningFinding(failedWorkUnit);
@@ -150,6 +157,8 @@ export default async function WorkUnitGovernanceDemoPage() {
         <WorkUnitMainlineLedgerPanel readout={ledgerReadout} english={english} />
 
         <WorkUnitActivationHandoffPanel readout={activationReadout} english={english} />
+
+        <WorkUnitProofPackagePanel readout={proofPackageReadout} english={english} />
 
         <footer className="flex items-start gap-2 border-t border-[color:var(--border)] py-5 text-xs leading-6 text-[color:var(--muted-foreground)]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--accent)]" aria-hidden />
