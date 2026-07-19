@@ -44,6 +44,13 @@ import {
   type OwnerReviewReceipt,
 } from "../lib/work-unit-governance/owner-lifecycle";
 import {
+  buildOwnerNotificationHandoffEnvelope,
+  buildPublicCoreNoopOwnerNotificationDispatcher,
+  ownerNotificationBindingSchema,
+  validateOwnerNotificationBinding,
+  type OwnerNotificationBinding,
+} from "../lib/work-unit-governance/owner-notification-binding";
+import {
   buildWorkUnitProofPackage,
   buildWorkUnitProofPackageReadout,
   validateWorkUnitProofPackage,
@@ -119,6 +126,12 @@ export type WorkUnitGovernanceOwnerLifecycleFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernanceOwnerNotificationFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceActivationHandoffFixture = {
   readonly name: string;
   readonly run: () => readonly WorkUnitViolation[];
@@ -152,6 +165,7 @@ export type WorkUnitGovernanceFailure = {
     | "runtime"
     | "ledger"
     | "owner-lifecycle"
+    | "owner-notification"
     | "activation-handoff"
     | "repair-learning"
     | "proof-package"
@@ -171,6 +185,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly runtimeFixtures: readonly WorkUnitGovernanceRuntimeFixture[];
   readonly ledgerFixtures: readonly WorkUnitGovernanceLedgerFixture[];
   readonly ownerLifecycleFixtures: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
+  readonly ownerNotificationFixtures: readonly WorkUnitGovernanceOwnerNotificationFixture[];
   readonly activationHandoffFixtures: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly repairLearningFixtures: readonly WorkUnitGovernanceRepairLearningFixture[];
   readonly proofPackageFixtures: readonly WorkUnitGovernanceProofPackageFixture[];
@@ -821,6 +836,226 @@ export function buildDefaultWorkUnitOwnerLifecycleFixtures(): readonly WorkUnitG
   ];
 }
 
+function ownerNotificationBinding(
+  overrides: Partial<OwnerNotificationBinding> = {},
+): OwnerNotificationBinding {
+  return ownerNotificationBindingSchema.parse({
+    schemaVersion: "helm.owner-notification-binding.v1",
+    bindingRef: "synthetic-binding:owner-notification",
+    dispatcherMode: "private_control_plane",
+    dispatcherRef: "synthetic://private-owner-notifications",
+    channel: "private_inbox",
+    authorityRef: "synthetic://owner-plane/notification-authority",
+    deliveryPolicyRef: "synthetic://owner-plane/delivery-policy",
+    capabilities: {
+      ownerRefsOnly: true,
+      snapshotBoundMessages: true,
+      humanOwnerAuthorityRequired: true,
+      escalationPolicyRequired: true,
+      contactDetailsStoredOutsidePublicCore: true,
+      redactedEnvelopeOnly: true,
+      privateDispatcherSends: true,
+      privateDispatcherPersistsReceipt: true,
+      publicCoreCarriesRealInstance: false,
+      publicCorePersists: false,
+      publicCoreSendsNotification: false,
+      publicCoreWritesTarget: false,
+      publicCoreActivatesRuntime: false,
+      publicCoreGrantsApproval: false,
+    },
+    ...overrides,
+  });
+}
+
+function publicCoreNoopOwnerNotificationBinding(
+  overrides: Partial<OwnerNotificationBinding> = {},
+): OwnerNotificationBinding {
+  return ownerNotificationBindingSchema.parse({
+    ...ownerNotificationBinding({
+      dispatcherMode: "public_core_noop",
+      dispatcherRef: "public-core:no-owner-notification-dispatcher",
+      authorityRef: undefined,
+      deliveryPolicyRef: undefined,
+      capabilities: {
+        ownerRefsOnly: true,
+        snapshotBoundMessages: true,
+        humanOwnerAuthorityRequired: true,
+        escalationPolicyRequired: true,
+        contactDetailsStoredOutsidePublicCore: true,
+        redactedEnvelopeOnly: true,
+        privateDispatcherSends: false,
+        privateDispatcherPersistsReceipt: false,
+        publicCoreCarriesRealInstance: false,
+        publicCorePersists: false,
+        publicCoreSendsNotification: false,
+        publicCoreWritesTarget: false,
+        publicCoreActivatesRuntime: false,
+        publicCoreGrantsApproval: false,
+      },
+    }),
+    ...overrides,
+  });
+}
+
+export function buildDefaultWorkUnitOwnerNotificationFixtures(): readonly WorkUnitGovernanceOwnerNotificationFixture[] {
+  return [
+    {
+      name: "owner-notification-envelope-is-handoff-only",
+      run: () => {
+        const envelope = buildOwnerNotificationHandoffEnvelope({
+          binding: ownerNotificationBinding(),
+          workUnit: buildSyntheticWorkUnit(),
+          policy: buildSyntheticOwnerLifecyclePolicy({
+            reviewDueAt: "2026-07-20T00:00:00.000Z",
+          }),
+          receipts: [],
+          requestedBy: { actorType: "system", actorRef: "owner-notification-handoff-builder" },
+          requestedAt: FIXTURE_TIME,
+          notificationKind: "owner_review_requested",
+          reason: "Synthetic owner review is pending.",
+        });
+        if (!envelope.ok) return envelope.violations;
+
+        const serialized = JSON.stringify(envelope.envelope);
+        const violations: WorkUnitViolation[] = [];
+        if (
+          envelope.envelope.readinessClaim !== "not_readiness" ||
+          envelope.envelope.approvalClaim !== "not_approval" ||
+          !envelope.envelope.privateDispatcherRequired ||
+          !envelope.envelope.deliveryReceiptRequired ||
+          envelope.envelope.publicCoreCarriesRealInstance ||
+          envelope.envelope.publicCorePersists ||
+          envelope.envelope.createsExternalEffect ||
+          envelope.envelope.sendsNotification ||
+          envelope.envelope.sendsExternally ||
+          envelope.envelope.writesTarget ||
+          envelope.envelope.activatesRuntime ||
+          envelope.envelope.grantsApproval ||
+          envelope.publicCorePersists ||
+          envelope.sendsNotification ||
+          envelope.createsExternalEffect ||
+          envelope.grantsApproval
+        ) {
+          violations.push({
+            rule: "owner-notification-envelope-side-effect",
+            detail: envelope.envelope.envelopeId,
+          });
+        }
+        if (serialized.includes("@")) {
+          violations.push({
+            rule: "owner-notification-envelope-leaked-contact-detail",
+            detail: envelope.envelope.envelopeId,
+          });
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "owner-notification-public-noop-cannot-dispatch",
+      run: () => {
+        const envelope = buildOwnerNotificationHandoffEnvelope({
+          binding: publicCoreNoopOwnerNotificationBinding(),
+          workUnit: buildSyntheticWorkUnit(),
+          policy: buildSyntheticOwnerLifecyclePolicy({
+            reviewDueAt: "2026-07-20T00:00:00.000Z",
+          }),
+          receipts: [],
+          requestedBy: { actorType: "system", actorRef: "owner-notification-handoff-builder" },
+          requestedAt: FIXTURE_TIME,
+          notificationKind: "owner_review_requested",
+          reason: "Synthetic owner review is pending.",
+        });
+        if (!envelope.ok) return envelope.violations;
+
+        const dispatchResult =
+          buildPublicCoreNoopOwnerNotificationDispatcher().dispatch(envelope.envelope);
+        return dispatchResult.ok
+          ? [{ rule: "owner-notification-public-noop-sent", detail: envelope.envelope.envelopeId }]
+          : dispatchResult.violations;
+      },
+      expectedRules: ["public-core-owner-notification-dispatcher-is-noop"],
+    },
+    {
+      name: "owner-notification-missing-governance-capability-is-blocked",
+      run: () =>
+        validateOwnerNotificationBinding({
+          ...ownerNotificationBinding(),
+          authorityRef: undefined,
+          deliveryPolicyRef: undefined,
+          capabilities: {
+            ...ownerNotificationBinding().capabilities,
+            ownerRefsOnly: false,
+            snapshotBoundMessages: false,
+            humanOwnerAuthorityRequired: false,
+            escalationPolicyRequired: false,
+            redactedEnvelopeOnly: false,
+            privateDispatcherSends: false,
+            privateDispatcherPersistsReceipt: false,
+          },
+        }),
+      expectedRules: [
+        "owner-notification-private-authority-required",
+        "owner-notification-private-delivery-policy-required",
+        "owner-notification-owner-refs-only-required",
+        "owner-notification-snapshot-bound-required",
+        "owner-notification-human-owner-authority-required",
+        "owner-notification-escalation-policy-required",
+        "owner-notification-redacted-envelope-required",
+        "owner-notification-private-dispatch-required",
+        "owner-notification-private-receipt-persistence-required",
+      ],
+    },
+    {
+      name: "owner-notification-public-core-side-effect-claim-is-blocked",
+      run: () =>
+        validateOwnerNotificationBinding({
+          ...publicCoreNoopOwnerNotificationBinding(),
+          capabilities: {
+            ...publicCoreNoopOwnerNotificationBinding().capabilities,
+            privateDispatcherSends: true,
+            privateDispatcherPersistsReceipt: true,
+            publicCoreCarriesRealInstance: true,
+            publicCorePersists: true,
+            publicCoreSendsNotification: true,
+            publicCoreWritesTarget: true,
+            publicCoreActivatesRuntime: true,
+            publicCoreGrantsApproval: true,
+          },
+        }),
+      expectedRules: [
+        "public-core-notification-dispatcher-cannot-send",
+        "public-core-notification-dispatcher-cannot-persist-receipt",
+        "owner-notification-public-core-real-instance-forbidden",
+        "owner-notification-public-core-persistence-forbidden",
+        "owner-notification-public-core-send-forbidden",
+        "owner-notification-public-core-write-forbidden",
+        "owner-notification-public-core-activation-forbidden",
+        "owner-notification-public-core-approval-forbidden",
+      ],
+    },
+    {
+      name: "owner-notification-closed-work-unit-does-not-trigger-review",
+      run: () => {
+        const envelope = buildOwnerNotificationHandoffEnvelope({
+          binding: ownerNotificationBinding(),
+          workUnit: acceptedSyntheticWorkUnit(),
+          policy: buildSyntheticOwnerLifecyclePolicy(),
+          receipts: [],
+          requestedBy: { actorType: "system", actorRef: "owner-notification-handoff-builder" },
+          requestedAt: FIXTURE_TIME,
+          notificationKind: "owner_review_requested",
+          reason: "Synthetic owner review is pending.",
+        });
+        return envelope.ok
+          ? [{ rule: "owner-notification-closed-work-unit-sent", detail: envelope.envelope.envelopeId }]
+          : envelope.violations;
+      },
+      expectedRules: ["owner-notification-no-pending-owner"],
+    },
+  ];
+}
+
 export function buildDefaultWorkUnitActivationHandoffFixtures(): readonly WorkUnitGovernanceActivationHandoffFixture[] {
   return [
     {
@@ -1220,6 +1455,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly runtimeFixtures?: readonly WorkUnitGovernanceRuntimeFixture[];
   readonly ledgerFixtures?: readonly WorkUnitGovernanceLedgerFixture[];
   readonly ownerLifecycleFixtures?: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
+  readonly ownerNotificationFixtures?: readonly WorkUnitGovernanceOwnerNotificationFixture[];
   readonly activationHandoffFixtures?: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly repairLearningFixtures?: readonly WorkUnitGovernanceRepairLearningFixture[];
   readonly proofPackageFixtures?: readonly WorkUnitGovernanceProofPackageFixture[];
@@ -1237,6 +1473,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.ledgerFixtures ?? buildDefaultWorkUnitLedgerFixtures();
   const ownerLifecycleFixtures =
     options.ownerLifecycleFixtures ?? buildDefaultWorkUnitOwnerLifecycleFixtures();
+  const ownerNotificationFixtures =
+    options.ownerNotificationFixtures ?? buildDefaultWorkUnitOwnerNotificationFixtures();
   const activationHandoffFixtures =
     options.activationHandoffFixtures ?? buildDefaultWorkUnitActivationHandoffFixtures();
   const repairLearningFixtures =
@@ -1321,6 +1559,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of ownerNotificationFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "owner-notification",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   for (const fixture of activationHandoffFixtures) {
     failures.push(
       ...compareExpectedRules({
@@ -1381,6 +1630,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     runtimeFixtures.length +
     ledgerFixtures.length +
     ownerLifecycleFixtures.length +
+    ownerNotificationFixtures.length +
     activationHandoffFixtures.length +
     repairLearningFixtures.length +
     proofPackageFixtures.length +
@@ -1398,6 +1648,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     runtimeFixtures,
     ledgerFixtures,
     ownerLifecycleFixtures,
+    ownerNotificationFixtures,
     activationHandoffFixtures,
     repairLearningFixtures,
     proofPackageFixtures,
