@@ -30,6 +30,11 @@ import {
   type WorkUnitLearningFinding,
   type WorkUnitRepairCandidateRecord,
 } from "./repair-learning-loop";
+import {
+  buildWorkUnitProofPackage,
+  workUnitProofPackageSchema,
+  type WorkUnitProofPackage,
+} from "./proof-package";
 
 export const WORK_UNIT_SYNTHETIC_TIME = "2026-07-19T00:00:00.000Z";
 
@@ -319,6 +324,22 @@ export function buildSyntheticLearningAssetDraft(input: {
     grantsApproval: false,
     appliesAsset: false,
     ...input.overrides,
+  });
+}
+
+export function buildSyntheticWorkUnitProofPackage(
+  workUnit: HelmWorkUnit,
+  overrides: Partial<WorkUnitProofPackage> = {},
+): WorkUnitProofPackage {
+  const base = buildWorkUnitProofPackage({
+    workUnit,
+    generatedAt: WORK_UNIT_SYNTHETIC_TIME,
+    generatedBy: { actorType: "system", actorRef: "proof-builder" },
+  });
+
+  return workUnitProofPackageSchema.parse({
+    ...base,
+    ...overrides,
   });
 }
 

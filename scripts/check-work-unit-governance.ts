@@ -37,6 +37,11 @@ import {
   type OwnerReviewReceipt,
 } from "../lib/work-unit-governance/owner-lifecycle";
 import {
+  buildWorkUnitProofPackage,
+  buildWorkUnitProofPackageReadout,
+  validateWorkUnitProofPackage,
+} from "../lib/work-unit-governance/proof-package";
+import {
   buildRepairLearningReadout,
   validateLearningFindingResolution,
   validateWorkUnitRepairCandidate,
@@ -57,6 +62,7 @@ import {
   buildSyntheticRepairedWorkUnit,
   buildSyntheticRepairCandidateRecord,
   buildSyntheticWorkUnit,
+  buildSyntheticWorkUnitProofPackage,
   syntheticAcceptedDecision,
   syntheticReceipt,
   WORK_UNIT_SYNTHETIC_TIME,
@@ -118,6 +124,12 @@ export type WorkUnitGovernanceRepairLearningFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernanceProofPackageFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceFailure = {
   readonly name: string;
   readonly check:
@@ -129,6 +141,7 @@ export type WorkUnitGovernanceFailure = {
     | "owner-lifecycle"
     | "activation-handoff"
     | "repair-learning"
+    | "proof-package"
     | "checklist";
   readonly detail: string;
 };
@@ -146,6 +159,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly ownerLifecycleFixtures: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
   readonly activationHandoffFixtures: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly repairLearningFixtures: readonly WorkUnitGovernanceRepairLearningFixture[];
+  readonly proofPackageFixtures: readonly WorkUnitGovernanceProofPackageFixture[];
   readonly failures: readonly WorkUnitGovernanceFailure[];
 };
 
@@ -886,6 +900,113 @@ export function buildDefaultWorkUnitRepairLearningFixtures(): readonly WorkUnitG
   ];
 }
 
+export function buildDefaultWorkUnitProofPackageFixtures(): readonly WorkUnitGovernanceProofPackageFixture[] {
+  return [
+    {
+      name: "proof-package-never-grants-readiness-or-approval",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit();
+        const packageItem = buildSyntheticWorkUnitProofPackage(workUnit);
+        const readout = buildWorkUnitProofPackageReadout(packageItem);
+        const violations: WorkUnitViolation[] = [];
+        if (
+          packageItem.publicCoreCarriesRealInstance ||
+          packageItem.publicCorePersists ||
+          packageItem.createsExternalEffect ||
+          packageItem.sendsExternally ||
+          packageItem.writesTarget ||
+          packageItem.grantsApproval ||
+          packageItem.grantsReadiness ||
+          packageItem.activatesRuntime ||
+          packageItem.appliesLearningAsset ||
+          packageItem.readinessClaim !== "not_readiness" ||
+          readout.publicCorePersists ||
+          readout.grantsApproval ||
+          readout.grantsReadiness ||
+          readout.activatesRuntime
+        ) {
+          violations.push({
+            rule: "proof-package-public-core-side-effect",
+            detail: packageItem.packageId,
+          });
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "proof-package-snapshot-mismatch-is-blocked",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit();
+        return validateWorkUnitProofPackage({
+          workUnit,
+          packageItem: buildSyntheticWorkUnitProofPackage(workUnit, {
+            snapshotHash: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          }),
+        });
+      },
+      expectedRules: ["proof-package-snapshot-mismatch"],
+    },
+    {
+      name: "proof-package-raw-private-entry-is-blocked",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit();
+        const clean = buildSyntheticWorkUnitProofPackage(workUnit);
+        return validateWorkUnitProofPackage({
+          workUnit,
+          packageItem: {
+            ...clean,
+            entries: [
+              ...clean.entries,
+              {
+                entryId: "proof-entry:raw-private",
+                kind: "evidence_manifest",
+                title: "Raw private fixture should not render",
+                summary: "This entry is intentionally unsafe.",
+                ref: "synthetic://unsafe-redaction/raw-private-fixture",
+                redactionStatus: "raw_private_rejected",
+                observedBy: { actorType: "ai", actorRef: "agent-1" },
+                observedAt: FIXTURE_TIME,
+                snapshotHash: clean.snapshotHash,
+                publicCoreCarriesRealInstance: false,
+              },
+            ],
+          },
+        });
+      },
+      expectedRules: ["proof-entry-redaction-not-public-safe"],
+    },
+    {
+      name: "proof-package-requires-all-hwu-coverage",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit();
+        const clean = buildSyntheticWorkUnitProofPackage(workUnit);
+        return validateWorkUnitProofPackage({
+          workUnit,
+          packageItem: {
+            ...clean,
+            requirementCoverage: clean.requirementCoverage.filter(
+              (coverage) => coverage.requirementId !== "HWU-14",
+            ),
+          },
+        });
+      },
+      expectedRules: ["proof-package-requirement-coverage-mismatch"],
+    },
+    {
+      name: "proof-package-clean",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit();
+        return validateWorkUnitProofPackage({
+          workUnit,
+          packageItem: buildWorkUnitProofPackage({ workUnit }),
+        });
+      },
+      expectedRules: [],
+    },
+  ];
+}
+
 function compareExpectedRules(options: {
   readonly name: string;
   readonly check: WorkUnitGovernanceFailure["check"];
@@ -925,6 +1046,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly ownerLifecycleFixtures?: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
   readonly activationHandoffFixtures?: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly repairLearningFixtures?: readonly WorkUnitGovernanceRepairLearningFixture[];
+  readonly proofPackageFixtures?: readonly WorkUnitGovernanceProofPackageFixture[];
 } = {}): WorkUnitGovernanceCheckResult {
   const workUnitFixtures =
     options.workUnitFixtures ?? buildDefaultWorkUnitGovernanceFixtures();
@@ -942,6 +1064,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.activationHandoffFixtures ?? buildDefaultWorkUnitActivationHandoffFixtures();
   const repairLearningFixtures =
     options.repairLearningFixtures ?? buildDefaultWorkUnitRepairLearningFixtures();
+  const proofPackageFixtures =
+    options.proofPackageFixtures ?? buildDefaultWorkUnitProofPackageFixtures();
 
   const failures: WorkUnitGovernanceFailure[] = [];
 
@@ -1040,6 +1164,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of proofPackageFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "proof-package",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   const actualRequirementIds = hwuAcceptanceChecklist.map((item) => item.requirementId);
   if (actualRequirementIds.join("|") !== EXPECTED_REQUIREMENT_IDS.join("|")) {
     failures.push({
@@ -1058,6 +1193,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     ownerLifecycleFixtures.length +
     activationHandoffFixtures.length +
     repairLearningFixtures.length +
+    proofPackageFixtures.length +
     1;
 
   return {
@@ -1073,6 +1209,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     ownerLifecycleFixtures,
     activationHandoffFixtures,
     repairLearningFixtures,
+    proofPackageFixtures,
     failures,
   };
 }

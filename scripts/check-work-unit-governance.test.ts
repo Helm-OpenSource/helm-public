@@ -5,6 +5,7 @@ import {
   buildDefaultWorkUnitGovernanceFixtures,
   buildDefaultWorkUnitLedgerFixtures,
   buildDefaultWorkUnitOwnerLifecycleFixtures,
+  buildDefaultWorkUnitProofPackageFixtures,
   buildDefaultWorkUnitRepairLearningFixtures,
   buildDefaultWorkUnitRuntimeFixtures,
   buildDefaultWorkUnitTerminologyFixtures,
@@ -16,7 +17,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(32);
+    expect(result.total).toBe(37);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -56,6 +57,13 @@ describe("check-work-unit-governance", () => {
       "repair-learning-finding-needs-asset-or-owner-waiver",
       "repair-learning-ai-waiver-is-blocked",
       "repair-learning-clean-asset",
+    ]);
+    expect(result.proofPackageFixtures.map((fixture) => fixture.name)).toEqual([
+      "proof-package-never-grants-readiness-or-approval",
+      "proof-package-snapshot-mismatch-is-blocked",
+      "proof-package-raw-private-entry-is-blocked",
+      "proof-package-requires-all-hwu-coverage",
+      "proof-package-clean",
     ]);
   });
 
@@ -245,6 +253,35 @@ describe("check-work-unit-governance", () => {
         name: "repair-learning-ai-repair-cannot-change-check-rules",
         check: "repair-learning",
         detail: "missing expected rule(s): ai-repair-cannot-change-check-rules",
+      },
+    ]);
+  });
+
+  it("fails when a proof package fixture no longer detects its boundary rule", () => {
+    const proofFixture = buildDefaultWorkUnitProofPackageFixtures()[1];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
+      activationHandoffFixtures: [],
+      repairLearningFixtures: [],
+      proofPackageFixtures: [
+        {
+          ...proofFixture,
+          run: () => [],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "proof-package-snapshot-mismatch-is-blocked",
+        check: "proof-package",
+        detail: "missing expected rule(s): proof-package-snapshot-mismatch",
       },
     ]);
   });
