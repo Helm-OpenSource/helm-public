@@ -8,17 +8,24 @@ import { Badge } from "@/components/ui/badge";
 import { WorkUnitActivationHandoffPanel } from "@/features/work-unit-governance/work-unit-activation-handoff-panel";
 import { WorkUnitMainlineLedgerPanel } from "@/features/work-unit-governance/work-unit-mainline-ledger-panel";
 import { WorkUnitOwnerLifecyclePanel } from "@/features/work-unit-governance/work-unit-owner-lifecycle-panel";
+import { WorkUnitRepairLearningPanel } from "@/features/work-unit-governance/work-unit-repair-learning-panel";
 import { WorkUnitReviewConsole } from "@/features/work-unit-governance/work-unit-review-console";
 import { resolveUiLocale } from "@/lib/i18n/config";
 import { buildActivationHandoffReadout } from "@/lib/work-unit-governance/activation-handoff";
 import { buildPrivateMainlineLedgerReadout } from "@/lib/work-unit-governance/mainline-ledger";
 import { buildOwnerLifecycleReadout } from "@/lib/work-unit-governance/owner-lifecycle";
+import { buildRepairLearningReadout } from "@/lib/work-unit-governance/repair-learning-loop";
 import { buildWorkUnitRuntimeReadout } from "@/lib/work-unit-governance/runtime";
 import {
   buildSyntheticActivationHandoffRequest,
+  buildSyntheticFailedWorkUnit,
+  buildSyntheticLearningAssetDraft,
+  buildSyntheticLearningFinding,
   buildSyntheticOwnerLifecyclePolicy,
   buildSyntheticPromotedWorkUnit,
   buildSyntheticPrivateMainlineLedger,
+  buildSyntheticRepairedWorkUnit,
+  buildSyntheticRepairCandidateRecord,
   buildSyntheticWorkUnit,
   WORK_UNIT_SYNTHETIC_TIME,
 } from "@/lib/work-unit-governance/synthetic-fixtures";
@@ -60,6 +67,19 @@ export default async function WorkUnitGovernanceDemoPage() {
   const activationReadout = buildActivationHandoffReadout({
     workUnit: promotedWorkUnit,
     request: buildSyntheticActivationHandoffRequest(promotedWorkUnit),
+  });
+  const failedWorkUnit = buildSyntheticFailedWorkUnit();
+  const repairedWorkUnit = buildSyntheticRepairedWorkUnit(failedWorkUnit);
+  const learningFinding = buildSyntheticLearningFinding(failedWorkUnit);
+  const repairLearningReadout = buildRepairLearningReadout({
+    original: failedWorkUnit,
+    repaired: repairedWorkUnit,
+    repair: buildSyntheticRepairCandidateRecord({
+      original: failedWorkUnit,
+      repaired: repairedWorkUnit,
+    }),
+    findings: [learningFinding],
+    learningDrafts: [buildSyntheticLearningAssetDraft({ finding: learningFinding })],
   });
 
   return (
@@ -124,6 +144,8 @@ export default async function WorkUnitGovernanceDemoPage() {
         <WorkUnitReviewConsole readout={readout} english={english} />
 
         <WorkUnitOwnerLifecyclePanel readout={ownerReadout} english={english} />
+
+        <WorkUnitRepairLearningPanel readout={repairLearningReadout} english={english} />
 
         <WorkUnitMainlineLedgerPanel readout={ledgerReadout} english={english} />
 

@@ -22,6 +22,14 @@ import {
   ownerLifecyclePolicySchema,
   type OwnerLifecyclePolicy,
 } from "./owner-lifecycle";
+import {
+  workUnitLearningAssetDraftSchema,
+  workUnitLearningFindingSchema,
+  workUnitRepairCandidateRecordSchema,
+  type WorkUnitLearningAssetDraft,
+  type WorkUnitLearningFinding,
+  type WorkUnitRepairCandidateRecord,
+} from "./repair-learning-loop";
 
 export const WORK_UNIT_SYNTHETIC_TIME = "2026-07-19T00:00:00.000Z";
 
@@ -154,6 +162,163 @@ export function buildSyntheticPromotedWorkUnit(
     decisionSnapshotHash: snapshotHash,
     decision: syntheticAcceptedDecision(snapshotHash),
     mergeReceipt: syntheticReceipt("mainline-receipt-1", snapshotHash),
+  });
+}
+
+export function buildSyntheticFailedWorkUnit(
+  overrides: Partial<HelmWorkUnit> = {},
+): HelmWorkUnit {
+  return buildSyntheticWorkUnit({
+    status: "candidate",
+    agentRole: "validate",
+    validationReceipts: [
+      {
+        receiptId: "validation-renewal-cost",
+        name: "synthetic-renewal-cost-required",
+        ok: false,
+        summary: "Synthetic quote is missing renewal cost basis.",
+        createdAt: WORK_UNIT_SYNTHETIC_TIME,
+      },
+    ],
+    ...overrides,
+  });
+}
+
+export function buildSyntheticRepairedWorkUnit(
+  original: HelmWorkUnit,
+  overrides: Partial<HelmWorkUnit> = {},
+): HelmWorkUnit {
+  return buildSyntheticWorkUnit({
+    id: `${original.id}-repair-1`,
+    objective: "Repair the synthetic work package before owner review.",
+    scope: original.scope,
+    status: "candidate",
+    initiator: original.initiator,
+    owner: original.owner,
+    agentRole: "repair",
+    sourceSnapshot: original.sourceSnapshot,
+    riskClass: original.riskClass,
+    conflictKeys: original.conflictKeys,
+    candidateArtifacts: [
+      {
+        artifactId: "candidate-repair-summary",
+        kind: "decision_card",
+        title: "Synthetic repaired renewal-cost check",
+        summary: "Adds the missing synthetic renewal cost basis before owner review.",
+        state: "candidate",
+        producedBy: "ai",
+      },
+    ],
+    evidenceManifest: original.evidenceManifest,
+    changeSummary: {
+      ...original.changeSummary,
+      changedWhat: "Repairs the missing renewal-cost basis in the synthetic quote.",
+      riskSummary: "AI prepared a candidate repair only; owner review is still required.",
+    },
+    requiredOwners: original.requiredOwners,
+    validationReceipts: [
+      {
+        receiptId: "validation-repair-renewal-cost",
+        name: "synthetic-renewal-cost-required",
+        ok: true,
+        summary: "Synthetic renewal cost basis is now present.",
+        createdAt: WORK_UNIT_SYNTHETIC_TIME,
+      },
+    ],
+    activationScope: original.activationScope,
+    rollbackOrRemediationPlan: original.rollbackOrRemediationPlan,
+    auditRefs: ["synthetic://audit/repair-candidate"],
+    relatedMainlineChanges: original.relatedMainlineChanges,
+    createdAt: original.createdAt,
+    updatedAt: WORK_UNIT_SYNTHETIC_TIME,
+    decision: undefined,
+    decisionSnapshotHash: undefined,
+    mergeReceipt: undefined,
+    activationReceipt: undefined,
+    ...overrides,
+  });
+}
+
+export function buildSyntheticRepairCandidateRecord(input: {
+  readonly original: HelmWorkUnit;
+  readonly repaired: HelmWorkUnit;
+  readonly overrides?: Partial<WorkUnitRepairCandidateRecord>;
+}): WorkUnitRepairCandidateRecord {
+  const failedReceiptIds = input.original.validationReceipts
+    .filter((receipt) => !receipt.ok)
+    .map((receipt) => receipt.receiptId);
+
+  return workUnitRepairCandidateRecordSchema.parse({
+    schemaVersion: "helm.work-unit-repair-candidate.v1",
+    repairId: `repair:${input.original.id}:1`,
+    originalWorkUnitId: input.original.id,
+    repairedWorkUnitId: input.repaired.id,
+    failedReceiptIds:
+      failedReceiptIds.length > 0
+        ? failedReceiptIds
+        : [input.original.validationReceipts[0]?.receiptId ?? "validation-missing"],
+    repairedBy: { actorType: "ai", actorRef: "agent-1" },
+    repairedAt: WORK_UNIT_SYNTHETIC_TIME,
+    originalSnapshotHash: computeWorkUnitSnapshotHash(input.original),
+    repairedSnapshotHash: computeWorkUnitSnapshotHash(input.repaired),
+    changedArtifactRefs: [input.repaired.candidateArtifacts[0]?.artifactId ?? "candidate-repair"],
+    checkRuleChangeRefs: [],
+    changesCheckRules: false,
+    publicCoreCarriesRealInstance: false,
+    publicCorePersists: false,
+    createsExternalEffect: false,
+    sendsExternally: false,
+    writesTarget: false,
+    grantsApproval: false,
+    ...input.overrides,
+  });
+}
+
+export function buildSyntheticLearningFinding(
+  workUnit: HelmWorkUnit,
+  overrides: Partial<WorkUnitLearningFinding> = {},
+): WorkUnitLearningFinding {
+  return workUnitLearningFindingSchema.parse({
+    schemaVersion: "helm.work-unit-learning-finding.v1",
+    findingId: `learning-finding:${workUnit.id}:renewal-cost`,
+    workUnitId: workUnit.id,
+    source: "review_finding",
+    severity: "medium",
+    summary: "Synthetic review found missing renewal cost basis.",
+    sourceSnapshotHash: computeWorkUnitSnapshotHash(workUnit),
+    evidenceRefs: ["synthetic://evidence/renewal-cost"],
+    recordedAt: WORK_UNIT_SYNTHETIC_TIME,
+    ...overrides,
+  });
+}
+
+export function buildSyntheticLearningAssetDraft(input: {
+  readonly finding: WorkUnitLearningFinding;
+  readonly overrides?: Partial<WorkUnitLearningAssetDraft>;
+}): WorkUnitLearningAssetDraft {
+  return workUnitLearningAssetDraftSchema.parse({
+    schemaVersion: "helm.work-unit-learning-asset-draft.v1",
+    draftId: `learning-asset:${input.finding.findingId}`,
+    findingId: input.finding.findingId,
+    workUnitId: input.finding.workUnitId,
+    sourceSnapshotHash: input.finding.sourceSnapshotHash,
+    disposition: {
+      findingId: input.finding.findingId,
+      disposition: "asset_recorded",
+      assetKind: "check",
+      assetRef: "synthetic://guard/renewal-cost-required",
+      summary: "Prepare a synthetic renewal-cost guard asset.",
+      recordedBy: { actorType: "system", actorRef: "guard-writer" },
+      recordedAt: WORK_UNIT_SYNTHETIC_TIME,
+    },
+    publicCoreCarriesRealInstance: false,
+    publicCorePersists: false,
+    createsExternalEffect: false,
+    sendsExternally: false,
+    writesTarget: false,
+    grantsApproval: false,
+    appliesAsset: false,
+    ...input.overrides,
   });
 }
 
