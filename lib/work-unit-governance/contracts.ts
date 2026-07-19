@@ -636,12 +636,12 @@ export const hwuAcceptanceChecklist = [
   {
     requirementId: "HWU-09",
     title: "Activation scope",
-    proof: "activation receipt required for high-risk scopes",
+    proof: "activation handoff request and independent authorization receipt guards",
   },
   {
     requirementId: "HWU-10",
     title: "Rollback or remediation",
-    proof: "discriminated rollback/remediation plan",
+    proof: "discriminated recovery plan plus remediation requirement for external effects",
   },
   {
     requirementId: "HWU-11",
@@ -661,7 +661,7 @@ export const hwuAcceptanceChecklist = [
   {
     requirementId: "HWU-14",
     title: "Audit and receipts",
-    proof: "append-only ledger events plus owner review and authorization receipt shapes",
+    proof: "append-only ledger events plus owner review, activation handoff, and authorization receipt shapes",
   },
   {
     requirementId: "HWU-15",

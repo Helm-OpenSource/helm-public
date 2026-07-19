@@ -5,15 +5,19 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 
 import { BoundaryBar } from "@/components/shared/boundary-bar";
 import { Badge } from "@/components/ui/badge";
+import { WorkUnitActivationHandoffPanel } from "@/features/work-unit-governance/work-unit-activation-handoff-panel";
 import { WorkUnitMainlineLedgerPanel } from "@/features/work-unit-governance/work-unit-mainline-ledger-panel";
 import { WorkUnitOwnerLifecyclePanel } from "@/features/work-unit-governance/work-unit-owner-lifecycle-panel";
 import { WorkUnitReviewConsole } from "@/features/work-unit-governance/work-unit-review-console";
 import { resolveUiLocale } from "@/lib/i18n/config";
+import { buildActivationHandoffReadout } from "@/lib/work-unit-governance/activation-handoff";
 import { buildPrivateMainlineLedgerReadout } from "@/lib/work-unit-governance/mainline-ledger";
 import { buildOwnerLifecycleReadout } from "@/lib/work-unit-governance/owner-lifecycle";
 import { buildWorkUnitRuntimeReadout } from "@/lib/work-unit-governance/runtime";
 import {
+  buildSyntheticActivationHandoffRequest,
   buildSyntheticOwnerLifecyclePolicy,
+  buildSyntheticPromotedWorkUnit,
   buildSyntheticPrivateMainlineLedger,
   buildSyntheticWorkUnit,
   WORK_UNIT_SYNTHETIC_TIME,
@@ -50,6 +54,13 @@ export default async function WorkUnitGovernanceDemoPage() {
   const ledgerReadout = buildPrivateMainlineLedgerReadout(
     buildSyntheticPrivateMainlineLedger(),
   );
+  const promotedWorkUnit = buildSyntheticPromotedWorkUnit({
+    activationScope: "production_runtime",
+  });
+  const activationReadout = buildActivationHandoffReadout({
+    workUnit: promotedWorkUnit,
+    request: buildSyntheticActivationHandoffRequest(promotedWorkUnit),
+  });
 
   return (
     <div className="surface-grid min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
@@ -90,8 +101,8 @@ export default async function WorkUnitGovernanceDemoPage() {
           english={english}
           copy={{
             observed: {
-              zh: "一个公开合成工作包、检查回执、负责人动作计划和公司主线投影形状。",
-              en: "One public synthetic work package, check receipt, owner action plan, and company-mainline projection shape.",
+              zh: "一个公开合成工作包、检查回执、负责人动作计划、公司主线投影形状和生效交接包。",
+              en: "One public synthetic work package, check receipt, owner action plan, company-mainline projection shape, and activation handoff.",
             },
             wontDo: {
               zh: "不保存真实批准、不写私有主线、不触发运行时、不连接客户系统。",
@@ -115,6 +126,8 @@ export default async function WorkUnitGovernanceDemoPage() {
         <WorkUnitOwnerLifecyclePanel readout={ownerReadout} english={english} />
 
         <WorkUnitMainlineLedgerPanel readout={ledgerReadout} english={english} />
+
+        <WorkUnitActivationHandoffPanel readout={activationReadout} english={english} />
 
         <footer className="flex items-start gap-2 border-t border-[color:var(--border)] py-5 text-xs leading-6 text-[color:var(--muted-foreground)]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--accent)]" aria-hidden />

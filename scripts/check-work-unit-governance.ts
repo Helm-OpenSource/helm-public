@@ -19,6 +19,11 @@ import {
   type WorkUnitViolation,
 } from "../lib/work-unit-governance/contracts";
 import {
+  buildActivationHandoffReadout,
+  validateActivationAuthorization,
+  validateActivationHandoffRequest,
+} from "../lib/work-unit-governance/activation-handoff";
+import {
   planPrivateMainlineLedgerAppend,
   privateMainlineLedgerEventSchema,
   validateReviewFindingDisposition,
@@ -37,7 +42,10 @@ import {
   planWorkUnitRuntimeEvent,
 } from "../lib/work-unit-governance/runtime";
 import {
+  buildSyntheticActivationAuthorityReceipt,
+  buildSyntheticActivationHandoffRequest,
   buildSyntheticOwnerLifecyclePolicy,
+  buildSyntheticPromotedWorkUnit,
   buildSyntheticWorkUnit,
   syntheticAcceptedDecision,
   syntheticReceipt,
@@ -88,6 +96,12 @@ export type WorkUnitGovernanceOwnerLifecycleFixture = {
   readonly expectedRules: readonly string[];
 };
 
+export type WorkUnitGovernanceActivationHandoffFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceFailure = {
   readonly name: string;
   readonly check:
@@ -97,6 +111,7 @@ export type WorkUnitGovernanceFailure = {
     | "runtime"
     | "ledger"
     | "owner-lifecycle"
+    | "activation-handoff"
     | "checklist";
   readonly detail: string;
 };
@@ -112,6 +127,7 @@ export type WorkUnitGovernanceCheckResult = {
   readonly runtimeFixtures: readonly WorkUnitGovernanceRuntimeFixture[];
   readonly ledgerFixtures: readonly WorkUnitGovernanceLedgerFixture[];
   readonly ownerLifecycleFixtures: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
+  readonly activationHandoffFixtures: readonly WorkUnitGovernanceActivationHandoffFixture[];
   readonly failures: readonly WorkUnitGovernanceFailure[];
 };
 
@@ -597,6 +613,122 @@ export function buildDefaultWorkUnitOwnerLifecycleFixtures(): readonly WorkUnitG
   ];
 }
 
+export function buildDefaultWorkUnitActivationHandoffFixtures(): readonly WorkUnitGovernanceActivationHandoffFixture[] {
+  return [
+    {
+      name: "activation-handoff-never-executes-public-core-side-effects",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit({
+          activationScope: "production_runtime",
+        });
+        const readout = buildActivationHandoffReadout({
+          workUnit,
+          request: buildSyntheticActivationHandoffRequest(workUnit),
+        });
+        const violations: WorkUnitViolation[] = [];
+        if (
+          readout.publicCorePersists ||
+          readout.createsExternalEffect ||
+          readout.sendsExternally ||
+          readout.writesTarget ||
+          readout.activatesRuntime ||
+          readout.grantsApproval
+        ) {
+          violations.push({
+            rule: "activation-handoff-public-core-side-effect",
+            detail: "readout",
+          });
+        }
+        for (const action of readout.actions) {
+          if (
+            action.publicCoreExecutes ||
+            action.createsExternalEffect ||
+            action.sendsExternally ||
+            action.writesTarget ||
+            action.activatesRuntime ||
+            action.grantsApproval
+          ) {
+            violations.push({
+              rule: "activation-handoff-action-side-effect",
+              detail: action.actionId,
+            });
+          }
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "activation-handoff-before-mainline-is-blocked",
+      run: () => {
+        const workUnit = buildSyntheticWorkUnit({
+          activationScope: "production_runtime",
+        });
+        return validateActivationHandoffRequest({
+          workUnit,
+          request: buildSyntheticActivationHandoffRequest(workUnit),
+        });
+      },
+      expectedRules: ["activation-handoff-mainline-required"],
+    },
+    {
+      name: "activation-handoff-ai-authorization-is-blocked",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit({
+          activationScope: "production_runtime",
+        });
+        const request = buildSyntheticActivationHandoffRequest(workUnit);
+        return validateActivationAuthorization({
+          workUnit,
+          request,
+          receipt: buildSyntheticActivationAuthorityReceipt(workUnit, request, {
+            actor: { actorType: "ai", actorRef: "agent-1" },
+          }),
+        });
+      },
+      expectedRules: ["activation-authorization-needs-human-owner"],
+    },
+    {
+      name: "activation-handoff-customer-effect-needs-remediation",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit({
+          activationScope: "customer_visible",
+          rollbackOrRemediationPlan: {
+            kind: "rollback",
+            summary: "Rollback is not enough for synthetic customer-visible effects.",
+            responsibleOwnerRef: "owner-1",
+          },
+        });
+        return validateActivationHandoffRequest({
+          workUnit,
+          request: buildSyntheticActivationHandoffRequest(workUnit),
+        });
+      },
+      expectedRules: ["activation-handoff-remediation-required"],
+    },
+    {
+      name: "activation-handoff-stale-mainline-is-blocked",
+      run: () => {
+        const workUnit = buildSyntheticPromotedWorkUnit({
+          activationScope: "production_runtime",
+          relatedMainlineChanges: [
+            {
+              mainlineRef: "mainline:quote:Q-001:v2",
+              conflictKeys: ["quote:Q-001"],
+              changedAt: "2026-07-19T01:00:00.000Z",
+            },
+          ],
+        });
+        return validateActivationHandoffRequest({
+          workUnit,
+          request: buildSyntheticActivationHandoffRequest(workUnit),
+        });
+      },
+      expectedRules: ["activation-handoff-stale-mainline"],
+    },
+  ];
+}
+
 function compareExpectedRules(options: {
   readonly name: string;
   readonly check: WorkUnitGovernanceFailure["check"];
@@ -634,6 +766,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly runtimeFixtures?: readonly WorkUnitGovernanceRuntimeFixture[];
   readonly ledgerFixtures?: readonly WorkUnitGovernanceLedgerFixture[];
   readonly ownerLifecycleFixtures?: readonly WorkUnitGovernanceOwnerLifecycleFixture[];
+  readonly activationHandoffFixtures?: readonly WorkUnitGovernanceActivationHandoffFixture[];
 } = {}): WorkUnitGovernanceCheckResult {
   const workUnitFixtures =
     options.workUnitFixtures ?? buildDefaultWorkUnitGovernanceFixtures();
@@ -647,6 +780,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.ledgerFixtures ?? buildDefaultWorkUnitLedgerFixtures();
   const ownerLifecycleFixtures =
     options.ownerLifecycleFixtures ?? buildDefaultWorkUnitOwnerLifecycleFixtures();
+  const activationHandoffFixtures =
+    options.activationHandoffFixtures ?? buildDefaultWorkUnitActivationHandoffFixtures();
 
   const failures: WorkUnitGovernanceFailure[] = [];
 
@@ -723,6 +858,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of activationHandoffFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "activation-handoff",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   const actualRequirementIds = hwuAcceptanceChecklist.map((item) => item.requirementId);
   if (actualRequirementIds.join("|") !== EXPECTED_REQUIREMENT_IDS.join("|")) {
     failures.push({
@@ -739,6 +885,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     runtimeFixtures.length +
     ledgerFixtures.length +
     ownerLifecycleFixtures.length +
+    activationHandoffFixtures.length +
     1;
 
   return {
@@ -752,6 +899,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     runtimeFixtures,
     ledgerFixtures,
     ownerLifecycleFixtures,
+    activationHandoffFixtures,
     failures,
   };
 }

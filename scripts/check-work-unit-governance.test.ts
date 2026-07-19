@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDefaultWorkUnitActivationHandoffFixtures,
   buildDefaultWorkUnitGovernanceFixtures,
   buildDefaultWorkUnitLedgerFixtures,
   buildDefaultWorkUnitOwnerLifecycleFixtures,
@@ -14,7 +15,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(21);
+    expect(result.total).toBe(26);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -40,6 +41,13 @@ describe("check-work-unit-governance", () => {
       "owner-lifecycle-proxy-needs-receipted-authorization",
       "owner-lifecycle-stale-related-mainline-change-needs-review",
     ]);
+    expect(result.activationHandoffFixtures.map((fixture) => fixture.name)).toEqual([
+      "activation-handoff-never-executes-public-core-side-effects",
+      "activation-handoff-before-mainline-is-blocked",
+      "activation-handoff-ai-authorization-is-blocked",
+      "activation-handoff-customer-effect-needs-remediation",
+      "activation-handoff-stale-mainline-is-blocked",
+    ]);
   });
 
   it("fails when a negative work-unit fixture no longer detects its boundary rule", () => {
@@ -56,6 +64,7 @@ describe("check-work-unit-governance", () => {
       runtimeFixtures: [],
       ledgerFixtures: [],
       ownerLifecycleFixtures: [],
+      activationHandoffFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -82,6 +91,7 @@ describe("check-work-unit-governance", () => {
       runtimeFixtures: [],
       ledgerFixtures: [],
       ownerLifecycleFixtures: [],
+      activationHandoffFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -108,6 +118,7 @@ describe("check-work-unit-governance", () => {
       ],
       ledgerFixtures: [],
       ownerLifecycleFixtures: [],
+      activationHandoffFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -134,6 +145,7 @@ describe("check-work-unit-governance", () => {
         },
       ],
       ownerLifecycleFixtures: [],
+      activationHandoffFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -160,6 +172,7 @@ describe("check-work-unit-governance", () => {
           run: () => [],
         },
       ],
+      activationHandoffFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -168,6 +181,33 @@ describe("check-work-unit-governance", () => {
         name: "owner-lifecycle-ai-decision-is-blocked",
         check: "owner-lifecycle",
         detail: "missing expected rule(s): human-owner-lifecycle-command-required",
+      },
+    ]);
+  });
+
+  it("fails when an activation handoff fixture no longer detects its boundary rule", () => {
+    const activationFixture = buildDefaultWorkUnitActivationHandoffFixtures()[2];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [],
+      ledgerFixtures: [],
+      ownerLifecycleFixtures: [],
+      activationHandoffFixtures: [
+        {
+          ...activationFixture,
+          run: () => [],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "activation-handoff-ai-authorization-is-blocked",
+        check: "activation-handoff",
+        detail: "missing expected rule(s): activation-authorization-needs-human-owner",
       },
     ]);
   });
