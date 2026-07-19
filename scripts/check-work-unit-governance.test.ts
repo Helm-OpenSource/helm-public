@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDefaultWorkUnitGovernanceFixtures,
+  buildDefaultWorkUnitRuntimeFixtures,
   buildDefaultWorkUnitTerminologyFixtures,
   runWorkUnitGovernanceBoundaryCheck,
 } from "./check-work-unit-governance";
@@ -11,7 +12,7 @@ describe("check-work-unit-governance", () => {
     const result = runWorkUnitGovernanceBoundaryCheck();
 
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(11);
+    expect(result.total).toBe(14);
     expect(result.failures).toEqual([]);
     expect(result.workUnitFixtures.map((fixture) => fixture.name)).toEqual([
       "clean-candidate",
@@ -20,6 +21,11 @@ describe("check-work-unit-governance", () => {
       "conflict-key-mainline-drift",
       "high-risk-owner-missing",
       "runtime-activation-without-independent-receipt",
+    ]);
+    expect(result.runtimeFixtures.map((fixture) => fixture.name)).toEqual([
+      "runtime-readout-never-executes-public-core-side-effects",
+      "ai-runtime-acceptance-is-blocked",
+      "private-mainline-projection-is-shape-only",
     ]);
   });
 
@@ -34,6 +40,7 @@ describe("check-work-unit-governance", () => {
       ],
       transitionFixtures: [],
       terminologyFixtures: [],
+      runtimeFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -57,6 +64,7 @@ describe("check-work-unit-governance", () => {
           expectedTerms: ["Merge"],
         },
       ],
+      runtimeFixtures: [],
     });
 
     expect(result.ok).toBe(false);
@@ -65,6 +73,30 @@ describe("check-work-unit-governance", () => {
         name: "decision-card-clean",
         check: "terminology",
         detail: "missing expected rule(s): Merge",
+      },
+    ]);
+  });
+
+  it("fails when a runtime fixture no longer detects its boundary rule", () => {
+    const runtimeFixture = buildDefaultWorkUnitRuntimeFixtures()[1];
+    const result = runWorkUnitGovernanceBoundaryCheck({
+      workUnitFixtures: [],
+      transitionFixtures: [],
+      terminologyFixtures: [],
+      runtimeFixtures: [
+        {
+          ...runtimeFixture,
+          run: () => [],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      {
+        name: "ai-runtime-acceptance-is-blocked",
+        check: "runtime",
+        detail: "missing expected rule(s): human-owner-runtime-command-required",
       },
     ]);
   });

@@ -10,7 +10,6 @@
 import {
   buildDecisionCard,
   computeWorkUnitSnapshotHash,
-  helmWorkUnitSchema,
   hwuAcceptanceChecklist,
   validateUserVisibleTerminology,
   validateWorkUnitTransition,
@@ -19,8 +18,19 @@ import {
   type WorkUnitActor,
   type WorkUnitViolation,
 } from "../lib/work-unit-governance/contracts";
+import {
+  buildPrivateMainlineProjection,
+  buildWorkUnitRuntimeReadout,
+  planWorkUnitRuntimeEvent,
+} from "../lib/work-unit-governance/runtime";
+import {
+  buildSyntheticWorkUnit,
+  syntheticAcceptedDecision,
+  syntheticReceipt,
+  WORK_UNIT_SYNTHETIC_TIME,
+} from "../lib/work-unit-governance/synthetic-fixtures";
 
-const FIXTURE_TIME = "2026-07-19T00:00:00.000Z";
+const FIXTURE_TIME = WORK_UNIT_SYNTHETIC_TIME;
 
 const EXPECTED_REQUIREMENT_IDS = Array.from({ length: 15 }, (_, index) => {
   return `HWU-${String(index + 1).padStart(2, "0")}`;
@@ -46,9 +56,15 @@ export type WorkUnitGovernanceTerminologyFixture = {
   readonly expectedTerms: readonly string[];
 };
 
+export type WorkUnitGovernanceRuntimeFixture = {
+  readonly name: string;
+  readonly run: () => readonly WorkUnitViolation[];
+  readonly expectedRules: readonly string[];
+};
+
 export type WorkUnitGovernanceFailure = {
   readonly name: string;
-  readonly check: "work-unit" | "transition" | "terminology" | "checklist";
+  readonly check: "work-unit" | "transition" | "terminology" | "runtime" | "checklist";
   readonly detail: string;
 };
 
@@ -60,97 +76,9 @@ export type WorkUnitGovernanceCheckResult = {
   readonly workUnitFixtures: readonly WorkUnitGovernanceFixture[];
   readonly transitionFixtures: readonly WorkUnitGovernanceTransitionFixture[];
   readonly terminologyFixtures: readonly WorkUnitGovernanceTerminologyFixture[];
+  readonly runtimeFixtures: readonly WorkUnitGovernanceRuntimeFixture[];
   readonly failures: readonly WorkUnitGovernanceFailure[];
 };
-
-function buildSyntheticWorkUnit(overrides: Partial<HelmWorkUnit> = {}): HelmWorkUnit {
-  return helmWorkUnitSchema.parse({
-    schemaVersion: "helm.work-unit.v1",
-    id: "hwu-synthetic-001",
-    objective: "Review a synthetic quote before it enters the company mainline.",
-    scope: ["synthetic:quote"],
-    status: "candidate",
-    initiator: { actorType: "human", actorRef: "initiator-1" },
-    owner: { ownerRef: "owner-1", ownerType: "human_owner", displayName: "Synthetic owner" },
-    agentRole: "draft",
-    sourceSnapshot: {
-      sourceRef: "synthetic://quote/Q-001",
-      redactionStatus: "synthetic",
-      mainlineBaselineRef: "mainline:baseline-1",
-      dependencyRefs: [],
-    },
-    riskClass: "internal_mainline",
-    conflictKeys: ["quote:Q-001"],
-    candidateArtifacts: [
-      {
-        artifactId: "candidate-summary",
-        kind: "decision_card",
-        title: "Synthetic renewal-cost check",
-        summary: "Review whether the synthetic quote includes renewal cost basis.",
-        state: "candidate",
-        producedBy: "ai",
-      },
-    ],
-    evidenceManifest: [
-      {
-        evidenceRef: "synthetic://evidence/renewal-cost",
-        title: "Synthetic renewal cost evidence",
-        redactionStatus: "synthetic",
-      },
-    ],
-    changeSummary: {
-      changedWhat: "Adds a renewal-cost review requirement to the synthetic quote.",
-      affectedWho: ["synthetic owner"],
-      basis: ["synthetic://evidence/renewal-cost"],
-      riskSummary: "Internal mainline update only; no customer-visible action.",
-    },
-    requiredOwners: {
-      mode: "all_of",
-      owners: [{ ownerRef: "owner-1", ownerType: "human_owner", displayName: "Synthetic owner" }],
-    },
-    validationReceipts: [
-      {
-        receiptId: "validation-1",
-        name: "synthetic-boundary-check",
-        ok: true,
-        summary: "Synthetic public-safe fixture.",
-        createdAt: FIXTURE_TIME,
-      },
-    ],
-    activationScope: "private_workspace_truth",
-    rollbackOrRemediationPlan: {
-      kind: "rollback",
-      summary: "Supersede the synthetic rule with a newer accepted work unit.",
-      responsibleOwnerRef: "owner-1",
-    },
-    auditRefs: [],
-    relatedMainlineChanges: [],
-    createdAt: FIXTURE_TIME,
-    updatedAt: FIXTURE_TIME,
-    ...overrides,
-  });
-}
-
-function acceptedDecision(snapshotHash: string) {
-  return {
-    decidedBy: { actorType: "human_owner", actorRef: "owner-1" },
-    decision: "accepted",
-    decidedAt: FIXTURE_TIME,
-    snapshotHash,
-    rationale: "Synthetic owner accepted this exact candidate snapshot.",
-  };
-}
-
-function receipt(receiptId: string, snapshotHash: string) {
-  return {
-    receiptId,
-    actor: { actorType: "human_owner", actorRef: "owner-1" },
-    snapshotHash,
-    createdAt: FIXTURE_TIME,
-    summary: "Synthetic human-owner receipt.",
-    publicCoreCarriesRealInstance: false,
-  };
-}
 
 function rulesFrom(violations: readonly WorkUnitViolation[]): readonly string[] {
   return violations.map((violation) => violation.rule);
@@ -187,8 +115,8 @@ export function buildDefaultWorkUnitGovernanceFixtures(): readonly WorkUnitGover
       workUnit: buildSyntheticWorkUnit({
         status: "promoted_to_mainline",
         decisionSnapshotHash: staleHash,
-        decision: acceptedDecision(staleHash),
-        mergeReceipt: receipt("merge-stale", staleHash),
+        decision: syntheticAcceptedDecision(staleHash),
+        mergeReceipt: syntheticReceipt("merge-stale", staleHash),
       }),
       expectedRules: ["approval-snapshot-mismatch"],
     },
@@ -197,7 +125,7 @@ export function buildDefaultWorkUnitGovernanceFixtures(): readonly WorkUnitGover
       workUnit: buildSyntheticWorkUnit({
         status: "accepted_by_human",
         decisionSnapshotHash: snapshotHash,
-        decision: acceptedDecision(snapshotHash),
+        decision: syntheticAcceptedDecision(snapshotHash),
         relatedMainlineChanges: [
           {
             mainlineRef: "mainline:quote:Q-001:v2",
@@ -223,7 +151,7 @@ export function buildDefaultWorkUnitGovernanceFixtures(): readonly WorkUnitGover
         riskClass: "runtime_activation",
         activationScope: "production_runtime",
         decisionSnapshotHash: snapshotHash,
-        decision: acceptedDecision(snapshotHash),
+        decision: syntheticAcceptedDecision(snapshotHash),
       }),
       expectedRules: ["activation-needs-independent-receipt"],
     },
@@ -267,6 +195,106 @@ export function buildDefaultWorkUnitTerminologyFixtures(): readonly WorkUnitGove
   ];
 }
 
+export function buildDefaultWorkUnitRuntimeFixtures(): readonly WorkUnitGovernanceRuntimeFixture[] {
+  return [
+    {
+      name: "runtime-readout-never-executes-public-core-side-effects",
+      run: () => {
+        const readout = buildWorkUnitRuntimeReadout(buildSyntheticWorkUnit());
+        const violations: WorkUnitViolation[] = [];
+        if (readout.privateMainlineBoundary.publicCoreCarriesRealInstance) {
+          violations.push({
+            rule: "runtime-public-core-carries-real-instance",
+            detail: "privateMainlineBoundary.publicCoreCarriesRealInstance",
+          });
+        }
+        for (const command of readout.commands) {
+          if (command.publicCoreExecutes || command.createsExternalEffect) {
+            violations.push({
+              rule: "runtime-command-side-effect",
+              detail: command.commandId,
+            });
+          }
+        }
+        const activationCommand = readout.commands.find(
+          (command) => command.commandId === "record_activation",
+        );
+        if (!activationCommand || activationCommand.enabled) {
+          violations.push({
+            rule: "runtime-activation-enabled-in-public-core",
+            detail: "record_activation",
+          });
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+    {
+      name: "ai-runtime-acceptance-is-blocked",
+      run: () => {
+        const plan = planWorkUnitRuntimeEvent({
+          workUnit: buildSyntheticWorkUnit(),
+          event: {
+            commandId: "accept_candidate",
+            actor: { actorType: "ai", actorRef: "agent-1" },
+            at: FIXTURE_TIME,
+            rationale: "AI attempted to accept a synthetic candidate.",
+          },
+        });
+        if (!plan.ok) return plan.violations;
+        return [
+          {
+            rule: "ai-runtime-acceptance-was-not-blocked",
+            detail: "accept_candidate",
+          },
+        ];
+      },
+      expectedRules: ["human-owner-runtime-command-required"],
+    },
+    {
+      name: "private-mainline-projection-is-shape-only",
+      run: () => {
+        const candidate = buildSyntheticWorkUnit();
+        const snapshotHash = computeWorkUnitSnapshotHash(candidate);
+        const accepted = buildSyntheticWorkUnit({
+          status: "accepted_by_human",
+          decisionSnapshotHash: snapshotHash,
+          decision: syntheticAcceptedDecision(snapshotHash),
+        });
+        const promoted = buildSyntheticWorkUnit({
+          status: "promoted_to_mainline",
+          decisionSnapshotHash: snapshotHash,
+          decision: syntheticAcceptedDecision(snapshotHash),
+          mergeReceipt: syntheticReceipt("merge-1", snapshotHash),
+        });
+        const projection = buildPrivateMainlineProjection([candidate, accepted, promoted]);
+        const violations: WorkUnitViolation[] = [];
+        if (projection.publicCoreCarriesRealInstance) {
+          violations.push({
+            rule: "projection-public-core-carries-real-instance",
+            detail: "publicCoreCarriesRealInstance",
+          });
+        }
+        if (projection.entries.some((entry) => entry.publicCoreCarriesRealInstance)) {
+          violations.push({
+            rule: "projection-entry-carries-real-instance",
+            detail: "entries.publicCoreCarriesRealInstance",
+          });
+        }
+        const projectedStates = projection.entries.map((entry) => entry.state);
+        if (projectedStates.join("|") !== "accepted_by_human|promoted_to_mainline") {
+          violations.push({
+            rule: "projection-unexpected-entry-states",
+            detail: projectedStates.join(", "),
+          });
+        }
+        return violations;
+      },
+      expectedRules: [],
+    },
+  ];
+}
+
 function compareExpectedRules(options: {
   readonly name: string;
   readonly check: WorkUnitGovernanceFailure["check"];
@@ -301,6 +329,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   readonly workUnitFixtures?: readonly WorkUnitGovernanceFixture[];
   readonly transitionFixtures?: readonly WorkUnitGovernanceTransitionFixture[];
   readonly terminologyFixtures?: readonly WorkUnitGovernanceTerminologyFixture[];
+  readonly runtimeFixtures?: readonly WorkUnitGovernanceRuntimeFixture[];
 } = {}): WorkUnitGovernanceCheckResult {
   const workUnitFixtures =
     options.workUnitFixtures ?? buildDefaultWorkUnitGovernanceFixtures();
@@ -308,6 +337,8 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     options.transitionFixtures ?? buildDefaultWorkUnitTransitionFixtures();
   const terminologyFixtures =
     options.terminologyFixtures ?? buildDefaultWorkUnitTerminologyFixtures();
+  const runtimeFixtures =
+    options.runtimeFixtures ?? buildDefaultWorkUnitRuntimeFixtures();
 
   const failures: WorkUnitGovernanceFailure[] = [];
 
@@ -351,6 +382,17 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     );
   }
 
+  for (const fixture of runtimeFixtures) {
+    failures.push(
+      ...compareExpectedRules({
+        name: fixture.name,
+        check: "runtime",
+        actualRules: rulesFrom(fixture.run()),
+        expectedRules: fixture.expectedRules,
+      }),
+    );
+  }
+
   const actualRequirementIds = hwuAcceptanceChecklist.map((item) => item.requirementId);
   if (actualRequirementIds.join("|") !== EXPECTED_REQUIREMENT_IDS.join("|")) {
     failures.push({
@@ -361,7 +403,11 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
   }
 
   const total =
-    workUnitFixtures.length + transitionFixtures.length + terminologyFixtures.length + 1;
+    workUnitFixtures.length +
+    transitionFixtures.length +
+    terminologyFixtures.length +
+    runtimeFixtures.length +
+    1;
 
   return {
     ok: failures.length === 0,
@@ -371,6 +417,7 @@ export function runWorkUnitGovernanceBoundaryCheck(options: {
     workUnitFixtures,
     transitionFixtures,
     terminologyFixtures,
+    runtimeFixtures,
     failures,
   };
 }

@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BriefcaseBusiness,
+  ClipboardCheck,
   ShieldCheck,
   Target,
   Users2,
@@ -194,6 +195,38 @@ export default async function DemoEntryPage({ searchParams }: DemoEntryPageProps
               </Card>
             );
           })}
+        </section>
+
+        <section
+          className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-5 shadow-[var(--shadow-card)]"
+          data-testid="demo-work-unit-governance"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[color:var(--accent-soft)] text-[color:var(--accent)]">
+                <ClipboardCheck className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                  {english ? "AI-native work package" : "AI 原生工作包"}
+                </p>
+                <h2 className="mt-1 text-xl font-semibold text-[color:var(--foreground)]">
+                  {english ? "Owner-gated review surface" : "负责人门控复核台"}
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--muted)]">
+                  {english
+                    ? "See the synthetic Work Unit path: candidate, checks, owner action plan, and company-mainline projection shape."
+                    : "查看合成工作包路径：候选方案、检查、负责人动作计划，以及公司主线投影形状。"}
+                </p>
+              </div>
+            </div>
+            <Button asChild variant="outline" className="shrink-0">
+              <Link href="/demo/work-unit-governance">
+                {english ? "Open review surface" : "打开复核台"}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </section>
 
         <section className="space-y-4" data-testid="demo-industry-cards">
