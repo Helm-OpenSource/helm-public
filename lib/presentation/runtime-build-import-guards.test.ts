@@ -151,6 +151,17 @@ describe("runtime build import guards", () => {
     expect(odpsKnowledge).toContain("turbopackIgnore: true */ resolvedPath");
   });
 
+  it("keeps private attachment storage I/O outside build-time file tracing", () => {
+    const uploadRoute = read("app/api/opportunities/[id]/attachments/route.ts");
+    const downloadRoute = read("app/api/opportunities/[id]/attachments/[attachmentId]/route.ts");
+    const attachmentStorage = read("lib/opportunities/attachment-storage.ts");
+
+    expect(uploadRoute).toContain("turbopackIgnore: true */ absoluteDir");
+    expect(downloadRoute).toContain("turbopackIgnore: true */ absolutePath");
+    expect(attachmentStorage).toContain("turbopackIgnore: true */ process.cwd()");
+    expect(attachmentStorage).toContain("turbopackIgnore: true */ root");
+  });
+
   it("keeps runtime stdio connector spawn lazy-loaded outside route tracing", () => {
     const dingTalkMcpClient = read("lib/connectors/dingtalk-mcp-client.ts");
     const odpsQueryAdapter = read("lib/bi-report-skill/query-adapters/odps.ts");

@@ -82,7 +82,7 @@ export async function GET(
 
   let data: Buffer;
   try {
-    data = await readFile(absolutePath);
+    data = await readFile(/* turbopackIgnore: true */ absolutePath);
   } catch {
     return errorResponse(
       english ? "Attachment file is no longer available." : "附件文件已不可用。",
