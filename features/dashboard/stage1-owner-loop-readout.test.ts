@@ -225,4 +225,31 @@ describe("Stage 1 owner-loop dashboard readout", () => {
     });
     expect(readout.posture).toBe("attention_required");
   });
+
+  it("summarizes QoderWork connection, review, quarantine, conflict, and freshness state", () => {
+    const readout = build({
+      externalAgentConnections: [
+        {
+          expiresAt: new Date("2026-08-18T00:00:00.000Z"),
+          revokedAt: null,
+          lastConnectedAt: new Date("2026-07-18T11:00:00.000Z"),
+          lastFailureCode: null,
+        },
+      ],
+      externalCandidates: [
+        { rawMetadata: JSON.stringify({ disposition: "review_required" }), occurredAt: new Date("2026-07-18T10:00:00.000Z") },
+        { rawMetadata: JSON.stringify({ disposition: "quarantine" }), occurredAt: new Date("2026-07-18T09:00:00.000Z") },
+      ],
+      externalCandidateAudits: [{ payload: JSON.stringify({ warnings: ["CONFLICT"] }) }],
+    });
+
+    expect(readout.qoderwork).toMatchObject({
+      activeConnections: 1,
+      candidates: 2,
+      reviewRequired: 1,
+      quarantined: 1,
+      conflicts: 1,
+      latestEvidenceAt: "2026-07-18T10:00:00.000Z",
+    });
+  });
 });

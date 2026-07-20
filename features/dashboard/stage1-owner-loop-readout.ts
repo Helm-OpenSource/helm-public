@@ -76,6 +76,22 @@ export type Stage1WorkPacketReceiptRow = {
   };
 };
 
+export type Stage1ExternalAgentConnectionRow = {
+  expiresAt: Date;
+  revokedAt: Date | null;
+  lastConnectedAt: Date | null;
+  lastFailureCode: string | null;
+};
+
+export type Stage1ExternalCandidateRow = {
+  rawMetadata: string | null;
+  occurredAt: Date;
+};
+
+export type Stage1ExternalCandidateAuditRow = {
+  payload: string | null;
+};
+
 export type Stage1SourceHealth = "healthy" | "stale" | "failing" | "unknown";
 
 export type Stage1DecisionProjection =
@@ -89,6 +105,8 @@ export type Stage1DecisionProjection =
   | "EVALUATED"
   | "RECEIPT_MISSING"
   | "REJECTED"
+  | "DEFERRED"
+  | "EVIDENCE_REQUESTED"
   | "BLOCKED"
   | "EXPIRED"
   | "SUPERSEDED";
@@ -157,6 +175,16 @@ export type Stage1OwnerLoopReadout = {
     averageVerifiedQuality: number | null;
   };
   operatingQuestions: CaioOperatingQuestionReadout;
+  qoderwork: {
+    activeConnections: number;
+    latestConnectedAt: string | null;
+    candidates: number;
+    reviewRequired: number;
+    quarantined: number;
+    conflicts: number;
+    latestEvidenceAt: string | null;
+    latestFailureCode: string | null;
+  };
 };
 
 function statusCount(
@@ -182,6 +210,8 @@ function decisionProjection(
 ): Stage1DecisionProjection {
   if (decision.status === "EVALUATED") return "EVALUATED";
   if (decision.status === "REJECTED") return "REJECTED";
+  if (decision.status === "DEFERRED") return "DEFERRED";
+  if (decision.status === "EVIDENCE_REQUESTED") return "EVIDENCE_REQUESTED";
   if (decision.status === "EXPIRED") return "EXPIRED";
   if (decision.status === "SUPERSEDED") return "SUPERSEDED";
   if (!decision.workPacketClaim) {
@@ -218,6 +248,9 @@ export function buildStage1OwnerLoopReadout(input: {
   currentG0Context: CaioCurrentAcceptedG0ReadContext | null;
   operatingQuestionHead: CaioOperatingQuestionPortfolioHeadReadRow | null;
   questionSelectionHead: CaioQuestionSelectionHeadReadRow | null;
+  externalAgentConnections?: readonly Stage1ExternalAgentConnectionRow[];
+  externalCandidates?: readonly Stage1ExternalCandidateRow[];
+  externalCandidateAudits?: readonly Stage1ExternalCandidateAuditRow[];
 }): Stage1OwnerLoopReadout {
   const operatingQuestions = buildCaioOperatingQuestionReadout({
     now: input.now,
@@ -289,6 +322,15 @@ export function buildStage1OwnerLoopReadout(input: {
       program.startsAt <= input.now &&
       program.expiresAt > input.now,
   ).length;
+  const externalConnections = input.externalAgentConnections ?? [];
+  const externalCandidates = input.externalCandidates ?? [];
+  const externalCandidateAudits = input.externalCandidateAudits ?? [];
+  const activeConnections = externalConnections.filter(
+    (connection) => !connection.revokedAt && connection.expiresAt > input.now,
+  );
+  const candidateMetadata = externalCandidates.map((candidate) =>
+    parseExternalCandidateMetadata(candidate.rawMetadata),
+  );
   const hasAnyStage1Data =
     input.programs.length > 0 ||
     input.sources.length > 0 ||
@@ -363,6 +405,7 @@ export function buildStage1OwnerLoopReadout(input: {
           validUntil: decision.validUntil?.toISOString() ?? null,
           needsAttention:
             projection === "EVIDENCE_READY" ||
+            projection === "EVIDENCE_REQUESTED" ||
             projection === "RECEIPT_MISSING" ||
             projection === "BLOCKED" ||
             normalizedRiskLevel === "high" ||
@@ -395,5 +438,43 @@ export function buildStage1OwnerLoopReadout(input: {
           : null,
     },
     operatingQuestions,
+    qoderwork: {
+      activeConnections: activeConnections.length,
+      latestConnectedAt:
+        externalConnections
+          .map((connection) => connection.lastConnectedAt)
+          .filter((value): value is Date => Boolean(value))
+          .sort((left, right) => right.getTime() - left.getTime())[0]
+          ?.toISOString() ?? null,
+      candidates: externalCandidates.length,
+      reviewRequired: candidateMetadata.filter(
+        (metadata) => metadata.disposition === "review_required",
+      ).length,
+      quarantined: candidateMetadata.filter(
+        (metadata) => metadata.disposition === "quarantine",
+      ).length,
+      conflicts: externalCandidateAudits.filter((audit) =>
+        audit.payload?.includes("CONFLICT"),
+      ).length,
+      latestEvidenceAt:
+        [...externalCandidates]
+          .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())[0]
+          ?.occurredAt.toISOString() ?? null,
+      latestFailureCode:
+        externalConnections.find((connection) => connection.lastFailureCode)
+          ?.lastFailureCode ?? null,
+    },
   };
+}
+
+function parseExternalCandidateMetadata(value: string | null) {
+  try {
+    const parsed = JSON.parse(value ?? "{}");
+    return {
+      disposition:
+        typeof parsed?.disposition === "string" ? parsed.disposition : null,
+    };
+  } catch {
+    return { disposition: null };
+  }
 }

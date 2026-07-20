@@ -102,6 +102,8 @@ const ZH_PROJECTION: Record<Stage1DecisionProjection, string> = {
   EVALUATED: "已复盘",
   RECEIPT_MISSING: "缺回执",
   REJECTED: "已拒绝",
+  DEFERRED: "已延后",
+  EVIDENCE_REQUESTED: "待补证",
   BLOCKED: "已阻塞",
   EXPIRED: "已失效",
   SUPERSEDED: "已替代",
@@ -249,6 +251,17 @@ export function Stage1OwnerLoopConsole({
           <span className="text-xs text-[color:var(--muted-foreground)]">
             {english ? "As of" : "截至"} {formatAsOf(readout.asOf, english)}
           </span>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 text-xs text-[color:var(--muted-foreground)]" data-stage1-qoderwork-health="true">
+          <span className="font-medium text-[color:var(--foreground)]">QoderWork</span>
+          <span>{english ? "Active devices" : "有效设备"}: {readout.qoderwork.activeConnections}</span>
+          <span>{english ? "Candidates" : "外部候选"}: {readout.qoderwork.candidates}</span>
+          <span>{english ? "Needs review" : "待复核"}: {readout.qoderwork.reviewRequired}</span>
+          <span className={readout.qoderwork.quarantined > 0 ? "text-[color:var(--danger)]" : undefined}>{english ? "Quarantined" : "隔离"}: {readout.qoderwork.quarantined}</span>
+          <span className={readout.qoderwork.conflicts > 0 ? "text-[color:var(--danger)]" : undefined}>{english ? "Conflicts" : "冲突"}: {readout.qoderwork.conflicts}</span>
+          <span>{english ? "Latest evidence" : "最新证据"}: {readout.qoderwork.latestEvidenceAt ? formatAsOf(readout.qoderwork.latestEvidenceAt, english) : english ? "None" : "暂无"}</span>
+          {readout.qoderwork.latestFailureCode ? <span className="text-[color:var(--danger)]">{english ? "Latest failure" : "最近失败"}: {readout.qoderwork.latestFailureCode}</span> : null}
         </div>
 
         <div className="mt-5 grid min-h-24 grid-cols-2 border-y border-[color:var(--border)] md:grid-cols-4 md:divide-x md:divide-[color:var(--border)]">

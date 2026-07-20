@@ -78,8 +78,9 @@ const COMMON_PROHIBITED_USES = [
 ] as const;
 
 /**
- * Deterministic order: coze_manual, openclaw_local, dify_manual.
- * Matches the founder-approved first-batch order in the PRD.
+ * Deterministic order: original manual/local providers first, followed by
+ * reviewed live-intake providers. Registry presence does not activate a
+ * provider or grant it runtime authority.
  */
 export const EXTERNAL_AGENT_PROVIDER_PROFILES: readonly ProviderCapabilityProfile[] = [
   {
@@ -147,6 +148,39 @@ export const EXTERNAL_AGENT_PROVIDER_PROFILES: readonly ProviderCapabilityProfil
       ...COMMON_PROHIBITED_USES,
       "treat_tool_receipt_as_business_truth",
       "treat_workflow_trace_as_business_outcome",
+    ],
+  },
+  {
+    providerId: "qoderwork_cn",
+    providerName: "QoderWork (CN) — governed MCP intake",
+    providerKind: "bounded_worker_runtime",
+    supportedCapabilities: [
+      "retrieve",
+      "analyze",
+      "draft",
+      "tool_call",
+      "source_read",
+      "write_candidate",
+    ],
+    maxEffectMode: "draft_only",
+    dataResidency: "unknown",
+    auditability: "receipt_only",
+    replayability: "best_effort_replay",
+    tenantIsolation: "workspace_scoped",
+    humanReviewNative: false,
+    supportsRedaction: true,
+    supportsOutputSchema: true,
+    defaultTrustTier: "low",
+    prohibitedUses: [
+      ...COMMON_PROHIBITED_USES,
+      "approve_decision",
+      "execute_business_action",
+      "crm_official_write",
+      "promote_memory",
+      "change_policy",
+      "activate_automation",
+      "treat_local_access_as_enterprise_authorization",
+      "treat_draft_or_receipt_candidate_as_business_truth",
     ],
   },
 ] as const;

@@ -154,7 +154,7 @@ type MemoryClientProps = {
     | "COMPANY"
     | "OPPORTUNITY"
     | "MEETING";
-  source: "ALL" | "HELM" | "OPENCLAW";
+  source: "ALL" | "HELM" | "OPENCLAW" | "QODERWORK";
   entryContext: "APPROVAL_EVIDENCE" | null;
   returnToApprovalId: string | null;
   objectType: "CONTACT" | "COMPANY" | "OPPORTUNITY" | "MEETING" | null;
@@ -255,9 +255,13 @@ type MemoryClientProps = {
   }>;
   externalMemoryRecords: Array<{
     id: string;
+    provider: "OPENCLAW" | "QODERWORK";
     memoryEntryId: string | null;
     scope: string;
     category: string;
+    text: string;
+    rawMetadata: string | null;
+    checksum: string | null;
     occurredAt: Date;
     syncedAt: Date;
   }>;
@@ -1030,7 +1034,7 @@ export function MemoryClient({
       </div>
     ) : null;
   const distillationReviewSection =
-    sourceFilter !== "OPENCLAW" ? (
+    sourceFilter !== "OPENCLAW" && sourceFilter !== "QODERWORK" ? (
       <Card className="workspace-panel-muted">
         <CardHeader>
           <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
@@ -1235,7 +1239,7 @@ export function MemoryClient({
       </Card>
     ) : null;
   const reflectionCarryForwardSection =
-    sourceFilter !== "OPENCLAW" ? (
+    sourceFilter !== "OPENCLAW" && sourceFilter !== "QODERWORK" ? (
       <Card className="workspace-panel-muted">
         <CardHeader>
           <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
@@ -1357,7 +1361,7 @@ export function MemoryClient({
       </Card>
     ) : null;
   const reflectionDecisionsSection =
-    sourceFilter !== "OPENCLAW" && reflectionDecisions.length ? (
+    sourceFilter !== "OPENCLAW" && sourceFilter !== "QODERWORK" && reflectionDecisions.length ? (
       <Card className="workspace-panel-muted">
         <CardHeader>
           <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
@@ -2272,6 +2276,7 @@ export function MemoryClient({
                 ["ALL", english ? "All sources" : "全部来源"],
                 ["HELM", "Helm"],
                 ["OPENCLAW", "OpenClaw"],
+                ["QODERWORK", "QoderWork"],
               ] as const
             ).map(([value, label]) => (
               <Button
@@ -2465,6 +2470,51 @@ export function MemoryClient({
                     {english ? "Open audit replay" : "查看审计回放"}
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+          ) : null}
+          {externalMemoryRecords.length > 0 ? (
+            <Card className="workspace-panel-muted" data-testid="external-memory-candidates">
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle>{english ? "External candidates" : "外部候选"}</CardTitle>
+                  <Badge variant="neutral">
+                    {externalMemoryRecords.length} {english ? "records" : "条"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "These records are an external candidate ledger, not ACTIVE Company Memory. QoderWork cannot promote them."
+                    : "这些记录属于外部候选账本，不是 ACTIVE 公司记忆；QoderWork 无权晋升。"}
+                </p>
+                {externalMemoryRecords.map((record) => {
+                  const metadata = safeParseJson<{
+                    disposition?: string;
+                    evidenceRefs?: string[];
+                    candidateRetainUntil?: string;
+                    externalCandidateOnly?: boolean;
+                  }>(record.rawMetadata, {});
+                  return (
+                    <div key={record.id} className="border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="neutral">{record.provider === "QODERWORK" ? "QoderWork" : "OpenClaw"}</Badge>
+                        <Badge variant="neutral">{metadata.disposition ?? "external_candidate"}</Badge>
+                        <Badge variant="neutral">{record.scope}</Badge>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{record.text}</p>
+                      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                        {english ? "Evidence refs" : "证据引用"}: {metadata.evidenceRefs?.join(" · ") || (english ? "Missing" : "缺失")} · {english ? "Observed" : "观察时间"}: {formatDateLabel(record.occurredAt)}
+                      </p>
+                      {metadata.candidateRetainUntil ? (
+                        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                          {english ? "Candidate retention until" : "候选保留至"}: {formatDateLabel(new Date(metadata.candidateRetainUntil))}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           ) : null}

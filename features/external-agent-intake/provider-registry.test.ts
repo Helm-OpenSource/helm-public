@@ -11,7 +11,12 @@ import {
   EXTERNAL_AGENT_INTAKE_UNKNOWN_PROVIDER_ID,
 } from "./provider-fixtures";
 
-const EXPECTED_PROVIDER_IDS = ["coze_manual", "openclaw_local", "dify_manual"] as const;
+const EXPECTED_PROVIDER_IDS = [
+  "coze_manual",
+  "openclaw_local",
+  "dify_manual",
+  "qoderwork_cn",
+] as const;
 
 const REQUIRED_PROHIBITED_USES = [
   "create_must_push_directly",
@@ -20,9 +25,9 @@ const REQUIRED_PROHIBITED_USES = [
 ] as const;
 
 describe("external-agent-intake provider registry", () => {
-  it("contains exactly the three first-phase provider profiles", () => {
-    expect(EXTERNAL_AGENT_PROVIDER_PROFILES).toHaveLength(3);
-    expect(listProviderProfiles()).toHaveLength(3);
+  it("contains the reviewed external-agent provider profiles", () => {
+    expect(EXTERNAL_AGENT_PROVIDER_PROFILES).toHaveLength(4);
+    expect(listProviderProfiles()).toHaveLength(4);
   });
 
   it("exposes provider ids in deterministic order", () => {
@@ -36,6 +41,31 @@ describe("external-agent-intake provider registry", () => {
     for (const profile of EXTERNAL_AGENT_PROVIDER_PROFILES) {
       expect(profile.maxEffectMode).not.toBe("side_effecting");
     }
+  });
+
+  it("registers QoderWork as low-trust draft-only with unknown residency", () => {
+    expect(getExternalAgentProviderProfile("qoderwork_cn")).toMatchObject({
+      providerKind: "bounded_worker_runtime",
+      maxEffectMode: "draft_only",
+      dataResidency: "unknown",
+      defaultTrustTier: "low",
+      tenantIsolation: "workspace_scoped",
+      supportsOutputSchema: true,
+    });
+
+    expect(
+      getExternalAgentProviderProfile("qoderwork_cn")?.prohibitedUses,
+    ).toEqual(
+      expect.arrayContaining([
+        "approve_decision",
+        "send_customer_message",
+        "execute_business_action",
+        "crm_official_write",
+        "promote_memory",
+        "change_policy",
+        "activate_automation",
+      ]),
+    );
   });
 
   it("keeps first-phase provider posture conservative instead of over-trusting external platforms", () => {

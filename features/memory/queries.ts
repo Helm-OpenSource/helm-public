@@ -144,8 +144,9 @@ export async function getMemoryData(
   const query = options?.query;
   const objectLevel = options?.objectLevel ?? options?.dimension ?? "ALL";
   const source = options?.source ?? "ALL";
-  const includeOpenClaw = source !== "HELM";
-  const includeHelm = source !== "OPENCLAW";
+  const includeOpenClaw = source === "ALL" || source === "OPENCLAW";
+  const includeQoderWork = source === "ALL" || source === "QODERWORK";
+  const includeHelm = source === "ALL" || source === "HELM";
 
   const entrySourceWhere = buildMemoryEntrySourceWhere(source);
 
@@ -165,7 +166,9 @@ export async function getMemoryData(
       : {}),
   } as const;
 
-  const shouldReturnOpenClawRecords = includeOpenClaw && (objectLevel === "ALL" || objectLevel === "WORKSPACE");
+  const shouldReturnExternalRecords =
+    (includeOpenClaw || includeQoderWork) &&
+    (objectLevel === "ALL" || objectLevel === "WORKSPACE" || objectLevel === "OPPORTUNITY");
   const shouldReturnReflectionCandidates =
     includeHelm &&
     (objectLevel === "ALL" || objectLevel === "WORKSPACE" || objectLevel === "MEETING" || options?.objectType === ObjectType.MEETING);
@@ -424,11 +427,16 @@ export async function getMemoryData(
             take: 50,
           })
         : Promise.resolve([]),
-      shouldReturnOpenClawRecords
+      shouldReturnExternalRecords
         ? db.externalMemoryRecord.findMany({
             where: {
               workspaceId,
-              provider: ExternalSyncProvider.OPENCLAW,
+              provider: {
+                in: [
+                  ...(includeOpenClaw ? [ExternalSyncProvider.OPENCLAW] : []),
+                  ...(includeQoderWork ? [ExternalSyncProvider.QODERWORK] : []),
+                ],
+              },
               ...(query
                 ? {
                     OR: [

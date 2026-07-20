@@ -53,6 +53,7 @@ import {
   confirmStage1DecisionRecord,
   createStage1DecisionRecord,
   dispatchStage1DecisionWorkPacket,
+  recordStage1OwnerReviewOutcome,
   recordStage1SupervisionSignal,
 } from "./decision-follow-through.service";
 
@@ -296,6 +297,103 @@ describe("Stage 1 decision follow-through runtime", () => {
 
     expect(result).toBe(confirmed);
     expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["reject", "REJECTED"],
+    ["request_evidence", "EVIDENCE_REQUESTED"],
+  ] as const)("records the structured owner %s outcome without confirming execution", async (action, status) => {
+    const reviewed = decisionRow({
+      status,
+      ownerRef: "owner-1",
+      ownerConclusion: "Evidence is insufficient for this decision",
+      ownerConfirmedAt: null,
+    });
+    dbMock.decisionRecord.updateMany.mockResolvedValue({ count: 1 });
+    dbMock.decisionRecord.findFirst.mockResolvedValue(reviewed);
+
+    const result = await recordStage1OwnerReviewOutcome({
+      workspaceId: "workspace-1",
+      decisionRecordId: "decision-1",
+      action,
+      reason: "Evidence is insufficient for this decision",
+      actorName: "Owner",
+      actorUserId: "owner-1",
+    });
+
+    expect(result).toBe(reviewed);
+    expect(dbMock.decisionRecord.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: "EVIDENCE_READY" }),
+        data: expect.objectContaining({
+          status,
+          ownerRef: "owner-1",
+          ownerConfirmedAt: null,
+        }),
+      }),
+    );
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: `STAGE1_DECISION_${status}` }),
+      { client: dbMock },
+    );
+  });
+
+  it("records a future deferral without creating an owner confirmation", async () => {
+    const deferUntil = new Date(Date.now() + 86_400_000).toISOString();
+    const reviewed = decisionRow({
+      status: "DEFERRED",
+      ownerRef: "owner-1",
+      ownerConclusion: "Review after the customer meeting",
+      ownerConfirmedAt: null,
+      validUntil: new Date(deferUntil),
+    });
+    dbMock.decisionRecord.updateMany.mockResolvedValue({ count: 1 });
+    dbMock.decisionRecord.findFirst.mockResolvedValue(reviewed);
+
+    await recordStage1OwnerReviewOutcome({
+      workspaceId: "workspace-1",
+      decisionRecordId: "decision-1",
+      action: "defer",
+      reason: "Review after the customer meeting",
+      deferUntil,
+      actorName: "Owner",
+      actorUserId: "owner-1",
+    });
+
+    expect(dbMock.decisionRecord.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "DEFERRED",
+          validUntil: new Date(deferUntil),
+          ownerConfirmedAt: null,
+        }),
+      }),
+    );
+  });
+
+  it("refuses unstructured or non-future owner review outcomes", async () => {
+    await expect(
+      recordStage1OwnerReviewOutcome({
+        workspaceId: "workspace-1",
+        decisionRecordId: "decision-1",
+        action: "reject",
+        reason: " ",
+        actorName: "Owner",
+        actorUserId: "owner-1",
+      }),
+    ).rejects.toMatchObject({ reasons: ["owner_review_reason_required"] });
+
+    await expect(
+      recordStage1OwnerReviewOutcome({
+        workspaceId: "workspace-1",
+        decisionRecordId: "decision-1",
+        action: "defer",
+        reason: "Wait",
+        deferUntil: "2020-01-01T00:00:00.000Z",
+        actorName: "Owner",
+        actorUserId: "owner-1",
+      }),
+    ).rejects.toMatchObject({ reasons: ["future_defer_until_required"] });
   });
 
   it("returns the existing governed packet after the decision is dispatched", async () => {

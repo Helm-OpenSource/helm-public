@@ -63,19 +63,40 @@ describe("memory source filter helper", () => {
 
   it("builds HELM filter", () => {
     expect(buildMemoryEntrySourceWhere("HELM")).toEqual({
-      NOT: { source: { startsWith: "OPENCLAW:" } },
+      NOT: {
+        OR: [
+          { source: { startsWith: "OPENCLAW:" } },
+          { source: { startsWith: "QODERWORK:" } },
+        ],
+      },
     });
   });
 
   it("builds ALL filter", () => {
     expect(buildMemoryEntrySourceWhere("ALL")).toEqual({
-      NOT: { source: { startsWith: "OPENCLAW:" } },
+      NOT: {
+        OR: [
+          { source: { startsWith: "OPENCLAW:" } },
+          { source: { startsWith: "QODERWORK:" } },
+        ],
+      },
     });
   });
 
-  it("defaults unknown source filters to ALL without including legacy OpenClaw memory", () => {
+  it("builds QODERWORK external-candidate-only filter", () => {
+    expect(buildMemoryEntrySourceWhere("QODERWORK")).toEqual({
+      source: { startsWith: "QODERWORK:" },
+    });
+  });
+
+  it("defaults unknown source filters to ALL without including external formal memory", () => {
     expect(buildMemoryEntrySourceWhere("UNKNOWN")).toEqual({
-      NOT: { source: { startsWith: "OPENCLAW:" } },
+      NOT: {
+        OR: [
+          { source: { startsWith: "OPENCLAW:" } },
+          { source: { startsWith: "QODERWORK:" } },
+        ],
+      },
     });
   });
 });

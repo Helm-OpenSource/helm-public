@@ -176,6 +176,7 @@ import { PilotSettingsTab } from "@/features/settings/components/pilot-settings-
 import { ConnectorPermissionSummaryPanel } from "@/features/settings/components/connector-permission-summary-panel";
 import { SettingsOverviewPanels } from "@/features/settings/components/settings-overview-panels";
 import { TenantResourceReadinessPanel } from "@/features/settings/components/tenant-resource-readiness-panel";
+import { QoderWorkConnectionCard } from "@/features/settings/components/qoderwork-connection-card";
 import { Info } from "@/features/settings/components/settings-display";
 import {
   formatSettingsBoundaryNote,
@@ -4400,6 +4401,13 @@ export function SettingsClient({
 
         <TabsContent value="connectors">
           <div className="space-y-6">
+            <QoderWorkConnectionCard
+              canManage={
+                data.organizationSummary.activeMembershipRole === "OWNER" ||
+                data.organizationSummary.activeMembershipRole === "ADMIN"
+              }
+              english={english}
+            />
             <Card className="workspace-panel-muted" data-testid="resource-access-catalog">
               <CardHeader>
                 <CardTitle>
