@@ -128,7 +128,10 @@ export async function POST(
     workspace.id,
     opportunityId,
   );
-  const absolutePath = path.join(absoluteDir, storedFileName);
+  const absolutePath = path.join(
+    /* turbopackIgnore: true */ absoluteDir,
+    storedFileName,
+  );
 
   await mkdir(absoluteDir, { recursive: true });
   await writeFile(absolutePath, Buffer.from(await file.arrayBuffer()));

@@ -50,9 +50,14 @@ export function getAttachmentUploadRoot(): string {
   if (configured) {
     return path.isAbsolute(configured)
       ? configured
-      : path.join(process.cwd(), configured);
+      : path.join(/* turbopackIgnore: true */ process.cwd(), configured);
   }
-  return path.join(process.cwd(), "var", "uploads", "opportunity-attachments");
+  return path.join(
+    /* turbopackIgnore: true */ process.cwd(),
+    "var",
+    "uploads",
+    "opportunity-attachments",
+  );
 }
 
 /** Storage key (path relative to the upload root) for a stored attachment. */
@@ -77,7 +82,7 @@ export function resolveAttachmentStoragePath(storageKey: string): string | null 
     return null;
   }
   const root = getAttachmentUploadRoot();
-  const resolved = path.resolve(root, storageKey);
+  const resolved = path.resolve(/* turbopackIgnore: true */ root, storageKey);
   const rootWithSep = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
   if (resolved !== root && !resolved.startsWith(rootWithSep)) {
     return null;
