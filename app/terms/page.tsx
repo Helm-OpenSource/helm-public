@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { resolveUiLocale } from "@/lib/i18n/config";
+import { getPublicOperatingIdentity } from "@/lib/public-operating-identity.server";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = resolveUiLocale((await cookies()).get("helm-ui-locale")?.value);
@@ -19,6 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function TermsPage() {
   const locale = resolveUiLocale((await cookies()).get("helm-ui-locale")?.value);
   const english = locale === "en-US";
+  const operatingIdentity = getPublicOperatingIdentity();
 
   const sections = english
     ? [
@@ -87,6 +89,33 @@ export default async function TermsPage() {
             </section>
           ))}
         </div>
+
+        <section className="space-y-3 rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-5 text-sm leading-7 text-[color:var(--muted-foreground)]">
+          <h2 className="font-semibold text-[color:var(--foreground)]">
+            {english ? "Product and deployment operator" : "产品与部署运营主体"}
+          </h2>
+          <p>
+            {operatingIdentity.legalRegistrationVerified && operatingIdentity.legalName
+              ? english
+                ? `${operatingIdentity.operatorDisplayName} is operated by ${operatingIdentity.legalName}.`
+                : `${operatingIdentity.operatorDisplayName} 的法定运营主体为 ${operatingIdentity.legalName}。`
+              : english
+                ? `${operatingIdentity.operatorDisplayName} is the deployment display name. A verified legal operator has not been declared by this deployment, so this page is not registration or production-readiness evidence.`
+                : `${operatingIdentity.operatorDisplayName} 是当前部署显示名。该部署尚未声明经核验的法定运营主体，因此本页不是工商登记或生产就绪证明。`}
+          </p>
+          <p>
+            {english
+              ? "This deployment declaration does not replace legal review, filing, or registration evidence."
+              : "该部署声明不能替代法律审阅、备案或工商登记证据。"}
+          </p>
+          <p>
+            {english ? "Also read the " : "另请阅读"}
+            <Link href="/privacy" className="font-semibold text-[color:var(--foreground)] underline underline-offset-4">
+              {english ? "Privacy Notice" : "《隐私说明》"}
+            </Link>
+            {english ? "." : "。"}
+          </p>
+        </section>
       </div>
     </main>
   );

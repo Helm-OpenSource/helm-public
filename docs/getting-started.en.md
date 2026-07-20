@@ -174,6 +174,19 @@ Leave them all blank on a first run.
 
 Neither scheduler affects a first run; leave them blank / `false`.
 
+### PUBLIC_IDENTITY (optional, required review before a public production launch)
+
+| Variable | Purpose |
+|---|---|
+| `HELM_PUBLIC_OPERATOR_DISPLAY_NAME` | Product/deployment operator display name on `/terms` and `/privacy`; not a legal-name claim |
+| `HELM_PUBLIC_OPERATOR_LEGAL_NAME` | Legal operator name; set only after the deployment's private release process verifies registration evidence |
+| `HELM_PUBLIC_OPERATOR_REGISTRATION_VERIFIED` | Accepts only `true` / `false`; the legal name renders only for exact `true` |
+
+The public Core default stays tenant-neutral and `false`. `npm run validate:env`
+fails when verification is ambiguous or set to `true` without a legal name. Public
+Core carries no company-registration evidence. A production launch still requires
+deployment-specific legal text, privacy, filing, domain, and contact-channel review.
+
 ### China delivery profile preflight (optional)
 
 If this fork is being prepared for a China customer delivery, first align the

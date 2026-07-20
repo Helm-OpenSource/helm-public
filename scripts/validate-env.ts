@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { validateDeploymentProfileEnv } from "@/lib/deployment-profile/contract";
+import { resolvePublicOperatingIdentity } from "@/lib/public-operating-identity";
 
 // ---------------------------------------------------------------------------
 // MUST tier — required to boot
@@ -246,6 +247,17 @@ function validateMust(result: ValidationResult): void {
   }
 }
 
+function validatePublicOperatingIdentity(result: ValidationResult): void {
+  try {
+    resolvePublicOperatingIdentity(process.env);
+  } catch (error) {
+    result.valid = false;
+    result.errors.push(
+      `IDENTITY: ${error instanceof Error ? error.message : "invalid public operating identity"}`,
+    );
+  }
+}
+
 function validateOptionalAi(result: ValidationResult): void {
   // Schema-level check — all keys are .optional(), so this won't fail.
   // Logic: if LLM_ENABLED=true but OPENAI_API_KEY empty, warn that Ask Helm
@@ -341,6 +353,7 @@ function validateEnvironment(): ValidationResult {
 
   validateMust(result);
   validateDeploymentProfile(result);
+  validatePublicOperatingIdentity(result);
   validateOptionalAi(result);
   validateOptionalConnectors(result);
   validateSuspiciousDefaults(result);
