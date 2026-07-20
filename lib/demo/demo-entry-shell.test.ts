@@ -66,40 +66,15 @@ describe("demo entry shell", () => {
     expect(topbar).not.toContain("hidden xl:inline\">\n                {messages.shell.quickCreate}");
   });
 
-  it("keeps loading recovery actions as native, accessible navigation targets", () => {
+  it("keeps global loading separate from demo entry actions", () => {
     const source = readSource("app/loading.tsx");
     const demoEntrySource = readSource("app/demo/page.tsx");
     const demoStartSource = readSource("app/demo/start/route.ts");
 
-    expect(source).toContain('data-testid="loading-recovery-actions"');
-    expect(source).toContain('role="button"');
-    expect(source).toContain('const demoRecoveryBaseHref = "/demo"');
-    expect(source).toContain('const dashboardRecoveryBaseHref = "/dashboard"');
-    expect(source).toContain("const publicRecoveryHref = copy.publicHref");
-    expect(source).toContain('const currentPageRetryHref = ""');
-    expect(source).toContain(
-      "const demoRecoveryHref = copy.demoHref || demoRecoveryBaseHref",
-    );
-    expect(source).toContain(
-      "const dashboardRecoveryHref = copy.dashboardHref || dashboardRecoveryBaseHref",
-    );
-    expect(source).toContain("href={currentPageRetryHref}");
-    expect(source).toContain("aria-label={copy.dashboardCta}");
-    expect(source).toContain("href={dashboardRecoveryHref}");
-    expect(source).toContain('href={publicRecoveryHref}');
-    expect(source).toContain('href={demoRecoveryHref}');
-    expect(source).toContain('href: "/search"');
-    expect(source).toContain("打开全局搜索");
-    expect(source).toContain('href: "/operating"');
-    expect(source).toContain("打开经营总盘");
-    expect(source).toContain('data-testid="loading-recovery-workspace-shortcuts"');
-    expect(source).toContain('action="/demo/start"');
-    expect(source).toContain('method="post"');
-    expect(source).not.toContain("action={enterDemoWorkspace}");
-    expect(source).not.toContain("withLoadingRecoveryFragmentReset(");
-    expect(source).not.toContain("?recovery=loading");
-    expect(source).toContain('aria-label={copy.demoCta}');
-    expect(source).toContain('<Link');
+    expect(source).toContain('data-testid="global-route-loading"');
+    expect(source).toContain('aria-busy="true"');
+    expect(source).not.toContain('action="/demo/start"');
+    expect(source).not.toContain("loading-recovery-actions");
     expect(demoEntrySource).toContain('id={`demo-workspace-${mode.mode}`}');
     expect(demoEntrySource).toContain("resolveHighlightedDemoMode(params.mode)");
     expect(demoStartSource).toContain("export async function POST");
