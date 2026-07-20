@@ -40,56 +40,23 @@ describe("loading recovery copy", () => {
     expect(visibleCopy).not.toContain("Loading Helm operating console");
   });
 
-  it("routes demo choices through a native demo start path from the global fallback", () => {
+  it("keeps the global loading boundary neutral and non-interactive", () => {
     const source = readFileSync(
       path.join(process.cwd(), "app/loading.tsx"),
       "utf8",
     );
-    const startRouteSource = readFileSync(
-      path.join(process.cwd(), "app/demo/start/route.ts"),
-      "utf8",
-    );
 
-    expect(source).toContain('data-testid="loading-recovery-demo-choices"');
-    expect(source).toContain(
-      'data-testid="loading-recovery-workspace-shortcuts"',
-    );
-    expect(source).toContain("getDemoModeProfiles(locale)");
-    expect(source).toContain('action="/demo/start"');
-    expect(source).toContain('method="post"');
-    expect(source).toContain('name="mode"');
-    expect(source).toContain("`进入${mode.badge}`");
-    expect(source).not.toContain("loginAction(accountEmail)");
-    expect(source).not.toContain("action={enterDemoWorkspace}");
-    expect(source).not.toContain("withLoadingRecoveryFragmentReset(");
-    expect(startRouteSource).toContain("export async function POST");
-    expect(startRouteSource).toContain("createSession({");
-    expect(startRouteSource).toContain("withLoadingRecoveryFragmentReset(");
-    expect(startRouteSource).toContain("function resolveRedirectOrigin");
-    expect(startRouteSource).toContain('request.headers.get("host")');
-    expect(startRouteSource).toContain(
-      "new URL(targetPath, resolveRedirectOrigin(request))",
-    );
-    expect(source).toContain("/approvals#approval-queue");
-    expect(source).toContain("/memory#memory-work-timeline");
-    expect(source).toContain(
-      "/opportunities?mine=1&action=priority#opportunity-judgement-workspace",
-    );
-    expect(source).toContain('href: "/search"');
-    expect(source).toContain("打开全局搜索");
-    expect(source).toContain('const demoRecoveryBaseHref = "/demo"');
-    expect(source).toContain("const publicRecoveryHref = copy.publicHref");
-    expect(source).toContain('const currentPageRetryHref = ""');
-    expect(source).toContain("const dashboardRecoveryHref = copy.dashboardHref || dashboardRecoveryBaseHref");
-    expect(source).toContain(
-      "const demoRecoveryHref = copy.demoHref || demoRecoveryBaseHref",
-    );
-    expect(source).toContain('href: "/operating"');
-    expect(source).toContain("打开经营总盘");
-    expect(source).toContain("href={currentPageRetryHref}");
-    expect(source).toContain("aria-label={copy.dashboardCta}");
-    expect(source).toContain("href={dashboardRecoveryHref}");
-    expect(source).toContain("href={publicRecoveryHref}");
+    expect(source).toContain('data-testid="global-route-loading"');
+    expect(source).toContain('aria-busy="true"');
+    expect(source).toContain("正在读取当前页面");
+    expect(source).toContain("Loading this page");
+    expect(source).toContain("不会审批、发送或写入业务数据");
+    expect(source).not.toContain("loading-recovery-actions");
+    expect(source).not.toContain("loading-recovery-demo-choices");
+    expect(source).not.toContain("loading-recovery-workspace-shortcuts");
+    expect(source).not.toContain('action="/demo/start"');
+    expect(source).not.toContain("getDemoModeProfiles");
+    expect(source).not.toContain("getLoadingRecoveryCopy");
   });
 
   it("prevents stale fragments from carrying into demo recovery redirects", () => {
