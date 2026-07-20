@@ -35,6 +35,14 @@ HELM_DATA_RESIDENCY="global"
 HELM_DEFAULT_LOCALE="zh-CN"
 NPM_CONFIG_REGISTRY="https://registry.npmjs.org/"
 
+# Optional public deployment identity for /terms and /privacy. The display name
+# may be configured independently. The legal name is rendered only when the
+# deployment's private release process has verified registration evidence and
+# sets the verification flag to the exact value \`true\`.
+HELM_PUBLIC_OPERATOR_DISPLAY_NAME=""
+HELM_PUBLIC_OPERATOR_LEGAL_NAME=""
+HELM_PUBLIC_OPERATOR_REGISTRATION_VERIFIED="false"
+
 # Optional Docker build helper for Mainland China or restricted networks.
 # docker-compose.yml passes this as the Dockerfile npm registry build arg.
 NPM_REGISTRY=""

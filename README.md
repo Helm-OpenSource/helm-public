@@ -233,6 +233,7 @@ open http://localhost:3000    # 5. 访问
 | **MUST** | `DATABASE_URL`、`APP_URL`、`CONNECTOR_TOKEN_SECRET` | 起服务的最小集 |
 | **OPTIONAL_AI** | `OPENAI_API_KEY`、`DASHSCOPE_API_KEY`、`DASHSCOPE_BASE_URL`、`LLM_*` | 缺失时给 placeholder + banner，不会崩；默认 provider 为 Qwen |
 | **PROFILE** | `HELM_DEPLOYMENT_REGION`、`HELM_DATA_RESIDENCY`、`NPM_CONFIG_REGISTRY` | public-safe region / residency / npm registry override 姿态；不构成生产合规声明 |
+| **PUBLIC_IDENTITY** | `HELM_PUBLIC_OPERATOR_DISPLAY_NAME`、`HELM_PUBLIC_OPERATOR_LEGAL_NAME`、`HELM_PUBLIC_OPERATOR_REGISTRATION_VERIFIED` | `/terms` 与 `/privacy` 的部署运营主体；法定名称只在私有发布流程已核验证据且 verification 精确为 `true` 时显示 |
 | **OPTIONAL_CONNECTORS** | DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支付 | 按需开启 |
 
 ASR 支持两个 provider：默认 `openai`（transcription path），以及 `ASR_PROVIDER=dashscope`

@@ -191,6 +191,7 @@ More detail in [docs/getting-started.en.md](docs/getting-started.en.md).
 |---|---|---|
 | **MUST** | `DATABASE_URL`, `APP_URL`, `CONNECTOR_TOKEN_SECRET` | Minimum to boot |
 | **OPTIONAL_AI** | `OPENAI_API_KEY`, `DASHSCOPE_API_KEY`, `DASHSCOPE_BASE_URL`, `LLM_*` | Missing values become placeholders + banner; no crash |
+| **PUBLIC_IDENTITY** | `HELM_PUBLIC_OPERATOR_DISPLAY_NAME`, `HELM_PUBLIC_OPERATOR_LEGAL_NAME`, `HELM_PUBLIC_OPERATOR_REGISTRATION_VERIFIED` | Product/deployment operator for `/terms` and `/privacy`; the legal name renders only after the private release process verifies evidence and sets verification to exact `true` |
 | **OPTIONAL_CONNECTORS** | DingTalk · WeCom · HubSpot · Salesforce · Stripe · Alipay · WeChat Pay | Enable as needed |
 
 ---
