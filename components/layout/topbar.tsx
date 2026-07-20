@@ -553,7 +553,7 @@ export function Topbar({
             >
               <Plus className="h-4 w-4" />
             </Button>
-            <ThemeToggle />
+            <ThemeToggle locale={locale} />
             <Button
               size="icon"
               variant="secondary"
