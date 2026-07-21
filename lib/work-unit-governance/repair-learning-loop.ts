@@ -483,16 +483,16 @@ export function buildRepairLearningReadout(input: {
   });
   const hasOwnerWaiver = learningItems.some((item) => item.disposition === "owner_waived");
   const posture: RepairLearningPosture =
-    failedChecks.length === 0
-      ? "repair_not_needed"
-      : repairViolations.length > 0
-        ? "repair_blocked"
-        : learningViolations.length > 0
-          ? "lesson_asset_required"
-          : hasOwnerWaiver
-            ? "owner_waiver_recorded"
-            : findings.length > 0
-              ? "lesson_asset_ready"
+    repairViolations.length > 0
+      ? "repair_blocked"
+      : learningViolations.length > 0
+        ? "lesson_asset_required"
+        : hasOwnerWaiver
+          ? "owner_waiver_recorded"
+          : findings.length > 0
+            ? "lesson_asset_ready"
+            : failedChecks.length === 0
+              ? "repair_not_needed"
               : "repair_candidate_ready";
 
   return {
