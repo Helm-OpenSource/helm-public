@@ -25,6 +25,7 @@ import type {
   DashboardHomeWorkEntryCard,
   DashboardHomeWorkEntryModel,
 } from "@/features/dashboard/home-work-entry";
+import { getAdditionalRoleAnomalyItems } from "@/features/dashboard/role-anomaly-progress";
 
 function getStateBadgeVariant(state: DashboardHomeWorkEntryModel["state"]) {
   switch (state) {
@@ -82,6 +83,12 @@ function WorkCard({
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--accent)]" />
           <p>{item.boundary}</p>
         </div>
+      ) : null}
+      {item.evidenceRef ? (
+        <p className="mt-3 break-all text-xs text-[color:var(--muted-foreground)]">
+          Evidence / 依据：
+          {item.evidenceRef}
+        </p>
       ) : null}
       <div className="mt-4">
         {item.tracking ? (
@@ -410,6 +417,10 @@ export function DashboardHomeWorkEntrySurface({
   model: DashboardHomeWorkEntryModel;
   english: boolean;
 }) {
+  const additionalRoleAnomalyItems = getAdditionalRoleAnomalyItems({
+    ...model,
+    roleAnomalyItems: model.roleAnomalyItems ?? [],
+  });
   return (
     <Card
       className="workspace-shell-panel border-[color:var(--border-strong)]"
@@ -449,6 +460,25 @@ export function DashboardHomeWorkEntrySurface({
           </summary>
           <div className="grid gap-4 px-3 pb-3 xl:grid-cols-[minmax(0,1.18fr)_minmax(0,0.82fr)]">
             <div className="space-y-4">
+              {additionalRoleAnomalyItems.length > 0 ? (
+                <Block
+                  title={english ? "System anomaly follow-through" : "系统异常推进项"}
+                  description={
+                    english
+                      ? "Critical system facts are routed to the responsible role with redacted evidence references."
+                      : "关键系统事实按责任角色浮起，并保留脱敏证据引用。"
+                  }
+                  icon={<CircleAlert className="h-3.5 w-3.5" />}
+                  items={additionalRoleAnomalyItems}
+                  emptyTitle={english ? "No routed anomaly" : "当前没有角色异常推进项"}
+                  emptyDescription={
+                    english
+                      ? "Only critical or warning attention becomes role work."
+                      : "只有关键或警告级异常会转成角色推进项。"
+                  }
+                  ctaVariant="default"
+                />
+              ) : null}
               <Block
                 title={english ? "Top 1-3 work items" : "当前前三项工作"}
                 description={
