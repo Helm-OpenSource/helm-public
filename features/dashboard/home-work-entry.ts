@@ -27,6 +27,8 @@ export type DashboardHomeWorkEntryCard = {
   boundary: string;
   href: string;
   ctaLabel: string;
+  /** Opaque, already-redacted evidence reference for system-derived work. */
+  evidenceRef?: string | undefined;
   tracking?:
     | {
         sourceArea: "dashboard-work-entry";
@@ -86,6 +88,8 @@ export type DashboardHomeWorkEntryModel = {
   assignmentItems: DashboardHomeWorkEntryCard[];
   resumeItem: DashboardHomeWorkEntryCard;
   blockerItems: DashboardHomeWorkEntryCard[];
+  /** Role-routed system anomalies projected into suggestion-only work. */
+  roleAnomalyItems?: DashboardHomeWorkEntryCard[] | undefined;
 };
 
 export type DashboardHomeSecondaryVisibility = {
@@ -570,5 +574,6 @@ export function buildDashboardHomeWorkEntry(
         ),
       2,
     ),
+    roleAnomalyItems: [],
   };
 }

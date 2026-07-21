@@ -13,6 +13,7 @@ import {
 } from "@/lib/shell/role-home-routing";
 import {
   resolveShellMainline,
+  resolveShellAttention,
   resolveShellRoleHomeRouting,
   resolveShellWorkstations,
   SHELL_MAINLINE_SURFACE_KEY,
@@ -28,6 +29,10 @@ import { NorthstarKpiPanel } from "@/features/northstar/northstar-kpi-panel";
 import { LegacyHomeView } from "@/features/dashboard/legacy-home-view";
 import { ConnectorBindingSuccessSheet } from "@/features/dashboard/connector-binding-success-sheet";
 import type { ShellRuntimeContext } from "@/lib/extensions/registry-types";
+import {
+  attachRoleAnomalyProgress,
+  resolveRoleAttentionCategory,
+} from "@/features/dashboard/role-anomaly-progress";
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -145,21 +150,43 @@ export default async function DashboardPage({
     workspace.id,
     SHELL_MAINLINE_SURFACE_KEY,
   );
-  const { readout: mainline } = await resolveShellMainline({
-    workspace,
-    english,
-    binding: mainlineBinding,
-    runtimeContext,
-    coreDefault: {
-      asOf: new Date().toISOString(),
-      english,
-      counts: {
-        judgementPending: workEntry.topWorkItems.length,
-        reviewQueue: workEntry.reviewItems.length,
-        advanceInFlight: null,
-      },
-    },
+  const attentionRoleCategory = resolveRoleAttentionCategory({
+    rolePresetKey: membership.rolePresetKey,
+    basePresetKey,
+    workspaceRole: membership.role,
   });
+  const [{ readout: mainline }, attentionResolution] = await Promise.all([
+    resolveShellMainline({
+      workspace,
+      english,
+      binding: mainlineBinding,
+      runtimeContext,
+      coreDefault: {
+        asOf: new Date().toISOString(),
+        english,
+        counts: {
+          judgementPending: workEntry.topWorkItems.length,
+          reviewQueue: workEntry.reviewItems.length,
+          advanceInFlight: null,
+        },
+      },
+    }),
+    resolveShellAttention({
+      workspace,
+      english,
+      roleCategory: attentionRoleCategory,
+      runtimeContext,
+    }),
+  ]);
+  const roleAwareWorkEntry = attachRoleAnomalyProgress({
+    model: workEntry,
+    attentionItems: attentionResolution.items,
+    english,
+  });
+  const roleAwareViewModel = {
+    ...viewModel,
+    dashboardHomeWorkEntry: roleAwareWorkEntry,
+  };
 
   // 北极星 KPI(read-only)——northstarKpiSources surface 首个 Core 消费者;
   // 金额只给分档、三态禁造数;无 provider 时一行诚实说明,不占版面。
@@ -182,7 +209,7 @@ export default async function DashboardPage({
       }
       mainline={mainline}
       northstarText={resolveNorthstarText(workspace.focusAreas, english)}
-      viewModel={viewModel}
+      viewModel={roleAwareViewModel}
       tenantResourceImpactReadout={pageData.tenantResourceImpactReadout}
       stage1OwnerLoopReadout={pageData.stage1OwnerLoopReadout}
       connectorSheet={connectorSheet}
@@ -197,7 +224,9 @@ export default async function DashboardPage({
         <AttentionInbox
           workspace={workspace}
           english={english}
+          roleCategory={attentionRoleCategory}
           runtimeContext={runtimeContext}
+          items={attentionResolution.items}
         />
       }
     />
