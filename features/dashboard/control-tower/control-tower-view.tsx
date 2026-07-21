@@ -20,11 +20,11 @@ import {
 
 /**
  * 控制塔内容层分流（蓝图 §2，Phase 1）——同一 URL、无 redirect：
- * - 管理角色（control_tower lens）：按关心程度三层——①需要你处理（拍板 +
- *   异常收件箱，唯一可被"消化"的内容）②经营态势（北极星一行 + 主线摘要 +
+ * - 管理角色（control_tower lens）：按关心程度三层——①需要你处理（有复核
+ *   capability 时含拍板 + 异常收件箱）②经营态势（北极星一行 + 主线摘要 +
  *   KPI，纯只读）③工位总览与折叠收纳。可操作内容置顶，只读态势居次。
- * - 一线角色（advance/delivery/review desk lens）：工位家视图——需拍板 +
- *   主区入口卡；不渲染主线卡带与改进候选（不给组合 KPI 面）。
+ * - 一线角色（advance/delivery/review desk lens）：工位家视图——当前工作 +
+ *   capability 允许时的复核入口 + 主区入口卡；不渲染主线卡带与改进候选。
  * - GENERIC（解析失败/无专属工位）：最低信息面——仅主区入口（搜索/收纳），
  *   不渲染需拍板 surface 与任何聚合读出。
  * northstarKpiSlot/attentionSlot 由页面注入（二者是独立异步 server component，
@@ -110,17 +110,25 @@ export function ControlTowerView({
         <PageHeader
           eyebrow={english ? "My desk" : "我的工位"}
           title={
-            english
-              ? "Today's queue and calls that need you"
-              : "今天的队列与需要你拍板的事"
+            viewModel.dashboardHomeWorkEntry.canReviewGovernedActions
+              ? english
+                ? "Today's queue and calls that need you"
+                : "今天的队列与需要你拍板的事"
+              : english
+                ? "Today's work queue"
+                : "今天的工作队列"
           }
           description={
-            english
-              ? "Suggestions only — nothing executes or sends without human review."
-              : "全部为建议——未经人工复核不执行、不外发。"
+            viewModel.dashboardHomeWorkEntry.canReviewGovernedActions
+              ? english
+                ? "Suggestions only — nothing executes or sends without human review."
+                : "全部为建议——未经人工复核不执行、不外发。"
+              : english
+                ? "Open work routed to your role. No recommendation executes or sends on its own."
+                : "打开分配给本角色的工作；任何建议都不会自行执行或外发。"
           }
         />
-        {/* 工位家：首个可操作区块 = 需要你拍板 */}
+        {/* 工位家：首个区块按真实 capability 展示当前工作与复核入口。 */}
         <DashboardHomeWorkEntrySurface
           model={viewModel.dashboardHomeWorkEntry}
           english={english}
@@ -142,9 +150,13 @@ export function ControlTowerView({
       <PageHeader
         eyebrow={english ? "Control tower" : "控制塔"}
         title={
-          english
-            ? "What the system is advancing, and where it needs you"
-            : "系统正在推进什么、哪里需要你拍板"
+          viewModel.dashboardHomeWorkEntry.canReviewGovernedActions
+            ? english
+              ? "What the system is advancing, and where it needs you"
+              : "系统正在推进什么、哪里需要你拍板"
+            : english
+              ? "What the system is advancing and what needs attention"
+              : "系统正在推进什么、哪里需要关注"
         }
         description={
           english
@@ -154,7 +166,7 @@ export function ControlTowerView({
       />
       <AssetScopeSwitch control={mainline.assetScope} english={english} />
 
-      {/* 层① 需要你处理——首屏即可操作：先拍板，后异常收件箱。
+      {/* 层① 需要你处理——首屏即可操作；复核入口由 capability 决定。
           这是首页唯一能被用户"消化掉"的内容，权重最高。 */}
       <DashboardHomeWorkEntrySurface
         model={viewModel.dashboardHomeWorkEntry}

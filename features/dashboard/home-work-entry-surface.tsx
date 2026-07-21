@@ -188,7 +188,9 @@ function WorkEntryActionRail({
   return (
     <nav
       aria-label={english ? "Current work quick actions" : "当前工作快速动作"}
-      className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-5"
+      className={`grid gap-2.5 md:grid-cols-2 ${
+        model.canReviewGovernedActions ? "xl:grid-cols-5" : "xl:grid-cols-4"
+      }`}
       data-dashboard-work-entry-action-rail="true"
     >
       <ActionRailItem
@@ -201,30 +203,32 @@ function WorkEntryActionRail({
         tracking={primary.tracking}
         ctaVariant="default"
       />
-      <ActionRailItem
-        label={english ? "Review" : "拍板"}
-        title={
-          review
-            ? english
-              ? `${model.reviewItems.length} actions waiting`
-              : `${model.reviewItems.length} 个动作待审批`
-            : english
-              ? "Review queue is clear"
-              : "复核队列已清"
-        }
-        body={
-          review
-            ? english
-              ? `Start with ${review.title}.`
-              : `先看：${review.title}。`
-            : english
-              ? "New customer-visible work will reappear here."
-              : "新的客户可见动作会重新出现在这里。"
-        }
-        href={reviewQueueHref}
-        ctaLabel={english ? "Open queue" : "查看队列"}
-        icon={<ShieldAlert className="h-3.5 w-3.5" />}
-      />
+      {model.canReviewGovernedActions ? (
+        <ActionRailItem
+          label={english ? "Review" : "拍板"}
+          title={
+            review
+              ? english
+                ? `${model.reviewItems.length} actions waiting`
+                : `${model.reviewItems.length} 个动作待审批`
+              : english
+                ? "Review queue is clear"
+                : "复核队列已清"
+          }
+          body={
+            review
+              ? english
+                ? `Start with ${review.title}.`
+                : `先看：${review.title}。`
+              : english
+                ? "New customer-visible work will reappear here."
+                : "新的客户可见动作会重新出现在这里。"
+          }
+          href={reviewQueueHref}
+          ctaLabel={english ? "Open queue" : "查看队列"}
+          icon={<ShieldAlert className="h-3.5 w-3.5" />}
+        />
+      ) : null}
       <ActionRailItem
         label={english ? "Signal" : "信号"}
         title={english ? "Add the work signal" : "上报信号"}
@@ -466,7 +470,7 @@ export function DashboardHomeWorkEntrySurface({
                 }
                 ctaVariant="default"
               />
-              {model.reviewItemsArePrimary ? (
+              {!model.canReviewGovernedActions ? null : model.reviewItemsArePrimary ? (
                 <ReviewQueueSummary items={model.reviewItems} english={english} />
               ) : (
                 <Block

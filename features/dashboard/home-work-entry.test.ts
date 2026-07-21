@@ -178,6 +178,7 @@ describe("buildDashboardHomeWorkEntry", () => {
   it("builds the empty/new state from setup handoff and keeps first-loop action first", () => {
     const model = buildDashboardHomeWorkEntry({
       english: true,
+      canReviewGovernedActions: true,
       firstLoopModel: buildFirstLoopModel({
         completedCount: 1,
         stage: "signal",
@@ -203,6 +204,7 @@ describe("buildDashboardHomeWorkEntry", () => {
   it("keeps a first-loop review fallback visible even without concrete approval tasks", () => {
     const model = buildDashboardHomeWorkEntry({
       english: true,
+      canReviewGovernedActions: true,
       firstLoopModel: buildFirstLoopModel({
         stage: "review",
         primaryAction: buildPrimaryAction("review", "/approvals", "Open review"),
@@ -227,6 +229,7 @@ describe("buildDashboardHomeWorkEntry", () => {
   it("switches to review-heavy when approval pressure is high and routes review cards into approvals", () => {
     const model = buildDashboardHomeWorkEntry({
       english: true,
+      canReviewGovernedActions: true,
       firstLoopModel: buildFirstLoopModel({
         stage: "review",
         primaryAction: buildPrimaryAction("review", "/approvals?approvalId=1", "Review approvals"),
@@ -283,9 +286,58 @@ describe("buildDashboardHomeWorkEntry", () => {
     });
   });
 
+  it("does not present governed review work as a personal action without review capability", () => {
+    const model = buildDashboardHomeWorkEntry({
+      english: false,
+      canReviewGovernedActions: false,
+      firstLoopModel: buildFirstLoopModel({
+        stage: "review",
+        primaryAction: buildPrimaryAction(
+          "review",
+          "/approvals?approvalId=approval-1",
+          "现在复核",
+        ),
+      }),
+      goalDrivenHome: buildGoalDrivenHome({
+        immediateActions: [
+          buildGoalLink("现在拍板：复核外呼草稿", "/approvals", "先完成审批。"),
+          buildGoalLink("查看本人工作台", "/workspace", "继续当前工作。"),
+        ],
+        topJudgements: [],
+      }),
+      pendingApprovals: [
+        {
+          id: "approval-1",
+          status: "PENDING",
+          reasoning: "外发前仍需要复核。",
+          actionItem: {
+            title: "复核外呼草稿",
+            opportunity: null,
+            contact: null,
+            meeting: null,
+          },
+        },
+      ],
+      setupFirstLoopHandoff: null,
+    });
+
+    expect(model.canReviewGovernedActions).toBe(false);
+    expect(model.state).not.toBe("review-heavy");
+    expect(model.reviewItems).toEqual([]);
+    expect(model.reviewItemsArePrimary).toBe(false);
+    expect(model.topWorkItems).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: expect.stringMatching(/^\/approvals/) }),
+      ]),
+    );
+    expect(model.topWorkItems[0]).toMatchObject({ href: "/workspace" });
+    expect(model.summary).not.toContain("复核压力");
+  });
+
   it("keeps returning/active state resume-first when the saved anchor is the current primary action", () => {
     const model = buildDashboardHomeWorkEntry({
       english: true,
+      canReviewGovernedActions: true,
       firstLoopModel: buildFirstLoopModel({
         stage: "anchor",
         completedCount: 6,
@@ -314,6 +366,7 @@ describe("buildDashboardHomeWorkEntry", () => {
   it("surfaces mapped external case-assignment actions in the home work entry without adding a new route", () => {
     const model = buildDashboardHomeWorkEntry({
       english: true,
+      canReviewGovernedActions: true,
       firstLoopModel: buildFirstLoopModel(),
       goalDrivenHome: buildGoalDrivenHome(),
       pendingApprovals: [],
@@ -339,6 +392,7 @@ describe("buildDashboardHomeWorkEntry", () => {
   it("keeps Chinese dashboard work-entry copy free of operator-facing English residue", () => {
     const model = buildDashboardHomeWorkEntry({
       english: false,
+      canReviewGovernedActions: true,
       firstLoopModel: buildFirstLoopModel({
         stage: "review",
         primaryAction: {

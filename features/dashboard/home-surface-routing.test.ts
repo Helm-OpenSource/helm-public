@@ -116,6 +116,7 @@ function buildGoalDrivenHome(input?: Partial<GoalDrivenHomeModel>): GoalDrivenHo
 
 function buildWorkEntry(input?: Partial<DashboardHomeWorkEntryModel>): DashboardHomeWorkEntryModel {
   return {
+    canReviewGovernedActions: true,
     state: "returning-active",
     title: "Home work entry",
     summary: "Current ranked work.",

@@ -18,6 +18,7 @@ import {
   buildWorkspaceOperatingFoundationSummary,
 } from "@/lib/operating-system";
 import { createWorkerSkillResourcePageSupport } from "@/lib/worker-skill-resource/presentation";
+import { canReviewWorkspaceGovernedActions } from "@/lib/auth/action-governance";
 
 export type DashboardViewModel = ReturnType<typeof buildDashboardViewModelInternal>;
 
@@ -122,6 +123,9 @@ function buildDashboardViewModelInternal(input: {
 
   const dashboardHomeWorkEntry = buildDashboardHomeWorkEntry({
     english,
+    canReviewGovernedActions: canReviewWorkspaceGovernedActions(
+      membership.role,
+    ),
     firstLoopModel,
     goalDrivenHome,
     pendingApprovals: data.pendingApprovals,
