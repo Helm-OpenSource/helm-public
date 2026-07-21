@@ -76,6 +76,7 @@ export type DashboardCaseAssignmentActionPreview = {
 };
 
 export type DashboardHomeWorkEntryModel = {
+  canReviewGovernedActions: boolean;
   state: DashboardHomeWorkEntryState;
   title: string;
   summary: string;
@@ -107,6 +108,7 @@ type PendingApprovalPreview = {
 
 type BuildDashboardHomeWorkEntryInput = {
   english: boolean;
+  canReviewGovernedActions: boolean;
   firstLoopModel: WorkspaceFirstLoopModel;
   goalDrivenHome: GoalDrivenHomeModel;
   pendingApprovals: PendingApprovalPreview[];
@@ -122,8 +124,10 @@ function getState(
   }
 
   if (
-    input.pendingApprovals.length >= 3 ||
-    (input.pendingApprovals.length > 0 &&
+    (input.canReviewGovernedActions &&
+      input.pendingApprovals.length >= 3) ||
+    (input.canReviewGovernedActions &&
+      input.pendingApprovals.length > 0 &&
       input.firstLoopModel.primaryAction.stepId === "review")
   ) {
     return "review-heavy";
@@ -166,6 +170,11 @@ function dedupeCards(cards: DashboardHomeWorkEntryCard[], limit: number) {
   }
 
   return result;
+}
+
+function isGovernedReviewHref(href: string) {
+  const pathname = href.split(/[?#]/, 1)[0];
+  return pathname === "/approvals" || pathname.startsWith("/approvals/");
 }
 
 function buildFirstLoopPrimaryCard(
@@ -399,10 +408,20 @@ function buildSummary(
         ? "Pick the first real signal, name the business object, and decide the next move."
         : "先挑第一条真实信号，确认它指向哪个经营对象，再决定下一步。";
     case "first-loop":
+      if (!input.canReviewGovernedActions) {
+        return input.english
+          ? "Current loop progress and the next work routed to your role."
+          : "当前闭环进度，以及分配给本角色的下一步工作。";
+      }
       return input.english
         ? "Current loop progress, review pressure and the next move."
         : "当前闭环进度、复核压力和下一步动作。";
     case "returning-active":
+      if (!input.canReviewGovernedActions) {
+        return input.english
+          ? "The top item, resume point and blockers route into work available to your role."
+          : "最重要事项、恢复起点和阻塞都会指向本角色可处理的工作。";
+      }
       return input.english
         ? "The top item, review pressure, resume point and blocker now route into the business object you can act on."
         : "最重要事项、复核压力、恢复起点和阻塞都会直接指向可处理的经营对象。";
@@ -449,7 +468,9 @@ export function buildDashboardHomeWorkEntry(
 ): DashboardHomeWorkEntryModel {
   const state = getState(input);
   const reviewItems = dedupeCards(
-    input.pendingApprovals.length
+    !input.canReviewGovernedActions
+      ? []
+      : input.pendingApprovals.length
       ? input.pendingApprovals
           .slice(0, 3)
           .map((task, index) => buildReviewItem(task, input.english, index))
@@ -462,9 +483,14 @@ export function buildDashboardHomeWorkEntry(
     ),
     3,
   );
+  const canPresentFirstLoopPrimary =
+    input.canReviewGovernedActions ||
+    input.firstLoopModel.primaryAction.stepId !== "review";
 
   const topWorkCandidates: DashboardHomeWorkEntryCard[] = [
-    buildFirstLoopPrimaryCard(input),
+    ...(canPresentFirstLoopPrimary
+      ? [buildFirstLoopPrimaryCard(input)]
+      : []),
     ...assignmentItems,
     ...input.goalDrivenHome.immediateActions.map((item, index) =>
       buildGoalDrivenCard(item, input.english, index),
@@ -472,7 +498,10 @@ export function buildDashboardHomeWorkEntry(
     ...input.goalDrivenHome.topJudgements.map((item, index) =>
       buildGoalDrivenCard(item, input.english, index + 10),
     ),
-  ];
+  ].filter(
+    (item) =>
+      input.canReviewGovernedActions || !isGovernedReviewHref(item.href),
+  );
 
   if (state === "review-heavy" && reviewItems.length) {
     topWorkCandidates.unshift(...reviewItems);
@@ -486,6 +515,7 @@ export function buildDashboardHomeWorkEntry(
     topWorkItems.every((item) => reviewItemIds.has(item.id));
 
   return {
+    canReviewGovernedActions: input.canReviewGovernedActions,
     state,
     title: buildTitle(state, input.english),
     summary: buildSummary(state, input),
