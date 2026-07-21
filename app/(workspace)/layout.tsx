@@ -20,6 +20,7 @@ import {
 } from "@/lib/shell/shell-chrome";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 import { DatabaseConnectionBanner } from "@/components/shared/database-connection-banner";
+import { canReviewWorkspaceGovernedActions } from "@/lib/auth/action-governance";
 
 export default async function WorkspaceLayout({
   children,
@@ -49,6 +50,7 @@ export default async function WorkspaceLayout({
         >["clusters"];
         shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
         basePresetKey: string | null;
+        canReviewGovernedActions: boolean;
       }
     | null = null;
   let databaseErrorMessage: string | null = null;
@@ -109,6 +111,9 @@ export default async function WorkspaceLayout({
         workspaceRole: membership.role,
         rawConfiguration: workspace.configuration,
       }),
+      canReviewGovernedActions: canReviewWorkspaceGovernedActions(
+        membership.role,
+      ),
     };
   } catch (error) {
     // 检查是否是数据库连接错误

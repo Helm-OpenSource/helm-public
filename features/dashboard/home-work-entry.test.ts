@@ -297,6 +297,10 @@ describe("buildDashboardHomeWorkEntry", () => {
           "/approvals?approvalId=approval-1",
           "现在复核",
         ),
+        returnReadback: buildReturnReadback(
+          "explicit",
+          "/approvals?approvalId=approval-1#approval-preview",
+        ),
       }),
       goalDrivenHome: buildGoalDrivenHome({
         immediateActions: [
@@ -304,6 +308,13 @@ describe("buildDashboardHomeWorkEntry", () => {
           buildGoalLink("查看本人工作台", "/workspace", "继续当前工作。"),
         ],
         topJudgements: [],
+        roleHandoffs: [
+          buildGoalLink(
+            "数据策略工位",
+            "/reports?tab=strategy-review",
+            "继续处理分配给数据策略角色的工作。",
+          ),
+        ],
       }),
       pendingApprovals: [
         {
@@ -330,8 +341,47 @@ describe("buildDashboardHomeWorkEntry", () => {
         expect.objectContaining({ href: expect.stringMatching(/^\/approvals/) }),
       ]),
     );
-    expect(model.topWorkItems[0]).toMatchObject({ href: "/workspace" });
+    expect(model.topWorkItems[0]).toMatchObject({
+      href: "/reports?tab=strategy-review",
+    });
+    expect(model.resumeItem.href).toBe("/reports?tab=strategy-review");
+    expect(model.blockerItems).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: expect.stringMatching(/^\/approvals/) }),
+      ]),
+    );
     expect(model.summary).not.toContain("复核压力");
+  });
+
+  it("fails closed to a neutral role-work anchor when no safe resume target exists", () => {
+    const model = buildDashboardHomeWorkEntry({
+      english: true,
+      canReviewGovernedActions: false,
+      firstLoopModel: buildFirstLoopModel({
+        stage: "review",
+        primaryAction: buildPrimaryAction(
+          "review",
+          "/approvals?approvalId=approval-1",
+        ),
+        returnReadback: buildReturnReadback(
+          "explicit",
+          "/approvals?approvalId=approval-1#approval-preview",
+        ),
+      }),
+      goalDrivenHome: buildGoalDrivenHome({
+        immediateActions: [],
+        topJudgements: [],
+        roleHandoffs: [],
+      }),
+      pendingApprovals: [],
+      setupFirstLoopHandoff: null,
+    });
+
+    expect(model.topWorkItems).toEqual([]);
+    expect(model.resumeItem).toMatchObject({
+      href: "/dashboard#role-workspace",
+      ctaLabel: "Open role work",
+    });
   });
 
   it("keeps returning/active state resume-first when the saved anchor is the current primary action", () => {

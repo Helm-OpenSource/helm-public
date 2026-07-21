@@ -69,12 +69,22 @@ function toNavItems(
     }));
 }
 
+export function getSidebarReviewPresentation(
+  canReviewGovernedActions: boolean,
+) {
+  return {
+    excludedHrefs: canReviewGovernedActions ? [] : ["/approvals"],
+    showPendingApprovals: canReviewGovernedActions,
+  };
+}
+
 export function Sidebar({
   workspaceName,
   brandLabel = null,
   pendingApprovals,
   navExtensionClusters = [],
   basePresetKey = null,
+  canReviewGovernedActions,
 }: {
   workspaceName: string;
   /** 租户品牌行覆盖;null → messages.shell.brand。 */
@@ -82,6 +92,7 @@ export function Sidebar({
   pendingApprovals: number;
   navExtensionClusters?: ReadonlyArray<WorkspaceNavExtensionCluster>;
   basePresetKey?: string | null;
+  canReviewGovernedActions: boolean;
 }) {
   const {
     locale,
@@ -94,6 +105,9 @@ export function Sidebar({
   } = useWorkspaceUi();
   const pathname = usePathname();
   const english = locale === "en-US";
+  const reviewPresentation = getSidebarReviewPresentation(
+    canReviewGovernedActions,
+  );
   const demoProfile = demoMode ? getDemoModeProfile(demoMode, locale) : null;
   const demoShellCopy =
     demoProfile?.mode === "sales"
@@ -238,19 +252,28 @@ export function Sidebar({
   const drawerItems = catalog
     ? toNavItems(catalog.drawer, english, settingsHrefs)
     : [];
-  const renderedSections = catalog
-    ? [
+  const renderedSections = (
+    catalog
+      ? [
         {
           key: "primary",
           label: english ? "Daily core" : "主区",
-          items: toNavItems(catalog.primary, english),
+          items: toNavItems(
+            catalog.primary,
+            english,
+            reviewPresentation.excludedHrefs,
+          ),
         },
         ...(catalog.secondary.length > 0
           ? [
               {
                 key: "secondary",
                 label: english ? "Periodic" : "次区",
-                items: toNavItems(catalog.secondary, english),
+                items: toNavItems(
+                  catalog.secondary,
+                  english,
+                  reviewPresentation.excludedHrefs,
+                ),
               },
             ]
           : []),
@@ -263,14 +286,23 @@ export function Sidebar({
               },
             ]
           : []),
-      ].map((section) => ({
-        ...section,
-        items: section.items.map((item) => ({
-          ...item,
-          activeDescendantExclusions: undefined as string[] | undefined,
-        })),
-      }))
-    : navSections;
+        ].map((section) => ({
+          ...section,
+          items: section.items.map((item) => ({
+            ...item,
+            activeDescendantExclusions: undefined as string[] | undefined,
+          })),
+        }))
+      : navSections.map((section) => ({
+          ...section,
+          items: section.items.filter(
+            (item) =>
+              !reviewPresentation.excludedHrefs.some((href) =>
+                item.href.startsWith(href),
+              ),
+          ),
+        }))
+  ).filter((section) => section.items.length > 0);
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[288px] shrink-0 px-4 py-4 lg:flex">
@@ -428,31 +460,33 @@ export function Sidebar({
           </div>
         </nav>
 
-        <div className="workspace-panel mt-6 rounded-[26px] p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                {messages.shell.pendingApprovals}
-              </p>
-              <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                {messages.shell.pendingApprovalsBody}
-              </p>
+        {reviewPresentation.showPendingApprovals ? (
+          <div className="workspace-panel mt-6 rounded-[26px] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                  {messages.shell.pendingApprovals}
+                </p>
+                <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+                  {messages.shell.pendingApprovalsBody}
+                </p>
+              </div>
+              <Badge variant="approval">{pendingApprovals}</Badge>
             </div>
-            <Badge variant="approval">{pendingApprovals}</Badge>
+            <Link
+              href="/approvals"
+              className="demo-mode-link mt-4 inline-flex items-center gap-2 text-sm font-medium transition hover:brightness-90"
+            >
+              <Sparkles className="h-4 w-4" />
+              {messages.shell.viewQueue}
+            </Link>
+            <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
+              {english
+                ? "Command palette: Cmd/Ctrl + K"
+                : "命令面板：Cmd/Ctrl + K"}
+            </p>
           </div>
-          <Link
-            href="/approvals"
-            className="demo-mode-link mt-4 inline-flex items-center gap-2 text-sm font-medium transition hover:brightness-90"
-          >
-            <Sparkles className="h-4 w-4" />
-            {messages.shell.viewQueue}
-          </Link>
-          <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
-            {english
-              ? "Command palette: Cmd/Ctrl + K"
-              : "命令面板：Cmd/Ctrl + K"}
-          </p>
-        </div>
+        ) : null}
       </div>
     </aside>
   );

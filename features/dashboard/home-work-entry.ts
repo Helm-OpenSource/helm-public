@@ -360,6 +360,25 @@ function buildResumeCard(
   };
 }
 
+function buildRoleWorkFallbackCard(
+  english: boolean,
+): DashboardHomeWorkEntryCard {
+  return {
+    id: "resume-role-work-fallback",
+    title: english ? "Open current role work" : "打开本角色当前工作",
+    subject: english ? "Current role work" : "本角色当前工作",
+    statusLabel: english ? "Resume role work" : "继续本角色工作",
+    nextStep: english
+      ? "Return to the current role workspace and continue from available work."
+      : "回到当前角色工位，从可处理的工作继续。",
+    boundary: english
+      ? "Navigation does not grant review or execution authority."
+      : "导航不授予复核或执行权限。",
+    href: "/dashboard#role-workspace",
+    ctaLabel: english ? "Open role work" : "打开角色工位",
+  };
+}
+
 function buildBlockerCard(
   item: GoalDrivenHomeModel["topBlockers"][number],
   english: boolean,
@@ -488,6 +507,11 @@ export function buildDashboardHomeWorkEntry(
     input.firstLoopModel.primaryAction.stepId !== "review";
 
   const topWorkCandidates: DashboardHomeWorkEntryCard[] = [
+    ...(!input.canReviewGovernedActions
+      ? input.goalDrivenHome.roleHandoffs.map((item, index) =>
+          buildGoalDrivenCard(item, input.english, index + 20),
+        )
+      : []),
     ...(canPresentFirstLoopPrimary
       ? [buildFirstLoopPrimaryCard(input)]
       : []),
@@ -513,6 +537,18 @@ export function buildDashboardHomeWorkEntry(
     reviewItems.length > 0 &&
     topWorkItems.length > 0 &&
     topWorkItems.every((item) => reviewItemIds.has(item.id));
+  const rawResumeItem = buildResumeCard(input);
+  const roleSafeResumeItem =
+    !input.canReviewGovernedActions &&
+    isGovernedReviewHref(rawResumeItem.href)
+      ? topWorkItems[0]
+        ? {
+            ...topWorkItems[0],
+            id: `resume-role-work-${topWorkItems[0].id}`,
+            statusLabel: input.english ? "Resume role work" : "继续本角色工作",
+          }
+        : buildRoleWorkFallbackCard(input.english)
+      : rawResumeItem;
 
   return {
     canReviewGovernedActions: input.canReviewGovernedActions,
@@ -523,11 +559,15 @@ export function buildDashboardHomeWorkEntry(
     reviewItems,
     reviewItemsArePrimary,
     assignmentItems,
-    resumeItem: buildResumeCard(input),
+    resumeItem: roleSafeResumeItem,
     blockerItems: dedupeCards(
-      input.goalDrivenHome.topBlockers.map((item, index) =>
-        buildBlockerCard(item, input.english, index),
-      ),
+      input.goalDrivenHome.topBlockers
+        .map((item, index) => buildBlockerCard(item, input.english, index))
+        .filter(
+          (item) =>
+            input.canReviewGovernedActions ||
+            !isGovernedReviewHref(item.href),
+        ),
       2,
     ),
   };
