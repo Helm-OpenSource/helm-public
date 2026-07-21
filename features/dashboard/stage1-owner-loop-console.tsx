@@ -7,12 +7,70 @@ import {
   Database,
   ShieldCheck,
 } from "lucide-react";
+import {
+  CAIO_MATURITY_STAGES,
+  CAIO_STAGE_EVIDENCE,
+  type CaioCapabilityMaturityStage,
+} from "@/lib/caio-governance/types";
 import type {
   Stage1DecisionProjection,
   Stage1OwnerLoopReadout,
   Stage1SourceHealth,
 } from "@/features/dashboard/stage1-owner-loop-readout";
 import { cn } from "@/lib/utils";
+
+// Display-only projection of the CAIO capability maturity axis (a product
+// honesty axis, never a permission axis): which stage this surface embodies
+// and how each stage is honestly staged today. Reading it grants nothing.
+const CURRENT_CONSOLE_STAGE: CaioCapabilityMaturityStage = "observe";
+
+const ZH_STAGE_LABEL: Record<CaioCapabilityMaturityStage, string> = {
+  observe: "观察",
+  advise: "建议",
+  supervise: "监督",
+  orchestrate: "编排",
+  authorized_execute: "授权执行",
+};
+
+// Frozen English display names (never derived from the machine values,
+// which would lowercase them).
+const EN_STAGE_LABEL: Record<CaioCapabilityMaturityStage, string> = {
+  observe: "Observe",
+  advise: "Advise",
+  supervise: "Supervise",
+  orchestrate: "Orchestrate",
+  authorized_execute: "Authorized Execute",
+};
+
+type CaioStageEvidenceStatusKey =
+  (typeof CAIO_STAGE_EVIDENCE)[CaioCapabilityMaturityStage];
+
+const ZH_STAGE_EVIDENCE: Record<CaioStageEvidenceStatusKey, string> = {
+  formed: "已成形",
+  next_layer: "仍需下一层",
+  roadmap_disabled: "路线图·默认关闭",
+};
+
+const EN_STAGE_EVIDENCE: Record<CaioStageEvidenceStatusKey, string> = {
+  formed: "formed",
+  next_layer: "needs next layer",
+  roadmap_disabled: "roadmap · disabled",
+};
+
+// The ADR requires Authorized Execute to ALWAYS render with the full
+// unauthorized / disabled / not-an-execution-permit wording.
+const ZH_STAGE_DETAIL_OVERRIDE: Partial<
+  Record<CaioCapabilityMaturityStage, string>
+> = {
+  authorized_execute: "路线图·未授权·默认关闭·不构成执行许可",
+};
+
+const EN_STAGE_DETAIL_OVERRIDE: Partial<
+  Record<CaioCapabilityMaturityStage, string>
+> = {
+  authorized_execute:
+    "roadmap · unauthorized · disabled by default · not an execution permit",
+};
 
 const ZH_POSTURE: Record<Stage1OwnerLoopReadout["posture"], string> = {
   not_configured: "尚未形成运行记录",
@@ -105,7 +163,9 @@ export function Stage1OwnerLoopConsole({
             </span>
             <div className="min-w-0">
               <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                {english ? "CEO operating loop" : "一把手经营闭环"}
+                {english
+                  ? "Helm CAIO — the AI executive reporting to the CEO"
+                  : "Helm CAIO｜一号位 AI 经营中枢"}
               </p>
               <h2
                 id="stage1-owner-loop-title"
@@ -118,6 +178,46 @@ export function Stage1OwnerLoopConsole({
                   ? "Read-only operating view. Advice requires owner confirmation; this surface does not execute, send, or create commitments."
                   : "只读经营视图。建议需一把手确认；本面板不执行、不外发、不产生承诺。"}
               </p>
+              <div
+                className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--muted-foreground)]"
+                data-caio-console-governance="true"
+              >
+                <span>
+                  {english
+                    ? "Reports directly and only to the CEO · currently read-only, review-first"
+                    : "直属并只向 CEO 汇报 · 当前为只读、复核优先"}
+                </span>
+                <span className="flex flex-wrap items-center gap-x-2">
+                  <span data-caio-console-axis="maturity">
+                    {english
+                      ? "Capability maturity (not a permission axis):"
+                      : "能力成熟度（非权限轴）："}
+                  </span>
+                  {CAIO_MATURITY_STAGES.map((stage) => (
+                    <span
+                      key={stage}
+                      data-caio-console-stage={stage}
+                      data-caio-console-stage-current={
+                        stage === CURRENT_CONSOLE_STAGE ? "true" : "false"
+                      }
+                      className={cn(
+                        stage === CURRENT_CONSOLE_STAGE
+                          ? "font-medium text-[color:var(--foreground)]"
+                          : undefined,
+                      )}
+                    >
+                      {english
+                        ? `${EN_STAGE_LABEL[stage]} (${EN_STAGE_DETAIL_OVERRIDE[stage] ?? EN_STAGE_EVIDENCE[CAIO_STAGE_EVIDENCE[stage]]})`
+                        : `${ZH_STAGE_LABEL[stage]}（${ZH_STAGE_DETAIL_OVERRIDE[stage] ?? ZH_STAGE_EVIDENCE[CAIO_STAGE_EVIDENCE[stage]]}）`}
+                    </span>
+                  ))}
+                </span>
+                <span>
+                  {english
+                    ? "CAIO is a product role definition, not a legal officer or an authorization; this view follows workspace owner permissions only."
+                    : "CAIO 为产品角色定义，不是法定高管身份，也不改变权限；本视图仅按工作区 OWNER 权限展示。"}
+                </span>
+              </div>
             </div>
           </div>
           <span className="text-xs text-[color:var(--muted-foreground)]">

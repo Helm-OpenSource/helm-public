@@ -239,6 +239,15 @@ fail closed；已完成回执不重写。
 - [ ] 非 OWNER 无法读取 CEO 聚合。
 - [ ] `docs/STATUS.md` 没有提前宣称生产成立。
 
+## 附：Helm CAIO 展示核对
+
+验收界面时同时核对：标题区显示 `Helm CAIO｜一号位 AI 经营中枢`；治理
+状态条显示"直属并只向 CEO 汇报 · 当前为只读、复核优先"、五阶段成熟度
+（Observe 已成形；Orchestrate 为路线图且默认关闭；Authorized Execute 为路线图、未授权、默认关闭且不构成执行许可）与
+"CAIO 为产品角色定义，不是法定高管身份，也不改变权限"。该状态条为只读
+展示，不引入任何按钮、写入口或权限变化；非 OWNER 仍不可见本面板。
+
+
 ## English Reference
 
 Run this reference flow only in an isolated, public-safe workspace unless a

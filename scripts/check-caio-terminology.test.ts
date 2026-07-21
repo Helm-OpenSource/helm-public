@@ -31,6 +31,8 @@ const FIXTURE_FILES = [
   "docs/public-docs-manifest.json",
   "scripts/check-caio-terminology.ts",
   "scripts/check-caio-terminology.test.ts",
+  "features/dashboard/stage1-owner-loop-console.tsx",
+  "docs/operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md",
   "package.json",
 ] as const;
 
