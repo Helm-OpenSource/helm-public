@@ -88,8 +88,10 @@ alias: a CAIO alias appearing in place of a historical machine identifier in
 canonical objects must fail validation, never be rewritten.
 
 Repository ownership: the public Core repository owns this ADR, the single
-CAIO type contract (planned; delivered by a later slice, not by this PR), and
-the terminology gate; the industry pack repository owns legacy-wording
+CAIO type contract (`lib/caio-governance/`: a delivered pure-type,
+deterministic, fail-closed validator slice with no database, API, server
+action, or permission entry point; permission, policy, LLM-runtime, and API
+code must not depend on it), and the terminology gate; the industry pack repository owns legacy-wording
 classification and ratchet guards for industry content; customer overlay
 repositories own tenant display overrides and private identity mapping only;
 the control-plane repository owns compatibility metadata, pins, receipts, and
