@@ -1,12 +1,18 @@
 import Link from "next/link";
-import { ArrowRight, BookOpenText, ShieldAlert, Waypoints } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpenText,
+  BriefcaseBusiness,
+  ShieldAlert,
+  Waypoints,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import type { DashboardHomeSurfaceRoutingModel } from "@/features/dashboard/home-surface-routing";
 
 function getSurfaceBadgeLabel(
-  surface: "detail" | "approvals" | "memory",
+  surface: "detail" | "approvals" | "work" | "memory",
   english: boolean,
 ) {
   switch (surface) {
@@ -14,17 +20,21 @@ function getSurfaceBadgeLabel(
       return english ? "Detail" : "详情页";
     case "approvals":
       return english ? "Approvals" : "复核与边界";
+    case "work":
+      return english ? "Role work" : "角色工位";
     case "memory":
       return english ? "Memory" : "经营记忆";
   }
 }
 
-function getSurfaceIcon(surface: "detail" | "approvals" | "memory") {
+function getSurfaceIcon(surface: "detail" | "approvals" | "work" | "memory") {
   switch (surface) {
     case "detail":
       return <Waypoints className="h-3.5 w-3.5" />;
     case "approvals":
       return <ShieldAlert className="h-3.5 w-3.5" />;
+    case "work":
+      return <BriefcaseBusiness className="h-3.5 w-3.5" />;
     case "memory":
       return <BookOpenText className="h-3.5 w-3.5" />;
   }

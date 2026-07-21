@@ -47,6 +47,7 @@ type AppShellProps = {
   navExtensionClusters: ReadonlyArray<WorkspaceNavExtensionCluster>;
   shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
   basePresetKey: string | null;
+  canReviewGovernedActions: boolean;
   children: React.ReactNode;
 };
 
@@ -70,6 +71,7 @@ export function AppShell({
   navExtensionClusters,
   shellChromeProfiles,
   basePresetKey,
+  canReviewGovernedActions,
   children,
 }: AppShellProps) {
   const resolvedDemoMode = demoMode ?? "default";
@@ -98,6 +100,7 @@ export function AppShell({
             pendingApprovals={pendingApprovals}
             navExtensionClusters={navExtensionClusters}
             basePresetKey={basePresetKey}
+            canReviewGovernedActions={canReviewGovernedActions}
           />
         ) : (
           <ShellChromeGate profiles={shellChromeProfiles}>
@@ -107,6 +110,7 @@ export function AppShell({
               pendingApprovals={pendingApprovals}
               navExtensionClusters={navExtensionClusters}
               basePresetKey={basePresetKey}
+              canReviewGovernedActions={canReviewGovernedActions}
             />
           </ShellChromeGate>
         )}

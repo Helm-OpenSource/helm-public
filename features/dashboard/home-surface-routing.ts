@@ -14,8 +14,8 @@ import type { DashboardSetupFirstLoopHandoffModel } from "@/features/dashboard/s
 // DESIGN.md §7.2: every routing card must state its boundary so the
 // recommendation/commitment line stays explicit at the surface choice level.
 export type DashboardHomeSurfaceRoutingCard = {
-  id: "detail" | "approvals" | "memory";
-  surface: "detail" | "approvals" | "memory";
+  id: "detail" | "approvals" | "work" | "memory";
+  surface: "detail" | "approvals" | "work" | "memory";
   title: string;
   focus: string;
   summary: string;
@@ -92,6 +92,13 @@ function isDetailLikeHref(href: string) {
   return !isHomeOrOverviewHref(href) && !isApprovalsHref(href) && !isMemoryHref(href);
 }
 
+function isRoleAvailableHref(
+  href: string,
+  canReviewGovernedActions: boolean,
+) {
+  return canReviewGovernedActions || !isApprovalsHref(href);
+}
+
 function getDetailHrefRank(href: string) {
   if (isRouteHref(href, "/opportunities")) {
     return 0;
@@ -143,7 +150,11 @@ function pickDetailCandidate(input: BuildDashboardHomeSurfaceRoutingInput): Href
       .filter((item) => isDetailLikeHref(item.href))
       .map((item) => cardToCandidate(item))
       .filter((item): item is HrefCandidate => Boolean(item)),
-    isDetailLikeHref(input.firstLoopModel.firstSignal.href)
+    isDetailLikeHref(input.firstLoopModel.firstSignal.href) &&
+    isRoleAvailableHref(
+      input.firstLoopModel.firstSignal.href,
+      input.workEntry.canReviewGovernedActions,
+    )
       ? {
           label: input.firstLoopModel.firstSignal.label,
           summary: input.firstLoopModel.firstSignal.summary,
@@ -247,6 +258,41 @@ function buildApprovalsCard(
   };
 }
 
+function buildRoleWorkCard(
+  input: BuildDashboardHomeSurfaceRoutingInput,
+): DashboardHomeSurfaceRoutingCard {
+  const candidate =
+    input.workEntry.topWorkItems.find((item) => !isApprovalsHref(item.href)) ??
+    (!isApprovalsHref(input.workEntry.resumeItem.href)
+      ? input.workEntry.resumeItem
+      : null);
+  const focus =
+    candidate?.title ??
+    (input.english ? "Current role work" : "本角色当前工作");
+  const href = candidate?.href ?? "/dashboard#role-workspace";
+
+  return {
+    id: "work",
+    surface: "work",
+    title: input.english ? "Continue work routed to your role" : "继续本角色当前工作",
+    focus,
+    summary:
+      candidate?.nextStep ??
+      (input.english
+        ? "Open the work surface assigned to your role and continue from the current context."
+        : "打开分配给本角色的工作面，从当前上下文继续推进。"),
+    boundary:
+      candidate?.boundary ??
+      (input.english
+        ? "Navigation does not grant review or execution authority."
+        : "导航不授予复核或执行权限。"),
+    href: appendHomeSurfaceEntry(href, "work", focus),
+    ctaLabel:
+      candidate?.ctaLabel ??
+      (input.english ? "Open role work" : "打开角色工位"),
+  };
+}
+
 function buildMemoryCard(
   input: BuildDashboardHomeSurfaceRoutingInput,
 ): DashboardHomeSurfaceRoutingCard {
@@ -293,11 +339,17 @@ export function buildDashboardHomeSurfaceRouting(
       ? "Open the right work surface"
       : "打开对应的工作入口",
     summary: input.english
-      ? "Detail handles state and evidence, Approvals handles boundary review, and Memory holds stable state, correction and replay."
-      : "详情页处理状态与证据，复核与边界处理边界复核，经营记忆承担稳定状态、修正和回放。",
+      ? input.workEntry.canReviewGovernedActions
+        ? "Detail handles state and evidence, Approvals handles boundary review, and Memory holds stable state, correction and replay."
+        : "Detail handles state and evidence, role work continues assigned work, and Memory holds stable state, correction and replay."
+      : input.workEntry.canReviewGovernedActions
+        ? "详情页处理状态与证据，复核与边界处理边界复核，经营记忆承担稳定状态、修正和回放。"
+        : "详情页处理状态与证据，角色工位承接分配工作，经营记忆承担稳定状态、修正和回放。",
     cards: [
       buildDetailCard(input),
-      buildApprovalsCard(input),
+      input.workEntry.canReviewGovernedActions
+        ? buildApprovalsCard(input)
+        : buildRoleWorkCard(input),
       buildMemoryCard(input),
     ],
   };

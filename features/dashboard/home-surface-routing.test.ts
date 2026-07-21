@@ -208,6 +208,47 @@ describe("buildDashboardHomeSurfaceRouting", () => {
     });
   });
 
+  it("routes members without review capability to role work instead of approvals", () => {
+    const model = buildDashboardHomeSurfaceRouting({
+      english: false,
+      workEntry: buildWorkEntry({
+        canReviewGovernedActions: false,
+        reviewItems: [],
+        topWorkItems: [
+          {
+            id: "role-work-1",
+            title: "打开数据策略工位",
+            subject: "本角色当前工作",
+            statusLabel: "现在可推进",
+            nextStep: "继续处理分配给数据策略角色的工作。",
+            boundary: "只打开角色工位，不改变业务状态。",
+            href: "/reports?tab=strategy-review",
+            ctaLabel: "打开角色工位",
+          },
+        ],
+      }),
+      firstLoopModel: buildFirstLoopModel(),
+      goalDrivenHome: buildGoalDrivenHome(),
+      setupFirstLoopHandoff: null,
+    });
+
+    expect(model.cards.map((card) => card.surface)).toEqual([
+      "detail",
+      "work",
+      "memory",
+    ]);
+    expect(model.cards[1]).toMatchObject({
+      href:
+        "/reports?tab=strategy-review&entry=home-surface-work&focus=%E6%89%93%E5%BC%80%E6%95%B0%E6%8D%AE%E7%AD%96%E7%95%A5%E5%B7%A5%E4%BD%8D",
+      ctaLabel: "打开角色工位",
+    });
+    expect(model.cards).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: expect.stringMatching(/^\/approvals/) }),
+      ]),
+    );
+  });
+
   it("prefers the first setup/live signal as the detail destination before generic dashboard resume links", () => {
     const model = buildDashboardHomeSurfaceRouting({
       english: true,
