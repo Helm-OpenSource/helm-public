@@ -474,8 +474,33 @@ export function validateWorkUnitProofPackage(input: {
       detail: actualRequirementIds.join(", "),
     });
   }
-  const entryIds = new Set(packageItem.entries.map((proofEntry) => proofEntry.entryId));
+  const entryIds = new Set<string>();
+  const duplicateEntryIds = new Set<string>();
+  for (const proofEntry of packageItem.entries) {
+    if (entryIds.has(proofEntry.entryId)) {
+      duplicateEntryIds.add(proofEntry.entryId);
+    }
+    entryIds.add(proofEntry.entryId);
+  }
+  for (const entryId of [...duplicateEntryIds].sort((a, b) => a.localeCompare(b))) {
+    violations.push({
+      rule: "proof-package-entry-id-duplicate",
+      detail: entryId,
+    });
+  }
   for (const coverage of packageItem.requirementCoverage) {
+    if (coverage.status === "covered" && coverage.evidenceEntryIds.length === 0) {
+      violations.push({
+        rule: "proof-package-covered-requirement-needs-evidence",
+        detail: coverage.requirementId,
+      });
+    }
+    if (coverage.status === "missing" && coverage.evidenceEntryIds.length > 0) {
+      violations.push({
+        rule: "proof-package-missing-requirement-has-evidence",
+        detail: coverage.requirementId,
+      });
+    }
     for (const entryId of coverage.evidenceEntryIds) {
       if (!entryIds.has(entryId)) {
         violations.push({

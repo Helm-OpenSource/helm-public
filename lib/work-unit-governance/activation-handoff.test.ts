@@ -112,6 +112,21 @@ describe("activation handoff governance", () => {
     expect(readout.activatesRuntime).toBe(false);
   });
 
+  it("blocks an authorization receipt that is not accompanied by its handoff request", () => {
+    const workUnit = buildSyntheticPromotedWorkUnit({
+      activationScope: "production_runtime",
+    });
+    const request = buildSyntheticActivationHandoffRequest(workUnit);
+    const receipt = buildSyntheticActivationAuthorityReceipt(workUnit, request);
+
+    const readout = buildActivationHandoffReadout({ workUnit, receipt });
+
+    expect(readout.posture).toBe("blocked");
+    expect(readout.blockers.map((violation) => violation.rule)).toContain(
+      "activation-authorization-request-required",
+    );
+  });
+
   it("requires remediation instead of rollback for customer-visible and commercial commitments", () => {
     for (const activationScope of [
       "customer_visible",

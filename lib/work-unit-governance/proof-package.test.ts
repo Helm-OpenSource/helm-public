@@ -111,6 +111,62 @@ describe("work unit proof package", () => {
     ).toContain("proof-package-requirement-coverage-mismatch");
   });
 
+  it("requires coverage status to match the attached evidence", () => {
+    const workUnit = buildSyntheticPromotedWorkUnit();
+    const clean = buildSyntheticWorkUnitProofPackage(workUnit);
+    const covered = clean.requirementCoverage.find(
+      (coverage) => coverage.status === "covered",
+    );
+    expect(covered).toBeDefined();
+
+    const coveredWithoutEvidence: WorkUnitProofPackage = {
+      ...clean,
+      requirementCoverage: clean.requirementCoverage.map((coverage) =>
+        coverage.requirementId === covered?.requirementId
+          ? { ...coverage, evidenceEntryIds: [] }
+          : coverage,
+      ),
+    };
+    expect(
+      validateWorkUnitProofPackage({
+        workUnit,
+        packageItem: coveredWithoutEvidence,
+      }).map((violation) => violation.rule),
+    ).toContain("proof-package-covered-requirement-needs-evidence");
+
+    const missingWithEvidence: WorkUnitProofPackage = {
+      ...clean,
+      requirementCoverage: clean.requirementCoverage.map((coverage) =>
+        coverage.requirementId === covered?.requirementId
+          ? { ...coverage, status: "missing" }
+          : coverage,
+      ),
+    };
+    expect(
+      validateWorkUnitProofPackage({
+        workUnit,
+        packageItem: missingWithEvidence,
+      }).map((violation) => violation.rule),
+    ).toContain("proof-package-missing-requirement-has-evidence");
+  });
+
+  it("rejects duplicate proof entry identifiers", () => {
+    const workUnit = buildSyntheticPromotedWorkUnit();
+    const clean = buildSyntheticWorkUnitProofPackage(workUnit);
+    const firstEntry = clean.entries[0];
+    expect(firstEntry).toBeDefined();
+    const packageItem: WorkUnitProofPackage = {
+      ...clean,
+      entries: firstEntry ? [...clean.entries, firstEntry] : clean.entries,
+    };
+
+    expect(
+      validateWorkUnitProofPackage({ workUnit, packageItem }).map(
+        (violation) => violation.rule,
+      ),
+    ).toContain("proof-package-entry-id-duplicate");
+  });
+
   it("includes repair and learning evidence without applying the learning asset", () => {
     const workUnit = buildSyntheticPromotedWorkUnit();
     const finding = buildSyntheticLearningFinding(workUnit);

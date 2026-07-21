@@ -592,6 +592,12 @@ export function buildActivationHandoffReadout(input: {
   if (receiptParse && !receiptParse.success) {
     blockers.push(...schemaViolations("activation-authority-receipt", receiptParse.error));
   }
+  if (receiptParse?.success && !requestParse?.success) {
+    blockers.push({
+      rule: "activation-authorization-request-required",
+      detail: receiptParse.data.receiptId,
+    });
+  }
   if (requestParse?.success && receiptParse?.success) {
     blockers.push(
       ...validateActivationAuthorization({

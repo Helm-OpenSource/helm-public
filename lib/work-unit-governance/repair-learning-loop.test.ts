@@ -208,4 +208,28 @@ describe("work unit repair and learning loop", () => {
     expect(readout.actions.every((action) => !action.publicCoreExecutes)).toBe(true);
     expect(readout.actions.every((action) => !action.changesCheckRules)).toBe(true);
   });
+
+  it("keeps unresolved learning findings actionable when no validation checks failed", () => {
+    const original = buildSyntheticRepairedWorkUnit(buildSyntheticFailedWorkUnit());
+    const finding = buildSyntheticLearningFinding(original);
+
+    const unresolved = buildRepairLearningReadout({
+      original,
+      findings: [finding],
+    });
+
+    expect(unresolved.failedChecks).toEqual([]);
+    expect(unresolved.posture).toBe("lesson_asset_required");
+    expect(unresolved.blockers.map((violation) => violation.rule)).toContain(
+      "learning-finding-needs-executable-asset-or-owner-waiver",
+    );
+
+    const resolved = buildRepairLearningReadout({
+      original,
+      findings: [finding],
+      learningDrafts: [buildSyntheticLearningAssetDraft({ finding })],
+    });
+
+    expect(resolved.posture).toBe("lesson_asset_ready");
+  });
 });
