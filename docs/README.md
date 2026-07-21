@@ -56,6 +56,7 @@ connector 授权、写回、外发或审批证明。
 - [交付工程师初始化诊断要求 / Delivery engineer setup diagnostic requirements](product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md)
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
 - [Stage 1 一把手经营闭环方法 / Stage 1 owner operating loop method](product/HELM_STAGE1_OWNER_LOOP_METHOD.md)
+- [Helm CAIO 产品与治理口径 / Helm CAIO product and governance ADR](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md) / [English](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.en.md) — 冻结品牌与治理定义、成熟度五阶段与兼容映射；不授予权限、不激活生产
 - [Stage 1 一把手经营闭环 Runbook / Stage 1 owner operating loop runbook](operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md)
 - [经营信号首公里 15 分钟跑通 / Signal First Mile quickstart](product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md)
 - [公开路线图 / Public roadmap](roadmap/HELM_PUBLIC_ROADMAP.md)

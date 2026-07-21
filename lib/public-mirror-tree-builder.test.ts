@@ -173,7 +173,7 @@ describe("public mirror tree builder", () => {
       license: "Apache-2.0",
       scripts: {
         "check:boundaries":
-          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop",
+          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology",
         "check:source-profiler-boundaries":
           "node --import tsx scripts/check-source-profiler-boundaries.ts",
         "check:golden-path-docs":
@@ -191,6 +191,8 @@ describe("public mirror tree builder", () => {
           "node --import tsx scripts/check-ai-shelf-trust-center-contract.ts",
         "check:stage1-owner-loop":
           "node --import tsx scripts/check-stage1-owner-loop.ts && vitest run lib/stage1-owner-loop features/dashboard/stage1-owner-loop-readout.test.ts features/dashboard/stage1-owner-loop-console-accessibility.test.ts --config vitest.public.config.ts",
+        "check:caio-terminology":
+          "node --import tsx scripts/check-caio-terminology.ts && vitest run scripts/check-caio-terminology.test.ts --config vitest.public.config.ts",
         "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
         "check:public-commit-metadata":
           "node --import tsx scripts/public-commit-metadata-check.ts",
@@ -320,7 +322,7 @@ describe("public mirror tree builder", () => {
       "npm run public:smoke:static && npm run check:secret-history",
     );
     expect(scripts["check:boundaries"]).toBe(
-      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop",
+      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology",
     );
     expect(scripts["check:source-profiler-boundaries"]).toBe(
       "node --import tsx scripts/check-source-profiler-boundaries.ts",
