@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const SCREENSHOT_DIR = "/tmp/helm-stage1-owner-loop";
 
@@ -15,6 +15,32 @@ async function openDemoWorkspace(
     "data-workspace-density",
     /comfortable|compact/,
   );
+}
+
+async function expectCaioGovernance(consoleLocator: Locator) {
+  await expect(consoleLocator).toContainText("Helm CAIO｜一号位 AI 经营中枢");
+  const governance = consoleLocator.locator(
+    '[data-caio-console-governance="true"]',
+  );
+  await expect(governance).toBeVisible();
+  await expect(governance).toContainText(
+    "直属并只向 CEO 汇报 · 当前为只读、复核优先",
+  );
+  await expect(
+    consoleLocator.locator('[data-caio-console-stage-current="true"]'),
+  ).toHaveText("观察（已成形）");
+  await expect(
+    consoleLocator.locator('[data-caio-console-stage="orchestrate"]'),
+  ).toHaveText("编排（路线图·默认关闭）");
+  await expect(
+    consoleLocator.locator('[data-caio-console-stage="authorized_execute"]'),
+  ).toHaveText("授权执行（路线图·未授权·默认关闭·不构成执行许可）");
+  await expect(governance).toContainText(
+    "CAIO 为产品角色定义，不是法定高管身份，也不改变权限",
+  );
+  await expect(
+    consoleLocator.locator('[data-caio-console-axis="maturity"]'),
+  ).toHaveText("能力成熟度（非权限轴）：");
 }
 
 async function expectMetric(
@@ -51,6 +77,7 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
     await expect(console).toContainText(
       "只读经营视图。建议需一把手确认；本面板不执行、不外发、不产生承诺。",
     );
+    await expectCaioGovernance(console);
     await expectMetric(page, "source-health", "1/2", /1 个过时 · 0 个异常/);
     await expectMetric(page, "owner-decisions", "1", /1 项跟进中/);
     await expectMetric(page, "open-supervision", "1", /0 个严重 · 1 个警告/);
@@ -74,6 +101,41 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
     expect(browserErrors).toEqual([]);
   });
 
+  test("English locale renders the frozen CAIO wording", async ({
+    page,
+    context,
+  }) => {
+    await context.addCookies([
+      {
+        name: "helm-ui-locale",
+        value: "en-US",
+        domain: "127.0.0.1",
+        path: "/",
+      },
+    ]);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openDemoWorkspace(page, "founder");
+    const console = page.locator('[data-stage1-owner-loop-console="true"]');
+    await expect(console).toBeVisible();
+    await expect(console).toContainText(
+      "Helm CAIO — the AI executive reporting to the CEO",
+    );
+    await expect(
+      console.locator('[data-caio-console-axis="maturity"]'),
+    ).toHaveText("Capability maturity (not a permission axis):");
+    await expect(
+      console.locator('[data-caio-console-stage-current="true"]'),
+    ).toHaveText("Observe (formed)");
+    await expect(
+      console.locator('[data-caio-console-stage="authorized_execute"]'),
+    ).toHaveText(
+      "Authorized Execute (roadmap · unauthorized · disabled by default · not an execution permit)",
+    );
+    await expect(console).toContainText(
+      "CAIO is a product role definition, not a legal officer or an authorization",
+    );
+  });
+
   test("non-OWNER cannot see the owner operating loop", async ({ page }) => {
     await openDemoWorkspace(page, "sales");
     await expect(
@@ -89,6 +151,7 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
 
     const console = page.locator('[data-stage1-owner-loop-console="true"]');
     await expect(console).toBeVisible();
+    await expectCaioGovernance(console);
     const dimensions = await console.evaluate((element) => ({
       clientWidth: element.clientWidth,
       scrollWidth: element.scrollWidth,

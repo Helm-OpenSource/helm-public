@@ -580,15 +580,35 @@ const REQUIRED_TOKENS: ReadonlyArray<{
       "Helm CAIO 术语与治理 ADR",
       "已成形但仍需下一层：品牌冻结为「Helm CAIO｜一号位 AI 经营中枢」",
       "纯类型与确定性验证器契约切片已成形",
-      "产品面与运行层仍由后续切片交付",
+      "除下方 Observe 参考 Console 外，其他产品面与运行层仍由后续切片交付",
       "成熟度轴而非权限轴",
-      "Orchestrate 与 Authorized Execute 为路线图且默认关闭",
+      "Authorized Execute 为路线图、未授权、默认关闭且不构成执行许可",
       "不改变任何权限、路由、API、数据库、执行状态机或既有机器标识",
     ],
   },
   {
     file: "docs/README.md",
     tokens: ["product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md"],
+  },
+  {
+    file: "docs/operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md",
+    tokens: [
+      "Authorized Execute 为路线图、未授权、默认关闭且不构成执行许可",
+    ],
+  },
+  {
+    file: "features/dashboard/stage1-owner-loop-console.tsx",
+    tokens: [
+      "Helm CAIO｜一号位 AI 经营中枢",
+      "Helm CAIO — the AI executive reporting to the CEO",
+      "直属并只向 CEO 汇报 · 当前为只读、复核优先",
+      "CAIO 为产品角色定义，不是法定高管身份，也不改变权限",
+      "路线图·未授权·默认关闭·不构成执行许可",
+      "能力成熟度（非权限轴）：",
+      "Capability maturity (not a permission axis):",
+      "roadmap · unauthorized · disabled by default · not an execution permit",
+      'data-caio-console-governance="true"',
+    ],
   },
 ];
 

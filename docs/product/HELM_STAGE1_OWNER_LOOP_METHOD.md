@@ -288,6 +288,17 @@ Public Core。
 - 不声明 Helm-self、Sales Process Pack 或任何租户 Overlay 已部署。
 - 不声明合成测试、页面截图或本地迁移等于生产运行证据。
 
+## 附：Helm CAIO 品牌与阶段口径
+
+Stage 1 一把手经营闭环 Console 是 Helm CAIO（一号位 AI 经营中枢）在
+Observe 阶段的公共参考面。界面品牌显示为 `Helm CAIO｜一号位 AI 经营中枢`，
+并展示成熟度五阶段（成熟度轴，不是权限轴；权威口径见
+[Helm CAIO 产品与治理口径](HELM_CAIO_PRODUCT_AND_GOVERNANCE.md)）。品牌与
+阶段展示不改变任何权限、门控或数据行为：本面板仍按工作区 OWNER 权限
+只读展示，不执行、不外发、不产生承诺；CAIO 是产品角色定义，不是法定
+高管身份，也不是任何鉴权条件。
+
+
 ## English Reference
 
 Helm Stage 1 is an owner-authorized, read-only-to-review-first operating loop.
