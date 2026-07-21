@@ -126,7 +126,8 @@ Public Core 中的 `WorkspaceRole.OWNER` 是工作区权限角色（“一号位
 ## 7. 四仓职责（PR 验收边界）
 
 - **公开 Core 仓（本仓）**：本 ADR、唯一的 CAIO 类型契约（`lib/caio-governance/`
-  纯类型与验证器，规划中、由后续切片交付，本 PR 未交付）、通用展示语义与
+  纯类型与确定性验证器切片已交付；无数据库、无 API、无 server action、无
+  权限入口；权限、政策、LLM 运行时与 API 代码禁止依赖它）、通用展示语义与
   术语门禁。
 - **行业 Pack 仓**：行业通用内容的旧口径分类与 ratchet 门禁；不复制 Core
   枚举，不定义第二份 CaioMandate。

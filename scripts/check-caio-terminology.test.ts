@@ -551,6 +551,425 @@ describe("checkCaioTerminology fail-closed behavior", () => {
     ).toBe(true);
   });
 
+  it("fails when restricted code imports the caio-governance contract", () => {
+    sandbox = createFixture();
+    for (const dir of ["lib/auth", "lib/policies", "lib/llm", "app/api"]) {
+      mkdirSync(path.join(sandbox, dir), { recursive: true });
+      writeFileSync(
+        path.join(sandbox, dir, "leak.ts"),
+        'import { deriveRuntimeAuthority } from "@/lib/caio-governance";\n',
+        "utf8",
+      );
+    }
+    const violations = checkCaioTerminology(sandbox);
+    for (const dir of ["lib/auth", "lib/policies", "lib/llm", "app/api"]) {
+      expect(violations).toContainEqual({
+        file: `${dir}/leak.ts`,
+        reason:
+          "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance",
+      });
+    }
+    expect(violations).toHaveLength(4);
+  });
+
+  it("catches transitive dependencies laundered through barrel re-exports", () => {
+    sandbox = createFixture();
+    mkdirSync(path.join(sandbox, "lib", "bridge"), { recursive: true });
+    mkdirSync(path.join(sandbox, "lib", "auth"), { recursive: true });
+    // two-hop laundering: auth -> hop -> barrel -> caio-governance
+    writeFileSync(
+      path.join(sandbox, "lib", "bridge", "barrel.ts"),
+      'export * from "@/lib/caio-governance";\n',
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "bridge", "hop.ts"),
+      'export { deriveRuntimeAuthority } from "./barrel";\n',
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "consumer.ts"),
+      'import { deriveRuntimeAuthority } from "@/lib/bridge/hop";\n',
+      "utf8",
+    );
+    // a relative dynamic import also counts
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "lazy.ts"),
+      'export const load = () => import("../bridge/barrel");\n',
+      "utf8",
+    );
+    // unrestricted code may depend on the contract freely
+    writeFileSync(
+      path.join(sandbox, "lib", "reporting.ts"),
+      'import "@/lib/caio-governance";\n',
+      "utf8",
+    );
+    const violations = checkCaioTerminology(sandbox);
+    expect(violations).toContainEqual({
+      file: "lib/auth/consumer.ts",
+      reason:
+        "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance",
+    });
+    expect(violations).toContainEqual({
+      file: "lib/auth/lazy.ts",
+      reason:
+        "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance",
+    });
+    expect(violations).toHaveLength(2);
+  });
+
+  it("covers server actions, route handlers, permission modules, and syntax variants", () => {
+    sandbox = createFixture();
+    const reason =
+      "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance";
+    const cases: ReadonlyArray<[string, string]> = [
+      // additional restricted surfaces
+      [
+        "features/memory/actions.ts",
+        'import "@/lib/caio-governance";\n',
+      ],
+      [
+        "lib/memory/permissions.ts",
+        'import "@/lib/caio-governance";\n',
+      ],
+      [
+        "app/demo/start/route.ts",
+        'import "@/lib/caio-governance";\n',
+      ],
+      // static syntax variants
+      [
+        "lib/auth/comment-import.ts",
+        'export const p = import/*c*/("@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/comment-inside.ts",
+        'export const p = import(/*c*/ "@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/template.ts",
+        "export const p = import(`@/lib/caio-governance`);\n",
+      ],
+      [
+        "lib/auth/double-slash.ts",
+        'import "@//lib/caio-governance";\n',
+      ],
+      [
+        "lib/auth/js-specifier.ts",
+        'import "@/lib/bridge2/hop.js";\n',
+      ],
+    ];
+    mkdirSync(path.join(sandbox, "lib", "bridge2"), { recursive: true });
+    writeFileSync(
+      path.join(sandbox, "lib", "bridge2", "hop.ts"),
+      'export * from "@/lib/caio-governance";\n',
+      "utf8",
+    );
+    for (const [file, content] of cases) {
+      mkdirSync(path.join(sandbox, path.dirname(file)), { recursive: true });
+      writeFileSync(path.join(sandbox, file), content, "utf8");
+    }
+    const violations = checkCaioTerminology(sandbox);
+    for (const [file] of cases) {
+      expect(violations, file).toContainEqual({ file, reason });
+    }
+    expect(violations).toHaveLength(cases.length);
+  });
+
+  it("parses imports with the real AST: line comments, escapes, shadow pairs", () => {
+    sandbox = createFixture();
+    const reason =
+      "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance";
+    mkdirSync(path.join(sandbox, "lib", "auth"), { recursive: true });
+    mkdirSync(path.join(sandbox, "lib", "shadow"), { recursive: true });
+    // line comment between import and the parenthesis
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "line-comment.ts"),
+      'export const p = import // comment\n("@/lib/caio-governance");\n',
+      "utf8",
+    );
+    // unicode escape inside the specifier literal
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "escape.ts"),
+      'export const p = import("@/lib/caio-gover\\u006eance");\n',
+      "utf8",
+    );
+    // .js specifier with a harmless .js twin must still follow the .ts source
+    writeFileSync(
+      path.join(sandbox, "lib", "shadow", "hop.js"),
+      "module.exports = {};\n",
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "shadow", "hop.ts"),
+      'export * from "@/lib/caio-governance";\n',
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "shadowed.ts"),
+      'import "@/lib/shadow/hop.js";\n',
+      "utf8",
+    );
+    // allowJs: the .js twin of a server-action surface is firewalled too
+    mkdirSync(path.join(sandbox, "features", "billing"), { recursive: true });
+    writeFileSync(
+      path.join(sandbox, "features", "billing", "actions.js"),
+      'require("@/lib/caio-governance");\n',
+      "utf8",
+    );
+    const violations = checkCaioTerminology(sandbox);
+    for (const file of [
+      "lib/auth/line-comment.ts",
+      "lib/auth/escape.ts",
+      "lib/auth/shadowed.ts",
+      "features/billing/actions.js",
+    ]) {
+      expect(violations, file).toContainEqual({ file, reason });
+    }
+    expect(violations).toHaveLength(4);
+  });
+
+  it("firewalls any use-server module and bundler shadow pairs", () => {
+    sandbox = createFixture();
+    const reason =
+      "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance";
+    // a Server Action file with a non-standard name is a restricted surface
+    mkdirSync(path.join(sandbox, "features", "imports"), { recursive: true });
+    writeFileSync(
+      path.join(sandbox, "features", "imports", "crm-actions.ts"),
+      '"use server";\nimport "@/lib/caio-governance";\nexport async function act() {}\n',
+      "utf8",
+    );
+    // module.require and import-equals are static loads too
+    mkdirSync(path.join(sandbox, "lib", "auth"), { recursive: true });
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "module-require.ts"),
+      'declare const m: NodeModule;\nexport const p = m.require("@/lib/caio-governance");\n',
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "import-equals.ts"),
+      'import governance = require("@/lib/caio-governance");\nexport { governance };\n',
+      "utf8",
+    );
+    // .jsx specifier: the bundler resolves to the .tsx twin (which
+    // re-exports the contract), never the harmless .ts sibling
+    mkdirSync(path.join(sandbox, "lib", "shadow2"), { recursive: true });
+    writeFileSync(
+      path.join(sandbox, "lib", "shadow2", "hop.ts"),
+      "export const harmless = true;\n",
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "shadow2", "hop.tsx"),
+      'export * from "@/lib/caio-governance";\n',
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "jsx-shadow.ts"),
+      'import "@/lib/shadow2/hop.jsx";\n',
+      "utf8",
+    );
+    // an ordinary module without a use-server directive stays unrestricted
+    writeFileSync(
+      path.join(sandbox, "lib", "plain-consumer.ts"),
+      'import "@/lib/caio-governance";\n',
+      "utf8",
+    );
+    const violations = checkCaioTerminology(sandbox);
+    for (const file of [
+      "features/imports/crm-actions.ts",
+      "lib/auth/module-require.ts",
+      "lib/auth/import-equals.ts",
+      "lib/auth/jsx-shadow.ts",
+    ]) {
+      expect(violations, file).toContainEqual({ file, reason });
+    }
+    expect(violations).toHaveLength(4);
+  });
+
+  it("sees parenthesized/element-access require and .mts/.cts modules", () => {
+    sandbox = createFixture();
+    const reason =
+      "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance";
+    mkdirSync(path.join(sandbox, "lib", "auth"), { recursive: true });
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "paren-require.ts"),
+      'export const p = (require)("@/lib/caio-governance");\n',
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "paren-module-require.ts"),
+      'declare const m: NodeModule;\nexport const p = (m.require)("@/lib/caio-governance");\n',
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "element-require.ts"),
+      'declare const m: NodeModule;\nexport const p = m["require"]("@/lib/caio-governance");\n',
+      "utf8",
+    );
+    // .mjs specifier resolving to a .mts twin that re-exports the contract
+    mkdirSync(path.join(sandbox, "lib", "shadow3"), { recursive: true });
+    writeFileSync(
+      path.join(sandbox, "lib", "shadow3", "hop.mts"),
+      'export * from "@/lib/caio-governance";\n',
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "mjs-shadow.ts"),
+      'import "@/lib/shadow3/hop.mjs";\n',
+      "utf8",
+    );
+    // a .cts file inside a restricted root is itself a starting point
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "direct.cts"),
+      'import governance = require("@/lib/caio-governance");\nexport { governance };\n',
+      "utf8",
+    );
+    const violations = checkCaioTerminology(sandbox);
+    for (const file of [
+      "lib/auth/paren-require.ts",
+      "lib/auth/paren-module-require.ts",
+      "lib/auth/element-require.ts",
+      "lib/auth/mjs-shadow.ts",
+      "lib/auth/direct.cts",
+    ]) {
+      expect(violations, file).toContainEqual({ file, reason });
+    }
+    expect(violations).toHaveLength(5);
+  });
+
+  it("unwraps template keys and parenthesized static arguments", () => {
+    sandbox = createFixture();
+    const reason =
+      "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance";
+    mkdirSync(path.join(sandbox, "lib", "auth"), { recursive: true });
+    const cases: ReadonlyArray<[string, string]> = [
+      [
+        "lib/auth/template-key.ts",
+        'declare const m: NodeModule;\nexport const p = m[`require`]("@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/paren-key.ts",
+        'declare const m: NodeModule;\nexport const p = m[("require")]("@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/paren-arg.ts",
+        'export const p = require(("@/lib/caio-governance"));\n',
+      ],
+      [
+        "lib/auth/paren-template-arg.ts",
+        "export const p = import((`@/lib/caio-governance`));\n",
+      ],
+    ];
+    for (const [file, content] of cases) {
+      writeFileSync(path.join(sandbox, file), content, "utf8");
+    }
+    const violations = checkCaioTerminology(sandbox);
+    for (const [file] of cases) {
+      expect(violations, file).toContainEqual({ file, reason });
+    }
+    expect(violations).toHaveLength(cases.length);
+  });
+
+  it("sees through compile-time-transparent wrappers and new require", () => {
+    sandbox = createFixture();
+    const reason =
+      "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance";
+    mkdirSync(path.join(sandbox, "lib", "auth"), { recursive: true });
+    const cases: ReadonlyArray<[string, string]> = [
+      [
+        "lib/auth/as-const-arg.ts",
+        'export const p = require("@/lib/caio-governance" as const);\n',
+      ],
+      [
+        "lib/auth/as-callee.ts",
+        'export const p = (require as NodeRequire)("@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/non-null-callee.ts",
+        'export const p = require!("@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/as-const-key.ts",
+        'declare const m: NodeModule;\nexport const p = m["require" as const]("@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/as-import-arg.ts",
+        'export const p = import("@/lib/caio-governance" as string);\n',
+      ],
+      [
+        "lib/auth/new-require.js",
+        'export const p = new require("@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/new-module-require.js",
+        'export const p = new module.require("@/lib/caio-governance");\n',
+      ],
+      [
+        "lib/auth/new-element-require.js",
+        'export const p = new module["require"]("@/lib/caio-governance");\n',
+      ],
+    ];
+    for (const [file, content] of cases) {
+      writeFileSync(path.join(sandbox, file), content, "utf8");
+    }
+    const violations = checkCaioTerminology(sandbox);
+    for (const [file] of cases) {
+      expect(violations, file).toContainEqual({ file, reason });
+    }
+    expect(violations).toHaveLength(cases.length);
+  });
+
+  it("firewalls permission-family modules, JSDoc types, and triple-slash refs", () => {
+    sandbox = createFixture();
+    const reason =
+      "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance";
+    mkdirSync(path.join(sandbox, "lib", "extensions"), { recursive: true });
+    // a permission execution module outside the four roots
+    writeFileSync(
+      path.join(sandbox, "lib", "extensions", "permission-access.ts"),
+      'import "@/lib/caio-governance";\nexport const evaluate = () => true;\n',
+      "utf8",
+    );
+    // a JSDoc type import inside a restricted-root JS module
+    mkdirSync(path.join(sandbox, "lib", "auth"), { recursive: true });
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "jsdoc-type.js"),
+      '/** @type {import("@/lib/caio-governance").CaioMandate} */\nexport const mandate = {};\n',
+      "utf8",
+    );
+    // the TS 5.9 native @import tag is equivalent
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "jsdoc-import-tag.js"),
+      '/** @import { CaioMandate } from "@/lib/caio-governance" */\nexport const mandate2 = {};\n',
+      "utf8",
+    );
+    // a triple-slash path reference pointing into the contract
+    mkdirSync(path.join(sandbox, "lib", "caio-governance"), {
+      recursive: true,
+    });
+    writeFileSync(
+      path.join(sandbox, "lib", "caio-governance", "types.ts"),
+      "export type Placeholder = never;\n",
+      "utf8",
+    );
+    writeFileSync(
+      path.join(sandbox, "lib", "auth", "triple-slash.ts"),
+      '/// <reference path="../caio-governance/types.ts" />\nexport const x = 1;\n',
+      "utf8",
+    );
+    const violations = checkCaioTerminology(sandbox);
+    for (const file of [
+      "lib/extensions/permission-access.ts",
+      "lib/auth/jsdoc-type.js",
+      "lib/auth/jsdoc-import-tag.js",
+      "lib/auth/triple-slash.ts",
+    ]) {
+      expect(violations, file).toContainEqual({ file, reason });
+    }
+    expect(violations).toHaveLength(4);
+  });
+
   it("fails when an extensionless file smuggles a NUL byte", () => {
     sandbox = createFixture();
     writeFileSync(

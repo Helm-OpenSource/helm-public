@@ -34,6 +34,7 @@
 // activation claim.
 
 import { execFileSync } from "node:child_process";
+import ts from "typescript";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -556,7 +557,8 @@ const REQUIRED_TOKENS: ReadonlyArray<{
       "单向展示映射",
       "机器标识保持不变",
       "`WorkspaceRole.OWNER` 不等价",
-      "规划中、由后续切片交付",
+      "纯类型与确定性验证器切片已交付",
+      "禁止依赖它",
     ],
   },
   {
@@ -577,7 +579,8 @@ const REQUIRED_TOKENS: ReadonlyArray<{
     tokens: [
       "Helm CAIO 术语与治理 ADR",
       "已成形但仍需下一层：品牌冻结为「Helm CAIO｜一号位 AI 经营中枢」",
-      "CAIO 类型契约与产品面由后续切片交付",
+      "纯类型与确定性验证器契约切片已成形",
+      "产品面与运行层仍由后续切片交付",
       "成熟度轴而非权限轴",
       "Orchestrate 与 Authorized Execute 为路线图且默认关闭",
       "不改变任何权限、路由、API、数据库、执行状态机或既有机器标识",
@@ -588,6 +591,393 @@ const REQUIRED_TOKENS: ReadonlyArray<{
     tokens: ["product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md"],
   },
 ];
+
+
+// ---------------------------------------------------------------------------
+// Authority firewall: static import-graph reachability.
+// ---------------------------------------------------------------------------
+
+const RESTRICTED_IMPORT_PREFIXES = [
+  "lib/auth/",
+  "lib/policies/",
+  "lib/llm/",
+  "app/api/",
+] as const;
+
+// Beyond the directory roots, every server action, route handler,
+// permission module, and the middleware are permission / side-effect
+// surfaces and equally firewalled.
+function isRestrictedSurface(file: string): boolean {
+  if (RESTRICTED_IMPORT_PREFIXES.some((prefix) => file.startsWith(prefix))) {
+    return true;
+  }
+  // allowJs is on, so the .js/.jsx/.mjs/.cjs twins of every surface are
+  // firewalled too.
+  const base = path.posix.basename(file);
+  const stem = base.replace(/\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/u, "");
+  const hasSourceExtension = stem !== base;
+  if (!hasSourceExtension) {
+    return false;
+  }
+  if (stem === "actions" || stem === "action") {
+    return true;
+  }
+  // Any module in the permission family (permissions.ts,
+  // permission-access.ts, permission-manifest.ts, ...) is a permission
+  // execution surface.
+  if (stem.includes("permission")) {
+    return true;
+  }
+  if (file.startsWith("app/") && stem === "route") {
+    return true;
+  }
+  return stem === "middleware" && !file.includes("/");
+}
+
+const FIREWALL_TARGET_PREFIX = "lib/caio-governance";
+
+const SOURCE_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+];
+
+// Extracts import / export-from / require / dynamic-import specifiers via
+// the TypeScript AST: comments in any position, unicode escapes inside the
+// literal (\u006e), and template-literal specifiers are all handled by the
+// real parser instead of a regex. Specifiers with ${ } interpolation are
+// runtime construction (declared residual risk) and yield no static value.
+type ModuleFacts = {
+  specifiers: string[];
+  // true when the module (or any function in it) carries a "use server"
+  // directive — i.e. it defines Server Actions regardless of its filename.
+  usesServerDirective: boolean;
+};
+
+function collectModuleFacts(file: string, content: string): ModuleFacts {
+  const sourceFile = ts.createSourceFile(
+    file,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith(".tsx") || file.endsWith(".jsx")
+      ? ts.ScriptKind.TSX
+      : ts.ScriptKind.TS,
+  );
+  const specifiers: string[] = [];
+  let usesServerDirective = false;
+  // Unwraps every compile-time-transparent wrapper (parentheses, as-
+  // expressions, old-style type assertions, satisfies, non-null "!") — they
+  // all erase at emit, so require("x" as const) is a plain static load.
+  const unwrapTransparent = (node: ts.Node): ts.Node => {
+    let current: ts.Node = node;
+    while (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isSatisfiesExpression(current) ||
+      ts.isNonNullExpression(current)
+    ) {
+      current = current.expression;
+    }
+    return current;
+  };
+  // Reads any static string value — string literals and no-substitution
+  // template literals alike — through transparent wrappers, so
+  // require(("x")), import((`x`)), and m[`require`] all resolve.
+  const literalText = (node: ts.Node): string | null => {
+    const unwrapped = unwrapTransparent(node);
+    return ts.isStringLiteral(unwrapped) ||
+      ts.isNoSubstitutionTemplateLiteral(unwrapped)
+      ? unwrapped.text
+      : null;
+  };
+  const visit = (node: ts.Node): void => {
+    // JSDoc trees are not visited by forEachChild; walk them explicitly so
+    // /** @type {import("x").T} */ dependencies enter the graph too.
+    const jsDocs = (node as { jsDoc?: readonly ts.Node[] }).jsDoc;
+    if (jsDocs !== undefined) {
+      for (const doc of jsDocs) {
+        ts.forEachChild(doc, visit);
+      }
+    }
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier !== undefined
+    ) {
+      const text = literalText(node.moduleSpecifier);
+      if (text !== null) {
+        specifiers.push(text);
+      }
+    } else if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+      // `new require("x")` is a legal Node.js static load too.
+      const isDynamicImport =
+        node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const callee = unwrapTransparent(node.expression);
+      const isRequire =
+        (ts.isIdentifier(callee) && callee.text === "require") ||
+        (ts.isPropertyAccessExpression(callee) &&
+          callee.name.text === "require") ||
+        (ts.isElementAccessExpression(callee) &&
+          literalText(callee.argumentExpression) === "require");
+      const firstArgument = node.arguments?.[0];
+      if ((isDynamicImport || isRequire) && firstArgument !== undefined) {
+        const text = literalText(firstArgument);
+        if (text !== null) {
+          specifiers.push(text);
+        }
+      }
+    } else if (ts.isJSDocImportTag(node)) {
+      // TS 5.9 native JSDoc form: /** @import { T } from "x" */
+      const text = literalText(node.moduleSpecifier);
+      if (text !== null) {
+        specifiers.push(text);
+      }
+    } else if (ts.isImportTypeNode(node)) {
+      const argument = node.argument;
+      if (
+        ts.isLiteralTypeNode(argument) &&
+        ts.isStringLiteral(argument.literal)
+      ) {
+        specifiers.push(argument.literal.text);
+      }
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference)
+    ) {
+      const text = literalText(node.moduleReference.expression);
+      if (text !== null) {
+        specifiers.push(text);
+      }
+    } else if (
+      ts.isExpressionStatement(node) &&
+      ts.isStringLiteral(node.expression) &&
+      node.expression.text === "use server"
+    ) {
+      // Directive-position statements only ever appear at prologue slots;
+      // matching any string-literal expression statement is a safe
+      // over-approximation.
+      usesServerDirective = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  // Triple-slash path references are static file dependencies as well.
+  for (const reference of sourceFile.referencedFiles) {
+    const fileName = reference.fileName;
+    specifiers.push(
+      fileName.startsWith(".") || fileName.startsWith("@/")
+        ? fileName
+        : `./${fileName}`,
+    );
+  }
+  return { specifiers, usesServerDirective };
+}
+
+function resolveSpecifier(fromFile: string, specifier: string): string | null {
+  if (specifier.includes("${")) {
+    return null; // runtime-constructed specifier (residual risk)
+  }
+  if (specifier.startsWith("@/")) {
+    // Tolerate redundant slashes: @//lib/x resolves like @/lib/x.
+    return path.posix.normalize(specifier.slice(2)).replace(/^\/+/u, "");
+  }
+  if (specifier.startsWith(".")) {
+    return path.posix.normalize(
+      path.posix.join(path.posix.dirname(fromFile), specifier),
+    );
+  }
+  return null; // external package
+}
+
+// Extension-aware candidate order mirroring TypeScript bundler
+// resolution: a JS-flavored specifier maps to its TS twin first
+// (.js->.ts/.tsx, .jsx->.tsx, .mjs->.mts, .cjs->.cts), and extensionless
+// specifiers try the TS family, declarations, then JS.
+const EXTENSION_TWINS: Readonly<Record<string, readonly string[]>> = {
+  ".js": [".ts", ".tsx", ".js"],
+  ".jsx": [".tsx", ".jsx"],
+  ".mjs": [".mts", ".mjs"],
+  ".cjs": [".cts", ".cjs"],
+};
+
+const BARE_EXTENSION_ORDER = [
+  ".ts",
+  ".tsx",
+  ".d.ts",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+] as const;
+
+function moduleCandidates(normalized: string): string[] {
+  const extension = path.posix.extname(normalized).toLowerCase();
+  const twins = EXTENSION_TWINS[extension];
+  if (twins !== undefined) {
+    const stripped = normalized.slice(0, -extension.length);
+    return twins.map((twin) => `${stripped}${twin}`);
+  }
+  const candidates: string[] = [normalized];
+  for (const ext of BARE_EXTENSION_ORDER) {
+    candidates.push(`${normalized}${ext}`);
+  }
+  for (const ext of BARE_EXTENSION_ORDER) {
+    candidates.push(`${normalized}/index${ext}`);
+  }
+  return candidates;
+}
+
+// Prefer the repo's real TypeScript resolver (moduleResolution: bundler,
+// paths) when a tsconfig is available; fixture sandboxes without one fall
+// back to the manual candidate order above.
+function createModuleResolver(
+  repoRoot: string,
+): (fromFile: string, specifier: string) => string | null {
+  let options: ts.CompilerOptions | null = null;
+  try {
+    const configPath = path.join(repoRoot, "tsconfig.json");
+    const config = ts.readConfigFile(configPath, ts.sys.readFile);
+    if (config.error === undefined && config.config !== undefined) {
+      options = ts.parseJsonConfigFileContent(
+        config.config,
+        ts.sys,
+        repoRoot,
+      ).options;
+    }
+  } catch {
+    options = null;
+  }
+  if (options === null) {
+    return () => null;
+  }
+  const compilerOptions = options;
+  return (fromFile, specifier) => {
+    const resolution = ts.resolveModuleName(
+      specifier,
+      path.join(repoRoot, fromFile),
+      compilerOptions,
+      ts.sys,
+    ).resolvedModule;
+    if (resolution === undefined) {
+      return null;
+    }
+    const relative = path
+      .relative(repoRoot, resolution.resolvedFileName)
+      .split(path.sep)
+      .join("/");
+    return relative.startsWith("..") ? null : relative;
+  };
+}
+
+// BFS from every file under a restricted root: if the static import graph
+// can reach lib/caio-governance, the firewall is breached — no matter how
+// many barrel re-export hops sit in between.
+function findAuthorityFirewallViolations(
+  repoRoot: string,
+  files: readonly string[],
+): Violation[] {
+  const fileSet = new Set(files);
+  const sourceFiles = files.filter((file) =>
+    SOURCE_EXTENSIONS.includes(path.extname(file).toLowerCase()),
+  );
+
+  const resolveWithTs = createModuleResolver(repoRoot);
+  const isTarget = (candidate: string): boolean =>
+    candidate === FIREWALL_TARGET_PREFIX ||
+    candidate.startsWith(`${FIREWALL_TARGET_PREFIX}/`);
+  const edges = new Map<
+    string,
+    { targets: string[]; hitsTarget: boolean; usesServerDirective: boolean }
+  >();
+  for (const file of sourceFiles) {
+    const content = read(repoRoot, file);
+    if (content === null) {
+      continue;
+    }
+    const facts = collectModuleFacts(file, content);
+    const targets: string[] = [];
+    let hitsTarget = false;
+    for (const specifier of facts.specifiers) {
+      const normalized = resolveSpecifier(file, specifier);
+      if (normalized !== null && isTarget(normalized)) {
+        hitsTarget = true;
+        continue;
+      }
+      // The repo's real TypeScript resolver decides shadow pairs and
+      // package.json entries; the manual candidate order is the fixture
+      // fallback.
+      const resolved = resolveWithTs(file, specifier);
+      if (resolved !== null) {
+        if (isTarget(resolved)) {
+          hitsTarget = true;
+        } else if (fileSet.has(resolved)) {
+          targets.push(resolved);
+        }
+        continue;
+      }
+      if (normalized === null) {
+        continue;
+      }
+      for (const candidate of moduleCandidates(normalized)) {
+        if (fileSet.has(candidate)) {
+          targets.push(candidate);
+          break;
+        }
+      }
+    }
+    edges.set(file, {
+      targets,
+      hitsTarget,
+      usesServerDirective: facts.usesServerDirective,
+    });
+  }
+
+  const violations: Violation[] = [];
+  for (const file of sourceFiles) {
+    if (
+      !isRestrictedSurface(file) &&
+      edges.get(file)?.usesServerDirective !== true
+    ) {
+      continue;
+    }
+    const queue = [file];
+    const seen = new Set<string>(queue);
+    let reachesTarget = false;
+    while (queue.length > 0 && !reachesTarget) {
+      const current = queue.pop() as string;
+      const node = edges.get(current);
+      if (node === undefined) {
+        continue;
+      }
+      if (node.hitsTarget) {
+        reachesTarget = true;
+        break;
+      }
+      for (const next of node.targets) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    if (reachesTarget) {
+      violations.push({
+        file,
+        reason:
+          "authority firewall: permission, policy, LLM-runtime, and API code must not depend on lib/caio-governance",
+      });
+    }
+  }
+  return violations;
+}
 
 function read(repoRoot: string, file: string): string | null {
   const absolutePath = path.join(repoRoot, file);
@@ -655,6 +1045,15 @@ export function checkCaioTerminology(repoRoot = process.cwd()): Violation[] {
         reason: `forbidden legacy term: ${hit}`,
       });
     }
+  }
+
+  // Authority firewall (ADR §3): the permission/policy engine, governed
+  // LLM runtime, and API surface must never depend on the CAIO governance
+  // contract — a CaioMandate is not an authorization token. Checked as
+  // static import-graph reachability, so barrel files and multi-hop
+  // re-exports cannot launder the dependency.
+  for (const violation of findAuthorityFirewallViolations(repoRoot, files)) {
+    violations.push(violation);
   }
 
   for (const entry of LEGACY_TERM_BUDGETS) {
