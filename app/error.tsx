@@ -2,6 +2,12 @@
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  claimStaleChunkReload,
+  classifyClientRuntimeError,
+  isRecoverableChunkLoadError,
+  toClientRuntimeRouteFamily,
+} from "@/lib/client-runtime-error-recovery";
 
 export default function Error({
   error,
@@ -14,13 +20,12 @@ export default function Error({
 
   useEffect(() => {
     const payload = {
-      message: error.message,
-      name: error.name,
-      stack: error.stack,
+      code: classifyClientRuntimeError(error),
       digest: error.digest ?? null,
-      url: typeof window !== "undefined" ? window.location.href : null,
-      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
-      timestamp: new Date().toISOString(),
+      routeFamily:
+        typeof window !== "undefined"
+          ? toClientRuntimeRouteFamily(window.location.pathname)
+          : "other",
     };
 
     const endpoint = "/api/runtime/client-errors";
@@ -40,6 +45,15 @@ export default function Error({
     }
 
     console.error(error);
+
+    if (
+      typeof window !== "undefined" &&
+      isRecoverableChunkLoadError(error) &&
+      claimBrowserStaleChunkReload()
+    ) {
+      const timer = window.setTimeout(() => window.location.reload(), 100);
+      return () => window.clearTimeout(timer);
+    }
   }, [error]);
 
   return (
@@ -58,4 +72,12 @@ export default function Error({
       </div>
     </div>
   );
+}
+
+function claimBrowserStaleChunkReload() {
+  try {
+    return claimStaleChunkReload(window.sessionStorage);
+  } catch {
+    return false;
+  }
 }
