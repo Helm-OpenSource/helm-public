@@ -526,7 +526,12 @@ describe("checkCaioTerminology fail-closed behavior", () => {
 
   it("honors .gitignore via the git-defined scan surface", () => {
     sandbox = createFixture();
-    execFileSync("git", ["init", "--quiet", sandbox]);
+    execFileSync("git", ["init", "--quiet", sandbox], {
+      env: {
+        HOME: process.env.HOME,
+        PATH: process.env.PATH,
+      },
+    });
     writeFileSync(path.join(sandbox, ".gitignore"), "ignored-dir/\n", "utf8");
     const ignored = path.join(sandbox, "ignored-dir");
     mkdirSync(ignored, { recursive: true });
@@ -540,7 +545,19 @@ describe("checkCaioTerminology fail-closed behavior", () => {
       "数字 COO 未忽略文件必须被扫描",
       "utf8",
     );
-    const violations = checkCaioTerminology(sandbox);
+    const previousGitDir = process.env.GIT_DIR;
+    const previousGitWorkTree = process.env.GIT_WORK_TREE;
+    process.env.GIT_DIR = path.join(REPO_ROOT, ".git");
+    process.env.GIT_WORK_TREE = REPO_ROOT;
+    let violations: ReturnType<typeof checkCaioTerminology>;
+    try {
+      violations = checkCaioTerminology(sandbox);
+    } finally {
+      if (previousGitDir === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = previousGitDir;
+      if (previousGitWorkTree === undefined) delete process.env.GIT_WORK_TREE;
+      else process.env.GIT_WORK_TREE = previousGitWorkTree;
+    }
     expect(
       violations.some((violation) => violation.file.startsWith("ignored-dir/")),
     ).toBe(false);
