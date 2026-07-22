@@ -17,6 +17,7 @@ import {
   type DestinationCatalog,
   type RoleLens,
 } from "@/lib/shell/role-home";
+import { routeWorkEntryToWorkstation } from "@/features/dashboard/workstation-home-work-entry";
 
 /**
  * 控制塔内容层分流（蓝图 §2，Phase 1）——同一 URL、无 redirect：
@@ -47,7 +48,7 @@ export function ControlTowerView({
   english: boolean;
   lens: RoleLens;
   basePresetKey: string | null;
-  workstationHomeEntry?: { href: string; label: string } | null;
+  workstationHomeEntry?: { key: string; href: string; label: string } | null;
   mainline: MainlineReadout;
   northstarText: string | null;
   viewModel: Pick<
@@ -100,6 +101,16 @@ export function ControlTowerView({
   }
 
   if (lens !== "control_tower") {
+    const workstationViewModel = workstationHomeEntry
+      ? {
+          ...viewModel,
+          dashboardHomeWorkEntry: routeWorkEntryToWorkstation({
+            model: viewModel.dashboardHomeWorkEntry,
+            workstation: workstationHomeEntry,
+            english,
+          }),
+        }
+      : viewModel;
     return (
       <div
         className="space-y-6"
@@ -110,27 +121,37 @@ export function ControlTowerView({
         <PageHeader
           eyebrow={english ? "My desk" : "我的工位"}
           title={
-            viewModel.dashboardHomeWorkEntry.canReviewGovernedActions
+            workstationHomeEntry
               ? english
-                ? "Today's queue and calls that need you"
-                : "今天的队列与需要你拍板的事"
-              : english
-                ? "Today's work queue"
-                : "今天的工作队列"
+                ? "Today's role work queue"
+                : "今天的角色工作队列"
+              : workstationViewModel.dashboardHomeWorkEntry
+                    .canReviewGovernedActions
+                ? english
+                  ? "Today's queue and calls that need you"
+                  : "今天的队列与需要你拍板的事"
+                : english
+                  ? "Today's work queue"
+                  : "今天的工作队列"
           }
           description={
-            viewModel.dashboardHomeWorkEntry.canReviewGovernedActions
+            workstationHomeEntry
               ? english
-                ? "Suggestions only — nothing executes or sends without human review."
-                : "全部为建议——未经人工复核不执行、不外发。"
-              : english
-                ? "Open work routed to your role. No recommendation executes or sends on its own."
-                : "打开分配给本角色的工作；任何建议都不会自行执行或外发。"
+                ? "Start from the bound role desk. Routed system anomalies will move ahead of it when they need this role."
+                : "从已绑定的角色工位开始；需要本角色处理的系统异常会自动排到它前面。"
+              : workstationViewModel.dashboardHomeWorkEntry
+                    .canReviewGovernedActions
+                ? english
+                  ? "Suggestions only — nothing executes or sends without human review."
+                  : "全部为建议——未经人工复核不执行、不外发。"
+                : english
+                  ? "Open work routed to your role. No recommendation executes or sends on its own."
+                  : "打开分配给本角色的工作；任何建议都不会自行执行或外发。"
           }
         />
         {/* 工位家：首个区块按真实 capability 展示当前工作与复核入口。 */}
         <DashboardHomeWorkEntrySurface
-          model={viewModel.dashboardHomeWorkEntry}
+          model={workstationViewModel.dashboardHomeWorkEntry}
           english={english}
         />
         <DeskEntries catalog={catalog} english={english} />

@@ -29,8 +29,10 @@ import { getDemoModeProfile } from "@/lib/demo/demo-modes";
 import type { WorkspaceNavExtensionCluster } from "@/lib/extensions/registry";
 import {
   getDestinationCatalog,
+  type DestinationCatalog,
   type DestinationEntry,
 } from "@/lib/shell/role-home";
+import type { MemberRoleHomeWorkstation } from "@/lib/shell/member-role-home";
 
 const CATALOG_ICON_BY_PREFIX: Array<[string, React.ReactNode]> = [
   ["/dashboard", <Compass key="i" className="h-4 w-4" />],
@@ -48,7 +50,9 @@ const CATALOG_ICON_BY_PREFIX: Array<[string, React.ReactNode]> = [
 ];
 
 function catalogIcon(href: string): React.ReactNode {
-  const hit = CATALOG_ICON_BY_PREFIX.find(([prefix]) => href.startsWith(prefix));
+  const hit = CATALOG_ICON_BY_PREFIX.find(([prefix]) =>
+    href.startsWith(prefix),
+  );
   return hit ? hit[1] : <Target className="h-4 w-4" />;
 }
 
@@ -78,6 +82,32 @@ export function getSidebarReviewPresentation(
   };
 }
 
+export function getSidebarWorkstationPresentation(
+  workstation: MemberRoleHomeWorkstation | null,
+): {
+  catalog: DestinationCatalog | null;
+  showExtensionClusters: boolean;
+  showUtilityPanel: boolean;
+} {
+  if (!workstation) {
+    return {
+      catalog: null,
+      showExtensionClusters: true,
+      showUtilityPanel: true,
+    };
+  }
+  const entry = {
+    href: workstation.href,
+    labelZh: workstation.label,
+    labelEn: workstation.label,
+  };
+  return {
+    catalog: { primary: [entry], secondary: [], drawer: [] },
+    showExtensionClusters: false,
+    showUtilityPanel: false,
+  };
+}
+
 export function Sidebar({
   workspaceName,
   brandLabel = null,
@@ -85,6 +115,7 @@ export function Sidebar({
   navExtensionClusters = [],
   basePresetKey = null,
   canReviewGovernedActions,
+  workstationHomeEntry = null,
 }: {
   workspaceName: string;
   /** 租户品牌行覆盖;null → messages.shell.brand。 */
@@ -93,6 +124,7 @@ export function Sidebar({
   navExtensionClusters?: ReadonlyArray<WorkspaceNavExtensionCluster>;
   basePresetKey?: string | null;
   canReviewGovernedActions: boolean;
+  workstationHomeEntry?: MemberRoleHomeWorkstation | null;
 }) {
   const {
     locale,
@@ -108,6 +140,8 @@ export function Sidebar({
   const reviewPresentation = getSidebarReviewPresentation(
     canReviewGovernedActions,
   );
+  const workstationPresentation =
+    getSidebarWorkstationPresentation(workstationHomeEntry);
   const demoProfile = demoMode ? getDemoModeProfile(demoMode, locale) : null;
   const demoShellCopy =
     demoProfile?.mode === "sales"
@@ -247,7 +281,7 @@ export function Sidebar({
   // 去重后为空则整段省略，避免双入口。
   const settingsHrefs = settingsLinks.map((item) => item.href);
   const catalog = featureFlags.controlTowerHome
-    ? getDestinationCatalog(basePresetKey)
+    ? (workstationPresentation.catalog ?? getDestinationCatalog(basePresetKey))
     : null;
   const drawerItems = catalog
     ? toNavItems(catalog.drawer, english, settingsHrefs)
@@ -255,37 +289,37 @@ export function Sidebar({
   const renderedSections = (
     catalog
       ? [
-        {
-          key: "primary",
-          label: english ? "Daily core" : "主区",
-          items: toNavItems(
-            catalog.primary,
-            english,
-            reviewPresentation.excludedHrefs,
-          ),
-        },
-        ...(catalog.secondary.length > 0
-          ? [
-              {
-                key: "secondary",
-                label: english ? "Periodic" : "次区",
-                items: toNavItems(
-                  catalog.secondary,
-                  english,
-                  reviewPresentation.excludedHrefs,
-                ),
-              },
-            ]
-          : []),
-        ...(drawerItems.length > 0
-          ? [
-              {
-                key: "drawer",
-                label: english ? "Drawer" : "收纳",
-                items: drawerItems,
-              },
-            ]
-          : []),
+          {
+            key: "primary",
+            label: english ? "Daily core" : "主区",
+            items: toNavItems(
+              catalog.primary,
+              english,
+              reviewPresentation.excludedHrefs,
+            ),
+          },
+          ...(catalog.secondary.length > 0
+            ? [
+                {
+                  key: "secondary",
+                  label: english ? "Periodic" : "次区",
+                  items: toNavItems(
+                    catalog.secondary,
+                    english,
+                    reviewPresentation.excludedHrefs,
+                  ),
+                },
+              ]
+            : []),
+          ...(drawerItems.length > 0
+            ? [
+                {
+                  key: "drawer",
+                  label: english ? "Drawer" : "收纳",
+                  items: drawerItems,
+                },
+              ]
+            : []),
         ].map((section) => ({
           ...section,
           items: section.items.map((item) => ({
@@ -329,7 +363,9 @@ export function Sidebar({
             <p
               className={cn(
                 "text-xs font-medium",
-                demoProfile ? "text-white/85" : "text-[color:var(--muted-foreground)]",
+                demoProfile
+                  ? "text-white/85"
+                  : "text-[color:var(--muted-foreground)]",
               )}
             >
               {demoProfile
@@ -381,7 +417,8 @@ export function Sidebar({
             </div>
           ))}
 
-          {navExtensionClusters.length > 0 ? (
+          {workstationPresentation.showExtensionClusters &&
+          navExtensionClusters.length > 0 ? (
             <div
               className="mt-4 space-y-2"
               data-testid="workspace-nav-extensions"
@@ -422,45 +459,48 @@ export function Sidebar({
             </div>
           ) : null}
 
-          <div className="mt-3 workspace-panel-muted rounded-[26px] p-3">
-            <Link
-              href="/settings"
-              className={cn(
-                "flex items-center gap-3 rounded-[20px] px-3 py-2.5 text-sm font-medium transition",
-                settingsActive
-                  ? "theme-primary-action"
-                  : "text-[color:var(--foreground)] hover:bg-[color:var(--surface-subtle)]",
-              )}
-            >
-              <Settings className="h-4 w-4" />
-              <span>{messages.shell.nav.settings}</span>
-            </Link>
-            <div className="mt-2 space-y-1">
-              {settingsLinks.map((item) => {
-                const active =
-                  pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-[18px] px-3 py-2 text-sm transition",
-                      active
-                        ? "bg-[color:color-mix(in_oklab,var(--surface)_88%,white_12%)] text-[color:var(--foreground)] shadow-[0_14px_28px_-26px_rgba(15,23,42,0.65)]"
-                        : "text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-subtle)] hover:text-[color:var(--foreground)]",
-                    )}
-                  >
-                    {item.icon}
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
+          {workstationPresentation.showUtilityPanel ? (
+            <div className="mt-3 workspace-panel-muted rounded-[26px] p-3">
+              <Link
+                href="/settings"
+                className={cn(
+                  "flex items-center gap-3 rounded-[20px] px-3 py-2.5 text-sm font-medium transition",
+                  settingsActive
+                    ? "theme-primary-action"
+                    : "text-[color:var(--foreground)] hover:bg-[color:var(--surface-subtle)]",
+                )}
+              >
+                <Settings className="h-4 w-4" />
+                <span>{messages.shell.nav.settings}</span>
+              </Link>
+              <div className="mt-2 space-y-1">
+                {settingsLinks.map((item) => {
+                  const active =
+                    pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-[18px] px-3 py-2 text-sm transition",
+                        active
+                          ? "bg-[color:color-mix(in_oklab,var(--surface)_88%,white_12%)] text-[color:var(--foreground)] shadow-[0_14px_28px_-26px_rgba(15,23,42,0.65)]"
+                          : "text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-subtle)] hover:text-[color:var(--foreground)]",
+                      )}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ) : null}
         </nav>
 
-        {reviewPresentation.showPendingApprovals ? (
+        {reviewPresentation.showPendingApprovals &&
+        workstationPresentation.showUtilityPanel ? (
           <div className="workspace-panel mt-6 rounded-[26px] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
