@@ -468,6 +468,23 @@ const SKIP_DIRECTORIES: ReadonlySet<string> = new Set([
 // OS junk files that legitimately contain NUL bytes and carry no content.
 const SKIP_FILES: ReadonlySet<string> = new Set([".DS_Store", "Thumbs.db"]);
 
+const INHERITED_GIT_CONTEXT_KEYS = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+] as const;
+
+function isolatedGitEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of INHERITED_GIT_CONTEXT_KEYS) {
+    delete env[key];
+  }
+  return env;
+}
+
 // Collects EVERY file (binary included) so path-level rules see the full
 // tree; content-type filtering happens at the consumer.
 function walkFiles(repoRoot: string, relativeDir: string, out: string[]): void {
@@ -501,6 +518,7 @@ function listDeliverableFiles(repoRoot: string): string[] {
       {
         cwd: repoRoot,
         encoding: "utf8",
+        env: isolatedGitEnvironment(),
         maxBuffer: 64 * 1024 * 1024,
         stdio: ["ignore", "pipe", "ignore"],
       },
