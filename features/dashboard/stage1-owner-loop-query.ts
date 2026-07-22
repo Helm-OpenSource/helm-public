@@ -18,6 +18,22 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
   if (input.membershipRole !== WorkspaceRole.OWNER) return null;
   const now = input.now ?? new Date();
 
+  let readModelRows: Awaited<ReturnType<typeof loadOwnerLoopRows>>;
+  try {
+    readModelRows = await loadOwnerLoopRows(input.workspaceId);
+  } catch (error) {
+    if (!isMissingOwnerLoopSchema(error)) throw error;
+    console.warn("stage1-owner-loop-query: additive schema unavailable");
+    return null;
+  }
+
+  return buildStage1OwnerLoopReadout({
+    now,
+    ...readModelRows,
+  });
+}
+
+async function loadOwnerLoopRows(workspaceId: string) {
   const [
     programs,
     sources,
@@ -28,11 +44,11 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
     workPacketReceipts,
   ] = await Promise.all([
     db.enterpriseObservationProgram.findMany({
-      where: { workspaceId: input.workspaceId },
+      where: { workspaceId },
       select: { status: true, startsAt: true, expiresAt: true },
     }),
     db.observationSource.findMany({
-      where: { workspaceId: input.workspaceId },
+      where: { workspaceId },
       select: {
         id: true,
         sourceKey: true,
@@ -45,7 +61,7 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     }),
     db.decisionRecord.findMany({
-      where: { workspaceId: input.workspaceId },
+      where: { workspaceId },
       select: {
         id: true,
         decisionKey: true,
@@ -77,12 +93,12 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
     }),
     db.decisionRecord.groupBy({
       by: ["status"],
-      where: { workspaceId: input.workspaceId },
+      where: { workspaceId },
       _count: { _all: true },
     }),
     db.supervisionSignalRecord.findMany({
       where: {
-        workspaceId: input.workspaceId,
+        workspaceId,
         status: { in: ["open", "acknowledged", "routed"] },
       },
       select: {
@@ -100,11 +116,11 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
     }),
     db.supervisionSignalRecord.groupBy({
       by: ["status", "severity"],
-      where: { workspaceId: input.workspaceId },
+      where: { workspaceId },
       _count: { _all: true },
     }),
     db.decisionWorkPacketClaim.findMany({
-      where: { workspaceId: input.workspaceId },
+      where: { workspaceId },
       select: {
         decisionRecord: { select: { status: true } },
         actionItem: {
@@ -119,8 +135,7 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
     }),
   ]);
 
-  return buildStage1OwnerLoopReadout({
-    now,
+  return {
     programs,
     sources,
     decisions,
@@ -128,5 +143,14 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
     supervisionSignals,
     supervisionCounts,
     workPacketReceipts,
-  });
+  };
+}
+
+function isMissingOwnerLoopSchema(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2021",
+  );
 }
