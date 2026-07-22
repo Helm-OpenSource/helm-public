@@ -194,6 +194,61 @@ describe("engineering delivery snapshot refresh", () => {
     }
     expect(dbMock.engineeringDeliveryReviewRefreshRun.create).not.toHaveBeenCalled();
   });
+
+  it("does not require git metadata when snapshot tables are missing in a source-only runtime", async () => {
+    const tableMissingError = {
+      code: "P2021",
+      message: "The table `engineeringdeliveryreviewsnapshot` does not exist in the current database.",
+    };
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue("/tmp/helm-source-only-runtime-without-git");
+
+    dbMock.engineeringDeliveryReviewSnapshot.findFirst.mockRejectedValueOnce(tableMissingError);
+    dbMock.engineeringDeliveryReviewRefreshRun.findFirst.mockResolvedValueOnce(null);
+
+    try {
+      const result = await runEngineeringDeliveryDailyRefresh({
+        now: new Date("2026-04-24T03:00:00.000Z"),
+        trigger: "cron",
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        status: "SKIPPED",
+        reason: "snapshot_tables_missing",
+      });
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
+
+  it("records source unavailability instead of throwing before a refresh run in a source-only runtime", async () => {
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue("/tmp/helm-source-only-runtime-without-git");
+    reviewServiceMock.getEngineeringDeliveryReview.mockResolvedValue({
+      ...buildReview(false),
+      availability: "UNAVAILABLE",
+    });
+
+    try {
+      const result = await runEngineeringDeliveryDailyRefresh({
+        now: new Date("2026-04-24T03:00:00.000Z"),
+        trigger: "cron",
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe("FAILED");
+      expect(dbMock.engineeringDeliveryReviewRefreshRun.create).toHaveBeenCalledTimes(1);
+      expect(dbMock.engineeringDeliveryReviewRefreshRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "FAILED",
+            errorMessage: "engineering delivery review source unavailable in current runtime",
+          }),
+        }),
+      );
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
 });
 
 function buildReview(english: boolean): EngineeringDeliveryReview {

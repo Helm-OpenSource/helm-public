@@ -79,7 +79,6 @@ export async function runEngineeringDeliveryDailyRefresh(input?: {
     const days = input?.days ?? DEFAULT_WINDOW_DAYS;
     const timezone = input?.timezone?.trim() || ENGINEERING_REVIEW_CRON_TZ_FALLBACK;
     const requestedRevision = input?.revision?.trim() || ENGINEERING_REVIEW_GIT_REVISION_FALLBACK;
-    const revision = await resolveRefreshRevision(requestedRevision, process.cwd());
     const snapshotDateKey = toDateKey(now, timezone);
     const snapshotDate = fromDateKey(snapshotDateKey);
     const snapshotTablesReady = await hasSnapshotTables();
@@ -91,6 +90,8 @@ export async function runEngineeringDeliveryDailyRefresh(input?: {
         reason: "snapshot_tables_missing",
       };
     }
+
+    const revision = await resolveRefreshRevision(requestedRevision, process.cwd());
 
     const running = await db.engineeringDeliveryReviewRefreshRun.findFirst({
       where: {
@@ -379,15 +380,15 @@ async function resolveRefreshRevision(revision: string, cwd: string) {
     return normalized;
   }
 
-  const repoRoot = await resolveRepoRoot(cwd);
   try {
+    const repoRoot = await resolveRepoRoot(cwd);
     await execFileAsync("git", ["-C", repoRoot, "fetch", "origin", "main", "--prune"], {
       cwd,
       maxBuffer: GIT_BUFFER_BYTES,
     });
   } catch {
-    // Offline / DNS-limited environments should still be able to render a local-only review.
-    // Fall back to local `main` when remote fetch is unavailable.
+    // Source-only and network-limited runtimes should reach the normal review
+    // availability path so the refresh failure is recorded instead of escaping.
     return "main";
   }
 
