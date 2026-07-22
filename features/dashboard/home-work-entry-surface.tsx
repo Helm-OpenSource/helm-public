@@ -191,12 +191,15 @@ function WorkEntryActionRail({
   const primary = model.topWorkItems[0] ?? model.resumeItem;
   const review = model.reviewItems[0] ?? null;
   const reviewQueueHref = review ? "/approvals#approval-queue" : "/approvals";
+  const showCrossRoleReviewQueue =
+    model.canReviewGovernedActions &&
+    model.showCrossRoleReviewQueue !== false;
 
   return (
     <nav
       aria-label={english ? "Current work quick actions" : "当前工作快速动作"}
       className={`grid gap-2.5 md:grid-cols-2 ${
-        model.canReviewGovernedActions ? "xl:grid-cols-5" : "xl:grid-cols-4"
+        showCrossRoleReviewQueue ? "xl:grid-cols-5" : "xl:grid-cols-4"
       }`}
       data-dashboard-work-entry-action-rail="true"
     >
@@ -210,7 +213,7 @@ function WorkEntryActionRail({
         tracking={primary.tracking}
         ctaVariant="default"
       />
-      {model.canReviewGovernedActions ? (
+      {showCrossRoleReviewQueue ? (
         <ActionRailItem
           label={english ? "Review" : "拍板"}
           title={
@@ -417,6 +420,9 @@ export function DashboardHomeWorkEntrySurface({
   model: DashboardHomeWorkEntryModel;
   english: boolean;
 }) {
+  const showCrossRoleReviewQueue =
+    model.canReviewGovernedActions &&
+    model.showCrossRoleReviewQueue !== false;
   const additionalRoleAnomalyItems = getAdditionalRoleAnomalyItems({
     ...model,
     roleAnomalyItems: model.roleAnomalyItems ?? [],
@@ -500,7 +506,7 @@ export function DashboardHomeWorkEntrySurface({
                 }
                 ctaVariant="default"
               />
-              {!model.canReviewGovernedActions ? null : model.reviewItemsArePrimary ? (
+              {!showCrossRoleReviewQueue ? null : model.reviewItemsArePrimary ? (
                 <ReviewQueueSummary items={model.reviewItems} english={english} />
               ) : (
                 <Block

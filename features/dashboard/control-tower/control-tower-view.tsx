@@ -48,7 +48,12 @@ export function ControlTowerView({
   english: boolean;
   lens: RoleLens;
   basePresetKey: string | null;
-  workstationHomeEntry?: { key: string; href: string; label: string } | null;
+  workstationHomeEntry?: {
+    key: string;
+    href: string;
+    label: string;
+    showCrossRoleReviewQueue?: boolean | undefined;
+  } | null;
   mainline: MainlineReadout;
   northstarText: string | null;
   viewModel: Pick<
