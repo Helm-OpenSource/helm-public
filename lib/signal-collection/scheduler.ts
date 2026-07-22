@@ -439,19 +439,17 @@ function scheduleJob(input: {
           successCount: summary.successCount,
           failureCount: summary.failureCount,
           skippedCount: summary.skippedCount,
-          jobs: summary.jobs,
         });
         if (!summary.ok) {
           logSchedulerError("job run failed", {
             jobKey: job.key,
             failureCount: summary.failureCount,
-            jobs: summary.jobs,
           });
         }
-      } catch (error) {
+      } catch {
         logSchedulerError("job crashed", {
           jobKey: job.key,
-          error: errorMessage(error),
+          errorCode: "scheduler_job_crashed",
         });
       } finally {
         scheduleNext();
