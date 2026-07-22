@@ -191,6 +191,43 @@ describe("signal collection scheduler", () => {
     expect(runTarget).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps scheduler logs free of target details and raw failure text", async () => {
+    process.env.TENANT_ALPHA_SIGNAL_TIME = "0 8 * * *";
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    startSignalCollectionScheduler({
+      jobs: [
+        buildJob({
+          resolveTargets: async () => [
+            { key: "customer-reference", workspaceId: "workspace-sensitive" },
+          ],
+          runTarget: async () => ({
+            status: "failed",
+            failureCount: 1,
+            details: {
+              error: "raw SQL and customer detail",
+            },
+          }),
+        }),
+      ],
+      stateKey: "test-scheduler-safe-logs",
+      source: "test",
+    });
+
+    await vi.advanceTimersByTimeAsync(61_000);
+
+    const logs = JSON.stringify([
+      ...infoSpy.mock.calls,
+      ...errorSpy.mock.calls,
+    ]);
+    expect(logs).toContain("job completed");
+    expect(logs).toContain("job run failed");
+    expect(logs).not.toContain("customer-reference");
+    expect(logs).not.toContain("workspace-sensitive");
+    expect(logs).not.toContain("raw SQL and customer detail");
+  });
+
   it("keeps core signal collection free of tenant extension imports", () => {
     const files = listTsFiles(join(process.cwd(), "lib/signal-collection"));
     const forbiddenImport = "@/" + "extensions/";
