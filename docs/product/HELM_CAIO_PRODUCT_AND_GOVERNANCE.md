@@ -126,9 +126,11 @@ Public Core 中的 `WorkspaceRole.OWNER` 是工作区权限角色（“一号位
 ## 7. 四仓职责（PR 验收边界）
 
 - **公开 Core 仓（本仓）**：本 ADR、唯一的 CAIO 类型契约（`lib/caio-governance/`
-  纯类型与确定性验证器切片已交付；无数据库、无 API、无 server action、无
-  权限入口；权限、政策、LLM 运行时与 API 代码禁止依赖它）、通用展示语义与
-  术语门禁。
+  纯类型与确定性验证器切片已交付；mandate 治理记录存储层已成形——写入前
+  强制通过 fail-closed 契约验证、激活以工作区唯一 claim 保证并发安全、监护
+  急停与恢复入账本；仍无 API、无 server action、无权限入口、无运行时消费
+  者；存储的 mandate 不是授权令牌，权限、政策、LLM 运行时与 API 代码
+  禁止依赖它）、通用展示语义与术语门禁。
 - **行业 Pack 仓**：行业通用内容的旧口径分类与 ratchet 门禁；不复制 Core
   枚举，不定义第二份 CaioMandate。
 - **客户 Overlay 仓**：仅租户展示覆盖与私有身份映射（如 CEO 身份绑定）；既有
@@ -150,7 +152,8 @@ Public Core 中的 `WorkspaceRole.OWNER` 是工作区权限角色（“一号位
 
 本文件与其配套校验器：
 
-- 不修改任何权限、路由、API、数据库或执行状态机；
+- 不修改任何权限、路由、API 或执行状态机；治理记录存储（mandate/绑定/急停
+  账本）是纯记录表，不构成任何权限或执行入口；
 - 不激活自动派工、自动外发、CRM 写入、资金或法律动作；
 - 不构成生产激活、客户承诺或 owner approval；
 - 不改变任何既有 `aicoo` 机器标识、pin、哈希或历史证据。

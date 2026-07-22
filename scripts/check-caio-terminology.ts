@@ -576,6 +576,7 @@ const REQUIRED_TOKENS: ReadonlyArray<{
       "机器标识保持不变",
       "`WorkspaceRole.OWNER` 不等价",
       "纯类型与确定性验证器切片已交付",
+      "存储的 mandate 不是授权令牌",
       "禁止依赖它",
     ],
   },
@@ -597,11 +598,13 @@ const REQUIRED_TOKENS: ReadonlyArray<{
     tokens: [
       "Helm CAIO 术语与治理 ADR",
       "已成形但仍需下一层：品牌冻结为「Helm CAIO｜一号位 AI 经营中枢」",
-      "纯类型与确定性验证器契约切片已成形",
+      "纯类型与确定性验证器契约切片及 mandate 治理记录存储层已成形",
+      "需已登记的 principal 绑定",
       "除下方 Observe 参考 Console 外，其他产品面与运行层仍由后续切片交付",
       "成熟度轴而非权限轴",
       "Authorized Execute 为路线图、未授权、默认关闭且不构成执行许可",
-      "不改变任何权限、路由、API、数据库、执行状态机或既有机器标识",
+      "不改变任何权限、路由、API、执行状态机或既有机器标识",
+      "不构成权限或执行入口",
     ],
   },
   {

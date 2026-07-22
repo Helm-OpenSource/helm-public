@@ -1355,6 +1355,10 @@ model Workspace {
   decisionRecords                      DecisionRecord[]
   supervisionSignalRecords             SupervisionSignalRecord[]
   decisionWorkPacketClaims             DecisionWorkPacketClaim[]
+  caioMandateRecords                   CaioMandateRecord[]
+  caioPrincipalBindings                CaioPrincipalBinding[]
+  caioActiveMandateClaims              CaioActiveMandateClaim[]
+  caioGuardianStopRecords              CaioGuardianStopRecord[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -5059,4 +5063,99 @@ model TrialApplication {
 
   @@index([status, createdAt])
   @@index([email])
+}
+
+// ---------------------------------------------------------------------------
+// Helm CAIO mandate store (governance records only). A stored mandate is
+// NEVER an authorization token: nothing reads these tables for permission,
+// routing, or execution decisions. Every write goes through the fail-closed
+// contract validators in lib/caio-governance/contract.ts first.
+// ---------------------------------------------------------------------------
+
+model CaioMandateRecord {
+  id                       String                   @id @default(cuid())
+  workspaceId              String
+  caioRef                  String
+  ceoRef                   String
+  stage                    String
+  status                   String
+  objectiveRefs            String                   @db.LongText
+  scopeRefs                String                   @db.LongText
+  grantBasisRefs           String                   @db.LongText
+  reservedMatterRefs       String                   @db.LongText
+  stageDecisionRef         String
+  policyEnvelopeRefs       String                   @db.LongText
+  humanResponsePolicyRef   String
+  accountabilityAnchorRefs String                   @db.LongText
+  guardianStopRefs         String                   @db.LongText
+  emergencyStopRef         String?
+  validFrom                DateTime
+  validUntil               DateTime
+  supersedesRef            String?
+  inFlightDisposition      String
+  auditRefs                String                   @db.LongText
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  workspace                Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  activeClaim              CaioActiveMandateClaim?
+  guardianStops            CaioGuardianStopRecord[]
+
+  @@unique([id, workspaceId])
+  @@index([workspaceId, status])
+}
+
+// At most one ACTIVE mandate per workspace, enforced by the unique
+// workspaceId claim row inside the activation transaction.
+model CaioActiveMandateClaim {
+  id              String            @id @default(cuid())
+  workspaceId     String            @unique
+  mandateRecordId String            @unique
+  createdAt       DateTime          @default(now())
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Composite relation: the claim's workspace MUST be the mandate's
+  // workspace — cross-workspace claims are unrepresentable.
+  mandateRecord   CaioMandateRecord @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([mandateRecordId, workspaceId])
+}
+
+model CaioGuardianStopRecord {
+  id              String            @id @default(cuid())
+  workspaceId     String
+  mandateRecordId String
+  guardianRef     String
+  reason          String            @db.LongText
+  triggeredAt     DateTime
+  resumedByRef    String?
+  resumedAt       DateTime?
+  auditRefs       String            @db.LongText
+  createdAt       DateTime          @default(now())
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Composite relation: a stop can only reference a mandate in its own
+  // workspace.
+  mandateRecord   CaioMandateRecord @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@index([mandateRecordId, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+// Workspace-scoped binding between an authenticated user and a governance
+// principal ref (ceo | guardian). Registration is OWNER-gated and audited;
+// acting as a principal requires a live binding row. This is a governance
+// RECORD seam — the authoritative private CEO identity binding arrives via
+// the private overlay slice; a binding row is never a credential and grants
+// no permission.
+model CaioPrincipalBinding {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  userId       String
+  principalRef String
+  principalKind String
+  evidenceRef  String
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, principalRef])
+  @@index([workspaceId, principalRef])
 }

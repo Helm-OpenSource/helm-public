@@ -134,6 +134,9 @@ export function deriveRuntimeAuthority(
 }
 
 // Structured grant basis: `caio-mandate-grant:<issuerRef>:<evidenceRef>`.
+// By construction issuerRef is colon-free, so a mandate whose ceoRef
+// contains ":" can never carry a valid grant basis — CEO principal refs
+// must be plain colon-free identifiers.
 // The issuer must be THIS mandate's CEO and the evidence must be non-empty;
 // anything else — including legacy owner approvals wrapped behind the
 // prefix — is not an explicit CEO issuance.
