@@ -7,6 +7,7 @@ export type WorkstationHomeEntry = {
   key: string;
   href: string;
   label: string;
+  showCrossRoleReviewQueue?: boolean | undefined;
 };
 
 function buildWorkstationCard(
@@ -46,6 +47,8 @@ export function routeWorkEntryToWorkstation(input: {
 
   return {
     ...input.model,
+    showCrossRoleReviewQueue:
+      input.workstation.showCrossRoleReviewQueue === true,
     state: "returning-active",
     title:
       roleAnomalyItems.length > 0

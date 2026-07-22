@@ -82,4 +82,23 @@ describe("DashboardHomeWorkEntrySurface", () => {
     expect(html).toContain("待你复核");
     expect(html).toContain('href="/approvals');
   });
+
+  it("omits the cross-role review queue from a dedicated workstation home", () => {
+    const model = {
+      ...buildModel(true),
+      showCrossRoleReviewQueue: false,
+      state: "returning-active" as const,
+      title: "先从本角色主工位继续。",
+      summary: "角色家绑定决定默认工作入口。",
+      reviewItemsArePrimary: false,
+    };
+    const html = renderToStaticMarkup(
+      <DashboardHomeWorkEntrySurface model={model} english={false} />,
+    );
+
+    expect(html).not.toContain("拍板");
+    expect(html).not.toContain("待你复核");
+    expect(html).not.toContain('href="/approvals');
+    expect(html).toContain("打开本人工作台");
+  });
 });

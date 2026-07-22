@@ -79,6 +79,11 @@ export type DashboardCaseAssignmentActionPreview = {
 
 export type DashboardHomeWorkEntryModel = {
   canReviewGovernedActions: boolean;
+  /**
+   * A role can retain governed-review permission without owning the workspace-wide
+   * review queue on its dedicated home. Undefined preserves the generic Core home.
+   */
+  showCrossRoleReviewQueue?: boolean | undefined;
   state: DashboardHomeWorkEntryState;
   title: string;
   summary: string;
@@ -556,6 +561,7 @@ export function buildDashboardHomeWorkEntry(
 
   return {
     canReviewGovernedActions: input.canReviewGovernedActions,
+    showCrossRoleReviewQueue: input.canReviewGovernedActions,
     state,
     title: buildTitle(state, input.english),
     summary: buildSummary(state, input),

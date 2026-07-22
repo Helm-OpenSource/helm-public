@@ -179,6 +179,10 @@ export default async function DashboardPage({
               key: workstationHomeEntry.key,
               href: workstationHomeEntry.href,
               label: workstationHomeEntry.label,
+              // Dedicated operator/reviewer desks keep their review permission,
+              // but the workspace-wide queue belongs on owner/admin home only.
+              showCrossRoleReviewQueue:
+                membership.role === "OWNER" || membership.role === "ADMIN",
             }
           : null
       }

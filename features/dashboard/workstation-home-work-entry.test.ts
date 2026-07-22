@@ -49,6 +49,22 @@ describe("routeWorkEntryToWorkstation", () => {
     });
     expect(result.reviewItems).toHaveLength(1);
     expect(result.reviewItemsArePrimary).toBe(false);
+    expect(result.showCrossRoleReviewQueue).toBe(false);
+  });
+
+  it("keeps the cross-role review queue only for an explicitly responsible workstation", () => {
+    const result = routeWorkEntryToWorkstation({
+      model: model(),
+      workstation: {
+        key: "control-tower",
+        href: "/anson/home",
+        label: "控制塔（原生）",
+        showCrossRoleReviewQueue: true,
+      },
+      english: false,
+    });
+
+    expect(result.showCrossRoleReviewQueue).toBe(true);
   });
 
   it("keeps routed anomalies ahead of the workstation and retains a role entry", () => {
