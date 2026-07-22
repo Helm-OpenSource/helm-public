@@ -21,38 +21,47 @@ import {
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 import { DatabaseConnectionBanner } from "@/components/shared/database-connection-banner";
 import { canReviewWorkspaceGovernedActions } from "@/lib/auth/action-governance";
+import {
+  resolveMemberRoleHome,
+  type MemberRoleHomeWorkstation,
+} from "@/lib/shell/member-role-home";
 
 export default async function WorkspaceLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let shellProps:
-    | {
-        workspaceName: string;
-        brandLabel: string | null;
-        userName: string;
-        roleLabel: string;
-        locale: ReturnType<typeof normalizeWorkspaceUiConfig>["locale"];
-        pilotMode: ReturnType<typeof normalizeWorkspaceUiConfig>["pilotMode"];
-        captureConsentRequired: ReturnType<typeof normalizeWorkspaceUiConfig>["captureConsentRequired"];
-        dataRetentionDays: ReturnType<typeof normalizeWorkspaceUiConfig>["dataRetentionDays"];
-        featureFlags: ReturnType<typeof normalizeWorkspaceUiConfig>["featureFlags"];
-        demoMode: ReturnType<typeof normalizeWorkspaceUiConfig>["demoMode"];
-        canAccessTenantHealth: boolean;
-        isHelmReserved: boolean;
-        pendingApprovals: number;
-        notificationCount: number;
-        alerts: Awaited<ReturnType<typeof getWorkspaceLayoutData>>["alerts"];
-        quickCreateData: Awaited<ReturnType<typeof getWorkspaceLayoutData>>["quickCreateData"];
-        navExtensionClusters: Awaited<
-          ReturnType<typeof resolveWorkspaceNavExtensions>
-        >["clusters"];
-        shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
-        basePresetKey: string | null;
-        canReviewGovernedActions: boolean;
-      }
-    | null = null;
+  let shellProps: {
+    workspaceName: string;
+    brandLabel: string | null;
+    userName: string;
+    roleLabel: string;
+    locale: ReturnType<typeof normalizeWorkspaceUiConfig>["locale"];
+    pilotMode: ReturnType<typeof normalizeWorkspaceUiConfig>["pilotMode"];
+    captureConsentRequired: ReturnType<
+      typeof normalizeWorkspaceUiConfig
+    >["captureConsentRequired"];
+    dataRetentionDays: ReturnType<
+      typeof normalizeWorkspaceUiConfig
+    >["dataRetentionDays"];
+    featureFlags: ReturnType<typeof normalizeWorkspaceUiConfig>["featureFlags"];
+    demoMode: ReturnType<typeof normalizeWorkspaceUiConfig>["demoMode"];
+    canAccessTenantHealth: boolean;
+    isHelmReserved: boolean;
+    pendingApprovals: number;
+    notificationCount: number;
+    alerts: Awaited<ReturnType<typeof getWorkspaceLayoutData>>["alerts"];
+    quickCreateData: Awaited<
+      ReturnType<typeof getWorkspaceLayoutData>
+    >["quickCreateData"];
+    navExtensionClusters: Awaited<
+      ReturnType<typeof resolveWorkspaceNavExtensions>
+    >["clusters"];
+    shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
+    basePresetKey: string | null;
+    canReviewGovernedActions: boolean;
+    workstationHomeEntry: MemberRoleHomeWorkstation | null;
+  } | null = null;
   let databaseErrorMessage: string | null = null;
   const requestLocale = await getRequestUiLocaleCandidate();
 
@@ -64,7 +73,8 @@ export default async function WorkspaceLayout({
     const workspaceUiConfig = normalizeWorkspaceUiConfig({
       ...workspace,
       requestLocale,
-      deploymentProfileDefaultLocale: getDeploymentProfileDefaultLocaleCandidate(),
+      deploymentProfileDefaultLocale:
+        getDeploymentProfileDefaultLocaleCandidate(),
     });
     const roleLabels = getLocalizedRoleLabels(workspaceUiConfig.locale);
     const english = workspaceUiConfig.locale === "en-US";
@@ -82,14 +92,27 @@ export default async function WorkspaceLayout({
       },
     });
 
+    const basePresetKey = resolveMemberBasePresetKey({
+      rolePresetKey: membership.rolePresetKey,
+      workspaceRole: membership.role,
+      rawConfiguration: workspace.configuration,
+    });
+    const roleHome = await resolveMemberRoleHome({
+      workspace,
+      membership,
+      basePresetKey,
+      english,
+    });
+
     shellProps = {
       workspaceName: workspace.name,
       // 租户品牌行覆盖(workspace.configuration.shellBrandLabel,fail-closed);null → 默认品牌。
       brandLabel: parseShellBrandLabel(workspace.configuration),
       userName: user.name,
       roleLabel:
-        (layoutData.membership ? roleLabels[layoutData.membership.role] : roleLabels[membership.role]) ??
-        (english ? "Member" : "成员"),
+        (layoutData.membership
+          ? roleLabels[layoutData.membership.role]
+          : roleLabels[membership.role]) ?? (english ? "Member" : "成员"),
       locale: workspaceUiConfig.locale,
       pilotMode: workspaceUiConfig.pilotMode,
       captureConsentRequired: workspaceUiConfig.captureConsentRequired,
@@ -106,18 +129,18 @@ export default async function WorkspaceLayout({
       shellChromeProfiles: parseShellChromeProfiles(workspace.configuration),
       // basePresetKey 仅用于导航目录（授权先行，导航不授权）；解析失败 → 受控兜底：
       // OWNER 无 preset → 控制塔(FOUNDER_CEO),其余 → null → GENERIC(CodeX 运行审计 P1)。
-      basePresetKey: resolveMemberBasePresetKey({
-        rolePresetKey: membership.rolePresetKey,
-        workspaceRole: membership.role,
-        rawConfiguration: workspace.configuration,
-      }),
+      basePresetKey,
       canReviewGovernedActions: canReviewWorkspaceGovernedActions(
         membership.role,
       ),
+      workstationHomeEntry: roleHome.workstation,
     };
   } catch (error) {
     // 检查是否是数据库连接错误
-    if (error instanceof Error && error.message.includes("Can't reach database server")) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Can't reach database server")
+    ) {
       databaseErrorMessage = error.message;
     } else {
       // 其他错误仍然抛出让错误边界处理
@@ -128,7 +151,8 @@ export default async function WorkspaceLayout({
   if (databaseErrorMessage) {
     const offlineLocale = resolveWorkspaceUiLocale({
       requestLocale,
-      deploymentProfileDefaultLocale: getDeploymentProfileDefaultLocaleCandidate(),
+      deploymentProfileDefaultLocale:
+        getDeploymentProfileDefaultLocaleCandidate(),
     });
     const offlineEnglish = offlineLocale === "en-US";
     return (

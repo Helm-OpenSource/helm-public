@@ -8,16 +8,9 @@ import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
 import { resolveMemberBasePresetKey } from "@/lib/definitions/workspace-role-preset-catalog";
 import { resolveNorthstarText } from "@/lib/shell/northstar-text";
 import {
-  buildRoleHomeCandidateKeys,
-  resolveRoleHomeDestinationFromCandidates,
-} from "@/lib/shell/role-home-routing";
-import {
   resolveShellMainline,
   resolveShellAttention,
-  resolveShellRoleHomeRouting,
-  resolveShellWorkstations,
   SHELL_MAINLINE_SURFACE_KEY,
-  SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
 } from "@/lib/shell/resolve-shell-experience";
 import { resolveWorkspaceSurfaceBinding } from "@/lib/shell/surface-binding-store";
 import { resolveRoleLens } from "@/lib/shell/role-home";
@@ -33,6 +26,7 @@ import {
   attachRoleAnomalyProgress,
   resolveRoleAttentionCategory,
 } from "@/features/dashboard/role-anomaly-progress";
+import { resolveMemberRoleHome } from "@/lib/shell/member-role-home";
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -98,28 +92,13 @@ export default async function DashboardPage({
     workspaceRole: membership.role,
     rawConfiguration: workspace.configuration,
   });
-  const routingBinding = await resolveWorkspaceSurfaceBinding(
-    workspace.id,
-    SHELL_ROLE_HOME_ROUTING_SURFACE_KEY,
-  );
-  const [{ table: roleHomeRouting }, { workstations }] = await Promise.all([
-    resolveShellRoleHomeRouting({
-      workspace,
-      english,
-      binding: routingBinding,
-    }),
-    resolveShellWorkstations({ workspace, english }),
-  ]);
-  const roleHomeDestination = resolveRoleHomeDestinationFromCandidates(
-    roleHomeRouting,
-    buildRoleHomeCandidateKeys({
-      persona: membership.persona,
-      title: membership.title,
-      rolePresetKey: membership.rolePresetKey,
-      basePresetKey,
-      workspaceRole: membership.role,
-    }),
-  );
+  const roleHome = await resolveMemberRoleHome({
+    workspace,
+    membership,
+    basePresetKey,
+    english,
+  });
+  const roleHomeDestination = roleHome.destination;
   const lens =
     roleHomeDestination.kind === "control_tower"
       ? "control_tower"
@@ -132,12 +111,7 @@ export default async function DashboardPage({
       : roleHomeDestination.kind === "workstation" && !basePresetKey
         ? "GENERAL_OPERATOR"
         : basePresetKey;
-  const workstationHomeEntry =
-    roleHomeDestination.kind === "workstation"
-      ? (workstations.find(
-          (item) => item.key === roleHomeDestination.workstationKey,
-        ) ?? null)
-      : null;
+  const workstationHomeEntry = roleHome.workstation;
 
   // 主线计数语义（诚实口径，contract 级 countCaliber=daily_schedule）：
   // judgement/review = home-work-entry 的今日排片数（非全量积压，UI 显式标注）；
@@ -202,6 +176,7 @@ export default async function DashboardPage({
       workstationHomeEntry={
         workstationHomeEntry?.href
           ? {
+              key: workstationHomeEntry.key,
               href: workstationHomeEntry.href,
               label: workstationHomeEntry.label,
             }

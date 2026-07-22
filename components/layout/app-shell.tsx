@@ -8,6 +8,7 @@ import type { WorkspaceNavExtensionCluster } from "@/lib/extensions/registry";
 import type { UiLocale } from "@/lib/i18n/config";
 import type { ShellChromeProfile } from "@/lib/shell/shell-chrome";
 import type { WorkspaceFeatureFlags } from "@/lib/workspace-ops";
+import type { MemberRoleHomeWorkstation } from "@/lib/shell/member-role-home";
 
 type AppShellProps = {
   workspaceName: string;
@@ -48,6 +49,7 @@ type AppShellProps = {
   shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
   basePresetKey: string | null;
   canReviewGovernedActions: boolean;
+  workstationHomeEntry: MemberRoleHomeWorkstation | null;
   children: React.ReactNode;
 };
 
@@ -72,6 +74,7 @@ export function AppShell({
   shellChromeProfiles,
   basePresetKey,
   canReviewGovernedActions,
+  workstationHomeEntry,
   children,
 }: AppShellProps) {
   const resolvedDemoMode = demoMode ?? "default";
@@ -101,6 +104,7 @@ export function AppShell({
             navExtensionClusters={navExtensionClusters}
             basePresetKey={basePresetKey}
             canReviewGovernedActions={canReviewGovernedActions}
+            workstationHomeEntry={workstationHomeEntry}
           />
         ) : (
           <ShellChromeGate profiles={shellChromeProfiles}>
@@ -111,6 +115,7 @@ export function AppShell({
               navExtensionClusters={navExtensionClusters}
               basePresetKey={basePresetKey}
               canReviewGovernedActions={canReviewGovernedActions}
+              workstationHomeEntry={workstationHomeEntry}
             />
           </ShellChromeGate>
         )}
