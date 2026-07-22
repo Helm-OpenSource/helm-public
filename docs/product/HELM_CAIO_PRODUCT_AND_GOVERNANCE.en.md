@@ -89,9 +89,12 @@ canonical objects must fail validation, never be rewritten.
 
 Repository ownership: the public Core repository owns this ADR, the single
 CAIO type contract (`lib/caio-governance/`: a delivered pure-type,
-deterministic, fail-closed validator slice with no database, API, server
-action, or permission entry point; permission, policy, LLM-runtime, and API
-code must not depend on it), and the terminology gate; the industry pack repository owns legacy-wording
+deterministic, fail-closed validator slice plus a mandate governance-record
+store whose every write passes the fail-closed validators, whose activation
+holds a workspace-unique claim, and which has no API, server action,
+permission entry point, or runtime consumer — a stored mandate is never an
+authorization token; permission, policy, LLM-runtime, and API code must not
+depend on it), and the terminology gate; the industry pack repository owns legacy-wording
 classification and ratchet guards for industry content; customer overlay
 repositories own tenant display overrides and private identity mapping only;
 the control-plane repository owns compatibility metadata, pins, receipts, and
@@ -100,7 +103,9 @@ deployment governance only.
 ## 5. Boundary statement
 
 This document and its companion checker change no permission, route, API,
-database, or execution state machine; activate no auto-dispatch, outbound
+or execution state machine; the governance-record store (mandate / binding /
+stop-ledger tables) is record-only and constitutes no permission or
+execution entry; activate no auto-dispatch, outbound
 send, CRM write, or financial / legal action; constitute no production
 activation, customer commitment, or owner approval; and alter no existing
 `aicoo` machine identifier, pin, hash, or historical evidence.
