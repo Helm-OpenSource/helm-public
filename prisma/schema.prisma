@@ -1359,6 +1359,7 @@ model Workspace {
   caioPrincipalBindings                CaioPrincipalBinding[]
   caioActiveMandateClaims              CaioActiveMandateClaim[]
   caioGuardianStopRecords              CaioGuardianStopRecord[]
+  caioAdviceRecords                    CaioAdviceRecord[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -5099,6 +5100,7 @@ model CaioMandateRecord {
   workspace                Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   activeClaim              CaioActiveMandateClaim?
   guardianStops            CaioGuardianStopRecord[]
+  adviceRecords            CaioAdviceRecord[]
 
   @@unique([id, workspaceId])
   @@index([workspaceId, status])
@@ -5137,6 +5139,43 @@ model CaioGuardianStopRecord {
 
   @@index([mandateRecordId, createdAt])
   @@index([workspaceId, createdAt])
+}
+
+// Advise-stage loop: an advice proposed by the CAIO under an ACTIVE
+// advise-stage mandate, decided by the CEO alone. A governance RECORD:
+// an accepted advice executes nothing, dispatches nothing, and grants
+// nothing (authority firewall lives in the contract layer; no permission,
+// routing, API, or execution path reads this table).
+model CaioAdviceRecord {
+  id              String            @id @default(cuid())
+  workspaceId     String
+  mandateRecordId String
+  adviceKey       String
+  caioRef         String
+  subjectRef      String
+  title           String
+  recommendation  String            @db.LongText
+  observationRefs String            @db.LongText
+  status          String
+  proposedAt      DateTime
+  validUntil      DateTime
+  decidedByRef    String?
+  decisionOutcome String?
+  decisionReason  String?           @db.LongText
+  decidedAt       DateTime?
+  withdrawnAt     DateTime?
+  auditRefs       String            @db.LongText
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Composite relation: advice can only reference a mandate in its own
+  // workspace.
+  mandateRecord   CaioMandateRecord @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([workspaceId, adviceKey])
+  @@unique([id, workspaceId])
+  @@index([workspaceId, status])
+  @@index([mandateRecordId, createdAt])
 }
 
 // Workspace-scoped binding between an authenticated user and a governance
