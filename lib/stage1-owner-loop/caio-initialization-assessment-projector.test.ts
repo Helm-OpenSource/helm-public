@@ -92,6 +92,7 @@ function readySnapshot(): CaioInitializationProjectionSnapshot {
     assetRef: "asset-1",
     observationRunRef: "run-1",
     authorizationReceiptRef: "authorization-1",
+    connectionReceiptRef: "connection-1",
     initializationReceiptRef: "initialization-1",
     sensitivity: "confidential" as const,
     outputType: "owner_answer" as const,
@@ -148,6 +149,7 @@ function readySnapshot(): CaioInitializationProjectionSnapshot {
         authorizationStatus: "AUTHORIZED",
         authorizationReceiptRef: "authorization-1",
         connectionStatus: "CONNECTED",
+        connectionReceiptRef: "connection-1",
         initializationStatus: "INITIALIZED",
         initializationReceiptRef: "initialization-1",
         riskOwnerRef: "role:data-owner",
@@ -172,6 +174,25 @@ function readySnapshot(): CaioInitializationProjectionSnapshot {
           consentRefs: [],
           validFrom: "2026-07-23T00:00:00.000Z",
           validUntil: "2026-08-23T00:00:00.000Z",
+          reasonCodes: [],
+        },
+        connectionReceipt: {
+          receiptType: "connection",
+          receiptId: "connection-1",
+          workspaceRef: "workspace:workspace-1",
+          assetRef: "asset-1",
+          idempotencyKey: "connection:1",
+          expectedVersion: 3,
+          resultingVersion: 4,
+          recordedAt: "2026-07-23T02:30:00.000Z",
+          actorRef: "user:owner",
+          evidenceRefs: ["evidence:connection:1"],
+          connectionStatus: "connected",
+          connectorRef: "connector:synthetic-crm",
+          accessMode: "read_only_api",
+          secretRef: "secret-manager:synthetic/crm",
+          authorizationReceiptRef: "authorization-1",
+          observationSourceRef: "source-1",
           reasonCodes: [],
         },
         initializationReceipt: {
@@ -247,6 +268,35 @@ describe("CAIO initialization assessment projector", () => {
     expect(assessment.failures).toContain(
       "initialized_asset_missing_schema_mapping",
     );
+  });
+
+  it("fails closed when a connected asset has no resolvable connection receipt", () => {
+    const snapshot = readySnapshot();
+    snapshot.assets[0].connectionReceipt = null;
+
+    const projection = projectCaioInitializationAssessmentInput(snapshot);
+    const assessment = computeCaioInitializationAssessment(projection.input);
+
+    expect(projection.diagnostics).toContain(
+      "connection_receipt_unresolved:asset-1",
+    );
+    expect(assessment.decision).toBe("not_ready");
+  });
+
+  it("fails closed when the connection receipt access mode differs from the source", () => {
+    const snapshot = readySnapshot();
+    snapshot.assets[0].connectionReceipt = {
+      ...snapshot.assets[0].connectionReceipt!,
+      accessMode: "file_snapshot",
+    };
+
+    const projection = projectCaioInitializationAssessmentInput(snapshot);
+    const assessment = computeCaioInitializationAssessment(projection.input);
+
+    expect(projection.diagnostics).toContain(
+      "connection_receipt_unresolved:asset-1",
+    );
+    expect(assessment.decision).toBe("not_ready");
   });
 
   it("treats unassessed feasibility and unrecognized access as blockers", () => {
