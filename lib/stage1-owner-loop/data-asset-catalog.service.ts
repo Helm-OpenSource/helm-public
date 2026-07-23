@@ -59,6 +59,24 @@ type CommonStageInput = {
 type StoredEntryUpdate =
   Prisma.DataAssetCatalogEntryUpdateManyMutationInput;
 
+// LOCK-BEFORE-READ invariant: every stage transition locks the catalog
+// entry before any ordinary read in its transaction. Under InnoDB
+// REPEATABLE READ, a transaction that waits for an observation-run claim
+// must then read the winner's committed state instead of continuing from a
+// stale snapshot and missing the run/source it needs to invalidate.
+async function lockCatalogEntryRow(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; assetId: string },
+): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM DataAssetCatalogEntry
+    WHERE id = ${input.assetId} AND workspaceId = ${input.workspaceId}
+    FOR UPDATE`;
+  if (rows.length !== 1) {
+    throw new DataAssetCatalogTransitionError(["asset_not_found"]);
+  }
+}
+
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -463,6 +481,10 @@ async function persistStageReceipt(input: {
 
   const execute = () =>
     db.$transaction(async (tx) => {
+      await lockCatalogEntryRow(tx, {
+        workspaceId: input.workspaceId,
+        assetId: input.assetId,
+      });
       const existing = await tx.dataAssetStageReceipt.findUnique({
         where: lookup,
       });

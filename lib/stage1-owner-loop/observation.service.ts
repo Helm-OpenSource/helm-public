@@ -39,6 +39,55 @@ const SENSITIVITY_RANK: Record<ObservationSource["sensitivity"], number> = {
   restricted: 3,
 };
 
+// InnoDB REPEATABLE READ requires locking reads to happen before ordinary
+// reads. The observation write paths use one order whenever the rows exist:
+// catalog asset -> observation program -> observation source. A caller that
+// waits for a concurrent revocation/connection transition therefore reloads
+// the committed terminal state instead of continuing from a stale snapshot.
+async function lockObservationCatalogEntry(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; catalogEntryId: string },
+): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM DataAssetCatalogEntry
+    WHERE id = ${input.catalogEntryId}
+      AND workspaceId = ${input.workspaceId}
+    FOR UPDATE`;
+  if (rows.length !== 1) {
+    throw new ObservationAuthorizationDeniedError([
+      "catalog_asset_not_found",
+    ]);
+  }
+}
+
+async function lockObservationProgram(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; programId: string },
+): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM EnterpriseObservationProgram
+    WHERE id = ${input.programId}
+      AND workspaceId = ${input.workspaceId}
+    FOR UPDATE`;
+  if (rows.length !== 1) {
+    throw new ObservationAuthorizationDeniedError(["program_not_found"]);
+  }
+}
+
+async function lockObservationSource(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; sourceId: string },
+): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM ObservationSource
+    WHERE id = ${input.sourceId}
+      AND workspaceId = ${input.workspaceId}
+    FOR UPDATE`;
+  if (rows.length !== 1) {
+    throw new ObservationAuthorizationDeniedError(["source_not_found"]);
+  }
+}
+
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -580,6 +629,14 @@ export async function registerObservationSource(input: {
   const now = input.now ?? new Date();
   return runWithWriteConflictRetry(() =>
     db.$transaction(async (tx) => {
+      await lockObservationCatalogEntry(tx, {
+        workspaceId: input.workspaceId,
+        catalogEntryId: input.catalogEntryId,
+      });
+      await lockObservationProgram(tx, {
+        workspaceId: input.workspaceId,
+        programId: input.programId,
+      });
       const program = await tx.enterpriseObservationProgram.findFirst({
         where: { id: input.programId, workspaceId: input.workspaceId },
       });
@@ -730,6 +787,10 @@ export async function revokeEnterpriseObservationProgram(input: {
 
   const result = await runWithWriteConflictRetry(() =>
     db.$transaction(async (tx) => {
+      await lockObservationProgram(tx, {
+        workspaceId: input.workspaceId,
+        programId: input.programId,
+      });
       const claimed = await tx.enterpriseObservationProgram.updateMany({
         where: {
           id: input.programId,
@@ -818,8 +879,38 @@ export async function beginObservationSourceRun(input: {
   const now = input.now ?? new Date();
 
   return runWithWriteConflictRetry(async () => {
+    const locator = await db.observationSource.findUnique({
+      where: {
+        workspaceId_sourceKey: {
+          workspaceId: input.workspaceId,
+          sourceKey,
+        },
+      },
+      select: {
+        id: true,
+        programId: true,
+        catalogEntryId: true,
+      },
+    });
+    if (!locator) {
+      throw new ObservationAuthorizationDeniedError(["source_not_found"]);
+    }
     try {
       return await db.$transaction(async (tx) => {
+        if (locator.catalogEntryId) {
+          await lockObservationCatalogEntry(tx, {
+            workspaceId: input.workspaceId,
+            catalogEntryId: locator.catalogEntryId,
+          });
+        }
+        await lockObservationProgram(tx, {
+          workspaceId: input.workspaceId,
+          programId: locator.programId,
+        });
+        await lockObservationSource(tx, {
+          workspaceId: input.workspaceId,
+          sourceId: locator.id,
+        });
         const source = await tx.observationSource.findUnique({
           where: {
             workspaceId_sourceKey: {
@@ -835,6 +926,15 @@ export async function beginObservationSourceRun(input: {
         });
         if (!source)
           throw new ObservationAuthorizationDeniedError(["source_not_found"]);
+        if (
+          source.id !== locator.id ||
+          source.programId !== locator.programId ||
+          source.catalogEntryId !== locator.catalogEntryId
+        ) {
+          throw new ObservationAuthorizationDeniedError([
+            "source_binding_changed",
+          ]);
+        }
 
         const existing = await tx.observationSourceRun.findUnique({
           where: {

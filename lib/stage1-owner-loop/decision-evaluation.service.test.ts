@@ -23,6 +23,7 @@ const { dbMock, auditMock, serviceGovernanceMock } = vi.hoisted(() => {
       create: vi.fn(),
       findFirst: vi.fn(),
     },
+    $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
   return {
@@ -108,6 +109,7 @@ describe("Stage 1 decision evaluation runtime", () => {
     dbMock.$transaction.mockImplementation(
       (callback: (tx: typeof dbMock) => unknown) => callback(dbMock),
     );
+    dbMock.$queryRaw.mockResolvedValue([{ id: "decision-1" }]);
     serviceGovernanceMock.assertWorkspaceInsightServiceAccess.mockResolvedValue(
       undefined,
     );
@@ -164,6 +166,11 @@ describe("Stage 1 decision evaluation runtime", () => {
     expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ actionType: "STAGE1_DECISION_EVALUATED" }),
       { client: dbMock },
+    );
+    expect(
+      dbMock.$queryRaw.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      dbMock.decisionRecord.findFirst.mock.invocationCallOrder[0],
     );
   });
 
