@@ -523,7 +523,7 @@ CEO 可以选择 0 至 3 个候选，并可修改：
 
 ## 11. 三个首批经营课题的定制实施
 
-每个已选问题形成独立 `OperatingQuestionImplementationPlan`：
+每个已选问题形成独立 `CaioOperatingQuestionImplementationPlan`：
 
 - 选题和选择回执引用；
 - 当前基线；

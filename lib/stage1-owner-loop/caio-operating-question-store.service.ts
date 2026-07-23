@@ -7,6 +7,7 @@ import {
 } from "@prisma/client";
 import type {
   CaioOperatingQuestionGenerationReceipt as StoredGenerationReceiptRow,
+  CaioOperatingQuestionImplementationPlan as StoredImplementationPlanRow,
   CaioOperatingQuestionPortfolio as StoredPortfolioRow,
   CaioOperatingQuestionPortfolioHead as StoredPortfolioHeadRow,
   CaioQuestionSelectionHead as StoredSelectionHeadRow,
@@ -29,6 +30,12 @@ import {
   type CurrentAcceptedCaioInitializationContext,
 } from "./caio-initialization-gate-store.service";
 import { projectCaioSelectedOperatingQuestionToDecision } from "./caio-operating-question-decision";
+import {
+  createCaioOperatingQuestionImplementationPlan,
+  validateCaioOperatingQuestionImplementationPlan,
+  validateCaioOperatingQuestionImplementationPlanAgainstContext,
+  type CaioOperatingQuestionImplementationPlan,
+} from "./caio-operating-question-implementation-plan";
 import {
   createCaioOperatingQuestionG0Context,
   createCaioOperatingQuestionGenerationReceipt,
@@ -336,6 +343,75 @@ function parseStoredSelectionReceipt(
     );
   }
   return receipt;
+}
+
+function parseStoredImplementationPlan(
+  row: StoredImplementationPlanRow,
+  input: {
+    portfolio: CaioOperatingQuestionPortfolio;
+    selectionReceipt: CaioQuestionSelectionReceipt;
+    decisionBindingId: string;
+    decisionRecordId: string;
+    actorUserId: string;
+    questionId: string;
+    candidateHash: string;
+  },
+): CaioOperatingQuestionImplementationPlan {
+  const plan =
+    safeParseJson<CaioOperatingQuestionImplementationPlan | null>(
+      row.planJson,
+      null,
+    );
+  const gapCodes = parseStrictStringArray(row.gapCodes);
+  if (!plan || !gapCodes) {
+    throw new CaioOperatingQuestionStoreError(
+      "stored_question_implementation_plan_json_invalid",
+    );
+  }
+  const validation =
+    validateCaioOperatingQuestionImplementationPlan(plan);
+  const contextValidation =
+    validateCaioOperatingQuestionImplementationPlanAgainstContext(plan, {
+      portfolio: input.portfolio,
+      selectionReceipt: input.selectionReceipt,
+      decisionRecordRef: input.decisionRecordId,
+    });
+  if (
+    !validation.valid ||
+    !contextValidation.valid ||
+    plan.planId !== row.id ||
+    plan.workspaceRef !== `workspace:${row.workspaceId}` ||
+    plan.portfolioRef !== row.portfolioId ||
+    plan.selectionReceiptRef !== row.selectionReceiptId ||
+    plan.questionId !== row.questionId ||
+    plan.candidateHash !== row.candidateHash ||
+    plan.decisionRecordRef !== row.decisionRecordId ||
+    row.workspaceId !==
+      input.portfolio.workspaceRef.replace("workspace:", "") ||
+    row.selectionReceiptId !== input.selectionReceipt.receiptId ||
+    row.portfolioId !== input.portfolio.portfolioId ||
+    row.questionId !== input.questionId ||
+    row.candidateHash !== input.candidateHash ||
+    row.decisionBindingId !== input.decisionBindingId ||
+    row.decisionRecordId !== input.decisionRecordId ||
+    row.actorUserId !== input.actorUserId ||
+    plan.status !== row.status ||
+    plan.implementationReadiness !== row.implementationReadiness ||
+    canonicalJson(plan.gapCodes) !== canonicalJson(gapCodes) ||
+    plan.authorityEffect !== row.authorityEffect ||
+    plan.workPacketEffect !== row.workPacketEffect ||
+    plan.createdAt !== row.plannedAt.toISOString() ||
+    plan.contentHash !== row.contentHash
+  ) {
+    throw new CaioOperatingQuestionStoreError(
+      "stored_question_implementation_plan_binding_invalid",
+      uniqueSorted([
+        ...validation.errors,
+        ...contextValidation.errors,
+      ]),
+    );
+  }
+  return plan;
 }
 
 async function loadTrustedContextForUpdate(
@@ -1362,9 +1438,111 @@ export async function selectCaioOperatingQuestions(input: {
   );
 }
 
+async function materializeOperatingQuestionImplementationPlan(
+  tx: Tx,
+  input: {
+    workspaceId: string;
+    portfolio: CaioOperatingQuestionPortfolio;
+    selectionReceipt: CaioQuestionSelectionReceipt;
+    questionId: string;
+    decisionBindingId: string;
+    decisionRecordId: string;
+    actorUserId: string;
+    ceoPrincipalRef: string;
+  },
+): Promise<{
+  plan: CaioOperatingQuestionImplementationPlan;
+  replayed: boolean;
+}> {
+  const plan = createCaioOperatingQuestionImplementationPlan({
+    portfolio: input.portfolio,
+    selectionReceipt: input.selectionReceipt,
+    questionId: input.questionId,
+    decisionRecordRef: input.decisionRecordId,
+  });
+  const existing =
+    await tx.caioOperatingQuestionImplementationPlan.findFirst({
+      where: {
+        OR: [
+          { id: plan.planId },
+          { decisionBindingId: input.decisionBindingId },
+          { decisionRecordId: input.decisionRecordId },
+          {
+            workspaceId: input.workspaceId,
+            selectionReceiptId: input.selectionReceipt.receiptId,
+            questionId: input.questionId,
+          },
+        ],
+      },
+    });
+  if (existing) {
+    return {
+      plan: parseStoredImplementationPlan(existing, {
+        portfolio: input.portfolio,
+        selectionReceipt: input.selectionReceipt,
+        decisionBindingId: input.decisionBindingId,
+        decisionRecordId: input.decisionRecordId,
+        actorUserId: input.actorUserId,
+        questionId: input.questionId,
+        candidateHash: plan.candidateHash,
+      }),
+      replayed: true,
+    };
+  }
+  await tx.caioOperatingQuestionImplementationPlan.create({
+    data: {
+      id: plan.planId,
+      workspaceId: input.workspaceId,
+      selectionReceiptId: input.selectionReceipt.receiptId,
+      portfolioId: input.portfolio.portfolioId,
+      questionId: input.questionId,
+      candidateHash: plan.candidateHash,
+      decisionBindingId: input.decisionBindingId,
+      decisionRecordId: input.decisionRecordId,
+      planJson: jsonStringify(plan),
+      contentHash: plan.contentHash,
+      status: plan.status,
+      implementationReadiness: plan.implementationReadiness,
+      gapCodes: jsonStringify(plan.gapCodes),
+      authorityEffect: plan.authorityEffect,
+      workPacketEffect: plan.workPacketEffect,
+      actorUserId: input.actorUserId,
+      plannedAt: new Date(plan.createdAt),
+    },
+  });
+  await writeAuditLog(
+    {
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      actor: input.ceoPrincipalRef,
+      actorType: ActorType.USER,
+      actionType:
+        "CAIO_OPERATING_QUESTION_IMPLEMENTATION_PLAN_MATERIALIZED",
+      targetType: "CaioOperatingQuestionImplementationPlan",
+      targetId: plan.planId,
+      summary:
+        "Selected CAIO operating question materialized as a canonical implementation-planning draft (no authority granted; no work dispatched)",
+      relatedObjectType: "DecisionRecord",
+      relatedObjectId: input.decisionRecordId,
+      payload: {
+        selectionReceiptId: input.selectionReceipt.receiptId,
+        portfolioId: input.portfolio.portfolioId,
+        questionId: input.questionId,
+        implementationReadiness: plan.implementationReadiness,
+        gapCodes: plan.gapCodes,
+        authorityEffect: plan.authorityEffect,
+        workPacketEffect: plan.workPacketEffect,
+      },
+    },
+    { client: tx },
+  );
+  return { plan, replayed: false };
+}
+
 // Converts the current CEO selection into the existing DecisionRecord runtime
-// model. This is still review-only: it creates no confirmation, Work Packet,
-// approval task, authority grant, or external side effect.
+// model and its canonical implementation-planning draft. This is still
+// review-only: it creates no confirmation, Work Packet, approval task,
+// authority grant, or external side effect.
 export async function bindCurrentCaioQuestionSelectionToDecisionRecords(input: {
   workspaceId: string;
   expectedSelectionReceiptId: string;
@@ -1378,6 +1556,8 @@ export async function bindCurrentCaioQuestionSelectionToDecisionRecords(input: {
     bindingId: string;
     questionId: string;
     decisionRecordId: string;
+    implementationPlanId: string;
+    implementationPlanReplayed: boolean;
     replayed: boolean;
   }>;
 }> {
@@ -1535,6 +1715,8 @@ export async function bindCurrentCaioQuestionSelectionToDecisionRecords(input: {
           bindingId: string;
           questionId: string;
           decisionRecordId: string;
+          implementationPlanId: string;
+          implementationPlanReplayed: boolean;
           replayed: boolean;
         }> = [];
         for (const questionId of selectionReceipt.selectedQuestionIds) {
@@ -1569,6 +1751,8 @@ export async function bindCurrentCaioQuestionSelectionToDecisionRecords(input: {
                 },
               },
             });
+          let binding = existingBinding;
+          let bindingReplayed = true;
           if (existingBinding) {
             if (
               existingBinding.portfolioId !== portfolio.portfolioId ||
@@ -1580,30 +1764,10 @@ export async function bindCurrentCaioQuestionSelectionToDecisionRecords(input: {
                 "question_decision_binding_conflict",
               );
             }
-            bindings.push({
-              bindingId: existingBinding.id,
-              questionId,
-              decisionRecordId: existingBinding.decisionRecordId,
-              replayed: true,
-            });
-            continue;
-          }
-          const bindingBasisHash = sha256(
-            canonicalJson({
-              workspaceId: input.workspaceId,
-              selectionReceiptId: selectionReceipt.receiptId,
-              portfolioId: portfolio.portfolioId,
-              questionId,
-              candidateHash: projection.candidateHash,
-              decisionRecordId: decisionResult.record.id,
-              actorUserId: input.actorUserId,
-            }),
-          );
-          const bindingId = `caio-question-decision-binding:${bindingBasisHash.slice(7, 31)}`;
-          const binding =
-            await tx.caioOperatingQuestionDecisionBinding.create({
-              data: {
-                id: bindingId,
+          } else {
+            bindingReplayed = false;
+            const bindingBasisHash = sha256(
+              canonicalJson({
                 workspaceId: input.workspaceId,
                 selectionReceiptId: selectionReceipt.receiptId,
                 portfolioId: portfolio.portfolioId,
@@ -1611,38 +1775,76 @@ export async function bindCurrentCaioQuestionSelectionToDecisionRecords(input: {
                 candidateHash: projection.candidateHash,
                 decisionRecordId: decisionResult.record.id,
                 actorUserId: input.actorUserId,
+              }),
+            );
+            const bindingId = `caio-question-decision-binding:${bindingBasisHash.slice(7, 31)}`;
+            binding =
+              await tx.caioOperatingQuestionDecisionBinding.create({
+                data: {
+                  id: bindingId,
+                  workspaceId: input.workspaceId,
+                  selectionReceiptId: selectionReceipt.receiptId,
+                  portfolioId: portfolio.portfolioId,
+                  questionId,
+                  candidateHash: projection.candidateHash,
+                  decisionRecordId: decisionResult.record.id,
+                  actorUserId: input.actorUserId,
+                },
+              });
+            await writeAuditLog(
+              {
+                workspaceId: input.workspaceId,
+                userId: input.actorUserId,
+                actor: ceoPrincipalRef,
+                actorType: ActorType.USER,
+                actionType:
+                  "CAIO_OPERATING_QUESTION_DECISION_BOUND",
+                targetType:
+                  "CaioOperatingQuestionDecisionBinding",
+                targetId: binding.id,
+                summary:
+                  "Selected CAIO operating question bound to the canonical DecisionRecord (review only; no work dispatched)",
+                relatedObjectType: "DecisionRecord",
+                relatedObjectId: decisionResult.record.id,
+                payload: {
+                  selectionReceiptId: selectionReceipt.receiptId,
+                  portfolioId: portfolio.portfolioId,
+                  questionId,
+                  authorityEffect: "none",
+                  workPacketEffect: "none",
+                },
               },
-            });
-          await writeAuditLog(
-            {
+              { client: tx },
+            );
+          }
+          if (!binding) {
+            throw new CaioOperatingQuestionStoreError(
+              "question_decision_binding_missing",
+            );
+          }
+          const implementationPlanResult =
+            await materializeOperatingQuestionImplementationPlan(tx, {
               workspaceId: input.workspaceId,
-              userId: input.actorUserId,
-              actor: ceoPrincipalRef,
-              actorType: ActorType.USER,
-              actionType:
-                "CAIO_OPERATING_QUESTION_DECISION_BOUND",
-              targetType:
-                "CaioOperatingQuestionDecisionBinding",
-              targetId: binding.id,
-              summary:
-                "Selected CAIO operating question bound to the canonical DecisionRecord (review only; no work dispatched)",
-              relatedObjectType: "DecisionRecord",
-              relatedObjectId: decisionResult.record.id,
-              payload: {
-                selectionReceiptId: selectionReceipt.receiptId,
-                portfolioId: portfolio.portfolioId,
-                questionId,
-                authorityEffect: "none",
-                workPacketEffect: "none",
-              },
-            },
-            { client: tx },
-          );
+              portfolio,
+              selectionReceipt,
+              questionId,
+              decisionBindingId: binding.id,
+              decisionRecordId: decisionResult.record.id,
+              actorUserId: input.actorUserId,
+              ceoPrincipalRef,
+            });
           bindings.push({
             bindingId: binding.id,
             questionId,
             decisionRecordId: decisionResult.record.id,
-            replayed: decisionResult.replayed,
+            implementationPlanId:
+              implementationPlanResult.plan.planId,
+            implementationPlanReplayed:
+              implementationPlanResult.replayed,
+            replayed:
+              decisionResult.replayed &&
+              bindingReplayed &&
+              implementationPlanResult.replayed,
           });
         }
         return { selectionReceipt, bindings };

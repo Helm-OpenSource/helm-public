@@ -93,6 +93,23 @@ describe("getWorkspaceStage1OwnerLoopReadout", () => {
         at: now,
       },
     );
+    expect(
+      dbMock.caioQuestionSelectionHead.findUnique,
+    ).toHaveBeenCalledWith({
+      where: { workspaceId: "workspace-1" },
+      include: {
+        currentReceipt: {
+          include: {
+            decisionBindings: {
+              include: {
+                implementationPlan: true,
+              },
+              orderBy: { questionId: "asc" },
+            },
+          },
+        },
+      },
+    });
   });
 
   it("degrades to null when the additive owner-loop schema is not deployed", async () => {

@@ -167,10 +167,8 @@ async function loadOwnerLoopRows(
         currentReceipt: {
           include: {
             decisionBindings: {
-              select: {
-                questionId: true,
-                candidateHash: true,
-                decisionRecordId: true,
+              include: {
+                implementationPlan: true,
               },
               orderBy: { questionId: "asc" },
             },

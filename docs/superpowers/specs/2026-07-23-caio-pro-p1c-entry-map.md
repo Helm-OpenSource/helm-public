@@ -19,6 +19,7 @@ current accepted G0
   -> CEO selects 0-3 questions
   -> immutable selection receipt
   -> selected questions bind existing DecisionRecord
+  -> canonical implementation-planning draft with explicit gaps
   -> OWNER-only dashboard read projection
 ```
 
@@ -27,13 +28,15 @@ current accepted G0
 - 经营问题真值为 `CaioOperatingQuestionPortfolio`；
 - CEO 选择真值为 `CaioQuestionSelectionReceipt`；
 - 后续决策真值继续使用现有 `DecisionRecord`；
+- 每个已选问题的实施规划真值为 `CaioOperatingQuestionImplementationPlan`，它是
+  `DecisionRecord` 的治理草案，不是第二套决策或任务状态机；
 - G0 真值继续使用现有 initialization assessment、receipt 与 current head；
 - 执行仍应复用现有 `ActionItem`、`ApprovalTask`、`ExecutionReceipt` 和 Work Packet；
 - 当前 Dashboard 只读，不提供生成、选择、绑定、确认或派工控件；
 - WorkBuddy、MCP Gateway、delivery outbox、设备证书与 LAN 部署不在本分支实现。
 
 因此，本切片属于“已成形但仍需下一层”。它证明 P1C canonical core、持久化、并发门控、
-`DecisionRecord` 绑定和真实只读入口已经在本地隔离环境验证；不证明远程 mutation、
+`DecisionRecord` 绑定、canonical implementation plan 和真实只读入口已经在本地隔离环境验证；不证明远程 mutation、
 生产连接器、客户部署、Control Plane 激活或正式生产运行。
 
 ## 2. 真实入口链
@@ -87,12 +90,13 @@ tool 或 UI 控件调用它们。
 | `CaioOperatingQuestionGenerationReceipt` | `lib/stage1-owner-loop/caio-operating-question.ts` | generated / insufficient_evidence 两种结果、前序链与 G0 锚点 | missing -> formed | Gateway 只能读取/投影，不能复制或改写 |
 | `CaioQuestionSelectionReceipt` | `lib/stage1-owner-loop/caio-question-selection.ts` | CEO 对 0-3 题的版本化选择；`authorityEffect` 与 `workPacketEffect` 均为 `none` | missing -> formed | 未来 prepare/submit challenge 在 Gateway 层实现；receipt contract 不变 |
 | `DecisionObject` projection | `lib/stage1-owner-loop/caio-operating-question-decision.ts` | 将一个已选候选确定性投影为现有 Decision Object 输入，保留证据和 G0/Portfolio/selection refs | extend | 不新增第二套决策对象 |
+| `CaioOperatingQuestionImplementationPlan` | `lib/stage1-owner-loop/caio-operating-question-implementation-plan.ts` | 将 Portfolio、selection 与现有 `DecisionRecord` 绑定成可校验的实施规划草案；显式记录基线、目标、适配、汇报、治理、人员、结果和 30 天复盘缺口 | missing -> formed | 初始状态固定为 `DRAFT / needs_configuration`，`authorityEffect` 与 `workPacketEffect` 均为 `none`；Pack、Overlay、连接器、模型路由、数据处置和升级/停止/回滚条件仍待配置 |
 | `createStage1DecisionRecordInTransaction` | `lib/stage1-owner-loop/decision-follow-through.service.ts` | 在调用方事务内复用现有 `DecisionRecord` 创建语义 | extend | 后续 owner confirmation 与 Work Packet 继续走现有 service |
 | `generateCaioOperatingQuestionPortfolio` | `lib/stage1-owner-loop/caio-operating-question-store.service.ts` | SERIALIZABLE、幂等、current G0 重验、append-only head、audit 同事务 | missing -> formed | 无 route；未来只由受治理 application adapter 调用 |
 | `selectCaioOperatingQuestions` | `lib/stage1-owner-loop/caio-operating-question-store.service.ts` | live CEO binding、current Portfolio、0-3 题、版本链、幂等与 audit | missing -> formed | mutation flag、challenge、expected version 与 user-presence 属 Gateway/Control Plane |
-| `bindCurrentCaioQuestionSelectionToDecisionRecords` | `lib/stage1-owner-loop/caio-operating-question-store.service.ts` | 只绑定 current selection；每个选中题幂等创建/复用现有 `DecisionRecord` 与 provenance binding | missing -> formed | 不确认 Decision、不创建 Work Packet、不形成权限 |
-| P1C persistence | `prisma/schema.prisma`、`prisma/migrations/20260723170000_caio_operating_question_portfolio/migration.sql` | Portfolio、generation receipt、current head、selection receipt、selection head 与 Decision binding | missing -> formed | 生产迁移与部署回执不属于本地实现证据 |
-| `buildCaioOperatingQuestionReadout` | `features/dashboard/caio-operating-question-readout.ts` | 只消费 canonical G0 read context，再校验 P1C 持久化 JSON、规范列和对象关联，形成 read-only UI projection | missing -> formed | 未来可供 Gateway projection resolver 复用，但不能直接返回 local-only 原文 |
+| `bindCurrentCaioQuestionSelectionToDecisionRecords` | `lib/stage1-owner-loop/caio-operating-question-store.service.ts` | 只处理 current selection；每个选中题在同一事务中幂等创建/复用现有 `DecisionRecord`、provenance binding 与 canonical implementation plan | missing -> formed | 不确认 Decision、不创建 Work Packet、不形成权限 |
+| P1C persistence | `prisma/schema.prisma`、`prisma/migrations/20260723170000_caio_operating_question_portfolio/migration.sql`、`prisma/migrations/20260723221500_caio_operating_question_implementation_plan/migration.sql` | Portfolio、generation receipt、current head、selection receipt、selection head、Decision binding 与一对一 implementation plan | missing -> formed | 新表为 additive；历史 binding 可在受治理重放时补齐计划，生产迁移与部署回执不属于本地实现证据 |
+| `buildCaioOperatingQuestionReadout` | `features/dashboard/caio-operating-question-readout.ts` | 只消费 canonical G0 read context，再校验 P1C 持久化 JSON、规范列、Decision binding 与 implementation plan 上下文，形成 read-only UI projection | missing -> formed | 缺计划显示 `planning_incomplete`，计划篡改显示 `invalid_evidence`；未来可供 Gateway projection resolver 复用，但不能直接返回 local-only 原文 |
 | `getWorkspaceStage1OwnerLoopReadout` | `features/dashboard/stage1-owner-loop-query.ts` | OWNER-only、单一 repeatable-read 事务聚合；实时 G0 漂移时隐藏旧 Portfolio；P1C 缺表沿现有 additive-schema 路径降级 | extend | 不增加 mutation |
 | `Stage1OwnerLoopConsole` | `features/dashboard/stage1-owner-loop-console.tsx` | 展示 10 题、选择状态和 canonical DecisionRecord binding；无写控件 | extend | CEO 选择交互必须等 mutation 门全绿并走 prepare/submit |
 | `OwnerQuestionPacket` / `EvidenceAnswerPacket` | `lib/stage1-owner-loop/types.ts` | CEO 问答和证据回答公共契约 | reuse | P1C 候选不能复制成问答真值；WorkBuddy 只做投影 |
@@ -132,7 +136,7 @@ tool 或 UI 控件调用它们。
 8. 追加 selection receipt 和 head，不覆盖历史；
 9. 同事务写 audit。
 
-### 4.3 CEO 选择到 DecisionRecord
+### 4.3 CEO 选择到 DecisionRecord 与实施计划
 
 绑定服务只处理 current selection：
 
@@ -140,7 +144,11 @@ tool 或 UI 控件调用它们。
 - `DecisionRecord` 初始保持 `EVIDENCE_READY`；
 - 选择回执、G0、Portfolio 与 question evidence 进入依据引用；
 - provenance binding 记录 question -> DecisionRecord 关系；
-- 相同 selection 并发绑定只创建一次；
+- canonical implementation plan 绑定 Portfolio、selection、question、binding 与 DecisionRecord；
+- 计划初始只描述实施目标和缺口，不授予权限、不产生 Work Packet；
+- 相同 selection 并发绑定与计划物化都只创建一次；
+- 已有历史 binding 但缺计划时只补计划，不复制 DecisionRecord；
+- 已存在计划必须通过内容哈希、规范列和上下文重算校验，篡改后 fail-closed；
 - superseded selection 拒绝；
 - audit 失败则整笔事务回滚；
 - 不作 owner confirmation；
@@ -176,6 +184,7 @@ not_generated
 awaiting_selection
 selection_deferred
 binding_incomplete
+planning_incomplete
 selected
 last_valid_portfolio_stale
 insufficient_evidence
@@ -200,8 +209,11 @@ invalid_evidence
 - G0 接受后 Company Memory 证据发生实时漂移，读取侧与写入侧使用同一校验内核并 fail-closed；
 - 证据不足不会破坏此前有效 Portfolio 历史；
 - current selection 并发绑定 `DecisionRecord` 恰好一次；
+- current selection 并发物化 implementation plan 恰好一次；
+- 历史 binding 缺计划时可确定性补齐，补齐后重放稳定；
+- implementation plan 被篡改时重放 fail-closed；
 - superseded selection 不能绑定；
-- generation、selection 和 binding 的 audit 失败均回滚；
+- generation、selection、binding 和 implementation-plan audit 失败均回滚；
 - P1C 操作不会创建 `ActionItem` 或 `ApprovalTask`。
 
 运行层仍有一个独立的 execution receipt verification 并发降级基线缺陷。它不阻止 P1C
@@ -218,6 +230,7 @@ WorkBuddy/P1C mutation 必须默认关闭。
 - `CaioQuestionSelectionReceipt`
 - `CaioQuestionSelectionHead`
 - `CaioOperatingQuestionDecisionBinding`
+- `CaioOperatingQuestionImplementationPlan`
 
 关键约束：
 
@@ -226,6 +239,8 @@ WorkBuddy/P1C mutation 必须默认关闭。
 - current head 通过显式 FK 指向当前不可变记录；
 - `DecisionRecord` 使用 `(id, workspaceId)` 复合唯一键供 binding 做 workspace-bound FK；
 - binding 对 `(workspaceId, selectionReceiptId, questionId)` 唯一；
+- plan 对 Decision binding 和 `DecisionRecord` 均为一对一，并对
+  `(workspaceId, selectionReceiptId, questionId)` 唯一；
 - migration 只建立 P1C 结构，不激活任何 runtime 权限或远程入口。
 
 ## 8. 公开 UI 语义
@@ -236,8 +251,10 @@ Dashboard 显示：
 - 候选数量；
 - CEO 已选 0-3 题数量；
 - 已绑定 `DecisionRecord` 数量；
+- 已形成 canonical implementation plan 数量；
 - 10 个候选的 rank、标题、问题、业务域、证据数和评分；
 - 选中项的 binding 完整性。
+- 选中项的 implementation-plan 完整性与配置状态。
 
 Dashboard 不显示：
 
@@ -256,6 +273,7 @@ Dashboard 不显示：
 CaioOperatingQuestionPortfolio
 CaioOperatingQuestionGenerationReceipt
 CaioQuestionSelectionReceipt
+CaioOperatingQuestionImplementationPlan
 CaioOperatingQuestionReadout
 ```
 
@@ -296,6 +314,7 @@ npx vitest run \
   lib/stage1-owner-loop/caio-operating-question.test.ts \
   lib/stage1-owner-loop/caio-question-selection.test.ts \
   lib/stage1-owner-loop/caio-operating-question-decision.test.ts \
+  lib/stage1-owner-loop/caio-operating-question-implementation-plan.test.ts \
   lib/stage1-owner-loop/caio-operating-question-store.service.test.ts \
   features/dashboard/caio-operating-question-readout.test.ts \
   features/dashboard/stage1-owner-loop-readout.test.ts \

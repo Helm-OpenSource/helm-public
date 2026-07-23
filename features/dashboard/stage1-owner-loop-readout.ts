@@ -306,7 +306,8 @@ export function buildStage1OwnerLoopReadout(input: {
     operatingQuestions.state === "invalid_evidence" ||
     operatingQuestions.state === "insufficient_evidence" ||
     operatingQuestions.state === "last_valid_portfolio_stale" ||
-    operatingQuestions.state === "binding_incomplete"
+    operatingQuestions.state === "binding_incomplete" ||
+    operatingQuestions.state === "planning_incomplete"
   ) {
     posture = "attention_required";
   } else if (

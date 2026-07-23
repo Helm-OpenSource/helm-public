@@ -319,7 +319,7 @@ CaioOperatingQuestionCandidate
 CaioOperatingQuestionPortfolio
 CaioOperatingQuestionGenerationReceipt
 CaioQuestionSelectionReceipt
-OperatingQuestionImplementationPlan
+CaioOperatingQuestionImplementationPlan
 ```
 
 确定性验证器必须保证：
@@ -338,6 +338,9 @@ OperatingQuestionImplementationPlan
 - 选择修改产生新版本，旧回执不可覆盖；
 - 未选择题目只留在观察池；
 - 选中题目绑定现有 `DecisionRecord`，不创建第二套决策对象。
+- 每个选中题目与 `DecisionRecord` 在同一事务中形成一份
+  `CaioOperatingQuestionImplementationPlan`；初始计划只记录实施目标、基线、成功指标、
+  适配范围、治理边界和显式缺口，`authorityEffect` 与 `workPacketEffect` 均为 `none`。
 
 ### 6.4 P1D 模型准入与出域回执
 
