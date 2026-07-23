@@ -1,3 +1,11 @@
+import {
+  buildCaioOperatingQuestionReadout,
+  type CaioCurrentAcceptedG0ReadContext,
+  type CaioOperatingQuestionPortfolioHeadReadRow,
+  type CaioOperatingQuestionReadout,
+  type CaioQuestionSelectionHeadReadRow,
+} from "@/features/dashboard/caio-operating-question-readout";
+
 export type Stage1ObservationProgramRow = {
   status: string;
   startsAt: Date;
@@ -148,6 +156,7 @@ export type Stage1OwnerLoopReadout = {
     missing: number;
     averageVerifiedQuality: number | null;
   };
+  operatingQuestions: CaioOperatingQuestionReadout;
 };
 
 function statusCount(
@@ -206,7 +215,16 @@ export function buildStage1OwnerLoopReadout(input: {
   supervisionSignals: readonly Stage1SupervisionSignalRow[];
   supervisionCounts: readonly Stage1SupervisionCountRow[];
   workPacketReceipts: readonly Stage1WorkPacketReceiptRow[];
+  currentG0Context: CaioCurrentAcceptedG0ReadContext | null;
+  operatingQuestionHead: CaioOperatingQuestionPortfolioHeadReadRow | null;
+  questionSelectionHead: CaioQuestionSelectionHeadReadRow | null;
 }): Stage1OwnerLoopReadout {
+  const operatingQuestions = buildCaioOperatingQuestionReadout({
+    now: input.now,
+    currentG0Context: input.currentG0Context,
+    portfolioHead: input.operatingQuestionHead,
+    selectionHead: input.questionSelectionHead,
+  });
   const sourceRows = input.sources.map((source) => ({
     source,
     health: sourceHealth(source, input.now),
@@ -276,13 +294,27 @@ export function buildStage1OwnerLoopReadout(input: {
     input.sources.length > 0 ||
     totalDecisions > 0 ||
     input.supervisionCounts.length > 0 ||
-    claims.length > 0;
+    claims.length > 0 ||
+    operatingQuestions.state !== "not_generated";
 
   let posture: Stage1OwnerLoopReadout["posture"] = "observing";
   if (!hasAnyStage1Data) posture = "not_configured";
-  else if (failing > 0 || critical > 0 || missing > 0) {
+  else if (
+    failing > 0 ||
+    critical > 0 ||
+    missing > 0 ||
+    operatingQuestions.state === "invalid_evidence" ||
+    operatingQuestions.state === "insufficient_evidence" ||
+    operatingQuestions.state === "last_valid_portfolio_stale" ||
+    operatingQuestions.state === "binding_incomplete"
+  ) {
     posture = "attention_required";
-  } else if (pendingOwner > 0) posture = "owner_review_required";
+  } else if (
+    pendingOwner > 0 ||
+    operatingQuestions.state === "awaiting_selection"
+  ) {
+    posture = "owner_review_required";
+  }
   else if (
     claims.some((claim) => claim.decisionRecord.status !== "EVALUATED")
   ) {
@@ -361,5 +393,6 @@ export function buildStage1OwnerLoopReadout(input: {
           ? Math.round(verifiedQualityTotal / verifiedReceipts.length)
           : null,
     },
+    operatingQuestions,
   };
 }

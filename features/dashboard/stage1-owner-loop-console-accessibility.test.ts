@@ -27,4 +27,36 @@ describe("Stage 1 owner-loop console boundaries", () => {
     expect(source).toContain('href="/approvals"');
     expect(source).toContain('href="/memory"');
   });
+
+  it("projects P1C in read-only mode without exposing selection or dispatch mutations", () => {
+    expect(source).toContain(
+      'data-caio-operating-question-portfolio="true"',
+    );
+    expect(source).toContain(
+      "本区仅作只读投影，不能选择、确认、派工或创建 Work Packet",
+    );
+    expect(source).toContain(
+      "This is a read-only projection: it cannot select, confirm, dispatch, or create a Work Packet",
+    );
+    expect(source).not.toContain("selectCaioOperatingQuestions");
+    expect(source).not.toContain(
+      "bindCurrentCaioQuestionSelectionToDecisionRecords",
+    );
+    expect(querySource).not.toMatch(/\.(?:create|update|upsert|delete)\(/u);
+  });
+
+  it("labels a retained last-valid portfolio with generation and version context", () => {
+    expect(source).toContain(
+      'data-caio-operating-question-stale-portfolio="true"',
+    );
+    expect(source).toContain(
+      "Latest generation ${operatingQuestions.generationSequence} lacked sufficient evidence",
+    );
+    expect(source).toContain(
+      "最新第 ${operatingQuestions.generationSequence} 次生成证据不足",
+    );
+    expect(source).toContain(
+      "portfolioGeneratedAt",
+    );
+  });
 });

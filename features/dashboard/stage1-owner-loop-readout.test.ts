@@ -35,6 +35,9 @@ function build(
     supervisionSignals: [],
     supervisionCounts: [],
     workPacketReceipts: [],
+    currentG0Context: null,
+    operatingQuestionHead: null,
+    questionSelectionHead: null,
     ...overrides,
   });
 }
