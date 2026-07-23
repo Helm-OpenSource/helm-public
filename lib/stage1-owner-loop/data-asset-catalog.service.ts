@@ -28,6 +28,7 @@ import type {
   DataAssetProcessingDisposition,
   DataAssetShape,
   DataAssetStageReceipt,
+  DataAssetTechnicalFeasibility,
 } from "./data-asset-catalog.types";
 import type {
   ObservationAccessMode,
@@ -107,6 +108,8 @@ function toContract(
       entry.sensitivity.toLowerCase() as ObservationSensitivity,
     processingDisposition:
       entry.processingDisposition.toLowerCase() as DataAssetProcessingDisposition,
+    technicalFeasibility:
+      entry.technicalFeasibility.toLowerCase() as DataAssetTechnicalFeasibility,
     inventoryStatus:
       entry.inventoryStatus.toLowerCase() as DataAssetCatalogEntry["inventoryStatus"],
     classificationStatus:
@@ -323,6 +326,7 @@ export async function createDataAssetCatalogEntry(input: {
     dataShape: "other",
     sensitivity: "restricted",
     processingDisposition: "local_only",
+    technicalFeasibility: "unassessed",
     inventoryStatus: "inventoried",
     classificationStatus: "pending",
     authorizationStatus: "not_requested",
@@ -367,6 +371,7 @@ export async function createDataAssetCatalogEntry(input: {
           dataShape: "OTHER",
           sensitivity: "RESTRICTED",
           processingDisposition: "LOCAL_ONLY",
+          technicalFeasibility: "UNASSESSED",
           inventoryStatus: "INVENTORIED",
           classificationStatus: "PENDING",
           authorizationStatus: "NOT_REQUESTED",
@@ -586,6 +591,10 @@ export async function recordDataAssetClassificationReceipt(
     dataShape: DataAssetShape;
     sensitivity: ObservationSensitivity;
     processingDisposition: DataAssetProcessingDisposition;
+    technicalFeasibility: Exclude<
+      DataAssetTechnicalFeasibility,
+      "unassessed"
+    >;
   },
 ) {
   const actorUserId = requireHumanActor(input);
@@ -607,6 +616,7 @@ export async function recordDataAssetClassificationReceipt(
     dataShape: input.dataShape,
     sensitivity: input.sensitivity,
     processingDisposition: input.processingDisposition,
+    technicalFeasibility: input.technicalFeasibility,
     classificationStatus: "classified",
   };
   return persistStageReceipt({
@@ -617,7 +627,8 @@ export async function recordDataAssetClassificationReceipt(
       const classificationChanged =
         current.dataShape !== receipt.dataShape ||
         current.sensitivity !== receipt.sensitivity ||
-        current.processingDisposition !== receipt.processingDisposition;
+        current.processingDisposition !== receipt.processingDisposition ||
+        current.technicalFeasibility !== receipt.technicalFeasibility;
       if (
         current.authorizationStatus === "authorized" &&
         classificationChanged
@@ -633,6 +644,7 @@ export async function recordDataAssetClassificationReceipt(
         dataShape: receipt.dataShape,
         sensitivity: receipt.sensitivity,
         processingDisposition: receipt.processingDisposition,
+        technicalFeasibility: receipt.technicalFeasibility,
         classificationStatus: "classified",
         evidenceRefs: uniqueNonEmpty([
           ...current.evidenceRefs,
@@ -648,6 +660,8 @@ export async function recordDataAssetClassificationReceipt(
           sensitivity: receipt.sensitivity.toUpperCase(),
           processingDisposition:
             receipt.processingDisposition.toUpperCase(),
+          technicalFeasibility:
+            receipt.technicalFeasibility.toUpperCase(),
           classificationStatus: "CLASSIFIED",
           classificationReceiptRef: receipt.receiptId,
           evidenceRefs: jsonStringify(candidate.evidenceRefs),

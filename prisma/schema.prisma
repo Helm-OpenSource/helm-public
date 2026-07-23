@@ -3536,6 +3536,7 @@ model DataAssetCatalogEntry {
   dataShape                String                  @default("OTHER")
   sensitivity              String                  @default("RESTRICTED")
   processingDisposition    String                  @default("LOCAL_ONLY")
+  technicalFeasibility     String                  @default("UNASSESSED")
   inventoryStatus          String                  @default("INVENTORIED")
   classificationStatus     String                  @default("PENDING")
   authorizationStatus      String                  @default("NOT_REQUESTED")

@@ -6,6 +6,7 @@ import type {
   DataAssetInitializationStatus,
   DataAssetInventoryStatus,
   DataAssetProcessingDisposition,
+  DataAssetTechnicalFeasibility,
 } from "./data-asset-catalog.types";
 import type {
   ObservationAccessMode,
@@ -78,7 +79,7 @@ export type CaioInitializationAssetSnapshot = {
   processingDisposition: DataAssetProcessingDisposition;
   authorizationStatus: DataAssetAuthorizationStatus;
   authorizationReceiptRef: string | null;
-  technicalFeasibility: "feasible" | "not_feasible";
+  technicalFeasibility: DataAssetTechnicalFeasibility;
   connectionStatus: DataAssetConnectionStatus;
   initializationStatus: DataAssetInitializationStatus;
   initializationReceiptRef: string | null;
@@ -340,6 +341,7 @@ function completeAssetState(
     return false;
   }
   if (asset.classificationStatus !== "classified") return false;
+  if (asset.technicalFeasibility === "unassessed") return false;
   if (
     asset.authorizationStatus === "not_requested" ||
     asset.authorizationStatus === "pending"
