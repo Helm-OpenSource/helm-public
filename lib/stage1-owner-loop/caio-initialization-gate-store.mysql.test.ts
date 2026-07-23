@@ -4,6 +4,7 @@ import {
   MemoryFactType,
   MemoryStatus,
   ObjectType,
+  Prisma,
   SourceType,
   WorkspaceRole,
 } from "@prisma/client";
@@ -80,10 +81,17 @@ import {
 import {
   acceptCaioInitializationGate,
   getCaioInitializationGateStatus,
+  loadCurrentAcceptedCaioInitializationContextForRead,
   recordCaioInitializationAssessment,
   revokeCaioInitializationGate,
 } from "./caio-initialization-gate-store.service";
 import type { CaioInitializationGateReceipt } from "./caio-initialization-gate-receipt";
+import {
+  bindCurrentCaioQuestionSelectionToDecisionRecords,
+  generateCaioOperatingQuestionPortfolio,
+  selectCaioOperatingQuestions,
+} from "./caio-operating-question-store.service";
+import { syntheticOperatingQuestionCandidate } from "./caio-operating-question.test-fixtures";
 import {
   createDataAssetCatalogEntry,
   recordDataAssetAuthorizationReceipt,
@@ -153,6 +161,47 @@ function withContentHash<T extends Record<string, unknown>>(
   };
 }
 
+function operatingQuestionCandidates(evidenceRef: string) {
+  return Array.from({ length: 10 }, (_, index) => {
+    const candidate = syntheticOperatingQuestionCandidate(index);
+    return {
+      ...candidate,
+      facts: candidate.facts.map((fact) => ({
+        ...fact,
+        evidenceRefs: [evidenceRef],
+      })),
+      inferences: candidate.inferences.map((inference) => ({
+        ...inference,
+        evidenceRefs: [evidenceRef],
+      })),
+      evidenceRefs: [evidenceRef],
+    };
+  });
+}
+
+function operatingQuestionSelection(questionId: string) {
+  return [
+    {
+      questionId,
+      questionOverride: null,
+      goal: "Validate one evidence-bound operating priority",
+      successMetrics: [
+        {
+          metricKey: "metric-1",
+          target: "Improve the governed baseline without external mutation",
+        },
+      ],
+      priority: 1,
+      implementationScopeRefs: ["scope:review-only"],
+      ownerRef: null,
+      reviewerRef: null,
+      startsAt: null,
+      endsAt: null,
+      prohibitedActions: ["external_side_effect"],
+    },
+  ];
+}
+
 async function resetGateLedger(workspaceId: string): Promise<void> {
   await runWithWriteConflictRetry(
     () =>
@@ -186,6 +235,88 @@ async function resetGateLedger(workspaceId: string): Promise<void> {
   );
 }
 
+async function resetOperatingQuestionLedger(
+  workspaceId: string,
+): Promise<void> {
+  await runWithWriteConflictRetry(
+    () =>
+      db.$transaction(async (tx) => {
+        const decisionBindings =
+          await tx.caioOperatingQuestionDecisionBinding.findMany({
+            where: { workspaceId },
+            select: { decisionRecordId: true },
+          });
+        await tx.caioOperatingQuestionDecisionBinding.deleteMany({
+          where: { workspaceId },
+        });
+        if (decisionBindings.length > 0) {
+          await tx.decisionRecord.deleteMany({
+            where: {
+              workspaceId,
+              id: {
+                in: decisionBindings.map(
+                  (binding) => binding.decisionRecordId,
+                ),
+              },
+            },
+          });
+        }
+        await tx.caioQuestionSelectionHead.deleteMany({
+          where: { workspaceId },
+        });
+        const selectionReceipts =
+          await tx.caioQuestionSelectionReceipt.findMany({
+            where: { workspaceId },
+            orderBy: { sequence: "desc" },
+            select: { id: true },
+          });
+        for (const receipt of selectionReceipts) {
+          await tx.caioQuestionSelectionReceipt.delete({
+            where: { id: receipt.id },
+          });
+        }
+        await tx.caioOperatingQuestionPortfolioHead.deleteMany({
+          where: { workspaceId },
+        });
+        const generationReceipts =
+          await tx.caioOperatingQuestionGenerationReceipt.findMany({
+            where: { workspaceId },
+            orderBy: { sequence: "desc" },
+            select: { id: true },
+          });
+        for (const receipt of generationReceipts) {
+          await tx.caioOperatingQuestionGenerationReceipt.delete({
+            where: { id: receipt.id },
+          });
+        }
+        const portfolios = await tx.caioOperatingQuestionPortfolio.findMany({
+          where: { workspaceId },
+          orderBy: { sequence: "desc" },
+          select: { id: true },
+        });
+        for (const portfolio of portfolios) {
+          await tx.caioOperatingQuestionPortfolio.delete({
+            where: { id: portfolio.id },
+          });
+        }
+        await tx.auditLog.deleteMany({
+          where: {
+            workspaceId,
+            actionType: {
+              in: [
+                "CAIO_OPERATING_QUESTIONS_GENERATED",
+                "CAIO_OPERATING_QUESTIONS_SELECTED",
+                "CAIO_OPERATING_QUESTION_DECISION_BOUND",
+                "STAGE1_DECISION_RECORDED",
+              ],
+            },
+          },
+        });
+      }),
+    { maxAttempts: 8, retryDelayMs: 50 },
+  );
+}
+
 describeMysql(
   "CAIO initialization gate with an isolated MySQL database",
   () => {
@@ -194,6 +325,45 @@ describeMysql(
     let mandateRecordId = "";
     let assessmentId = "";
     let evaluatedAt = new Date(0);
+
+    async function acceptCurrentG0ForP1c(
+      label: string,
+      offsetMs: number,
+    ) {
+      return acceptCaioInitializationGate({
+        workspaceId,
+        assessmentId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `g0-accept-p1c-${label}-${suffix}`,
+        inventoryConfirmationRef: `confirmation:inventory:${suffix}`,
+        customerAcceptanceRef: `acceptance:customer:${suffix}`,
+        acceptedExceptionRefs: [],
+        reasonCodes: ["initialization_reviewed"],
+        evidenceRefs: [`evidence:g0-acceptance:${suffix}`],
+        now: new Date(evaluatedAt.getTime() + offsetMs),
+      });
+    }
+
+    async function generateP1cPortfolio(input: {
+      label: string;
+      offsetMs: number;
+      candidates?: unknown;
+      generationKey?: string;
+    }) {
+      return generateCaioOperatingQuestionPortfolio({
+        workspaceId,
+        actorUserId: ownerUserId,
+        generationKey:
+          input.generationKey ?? `p1c-generation-${input.label}-${suffix}`,
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates:
+          input.candidates ?? operatingQuestionCandidates(EVIDENCE_REF),
+        auditRefs: [`audit:p1c-generation:${input.label}:${suffix}`],
+        now: new Date(evaluatedAt.getTime() + input.offsetMs),
+      });
+    }
 
     beforeAll(async () => {
       assertIsolatedDatabaseTarget();
@@ -581,6 +751,7 @@ describeMysql(
     beforeEach(async () => {
       auditFaultState.failActionType = null;
       policyInterleaveState.afterAccess = null;
+      await resetOperatingQuestionLedger(workspaceId);
       await resetGateLedger(workspaceId);
       await db.membership.update({
         where: {
@@ -617,6 +788,7 @@ describeMysql(
           )?.id ||
           "";
         if (cleanupWorkspaceId) {
+          await resetOperatingQuestionLedger(cleanupWorkspaceId);
           await runWithWriteConflictRetry(
             () =>
               db.$transaction(async (tx) => {
@@ -1114,6 +1286,685 @@ describeMysql(
           },
         }),
       ).toBe(1);
+    });
+
+    it("fails closed on reads when the accepted G0 live evidence has drifted", async () => {
+      await acceptCurrentG0ForP1c("read-live-projection", 55_000);
+      const readAt = new Date(evaluatedAt.getTime() + 56_000);
+      const transactionOptions = {
+        isolationLevel:
+          Prisma.TransactionIsolationLevel.RepeatableRead,
+        maxWait: 10_000,
+        timeout: 30_000,
+      } as const;
+
+      const current = await db.$transaction(
+        (tx) =>
+          loadCurrentAcceptedCaioInitializationContextForRead(tx, {
+            workspaceId,
+            at: readAt,
+          }),
+        transactionOptions,
+      );
+      expect(current?.assessment.assessmentId).toBe(assessmentId);
+      if (!current) {
+        throw new Error("current accepted G0 context required");
+      }
+      const memoryRef =
+        current.assessmentInput.assets[0]?.companyMemoryBindings[0]
+          ?.ref;
+      if (!memoryRef?.startsWith("memory-fact:")) {
+        throw new Error("bound company-memory fact required");
+      }
+      const memoryFactId = memoryRef.slice("memory-fact:".length);
+      const originalFact = await db.memoryFact.findUniqueOrThrow({
+        where: { id: memoryFactId },
+        select: { content: true, updatedAt: true },
+      });
+      await db.memoryFact.update({
+        where: { id: memoryFactId },
+        data: {
+          content:
+            "The accepted Company Memory fact changed after the G0 snapshot.",
+          updatedAt: readAt,
+        },
+      });
+      try {
+        const stale = await db.$transaction(
+          (tx) =>
+            loadCurrentAcceptedCaioInitializationContextForRead(tx, {
+              workspaceId,
+              at: new Date(readAt.getTime() + 1_000),
+            }),
+          transactionOptions,
+        );
+        expect(stale).toBeNull();
+      } finally {
+        await db.memoryFact.update({
+          where: { id: memoryFactId },
+          data: originalFact,
+        });
+      }
+    });
+
+    it("converges concurrent identical operating-question generation to one receipt", async () => {
+      await acceptCurrentG0ForP1c("generation", 60_000);
+      const generationInput = {
+        workspaceId,
+        actorUserId: ownerUserId,
+        generationKey: `p1c-generation-concurrent-${suffix}`,
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates: operatingQuestionCandidates(EVIDENCE_REF),
+        auditRefs: [`audit:p1c-generation:${suffix}`],
+        now: new Date(evaluatedAt.getTime() + 61_000),
+      };
+
+      const settled = await Promise.allSettled([
+        generateCaioOperatingQuestionPortfolio(generationInput),
+        generateCaioOperatingQuestionPortfolio(generationInput),
+      ]);
+
+      expect(settled.map((result) => result.status)).toEqual([
+        "fulfilled",
+        "fulfilled",
+      ]);
+      const results = settled
+        .filter(
+          (
+            result,
+          ): result is PromiseFulfilledResult<
+            Awaited<
+              ReturnType<typeof generateCaioOperatingQuestionPortfolio>
+            >
+          > => result.status === "fulfilled",
+        )
+        .map((result) => result.value);
+      expect(results.map((result) => result.replayed).sort()).toEqual([
+        false,
+        true,
+      ]);
+      expect(
+        await db.caioOperatingQuestionGenerationReceipt.count({
+          where: { workspaceId },
+        }),
+      ).toBe(1);
+      expect(
+        await db.caioOperatingQuestionPortfolio.count({
+          where: { workspaceId },
+        }),
+      ).toBe(1);
+    });
+
+    it("converges concurrent identical CEO selection to one receipt", async () => {
+      await acceptCurrentG0ForP1c("selection", 70_000);
+      const generated = await generateCaioOperatingQuestionPortfolio({
+        workspaceId,
+        actorUserId: ownerUserId,
+        generationKey: `p1c-generation-selection-${suffix}`,
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates: operatingQuestionCandidates(EVIDENCE_REF),
+        auditRefs: [`audit:p1c-generation-selection:${suffix}`],
+        now: new Date(evaluatedAt.getTime() + 71_000),
+      });
+      if (!generated.portfolio) {
+        throw new Error("P1C integration portfolio missing");
+      }
+      const selectionInput = {
+        workspaceId,
+        expectedPortfolioId: generated.portfolio.portfolioId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `p1c-selection-concurrent-${suffix}`,
+        selections: operatingQuestionSelection(
+          generated.portfolio.candidates[0].questionId,
+        ),
+        reasonCodes: ["ceo_selected_operating_focus"],
+        evidenceRefs: [EVIDENCE_REF],
+        now: new Date(evaluatedAt.getTime() + 72_000),
+      };
+
+      const settled = await Promise.allSettled([
+        selectCaioOperatingQuestions(selectionInput),
+        selectCaioOperatingQuestions(selectionInput),
+      ]);
+
+      expect(settled.map((result) => result.status)).toEqual([
+        "fulfilled",
+        "fulfilled",
+      ]);
+      const results = settled
+        .filter(
+          (
+            result,
+          ): result is PromiseFulfilledResult<
+            Awaited<ReturnType<typeof selectCaioOperatingQuestions>>
+          > => result.status === "fulfilled",
+        )
+        .map((result) => result.value);
+      expect(results.map((result) => result.replayed).sort()).toEqual([
+        false,
+        true,
+      ]);
+      expect(
+        await db.caioQuestionSelectionReceipt.count({
+          where: { workspaceId },
+        }),
+      ).toBe(1);
+    });
+
+    it("rejects one generation key reused with a different payload", async () => {
+      await acceptCurrentG0ForP1c("generation-payload-conflict", 80_000);
+      const generationKey = `p1c-generation-conflict-${suffix}`;
+      await generateP1cPortfolio({
+        label: "generation-payload-conflict",
+        generationKey,
+        offsetMs: 81_000,
+      });
+      const changedCandidates = operatingQuestionCandidates(EVIDENCE_REF);
+      changedCandidates[0] = {
+        ...changedCandidates[0],
+        title: "Changed operating focus",
+      };
+
+      await expect(
+        generateP1cPortfolio({
+          label: "generation-payload-conflict",
+          generationKey,
+          candidates: changedCandidates,
+          offsetMs: 82_000,
+        }),
+      ).rejects.toThrow("generation_key_payload_conflict");
+      expect(
+        await db.caioOperatingQuestionGenerationReceipt.count({
+          where: { workspaceId },
+        }),
+      ).toBe(1);
+      expect(
+        await db.caioOperatingQuestionPortfolio.count({
+          where: { workspaceId },
+        }),
+      ).toBe(1);
+    });
+
+    it("appends an explicit second generation without forking the portfolio chain", async () => {
+      await acceptCurrentG0ForP1c("second-generation", 90_000);
+      const first = await generateP1cPortfolio({
+        label: "second-generation-1",
+        offsetMs: 91_000,
+      });
+      const second = await generateP1cPortfolio({
+        label: "second-generation-2",
+        offsetMs: 92_000,
+      });
+      if (!first.portfolio || !second.portfolio) {
+        throw new Error("P1C generation chain portfolio missing");
+      }
+
+      expect(first.receipt.sequence).toBe(1);
+      expect(first.portfolio.sequence).toBe(1);
+      expect(second.receipt.sequence).toBe(2);
+      expect(second.receipt.previousReceiptRef).toBe(first.receipt.receiptId);
+      expect(second.receipt.previousReceiptHash).toBe(
+        first.receipt.contentHash,
+      );
+      expect(second.portfolio.sequence).toBe(2);
+      expect(second.portfolio.previousPortfolioRef).toBe(
+        first.portfolio.portfolioId,
+      );
+      expect(second.portfolio.previousPortfolioHash).toBe(
+        first.portfolio.contentHash,
+      );
+      expect(
+        await db.caioOperatingQuestionPortfolioHead.findUnique({
+          where: { workspaceId },
+          select: {
+            currentGenerationReceiptId: true,
+            currentPortfolioId: true,
+            generationSequence: true,
+            portfolioSequence: true,
+          },
+        }),
+      ).toEqual({
+        currentGenerationReceiptId: second.receipt.receiptId,
+        currentPortfolioId: second.portfolio.portfolioId,
+        generationSequence: 2,
+        portfolioSequence: 2,
+      });
+    });
+
+    it("keeps the last valid portfolio current when a later generation has insufficient evidence", async () => {
+      await acceptCurrentG0ForP1c("insufficient-preserves-head", 100_000);
+      const valid = await generateP1cPortfolio({
+        label: "insufficient-preserves-head-valid",
+        offsetMs: 101_000,
+      });
+      const insufficient = await generateP1cPortfolio({
+        label: "insufficient-preserves-head-gap",
+        candidates: [operatingQuestionCandidates(EVIDENCE_REF)[0]],
+        offsetMs: 102_000,
+      });
+      if (!valid.portfolio) {
+        throw new Error("P1C valid portfolio missing");
+      }
+
+      expect(insufficient.portfolio).toBeNull();
+      expect(insufficient.receipt.status).toBe("insufficient_evidence");
+      expect(insufficient.receipt.sequence).toBe(2);
+      expect(
+        await db.caioOperatingQuestionPortfolioHead.findUnique({
+          where: { workspaceId },
+          select: {
+            currentGenerationReceiptId: true,
+            currentPortfolioId: true,
+            generationSequence: true,
+            portfolioSequence: true,
+          },
+        }),
+      ).toEqual({
+        currentGenerationReceiptId: insufficient.receipt.receiptId,
+        currentPortfolioId: valid.portfolio.portfolioId,
+        generationSequence: 2,
+        portfolioSequence: 1,
+      });
+      const selected = await selectCaioOperatingQuestions({
+        workspaceId,
+        expectedPortfolioId: valid.portfolio.portfolioId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `p1c-selection-after-gap-${suffix}`,
+        selections: operatingQuestionSelection(
+          valid.portfolio.candidates[0].questionId,
+        ),
+        reasonCodes: ["ceo_selected_operating_focus"],
+        evidenceRefs: [EVIDENCE_REF],
+        now: new Date(evaluatedAt.getTime() + 103_000),
+      });
+      expect(selected.receipt.workPacketEffect).toBe("none");
+    });
+
+    it("accepts zero-to-three selections only against the current portfolio", async () => {
+      await acceptCurrentG0ForP1c("selection-bounds", 110_000);
+      const first = await generateP1cPortfolio({
+        label: "selection-bounds-1",
+        offsetMs: 111_000,
+      });
+      if (!first.portfolio) {
+        throw new Error("P1C first portfolio missing");
+      }
+      const zeroSelection = await selectCaioOperatingQuestions({
+        workspaceId,
+        expectedPortfolioId: first.portfolio.portfolioId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `p1c-selection-zero-${suffix}`,
+        selections: [],
+        reasonCodes: ["ceo_deferred_operating_focus"],
+        evidenceRefs: [EVIDENCE_REF],
+        now: new Date(evaluatedAt.getTime() + 112_000),
+      });
+      expect(zeroSelection.receipt.selectedQuestionIds).toEqual([]);
+      const threeSelections = first.portfolio.candidates
+        .slice(0, 3)
+        .map((candidate, index) => ({
+          ...operatingQuestionSelection(candidate.questionId)[0],
+          priority: index + 1,
+          successMetrics: [
+            {
+              metricKey: `metric-${index + 1}`,
+              target: `Validate priority ${index + 1}`,
+            },
+          ],
+        }));
+      const threeSelection = await selectCaioOperatingQuestions({
+        workspaceId,
+        expectedPortfolioId: first.portfolio.portfolioId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `p1c-selection-three-${suffix}`,
+        selections: threeSelections,
+        reasonCodes: ["ceo_selected_operating_focus"],
+        evidenceRefs: [EVIDENCE_REF],
+        now: new Date(evaluatedAt.getTime() + 113_000),
+      });
+      expect(threeSelection.receipt.selectedQuestionIds).toHaveLength(3);
+      expect(threeSelection.receipt.sequence).toBe(2);
+
+      const second = await generateP1cPortfolio({
+        label: "selection-bounds-2",
+        offsetMs: 114_000,
+      });
+      if (!second.portfolio) {
+        throw new Error("P1C second portfolio missing");
+      }
+      await expect(
+        selectCaioOperatingQuestions({
+          workspaceId,
+          expectedPortfolioId: first.portfolio.portfolioId,
+          actorUserId: ownerUserId,
+          ceoPrincipalRef: CEO_REF,
+          idempotencyKey: `p1c-selection-stale-${suffix}`,
+          selections: operatingQuestionSelection(
+            first.portfolio.candidates[0].questionId,
+          ),
+          reasonCodes: ["ceo_selected_operating_focus"],
+          evidenceRefs: [EVIDENCE_REF],
+          now: new Date(evaluatedAt.getTime() + 115_000),
+        }),
+      ).rejects.toThrow("current_question_portfolio_required");
+    });
+
+    it("fails closed when the accepted G0 is revoked after the outer policy check", async () => {
+      await acceptCurrentG0ForP1c("revoked-before-generation", 120_000);
+      policyInterleaveState.afterAccess = async () => {
+        await revokeCaioInitializationGate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          ceoPrincipalRef: CEO_REF,
+          idempotencyKey: `g0-revoke-before-p1c-${suffix}`,
+          reasonCodes: ["owner_revoked_initialization_acceptance"],
+          evidenceRefs: [`evidence:g0-revocation:${suffix}`],
+          now: new Date(evaluatedAt.getTime() + 121_000),
+        });
+      };
+
+      await expect(
+        generateP1cPortfolio({
+          label: "revoked-before-generation",
+          offsetMs: 122_000,
+        }),
+      ).rejects.toThrow("current_gate_not_accepted");
+      expect(
+        await db.caioOperatingQuestionGenerationReceipt.count({
+          where: { workspaceId },
+        }),
+      ).toBe(0);
+      expect(
+        await db.caioOperatingQuestionPortfolioHead.findUnique({
+          where: { workspaceId },
+        }),
+      ).toBeNull();
+    });
+
+    it("rejects a tampered predecessor before appending another generation", async () => {
+      await acceptCurrentG0ForP1c("tampered-predecessor", 130_000);
+      const first = await generateP1cPortfolio({
+        label: "tampered-predecessor-1",
+        offsetMs: 131_000,
+      });
+      await generateP1cPortfolio({
+        label: "tampered-predecessor-2",
+        offsetMs: 132_000,
+      });
+      if (!first.portfolio) {
+        throw new Error("P1C predecessor portfolio missing");
+      }
+      await db.caioOperatingQuestionPortfolio.update({
+        where: { id: first.portfolio.portfolioId },
+        data: { contentHash: sha256(`tampered-p1c:${suffix}`) },
+      });
+
+      await expect(
+        generateP1cPortfolio({
+          label: "tampered-predecessor-3",
+          offsetMs: 133_000,
+        }),
+      ).rejects.toThrow("stored_question_portfolio_binding_invalid");
+      expect(
+        await db.caioOperatingQuestionGenerationReceipt.count({
+          where: { workspaceId },
+        }),
+      ).toBe(2);
+    });
+
+    it("binds the current CEO selection to canonical DecisionRecords exactly once", async () => {
+      await acceptCurrentG0ForP1c("decision-binding", 140_000);
+      const generated = await generateP1cPortfolio({
+        label: "decision-binding",
+        offsetMs: 141_000,
+      });
+      if (!generated.portfolio) {
+        throw new Error("P1C decision-binding portfolio missing");
+      }
+      const selections = generated.portfolio.candidates
+        .slice(0, 2)
+        .map((candidate, index) => ({
+          ...operatingQuestionSelection(candidate.questionId)[0],
+          priority: index + 1,
+          successMetrics: [
+            {
+              metricKey: `metric-${index + 1}`,
+              target: `Validate selected priority ${index + 1}`,
+            },
+          ],
+        }));
+      const selected = await selectCaioOperatingQuestions({
+        workspaceId,
+        expectedPortfolioId: generated.portfolio.portfolioId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `p1c-selection-decision-binding-${suffix}`,
+        selections,
+        reasonCodes: ["ceo_selected_operating_focus"],
+        evidenceRefs: [EVIDENCE_REF],
+        now: new Date(evaluatedAt.getTime() + 142_000),
+      });
+      const bindingInput = {
+        workspaceId,
+        expectedSelectionReceiptId: selected.receipt.receiptId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        now: new Date(evaluatedAt.getTime() + 143_000),
+      };
+
+      const settled = await Promise.allSettled([
+        bindCurrentCaioQuestionSelectionToDecisionRecords(bindingInput),
+        bindCurrentCaioQuestionSelectionToDecisionRecords(bindingInput),
+      ]);
+
+      expect(settled.map((result) => result.status)).toEqual([
+        "fulfilled",
+        "fulfilled",
+      ]);
+      const results = settled
+        .filter(
+          (
+            result,
+          ): result is PromiseFulfilledResult<
+            Awaited<
+              ReturnType<
+                typeof bindCurrentCaioQuestionSelectionToDecisionRecords
+              >
+            >
+          > => result.status === "fulfilled",
+        )
+        .map((result) => result.value);
+      expect(
+        results
+          .map((result) =>
+            result.bindings.every((binding) => binding.replayed),
+          )
+          .sort(),
+      ).toEqual([false, true]);
+      expect(
+        await db.caioOperatingQuestionDecisionBinding.count({
+          where: { workspaceId },
+        }),
+      ).toBe(2);
+      expect(
+        await db.decisionRecord.findMany({
+          where: { workspaceId },
+          orderBy: { decisionKey: "asc" },
+          select: {
+            status: true,
+            allowedActionLevel: true,
+            ownerGate: true,
+            ownerConfirmedAt: true,
+          },
+        }),
+      ).toEqual([
+        {
+          status: "EVIDENCE_READY",
+          allowedActionLevel: "draft_task",
+          ownerGate: "approval_required",
+          ownerConfirmedAt: null,
+        },
+        {
+          status: "EVIDENCE_READY",
+          allowedActionLevel: "draft_task",
+          ownerGate: "approval_required",
+          ownerConfirmedAt: null,
+        },
+      ]);
+      expect(await db.actionItem.count({ where: { workspaceId } })).toBe(0);
+      expect(await db.approvalTask.count({ where: { workspaceId } })).toBe(0);
+    });
+
+    it("rejects a superseded CEO selection before creating DecisionRecords", async () => {
+      await acceptCurrentG0ForP1c("superseded-selection", 150_000);
+      const generated = await generateP1cPortfolio({
+        label: "superseded-selection",
+        offsetMs: 151_000,
+      });
+      if (!generated.portfolio) {
+        throw new Error("P1C superseded-selection portfolio missing");
+      }
+      const first = await selectCaioOperatingQuestions({
+        workspaceId,
+        expectedPortfolioId: generated.portfolio.portfolioId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `p1c-selection-superseded-1-${suffix}`,
+        selections: operatingQuestionSelection(
+          generated.portfolio.candidates[0].questionId,
+        ),
+        reasonCodes: ["ceo_selected_operating_focus"],
+        evidenceRefs: [EVIDENCE_REF],
+        now: new Date(evaluatedAt.getTime() + 152_000),
+      });
+      await selectCaioOperatingQuestions({
+        workspaceId,
+        expectedPortfolioId: generated.portfolio.portfolioId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `p1c-selection-superseded-2-${suffix}`,
+        selections: operatingQuestionSelection(
+          generated.portfolio.candidates[1].questionId,
+        ),
+        reasonCodes: ["ceo_reprioritized_operating_focus"],
+        evidenceRefs: [EVIDENCE_REF],
+        now: new Date(evaluatedAt.getTime() + 153_000),
+      });
+
+      await expect(
+        bindCurrentCaioQuestionSelectionToDecisionRecords({
+          workspaceId,
+          expectedSelectionReceiptId: first.receipt.receiptId,
+          actorUserId: ownerUserId,
+          ceoPrincipalRef: CEO_REF,
+          now: new Date(evaluatedAt.getTime() + 154_000),
+        }),
+      ).rejects.toThrow("current_question_selection_required");
+      expect(
+        await db.caioOperatingQuestionDecisionBinding.count({
+          where: { workspaceId },
+        }),
+      ).toBe(0);
+      expect(
+        await db.decisionRecord.count({ where: { workspaceId } }),
+      ).toBe(0);
+    });
+
+    it("rolls back DecisionRecords and bindings when the binding audit fails", async () => {
+      await acceptCurrentG0ForP1c("decision-binding-audit", 160_000);
+      const generated = await generateP1cPortfolio({
+        label: "decision-binding-audit",
+        offsetMs: 161_000,
+      });
+      if (!generated.portfolio) {
+        throw new Error("P1C binding-audit portfolio missing");
+      }
+      const selected = await selectCaioOperatingQuestions({
+        workspaceId,
+        expectedPortfolioId: generated.portfolio.portfolioId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `p1c-selection-binding-audit-${suffix}`,
+        selections: operatingQuestionSelection(
+          generated.portfolio.candidates[0].questionId,
+        ),
+        reasonCodes: ["ceo_selected_operating_focus"],
+        evidenceRefs: [EVIDENCE_REF],
+        now: new Date(evaluatedAt.getTime() + 162_000),
+      });
+      auditFaultState.failActionType =
+        "CAIO_OPERATING_QUESTION_DECISION_BOUND";
+
+      await expect(
+        bindCurrentCaioQuestionSelectionToDecisionRecords({
+          workspaceId,
+          expectedSelectionReceiptId: selected.receipt.receiptId,
+          actorUserId: ownerUserId,
+          ceoPrincipalRef: CEO_REF,
+          now: new Date(evaluatedAt.getTime() + 163_000),
+        }),
+      ).rejects.toThrow("injected_audit_failure");
+      auditFaultState.failActionType = null;
+
+      expect(
+        await db.caioOperatingQuestionDecisionBinding.count({
+          where: { workspaceId },
+        }),
+      ).toBe(0);
+      expect(
+        await db.decisionRecord.count({ where: { workspaceId } }),
+      ).toBe(0);
+      expect(
+        await db.auditLog.count({
+          where: {
+            workspaceId,
+            actionType: {
+              in: [
+                "STAGE1_DECISION_RECORDED",
+                "CAIO_OPERATING_QUESTION_DECISION_BOUND",
+              ],
+            },
+          },
+        }),
+      ).toBe(0);
+    });
+
+    it("rolls back generated records and heads when the P1C audit write fails", async () => {
+      await acceptCurrentG0ForP1c("generation-audit-rollback", 170_000);
+      auditFaultState.failActionType =
+        "CAIO_OPERATING_QUESTIONS_GENERATED";
+
+      await expect(
+        generateP1cPortfolio({
+          label: "generation-audit-rollback",
+          offsetMs: 171_000,
+        }),
+      ).rejects.toThrow("injected_audit_failure");
+      auditFaultState.failActionType = null;
+
+      expect(
+        await db.caioOperatingQuestionGenerationReceipt.count({
+          where: { workspaceId },
+        }),
+      ).toBe(0);
+      expect(
+        await db.caioOperatingQuestionPortfolio.count({
+          where: { workspaceId },
+        }),
+      ).toBe(0);
+      expect(
+        await db.caioOperatingQuestionPortfolioHead.findUnique({
+          where: { workspaceId },
+        }),
+      ).toBeNull();
+      expect(await db.actionItem.count({ where: { workspaceId } })).toBe(0);
+      expect(await db.approvalTask.count({ where: { workspaceId } })).toBe(0);
     });
   },
 );

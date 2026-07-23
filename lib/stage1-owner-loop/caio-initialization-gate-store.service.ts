@@ -59,6 +59,18 @@ type StoredAssessmentEnvelope = {
   diagnostics: string[];
 };
 
+export type CurrentAcceptedCaioInitializationContext = {
+  assessmentInput: StoredAssessmentEnvelope["input"];
+  assessment: CaioInitializationAssessment;
+  receipt: CaioInitializationGateReceipt;
+  head: {
+    currentAssessmentRef: string;
+    currentReceiptRef: string;
+    currentReceiptHash: string;
+    sequence: number;
+  };
+};
+
 type GateStatus =
   | "not_accepted"
   | "accepted"
@@ -867,30 +879,42 @@ async function persistReceipt(
   });
 }
 
-async function readHeadForUpdate(
-  tx: Tx,
-  workspaceId: string,
-): Promise<{
+type CaioInitializationGateHeadRow = {
   workspaceId: string;
   currentAssessmentId: string;
   currentReceiptId: string;
   sequence: number;
   version: number;
-} | null> {
+};
+
+async function readHeadForUpdate(
+  tx: Tx,
+  workspaceId: string,
+): Promise<CaioInitializationGateHeadRow | null> {
   const rows = await tx.$queryRaw<
-    Array<{
-      workspaceId: string;
-      currentAssessmentId: string;
-      currentReceiptId: string;
-      sequence: number;
-      version: number;
-    }>
+    CaioInitializationGateHeadRow[]
   >`
     SELECT workspaceId, currentAssessmentId, currentReceiptId, sequence, version
     FROM CaioInitializationGateHead
     WHERE workspaceId = ${workspaceId}
     FOR UPDATE`;
   return rows[0] ?? null;
+}
+
+async function readHeadSnapshot(
+  tx: Tx,
+  workspaceId: string,
+): Promise<CaioInitializationGateHeadRow | null> {
+  return tx.caioInitializationGateHead.findUnique({
+    where: { workspaceId },
+    select: {
+      workspaceId: true,
+      currentAssessmentId: true,
+      currentReceiptId: true,
+      sequence: true,
+      version: true,
+    },
+  });
 }
 
 function assertHeadReceiptBinding(
@@ -1061,6 +1085,148 @@ async function updateHead(
     throw new CaioInitializationGateStoreError(
       "gate_head_concurrent_update",
     );
+  }
+}
+
+async function loadValidatedCurrentAcceptedCaioInitializationContext(
+  tx: Tx,
+  input: {
+    workspaceId: string;
+    at: Date;
+  },
+  options: {
+    lockForUpdate: boolean;
+  },
+): Promise<CurrentAcceptedCaioInitializationContext> {
+  if (options.lockForUpdate) {
+    await lockWorkspace(tx, input.workspaceId);
+  }
+  const head = options.lockForUpdate
+    ? await readHeadForUpdate(tx, input.workspaceId)
+    : await readHeadSnapshot(tx, input.workspaceId);
+  if (!head) {
+    throw new CaioInitializationGateStoreError(
+      "accepted_gate_not_found",
+    );
+  }
+  const [receiptRow, assessmentRow] = await Promise.all([
+    tx.caioInitializationGateReceipt.findFirst({
+      where: {
+        id: head.currentReceiptId,
+        workspaceId: input.workspaceId,
+      },
+    }),
+    tx.caioInitializationAssessment.findFirst({
+      where: {
+        id: head.currentAssessmentId,
+        workspaceId: input.workspaceId,
+      },
+    }),
+  ]);
+  if (!receiptRow || !assessmentRow) {
+    throw new CaioInitializationGateStoreError(
+      "gate_head_binding_invalid",
+    );
+  }
+  const receipt = parseStoredReceipt(receiptRow);
+  const assessment = parseStoredAssessment(assessmentRow);
+  const assessmentEnvelope = parseStoredAssessmentEnvelope(
+    assessmentRow.inputJson,
+    assessment,
+  );
+  assertHeadReceiptBinding(head, receipt);
+  assertReceiptAssessmentBinding(receipt, assessment);
+  await assertReceiptChainIntegrity(tx, input.workspaceId, receipt);
+  if (
+    receipt.action !== "accept" ||
+    receipt.resultingStatus !== "accepted"
+  ) {
+    throw new CaioInitializationGateStoreError(
+      "current_gate_not_accepted",
+    );
+  }
+  const mandate = await assertActiveMandate(tx, {
+    workspaceId: input.workspaceId,
+    mandateRecordId: assessmentRow.mandateRecordId,
+    at: input.at,
+  });
+  if (mandate.ceoRef !== receipt.ceoPrincipalRef) {
+    throw new CaioInitializationGateStoreError(
+      "issuing_ceo_changed",
+    );
+  }
+  const liveBinding = await assertLiveCeoBinding(tx, {
+    workspaceId: input.workspaceId,
+    actorUserId: receipt.actorUserRef,
+    ceoPrincipalRef: receipt.ceoPrincipalRef,
+  });
+  if (liveBinding.id !== receipt.ceoPrincipalBindingRef) {
+    throw new CaioInitializationGateStoreError(
+      "ceo_principal_binding_changed",
+    );
+  }
+  const snapshot = await loadProjectionSnapshot(tx, {
+    workspaceId: input.workspaceId,
+    mandateRecordId: assessmentRow.mandateRecordId,
+    evaluatedAt: input.at,
+  });
+  const current = computeCaioInitializationAssessment(
+    projectCaioInitializationAssessmentInput(snapshot).input,
+  );
+  assertAssessmentStillCurrent({ stored: assessment, current });
+  return {
+    assessmentInput: assessmentEnvelope.input,
+    assessment,
+    receipt,
+    head: {
+      currentAssessmentRef: head.currentAssessmentId,
+      currentReceiptRef: head.currentReceiptId,
+      currentReceiptHash: receipt.contentHash,
+      sequence: head.sequence,
+    },
+  };
+}
+
+// Internal cross-service seam for downstream CAIO review artifacts. Callers
+// must already be inside a SERIALIZABLE transaction. This function locks the
+// workspace, rebuilds the live G0 projection, and returns only the current
+// accepted context; serialized request payloads are never trusted as G0 truth.
+export async function loadCurrentAcceptedCaioInitializationContextForUpdate(
+  tx: Tx,
+  input: {
+    workspaceId: string;
+    at: Date;
+  },
+): Promise<CurrentAcceptedCaioInitializationContext> {
+  return loadValidatedCurrentAcceptedCaioInitializationContext(
+    tx,
+    input,
+    { lockForUpdate: true },
+  );
+}
+
+// Read projections use the same evidence replay and live G0 checks as writes.
+// The caller must provide one repeatable-read (or stronger) transaction so the
+// head, receipt chain, mandate, source inventory, and live projection come from
+// one database snapshot. Invalid or absent G0 evidence degrades to null.
+export async function loadCurrentAcceptedCaioInitializationContextForRead(
+  tx: Tx,
+  input: {
+    workspaceId: string;
+    at: Date;
+  },
+): Promise<CurrentAcceptedCaioInitializationContext | null> {
+  try {
+    return await loadValidatedCurrentAcceptedCaioInitializationContext(
+      tx,
+      input,
+      { lockForUpdate: false },
+    );
+  } catch (error) {
+    if (error instanceof CaioInitializationGateStoreError) {
+      return null;
+    }
+    throw error;
   }
 }
 

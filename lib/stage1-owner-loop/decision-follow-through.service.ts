@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ActionType, ActorType, SourceType } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import {
   assertWorkspaceGovernedActionManagementServiceAccess,
@@ -59,6 +60,207 @@ export class Stage1DecisionGateError extends Error {
     this.name = "Stage1DecisionGateError";
     this.reasons = reasons;
   }
+}
+
+export type CreateStage1DecisionRecordInput = {
+  workspaceId: string;
+  decision: DecisionObject;
+  facts: EvidenceStatement[];
+  inferences: EvidenceStatement[];
+  unknowns: string[];
+  risks: string[];
+  actorName: string;
+  actorUserId?: string | null;
+  actorType?: ActorType;
+  english?: boolean;
+};
+
+type PreparedStage1DecisionRecord = {
+  decisionKey: string;
+  status: "DRAFT" | "EVIDENCE_READY";
+  validationReasons: string[];
+  immutablePayload: {
+    decisionType: string;
+    businessQuestion: string;
+    problemCategoryRef: string | null;
+    contextRefs: string;
+    knowledgeRefs: string;
+    evidenceRefs: string;
+    policyRefs: string;
+    receiptRefs: string;
+    alternatives: string;
+    recommendedOption: string | null;
+    confidence: string;
+    riskLevel: string;
+    allowedActionLevel: string;
+    ownerGate: string;
+    rollbackPath: string | null;
+    factsJson: string;
+    inferencesJson: string;
+    unknownsJson: string;
+    risksJson: string;
+    validUntil: Date | null;
+  };
+};
+
+function prepareStage1DecisionRecord(
+  input: CreateStage1DecisionRecordInput,
+): PreparedStage1DecisionRecord {
+  const validation = validateDecisionObject(input.decision);
+  const workspaceRef = `workspace:${input.workspaceId}`;
+  const reasons = validation.valid ? [] : [...validation.reasons];
+  if (input.decision.tenantRef !== workspaceRef)
+    reasons.push("workspace_mismatch");
+  for (const statement of [...input.facts, ...input.inferences]) {
+    if (statement.evidenceRefs.length === 0)
+      reasons.push("statement_evidence_required");
+  }
+  if (reasons.length > 0)
+    throw new Stage1DecisionGateError([...new Set(reasons)]);
+
+  const evidenceReady =
+    input.decision.evidenceRefs.length > 0 &&
+    input.decision.knowledgeRefs.length > 0 &&
+    ["draft_task", "shadow", "active_candidate"].includes(
+      validation.maxActionLevel,
+    );
+  return {
+    decisionKey: input.decision.decisionId.trim(),
+    status: evidenceReady ? "EVIDENCE_READY" : "DRAFT",
+    validationReasons: validation.reasons,
+    immutablePayload: {
+      decisionType: input.decision.decisionType,
+      businessQuestion: input.decision.businessQuestion,
+      problemCategoryRef: input.decision.problemCategoryRef,
+      contextRefs: jsonStringify(input.decision.contextRefs),
+      knowledgeRefs: jsonStringify(input.decision.knowledgeRefs),
+      evidenceRefs: jsonStringify(input.decision.evidenceRefs),
+      policyRefs: jsonStringify(input.decision.policyRefs),
+      receiptRefs: jsonStringify(input.decision.receiptRefs),
+      alternatives: jsonStringify(input.decision.alternatives),
+      recommendedOption: input.decision.recommendedOption,
+      confidence: input.decision.confidence,
+      riskLevel: input.decision.riskLevel,
+      allowedActionLevel: validation.maxActionLevel,
+      ownerGate: input.decision.ownerGate,
+      rollbackPath: input.decision.rollbackPath,
+      factsJson: jsonStringify(input.facts),
+      inferencesJson: jsonStringify(input.inferences),
+      unknownsJson: jsonStringify(input.unknowns),
+      risksJson: jsonStringify(input.risks),
+      validUntil: input.decision.expiryOrReviewAt
+        ? new Date(input.decision.expiryOrReviewAt)
+        : null,
+    },
+  };
+}
+
+function storedDecisionMatchesPrepared(
+  existing: {
+    decisionType: string;
+    businessQuestion: string;
+    problemCategoryRef: string | null;
+    contextRefs: string;
+    knowledgeRefs: string;
+    evidenceRefs: string;
+    policyRefs: string;
+    receiptRefs: string;
+    alternatives: string;
+    recommendedOption: string | null;
+    confidence: string;
+    riskLevel: string;
+    allowedActionLevel: string;
+    ownerGate: string;
+    rollbackPath: string | null;
+    factsJson: string;
+    inferencesJson: string;
+    unknownsJson: string;
+    risksJson: string;
+    validUntil: Date | null;
+  },
+  prepared: PreparedStage1DecisionRecord,
+): boolean {
+  const immutablePayload = prepared.immutablePayload;
+  return (
+    existing.decisionType === immutablePayload.decisionType &&
+    existing.businessQuestion === immutablePayload.businessQuestion &&
+    existing.problemCategoryRef === immutablePayload.problemCategoryRef &&
+    existing.contextRefs === immutablePayload.contextRefs &&
+    existing.knowledgeRefs === immutablePayload.knowledgeRefs &&
+    existing.evidenceRefs === immutablePayload.evidenceRefs &&
+    existing.policyRefs === immutablePayload.policyRefs &&
+    existing.receiptRefs === immutablePayload.receiptRefs &&
+    existing.alternatives === immutablePayload.alternatives &&
+    existing.recommendedOption === immutablePayload.recommendedOption &&
+    existing.confidence === immutablePayload.confidence &&
+    existing.riskLevel === immutablePayload.riskLevel &&
+    existing.allowedActionLevel === immutablePayload.allowedActionLevel &&
+    existing.ownerGate === immutablePayload.ownerGate &&
+    existing.rollbackPath === immutablePayload.rollbackPath &&
+    existing.factsJson === immutablePayload.factsJson &&
+    existing.inferencesJson === immutablePayload.inferencesJson &&
+    existing.unknownsJson === immutablePayload.unknownsJson &&
+    existing.risksJson === immutablePayload.risksJson &&
+    sameInstant(existing.validUntil, immutablePayload.validUntil)
+  );
+}
+
+// Internal cross-service seam for callers that already own the governing
+// SERIALIZABLE transaction. It reuses the canonical DecisionRecord model and
+// audit semantics; it does not confirm, dispatch, or create a Work Packet.
+export async function createStage1DecisionRecordInTransaction(
+  tx: Prisma.TransactionClient,
+  input: CreateStage1DecisionRecordInput,
+): Promise<{
+  record: Awaited<ReturnType<Prisma.TransactionClient["decisionRecord"]["create"]>>;
+  replayed: boolean;
+}> {
+  const prepared = prepareStage1DecisionRecord(input);
+  const existing = await tx.decisionRecord.findUnique({
+    where: {
+      workspaceId_decisionKey: {
+        workspaceId: input.workspaceId,
+        decisionKey: prepared.decisionKey,
+      },
+    },
+  });
+  if (existing) {
+    if (!storedDecisionMatchesPrepared(existing, prepared)) {
+      throw new Stage1DecisionGateError(["decision_idempotency_conflict"]);
+    }
+    return { record: existing, replayed: true };
+  }
+  const record = await tx.decisionRecord.create({
+    data: {
+      workspaceId: input.workspaceId,
+      decisionKey: prepared.decisionKey,
+      ...prepared.immutablePayload,
+      status: prepared.status,
+    },
+  });
+  await writeAuditLog(
+    {
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      actor: input.actorName,
+      actorType: input.actorType ?? ActorType.AI,
+      actionType: "STAGE1_DECISION_RECORDED",
+      targetType: "DecisionRecord",
+      targetId: record.id,
+      summary:
+        prepared.status === "EVIDENCE_READY"
+          ? "Decision evidence is ready for owner confirmation"
+          : "Decision draft recorded but cannot advance beyond observation",
+      payload: {
+        decisionKey: record.decisionKey,
+        status: record.status,
+        allowedActionLevel: record.allowedActionLevel,
+        validationReasons: prepared.validationReasons,
+      },
+    },
+    { client: tx },
+  );
+  return { record, replayed: false };
 }
 
 export async function recordOwnerQuestionAndEvidenceAnswer(input: {
@@ -147,100 +349,23 @@ export async function recordOwnerQuestionAndEvidenceAnswer(input: {
   });
 }
 
-export async function createStage1DecisionRecord(input: {
-  workspaceId: string;
-  decision: DecisionObject;
-  facts: EvidenceStatement[];
-  inferences: EvidenceStatement[];
-  unknowns: string[];
-  risks: string[];
-  actorName: string;
-  actorUserId?: string | null;
-  actorType?: ActorType;
-  english?: boolean;
-}) {
+export async function createStage1DecisionRecord(
+  input: CreateStage1DecisionRecordInput,
+) {
   await assertWorkspaceInsightServiceAccess({
     workspaceId: input.workspaceId,
     userId: input.actorUserId,
     actorType: input.actorType ?? ActorType.AI,
     english: input.english ?? false,
   });
-  const validation = validateDecisionObject(input.decision);
-  const workspaceRef = `workspace:${input.workspaceId}`;
-  const reasons = validation.valid ? [] : [...validation.reasons];
-  if (input.decision.tenantRef !== workspaceRef)
-    reasons.push("workspace_mismatch");
-  for (const statement of [...input.facts, ...input.inferences]) {
-    if (statement.evidenceRefs.length === 0)
-      reasons.push("statement_evidence_required");
-  }
-  if (reasons.length > 0)
-    throw new Stage1DecisionGateError([...new Set(reasons)]);
-
-  const evidenceReady =
-    input.decision.evidenceRefs.length > 0 &&
-    input.decision.knowledgeRefs.length > 0 &&
-    ["draft_task", "shadow", "active_candidate"].includes(
-      validation.maxActionLevel,
-    );
-  const decisionKey = input.decision.decisionId.trim();
-  const validUntil = input.decision.expiryOrReviewAt
-    ? new Date(input.decision.expiryOrReviewAt)
-    : null;
-  const immutablePayload = {
-    decisionType: input.decision.decisionType,
-    businessQuestion: input.decision.businessQuestion,
-    problemCategoryRef: input.decision.problemCategoryRef,
-    contextRefs: jsonStringify(input.decision.contextRefs),
-    knowledgeRefs: jsonStringify(input.decision.knowledgeRefs),
-    evidenceRefs: jsonStringify(input.decision.evidenceRefs),
-    policyRefs: jsonStringify(input.decision.policyRefs),
-    receiptRefs: jsonStringify(input.decision.receiptRefs),
-    alternatives: jsonStringify(input.decision.alternatives),
-    recommendedOption: input.decision.recommendedOption,
-    confidence: input.decision.confidence,
-    riskLevel: input.decision.riskLevel,
-    allowedActionLevel: validation.maxActionLevel,
-    ownerGate: input.decision.ownerGate,
-    rollbackPath: input.decision.rollbackPath,
-    factsJson: jsonStringify(input.facts),
-    inferencesJson: jsonStringify(input.inferences),
-    unknownsJson: jsonStringify(input.unknowns),
-    risksJson: jsonStringify(input.risks),
-    validUntil,
-  };
+  const prepared = prepareStage1DecisionRecord(input);
   try {
     return await db.$transaction(async (tx) => {
-      const record = await tx.decisionRecord.create({
-        data: {
-          workspaceId: input.workspaceId,
-          decisionKey,
-          ...immutablePayload,
-          status: evidenceReady ? "EVIDENCE_READY" : "DRAFT",
-        },
-      });
-      await writeAuditLog(
-        {
-          workspaceId: input.workspaceId,
-          userId: input.actorUserId,
-          actor: input.actorName,
-          actorType: input.actorType ?? ActorType.AI,
-          actionType: "STAGE1_DECISION_RECORDED",
-          targetType: "DecisionRecord",
-          targetId: record.id,
-          summary: evidenceReady
-            ? "Decision evidence is ready for owner confirmation"
-            : "Decision draft recorded but cannot advance beyond observation",
-          payload: {
-            decisionKey: record.decisionKey,
-            status: record.status,
-            allowedActionLevel: record.allowedActionLevel,
-            validationReasons: validation.reasons,
-          },
-        },
-        { client: tx },
+      const result = await createStage1DecisionRecordInTransaction(
+        tx,
+        input,
       );
-      return record;
+      return result.record;
     });
   } catch (error) {
     if (!isUniqueConstraintViolation(error)) throw error;
@@ -248,33 +373,12 @@ export async function createStage1DecisionRecord(input: {
       where: {
         workspaceId_decisionKey: {
           workspaceId: input.workspaceId,
-          decisionKey,
+          decisionKey: prepared.decisionKey,
         },
       },
     });
     if (!existing) throw error;
-    const matches =
-      existing.decisionType === immutablePayload.decisionType &&
-      existing.businessQuestion === immutablePayload.businessQuestion &&
-      existing.problemCategoryRef === immutablePayload.problemCategoryRef &&
-      existing.contextRefs === immutablePayload.contextRefs &&
-      existing.knowledgeRefs === immutablePayload.knowledgeRefs &&
-      existing.evidenceRefs === immutablePayload.evidenceRefs &&
-      existing.policyRefs === immutablePayload.policyRefs &&
-      existing.receiptRefs === immutablePayload.receiptRefs &&
-      existing.alternatives === immutablePayload.alternatives &&
-      existing.recommendedOption === immutablePayload.recommendedOption &&
-      existing.confidence === immutablePayload.confidence &&
-      existing.riskLevel === immutablePayload.riskLevel &&
-      existing.allowedActionLevel === immutablePayload.allowedActionLevel &&
-      existing.ownerGate === immutablePayload.ownerGate &&
-      existing.rollbackPath === immutablePayload.rollbackPath &&
-      existing.factsJson === immutablePayload.factsJson &&
-      existing.inferencesJson === immutablePayload.inferencesJson &&
-      existing.unknownsJson === immutablePayload.unknownsJson &&
-      existing.risksJson === immutablePayload.risksJson &&
-      sameInstant(existing.validUntil, immutablePayload.validUntil);
-    if (!matches) {
+    if (!storedDecisionMatchesPrepared(existing, prepared)) {
       throw new Stage1DecisionGateError(["decision_idempotency_conflict"]);
     }
     return existing;
