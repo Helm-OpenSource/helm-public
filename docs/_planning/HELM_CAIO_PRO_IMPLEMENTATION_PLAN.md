@@ -119,6 +119,33 @@ P8 复盘、能力沉淀与下一成熟度评估
 - 不得声明已形成完整企业世界模型。
 - 不得声明 10 个经营问题、3 个课题或 30 天价值结果已经在客户现场成立。
 
+### 3.4 复用扫描与“不重复造轮子”决策
+
+2026-07-23 在实施 G0 前完成了 Helm 既有能力和主流开源项目的代码级扫描。没有发现
+可以直接替代 Helm G0 的现成实现：通用数据目录和数据质量项目不能处理
+“客户绑定 CEO 验收、CAIO 治理身份、全源只读边界、Company Memory 和经营上下文重放”
+这一组合语义。因此本计划采用“复用现有 Helm 原语、借鉴开源契约、不引入第二个平台”。
+
+| 来源 | 可复用内容 | 本计划采用方式 | 明确不采用 |
+|---|---|---|---|
+| Helm Operating Harness P3 readiness | 规范化 JSON、证据和政策哈希、确定性评估、可重放检查、`ready` 不等于 owner approval | 直接复用 `canonicalJson`、`sha256` 和报告绑定模式 | 不复制第二套哈希或 readiness 框架 |
+| Helm CAIO mandate store | CEO principal binding、owner-only 注册、事务锁、append-only ledger、原子 claim | 直接复用身份验证、事务和审计模式 | 不把 G0 回执当权限令牌 |
+| [OpenLineage](https://github.com/OpenLineage/OpenLineage) | Run 状态、Job/Run/Dataset 分离、可扩展 facets | 映射观察批次状态并保留扩展元数据位；不改变 Helm 既有 `ObservationSourceRun` 真值 | 不部署独立 lineage 服务 |
+| [Dagster asset checks](https://github.com/dagster-io/dagster/blob/master/python_modules/dagster/dagster/_core/definitions/asset_checks/asset_check_result.py) | 检查结果的 `passed`、severity、description 和 metadata 分离；freshness 的 `PASS/WARN/FAIL/UNKNOWN` | G0 每项检查保留机器结果、严重度、原因和证据；来源健康保留 unknown，而不是折算成成功 | 不引入 Dagster 编排运行时 |
+| [Great Expectations Checkpoint](https://docs.greatexpectations.io/docs/reference/api/checkpoint_class/) | 检查定义、运行结果和后续 action 分离 | `CaioInitializationAssessment` 只评估；`CaioInitializationGateReceipt` 单独记录验收/撤销 | 不允许评估器自行生成客户验收 |
+| [DataHub assertions](https://github.com/datahub-project/datahub/blob/master/metadata-models/src/main/pegasus/com/linkedin/assertion/AssertionInfo.pdl) | assertion type、source、更新时间、描述和运行事件分离 | 为 G0 检查保留 check code、来源绑定、policy revision 和运行时间 | 不复制 DataHub 元数据图或 Assertion 平台 |
+| [OpenMetadata lineage](https://docs.open-metadata.org/latest/how-to-guides/data-lineage/explore) | owner/domain/schema、质量结果和 lineage 同屏解释 | 作为目录投影和证据下钻的展示语义参考 | 不把 Public Core 变成另一套企业数据目录 |
+| [OPA decision logs](https://www.openpolicyagent.org/docs/management-decision-logs) | policy revision、input、result、decision id、脱敏和审计 | G0 绑定 policy ref/hash、输入快照 hash、结果和脱敏后的 gap codes；未来可加可选 OPA adapter | V1 不新增 OPA sidecar 或 Rego 依赖 |
+| [in-toto Attestation Statement](https://github.com/in-toto/attestation/blob/main/spec/v1/statement.md) | subject digest 与 predicate type/payload 分离 | assessment/receipt 绑定不可变主体摘要和类型化结论 | V1 不引入签名供应链工具或把普通回执宣称为密码学签名 |
+
+V1 的依赖决策：
+
+1. 不增加上述项目的 npm、容器或服务依赖；
+2. 先把外部成熟语义映射到 Helm 已有对象，保持一套运行真值；
+3. 未来连接器若原生输出 OpenLineage、DataHub、OpenMetadata 或 Great Expectations 结果，
+   通过 adapter 转成 Helm evidence ref 和 observation receipt，而不是反向改变 Core 模型；
+4. 新增外部 adapter 必须单独评审许可证、版本、数据出域、故障隔离和客户部署成本。
+
 ## 4. 交付对象与总体验收
 
 ### 4.1 产品交付对象
