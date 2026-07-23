@@ -1349,6 +1349,9 @@ model Workspace {
   approvalTasks                        ApprovalTask[]
   executionReceipts                    ExecutionReceipt[]
   diagnosticSessionWorkPackets         DiagnosticSessionWorkPacket[]
+  dataAssetCatalogEntries              DataAssetCatalogEntry[]
+  dataAssetStageReceipts               DataAssetStageReceipt[]
+  observationCompatReceipts            ObservationCompatReceipt[]
   enterpriseObservationPrograms        EnterpriseObservationProgram[]
   observationSources                   ObservationSource[]
   observationSourceRuns                ObservationSourceRun[]
@@ -3516,6 +3519,107 @@ model DiagnosticSessionWorkPacket {
   @@index([workspaceId])
 }
 
+// Current projection for the pre-connection enterprise data asset inventory.
+// Stage transitions are backed by immutable DataAssetStageReceipt rows.
+model DataAssetCatalogEntry {
+  id                       String                  @id @default(cuid())
+  workspaceId              String
+  assetKey                 String
+  sourceSystemRef          String
+  displayName              String
+  sourceKind               String
+  businessDomain           String
+  businessOwnerRef         String
+  dataShape                String                  @default("OTHER")
+  sensitivity              String                  @default("RESTRICTED")
+  processingDisposition    String                  @default("LOCAL_ONLY")
+  inventoryStatus          String                  @default("INVENTORIED")
+  classificationStatus     String                  @default("PENDING")
+  authorizationStatus      String                  @default("NOT_REQUESTED")
+  connectionStatus         String                  @default("NOT_STARTED")
+  initializationStatus     String                  @default("NOT_STARTED")
+  purpose                  String                  @db.LongText
+  scopeRefs                String                  @db.LongText
+  authorizationRef         String?
+  authorizationValidFrom   DateTime?
+  authorizationValidUntil  DateTime?
+  consentRefs              String                  @db.LongText
+  recommendedAccessMode    String
+  connectorRef             String?
+  retentionDays            Int
+  freshnessSlaMinutes      Int
+  residencyRequirements    String                  @db.LongText
+  blindSpots               String                  @db.LongText
+  blockerCodes             String                  @db.LongText
+  riskOwnerRef             String?
+  nextReviewAt             DateTime?
+  observationSourceRefs    String                  @db.LongText
+  observationRunRefs       String                  @db.LongText
+  evidenceRefs             String                  @db.LongText
+  classificationReceiptRef String?
+  authorizationReceiptRef  String?
+  connectionReceiptRef     String?
+  initializationReceiptRef String?
+  version                  Int                     @default(1)
+  observationClaimSequence Int                     @default(0)
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  workspace                Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  stageReceipts            DataAssetStageReceipt[]
+  observationSources       ObservationSource[]
+
+  @@unique([workspaceId, assetKey])
+  @@index([workspaceId, inventoryStatus, classificationStatus], map: "DataAssetCatalogEntry_inventory_class_idx")
+  @@index([workspaceId, authorizationStatus, connectionStatus, initializationStatus], map: "DataAssetCatalogEntry_auth_conn_init_idx")
+}
+
+// Append-only receipt for one data-asset stage transition. The current entry
+// projection can advance only through a matching optimistic version claim.
+model DataAssetStageReceipt {
+  id               String                @id
+  workspaceId      String
+  assetId          String
+  receiptType      String
+  idempotencyKey   String
+  expectedVersion  Int
+  resultingVersion Int
+  status           String
+  actorRef         String
+  evidenceRefs     String                @db.LongText
+  payloadJson      String                @db.LongText
+  recordedAt       DateTime
+  createdAt        DateTime              @default(now())
+  workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  asset            DataAssetCatalogEntry @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, receiptType, idempotencyKey], map: "DataAssetStageReceipt_workspace_type_key")
+  @@unique([assetId, resultingVersion])
+  @@index([workspaceId, receiptType, recordedAt], map: "DataAssetStageReceipt_workspace_type_time_idx")
+  @@index([assetId, receiptType, recordedAt], map: "DataAssetStageReceipt_asset_type_time_idx")
+}
+
+// Migration-generated receipt for an ObservationSource that predates
+// DataAssetCatalog. It permits existing read-only behavior only; new source
+// registrations cannot use this compatibility path.
+model ObservationCompatReceipt {
+  id                  String            @id
+  workspaceId         String
+  observationSourceId String            @unique(map: "ObsSourceCompatReceipt_sourceId_key")
+  migrationRef        String
+  capturedAt          DateTime
+  actorRef            String
+  evidenceRefs        String            @db.LongText
+  nextReviewAt        DateTime
+  sourceFingerprint   String
+  restrictions        String            @db.LongText
+  createdAt           DateTime          @default(now())
+  workspace           Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  observationSource   ObservationSource @relation(fields: [observationSourceId], references: [id], onDelete: Restrict, map: "ObsSourceCompatReceipt_sourceId_fkey")
+
+  @@index([workspaceId, nextReviewAt], map: "ObsSourceCompatReceipt_workspace_review_idx")
+  @@map("ObservationSourceCompatibilityReceipt")
+}
+
 // Owner-authorized, time-bounded read-only observation program. The runSequence
 // is an atomic authorization claim: starting a source run increments it only
 // while the program is ACTIVE and inside its authorization window. Revocation
@@ -3553,6 +3657,7 @@ model ObservationSource {
   id                  String                       @id @default(cuid())
   workspaceId         String
   programId           String
+  catalogEntryId      String?
   sourceKey           String
   sourceKind          String
   accessMode          String
@@ -3568,10 +3673,13 @@ model ObservationSource {
   updatedAt           DateTime                     @updatedAt
   workspace           Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   program             EnterpriseObservationProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  catalogEntry        DataAssetCatalogEntry?       @relation(fields: [catalogEntryId], references: [id], onDelete: Restrict)
+  compatibilityReceipt ObservationCompatReceipt?
   runs                ObservationSourceRun[]
 
   @@unique([workspaceId, sourceKey])
   @@index([programId, status])
+  @@index([catalogEntryId, status])
 }
 
 // Immutable completion receipt for one authorized observation attempt. A run
