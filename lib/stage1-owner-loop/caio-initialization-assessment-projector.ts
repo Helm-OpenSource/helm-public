@@ -17,6 +17,7 @@ import {
 } from "./caio-initialization-artifacts";
 import {
   validateDataAssetAuthorizationReceipt,
+  validateDataAssetConnectionReceipt,
   validateDataAssetInitializationReceipt,
 } from "./data-asset-catalog.contract";
 import {
@@ -28,6 +29,7 @@ import {
 } from "./caio-initialization-gate";
 import type {
   DataAssetAuthorizationReceipt,
+  DataAssetConnectionReceipt,
   DataAssetInitializationReceipt,
   DataAssetTechnicalFeasibility,
 } from "./data-asset-catalog.types";
@@ -49,6 +51,7 @@ export type CaioInitializationProjectionAsset = {
   authorizationStatus: string;
   authorizationReceiptRef: string | null;
   connectionStatus: string;
+  connectionReceiptRef: string | null;
   initializationStatus: string;
   initializationReceiptRef: string | null;
   riskOwnerRef: string | null;
@@ -57,6 +60,7 @@ export type CaioInitializationProjectionAsset = {
   evidenceRefs: string[];
   version: number;
   authorizationReceipt: DataAssetAuthorizationReceipt | null;
+  connectionReceipt: DataAssetConnectionReceipt | null;
   initializationReceipt: DataAssetInitializationReceipt | null;
 };
 
@@ -368,34 +372,34 @@ export function projectCaioInitializationAssessmentInput(
     snapshot.memoryFacts.map((fact) => [memoryFactRef(fact.id), fact]),
   );
   const assetRows = new Map(snapshot.assets.map((asset) => [asset.id, asset]));
+  const sourceRows = new Map(
+    snapshot.sources.map((source) => [source.id, source]),
+  );
   const runRefsByAsset = new Map<string, Set<string>>();
+  const sourceRefsByAsset = new Map<string, Set<string>>();
   for (const source of snapshot.sources) {
     if (!source.catalogEntryId) continue;
     const refs = runRefsByAsset.get(source.catalogEntryId) ?? new Set<string>();
     for (const ref of source.runRefs) refs.add(ref);
     if (source.latestRun) refs.add(source.latestRun.id);
     runRefsByAsset.set(source.catalogEntryId, refs);
+    const sourceRefs =
+      sourceRefsByAsset.get(source.catalogEntryId) ?? new Set<string>();
+    sourceRefs.add(source.id);
+    sourceRefsByAsset.set(source.catalogEntryId, sourceRefs);
   }
   const assets = snapshot.assets
     .map((asset) => {
       const authorizationValidation = asset.authorizationReceipt
         ? validateDataAssetAuthorizationReceipt(asset.authorizationReceipt)
         : { valid: false };
+      const connectionValidation = asset.connectionReceipt
+        ? validateDataAssetConnectionReceipt(asset.connectionReceipt)
+        : { valid: false };
       const initializationValidation = asset.initializationReceipt
         ? validateDataAssetInitializationReceipt(asset.initializationReceipt)
         : { valid: false };
       const evaluatedAt = Date.parse(snapshot.evaluatedAt);
-      const initializationReceipt =
-        initializationValidation.valid &&
-        asset.initializationReceipt?.receiptType === "initialization" &&
-        asset.initializationReceipt.receiptId ===
-          asset.initializationReceiptRef &&
-        asset.initializationReceipt.assetRef === asset.id &&
-        asset.initializationReceipt.workspaceRef === workspaceRef &&
-        asset.initializationReceipt.initializationStatus ===
-          asset.initializationStatus.toLowerCase()
-          ? asset.initializationReceipt
-          : null;
       const authorizationReceipt =
         authorizationValidation.valid &&
         asset.authorizationReceipt?.receiptType === "authorization" &&
@@ -413,11 +417,49 @@ export function projectCaioInitializationAssessmentInput(
               evaluatedAt))
           ? asset.authorizationReceipt
           : null;
-      if (asset.initializationReceiptRef && !initializationReceipt) {
-        diagnostics.push(`initialization_receipt_unresolved:${asset.id}`);
-      }
+      const knownSourceRefs =
+        sourceRefsByAsset.get(asset.id) ?? new Set<string>();
+      const receiptSource = asset.connectionReceipt?.observationSourceRef
+        ? sourceRows.get(asset.connectionReceipt.observationSourceRef)
+        : null;
+      const connectionReceipt =
+        connectionValidation.valid &&
+        asset.connectionReceipt?.receiptType === "connection" &&
+        asset.connectionReceipt.receiptId === asset.connectionReceiptRef &&
+        asset.connectionReceipt.assetRef === asset.id &&
+        asset.connectionReceipt.workspaceRef === workspaceRef &&
+        asset.connectionReceipt.connectionStatus ===
+          asset.connectionStatus.toLowerCase() &&
+        asset.connectionReceipt.authorizationReceiptRef ===
+          authorizationReceipt?.receiptId &&
+        asset.connectionReceipt.observationSourceRef !== null &&
+        knownSourceRefs.has(asset.connectionReceipt.observationSourceRef) &&
+        receiptSource?.accessMode.toLowerCase() ===
+          asset.connectionReceipt.accessMode
+          ? asset.connectionReceipt
+          : null;
+      const initializationReceipt =
+        initializationValidation.valid &&
+        connectionReceipt !== null &&
+        asset.initializationReceipt?.receiptType === "initialization" &&
+        asset.initializationReceipt.receiptId ===
+          asset.initializationReceiptRef &&
+        asset.initializationReceipt.assetRef === asset.id &&
+        asset.initializationReceipt.workspaceRef === workspaceRef &&
+        asset.initializationReceipt.initializationStatus ===
+          asset.initializationStatus.toLowerCase() &&
+        asset.initializationReceipt.connectionReceiptRef ===
+          connectionReceipt.receiptId
+          ? asset.initializationReceipt
+          : null;
       if (asset.authorizationReceiptRef && !authorizationReceipt) {
         diagnostics.push(`authorization_receipt_unresolved:${asset.id}`);
+      }
+      if (asset.connectionReceiptRef && !connectionReceipt) {
+        diagnostics.push(`connection_receipt_unresolved:${asset.id}`);
+      }
+      if (asset.initializationReceiptRef && !initializationReceipt) {
+        diagnostics.push(`initialization_receipt_unresolved:${asset.id}`);
       }
       const schemaMappingRefs = initializationReceipt
         ? resolvedSchemaMappingRefs({
@@ -471,6 +513,7 @@ export function projectCaioInitializationAssessmentInput(
         ),
         connectionStatus:
           asset.connectionStatus.toLowerCase() as CaioInitializationAssessmentInput["assets"][number]["connectionStatus"],
+        connectionReceiptRef: connectionReceipt?.receiptId ?? null,
         initializationStatus:
           asset.initializationStatus.toLowerCase() as CaioInitializationAssessmentInput["assets"][number]["initializationStatus"],
         initializationReceiptRef:

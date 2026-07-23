@@ -81,6 +81,7 @@ export type CaioInitializationAssetSnapshot = {
   authorizationReceiptRef: string | null;
   technicalFeasibility: DataAssetTechnicalFeasibility;
   connectionStatus: DataAssetConnectionStatus;
+  connectionReceiptRef: string | null;
   initializationStatus: DataAssetInitializationStatus;
   initializationReceiptRef: string | null;
   observationRunRefs: string[];
@@ -115,6 +116,7 @@ export type CaioInitializationEvidenceTrace = {
   assetRef: string;
   observationRunRef: string;
   authorizationReceiptRef: string;
+  connectionReceiptRef: string;
   initializationReceiptRef: string;
   sensitivity: ObservationSensitivity;
   outputType: CaioInitializationEvidenceOutputType;
@@ -268,6 +270,8 @@ function normalizedInput(
       assetRef: asset.assetRef.trim(),
       authorizationReceiptRef:
         asset.authorizationReceiptRef?.trim() || null,
+      connectionReceiptRef:
+        asset.connectionReceiptRef?.trim() || null,
       initializationReceiptRef:
         asset.initializationReceiptRef?.trim() || null,
       observationRunRefs: uniqueSorted(asset.observationRunRefs),
@@ -302,6 +306,7 @@ function normalizedInput(
       assetRef: trace.assetRef.trim(),
       observationRunRef: trace.observationRunRef.trim(),
       authorizationReceiptRef: trace.authorizationReceiptRef.trim(),
+      connectionReceiptRef: trace.connectionReceiptRef.trim(),
       initializationReceiptRef: trace.initializationReceiptRef.trim(),
     })),
     knowledge: {
@@ -357,7 +362,8 @@ function completeAssetState(
   }
   return (
     isNonEmpty(asset.authorizationReceiptRef) &&
-    asset.connectionStatus === "connected"
+    asset.connectionStatus === "connected" &&
+    isNonEmpty(asset.connectionReceiptRef)
   );
 }
 
@@ -384,6 +390,7 @@ function traceableEvidence(
       isNonEmpty(trace.evidenceRef) &&
       isNonEmpty(trace.observationRunRef) &&
       isNonEmpty(trace.authorizationReceiptRef) &&
+      isNonEmpty(trace.connectionReceiptRef) &&
       isNonEmpty(trace.initializationReceiptRef) &&
       isSha256(trace.traceHash) &&
       Number.isFinite(Date.parse(trace.capturedAt)) &&
@@ -392,6 +399,7 @@ function traceableEvidence(
       source.assetRef === asset.assetRef &&
       asset.observationRunRefs.includes(trace.observationRunRef) &&
       asset.authorizationReceiptRef === trace.authorizationReceiptRef &&
+      asset.connectionReceiptRef === trace.connectionReceiptRef &&
       asset.initializationReceiptRef === trace.initializationReceiptRef,
   );
 }

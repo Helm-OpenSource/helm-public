@@ -24,6 +24,7 @@ function evidence(
     assetRef: `asset:crm-${index % 3}`,
     observationRunRef: `observation-run:crm-${index}`,
     authorizationReceiptRef: `receipt:authorization:crm-${index % 3}`,
+    connectionReceiptRef: `receipt:connection:crm-${index % 3}`,
     initializationReceiptRef: `receipt:initialization:crm-${index % 3}`,
     sensitivity: (["internal", "confidential", "restricted"] as const)[
       index % 3
@@ -57,6 +58,7 @@ function readyInput(): CaioInitializationAssessmentInput {
         authorizationReceiptRef: "receipt:authorization:crm-0",
         technicalFeasibility: "feasible",
         connectionStatus: "connected",
+        connectionReceiptRef: "receipt:connection:crm-0",
         initializationStatus: "initialized",
         initializationReceiptRef: "receipt:initialization:crm-0",
         observationRunRefs: ["observation-run:crm-0"],
@@ -77,6 +79,7 @@ function readyInput(): CaioInitializationAssessmentInput {
         authorizationReceiptRef: "receipt:authorization:crm-1",
         technicalFeasibility: "feasible",
         connectionStatus: "connected",
+        connectionReceiptRef: "receipt:connection:crm-1",
         initializationStatus: "initialized",
         initializationReceiptRef: "receipt:initialization:crm-1",
         observationRunRefs: ["observation-run:crm-1"],
@@ -97,6 +100,7 @@ function readyInput(): CaioInitializationAssessmentInput {
         authorizationReceiptRef: "receipt:authorization:crm-2",
         technicalFeasibility: "feasible",
         connectionStatus: "connected",
+        connectionReceiptRef: "receipt:connection:crm-2",
         initializationStatus: "initialized",
         initializationReceiptRef: "receipt:initialization:crm-2",
         observationRunRefs: ["observation-run:crm-2"],
@@ -171,6 +175,16 @@ describe("CAIO Pro initialization gate G0", () => {
         "initialized_asset_missing_temporal_context",
       ]),
     );
+  });
+
+  it("fails closed when a connected asset has no connection receipt binding", () => {
+    const input = readyInput();
+    input.assets[0].connectionReceiptRef = null;
+
+    const assessment = computeCaioInitializationAssessment(input);
+
+    expect(assessment.decision).toBe("not_ready");
+    expect(assessment.failures).toContain("asset_state_incomplete");
   });
 
   it("does not infer complete inventory from an empty catalog", () => {

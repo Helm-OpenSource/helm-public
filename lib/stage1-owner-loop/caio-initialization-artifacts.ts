@@ -240,6 +240,7 @@ export function validateCaioEvidenceTraceArtifact(
     !isNonEmpty(input.assetRef) ||
     !isNonEmpty(input.observationRunRef) ||
     !isNonEmpty(input.authorizationReceiptRef) ||
+    !isNonEmpty(input.connectionReceiptRef) ||
     !isNonEmpty(input.initializationReceiptRef) ||
     !OBSERVATION_SENSITIVITY_LEVELS.includes(
       input.sensitivity as ObservationSensitivity,
