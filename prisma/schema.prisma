@@ -1366,6 +1366,12 @@ model Workspace {
   caioInitializationAssessments        CaioInitializationAssessment[]
   caioInitializationGateReceipts       CaioInitializationGateReceipt[]
   caioInitializationGateHead           CaioInitializationGateHead?
+  caioOperatingQuestionPortfolios      CaioOperatingQuestionPortfolio[]
+  caioOperatingQuestionReceipts        CaioOperatingQuestionGenerationReceipt[]
+  caioOperatingQuestionPortfolioHead   CaioOperatingQuestionPortfolioHead?
+  caioQuestionSelectionReceipts         CaioQuestionSelectionReceipt[]
+  caioQuestionSelectionHead             CaioQuestionSelectionHead?
+  caioOperatingQuestionDecisionBindings CaioOperatingQuestionDecisionBinding[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -3755,7 +3761,9 @@ model DecisionRecord {
   workspace          Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   supervisionSignals SupervisionSignalRecord[]
   workPacketClaim    DecisionWorkPacketClaim?
+  caioQuestionBindings CaioOperatingQuestionDecisionBinding[]
 
+  @@unique([id, workspaceId])
   @@unique([workspaceId, decisionKey])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, ownerRef, status])
@@ -5309,6 +5317,7 @@ model CaioPrincipalBinding {
   createdAt    DateTime  @default(now())
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   initializationGateReceipts CaioInitializationGateReceipt[]
+  questionSelectionReceipts CaioQuestionSelectionReceipt[]
 
   @@unique([workspaceId, userId, principalRef])
   @@unique([id, workspaceId])
@@ -5339,6 +5348,9 @@ model CaioInitializationAssessment {
   mandateRecord     CaioMandateRecord               @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
   gateReceipts      CaioInitializationGateReceipt[]
   gateHeads         CaioInitializationGateHead[]
+  operatingQuestionPortfolios CaioOperatingQuestionPortfolio[]
+  operatingQuestionReceipts   CaioOperatingQuestionGenerationReceipt[]
+  operatingQuestionHeads      CaioOperatingQuestionPortfolioHead[]
 
   @@unique([id, workspaceId])
   @@unique([workspaceId, evaluationKey], map: "CaioInitAssessment_workspace_eval_key")
@@ -5385,6 +5397,10 @@ model CaioInitializationGateReceipt {
   previousReceipt          CaioInitializationGateReceipt? @relation("CaioInitializationReceiptChain", fields: [previousReceiptId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction)
   nextReceipt              CaioInitializationGateReceipt? @relation("CaioInitializationReceiptChain")
   currentForHead           CaioInitializationGateHead?
+  operatingQuestionPortfolios CaioOperatingQuestionPortfolio[]
+  operatingQuestionReceipts   CaioOperatingQuestionGenerationReceipt[]
+  operatingQuestionHeads      CaioOperatingQuestionPortfolioHead[]
+  questionSelectionReceipts   CaioQuestionSelectionReceipt[]
 
   @@unique([id, workspaceId])
   @@unique([workspaceId, sequence], map: "CaioInitGateReceipt_workspace_sequence_key")
@@ -5413,4 +5429,191 @@ model CaioInitializationGateHead {
 
   @@unique([currentReceiptId, workspaceId], map: "CaioInitGateHead_receipt_workspace_key")
   @@index([currentAssessmentId, workspaceId], map: "CaioInitGateHead_assessment_workspace_idx")
+}
+
+// Immutable portfolio of exactly ten evidence-bound operating questions.
+// It is a review artifact only and never grants authority or creates work.
+model CaioOperatingQuestionPortfolio {
+  id                          String                                   @id
+  workspaceId                 String
+  initializationGateReceiptId String
+  initializationAssessmentId  String
+  previousPortfolioId         String?
+  sequence                    Int
+  generationKey               String
+  generationInputHash         String
+  generatorRevision           String
+  generatorRef                String
+  modelRef                    String
+  policyRef                   String
+  policyHash                  String
+  g0ContextHash               String
+  evidenceUniverseHash        String
+  evidenceRefs                String                                   @db.LongText
+  auditRefs                   String                                   @db.LongText
+  portfolioJson               String                                   @db.LongText
+  contentHash                 String
+  authorityEffect             String
+  generatedAt                 DateTime
+  createdAt                   DateTime                                 @default(now())
+  workspace                   Workspace                                @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQPortfolio_workspace_fkey")
+  initializationGateReceipt   CaioInitializationGateReceipt            @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPortfolio_gate_workspace_fkey")
+  initializationAssessment    CaioInitializationAssessment             @relation(fields: [initializationAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPortfolio_assessment_workspace_fkey")
+  previousPortfolio           CaioOperatingQuestionPortfolio?          @relation("CaioOperatingQuestionPortfolioChain", fields: [previousPortfolioId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction, map: "COQPortfolio_previous_workspace_fkey")
+  nextPortfolio               CaioOperatingQuestionPortfolio?          @relation("CaioOperatingQuestionPortfolioChain")
+  generationReceipts          CaioOperatingQuestionGenerationReceipt[]
+  currentForHead              CaioOperatingQuestionPortfolioHead?
+  selectionReceipts           CaioQuestionSelectionReceipt[]
+  selectionHead               CaioQuestionSelectionHead?
+  decisionBindings            CaioOperatingQuestionDecisionBinding[]
+
+  @@unique([id, workspaceId])
+  @@unique([id, workspaceId, initializationGateReceiptId], map: "COQPortfolio_id_workspace_gate_key")
+  @@unique([workspaceId, initializationGateReceiptId, sequence], map: "COQPortfolio_workspace_gate_sequence_key")
+  @@unique([previousPortfolioId, workspaceId], map: "COQPortfolio_previous_workspace_key")
+  @@index([workspaceId, initializationGateReceiptId, generatedAt], map: "COQPortfolio_workspace_gate_time_idx")
+}
+
+// Append-only generation ledger. Failed evidence checks are retained as
+// insufficient_evidence receipts without replacing the last valid portfolio.
+model CaioOperatingQuestionGenerationReceipt {
+  id                          String                                         @id
+  workspaceId                 String
+  initializationGateReceiptId String
+  initializationAssessmentId  String
+  portfolioId                 String?
+  previousReceiptId           String?
+  previousReceiptHash         String?
+  sequence                    Int
+  generationKey               String
+  requestHash                 String
+  generationInputHash         String
+  status                      String
+  evidenceRefs                String                                         @db.LongText
+  gapCodes                    String                                         @db.LongText
+  generatorRevision           String
+  policyRef                   String
+  policyHash                  String
+  receiptJson                 String                                         @db.LongText
+  contentHash                 String
+  authorityEffect             String
+  recordedAt                  DateTime
+  createdAt                   DateTime                                       @default(now())
+  workspace                   Workspace                                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQReceipt_workspace_fkey")
+  initializationGateReceipt   CaioInitializationGateReceipt                  @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQReceipt_gate_workspace_fkey")
+  initializationAssessment    CaioInitializationAssessment                   @relation(fields: [initializationAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQReceipt_assessment_workspace_fkey")
+  portfolio                   CaioOperatingQuestionPortfolio?                @relation(fields: [portfolioId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: Restrict, map: "COQReceipt_portfolio_workspace_gate_fkey")
+  previousReceipt             CaioOperatingQuestionGenerationReceipt?       @relation("CaioOperatingQuestionGenerationReceiptChain", fields: [previousReceiptId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: NoAction, onUpdate: NoAction, map: "COQReceipt_previous_workspace_gate_fkey")
+  nextReceipt                 CaioOperatingQuestionGenerationReceipt?       @relation("CaioOperatingQuestionGenerationReceiptChain")
+  currentForHead              CaioOperatingQuestionPortfolioHead?
+
+  @@unique([id, workspaceId])
+  @@unique([id, workspaceId, initializationGateReceiptId], map: "COQReceipt_id_workspace_gate_key")
+  @@unique([workspaceId, initializationGateReceiptId, sequence], map: "COQReceipt_workspace_gate_sequence_key")
+  @@unique([workspaceId, initializationGateReceiptId, generationKey], map: "COQReceipt_workspace_gate_generation_key")
+  @@unique([portfolioId, workspaceId, initializationGateReceiptId], map: "COQReceipt_portfolio_workspace_gate_key")
+  @@unique([previousReceiptId, workspaceId, initializationGateReceiptId], map: "COQReceipt_previous_workspace_gate_key")
+  @@index([workspaceId, status, recordedAt], map: "COQReceipt_workspace_status_time_idx")
+}
+
+// Current-truth pointer only. Historical portfolios and generation receipts
+// remain immutable and are validated through their explicit predecessor chains.
+model CaioOperatingQuestionPortfolioHead {
+  workspaceId                 String                                 @id
+  initializationGateReceiptId String
+  initializationAssessmentId  String
+  currentGenerationReceiptId  String                                 @unique(map: "COQHead_current_receipt_key")
+  currentPortfolioId          String?
+  generationSequence          Int
+  portfolioSequence           Int
+  version                     Int                                    @default(1)
+  updatedAt                   DateTime                               @updatedAt
+  workspace                   Workspace                              @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQHead_workspace_fkey")
+  initializationGateReceipt   CaioInitializationGateReceipt          @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQHead_gate_workspace_fkey")
+  initializationAssessment    CaioInitializationAssessment           @relation(fields: [initializationAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQHead_assessment_workspace_fkey")
+  currentGenerationReceipt    CaioOperatingQuestionGenerationReceipt @relation(fields: [currentGenerationReceiptId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: NoAction, onUpdate: NoAction, map: "COQHead_receipt_workspace_gate_fkey")
+  currentPortfolio            CaioOperatingQuestionPortfolio?        @relation(fields: [currentPortfolioId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: NoAction, onUpdate: NoAction, map: "COQHead_portfolio_workspace_gate_fkey")
+
+  @@unique([currentGenerationReceiptId, workspaceId, initializationGateReceiptId], map: "COQHead_receipt_workspace_gate_key")
+  @@unique([currentPortfolioId, workspaceId, initializationGateReceiptId], map: "COQHead_portfolio_workspace_gate_key")
+}
+
+// Append-only CEO selection receipt. Selecting zero to three questions records
+// prioritization only; it neither creates a Work Packet nor grants authority.
+model CaioQuestionSelectionReceipt {
+  id                          String                            @id
+  workspaceId                 String
+  portfolioId                 String
+  initializationGateReceiptId String
+  ceoPrincipalBindingId       String
+  previousReceiptId           String?
+  previousReceiptHash         String?
+  sequence                    Int
+  idempotencyKey              String
+  requestHash                 String
+  actorType                   ActorType
+  actorUserId                 String
+  ceoPrincipalRef             String
+  selectionsJson              String                            @db.LongText
+  selectedQuestionIds         String                            @db.LongText
+  reasonCodes                 String                            @db.LongText
+  evidenceRefs                String                            @db.LongText
+  receiptJson                 String                            @db.LongText
+  contentHash                 String
+  authorityEffect             String
+  workPacketEffect            String
+  selectedAt                  DateTime
+  createdAt                   DateTime                          @default(now())
+  workspace                   Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CQSelection_workspace_fkey")
+  portfolio                   CaioOperatingQuestionPortfolio   @relation(fields: [portfolioId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: Restrict, map: "CQSelection_portfolio_workspace_gate_fkey")
+  initializationGateReceipt   CaioInitializationGateReceipt    @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CQSelection_gate_workspace_fkey")
+  ceoPrincipalBinding         CaioPrincipalBinding             @relation(fields: [ceoPrincipalBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CQSelection_binding_workspace_fkey")
+  previousReceipt             CaioQuestionSelectionReceipt?    @relation("CaioQuestionSelectionReceiptChain", fields: [previousReceiptId, workspaceId, portfolioId], references: [id, workspaceId, portfolioId], onDelete: NoAction, onUpdate: NoAction, map: "CQSelection_previous_workspace_portfolio_fkey")
+  nextReceipt                 CaioQuestionSelectionReceipt?    @relation("CaioQuestionSelectionReceiptChain")
+  currentForHead              CaioQuestionSelectionHead?
+  decisionBindings            CaioOperatingQuestionDecisionBinding[]
+
+  @@unique([id, workspaceId])
+  @@unique([id, workspaceId, portfolioId], map: "CQSelection_id_workspace_portfolio_key")
+  @@unique([workspaceId, portfolioId, sequence], map: "CQSelection_workspace_portfolio_sequence_key")
+  @@unique([workspaceId, portfolioId, idempotencyKey], map: "CQSelection_workspace_portfolio_idem_key")
+  @@unique([previousReceiptId, workspaceId, portfolioId], map: "CQSelection_previous_workspace_portfolio_key")
+  @@index([workspaceId, selectedAt], map: "CQSelection_workspace_time_idx")
+}
+
+model CaioQuestionSelectionHead {
+  workspaceId          String                         @id
+  currentPortfolioId   String
+  currentGateReceiptId String
+  currentReceiptId     String                         @unique
+  sequence             Int
+  version              Int                            @default(1)
+  updatedAt            DateTime                       @updatedAt
+  workspace            Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CQSelectionHead_workspace_fkey")
+  currentPortfolio     CaioOperatingQuestionPortfolio @relation(fields: [currentPortfolioId, workspaceId, currentGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: Restrict, map: "CQSelectionHead_portfolio_workspace_gate_fkey")
+  currentReceipt       CaioQuestionSelectionReceipt   @relation(fields: [currentReceiptId, workspaceId, currentPortfolioId], references: [id, workspaceId, portfolioId], onDelete: NoAction, onUpdate: NoAction, map: "CQSelectionHead_receipt_workspace_portfolio_fkey")
+
+  @@unique([currentReceiptId, workspaceId, currentPortfolioId], map: "CQSelectionHead_receipt_workspace_portfolio_key")
+  @@unique([currentPortfolioId, workspaceId, currentGateReceiptId], map: "CQSelectionHead_portfolio_workspace_gate_key")
+}
+
+// Provenance link into the existing DecisionRecord runtime. This table does
+// not define a second decision object and does not dispatch execution.
+model CaioOperatingQuestionDecisionBinding {
+  id                 String                       @id @default(cuid())
+  workspaceId        String
+  selectionReceiptId String
+  portfolioId        String
+  questionId         String
+  candidateHash      String
+  decisionRecordId   String                       @unique
+  actorUserId        String
+  createdAt          DateTime                     @default(now())
+  workspace          Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQDecisionBinding_workspace_fkey")
+  selectionReceipt   CaioQuestionSelectionReceipt @relation(fields: [selectionReceiptId, workspaceId, portfolioId], references: [id, workspaceId, portfolioId], onDelete: Restrict, map: "COQDecisionBinding_selection_workspace_portfolio_fkey")
+  portfolio          CaioOperatingQuestionPortfolio @relation(fields: [portfolioId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQDecisionBinding_portfolio_workspace_fkey")
+  decisionRecord     DecisionRecord               @relation(fields: [decisionRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQDecisionBinding_decision_workspace_fkey")
+
+  @@unique([workspaceId, selectionReceiptId, questionId], map: "COQDecisionBinding_workspace_selection_question_key")
+  @@index([workspaceId, portfolioId], map: "COQDecisionBinding_workspace_portfolio_idx")
 }

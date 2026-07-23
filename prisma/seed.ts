@@ -966,6 +966,39 @@ async function main() {
     }
   }
 
+  await prisma.caioOperatingQuestionDecisionBinding.deleteMany();
+  await prisma.caioQuestionSelectionHead.deleteMany();
+  const caioQuestionSelectionReceipts =
+    await prisma.caioQuestionSelectionReceipt.findMany({
+      select: { id: true },
+      orderBy: [{ sequence: "desc" }, { createdAt: "desc" }],
+    });
+  for (const receipt of caioQuestionSelectionReceipts) {
+    await prisma.caioQuestionSelectionReceipt.delete({
+      where: { id: receipt.id },
+    });
+  }
+  await prisma.caioOperatingQuestionPortfolioHead.deleteMany();
+  const caioOperatingQuestionGenerationReceipts =
+    await prisma.caioOperatingQuestionGenerationReceipt.findMany({
+      select: { id: true },
+      orderBy: [{ sequence: "desc" }, { createdAt: "desc" }],
+    });
+  for (const receipt of caioOperatingQuestionGenerationReceipts) {
+    await prisma.caioOperatingQuestionGenerationReceipt.delete({
+      where: { id: receipt.id },
+    });
+  }
+  const caioOperatingQuestionPortfolios =
+    await prisma.caioOperatingQuestionPortfolio.findMany({
+      select: { id: true },
+      orderBy: [{ sequence: "desc" }, { createdAt: "desc" }],
+    });
+  for (const portfolio of caioOperatingQuestionPortfolios) {
+    await prisma.caioOperatingQuestionPortfolio.delete({
+      where: { id: portfolio.id },
+    });
+  }
   await prisma.notification.deleteMany();
   await prisma.usageLedger.deleteMany();
   await prisma.strategySuggestion.deleteMany();
