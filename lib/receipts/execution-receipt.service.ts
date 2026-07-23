@@ -140,6 +140,16 @@ export async function recordExecutionReceipt(
       subjectId: input.subjectId,
     },
   } as const;
+  async function runConflictAwareMutation<T>(
+    mutation: () => Promise<T>,
+  ): Promise<T> {
+    // A caller-owned transaction must be retried as one atomic unit by its
+    // owner. Standalone canonical mutations are safe to replay in place.
+    return options?.client
+      ? mutation()
+      : runWithWriteConflictRetry(mutation);
+  }
+
   const existing = await client.executionReceipt.findUnique({ where });
   let receipt: ExecutionReceipt;
   let changed = false;
@@ -151,13 +161,15 @@ export async function recordExecutionReceipt(
     // retry may not overwrite it or reset it to SELF_REPORTED.
     receipt = existing;
   } else if (existing) {
-    const claimed = await client.executionReceipt.updateMany({
-      where: {
-        id: existing.id,
-        verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
-      },
-      data,
-    });
+    const claimed = await runConflictAwareMutation(() =>
+      client.executionReceipt.updateMany({
+        where: {
+          id: existing.id,
+          verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+        },
+        data,
+      }),
+    );
     if (claimed.count === 1) {
       changed = true;
       receipt = await client.executionReceipt.findUniqueOrThrow({ where });
@@ -168,7 +180,9 @@ export async function recordExecutionReceipt(
     }
   } else {
     try {
-      receipt = await client.executionReceipt.create({ data });
+      receipt = await runConflictAwareMutation(() =>
+        client.executionReceipt.create({ data }),
+      );
       changed = true;
     } catch (error) {
       if (!isUniqueConstraintViolation(error)) throw error;
@@ -181,13 +195,16 @@ export async function recordExecutionReceipt(
       ) {
         receipt = raced;
       } else {
-        const claimed = await client.executionReceipt.updateMany({
-          where: {
-            id: raced.id,
-            verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
-          },
-          data,
-        });
+        const claimed = await runConflictAwareMutation(() =>
+          client.executionReceipt.updateMany({
+            where: {
+              id: raced.id,
+              verificationState:
+                ExecutionReceiptVerificationState.SELF_REPORTED,
+            },
+            data,
+          }),
+        );
         changed = claimed.count === 1;
         receipt = await client.executionReceipt.findUniqueOrThrow({ where });
       }

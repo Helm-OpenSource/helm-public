@@ -431,6 +431,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       record(ExecutionReceiptOutcome.FAILURE),
     ]);
     const verification = results[0];
+    expect(results[1].status).toBe("fulfilled");
     if (verification.status === "rejected") {
       expect(verification.reason).toBeInstanceOf(
         ReceiptChangedDuringVerificationError,

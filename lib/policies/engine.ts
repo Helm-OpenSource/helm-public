@@ -32,6 +32,7 @@ import {
   writeBiReportHandoffRejectionReceipt,
 } from "@/lib/bi-report-skill/handoff-receipt";
 import { db } from "@/lib/db";
+import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import { resolvePolicyDecision } from "@/lib/policies";
 import { getRejectionReasonLabel } from "@/lib/policies/rejection-reason";
 import {
@@ -589,9 +590,8 @@ export async function executeActionItem(
   // EXECUTED is a conditional write over the open statuses, and the canonical
   // receipt commits in the same transaction — a closed task without a receipt
   // must be impossible, and a concurrently closed task cannot be re-closed.
-  let executionReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
-  try {
-    executionReceipt = await db.$transaction(async (tx) => {
+  const runExecutionClosure = () =>
+    db.$transaction(async (tx) => {
       const claimed = await tx.actionItem.updateMany({
         where: {
           id: action.id,
@@ -649,6 +649,10 @@ export async function executeActionItem(
         { client: tx },
       );
     });
+
+  let executionReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
+  try {
+    executionReceipt = await runWithWriteConflictRetry(runExecutionClosure);
   } catch (error) {
     if (error instanceof ClosureClaimLostError) {
       const current = await db.actionItem.findUnique({
@@ -975,9 +979,8 @@ export async function blockApprovedAction(
 
   // Atomic closure: only an open action can be blocked; the NOT_EXECUTED
   // receipt commits with the state change (fail-closed, same as execution).
-  let blockReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
-  try {
-    blockReceipt = await db.$transaction(async (tx) => {
+  const runBlockClosure = () =>
+    db.$transaction(async (tx) => {
       const claimed = await tx.actionItem.updateMany({
         where: {
           id: action.id,
@@ -1019,6 +1022,10 @@ export async function blockApprovedAction(
         { client: tx },
       );
     });
+
+  let blockReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
+  try {
+    blockReceipt = await runWithWriteConflictRetry(runBlockClosure);
   } catch (error) {
     if (error instanceof ClosureClaimLostError) {
       throw new ActionNoLongerBlockableError(options?.english ?? false);
@@ -1115,9 +1122,8 @@ export async function rejectApprovalTask(
   // rejected, a concurrent approve/reject race resolves to a single winner,
   // and the REJECTED receipt commits with the state change (fail-closed) —
   // rejected is a learning signal, not a silent terminal state.
-  let rejectionReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
-  try {
-    rejectionReceipt = await db.$transaction(async (tx) => {
+  const runRejectionClosure = () =>
+    db.$transaction(async (tx) => {
       const claimed = await tx.approvalTask.updateMany({
         where: { id: task.id, status: ApprovalStatus.PENDING },
         data: {
@@ -1164,6 +1170,10 @@ export async function rejectApprovalTask(
         { client: tx },
       );
     });
+
+  let rejectionReceipt: Awaited<ReturnType<typeof recordExecutionReceipt>> | null = null;
+  try {
+    rejectionReceipt = await runWithWriteConflictRetry(runRejectionClosure);
   } catch (error) {
     if (error instanceof ClosureClaimLostError) {
       throw new Error("Approval task is no longer pending and cannot be rejected");

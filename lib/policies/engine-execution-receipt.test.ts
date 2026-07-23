@@ -134,6 +134,8 @@ import {
 describe("policy engine execution receipts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbMock.$transaction.mockReset();
+    executionReceiptMock.recordExecutionReceipt.mockReset();
     dbMock.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(dbMock));
     dbMock.approvalTask.updateMany.mockResolvedValue({ count: 1 });
     dbMock.actionItem.update.mockResolvedValue({});
@@ -265,6 +267,194 @@ describe("policy engine execution receipts", () => {
         note: "客户暂停项目",
       }),
       expect.objectContaining({ client: expect.anything() }),
+    );
+  });
+
+  it("retries the execution closure transaction without replaying pre-transaction work", async () => {
+    dbMock.actionItem.findUnique.mockResolvedValue({
+      id: "action-1",
+      workspaceId: "workspace-1",
+      title: "Retryable action",
+      actionType: ActionType.CREATE_TASK,
+      status: ActionStatus.APPROVED,
+      riskLevel: RiskLevel.MEDIUM,
+      draftContent: "draft",
+      description: "desc",
+      metadata: null,
+      policySnapshot: null,
+      recommendationLogId: null,
+      contactId: null,
+      opportunityId: "opp-1",
+      meetingId: null,
+      ownerId: null,
+      sourceId: "source-1",
+      workspace: { id: "workspace-1" },
+      opportunity: {
+        id: "opp-1",
+        companyId: null,
+        nextAction: null,
+        dueDate: null,
+      },
+      contact: null,
+      meeting: null,
+      approvalTask: {
+        id: "task-1",
+        status: ApprovalStatus.EXECUTED,
+      },
+      recommendationLog: null,
+    });
+    dbMock.$transaction
+      .mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          await fn(dbMock);
+          throw new Error(
+            "Record has changed since last read in table 'executionreceipt'",
+          );
+        },
+      )
+      .mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(dbMock),
+      );
+    executionReceiptMock.recordExecutionReceipt
+      .mockResolvedValueOnce({ id: "receipt-rolled-back" })
+      .mockResolvedValueOnce({ id: "receipt-committed" });
+
+    await executeActionItem("action-1", {
+      actorName: "Reviewer",
+      actorType: ActorType.USER,
+      actorUserId: "user-2",
+    });
+
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(2);
+    expect(dbMock.memoryEntry.create).toHaveBeenCalledTimes(1);
+    expect(executionReceiptMock.recordExecutionReceipt).toHaveBeenCalledTimes(
+      2,
+    );
+    expect(
+      executionReceiptMock.auditExecutionReceiptRecorded,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      executionReceiptMock.auditExecutionReceiptRecorded,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "workspace-1" }),
+      expect.objectContaining({ id: "receipt-committed" }),
+    );
+  });
+
+  it("retries the rejection closure transaction and audits only the committed receipt", async () => {
+    dbMock.approvalTask.findUnique.mockResolvedValue({
+      id: "task-1",
+      workspaceId: "workspace-1",
+      actionItemId: "action-1",
+      status: ApprovalStatus.PENDING,
+      isHighRisk: false,
+      actionItem: {
+        id: "action-1",
+        workspaceId: "workspace-1",
+        title: "Follow up",
+        actionType: ActionType.CREATE_TASK,
+        riskLevel: RiskLevel.MEDIUM,
+        recommendationLogId: null,
+        contactId: null,
+        opportunityId: null,
+        meetingId: null,
+        metadata: null,
+        sourceId: "source-1",
+        createdByUserId: null,
+        contentAuthorship: null,
+      },
+    });
+    dbMock.$transaction
+      .mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          await fn(dbMock);
+          throw new Error(
+            "Record has changed since last read in table 'executionreceipt'",
+          );
+        },
+      )
+      .mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(dbMock),
+      );
+    executionReceiptMock.recordExecutionReceipt
+      .mockResolvedValueOnce({ id: "receipt-rolled-back" })
+      .mockResolvedValueOnce({ id: "receipt-committed" });
+
+    await rejectApprovalTask("task-1", "Reviewer", "user-2", undefined, {
+      actorType: ActorType.USER,
+      rejectionReasonCode: RejectionReasonCode.BOUNDARY_ERROR,
+    });
+
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(2);
+    expect(executionReceiptMock.recordExecutionReceipt).toHaveBeenCalledTimes(
+      2,
+    );
+    expect(
+      executionReceiptMock.auditExecutionReceiptRecorded,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      executionReceiptMock.auditExecutionReceiptRecorded,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "workspace-1" }),
+      expect.objectContaining({ id: "receipt-committed" }),
+    );
+  });
+
+  it("retries the block closure transaction and audits only the committed receipt", async () => {
+    dbMock.actionItem.findUnique.mockResolvedValue({
+      id: "action-1",
+      workspaceId: "workspace-1",
+      title: "Follow up",
+      actionType: ActionType.CREATE_TASK,
+      riskLevel: RiskLevel.MEDIUM,
+      contactId: null,
+      opportunityId: null,
+      meetingId: null,
+      metadata: null,
+      sourceId: "source-1",
+      approvalTask: { id: "task-1", status: ApprovalStatus.EXECUTED },
+      meeting: null,
+      opportunity: null,
+      contact: null,
+    });
+    dbMock.$transaction
+      .mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          await fn(dbMock);
+          throw new Error(
+            "Record has changed since last read in table 'executionreceipt'",
+          );
+        },
+      )
+      .mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(dbMock),
+      );
+    executionReceiptMock.recordExecutionReceipt
+      .mockResolvedValueOnce({ id: "receipt-rolled-back" })
+      .mockResolvedValueOnce({ id: "receipt-committed" });
+
+    await blockApprovedAction(
+      "action-1",
+      "Reviewer",
+      "user-2",
+      "客户暂停项目",
+      {
+        actorType: ActorType.USER,
+      },
+    );
+
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(2);
+    expect(executionReceiptMock.recordExecutionReceipt).toHaveBeenCalledTimes(
+      2,
+    );
+    expect(
+      executionReceiptMock.auditExecutionReceiptRecorded,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      executionReceiptMock.auditExecutionReceiptRecorded,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "workspace-1" }),
+      expect.objectContaining({ id: "receipt-committed" }),
     );
   });
 
