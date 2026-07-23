@@ -203,6 +203,7 @@ function readySnapshot(): CaioInitializationProjectionSnapshot {
         accessMode: "READ_ONLY_API",
         sensitivity: "CONFIDENTIAL",
         compatibilityMode: false,
+        runRefs: ["run-1"],
         latestRun: {
           id: "run-1",
           status: "SUCCEEDED",
@@ -292,5 +293,35 @@ describe("CAIO initialization assessment projector", () => {
     expect(assessment.failures).toContain(
       "temporal_context_not_rebuildable",
     );
+  });
+
+  it("rejects expired authorization and initialization runs absent from current source truth", () => {
+    const expired = readySnapshot();
+    if (!expired.assets[0].authorizationReceipt) {
+      throw new Error("authorization receipt missing");
+    }
+    expired.assets[0].authorizationReceipt.validUntil =
+      "2026-07-23T04:59:59.000Z";
+
+    const expiredProjection =
+      projectCaioInitializationAssessmentInput(expired);
+    expect(expiredProjection.diagnostics).toContain(
+      "authorization_receipt_unresolved:asset-1",
+    );
+    expect(
+      computeCaioInitializationAssessment(expiredProjection.input).decision,
+    ).toBe("not_ready");
+
+    const missingRun = readySnapshot();
+    missingRun.sources[0].runRefs = [];
+    missingRun.sources[0].latestRun = null;
+    const runProjection =
+      projectCaioInitializationAssessmentInput(missingRun);
+    expect(runProjection.diagnostics).toContain(
+      "observation_run_unresolved:asset-1:run-1",
+    );
+    expect(
+      computeCaioInitializationAssessment(runProjection.input).failures,
+    ).toContain("initialized_asset_missing_observation_run");
   });
 });

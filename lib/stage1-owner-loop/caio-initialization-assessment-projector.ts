@@ -16,6 +16,10 @@ import {
   type CaioTemporalContextArtifact,
 } from "./caio-initialization-artifacts";
 import {
+  validateDataAssetAuthorizationReceipt,
+  validateDataAssetInitializationReceipt,
+} from "./data-asset-catalog.contract";
+import {
   CAIO_INITIALIZATION_ASSESSMENT_SCHEMA_VERSION,
   CAIO_INITIALIZATION_POLICY,
   type CaioInitializationAssessmentInput,
@@ -72,6 +76,7 @@ export type CaioInitializationProjectionSource = {
   accessMode: string;
   sensitivity: string;
   compatibilityMode: boolean;
+  runRefs: string[];
   latestRun: CaioInitializationProjectionRun | null;
 };
 
@@ -357,25 +362,55 @@ export function projectCaioInitializationAssessmentInput(
   snapshot: CaioInitializationProjectionSnapshot,
 ): CaioInitializationProjectionResult {
   const diagnostics: string[] = [];
+  const workspaceRef = `workspace:${snapshot.workspaceId}`;
   const artifacts = artifactMap(snapshot.artifacts);
   const facts = new Map(
     snapshot.memoryFacts.map((fact) => [memoryFactRef(fact.id), fact]),
   );
   const assetRows = new Map(snapshot.assets.map((asset) => [asset.id, asset]));
+  const runRefsByAsset = new Map<string, Set<string>>();
+  for (const source of snapshot.sources) {
+    if (!source.catalogEntryId) continue;
+    const refs = runRefsByAsset.get(source.catalogEntryId) ?? new Set<string>();
+    for (const ref of source.runRefs) refs.add(ref);
+    if (source.latestRun) refs.add(source.latestRun.id);
+    runRefsByAsset.set(source.catalogEntryId, refs);
+  }
   const assets = snapshot.assets
     .map((asset) => {
+      const authorizationValidation = asset.authorizationReceipt
+        ? validateDataAssetAuthorizationReceipt(asset.authorizationReceipt)
+        : { valid: false };
+      const initializationValidation = asset.initializationReceipt
+        ? validateDataAssetInitializationReceipt(asset.initializationReceipt)
+        : { valid: false };
+      const evaluatedAt = Date.parse(snapshot.evaluatedAt);
       const initializationReceipt =
+        initializationValidation.valid &&
         asset.initializationReceipt?.receiptType === "initialization" &&
         asset.initializationReceipt.receiptId ===
           asset.initializationReceiptRef &&
-        asset.initializationReceipt.assetRef === asset.id
+        asset.initializationReceipt.assetRef === asset.id &&
+        asset.initializationReceipt.workspaceRef === workspaceRef &&
+        asset.initializationReceipt.initializationStatus ===
+          asset.initializationStatus.toLowerCase()
           ? asset.initializationReceipt
           : null;
       const authorizationReceipt =
+        authorizationValidation.valid &&
         asset.authorizationReceipt?.receiptType === "authorization" &&
         asset.authorizationReceipt.receiptId ===
           asset.authorizationReceiptRef &&
-        asset.authorizationReceipt.assetRef === asset.id
+        asset.authorizationReceipt.assetRef === asset.id &&
+        asset.authorizationReceipt.workspaceRef === workspaceRef &&
+        asset.authorizationReceipt.authorizationStatus ===
+          asset.authorizationStatus.toLowerCase() &&
+        (asset.authorizationReceipt.authorizationStatus !== "authorized" ||
+          (Number.isFinite(evaluatedAt) &&
+            Date.parse(asset.authorizationReceipt.validFrom ?? "") <=
+              evaluatedAt &&
+            Date.parse(asset.authorizationReceipt.validUntil ?? "") >
+              evaluatedAt))
           ? asset.authorizationReceipt
           : null;
       if (asset.initializationReceiptRef && !initializationReceipt) {
@@ -391,6 +426,20 @@ export function projectCaioInitializationAssessmentInput(
             artifacts,
             diagnostics,
           })
+        : [];
+      const knownRunRefs = runRefsByAsset.get(asset.id) ?? new Set<string>();
+      const observationRunRefs = initializationReceipt
+        ? uniqueSorted(initializationReceipt.observationRunRefs).filter(
+            (ref) => {
+              const resolved = knownRunRefs.has(ref);
+              if (!resolved) {
+                diagnostics.push(
+                  `observation_run_unresolved:${asset.id}:${ref}`,
+                );
+              }
+              return resolved;
+            },
+          )
         : [];
       const companyMemoryBindings = initializationReceipt
         ? resolvedMemoryBindings({
@@ -426,9 +475,7 @@ export function projectCaioInitializationAssessmentInput(
           asset.initializationStatus.toLowerCase() as CaioInitializationAssessmentInput["assets"][number]["initializationStatus"],
         initializationReceiptRef:
           initializationReceipt?.receiptId ?? null,
-        observationRunRefs: initializationReceipt
-          ? uniqueSorted(initializationReceipt.observationRunRefs)
-          : [],
+        observationRunRefs,
         schemaMappingRefs,
         companyMemoryBindings,
         temporalContextSnapshotRef:
@@ -509,7 +556,7 @@ export function projectCaioInitializationAssessmentInput(
   const temporalContext = selectTemporalContext({
     artifacts,
     refs: temporalRefs,
-    workspaceRef: `workspace:${snapshot.workspaceId}`,
+    workspaceRef,
     diagnostics,
   });
   const traces = evidenceTraces(snapshot.artifacts, diagnostics);
@@ -523,7 +570,7 @@ export function projectCaioInitializationAssessmentInput(
   return {
     input: {
       schemaVersion: CAIO_INITIALIZATION_ASSESSMENT_SCHEMA_VERSION,
-      workspaceRef: `workspace:${snapshot.workspaceId}`,
+      workspaceRef,
       mandateRef: snapshot.mandateRecordId,
       evaluatedAt: snapshot.evaluatedAt,
       assets,
