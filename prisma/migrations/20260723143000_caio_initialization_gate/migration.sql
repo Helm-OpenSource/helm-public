@@ -1,6 +1,9 @@
 -- Helm CAIO G0 initialization gate. These are governance and evidence records
 -- only. An accepted gate grants no permission and activates no execution path.
 
+ALTER TABLE `DataAssetCatalogEntry`
+  ADD COLUMN `technicalFeasibility` VARCHAR(191) NOT NULL DEFAULT 'UNASSESSED';
+
 CREATE UNIQUE INDEX `CaioPrincipalBinding_id_workspaceId_key`
   ON `CaioPrincipalBinding`(`id`, `workspaceId`);
 

@@ -29,6 +29,7 @@ const entry: DataAssetCatalogEntry = {
   dataShape: "structured",
   sensitivity: "restricted",
   processingDisposition: "local_only",
+  technicalFeasibility: "unassessed",
   inventoryStatus: "inventoried",
   classificationStatus: "pending",
   authorizationStatus: "not_requested",
@@ -69,6 +70,7 @@ const classificationReceipt: DataAssetClassificationReceipt = {
   dataShape: "structured",
   sensitivity: "confidential",
   processingDisposition: "local_only",
+  technicalFeasibility: "feasible",
   classificationStatus: "classified",
 };
 

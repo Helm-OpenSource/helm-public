@@ -64,6 +64,7 @@ function asset(overrides: Record<string, unknown> = {}) {
     dataShape: "STRUCTURED",
     sensitivity: "RESTRICTED",
     processingDisposition: "LOCAL_ONLY",
+    technicalFeasibility: "UNASSESSED",
     inventoryStatus: "INVENTORIED",
     classificationStatus: "PENDING",
     authorizationStatus: "NOT_REQUESTED",
@@ -194,6 +195,7 @@ describe("CAIO Pro data asset catalog persistence", () => {
       data: expect.objectContaining({
         sensitivity: "RESTRICTED",
         processingDisposition: "LOCAL_ONLY",
+        technicalFeasibility: "UNASSESSED",
         classificationStatus: "PENDING",
         authorizationStatus: "NOT_REQUESTED",
         connectionStatus: "NOT_STARTED",
@@ -232,6 +234,7 @@ describe("CAIO Pro data asset catalog persistence", () => {
       dataShape: "structured",
       sensitivity: "confidential",
       processingDisposition: "local_only",
+      technicalFeasibility: "feasible",
       evidenceRefs: ["evidence:classification:crm"],
     });
 
@@ -251,6 +254,7 @@ describe("CAIO Pro data asset catalog persistence", () => {
     dbMock.dataAssetCatalogEntry.findFirst.mockResolvedValue(
       asset({
         classificationStatus: "CLASSIFIED",
+        technicalFeasibility: "FEASIBLE",
         authorizationStatus: "AUTHORIZED",
         authorizationRef: "authorization:crm:readonly",
         authorizationValidFrom: recordedAt,
@@ -269,6 +273,7 @@ describe("CAIO Pro data asset catalog persistence", () => {
         dataShape: "structured",
         sensitivity: "public",
         processingDisposition: "remote_projected",
+        technicalFeasibility: "feasible",
         evidenceRefs: ["evidence:classification:crm:v2"],
       }),
     ).rejects.toMatchObject({
@@ -283,6 +288,7 @@ describe("CAIO Pro data asset catalog persistence", () => {
     dbMock.dataAssetCatalogEntry.findFirst.mockResolvedValue(
       asset({
         classificationStatus: "CLASSIFIED",
+        technicalFeasibility: "FEASIBLE",
         authorizationStatus: "AUTHORIZED",
         authorizationRef: "authorization:crm:readonly",
         authorizationValidFrom: recordedAt,
@@ -303,6 +309,7 @@ describe("CAIO Pro data asset catalog persistence", () => {
     dbMock.dataAssetCatalogEntry.findUniqueOrThrow.mockResolvedValue(
       asset({
         classificationStatus: "CLASSIFIED",
+        technicalFeasibility: "FEASIBLE",
         authorizationStatus: "AUTHORIZED",
         authorizationRef: "authorization:crm:readonly",
         authorizationReceiptRef: "receipt-auth-1",
@@ -319,6 +326,7 @@ describe("CAIO Pro data asset catalog persistence", () => {
       dataShape: "structured",
       sensitivity: "restricted",
       processingDisposition: "local_only",
+      technicalFeasibility: "feasible",
       evidenceRefs: ["evidence:classification:crm:v2"],
     });
 

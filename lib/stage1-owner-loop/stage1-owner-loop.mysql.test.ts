@@ -88,6 +88,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       dataShape: "structured",
       sensitivity: "confidential",
       processingDisposition: "local_only",
+      technicalFeasibility: "feasible",
       evidenceRefs: [`evidence:classification:${input.sourceKey}`],
       actorName: "Stage 1 Owner",
       actorUserId: ownerUserId,

@@ -24,6 +24,15 @@ export const DATA_ASSET_PROCESSING_DISPOSITIONS = [
 export type DataAssetProcessingDisposition =
   (typeof DATA_ASSET_PROCESSING_DISPOSITIONS)[number];
 
+export const DATA_ASSET_TECHNICAL_FEASIBILITY_STATES = [
+  "unassessed",
+  "feasible",
+  "not_feasible",
+] as const;
+
+export type DataAssetTechnicalFeasibility =
+  (typeof DATA_ASSET_TECHNICAL_FEASIBILITY_STATES)[number];
+
 export const DATA_ASSET_INVENTORY_STATUSES = [
   "inventoried",
   "confirmed",
@@ -90,6 +99,7 @@ export type DataAssetCatalogEntry = {
   dataShape: DataAssetShape;
   sensitivity: ObservationSensitivity;
   processingDisposition: DataAssetProcessingDisposition;
+  technicalFeasibility: DataAssetTechnicalFeasibility;
   inventoryStatus: DataAssetInventoryStatus;
   classificationStatus: DataAssetClassificationStatus;
   authorizationStatus: DataAssetAuthorizationStatus;
@@ -138,6 +148,10 @@ export type DataAssetClassificationReceipt = DataAssetStageReceiptBase & {
   dataShape: DataAssetShape;
   sensitivity: ObservationSensitivity;
   processingDisposition: DataAssetProcessingDisposition;
+  technicalFeasibility: Exclude<
+    DataAssetTechnicalFeasibility,
+    "unassessed"
+  >;
   classificationStatus: "classified";
 };
 

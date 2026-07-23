@@ -10,6 +10,7 @@ import {
   DATA_ASSET_INVENTORY_STATUSES,
   DATA_ASSET_PROCESSING_DISPOSITIONS,
   DATA_ASSET_SHAPES,
+  DATA_ASSET_TECHNICAL_FEASIBILITY_STATES,
   OBSERVATION_SOURCE_COMPATIBILITY_RESTRICTIONS,
   type DataAssetAuthorizationReceipt,
   type DataAssetCatalogEntry,
@@ -107,6 +108,14 @@ export function validateDataAssetCatalogEntry(
     )
   ) {
     errors.push("processing_disposition_invalid");
+  }
+  if (
+    !isOneOf(
+      entry.technicalFeasibility,
+      DATA_ASSET_TECHNICAL_FEASIBILITY_STATES,
+    )
+  ) {
+    errors.push("technical_feasibility_invalid");
   }
   if (!isOneOf(entry.inventoryStatus, DATA_ASSET_INVENTORY_STATUSES)) {
     errors.push("inventory_status_invalid");
@@ -268,6 +277,16 @@ export function validateDataAssetClassificationReceipt(
     )
   ) {
     errors.push("processing_disposition_invalid");
+  }
+  if (
+    !isOneOf(
+      receipt.technicalFeasibility,
+      DATA_ASSET_TECHNICAL_FEASIBILITY_STATES.filter(
+        (state) => state !== "unassessed",
+      ),
+    )
+  ) {
+    errors.push("technical_feasibility_invalid");
   }
   if (receipt.classificationStatus !== "classified") {
     errors.push("classification_status_invalid");
