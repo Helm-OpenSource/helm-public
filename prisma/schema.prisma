@@ -1363,6 +1363,9 @@ model Workspace {
   caioActiveMandateClaims              CaioActiveMandateClaim[]
   caioGuardianStopRecords              CaioGuardianStopRecord[]
   caioAdviceRecords                    CaioAdviceRecord[]
+  caioInitializationAssessments        CaioInitializationAssessment[]
+  caioInitializationGateReceipts       CaioInitializationGateReceipt[]
+  caioInitializationGateHead           CaioInitializationGateHead?
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -5209,6 +5212,8 @@ model CaioMandateRecord {
   activeClaim              CaioActiveMandateClaim?
   guardianStops            CaioGuardianStopRecord[]
   adviceRecords            CaioAdviceRecord[]
+  initializationAssessments CaioInitializationAssessment[]
+  initializationGateReceipts CaioInitializationGateReceipt[]
 
   @@unique([id, workspaceId])
   @@index([workspaceId, status])
@@ -5302,7 +5307,108 @@ model CaioPrincipalBinding {
   revokedAt    DateTime?
   createdAt    DateTime  @default(now())
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  initializationGateReceipts CaioInitializationGateReceipt[]
 
   @@unique([workspaceId, userId, principalRef])
+  @@unique([id, workspaceId])
   @@index([workspaceId, principalRef])
+}
+
+// Immutable, reproducible G0 assessment. "ready_for_owner_acceptance" is a
+// machine-derived review state only: it is not CEO acceptance, a permission
+// grant, or proof that the enterprise inventory is universally complete.
+model CaioInitializationAssessment {
+  id                String                          @id
+  workspaceId       String
+  mandateRecordId   String
+  evaluationKey     String
+  schemaVersion     String
+  evaluatorRevision String
+  policyRef         String
+  policyHash        String
+  basisHash         String
+  decision          String
+  inputJson         String                          @db.LongText
+  assessmentJson    String                          @db.LongText
+  contentHash       String
+  authorityEffect   String
+  evaluatedAt       DateTime
+  createdAt         DateTime                        @default(now())
+  workspace         Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  mandateRecord     CaioMandateRecord               @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  gateReceipts      CaioInitializationGateReceipt[]
+  gateHeads         CaioInitializationGateHead[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, evaluationKey], map: "CaioInitAssessment_workspace_eval_key")
+  @@unique([workspaceId, contentHash], map: "CaioInitAssessment_workspace_content_key")
+  @@index([workspaceId, decision, evaluatedAt], map: "CaioInitAssessment_workspace_decision_time_idx")
+  @@index([mandateRecordId, evaluatedAt], map: "CaioInitAssessment_mandate_time_idx")
+  @@index([mandateRecordId, workspaceId], map: "CaioInitAssessment_mandate_workspace_idx")
+}
+
+// Append-only CEO gate ledger. An ACCEPTED receipt records explicit scope and
+// exception acknowledgement; it grants no runtime authority. A REVOKED receipt
+// closes the accepted gate. previousReceiptId is unique per workspace so the
+// chain cannot fork.
+model CaioInitializationGateReceipt {
+  id                       String                         @id
+  workspaceId              String
+  assessmentId             String
+  mandateRecordId          String
+  ceoPrincipalBindingId    String
+  previousReceiptId        String?
+  sequence                 Int
+  idempotencyKey           String
+  action                   String
+  resultingStatus          String
+  actorType                ActorType
+  actorUserId              String
+  ceoPrincipalRef          String
+  inventoryConfirmationRef String?
+  customerAcceptanceRef    String?
+  acceptedExceptionRefs    String                         @db.LongText
+  reasonCodes              String                         @db.LongText
+  evidenceRefs             String                         @db.LongText
+  basisHash                String
+  receiptJson              String                         @db.LongText
+  contentHash              String
+  authorityEffect          String
+  recordedAt               DateTime
+  createdAt                DateTime                       @default(now())
+  workspace                Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  assessment               CaioInitializationAssessment   @relation(fields: [assessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  mandateRecord            CaioMandateRecord              @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  ceoPrincipalBinding      CaioPrincipalBinding           @relation(fields: [ceoPrincipalBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  previousReceipt          CaioInitializationGateReceipt? @relation("CaioInitializationReceiptChain", fields: [previousReceiptId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction)
+  nextReceipt              CaioInitializationGateReceipt? @relation("CaioInitializationReceiptChain")
+  currentForHead           CaioInitializationGateHead?
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, sequence], map: "CaioInitGateReceipt_workspace_sequence_key")
+  @@unique([workspaceId, idempotencyKey], map: "CaioInitGateReceipt_workspace_idem_key")
+  @@unique([previousReceiptId, workspaceId], map: "CaioInitGateReceipt_prev_workspace_key")
+  @@index([workspaceId, resultingStatus, recordedAt], map: "CaioInitGateReceipt_workspace_status_time_idx")
+  @@index([assessmentId, recordedAt], map: "CaioInitGateReceipt_assessment_time_idx")
+  @@index([assessmentId, workspaceId], map: "CaioInitGateReceipt_assessment_workspace_idx")
+  @@index([mandateRecordId, workspaceId], map: "CaioInitGateReceipt_mandate_workspace_idx")
+  @@index([ceoPrincipalBindingId, workspaceId], map: "CaioInitGateReceipt_binding_workspace_idx")
+}
+
+// Concurrency pointer only. The append-only assessment and receipt records are
+// the evidence truth; no permission, routing, or execution path may treat this
+// row as an authority token.
+model CaioInitializationGateHead {
+  workspaceId         String                        @id
+  currentAssessmentId String
+  currentReceiptId    String                        @unique
+  sequence            Int
+  version             Int                           @default(1)
+  updatedAt           DateTime                      @updatedAt
+  workspace           Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  currentAssessment   CaioInitializationAssessment  @relation(fields: [currentAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  currentReceipt      CaioInitializationGateReceipt @relation(fields: [currentReceiptId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([currentReceiptId, workspaceId], map: "CaioInitGateHead_receipt_workspace_key")
+  @@index([currentAssessmentId, workspaceId], map: "CaioInitGateHead_assessment_workspace_idx")
 }
