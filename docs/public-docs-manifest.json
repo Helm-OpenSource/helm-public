@@ -78,6 +78,7 @@
     "docs/reviews/HELM_PUBLIC_CLEAN_HISTORY_RECEIPT_V1.md",
     "docs/reviews/HELM_PUBLIC_VISIBILITY_GO_NOGO_2026-06-01.md",
     "docs/reviews/HELM_SELF_TENANT_MINIMAL_LIVE_GATE_RECEIPT_2026-07-05.md",
-    "docs/roadmap/HELM_PUBLIC_ROADMAP.md"
+    "docs/roadmap/HELM_PUBLIC_ROADMAP.md",
+    "docs/superpowers/specs/2026-07-23-workbuddy-caio-lan-collaboration-design.md"
   ]
 }
