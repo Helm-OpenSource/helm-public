@@ -46,7 +46,7 @@ function nonEmptyValues(values: unknown): string[] {
   return values.filter(isNonEmpty).map((value) => value.trim());
 }
 
-function isManagedSecretRef(value: string | null): boolean {
+export function isManagedSecretReference(value: string | null): boolean {
   return Boolean(
     value &&
       /^(?:secret-ref|secret-manager):[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(
@@ -345,7 +345,10 @@ export function validateDataAssetConnectionReceipt(
   if (!isOneOf(receipt.accessMode, OBSERVATION_ACCESS_MODES)) {
     errors.push("access_mode_invalid");
   }
-  if (receipt.secretRef !== null && !isManagedSecretRef(receipt.secretRef)) {
+  if (
+    receipt.secretRef !== null &&
+    !isManagedSecretReference(receipt.secretRef)
+  ) {
     errors.push("secret_ref_must_be_managed_reference");
   }
   if (
