@@ -60,6 +60,7 @@ connector 授权、写回、外发或审批证明。
 - [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 冻结单一硬件产品、全量数据资产盘点与分级接入、初始化门、10 题候选、CEO 选 0-3 题、模型切换和 Context Agent 治理；requirements-only
 - [Helm CAIO Pro 实施主计划 / Helm CAIO Pro implementation plan](_planning/HELM_CAIO_PRO_IMPLEMENTATION_PLAN.md) — 按四仓、阶段门、PR、验证和回滚拆解；不代表客户连接、设备交付或生产激活
 - [腾讯 WorkBuddy 与 Helm CAIO Pro 内网协作设计 / Tencent WorkBuddy and Helm CAIO Pro LAN collaboration design](superpowers/specs/2026-07-23-workbuddy-caio-lan-collaboration-design.md) — CEO macOS 通过 LAN-only MCP Gateway 主动提问、读取 P1C canonical Portfolio、接收 typed prompt 并复核建议；设计已确认、实现未开始，不构成生产可用或外部执行授权
+- [Helm CAIO Pro P1C 入口图 / Helm CAIO Pro P1C entry map](superpowers/specs/2026-07-23-caio-pro-p1c-entry-map.md) — 记录 canonical 10 题 Portfolio、CEO 选 0-3 题、现有 DecisionRecord 绑定与 OWNER-only 只读入口；本地参考实现已验证，WorkBuddy/Gateway、远程 mutation、部署与生产回执仍需下一层
 - [Stage 1 一把手经营闭环 Runbook / Stage 1 owner operating loop runbook](operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md)
 - [经营信号首公里 15 分钟跑通 / Signal First Mile quickstart](product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md)
 - [公开路线图 / Public roadmap](roadmap/HELM_PUBLIC_ROADMAP.md)
