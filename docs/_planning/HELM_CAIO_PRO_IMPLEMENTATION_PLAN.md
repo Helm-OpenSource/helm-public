@@ -138,13 +138,31 @@ P8 复盘、能力沉淀与下一成熟度评估
 | [OPA decision logs](https://www.openpolicyagent.org/docs/management-decision-logs) | policy revision、input、result、decision id、脱敏和审计 | G0 绑定 policy ref/hash、输入快照 hash、结果和脱敏后的 gap codes；未来可加可选 OPA adapter | V1 不新增 OPA sidecar 或 Rego 依赖 |
 | [in-toto Attestation Statement](https://github.com/in-toto/attestation/blob/main/spec/v1/statement.md) | subject digest 与 predicate type/payload 分离 | assessment/receipt 绑定不可变主体摘要和类型化结论 | V1 不引入签名供应链工具或把普通回执宣称为密码学签名 |
 
+第二轮扫描覆盖了来源连接、文档抽取、企业图谱、桌面上下文和可靠编排。结论仍是
+“可选择性复用 adapter 或算法组件，不引入第二套真值、权限或工作流控制面”。
+
+| 来源 | 可学习或复用内容 | CAIO Pro 决策 | 采用前的硬门 |
+|---|---|---|---|
+| [Airbyte Connector Builder / CDK](https://docs.airbyte.com/platform/connector-development) | REST、GraphQL 等来源的声明式连接器、增量游标、schema discovery 和连接器测试方法 | 作为长尾 SaaS 只读 adapter 的候选实现方式；输出必须转换成 `ObservationSourceRun` 和来源回执 | 逐连接器核验许可证、只读能力、凭据处理、数据落点和失败隔离；不启用 destination 写入面 |
+| [Meltano Singer SDK](https://sdk.meltano.com/en/main/index.html) | Tap/Stream、认证、分页、schema、增量复制和标准化测试 | 当单个来源适合轻量 Python Tap 时，可作为 Airbyte 之外的 adapter 候选 | Tap 只能在逐源授权范围内读取；不得让 Singer state 取代 Helm 来源状态和回执真值 |
+| [Apache Tika](https://tika.apache.org/) | 统一检测并流式抽取大量文件类型的文本和元数据 | 作为本地文档基础解析器候选，优先处理通用 Office、PDF、邮件和归档格式 | 必须有文件大小、页数、解压炸弹、超时、沙箱、加密文件和恶意文档隔离门 |
+| [Microsoft MarkItDown](https://github.com/microsoft/markitdown) | 将 Office、PDF、图片、音频和结构化文件转换为适合 LLM 的 Markdown；插件默认关闭 | 作为本地轻量格式转换和结构保留候选，不作为高保真或唯一解析器 | 只调用最窄的本地流接口；继承进程权限，故必须在最小权限 worker 中运行并禁用未审插件和网络 URL |
+| [Unstructured open source](https://docs.unstructured.io/open-source/introduction/overview) | 文档 partition、element metadata、cleaning 和语义 chunking | 仅用于离线评测或难文档的候选解析后端；先和 Tika/MarkItDown 在固定评测集对拍 | 官方明确开源库不是生产方案，且缺少认证、增量加载、调度和监控；不得把实验通过写成生产可用 |
+| [Microsoft GraphRAG](https://microsoft.github.io/graphrag/) | 从文本派生实体、关系、claims、community summaries，并支持全局问题检索 | 作为可重建的 Company Memory / 经营世界模型派生索引候选；原始证据和 Helm 时间化对象仍是真值 | 每条图节点和结论必须保留 evidence ref、时间、冲突和失效状态；图谱不得授予权限或替代原系统事实 |
+| [Temporal](https://docs.temporal.io/workflow-execution) | 可恢复的长事务、事件历史、重放、重试、取消和长时间运行 workflow | 暂不引入；只有现有任务/回执链无法满足断点续跑、补偿和规模要求时再做独立 ADR 与对拍 | 不得形成第二套业务状态机；Workflow History 只能承载执行可靠性，Helm 业务对象和回执仍是唯一经营真值 |
+| [Screenpipe](https://github.com/screenpipe/screenpipe) | 本地优先、事件触发采集、可访问性树优先/OCR 回退、应用与窗口过滤、时间化搜索 | 只学习桌面 Context Agent 的采集与过滤设计，不直接嵌入当前代码 | 当前主分支为商业许可，未取得商业授权前禁止复制、嵌入或客户部署；持续屏幕/音频采集还必须逐员工授权、可见、可暂停、可删除 |
+
 V1 的依赖决策：
 
 1. 不增加上述项目的 npm、容器或服务依赖；
 2. 先把外部成熟语义映射到 Helm 已有对象，保持一套运行真值；
 3. 未来连接器若原生输出 OpenLineage、DataHub、OpenMetadata 或 Great Expectations 结果，
    通过 adapter 转成 Helm evidence ref 和 observation receipt，而不是反向改变 Core 模型；
-4. 新增外部 adapter 必须单独评审许可证、版本、数据出域、故障隔离和客户部署成本。
+4. 文档解析器必须通过同一份合成与脱敏评测集比较结构保真、表格、OCR、失败隔离、
+   资源消耗和证据定位，不能因为“支持格式多”直接成为默认解析器；
+5. 桌面 Context Agent 默认不持续采集屏幕、音频或键盘；任何新增采集面都必须独立授权、
+   常驻可见、按应用/窗口过滤、可暂停、可删除并生成回执；
+6. 新增外部 adapter 必须单独评审许可证、版本、数据出域、故障隔离和客户部署成本。
 
 ## 4. 交付对象与总体验收
 
