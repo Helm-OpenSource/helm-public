@@ -223,14 +223,37 @@ function readySnapshot(): CaioInitializationProjectionSnapshot {
         status: "ACTIVE",
         accessMode: "READ_ONLY_API",
         sensitivity: "CONFIDENTIAL",
+        freshnessSlaMinutes: 60,
         compatibilityMode: false,
         runRefs: ["run-1"],
+        runs: [
+          {
+            id: "run-1",
+            status: "SUCCEEDED",
+            outcome: "SUCCESS",
+            freshness: "FRESH",
+            windowStart: "2026-07-23T03:00:00.000Z",
+            windowEnd: "2026-07-23T04:00:00.000Z",
+            observedAt: "2026-07-23T04:00:00.000Z",
+            evidenceRefs: [
+              "evidence:run:1",
+              "evidence:owner-answer:1",
+            ],
+            errorCodes: [],
+          },
+        ],
         latestRun: {
           id: "run-1",
           status: "SUCCEEDED",
           outcome: "SUCCESS",
           freshness: "FRESH",
-          evidenceRefs: ["evidence:run:1"],
+          windowStart: "2026-07-23T03:00:00.000Z",
+          windowEnd: "2026-07-23T04:00:00.000Z",
+          observedAt: "2026-07-23T04:00:00.000Z",
+          evidenceRefs: [
+            "evidence:run:1",
+            "evidence:owner-answer:1",
+          ],
           errorCodes: [],
         },
       },
@@ -288,6 +311,23 @@ describe("CAIO initialization assessment projector", () => {
     snapshot.assets[0].connectionReceipt = {
       ...snapshot.assets[0].connectionReceipt!,
       accessMode: "file_snapshot",
+    };
+
+    const projection = projectCaioInitializationAssessmentInput(snapshot);
+    const assessment = computeCaioInitializationAssessment(projection.input);
+
+    expect(projection.diagnostics).toContain(
+      "connection_receipt_unresolved:asset-1",
+    );
+    expect(assessment.decision).toBe("not_ready");
+  });
+
+  it("fails closed when stage receipts do not form a continuous version chain", () => {
+    const snapshot = readySnapshot();
+    snapshot.assets[0].connectionReceipt = {
+      ...snapshot.assets[0].connectionReceipt!,
+      expectedVersion: 4,
+      resultingVersion: 5,
     };
 
     const projection = projectCaioInitializationAssessmentInput(snapshot);
@@ -364,6 +404,7 @@ describe("CAIO initialization assessment projector", () => {
 
     const missingRun = readySnapshot();
     missingRun.sources[0].runRefs = [];
+    missingRun.sources[0].runs = [];
     missingRun.sources[0].latestRun = null;
     const runProjection =
       projectCaioInitializationAssessmentInput(missingRun);
@@ -373,5 +414,35 @@ describe("CAIO initialization assessment projector", () => {
     expect(
       computeCaioInitializationAssessment(runProjection.input).failures,
     ).toContain("initialized_asset_missing_observation_run");
+  });
+
+  it("recomputes freshness from observed time and source SLA", () => {
+    const snapshot = readySnapshot();
+    snapshot.evaluatedAt = "2026-07-23T05:00:00.001Z";
+
+    const projection = projectCaioInitializationAssessmentInput(snapshot);
+    const assessment = computeCaioInitializationAssessment(projection.input);
+
+    expect(projection.diagnostics).toContain(
+      "source_freshness_stale:source-1",
+    );
+    expect(assessment.failures).toContain(
+      "connected_source_health_below_threshold",
+    );
+    expect(assessment.failures).toContain("source_exception_incomplete");
+  });
+
+  it("rejects an evidence trace absent from the referenced run receipt", () => {
+    const snapshot = readySnapshot();
+    snapshot.sources[0].runs[0].evidenceRefs = ["evidence:another-output"];
+    snapshot.sources[0].latestRun = snapshot.sources[0].runs[0];
+
+    const projection = projectCaioInitializationAssessmentInput(snapshot);
+    const assessment = computeCaioInitializationAssessment(projection.input);
+
+    expect(projection.diagnostics).toContain(
+      "evidence_trace_run_binding_invalid:evidence:owner-answer:1",
+    );
+    expect(assessment.failures).toContain("evidence_trace_sample_empty");
   });
 });

@@ -159,6 +159,8 @@ describe("CAIO initialization CEO gate receipt", () => {
         contentHash: accepted.contentHash,
         sequence: accepted.sequence,
         resultingStatus: accepted.resultingStatus,
+        assessmentRef: accepted.assessmentRef,
+        recordedAt: accepted.recordedAt,
       },
       acceptedExceptionRefs: accepted.acceptedExceptionRefs,
       reasonCodes: ["owner_revoked_initialization_acceptance"],
@@ -187,9 +189,51 @@ describe("CAIO initialization CEO gate receipt", () => {
           contentHash: accepted.contentHash,
           sequence: accepted.sequence,
           resultingStatus: "accepted",
+          assessmentRef: accepted.assessmentRef,
+          recordedAt: accepted.recordedAt,
         },
       }),
     ).toThrow("caio_initialization_gate_already_accepted");
+  });
+
+  it("treats revocation as terminal for the same assessment version", () => {
+    const accepted = createCaioInitializationAcceptanceReceipt(
+      acceptanceInput(),
+    );
+    const revoked = createCaioInitializationRevocationReceipt({
+      ...acceptanceInput(),
+      idempotencyKey: "revoke:synthetic:v1",
+      previousReceipt: {
+        receiptId: accepted.receiptId,
+        contentHash: accepted.contentHash,
+        sequence: accepted.sequence,
+        resultingStatus: accepted.resultingStatus,
+        assessmentRef: accepted.assessmentRef,
+        recordedAt: accepted.recordedAt,
+      },
+      acceptedExceptionRefs: accepted.acceptedExceptionRefs,
+      reasonCodes: ["owner_revoked_initialization_acceptance"],
+      evidenceRefs: ["evidence:ceo-revocation:synthetic"],
+      recordedAt: "2026-07-23T10:00:00.000Z",
+    });
+
+    expect(() =>
+      createCaioInitializationAcceptanceReceipt({
+        ...acceptanceInput(),
+        idempotencyKey: "accept:synthetic:v2",
+        previousReceipt: {
+          receiptId: revoked.receiptId,
+          contentHash: revoked.contentHash,
+          sequence: revoked.sequence,
+          resultingStatus: revoked.resultingStatus,
+          assessmentRef: revoked.assessmentRef,
+          recordedAt: revoked.recordedAt,
+        },
+        recordedAt: "2026-07-23T11:00:00.000Z",
+      }),
+    ).toThrow(
+      "caio_initialization_revoked_assessment_requires_newer_reassessment",
+    );
   });
 
   it("detects receipt tampering", () => {

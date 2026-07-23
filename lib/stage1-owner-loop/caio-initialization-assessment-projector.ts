@@ -69,6 +69,9 @@ export type CaioInitializationProjectionRun = {
   status: string;
   outcome: string;
   freshness: string;
+  windowStart: string;
+  windowEnd: string;
+  observedAt: string | null;
   evidenceRefs: string[];
   errorCodes: string[];
 };
@@ -79,8 +82,10 @@ export type CaioInitializationProjectionSource = {
   status: string;
   accessMode: string;
   sensitivity: string;
+  freshnessSlaMinutes: number;
   compatibilityMode: boolean;
   runRefs: string[];
+  runs: CaioInitializationProjectionRun[];
   latestRun: CaioInitializationProjectionRun | null;
 };
 
@@ -362,6 +367,38 @@ function evidenceTraces(
   );
 }
 
+function effectiveRunFreshness(input: {
+  source: CaioInitializationProjectionSource;
+  evaluatedAt: string;
+  diagnostics: string[];
+}): EvidenceFreshnessState {
+  const run = input.source.latestRun;
+  const evaluatedAt = Date.parse(input.evaluatedAt);
+  const observedAt = Date.parse(run?.observedAt ?? "");
+  const slaMs = input.source.freshnessSlaMinutes * 60_000;
+  if (
+    !run ||
+    run.status.toLowerCase() !== "succeeded" ||
+    run.outcome.toLowerCase() !== "success" ||
+    run.freshness.toLowerCase() !== "fresh" ||
+    !Number.isFinite(evaluatedAt) ||
+    !Number.isFinite(observedAt) ||
+    !Number.isSafeInteger(input.source.freshnessSlaMinutes) ||
+    input.source.freshnessSlaMinutes <= 0 ||
+    observedAt > evaluatedAt
+  ) {
+    input.diagnostics.push(
+      `source_freshness_unresolved:${input.source.id}`,
+    );
+    return "unknown";
+  }
+  if (evaluatedAt - observedAt > slaMs) {
+    input.diagnostics.push(`source_freshness_stale:${input.source.id}`);
+    return "stale";
+  }
+  return "fresh";
+}
+
 export function projectCaioInitializationAssessmentInput(
   snapshot: CaioInitializationProjectionSnapshot,
 ): CaioInitializationProjectionResult {
@@ -375,12 +412,30 @@ export function projectCaioInitializationAssessmentInput(
   const sourceRows = new Map(
     snapshot.sources.map((source) => [source.id, source]),
   );
+  const runRows = new Map<
+    string,
+    {
+      sourceId: string;
+      run: CaioInitializationProjectionRun;
+    }
+  >();
   const runRefsByAsset = new Map<string, Set<string>>();
   const sourceRefsByAsset = new Map<string, Set<string>>();
   for (const source of snapshot.sources) {
+    for (const run of [
+      ...source.runs,
+      ...(source.latestRun ? [source.latestRun] : []),
+    ]) {
+      runRows.set(run.id, { sourceId: source.id, run });
+    }
     if (!source.catalogEntryId) continue;
     const refs = runRefsByAsset.get(source.catalogEntryId) ?? new Set<string>();
-    for (const ref of source.runRefs) refs.add(ref);
+    for (const ref of [
+      ...source.runRefs,
+      ...source.runs.map((run) => run.id),
+    ]) {
+      refs.add(ref);
+    }
     if (source.latestRun) refs.add(source.latestRun.id);
     runRefsByAsset.set(source.catalogEntryId, refs);
     const sourceRefs =
@@ -432,6 +487,8 @@ export function projectCaioInitializationAssessmentInput(
           asset.connectionStatus.toLowerCase() &&
         asset.connectionReceipt.authorizationReceiptRef ===
           authorizationReceipt?.receiptId &&
+        asset.connectionReceipt.expectedVersion ===
+          authorizationReceipt?.resultingVersion &&
         asset.connectionReceipt.observationSourceRef !== null &&
         knownSourceRefs.has(asset.connectionReceipt.observationSourceRef) &&
         receiptSource?.accessMode.toLowerCase() ===
@@ -449,7 +506,10 @@ export function projectCaioInitializationAssessmentInput(
         asset.initializationReceipt.initializationStatus ===
           asset.initializationStatus.toLowerCase() &&
         asset.initializationReceipt.connectionReceiptRef ===
-          connectionReceipt.receiptId
+          connectionReceipt.receiptId &&
+        asset.initializationReceipt.expectedVersion ===
+          connectionReceipt.resultingVersion &&
+        asset.initializationReceipt.resultingVersion === asset.version
           ? asset.initializationReceipt
           : null;
       if (asset.authorizationReceiptRef && !authorizationReceipt) {
@@ -571,9 +631,11 @@ export function projectCaioInitializationAssessmentInput(
         latestRunOutcome:
           (latestRun?.outcome.toLowerCase() ??
             "unknown") as ObservationOutcome,
-        freshness:
-          (latestRun?.freshness.toLowerCase() ??
-            "unknown") as EvidenceFreshnessState,
+        freshness: effectiveRunFreshness({
+          source,
+          evaluatedAt: snapshot.evaluatedAt,
+          diagnostics,
+        }),
         exception: sourceException,
       };
     })
@@ -602,7 +664,33 @@ export function projectCaioInitializationAssessmentInput(
     workspaceRef,
     diagnostics,
   });
-  const traces = evidenceTraces(snapshot.artifacts, diagnostics);
+  const traces = evidenceTraces(snapshot.artifacts, diagnostics).filter(
+    (trace) => {
+      const binding = runRows.get(trace.observationRunRef);
+      const capturedAt = Date.parse(trace.capturedAt);
+      const windowStart = Date.parse(binding?.run.windowStart ?? "");
+      const observedAt = Date.parse(binding?.run.observedAt ?? "");
+      const evaluatedAt = Date.parse(snapshot.evaluatedAt);
+      const valid =
+        binding?.sourceId === trace.sourceRef &&
+        binding.run.status.toLowerCase() === "succeeded" &&
+        binding.run.outcome.toLowerCase() === "success" &&
+        binding.run.evidenceRefs.includes(trace.evidenceRef) &&
+        Number.isFinite(capturedAt) &&
+        Number.isFinite(windowStart) &&
+        Number.isFinite(observedAt) &&
+        Number.isFinite(evaluatedAt) &&
+        capturedAt >= windowStart &&
+        capturedAt <= observedAt &&
+        capturedAt <= evaluatedAt;
+      if (!valid) {
+        diagnostics.push(
+          `evidence_trace_run_binding_invalid:${trace.evidenceRef}`,
+        );
+      }
+      return valid;
+    },
+  );
   const registeredWritePathCount = snapshot.sources.filter(
     (source) =>
       !CAIO_INITIALIZATION_POLICY.allowedAccessModes.includes(
