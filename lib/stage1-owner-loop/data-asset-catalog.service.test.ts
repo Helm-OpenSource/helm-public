@@ -23,6 +23,7 @@ const { dbMock, auditMock, serviceGovernanceMock } = vi.hoisted(() => {
       findMany: vi.fn(),
       updateMany: vi.fn(),
     },
+    $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
   return {
@@ -156,12 +157,69 @@ describe("CAIO Pro data asset catalog persistence", () => {
     dbMock.$transaction.mockImplementation(
       (callback: (tx: typeof dbMock) => unknown) => callback(dbMock),
     );
+    dbMock.$queryRaw.mockResolvedValue([{ id: "asset-1" }]);
     serviceGovernanceMock.assertWorkspacePolicyServiceAccess.mockResolvedValue(
       undefined,
     );
     auditMock.writeAuditLog.mockResolvedValue({ id: "audit-1" });
     dbMock.dataAssetStageReceipt.findFirst.mockResolvedValue(null);
     dbMock.dataAssetStageReceipt.findUnique.mockResolvedValue(null);
+  });
+
+  it("locks the catalog entry before reading stage state", async () => {
+    dbMock.dataAssetCatalogEntry.findFirst.mockResolvedValue(
+      asset({
+        classificationStatus: "CLASSIFIED",
+        technicalFeasibility: "FEASIBLE",
+        version: 2,
+      }),
+    );
+    dbMock.dataAssetCatalogEntry.updateMany.mockResolvedValue({ count: 1 });
+    dbMock.dataAssetStageReceipt.create.mockResolvedValue(
+      stageReceipt({
+        id: "receipt-auth-1",
+        receiptType: "AUTHORIZATION",
+        idempotencyKey: "authorization:crm:v1",
+        expectedVersion: 2,
+        resultingVersion: 3,
+        status: "AUTHORIZED",
+      }),
+    );
+    dbMock.dataAssetCatalogEntry.findUniqueOrThrow.mockResolvedValue(
+      asset({
+        classificationStatus: "CLASSIFIED",
+        technicalFeasibility: "FEASIBLE",
+        authorizationStatus: "AUTHORIZED",
+        version: 3,
+      }),
+    );
+
+    await recordDataAssetAuthorizationReceipt({
+      ...actorInput(),
+      receiptId: "receipt-auth-1",
+      idempotencyKey: "authorization:crm:v1",
+      expectedVersion: 2,
+      authorizationStatus: "authorized",
+      authorizationRef: "authorization:crm:readonly",
+      scopeRefs: ["scope:sales"],
+      consentRefs: [],
+      validFrom: recordedAt,
+      validUntil: new Date("2026-08-23T01:00:00.000Z"),
+      reasonCodes: [],
+      evidenceRefs: ["evidence:authorization:crm"],
+    });
+
+    expect(dbMock.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(
+      dbMock.$queryRaw.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      dbMock.dataAssetStageReceipt.findUnique.mock.invocationCallOrder[0],
+    );
+    expect(
+      dbMock.$queryRaw.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      dbMock.dataAssetCatalogEntry.findFirst.mock.invocationCallOrder[0],
+    );
   });
 
   it("creates an inventoried asset with fail-closed classification defaults", async () => {

@@ -362,6 +362,7 @@ function memoryTitle(
 }
 
 async function resolveCommittedEvaluation(
+  tx: Prisma.TransactionClient,
   record: DecisionRuntimeRecord,
   expected: DecisionEvaluation,
 ) {
@@ -385,7 +386,7 @@ async function resolveCommittedEvaluation(
   if (!action) {
     throw new Stage1DecisionEvaluationError(["work_packet_required"]);
   }
-  const memoryFact = await db.memoryFact.findFirst({
+  const memoryFact = await tx.memoryFact.findFirst({
     where: {
       workspaceId: record.workspaceId,
       objectType: ObjectType.ACTION_ITEM,
@@ -401,6 +402,24 @@ async function resolveCommittedEvaluation(
     ]);
   }
   return { created: false as const, evaluation: persisted, memoryFact };
+}
+
+// Lock first, then reconstruct the decision and inspect its evaluation
+// status. This keeps concurrent replays out of separate REPEATABLE READ
+// snapshots where both callers could otherwise report themselves as the
+// creator even though the persisted decision is singular.
+async function lockDecisionRecord(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; decisionRecordId: string },
+): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM DecisionRecord
+    WHERE id = ${input.decisionRecordId}
+      AND workspaceId = ${input.workspaceId}
+    FOR UPDATE`;
+  if (rows.length !== 1) {
+    throw new Stage1DecisionEvaluationError(["decision_not_found"]);
+  }
 }
 
 export async function evaluateStage1DecisionRecord(
@@ -437,39 +456,45 @@ export async function evaluateStage1DecisionRecord(
     english: input.english ?? false,
   });
 
-  return runWithWriteConflictRetry(async () => {
-    const record = await db.decisionRecord.findFirst({
-      where: {
-        id: input.decisionRecordId,
+  return runWithWriteConflictRetry(() =>
+    db.$transaction(async (tx) => {
+      await lockDecisionRecord(tx, {
         workspaceId: input.workspaceId,
-      },
-      include: {
-        workPacketClaim: {
-          include: {
-            actionItem: {
-              include: { approvalTask: true, executionReceipt: true },
+        decisionRecordId: input.decisionRecordId,
+      });
+      const record = await tx.decisionRecord.findFirst({
+        where: {
+          id: input.decisionRecordId,
+          workspaceId: input.workspaceId,
+        },
+        include: {
+          workPacketClaim: {
+            include: {
+              actionItem: {
+                include: { approvalTask: true, executionReceipt: true },
+              },
             },
           },
         },
-      },
-    });
-    if (!record) {
-      throw new Stage1DecisionEvaluationError(["decision_not_found"]);
-    }
-    const evaluation = buildEvaluation(record, input);
-    if (record.status === "EVALUATED" || record.evaluationJson) {
-      return resolveCommittedEvaluation(record, evaluation);
-    }
-    if (record.status !== "DISPATCHED") {
-      throw new Stage1DecisionEvaluationError(["decision_not_dispatched"]);
-    }
-    const action = record.workPacketClaim?.actionItem;
-    if (!action) {
-      throw new Stage1DecisionEvaluationError(["work_packet_required"]);
-    }
-    const evaluatedAt = new Date();
-    const sourceId = evaluationSourceId(record);
-    const committed = await db.$transaction(async (tx) => {
+      });
+      if (!record) {
+        throw new Stage1DecisionEvaluationError(["decision_not_found"]);
+      }
+      const evaluation = buildEvaluation(record, input);
+      if (record.status === "EVALUATED" || record.evaluationJson) {
+        return resolveCommittedEvaluation(tx, record, evaluation);
+      }
+      if (record.status !== "DISPATCHED") {
+        throw new Stage1DecisionEvaluationError([
+          "decision_not_dispatched",
+        ]);
+      }
+      const action = record.workPacketClaim?.actionItem;
+      if (!action) {
+        throw new Stage1DecisionEvaluationError(["work_packet_required"]);
+      }
+      const evaluatedAt = new Date();
+      const sourceId = evaluationSourceId(record);
       const claimed = await tx.decisionRecord.updateMany({
         where: {
           id: record.id,
@@ -483,7 +508,11 @@ export async function evaluateStage1DecisionRecord(
           evaluatedAt,
         },
       });
-      if (claimed.count !== 1) return null;
+      if (claimed.count !== 1) {
+        throw new Stage1DecisionEvaluationError([
+          "decision_evaluation_claim_lost",
+        ]);
+      }
 
       const memoryFact = await tx.memoryFact.create({
         data: {
@@ -537,24 +566,6 @@ export async function evaluateStage1DecisionRecord(
         { client: tx },
       );
       return { created: true as const, evaluation, memoryFact };
-    });
-    if (committed) return committed;
-
-    const current = await db.decisionRecord.findFirst({
-      where: { id: record.id, workspaceId: input.workspaceId },
-      include: {
-        workPacketClaim: {
-          include: {
-            actionItem: {
-              include: { approvalTask: true, executionReceipt: true },
-            },
-          },
-        },
-      },
-    });
-    if (!current) {
-      throw new Stage1DecisionEvaluationError(["decision_not_found"]);
-    }
-    return resolveCommittedEvaluation(current, evaluation);
-  });
+    }),
+  );
 }

@@ -27,6 +27,7 @@ const { dbMock, auditMock, serviceGovernanceMock } = vi.hoisted(() => {
       findUniqueOrThrow: vi.fn(),
       updateMany: vi.fn(),
     },
+    $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
   return {
@@ -181,6 +182,7 @@ describe("Stage 1 observation runtime", () => {
     dbMock.$transaction.mockImplementation(
       (callback: (tx: typeof dbMock) => unknown) => callback(dbMock),
     );
+    dbMock.$queryRaw.mockResolvedValue([{ id: "locked-row" }]);
     serviceGovernanceMock.assertWorkspacePolicyServiceAccess.mockResolvedValue(
       undefined,
     );
@@ -445,6 +447,18 @@ describe("Stage 1 observation runtime", () => {
       }),
     );
     expect(auditInput.payload).not.toHaveProperty("secretRef");
+    expect(dbMock.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(
+      dbMock.$queryRaw.mock.invocationCallOrder[1],
+    ).toBeLessThan(
+      dbMock.enterpriseObservationProgram.findFirst.mock
+        .invocationCallOrder[0],
+    );
+    expect(
+      dbMock.$queryRaw.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      dbMock.dataAssetCatalogEntry.findFirst.mock.invocationCallOrder[0],
+    );
   });
 
   it("fails source registration when the catalog authorization has expired", async () => {
@@ -504,6 +518,12 @@ describe("Stage 1 observation runtime", () => {
     ).rejects.toMatchObject({ reasons: ["authorization_claim_lost"] });
 
     expect(dbMock.observationSourceRun.create).not.toHaveBeenCalled();
+    expect(dbMock.$queryRaw).toHaveBeenCalledTimes(3);
+    expect(
+      dbMock.$queryRaw.mock.invocationCallOrder[2],
+    ).toBeLessThan(
+      dbMock.observationSource.findUnique.mock.invocationCallOrder[1],
+    );
   });
 
   it("fails closed when an asset transition wins the atomic observation claim", async () => {
@@ -713,6 +733,12 @@ describe("Stage 1 observation runtime", () => {
     };
     await revokeEnterpriseObservationProgram(input);
 
+    expect(
+      dbMock.$queryRaw.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      dbMock.enterpriseObservationProgram.updateMany.mock
+        .invocationCallOrder[0],
+    );
     expect(dbMock.observationSource.updateMany).toHaveBeenCalledTimes(1);
     expect(dbMock.observationSourceRun.updateMany).toHaveBeenCalledTimes(1);
     expect(auditMock.writeAuditLog).toHaveBeenCalledTimes(1);
