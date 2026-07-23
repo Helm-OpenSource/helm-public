@@ -1,6 +1,8 @@
 import {
   ActorType,
+  type CaioOperatingQuestionDecisionBinding as StoredDecisionBindingRow,
   type CaioOperatingQuestionGenerationReceipt as StoredGenerationReceiptRow,
+  type CaioOperatingQuestionImplementationPlan as StoredImplementationPlanRow,
   type CaioOperatingQuestionPortfolio as StoredPortfolioRow,
   type CaioQuestionSelectionReceipt as StoredSelectionReceiptRow,
 } from "@prisma/client";
@@ -12,6 +14,11 @@ import {
   validateCaioInitializationGateReceipt,
   type CaioInitializationGateReceipt,
 } from "@/lib/stage1-owner-loop/caio-initialization-gate-receipt";
+import {
+  validateCaioOperatingQuestionImplementationPlan,
+  validateCaioOperatingQuestionImplementationPlanAgainstContext,
+  type CaioOperatingQuestionImplementationPlan,
+} from "@/lib/stage1-owner-loop/caio-operating-question-implementation-plan";
 import {
   validateCaioOperatingQuestionGenerationReceipt,
   validateCaioOperatingQuestionGenerationReceiptAgainstPortfolio,
@@ -48,11 +55,11 @@ export type CaioQuestionSelectionHeadReadRow = {
   version: number;
   updatedAt: Date;
   currentReceipt: StoredSelectionReceiptRow & {
-    decisionBindings: Array<{
-      questionId: string;
-      candidateHash: string;
-      decisionRecordId: string;
-    }>;
+    decisionBindings: Array<
+      StoredDecisionBindingRow & {
+        implementationPlan: StoredImplementationPlanRow | null;
+      }
+    >;
   };
 };
 
@@ -68,6 +75,7 @@ export type CaioOperatingQuestionReadout = {
     | "awaiting_selection"
     | "selection_deferred"
     | "binding_incomplete"
+    | "planning_incomplete"
     | "selected"
     | "last_valid_portfolio_stale"
     | "insufficient_evidence"
@@ -84,6 +92,7 @@ export type CaioOperatingQuestionReadout = {
   selectionSequence: number;
   selectedQuestionIds: string[];
   decisionBindingCount: number;
+  implementationPlanCount: number;
   candidates: Array<{
     questionId: string;
     rank: number;
@@ -94,6 +103,9 @@ export type CaioOperatingQuestionReadout = {
     evidenceCount: number;
     selected: boolean;
     decisionRecordId: string | null;
+    implementationPlanId: string | null;
+    implementationReadiness: string | null;
+    implementationGapCodes: string[];
   }>;
 };
 
@@ -115,6 +127,7 @@ function emptyReadout(
     selectionSequence: 0,
     selectedQuestionIds: [],
     decisionBindingCount: 0,
+    implementationPlanCount: 0,
     candidates: [],
   };
 }
@@ -329,6 +342,63 @@ function parseSelectionReceipt(input: {
   }
 }
 
+function parseImplementationPlan(input: {
+  row: StoredImplementationPlanRow;
+  binding: StoredDecisionBindingRow;
+  portfolio: CaioOperatingQuestionPortfolio;
+  selectionReceipt: CaioQuestionSelectionReceipt;
+}): CaioOperatingQuestionImplementationPlan | null {
+  const plan =
+    safeParseJson<CaioOperatingQuestionImplementationPlan | null>(
+      input.row.planJson,
+      null,
+    );
+  const gapCodes = parseStringArray(input.row.gapCodes);
+  if (!plan || !gapCodes) return null;
+  try {
+    if (
+      !validateCaioOperatingQuestionImplementationPlan(plan).valid ||
+      !validateCaioOperatingQuestionImplementationPlanAgainstContext(
+        plan,
+        {
+          portfolio: input.portfolio,
+          selectionReceipt: input.selectionReceipt,
+          decisionRecordRef: input.binding.decisionRecordId,
+        },
+      ).valid ||
+      plan.planId !== input.row.id ||
+      plan.workspaceRef !== `workspace:${input.row.workspaceId}` ||
+      plan.portfolioRef !== input.row.portfolioId ||
+      plan.selectionReceiptRef !== input.row.selectionReceiptId ||
+      plan.questionId !== input.row.questionId ||
+      plan.candidateHash !== input.row.candidateHash ||
+      plan.decisionRecordRef !== input.row.decisionRecordId ||
+      input.row.workspaceId !== input.binding.workspaceId ||
+      input.row.selectionReceiptId !==
+        input.binding.selectionReceiptId ||
+      input.row.portfolioId !== input.binding.portfolioId ||
+      input.row.questionId !== input.binding.questionId ||
+      input.row.candidateHash !== input.binding.candidateHash ||
+      input.row.decisionBindingId !== input.binding.id ||
+      input.row.decisionRecordId !== input.binding.decisionRecordId ||
+      input.row.actorUserId !== input.binding.actorUserId ||
+      plan.status !== input.row.status ||
+      plan.implementationReadiness !==
+        input.row.implementationReadiness ||
+      canonicalJson(plan.gapCodes) !== canonicalJson(gapCodes) ||
+      plan.authorityEffect !== input.row.authorityEffect ||
+      plan.workPacketEffect !== input.row.workPacketEffect ||
+      plan.createdAt !== input.row.plannedAt.toISOString() ||
+      plan.contentHash !== input.row.contentHash
+    ) {
+      return null;
+    }
+    return plan;
+  } catch {
+    return null;
+  }
+}
+
 export function buildCaioOperatingQuestionReadout(input: {
   now: Date;
   currentG0Context: CaioCurrentAcceptedG0ReadContext | null;
@@ -415,24 +485,55 @@ export function buildCaioOperatingQuestionReadout(input: {
       candidate.contentHash,
     ]),
   );
-  const bindingByQuestionId = new Map<string, string>();
+  const bindingByQuestionId = new Map<
+    string,
+    {
+      decisionRecordId: string;
+      implementationPlan: CaioOperatingQuestionImplementationPlan | null;
+    }
+  >();
   const currentBindings = selectionReceipt
     ? (input.selectionHead?.currentReceipt.decisionBindings ?? [])
     : [];
   for (const binding of currentBindings) {
+    if (!selectionReceipt) return emptyReadout("invalid_evidence");
     if (
       bindingByQuestionId.has(binding.questionId) ||
       !selectedQuestionIdSet.has(binding.questionId) ||
       candidateHashByQuestionId.get(binding.questionId) !==
-        binding.candidateHash
+        binding.candidateHash ||
+      !binding.id.trim() ||
+      !binding.decisionRecordId.trim() ||
+      binding.workspaceId !==
+        input.selectionHead?.currentReceipt.workspaceId ||
+      binding.selectionReceiptId !== selectionReceipt.receiptId ||
+      binding.portfolioId !== portfolio.portfolioId ||
+      binding.actorUserId !== selectionReceipt.actorUserRef
     ) {
+      return emptyReadout("invalid_evidence");
+    }
+    const implementationPlan = binding.implementationPlan
+      ? parseImplementationPlan({
+          row: binding.implementationPlan,
+          binding,
+          portfolio,
+          selectionReceipt,
+        })
+      : null;
+    if (binding.implementationPlan && !implementationPlan) {
       return emptyReadout("invalid_evidence");
     }
     bindingByQuestionId.set(
       binding.questionId,
-      binding.decisionRecordId,
+      {
+        decisionRecordId: binding.decisionRecordId,
+        implementationPlan,
+      },
     );
   }
+  const implementationPlanCount = [...bindingByQuestionId.values()].filter(
+    (binding) => binding.implementationPlan !== null,
+  ).length;
   let state: CaioOperatingQuestionReadout["state"] =
     "awaiting_selection";
   if (generationReceipt.status === "insufficient_evidence") {
@@ -444,6 +545,11 @@ export function buildCaioOperatingQuestionReadout(input: {
     bindingByQuestionId.size < selectedQuestionIds.length
   ) {
     state = "binding_incomplete";
+  } else if (
+    selectionReceipt &&
+    implementationPlanCount < selectedQuestionIds.length
+  ) {
+    state = "planning_incomplete";
   } else if (selectionReceipt) {
     state = "selected";
   }
@@ -462,6 +568,7 @@ export function buildCaioOperatingQuestionReadout(input: {
     selectionSequence: selectionReceipt?.sequence ?? 0,
     selectedQuestionIds,
     decisionBindingCount: bindingByQuestionId.size,
+    implementationPlanCount,
     candidates: portfolio.candidates.map((candidate) => ({
       questionId: candidate.questionId,
       rank: candidate.rank,
@@ -472,7 +579,17 @@ export function buildCaioOperatingQuestionReadout(input: {
       evidenceCount: candidate.evidenceRefs.length,
       selected: selectedQuestionIdSet.has(candidate.questionId),
       decisionRecordId:
-        bindingByQuestionId.get(candidate.questionId) ?? null,
+        bindingByQuestionId.get(candidate.questionId)?.decisionRecordId ??
+        null,
+      implementationPlanId:
+        bindingByQuestionId.get(candidate.questionId)?.implementationPlan
+          ?.planId ?? null,
+      implementationReadiness:
+        bindingByQuestionId.get(candidate.questionId)?.implementationPlan
+          ?.implementationReadiness ?? null,
+      implementationGapCodes:
+        bindingByQuestionId.get(candidate.questionId)?.implementationPlan
+          ?.gapCodes ?? [],
     })),
   };
 }

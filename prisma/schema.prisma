@@ -1372,6 +1372,7 @@ model Workspace {
   caioQuestionSelectionReceipts         CaioQuestionSelectionReceipt[]
   caioQuestionSelectionHead             CaioQuestionSelectionHead?
   caioOperatingQuestionDecisionBindings CaioOperatingQuestionDecisionBinding[]
+  caioOperatingQuestionImplementationPlans CaioOperatingQuestionImplementationPlan[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -3762,6 +3763,7 @@ model DecisionRecord {
   supervisionSignals SupervisionSignalRecord[]
   workPacketClaim    DecisionWorkPacketClaim?
   caioQuestionBindings CaioOperatingQuestionDecisionBinding[]
+  caioQuestionImplementationPlans CaioOperatingQuestionImplementationPlan[]
 
   @@unique([id, workspaceId])
   @@unique([workspaceId, decisionKey])
@@ -5466,6 +5468,7 @@ model CaioOperatingQuestionPortfolio {
   selectionReceipts           CaioQuestionSelectionReceipt[]
   selectionHead               CaioQuestionSelectionHead?
   decisionBindings            CaioOperatingQuestionDecisionBinding[]
+  implementationPlans         CaioOperatingQuestionImplementationPlan[]
 
   @@unique([id, workspaceId])
   @@unique([id, workspaceId, initializationGateReceiptId], map: "COQPortfolio_id_workspace_gate_key")
@@ -5572,6 +5575,7 @@ model CaioQuestionSelectionReceipt {
   nextReceipt                 CaioQuestionSelectionReceipt?    @relation("CaioQuestionSelectionReceiptChain")
   currentForHead              CaioQuestionSelectionHead?
   decisionBindings            CaioOperatingQuestionDecisionBinding[]
+  implementationPlans         CaioOperatingQuestionImplementationPlan[]
 
   @@unique([id, workspaceId])
   @@unique([id, workspaceId, portfolioId], map: "CQSelection_id_workspace_portfolio_key")
@@ -5613,7 +5617,44 @@ model CaioOperatingQuestionDecisionBinding {
   selectionReceipt   CaioQuestionSelectionReceipt @relation(fields: [selectionReceiptId, workspaceId, portfolioId], references: [id, workspaceId, portfolioId], onDelete: Restrict, map: "COQDecisionBinding_selection_workspace_portfolio_fkey")
   portfolio          CaioOperatingQuestionPortfolio @relation(fields: [portfolioId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQDecisionBinding_portfolio_workspace_fkey")
   decisionRecord     DecisionRecord               @relation(fields: [decisionRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQDecisionBinding_decision_workspace_fkey")
+  implementationPlan CaioOperatingQuestionImplementationPlan?
 
+  @@unique([id, workspaceId], map: "COQDecisionBinding_id_workspace_key")
   @@unique([workspaceId, selectionReceiptId, questionId], map: "COQDecisionBinding_workspace_selection_question_key")
   @@index([workspaceId, portfolioId], map: "COQDecisionBinding_workspace_portfolio_idx")
+}
+
+// Canonical P1C implementation-planning draft. It is materialized alongside
+// the existing DecisionRecord binding but grants no authority and dispatches
+// no Work Packet. Missing implementation details remain explicit gap codes.
+model CaioOperatingQuestionImplementationPlan {
+  id                      String                               @id
+  workspaceId             String
+  selectionReceiptId      String
+  portfolioId             String
+  questionId              String
+  candidateHash           String
+  decisionBindingId       String                               @unique
+  decisionRecordId        String                               @unique
+  planJson                String                               @db.LongText
+  contentHash             String
+  status                  String
+  implementationReadiness String
+  gapCodes                String                               @db.LongText
+  authorityEffect         String
+  workPacketEffect        String
+  actorUserId             String
+  plannedAt               DateTime
+  createdAt               DateTime                             @default(now())
+  workspace               Workspace                            @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQPlan_workspace_fkey")
+  selectionReceipt        CaioQuestionSelectionReceipt         @relation(fields: [selectionReceiptId, workspaceId, portfolioId], references: [id, workspaceId, portfolioId], onDelete: Restrict, map: "COQPlan_selection_workspace_portfolio_fkey")
+  portfolio               CaioOperatingQuestionPortfolio       @relation(fields: [portfolioId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPlan_portfolio_workspace_fkey")
+  decisionBinding         CaioOperatingQuestionDecisionBinding @relation(fields: [decisionBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPlan_binding_workspace_fkey")
+  decisionRecord          DecisionRecord                       @relation(fields: [decisionRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPlan_decision_workspace_fkey")
+
+  @@unique([decisionBindingId, workspaceId], map: "COQPlan_binding_workspace_key")
+  @@unique([decisionRecordId, workspaceId], map: "COQPlan_decision_workspace_key")
+  @@unique([workspaceId, selectionReceiptId, questionId], map: "COQPlan_workspace_selection_question_key")
+  @@index([workspaceId, status, plannedAt], map: "COQPlan_workspace_status_time_idx")
+  @@index([workspaceId, portfolioId], map: "COQPlan_workspace_portfolio_idx")
 }

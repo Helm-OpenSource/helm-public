@@ -14,6 +14,7 @@ import {
   createCaioOperatingQuestionGenerationReceipt,
   evaluateCaioOperatingQuestionGeneration,
 } from "@/lib/stage1-owner-loop/caio-operating-question";
+import { createCaioOperatingQuestionImplementationPlan } from "@/lib/stage1-owner-loop/caio-operating-question-implementation-plan";
 import {
   syntheticOperatingQuestionG0Source,
   syntheticOperatingQuestionGenerationInput,
@@ -125,7 +126,9 @@ function generatedRows() {
   };
 }
 
-function selectedRows() {
+function selectedRows(input?: {
+  includeImplementationPlans?: boolean;
+}) {
   const { portfolio, portfolioHead, currentG0Context } = generatedRows();
   const selectionReceipt = createCaioQuestionSelectionReceipt({
     portfolio,
@@ -192,18 +195,68 @@ function selectedRows() {
       selectedAt: new Date(selectionReceipt.selectedAt),
       createdAt: new Date(selectionReceipt.selectedAt),
       decisionBindings: selectionReceipt.selectedQuestionIds.map(
-        (questionId, index) => ({
-          questionId,
-          candidateHash:
-            portfolio.candidates.find(
-              (candidate) => candidate.questionId === questionId,
-            )?.contentHash ?? "",
-          decisionRecordId: `decision-${index + 1}`,
-        }),
+        (questionId, index) => {
+          const candidate = portfolio.candidates.find(
+            (item) => item.questionId === questionId,
+          );
+          if (!candidate) throw new Error("selected candidate required");
+          const decisionRecordId = `decision-${index + 1}`;
+          const bindingId = `binding-${index + 1}`;
+          const implementationPlan =
+            createCaioOperatingQuestionImplementationPlan({
+              portfolio,
+              selectionReceipt,
+              questionId,
+              decisionRecordRef: decisionRecordId,
+            });
+          return {
+            id: bindingId,
+            workspaceId: portfolio.workspaceRef.replace("workspace:", ""),
+            selectionReceiptId: selectionReceipt.receiptId,
+            portfolioId: portfolio.portfolioId,
+            questionId,
+            candidateHash: candidate.contentHash,
+            decisionRecordId,
+            actorUserId: selectionReceipt.actorUserRef,
+            createdAt: new Date(selectionReceipt.selectedAt),
+            implementationPlan:
+              input?.includeImplementationPlans === false
+                ? null
+                : {
+                    id: implementationPlan.planId,
+                    workspaceId: portfolio.workspaceRef.replace(
+                      "workspace:",
+                      "",
+                    ),
+                    selectionReceiptId: selectionReceipt.receiptId,
+                    portfolioId: portfolio.portfolioId,
+                    questionId,
+                    candidateHash: candidate.contentHash,
+                    decisionBindingId: bindingId,
+                    decisionRecordId,
+                    planJson: JSON.stringify(implementationPlan),
+                    contentHash: implementationPlan.contentHash,
+                    status: implementationPlan.status,
+                    implementationReadiness:
+                      implementationPlan.implementationReadiness,
+                    gapCodes: JSON.stringify(
+                      implementationPlan.gapCodes,
+                    ),
+                    authorityEffect:
+                      implementationPlan.authorityEffect,
+                    workPacketEffect:
+                      implementationPlan.workPacketEffect,
+                    actorUserId: selectionReceipt.actorUserRef,
+                    plannedAt: new Date(implementationPlan.createdAt),
+                    createdAt: new Date(implementationPlan.createdAt),
+                  },
+          };
+        },
       ),
     },
   };
   return {
+    portfolio,
     portfolioHead,
     currentG0Context,
     selectionReceipt,
@@ -225,6 +278,7 @@ describe("CAIO operating-question dashboard readout", () => {
       boundary: "read_only",
       candidates: [],
       selectedQuestionIds: [],
+      implementationPlanCount: 0,
     });
   });
 
@@ -247,7 +301,7 @@ describe("CAIO operating-question dashboard readout", () => {
     });
   });
 
-  it("shows current CEO selections and canonical DecisionRecord bindings", () => {
+  it("shows current CEO selections with canonical DecisionRecord bindings and implementation plans", () => {
     const {
       portfolioHead,
       currentG0Context,
@@ -266,12 +320,170 @@ describe("CAIO operating-question dashboard readout", () => {
     expect(readout.selectedQuestionIds).toEqual(
       selectionReceipt.selectedQuestionIds,
     );
+    expect(readout.decisionBindingCount).toBe(2);
+    expect(readout.implementationPlanCount).toBe(2);
     expect(
       readout.candidates
         .filter((candidate) => candidate.selected)
-        .map((candidate) => candidate.decisionRecordId),
-    ).toEqual(["decision-1", "decision-2"]);
+        .map((candidate) => ({
+          decisionRecordId: candidate.decisionRecordId,
+          implementationPlanId: candidate.implementationPlanId,
+          implementationReadiness:
+            candidate.implementationReadiness,
+          hasExplicitGaps:
+            candidate.implementationGapCodes.length > 0,
+        })),
+    ).toEqual([
+      {
+        decisionRecordId: "decision-1",
+        implementationPlanId: expect.stringMatching(
+          /^caio-operating-question-plan:/,
+        ),
+        implementationReadiness: "needs_configuration",
+        hasExplicitGaps: true,
+      },
+      {
+        decisionRecordId: "decision-2",
+        implementationPlanId: expect.stringMatching(
+          /^caio-operating-question-plan:/,
+        ),
+        implementationReadiness: "needs_configuration",
+        hasExplicitGaps: true,
+      },
+    ]);
   });
+
+  it("marks a complete DecisionRecord binding set as planning incomplete until plans exist", () => {
+    const {
+      portfolioHead,
+      currentG0Context,
+      selectionReceipt,
+      selectionHead,
+    } = selectedRows({ includeImplementationPlans: false });
+
+    expect(
+      buildCaioOperatingQuestionReadout({
+        now: READOUT_NOW,
+        currentG0Context,
+        portfolioHead,
+        selectionHead,
+      }),
+    ).toMatchObject({
+      state: "planning_incomplete",
+      selectedQuestionIds: selectionReceipt.selectedQuestionIds,
+      decisionBindingCount: 2,
+      implementationPlanCount: 0,
+    });
+  });
+
+  it("fails closed when an implementation plan no longer matches its canonical row", () => {
+    const { portfolioHead, currentG0Context, selectionHead } =
+      selectedRows();
+    selectionHead.currentReceipt.decisionBindings[0].implementationPlan!.contentHash =
+      `sha256:${"f".repeat(64)}`;
+
+    expect(
+      buildCaioOperatingQuestionReadout({
+        now: READOUT_NOW,
+        currentG0Context,
+        portfolioHead,
+        selectionHead,
+      }),
+    ).toMatchObject({
+      state: "invalid_evidence",
+      candidates: [],
+      decisionBindingCount: 0,
+      implementationPlanCount: 0,
+    });
+  });
+
+  it("fails closed when a valid plan for another selected question is attached to the binding", () => {
+    const {
+      portfolio,
+      portfolioHead,
+      currentG0Context,
+      selectionReceipt,
+      selectionHead,
+    } = selectedRows();
+    const [targetBinding, otherBinding] =
+      selectionHead.currentReceipt.decisionBindings;
+    const crossQuestionPlan =
+      createCaioOperatingQuestionImplementationPlan({
+        portfolio,
+        selectionReceipt,
+        questionId: otherBinding.questionId,
+        decisionRecordRef: targetBinding.decisionRecordId,
+      });
+    targetBinding.implementationPlan = {
+      ...targetBinding.implementationPlan!,
+      id: crossQuestionPlan.planId,
+      questionId: otherBinding.questionId,
+      candidateHash: otherBinding.candidateHash,
+      planJson: JSON.stringify(crossQuestionPlan),
+      contentHash: crossQuestionPlan.contentHash,
+      status: crossQuestionPlan.status,
+      implementationReadiness:
+        crossQuestionPlan.implementationReadiness,
+      gapCodes: JSON.stringify(crossQuestionPlan.gapCodes),
+      authorityEffect: crossQuestionPlan.authorityEffect,
+      workPacketEffect: crossQuestionPlan.workPacketEffect,
+      plannedAt: new Date(crossQuestionPlan.createdAt),
+    };
+
+    expect(
+      buildCaioOperatingQuestionReadout({
+        now: READOUT_NOW,
+        currentG0Context,
+        portfolioHead,
+        selectionHead,
+      }),
+    ).toMatchObject({
+      state: "invalid_evidence",
+      candidates: [],
+      decisionBindingCount: 0,
+      implementationPlanCount: 0,
+    });
+  });
+
+  it.each([
+    [
+      "reordered",
+      (values: string[]) => [...values].reverse(),
+    ],
+    [
+      "duplicated",
+      (values: string[]) => [...values, values[0]],
+    ],
+    [
+      "whitespace-padded",
+      (values: string[]) => [` ${values[0]} `, ...values.slice(1)],
+    ],
+  ])(
+    "fails closed when canonical gapCodes are %s",
+    (_label, mutateGapCodes) => {
+      const { portfolioHead, currentG0Context, selectionHead } =
+        selectedRows();
+      const plan =
+        selectionHead.currentReceipt.decisionBindings[0]
+          .implementationPlan!;
+      const gapCodes = JSON.parse(plan.gapCodes) as string[];
+      plan.gapCodes = JSON.stringify(mutateGapCodes(gapCodes));
+
+      expect(
+        buildCaioOperatingQuestionReadout({
+          now: READOUT_NOW,
+          currentG0Context,
+          portfolioHead,
+          selectionHead,
+        }),
+      ).toMatchObject({
+        state: "invalid_evidence",
+        candidates: [],
+        decisionBindingCount: 0,
+        implementationPlanCount: 0,
+      });
+    },
+  );
 
   it("fails closed when a DecisionRecord binding targets a different candidate version", () => {
     const { portfolioHead, currentG0Context, selectionHead } =
