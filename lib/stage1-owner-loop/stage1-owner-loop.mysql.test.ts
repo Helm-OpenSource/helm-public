@@ -30,6 +30,12 @@ import {
   registerObservationSource,
   revokeEnterpriseObservationProgram,
 } from "./observation.service";
+import {
+  createDataAssetCatalogEntry,
+  recordDataAssetAuthorizationReceipt,
+  recordDataAssetClassificationReceipt,
+  recordDataAssetConnectionReceipt,
+} from "./data-asset-catalog.service";
 import type { OwnerCommandDraft } from "./types";
 
 const integrationDatabaseUrl = process.env.STAGE1_OWNER_LOOP_DATABASE_URL;
@@ -43,6 +49,71 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
   let dispatchedDecisionRecordId = "";
   let dispatchedDecisionKey = "";
   let dispatchedActionItemId = "";
+
+  async function createAuthorizedCatalogAsset(input: {
+    sourceKey: string;
+    authorizationRef: string;
+    validFrom: Date;
+    validUntil: Date;
+  }) {
+    const entry = await createDataAssetCatalogEntry({
+      workspaceId,
+      assetKey: `asset-${input.sourceKey}`,
+      sourceSystemRef: `system:${input.sourceKey}`,
+      displayName: `Synthetic ${input.sourceKey}`,
+      sourceKind: "crm",
+      businessDomain: "sales",
+      businessOwnerRef: ownerUserId,
+      purpose: "Observe synthetic CRM facts for owner decisions",
+      scopeRefs: ["scope:synthetic-crm"],
+      recommendedAccessMode: "read_only_api",
+      retentionDays: 30,
+      freshnessSlaMinutes: 60,
+      residencyRequirements: ["region:test"],
+      blindSpots: [],
+      blockerCodes: [],
+      riskOwnerRef: ownerUserId,
+      nextReviewAt: input.validUntil,
+      evidenceRefs: [`evidence:inventory:${input.sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: input.validFrom,
+    });
+    await recordDataAssetClassificationReceipt({
+      workspaceId,
+      assetId: entry.id,
+      receiptId: `classification-${input.sourceKey}`,
+      idempotencyKey: `classification:${input.sourceKey}:v1`,
+      expectedVersion: 1,
+      dataShape: "structured",
+      sensitivity: "confidential",
+      processingDisposition: "local_only",
+      evidenceRefs: [`evidence:classification:${input.sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: input.validFrom,
+    });
+    const authorizationReceiptId = `authorization-${input.sourceKey}`;
+    await recordDataAssetAuthorizationReceipt({
+      workspaceId,
+      assetId: entry.id,
+      receiptId: authorizationReceiptId,
+      idempotencyKey: `authorization:${input.sourceKey}:v1`,
+      expectedVersion: 2,
+      authorizationStatus: "authorized",
+      authorizationRef: input.authorizationRef,
+      scopeRefs: ["scope:synthetic-crm"],
+      consentRefs: [],
+      validFrom: input.validFrom,
+      validUntil: input.validUntil,
+      reasonCodes: [],
+      evidenceRefs: [`evidence:authorization:${input.sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: input.validFrom,
+    });
+    return { entry, authorizationReceiptId };
+  }
 
   beforeAll(async () => {
     if (process.env.DATABASE_URL !== integrationDatabaseUrl) {
@@ -96,7 +167,12 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       await tx.supervisionSignalRecord.deleteMany({ where: { workspaceId } });
       await tx.decisionRecord.deleteMany({ where: { workspaceId } });
       await tx.observationSourceRun.deleteMany({ where: { workspaceId } });
+      await tx.observationCompatReceipt.deleteMany({
+        where: { workspaceId },
+      });
       await tx.observationSource.deleteMany({ where: { workspaceId } });
+      await tx.dataAssetStageReceipt.deleteMany({ where: { workspaceId } });
+      await tx.dataAssetCatalogEntry.deleteMany({ where: { workspaceId } });
       await tx.enterpriseObservationProgram.deleteMany({ where: { workspaceId } });
       await tx.notification.deleteMany({ where: { workspaceId } });
       await tx.auditLog.deleteMany({ where: { workspaceId } });
@@ -117,10 +193,18 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       actorName: "Stage 1 Owner",
       actorUserId: ownerUserId,
     });
-    await registerObservationSource({
+    const sourceKey = `synthetic-crm-${suffix}`;
+    const catalog = await createAuthorizedCatalogAsset({
+      sourceKey,
+      authorizationRef: program.authorizationRef,
+      validFrom: program.startsAt,
+      validUntil: program.expiresAt,
+    });
+    const source = await registerObservationSource({
       workspaceId,
       programId: program.id,
-      sourceKey: `synthetic-crm-${suffix}`,
+      catalogEntryId: catalog.entry.id,
+      sourceKey,
       sourceKind: "crm",
       accessMode: "read_only_api",
       ownerRef: ownerUserId,
@@ -131,6 +215,25 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       retentionDays: 30,
       actorName: "Stage 1 Owner",
       actorUserId: ownerUserId,
+      now: new Date("2026-07-18T00:00:00.000Z"),
+    });
+    await recordDataAssetConnectionReceipt({
+      workspaceId,
+      assetId: catalog.entry.id,
+      receiptId: `connection-${sourceKey}`,
+      idempotencyKey: `connection:${sourceKey}:v1`,
+      expectedVersion: 3,
+      connectionStatus: "connected",
+      accessMode: "read_only_api",
+      connectorRef: `connector:${sourceKey}`,
+      secretRef: `secret-manager:synthetic-crm-${suffix}`,
+      authorizationReceiptRef: catalog.authorizationReceiptId,
+      observationSourceRef: source.id,
+      reasonCodes: [],
+      evidenceRefs: [`evidence:connection:${sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date("2026-07-18T00:00:00.000Z"),
     });
 
     const input = {
@@ -172,6 +275,348 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
     ).toEqual({ runSequence: 1 });
   });
 
+  it("stops a catalog-bound source and running observation when its connection fails", async () => {
+    const program = await createEnterpriseObservationProgram({
+      workspaceId,
+      purpose: "Observe a synthetic source until its connection fails",
+      scopeRefs: ["scope:synthetic-connection-failure"],
+      dataCategories: ["synthetic-record"],
+      startsAt: new Date("2026-07-01T00:00:00.000Z"),
+      expiresAt: new Date("2026-08-01T00:00:00.000Z"),
+      retentionDays: 30,
+      authorizationRef: `authorization:connection-failure-${suffix}`,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+    });
+    const sourceKey = `synthetic-connection-failure-${suffix}`;
+    const catalog = await createAuthorizedCatalogAsset({
+      sourceKey,
+      authorizationRef: program.authorizationRef,
+      validFrom: program.startsAt,
+      validUntil: program.expiresAt,
+    });
+    const source = await registerObservationSource({
+      workspaceId,
+      programId: program.id,
+      catalogEntryId: catalog.entry.id,
+      sourceKey,
+      sourceKind: "crm",
+      accessMode: "read_only_api",
+      ownerRef: ownerUserId,
+      freshnessSlaMinutes: 60,
+      sensitivity: "confidential",
+      authorizationRef: program.authorizationRef,
+      secretRef: `secret-manager:${sourceKey}`,
+      retentionDays: 30,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date("2026-07-18T00:00:00.000Z"),
+    });
+    await recordDataAssetConnectionReceipt({
+      workspaceId,
+      assetId: catalog.entry.id,
+      receiptId: `connection-${sourceKey}`,
+      idempotencyKey: `connection:${sourceKey}:v1`,
+      expectedVersion: 3,
+      connectionStatus: "connected",
+      accessMode: "read_only_api",
+      connectorRef: `connector:${sourceKey}`,
+      secretRef: `secret-manager:${sourceKey}`,
+      authorizationReceiptRef: catalog.authorizationReceiptId,
+      observationSourceRef: source.id,
+      reasonCodes: [],
+      evidenceRefs: [`evidence:connection:${sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date("2026-07-18T00:00:00.000Z"),
+    });
+    const run = await beginObservationSourceRun({
+      workspaceId,
+      sourceKey,
+      executionKey: "connection-failure-window",
+      windowStart: new Date("2026-07-18T00:00:00.000Z"),
+      windowEnd: new Date("2026-07-18T01:00:00.000Z"),
+      now: new Date("2026-07-18T01:01:00.000Z"),
+    });
+
+    await recordDataAssetConnectionReceipt({
+      workspaceId,
+      assetId: catalog.entry.id,
+      receiptId: `connection-failed-${sourceKey}`,
+      idempotencyKey: `connection:${sourceKey}:failed:v1`,
+      expectedVersion: 4,
+      connectionStatus: "failed",
+      accessMode: "read_only_api",
+      connectorRef: `connector:${sourceKey}`,
+      secretRef: `secret-manager:${sourceKey}`,
+      authorizationReceiptRef: catalog.authorizationReceiptId,
+      observationSourceRef: source.id,
+      reasonCodes: ["synthetic_connection_failure"],
+      evidenceRefs: [`evidence:connection-failed:${sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date("2026-07-18T01:02:00.000Z"),
+    });
+
+    expect(
+      await db.observationSource.findUnique({
+        where: { id: source.id },
+        select: { status: true },
+      }),
+    ).toEqual({ status: "ERROR" });
+    const stoppedRun = await db.observationSourceRun.findUnique({
+      where: { id: run.id },
+      select: {
+        status: true,
+        outcome: true,
+        errorCodes: true,
+      },
+    });
+    expect(stoppedRun).toMatchObject({
+      status: "CANCELLED",
+      outcome: "FAILURE",
+    });
+    expect(JSON.parse(stoppedRun?.errorCodes ?? "[]")).toEqual([
+      "asset_connection_failed",
+    ]);
+  });
+
+  it("serializes a new observation run against a concurrent connection failure", async () => {
+    const program = await createEnterpriseObservationProgram({
+      workspaceId,
+      purpose: "Serialize observation start against connection failure",
+      scopeRefs: ["scope:synthetic-connection-race"],
+      dataCategories: ["synthetic-record"],
+      startsAt: new Date("2026-07-01T00:00:00.000Z"),
+      expiresAt: new Date("2026-08-01T00:00:00.000Z"),
+      retentionDays: 30,
+      authorizationRef: `authorization:connection-race-${suffix}`,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+    });
+    const sourceKey = `synthetic-connection-race-${suffix}`;
+    const catalog = await createAuthorizedCatalogAsset({
+      sourceKey,
+      authorizationRef: program.authorizationRef,
+      validFrom: program.startsAt,
+      validUntil: program.expiresAt,
+    });
+    const source = await registerObservationSource({
+      workspaceId,
+      programId: program.id,
+      catalogEntryId: catalog.entry.id,
+      sourceKey,
+      sourceKind: "crm",
+      accessMode: "read_only_api",
+      ownerRef: ownerUserId,
+      freshnessSlaMinutes: 60,
+      sensitivity: "confidential",
+      authorizationRef: program.authorizationRef,
+      secretRef: `secret-manager:${sourceKey}`,
+      retentionDays: 30,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date("2026-07-18T00:00:00.000Z"),
+    });
+    await recordDataAssetConnectionReceipt({
+      workspaceId,
+      assetId: catalog.entry.id,
+      receiptId: `connection-${sourceKey}`,
+      idempotencyKey: `connection:${sourceKey}:v1`,
+      expectedVersion: 3,
+      connectionStatus: "connected",
+      accessMode: "read_only_api",
+      connectorRef: `connector:${sourceKey}`,
+      secretRef: `secret-manager:${sourceKey}`,
+      authorizationReceiptRef: catalog.authorizationReceiptId,
+      observationSourceRef: source.id,
+      reasonCodes: [],
+      evidenceRefs: [`evidence:connection:${sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date("2026-07-18T00:00:00.000Z"),
+    });
+
+    const [beginResult, failureResult] = await Promise.allSettled([
+      beginObservationSourceRun({
+        workspaceId,
+        sourceKey,
+        executionKey: "connection-race-window",
+        windowStart: new Date("2026-07-18T00:00:00.000Z"),
+        windowEnd: new Date("2026-07-18T01:00:00.000Z"),
+        now: new Date("2026-07-18T01:01:00.000Z"),
+      }),
+      recordDataAssetConnectionReceipt({
+        workspaceId,
+        assetId: catalog.entry.id,
+        receiptId: `connection-failed-race-${sourceKey}`,
+        idempotencyKey: `connection:${sourceKey}:failed-race:v1`,
+        expectedVersion: 4,
+        connectionStatus: "failed",
+        accessMode: "read_only_api",
+        connectorRef: `connector:${sourceKey}`,
+        secretRef: `secret-manager:${sourceKey}`,
+        authorizationReceiptRef: catalog.authorizationReceiptId,
+        observationSourceRef: source.id,
+        reasonCodes: ["synthetic_connection_race_failure"],
+        evidenceRefs: [`evidence:connection-failed-race:${sourceKey}`],
+        actorName: "Stage 1 Owner",
+        actorUserId: ownerUserId,
+        now: new Date("2026-07-18T01:01:00.000Z"),
+      }),
+    ]);
+
+    expect(failureResult.status).toBe("fulfilled");
+    if (beginResult.status === "rejected") {
+      expect(beginResult.reason).toBeInstanceOf(Error);
+    }
+    expect(
+      await db.observationSource.findUnique({
+        where: { id: source.id },
+        select: { status: true },
+      }),
+    ).toEqual({ status: "ERROR" });
+    expect(
+      await db.observationSourceRun.count({
+        where: {
+          workspaceId,
+          sourceId: source.id,
+          status: { in: ["RUNNING", "SUCCEEDED", "PARTIAL"] },
+        },
+      }),
+    ).toBe(0);
+    await expect(
+      beginObservationSourceRun({
+        workspaceId,
+        sourceKey,
+        executionKey: "connection-race-after-failure",
+        windowStart: new Date("2026-07-18T01:00:00.000Z"),
+        windowEnd: new Date("2026-07-18T01:02:00.000Z"),
+        now: new Date("2026-07-18T01:03:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["catalog_asset_not_connected"],
+    });
+  });
+
+  it("serializes a new observation run against concurrent authorization revocation", async () => {
+    const program = await createEnterpriseObservationProgram({
+      workspaceId,
+      purpose: "Serialize observation start against authorization revocation",
+      scopeRefs: ["scope:synthetic-authorization-race"],
+      dataCategories: ["synthetic-record"],
+      startsAt: new Date("2026-07-01T00:00:00.000Z"),
+      expiresAt: new Date("2026-08-01T00:00:00.000Z"),
+      retentionDays: 30,
+      authorizationRef: `authorization:authorization-race-${suffix}`,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+    });
+    const sourceKey = `synthetic-authorization-race-${suffix}`;
+    const catalog = await createAuthorizedCatalogAsset({
+      sourceKey,
+      authorizationRef: program.authorizationRef,
+      validFrom: program.startsAt,
+      validUntil: program.expiresAt,
+    });
+    const source = await registerObservationSource({
+      workspaceId,
+      programId: program.id,
+      catalogEntryId: catalog.entry.id,
+      sourceKey,
+      sourceKind: "crm",
+      accessMode: "read_only_api",
+      ownerRef: ownerUserId,
+      freshnessSlaMinutes: 60,
+      sensitivity: "confidential",
+      authorizationRef: program.authorizationRef,
+      secretRef: `secret-manager:${sourceKey}`,
+      retentionDays: 30,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date("2026-07-18T00:00:00.000Z"),
+    });
+    await recordDataAssetConnectionReceipt({
+      workspaceId,
+      assetId: catalog.entry.id,
+      receiptId: `connection-${sourceKey}`,
+      idempotencyKey: `connection:${sourceKey}:v1`,
+      expectedVersion: 3,
+      connectionStatus: "connected",
+      accessMode: "read_only_api",
+      connectorRef: `connector:${sourceKey}`,
+      secretRef: `secret-manager:${sourceKey}`,
+      authorizationReceiptRef: catalog.authorizationReceiptId,
+      observationSourceRef: source.id,
+      reasonCodes: [],
+      evidenceRefs: [`evidence:connection:${sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date("2026-07-18T00:00:00.000Z"),
+    });
+
+    const [beginResult, revocationResult] = await Promise.allSettled([
+      beginObservationSourceRun({
+        workspaceId,
+        sourceKey,
+        executionKey: "authorization-race-window",
+        windowStart: new Date("2026-07-18T00:00:00.000Z"),
+        windowEnd: new Date("2026-07-18T01:00:00.000Z"),
+        now: new Date("2026-07-18T01:01:00.000Z"),
+      }),
+      recordDataAssetAuthorizationReceipt({
+        workspaceId,
+        assetId: catalog.entry.id,
+        receiptId: `authorization-revoked-race-${sourceKey}`,
+        idempotencyKey: `authorization:${sourceKey}:revoked-race:v1`,
+        expectedVersion: 4,
+        authorizationStatus: "revoked",
+        authorizationRef: null,
+        scopeRefs: [],
+        consentRefs: [],
+        validFrom: null,
+        validUntil: null,
+        reasonCodes: ["synthetic_authorization_race_revocation"],
+        evidenceRefs: [`evidence:authorization-revoked-race:${sourceKey}`],
+        actorName: "Stage 1 Owner",
+        actorUserId: ownerUserId,
+        now: new Date("2026-07-18T01:01:00.000Z"),
+      }),
+    ]);
+
+    expect(revocationResult.status).toBe("fulfilled");
+    if (beginResult.status === "rejected") {
+      expect(beginResult.reason).toBeInstanceOf(Error);
+    }
+    expect(
+      await db.observationSource.findUnique({
+        where: { id: source.id },
+        select: { status: true },
+      }),
+    ).toEqual({ status: "REVOKED" });
+    expect(
+      await db.observationSourceRun.count({
+        where: {
+          workspaceId,
+          sourceId: source.id,
+          status: { in: ["RUNNING", "SUCCEEDED", "PARTIAL"] },
+        },
+      }),
+    ).toBe(0);
+    await expect(
+      beginObservationSourceRun({
+        workspaceId,
+        sourceKey,
+        executionKey: "authorization-race-after-revocation",
+        windowStart: new Date("2026-07-18T01:00:00.000Z"),
+        windowEnd: new Date("2026-07-18T01:02:00.000Z"),
+        now: new Date("2026-07-18T01:03:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["catalog_asset_not_authorized"],
+    });
+  });
+
   it("never leaves an ACTIVE source when registration races revocation", async () => {
     const program = await createEnterpriseObservationProgram({
       workspaceId,
@@ -186,11 +631,18 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       actorUserId: ownerUserId,
     });
     const sourceKey = `synthetic-revoke-${suffix}`;
+    const catalog = await createAuthorizedCatalogAsset({
+      sourceKey,
+      authorizationRef: program.authorizationRef,
+      validFrom: program.startsAt,
+      validUntil: program.expiresAt,
+    });
 
     const [, revocation] = await Promise.allSettled([
       registerObservationSource({
         workspaceId,
         programId: program.id,
+        catalogEntryId: catalog.entry.id,
         sourceKey,
         sourceKind: "crm",
         accessMode: "read_only_api",
@@ -202,6 +654,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
         retentionDays: 30,
         actorName: "Stage 1 Owner",
         actorUserId: ownerUserId,
+        now: new Date("2026-07-18T00:00:00.000Z"),
       }),
       revokeEnterpriseObservationProgram({
         workspaceId,

@@ -56,11 +56,14 @@ npm run check:boundaries
 
 ```bash
 DATABASE_URL='<isolated-empty-database-url>' npx tsx prisma/setup-db.ts prepare
-DATABASE_URL='<isolated-empty-database-url>' npm run test -- --run lib/stage1-owner-loop/stage1-owner-loop.mysql.test.ts
+DATABASE_URL='<isolated-empty-database-url>' \
+STAGE1_OWNER_LOOP_DATABASE_URL='<isolated-empty-database-url>' \
+npx vitest run lib/stage1-owner-loop/stage1-owner-loop.mysql.test.ts
 ```
 
 验收：所有迁移可从空库重放，并发用例只能生成一个授权运行、一个 Work Packet、一个
-有效验收结果和一个候选记忆。
+有效验收结果和一个候选记忆。该步骤是本地隔离数据库验证，不是 CI 或 release gate；
+回执必须记录所用一次性库、测试数量和退出码，但不得记录凭据。
 
 ## 5. 运行流程
 
@@ -86,7 +89,9 @@ DATABASE_URL='<isolated-empty-database-url>' npm run test -- --run lib/stage1-ow
 
 ### 5.3 登记来源
 
-调用 `registerObservationSource`。`secretRef` 必须是密钥管理器引用，不得传原始密钥。
+调用 `registerObservationSource`。新来源必须绑定已经完成分类和限时授权的
+`DataAssetCatalogEntry`；当前授权回执必须真实存在。`secretRef` 必须是密钥管理器引用，
+不得传原始密钥。
 
 每个来源至少定义：
 
@@ -101,8 +106,13 @@ DATABASE_URL='<isolated-empty-database-url>' npm run test -- --run lib/stage1-ow
 
 ### 5.4 开始和完成观察
 
-调用 `beginObservationSourceRun` 时传入非空、规范化的 `executionKey`。运行开始会原子认领
-当前授权版本。计划被撤销或过期后，开始新运行必须失败。
+调用 `beginObservationSourceRun` 时传入非空、规范化的 `executionKey`。Catalog 来源会先
+原子认领当前资产授权、连接状态和版本，再认领观察计划授权版本。资产授权撤销、连接失效、
+计划撤销或期限失效后，开始新运行必须失败。
+
+`catalog_asset_claim_lost` 表示观察开始与新的资产治理回执并发，服务会失败关闭且不会把它
+当作数据库死锁自动重试。调用方必须重新读取资产目录、授权与连接回执；只有治理真值仍允许
+观察时，才可使用同一个 `executionKey` 重试。禁止在不了解最新授权状态时循环重试。
 
 调用 `completeObservationSourceRun` 时提交：
 

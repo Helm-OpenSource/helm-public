@@ -514,39 +514,230 @@ async function seedStage1OwnerLoopDemo(input: {
     },
   });
 
-  const healthySource = await prisma.observationSource.create({
-    data: {
-      workspaceId: input.workspaceId,
-      programId: program.id,
-      sourceKey: "synthetic-crm",
-      sourceKind: "crm",
-      accessMode: "read_only_api",
-      ownerRef: input.ownerUserId,
-      freshnessSlaMinutes: 60,
-      sensitivity: "internal",
+  const createSyntheticCatalogSource = async (sourceInput: {
+    sourceKey: string;
+    sourceKind: string;
+    businessDomain: string;
+    accessMode: "read_only_api" | "scheduled_snapshot";
+    freshnessSlaMinutes: number;
+    sensitivity: "internal" | "confidential";
+    lastObservedAt: Date;
+  }) => {
+    const receiptRecordedAt = subDays(now, 6);
+    const classificationReceiptId =
+      `seed-classification-${sourceInput.sourceKey}`;
+    const authorizationReceiptId =
+      `seed-authorization-${sourceInput.sourceKey}`;
+    const connectionReceiptId =
+      `seed-connection-${sourceInput.sourceKey}`;
+    const classificationEvidence =
+      `evidence:seed-classification:${sourceInput.sourceKey}`;
+    const authorizationEvidence =
+      `evidence:seed-authorization:${sourceInput.sourceKey}`;
+    const connectionEvidence =
+      `evidence:seed-connection:${sourceInput.sourceKey}`;
+    const asset = await prisma.dataAssetCatalogEntry.create({
+      data: {
+        workspaceId: input.workspaceId,
+        assetKey: `synthetic-asset-${sourceInput.sourceKey}`,
+        sourceSystemRef: `system:${sourceInput.sourceKey}`,
+        displayName: `Synthetic ${sourceInput.sourceKind}`,
+        sourceKind: sourceInput.sourceKind,
+        businessDomain: sourceInput.businessDomain,
+        businessOwnerRef: input.ownerUserId,
+        dataShape: "STRUCTURED",
+        sensitivity: sourceInput.sensitivity.toUpperCase(),
+        processingDisposition: "LOCAL_ONLY",
+        inventoryStatus: "INVENTORIED",
+        classificationStatus: "CLASSIFIED",
+        authorizationStatus: "AUTHORIZED",
+        connectionStatus: "NOT_STARTED",
+        initializationStatus: "NOT_STARTED",
+        purpose: "只读观察合成经营数据，为一把手决策提供证据",
+        scopeRefs: json([`scope:${sourceInput.sourceKey}`]),
+        authorizationRef,
+        authorizationValidFrom: program.startsAt,
+        authorizationValidUntil: program.expiresAt,
+        consentRefs: json([]),
+        recommendedAccessMode: sourceInput.accessMode.toUpperCase(),
+        retentionDays: 30,
+        freshnessSlaMinutes: sourceInput.freshnessSlaMinutes,
+        residencyRequirements: json(["region:synthetic"]),
+        blindSpots: json([]),
+        blockerCodes: json([]),
+        riskOwnerRef: input.ownerUserId,
+        nextReviewAt: program.expiresAt,
+        observationSourceRefs: json([]),
+        observationRunRefs: json([]),
+        evidenceRefs: json([
+          `evidence:seed-inventory:${sourceInput.sourceKey}`,
+          classificationEvidence,
+          authorizationEvidence,
+        ]),
+        classificationReceiptRef: classificationReceiptId,
+        authorizationReceiptRef: authorizationReceiptId,
+        version: 3,
+      },
+    });
+    const classificationPayload = {
+      receiptType: "classification",
+      receiptId: classificationReceiptId,
+      workspaceRef: `workspace:${input.workspaceId}`,
+      assetRef: asset.id,
+      idempotencyKey: `seed:classification:${sourceInput.sourceKey}:v1`,
+      expectedVersion: 1,
+      resultingVersion: 2,
+      recordedAt: receiptRecordedAt.toISOString(),
+      actorRef: input.ownerUserId,
+      evidenceRefs: [classificationEvidence],
+      dataShape: "structured",
+      sensitivity: sourceInput.sensitivity,
+      processingDisposition: "local_only",
+      classificationStatus: "classified",
+    };
+    const authorizationPayload = {
+      receiptType: "authorization",
+      receiptId: authorizationReceiptId,
+      workspaceRef: `workspace:${input.workspaceId}`,
+      assetRef: asset.id,
+      idempotencyKey: `seed:authorization:${sourceInput.sourceKey}:v1`,
+      expectedVersion: 2,
+      resultingVersion: 3,
+      recordedAt: receiptRecordedAt.toISOString(),
+      actorRef: input.ownerUserId,
+      evidenceRefs: [authorizationEvidence],
+      authorizationStatus: "authorized",
       authorizationRef,
-      secretRef: "secret-manager:synthetic-crm",
-      retentionDays: 30,
-      status: "ACTIVE",
-      lastObservedAt: addMinutes(now, -12),
-    },
+      scopeRefs: [`scope:${sourceInput.sourceKey}`],
+      consentRefs: [],
+      validFrom: program.startsAt.toISOString(),
+      validUntil: program.expiresAt.toISOString(),
+      reasonCodes: [],
+    };
+    await prisma.dataAssetStageReceipt.createMany({
+      data: [
+        {
+          id: classificationReceiptId,
+          workspaceId: input.workspaceId,
+          assetId: asset.id,
+          receiptType: "CLASSIFICATION",
+          idempotencyKey: classificationPayload.idempotencyKey,
+          expectedVersion: 1,
+          resultingVersion: 2,
+          status: "CLASSIFIED",
+          actorRef: input.ownerUserId,
+          evidenceRefs: json([classificationEvidence]),
+          payloadJson: json(classificationPayload),
+          recordedAt: receiptRecordedAt,
+        },
+        {
+          id: authorizationReceiptId,
+          workspaceId: input.workspaceId,
+          assetId: asset.id,
+          receiptType: "AUTHORIZATION",
+          idempotencyKey: authorizationPayload.idempotencyKey,
+          expectedVersion: 2,
+          resultingVersion: 3,
+          status: "AUTHORIZED",
+          actorRef: input.ownerUserId,
+          evidenceRefs: json([authorizationEvidence]),
+          payloadJson: json(authorizationPayload),
+          recordedAt: receiptRecordedAt,
+        },
+      ],
+    });
+    const secretRef = `secret-manager:${sourceInput.sourceKey}`;
+    const source = await prisma.observationSource.create({
+      data: {
+        workspaceId: input.workspaceId,
+        programId: program.id,
+        catalogEntryId: asset.id,
+        sourceKey: sourceInput.sourceKey,
+        sourceKind: sourceInput.sourceKind,
+        accessMode: sourceInput.accessMode.toUpperCase(),
+        ownerRef: input.ownerUserId,
+        freshnessSlaMinutes: sourceInput.freshnessSlaMinutes,
+        sensitivity: sourceInput.sensitivity.toUpperCase(),
+        authorizationRef,
+        secretRef,
+        retentionDays: 30,
+        status: "ACTIVE",
+        lastObservedAt: sourceInput.lastObservedAt,
+      },
+    });
+    const connectionPayload = {
+      receiptType: "connection",
+      receiptId: connectionReceiptId,
+      workspaceRef: `workspace:${input.workspaceId}`,
+      assetRef: asset.id,
+      idempotencyKey: `seed:connection:${sourceInput.sourceKey}:v1`,
+      expectedVersion: 3,
+      resultingVersion: 4,
+      recordedAt: receiptRecordedAt.toISOString(),
+      actorRef: input.ownerUserId,
+      evidenceRefs: [connectionEvidence],
+      connectionStatus: "connected",
+      accessMode: sourceInput.accessMode,
+      connectorRef: `connector:${sourceInput.sourceKey}`,
+      secretRef,
+      authorizationReceiptRef: authorizationReceiptId,
+      observationSourceRef: source.id,
+      reasonCodes: [],
+    };
+    await prisma.$transaction([
+      prisma.dataAssetStageReceipt.create({
+        data: {
+          id: connectionReceiptId,
+          workspaceId: input.workspaceId,
+          assetId: asset.id,
+          receiptType: "CONNECTION",
+          idempotencyKey: connectionPayload.idempotencyKey,
+          expectedVersion: 3,
+          resultingVersion: 4,
+          status: "CONNECTED",
+          actorRef: input.ownerUserId,
+          evidenceRefs: json([connectionEvidence]),
+          payloadJson: json(connectionPayload),
+          recordedAt: receiptRecordedAt,
+        },
+      }),
+      prisma.dataAssetCatalogEntry.update({
+        where: { id: asset.id },
+        data: {
+          connectionStatus: "CONNECTED",
+          connectorRef: connectionPayload.connectorRef,
+          observationSourceRefs: json([source.id]),
+          connectionReceiptRef: connectionReceiptId,
+          evidenceRefs: json([
+            `evidence:seed-inventory:${sourceInput.sourceKey}`,
+            classificationEvidence,
+            authorizationEvidence,
+            connectionEvidence,
+          ]),
+          version: 4,
+        },
+      }),
+    ]);
+    return source;
+  };
+
+  const healthySource = await createSyntheticCatalogSource({
+    sourceKey: "synthetic-crm",
+    sourceKind: "crm",
+    businessDomain: "sales",
+    accessMode: "read_only_api",
+    freshnessSlaMinutes: 60,
+    sensitivity: "internal",
+    lastObservedAt: addMinutes(now, -12),
   });
-  const staleSource = await prisma.observationSource.create({
-    data: {
-      workspaceId: input.workspaceId,
-      programId: program.id,
-      sourceKey: "synthetic-finance",
-      sourceKind: "finance",
-      accessMode: "scheduled_snapshot",
-      ownerRef: input.ownerUserId,
-      freshnessSlaMinutes: 24 * 60,
-      sensitivity: "confidential",
-      authorizationRef,
-      secretRef: "secret-manager:synthetic-finance",
-      retentionDays: 30,
-      status: "ACTIVE",
-      lastObservedAt: subDays(now, 2),
-    },
+  const staleSource = await createSyntheticCatalogSource({
+    sourceKey: "synthetic-finance",
+    sourceKind: "finance",
+    businessDomain: "finance",
+    accessMode: "scheduled_snapshot",
+    freshnessSlaMinutes: 24 * 60,
+    sensitivity: "confidential",
+    lastObservedAt: subDays(now, 2),
   });
   await prisma.observationSourceRun.createMany({
     data: [
