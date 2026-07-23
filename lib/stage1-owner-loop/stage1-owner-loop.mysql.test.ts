@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { DecisionObject } from "@/lib/agentos-decision-supervision/types";
 import { db } from "@/lib/db";
+import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import {
   ReceiptChangedDuringVerificationError,
   recordExecutionReceipt,
@@ -39,8 +40,42 @@ import {
 import type { OwnerCommandDraft } from "./types";
 
 const integrationDatabaseUrl = process.env.STAGE1_OWNER_LOOP_DATABASE_URL;
+const confirmedIntegrationDatabaseName =
+  process.env.STAGE1_OWNER_LOOP_TEST_DATABASE_NAME;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
 const suffix = `${process.pid}-${Date.now()}`;
+const WORKSPACE_SLUG = `stage1-integration-${suffix}`;
+const OWNER_EMAIL = `stage1-owner-${suffix}@example.test`;
+const REVIEWER_EMAIL = `stage1-reviewer-${suffix}@example.test`;
+const ISOLATED_DATABASE_PREFIX = "helm_caio_stage1_";
+
+function assertIsolatedDatabaseTarget(): void {
+  if (
+    !integrationDatabaseUrl ||
+    process.env.DATABASE_URL !== integrationDatabaseUrl
+  ) {
+    throw new Error(
+      "DATABASE_URL must equal STAGE1_OWNER_LOOP_DATABASE_URL for the isolated integration test.",
+    );
+  }
+  let databaseName = "";
+  try {
+    const parsed = new URL(integrationDatabaseUrl);
+    databaseName = decodeURIComponent(parsed.pathname.replace(/^\/+/u, ""));
+  } catch {
+    throw new Error(
+      "STAGE1_OWNER_LOOP_DATABASE_URL must be a valid isolated MySQL URL.",
+    );
+  }
+  if (
+    !databaseName.startsWith(ISOLATED_DATABASE_PREFIX) ||
+    databaseName !== confirmedIntegrationDatabaseName
+  ) {
+    throw new Error(
+      "Refusing Stage 1 integration test: confirm the isolated database name with STAGE1_OWNER_LOOP_TEST_DATABASE_NAME and use the helm_caio_stage1_ prefix.",
+    );
+  }
+}
 
 describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
   let workspaceId = "";
@@ -117,28 +152,24 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
   }
 
   beforeAll(async () => {
-    if (process.env.DATABASE_URL !== integrationDatabaseUrl) {
-      throw new Error(
-        "DATABASE_URL must equal STAGE1_OWNER_LOOP_DATABASE_URL for the isolated integration test.",
-      );
-    }
+    assertIsolatedDatabaseTarget();
     const workspace = await db.workspace.create({
       data: {
         name: `Stage 1 integration ${suffix}`,
-        slug: `stage1-integration-${suffix}`,
+        slug: WORKSPACE_SLUG,
       },
     });
     const [owner, reviewer] = await Promise.all([
       db.user.create({
         data: {
           name: "Stage 1 Owner",
-          email: `stage1-owner-${suffix}@example.test`,
+          email: OWNER_EMAIL,
         },
       }),
       db.user.create({
         data: {
           name: "Stage 1 Reviewer",
-          email: `stage1-reviewer-${suffix}@example.test`,
+          email: REVIEWER_EMAIL,
         },
       }),
     ]);
@@ -158,27 +189,95 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
   });
 
   afterAll(async () => {
-    if (!workspaceId) return;
-    await db.$transaction(async (tx) => {
-      await tx.memoryFact.deleteMany({ where: { workspaceId } });
-      await tx.executionReceipt.deleteMany({ where: { workspaceId } });
-      await tx.decisionWorkPacketClaim.deleteMany({ where: { workspaceId } });
-      await tx.approvalTask.deleteMany({ where: { workspaceId } });
-      await tx.actionItem.deleteMany({ where: { workspaceId } });
-      await tx.supervisionSignalRecord.deleteMany({ where: { workspaceId } });
-      await tx.decisionRecord.deleteMany({ where: { workspaceId } });
-      await tx.observationSourceRun.deleteMany({ where: { workspaceId } });
-      await tx.observationCompatReceipt.deleteMany({
-        where: { workspaceId },
-      });
-      await tx.observationSource.deleteMany({ where: { workspaceId } });
-      await tx.dataAssetStageReceipt.deleteMany({ where: { workspaceId } });
-      await tx.dataAssetCatalogEntry.deleteMany({ where: { workspaceId } });
-      await tx.enterpriseObservationProgram.deleteMany({ where: { workspaceId } });
-      await tx.notification.deleteMany({ where: { workspaceId } });
-      await tx.auditLog.deleteMany({ where: { workspaceId } });
-      await tx.membership.deleteMany({ where: { workspaceId } });
-    });
+    const cleanupWorkspaceId =
+      workspaceId ||
+      (
+        await db.workspace.findUnique({
+          where: { slug: WORKSPACE_SLUG },
+          select: { id: true },
+        })
+      )?.id ||
+      "";
+    const cleanupOwnerUserId =
+      ownerUserId ||
+      (
+        await db.user.findUnique({
+          where: { email: OWNER_EMAIL },
+          select: { id: true },
+        })
+      )?.id ||
+      "";
+    const cleanupReviewerUserId =
+      reviewerUserId ||
+      (
+        await db.user.findUnique({
+          where: { email: REVIEWER_EMAIL },
+          select: { id: true },
+        })
+      )?.id ||
+      "";
+    if (cleanupWorkspaceId) {
+      await runWithWriteConflictRetry(
+        () =>
+          db.$transaction(async (tx) => {
+            await tx.memoryFact.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.executionReceipt.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.decisionWorkPacketClaim.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.approvalTask.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.actionItem.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.supervisionSignalRecord.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.decisionRecord.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.observationSourceRun.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.observationCompatReceipt.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.observationSource.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.dataAssetStageReceipt.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.dataAssetCatalogEntry.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.enterpriseObservationProgram.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.notification.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.auditLog.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.membership.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+          }),
+        { maxAttempts: 8, retryDelayMs: 50 },
+      );
+      await db.$executeRaw`DELETE FROM Workspace WHERE id = ${cleanupWorkspaceId}`;
+    }
+    for (const userId of [cleanupOwnerUserId, cleanupReviewerUserId]) {
+      if (userId) {
+        await db.$executeRaw`DELETE FROM User WHERE id = ${userId}`;
+      }
+    }
   });
 
   it("creates one observation run for concurrent identical execution keys", async () => {

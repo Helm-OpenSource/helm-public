@@ -907,6 +907,15 @@ export function validateCaioInitializationAssessment(
   if (!isNonEmpty(assessment.mandateRef)) {
     errors.push("assessment_mandate_ref_required");
   }
+  if (
+    assessment.evaluatorRevision !==
+    CAIO_INITIALIZATION_EVALUATOR_REVISION
+  ) {
+    errors.push("assessment_evaluator_revision_mismatch");
+  }
+  if (assessment.policyRef !== CAIO_INITIALIZATION_POLICY.policyRef) {
+    errors.push("assessment_policy_ref_mismatch");
+  }
   if (assessment.policyHash !== CAIO_INITIALIZATION_POLICY.policyHash) {
     errors.push("assessment_policy_hash_mismatch");
   }

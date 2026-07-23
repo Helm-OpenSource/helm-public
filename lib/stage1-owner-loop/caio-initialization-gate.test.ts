@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import {
   CAIO_INITIALIZATION_ASSESSMENT_SCHEMA_VERSION,
+  CAIO_INITIALIZATION_EVALUATOR_REVISION,
   CAIO_INITIALIZATION_POLICY,
   computeCaioInitializationAssessment,
   selectCaioInitializationEvidenceSample,
@@ -377,6 +379,42 @@ describe("CAIO Pro initialization gate G0", () => {
         },
       }).errors,
     ).toContain("assessment_content_hash_mismatch");
+  });
+
+  it("rejects a self-consistent assessment from an obsolete evaluator or policy reference", () => {
+    const assessment = computeCaioInitializationAssessment(readyInput());
+    const obsoleteEvaluator = {
+      ...assessment,
+      evaluatorRevision: "caio-initialization-evaluator-obsolete",
+    };
+    const {
+      contentHash: _obsoleteEvaluatorHash,
+      ...obsoleteEvaluatorContent
+    } = obsoleteEvaluator;
+    const obsoletePolicy = {
+      ...assessment,
+      policyRef: "policy:caio-initialization-obsolete",
+    };
+    const {
+      contentHash: _obsoletePolicyHash,
+      ...obsoletePolicyContent
+    } = obsoletePolicy;
+
+    expect(
+      validateCaioInitializationAssessment({
+        ...obsoleteEvaluator,
+        contentHash: sha256(canonicalJson(obsoleteEvaluatorContent)),
+      } as typeof assessment).errors,
+    ).toContain("assessment_evaluator_revision_mismatch");
+    expect(
+      validateCaioInitializationAssessment({
+        ...obsoletePolicy,
+        contentHash: sha256(canonicalJson(obsoletePolicyContent)),
+      } as typeof assessment).errors,
+    ).toContain("assessment_policy_ref_mismatch");
+    expect(assessment.evaluatorRevision).toBe(
+      CAIO_INITIALIZATION_EVALUATOR_REVISION,
+    );
   });
 
   it("fails closed on duplicate catalog identities or an invalid evaluation instant", () => {
