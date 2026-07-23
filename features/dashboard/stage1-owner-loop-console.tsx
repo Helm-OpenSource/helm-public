@@ -5,6 +5,7 @@ import {
   BookOpenCheck,
   CheckCircle2,
   Database,
+  ListChecks,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -128,6 +129,29 @@ function sourceHealthLabel(health: Stage1SourceHealth, english: boolean) {
   return labels[health][english ? 1 : 0];
 }
 
+function operatingQuestionStateLabel(
+  state: Stage1OwnerLoopReadout["operatingQuestions"]["state"],
+  english: boolean,
+) {
+  const labels: Record<
+    Stage1OwnerLoopReadout["operatingQuestions"]["state"],
+    [string, string]
+  > = {
+    not_generated: ["尚未生成", "Not generated"],
+    awaiting_selection: ["待 CEO 选择", "Awaiting CEO selection"],
+    selection_deferred: ["CEO 暂不选择", "Selection deferred"],
+    binding_incomplete: ["决策绑定不完整", "Decision binding incomplete"],
+    selected: ["已选择并绑定", "Selected and bound"],
+    last_valid_portfolio_stale: [
+      "上一版有效组合",
+      "Last valid portfolio",
+    ],
+    insufficient_evidence: ["证据不足", "Insufficient evidence"],
+    invalid_evidence: ["证据校验失败", "Evidence validation failed"],
+  };
+  return labels[state][english ? 1 : 0];
+}
+
 function formatAsOf(value: string, english: boolean) {
   return new Intl.DateTimeFormat(english ? "en" : "zh-CN", {
     month: "short",
@@ -148,6 +172,7 @@ export function Stage1OwnerLoopConsole({
   const verifiedQuality = readout.receipts.averageVerifiedQuality;
   const decisionItems = readout.decisions.items.slice(0, 3);
   const signalItems = readout.supervision.items.slice(0, 3);
+  const operatingQuestions = readout.operatingQuestions;
 
   return (
     <section
@@ -277,6 +302,148 @@ export function Stage1OwnerLoopConsole({
             attention={readout.receipts.missing > 0}
           />
         </div>
+
+        <section
+          aria-labelledby="caio-operating-question-portfolio-title"
+          className="mt-5 border-b border-[color:var(--border)] pb-5"
+          data-caio-operating-question-portfolio="true"
+          data-caio-operating-question-boundary={operatingQuestions.boundary}
+          data-caio-operating-question-state={operatingQuestions.state}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <ListChecks
+                className="mt-0.5 size-4 shrink-0 text-[color:var(--muted-foreground)]"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <h3
+                  id="caio-operating-question-portfolio-title"
+                  className="text-sm font-medium text-[color:var(--foreground)]"
+                >
+                  {english
+                    ? "CEO operating-question portfolio"
+                    : "CEO 经营问题组合"}
+                </h3>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Ten evidence-bound candidates from the current accepted initialization context. This is a read-only projection: it cannot select, confirm, dispatch, or create a Work Packet."
+                    : "基于当前已验收初始化上下文形成的 10 个证据化候选。本区仅作只读投影，不能选择、确认、派工或创建 Work Packet。"}
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0 text-right text-xs text-[color:var(--muted-foreground)]">
+              <p
+                className={cn(
+                  "font-medium",
+                  (operatingQuestions.state === "invalid_evidence" ||
+                    operatingQuestions.state === "insufficient_evidence" ||
+                    operatingQuestions.state ===
+                      "last_valid_portfolio_stale" ||
+                    operatingQuestions.state === "binding_incomplete") &&
+                    "text-[color:var(--danger)]",
+                )}
+              >
+                {operatingQuestionStateLabel(
+                  operatingQuestions.state,
+                  english,
+                )}
+              </p>
+              <p className="mt-1 tabular-nums">
+                {english
+                  ? `${operatingQuestions.candidates.length} questions · ${operatingQuestions.selectedQuestionIds.length}/3 selected · ${operatingQuestions.decisionBindingCount} bound`
+                  : `${operatingQuestions.candidates.length} 个问题 · 已选 ${operatingQuestions.selectedQuestionIds.length}/3 · 已绑定 ${operatingQuestions.decisionBindingCount}`}
+              </p>
+              {operatingQuestions.state ===
+                "last_valid_portfolio_stale" &&
+              operatingQuestions.portfolioGeneratedAt ? (
+                <p
+                  className="mt-1 max-w-sm text-xs leading-5 text-[color:var(--danger)]"
+                  data-caio-operating-question-stale-portfolio="true"
+                >
+                  {english
+                    ? `Latest generation ${operatingQuestions.generationSequence} lacked sufficient evidence; showing valid portfolio ${operatingQuestions.portfolioSequence} from ${formatAsOf(operatingQuestions.portfolioGeneratedAt, true)}.`
+                    : `最新第 ${operatingQuestions.generationSequence} 次生成证据不足；当前展示 ${formatAsOf(operatingQuestions.portfolioGeneratedAt, false)} 形成的第 ${operatingQuestions.portfolioSequence} 版有效组合。`}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          {operatingQuestions.candidates.length > 0 ? (
+            <ol className="mt-4 grid gap-x-6 md:grid-cols-2">
+              {operatingQuestions.candidates.map((candidate) => (
+                <li
+                  key={candidate.questionId}
+                  className="min-w-0 border-t border-[color:var(--border)] py-3"
+                  data-caio-operating-question={candidate.questionId}
+                  data-caio-operating-question-selected={
+                    candidate.selected ? "true" : "false"
+                  }
+                  data-caio-operating-question-decision-bound={
+                    candidate.decisionRecordId ? "true" : "false"
+                  }
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 shrink-0 pt-0.5 text-right font-mono text-xs tabular-nums text-[color:var(--muted-foreground)]">
+                      {candidate.rank}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                        <p className="text-sm font-medium text-[color:var(--foreground)]">
+                          {candidate.title}
+                        </p>
+                        <span
+                          className={cn(
+                            "shrink-0 text-xs",
+                            candidate.selected
+                              ? "font-medium text-[color:var(--foreground)]"
+                              : "text-[color:var(--muted-foreground)]",
+                          )}
+                        >
+                          {candidate.selected
+                            ? candidate.decisionRecordId
+                              ? english
+                                ? "CEO selected · Decision bound"
+                                : "CEO 已选 · 决策已绑定"
+                              : english
+                                ? "CEO selected · Binding pending"
+                                : "CEO 已选 · 待绑定"
+                            : english
+                              ? "Candidate"
+                              : "候选"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                        {candidate.question}
+                      </p>
+                      <p className="mt-1 font-mono text-[11px] text-[color:var(--muted-foreground)]">
+                        {candidate.businessDomain} ·{" "}
+                        {english ? "evidence" : "证据"}{" "}
+                        {candidate.evidenceCount} ·{" "}
+                        {english ? "score" : "评分"}{" "}
+                        {candidate.compositeScore}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-4 border-t border-[color:var(--border)] pt-3 text-sm text-[color:var(--muted-foreground)]">
+              {operatingQuestions.state === "invalid_evidence"
+                ? english
+                  ? "The current portfolio failed evidence validation and is hidden fail-closed."
+                  : "当前问题组合未通过证据校验，已按 fail-closed 隐藏。"
+                : operatingQuestions.state === "insufficient_evidence"
+                  ? english
+                    ? "The accepted initialization context does not yet contain enough evidence to form ten questions."
+                    : "当前已验收初始化上下文尚不足以形成 10 个经营问题。"
+                  : english
+                    ? "No governed operating-question portfolio has been generated."
+                    : "尚未生成受治理的经营问题组合。"}
+            </p>
+          )}
+        </section>
 
         <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <div>

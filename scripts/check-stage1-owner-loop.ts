@@ -42,8 +42,11 @@ const REQUIRED_TOKENS: ReadonlyArray<{
     file: "features/dashboard/stage1-owner-loop-query.ts",
     tokens: [
       "input.membershipRole !== WorkspaceRole.OWNER",
-      "db.enterpriseObservationProgram.findMany",
-      "db.decisionWorkPacketClaim.findMany",
+      "db.$transaction(",
+      "Prisma.TransactionIsolationLevel.RepeatableRead",
+      "tx.enterpriseObservationProgram.findMany",
+      "tx.decisionWorkPacketClaim.findMany",
+      "loadCurrentAcceptedCaioInitializationContextForRead",
     ],
   },
   {

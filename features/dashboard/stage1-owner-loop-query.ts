@@ -1,11 +1,18 @@
 import "server-only";
 
-import { WorkspaceRole } from "@prisma/client";
+import { Prisma, WorkspaceRole } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   buildStage1OwnerLoopReadout,
   type Stage1OwnerLoopReadout,
 } from "@/features/dashboard/stage1-owner-loop-readout";
+import { loadCurrentAcceptedCaioInitializationContextForRead } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
+
+const OWNER_LOOP_READ_TRANSACTION_OPTIONS = {
+  isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+  maxWait: 10_000,
+  timeout: 30_000,
+} as const;
 
 export async function getWorkspaceStage1OwnerLoopReadout(input: {
   workspaceId: string;
@@ -20,7 +27,10 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
 
   let readModelRows: Awaited<ReturnType<typeof loadOwnerLoopRows>>;
   try {
-    readModelRows = await loadOwnerLoopRows(input.workspaceId);
+    readModelRows = await db.$transaction(
+      (tx) => loadOwnerLoopRows(tx, input.workspaceId, now),
+      OWNER_LOOP_READ_TRANSACTION_OPTIONS,
+    );
   } catch (error) {
     if (!isMissingOwnerLoopSchema(error)) throw error;
     console.warn("stage1-owner-loop-query: additive schema unavailable");
@@ -33,7 +43,11 @@ export async function getWorkspaceStage1OwnerLoopReadout(input: {
   });
 }
 
-async function loadOwnerLoopRows(workspaceId: string) {
+async function loadOwnerLoopRows(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  now: Date,
+) {
   const [
     programs,
     sources,
@@ -42,12 +56,15 @@ async function loadOwnerLoopRows(workspaceId: string) {
     supervisionSignals,
     supervisionCounts,
     workPacketReceipts,
+    currentG0Context,
+    operatingQuestionHead,
+    questionSelectionHead,
   ] = await Promise.all([
-    db.enterpriseObservationProgram.findMany({
+    tx.enterpriseObservationProgram.findMany({
       where: { workspaceId },
       select: { status: true, startsAt: true, expiresAt: true },
     }),
-    db.observationSource.findMany({
+    tx.observationSource.findMany({
       where: { workspaceId },
       select: {
         id: true,
@@ -60,7 +77,7 @@ async function loadOwnerLoopRows(workspaceId: string) {
       },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     }),
-    db.decisionRecord.findMany({
+    tx.decisionRecord.findMany({
       where: { workspaceId },
       select: {
         id: true,
@@ -91,12 +108,12 @@ async function loadOwnerLoopRows(workspaceId: string) {
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: 5,
     }),
-    db.decisionRecord.groupBy({
+    tx.decisionRecord.groupBy({
       by: ["status"],
       where: { workspaceId },
       _count: { _all: true },
     }),
-    db.supervisionSignalRecord.findMany({
+    tx.supervisionSignalRecord.findMany({
       where: {
         workspaceId,
         status: { in: ["open", "acknowledged", "routed"] },
@@ -114,12 +131,12 @@ async function loadOwnerLoopRows(workspaceId: string) {
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       take: 5,
     }),
-    db.supervisionSignalRecord.groupBy({
+    tx.supervisionSignalRecord.groupBy({
       by: ["status", "severity"],
       where: { workspaceId },
       _count: { _all: true },
     }),
-    db.decisionWorkPacketClaim.findMany({
+    tx.decisionWorkPacketClaim.findMany({
       where: { workspaceId },
       select: {
         decisionRecord: { select: { status: true } },
@@ -128,6 +145,34 @@ async function loadOwnerLoopRows(workspaceId: string) {
             status: true,
             executionReceipt: {
               select: { verificationState: true, qualityScore: true },
+            },
+          },
+        },
+      },
+    }),
+    loadCurrentAcceptedCaioInitializationContextForRead(tx, {
+      workspaceId,
+      at: now,
+    }),
+    tx.caioOperatingQuestionPortfolioHead.findUnique({
+      where: { workspaceId },
+      include: {
+        currentGenerationReceipt: true,
+        currentPortfolio: true,
+      },
+    }),
+    tx.caioQuestionSelectionHead.findUnique({
+      where: { workspaceId },
+      include: {
+        currentReceipt: {
+          include: {
+            decisionBindings: {
+              select: {
+                questionId: true,
+                candidateHash: true,
+                decisionRecordId: true,
+              },
+              orderBy: { questionId: "asc" },
             },
           },
         },
@@ -143,6 +188,9 @@ async function loadOwnerLoopRows(workspaceId: string) {
     supervisionSignals,
     supervisionCounts,
     workPacketReceipts,
+    currentG0Context,
+    operatingQuestionHead,
+    questionSelectionHead,
   };
 }
 
