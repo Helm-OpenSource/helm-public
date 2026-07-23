@@ -41,6 +41,7 @@ CREATE TABLE `CaioInitializationGateReceipt` (
   `mandateRecordId` VARCHAR(191) NOT NULL,
   `ceoPrincipalBindingId` VARCHAR(191) NOT NULL,
   `previousReceiptId` VARCHAR(191) NULL,
+  `previousReceiptHash` VARCHAR(191) NULL,
   `sequence` INTEGER NOT NULL,
   `idempotencyKey` VARCHAR(191) NOT NULL,
   `action` VARCHAR(191) NOT NULL,
