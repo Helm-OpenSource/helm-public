@@ -57,6 +57,8 @@ connector 授权、写回、外发或审批证明。
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
 - [Stage 1 一把手经营闭环方法 / Stage 1 owner operating loop method](product/HELM_STAGE1_OWNER_LOOP_METHOD.md)
 - [Helm CAIO 产品与治理口径 / Helm CAIO product and governance ADR](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md) / [English](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.en.md) — 冻结品牌与治理定义、成熟度五阶段与兼容映射；不授予权限、不激活生产
+- [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 冻结单一硬件产品、全量数据资产盘点与分级接入、初始化门、10 题候选、CEO 选 0-3 题、模型切换和 Context Agent 治理；requirements-only
+- [Helm CAIO Pro 实施主计划 / Helm CAIO Pro implementation plan](_planning/HELM_CAIO_PRO_IMPLEMENTATION_PLAN.md) — 按四仓、阶段门、PR、验证和回滚拆解；不代表客户连接、设备交付或生产激活
 - [Stage 1 一把手经营闭环 Runbook / Stage 1 owner operating loop runbook](operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md)
 - [经营信号首公里 15 分钟跑通 / Signal First Mile quickstart](product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md)
 - [公开路线图 / Public roadmap](roadmap/HELM_PUBLIC_ROADMAP.md)
@@ -86,6 +88,7 @@ connector 授权、写回、外发或审批证明。
 - [交付工程师初始化诊断要求 / Delivery engineer setup diagnostic requirements](product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md)
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
 - [Stage 1 一把手经营闭环方法 / Stage 1 owner operating loop method](product/HELM_STAGE1_OWNER_LOOP_METHOD.md) — owner-authorized、read-only 到 review-first 的公共参考切片；不是生产连接器或自治授权
+- [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 全资产目录、逐源只读授权、G0、10 题/选 0-3 题、模型出域和员工同意边界
 - [默认经营工作区重构蓝图 / Default operating workspace refactor blueprint](product/HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md) — design-only 设计蓝图；不是实现、API freeze、路由删除批准或执行授权
 - [Solution extension 协议 / Solution extension protocol](product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)
 - [扩展目录与命名协议 / Extension directory and naming protocol](product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md)
@@ -101,6 +104,7 @@ connector 授权、写回、外发或审批证明。
 ## 贡献与运营 / Contribution And Operations
 
 - [集成模板 / Integration template](integrations/INTEGRATION_TEMPLATE.md)
+- [Helm CAIO Pro 实施主计划 / Helm CAIO Pro implementation plan](_planning/HELM_CAIO_PRO_IMPLEMENTATION_PLAN.md)
 - [公开双语化计划 / Public bilingualization plan](./_planning/HELM_PUBLIC_BILINGUALIZATION_PLAN.md)
 - [开源运营模型 / Open source operating model](operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md)
 - [公开试点作业手册 / Public trial runbook](pilot/PUBLIC_TRIAL_RUNBOOK.md)
