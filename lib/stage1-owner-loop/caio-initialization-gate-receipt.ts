@@ -71,6 +71,8 @@ type PreviousReceiptBinding = {
   contentHash: string;
   sequence: number;
   resultingStatus: CaioInitializationGateStatus;
+  assessmentRef: string;
+  recordedAt: string;
 } | null;
 
 type CommonReceiptInput = {
@@ -113,7 +115,9 @@ function commonSeed(input: CommonReceiptInput) {
     (!isNonEmpty(input.previousReceipt.receiptId) ||
       !isSha256(input.previousReceipt.contentHash) ||
       !Number.isInteger(input.previousReceipt.sequence) ||
-      input.previousReceipt.sequence < 1)
+      input.previousReceipt.sequence < 1 ||
+      !isNonEmpty(input.previousReceipt.assessmentRef) ||
+      !Number.isFinite(Date.parse(input.previousReceipt.recordedAt)))
   ) {
     throw new Error("caio_initialization_gate_previous_receipt_invalid");
   }
@@ -170,6 +174,17 @@ export function createCaioInitializationAcceptanceReceipt(
     input.previousReceipt.resultingStatus !== "revoked"
   ) {
     throw new Error("caio_initialization_gate_already_accepted");
+  }
+  if (
+    input.previousReceipt?.resultingStatus === "revoked" &&
+    (input.previousReceipt.assessmentRef ===
+      input.assessment.assessmentId ||
+      Date.parse(input.assessment.evaluatedAt) <=
+        Date.parse(input.previousReceipt.recordedAt))
+  ) {
+    throw new Error(
+      "caio_initialization_revoked_assessment_requires_newer_reassessment",
+    );
   }
   if (
     !isNonEmpty(input.inventoryConfirmationRef) ||
