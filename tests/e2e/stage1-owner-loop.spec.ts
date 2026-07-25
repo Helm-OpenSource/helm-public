@@ -43,6 +43,31 @@ async function expectCaioGovernance(consoleLocator: Locator) {
   ).toHaveText("能力成熟度（非权限轴）：");
 }
 
+async function expectP1cReadOnlyProjection(
+  consoleLocator: Locator,
+  english = false,
+) {
+  const portfolio = consoleLocator.locator(
+    '[data-caio-operating-question-portfolio="true"]',
+  );
+  await expect(portfolio).toBeVisible();
+  await expect(portfolio).toHaveAttribute(
+    "data-caio-operating-question-boundary",
+    "read_only",
+  );
+  await expect(portfolio).toContainText(
+    english
+      ? "CEO operating-question portfolio"
+      : "CEO 经营问题组合",
+  );
+  await expect(portfolio).toContainText(
+    english
+      ? "This is a read-only projection: it cannot select, confirm, dispatch, or create a Work Packet."
+      : "本区仅作只读投影，不能选择、确认、派工或创建 Work Packet。",
+  );
+  await expect(portfolio.getByRole("button")).toHaveCount(0);
+}
+
 async function expectMetric(
   page: Page,
   metricKey: string,
@@ -78,6 +103,7 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
       "只读经营视图。建议需一把手确认；本面板不执行、不外发、不产生承诺。",
     );
     await expectCaioGovernance(console);
+    await expectP1cReadOnlyProjection(console);
     await expectMetric(page, "source-health", "1/2", /1 个过时 · 0 个异常/);
     await expectMetric(page, "owner-decisions", "1", /1 项跟进中/);
     await expectMetric(page, "open-supervision", "1", /0 个严重 · 1 个警告/);
@@ -134,6 +160,7 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
     await expect(console).toContainText(
       "CAIO is a product role definition, not a legal officer or an authorization",
     );
+    await expectP1cReadOnlyProjection(console, true);
   });
 
   test("non-OWNER cannot see the owner operating loop", async ({ page }) => {
@@ -152,6 +179,7 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
     const console = page.locator('[data-stage1-owner-loop-console="true"]');
     await expect(console).toBeVisible();
     await expectCaioGovernance(console);
+    await expectP1cReadOnlyProjection(console);
     const dimensions = await console.evaluate((element) => ({
       clientWidth: element.clientWidth,
       scrollWidth: element.scrollWidth,
