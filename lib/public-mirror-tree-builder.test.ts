@@ -68,6 +68,8 @@ function seedPrivateSourceTree(): void {
       "check:boundaries": "node --import tsx scripts/decision-first-boundary-check.ts",
       "check:public-release": "node --import tsx scripts/public-release-guard.ts",
       "release:check": "node --import tsx scripts/release-readiness-check.ts",
+      "test:model-egress:mysql":
+        "vitest run lib/llm/model-egress-store.mysql.test.ts --config vitest.public.config.ts",
       [`seed:${tenantSlug}`]: `tsx ${tenantPrivateRoot}/scripts/seed.ts`,
     },
   });
@@ -173,7 +175,7 @@ describe("public mirror tree builder", () => {
       license: "Apache-2.0",
       scripts: {
         "check:boundaries":
-          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology",
+          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance",
         "check:source-profiler-boundaries":
           "node --import tsx scripts/check-source-profiler-boundaries.ts",
         "check:golden-path-docs":
@@ -193,6 +195,8 @@ describe("public mirror tree builder", () => {
           "node --import tsx scripts/check-stage1-owner-loop.ts && vitest run lib/stage1-owner-loop features/dashboard/stage1-owner-loop-readout.test.ts features/dashboard/stage1-owner-loop-console-accessibility.test.ts --config vitest.public.config.ts",
         "check:caio-terminology":
           "node --import tsx scripts/check-caio-terminology.ts && vitest run scripts/check-caio-terminology.test.ts --config vitest.public.config.ts",
+        "check:model-egress-governance":
+          "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
         "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
         "check:public-commit-metadata":
           "node --import tsx scripts/public-commit-metadata-check.ts",
@@ -230,6 +234,8 @@ describe("public mirror tree builder", () => {
         test: "vitest run --config vitest.public.config.ts",
         "test:public:guards":
           "vitest run lib/caio-governance/contract.test.ts lib/public-release-guard.test.ts lib/public-mirror-semantic-entry-docs.test.ts scripts/check-llm-candidate-boundaries.test.ts scripts/check-recoverable-agent-runtime.test.ts scripts/check-agentic-sarp.test.ts scripts/check-work-unit-governance.test.ts lib/work-unit-governance/runtime.test.ts lib/work-unit-governance/mainline-ledger.test.ts lib/work-unit-governance/private-mainline-store.test.ts lib/work-unit-governance/owner-lifecycle.test.ts lib/work-unit-governance/owner-notification-binding.test.ts lib/work-unit-governance/activation-handoff.test.ts lib/work-unit-governance/activation-runtime-binding.test.ts lib/work-unit-governance/repair-learning-loop.test.ts lib/work-unit-governance/learning-asset-store-binding.test.ts lib/work-unit-governance/proof-package.test.ts features/work-unit-governance/work-unit-review-console.test.tsx features/work-unit-governance/work-unit-mainline-ledger-panel.test.tsx features/work-unit-governance/work-unit-owner-lifecycle-panel.test.tsx features/work-unit-governance/work-unit-activation-handoff-panel.test.tsx features/work-unit-governance/work-unit-repair-learning-panel.test.tsx features/work-unit-governance/work-unit-proof-package-panel.test.tsx features/work-unit-governance/work-unit-private-plane-handoff-panel.test.tsx scripts/check-ai-shelf-trust-center-contract.test.ts scripts/sarp-proof.test.ts lib/agent-runtime/agent-loop.test.ts lib/agent-runtime/recoverable-run-store.test.ts lib/agent-runtime/recoverable-runner.test.ts lib/agent-runtime/recoverable-run-store-mysql.test.ts lib/evals/llm-critic-evals.test.ts lib/llm/runtime-permission.test.ts lib/llm/overlay-context-hygiene.test.ts lib/llm/intelligence-contracts-v2.test.ts lib/llm/intelligence-contracts-v3.test.ts lib/llm/governed-runtime-contracts.test.ts lib/llm/governed-candidate-materializer.test.ts lib/governed-intelligence/governed-candidate-review.test.ts features/governed-candidates/governed-candidate-review-panel.test.tsx lib/llm/reasoning-budget.test.ts lib/llm-workflows/review-counterfactual.workflow.test.ts lib/llm-workflows/multi-pass-review.workflow.test.ts lib/evals/llm-counterfactual-evals.test.ts lib/evals/memory-bench-evals.test.ts lib/evals/overlay-context-hygiene-evals.test.ts lib/evals/llm-trajectory-harness.test.ts lib/evals/llm-v3-proposer-evals.test.ts lib/evals/llm-v3-disabled-snapshot.test.ts",
+        "test:model-egress:mysql":
+          "vitest run lib/llm/model-egress-store.mysql.test.ts --config vitest.public.config.ts",
         typecheck: "tsc --noEmit --project tsconfig.public.json",
       },
     });
@@ -322,7 +328,7 @@ describe("public mirror tree builder", () => {
       "npm run public:smoke:static && npm run check:secret-history",
     );
     expect(scripts["check:boundaries"]).toBe(
-      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology",
+      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance",
     );
     expect(scripts["check:source-profiler-boundaries"]).toBe(
       "node --import tsx scripts/check-source-profiler-boundaries.ts",
@@ -350,6 +356,12 @@ describe("public mirror tree builder", () => {
     );
     expect(scripts["check:stage1-owner-loop"]).toBe(
       "node --import tsx scripts/check-stage1-owner-loop.ts && vitest run lib/stage1-owner-loop features/dashboard/stage1-owner-loop-readout.test.ts features/dashboard/stage1-owner-loop-console-accessibility.test.ts --config vitest.public.config.ts",
+    );
+    expect(scripts["check:model-egress-governance"]).toBe(
+      "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
+    );
+    expect(scripts["test:model-egress:mysql"]).toBe(
+      "vitest run lib/llm/model-egress-store.mysql.test.ts --config vitest.public.config.ts",
     );
     expect(scripts["sarp:proof"]).toBe("node --import tsx scripts/sarp-proof.ts");
     expect(scripts["eval:llm-critic-boundaries"]).toBe(

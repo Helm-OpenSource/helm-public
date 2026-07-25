@@ -1380,6 +1380,13 @@ model Workspace {
   contextAgentPauseReceipts            ContextAgentPauseReceipt[]
   contextAgentRevocationReceipts       ContextAgentRevocationReceipt[]
   contextAgentDeletionReceipts         ContextAgentDeletionReceipt[]
+  providerAdapterReadinessReceipts     ProviderAdapterReadinessReceipt[]
+  modelRoutePolicyApprovalReceipts     ModelRoutePolicyApprovalReceipt[]
+  governedModelProjectionReceipts      GovernedModelProjectionReceipt[]
+  tenantModelRoutePolicies             TenantModelRoutePolicy[]
+  tenantModelRoutePolicyHeads          TenantModelRoutePolicyHead[]
+  modelRouteDecisions                  ModelRouteDecision[]
+  modelEgressReceipts                  ModelEgressReceipt[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -3823,6 +3830,290 @@ model DecisionWorkPacketClaim {
   actionItem       ActionItem     @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
+}
+
+// Immutable proof that one exact adapter/model/version/endpoint fingerprint was
+// checked for a workspace. Catalog visibility is informational and deliberately
+// separate from adapter/model readiness.
+model ProviderAdapterReadinessReceipt {
+  id                      String               @id
+  workspaceId             String
+  idempotencyKey          String
+  provider                String
+  modelId                 String
+  modelVersion            String
+  adapterKey              String
+  adapterVersion          String
+  adapterRegistrationRef  String
+  adapterRegistrationHash String
+  deploymentForm          String
+  jurisdiction            String
+  region                  String
+  endpointFingerprint     String
+  credentialRef           String
+  adapterRegistered       Boolean
+  credentialConfigured    Boolean
+  modelProbeStatus        String
+  capabilityRefs          String               @db.LongText
+  checkedAt               DateTime
+  expiresAt               DateTime
+  evidenceRefs            String               @db.LongText
+  rawCredentialIncluded   Boolean              @default(false)
+  receiptJson             String               @db.LongText
+  contentHash             String
+  createdAt               DateTime             @default(now())
+  workspace               Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  routeDecisions          ModelRouteDecision[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, idempotencyKey], map: "ProviderReadiness_workspace_idem_key")
+  @@unique([workspaceId, contentHash], map: "ProviderReadiness_workspace_hash_key")
+  @@index([workspaceId, provider, modelId, expiresAt], map: "ProviderReadiness_workspace_model_expiry_idx")
+}
+
+// Immutable model-egress policy snapshot. Lifecycle status may advance, but
+// policyJson and policyHash never change; a semantic change creates a new row.
+model TenantModelRoutePolicy {
+  id                   String                           @id
+  workspaceId          String
+  policyKey            String
+  revision             Int
+  status               String                           @default("DRAFT")
+  validFrom            DateTime
+  validUntil           DateTime
+  approvalRef          String
+  approvedByRef        String
+  createdByUserId      String
+  policyJson           String                           @db.LongText
+  policyHash           String
+  activatedAt          DateTime?
+  supersededAt         DateTime?
+  revokedAt            DateTime?
+  revokedByRef         String?
+  revocationReason     String?                          @db.LongText
+  createdAt            DateTime                         @default(now())
+  workspace            Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  activeHead           TenantModelRoutePolicyHead?
+  ownerApprovalReceipt ModelRoutePolicyApprovalReceipt?
+  routeDecisions       ModelRouteDecision[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, policyKey, revision], map: "TenantModelPolicy_workspace_key_revision_key")
+  @@unique([workspaceId, policyHash], map: "TenantModelPolicy_workspace_hash_key")
+  @@index([workspaceId, policyKey, status, validUntil], map: "TenantModelPolicy_workspace_status_expiry_idx")
+}
+
+// Immutable proof that the current workspace owner activated one exact policy
+// revision. The policy's string refs are not authority without this receipt.
+model ModelRoutePolicyApprovalReceipt {
+  id                  String                 @id
+  workspaceId         String
+  policyId            String                 @unique
+  policyHash          String
+  policyKey           String
+  policyRevision      Int
+  approvedByUserId    String
+  expectedHeadVersion Int?
+  approvedAt          DateTime
+  receiptJson         String                 @db.LongText
+  contentHash         String
+  createdAt           DateTime               @default(now())
+  workspace           Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  policy              TenantModelRoutePolicy @relation(fields: [policyId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+
+  @@unique([id, workspaceId])
+  @@unique([policyId, workspaceId], map: "ModelPolicyApproval_policy_workspace_key")
+  @@index([workspaceId, policyKey, approvedAt], map: "ModelPolicyApproval_workspace_key_time_idx")
+}
+
+// Per-workspace/policy-key active pointer and revocation epoch. This is a
+// concurrency primitive, not permission by itself.
+model TenantModelRoutePolicyHead {
+  id              String                 @id @default(cuid())
+  workspaceId     String
+  policyKey       String
+  activePolicyId  String                 @unique
+  version         Int                    @default(1)
+  revocationEpoch Int                    @default(0)
+  updatedAt       DateTime               @updatedAt
+  workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  activePolicy    TenantModelRoutePolicy @relation(fields: [activePolicyId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+
+  @@unique([workspaceId, policyKey], map: "TenantModelPolicyHead_workspace_key")
+  @@unique([activePolicyId, workspaceId], map: "TenantModelPolicyHead_policy_workspace_key")
+  @@index([workspaceId, version, revocationEpoch], map: "TenantModelPolicyHead_workspace_epoch_idx")
+}
+
+// Immutable evidence that one registered local projector/scanner produced the
+// exact payload later offered to the governed model gateway. Raw projected
+// content is never persisted in this ledger.
+model GovernedModelProjectionReceipt {
+  id                        String               @id
+  workspaceId               String
+  idempotencyKey            String
+  sourceAssetRefs           String               @db.LongText
+  sourceAssetBindingsJson   String               @db.LongText
+  candidateEvidenceRefs     String               @db.LongText
+  selectedEvidenceRefs      String               @db.LongText
+  droppedEvidenceRefs       String               @db.LongText
+  projectedPayloadHash      String
+  projectedPayloadBytes     Int
+  maxInputTokens            Int
+  maxOutputTokens           Int
+  remoteSafe                Boolean
+  redactionStatus           String
+  promptInjectionScanStatus String
+  projectorRegistrationRef  String
+  projectorRegistrationHash String
+  projectorVersion          String
+  scannerRegistrationRef    String
+  scannerRegistrationHash   String
+  scannerVersion            String
+  validUntil                DateTime
+  receiptJson               String               @db.LongText
+  contentHash               String
+  createdAt                 DateTime
+  workspace                 Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  routeDecisions            ModelRouteDecision[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, idempotencyKey], map: "ModelProjection_workspace_idem_key")
+  @@unique([workspaceId, contentHash], map: "ModelProjection_workspace_hash_key")
+  @@index([workspaceId, validUntil], map: "ModelProjection_workspace_expiry_idx")
+}
+
+// Immutable route decision written before any provider dispatch. A decision is
+// bound to the exact policy/readiness/payload hashes and may be claimed once.
+model ModelRouteDecision {
+  id                             String                           @id
+  workspaceId                    String
+  policyId                       String?
+  readinessReceiptId             String?
+  parentDecisionId               String?
+  requestKey                     String
+  requestHash                    String
+  attemptOrdinal                 Int                              @default(0)
+  policyKey                      String
+  policyHeadVersion              Int
+  policyRevocationEpoch          Int
+  taskClass                      String
+  taskRef                        String
+  requestedMaxOutputTokens       Int
+  allowFallback                  Boolean
+  sensitivity                    String
+  processingDisposition          String
+  sourceAssetRefs                String                           @db.LongText
+  sourceAssetBindingsJson        String                           @db.LongText
+  candidateEvidenceRefs          String                           @db.LongText
+  selectedEvidenceRefs           String                           @db.LongText
+  droppedEvidenceRefs            String                           @db.LongText
+  projectionReceiptRef           String?
+  projectionReceiptHash          String?
+  projectedPayloadHash           String
+  promptInjectionScanStatus      String
+  routeRef                       String?
+  routeSnapshotJson              String?                          @db.LongText
+  adapterReadinessState          String
+  catalogVisibilityState         String
+  decision                       String
+  reasonCodes                    String                           @db.LongText
+  requestedFallbackRouteRef      String?
+  fallbackFromRouteRef           String?
+  fallbackReason                 String?
+  dispatchClaimedAt              DateTime?
+  dispatchGatewayRef             String?
+  dispatchRuntimeJson            String?                          @db.LongText
+  dispatchRuntimeHash            String?
+  dispatchClaimHash              String?
+  dispatchProviderIdempotencyKey String?
+  dispatchLeaseExpiresAt         DateTime?
+  validUntil                     DateTime
+  decisionJson                   String                           @db.LongText
+  contentHash                    String
+  createdAt                      DateTime                         @default(now())
+  workspace                      Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  projectionReceipt              GovernedModelProjectionReceipt?  @relation(fields: [projectionReceiptRef, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  policy                         TenantModelRoutePolicy?          @relation(fields: [policyId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  readinessReceipt               ProviderAdapterReadinessReceipt? @relation(fields: [readinessReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  parentDecision                 ModelRouteDecision?              @relation("ModelRouteDecisionFallbackChain", fields: [parentDecisionId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction)
+  fallbackDecisions              ModelRouteDecision[]             @relation("ModelRouteDecisionFallbackChain")
+  egressReceipts                 ModelEgressReceipt[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, requestKey], map: "ModelRouteDecision_workspace_request_key")
+  @@unique([workspaceId, contentHash], map: "ModelRouteDecision_workspace_hash_key")
+  @@unique([parentDecisionId, attemptOrdinal, workspaceId], map: "ModelRouteDecision_parent_attempt_workspace_key")
+  @@unique([workspaceId, dispatchProviderIdempotencyKey], map: "ModelRouteDecision_workspace_provider_idem_key")
+  @@index([workspaceId, taskClass, decision, createdAt], map: "ModelRouteDecision_workspace_task_decision_idx")
+  @@index([workspaceId, routeRef, dispatchClaimedAt], map: "ModelRouteDecision_workspace_route_claim_idx")
+  @@index([workspaceId, dispatchLeaseExpiresAt], map: "ModelRouteDecision_workspace_lease_idx")
+  @@index([policyId, workspaceId], map: "ModelRouteDecision_policy_workspace_idx")
+  @@index([readinessReceiptId, workspaceId], map: "ModelRouteDecision_readiness_workspace_idx")
+}
+
+// Append-only model-egress ledger. Sequence 1 is the pre-dispatch UNKNOWN
+// receipt; sequence 2 is the terminal receipt. A missing terminal row therefore
+// remains an explicit unknown outcome instead of an unreceipted success.
+model ModelEgressReceipt {
+  id                     String              @id
+  workspaceId            String
+  decisionId             String
+  previousReceiptId      String?
+  previousReceiptHash    String?
+  sequence               Int
+  idempotencyKey         String
+  phase                  String
+  outcome                String
+  resolutionSource       String
+  provider               String
+  modelId                String
+  modelVersion           String
+  deploymentForm         String
+  jurisdiction           String
+  region                 String
+  policyHash             String
+  readinessReceiptHash   String
+  projectedPayloadHash   String
+  selectedEvidenceRefs   String              @db.LongText
+  droppedEvidenceRefs    String              @db.LongText
+  projectionReceiptRef   String?
+  projectionReceiptHash  String?
+  rawContentIncluded     Boolean             @default(false)
+  dispatchGatewayRef     String?
+  dispatchRuntimeHash    String?
+  dispatchClaimHash      String?
+  requestDisposition     String
+  providerRequestRefHash String?
+  startedAt              DateTime
+  finishedAt             DateTime?
+  latencyMs              Int?
+  promptTokens           Int?
+  completionTokens       Int?
+  actualCostUsdMicros    Int?
+  costCurrency           String?
+  pricingVersion         String?
+  costBand               String
+  errorCode              String?
+  fallbackTargetRouteRef String?
+  fallbackReason         String?
+  auditRef               String
+  receiptJson            String              @db.LongText
+  contentHash            String
+  recordedAt             DateTime
+  createdAt              DateTime            @default(now())
+  workspace              Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  decision               ModelRouteDecision  @relation(fields: [decisionId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  previousReceipt        ModelEgressReceipt? @relation("ModelEgressReceiptChain", fields: [previousReceiptId, decisionId, workspaceId], references: [id, decisionId, workspaceId], onDelete: NoAction, onUpdate: NoAction)
+  nextReceipt            ModelEgressReceipt? @relation("ModelEgressReceiptChain")
+
+  @@unique([id, workspaceId])
+  @@unique([id, decisionId, workspaceId], map: "ModelEgressReceipt_id_decision_workspace_key")
+  @@unique([decisionId, sequence], map: "ModelEgressReceipt_decision_sequence_key")
+  @@unique([workspaceId, idempotencyKey], map: "ModelEgressReceipt_workspace_idem_key")
+  @@unique([workspaceId, contentHash], map: "ModelEgressReceipt_workspace_hash_key")
+  @@unique([previousReceiptId, decisionId, workspaceId], map: "ModelEgressReceipt_previous_decision_workspace_key")
+  @@index([workspaceId, outcome, recordedAt], map: "ModelEgressReceipt_workspace_outcome_time_idx")
+  @@index([decisionId, workspaceId], map: "ModelEgressReceipt_decision_workspace_idx")
 }
 
 model AuditLog {

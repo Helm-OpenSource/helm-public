@@ -59,6 +59,8 @@ connector 授权、写回、外发或审批证明。
 - [Helm CAIO 产品与治理口径 / Helm CAIO product and governance ADR](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md) / [English](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.en.md) — 冻结品牌与治理定义、成熟度五阶段与兼容映射；不授予权限、不激活生产
 - [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 冻结单一硬件产品、全量数据资产盘点与分级接入、初始化门、10 题候选、CEO 选 0-3 题、模型切换和 Context Agent 治理；requirements-only
 - [Helm CAIO Pro 实施主计划 / Helm CAIO Pro implementation plan](_planning/HELM_CAIO_PRO_IMPLEMENTATION_PLAN.md) — 按四仓、阶段门、PR、验证和回滚拆解；不代表客户连接、设备交付或生产激活
+- [Helm CAIO 模型准入与数据出域治理 / Helm CAIO model admission and data egress governance](product/HELM_CAIO_MODEL_ADMISSION_AND_EGRESS.md) — 租户策略、adapter readiness、调用前决定、单次 claim、append-only 回执与受限 fallback；Public Core 默认无生产 adapter
+- [Helm CAIO 模型准入与数据出域 Runbook / Helm CAIO model admission and data egress runbook](operations/HELM_CAIO_MODEL_EGRESS_RUNBOOK.md) — 空库重放、隔离 MySQL、事故处置与回滚；不把合成或本地证据提升为生产事实
 - [腾讯 WorkBuddy 与 Helm CAIO Pro 内网协作设计 / Tencent WorkBuddy and Helm CAIO Pro LAN collaboration design](superpowers/specs/2026-07-23-workbuddy-caio-lan-collaboration-design.md) — CEO macOS 通过 LAN-only MCP Gateway 主动提问、读取 P1C canonical Portfolio、接收 typed prompt 并复核建议；设计已确认、实现未开始，不构成生产可用或外部执行授权
 - [Helm CAIO Pro P1C 入口图 / Helm CAIO Pro P1C entry map](superpowers/specs/2026-07-23-caio-pro-p1c-entry-map.md) — 记录 canonical 10 题 Portfolio、CEO 选 0-3 题、现有 DecisionRecord 绑定与 OWNER-only 只读入口；本地参考实现已验证，WorkBuddy/Gateway、远程 mutation、部署与生产回执仍需下一层
 - [Stage 1 一把手经营闭环 Runbook / Stage 1 owner operating loop runbook](operations/HELM_STAGE1_OWNER_LOOP_RUNBOOK.md)
