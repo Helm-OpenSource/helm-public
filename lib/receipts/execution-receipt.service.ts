@@ -9,7 +9,10 @@ import {
 } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
-import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import {
+  isWriteConflictError,
+  runWithWriteConflictRetry,
+} from "@/lib/db/conflict-aware-write";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 import { computeExecutionReceiptQuality } from "@/lib/receipts/execution-receipt-quality";
 
@@ -133,57 +136,61 @@ export async function recordExecutionReceipt(
     qualityFlags: quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
   };
 
-  const client = options?.client ?? db;
   const where = {
     subjectType_subjectId: {
       subjectType: input.subjectType,
       subjectId: input.subjectId,
     },
   } as const;
-  async function runConflictAwareMutation<T>(
-    mutation: () => Promise<T>,
-  ): Promise<T> {
-    // A caller-owned transaction must be retried as one atomic unit by its
-    // owner. Standalone canonical mutations are safe to replay in place.
-    return options?.client
-      ? mutation()
-      : runWithWriteConflictRetry(mutation);
-  }
 
-  const existing = await client.executionReceipt.findUnique({ where });
-  let receipt: ExecutionReceipt;
-  let changed = false;
+  // Prisma compiles a guarded updateMany into a SELECT (carrying the guard)
+  // followed by an UPDATE constrained only by id — observed verbatim in the
+  // MySQL 8.4 general log — so a where-clause guard is NOT atomic on its
+  // own. Correctness therefore requires the canonical row to be serialized
+  // by a lock for the whole read-check-write:
+  // - caller-owned transactions bring their own locks and retry the
+  //   transaction as one atomic unit;
+  // - the standalone path below wraps the write in its own transaction and
+  //   takes a FOR UPDATE lock on the canonical row first, so concurrent
+  //   recorders and verifiers cannot interleave between guard and write.
+  const performWrite = async (
+    client: ExecutionReceiptDbClient,
+  ): Promise<{ receipt: ExecutionReceipt; changed: boolean }> => {
+    const existing = await client.executionReceipt.findUnique({ where });
 
-  if (
-    existing?.verificationState === ExecutionReceiptVerificationState.VERIFIED
-  ) {
-    // A VERIFIED receipt is accepted truth. A stale re-execution, block, or
-    // retry may not overwrite it or reset it to SELF_REPORTED.
-    receipt = existing;
-  } else if (existing) {
-    const claimed = await runConflictAwareMutation(() =>
-      client.executionReceipt.updateMany({
+    if (
+      existing?.verificationState === ExecutionReceiptVerificationState.VERIFIED
+    ) {
+      // A VERIFIED receipt is accepted truth. A stale re-execution, block, or
+      // retry may not overwrite it or reset it to SELF_REPORTED.
+      return { receipt: existing, changed: false };
+    }
+    if (existing) {
+      const claimed = await client.executionReceipt.updateMany({
         where: {
           id: existing.id,
           verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
         },
         data,
-      }),
-    );
-    if (claimed.count === 1) {
-      changed = true;
-      receipt = await client.executionReceipt.findUniqueOrThrow({ where });
-    } else {
+      });
+      if (claimed.count === 1) {
+        return {
+          receipt: await client.executionReceipt.findUniqueOrThrow({ where }),
+          changed: true,
+        };
+      }
       // Verification won the race after our read. Return the now-immutable
       // receipt instead of downgrading it.
-      receipt = await client.executionReceipt.findUniqueOrThrow({ where });
+      return {
+        receipt: await client.executionReceipt.findUniqueOrThrow({ where }),
+        changed: false,
+      };
     }
-  } else {
     try {
-      receipt = await runConflictAwareMutation(() =>
-        client.executionReceipt.create({ data }),
-      );
-      changed = true;
+      return {
+        receipt: await client.executionReceipt.create({ data }),
+        changed: true,
+      };
     } catch (error) {
       if (!isUniqueConstraintViolation(error)) throw error;
       // Another writer created the canonical row. Re-enter once so the same
@@ -193,25 +200,47 @@ export async function recordExecutionReceipt(
       if (
         raced.verificationState === ExecutionReceiptVerificationState.VERIFIED
       ) {
-        receipt = raced;
-      } else {
-        const claimed = await runConflictAwareMutation(() =>
-          client.executionReceipt.updateMany({
-            where: {
-              id: raced.id,
-              verificationState:
-                ExecutionReceiptVerificationState.SELF_REPORTED,
-            },
-            data,
-          }),
-        );
-        changed = claimed.count === 1;
-        receipt = await client.executionReceipt.findUniqueOrThrow({ where });
+        return { receipt: raced, changed: false };
       }
+      const claimed = await client.executionReceipt.updateMany({
+        where: {
+          id: raced.id,
+          verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+        },
+        data,
+      });
+      return {
+        receipt: await client.executionReceipt.findUniqueOrThrow({ where }),
+        changed: claimed.count === 1,
+      };
     }
+  };
+
+  if (options?.client) {
+    const { receipt } = await performWrite(options.client);
+    return receipt;
   }
 
-  if (!options?.client && changed) {
+  // The retry predicate also covers the create/create race (P2002): the
+  // retried transaction re-locks, sees the winner's committed row, and
+  // converges on the conditional-update path.
+  const { receipt, changed } = await runWithWriteConflictRetry(
+    () =>
+      db.$transaction(async (tx) => {
+        await tx.$queryRaw`
+          SELECT id FROM ExecutionReceipt
+          WHERE subjectType = ${input.subjectType}
+            AND subjectId = ${input.subjectId}
+          FOR UPDATE`;
+        return performWrite(tx);
+      }),
+    {
+      isConflict: (error) =>
+        isWriteConflictError(error) || isUniqueConstraintViolation(error),
+    },
+  );
+
+  if (changed) {
     await auditExecutionReceiptRecorded(input, receipt);
   }
 
@@ -273,71 +302,97 @@ export type VerifyExecutionReceiptInput = {
 // verifier; hard-refuses executor self-verification.
 export async function verifyExecutionReceipt(input: VerifyExecutionReceiptInput) {
   const english = input.english ?? false;
-  const receipt = await db.executionReceipt.findFirst({
-    where: {
-      workspaceId: input.workspaceId,
-      subjectType: input.subjectType,
-      subjectId: input.subjectId,
-    },
-  });
 
-  if (!receipt) {
-    throw new ExecutionReceiptNotFoundError(english);
-  }
+  // Same atomicity rule as recordExecutionReceipt: the guarded updateMany is
+  // not atomic by itself, so the whole read-check-upgrade runs in one
+  // transaction behind a FOR UPDATE lock on the canonical row.
+  const outcome = await runWithWriteConflictRetry(() =>
+    db.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id FROM ExecutionReceipt
+        WHERE subjectType = ${input.subjectType}
+          AND subjectId = ${input.subjectId}
+        FOR UPDATE`;
+      const receipt = await tx.executionReceipt.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          subjectType: input.subjectType,
+          subjectId: input.subjectId,
+        },
+      });
 
-  if (receipt.executedByUserId && receipt.executedByUserId === input.verifierUserId) {
-    throw new ReceiptSelfVerificationError(english);
-  }
+      if (!receipt) {
+        throw new ExecutionReceiptNotFoundError(english);
+      }
 
-  if (
-    receipt.verificationState === ExecutionReceiptVerificationState.VERIFIED &&
-    receipt.verifiedByUserId === input.verifierUserId
-  ) {
-    return receipt;
-  }
+      if (
+        receipt.executedByUserId &&
+        receipt.executedByUserId === input.verifierUserId
+      ) {
+        throw new ReceiptSelfVerificationError(english);
+      }
 
-  const quality = buildQualityInput({
-    outcome: receipt.outcome,
-    evidenceRefs: safeParseJson<string[]>(receipt.evidenceRefs, []),
-    nextStep: receipt.nextStep,
-    note: receipt.note,
-    rejectionReasonCode: receipt.rejectionReasonCode,
-    verificationState: ExecutionReceiptVerificationState.VERIFIED,
-  });
+      if (
+        receipt.verificationState ===
+          ExecutionReceiptVerificationState.VERIFIED &&
+        receipt.verifiedByUserId === input.verifierUserId
+      ) {
+        return { kind: "idempotent" as const, receipt };
+      }
 
-  const claimed = await runWithWriteConflictRetry(() =>
-    db.executionReceipt.updateMany({
-      where: {
-        id: receipt.id,
-        workspaceId: input.workspaceId,
-        verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
-        updatedAt: receipt.updatedAt,
-      },
-      data: {
-        verifiedByUserId: input.verifierUserId,
+      const quality = buildQualityInput({
+        outcome: receipt.outcome,
+        evidenceRefs: safeParseJson<string[]>(receipt.evidenceRefs, []),
+        nextStep: receipt.nextStep,
+        note: receipt.note,
+        rejectionReasonCode: receipt.rejectionReasonCode,
         verificationState: ExecutionReceiptVerificationState.VERIFIED,
+      });
+
+      const claimed = await tx.executionReceipt.updateMany({
+        where: {
+          id: receipt.id,
+          workspaceId: input.workspaceId,
+          verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+          updatedAt: receipt.updatedAt,
+        },
+        data: {
+          verifiedByUserId: input.verifierUserId,
+          verificationState: ExecutionReceiptVerificationState.VERIFIED,
+          qualityScore: quality.score,
+          qualityFlags:
+            quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
+        },
+      });
+      if (claimed.count !== 1) {
+        const current = await tx.executionReceipt.findUniqueOrThrow({
+          where: { id: receipt.id },
+        });
+        if (
+          current.verificationState ===
+          ExecutionReceiptVerificationState.VERIFIED
+        ) {
+          return { kind: "idempotent" as const, receipt: current };
+        }
+        throw new ReceiptChangedDuringVerificationError(english);
+      }
+      const updated = await tx.executionReceipt.findUniqueOrThrow({
+        where: { id: receipt.id },
+      });
+      return {
+        kind: "verified" as const,
+        receipt: updated,
+        priorReceipt: receipt,
         qualityScore: quality.score,
-        qualityFlags:
-          quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
-      },
+      };
     }),
   );
-  if (claimed.count !== 1) {
-    const current = await db.executionReceipt.findUniqueOrThrow({
-      where: { id: receipt.id },
-    });
-    if (
-      current.verificationState ===
-      ExecutionReceiptVerificationState.VERIFIED
-    ) {
-      return current;
-    }
-    throw new ReceiptChangedDuringVerificationError(english);
-  }
-  const updated = await db.executionReceipt.findUniqueOrThrow({
-    where: { id: receipt.id },
-  });
 
+  if (outcome.kind === "idempotent") {
+    return outcome.receipt;
+  }
+
+  // Audit AFTER commit so the entry can never describe a rolled-back upgrade.
   await writeAuditLog({
     workspaceId: input.workspaceId,
     userId: input.verifierUserId,
@@ -345,15 +400,15 @@ export async function verifyExecutionReceipt(input: VerifyExecutionReceiptInput)
     actorType: ActorType.USER,
     actionType: "EXECUTION_RECEIPT_VERIFIED",
     targetType: "ExecutionReceipt",
-    targetId: receipt.id,
-    summary: `回执已由他人验收确认：${receipt.actionTaken}`,
+    targetId: outcome.priorReceipt.id,
+    summary: `回执已由他人验收确认：${outcome.priorReceipt.actionTaken}`,
     payload: {
-      subjectType: receipt.subjectType,
-      subjectId: receipt.subjectId,
-      executedByUserId: receipt.executedByUserId,
-      qualityScore: quality.score,
+      subjectType: outcome.priorReceipt.subjectType,
+      subjectId: outcome.priorReceipt.subjectId,
+      executedByUserId: outcome.priorReceipt.executedByUserId,
+      qualityScore: outcome.qualityScore,
     },
   });
 
-  return updated;
+  return outcome.receipt;
 }
