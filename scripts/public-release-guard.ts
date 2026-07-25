@@ -899,7 +899,7 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "self-check":
     "npm run public:smoke:static && npm run check:secret-history",
   "check:boundaries":
-    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance",
+    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:caio-pro-v1",
   "check:source-profiler-boundaries":
     "node --import tsx scripts/check-source-profiler-boundaries.ts",
   "check:golden-path-docs":
@@ -921,6 +921,8 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
     "node --import tsx scripts/check-caio-terminology.ts && vitest run scripts/check-caio-terminology.test.ts --config vitest.public.config.ts",
   "check:model-egress-governance":
     "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
+  "check:caio-pro-v1":
+    "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts",
   "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
   "eval:llm-critic-boundaries":
     "vitest run lib/evals/llm-critic-evals.test.ts",
@@ -1001,6 +1003,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "check:stage1-owner-loop",
   "check:caio-terminology",
   "check:model-egress-governance",
+  "check:caio-pro-v1",
   "test:model-egress:mysql",
   "sarp:proof",
   "public-mirror:build",
@@ -1022,6 +1025,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "check:boundaries",
   "test",
   "test:caio-stage1:mysql",
+  "test:caio-pro-v1:mysql",
   "test:public:guards",
   "quality:regression",
   "e2e",

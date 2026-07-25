@@ -728,7 +728,7 @@ describe("public release guard fixture coverage", () => {
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance",
+        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:caio-pro-v1",
       "check:source-profiler-boundaries":
         "node --import tsx scripts/check-source-profiler-boundaries.ts",
       "check:golden-path-docs":
@@ -898,7 +898,7 @@ describe("public release guard fixture coverage", () => {
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance",
+        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:caio-pro-v1",
       "check:source-profiler-boundaries":
         "node --import tsx scripts/check-source-profiler-boundaries.ts",
       "check:golden-path-docs":
@@ -920,6 +920,8 @@ describe("public release guard fixture coverage", () => {
         "node --import tsx scripts/check-caio-terminology.ts && vitest run scripts/check-caio-terminology.test.ts --config vitest.public.config.ts",
       "check:model-egress-governance":
         "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
+      "check:caio-pro-v1":
+        "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts",
       "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
       "check:public-docs": "node --import tsx scripts/check-public-docs-curation.ts",
       "check:public-commit-metadata":
