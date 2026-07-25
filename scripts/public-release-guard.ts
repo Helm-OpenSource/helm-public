@@ -1017,6 +1017,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "self-check",
   "check:boundaries",
   "test",
+  "test:caio-stage1:mysql",
   "test:public:guards",
   "quality:regression",
   "e2e",

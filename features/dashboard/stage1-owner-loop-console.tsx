@@ -141,7 +141,8 @@ function operatingQuestionStateLabel(
     awaiting_selection: ["待 CEO 选择", "Awaiting CEO selection"],
     selection_deferred: ["CEO 暂不选择", "Selection deferred"],
     binding_incomplete: ["决策绑定不完整", "Decision binding incomplete"],
-    selected: ["已选择并绑定", "Selected and bound"],
+    planning_incomplete: ["实施计划待形成", "Implementation plan pending"],
+    selected: ["已选择并形成计划", "Selected and planned"],
     last_valid_portfolio_stale: [
       "上一版有效组合",
       "Last valid portfolio",
@@ -340,7 +341,9 @@ export function Stage1OwnerLoopConsole({
                     operatingQuestions.state === "insufficient_evidence" ||
                     operatingQuestions.state ===
                       "last_valid_portfolio_stale" ||
-                    operatingQuestions.state === "binding_incomplete") &&
+                    operatingQuestions.state === "binding_incomplete" ||
+                    operatingQuestions.state ===
+                      "planning_incomplete") &&
                     "text-[color:var(--danger)]",
                 )}
               >
@@ -351,8 +354,8 @@ export function Stage1OwnerLoopConsole({
               </p>
               <p className="mt-1 tabular-nums">
                 {english
-                  ? `${operatingQuestions.candidates.length} questions · ${operatingQuestions.selectedQuestionIds.length}/3 selected · ${operatingQuestions.decisionBindingCount} bound`
-                  : `${operatingQuestions.candidates.length} 个问题 · 已选 ${operatingQuestions.selectedQuestionIds.length}/3 · 已绑定 ${operatingQuestions.decisionBindingCount}`}
+                  ? `${operatingQuestions.candidates.length} questions · ${operatingQuestions.selectedQuestionIds.length}/3 selected · ${operatingQuestions.decisionBindingCount} bound · ${operatingQuestions.implementationPlanCount} planned`
+                  : `${operatingQuestions.candidates.length} 个问题 · 已选 ${operatingQuestions.selectedQuestionIds.length}/3 · 已绑定 ${operatingQuestions.decisionBindingCount} · 已形成计划 ${operatingQuestions.implementationPlanCount}`}
               </p>
               {operatingQuestions.state ===
                 "last_valid_portfolio_stale" &&
@@ -382,6 +385,9 @@ export function Stage1OwnerLoopConsole({
                   data-caio-operating-question-decision-bound={
                     candidate.decisionRecordId ? "true" : "false"
                   }
+                  data-caio-operating-question-plan-materialized={
+                    candidate.implementationPlanId ? "true" : "false"
+                  }
                 >
                   <div className="flex items-start gap-3">
                     <span className="w-6 shrink-0 pt-0.5 text-right font-mono text-xs tabular-nums text-[color:var(--muted-foreground)]">
@@ -401,10 +407,14 @@ export function Stage1OwnerLoopConsole({
                           )}
                         >
                           {candidate.selected
-                            ? candidate.decisionRecordId
+                            ? candidate.implementationPlanId
                               ? english
-                                ? "CEO selected · Decision bound"
-                                : "CEO 已选 · 决策已绑定"
+                                ? "CEO selected · Plan drafted"
+                                : "CEO 已选 · 计划已形成"
+                              : candidate.decisionRecordId
+                                ? english
+                                  ? "Decision bound · Planning pending"
+                                  : "决策已绑定 · 计划待形成"
                               : english
                                 ? "CEO selected · Binding pending"
                                 : "CEO 已选 · 待绑定"

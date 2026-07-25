@@ -9,6 +9,10 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
+import {
+  WORKSPACE_CAPABILITIES,
+  workspaceRoleHasCapability,
+} from "@/lib/auth/authorization";
 import { assertWorkspacePolicyServiceAccess } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
@@ -516,6 +520,37 @@ export class ObservationAuthorizationDeniedError extends Error {
   }
 }
 
+// TOCTOU hardening (uniform with the G0 gate store and the data asset
+// catalog): human-gated observation writes re-verify the MANAGE_POLICIES
+// capability INSIDE the write transaction, so a membership deactivated
+// after the outer gate can never still land a program or source write.
+async function assertPolicyAccessInTransaction(
+  tx: import("@prisma/client").Prisma.TransactionClient,
+  input: { workspaceId: string; actorUserId: string },
+): Promise<void> {
+  const membership = await tx.membership.findUnique({
+    where: {
+      workspaceId_userId: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+      },
+    },
+    select: { role: true, status: true },
+  });
+  if (
+    !membership ||
+    membership.status !== "ACTIVE" ||
+    !workspaceRoleHasCapability(
+      membership.role,
+      WORKSPACE_CAPABILITIES.MANAGE_POLICIES,
+    )
+  ) {
+    throw new ObservationAuthorizationDeniedError([
+      "workspace_policy_access_lost",
+    ]);
+  }
+}
+
 export async function createEnterpriseObservationProgram(input: {
   workspaceId: string;
   purpose: string;
@@ -557,6 +592,10 @@ export async function createEnterpriseObservationProgram(input: {
   if (!validation.valid) throw new ObservationContractError(validation.errors);
 
   return db.$transaction(async (tx) => {
+    await assertPolicyAccessInTransaction(tx, {
+      workspaceId: input.workspaceId,
+      actorUserId,
+    });
     const program = await tx.enterpriseObservationProgram.create({
       data: {
         workspaceId: input.workspaceId,
@@ -636,6 +675,10 @@ export async function registerObservationSource(input: {
       await lockObservationProgram(tx, {
         workspaceId: input.workspaceId,
         programId: input.programId,
+      });
+      await assertPolicyAccessInTransaction(tx, {
+        workspaceId: input.workspaceId,
+        actorUserId,
       });
       const program = await tx.enterpriseObservationProgram.findFirst({
         where: { id: input.programId, workspaceId: input.workspaceId },
@@ -790,6 +833,10 @@ export async function revokeEnterpriseObservationProgram(input: {
       await lockObservationProgram(tx, {
         workspaceId: input.workspaceId,
         programId: input.programId,
+      });
+      await assertPolicyAccessInTransaction(tx, {
+        workspaceId: input.workspaceId,
+        actorUserId,
       });
       const claimed = await tx.enterpriseObservationProgram.updateMany({
         where: {

@@ -996,6 +996,15 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
         verifierUserId: reviewerUserId,
         verifierName: "Stage 1 Reviewer",
       });
+    } else {
+      // Service contract: a FULFILLED verification must have returned a
+      // VERIFIED receipt. If the database row later reads SELF_REPORTED
+      // while this held, that is a lost persist or a downgrade — the
+      // exact defect this test exists to catch — so pin the contract
+      // here for a sharp failure signal.
+      expect(verification.value.verificationState).toBe(
+        ExecutionReceiptVerificationState.VERIFIED,
+      );
     }
     await record(ExecutionReceiptOutcome.REJECTED);
 
