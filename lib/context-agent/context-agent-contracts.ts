@@ -240,9 +240,13 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function uniqueSorted(values: readonly string[]): string[] {
+  // Code-point order, NOT localeCompare: the scope hash is recomputed on
+  // every read, so the sort must be identical on every machine regardless
+  // of process locale (localeCompare reorders under e.g. cs_CZ and would
+  // fail-close every stored consent after a locale change).
   return [
     ...new Set(values.map((value) => value.trim()).filter(Boolean)),
-  ].sort((left, right) => left.localeCompare(right));
+  ].sort();
 }
 
 function allReferences(values: readonly string[]): boolean {

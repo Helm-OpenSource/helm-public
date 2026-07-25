@@ -268,6 +268,34 @@ describeMysql(
       expect(auditRows).toBe(1);
     });
 
+    it("refuses an idempotent replay whose payload diverges (reviewer probe)", async () => {
+      // Same idempotency key as the "first" collection, different
+      // itemCount: silently returning the old receipt would fork the
+      // governance evidence from the caller's belief.
+      await expect(
+        recordContextAgentCollection({
+          workspaceId,
+          actorUserId: ownerUserId,
+          consentReceiptId,
+          collectionKind: "local_snapshot",
+          consentScopeHash: effectiveScopeHash,
+          itemCount: 99,
+          digestHashes: [DIGEST],
+          evidenceRefs: [`evidence:collection:first:${suffix}`],
+          collectedAt: at(5_000),
+          idempotencyKey: `collection-first-${suffix}`,
+          now: at(6_500),
+        }),
+      ).rejects.toThrow("idempotency_key_payload_conflict");
+      // Identical payload still replays cleanly.
+      const replay = await collect({
+        label: "first",
+        scopeHash: effectiveScopeHash,
+        offsetMs: 6_000,
+      });
+      expect(replay.replayed).toBe(true);
+    });
+
     it("refuses widening, applies narrowing, and rebinds the scope hash", async () => {
       await expect(
         reviseContextAgentScope({
@@ -501,6 +529,26 @@ describeMysql(
         now: at(25_000),
       });
       expect(partial.receipt.attempt).toBe(1);
+      // Reviewer probe: same idempotency key, divergent counts — the
+      // deletion executor claiming "999 deleted" must not be silently
+      // answered with the old attempt's receipt.
+      await expect(
+        recordContextAgentDeletionOutcome({
+          workspaceId,
+          actorUserId: ownerUserId,
+          revocationReceiptId,
+          outcome: "partial",
+          counts: {
+            ...zeroCounts(),
+            indicesDeleted: 999,
+            cachesDeleted: 999,
+          },
+          failureCodes: ["totally_different_failure"],
+          evidenceRefs: [`evidence:deletion-partial:${suffix}`],
+          idempotencyKey: `deletion-partial-${suffix}`,
+          now: at(25_500),
+        }),
+      ).rejects.toThrow("idempotency_key_payload_conflict");
       const success = await recordContextAgentDeletionOutcome({
         workspaceId,
         actorUserId: ownerUserId,

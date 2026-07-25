@@ -99,9 +99,13 @@ function nonEmpty(value: string, reason: string): string {
 }
 
 function uniqueSorted(values: readonly string[]): string[] {
+  // Code-point order, NOT localeCompare: the scope hash is recomputed on
+  // every read, so the sort must be identical on every machine regardless
+  // of process locale (localeCompare reorders under e.g. cs_CZ and would
+  // fail-close every stored consent after a locale change).
   return [
     ...new Set(values.map((value) => value.trim()).filter(Boolean)),
-  ].sort((left, right) => left.localeCompare(right));
+  ].sort();
 }
 
 function sameStrings(
@@ -945,7 +949,14 @@ export async function recordContextAgentCollection(input: {
             !validateContextAgentCollectionReceipt(receipt).valid ||
             receipt.consentRef !== input.consentReceiptId ||
             receipt.consentScopeHash !== input.consentScopeHash ||
-            !sameStrings(receipt.digestHashes, input.digestHashes)
+            !sameStrings(receipt.digestHashes, input.digestHashes) ||
+            // Replay must match the FULL immutable payload: silently
+            // returning the old receipt for a divergent re-submission
+            // would let the caller believe different content was recorded.
+            receipt.collectionKind !== input.collectionKind ||
+            receipt.itemCount !== input.itemCount ||
+            receipt.collectedAt !== input.collectedAt.toISOString() ||
+            !sameStrings(receipt.evidenceRefs, input.evidenceRefs)
           ) {
             throw new ContextAgentStoreError(
               "idempotency_key_payload_conflict",
@@ -1113,7 +1124,9 @@ async function recordPauseTransition(input: {
             !validateContextAgentPauseReceipt(receipt).valid ||
             receipt.consentRef !== stored.receipt.receiptId ||
             receipt.action !== input.action ||
-            receipt.actorUserRef !== actorUserId
+            receipt.actorUserRef !== actorUserId ||
+            // Replay must match the FULL immutable payload.
+            !sameStrings(receipt.reasonCodes, input.reasonCodes)
           ) {
             throw new ContextAgentStoreError(
               "idempotency_key_payload_conflict",
@@ -1289,7 +1302,10 @@ export async function revokeContextAgentConsent(input: {
             !receipt ||
             !validateContextAgentRevocationReceipt(receipt).valid ||
             receipt.consentRef !== stored.receipt.receiptId ||
-            receipt.actorUserRef !== actorUserId
+            receipt.actorUserRef !== actorUserId ||
+            // Replay must match the FULL immutable payload.
+            !sameStrings(receipt.reasonCodes, input.reasonCodes) ||
+            !sameStrings(receipt.evidenceRefs, input.evidenceRefs)
           ) {
             throw new ContextAgentStoreError(
               "idempotency_key_payload_conflict",
@@ -1447,7 +1463,26 @@ export async function recordContextAgentDeletionOutcome(input: {
             !receipt ||
             !validateContextAgentDeletionReceipt(receipt).valid ||
             receipt.revocationRef !== revocation.receiptId ||
-            receipt.outcome !== input.outcome
+            receipt.outcome !== input.outcome ||
+            // Replay must match the FULL immutable payload: a divergent
+            // deletion report (different counts, failures, evidence, or
+            // reporting actor) silently returning the old receipt would
+            // fork the governance evidence from the caller's belief.
+            receipt.actorUserRef !== input.actorUserId ||
+            !sameStrings(receipt.failureCodes, input.failureCodes) ||
+            !sameStrings(receipt.evidenceRefs, input.evidenceRefs) ||
+            receipt.counts.indicesDeleted !== input.counts.indicesDeleted ||
+            receipt.counts.cachesDeleted !== input.counts.cachesDeleted ||
+            receipt.counts.derivedVectorsDeleted !==
+              input.counts.derivedVectorsDeleted ||
+            receipt.counts.memoryCandidatesDeleted !==
+              input.counts.memoryCandidatesDeleted ||
+            receipt.counts.observedFactsDeleted !==
+              input.counts.observedFactsDeleted ||
+            receipt.counts.observedFactsEvidenceInvalidated !==
+              input.counts.observedFactsEvidenceInvalidated ||
+            receipt.counts.multiSourceRecomputed !==
+              input.counts.multiSourceRecomputed
           ) {
             throw new ContextAgentStoreError(
               "idempotency_key_payload_conflict",
