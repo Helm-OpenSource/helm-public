@@ -221,6 +221,14 @@ const CANONICAL_UTC_TIMESTAMP_PATTERN =
 const TEMPLATE_PATTERN =
   /(?:\b(?:todo|tbd|placeholder|example)\b|待补充|待填写|模板占位|\{\{[^}]+\}\}|<[^>]+>)/iu;
 
+// Monetary claims are only legal through the STRUCTURED quantifiedValue +
+// currency + evidenceRefs channel. A money-shaped amount inside free text
+// while quantifiedValue is null would be an unevidenced number reaching
+// the owner console verbatim — refused, matching the requirements rule
+// that amounts must never be invented.
+const MONETARY_CLAIM_PATTERN =
+  /(?:[¥$€£]\s?\d|\d[\d,.]*\s*(?:万元|亿元|百万元|千万元|万块|元钱|USD|CNY|RMB|EUR|dollars?\b|yuan\b)|\b(?:usd|cny|rmb|eur)\s?\d)/iu;
+
 function isNonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -738,6 +746,24 @@ function validateCandidate(
     !isNonEmpty(candidate.valueHypothesis.unknownReason)
   ) {
     errors.push(`${prefix}:value_unknown_reason_required`);
+  }
+  if (candidate.valueHypothesis.quantifiedValue === null) {
+    // With no structured quantified value, no free-text field may smuggle
+    // a money-shaped amount to the owner console.
+    for (const freeText of [
+      candidate.valueHypothesis.description,
+      candidate.title,
+      candidate.question,
+      candidate.whyNow,
+    ]) {
+      if (
+        typeof freeText === "string" &&
+        MONETARY_CLAIM_PATTERN.test(freeText)
+      ) {
+        errors.push(`${prefix}:unquantified_monetary_claim_forbidden`);
+        break;
+      }
+    }
   }
   if (
     candidate.valueHypothesis.quantifiedValue !== null &&

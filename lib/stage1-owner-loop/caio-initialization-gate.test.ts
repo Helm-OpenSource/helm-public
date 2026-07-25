@@ -237,6 +237,14 @@ describe("CAIO Pro initialization gate G0", () => {
     expect(
       computeCaioInitializationAssessment(atThreshold).failures,
     ).not.toContain("connected_source_health_below_threshold");
+    // At the floor is NOT a free pass: the one broken source carries no
+    // exception, so transparency still fails the assessment.
+    const atThresholdAssessment =
+      computeCaioInitializationAssessment(atThreshold);
+    expect(atThresholdAssessment.failures).toContain(
+      "source_exception_incomplete",
+    );
+    expect(atThresholdAssessment.decision).toBe("not_ready");
 
     const belowThreshold = readyInput();
     belowThreshold.sources = Array.from({ length: 100 }, (_, index) => ({
@@ -268,6 +276,7 @@ describe("CAIO Pro initialization gate G0", () => {
     expect(belowAssessment.failures).toContain(
       "connected_source_health_below_threshold",
     );
+    expect(belowAssessment.failures).toContain("source_exception_incomplete");
   });
 
   it("allows unhealthy sources only when every unhealthy source has a complete transparent exception", () => {

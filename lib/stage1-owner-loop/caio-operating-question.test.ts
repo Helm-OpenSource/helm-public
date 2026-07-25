@@ -248,6 +248,55 @@ describe("CAIO operating question portfolio", () => {
     );
   });
 
+  it("refuses money-shaped amounts in free text when no quantified value exists", () => {
+    // the reviewer probe: an unevidenced amount smuggled through prose
+    for (const [field, value] of [
+      ["description", "预计每月挽回 120 万元回款"],
+      ["title", "Recover $250,000 in stalled receivables"],
+      ["question", "为什么每季度流失 300 万元 的续费?"],
+      ["whyNow", "We are losing 1,200,000 CNY every quarter."],
+    ] as const) {
+      const candidates = Array.from({ length: 10 }, (_, index) =>
+        candidate(index),
+      );
+      if (field === "description") {
+        candidates[0].valueHypothesis.description = value;
+      } else {
+        candidates[0][field] = value;
+      }
+      const result = evaluateCaioOperatingQuestionGeneration(
+        generationInput(candidates),
+      );
+      expect(result.gapCodes).toContain(
+        "candidate_1:unquantified_monetary_claim_forbidden",
+      );
+    }
+  });
+
+  it("allows the same amount through the structured evidence channel and spares non-monetary numbers", () => {
+    const candidates = Array.from({ length: 10 }, (_, index) =>
+      candidate(index),
+    );
+    candidates[0].valueHypothesis = {
+      description: "预计每月挽回 120 万元回款",
+      quantifiedValue: 1_200_000,
+      currency: "CNY",
+      evidenceRefs: [...(candidates[0]!.evidenceRefs)],
+      unknownReason: null,
+    };
+    // non-monetary numerals in prose stay legal
+    candidates[1].whyNow = "回款周期已从 30 天拖长到 45 天,增长 20%";
+    const result = evaluateCaioOperatingQuestionGeneration(
+      generationInput(candidates),
+    );
+    expect(result.gapCodes).not.toContain(
+      "candidate_1:unquantified_monetary_claim_forbidden",
+    );
+    expect(result.gapCodes).not.toContain(
+      "candidate_2:unquantified_monetary_claim_forbidden",
+    );
+  });
+
   it("requires an explicit unknown reason when value cannot be quantified", () => {
     const candidates = Array.from({ length: 10 }, (_, index) =>
       candidate(index),

@@ -23,6 +23,9 @@ const { dbMock, auditMock, serviceGovernanceMock } = vi.hoisted(() => {
       findMany: vi.fn(),
       updateMany: vi.fn(),
     },
+    membership: {
+      findUnique: vi.fn(async () => ({ role: "OWNER", status: "ACTIVE" })),
+    },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -220,6 +223,39 @@ describe("CAIO Pro data asset catalog persistence", () => {
     ).toBeLessThan(
       dbMock.dataAssetCatalogEntry.findFirst.mock.invocationCallOrder[0],
     );
+  });
+
+  it("refuses a write when the membership was deactivated after the outer gate (TOCTOU)", async () => {
+    dbMock.membership.findUnique.mockResolvedValueOnce({
+      role: "OWNER",
+      status: "INACTIVE",
+    });
+    await expect(
+      createDataAssetCatalogEntry({
+        workspaceId: "workspace-1",
+        assetKey: "crm-primary",
+        sourceSystemRef: "system:crm-primary",
+        displayName: "Primary CRM",
+        sourceKind: "crm",
+        businessDomain: "sales",
+        businessOwnerRef: "role:sales-operations",
+        purpose: "Build a read-only operating baseline",
+        scopeRefs: ["scope:sales"],
+        recommendedAccessMode: "read_only_api",
+        retentionDays: 30,
+        freshnessSlaMinutes: 60,
+        residencyRequirements: ["region:cn"],
+        blindSpots: [],
+        blockerCodes: [],
+        riskOwnerRef: "role:security",
+        nextReviewAt: new Date("2026-08-23T00:00:00.000Z"),
+        evidenceRefs: ["evidence:inventory:crm"],
+        actorName: "Owner",
+        actorUserId: "owner-1",
+        now: recordedAt,
+      }),
+    ).rejects.toThrow(/workspace_policy_access_lost/);
+    expect(dbMock.dataAssetCatalogEntry.create).not.toHaveBeenCalled();
   });
 
   it("creates an inventoried asset with fail-closed classification defaults", async () => {

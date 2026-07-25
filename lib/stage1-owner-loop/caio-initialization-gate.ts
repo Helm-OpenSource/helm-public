@@ -714,12 +714,13 @@ export function computeCaioInitializationAssessment(
       incompleteSourceExceptions.length > 0,
     "connected_source_health_below_threshold",
   );
+  // Mirrors the asset side: EVERY unhealthy source must carry a complete,
+  // transparent exception, at any health rate. Without this, up to
+  // (1 - floor) of sources could be broken with nothing surfaced in what
+  // the CEO acknowledges.
   addFailure(
     failures,
-    sourceHealthRate !== null &&
-      sourceHealthRate <
-        CAIO_INITIALIZATION_POLICY.minimumSourceHealthRate &&
-      incompleteSourceExceptions.length > 0,
+    incompleteSourceExceptions.length > 0,
     "source_exception_incomplete",
   );
   addFailure(
@@ -815,12 +816,9 @@ export function computeCaioInitializationAssessment(
     check(
       "source_health_or_exceptions",
       Boolean(
-        sourceHealthRate !== null &&
-          (sourceHealthRate >=
-            CAIO_INITIALIZATION_POLICY.minimumSourceHealthRate ||
-            incompleteSourceExceptions.length === 0),
+        sourceHealthRate !== null && incompleteSourceExceptions.length === 0,
       ),
-      "Connected sources meet the health floor or have complete transparent exceptions.",
+      "Every unhealthy connected source carries a complete transparent exception (unexplained breakage never passes, at any health rate).",
       exceptionRefs,
     ),
     check(

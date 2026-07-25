@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { dbMock, auditMock, serviceGovernanceMock } = vi.hoisted(() => {
   const client = {
+    membership: {
+      findUnique: vi.fn(async () => ({ role: "OWNER", status: "ACTIVE" })),
+    },
     enterpriseObservationProgram: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -191,6 +194,30 @@ describe("Stage 1 observation runtime", () => {
       id: "receipt-current",
     });
     dbMock.dataAssetCatalogEntry.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("refuses a program write when the membership was deactivated after the outer gate (TOCTOU)", async () => {
+    dbMock.membership.findUnique.mockResolvedValueOnce({
+      role: "OWNER",
+      status: "INACTIVE",
+    });
+    const startsAt = new Date("2026-07-23T00:00:00.000Z");
+    const expiresAt = new Date("2026-08-23T00:00:00.000Z");
+    await expect(
+      createEnterpriseObservationProgram({
+        workspaceId: "workspace-1",
+        purpose: "Observe operating facts for owner decisions",
+        scopeRefs: ["scope:company"],
+        dataCategories: ["operations"],
+        startsAt,
+        expiresAt,
+        retentionDays: 30,
+        authorizationRef: "authorization:owner-1",
+        actorName: "Owner",
+        actorUserId: "owner-1",
+      }),
+    ).rejects.toThrow(/workspace_policy_access_lost/);
+    expect(dbMock.enterpriseObservationProgram.create).not.toHaveBeenCalled();
   });
 
   it("commits owner authorization and its audit through the same transaction client", async () => {

@@ -7,6 +7,10 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
+import {
+  WORKSPACE_CAPABILITIES,
+  workspaceRoleHasCapability,
+} from "@/lib/auth/authorization";
 import { assertWorkspacePolicyServiceAccess } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
@@ -246,6 +250,37 @@ function receiptLookup(input: {
   } as const;
 }
 
+// TOCTOU hardening (uniform with the G0 gate store): the pre-transaction
+// capability gate gives fast, uniform error surfaces, but authority is
+// RE-VERIFIED inside each write transaction so a membership deactivated
+// after the outer gate can never still land a catalog write.
+async function assertPolicyAccessInTransaction(
+  tx: import("@prisma/client").Prisma.TransactionClient,
+  input: { workspaceId: string; actorUserId: string },
+): Promise<void> {
+  const membership = await tx.membership.findUnique({
+    where: {
+      workspaceId_userId: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+      },
+    },
+    select: { role: true, status: true },
+  });
+  if (
+    !membership ||
+    membership.status !== "ACTIVE" ||
+    !workspaceRoleHasCapability(
+      membership.role,
+      WORKSPACE_CAPABILITIES.MANAGE_POLICIES,
+    )
+  ) {
+    throw new DataAssetCatalogTransitionError([
+      "workspace_policy_access_lost",
+    ]);
+  }
+}
+
 async function assertPolicyAccess(input: {
   workspaceId: string;
   actorUserId: string;
@@ -377,6 +412,10 @@ export async function createDataAssetCatalogEntry(input: {
 
   try {
     return await db.$transaction(async (tx) => {
+      await assertPolicyAccessInTransaction(tx, {
+        workspaceId: input.workspaceId,
+        actorUserId,
+      });
       const entry = await tx.dataAssetCatalogEntry.create({
         data: {
           workspaceId: input.workspaceId,
@@ -484,6 +523,10 @@ async function persistStageReceipt(input: {
       await lockCatalogEntryRow(tx, {
         workspaceId: input.workspaceId,
         assetId: input.assetId,
+      });
+      await assertPolicyAccessInTransaction(tx, {
+        workspaceId: input.workspaceId,
+        actorUserId: input.actorUserId,
       });
       const existing = await tx.dataAssetStageReceipt.findUnique({
         where: lookup,
