@@ -8,16 +8,26 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { dbMock, auditMock } = vi.hoisted(() => ({
-  dbMock: {
-    executionReceipt: {
-      findUnique: vi.fn(),
-      findUniqueOrThrow: vi.fn(),
-      create: vi.fn(),
-      updateMany: vi.fn(),
-      findFirst: vi.fn(),
-      update: vi.fn(),
-    },
-  },
+  dbMock: (() => {
+    const client = {
+      executionReceipt: {
+        findUnique: vi.fn(),
+        findUniqueOrThrow: vi.fn(),
+        create: vi.fn(),
+        updateMany: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+      // The standalone canonical path wraps the write in a transaction and
+      // takes a FOR UPDATE row lock first; the mock passes the same client
+      // through so the branch logic under test is unchanged.
+      $queryRaw: vi.fn(async () => []),
+      $transaction: vi.fn(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(client),
+      ),
+    };
+    return client;
+  })(),
   auditMock: {
     writeAuditLog: vi.fn(),
   },
@@ -230,7 +240,9 @@ describe("execution receipt service", () => {
     });
 
     expect(result).toBe(verified);
-    expect(dbMock.executionReceipt.findUnique).toHaveBeenCalledTimes(1);
+    // the standalone path retries the WHOLE locked transaction, so the
+    // canonical row is re-read on the second attempt
+    expect(dbMock.executionReceipt.findUnique).toHaveBeenCalledTimes(2);
     expect(dbMock.executionReceipt.updateMany).toHaveBeenCalledTimes(2);
     expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
   });
@@ -315,6 +327,7 @@ describe("execution receipt service", () => {
     });
     dbMock.executionReceipt.findUnique
       .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(raced)
       .mockResolvedValueOnce(raced);
     dbMock.executionReceipt.create.mockRejectedValueOnce(uniqueError);
     dbMock.executionReceipt.updateMany
@@ -339,6 +352,8 @@ describe("execution receipt service", () => {
 
     expect(result).toBe(updated);
     expect(dbMock.executionReceipt.create).toHaveBeenCalledTimes(1);
+    // conflict on the raced update aborts and retries the whole locked
+    // transaction; the retry re-reads and lands the conditional update
     expect(dbMock.executionReceipt.updateMany).toHaveBeenCalledTimes(2);
     expect(auditMock.writeAuditLog).toHaveBeenCalledTimes(1);
   });
