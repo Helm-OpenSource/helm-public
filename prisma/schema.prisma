@@ -1373,6 +1373,13 @@ model Workspace {
   caioQuestionSelectionHead             CaioQuestionSelectionHead?
   caioOperatingQuestionDecisionBindings CaioOperatingQuestionDecisionBinding[]
   caioOperatingQuestionImplementationPlans CaioOperatingQuestionImplementationPlan[]
+  contextAgentInvitations              ContextAgentInvitation[]
+  contextAgentConsentReceipts          ContextAgentConsentReceipt[]
+  contextAgentScopeRevisions           ContextAgentScopeRevision[]
+  contextAgentCollectionReceipts       ContextAgentCollectionReceipt[]
+  contextAgentPauseReceipts            ContextAgentPauseReceipt[]
+  contextAgentRevocationReceipts       ContextAgentRevocationReceipt[]
+  contextAgentDeletionReceipts         ContextAgentDeletionReceipt[]
   auditLogs                            AuditLog[]
   emailThreads                         EmailThread[]
   memoryEntries                        MemoryEntry[]
@@ -5657,4 +5664,233 @@ model CaioOperatingQuestionImplementationPlan {
   @@unique([workspaceId, selectionReceiptId, questionId], map: "COQPlan_workspace_selection_question_key")
   @@index([workspaceId, status, plannedAt], map: "COQPlan_workspace_status_time_idx")
   @@index([workspaceId, portfolioId], map: "COQPlan_workspace_portfolio_idx")
+}
+
+// ===== CAIO Pro P1E: Context Agent consent / revocation / deletion chain =====
+// Review-first governance records for employee-consented context collection.
+// Public core only records these receipts: no collection runtime and no
+// deletion executor lives here, and participation state must never feed
+// performance input. All receipt foreign keys are ON DELETE RESTRICT so
+// evidence cannot be silently dropped.
+
+// Admin-issued invitation carrying the exact structured scope (devices,
+// directories, enterprise apps, purposes) the employee would consent to.
+// An invitation grants nothing and implies no participation.
+model ContextAgentInvitation {
+  id              String                       @id
+  workspaceId     String
+  memberUserId    String
+  invitedByUserId String
+  scopeJson       String                       @db.LongText
+  scopeHash       String
+  status          String                       @default("PENDING")
+  idempotencyKey  String
+  evidenceRefs    String                       @db.LongText
+  invitationJson  String                       @db.LongText
+  contentHash     String
+  recordedAt      DateTime
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  workspace       Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentInvitation_workspace_fkey")
+  consentReceipt  ContextAgentConsentReceipt?
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, idempotencyKey], map: "CtxAgentInvitation_workspace_idem_key")
+  @@index([workspaceId, memberUserId, recordedAt], map: "CtxAgentInvitation_workspace_member_time_idx")
+}
+
+// Employee self-consent receipt. The immutable contract payload lives in
+// receiptJson; participationStatus / effectiveScope* / stateVersion are the
+// mutable projection advanced only through CAS transitions under the
+// workspace row lock. At most one live (ACTIVE or PAUSED) consent exists per
+// member; a fresh consent supersedes the previous version.
+model ContextAgentConsentReceipt {
+  id                         String                          @id
+  workspaceId                String
+  invitationId               String
+  memberUserId               String
+  actorUserId                String
+  consentVersion             Int
+  previousConsentId          String?
+  scopeJson                  String                          @db.LongText
+  scopeHash                  String
+  effectiveScopeJson         String                          @db.LongText
+  effectiveScopeHash         String
+  participationStatus        String                          @default("ACTIVE")
+  stateVersion               Int                             @default(1)
+  performanceInputProhibited Boolean
+  idempotencyKey             String
+  evidenceRefs               String                          @db.LongText
+  receiptJson                String                          @db.LongText
+  contentHash                String
+  recordedAt                 DateTime
+  createdAt                  DateTime                        @default(now())
+  updatedAt                  DateTime                        @updatedAt
+  workspace                  Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentConsent_workspace_fkey")
+  invitation                 ContextAgentInvitation          @relation(fields: [invitationId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CtxAgentConsent_invitation_workspace_fkey")
+  previousConsent            ContextAgentConsentReceipt?     @relation("ContextAgentConsentChain", fields: [previousConsentId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction, map: "CtxAgentConsent_previous_workspace_fkey")
+  nextConsent                ContextAgentConsentReceipt?     @relation("ContextAgentConsentChain")
+  scopeRevisions             ContextAgentScopeRevision[]
+  collectionReceipts         ContextAgentCollectionReceipt[]
+  pauseReceipts              ContextAgentPauseReceipt[]
+  revocationReceipt          ContextAgentRevocationReceipt?
+  deletionReceipts           ContextAgentDeletionReceipt[]
+
+  @@unique([id, workspaceId])
+  @@unique([invitationId, workspaceId], map: "CtxAgentConsent_invitation_workspace_key")
+  @@unique([workspaceId, memberUserId, consentVersion], map: "CtxAgentConsent_workspace_member_version_key")
+  @@unique([workspaceId, idempotencyKey], map: "CtxAgentConsent_workspace_idem_key")
+  @@unique([previousConsentId, workspaceId], map: "CtxAgentConsent_previous_workspace_key")
+  @@index([workspaceId, memberUserId, participationStatus], map: "CtxAgentConsent_workspace_member_status_idx")
+}
+
+// Append-only, employee-initiated narrowing of a live consent's effective
+// scope. Widening any dimension is refused here; it requires a fresh consent
+// receipt bound to the new scope hash.
+model ContextAgentScopeRevision {
+  id                String                     @id
+  workspaceId       String
+  consentReceiptId  String
+  memberUserId      String
+  actorUserId       String
+  sequence          Int
+  revisionKind      String
+  previousScopeJson String                     @db.LongText
+  previousScopeHash String
+  newScopeJson      String                     @db.LongText
+  newScopeHash      String
+  idempotencyKey    String
+  revisionJson      String                     @db.LongText
+  contentHash       String
+  recordedAt        DateTime
+  createdAt         DateTime                   @default(now())
+  workspace         Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentScopeRev_workspace_fkey")
+  consentReceipt    ContextAgentConsentReceipt @relation(fields: [consentReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CtxAgentScopeRev_consent_workspace_fkey")
+
+  @@unique([id, workspaceId])
+  @@unique([consentReceiptId, workspaceId, sequence], map: "CtxAgentScopeRev_consent_workspace_seq_key")
+  @@unique([workspaceId, idempotencyKey], map: "CtxAgentScopeRev_workspace_idem_key")
+  @@index([workspaceId, memberUserId, recordedAt], map: "CtxAgentScopeRev_workspace_member_time_idx")
+}
+
+// Append-only record of one reviewed collection batch: evidence refs and
+// digest hashes only, never raw content. Recordable only against a live
+// ACTIVE consent whose effective scope hash matches.
+model ContextAgentCollectionReceipt {
+  id                         String                     @id
+  workspaceId                String
+  consentReceiptId           String
+  memberUserId               String
+  collectionKind             String
+  consentScopeHash           String
+  itemCount                  Int
+  digestHashes               String                     @db.LongText
+  evidenceRefs               String                     @db.LongText
+  performanceInputProhibited Boolean
+  idempotencyKey             String
+  receiptJson                String                     @db.LongText
+  contentHash                String
+  collectedAt                DateTime
+  recordedAt                 DateTime
+  createdAt                  DateTime                   @default(now())
+  workspace                  Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentCollection_workspace_fkey")
+  consentReceipt             ContextAgentConsentReceipt @relation(fields: [consentReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CtxAgentCollection_consent_workspace_fkey")
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, idempotencyKey], map: "CtxAgentCollection_workspace_idem_key")
+  @@index([workspaceId, memberUserId, recordedAt], map: "CtxAgentCollection_workspace_member_time_idx")
+  @@index([consentReceiptId, workspaceId, recordedAt], map: "CtxAgentCollection_consent_workspace_time_idx")
+}
+
+// Append-only pause/resume ledger for one consent. Pause immediately blocks
+// new collection receipts; resume is valid only from the employee themself.
+model ContextAgentPauseReceipt {
+  id               String                     @id
+  workspaceId      String
+  consentReceiptId String
+  memberUserId     String
+  actorUserId      String
+  action           String
+  resultingStatus  String
+  sequence         Int
+  reasonCodes      String                     @db.LongText
+  idempotencyKey   String
+  receiptJson      String                     @db.LongText
+  contentHash      String
+  recordedAt       DateTime
+  createdAt        DateTime                   @default(now())
+  workspace        Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentPause_workspace_fkey")
+  consentReceipt   ContextAgentConsentReceipt @relation(fields: [consentReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CtxAgentPause_consent_workspace_fkey")
+
+  @@unique([id, workspaceId])
+  @@unique([consentReceiptId, workspaceId, sequence], map: "CtxAgentPause_consent_workspace_seq_key")
+  @@unique([workspaceId, idempotencyKey], map: "CtxAgentPause_workspace_idem_key")
+  @@index([workspaceId, memberUserId, recordedAt], map: "CtxAgentPause_workspace_member_time_idx")
+}
+
+// Terminal revocation for one consent version (unique per consent). It
+// creates the deletion work item that ContextAgentDeletionReceipt attempts
+// report against; re-participation requires a fresh invitation + consent.
+model ContextAgentRevocationReceipt {
+  id                  String                        @id
+  workspaceId         String
+  consentReceiptId    String
+  memberUserId        String
+  actorUserId         String
+  consentScopeHash    String
+  deletionWorkItemRef String
+  reasonCodes         String                        @db.LongText
+  evidenceRefs        String                        @db.LongText
+  idempotencyKey      String
+  receiptJson         String                        @db.LongText
+  contentHash         String
+  recordedAt          DateTime
+  createdAt           DateTime                      @default(now())
+  workspace           Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentRevocation_workspace_fkey")
+  consentReceipt      ContextAgentConsentReceipt    @relation(fields: [consentReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CtxAgentRevocation_consent_workspace_fkey")
+  deletionReceipts    ContextAgentDeletionReceipt[]
+
+  @@unique([id, workspaceId])
+  @@unique([consentReceiptId, workspaceId], map: "CtxAgentRevocation_consent_workspace_key")
+  @@unique([workspaceId, idempotencyKey], map: "CtxAgentRevocation_workspace_idem_key")
+  @@unique([workspaceId, deletionWorkItemRef], map: "CtxAgentRevocation_workspace_work_item_key")
+  @@index([workspaceId, memberUserId, recordedAt], map: "CtxAgentRevocation_workspace_member_time_idx")
+}
+
+// Append-only deletion outcome ledger (success / failure / partial /
+// unknown) with structured counts. This is a record of a reviewed deletion
+// attempt, not a deletion executor; a success outcome closes the work item.
+model ContextAgentDeletionReceipt {
+  id                               String                        @id
+  workspaceId                      String
+  revocationReceiptId              String
+  consentReceiptId                 String
+  memberUserId                     String
+  actorUserId                      String
+  deletionWorkItemRef              String
+  attempt                          Int
+  outcome                          String
+  indicesDeleted                   Int
+  cachesDeleted                    Int
+  derivedVectorsDeleted            Int
+  memoryCandidatesDeleted          Int
+  observedFactsDeleted             Int
+  observedFactsEvidenceInvalidated Int
+  multiSourceRecomputed            Int
+  failureCodes                     String                        @db.LongText
+  evidenceRefs                     String                        @db.LongText
+  idempotencyKey                   String
+  receiptJson                      String                        @db.LongText
+  contentHash                      String
+  recordedAt                       DateTime
+  createdAt                        DateTime                      @default(now())
+  workspace                        Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentDeletion_workspace_fkey")
+  revocationReceipt                ContextAgentRevocationReceipt @relation(fields: [revocationReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CtxAgentDeletion_revocation_workspace_fkey")
+  consentReceipt                   ContextAgentConsentReceipt    @relation(fields: [consentReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CtxAgentDeletion_consent_workspace_fkey")
+
+  @@unique([id, workspaceId])
+  @@unique([revocationReceiptId, workspaceId, attempt], map: "CtxAgentDeletion_revocation_workspace_attempt_key")
+  @@unique([workspaceId, idempotencyKey], map: "CtxAgentDeletion_workspace_idem_key")
+  @@index([workspaceId, outcome, recordedAt], map: "CtxAgentDeletion_workspace_outcome_time_idx")
+  @@index([workspaceId, memberUserId, recordedAt], map: "CtxAgentDeletion_workspace_member_time_idx")
 }
