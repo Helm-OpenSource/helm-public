@@ -1,7 +1,8 @@
 ---
-status: formed-needs-next-layer
+status: active / formed-needs-next-layer
 owner: helm-core
 created: 2026-07-23
+review_after: 2026-08-25
 public_safety: Public reference runbook. Commands and evidence are synthetic or isolated; no customer endpoint, credential, policy, or production receipt.
 ---
 

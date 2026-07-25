@@ -1,7 +1,8 @@
 ---
-status: formed-needs-next-layer
+status: active / formed-needs-next-layer
 owner: helm-core
 created: 2026-07-23
+review_after: 2026-08-25
 public_safety: Public Core contract and reference-runtime design. No customer policy, credential, payload, provider entitlement, or production receipt.
 ---
 

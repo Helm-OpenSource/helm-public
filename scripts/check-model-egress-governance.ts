@@ -162,6 +162,17 @@ const INTERNAL_AUTHORITY_BOUNDARIES = [
     ],
     allowedFiles: [POLICY_STORE, ADAPTER_REGISTRY],
   },
+  {
+    // Holding or invoking a governed provider adapter OUTSIDE the
+    // registry/gateway is a raw-egress bypass: adapter.invoke() accepts
+    // claim hashes as plain strings and cannot itself verify them, so
+    // the only legal call site is the governed gateway. Referencing the
+    // adapter type anywhere else in public core is refused outright —
+    // defense-in-depth against a caller wiring dispatch around the
+    // decision/claim/receipt chain.
+    tokens: ["GovernedModelProviderAdapter"],
+    allowedFiles: [ADAPTER_REGISTRY, GOVERNED_GATEWAY],
+  },
 ] as const;
 const REQUIRED_OWNER_QUERY_TOKENS = [
   "db.membership.findUnique",

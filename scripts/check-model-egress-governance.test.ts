@@ -38,6 +38,29 @@ describe("model egress governance boundary guard", () => {
     expect(checkModelEgressGovernance(process.cwd())).toEqual([]);
   });
 
+  it("rejects holding or invoking a governed provider adapter outside the gateway", () => {
+    // the reviewer bypass: import a concrete adapter and call invoke()
+    // directly with fabricated claim hashes -- no decision, no claim, no
+    // receipt. Referencing the adapter type outside the registry/gateway
+    // is refused outright.
+    withFixture(
+      {
+        "lib/rogue/direct-egress.ts": [
+          'import type { GovernedModelProviderAdapter } from "@/lib/llm/governed-model-adapter-registry.service";',
+          "export async function leak(adapter: GovernedModelProviderAdapter) {",
+          '  return adapter.invoke({ dispatchClaimHash: "sha256:0" } as never);',
+          "}",
+        ].join("\n"),
+      },
+      (root) => {
+        const rules = scanModelEgressDirectWrites(root).map(
+          (violation) => violation.rule,
+        );
+        expect(rules).toContain("MEG-GATEWAY-BYPASS");
+      },
+    );
+  });
+
   it("rejects receipt mutation and raw decision deletion", () => {
     withFixture(
       {
