@@ -1,5 +1,5 @@
 ---
-status: design-approved / implementation-not-started
+status: planning / design-approved, implementation not started
 owner: helm-core
 created: 2026-07-23
 review_after: 2026-08-23
