@@ -419,7 +419,10 @@ function parseStoredReceipt(row: {
   return receipt;
 }
 
-async function loadProjectionSnapshot(
+// Exported cross-service seam: the CAIO Pro V1 completion store reuses this
+// projection to derive p4_asset_states_complete from the live catalog inside
+// its own SERIALIZABLE transaction. Read-only; grants nothing.
+export async function loadCaioInitializationProjectionSnapshot(
   tx: Tx,
   input: {
     workspaceId: string;
@@ -1165,7 +1168,7 @@ async function loadValidatedCurrentAcceptedCaioInitializationContext(
       "ceo_principal_binding_changed",
     );
   }
-  const snapshot = await loadProjectionSnapshot(tx, {
+  const snapshot = await loadCaioInitializationProjectionSnapshot(tx, {
     workspaceId: input.workspaceId,
     mandateRecordId: assessmentRow.mandateRecordId,
     evaluatedAt: input.at,
@@ -1279,7 +1282,7 @@ export async function recordCaioInitializationAssessment(input: {
           replayed: true,
         };
       }
-      const snapshot = await loadProjectionSnapshot(tx, {
+      const snapshot = await loadCaioInitializationProjectionSnapshot(tx, {
         workspaceId: input.workspaceId,
         mandateRecordId: input.mandateRecordId,
         evaluatedAt: now,
@@ -1421,7 +1424,7 @@ export async function acceptCaioInitializationGate(input: {
           "issuing_ceo_required",
         );
       }
-      const snapshot = await loadProjectionSnapshot(tx, {
+      const snapshot = await loadCaioInitializationProjectionSnapshot(tx, {
         workspaceId: input.workspaceId,
         mandateRecordId: assessmentRow.mandateRecordId,
         evaluatedAt: now,
@@ -1811,7 +1814,7 @@ export async function getCaioInitializationGateStatus(input: {
         staleReasons: ["ceo_principal_binding_not_live"],
       };
     }
-    const snapshot = await loadProjectionSnapshot(tx, {
+    const snapshot = await loadCaioInitializationProjectionSnapshot(tx, {
       workspaceId: input.workspaceId,
       mandateRecordId: assessmentRow.mandateRecordId,
       evaluatedAt: now,

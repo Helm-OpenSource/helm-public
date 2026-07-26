@@ -18,12 +18,32 @@ import {
 } from "../lib/stage1-owner-loop/caio-operating-question.test-fixtures";
 import { createCaioQuestionSelectionReceipt } from "../lib/stage1-owner-loop/caio-question-selection";
 import {
+  computeCaioProV1CompletionAssessment,
+  createCaioProV1CompletionAcceptanceReceipt,
+  createCaioQuestionValueReceipt,
+  validateCaioProV1CompletionGateReceipt,
+  type CaioProV1CompletionGateReceipt,
+} from "../lib/stage1-owner-loop/caio-pro-completion";
+import {
+  syntheticCaioProV1CompletionInput,
+  syntheticCaioQuestionValueReceiptInput,
+} from "../lib/stage1-owner-loop/caio-pro-completion.test-fixtures";
+import {
   checkCaioProV1,
   checkCaioProV1Exports,
   checkCaioProV1FrozenLiterals,
   checkCaioProV1Static,
+  COMPLETION_STORE_SUITE,
   SYNTHETIC_LOOP_SUITE,
 } from "./check-caio-pro-v1";
+
+const CLEAN_HYGIENE_COMPANIONS = {
+  [COMPLETION_STORE_SUITE]: "export const clean = true;\n",
+  "lib/stage1-owner-loop/caio-operating-question.test-fixtures.ts":
+    "export const clean = true;\n",
+  "lib/stage1-owner-loop/caio-pro-completion.test-fixtures.ts":
+    "export const clean = true;\n",
+} as const;
 
 function withFixture(
   files: Record<string, string>,
@@ -192,6 +212,81 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("keeps a completion assessment with any missing item not_ready", () => {
+    const input = syntheticCaioProV1CompletionInput();
+    input.attestations = input.attestations.filter(
+      (attestation) => attestation.itemKey !== "p3_runtime_truth_bound",
+    );
+    const assessment = computeCaioProV1CompletionAssessment(input);
+    expect(assessment.decision).toBe("not_ready");
+    expect(assessment.missingItemKeys).toEqual(["p3_runtime_truth_bound"]);
+  });
+
+  it("refuses completion acceptance against a not-ready assessment", () => {
+    const input = syntheticCaioProV1CompletionInput();
+    input.valueReceipts = input.valueReceipts.slice(0, 1);
+    const notReady = computeCaioProV1CompletionAssessment(input);
+    expect(notReady.decision).toBe("not_ready");
+    expect(() =>
+      createCaioProV1CompletionAcceptanceReceipt({
+        workspaceRef: notReady.workspaceRef,
+        assessment: notReady,
+        ceoPrincipalBindingRef: "binding:ceo:synthetic-completion",
+        ceoPrincipalRef: "principal:ceo:synthetic-completion",
+        actorUserRef: "user:ceo:synthetic-completion",
+        idempotencyKey: "completion-accept:test-not-ready",
+        reasonCodes: ["site_deployment_reviewed"],
+        evidenceRefs: ["evidence:completion-acceptance"],
+        previousReceipt: null,
+        recordedAt: "2026-07-26T08:00:00.000Z",
+      }),
+    ).toThrow("caio_pro_v1_completion_assessment_not_ready");
+  });
+
+  it("validates the fullFunctionOperation literal exactly", () => {
+    const ready = computeCaioProV1CompletionAssessment(
+      syntheticCaioProV1CompletionInput(),
+    );
+    const receipt = createCaioProV1CompletionAcceptanceReceipt({
+      workspaceRef: ready.workspaceRef,
+      assessment: ready,
+      ceoPrincipalBindingRef: "binding:ceo:synthetic-completion",
+      ceoPrincipalRef: "principal:ceo:synthetic-completion",
+      actorUserRef: "user:ceo:synthetic-completion",
+      idempotencyKey: "completion-accept:test-literal",
+      reasonCodes: ["site_deployment_reviewed"],
+      evidenceRefs: ["evidence:completion-acceptance"],
+      previousReceipt: null,
+      recordedAt: "2026-07-26T08:00:00.000Z",
+    });
+    expect(receipt.fullFunctionOperation).toBe(
+      "not_authorized_by_this_receipt",
+    );
+    const tampered = validateCaioProV1CompletionGateReceipt({
+      ...receipt,
+      fullFunctionOperation:
+        "activated" as unknown as CaioProV1CompletionGateReceipt["fullFunctionOperation"],
+    });
+    expect(tampered.valid).toBe(false);
+    expect(tampered.errors).toContain(
+      "completion_gate_receipt_governance_boundary_invalid",
+    );
+  });
+
+  it("refuses a token-count value metric fail-closed", () => {
+    const input = syntheticCaioQuestionValueReceiptInput();
+    input.metricDefinitions = [
+      {
+        metricKey: "token-usage-total",
+        definition: "tokens consumed per operating window",
+        dataSourceRefs: ["evidence:synthetic-tokens"],
+      },
+    ];
+    expect(() => createCaioQuestionValueReceipt(input)).toThrow(
+      "value_receipt_forbidden_value_basis:token_usage",
+    );
+  });
+
   it("fails closed on an empty repository fixture", () => {
     withFixture({}, (root) => {
       const rules = new Set(
@@ -221,8 +316,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           'const endpoint = "https://internal.example-corp.io/api";',
           'const secret = "sk-abcdefghijklmnopqrstuvwx";',
         ].join("\n"),
-        "lib/stage1-owner-loop/caio-operating-question.test-fixtures.ts":
-          "export const clean = true;\n",
+        ...CLEAN_HYGIENE_COMPANIONS,
       },
       (root) => {
         const hygiene = checkCaioProV1Static(root).filter(
@@ -248,8 +342,7 @@ describe("caio-pro-v1 aggregate gate", () => {
       {
         [SYNTHETIC_LOOP_SUITE]:
           'const email = "synthetic-owner@example.test";\nconst host = "127.0.0.1";\n',
-        "lib/stage1-owner-loop/caio-operating-question.test-fixtures.ts":
-          "export const clean = true;\n",
+        ...CLEAN_HYGIENE_COMPANIONS,
       },
       (root) => {
         expect(
@@ -267,7 +360,7 @@ describe("caio-pro-v1 aggregate gate", () => {
         "package.json": JSON.stringify({
           scripts: {
             "test:caio-pro-v1:mysql":
-              "vitest run lib/stage1-owner-loop/caio-pro-v1-synthetic-loop.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
+              "vitest run lib/stage1-owner-loop/caio-pro-v1-synthetic-loop.mysql.test.ts lib/stage1-owner-loop/caio-pro-completion-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
             "check:caio-pro-v1":
               "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts",
             "check:boundaries": "npm run public:smoke:static",

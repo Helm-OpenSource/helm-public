@@ -271,7 +271,7 @@ async function assertPrincipalBinding(
     workspaceId: string;
     actorUserId: string;
     principalRef: string;
-    principalKind: "ceo" | "guardian";
+    principalKind: "ceo" | "guardian" | "fde";
   },
 ): Promise<void> {
   const binding = await tx.caioPrincipalBinding.findFirst({
@@ -303,7 +303,7 @@ export async function registerCaioPrincipalBinding(input: {
   actorUserId: string;
   userId: string;
   principalRef: string;
-  principalKind: "ceo" | "guardian";
+  principalKind: "ceo" | "guardian" | "fde";
   evidenceRef: string;
   english?: boolean;
 }) {

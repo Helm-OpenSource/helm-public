@@ -179,7 +179,12 @@ describe("dashboard role-attention wiring", () => {
     );
     expect(source).toMatch(/const attentionRoleCategory = resolveRoleAttentionCategory/);
     expect(source).toMatch(/resolveShellAttention\(\{[\s\S]*roleCategory: attentionRoleCategory/);
-    expect(source).toMatch(/attentionItems: attentionResolution\.items/);
+    // The role work entry composes the shared attention resolution PLUS the
+    // CAIO Pro V1 completion-gate TODO source through the same channel.
+    expect(source).toMatch(
+      /attentionItems: \[\.\.\.attentionResolution\.items, \.\.\.completionAttention\]/,
+    );
+    expect(source).toMatch(/buildCaioProV1CompletionAttention\(\{/);
     expect(source).toMatch(/viewModel=\{roleAwareViewModel\}/);
     expect(source).toMatch(/<AttentionInbox[\s\S]*items=\{attentionResolution\.items\}/);
   });
