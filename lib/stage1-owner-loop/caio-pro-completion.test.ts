@@ -377,30 +377,40 @@ describe("computeCaioProV1CompletionAssessment", () => {
     ).toEqual(["p7_value_receipts_recorded"]);
   });
 
-  it("treats a zero-question selection as vacuous for P7 but still requires the retrospective", () => {
+  it("never lets a zero-question selection satisfy site-deployment completion", () => {
+    // Reviewer bypass: a legitimate 0-of-3 CEO selection previously made
+    // the P6/P7 journey items vacuously satisfied, so completion could be
+    // accepted with no closed supervision chain and no 30-day value
+    // receipt. A zero selection is a valid governance receipt but NEVER
+    // completion: a later selection round must close at least one real
+    // question journey first.
     const input = syntheticCaioProV1CompletionInput();
     input.selection.selectedQuestionIds = [];
     input.implementationPlans = [];
     input.supervisionChains = [];
     input.valueReceipts = [];
-    const withRetrospective =
-      computeCaioProV1CompletionAssessment(input);
-    expect(withRetrospective.decision).toBe("ready_for_owner_acceptance");
-    const p7 = withRetrospective.items.find(
-      (item) => item.itemKey === "p7_value_receipts_recorded",
+    const assessment = computeCaioProV1CompletionAssessment(input);
+    expect(assessment.decision).toBe("not_ready");
+    expect(assessment.missingItemKeys).toEqual(
+      expect.arrayContaining([
+        "p6_implementation_plans_materialized",
+        "p7_supervision_chain_closed",
+        "p7_value_receipts_recorded",
+      ]),
     );
-    expect(p7?.reasonCodes).toContain("vacuously_satisfied_zero_selection");
-
-    const withoutRetrospective = syntheticCaioProV1CompletionInput();
-    withoutRetrospective.selection.selectedQuestionIds = [];
-    withoutRetrospective.implementationPlans = [];
-    withoutRetrospective.supervisionChains = [];
-    withoutRetrospective.valueReceipts = [];
-    withoutRetrospective.retrospective = null;
-    expect(
-      computeCaioProV1CompletionAssessment(withoutRetrospective)
-        .missingItemKeys,
-    ).toEqual(["p8_retrospective_recorded"]);
+    for (const itemKey of [
+      "p6_implementation_plans_materialized",
+      "p7_supervision_chain_closed",
+      "p7_value_receipts_recorded",
+    ] as const) {
+      const item = assessment.items.find(
+        (candidate) => candidate.itemKey === itemKey,
+      );
+      expect(item?.status).toBe("missing");
+      expect(item?.reasonCodes).toContain(
+        "zero_selection_requires_a_later_completed_question_round",
+      );
+    }
   });
 
   it("goes not_ready when the retrospective binds a different selection", () => {

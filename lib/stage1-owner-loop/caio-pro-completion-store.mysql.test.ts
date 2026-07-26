@@ -259,6 +259,57 @@ describeMysql(
           evidenceRefs: [`evidence:fde-accept-attempt:${suffix}`],
         }),
       ).rejects.toThrow(/live_ceo_principal_binding_required/);
+      // A MEMBER-role field engineer with a live fde binding can READ the
+      // governed TODO readout (the field must see its queue); a plain
+      // MEMBER without any binding cannot.
+      const fieldMember = await db.user.create({
+        data: {
+          email: `caio-completion-field-${suffix}@example.com`,
+          name: "CAIO completion field member",
+        },
+      });
+      await db.membership.create({
+        data: {
+          workspaceId: workspaceA.workspaceId,
+          userId: fieldMember.id,
+          role: WorkspaceRole.MEMBER,
+          status: MembershipStatus.ACTIVE,
+        },
+      });
+      await registerCaioPrincipalBinding({
+        workspaceId: workspaceA.workspaceId,
+        actorUserId: workspaceA.ownerUserId,
+        userId: fieldMember.id,
+        principalRef: `fde-field-${suffix}`,
+        principalKind: "fde",
+        evidenceRef: `evidence:fde-field-binding:${suffix}`,
+      });
+      const fieldStatus = await getCaioProV1CompletionStatus({
+        workspaceId: workspaceA.workspaceId,
+        actorUserId: fieldMember.id,
+      });
+      expect(fieldStatus.state).toBe("not_ready");
+      expect(fieldStatus.missingItemKeys.length).toBeGreaterThan(0);
+      const plainMember = await db.user.create({
+        data: {
+          email: `caio-completion-plain-${suffix}@example.com`,
+          name: "CAIO completion plain member",
+        },
+      });
+      await db.membership.create({
+        data: {
+          workspaceId: workspaceA.workspaceId,
+          userId: plainMember.id,
+          role: WorkspaceRole.MEMBER,
+          status: MembershipStatus.ACTIVE,
+        },
+      });
+      await expect(
+        getCaioProV1CompletionStatus({
+          workspaceId: workspaceA.workspaceId,
+          actorUserId: plainMember.id,
+        }),
+      ).rejects.toThrow();
     });
 
     it("refuses an attestation without a live CEO binding in that workspace", async () => {

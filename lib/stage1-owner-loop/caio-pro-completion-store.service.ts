@@ -151,6 +151,53 @@ async function assertPolicyAccess(input: {
   });
 }
 
+// READ access for the governed TODO readout: MANAGE_POLICIES (owner scope)
+// OR a live fde principal binding held by an ACTIVE member. The field
+// deployment engineer must be able to SEE the operational TODO list to
+// work it; the readout carries item statuses, reason codes and evidence
+// refs only — never raw content — and grants nothing.
+async function assertCompletionStatusReadAccess(input: {
+  workspaceId: string;
+  actorUserId: string;
+  english?: boolean;
+}): Promise<void> {
+  nonEmpty(input.actorUserId, "signed_in_human_actor_required");
+  try {
+    await assertWorkspacePolicyServiceAccess({
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      actorType: ActorType.USER,
+      english: input.english ?? false,
+    });
+    return;
+  } catch (policyError) {
+    const membership = await db.membership.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: input.workspaceId,
+          userId: input.actorUserId,
+        },
+      },
+      select: { status: true },
+    });
+    const fdeBinding =
+      membership?.status === MembershipStatus.ACTIVE
+        ? await db.caioPrincipalBinding.findFirst({
+            where: {
+              workspaceId: input.workspaceId,
+              userId: input.actorUserId,
+              principalKind: "fde",
+              revokedAt: null,
+            },
+            select: { id: true },
+          })
+        : null;
+    if (!fdeBinding) {
+      throw policyError;
+    }
+  }
+}
+
 async function assertPolicyAccessInTransaction(
   tx: Tx,
   input: {
@@ -1345,24 +1392,36 @@ export async function recordCaioProV1CompletionAssessment(input: {
             workspaceId: input.workspaceId,
             now,
           });
-        await tx.caioProV1CompletionAssessment.create({
-          data: {
-            id: assessment.assessmentId,
-            workspaceId: input.workspaceId,
-            evaluationKey,
-            schemaVersion: assessment.schemaVersion,
-            evaluatorRevision: assessment.evaluatorRevision,
-            basisHash: assessment.basisHash,
-            decision: assessment.decision.toUpperCase(),
-            inputJson: jsonStringify({
-              input: projection,
-            } satisfies StoredCompletionAssessmentEnvelope),
-            assessmentJson: jsonStringify(assessment),
-            contentHash: assessment.contentHash,
-            authorityEffect: assessment.authorityEffect,
-            evaluatedAt: now,
-          },
-        });
+        try {
+          await tx.caioProV1CompletionAssessment.create({
+            data: {
+              id: assessment.assessmentId,
+              workspaceId: input.workspaceId,
+              evaluationKey,
+              schemaVersion: assessment.schemaVersion,
+              evaluatorRevision: assessment.evaluatorRevision,
+              basisHash: assessment.basisHash,
+              decision: assessment.decision.toUpperCase(),
+              inputJson: jsonStringify({
+                input: projection,
+              } satisfies StoredCompletionAssessmentEnvelope),
+              assessmentJson: jsonStringify(assessment),
+              contentHash: assessment.contentHash,
+              authorityEffect: assessment.authorityEffect,
+              evaluatedAt: now,
+            },
+          });
+        } catch (error) {
+          if (isUniqueConstraintViolation(error)) {
+            // Same-millisecond identical evidence under a different
+            // evaluation key collides on (workspaceId, contentHash) —
+            // surface a domain code instead of a raw driver error.
+            throw new CaioProCompletionStoreError(
+              "completion_assessment_content_already_recorded",
+            );
+          }
+          throw error;
+        }
         await writeAuditLog(
           {
             workspaceId: input.workspaceId,
@@ -2053,7 +2112,7 @@ export async function getCaioProV1CompletionStatus(input: {
   now?: Date;
   english?: boolean;
 }): Promise<CaioProV1CompletionStatus> {
-  await assertPolicyAccess(input);
+  await assertCompletionStatusReadAccess(input);
   const now = input.now ?? new Date();
   return db.$transaction(async (tx) => {
     const { assessment: live } = await computeLiveCompletionAssessment(tx, {

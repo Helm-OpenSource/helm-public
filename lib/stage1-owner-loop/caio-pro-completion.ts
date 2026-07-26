@@ -83,7 +83,7 @@ export const CAIO_FORBIDDEN_VALUE_BASES: ReadonlyArray<{
   code: string;
   pattern: RegExp;
 }> = [
-  { code: "token_usage", pattern: /tokens?/iu },
+  { code: "token_usage", pattern: /(?:tokens?|令牌|词元)/iu },
   {
     code: "model_output_count",
     pattern:
@@ -817,14 +817,21 @@ type ItemJudgement = {
   evidenceRefs: string[];
 };
 
+// Ruling on revoked recorder bindings: an attestation is CONTENT-effective —
+// it stays satisfied even if the binding that recorded it is later revoked,
+// because the evidence it points at did not change. Live-actor checks
+// remain enforced where they matter: acceptance and revocation always
+// re-assert the ACTING user's live CEO binding at signing time.
 function judgeAttestedItem(
   itemKey: CaioProV1AttestableItemKey,
   attestations: readonly CaioProV1EvidenceAttestation[],
+  workspaceRef: string,
 ): ItemJudgement {
   const candidates = attestations
     .filter(
       (attestation) =>
         attestation.itemKey === itemKey &&
+        attestation.workspaceRef === workspaceRef &&
         validateCaioProV1EvidenceAttestation(attestation).valid,
     )
     .sort((left, right) => right.version - left.version);
@@ -880,7 +887,7 @@ export function computeCaioProV1CompletionAssessment(
   for (const itemKey of CAIO_PRO_V1_ATTESTABLE_ITEMS) {
     judgements.set(
       itemKey,
-      judgeAttestedItem(itemKey, normalized.attestations),
+      judgeAttestedItem(itemKey, normalized.attestations, normalized.workspaceRef),
     );
   }
 
@@ -952,14 +959,19 @@ export function computeCaioProV1CompletionAssessment(
     );
   });
   judgements.set("p6_implementation_plans_materialized", {
-    satisfied: selectionRecorded && planGaps.length === 0,
+    satisfied:
+      selectionRecorded &&
+      selectedQuestionIds.length > 0 &&
+      planGaps.length === 0,
     reasonCodes: !selectionRecorded
       ? ["ceo_selection_required_first"]
-      : planGaps.length > 0
-        ? planGaps.map(
-            (questionId) => `implementation_plan_missing:${questionId}`,
-          )
-        : [],
+      : selectedQuestionIds.length === 0
+        ? ["zero_selection_requires_a_later_completed_question_round"]
+        : planGaps.length > 0
+          ? planGaps.map(
+              (questionId) => `implementation_plan_missing:${questionId}`,
+            )
+          : [],
     evidenceRefs: uniqueSorted(
       selectedQuestionIds.flatMap((questionId) => {
         const plan = plansByQuestion.get(questionId);
@@ -970,8 +982,12 @@ export function computeCaioProV1CompletionAssessment(
     ),
   });
 
-  // P7 with zero selected questions is vacuously satisfied; the checklist
-  // still requires the CEO selection receipt itself and the P8 retrospective.
+  // A ZERO-question selection is a legitimate governance receipt (the CEO
+  // may defer, P1C allows 0-3), but it can never constitute site-deployment
+  // completion: full-function work only starts after at least one question
+  // has actually travelled the whole supervised 30-day journey. P7 items
+  // therefore stay MISSING under a zero selection — a later selection round
+  // must close at least one real chain before the gate can become ready.
   const closedChains = selectedQuestionIds
     .map((questionId) => chainsByQuestion.get(questionId))
     .filter(
@@ -986,13 +1002,14 @@ export function computeCaioProV1CompletionAssessment(
     );
   const supervisionSatisfied =
     selectionRecorded &&
-    (selectedQuestionIds.length === 0 || closedChains.length >= 1);
+    selectedQuestionIds.length > 0 &&
+    closedChains.length >= 1;
   judgements.set("p7_supervision_chain_closed", {
     satisfied: supervisionSatisfied,
     reasonCodes: !selectionRecorded
       ? ["ceo_selection_required_first"]
       : selectedQuestionIds.length === 0
-        ? ["vacuously_satisfied_zero_selection"]
+        ? ["zero_selection_requires_a_later_completed_question_round"]
         : closedChains.length >= 1
           ? []
           : ["no_selected_question_has_closed_supervision_chain"],
@@ -1016,11 +1033,14 @@ export function computeCaioProV1CompletionAssessment(
     return !receipt || !caioQuestionValueReceiptWindowSatisfied(receipt);
   });
   judgements.set("p7_value_receipts_recorded", {
-    satisfied: selectionRecorded && valueReceiptGaps.length === 0,
+    satisfied:
+      selectionRecorded &&
+      selectedQuestionIds.length > 0 &&
+      valueReceiptGaps.length === 0,
     reasonCodes: !selectionRecorded
       ? ["ceo_selection_required_first"]
       : selectedQuestionIds.length === 0
-        ? ["vacuously_satisfied_zero_selection"]
+        ? ["zero_selection_requires_a_later_completed_question_round"]
         : valueReceiptGaps.map(
             (questionId) => `value_receipt_missing_or_unsatisfied:${questionId}`,
           ),
