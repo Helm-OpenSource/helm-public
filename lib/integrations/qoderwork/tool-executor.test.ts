@@ -14,7 +14,10 @@ const { dbMock } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({ db: dbMock }));
 
-import { executeQoderWorkTool } from "./tool-executor";
+import {
+  executeQoderWorkTool,
+  serverProposalPayloadHash,
+} from "./tool-executor";
 
 const AUTH = {
   connectionId: "connection-1",
@@ -99,6 +102,7 @@ describe("QoderWork governed tool executor", () => {
       rawMetadata: JSON.stringify({
         disposition: "accept_as_draft_candidate",
         reasonCodes: ["requires_human_review"],
+        serverPayloadHash: serverProposalPayloadHash(DRAFT),
       }),
     });
     dbMock.auditLog.findFirst.mockResolvedValue({ id: "audit-original", requestId: "request-original" });
@@ -118,6 +122,61 @@ describe("QoderWork governed tool executor", () => {
     expect(dbMock.externalMemoryRecord.create).not.toHaveBeenCalled();
   });
 
+  it("routes a divergent payload under a matching declared hash to CONFLICT (reviewer bypass)", async () => {
+    // Same idempotency key, same caller-declared contentHash, but the
+    // stored server-computed payload hash belongs to a DIFFERENT payload:
+    // the server must refuse the replay instead of answering with the old
+    // artifact.
+    dbMock.externalMemoryRecord.findUnique.mockResolvedValue({
+      id: "candidate-1",
+      checksum: DRAFT.contentHash,
+      rawMetadata: JSON.stringify({
+        disposition: "accept_as_draft_candidate",
+        reasonCodes: ["requires_human_review"],
+        serverPayloadHash: serverProposalPayloadHash({
+          ...DRAFT,
+          contentSummary: "a different summary the caller tried to swap in",
+        }),
+      }),
+    });
+    dbMock.auditLog.create.mockResolvedValue({ id: "audit-conflict" });
+
+    const result = await executeQoderWorkTool({
+      auth: AUTH,
+      toolName: "propose_draft_artifact",
+      arguments: DRAFT,
+    });
+
+    expect(result).toMatchObject({
+      status: "rejected",
+      warnings: expect.arrayContaining(["CONFLICT"]),
+    });
+    expect(dbMock.externalMemoryRecord.create).not.toHaveBeenCalled();
+  });
+
+  it("fails closed to CONFLICT when the stored candidate has no server payload hash", async () => {
+    dbMock.externalMemoryRecord.findUnique.mockResolvedValue({
+      id: "candidate-1",
+      checksum: DRAFT.contentHash,
+      rawMetadata: JSON.stringify({
+        disposition: "accept_as_draft_candidate",
+        reasonCodes: ["requires_human_review"],
+      }),
+    });
+    dbMock.auditLog.create.mockResolvedValue({ id: "audit-conflict" });
+
+    const result = await executeQoderWorkTool({
+      auth: AUTH,
+      toolName: "propose_draft_artifact",
+      arguments: DRAFT,
+    });
+
+    expect(result).toMatchObject({
+      status: "rejected",
+      warnings: expect.arrayContaining(["CONFLICT"]),
+    });
+  });
+
   it("preserves quarantine on an idempotent replay", async () => {
     dbMock.externalMemoryRecord.findUnique.mockResolvedValue({
       id: "candidate-1",
@@ -125,6 +184,7 @@ describe("QoderWork governed tool executor", () => {
       rawMetadata: JSON.stringify({
         disposition: "quarantine",
         reasonCodes: ["authority_exceeded"],
+        serverPayloadHash: serverProposalPayloadHash(DRAFT),
       }),
     });
     dbMock.auditLog.findFirst.mockResolvedValue({ id: "audit-original", requestId: "request-original" });

@@ -387,6 +387,7 @@ async function executeProposal(input: {
             schemaVersion: input.proposal.schemaVersion,
             correlationRef: input.proposal.correlationRef,
             idempotencyKeyHash: contentBoundId("idempotency", input.proposal.idempotencyKey),
+            serverPayloadHash: serverProposalPayloadHash(input.proposal),
             artifactId: artifact.artifactId,
             objectRef: artifact.objectRef,
             evidenceRefs: artifact.citationsOrEvidenceRefs,
@@ -566,7 +567,18 @@ async function replayOrConflict(
   input: { auth: AuthenticatedConnection; toolName: ProposalToolName; proposal: ProposalArguments; now: Date },
   existing: { id: string; checksum: string | null; rawMetadata?: string | null },
 ): Promise<QoderWorkMcpResponse> {
-  const sameContent = existing.checksum === input.proposal.contentHash;
+  // Server-side full-payload equality: the stored candidate carries the
+  // canonical hash the SERVER computed at record time; a replay is only a
+  // replay when the recomputed hash of the incoming payload matches it.
+  // The caller-declared contentHash stays a source declaration and, on its
+  // own, proves nothing. Missing stored hash fails closed into CONFLICT.
+  const storedPayloadHash = parseCandidateMetadata(
+    existing.rawMetadata,
+  ).serverPayloadHash;
+  const sameContent =
+    existing.checksum === input.proposal.contentHash &&
+    typeof storedPayloadHash === "string" &&
+    storedPayloadHash === serverProposalPayloadHash(input.proposal);
   if (!sameContent) {
     const requestRef = `request:${randomUUID()}`;
     const conflictReceipt = await db.auditLog.create({
@@ -611,6 +623,29 @@ async function replayOrConflict(
     orderBy: { createdAt: "asc" },
     select: { id: true, requestId: true },
   });
+  // Replays are observable: every DUPLICATE answer leaves its own audit
+  // row (rate-limited upstream), so repeated replays never become an
+  // invisible traffic pattern.
+  await db.auditLog.create({
+    data: {
+      workspaceId: input.auth.workspaceId,
+      userId: input.auth.userId,
+      actor: `QoderWork device ${input.auth.deviceRef}`,
+      actorType: ActorType.AI,
+      actionType: "QODERWORK_PROPOSAL_REPLAYED",
+      targetType: "ExternalMemoryRecord",
+      targetId: existing.id,
+      summary: "QoderWork idempotent replay answered with the recorded candidate",
+      payload: JSON.stringify({
+        payloadStored: false,
+        originalReceiptRef: receipt?.id ?? null,
+        auditRetainUntil: auditRetainUntil(input.now),
+      }),
+      sourcePage: "/api/mcp/qoderwork",
+      traceId: input.proposal.correlationRef,
+      requestId: `request:${randomUUID()}`,
+    },
+  });
   const metadata = parseCandidateMetadata(existing.rawMetadata);
   return {
     status: mapDisposition(metadata.disposition),
@@ -627,15 +662,27 @@ function parseCandidateMetadata(value: string | null | undefined) {
   try {
     const parsed: unknown = JSON.parse(value ?? "{}");
     if (!parsed || typeof parsed !== "object") throw new Error("invalid metadata");
-    const record = parsed as { disposition?: unknown; reasonCodes?: unknown };
+    const record = parsed as {
+      disposition?: unknown;
+      reasonCodes?: unknown;
+      serverPayloadHash?: unknown;
+    };
     return {
       disposition: typeof record.disposition === "string" ? record.disposition : "review_required",
       reasonCodes: Array.isArray(record.reasonCodes)
         ? record.reasonCodes.filter((reason): reason is string => typeof reason === "string")
         : [],
+      serverPayloadHash:
+        typeof record.serverPayloadHash === "string"
+          ? record.serverPayloadHash
+          : null,
     };
   } catch {
-    return { disposition: "review_required", reasonCodes: [] as string[] };
+    return {
+      disposition: "review_required",
+      reasonCodes: [] as string[],
+      serverPayloadHash: null,
+    };
   }
 }
 
@@ -669,6 +716,32 @@ function nextSurface(toolName: ProposalToolName): QoderWorkMcpResponse["nextAllo
 
 function contentBoundId(namespace: string, value: string) {
   return `sha256:${createHash("sha256").update(`${namespace}\0${value}`).digest("hex")}`;
+}
+
+// Replay equality is judged on a SERVER-computed hash over the canonical
+// full proposal payload — never on the caller-declared contentHash alone.
+// A caller reusing an idempotency key with the same declared hash but a
+// divergent payload (summary, evidence refs, object ref, ...) must land in
+// the CONFLICT path, not be silently answered with the old artifact.
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [
+          key,
+          canonicalize((value as Record<string, unknown>)[key]),
+        ]),
+    );
+  }
+  return value;
+}
+
+export function serverProposalPayloadHash(proposal: unknown): string {
+  return `sha256:${createHash("sha256")
+    .update(`qoderwork-proposal\0${JSON.stringify(canonicalize(proposal))}`)
+    .digest("hex")}`;
 }
 
 function auditRetainUntil(now: Date) {
