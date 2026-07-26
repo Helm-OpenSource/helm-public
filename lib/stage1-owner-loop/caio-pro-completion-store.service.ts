@@ -193,6 +193,57 @@ async function lockWorkspace(tx: Tx, workspaceId: string): Promise<void> {
   }
 }
 
+// FDE seam: a bound field deployment engineer may RECORD evidence on the
+// CEO's behalf (installation, maintenance, upgrade and P4-P8 follow-
+// through). Acceptance and revocation stay CEO-only — recording is
+// delegable, signing is not.
+async function assertLiveFdeBinding(
+  tx: Tx,
+  input: {
+    workspaceId: string;
+    actorUserId: string;
+    fdePrincipalRef: string;
+  },
+) {
+  const binding = await tx.caioPrincipalBinding.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      principalRef: input.fdePrincipalRef,
+      principalKind: "fde",
+      revokedAt: null,
+    },
+  });
+  if (!binding) {
+    throw new CaioProCompletionStoreError(
+      "live_fde_principal_binding_required",
+    );
+  }
+  return binding;
+}
+
+// The accountable CEO SEAT must exist (a live ceo binding row for the
+// given principal ref, whoever holds it) even when an FDE records.
+async function requireLiveCeoSeat(
+  tx: Tx,
+  input: { workspaceId: string; ceoPrincipalRef: string },
+) {
+  const seat = await tx.caioPrincipalBinding.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      principalRef: input.ceoPrincipalRef,
+      principalKind: "ceo",
+      revokedAt: null,
+    },
+  });
+  if (!seat) {
+    throw new CaioProCompletionStoreError(
+      "live_ceo_principal_binding_required",
+    );
+  }
+  return seat;
+}
+
 async function assertLiveCeoBinding(
   tx: Tx,
   input: {
@@ -798,6 +849,9 @@ export async function recordCaioProV1EvidenceAttestation(input: {
   workspaceId: string;
   actorUserId: string;
   ceoPrincipalRef: string;
+  // When present, the acting user is a bound FDE recording on the CEO's
+  // behalf; when absent, the acting user must be the bound CEO themself.
+  recorderFdePrincipalRef?: string;
   itemKey: CaioProV1AttestableItemKey;
   statement: string;
   evidenceRefs: string[];
@@ -837,11 +891,31 @@ export async function recordCaioProV1EvidenceAttestation(input: {
       db.$transaction(async (tx) => {
         await lockWorkspace(tx, input.workspaceId);
         await assertPolicyAccessInTransaction(tx, input);
-        const binding = await assertLiveCeoBinding(tx, {
-          workspaceId: input.workspaceId,
-          actorUserId: input.actorUserId,
-          ceoPrincipalRef,
-        });
+        const fdePrincipalRef = input.recorderFdePrincipalRef?.trim();
+        let binding;
+        let recordedByPrincipalKind: "ceo" | "fde";
+        let recorderBinding;
+        if (fdePrincipalRef) {
+          recorderBinding = await assertLiveFdeBinding(tx, {
+            workspaceId: input.workspaceId,
+            actorUserId: input.actorUserId,
+            fdePrincipalRef,
+          });
+          binding = await requireLiveCeoSeat(tx, {
+            workspaceId: input.workspaceId,
+            ceoPrincipalRef,
+          });
+          recordedByPrincipalKind = "fde";
+        } else {
+          binding = await assertLiveCeoBinding(tx, {
+            workspaceId: input.workspaceId,
+            actorUserId: input.actorUserId,
+            ceoPrincipalRef,
+          });
+          recorderBinding = binding;
+          recordedByPrincipalKind = "ceo";
+        }
+        const recordedByPrincipalRef = fdePrincipalRef ?? ceoPrincipalRef;
         const requestHash = hashRequest({
           itemKey: input.itemKey,
           statement,
@@ -849,6 +923,9 @@ export async function recordCaioProV1EvidenceAttestation(input: {
           ceoPrincipalBindingRef: binding.id,
           ceoPrincipalRef,
           actorUserRef: input.actorUserId,
+          recordedByPrincipalKind,
+          recordedByPrincipalRef,
+          recordedByBindingRef: recorderBinding.id,
         });
         const existing = await tx.caioProV1EvidenceAttestation.findUnique({
           where: {
@@ -883,6 +960,9 @@ export async function recordCaioProV1EvidenceAttestation(input: {
           ceoPrincipalBindingRef: binding.id,
           ceoPrincipalRef,
           actorUserRef: input.actorUserId,
+          recordedByPrincipalKind,
+          recordedByPrincipalRef,
+          recordedByBindingRef: recorderBinding.id,
           recordedAt: now.toISOString(),
         });
         try {

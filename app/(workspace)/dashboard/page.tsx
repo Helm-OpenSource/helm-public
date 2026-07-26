@@ -26,6 +26,8 @@ import {
   attachRoleAnomalyProgress,
   resolveRoleAttentionCategory,
 } from "@/features/dashboard/role-anomaly-progress";
+import { buildCaioProV1CompletionAttention } from "@/lib/stage1-owner-loop/caio-pro-completion-attention";
+import { getCaioProV1CompletionStatus } from "@/lib/stage1-owner-loop/caio-pro-completion-store.service";
 import { resolveMemberRoleHome } from "@/lib/shell/member-role-home";
 
 function firstParam(value: string | string[] | undefined): string | undefined {
@@ -152,9 +154,37 @@ export default async function DashboardPage({
       runtimeContext,
     }),
   ]);
+  // CAIO Pro V1 completion gate -> the same governed work-entry channel.
+  // OWNER/ADMIN scope sees the full accountable P4-P8 TODO list; an "fde"
+  // workstation sees the operational subset; other roles see nothing.
+  // Fail-quiet: the dashboard first paint must never depend on the gate.
+  const viewerHasOwnerScope =
+    membership.role === "OWNER" || membership.role === "ADMIN";
+  let completionAttention: ReturnType<
+    typeof buildCaioProV1CompletionAttention
+  > = [];
+  if (viewerHasOwnerScope || attentionRoleCategory === "fde") {
+    try {
+      const completionStatus = await getCaioProV1CompletionStatus({
+        workspaceId: workspace.id,
+        actorUserId: pageData.user.id,
+        english,
+      });
+      if (completionStatus.state !== "accepted") {
+        completionAttention = buildCaioProV1CompletionAttention({
+          missingItemKeys: completionStatus.missingItemKeys,
+          assessmentContentHash: completionStatus.liveAssessment.contentHash,
+          viewerRoleCategory: attentionRoleCategory,
+          viewerHasOwnerScope,
+        });
+      }
+    } catch {
+      completionAttention = [];
+    }
+  }
   const roleAwareWorkEntry = attachRoleAnomalyProgress({
     model: workEntry,
-    attentionItems: attentionResolution.items,
+    attentionItems: [...attentionResolution.items, ...completionAttention],
     english,
   });
   const roleAwareViewModel = {

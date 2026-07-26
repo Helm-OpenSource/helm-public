@@ -569,6 +569,13 @@ export type CaioProV1EvidenceAttestation = {
   ceoPrincipalBindingRef: string;
   ceoPrincipalRef: string;
   actorUserRef: string;
+  // Who actually recorded the attestation: the bound CEO themself, or a
+  // bound FDE (field deployment engineer) helping the CEO complete the
+  // P4-P8 TODOs. The CEO seat above stays the accountable anchor either
+  // way; recording is delegable, ACCEPTANCE never is.
+  recordedByPrincipalKind: "ceo" | "fde";
+  recordedByPrincipalRef: string;
+  recordedByBindingRef: string;
   authorityEffect: "none";
   recordedAt: string;
   contentHash: string;
@@ -615,6 +622,27 @@ function attestationErrors(
   if (attestation.authorityEffect !== "none") {
     errors.push("attestation_authority_effect_invalid");
   }
+  if (
+    attestation.recordedByPrincipalKind !== "ceo" &&
+    attestation.recordedByPrincipalKind !== "fde"
+  ) {
+    errors.push("attestation_recorder_kind_invalid");
+  } else if (attestation.recordedByPrincipalKind === "ceo") {
+    // The CEO recording for themself must reference their own seat.
+    if (
+      attestation.recordedByPrincipalRef !== attestation.ceoPrincipalRef ||
+      attestation.recordedByBindingRef !== attestation.ceoPrincipalBindingRef
+    ) {
+      errors.push("attestation_recorder_seat_mismatch");
+    }
+  } else if (
+    !isNonEmpty(attestation.recordedByPrincipalRef) ||
+    !isNonEmpty(attestation.recordedByBindingRef) ||
+    attestation.recordedByPrincipalRef === attestation.ceoPrincipalRef
+  ) {
+    // An FDE recorder is a DISTINCT seat: it can never be the CEO ref.
+    errors.push("attestation_fde_recorder_invalid");
+  }
   return [...new Set(errors)];
 }
 
@@ -634,6 +662,9 @@ export function createCaioProV1EvidenceAttestation(
     ceoPrincipalBindingRef: input.ceoPrincipalBindingRef.trim(),
     ceoPrincipalRef: input.ceoPrincipalRef.trim(),
     actorUserRef: input.actorUserRef.trim(),
+    recordedByPrincipalKind: input.recordedByPrincipalKind,
+    recordedByPrincipalRef: input.recordedByPrincipalRef.trim(),
+    recordedByBindingRef: input.recordedByBindingRef.trim(),
     authorityEffect: "none",
     recordedAt: input.recordedAt,
   };

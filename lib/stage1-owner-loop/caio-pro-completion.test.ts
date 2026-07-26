@@ -203,6 +203,9 @@ describe("CaioProV1EvidenceAttestation", () => {
         ceoPrincipalBindingRef: "binding-1",
         ceoPrincipalRef: "ceo-1",
         actorUserRef: "user-1",
+        recordedByPrincipalKind: "ceo",
+        recordedByPrincipalRef: "ceo-1",
+        recordedByBindingRef: "binding-1",
         recordedAt: "2026-06-06T12:00:00.000Z",
       }),
     ).toThrow("attestation_item_key_not_attestable");
@@ -219,12 +222,56 @@ describe("CaioProV1EvidenceAttestation", () => {
         ceoPrincipalBindingRef: "binding-1",
         ceoPrincipalRef: "ceo-1",
         actorUserRef: "user-1",
+        recordedByPrincipalKind: "ceo",
+        recordedByPrincipalRef: "ceo-1",
+        recordedByBindingRef: "binding-1",
         recordedAt: "2026-06-06T12:00:00.000Z",
       });
       expect(validateCaioProV1EvidenceAttestation(attestation).valid).toBe(
         true,
       );
     }
+  });
+
+  it("accepts a bound FDE recorder as a distinct seat and refuses forgeries", () => {
+    const base = {
+      workspaceRef: "workspace:synthetic-caio-completion",
+      itemKey: CAIO_PRO_V1_ATTESTABLE_ITEMS[0],
+      version: 3,
+      statement: "Recorded by the field deployment engineer",
+      evidenceRefs: ["evidence:fde-recorded"],
+      ceoPrincipalBindingRef: "binding-1",
+      ceoPrincipalRef: "ceo-1",
+      actorUserRef: "fde-user-1",
+      recordedAt: "2026-06-06T12:00:00.000Z",
+    } as const;
+    const fdeAttestation = createCaioProV1EvidenceAttestation({
+      ...base,
+      recordedByPrincipalKind: "fde",
+      recordedByPrincipalRef: "fde-1",
+      recordedByBindingRef: "binding-fde-1",
+    });
+    expect(validateCaioProV1EvidenceAttestation(fdeAttestation).valid).toBe(
+      true,
+    );
+    // an FDE recorder can never claim the CEO seat ref
+    expect(() =>
+      createCaioProV1EvidenceAttestation({
+        ...base,
+        recordedByPrincipalKind: "fde",
+        recordedByPrincipalRef: "ceo-1",
+        recordedByBindingRef: "binding-fde-1",
+      }),
+    ).toThrow("attestation_fde_recorder_invalid");
+    // a CEO recorder must reference their own seat exactly
+    expect(() =>
+      createCaioProV1EvidenceAttestation({
+        ...base,
+        recordedByPrincipalKind: "ceo",
+        recordedByPrincipalRef: "someone-else",
+        recordedByBindingRef: "binding-1",
+      }),
+    ).toThrow("attestation_recorder_seat_mismatch");
   });
 });
 

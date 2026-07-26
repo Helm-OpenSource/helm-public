@@ -181,6 +181,86 @@ describeMysql(
       ).toBe(2);
     });
 
+    it("lets a bound FDE record on the CEO's behalf but never sign acceptance", async () => {
+      // Register a distinct FDE member + fde principal binding.
+      const fde = await db.user.create({
+        data: {
+          email: `caio-completion-fde-${suffix}@example.com`,
+          name: "CAIO completion fde",
+        },
+      });
+      await db.membership.create({
+        data: {
+          workspaceId: workspaceA.workspaceId,
+          userId: fde.id,
+          role: WorkspaceRole.ADMIN,
+          status: MembershipStatus.ACTIVE,
+        },
+      });
+      const fdeRef = `fde-completion-${suffix}`;
+      await registerCaioPrincipalBinding({
+        workspaceId: workspaceA.workspaceId,
+        actorUserId: workspaceA.ownerUserId,
+        userId: fde.id,
+        principalRef: fdeRef,
+        principalKind: "fde",
+        evidenceRef: `evidence:fde-binding:${suffix}`,
+      });
+      // FDE records an attestation; the recorder seat is stamped as fde
+      // while the CEO seat stays the accountable anchor.
+      const recorded = await recordCaioProV1EvidenceAttestation({
+        workspaceId: workspaceA.workspaceId,
+        actorUserId: fde.id,
+        ceoPrincipalRef: workspaceA.ceoRef,
+        recorderFdePrincipalRef: fdeRef,
+        itemKey: "p3_device_security_accepted",
+        statement: "Synthetic device security walkthrough recorded by fde",
+        evidenceRefs: [`evidence:device-security:${suffix}`],
+        idempotencyKey: `attest-fde-device-${suffix}`,
+      });
+      expect(recorded.attestation.recordedByPrincipalKind).toBe("fde");
+      expect(recorded.attestation.recordedByPrincipalRef).toBe(fdeRef);
+      expect(recorded.attestation.ceoPrincipalRef).toBe(workspaceA.ceoRef);
+      // Claiming the fde path without a live fde binding fails closed.
+      await expect(
+        recordCaioProV1EvidenceAttestation({
+          workspaceId: workspaceA.workspaceId,
+          actorUserId: workspaceA.ownerUserId,
+          ceoPrincipalRef: workspaceA.ceoRef,
+          recorderFdePrincipalRef: `fde-unbound-${suffix}`,
+          itemKey: "p3_runtime_truth_bound",
+          statement: "Should fail closed",
+          evidenceRefs: [`evidence:should-fail:${suffix}`],
+          idempotencyKey: `attest-fde-unbound-${suffix}`,
+        }),
+      ).rejects.toThrow("live_fde_principal_binding_required");
+      // The FDE can never sign completion acceptance: acceptance asserts a
+      // live CEO binding held by the ACTOR, which the fde user lacks.
+      await recordCaioProV1CompletionAssessment({
+        workspaceId: workspaceA.workspaceId,
+        actorUserId: workspaceA.ownerUserId,
+        evaluationKey: `completion-eval-fde-${suffix}`,
+      });
+      const fdeAssessmentRow =
+        await db.caioProV1CompletionAssessment.findFirst({
+          where: { workspaceId: workspaceA.workspaceId },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        });
+      if (!fdeAssessmentRow) throw new Error("assessment row required");
+      await expect(
+        acceptCaioProV1CompletionGate({
+          workspaceId: workspaceA.workspaceId,
+          actorUserId: fde.id,
+          ceoPrincipalRef: workspaceA.ceoRef,
+          assessmentId: fdeAssessmentRow.id,
+          idempotencyKey: `accept-by-fde-${suffix}`,
+          reasonCodes: ["site_deployment_reviewed"],
+          evidenceRefs: [`evidence:fde-accept-attempt:${suffix}`],
+        }),
+      ).rejects.toThrow(/live_ceo_principal_binding_required/);
+    });
+
     it("refuses an attestation without a live CEO binding in that workspace", async () => {
       await expect(
         recordCaioProV1EvidenceAttestation({
