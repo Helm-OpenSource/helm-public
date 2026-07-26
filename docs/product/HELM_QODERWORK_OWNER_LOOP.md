@@ -1,5 +1,5 @@
 ---
-status: implemented_default_off
+status: dormant / implemented default-off (registration only, no runtime activation)
 owner: helm-core
 created: 2026-07-20
 review_after: 2026-08-20
