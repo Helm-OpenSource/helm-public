@@ -542,6 +542,8 @@ export function projectDecisionFollowThroughState(
   if (input.decisionStatus === "superseded") return "SUPERSEDED";
   if (input.decisionStatus === "expired") return "EXPIRED";
   if (input.decisionStatus === "rejected") return "REJECTED";
+  if (input.decisionStatus === "deferred") return "DEFERRED";
+  if (input.decisionStatus === "evidence_requested") return "EVIDENCE_REQUESTED";
   if (input.decisionStatus === "evaluated") return "EVALUATED";
   if (input.receiptVerified && !input.receiptPresent) return "INCONSISTENT";
   if (input.actionStatus === "BLOCKED") return "BLOCKED";

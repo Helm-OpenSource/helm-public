@@ -186,7 +186,7 @@ describe("memory export route", () => {
     expect(exportedText).not.toContain("Helm workspace memory export");
   });
 
-  it("excludes legacy OpenClaw entries from default ALL exports", async () => {
+  it("excludes external Agent entries from default ALL exports", async () => {
     permissionsMock.canExportMemory.mockReturnValue(true);
     dbMock.memoryEntry.findMany.mockResolvedValue([]);
 
@@ -198,7 +198,12 @@ describe("memory export route", () => {
         where: expect.objectContaining({
           workspaceId: "workspace-1",
           deletedAt: null,
-          NOT: { source: { startsWith: "OPENCLAW:" } },
+          NOT: {
+            OR: [
+              { source: { startsWith: "OPENCLAW:" } },
+              { source: { startsWith: "QODERWORK:" } },
+            ],
+          },
         }),
       }),
     );

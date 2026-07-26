@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, WorkspaceRole } from "@prisma/client";
+import { ExternalSyncProvider, Prisma, WorkspaceRole } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   buildStage1OwnerLoopReadout,
@@ -59,6 +59,9 @@ async function loadOwnerLoopRows(
     currentG0Context,
     operatingQuestionHead,
     questionSelectionHead,
+    externalAgentConnections,
+    externalCandidates,
+    externalCandidateAudits,
   ] = await Promise.all([
     tx.enterpriseObservationProgram.findMany({
       where: { workspaceId },
@@ -176,6 +179,33 @@ async function loadOwnerLoopRows(
         },
       },
     }),
+    tx.externalAgentConnection.findMany({
+      where: { workspaceId, providerId: "qoderwork_cn" },
+      select: {
+        expiresAt: true,
+        revokedAt: true,
+        lastConnectedAt: true,
+        lastFailureCode: true,
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+    tx.externalMemoryRecord.findMany({
+      where: { workspaceId, provider: ExternalSyncProvider.QODERWORK },
+      select: { rawMetadata: true, occurredAt: true },
+      orderBy: { occurredAt: "desc" },
+      take: 100,
+    }),
+    tx.auditLog.findMany({
+      where: {
+        workspaceId,
+        actionType: {
+          in: ["QODERWORK_PROPOSAL_REJECTED", "QODERWORK_IDEMPOTENCY_CONFLICT"],
+        },
+      },
+      select: { payload: true },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
   ]);
 
   return {
@@ -189,6 +219,9 @@ async function loadOwnerLoopRows(
     currentG0Context,
     operatingQuestionHead,
     questionSelectionHead,
+    externalAgentConnections,
+    externalCandidates,
+    externalCandidateAudits,
   };
 }
 

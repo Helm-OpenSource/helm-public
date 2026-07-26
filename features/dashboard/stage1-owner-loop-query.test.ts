@@ -11,6 +11,9 @@ const { dbMock, loadCurrentAcceptedG0ForReadMock } = vi.hoisted(() => ({
     decisionWorkPacketClaim: { findMany: vi.fn() },
     caioOperatingQuestionPortfolioHead: { findUnique: vi.fn() },
     caioQuestionSelectionHead: { findUnique: vi.fn() },
+    externalAgentConnection: { findMany: vi.fn(async () => []) },
+    externalMemoryRecord: { findMany: vi.fn(async () => []) },
+    auditLog: { findMany: vi.fn(async () => []) },
   },
   loadCurrentAcceptedG0ForReadMock: vi.fn(),
 }));

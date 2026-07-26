@@ -203,7 +203,7 @@ describe("memory query routes", () => {
     expect(body.data.pageInfo.nextCursor).toEqual(expect.any(String));
   });
 
-  it("excludes legacy OpenClaw entries from default ALL timeline queries", async () => {
+  it("excludes external Agent entries from default ALL timeline queries", async () => {
     const response = await getMemoryTimelineRoute(
       new Request("http://localhost/api/memory/timeline?objectLevel=WORKSPACE"),
     );
@@ -214,7 +214,12 @@ describe("memory query routes", () => {
         where: expect.objectContaining({
           workspaceId: "workspace-1",
           deletedAt: null,
-          NOT: { source: { startsWith: "OPENCLAW:" } },
+          NOT: {
+            OR: [
+              { source: { startsWith: "OPENCLAW:" } },
+              { source: { startsWith: "QODERWORK:" } },
+            ],
+          },
         }),
       }),
     );

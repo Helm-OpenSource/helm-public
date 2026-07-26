@@ -1072,6 +1072,7 @@ enum CaptureSourceType {
 
 enum ExternalSyncProvider {
   OPENCLAW
+  QODERWORK
 }
 
 enum ExternalSyncStatus {
@@ -1233,6 +1234,7 @@ model User {
   ownedBiReportBusinessSignals         BiReportBusinessSignal[]          @relation("BiReportBusinessSignalOwner")
   reviewedBiReportHandoffDecisions     BiReportBusinessHandoffDecision[] @relation("BiReportBusinessHandoffDecisionReviewedBy")
   authoredBiReportHandoffExecutionLogs BiReportHandoffExecutionLog[]     @relation("BiReportHandoffExecutionLogAuthor")
+  externalAgentConnections             ExternalAgentConnection[]
 }
 
 model AuthEnrollment {
@@ -1398,6 +1400,7 @@ model Workspace {
   memoryEntries                        MemoryEntry[]
   externalMemorySyncStates             ExternalMemorySyncState[]
   externalMemoryRecords                ExternalMemoryRecord[]
+  externalAgentConnections             ExternalAgentConnection[]
   policyRules                          PolicyRule[]
   budgetRules                          BudgetRule[]
   notifications                        Notification[]
@@ -3677,6 +3680,7 @@ model EnterpriseObservationProgram {
   workspace            Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   sources              ObservationSource[]
   runs                 ObservationSourceRun[]
+  externalAgentConnections ExternalAgentConnection[]
 
   @@index([workspaceId, status, expiresAt])
   @@index([authorizationRef])
@@ -4315,6 +4319,45 @@ model ExternalMemoryRecord {
   @@unique([workspaceId, provider, externalId])
   @@index([workspaceId, provider, occurredAt])
   @@index([workspaceId, scope, category])
+}
+
+// Workspace-, user-, and device-bound credential for an external Agent.
+// Raw bearer tokens are shown once and never persisted; tokenHash is the only
+// authentication material stored by Helm. Runtime identity is derived from
+// this row and never accepted from MCP request arguments.
+model ExternalAgentConnection {
+  id                       String    @id @default(cuid())
+  workspaceId              String
+  userId                   String
+  observationProgramId     String
+  providerId               String
+  deviceRef                String
+  displayName              String
+  tokenHash                String    @unique
+  tokenPrefix              String
+  scopesJson               String    @db.LongText
+  allowedSourceIdsJson     String    @db.LongText
+  allowedObjectTypesJson   String    @db.LongText
+  maxDataClassification    String
+  expiresAt                DateTime
+  revokedAt                DateTime?
+  revokedByUserId          String?
+  lastConnectedAt          DateTime?
+  lastClientName           String?
+  lastClientVersion        String?
+  lastFailureCode          String?
+  rateWindowStartedAt      DateTime  @default(now())
+  rateWindowRequestCount   Int       @default(0)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  observationProgram       EnterpriseObservationProgram @relation(fields: [observationProgramId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, providerId, deviceRef])
+  @@index([workspaceId, providerId, revokedAt, expiresAt])
+  @@index([userId])
+  @@index([observationProgramId])
 }
 
 model PolicyRule {

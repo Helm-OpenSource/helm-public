@@ -8,7 +8,7 @@ export default async function MemoryPage({
     query?: string;
     dimension?: "ALL" | "WORKSPACE" | "CONTACT" | "COMPANY" | "OPPORTUNITY" | "MEETING";
     objectLevel?: "ALL" | "WORKSPACE" | "CONTACT" | "COMPANY" | "OPPORTUNITY" | "MEETING";
-    source?: "ALL" | "HELM" | "OPENCLAW";
+    source?: "ALL" | "HELM" | "OPENCLAW" | "QODERWORK";
     objectType?: import("@prisma/client").ObjectType;
     objectId?: string;
     from?: string;

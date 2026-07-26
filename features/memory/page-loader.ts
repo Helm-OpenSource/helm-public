@@ -20,7 +20,7 @@ type MemorySearchParams = Promise<{
   query?: string;
   dimension?: "ALL" | "WORKSPACE" | "CONTACT" | "COMPANY" | "OPPORTUNITY" | "MEETING";
   objectLevel?: "ALL" | "WORKSPACE" | "CONTACT" | "COMPANY" | "OPPORTUNITY" | "MEETING";
-  source?: "ALL" | "HELM" | "OPENCLAW";
+  source?: "ALL" | "HELM" | "OPENCLAW" | "QODERWORK";
   objectType?: ObjectType;
   objectId?: string;
   from?: string;

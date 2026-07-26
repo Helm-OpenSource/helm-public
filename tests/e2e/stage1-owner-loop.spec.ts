@@ -110,6 +110,9 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
     await expectMetric(page, "verified-receipts", "1/1", /质量 92\/100 · 0 个缺失/);
     await expect(console).toContainText("synthetic-crm: 健康");
     await expect(console).toContainText("synthetic-finance: 已过时");
+    await expect(console.locator('[data-stage1-qoderwork-health="true"]')).toContainText(
+      /QoderWork.*有效设备.*外部候选.*待复核.*隔离.*冲突/,
+    );
     await expect(console.getByRole("link", { name: "审批与验收队列" })).toHaveAttribute(
       "href",
       "/approvals",
@@ -168,6 +171,41 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
     await expect(
       page.locator('[data-stage1-owner-loop-console="true"]'),
     ).toHaveCount(0);
+  });
+
+  test("OWNER can inspect the governed decision drawer without a send action", async ({ page }) => {
+    await openDemoWorkspace(page, "founder");
+    await page.goto("/approvals");
+
+    const queue = page.getByTestId("stage1-decision-queue");
+    await expect(queue).toBeVisible();
+    await queue
+      .getByTestId("stage1-decision-card")
+      .filter({ hasText: "EVIDENCE_READY" })
+      .click();
+
+    const drawer = page.getByRole("dialog");
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toContainText(/事实|Facts/);
+    await expect(drawer).toContainText(/推断|Inference/);
+    await expect(drawer).toContainText(/未知与风险|Unknowns and risks/);
+    await expect(drawer.getByRole("button", { name: /批准并生成 Work Packet|Approve and create Work Packet/ })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: /拒绝|Reject/ })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: /延后|Defer/ })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: /要求补证|Need evidence/ })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: /发送|Send/ })).toHaveCount(0);
+  });
+
+  test("OWNER sees the default-off QoderWork connection surface", async ({ page }) => {
+    await openDemoWorkspace(page, "founder");
+    await page.goto("/settings?tab=connectors");
+
+    const card = page.getByTestId("qoderwork-connection-card");
+    await expect(card).toBeVisible();
+    await expect(card).toContainText(/运行入口默认关闭|Runtime off by default/);
+    await expect(card).toContainText(/工具权限|Tool permissions/);
+    await expect(card).toContainText("draft:propose");
+    await expect(card).toContainText(/不能批准、外发、执行、写 CRM、改策略或晋升记忆|cannot approve, send, execute, write CRM, change policy, or promote memory/);
   });
 
   test("owner operating loop remains readable without horizontal overflow on mobile", async ({

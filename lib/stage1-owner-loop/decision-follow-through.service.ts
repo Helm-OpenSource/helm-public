@@ -498,6 +498,132 @@ export async function confirmStage1DecisionRecord(input: {
   return outcome.record;
 }
 
+export type Stage1OwnerReviewAction =
+  | "reject"
+  | "defer"
+  | "request_evidence";
+
+export async function recordStage1OwnerReviewOutcome(input: {
+  workspaceId: string;
+  decisionRecordId: string;
+  action: Stage1OwnerReviewAction;
+  reason: string;
+  deferUntil?: string | null;
+  actorName: string;
+  actorUserId: string;
+  english?: boolean;
+}) {
+  if (!input.actorUserId.trim()) {
+    throw new Stage1DecisionGateError(["owner_identity_required"]);
+  }
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new Stage1DecisionGateError(["owner_review_reason_required"]);
+  }
+  const now = new Date();
+  const deferUntil =
+    input.action === "defer" && input.deferUntil
+      ? new Date(input.deferUntil)
+      : null;
+  if (
+    input.action === "defer" &&
+    (!deferUntil ||
+      Number.isNaN(deferUntil.getTime()) ||
+      deferUntil.getTime() <= now.getTime())
+  ) {
+    throw new Stage1DecisionGateError(["future_defer_until_required"]);
+  }
+  await assertWorkspaceGovernedActionManagementServiceAccess({
+    workspaceId: input.workspaceId,
+    userId: input.actorUserId,
+    actorType: ActorType.USER,
+    english: input.english ?? false,
+  });
+
+  const status =
+    input.action === "reject"
+      ? "REJECTED"
+      : input.action === "defer"
+        ? "DEFERRED"
+        : "EVIDENCE_REQUESTED";
+  const outcome = await db.$transaction(async (tx) => {
+    const claimed = await tx.decisionRecord.updateMany({
+      where: {
+        id: input.decisionRecordId,
+        workspaceId: input.workspaceId,
+        status: "EVIDENCE_READY",
+        ownerConfirmedAt: null,
+        OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+      },
+      data: {
+        status,
+        ownerRef: input.actorUserId,
+        ownerConclusion: reason,
+        ownerConfirmedAt: null,
+        ...(deferUntil ? { validUntil: deferUntil } : {}),
+      },
+    });
+    const record = await tx.decisionRecord.findFirst({
+      where: { id: input.decisionRecordId, workspaceId: input.workspaceId },
+    });
+    if (!record) return { kind: "not_found" as const };
+    if (claimed.count === 0) {
+      const sameDeferral =
+        input.action !== "defer" || sameInstant(record.validUntil, deferUntil);
+      if (
+        record.status === status &&
+        record.ownerRef === input.actorUserId &&
+        record.ownerConclusion === reason &&
+        record.ownerConfirmedAt === null &&
+        sameDeferral
+      ) {
+        return { kind: "idempotent" as const, record };
+      }
+      if (record.validUntil && record.validUntil <= now) {
+        return { kind: "expired" as const, record };
+      }
+      return { kind: "not_ready" as const, record };
+    }
+    await writeAuditLog(
+      {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        actor: input.actorName,
+        actorType: ActorType.USER,
+        actionType: `STAGE1_DECISION_${status}`,
+        targetType: "DecisionRecord",
+        targetId: record.id,
+        summary:
+          input.action === "reject"
+            ? "Owner rejected the decision with a structured reason"
+            : input.action === "defer"
+              ? "Owner deferred the decision to a future review time"
+              : "Owner requested more evidence before deciding",
+        payload: {
+          action: input.action,
+          reason,
+          deferUntil,
+          ownerConfirmed: false,
+        },
+      },
+      { client: tx },
+    );
+    return { kind: "recorded" as const, record };
+  });
+  if (outcome.kind === "not_found") {
+    throw new Stage1DecisionGateError(["decision_not_found"]);
+  }
+  if (outcome.kind === "expired") {
+    throw new Stage1DecisionGateError(["decision_expired"]);
+  }
+  if (outcome.kind === "not_ready") {
+    throw new Stage1DecisionGateError([
+      "decision_already_claimed_or_not_ready",
+    ]);
+  }
+  return outcome.record;
+}
+
 export async function recordStage1SupervisionSignal(input: {
   workspaceId: string;
   signal: SupervisionSignal;
