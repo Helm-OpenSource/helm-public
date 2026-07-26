@@ -14,9 +14,16 @@
 //                      refused, the G0 acceptance-receipt creator refuses a
 //                      caller-supplied accepted state without a ready
 //                      assessment, plan artifacts carry authorityEffect and
-//                      workPacketEffect exactly "none", and the context-agent
+//                      workPacketEffect exactly "none", the context-agent
 //                      consent validator requires performanceInputProhibited
-//                      to be exactly true.
+//                      to be exactly true, a completion assessment with ANY
+//                      missing P4-P8 item can never be ready, completion
+//                      acceptance against a not-ready assessment throws,
+//                      every completion-gate receipt carries
+//                      fullFunctionOperation exactly
+//                      "not_authorized_by_this_receipt", and value receipts
+//                      refuse forbidden value bases (token counts are never
+//                      business value).
 //   4. CPV1-FIREWALL — the mandate-not-an-authorization firewall stays wired.
 //                      The import-graph sweep itself lives in
 //                      scripts/check-caio-terminology.ts (authority firewall:
@@ -58,6 +65,17 @@ import {
   syntheticOperatingQuestionG0Input,
   syntheticOperatingQuestionGenerationInput,
 } from "../lib/stage1-owner-loop/caio-operating-question.test-fixtures";
+import {
+  computeCaioProV1CompletionAssessment,
+  createCaioProV1CompletionAcceptanceReceipt,
+  createCaioQuestionValueReceipt,
+  validateCaioProV1CompletionGateReceipt,
+  type CaioProV1CompletionGateReceipt,
+} from "../lib/stage1-owner-loop/caio-pro-completion";
+import {
+  syntheticCaioProV1CompletionInput,
+  syntheticCaioQuestionValueReceiptInput,
+} from "../lib/stage1-owner-loop/caio-pro-completion.test-fixtures";
 import { createCaioQuestionSelectionReceipt } from "../lib/stage1-owner-loop/caio-question-selection";
 
 export type CaioProV1Violation = {
@@ -84,6 +102,7 @@ const REQUIRED_STATUS_TOKENS = [
   "Helm CAIO Pro V1",
   "Helm CAIO Pro P1C",
   "Helm CAIO Pro P2",
+  "Helm CAIO Pro V1 现场部署完成门",
   "npm run check:caio-pro-v1",
   "npm run test:caio-pro-v1:mysql",
 ] as const;
@@ -102,9 +121,13 @@ const REQUIRED_FIREWALL_TOKENS = [
 
 export const SYNTHETIC_LOOP_SUITE =
   "lib/stage1-owner-loop/caio-pro-v1-synthetic-loop.mysql.test.ts";
+export const COMPLETION_STORE_SUITE =
+  "lib/stage1-owner-loop/caio-pro-completion-store.mysql.test.ts";
 const HYGIENE_FILES = [
   SYNTHETIC_LOOP_SUITE,
+  COMPLETION_STORE_SUITE,
   "lib/stage1-owner-loop/caio-operating-question.test-fixtures.ts",
+  "lib/stage1-owner-loop/caio-pro-completion.test-fixtures.ts",
 ] as const;
 
 // Synthetic fixture hygiene: nothing phone-, email-, endpoint-, IP- or
@@ -146,7 +169,7 @@ export const HYGIENE_RULES: readonly HygieneRule[] = [
 ] as const;
 
 const EXPECTED_LOOP_SUITE_COMMAND =
-  "vitest run lib/stage1-owner-loop/caio-pro-v1-synthetic-loop.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false";
+  "vitest run lib/stage1-owner-loop/caio-pro-v1-synthetic-loop.mysql.test.ts lib/stage1-owner-loop/caio-pro-completion-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false";
 
 const EXPECTED_GATE_COMMAND =
   "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts";
@@ -264,6 +287,26 @@ export function checkCaioProV1Exports(): CaioProV1Violation[] {
       name: "createCaioOperatingQuestionImplementationPlan",
       value: createCaioOperatingQuestionImplementationPlan,
       file: "lib/stage1-owner-loop/caio-operating-question-implementation-plan.ts",
+    },
+    {
+      name: "computeCaioProV1CompletionAssessment",
+      value: computeCaioProV1CompletionAssessment,
+      file: "lib/stage1-owner-loop/caio-pro-completion.ts",
+    },
+    {
+      name: "createCaioProV1CompletionAcceptanceReceipt",
+      value: createCaioProV1CompletionAcceptanceReceipt,
+      file: "lib/stage1-owner-loop/caio-pro-completion.ts",
+    },
+    {
+      name: "createCaioQuestionValueReceipt",
+      value: createCaioQuestionValueReceipt,
+      file: "lib/stage1-owner-loop/caio-pro-completion.ts",
+    },
+    {
+      name: "validateCaioProV1CompletionGateReceipt",
+      value: validateCaioProV1CompletionGateReceipt,
+      file: "lib/stage1-owner-loop/caio-pro-completion.ts",
     },
     {
       name: "compareFallbackRouteSafety",
@@ -494,6 +537,133 @@ export function checkCaioProV1FrozenLiterals(): CaioProV1Violation[] {
     frozen(
       "lib/stage1-owner-loop/caio-operating-question-implementation-plan.ts",
       "creating the synthetic selection receipt or implementation plan threw",
+    );
+  }
+
+  // Completion gate: an assessment with ANY missing P4-P8 item can never be
+  // ready, acceptance against a not-ready assessment throws, the
+  // fullFunctionOperation literal is validated exactly, and value receipts
+  // refuse forbidden value bases (token counts are never business value).
+  const completionFile = "lib/stage1-owner-loop/caio-pro-completion.ts";
+  try {
+    const completeInput = syntheticCaioProV1CompletionInput();
+    const readyAssessmentCompletion =
+      computeCaioProV1CompletionAssessment(completeInput);
+    if (
+      readyAssessmentCompletion.decision !== "ready_for_owner_acceptance" ||
+      readyAssessmentCompletion.missingItemKeys.length !== 0
+    ) {
+      frozen(
+        completionFile,
+        "the fully-satisfied synthetic completion input no longer evaluates ready",
+      );
+    }
+    const missingOneInput = syntheticCaioProV1CompletionInput();
+    missingOneInput.attestations = missingOneInput.attestations.filter(
+      (attestation) => attestation.itemKey !== "p8_incident_posture_clear",
+    );
+    const notReadyCompletion =
+      computeCaioProV1CompletionAssessment(missingOneInput);
+    if (
+      notReadyCompletion.decision !== "not_ready" ||
+      !notReadyCompletion.missingItemKeys.includes(
+        "p8_incident_posture_clear",
+      )
+    ) {
+      frozen(
+        completionFile,
+        "a completion assessment with a missing checklist item must be not_ready with the missing item listed",
+      );
+    }
+    const completionAcceptanceInput = (
+      assessment: typeof readyAssessmentCompletion,
+      key: string,
+    ) => ({
+      workspaceRef: assessment.workspaceRef,
+      assessment,
+      ceoPrincipalBindingRef: "binding:ceo:synthetic-completion",
+      ceoPrincipalRef: "principal:ceo:synthetic-completion",
+      actorUserRef: "user:ceo:synthetic-completion",
+      idempotencyKey: `completion-accept:${key}`,
+      reasonCodes: ["site_deployment_reviewed"],
+      evidenceRefs: ["evidence:completion-acceptance"],
+      previousReceipt: null,
+      recordedAt: "2026-07-26T08:00:00.000Z",
+    });
+    let notReadyRefused = false;
+    try {
+      createCaioProV1CompletionAcceptanceReceipt(
+        completionAcceptanceInput(notReadyCompletion, "not-ready"),
+      );
+    } catch (error) {
+      notReadyRefused =
+        error instanceof Error &&
+        error.message.includes("caio_pro_v1_completion_assessment_not_ready");
+    }
+    if (!notReadyRefused) {
+      frozen(
+        completionFile,
+        "completion acceptance against a not-ready assessment must throw caio_pro_v1_completion_assessment_not_ready",
+      );
+    }
+    const acceptedReceipt = createCaioProV1CompletionAcceptanceReceipt(
+      completionAcceptanceInput(readyAssessmentCompletion, "ready"),
+    );
+    if (
+      acceptedReceipt.fullFunctionOperation !==
+        "not_authorized_by_this_receipt" ||
+      acceptedReceipt.authorityEffect !== "none"
+    ) {
+      frozen(
+        completionFile,
+        'every completion-gate receipt must carry fullFunctionOperation exactly "not_authorized_by_this_receipt" and authorityEffect "none"',
+      );
+    }
+    const tamperedValidation = validateCaioProV1CompletionGateReceipt({
+      ...acceptedReceipt,
+      fullFunctionOperation:
+        "activated" as unknown as CaioProV1CompletionGateReceipt["fullFunctionOperation"],
+    });
+    if (
+      tamperedValidation.valid ||
+      !tamperedValidation.errors.includes(
+        "completion_gate_receipt_governance_boundary_invalid",
+      )
+    ) {
+      frozen(
+        completionFile,
+        "a tampered fullFunctionOperation literal must fail completion-gate receipt validation",
+      );
+    }
+  } catch {
+    frozen(
+      completionFile,
+      "evaluating the synthetic completion gate threw instead of judging fail-closed",
+    );
+  }
+
+  let tokenMetricRefused = false;
+  try {
+    const forbiddenInput = syntheticCaioQuestionValueReceiptInput();
+    forbiddenInput.metricDefinitions = [
+      {
+        metricKey: "token-usage-total",
+        definition: "tokens consumed per operating window",
+        dataSourceRefs: ["evidence:synthetic-tokens"],
+      },
+    ];
+    createCaioQuestionValueReceipt(forbiddenInput);
+  } catch (error) {
+    tokenMetricRefused =
+      error instanceof Error &&
+      error.message.includes(
+        "value_receipt_forbidden_value_basis:token_usage",
+      );
+  }
+  if (!tokenMetricRefused) {
+    frozen(
+      completionFile,
+      "a token-count value metric must be refused with value_receipt_forbidden_value_basis:token_usage",
     );
   }
 
@@ -776,7 +946,7 @@ if (
     process.exitCode = 1;
   } else {
     console.log(
-      "caio-pro-v1: PASS - synthetic reference loop formed on the public path (isolated-MySQL E2E + CI wiring); NOT customer or production evidence, no external side effects",
+      "caio-pro-v1: PASS - synthetic reference loop and P4-P8 site-deployment completion gate formed on the public path (isolated-MySQL E2E + CI wiring); completion acceptance never authorizes full-function operation; NOT customer or production evidence, no external side effects",
     );
   }
 }

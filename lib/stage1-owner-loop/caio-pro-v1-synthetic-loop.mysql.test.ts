@@ -12,7 +12,10 @@
 //   packet -> execution receipt -> independent verification -> decision
 //   evaluation -> OBSERVED memory candidate. Plus one context-agent
 //   consent -> revocation -> deletion-receipt chain and one refused
-//   (fail-closed) model-route decision.
+//   (fail-closed) model-route decision. The suite then drives the
+//   site-deployment completion gate: the P4-P8 TODO readout with missing
+//   items -> synthetic value receipts + retrospective + owner attestations
+//   -> ready assessment -> CEO acceptance -> revocation fail-close.
 //
 // Honesty statement: every fixture string below is synthetic. This suite is
 // a public reference loop only — it is NOT customer initialization, NOT
@@ -74,6 +77,16 @@ import {
   acceptCaioInitializationGate,
   recordCaioInitializationAssessment,
 } from "./caio-initialization-gate-store.service";
+import { CAIO_PRO_V1_ATTESTABLE_ITEMS } from "./caio-pro-completion";
+import {
+  acceptCaioProV1CompletionGate,
+  getCaioProV1CompletionStatus,
+  recordCaioProV1CompletionAssessment,
+  recordCaioProV1EvidenceAttestation,
+  recordCaioProV1RetrospectiveReceipt,
+  recordCaioQuestionValueReceipt,
+  revokeCaioProV1CompletionGate,
+} from "./caio-pro-completion-store.service";
 import {
   bindCurrentCaioQuestionSelectionToDecisionRecords,
   generateCaioOperatingQuestionPortfolio,
@@ -1355,6 +1368,230 @@ describeMysql(
       const second = sha256(canonicalJson(syntheticEvidencePackageSeed()));
       expect(first).toBe(second);
       expect(first).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    });
+
+    // ----------------------------------------------------------------------
+    // Site-deployment completion gate: P4-P8 as a governed TODO checklist.
+    // ----------------------------------------------------------------------
+
+    const DAY_MS = 24 * HOUR_MS;
+
+    function completionValuePayload(questionId: string) {
+      return {
+        questionId,
+        baselineWindow: {
+          start: new Date(base.getTime() - 80 * DAY_MS).toISOString(),
+          end: new Date(base.getTime() - 45 * DAY_MS).toISOString(),
+        },
+        resultWindow: {
+          start: new Date(base.getTime() - 45 * DAY_MS).toISOString(),
+          end: new Date(base.getTime() - 10 * DAY_MS).toISOString(),
+        },
+        resultWindowShortfallReason: null,
+        metricDefinitions: [
+          {
+            metricKey: `governed-operating-baseline-${questionId}`,
+            definition:
+              "Synthetic governed operating baseline observed over the evidence window",
+            dataSourceRefs: [connectedAssets[0].evidenceRef],
+          },
+        ],
+        observedDelta: {
+          description:
+            "Synthetic observed improvement of the governed baseline",
+          quantifiedValue: 3200,
+          currency: "CNY",
+          confidence: "medium" as const,
+          evidenceRefs: [connectedAssets[0].evidenceRef],
+        },
+        adviceRefs: [evidenceRefFor(`advice-${questionId}`)],
+        decisionRefs: boundDecisionRecordIds,
+        executionReceiptRefs: [executionReceiptId],
+        acceptanceReceiptRefs: [executionReceiptId],
+        counterfactualNotes:
+          "Synthetic counterfactual: part of the delta may have occurred without the advice chain",
+        externalFactorNotes:
+          "Synthetic external factor: demand shifted during the result window",
+        valueClasses: ["efficiency" as const],
+        unprovenParts: [
+          "Causality between the advice chain and the full delta is unproven",
+        ],
+        nextStepRecommendation:
+          "Continue observation for one more governed window before expansion",
+        ownerConclusion: "continue" as const,
+      };
+    }
+
+    it("surfaces the P4-P8 completion TODO list with missing items", async () => {
+      const status = await getCaioProV1CompletionStatus({
+        workspaceId,
+        actorUserId: ownerUserId,
+      });
+      expect(status.state).toBe("not_ready");
+      expect(status.receipt).toBeNull();
+      expect(status.items).toHaveLength(13);
+      // The chain built so far already satisfies the derivable items...
+      for (const satisfiedKey of [
+        "p4_asset_states_complete",
+        "p5_g0_accepted",
+        "p6_portfolio_generated",
+        "p6_ceo_selection_recorded",
+        "p6_implementation_plans_materialized",
+        "p7_supervision_chain_closed",
+      ] as const) {
+        expect(
+          status.items.find((item) => item.itemKey === satisfiedKey)?.status,
+        ).toBe("satisfied");
+      }
+      // ...while the value, retrospective, and attestation items stay open.
+      expect(status.missingItemKeys).toEqual([
+        "p4_asset_inventory_confirmed",
+        "p7_value_receipts_recorded",
+        "p3_device_security_accepted",
+        "p3_runtime_truth_bound",
+        "p8_incident_posture_clear",
+        "p8_retrospective_recorded",
+        "p8_maturity_decision_recorded",
+      ]);
+    });
+
+    it("refuses CEO acceptance while completion items are missing", async () => {
+      const notReady = await recordCaioProV1CompletionAssessment({
+        workspaceId,
+        actorUserId: ownerUserId,
+        evaluationKey: `completion-not-ready-${suffix}`,
+      });
+      expect(notReady.assessment.decision).toBe("not_ready");
+      await expect(
+        acceptCaioProV1CompletionGate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          ceoPrincipalRef: CEO_REF,
+          assessmentId: notReady.assessment.assessmentId,
+          idempotencyKey: `completion-accept-early-${suffix}`,
+          reasonCodes: ["site_deployment_reviewed"],
+          evidenceRefs: [evidenceRefFor("completion-acceptance-early")],
+        }),
+      ).rejects.toThrow(
+        "completion_assessment_stale_reassessment_required",
+      );
+      expect(
+        await db.caioProV1CompletionGateReceipt.count({
+          where: { workspaceId },
+        }),
+      ).toBe(0);
+    });
+
+    it("records value receipts, the retrospective, and the five owner attestations", async () => {
+      for (const questionId of [
+        portfolioQuestionIds[0],
+        portfolioQuestionIds[1],
+      ]) {
+        const recorded = await recordCaioQuestionValueReceipt({
+          workspaceId,
+          actorUserId: ownerUserId,
+          payload: completionValuePayload(questionId),
+          idempotencyKey: `completion-value-${questionId}-${suffix}`,
+        });
+        expect(recorded.replayed).toBe(false);
+        expect(recorded.receipt.selectionReceiptRef).toBe(
+          selectionReceiptRef,
+        );
+      }
+      const retrospective = await recordCaioProV1RetrospectiveReceipt({
+        workspaceId,
+        actorUserId: ownerUserId,
+        payload: {
+          reusablePackAssetRefs: [
+            evidenceRefFor("retrospective-pack-asset"),
+          ],
+          customerOverlayRefs: [evidenceRefFor("retrospective-overlay")],
+          maturityEvaluations: [
+            {
+              actionCategory: "operating_review",
+              recommendation: "advise",
+              evidenceRefs: [evidenceRefFor("retrospective-review")],
+            },
+          ],
+          overallRecommendation: "continue",
+        },
+        idempotencyKey: `completion-retrospective-${suffix}`,
+      });
+      expect(retrospective.receipt.maturityPromotionEffect).toBe("none");
+      for (const itemKey of CAIO_PRO_V1_ATTESTABLE_ITEMS) {
+        const attested = await recordCaioProV1EvidenceAttestation({
+          workspaceId,
+          actorUserId: ownerUserId,
+          ceoPrincipalRef: CEO_REF,
+          itemKey,
+          statement: `Synthetic owner attestation for ${itemKey}`,
+          evidenceRefs: [evidenceRefFor(`attestation-${itemKey}`)],
+          idempotencyKey: `completion-attest-${itemKey}-${suffix}`,
+        });
+        expect(attested.attestation.authorityEffect).toBe("none");
+      }
+    });
+
+    it("flips the assessment ready, records CEO acceptance, and shows complete", async () => {
+      const ready = await recordCaioProV1CompletionAssessment({
+        workspaceId,
+        actorUserId: ownerUserId,
+        evaluationKey: `completion-ready-${suffix}`,
+      });
+      expect(ready.assessment.decision).toBe("ready_for_owner_acceptance");
+      expect(ready.assessment.missingItemKeys).toEqual([]);
+
+      const accepted = await acceptCaioProV1CompletionGate({
+        workspaceId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        assessmentId: ready.assessment.assessmentId,
+        idempotencyKey: `completion-accept-${suffix}`,
+        reasonCodes: ["site_deployment_reviewed"],
+        evidenceRefs: [evidenceRefFor("completion-acceptance")],
+      });
+      expect(accepted.replayed).toBe(false);
+      expect(accepted.receipt.resultingStatus).toBe("accepted");
+      expect(accepted.receipt.authorityEffect).toBe("none");
+      // The frozen boundary: acceptance is the precondition for
+      // full-function operation, never its activation.
+      expect(accepted.receipt.fullFunctionOperation).toBe(
+        "not_authorized_by_this_receipt",
+      );
+      // Acceptance dispatches nothing beyond the packet already present.
+      expect(await db.actionItem.count({ where: { workspaceId } })).toBe(1);
+
+      const status = await getCaioProV1CompletionStatus({
+        workspaceId,
+        actorUserId: ownerUserId,
+      });
+      expect(status.state).toBe("accepted");
+      expect(status.missingItemKeys).toEqual([]);
+      expect(status.staleReasons).toEqual([]);
+    });
+
+    it("revokes the completion gate and fail-closes the accepted state", async () => {
+      const revoked = await revokeCaioProV1CompletionGate({
+        workspaceId,
+        actorUserId: ownerUserId,
+        ceoPrincipalRef: CEO_REF,
+        idempotencyKey: `completion-revoke-${suffix}`,
+        reasonCodes: ["synthetic_revocation_drill"],
+        evidenceRefs: [evidenceRefFor("completion-revocation")],
+      });
+      expect(revoked.receipt.resultingStatus).toBe("revoked");
+      expect(revoked.receipt.fullFunctionOperation).toBe(
+        "not_authorized_by_this_receipt",
+      );
+
+      const status = await getCaioProV1CompletionStatus({
+        workspaceId,
+        actorUserId: ownerUserId,
+      });
+      // Accepted is no longer current; the checklist itself remains ready
+      // but a NEW assessment and a fresh CEO acceptance are required.
+      expect(status.state).toBe("revoked");
+      expect(status.receipt?.resultingStatus).toBe("revoked");
     });
   },
 );

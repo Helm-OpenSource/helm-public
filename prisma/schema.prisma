@@ -1373,6 +1373,12 @@ model Workspace {
   caioQuestionSelectionHead             CaioQuestionSelectionHead?
   caioOperatingQuestionDecisionBindings CaioOperatingQuestionDecisionBinding[]
   caioOperatingQuestionImplementationPlans CaioOperatingQuestionImplementationPlan[]
+  caioQuestionValueReceipts            CaioQuestionValueReceipt[]
+  caioProV1RetrospectiveReceipts       CaioProV1RetrospectiveReceipt[]
+  caioProV1EvidenceAttestations        CaioProV1EvidenceAttestation[]
+  caioProV1CompletionAssessments       CaioProV1CompletionAssessment[]
+  caioProV1CompletionGateReceipts      CaioProV1CompletionGateReceipt[]
+  caioProV1CompletionGateHead          CaioProV1CompletionGateHead?
   contextAgentInvitations              ContextAgentInvitation[]
   contextAgentConsentReceipts          ContextAgentConsentReceipt[]
   contextAgentScopeRevisions           ContextAgentScopeRevision[]
@@ -5618,6 +5624,8 @@ model CaioPrincipalBinding {
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   initializationGateReceipts CaioInitializationGateReceipt[]
   questionSelectionReceipts CaioQuestionSelectionReceipt[]
+  proV1EvidenceAttestations CaioProV1EvidenceAttestation[]
+  proV1CompletionGateReceipts CaioProV1CompletionGateReceipt[]
 
   @@unique([workspaceId, userId, principalRef])
   @@unique([id, workspaceId])
@@ -5874,6 +5882,8 @@ model CaioQuestionSelectionReceipt {
   currentForHead              CaioQuestionSelectionHead?
   decisionBindings            CaioOperatingQuestionDecisionBinding[]
   implementationPlans         CaioOperatingQuestionImplementationPlan[]
+  valueReceipts               CaioQuestionValueReceipt[]
+  retrospectiveReceipts       CaioProV1RetrospectiveReceipt[]
 
   @@unique([id, workspaceId])
   @@unique([id, workspaceId, portfolioId], map: "CQSelection_id_workspace_portfolio_key")
@@ -5955,6 +5965,175 @@ model CaioOperatingQuestionImplementationPlan {
   @@unique([workspaceId, selectionReceiptId, questionId], map: "COQPlan_workspace_selection_question_key")
   @@index([workspaceId, status, plannedAt], map: "COQPlan_workspace_status_time_idx")
   @@index([workspaceId, portfolioId], map: "COQPlan_workspace_portfolio_idx")
+}
+
+// ===== CAIO Pro V1 site-deployment completion gate =====
+// Governance and evidence records only. The completion gate operationalizes
+// plan §4.3 + P4-P8 as a post-initialization TODO checklist; an accepted
+// completion gate is the PRECONDITION for full-function operation and never
+// its activation. No permission, routing, API, or execution path reads
+// these tables as an authority token.
+
+// Append-only single-question 30-day value receipt (plan §12.5). Later
+// versions supersede earlier ones; rows are never updated or deleted.
+model CaioQuestionValueReceipt {
+  id                 String                       @id
+  workspaceId        String
+  selectionReceiptId String
+  questionId         String
+  version            Int
+  idempotencyKey     String
+  requestHash        String
+  receiptJson        String                       @db.LongText
+  contentHash        String
+  authorityEffect    String
+  recordedAt         DateTime
+  createdAt          DateTime                     @default(now())
+  workspace          Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CQValueReceipt_workspace_fkey")
+  selectionReceipt   CaioQuestionSelectionReceipt @relation(fields: [selectionReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CQValueReceipt_selection_workspace_fkey")
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, idempotencyKey], map: "CQValueReceipt_workspace_idem_key")
+  @@unique([workspaceId, selectionReceiptId, questionId, version], map: "CQValueReceipt_workspace_selection_question_version_key")
+  @@index([workspaceId, selectionReceiptId, questionId], map: "CQValueReceipt_workspace_selection_question_idx")
+}
+
+// Append-only P8 retrospective receipt. Recommendations only: maturity never
+// auto-promotes from this record.
+model CaioProV1RetrospectiveReceipt {
+  id                 String                       @id
+  workspaceId        String
+  selectionReceiptId String
+  version            Int
+  idempotencyKey     String
+  requestHash        String
+  receiptJson        String                       @db.LongText
+  contentHash        String
+  authorityEffect    String
+  recordedAt         DateTime
+  createdAt          DateTime                     @default(now())
+  workspace          Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CPV1Retro_workspace_fkey")
+  selectionReceipt   CaioQuestionSelectionReceipt @relation(fields: [selectionReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CPV1Retro_selection_workspace_fkey")
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, idempotencyKey], map: "CPV1Retro_workspace_idem_key")
+  @@unique([workspaceId, selectionReceiptId, version], map: "CPV1Retro_workspace_selection_version_key")
+}
+
+// OWNER-recorded immutable attestation for the checklist items that cannot
+// be derived from database state. A later attestation supersedes by version;
+// rows are never updated or deleted.
+model CaioProV1EvidenceAttestation {
+  id                    String               @id
+  workspaceId           String
+  itemKey               String
+  version               Int
+  ceoPrincipalBindingId String
+  ceoPrincipalRef       String
+  actorType             ActorType
+  actorUserId           String
+  statement             String               @db.LongText
+  evidenceRefs          String               @db.LongText
+  idempotencyKey        String
+  requestHash           String
+  attestationJson       String               @db.LongText
+  contentHash           String
+  authorityEffect       String
+  recordedAt            DateTime
+  createdAt             DateTime             @default(now())
+  workspace             Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CPV1Attestation_workspace_fkey")
+  ceoPrincipalBinding   CaioPrincipalBinding @relation(fields: [ceoPrincipalBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CPV1Attestation_binding_workspace_fkey")
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, idempotencyKey], map: "CPV1Attestation_workspace_idem_key")
+  @@unique([workspaceId, itemKey, version], map: "CPV1Attestation_workspace_item_version_key")
+  @@index([workspaceId, itemKey, recordedAt], map: "CPV1Attestation_workspace_item_time_idx")
+}
+
+// Immutable, reproducible completion assessment. "ready_for_owner_acceptance"
+// is a machine-derived review state only — not CEO acceptance and not a
+// permission grant.
+model CaioProV1CompletionAssessment {
+  id              String                           @id
+  workspaceId     String
+  evaluationKey   String
+  schemaVersion   String
+  evaluatorRevision String
+  basisHash       String
+  decision        String
+  inputJson       String                           @db.LongText
+  assessmentJson  String                           @db.LongText
+  contentHash     String
+  authorityEffect String
+  evaluatedAt     DateTime
+  createdAt       DateTime                         @default(now())
+  workspace       Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CPV1Assessment_workspace_fkey")
+  gateReceipts    CaioProV1CompletionGateReceipt[]
+  gateHeads       CaioProV1CompletionGateHead[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, evaluationKey], map: "CPV1Assessment_workspace_eval_key")
+  @@unique([workspaceId, contentHash], map: "CPV1Assessment_workspace_content_key")
+  @@index([workspaceId, decision, evaluatedAt], map: "CPV1Assessment_workspace_decision_time_idx")
+}
+
+// Append-only CEO completion-gate ledger. previousReceiptId is unique per
+// workspace so the chain cannot fork; every receipt carries the frozen
+// fullFunctionOperation boundary literal.
+model CaioProV1CompletionGateReceipt {
+  id                    String                          @id
+  workspaceId           String
+  assessmentId          String
+  ceoPrincipalBindingId String
+  previousReceiptId     String?
+  previousReceiptHash   String?
+  sequence              Int
+  idempotencyKey        String
+  action                String
+  resultingStatus       String
+  actorType             ActorType
+  actorUserId           String
+  ceoPrincipalRef       String
+  reasonCodes           String                          @db.LongText
+  evidenceRefs          String                          @db.LongText
+  basisHash             String
+  receiptJson           String                          @db.LongText
+  contentHash           String
+  authorityEffect       String
+  fullFunctionOperation String
+  recordedAt            DateTime
+  createdAt             DateTime                        @default(now())
+  workspace             Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CPV1GateReceipt_workspace_fkey")
+  assessment            CaioProV1CompletionAssessment   @relation(fields: [assessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CPV1GateReceipt_assessment_workspace_fkey")
+  ceoPrincipalBinding   CaioPrincipalBinding            @relation(fields: [ceoPrincipalBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CPV1GateReceipt_binding_workspace_fkey")
+  previousReceipt       CaioProV1CompletionGateReceipt? @relation("CaioProV1CompletionReceiptChain", fields: [previousReceiptId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction, map: "CPV1GateReceipt_previous_workspace_fkey")
+  nextReceipt           CaioProV1CompletionGateReceipt? @relation("CaioProV1CompletionReceiptChain")
+  currentForHead        CaioProV1CompletionGateHead?
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, sequence], map: "CPV1GateReceipt_workspace_sequence_key")
+  @@unique([workspaceId, idempotencyKey], map: "CPV1GateReceipt_workspace_idem_key")
+  @@unique([previousReceiptId, workspaceId], map: "CPV1GateReceipt_prev_workspace_key")
+  @@index([workspaceId, resultingStatus, recordedAt], map: "CPV1GateReceipt_workspace_status_time_idx")
+  @@index([assessmentId, workspaceId], map: "CPV1GateReceipt_assessment_workspace_idx")
+  @@index([ceoPrincipalBindingId, workspaceId], map: "CPV1GateReceipt_binding_workspace_idx")
+}
+
+// Concurrency pointer only. The append-only assessment and receipt records
+// are the evidence truth.
+model CaioProV1CompletionGateHead {
+  workspaceId         String                         @id
+  currentAssessmentId String
+  currentReceiptId    String                         @unique
+  sequence            Int
+  version             Int                            @default(1)
+  updatedAt           DateTime                       @updatedAt
+  workspace           Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CPV1GateHead_workspace_fkey")
+  currentAssessment   CaioProV1CompletionAssessment  @relation(fields: [currentAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CPV1GateHead_assessment_workspace_fkey")
+  currentReceipt      CaioProV1CompletionGateReceipt @relation(fields: [currentReceiptId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction, map: "CPV1GateHead_receipt_workspace_fkey")
+
+  @@unique([currentReceiptId, workspaceId], map: "CPV1GateHead_receipt_workspace_key")
+  @@index([currentAssessmentId, workspaceId], map: "CPV1GateHead_assessment_workspace_idx")
 }
 
 // ===== CAIO Pro P1E: Context Agent consent / revocation / deletion chain =====
