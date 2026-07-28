@@ -602,6 +602,34 @@ describe("auth verification code attempt cap", () => {
     );
   });
 
+  it("does not issue a phone code for a membership outside a private deployment", async () => {
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "tenant");
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_HOME_PATH", "/tenant/home");
+    vi.stubEnv("HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS", "allowed-workspace");
+    installAuthCodeStore([]);
+    mocks.db.user.findFirst.mockResolvedValue({
+      ...createActiveUser(),
+      phoneVerifiedAt: now,
+      memberships: [
+        {
+          status: MembershipStatus.ACTIVE,
+          workspace: {
+            slug: "other-workspace",
+            systemKey: null,
+          },
+        },
+      ],
+    });
+
+    const result = await requestPhoneLoginCodeAction({
+      phone: "13800000000",
+      locale: "en-US",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(mocks.db.authVerificationCode.create).not.toHaveBeenCalled();
+  });
+
   it("rejects resend when a concurrent verification reaches the cap before delete", async () => {
     const record = makeCodeRecord({
       id: "login-code-race-resend",

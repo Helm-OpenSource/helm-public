@@ -11,6 +11,10 @@ import { readPublicOauthSignupPrefillCookie, PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE 
 import { isDingTalkOauthConfigured } from "@/lib/connectors/dingtalk";
 import { isFeishuOauthConfigured } from "@/lib/connectors/feishu";
 import { getCurrentUser } from "@/lib/auth/session";
+import {
+  resolveDeploymentEntryConfig,
+  resolveDeploymentPostLoginPath,
+} from "@/lib/auth/deployment-entry";
 import { resolveUiLocale } from "@/lib/i18n/config";
 
 type LoginPageSearchParams = Record<string, string | string[] | undefined>;
@@ -59,6 +63,7 @@ function buildPublicAuthStartPath(
 function getLoginPageCopy(
   mode: LoginPageEntryMode,
   english: boolean,
+  deploymentName: string,
   organizationName?: string,
 ) {
   switch (mode) {
@@ -67,7 +72,7 @@ function getLoginPageCopy(
         eyebrow: english ? "DingTalk invite recognized" : "钉钉邀请已识别",
         title: english
           ? `Confirm your invitation${organizationName ? ` to ${organizationName}` : ""}.`
-          : `确认加入${organizationName ? `「${organizationName}」` : "你的Helm组织"}。`,
+          : `确认加入${organizationName ? `「${organizationName}」` : `「${deploymentName}」组织`}。`,
         description: english
           ? "Helm already knows who invited you and which organization you are joining. Confirm the identity below and set your login password."
           : "Helm已经知道你是谁、要加入哪个组织。确认身份，补齐工作邮箱和密码即可进入。",
@@ -75,7 +80,9 @@ function getLoginPageCopy(
     case "new-trial":
       return {
         eyebrow: english ? "New trial setup" : "新试点开通",
-        title: english ? "Create your Helm trial workspace." : "开通你的Helm试点工作区。",
+        title: english
+          ? `Create your ${deploymentName} trial workspace.`
+          : `开通「${deploymentName}」试点工作区。`,
         description: english
           ? "Verify your work email and phone, set a password, and Helm will create the trial workspace in one path."
           : "验证工作邮箱和手机号，设置密码，然后直接创建试点工作区。",
@@ -99,7 +106,9 @@ function getLoginPageCopy(
     case "returning":
       return {
         eyebrow: english ? "Workspace sign-in" : "工作区登录",
-        title: english ? "Return to your Helm workspace." : "回到你的Helm工作区。",
+        title: english
+          ? `Return to your ${deploymentName} workspace.`
+          : `回到「${deploymentName}」工作区。`,
         description: english
           ? "Use your email, phone, DingTalk, or Feishu to continue."
           : "使用邮箱、手机号、钉钉或飞书继续。",
@@ -192,7 +201,7 @@ export default async function LoginPage({
   const publicOauthOrganizationName = readSearchParam(params, "org");
   const publicOauthWorkspaceId = readSearchParam(params, "ws");
   const publicOauthTitle = readSearchParam(params, "title");
-  const initialTab =
+  const requestedInitialTab =
     requestedTab === "signup" || requestedTab === "password" || requestedTab === "phone"
       ? requestedTab
       : undefined;
@@ -247,6 +256,13 @@ export default async function LoginPage({
           oauthPrefill.organizationName ||
           oauthPrefill.title),
     );
+  const deploymentEntry = resolveDeploymentEntryConfig();
+  const signupEntryAllowed =
+    deploymentEntry.selfServeSignupEnabled || isDingTalkInvitePrefill;
+  const initialTab =
+    requestedInitialTab === "signup" && !signupEntryAllowed
+      ? "password"
+      : requestedInitialTab;
   const oauthFallbackMessage =
     oauthStatus === "identity-conflict"
       ? english
@@ -263,6 +279,7 @@ export default async function LoginPage({
         : null;
   const isSignupEntry =
     !isDingTalkInvitePrefill &&
+    deploymentEntry.selfServeSignupEnabled &&
     (requestedTab === "signup" || Boolean(phonePrefill) || Boolean(oauthPrefill));
   const isPhoneCodeReturn =
     !isDingTalkInvitePrefill &&
@@ -289,20 +306,24 @@ export default async function LoginPage({
   const loginCopy = getLoginPageCopy(
     entryMode,
     english,
+    deploymentEntry.displayName,
     signupPrefillOrganizationName,
   );
 
   if (user) {
-    redirect("/dashboard");
+    redirect(resolveDeploymentPostLoginPath("/dashboard", deploymentEntry));
   }
 
   return (
     <div className="surface-grid min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
       <header className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-10">
         <div className="min-w-0">
-          <p className="text-sm font-semibold">{english ? "Helm" : "Helm 掌舵者"}</p>
+          <p className="text-sm font-semibold">{deploymentEntry.displayName}</p>
           <p className="max-w-[18rem] text-xs text-[color:var(--muted-foreground)]">
-            {english ? "Welcome back. Today's calls are waiting." : "欢迎回来。今天要拍板的事在等你。"}
+            {deploymentEntry.companyName ??
+              (english
+                ? "Secure access to your operating workspace."
+                : "安全进入你的经营工作区。")}
           </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
@@ -326,7 +347,7 @@ export default async function LoginPage({
             {loginCopy.title}
           </h1>
           <p className="text-sm leading-6 text-[color:var(--muted)]">
-            {entryMode === "returning" ? (
+            {entryMode === "returning" && deploymentEntry.selfServeSignupEnabled ? (
               <>
                 {loginCopy.description} {english ? "First time here? " : "第一次来？"}
                 <Link
@@ -334,7 +355,9 @@ export default async function LoginPage({
                   className="font-semibold text-[color:var(--accent)] underline-offset-4 hover:underline"
                   data-testid="login-link-trial"
                 >
-                  {english ? "Apply for Helm Cloud trial." : "申请Helm Cloud试用。"}
+                  {english
+                    ? `Apply for ${deploymentEntry.displayName} trial.`
+                    : `申请「${deploymentEntry.displayName}」试用。`}
                 </Link>
               </>
             ) : (
@@ -363,6 +386,8 @@ export default async function LoginPage({
           {isPhoneCodeReturn ? null : (
             <LoginPanel
               locale={locale}
+              allowSelfServeSignup={deploymentEntry.selfServeSignupEnabled}
+              deploymentDisplayName={deploymentEntry.displayName}
               initialTab={initialTab}
               prefillSignup={{
                 name: signupPrefillName,

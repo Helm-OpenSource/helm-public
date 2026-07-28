@@ -30,6 +30,9 @@ const {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    workspace: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -117,6 +120,8 @@ function buildMembership(workspaceId: string, status: MembershipStatus) {
     workspace: {
       id: workspaceId,
       name: `Workspace ${workspaceId}`,
+      slug: workspaceId,
+      systemKey: null,
     },
   };
 }
@@ -201,6 +206,7 @@ describe("resolvePreferredMembership", () => {
 
 describe("auth session substrate", () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
     cookiesMock.mockResolvedValue(createCookieStore());
     headersMock.mockResolvedValue(createHeaderStore());
@@ -220,6 +226,23 @@ describe("auth session substrate", () => {
 
     expect(await getCurrentUser()).toBeNull();
     expect(dbMock.authSession.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("returns only memberships allowed by a private deployment", async () => {
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "tenant");
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_HOME_PATH", "/tenant/home");
+    vi.stubEnv("HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS", "workspace-2");
+    const cookieStore = createCookieStore({
+      [SESSION_ID_COOKIE]: "current-session",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+    dbMock.authSession.findUnique.mockResolvedValue(buildAuthSessionRecord());
+
+    const user = await getCurrentUser();
+
+    expect(user?.memberships.map((membership) => membership.workspaceId)).toEqual([
+      "workspace-2",
+    ]);
   });
 
   it("clears cookies and revokes the session when authSession points to a missing user", async () => {
@@ -377,6 +400,28 @@ describe("auth session substrate", () => {
     expect(dbMock.authSession.create).toHaveBeenCalled();
   });
 
+  it("rejects session creation for a workspace outside a private deployment", async () => {
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "tenant");
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_HOME_PATH", "/tenant/home");
+    vi.stubEnv("HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS", "workspace-1");
+    dbMock.workspace.findUnique.mockResolvedValue({
+      slug: "workspace-2",
+      systemKey: null,
+    });
+
+    await expect(
+      createSession({
+        userId: "user-2",
+        email: "alice@example.com",
+        workspaceId: "workspace-2",
+        sourcePage: "/api/auth/dingtalk/callback",
+        providerType: AUTH_SESSION_PROVIDER_TYPES.DINGTALK_OAUTH,
+      }),
+    ).rejects.toThrow("Workspace unavailable for this deployment");
+
+    expect(dbMock.authSession.create).not.toHaveBeenCalled();
+  });
+
   it("rotates the current auth session explicitly and records rotation audit", async () => {
     const cookieStore = createCookieStore({
       [SESSION_ID_COOKIE]: "current-session",
@@ -452,6 +497,8 @@ describe("auth session substrate", () => {
       workspace: {
         id: "workspace-2",
         name: "Ops Workspace",
+        slug: "workspace-2",
+        systemKey: null,
       },
     });
     dbMock.authSession.update.mockResolvedValue({});
@@ -480,6 +527,32 @@ describe("auth session substrate", () => {
         targetId: "auth-session-1",
       }),
     );
+  });
+
+  it("rejects a workspace switch outside the private deployment allowlist", async () => {
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "tenant");
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_HOME_PATH", "/tenant/home");
+    vi.stubEnv("HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS", "workspace-1");
+    const cookieStore = createCookieStore({
+      [SESSION_ID_COOKIE]: "current-session",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+    dbMock.authSession.findUnique.mockResolvedValue(buildAuthSessionRecord());
+    dbMock.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-2",
+      status: MembershipStatus.ACTIVE,
+      workspace: {
+        id: "workspace-2",
+        name: "Other workspace",
+        slug: "workspace-2",
+        systemKey: null,
+      },
+    });
+
+    await expect(setActiveWorkspace("workspace-2")).rejects.toThrow(
+      "Workspace unavailable for this deployment",
+    );
+    expect(dbMock.authSession.update).not.toHaveBeenCalled();
   });
 
   it("adds a workspace-switch marker when the current workspace is realigned from memberships", async () => {

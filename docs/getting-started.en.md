@@ -174,6 +174,23 @@ Leave them all blank on a first run.
 
 Neither scheduler affects a first run; leave them blank / `false`.
 
+### DEPLOYMENT_ENTRY (optional deployment entry)
+
+| Variable | Purpose |
+|---|---|
+| `HELM_DEPLOYMENT_ENTRY_PROFILE` | Entry type: `public`, `cloud`, `tenant`, or `first-party` |
+| `HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME` | Product or workspace entry name |
+| `HELM_DEPLOYMENT_ENTRY_COMPANY_NAME` | Optional owning-company label; Core reads generic configuration and embeds no company |
+| `HELM_DEPLOYMENT_ENTRY_HOME_PATH` | Same-origin path used after successful sign-in |
+| `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS` | One required allowlist option for `tenant` / `first-party` |
+| `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS` | System-key allowlist that can replace or supplement slugs |
+| `HELM_DEPLOYMENT_SELF_SERVE_SIGNUP` | Available only to `public` / `cloud`; private entries always disable it |
+
+`first-party` uses a minimal internal sign-in home. An explicitly configured
+company name containing control characters or more than 120 characters fails
+closed. This display setting does not replace registration evidence or activate
+the legal identity on public legal pages.
+
 ### PUBLIC_IDENTITY (optional, required review before a public production launch)
 
 | Variable | Purpose |

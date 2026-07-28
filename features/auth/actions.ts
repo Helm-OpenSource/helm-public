@@ -62,6 +62,12 @@ import {
   resolvePostLoginRedirectPath,
   shouldRequireFirstLoginIdentityCompletion,
 } from "@/lib/auth/first-login-identity-completion";
+import {
+  filterDeploymentMemberships,
+  isWorkspaceAllowedForDeployment,
+  resolveDeploymentEntryConfig,
+  resolveDeploymentPostLoginPath,
+} from "@/lib/auth/deployment-entry";
 
 const codeSchema = z.string().trim().regex(/^\d{6}$/);
 const authValidationMessages = {
@@ -202,6 +208,19 @@ type AuthUser = User & {
   }>;
 };
 
+function getSelectableDeploymentMemberships<
+  T extends {
+    status: MembershipStatus;
+    workspace: Workspace;
+  },
+>(memberships: T[]) {
+  return filterDeploymentMemberships(
+    memberships.filter(
+      (membership) => membership.status !== MembershipStatus.INACTIVE,
+    ),
+  );
+}
+
 function resolveActionInputLocale(input: unknown): UiLocale {
   if (typeof input !== "object" || input === null || !("locale" in input)) {
     return resolveUiLocale();
@@ -246,8 +265,8 @@ async function finalizeLoginForUser(
   const english = locale === "en-US";
   const cookieStore = await cookies();
   const activeWorkspaceId = cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value;
-  const selectableMemberships = user.memberships.filter(
-    (membership) => membership.status !== MembershipStatus.INACTIVE,
+  const selectableMemberships = getSelectableDeploymentMemberships(
+    user.memberships,
   );
   const activeMembership = resolvePreferredMembership(
     selectableMemberships,
@@ -308,7 +327,9 @@ async function finalizeLoginForUser(
     ? LOGIN_WORKSPACE_SELECTOR_PATH
     : requiresIdentityCompletion
       ? FIRST_LOGIN_IDENTITY_SETUP_PATH
-      : resolvePostLoginRedirectPath(activeMembership);
+      : resolveDeploymentPostLoginPath(
+          resolvePostLoginRedirectPath(activeMembership),
+        );
 
   await logEvent({
     workspaceId: activeMembership.workspaceId,
@@ -643,6 +664,45 @@ function readDingTalkInvitePrefillContext(input: {
   return prefill;
 }
 
+async function hasAllowedInviteMembership(input: {
+  cookieStore: Awaited<ReturnType<typeof cookies>>;
+  email: string;
+  phone: string;
+}) {
+  const prefill = readDingTalkInvitePrefillContext({
+    cookieStore: input.cookieStore,
+  });
+  if (!prefill?.invitedWorkspaceId) {
+    return false;
+  }
+
+  const membership = await db.membership.findFirst({
+    where: {
+      workspaceId: prefill.invitedWorkspaceId,
+      status: {
+        not: MembershipStatus.INACTIVE,
+      },
+      user: {
+        OR: [
+          { email: input.email },
+          { phone: input.phone },
+        ],
+      },
+    },
+    include: {
+      workspace: true,
+    },
+  });
+
+  return Boolean(
+    membership &&
+      isWorkspaceAllowedForDeployment(
+        membership.workspace,
+        resolveDeploymentEntryConfig(),
+      ),
+  );
+}
+
 function canBypassSignupVerificationCodes(input: {
   cookieStore: Awaited<ReturnType<typeof cookies>>;
   email: string;
@@ -705,34 +765,48 @@ export async function loginAction(input: string | z.infer<typeof legacyEmailLogi
     },
   });
 
-  if (!user || user.memberships.length === 0) {
+  const deploymentMemberships = user
+    ? getSelectableDeploymentMemberships(user.memberships)
+    : [];
+
+  if (!user || deploymentMemberships.length === 0) {
     return {
       ok: false,
       error: english
-        ? "This email does not have an organization yet. Start a verified self-serve trial first, or ask your team to invite this work email."
-        : "这个邮箱当前还没有可进入的组织。请先开始正式验证试用，或让团队先邀请这个工作邮箱加入组织。",
+        ? "This email does not have an organization available on this deployment."
+        : "这个邮箱在当前部署没有可进入的组织。",
     };
   }
 
   const isDemoEntryEmail = DEMO_ENTRY_EMAILS.has(normalizedEmail);
-  const hasActiveMembership = user.memberships.some(
+  const hasActiveMembership = deploymentMemberships.some(
     (membership) => membership.status === MembershipStatus.ACTIVE,
   );
-  const hasInvitedMembership = user.memberships.some(
+  const hasInvitedMembership = deploymentMemberships.some(
     (membership) => membership.status === MembershipStatus.INVITED,
   );
-  const demoMembership = user.memberships.find((membership) =>
+  const demoMembership = deploymentMemberships.find((membership) =>
     normalizeWorkspaceUiConfig(membership.workspace).demoMode,
   );
 
   if (isDemoEntryEmail && demoMembership) {
-    return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY, locale);
+    return finalizeLoginForUser(
+      { ...user, memberships: deploymentMemberships },
+      "/login",
+      AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY,
+      locale,
+    );
   }
 
   // Keep the work-email compatibility entry narrow: it only accepts teammates
   // who are still invite-only. Active formal accounts must use credentials.
   if (!isDemoEntryEmail && hasInvitedMembership && !hasActiveMembership) {
-    return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY, locale);
+    return finalizeLoginForUser(
+      { ...user, memberships: deploymentMemberships },
+      "/login",
+      AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY,
+      locale,
+    );
   }
 
   if (isDemoEntryEmail && !demoMembership) {
@@ -784,6 +858,23 @@ export async function startTrialSignupAction(input: z.infer<typeof trialSignupSc
     return {
       ok: false,
       error: english ? "Please enter a valid phone number" : "请输入有效的手机号",
+    };
+  }
+
+  const deploymentConfig = resolveDeploymentEntryConfig();
+  if (
+    !deploymentConfig.selfServeSignupEnabled &&
+    !(await hasAllowedInviteMembership({
+      cookieStore,
+      email: normalizedEmail,
+      phone: normalizedPhone,
+    }))
+  ) {
+    return {
+      ok: false as const,
+      error: english
+        ? "This deployment accepts invited members only. Ask an administrator for a new invitation."
+        : "当前部署仅接受受邀成员。请联系管理员重新发送邀请。",
     };
   }
 
@@ -965,6 +1056,23 @@ export async function completeTrialSignupVerificationAction(
     };
   }
 
+  const deploymentConfig = resolveDeploymentEntryConfig();
+  if (
+    !deploymentConfig.selfServeSignupEnabled &&
+    !(await hasAllowedInviteMembership({
+      cookieStore,
+      email: enrollment.email,
+      phone: enrollment.phone,
+    }))
+  ) {
+    return {
+      ok: false as const,
+      error: english
+        ? "This invitation is no longer valid for this deployment."
+        : "该邀请已失效，无法进入当前部署。",
+    };
+  }
+
   const canSkipVerificationCodes = canBypassSignupVerificationCodes({
     cookieStore,
     email: enrollment.email,
@@ -1078,10 +1186,17 @@ export async function completeTrialSignupVerificationAction(
   if (invitedWorkspaceId) {
     const invitedWorkspace = await db.workspace.findUnique({
       where: { id: invitedWorkspaceId },
-      select: { id: true },
+      select: {
+        id: true,
+        slug: true,
+        systemKey: true,
+      },
     });
 
-    if (!invitedWorkspace) {
+    if (
+      !invitedWorkspace ||
+      !isWorkspaceAllowedForDeployment(invitedWorkspace, deploymentConfig)
+    ) {
       return {
         ok: false,
         error: english
@@ -1139,7 +1254,10 @@ export async function completeTrialSignupVerificationAction(
     });
 
     workspaceIdForSession = invitedWorkspace.id;
-    redirectTo = "/dashboard";
+    redirectTo = resolveDeploymentPostLoginPath(
+      "/dashboard",
+      deploymentConfig,
+    );
   } else {
     const { workspace } = await createSelfServeTrialOrganization({
       user: {
@@ -1235,9 +1353,12 @@ export async function passwordLoginAction(input: z.infer<typeof passwordLoginSch
     return temporarilyUnavailable;
   }
 
+  const deploymentMemberships = user
+    ? getSelectableDeploymentMemberships(user.memberships)
+    : [];
   if (
     !user ||
-    user.memberships.length === 0 ||
+    deploymentMemberships.length === 0 ||
     !user.passwordHash ||
     !verifyPassword(parsed.data.password, user.passwordHash)
   ) {
@@ -1246,7 +1367,15 @@ export async function passwordLoginAction(input: z.infer<typeof passwordLoginSch
   }
 
   await clearFailedLogins(identifier);
-  return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.PASSWORD, locale);
+  return finalizeLoginForUser(
+    {
+      ...user,
+      memberships: deploymentMemberships,
+    },
+    "/login",
+    AUTH_SESSION_PROVIDER_TYPES.PASSWORD,
+    locale,
+  );
 }
 
 export async function requestPhoneLoginCodeAction(
@@ -1280,12 +1409,17 @@ export async function requestPhoneLoginCodeAction(
             not: MembershipStatus.INACTIVE,
           },
         },
-        take: 1,
+        include: {
+          workspace: true,
+        },
       },
     },
   });
 
-  if (!user || user.memberships.length === 0) {
+  const deploymentMemberships = user
+    ? getSelectableDeploymentMemberships(user.memberships)
+    : [];
+  if (!user || deploymentMemberships.length === 0) {
     return {
       ok: false,
       error: english
@@ -1366,12 +1500,31 @@ export async function beginPublicPhoneEntryAction(
             not: MembershipStatus.INACTIVE,
           },
         },
-        take: 1,
+        include: {
+          workspace: true,
+        },
       },
     },
   });
 
-  if (!user || user.memberships.length === 0 || !user.phoneVerifiedAt) {
+  const deploymentConfig = resolveDeploymentEntryConfig();
+  const deploymentMemberships = user
+    ? getSelectableDeploymentMemberships(user.memberships)
+    : [];
+  if (
+    !user ||
+    deploymentMemberships.length === 0 ||
+    !user.phoneVerifiedAt
+  ) {
+    if (!deploymentConfig.selfServeSignupEnabled) {
+      return {
+        ok: false as const,
+        error: english
+          ? "This deployment accepts existing invited members only."
+          : "当前部署仅允许已有受邀成员登录。",
+      };
+    }
+
     return {
       ok: true as const,
       mode: "signup" as const,
@@ -1454,7 +1607,10 @@ export async function loginWithPhoneCodeAction(
     },
   });
 
-  if (!user || user.memberships.length === 0) {
+  const deploymentMemberships = user
+    ? getSelectableDeploymentMemberships(user.memberships)
+    : [];
+  if (!user || deploymentMemberships.length === 0) {
     return {
       ok: false,
       error: english ? "This phone number does not match an active organization account." : "这个手机号当前没有匹配到可进入的组织账号。",
@@ -1527,7 +1683,10 @@ export async function completeFirstLoginIdentityCompletionAction(
     },
   });
 
-  if (!user || user.memberships.length === 0) {
+  const deploymentMemberships = user
+    ? getSelectableDeploymentMemberships(user.memberships)
+    : [];
+  if (!user || deploymentMemberships.length === 0) {
     return {
       ok: false,
       error: english ? "Current account has no active workspace membership." : "当前账号没有可进入的工作区成员关系。",
@@ -1546,23 +1705,8 @@ export async function completeFirstLoginIdentityCompletionAction(
   const normalizedInputPhone = normalizePhoneNumber(parsed.data.phone ?? "");
 
   if (!hasPendingIdentitySetupCookie) {
-    const membership = resolvePreferredMembership(user.memberships, activeWorkspaceId);
-    if (!membership) {
-      return {
-        ok: false,
-        error: english ? "Unable to resolve active workspace." : "无法确定当前工作区。",
-      };
-    }
-    return {
-      ok: true,
-      redirectTo: resolvePostLoginRedirectPath(membership),
-    };
-  }
-
-  if (!requiresEmailCompletion && !requiresPhoneCompletion && !requiresPasswordSetup) {
-    cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
     const membership = resolvePreferredMembership(
-      user.memberships,
+      deploymentMemberships,
       activeWorkspaceId,
     );
     if (!membership) {
@@ -1573,7 +1717,29 @@ export async function completeFirstLoginIdentityCompletionAction(
     }
     return {
       ok: true,
-      redirectTo: resolvePostLoginRedirectPath(membership),
+      redirectTo: resolveDeploymentPostLoginPath(
+        resolvePostLoginRedirectPath(membership),
+      ),
+    };
+  }
+
+  if (!requiresEmailCompletion && !requiresPhoneCompletion && !requiresPasswordSetup) {
+    cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
+    const membership = resolvePreferredMembership(
+      deploymentMemberships,
+      activeWorkspaceId,
+    );
+    if (!membership) {
+      return {
+        ok: false,
+        error: english ? "Unable to resolve active workspace." : "无法确定当前工作区。",
+      };
+    }
+    return {
+      ok: true,
+      redirectTo: resolveDeploymentPostLoginPath(
+        resolvePostLoginRedirectPath(membership),
+      ),
     };
   }
 
@@ -1637,7 +1803,7 @@ export async function completeFirstLoginIdentityCompletionAction(
   cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
 
   const membership = resolvePreferredMembership(
-    user.memberships,
+    deploymentMemberships,
     activeWorkspaceId,
   );
   if (!membership) {
@@ -1649,7 +1815,9 @@ export async function completeFirstLoginIdentityCompletionAction(
 
   return {
     ok: true,
-    redirectTo: resolvePostLoginRedirectPath(membership),
+    redirectTo: resolveDeploymentPostLoginPath(
+      resolvePostLoginRedirectPath(membership),
+    ),
   };
 }
 
@@ -1678,7 +1846,11 @@ export async function selectLoginWorkspaceAction(
     },
   });
 
-  if (!membership || membership.status === MembershipStatus.INACTIVE) {
+  if (
+    !membership ||
+    membership.status === MembershipStatus.INACTIVE ||
+    !isWorkspaceAllowedForDeployment(membership.workspace)
+  ) {
     return {
       ok: false,
       error: english ? "The selected organization is unavailable." : "选择的组织当前不可用。",
@@ -1697,10 +1869,12 @@ export async function selectLoginWorkspaceAction(
   const requiresIdentityCompletion = shouldRequireFirstLoginIdentityCompletion(user);
   const redirectTo = requiresIdentityCompletion
     ? FIRST_LOGIN_IDENTITY_SETUP_PATH
-    : resolvePostLoginRedirectPath(
-        membership.status === MembershipStatus.INVITED
-          ? { ...membership, status: MembershipStatus.ACTIVE }
-          : membership,
+    : resolveDeploymentPostLoginPath(
+        resolvePostLoginRedirectPath(
+          membership.status === MembershipStatus.INVITED
+            ? { ...membership, status: MembershipStatus.ACTIVE }
+            : membership,
+        ),
       );
 
   return {
