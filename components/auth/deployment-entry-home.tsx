@@ -19,7 +19,6 @@ import type {
 } from "@/lib/auth/deployment-entry";
 import type { UiLocale } from "@/lib/i18n/config";
 import cloudOperationsImage from "@/public/entry/cloud-operations.webp";
-import firstPartyOperationsImage from "@/public/entry/first-party-operations.webp";
 import tenantOperationsImage from "@/public/entry/tenant-operations.webp";
 
 type EntryHomeCopy = {
@@ -47,7 +46,7 @@ const entryHeroStyle = {
 } as CSSProperties;
 
 function getEntryHomeCopy(
-  profile: Exclude<DeploymentEntryProfile, "public">,
+  profile: Exclude<DeploymentEntryProfile, "public" | "first-party">,
   locale: UiLocale,
   signupEnabled: boolean,
 ): EntryHomeCopy {
@@ -103,84 +102,42 @@ function getEntryHomeCopy(
     };
   }
 
-  if (profile === "tenant") {
-    return {
-      category: english ? "Dedicated tenant workspace" : "专属租户工作区",
-      headline: english
-        ? "Enter the operating surface assigned to your role."
-        : "进入与你角色匹配的经营作业面。",
-      description: english
-        ? "This is an invite-only deployment. Your identity and tenant membership are checked before any workspace route becomes available."
-        : "这是仅限受邀成员的专属部署。系统会先核验身份和租户成员关系，再开放工作区路由。",
-      primaryAction: english ? "Enter workspace" : "进入工作台",
-      secondaryAction: english ? "Review access boundary" : "查看访问边界",
-      secondaryHref: "/terms",
-      image: tenantOperationsImage,
-      imageAlt: english
-        ? "A service operations team reviewing a governed workflow"
-        : "服务运营团队复核受治理流程",
-      assurance: english
-        ? "Invite-only · tenant membership enforced"
-        : "仅限受邀 · 强制租户成员校验",
-      checkpoints: [
-        {
-          title: english ? "Use an existing identity" : "使用已有身份",
-          body: english
-            ? "Password, phone, or configured enterprise sign-in."
-            : "支持密码、手机号或已配置的企业身份登录。",
-        },
-        {
-          title: english ? "Stay inside this tenant" : "只进入本租户",
-          body: english
-            ? "Memberships outside this deployment are never offered."
-            : "不会展示或进入当前部署之外的成员关系。",
-        },
-        {
-          title: english ? "Land on the role surface" : "直达角色作业面",
-          body: english
-            ? "Successful sign-in routes to the deployment home."
-            : "登录成功后直接进入本部署首页。",
-        },
-      ],
-    };
-  }
-
   return {
-    category: english ? "First-party operating workspace" : "自身租户经营工作区",
+    category: english ? "Dedicated tenant workspace" : "专属租户工作区",
     headline: english
-      ? "Run the company with decisions and evidence on the same line."
-      : "让经营判断与执行证据保持在同一条线上。",
+      ? "Enter the operating surface assigned to your role."
+      : "进入与你角色匹配的经营作业面。",
     description: english
-      ? "A private operating entry for the internal team. Only approved members of this first-party workspace can continue."
-      : "供内部团队使用的私有经营入口。只有自身租户已批准成员可以继续。",
-    primaryAction: english ? "Enter internal workspace" : "进入内部工作区",
+      ? "This is an invite-only deployment. Your identity and tenant membership are checked before any workspace route becomes available."
+      : "这是仅限受邀成员的专属部署。系统会先核验身份和租户成员关系，再开放工作区路由。",
+    primaryAction: english ? "Enter workspace" : "进入工作台",
     secondaryAction: english ? "Review access boundary" : "查看访问边界",
     secondaryHref: "/terms",
-    image: firstPartyOperationsImage,
+    image: tenantOperationsImage,
     imageAlt: english
-      ? "An internal team reviewing an evidence-backed decision map"
-      : "内部团队复核带证据的决策图",
+      ? "A service operations team reviewing a governed workflow"
+      : "服务运营团队复核受治理流程",
     assurance: english
-      ? "Internal members only · evidence-first"
-      : "仅限内部成员 · 证据优先",
+      ? "Invite-only · tenant membership enforced"
+      : "仅限受邀 · 强制租户成员校验",
     checkpoints: [
       {
-        title: english ? "See what needs a decision" : "先看需要拍板的事",
+        title: english ? "Use an existing identity" : "使用已有身份",
         body: english
-          ? "Start from operating questions, not a generic dashboard."
-          : "从经营问题开始，而不是从通用仪表盘开始。",
+          ? "Password, phone, or configured enterprise sign-in."
+          : "支持密码、手机号或已配置的企业身份登录。",
       },
       {
-        title: english ? "Keep review explicit" : "复核动作保持显式",
+        title: english ? "Stay inside this tenant" : "只进入本租户",
         body: english
-          ? "No recommendation becomes authority by being displayed."
-          : "建议被展示，不等于获得执行权限。",
+          ? "Memberships outside this deployment are never offered."
+          : "不会展示或进入当前部署之外的成员关系。",
       },
       {
-        title: english ? "Close with a receipt" : "用回执完成闭环",
+        title: english ? "Land on the role surface" : "直达角色作业面",
         body: english
-          ? "Progress and outcomes remain attached to evidence."
-          : "推进与结果始终绑定证据。",
+          ? "Successful sign-in routes to the deployment home."
+          : "登录成功后直接进入本部署首页。",
       },
     ],
   };
@@ -200,6 +157,109 @@ function EntryProfileIcon({
   return <Fingerprint className="h-5 w-5" />;
 }
 
+function FirstPartyEntryHome({
+  config,
+  locale,
+  databaseAvailable,
+}: {
+  config: DeploymentEntryConfig;
+  locale: UiLocale;
+  databaseAvailable: boolean;
+}) {
+  const english = locale === "en-US";
+  const companyName = config.companyName ?? config.displayName;
+
+  return (
+    <div className="flex min-h-screen flex-col bg-[color:var(--background)] text-[color:var(--foreground)]">
+      <header className="border-b border-[color:var(--border)]">
+        <div className="mx-auto flex h-20 w-full max-w-[1120px] items-center justify-between px-6 lg:px-10">
+          <Link
+            href="/"
+            className="flex min-w-0 items-center gap-3"
+            aria-label={`${config.displayName} ${english ? "home" : "首页"}`}
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[color:var(--border)] bg-[color:var(--surface)]">
+              <Fingerprint className="h-5 w-5" />
+            </span>
+            <span className="truncate text-base font-semibold">
+              {config.displayName}
+            </span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <PublicLocaleSwitcher locale={locale} variant="compact" />
+            <ThemeToggle locale={locale} />
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col justify-center px-6 py-14 lg:px-10">
+        <div className="h-1 w-12 bg-[color:var(--accent)]" aria-hidden />
+        <p className="mt-6 text-sm font-semibold text-[color:var(--accent)]">
+          {english ? "Private company workspace" : "公司内部专属入口"}
+        </p>
+        <h1 className="mt-4 max-w-[820px] text-pretty text-4xl font-semibold leading-[1.12] sm:text-5xl lg:text-6xl">
+          {companyName}
+        </h1>
+        <p className="mt-6 text-xl font-semibold">
+          {english ? "Helm internal workspace" : "Helm 内部工作台"}
+        </p>
+        <p className="mt-3 max-w-[560px] text-sm leading-7 text-[color:var(--muted)] sm:text-base">
+          {english
+            ? "Authorized employees can sign in with an existing company identity. Access remains limited to this internal workspace."
+            : "仅限已授权员工使用现有公司身份登录，访问范围严格限定在内部工作区。"}
+        </p>
+
+        <div className="mt-10">
+          <Button asChild size="lg" className="h-12 rounded-md px-6">
+            <Link href="/login" data-testid="deployment-entry-login">
+              <LockKeyhole className="mr-2 h-4 w-4" />
+              {english ? "Sign in" : "登录"}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+
+        <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-[color:var(--muted)]">
+          <span className="inline-flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-[color:var(--accent)]" />
+            {english ? "Authorized members only" : "仅限授权成员"}
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                databaseAvailable
+                  ? "bg-[color:var(--status-success-text)]"
+                  : "bg-[color:var(--status-warning-text)]"
+              }`}
+            />
+            {databaseAvailable
+              ? english
+                ? "Identity service available"
+                : "身份服务可用"
+              : english
+                ? "Identity service reconnecting"
+                : "身份服务正在重连"}
+          </span>
+        </div>
+      </main>
+
+      <footer className="border-t border-[color:var(--border)]">
+        <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-3 px-6 py-5 text-xs text-[color:var(--muted)] sm:flex-row sm:items-center sm:justify-between lg:px-10">
+          <span>{companyName}</span>
+          <nav className="flex items-center gap-5" aria-label={english ? "Legal" : "法律信息"}>
+            <Link href="/terms" className="hover:text-[color:var(--foreground)]">
+              {english ? "Terms" : "服务条款"}
+            </Link>
+            <Link href="/privacy" className="hover:text-[color:var(--foreground)]">
+              {english ? "Privacy" : "隐私政策"}
+            </Link>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
 export function DeploymentEntryHome({
   config,
   locale,
@@ -214,11 +274,6 @@ export function DeploymentEntryHome({
   }
 
   const english = locale === "en-US";
-  const copy = getEntryHomeCopy(
-    config.profile,
-    locale,
-    config.selfServeSignupEnabled,
-  );
 
   if (!config.configurationValid) {
     return (
@@ -239,6 +294,22 @@ export function DeploymentEntryHome({
       </main>
     );
   }
+
+  if (config.profile === "first-party") {
+    return (
+      <FirstPartyEntryHome
+        config={config}
+        locale={locale}
+        databaseAvailable={databaseAvailable}
+      />
+    );
+  }
+
+  const copy = getEntryHomeCopy(
+    config.profile,
+    locale,
+    config.selfServeSignupEnabled,
+  );
 
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
@@ -283,6 +354,12 @@ export function DeploymentEntryHome({
             <h1 className="mt-5 text-balance text-4xl font-semibold leading-[1.08] text-[color:var(--entry-hero-ink)] sm:text-5xl lg:text-6xl">
               {config.displayName}
             </h1>
+            {config.companyName ? (
+              <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--entry-hero-muted)]">
+                <Building2 className="h-4 w-4" />
+                {english ? "Operated by" : "所属公司"} {config.companyName}
+              </p>
+            ) : null}
             <p className="mt-5 max-w-[600px] text-balance text-2xl font-semibold leading-tight text-[color:var(--entry-hero-ink)] sm:text-3xl">
               {copy.headline}
             </p>

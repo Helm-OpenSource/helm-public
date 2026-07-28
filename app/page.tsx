@@ -34,13 +34,18 @@ export async function generateMetadata(): Promise<Metadata> {
   const deploymentEntry = resolveDeploymentEntryConfig();
 
   if (deploymentEntry.profile !== "public") {
+    const companyAttribution = deploymentEntry.companyName
+      ? english
+        ? ` Operated by ${deploymentEntry.companyName}.`
+        : `所属公司：${deploymentEntry.companyName}。`
+      : "";
     return {
       title: `${deploymentEntry.displayName} | ${
         english ? "Operating workspace" : "经营工作区"
       }`,
       description: english
-        ? `Secure entry to the ${deploymentEntry.displayName} operating workspace.`
-        : `${deploymentEntry.displayName}经营工作区安全入口。`,
+        ? `Secure entry to the ${deploymentEntry.displayName} operating workspace.${companyAttribution}`
+        : `${deploymentEntry.displayName}经营工作区安全入口。${companyAttribution}`,
     };
   }
 

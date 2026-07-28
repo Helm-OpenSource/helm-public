@@ -11,6 +11,7 @@ type DeploymentEntryEnvironment = Partial<
   Record<
     | "HELM_DEPLOYMENT_ENTRY_PROFILE"
     | "HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME"
+    | "HELM_DEPLOYMENT_ENTRY_COMPANY_NAME"
     | "HELM_DEPLOYMENT_ENTRY_HOME_PATH"
     | "HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS"
     | "HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS"
@@ -33,6 +34,7 @@ export type DeploymentEntryConfig = {
   profileConfigured: boolean;
   configurationValid: boolean;
   displayName: string;
+  companyName: string | null;
   homePath: string | null;
   allowedWorkspaceSlugs: ReadonlySet<string>;
   allowedWorkspaceSystemKeys: ReadonlySet<string>;
@@ -84,6 +86,28 @@ function normalizeDisplayName(value: string | undefined, profile: DeploymentEntr
   return profile === "cloud" ? "Helm Cloud" : "Helm";
 }
 
+function normalizeCompanyName(value: string | undefined) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return {
+      companyName: null,
+      valid: true,
+    };
+  }
+
+  if (normalized.length > 120 || /[\u0000-\u001f\u007f]/.test(normalized)) {
+    return {
+      companyName: null,
+      valid: false,
+    };
+  }
+
+  return {
+    companyName: normalized,
+    valid: true,
+  };
+}
+
 export function normalizeDeploymentHomePath(value: string | undefined) {
   const normalized = value?.trim();
   if (
@@ -119,6 +143,9 @@ export function resolveDeploymentEntryConfig(
   );
   const requiresWorkspaceAllowlist =
     profileResult.profile === "tenant" || profileResult.profile === "first-party";
+  const companyResult = normalizeCompanyName(
+    environment.HELM_DEPLOYMENT_ENTRY_COMPANY_NAME,
+  );
   const hasWorkspaceAllowlist =
     allowedWorkspaceSlugs.size > 0 || allowedWorkspaceSystemKeys.size > 0;
   const homePath = normalizeDeploymentHomePath(
@@ -140,12 +167,14 @@ export function resolveDeploymentEntryConfig(
     profileConfigured: profileResult.profileConfigured,
     configurationValid:
       profileResult.valid &&
+      companyResult.valid &&
       (!requiresWorkspaceAllowlist || hasWorkspaceAllowlist) &&
       (!requiresHomePath || homePath !== null),
     displayName: normalizeDisplayName(
       environment.HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME,
       profileResult.profile,
     ),
+    companyName: companyResult.companyName,
     homePath,
     allowedWorkspaceSlugs,
     allowedWorkspaceSystemKeys,

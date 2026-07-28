@@ -170,6 +170,22 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 
 两个调度器都不影响首次启动，留空 / `false` 即可。
 
+### DEPLOYMENT_ENTRY（可选，部署入口）
+
+| 变量 | 用途 |
+|---|---|
+| `HELM_DEPLOYMENT_ENTRY_PROFILE` | 入口类型：`public`、`cloud`、`tenant` 或 `first-party` |
+| `HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME` | 产品或工作区入口名称 |
+| `HELM_DEPLOYMENT_ENTRY_COMPANY_NAME` | 可选的所属公司展示名称；Core 只读取通用配置，不内置任何公司 |
+| `HELM_DEPLOYMENT_ENTRY_HOME_PATH` | 登录成功后的同源站内路径 |
+| `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS` | `tenant` / `first-party` 必填的工作区白名单之一 |
+| `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS` | 可替代或补充 slug 的 system key 白名单 |
+| `HELM_DEPLOYMENT_SELF_SERVE_SIGNUP` | 仅 `public` / `cloud` 可开启；私有入口始终关闭 |
+
+`first-party` 使用极简内部登录首页。显式填写的公司名称若包含控制字符或超过
+120 个字符，部署入口会 fail closed。该展示配置不替代下方工商登记证据与法律页面
+激活流程。
+
 ### PUBLIC_IDENTITY（可选，正式公开部署前必审）
 
 | 变量 | 用途 |

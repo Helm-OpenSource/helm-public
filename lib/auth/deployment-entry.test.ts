@@ -33,6 +33,7 @@ describe("deployment entry configuration", () => {
       profileConfigured: false,
       configurationValid: true,
       displayName: "Helm",
+      companyName: null,
       homePath: null,
       selfServeSignupEnabled: true,
       requiresWorkspaceAllowlist: false,
@@ -44,6 +45,7 @@ describe("deployment entry configuration", () => {
     const config = resolveDeploymentEntryConfig({
       HELM_DEPLOYMENT_ENTRY_PROFILE: "cloud",
       HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME: "Helm Cloud",
+      HELM_DEPLOYMENT_ENTRY_COMPANY_NAME: "杭州追鹿智能科技有限公司",
       HELM_DEPLOYMENT_ENTRY_HOME_PATH: "/dashboard?source=cloud",
       HELM_DEPLOYMENT_SELF_SERVE_SIGNUP: "false",
     });
@@ -51,10 +53,23 @@ describe("deployment entry configuration", () => {
     expect(config).toMatchObject({
       profile: "cloud",
       configurationValid: true,
+      companyName: "杭州追鹿智能科技有限公司",
       homePath: "/dashboard?source=cloud",
       selfServeSignupEnabled: false,
     });
     expect(filterDeploymentMemberships(memberships, config)).toHaveLength(2);
+  });
+
+  it("fails closed when an explicitly configured company name is unsafe", () => {
+    const config = resolveDeploymentEntryConfig({
+      HELM_DEPLOYMENT_ENTRY_PROFILE: "cloud",
+      HELM_DEPLOYMENT_ENTRY_COMPANY_NAME: "Example\nCompany",
+      HELM_DEPLOYMENT_ENTRY_HOME_PATH: "/dashboard",
+    });
+
+    expect(config.companyName).toBeNull();
+    expect(config.configurationValid).toBe(false);
+    expect(filterDeploymentMemberships(memberships, config)).toEqual([]);
   });
 
   it("fails closed when a non-public deployment has no valid home path", () => {

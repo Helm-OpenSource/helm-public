@@ -320,9 +320,10 @@ export default async function LoginPage({
         <div className="min-w-0">
           <p className="text-sm font-semibold">{deploymentEntry.displayName}</p>
           <p className="max-w-[18rem] text-xs text-[color:var(--muted-foreground)]">
-            {english
-              ? "Secure access to your operating workspace."
-              : "安全进入你的经营工作区。"}
+            {deploymentEntry.companyName ??
+              (english
+                ? "Secure access to your operating workspace."
+                : "安全进入你的经营工作区。")}
           </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
