@@ -151,7 +151,7 @@ describe("login page salvage contract", () => {
     expect(signupHtml).toContain(
       'data-public-sso-options="[{&quot;provider&quot;:&quot;dingtalk&quot;,&quot;ready&quot;:true,&quot;startUrl&quot;:&quot;/api/public-auth/dingtalk/start&quot;},{&quot;provider&quot;:&quot;feishu&quot;,&quot;ready&quot;:true,&quot;startUrl&quot;:&quot;/api/public-auth/feishu/start&quot;}]"',
     );
-    expect(signupHtml).toContain("开通你的Helm试点工作区。");
+    expect(signupHtml).toContain("开通「Helm」试点工作区。");
 
     const passwordElement = await LoginPage({
       searchParams: Promise.resolve({ tab: "password" }),
