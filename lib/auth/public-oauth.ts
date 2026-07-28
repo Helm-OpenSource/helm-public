@@ -12,6 +12,10 @@ import {
   resolvePostLoginRedirectPath,
   shouldRequireFirstLoginIdentityCompletion,
 } from "@/lib/auth/first-login-identity-completion";
+import {
+  filterDeploymentMemberships,
+  resolveDeploymentPostLoginPath,
+} from "@/lib/auth/deployment-entry";
 import { normalizePhoneNumber } from "@/lib/auth/formal-auth";
 import { recordUserLastLogin } from "@/lib/auth/login-activity";
 import { db } from "@/lib/db";
@@ -537,8 +541,10 @@ export async function finalizePublicOauthLogin(input: {
     avatar?: string | null;
   };
 }) {
-  const selectableMemberships = input.user.memberships.filter(
-    (membership) => membership.status !== MembershipStatus.INACTIVE,
+  const selectableMemberships = filterDeploymentMemberships(
+    input.user.memberships.filter(
+      (membership) => membership.status !== MembershipStatus.INACTIVE,
+    ),
   );
   const requiresWorkspaceSelection =
     selectableMemberships.length > 1 && !input.preferredWorkspaceId;
@@ -619,7 +625,9 @@ export async function finalizePublicOauthLogin(input: {
     ? LOGIN_WORKSPACE_SELECTOR_PATH
     : requiresIdentityCompletion
       ? FIRST_LOGIN_IDENTITY_SETUP_PATH
-      : resolvePostLoginRedirectPath(activeMembership);
+      : resolveDeploymentPostLoginPath(
+          resolvePostLoginRedirectPath(activeMembership),
+        );
 
   await logEvent({
     workspaceId: activeMembership.workspaceId,

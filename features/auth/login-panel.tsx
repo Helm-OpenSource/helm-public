@@ -48,6 +48,8 @@ import { defaultWorkspaceFeatureFlags } from "@/lib/workspace-ops";
 type LoginPanelProps = {
   locale: UiLocale;
   surface?: "landing" | "landing-compact" | "login";
+  allowSelfServeSignup?: boolean;
+  deploymentDisplayName?: string;
   initialTab?: "signup" | "password" | "phone";
   prefillSignup?: {
     name?: string;
@@ -122,6 +124,8 @@ function FieldLabel({
 export function LoginPanel({
   locale,
   surface,
+  allowSelfServeSignup,
+  deploymentDisplayName,
   initialTab,
   prefillSignup,
   prefillCompatibilityEmail,
@@ -141,6 +145,8 @@ export function LoginPanel({
       <LoginPanelSurface
         locale={locale}
         surface={surface}
+        allowSelfServeSignup={allowSelfServeSignup}
+        deploymentDisplayName={deploymentDisplayName}
         initialTab={initialTab}
         prefillSignup={prefillSignup}
         prefillCompatibilityEmail={prefillCompatibilityEmail}
@@ -155,6 +161,8 @@ export function LoginPanel({
 function LoginPanelSurface({
   locale,
   surface,
+  allowSelfServeSignup,
+  deploymentDisplayName,
   initialTab,
   prefillSignup,
   prefillCompatibilityEmail,
@@ -172,11 +180,23 @@ function LoginPanelSurface({
   const newTrialEntryMode = presentation === "login" && entryIntent === "new-trial";
   const returningEntryMode = presentation === "login" && entryIntent === "returning";
   const compatibilityEntryMode = presentation === "login" && entryIntent === "compatibility";
+  const signupEnabled = allowSelfServeSignup ?? true;
   const resolvedInitialTab = inviteEntryMode || newTrialEntryMode
-    ? "signup"
+    ? inviteEntryMode || signupEnabled
+      ? "signup"
+      : "password"
     : returningEntryMode || compatibilityEntryMode
       ? "password"
-      : initialTab ?? (presentation === "login" ? "password" : compactLandingMode ? "phone" : "signup");
+      : initialTab === "signup" && !signupEnabled
+        ? "password"
+        : initialTab ??
+          (presentation === "login"
+            ? "password"
+            : compactLandingMode
+              ? "phone"
+              : signupEnabled
+                ? "signup"
+                : "password");
   const [activeTab, setActiveTab] = useState<LoginPanelTab>(resolvedInitialTab);
   const [signup, setSignup] = useState({
     name: prefillSignup?.name ?? "",
@@ -382,6 +402,16 @@ function LoginPanelSurface({
   }, [english, locale, router]);
 
   const startSignup = () => {
+    if (!signupEnabled && !inviteEntryMode) {
+      toast.error(
+        english
+          ? "This deployment accepts invited members only."
+          : "当前部署仅接受受邀成员。",
+      );
+      setActiveTab("password");
+      return;
+    }
+
     if (signupPhoneError) {
       toast.error(signupPhoneError);
       return;
@@ -758,8 +788,8 @@ function LoginPanelSurface({
                     : "受邀成员辅助入口"
                 : landingMode
                 ? english
-                  ? "Start your operating workspace"
-                  : "开始你的经营工作区"
+                  ? `Enter ${deploymentDisplayName ?? "your operating workspace"}`
+                  : `进入${deploymentDisplayName ?? "你的经营工作区"}`
                 : english
                   ? "Formal customer entry"
                 : "正式客户进入路径"}
@@ -888,7 +918,7 @@ function LoginPanelSurface({
             onValueChange={(value) => setActiveTab(value as LoginPanelTab)}
             className="space-y-5"
           >
-            {inviteEntryMode || newTrialEntryMode || compatibilityEntryMode ? null : returningEntryMode ? (
+            {inviteEntryMode || newTrialEntryMode || compatibilityEntryMode ? null : returningEntryMode || !signupEnabled ? (
               <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl bg-[color:var(--surface-subtle)] p-1">
                 <TabsTrigger value="password" className="rounded-xl">
                   {english ? "Password" : "密码登录"}

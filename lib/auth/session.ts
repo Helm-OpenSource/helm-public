@@ -11,6 +11,11 @@ import {
   isAuthSessionStale,
 } from "@/lib/auth/session-governance";
 import {
+  filterDeploymentMemberships,
+  isWorkspaceAllowedForDeployment,
+  resolveDeploymentEntryConfig,
+} from "@/lib/auth/deployment-entry";
+import {
   ACTIVE_WORKSPACE_COOKIE,
   FIRST_LOGIN_IDENTITY_SETUP_COOKIE,
   LEGACY_SESSION_COOKIE,
@@ -548,7 +553,19 @@ export function buildAuthSessionRevokeConsistencySummary(input: {
 
 export async function getCurrentUser() {
   const authSession = await getCurrentAuthSessionRecord();
-  return authSession?.user ?? null;
+  if (!authSession) {
+    return null;
+  }
+
+  const memberships = filterDeploymentMemberships(authSession.user.memberships);
+  if (memberships.length === 0) {
+    return null;
+  }
+
+  return {
+    ...authSession.user,
+    memberships,
+  };
 }
 
 export async function requireCurrentUser() {
@@ -689,6 +706,9 @@ export async function setActiveWorkspace(workspaceId: string) {
   if (!membership || membership.status === MembershipStatus.INACTIVE) {
     throw new Error("Workspace unavailable for current session");
   }
+  if (!isWorkspaceAllowedForDeployment(membership.workspace)) {
+    throw new Error("Workspace unavailable for this deployment");
+  }
 
   const switchedAt = new Date();
 
@@ -739,8 +759,11 @@ export async function getCurrentWorkspaceSessionOrNull() {
 
   const cookieStore = await cookies();
   const legacyWorkspacePreference = cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value;
-  const membership = resolvePreferredMembership(
+  const deploymentMemberships = filterDeploymentMemberships(
     authSession.user.memberships,
+  );
+  const membership = resolvePreferredMembership(
+    deploymentMemberships,
     authSession.activeWorkspaceId ?? legacyWorkspacePreference,
   );
 
@@ -846,6 +869,32 @@ export async function createSession(input: {
   sourcePage?: string | null;
   providerType?: AuthSessionProviderType | null;
 }) {
+  if (input.workspaceId) {
+    const deploymentConfig = resolveDeploymentEntryConfig();
+    const hasWorkspaceRestriction =
+      deploymentConfig.requiresWorkspaceAllowlist ||
+      deploymentConfig.allowedWorkspaceSlugs.size > 0 ||
+      deploymentConfig.allowedWorkspaceSystemKeys.size > 0 ||
+      !deploymentConfig.configurationValid;
+
+    if (hasWorkspaceRestriction) {
+      const workspace = await db.workspace.findUnique({
+        where: { id: input.workspaceId },
+        select: {
+          slug: true,
+          systemKey: true,
+        },
+      });
+
+      if (
+        !workspace ||
+        !isWorkspaceAllowedForDeployment(workspace, deploymentConfig)
+      ) {
+        throw new Error("Workspace unavailable for this deployment");
+      }
+    }
+  }
+
   const cookieStore = await cookies();
   const existingSessionKey = cookieStore.get(SESSION_ID_COOKIE)?.value;
 

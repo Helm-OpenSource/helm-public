@@ -16,16 +16,33 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { PublicLocaleSwitcher } from "@/components/shared/public-locale-switcher";
+import { DeploymentEntryHome } from "@/components/auth/deployment-entry-home";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { loginAction } from "@/features/auth/actions";
 import { getCurrentUser } from "@/lib/auth/session";
+import {
+  resolveDeploymentEntryConfig,
+  resolveDeploymentPostLoginPath,
+} from "@/lib/auth/deployment-entry";
 import { getDemoModeProfiles } from "@/lib/demo/demo-modes";
 import { resolveUiLocale } from "@/lib/i18n/config";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = resolveUiLocale((await cookies()).get("helm-ui-locale")?.value);
   const english = locale === "en-US";
+  const deploymentEntry = resolveDeploymentEntryConfig();
+
+  if (deploymentEntry.profile !== "public") {
+    return {
+      title: `${deploymentEntry.displayName} | ${
+        english ? "Operating workspace" : "经营工作区"
+      }`,
+      description: english
+        ? `Secure entry to the ${deploymentEntry.displayName} operating workspace.`
+        : `${deploymentEntry.displayName}经营工作区安全入口。`,
+    };
+  }
 
   return {
     title: english
@@ -44,6 +61,7 @@ export default async function Home({
 }) {
   let user = null;
   let hasDbConnection = true;
+  const deploymentEntry = resolveDeploymentEntryConfig();
 
   try {
     user = await getCurrentUser();
@@ -64,7 +82,17 @@ export default async function Home({
   );
 
   if (user && view !== "public" && hasDbConnection) {
-    redirect("/dashboard");
+    redirect(resolveDeploymentPostLoginPath("/dashboard", deploymentEntry));
+  }
+
+  if (deploymentEntry.profile !== "public") {
+    return (
+      <DeploymentEntryHome
+        config={deploymentEntry}
+        locale={locale}
+        databaseAvailable={hasDbConnection}
+      />
+    );
   }
 
   async function enterDemoWorkspace(formData: FormData) {
