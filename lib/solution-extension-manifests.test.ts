@@ -103,6 +103,102 @@ describe("solution extension manifest bundle validation", () => {
       "resourceDependencyDeclarations[0].policyHints must be a non-empty string array",
     );
   });
+
+  it("validates an explicitly declared Pack dependency without treating it as tenant-owned", () => {
+    const fixture = createTempHarnessProject();
+    const tenantManifest = fixture.readTenantManifest();
+    tenantManifest.ownedExtensions = [];
+    tenantManifest.packDependencies = [
+      {
+        packKey: "npa",
+        providedExtensions: ["npa-sample"],
+      },
+    ];
+    fixture.writeTenantManifest(tenantManifest);
+    const manifest = fixture.readManifest();
+    manifest.tenantKey = "npa";
+    manifest.extensionKey = "npa-sample";
+    fixture.writeManifest(manifest);
+
+    const [result] = collectTenantExtensionManifestValidationReadout(
+      fixture.extensionsRoot,
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      validationScope: "pack-dependency",
+      extensionKey: "npa-sample",
+      sourceExtensionKey: "npa-sample",
+    });
+  });
+
+  it("validates an explicitly declared tenant alias for a Pack extension", () => {
+    const fixture = createTempHarnessProject();
+    const tenantManifest = fixture.readTenantManifest();
+    tenantManifest.ownedExtensions = [];
+    tenantManifest.packDependencies = [
+      {
+        packKey: "npa",
+        providedExtensions: ["npa-sample"],
+      },
+    ];
+    fixture.writeTenantManifest(tenantManifest);
+
+    const [result] = collectTenantExtensionManifestValidationReadout(
+      fixture.extensionsRoot,
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      validationScope: "pack-dependency",
+      extensionKey: "demo-sample",
+      sourceExtensionKey: "npa-sample",
+    });
+  });
+
+  it("fails closed for an undeclared cross-tenant Pack manifest", () => {
+    const fixture = createTempHarnessProject();
+    const manifest = fixture.readManifest();
+    manifest.tenantKey = "npa";
+    manifest.extensionKey = "npa-sample";
+    fixture.writeManifest(manifest);
+
+    const [result] = collectTenantExtensionManifestValidationReadout(
+      fixture.extensionsRoot,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.validationScope).toBe("tenant-owned");
+    expect(result.issues).toContain("tenantKey must match directory name (demo)");
+  });
+
+  it("reuses the read-only capability gate for declared Pack dependencies", () => {
+    const fixture = createTempHarnessProject();
+    const tenantManifest = fixture.readTenantManifest();
+    tenantManifest.ownedExtensions = [];
+    tenantManifest.packDependencies = [
+      {
+        packKey: "npa",
+        providedExtensions: ["npa-sample"],
+      },
+    ];
+    fixture.writeTenantManifest(tenantManifest);
+    const manifest = fixture.readManifest();
+    manifest.tenantKey = "npa";
+    manifest.extensionKey = "npa-sample";
+    manifest.capabilityManifest.maxEffectMode = "customer_visible_send";
+    fixture.writeManifest(manifest);
+
+    const [result] = collectTenantExtensionManifestValidationReadout(
+      fixture.extensionsRoot,
+    );
+
+    expect(result.validationScope).toBe("pack-dependency");
+    expect(result.ok).toBe(false);
+    expect(result.issues).toContain(
+      "capabilityManifest.maxEffectMode must not declare customer_visible_send in read-only validation phase",
+    );
+  });
 });
 
 function createTempHarnessProject() {
@@ -115,8 +211,9 @@ function createTempHarnessProject() {
   mkdirSync(path.join(extensionRoot, "docs"), { recursive: true });
   mkdirSync(path.join(extensionRoot, "tests"), { recursive: true });
 
+  const tenantManifestPath = path.join(tenantRoot, "tenant.manifest.json");
   writeFileSync(
-    path.join(tenantRoot, "tenant.manifest.json"),
+    tenantManifestPath,
     JSON.stringify(
       {
         tenantKey: "demo",
@@ -145,6 +242,10 @@ function createTempHarnessProject() {
 
   return {
     extensionsRoot,
+    readTenantManifest: () =>
+      JSON.parse(readFileSync(tenantManifestPath, "utf8")) as TenantManifestFixture,
+    writeTenantManifest: (manifest: TenantManifestFixture) =>
+      writeFileSync(tenantManifestPath, JSON.stringify(manifest, null, 2)),
     readManifest: () => JSON.parse(readFileSync(manifestPath, "utf8")) as ManifestFixture,
     writeManifest: (manifest: ManifestFixture) =>
       writeFileSync(manifestPath, JSON.stringify(manifest, null, 2)),
@@ -256,4 +357,20 @@ type ManifestFixture = {
   };
   summary: string;
   surfaces: string[];
+};
+
+type TenantManifestFixture = {
+  tenantKey: string;
+  displayName: string;
+  status: string;
+  packDependencies?: Array<{
+    packKey: string;
+    providedExtensions: string[];
+  }>;
+  ownedExtensions: Array<{
+    extensionSlug: string;
+    extensionKey: string;
+    displayName: string;
+    rootPath?: string;
+  }>;
 };

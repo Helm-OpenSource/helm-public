@@ -83,6 +83,10 @@ export type TenantManifest = {
   tenantKey: string;
   displayName: string;
   status: string;
+  packDependencies?: Array<{
+    packKey: string;
+    providedExtensions: string[];
+  }>;
   ownedExtensions: Array<{
     extensionSlug: string;
     extensionKey: string;
@@ -94,6 +98,8 @@ export type TenantManifest = {
 export type TenantExtensionManifestValidationResult = {
   extensionKey: string;
   manifestPath: string;
+  validationScope: "tenant-owned" | "pack-dependency";
+  sourceExtensionKey?: string;
   ok: boolean;
   issues: string[];
 };
@@ -197,6 +203,11 @@ export function validateTenantExtensionManifestBundle(input: {
   manifestPath: string;
   manifest: TenantExtensionManifest;
   tenantManifest: TenantManifest;
+  packDependencyBinding?: {
+    packKey: string;
+    sourceExtensionKey: string;
+    alias: boolean;
+  };
 }) {
   const issues: string[] = [];
   const extensionRoot = path.dirname(input.manifestPath);
@@ -205,34 +216,72 @@ export function validateTenantExtensionManifestBundle(input: {
   const extensionSlugFromDir = path.basename(extensionRoot);
   const expectedExtensionKey = `${tenantKeyFromDir}-${extensionSlugFromDir}`;
 
-  if (input.manifest.tenantKey !== tenantKeyFromDir) {
-    issues.push(`tenantKey must match directory name (${tenantKeyFromDir})`);
-  }
-
-  if (input.manifest.extensionSlug !== extensionSlugFromDir) {
-    issues.push(`extensionSlug must match directory name (${extensionSlugFromDir})`);
-  }
-
-  if (input.manifest.extensionKey !== expectedExtensionKey) {
-    issues.push(`extensionKey must equal ${expectedExtensionKey}`);
-  }
-
-  const ownedExtension = input.tenantManifest.ownedExtensions.find(
-    (item) => item.extensionSlug === extensionSlugFromDir,
-  );
-  if (!ownedExtension) {
-    issues.push(`tenant.manifest.json must include ownedExtensions entry for ${extensionSlugFromDir}`);
-  } else {
-    if (ownedExtension.extensionKey !== expectedExtensionKey) {
-      issues.push(`tenant.manifest.json entry for ${extensionSlugFromDir} must use extensionKey ${expectedExtensionKey}`);
-    }
-    if (
-      isNonEmptyString(ownedExtension.rootPath) &&
-      ownedExtension.rootPath !== path.relative(process.cwd(), extensionRoot)
-    ) {
+  if (input.packDependencyBinding) {
+    const binding = input.packDependencyBinding;
+    const expectedPackExtensionKey = `${binding.packKey}-${extensionSlugFromDir}`;
+    if (input.manifest.extensionSlug !== extensionSlugFromDir) {
       issues.push(
-        `tenant.manifest.json rootPath for ${extensionSlugFromDir} must equal ${path.relative(process.cwd(), extensionRoot)}`,
+        `pack dependency extensionSlug must match directory name (${extensionSlugFromDir})`,
       );
+    }
+    if (binding.sourceExtensionKey !== expectedPackExtensionKey) {
+      issues.push(
+        `pack dependency source extensionKey must equal ${expectedPackExtensionKey}`,
+      );
+    }
+    if (binding.alias) {
+      if (input.manifest.tenantKey !== tenantKeyFromDir) {
+        issues.push(
+          `pack dependency alias tenantKey must equal ${tenantKeyFromDir}`,
+        );
+      }
+      if (input.manifest.extensionKey !== expectedExtensionKey) {
+        issues.push(
+          `pack dependency alias extensionKey must equal ${expectedExtensionKey}`,
+        );
+      }
+    } else {
+      if (input.manifest.tenantKey !== binding.packKey) {
+        issues.push(
+          `pack dependency tenantKey must equal declared packKey ${binding.packKey}`,
+        );
+      }
+      if (input.manifest.extensionKey !== binding.sourceExtensionKey) {
+        issues.push(
+          `pack dependency extensionKey must equal ${binding.sourceExtensionKey}`,
+        );
+      }
+    }
+  } else {
+    if (input.manifest.tenantKey !== tenantKeyFromDir) {
+      issues.push(`tenantKey must match directory name (${tenantKeyFromDir})`);
+    }
+
+    if (input.manifest.extensionSlug !== extensionSlugFromDir) {
+      issues.push(`extensionSlug must match directory name (${extensionSlugFromDir})`);
+    }
+
+    if (input.manifest.extensionKey !== expectedExtensionKey) {
+      issues.push(`extensionKey must equal ${expectedExtensionKey}`);
+    }
+
+    const ownedExtension = input.tenantManifest.ownedExtensions.find(
+      (item) => item.extensionSlug === extensionSlugFromDir,
+    );
+    if (!ownedExtension) {
+      issues.push(`tenant.manifest.json must include ownedExtensions entry for ${extensionSlugFromDir}`);
+    } else {
+      if (ownedExtension.extensionKey !== expectedExtensionKey) {
+        issues.push(`tenant.manifest.json entry for ${extensionSlugFromDir} must use extensionKey ${expectedExtensionKey}`);
+      }
+      if (
+        isNonEmptyString(ownedExtension.rootPath) &&
+        ownedExtension.rootPath !== path.relative(process.cwd(), extensionRoot)
+      ) {
+        issues.push(
+          `tenant.manifest.json rootPath for ${extensionSlugFromDir} must equal ${path.relative(process.cwd(), extensionRoot)}`,
+        );
+      }
     }
   }
 
@@ -446,9 +495,60 @@ export function validateTenantExtensionManifestBundle(input: {
   return {
     extensionKey: input.manifest.extensionKey,
     manifestPath: input.manifestPath,
+    validationScope: input.packDependencyBinding
+      ? "pack-dependency"
+      : "tenant-owned",
+    ...(input.packDependencyBinding
+      ? { sourceExtensionKey: input.packDependencyBinding.sourceExtensionKey }
+      : {}),
     ok: issues.length === 0,
     issues,
   } satisfies TenantExtensionManifestValidationResult;
+}
+
+function resolvePackDependencyBinding(input: {
+  tenantKey: string;
+  extensionSlug: string;
+  manifest: TenantExtensionManifest;
+  tenantManifest: TenantManifest;
+}) {
+  if (
+    input.tenantManifest.ownedExtensions.some(
+      (extension) => extension.extensionSlug === input.extensionSlug,
+    )
+  ) {
+    return null;
+  }
+
+  for (const dependency of input.tenantManifest.packDependencies ?? []) {
+    if (!isNonEmptyString(dependency.packKey) || !isStringArray(dependency.providedExtensions)) {
+      continue;
+    }
+
+    if (dependency.providedExtensions.includes(input.manifest.extensionKey)) {
+      return {
+        packKey: dependency.packKey,
+        sourceExtensionKey: input.manifest.extensionKey,
+        alias: false,
+      } as const;
+    }
+
+    const sourceExtensionKey = `${dependency.packKey}-${input.manifest.extensionSlug}`;
+    const expectedAliasKey = `${input.tenantKey}-${input.manifest.extensionSlug}`;
+    if (
+      dependency.providedExtensions.includes(sourceExtensionKey) &&
+      input.manifest.tenantKey === input.tenantKey &&
+      input.manifest.extensionKey === expectedAliasKey
+    ) {
+      return {
+        packKey: dependency.packKey,
+        sourceExtensionKey,
+        alias: true,
+      } as const;
+    }
+  }
+
+  return null;
 }
 
 export function collectTenantExtensionManifestValidationReadout(extensionsRoot = resolveExtensionsRoot()) {
@@ -457,11 +557,20 @@ export function collectTenantExtensionManifestValidationReadout(extensionsRoot =
   for (const descriptor of listTenantExtensionManifestDescriptors(extensionsRoot)) {
     const tenantManifest = loadTenantManifest(descriptor.tenantKey, extensionsRoot);
     const manifest = readJsonFile<TenantExtensionManifest>(descriptor.manifestPath);
+    const packDependencyBinding = resolvePackDependencyBinding({
+      tenantKey: descriptor.tenantKey,
+      extensionSlug: descriptor.extensionSlug,
+      manifest,
+      tenantManifest,
+    });
     results.push(
       validateTenantExtensionManifestBundle({
         manifestPath: descriptor.manifestPath,
         manifest,
         tenantManifest,
+        ...(packDependencyBinding
+          ? { packDependencyBinding }
+          : {}),
       }),
     );
   }
