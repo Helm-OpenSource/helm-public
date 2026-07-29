@@ -265,6 +265,10 @@ export function validateWorkerSkillResourceContractBundle(
       throw new Error("human_seat_write skills must require review");
     }
 
+    if (skill.effectMode === "human_seat_write" && !skill.requiresApproval) {
+      throw new Error("human_seat_write skills must require approval");
+    }
+
     if (skill.customerFacingAllowed && !skill.requiresReview) {
       throw new Error("customer-facing skills must require review");
     }
@@ -305,6 +309,15 @@ export function validateWorkerSkillResourceContractBundle(
       if (binding.skillId !== skill.skillId) {
         throw new Error(
           `binding ${binding.bindingId} must point back to skill ${skill.skillId}`,
+        );
+      }
+
+      if (
+        skill.effectMode === "human_seat_write" &&
+        binding.authMode !== "workspace_member_context"
+      ) {
+        throw new Error(
+          `human_seat_write skill ${skill.skillId} binding ${binding.bindingId} must use workspace_member_context`,
         );
       }
 
