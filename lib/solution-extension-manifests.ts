@@ -109,14 +109,6 @@ type PackDependencyAuthority = {
   providedExtensions: CanonicalPackProvidedExtension[];
 };
 
-type PackDependencyBinding = {
-  packKey: string;
-  sourceExtensionKey: string;
-  alias: boolean;
-  logicalExtensionSlug: string;
-  physicalExtensionSlug: string;
-};
-
 export type TenantExtensionManifestValidationResult = {
   extensionKey: string;
   manifestPath: string;
