@@ -1391,6 +1391,13 @@ model Workspace {
   workBuddyMutationReceipts            WorkBuddyMutationReceipt[]
   workBuddyPresenceChallenges          WorkBuddyPresenceChallenge[]
   workBuddyPromptResponseReceipts      WorkBuddyPromptResponseReceipt[]
+  caioAccessTokens                     CaioAccessToken[]
+  caioPairingRequests                  CaioPairingRequest[]
+  caioContextNegativeRules             CaioContextNegativeRule[]
+  caioContextReceipts                  CaioContextReceipt[]
+  caioMemoryCandidates                 CaioMemoryCandidate[]
+  caioAuditDispatchReceipts            CaioAuditDispatchReceipt[]
+  caioCredentialRefStates              CaioCredentialRefState[]
   contextAgentInvitations              ContextAgentInvitation[]
   contextAgentConsentReceipts          ContextAgentConsentReceipt[]
   contextAgentScopeRevisions           ContextAgentScopeRevision[]
@@ -6667,3 +6674,156 @@ model WorkBuddyPromptResponseReceipt {
   @@index([deliveryObjectId, workspaceId, recordedAt], map: "WBPromptResponse_envelope_workspace_time_idx")
 }
 
+
+// ===== CAIO Pro next-version access gateway records =====
+// Identity, pairing, context policy, enterprise memory, and audit dispatch
+// records for the CAIO Access Gateway. Rows hold governance and transport
+// metadata only: no raw bearer tokens, no private keys, no prompt or response
+// bodies, no attachment bodies, no connection strings.
+
+model CaioAccessToken {
+  id                     String    @id
+  workspaceId            String
+  userRef                String
+  clientType             String
+  deviceRef              String
+  audience               String
+  tokenHash              String    @unique(map: "CaioAccessToken_token_hash_key")
+  tokenPrefix            String
+  approvedSourceIp       String
+  status                 String
+  createdAt              DateTime
+  expiresAt              DateTime
+  rotatedAt              DateTime?
+  revokedAt              DateTime?
+  rotatedFromTokenId     String?
+  rateWindowStartedAt    DateTime
+  rateWindowRequestCount Int       @default(0)
+  workspace              Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioAccessToken_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "CaioAccessToken_id_workspace_key")
+  @@index([workspaceId, clientType, deviceRef, audience, status], map: "CaioAccessToken_binding_idx")
+  @@index([workspaceId, status, expiresAt], map: "CaioAccessToken_status_expiry_idx")
+}
+
+model CaioPairingRequest {
+  id                String    @id
+  workspaceId       String
+  userRef           String
+  clientType        String
+  deviceRef         String
+  sourceIp          String
+  matchCodeHash     String
+  clientPublicKey   String
+  status            String
+  createdAt         DateTime
+  expiresAt         DateTime
+  approvedAt        DateTime?
+  approvedByRef     String?
+  completedAt       DateTime?
+  revokedAt         DateTime?
+  issuedMcpTokenId  String?
+  issuedModelTokenId String?
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioPairingRequest_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "CaioPairingRequest_id_workspace_key")
+  @@index([workspaceId, status, expiresAt], map: "CaioPairingRequest_status_expiry_idx")
+}
+
+model CaioContextNegativeRule {
+  id             String    @id
+  workspaceId    String
+  ruleKey        String
+  scopeKind      String
+  scopeRef       String?
+  ruleKind       String
+  patternJson    String    @db.LongText
+  version        Int
+  status         String
+  createdByRef   String
+  publishedByRef String?
+  createdAt      DateTime
+  publishedAt    DateTime?
+  revokedAt      DateTime?
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioContextNegativeRule_workspace_fkey")
+
+  @@unique([workspaceId, ruleKey, version], map: "CaioContextNegativeRule_key_version_key")
+  @@index([workspaceId, status, scopeKind], map: "CaioContextNegativeRule_status_idx")
+}
+
+model CaioContextReceipt {
+  id                String   @id
+  workspaceId       String
+  userRef           String
+  requestId         String
+  decision          String
+  policyVersion     String
+  ruleHitsJson      String   @db.LongText
+  sourcesJson       String   @db.LongText
+  redactionReliable Boolean
+  contentHash       String
+  createdAt         DateTime
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioContextReceipt_workspace_fkey")
+
+  @@unique([workspaceId, requestId], map: "CaioContextReceipt_workspace_request_key")
+  @@index([workspaceId, userRef, createdAt], map: "CaioContextReceipt_user_time_idx")
+}
+
+model CaioMemoryCandidate {
+  id                 String    @id
+  workspaceId        String
+  projectRef         String?
+  createdByRef       String
+  state              String
+  body               String?   @db.LongText
+  contentHash        String
+  sourceRequestId    String?
+  receiptJson        String    @db.LongText
+  createdAt          DateTime
+  candidateExpiresAt DateTime
+  adoptedAt          DateTime?
+  adoptedByRef       String?
+  ephemeralExpiresAt DateTime?
+  verifiedAt         DateTime?
+  verifiedByRef      String?
+  rejectedAt         DateTime?
+  rejectedByRef      String?
+  expiredAt          DateTime?
+  updatedAt          DateTime
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioMemoryCandidate_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "CaioMemoryCandidate_id_workspace_key")
+  @@index([workspaceId, state, candidateExpiresAt], map: "CaioMemoryCandidate_state_ttl_idx")
+  @@index([workspaceId, createdByRef, state], map: "CaioMemoryCandidate_owner_state_idx")
+}
+
+model CaioAuditDispatchReceipt {
+  id            String   @id
+  workspaceId   String
+  requestId     String
+  clientType    String
+  modelAlias    String
+  inputHash     String
+  policyVersion String
+  persistedVia  String
+  createdAt     DateTime
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioAuditDispatchReceipt_workspace_fkey")
+
+  @@unique([workspaceId, requestId], map: "CaioAuditDispatchReceipt_workspace_request_key")
+  @@index([workspaceId, createdAt], map: "CaioAuditDispatchReceipt_time_idx")
+}
+
+model CaioCredentialRefState {
+  id            String    @id
+  workspaceId   String
+  credentialRef String
+  providerKey   String
+  status        String
+  version       Int
+  rotatedAt     DateTime?
+  createdAt     DateTime
+  updatedAt     DateTime
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioCredentialRefState_workspace_fkey")
+
+  @@unique([workspaceId, credentialRef], map: "CaioCredentialRefState_workspace_ref_key")
+}
