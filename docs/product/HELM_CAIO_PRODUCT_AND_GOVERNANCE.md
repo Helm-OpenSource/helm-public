@@ -108,6 +108,18 @@ Public Core 中的 `WorkspaceRole.OWNER` 是工作区权限角色（“一号位
 展示或审计为法定 CEO；CEO 身份只能由私有 Overlay 显式绑定。展示品牌不得
 作为身份认证或服务端授权条件。
 
+### CEO-owner 视图中的 IA 位置
+
+Public Core 仅在当前成员同时满足 `WorkspaceRole.OWNER` 且角色基础预设为
+`FOUNDER_CEO` 时，将独立的 `Helm CAIO` 入口置于桌面和移动端首要导航的第一
+位，目标为 `/caio`。该入口表达 CAIO 单独对 CEO 负责的产品地位，不把 CAIO
+降格为控制塔中的普通业务模块。
+
+这仍然只是**导航展示条件**，不是 CEO 身份认证或权限来源：`/caio` 会在服务端
+重新校验 OWNER 访问边界，并且只复用既有 Stage 1 Owner Loop 只读投影；不新增
+选择、确认、派工、执行、外发或承诺入口。若缺少私有 Overlay 的 CEO principal
+binding，Public Core 不得仅凭该导航或 OWNER 角色声称用户是法定 CEO。
+
 ## 6. `aicoo → CAIO` 兼容映射（仅展示层，单向）
 
 历史演进：Helm 的 AI 经营中枢能力早期以 `AI COO` 口径建设，相关机器标识使用

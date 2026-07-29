@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Activity,
   BarChart3,
+  BrainCircuit,
   BriefcaseBusiness,
   CalendarDays,
   CheckSquare,
@@ -28,11 +29,26 @@ import { cn } from "@/lib/utils";
 import { getDemoModeProfile } from "@/lib/demo/demo-modes";
 import type { WorkspaceNavExtensionCluster } from "@/lib/extensions/registry";
 import {
+  CAIO_PRIMARY_DESTINATION,
   getDestinationCatalog,
   type DestinationCatalog,
   type DestinationEntry,
 } from "@/lib/shell/role-home";
 import type { MemberRoleHomeWorkstation } from "@/lib/shell/member-role-home";
+
+type SidebarNavItem = {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  activeDescendantExclusions?: string[];
+  trailing?: React.ReactNode;
+};
+
+type SidebarNavSection = {
+  key: string;
+  label: string;
+  items: SidebarNavItem[];
+};
 
 const CATALOG_ICON_BY_PREFIX: Array<[string, React.ReactNode]> = [
   ["/dashboard", <Compass key="i" className="h-4 w-4" />],
@@ -60,7 +76,7 @@ function toNavItems(
   entries: ReadonlyArray<DestinationEntry>,
   english: boolean,
   excludeHrefs: ReadonlyArray<string> = [],
-) {
+): SidebarNavItem[] {
   return entries
     .filter((entry) => !entry.href.startsWith("/settings"))
     .filter((entry) => !excludeHrefs.some((ex) => entry.href.startsWith(ex)))
@@ -114,6 +130,7 @@ export function Sidebar({
   pendingApprovals,
   navExtensionClusters = [],
   basePresetKey = null,
+  showCaioPrimaryNavigation,
   canReviewGovernedActions,
   workstationHomeEntry = null,
 }: {
@@ -123,6 +140,7 @@ export function Sidebar({
   pendingApprovals: number;
   navExtensionClusters?: ReadonlyArray<WorkspaceNavExtensionCluster>;
   basePresetKey?: string | null;
+  showCaioPrimaryNavigation: boolean;
   canReviewGovernedActions: boolean;
   workstationHomeEntry?: MemberRoleHomeWorkstation | null;
 }) {
@@ -142,6 +160,27 @@ export function Sidebar({
   );
   const workstationPresentation =
     getSidebarWorkstationPresentation(workstationHomeEntry);
+  const caioPrimarySection: SidebarNavSection = {
+    key: "caio",
+    label: english ? "CEO-direct AI" : "CEO 直属 AI",
+    items: [
+      {
+        href: CAIO_PRIMARY_DESTINATION.href,
+        icon: <BrainCircuit className="h-4 w-4" />,
+        label: english
+          ? CAIO_PRIMARY_DESTINATION.labelEn
+          : CAIO_PRIMARY_DESTINATION.labelZh,
+        trailing: (
+          <span
+            aria-hidden="true"
+            className="text-[11px] font-medium text-[color:var(--muted-foreground)] group-[.nav-active]:text-white/75"
+          >
+            CEO
+          </span>
+        ),
+      },
+    ],
+  };
   const demoProfile = demoMode ? getDemoModeProfile(demoMode, locale) : null;
   const demoShellCopy =
     demoProfile?.mode === "sales"
@@ -190,7 +229,7 @@ export function Sidebar({
   const settingsActive =
     pathname === "/settings" ||
     settingsLinks.some((item) => pathname.startsWith(item.href));
-  const navSections = [
+  const navSections: SidebarNavSection[] = [
     {
       key: "today",
       label: english ? "What needs attention" : "今天要处理",
@@ -286,8 +325,9 @@ export function Sidebar({
   const drawerItems = catalog
     ? toNavItems(catalog.drawer, english, settingsHrefs)
     : [];
-  const renderedSections = (
-    catalog
+  const renderedSections: SidebarNavSection[] = [
+    ...(showCaioPrimaryNavigation ? [caioPrimarySection] : []),
+    ...(catalog
       ? [
           {
             key: "primary",
@@ -335,8 +375,8 @@ export function Sidebar({
                 item.href.startsWith(href),
               ),
           ),
-        }))
-  ).filter((section) => section.items.length > 0);
+        }))),
+  ].filter((section) => section.items.length > 0);
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[288px] shrink-0 px-4 py-4 lg:flex">
@@ -401,7 +441,15 @@ export function Sidebar({
 
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto pr-1">
           {renderedSections.map((section) => (
-            <div key={section.key} className="space-y-1">
+            <div
+              key={section.key}
+              className="space-y-1"
+              data-testid={
+                section.key === "caio"
+                  ? "caio-primary-navigation"
+                  : undefined
+              }
+            >
               <p className="px-1 pb-1 text-xs font-medium text-[color:var(--muted-foreground)]">
                 {section.label}
               </p>
@@ -412,6 +460,7 @@ export function Sidebar({
                   icon={item.icon}
                   label={item.label}
                   activeDescendantExclusions={item.activeDescendantExclusions}
+                  trailing={item.trailing}
                 />
               ))}
             </div>

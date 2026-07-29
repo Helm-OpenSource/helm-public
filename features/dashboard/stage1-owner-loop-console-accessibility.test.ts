@@ -12,6 +12,7 @@ const querySource = readFileSync(
 
 describe("Stage 1 owner-loop console boundaries", () => {
   it("exposes a named owner surface with an explicit review-first boundary", () => {
+    expect(source).toContain('id="helm-caio"');
     expect(source).toContain('aria-labelledby="stage1-owner-loop-title"');
     expect(source).toContain('data-stage1-owner-loop-console="true"');
     expect(source).toContain("本面板不执行、不外发、不产生承诺");

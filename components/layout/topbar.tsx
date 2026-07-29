@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
+  BrainCircuit,
   BriefcaseBusiness,
   Bell,
   CalendarDays,
@@ -64,6 +65,7 @@ import {
 } from "@/features/workspace/actions";
 import { saveOpportunityAction } from "@/features/opportunities/actions";
 import { buildSearchIntentHref } from "@/features/search/ask-helm-entry-routing";
+import { CAIO_PRIMARY_DESTINATION } from "@/lib/shell/role-home";
 
 type TopbarProps = {
   workspaceName: string;
@@ -91,6 +93,7 @@ type TopbarProps = {
       user: { id: string; name: string };
     }>;
   };
+  showCaioPrimaryNavigation: boolean;
 };
 
 type OpportunityFormState = {
@@ -128,6 +131,7 @@ export function Topbar({
   notificationCount,
   alerts,
   quickCreateData,
+  showCaioPrimaryNavigation,
 }: TopbarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -351,6 +355,23 @@ export function Topbar({
   ] as const;
 
   const primaryNavSections = [
+    ...(showCaioPrimaryNavigation
+      ? [
+          {
+            key: "caio",
+            label: english ? "CEO-direct AI" : "CEO 直属 AI",
+            items: [
+              {
+                href: CAIO_PRIMARY_DESTINATION.href,
+                label: english
+                  ? CAIO_PRIMARY_DESTINATION.labelEn
+                  : CAIO_PRIMARY_DESTINATION.labelZh,
+                icon: <BrainCircuit className="h-4 w-4" />,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       key: "today",
       label: english ? "What needs attention" : "今天要处理",
@@ -1068,9 +1089,13 @@ export function Topbar({
           <SheetHeader>
             <SheetTitle>{brandLabel ?? messages.shell.brand}</SheetTitle>
             <SheetDescription>
-              {english
-                ? "Navigate today, customer work, reviews, memory and the workspace foundation."
-                : "进入今天要处理的事、客户资产、复核记录和工作区设置。"}
+              {showCaioPrimaryNavigation
+                ? english
+                  ? "Open the CEO-direct Helm CAIO surface, then navigate today's work, reviews, records and workspace foundations."
+                  : "先进入 CEO 直属的 Helm CAIO，再查看今日工作、复核记录与工作区基础。"
+                : english
+                  ? "Navigate today, customer work, reviews, memory and the workspace foundation."
+                  : "进入今天要处理的事、客户资产、复核记录和工作区设置。"}
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-3 p-5">
@@ -1082,7 +1107,15 @@ export function Topbar({
             </div>
             <div className="space-y-2">
               {primaryNavSections.map((section) => (
-                <div key={section.key} className="space-y-2">
+                <div
+                  key={section.key}
+                  className="space-y-2"
+                  data-testid={
+                    section.key === "caio"
+                      ? "mobile-caio-primary-navigation"
+                      : undefined
+                  }
+                >
                   <p className="px-1 text-xs font-medium text-[color:var(--muted-foreground)]">
                     {section.label}
                   </p>

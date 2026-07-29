@@ -94,6 +94,15 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openDemoWorkspace(page, "founder");
 
+    const caioNavigation = page.getByTestId("caio-primary-navigation");
+    await expect(caioNavigation).toBeVisible();
+    await expect(caioNavigation.getByRole("link", { name: "Helm CAIO" })).toHaveAttribute(
+      "href",
+      "/caio",
+    );
+    await caioNavigation.getByRole("link", { name: "Helm CAIO" }).click();
+    await expect(page).toHaveURL(/\/caio$/);
+
     const console = page.locator('[data-stage1-owner-loop-console="true"]');
     await expect(console).toBeVisible();
     await expect(console.getByRole("heading", { level: 2 })).toHaveText(
@@ -168,6 +177,14 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
 
   test("non-OWNER cannot see the owner operating loop", async ({ page }) => {
     await openDemoWorkspace(page, "sales");
+    await expect(page.getByTestId("caio-primary-navigation")).toHaveCount(0);
+    await page.goto("/caio");
+    await expect(
+      page.getByRole("heading", { name: "没有找到对应内容" }),
+    ).toBeVisible();
+    await expect(page.locator('[data-caio-owner-surface="true"]')).toHaveCount(
+      0,
+    );
     await expect(
       page.locator('[data-stage1-owner-loop-console="true"]'),
     ).toHaveCount(0);
@@ -213,6 +230,19 @@ test.describe("Stage 1 owner loop synthetic proof", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openDemoWorkspace(page, "founder");
+
+    await page.getByRole("button", { name: "打开工作区导航" }).click();
+    const mobileCaioNavigation = page.getByTestId(
+      "mobile-caio-primary-navigation",
+    );
+    await expect(mobileCaioNavigation).toBeVisible();
+    await expect(
+      mobileCaioNavigation.getByRole("link", { name: "Helm CAIO" }),
+    ).toHaveAttribute("href", "/caio");
+    await mobileCaioNavigation
+      .getByRole("link", { name: "Helm CAIO" })
+      .click();
+    await expect(page).toHaveURL(/\/caio$/);
 
     const console = page.locator('[data-stage1-owner-loop-console="true"]');
     await expect(console).toBeVisible();

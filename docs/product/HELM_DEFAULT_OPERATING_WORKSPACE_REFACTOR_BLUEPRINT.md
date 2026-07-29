@@ -82,6 +82,11 @@ Core 默认主线 = **信号 → 判断 → 复核 → 推进 → 证据** 五�
 
 ## 2. 新默认 home：控制塔
 
+对同时满足 `WorkspaceRole.OWNER` 与 `FOUNDER_CEO` 基础预设的成员，IA 在控制
+塔四段之前增加独立、首位的 `Helm CAIO` 主导航，目标为 OWNER-only 只读
+`/caio`。这是“直属 CEO”的产品地位表达，不是 CEO 身份认证、权限授予或自动
+执行入口；目标页必须独立重验 OWNER 边界。
+
 `/dashboard` 路由不变，内容重构为四段（自上而下）：
 
 | 段 | 内容 | 数据来源（升舱自现有资产） |
@@ -294,6 +299,9 @@ type MainlineDescriptor = {
 
 清单由 `git ls-tree -r --name-only 79ef569 -- 'app/(workspace)'` 过滤 `page.tsx` 生成（52 行，字典序）。处置：A=升舱 / B=事实面 / C=退役 / infra=路由基础设施。
 
+基线之后新增的 `/caio` 不回写进这份 52 页历史 inventory；当前处置为 A 类
+CEO-owner 只读经营面，其现行 IA 与边界以 §2、附录 B 和 CAIO ADR 为准。
+
 | # | 页面（`app/(workspace)/` 下） | 类 | 处置说明 |
 |---|---|---|---|
 | 1 | `analytics/page.tsx` | B | 使用面板证据页；撤导航收纳 |
@@ -355,7 +363,7 @@ type MainlineDescriptor = {
 
 | rolePresetKey | 角色家 | 主区（≤4） |
 |---|---|---|
-| `FOUNDER_CEO` | 控制塔 | 主线卡带 · 需你拍板 · 复核队列 · 周期复盘深链 |
+| `FOUNDER_CEO` + `OWNER` | Helm CAIO + 控制塔 | **Helm CAIO（首位、直属 CEO）** · 主线卡带 / 需你拍板 · 复核队列 · 周期复盘深链 |
 | `SALES_LEAD` | 推进工作台（管理镜头） | 机会队列 · 需拍板（销售域过滤） · 会议 · 复盘深链 |
 | `ACCOUNT_EXECUTIVE` | 推进工作台 | 我的机会队列 · 今日会议 · 收件推进 · 我的承诺 / 跟进 |
 | `RECRUITER` | GENERIC 通用面 | Core 默认无招聘工位（诚实标注）；收纳导航 + 搜索 |
@@ -420,4 +428,5 @@ type MainlineDescriptor = {
 
 ## 变更记录
 
+- 2026-07-29：`FOUNDER_CEO + OWNER` 视图新增首位独立 `/caio` 只读入口；导航不授予 CEO 身份或任何执行权限，52 页 inventory 仍保持历史基线口径。
 - 2026-07-12：首版。设计蓝图（design-only）；基线 `origin/main@79ef569`；经五轮只读评审收敛（评审记录与方向批准状态在私有 control-plane owner gate）。

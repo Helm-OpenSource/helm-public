@@ -179,6 +179,7 @@ export function Stage1OwnerLoopConsole({
 
   return (
     <section
+      id="helm-caio"
       aria-labelledby="stage1-owner-loop-title"
       className="border-y border-[color:var(--border)] bg-[color:var(--surface-subtle)]"
       data-stage1-owner-loop-console="true"
