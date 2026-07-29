@@ -10,7 +10,10 @@
 import { Prisma, type CaioAccessToken as StoredToken } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import {
+  isWriteConflictError,
+  runWithWriteConflictRetry,
+} from "@/lib/db/conflict-aware-write";
 import { CaioAccessGatewayError } from "@/lib/caio-access-gateway/gateway-error-contract";
 import {
   caioClientTypeSchema,
@@ -37,6 +40,22 @@ const WRITE_RETRY_OPTIONS = {
 } as const;
 
 const RATE_SLOT_MAX_ATTEMPTS = 4;
+
+/**
+ * Runs one conditional rate-window update, returning null when the engine
+ * refuses it as a write conflict so the caller can retry within its bounded
+ * attempt budget. Any other failure still propagates.
+ */
+async function claimUpdate(
+  run: () => Promise<{ count: number }>,
+): Promise<{ count: number } | null> {
+  try {
+    return await run();
+  } catch (error) {
+    if (isWriteConflictError(error)) return null;
+    throw error;
+  }
+}
 
 function toRecord(row: StoredToken): CaioAccessTokenRecord {
   return Object.freeze({
@@ -149,25 +168,36 @@ export function createPrismaCaioAccessTokenPersistence(
     }): Promise<CaioRateSlotResult> {
       const cutoff = new Date(input.now.getTime() - input.windowMs);
       for (let attempt = 0; attempt < RATE_SLOT_MAX_ATTEMPTS; attempt += 1) {
-        const reset = await client.caioAccessToken.updateMany({
-          where: {
-            id: input.tokenId,
-            rateWindowStartedAt: { lte: cutoff },
-          },
-          data: {
-            rateWindowStartedAt: input.now,
-            rateWindowRequestCount: 1,
-          },
-        });
+        // Concurrent authentications target the same row, so the engine can
+        // reject a conditional update with a write conflict (MySQL 1020 /
+        // Prisma P2034). Treat that as "someone else moved the window" and
+        // take another bounded attempt instead of surfacing a raw database
+        // error to the caller.
+        const reset = await claimUpdate(() =>
+          client.caioAccessToken.updateMany({
+            where: {
+              id: input.tokenId,
+              rateWindowStartedAt: { lte: cutoff },
+            },
+            data: {
+              rateWindowStartedAt: input.now,
+              rateWindowRequestCount: 1,
+            },
+          }),
+        );
+        if (reset === null) continue;
         if (reset.count === 1) return { allowed: true };
-        const counted = await client.caioAccessToken.updateMany({
-          where: {
-            id: input.tokenId,
-            rateWindowStartedAt: { gt: cutoff },
-            rateWindowRequestCount: { lt: input.limit },
-          },
-          data: { rateWindowRequestCount: { increment: 1 } },
-        });
+        const counted = await claimUpdate(() =>
+          client.caioAccessToken.updateMany({
+            where: {
+              id: input.tokenId,
+              rateWindowStartedAt: { gt: cutoff },
+              rateWindowRequestCount: { lt: input.limit },
+            },
+            data: { rateWindowRequestCount: { increment: 1 } },
+          }),
+        );
+        if (counted === null) continue;
         if (counted.count === 1) return { allowed: true };
         const row = await client.caioAccessToken.findUnique({
           where: { id: input.tokenId },

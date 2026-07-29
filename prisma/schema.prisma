@@ -6702,7 +6702,9 @@ model CaioAccessToken {
   workspace              Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioAccessToken_workspace_fkey")
 
   @@unique([id, workspaceId], map: "CaioAccessToken_id_workspace_key")
-  @@index([workspaceId, clientType, deviceRef, audience, status], map: "CaioAccessToken_binding_idx")
+  // Three key columns only: five VARCHAR(191) columns exceed the 3072-byte
+  // index limit. clientType/userRef/status stay as WHERE filters.
+  @@index([workspaceId, deviceRef, audience], map: "CaioAccessToken_binding_idx")
   @@index([workspaceId, status, expiresAt], map: "CaioAccessToken_status_expiry_idx")
 }
 

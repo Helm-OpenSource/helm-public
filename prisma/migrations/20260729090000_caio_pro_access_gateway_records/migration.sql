@@ -19,7 +19,7 @@ CREATE TABLE `CaioAccessToken` (
     `rateWindowRequestCount` INTEGER NOT NULL DEFAULT 0,
 
     UNIQUE INDEX `CaioAccessToken_token_hash_key`(`tokenHash`),
-    INDEX `CaioAccessToken_binding_idx`(`workspaceId`, `clientType`, `deviceRef`, `audience`, `status`),
+    INDEX `CaioAccessToken_binding_idx`(`workspaceId`, `deviceRef`, `audience`),
     INDEX `CaioAccessToken_status_expiry_idx`(`workspaceId`, `status`, `expiresAt`),
     UNIQUE INDEX `CaioAccessToken_id_workspace_key`(`id`, `workspaceId`),
     PRIMARY KEY (`id`)
