@@ -16,6 +16,7 @@ import {
 import {
   getDestinationCatalog,
   resolveRoleLens,
+  shouldShowCaioPrimaryNavigation,
   type RoleLens,
 } from "@/lib/shell/role-home";
 
@@ -356,6 +357,36 @@ describe("single-winner provider selection (binding-is-authorization)", () => {
 });
 
 describe("role lens + per-preset destination catalog (Appendix B row-by-row)", () => {
+  it("shows the standalone CAIO primary destination only in an OWNER-backed CEO view", () => {
+    expect(
+      shouldShowCaioPrimaryNavigation({
+        basePresetKey: "FOUNDER_CEO",
+        workspaceRole: "OWNER",
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowCaioPrimaryNavigation({
+        basePresetKey: "FOUNDER_CEO",
+        workspaceRole: "ADMIN",
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowCaioPrimaryNavigation({
+        basePresetKey: "SALES_LEAD",
+        workspaceRole: "OWNER",
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowCaioPrimaryNavigation({
+        basePresetKey: null,
+        workspaceRole: "OWNER",
+      }),
+    ).toBe(false);
+    expect(
+      getDestinationCatalog("FOUNDER_CEO").primary.map((entry) => entry.href),
+    ).not.toContain("/caio");
+  });
+
   it("maps all nine built-in presets and fails safe to generic", () => {
     const cases: Array<[string | null, RoleLens]> = [
       ["FOUNDER_CEO", "control_tower"],
@@ -422,6 +453,18 @@ describe("role lens + per-preset destination catalog (Appendix B row-by-row)", (
     // 解析失败 → 最低信息面：仅搜索，无拍板、无业务队列
     expect(primaryHrefs(null)).toEqual(["/search"]);
     expect(primaryHrefs("UNKNOWN")).toEqual(["/search"]);
+    for (const key of [
+      "SALES_LEAD",
+      "ACCOUNT_EXECUTIVE",
+      "RECRUITER",
+      "CUSTOMER_SUCCESS",
+      "DELIVERY_LEAD",
+      "PRODUCT_ENGINEER",
+      "OPERATIONS_FINANCE",
+      "GENERAL_OPERATOR",
+    ]) {
+      expect(primaryHrefs(key)).not.toContain("/caio");
+    }
   });
 
   it("primary zone stays within 4 entries with in-site hrefs", () => {

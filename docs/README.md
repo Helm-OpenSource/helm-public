@@ -56,7 +56,7 @@ connector 授权、写回、外发或审批证明。
 - [交付工程师初始化诊断要求 / Delivery engineer setup diagnostic requirements](product/HELM_DELIVERY_ENGINEER_SETUP_DIAGNOSTIC_REQUIREMENTS.md)
 - [数据接入体验 / Data intake experience](product/HELM_DATA_INTAKE_EXPERIENCE.md)
 - [Stage 1 一把手经营闭环方法 / Stage 1 owner operating loop method](product/HELM_STAGE1_OWNER_LOOP_METHOD.md)
-- [Helm CAIO 产品与治理口径 / Helm CAIO product and governance ADR](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md) / [English](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.en.md) — 冻结品牌与治理定义、成熟度五阶段与兼容映射；不授予权限、不激活生产
+- [Helm CAIO 产品与治理口径 / Helm CAIO product and governance ADR](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md) / [English](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.en.md) — 冻结品牌、治理定义、成熟度五阶段与 CEO-owner 首要 IA 位置；导航不认证 CEO、不授予权限、不激活生产
 - [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 冻结单一硬件产品、全量数据资产盘点与分级接入、初始化门、10 题候选、CEO 选 0-3 题、模型切换和 Context Agent 治理；requirements-only
 - [Helm CAIO Pro 实施主计划 / Helm CAIO Pro implementation plan](_planning/HELM_CAIO_PRO_IMPLEMENTATION_PLAN.md) — 按四仓、阶段门、PR、验证和回滚拆解；不代表客户连接、设备交付或生产激活
 - [Helm CAIO 模型准入与数据出域治理 / Helm CAIO model admission and data egress governance](product/HELM_CAIO_MODEL_ADMISSION_AND_EGRESS.md) — 租户策略、adapter readiness、调用前决定、单次 claim、append-only 回执与受限 fallback；Public Core 默认无生产 adapter

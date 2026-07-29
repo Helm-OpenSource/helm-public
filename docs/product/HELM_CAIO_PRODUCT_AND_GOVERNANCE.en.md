@@ -75,6 +75,22 @@ legal CEO identity. CEO identity can only be bound explicitly by a private
 overlay; display branding is never an authentication or server-side
 authorization condition.
 
+### IA placement in the CEO-owner view
+
+Public Core places a standalone `Helm CAIO` destination first in desktop and
+mobile primary navigation only when the current member is both a
+`WorkspaceRole.OWNER` and based on the `FOUNDER_CEO` role preset. The
+destination is `/caio`. This positioning expresses CAIO's direct
+accountability to the CEO instead of treating it as an ordinary control-tower
+module.
+
+This remains navigation presentation, not CEO identity proof or an authority
+grant. `/caio` rechecks the OWNER boundary on the server and only reuses the
+existing read-only Stage 1 Owner Loop projection. It adds no selection,
+confirmation, dispatch, execution, outbound-send, or commitment surface.
+Without a private-overlay CEO principal binding, neither the navigation nor an
+OWNER role may be used to claim that the user is the legal CEO.
+
 ## 4. `aicoo → CAIO` compatibility mapping (display only, one-way)
 
 Customer-visible display wording migrates to CAIO. Machine identifiers under

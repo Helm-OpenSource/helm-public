@@ -39,8 +39,8 @@ describe("getSidebarReviewPresentation", () => {
     expect(sidebar).toMatch(
       /reviewPresentation\.showPendingApprovals\s*&&\s*workstationPresentation\.showUtilityPanel/,
     );
-    expect(sidebar).toContain(
-      ").filter((section) => section.items.length > 0)",
+    expect(sidebar).toMatch(
+      /\.filter\(\(section\) => section\.items\.length > 0\)/,
     );
   });
 });

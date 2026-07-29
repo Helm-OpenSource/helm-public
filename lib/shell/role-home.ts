@@ -55,6 +55,26 @@ const D = (href: string, labelZh: string, labelEn: string): DestinationEntry => 
   labelEn,
 });
 
+export const CAIO_PRIMARY_DESTINATION = D(
+  "/caio",
+  "Helm CAIO",
+  "Helm CAIO",
+);
+
+/**
+ * CAIO is elevated only when both the CEO-oriented IA preset and the
+ * workspace OWNER access role are present. This decides navigation
+ * presentation only; the destination must re-authorize independently.
+ */
+export function shouldShowCaioPrimaryNavigation(input: {
+  basePresetKey: string | null | undefined;
+  workspaceRole: string | null | undefined;
+}): boolean {
+  return (
+    input.basePresetKey === "FOUNDER_CEO" && input.workspaceRole === "OWNER"
+  );
+}
+
 const DRAWER_COMMON: DestinationEntry[] = [
   D("/imports", "数据接入", "Imports"),
   D("/diagnostics", "诊断", "Diagnostics"),

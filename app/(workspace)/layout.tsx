@@ -25,6 +25,7 @@ import {
   resolveMemberRoleHome,
   type MemberRoleHomeWorkstation,
 } from "@/lib/shell/member-role-home";
+import { shouldShowCaioPrimaryNavigation } from "@/lib/shell/role-home";
 
 export default async function WorkspaceLayout({
   children,
@@ -59,6 +60,7 @@ export default async function WorkspaceLayout({
     >["clusters"];
     shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
     basePresetKey: string | null;
+    showCaioPrimaryNavigation: boolean;
     canReviewGovernedActions: boolean;
     workstationHomeEntry: MemberRoleHomeWorkstation | null;
   } | null = null;
@@ -130,6 +132,10 @@ export default async function WorkspaceLayout({
       // basePresetKey 仅用于导航目录（授权先行，导航不授权）；解析失败 → 受控兜底：
       // OWNER 无 preset → 控制塔(FOUNDER_CEO),其余 → null → GENERIC(CodeX 运行审计 P1)。
       basePresetKey,
+      showCaioPrimaryNavigation: shouldShowCaioPrimaryNavigation({
+        basePresetKey,
+        workspaceRole: membership.role,
+      }),
       canReviewGovernedActions: canReviewWorkspaceGovernedActions(
         membership.role,
       ),
