@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -104,20 +105,26 @@ describe("solution extension manifest bundle validation", () => {
     );
   });
 
-  it("validates an explicitly declared Pack dependency without treating it as tenant-owned", () => {
+  it("validates a Pack dependency from its canonical authority files", () => {
     const fixture = createTempHarnessProject();
     const tenantManifest = fixture.readTenantManifest();
     tenantManifest.ownedExtensions = [];
-    tenantManifest.packDependencies = [
-      {
-        packKey: "npa",
-        providedExtensions: ["npa-sample"],
-      },
-    ];
+    const authority = fixture.writePackAuthority({
+      packKey: "npa",
+      providedExtensions: [
+        {
+          extensionKey: "npa-sample",
+          extensionSlug: "sample",
+          rootPath: "packs/npa/sample",
+        },
+      ],
+    });
+    tenantManifest.packDependencies = [{ packKey: "npa", ...authority }];
     fixture.writeTenantManifest(tenantManifest);
     const manifest = fixture.readManifest();
     manifest.tenantKey = "npa";
     manifest.extensionKey = "npa-sample";
+    manifest.capabilityManifest.maxEffectMode = "human_seat_write";
     fixture.writeManifest(manifest);
 
     const [result] = collectTenantExtensionManifestValidationReadout(
@@ -136,12 +143,17 @@ describe("solution extension manifest bundle validation", () => {
     const fixture = createTempHarnessProject();
     const tenantManifest = fixture.readTenantManifest();
     tenantManifest.ownedExtensions = [];
-    tenantManifest.packDependencies = [
-      {
-        packKey: "npa",
-        providedExtensions: ["npa-sample"],
-      },
-    ];
+    const authority = fixture.writePackAuthority({
+      packKey: "npa",
+      providedExtensions: [
+        {
+          extensionKey: "npa-sample",
+          extensionSlug: "sample",
+          rootPath: "packs/npa/sample",
+        },
+      ],
+    });
+    tenantManifest.packDependencies = [{ packKey: "npa", ...authority }];
     fixture.writeTenantManifest(tenantManifest);
 
     const [result] = collectTenantExtensionManifestValidationReadout(
@@ -154,6 +166,112 @@ describe("solution extension manifest bundle validation", () => {
       extensionKey: "demo-sample",
       sourceExtensionKey: "npa-sample",
     });
+  });
+
+  it("maps a Pack logical extension slug to its canonical physical directory", () => {
+    const fixture = createTempHarnessProject({
+      physicalExtensionSlug: "third-party-agency",
+      logicalExtensionSlug: "agency-oversight",
+    });
+    const tenantManifest = fixture.readTenantManifest();
+    tenantManifest.ownedExtensions = [];
+    const authority = fixture.writePackAuthority({
+      packKey: "npa",
+      providedExtensions: [
+        {
+          extensionKey: "npa-agency-oversight",
+          extensionSlug: "agency-oversight",
+          rootPath: "packs/npa/third-party-agency",
+        },
+      ],
+    });
+    tenantManifest.packDependencies = [{ packKey: "npa", ...authority }];
+    fixture.writeTenantManifest(tenantManifest);
+    const manifest = fixture.readManifest();
+    manifest.tenantKey = "npa";
+    manifest.extensionKey = "npa-agency-oversight";
+    fixture.writeManifest(manifest);
+
+    const [result] = collectTenantExtensionManifestValidationReadout(
+      fixture.extensionsRoot,
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      validationScope: "pack-dependency",
+      extensionKey: "npa-agency-oversight",
+      sourceExtensionKey: "npa-agency-oversight",
+    });
+  });
+
+  it("fails closed when a Pack authority digest is not exact", () => {
+    const fixture = createTempHarnessProject();
+    const tenantManifest = fixture.readTenantManifest();
+    tenantManifest.ownedExtensions = [];
+    const authority = fixture.writePackAuthority({
+      packKey: "npa",
+      providedExtensions: [
+        {
+          extensionKey: "npa-sample",
+          extensionSlug: "sample",
+          rootPath: "packs/npa/sample",
+        },
+      ],
+    });
+    tenantManifest.packDependencies = [
+      { ...authority, packKey: "npa", manifestSha256: "0".repeat(64) },
+    ];
+    fixture.writeTenantManifest(tenantManifest);
+    const manifest = fixture.readManifest();
+    manifest.tenantKey = "npa";
+    manifest.extensionKey = "npa-sample";
+    fixture.writeManifest(manifest);
+
+    const [result] = collectTenantExtensionManifestValidationReadout(
+      fixture.extensionsRoot,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.issues).toContain(
+      "pack dependency npa manifestSha256 must match the canonical Pack manifest",
+    );
+  });
+
+  it("rejects tenant-owned Pack extension declarations", () => {
+    const fixture = createTempHarnessProject();
+    const tenantManifest = fixture.readTenantManifest();
+    tenantManifest.ownedExtensions = [];
+    const authority = fixture.writePackAuthority({
+      packKey: "npa",
+      providedExtensions: [
+        {
+          extensionKey: "npa-sample",
+          extensionSlug: "sample",
+          rootPath: "packs/npa/sample",
+        },
+      ],
+    });
+    tenantManifest.packDependencies = [
+      {
+        packKey: "npa",
+        ...authority,
+        providedExtensions: ["npa-sample"],
+      },
+    ];
+    fixture.writeTenantManifest(tenantManifest);
+    const manifest = fixture.readManifest();
+    manifest.tenantKey = "npa";
+    manifest.extensionKey = "npa-sample";
+    fixture.writeManifest(manifest);
+
+    const [result] = collectTenantExtensionManifestValidationReadout(
+      fixture.extensionsRoot,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.issues).toContain(
+      "pack dependency npa must not declare providedExtensions; the canonical Pack manifest is the authority",
+    );
   });
 
   it("fails closed for an undeclared cross-tenant Pack manifest", () => {
@@ -176,12 +294,17 @@ describe("solution extension manifest bundle validation", () => {
     const fixture = createTempHarnessProject();
     const tenantManifest = fixture.readTenantManifest();
     tenantManifest.ownedExtensions = [];
-    tenantManifest.packDependencies = [
-      {
-        packKey: "npa",
-        providedExtensions: ["npa-sample"],
-      },
-    ];
+    const authority = fixture.writePackAuthority({
+      packKey: "npa",
+      providedExtensions: [
+        {
+          extensionKey: "npa-sample",
+          extensionSlug: "sample",
+          rootPath: "packs/npa/sample",
+        },
+      ],
+    });
+    tenantManifest.packDependencies = [{ packKey: "npa", ...authority }];
     fixture.writeTenantManifest(tenantManifest);
     const manifest = fixture.readManifest();
     manifest.tenantKey = "npa";
@@ -199,15 +322,38 @@ describe("solution extension manifest bundle validation", () => {
       "capabilityManifest.maxEffectMode must not declare customer_visible_send in read-only validation phase",
     );
   });
+
+  it("rejects human_seat_write on a tenant-owned manifest", () => {
+    const fixture = createTempHarnessProject();
+    const manifest = fixture.readManifest();
+    manifest.capabilityManifest.maxEffectMode = "human_seat_write";
+    fixture.writeManifest(manifest);
+
+    const [result] = collectTenantExtensionManifestValidationReadout(
+      fixture.extensionsRoot,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.issues).toContain(
+      "capabilityManifest.maxEffectMode human_seat_write requires a declared Pack dependency authority",
+    );
+  });
 });
 
-function createTempHarnessProject() {
+function createTempHarnessProject(
+  options: {
+    physicalExtensionSlug?: string;
+    logicalExtensionSlug?: string;
+  } = {},
+) {
+  const physicalExtensionSlug = options.physicalExtensionSlug ?? "sample";
+  const logicalExtensionSlug = options.logicalExtensionSlug ?? physicalExtensionSlug;
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), "helm-solution-extension-manifests-"));
   tempProjectRoots.push(projectRoot);
 
   const extensionsRoot = path.join(projectRoot, "extensions");
   const tenantRoot = path.join(extensionsRoot, "demo");
-  const extensionRoot = path.join(tenantRoot, "sample");
+  const extensionRoot = path.join(tenantRoot, physicalExtensionSlug);
   mkdirSync(path.join(extensionRoot, "docs"), { recursive: true });
   mkdirSync(path.join(extensionRoot, "tests"), { recursive: true });
 
@@ -221,10 +367,10 @@ function createTempHarnessProject() {
         status: "ACTIVE",
         ownedExtensions: [
           {
-            extensionSlug: "sample",
-            extensionKey: "demo-sample",
+            extensionSlug: physicalExtensionSlug,
+            extensionKey: `demo-${physicalExtensionSlug}`,
             displayName: "Demo Sample",
-            rootPath: "extensions/demo/sample",
+            rootPath: `extensions/demo/${physicalExtensionSlug}`,
           },
         ],
       },
@@ -238,7 +384,17 @@ function createTempHarnessProject() {
   writeFileSync(path.join(extensionRoot, "tests", "route.test.ts"), "export {};\n");
 
   const manifestPath = path.join(extensionRoot, "extension.manifest.json");
-  writeFileSync(manifestPath, JSON.stringify(buildManifestFixture(), null, 2));
+  writeFileSync(
+    manifestPath,
+    JSON.stringify(
+      buildManifestFixture({
+        extensionSlug: logicalExtensionSlug,
+        extensionKey: `demo-${logicalExtensionSlug}`,
+      }),
+      null,
+      2,
+    ),
+  );
 
   return {
     extensionsRoot,
@@ -249,16 +405,50 @@ function createTempHarnessProject() {
     readManifest: () => JSON.parse(readFileSync(manifestPath, "utf8")) as ManifestFixture,
     writeManifest: (manifest: ManifestFixture) =>
       writeFileSync(manifestPath, JSON.stringify(manifest, null, 2)),
+    writePackAuthority: (input: {
+      packKey: string;
+      providedExtensions: PackProvidedExtensionFixture[];
+    }) => {
+      const authorityRoot = path.join(
+        tenantRoot,
+        ".pack-dependencies",
+        input.packKey,
+      );
+      mkdirSync(authorityRoot, { recursive: true });
+      const packManifest = {
+        packKey: input.packKey,
+        providedExtensions: input.providedExtensions,
+      };
+      const packContract = {
+        packKey: input.packKey,
+        providedExtensionKeys: input.providedExtensions.map(
+          (extension) => extension.extensionKey,
+        ),
+      };
+      return {
+        manifestSha256: writeCanonicalJson(
+          path.join(authorityRoot, "pack.manifest.json"),
+          packManifest,
+        ),
+        contractSha256: writeCanonicalJson(
+          path.join(authorityRoot, "pack-contract.json"),
+          packContract,
+        ),
+      };
+    },
   };
 }
 
-function buildManifestFixture(): ManifestFixture {
+function buildManifestFixture(input: {
+  extensionSlug: string;
+  extensionKey: string;
+}): ManifestFixture {
   return {
     manifestVersion: "1",
     bundleVersion: "2026.04.24",
-    extensionKey: "demo-sample",
+    extensionKey: input.extensionKey,
     tenantKey: "demo",
-    extensionSlug: "sample",
+    extensionSlug: input.extensionSlug,
     displayName: "Demo Sample",
     kind: "TENANT_CUSTOM",
     status: "ACTIVE",
@@ -303,6 +493,12 @@ function buildManifestFixture(): ManifestFixture {
   };
 }
 
+function writeCanonicalJson(filePath: string, value: unknown) {
+  const contents = `${JSON.stringify(value, null, 2)}\n`;
+  writeFileSync(filePath, contents);
+  return createHash("sha256").update(contents).digest("hex");
+}
+
 type ManifestFixture = {
   manifestVersion?: string;
   bundleVersion: string;
@@ -330,7 +526,7 @@ type ManifestFixture = {
   };
   capabilityManifest: {
     capabilityDeclarations: string[];
-    maxEffectMode: "read_only" | "customer_visible_send";
+    maxEffectMode: "read_only" | "human_seat_write" | "customer_visible_send";
     customerFacingAllowed: boolean;
     requiresReviewByDefault: boolean;
     nonCommitmentOnly: boolean;
@@ -365,7 +561,9 @@ type TenantManifestFixture = {
   status: string;
   packDependencies?: Array<{
     packKey: string;
-    providedExtensions: string[];
+    manifestSha256?: string;
+    contractSha256?: string;
+    providedExtensions?: string[];
   }>;
   ownedExtensions: Array<{
     extensionSlug: string;
@@ -373,4 +571,10 @@ type TenantManifestFixture = {
     displayName: string;
     rootPath?: string;
   }>;
+};
+
+type PackProvidedExtensionFixture = {
+  extensionKey: string;
+  extensionSlug: string;
+  rootPath: string;
 };

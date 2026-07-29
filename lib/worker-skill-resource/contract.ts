@@ -72,6 +72,7 @@ export const effectModes = [
   "read_only",
   "draft_only",
   "internal_write",
+  "human_seat_write",
   "customer_visible_send",
 ] as const;
 
@@ -206,7 +207,8 @@ const effectModeRank: Record<(typeof effectModes)[number], number> = {
   read_only: 0,
   draft_only: 1,
   internal_write: 2,
-  customer_visible_send: 3,
+  human_seat_write: 3,
+  customer_visible_send: 4,
 };
 
 function indexById<T extends Record<string, unknown>, K extends keyof T>(
@@ -253,6 +255,14 @@ export function validateWorkerSkillResourceContractBundle(
       throw new Error(
         "Sprint 1 does not permit autonomous customer-visible send skills",
       );
+    }
+
+    if (skill.effectMode === "human_seat_write" && skill.allowsAutoExecution) {
+      throw new Error("human_seat_write skills must not allow automatic execution");
+    }
+
+    if (skill.effectMode === "human_seat_write" && !skill.requiresReview) {
+      throw new Error("human_seat_write skills must require review");
     }
 
     if (skill.customerFacingAllowed && !skill.requiresReview) {

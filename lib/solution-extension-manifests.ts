@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { effectModes } from "./worker-skill-resource/contract";
 
 const supportedWorkspaceClasses = ["CUSTOMER", "HELM_RESERVED"] as const;
+const packOwnedEffectModes = ["human_seat_write"] as const;
 
 type SupportedWorkspaceClass = (typeof supportedWorkspaceClasses)[number];
 type BundleEffectMode = (typeof effectModes)[number];
@@ -85,7 +87,8 @@ export type TenantManifest = {
   status: string;
   packDependencies?: Array<{
     packKey: string;
-    providedExtensions: string[];
+    manifestSha256: string;
+    contractSha256: string;
   }>;
   ownedExtensions: Array<{
     extensionSlug: string;
@@ -93,6 +96,25 @@ export type TenantManifest = {
     displayName: string;
     rootPath?: string;
   }>;
+};
+
+type CanonicalPackProvidedExtension = {
+  extensionKey: string;
+  extensionSlug: string;
+  rootPath: string;
+};
+
+type PackDependencyAuthority = {
+  packKey: string;
+  providedExtensions: CanonicalPackProvidedExtension[];
+};
+
+type PackDependencyBinding = {
+  packKey: string;
+  sourceExtensionKey: string;
+  alias: boolean;
+  logicalExtensionSlug: string;
+  physicalExtensionSlug: string;
 };
 
 export type TenantExtensionManifestValidationResult = {
@@ -168,12 +190,252 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isStringArray(value: unknown) {
+function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function isNonEmptyStringArray(value: unknown) {
+function isNonEmptyStringArray(value: unknown): value is string[] {
   return isStringArray(value) && value.length > 0;
+}
+
+function isExactSha256(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+function isSafePackKey(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z0-9][a-z0-9-]*$/.test(value);
+}
+
+function sha256File(filePath: string) {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function resolveCanonicalPackPhysicalSlug(input: {
+  packKey: string;
+  rootPath: unknown;
+}) {
+  if (!isNonEmptyString(input.rootPath)) return null;
+
+  const normalized = input.rootPath.replaceAll("\\", "/");
+  const expectedPrefix = `packs/${input.packKey}/`;
+  if (
+    !normalized.startsWith(expectedPrefix) ||
+    normalized.endsWith("/") ||
+    normalized.split("/").some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    return null;
+  }
+
+  return normalized.split("/").at(-1) ?? null;
+}
+
+function loadPackDependencyAuthority(input: {
+  tenantKey: string;
+  dependency: Record<string, unknown>;
+  extensionsRoot: string;
+  index: number;
+}) {
+  const issues: string[] = [];
+  const packKey = input.dependency.packKey;
+  if (!isSafePackKey(packKey)) {
+    return {
+      authority: null,
+      issues: [
+        `packDependencies[${input.index}].packKey must be a safe lowercase package key`,
+      ],
+    } as const;
+  }
+
+  if ("providedExtensions" in input.dependency) {
+    issues.push(
+      `pack dependency ${packKey} must not declare providedExtensions; the canonical Pack manifest is the authority`,
+    );
+  }
+
+  const manifestSha256 = input.dependency.manifestSha256;
+  const contractSha256 = input.dependency.contractSha256;
+  if (!isExactSha256(manifestSha256)) {
+    issues.push(`pack dependency ${packKey} manifestSha256 must be a lowercase SHA-256`);
+  }
+  if (!isExactSha256(contractSha256)) {
+    issues.push(`pack dependency ${packKey} contractSha256 must be a lowercase SHA-256`);
+  }
+
+  const authorityRoot = path.join(
+    input.extensionsRoot,
+    input.tenantKey,
+    ".pack-dependencies",
+    packKey,
+  );
+  const manifestPath = path.join(authorityRoot, "pack.manifest.json");
+  const contractPath = path.join(authorityRoot, "pack-contract.json");
+  if (!existsSync(manifestPath)) {
+    issues.push(`pack dependency ${packKey} canonical Pack manifest is missing`);
+  }
+  if (!existsSync(contractPath)) {
+    issues.push(`pack dependency ${packKey} canonical Pack contract is missing`);
+  }
+  if (issues.length > 0) return { authority: null, issues } as const;
+
+  if (sha256File(manifestPath) !== manifestSha256) {
+    issues.push(
+      `pack dependency ${packKey} manifestSha256 must match the canonical Pack manifest`,
+    );
+  }
+  if (sha256File(contractPath) !== contractSha256) {
+    issues.push(
+      `pack dependency ${packKey} contractSha256 must match the canonical Pack contract`,
+    );
+  }
+
+  let packManifest: unknown;
+  let packContract: unknown;
+  try {
+    packManifest = readJsonFile<unknown>(manifestPath);
+  } catch {
+    issues.push(`pack dependency ${packKey} canonical Pack manifest must contain JSON`);
+  }
+  try {
+    packContract = readJsonFile<unknown>(contractPath);
+  } catch {
+    issues.push(`pack dependency ${packKey} canonical Pack contract must contain JSON`);
+  }
+  if (issues.length > 0) return { authority: null, issues } as const;
+
+  if (!packManifest || typeof packManifest !== "object") {
+    issues.push(`pack dependency ${packKey} canonical Pack manifest must be an object`);
+  }
+  if (!packContract || typeof packContract !== "object") {
+    issues.push(`pack dependency ${packKey} canonical Pack contract must be an object`);
+  }
+  if (issues.length > 0) return { authority: null, issues } as const;
+
+  const manifest = packManifest as {
+    packKey?: unknown;
+    providedExtensions?: unknown;
+  };
+  const contract = packContract as {
+    packKey?: unknown;
+    providedExtensionKeys?: unknown;
+  };
+  if (manifest.packKey !== packKey) {
+    issues.push(`pack dependency ${packKey} canonical Pack manifest packKey must match`);
+  }
+  if (contract.packKey !== packKey) {
+    issues.push(`pack dependency ${packKey} canonical Pack contract packKey must match`);
+  }
+  const canonicalProvidedExtensions: unknown[] | null = Array.isArray(manifest.providedExtensions)
+    ? manifest.providedExtensions
+    : null;
+  const rawProvidedExtensionKeys = contract.providedExtensionKeys;
+  const canonicalProvidedExtensionKeys: string[] | null = isNonEmptyStringArray(
+    rawProvidedExtensionKeys,
+  )
+    ? [...rawProvidedExtensionKeys]
+    : null;
+  if (!canonicalProvidedExtensions || canonicalProvidedExtensions.length === 0) {
+    issues.push(`pack dependency ${packKey} canonical Pack manifest must provide extensions`);
+  }
+  if (!canonicalProvidedExtensionKeys) {
+    issues.push(`pack dependency ${packKey} canonical Pack contract must provide extension keys`);
+  }
+  if (!canonicalProvidedExtensions || !canonicalProvidedExtensionKeys) {
+    return { authority: null, issues } as const;
+  }
+
+  const providedExtensions: CanonicalPackProvidedExtension[] = [];
+  for (const [extensionIndex, candidate] of canonicalProvidedExtensions.entries()) {
+    if (!candidate || typeof candidate !== "object") {
+      issues.push(
+        `pack dependency ${packKey} canonical Pack manifest extension ${extensionIndex} must be an object`,
+      );
+      continue;
+    }
+    const extension = candidate as Record<string, unknown>;
+    if (!isNonEmptyString(extension.extensionKey)) {
+      issues.push(
+        `pack dependency ${packKey} canonical Pack manifest extension ${extensionIndex} must declare extensionKey`,
+      );
+    }
+    if (!isNonEmptyString(extension.extensionSlug)) {
+      issues.push(
+        `pack dependency ${packKey} canonical Pack manifest extension ${extensionIndex} must declare extensionSlug`,
+      );
+    }
+    const physicalExtensionSlug = resolveCanonicalPackPhysicalSlug({
+      packKey,
+      rootPath: extension.rootPath,
+    });
+    if (!physicalExtensionSlug) {
+      issues.push(
+        `pack dependency ${packKey} canonical Pack manifest extension ${extensionIndex} must declare a safe Pack rootPath`,
+      );
+    }
+    if (
+      isNonEmptyString(extension.extensionKey) &&
+      isNonEmptyString(extension.extensionSlug) &&
+      physicalExtensionSlug
+    ) {
+      providedExtensions.push({
+        extensionKey: extension.extensionKey,
+        extensionSlug: extension.extensionSlug,
+        rootPath: extension.rootPath as string,
+      });
+    }
+  }
+
+  const providedExtensionKeys = providedExtensions.map(
+    (extension) => extension.extensionKey,
+  );
+  if (new Set(providedExtensionKeys).size !== providedExtensionKeys.length) {
+    issues.push(`pack dependency ${packKey} canonical Pack manifest must not duplicate extensionKey`);
+  }
+  if (
+    providedExtensionKeys.length !== canonicalProvidedExtensionKeys.length ||
+    providedExtensionKeys.some(
+      (extensionKey, index) => extensionKey !== canonicalProvidedExtensionKeys[index],
+    )
+  ) {
+    issues.push(
+      `pack dependency ${packKey} canonical Pack manifest and contract extension identities must match in order`,
+    );
+  }
+  if (issues.length > 0) return { authority: null, issues } as const;
+
+  return {
+    authority: {
+      packKey,
+      providedExtensions,
+    } satisfies PackDependencyAuthority,
+    issues,
+  } as const;
+}
+
+function loadPackDependencyAuthorities(input: {
+  tenantKey: string;
+  tenantManifest: TenantManifest;
+  extensionsRoot: string;
+}) {
+  const authorities: PackDependencyAuthority[] = [];
+  const issues: string[] = [];
+  const seenPackKeys = new Set<string>();
+  for (const [index, dependency] of (input.tenantManifest.packDependencies ?? []).entries()) {
+    const resolved = loadPackDependencyAuthority({
+      tenantKey: input.tenantKey,
+      dependency: dependency as unknown as Record<string, unknown>,
+      extensionsRoot: input.extensionsRoot,
+      index,
+    });
+    issues.push(...resolved.issues);
+    if (!resolved.authority) continue;
+    if (seenPackKeys.has(resolved.authority.packKey)) {
+      issues.push(`pack dependency ${resolved.authority.packKey} must not be declared more than once`);
+      continue;
+    }
+    seenPackKeys.add(resolved.authority.packKey);
+    authorities.push(resolved.authority);
+  }
+  return { authorities, issues } as const;
 }
 
 function pushMissingField(issues: string[], fieldPath: string) {
@@ -207,9 +469,13 @@ export function validateTenantExtensionManifestBundle(input: {
     packKey: string;
     sourceExtensionKey: string;
     alias: boolean;
+    logicalExtensionSlug: string;
+    physicalExtensionSlug: string;
   };
+  authorityIssues?: string[];
 }) {
   const issues: string[] = [];
+  issues.push(...(input.authorityIssues ?? []));
   const extensionRoot = path.dirname(input.manifestPath);
   const tenantRoot = path.dirname(extensionRoot);
   const tenantKeyFromDir = path.basename(tenantRoot);
@@ -218,10 +484,15 @@ export function validateTenantExtensionManifestBundle(input: {
 
   if (input.packDependencyBinding) {
     const binding = input.packDependencyBinding;
-    const expectedPackExtensionKey = `${binding.packKey}-${extensionSlugFromDir}`;
-    if (input.manifest.extensionSlug !== extensionSlugFromDir) {
+    if (extensionSlugFromDir !== binding.physicalExtensionSlug) {
       issues.push(
-        `pack dependency extensionSlug must match directory name (${extensionSlugFromDir})`,
+        `pack dependency directory must match canonical Pack physical directory (${binding.physicalExtensionSlug})`,
+      );
+    }
+    const expectedPackExtensionKey = binding.sourceExtensionKey;
+    if (input.manifest.extensionSlug !== binding.logicalExtensionSlug) {
+      issues.push(
+        `pack dependency extensionSlug must match canonical Pack logical slug (${binding.logicalExtensionSlug})`,
       );
     }
     if (binding.sourceExtensionKey !== expectedPackExtensionKey) {
@@ -235,9 +506,10 @@ export function validateTenantExtensionManifestBundle(input: {
           `pack dependency alias tenantKey must equal ${tenantKeyFromDir}`,
         );
       }
-      if (input.manifest.extensionKey !== expectedExtensionKey) {
+      const expectedAliasKey = `${tenantKeyFromDir}-${binding.logicalExtensionSlug}`;
+      if (input.manifest.extensionKey !== expectedAliasKey) {
         issues.push(
-          `pack dependency alias extensionKey must equal ${expectedExtensionKey}`,
+          `pack dependency alias extensionKey must equal ${expectedAliasKey}`,
         );
       }
     } else {
@@ -362,6 +634,15 @@ export function validateTenantExtensionManifestBundle(input: {
       issues.push(`capabilityManifest.maxEffectMode must be one of ${effectModes.join(", ")}`);
     } else if (capabilityManifest.maxEffectMode === "customer_visible_send") {
       issues.push("capabilityManifest.maxEffectMode must not declare customer_visible_send in read-only validation phase");
+    } else if (
+      packOwnedEffectModes.includes(
+        capabilityManifest.maxEffectMode as (typeof packOwnedEffectModes)[number],
+      ) &&
+      !input.packDependencyBinding
+    ) {
+      issues.push(
+        `capabilityManifest.maxEffectMode ${capabilityManifest.maxEffectMode} requires a declared Pack dependency authority`,
+      );
     }
 
     for (const fieldName of [
@@ -424,6 +705,16 @@ export function validateTenantExtensionManifestBundle(input: {
             if (mode === "customer_visible_send") {
               issues.push(
                 `${fieldPath}.declaredCapabilityModes must not declare customer_visible_send in phase 4 adoption`,
+              );
+            }
+            if (
+              packOwnedEffectModes.includes(
+                mode as (typeof packOwnedEffectModes)[number],
+              ) &&
+              !input.packDependencyBinding
+            ) {
+              issues.push(
+                `${fieldPath}.declaredCapabilityModes ${mode} requires a declared Pack dependency authority`,
               );
             }
           }
@@ -511,6 +802,7 @@ function resolvePackDependencyBinding(input: {
   extensionSlug: string;
   manifest: TenantExtensionManifest;
   tenantManifest: TenantManifest;
+  authorities: PackDependencyAuthority[];
 }) {
   if (
     input.tenantManifest.ownedExtensions.some(
@@ -520,30 +812,38 @@ function resolvePackDependencyBinding(input: {
     return null;
   }
 
-  for (const dependency of input.tenantManifest.packDependencies ?? []) {
-    if (!isNonEmptyString(dependency.packKey) || !isStringArray(dependency.providedExtensions)) {
-      continue;
-    }
-
-    if (dependency.providedExtensions.includes(input.manifest.extensionKey)) {
+  for (const authority of input.authorities) {
+    const directExtension = authority.providedExtensions.find(
+      (extension) => extension.extensionKey === input.manifest.extensionKey,
+    );
+    if (directExtension) {
       return {
-        packKey: dependency.packKey,
-        sourceExtensionKey: input.manifest.extensionKey,
+        packKey: authority.packKey,
+        sourceExtensionKey: directExtension.extensionKey,
         alias: false,
+        logicalExtensionSlug: directExtension.extensionSlug,
+        physicalExtensionSlug: resolveCanonicalPackPhysicalSlug({
+          packKey: authority.packKey,
+          rootPath: directExtension.rootPath,
+        })!,
       } as const;
     }
 
-    const sourceExtensionKey = `${dependency.packKey}-${input.manifest.extensionSlug}`;
-    const expectedAliasKey = `${input.tenantKey}-${input.manifest.extensionSlug}`;
-    if (
-      dependency.providedExtensions.includes(sourceExtensionKey) &&
-      input.manifest.tenantKey === input.tenantKey &&
-      input.manifest.extensionKey === expectedAliasKey
-    ) {
+    const aliasExtension = authority.providedExtensions.find(
+      (extension) =>
+        input.manifest.tenantKey === input.tenantKey &&
+        input.manifest.extensionKey === `${input.tenantKey}-${extension.extensionSlug}`,
+    );
+    if (aliasExtension) {
       return {
-        packKey: dependency.packKey,
-        sourceExtensionKey,
+        packKey: authority.packKey,
+        sourceExtensionKey: aliasExtension.extensionKey,
         alias: true,
+        logicalExtensionSlug: aliasExtension.extensionSlug,
+        physicalExtensionSlug: resolveCanonicalPackPhysicalSlug({
+          packKey: authority.packKey,
+          rootPath: aliasExtension.rootPath,
+        })!,
       } as const;
     }
   }
@@ -557,11 +857,17 @@ export function collectTenantExtensionManifestValidationReadout(extensionsRoot =
   for (const descriptor of listTenantExtensionManifestDescriptors(extensionsRoot)) {
     const tenantManifest = loadTenantManifest(descriptor.tenantKey, extensionsRoot);
     const manifest = readJsonFile<TenantExtensionManifest>(descriptor.manifestPath);
+    const authorityReadout = loadPackDependencyAuthorities({
+      tenantKey: descriptor.tenantKey,
+      tenantManifest,
+      extensionsRoot,
+    });
     const packDependencyBinding = resolvePackDependencyBinding({
       tenantKey: descriptor.tenantKey,
       extensionSlug: descriptor.extensionSlug,
       manifest,
       tenantManifest,
+      authorities: authorityReadout.authorities,
     });
     results.push(
       validateTenantExtensionManifestBundle({
@@ -571,6 +877,7 @@ export function collectTenantExtensionManifestValidationReadout(extensionsRoot =
         ...(packDependencyBinding
           ? { packDependencyBinding }
           : {}),
+        authorityIssues: authorityReadout.issues,
       }),
     );
   }

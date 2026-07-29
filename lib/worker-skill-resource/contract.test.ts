@@ -39,6 +39,7 @@ describe("worker skill resource contract", () => {
       "read_only",
       "draft_only",
       "internal_write",
+      "human_seat_write",
       "customer_visible_send",
     ]);
   });
@@ -176,6 +177,25 @@ describe("worker skill resource contract", () => {
     expect(() =>
       createWorkerSkillResourceContractBundle(approvalWithoutReview),
     ).toThrow("approval-required skills must also require review");
+  });
+
+  it("requires human-reviewed, non-automatic execution for human seat writes", () => {
+    const humanSeatWrite = JSON.parse(
+      JSON.stringify(workerSkillResourceSprint1Blueprint),
+    );
+    humanSeatWrite.skills[0].effectMode = "human_seat_write";
+    humanSeatWrite.skills[0].allowsAutoExecution = true;
+
+    expect(() =>
+      createWorkerSkillResourceContractBundle(humanSeatWrite),
+    ).toThrow("human_seat_write skills must not allow automatic execution");
+
+    humanSeatWrite.skills[0].allowsAutoExecution = false;
+    humanSeatWrite.skills[0].requiresReview = false;
+
+    expect(() =>
+      createWorkerSkillResourceContractBundle(humanSeatWrite),
+    ).toThrow("human_seat_write skills must require review");
   });
 
   it("rejects role or flow mismatches introduced in Sprint 2", () => {
