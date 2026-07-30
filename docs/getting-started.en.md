@@ -191,6 +191,22 @@ company name containing control characters or more than 120 characters fails
 closed. This display setting does not replace registration evidence or activate
 the legal identity on public legal pages.
 
+### RUNTIME_ATTESTATION (optional source-built release binding)
+
+| Variable | Purpose |
+|---|---|
+| `HELM_HEALTH_ATTESTATION_MODE` | Missing, empty, or exact `reachability` preserves the existing public reachability check; only exact `artifact-bound` enables source-release binding |
+| `HELM_RUNTIME_DEPLOYMENT_ID` | Non-secret opaque ID injected by the private release process; 1–128 ASCII characters matching `[A-Za-z0-9][A-Za-z0-9._:-]*` |
+
+`artifact-bound` is explicit opt-in. A missing, oversized, whitespace-bearing,
+control-character-bearing, or otherwise invalid ID makes `GET /api/health`
+return a fixed `503` response without reflecting the rejected value. A valid ID
+is returned as `data.runtimeDeploymentId` so a source-deployment heartbeat can
+bind the running process to a verified release receipt. The existing `200`
+contract remains unchanged in default `reachability` mode; public health still
+does not prove database, customer workload, webhook, connector, or production
+adoption readiness.
+
 ### PUBLIC_IDENTITY (optional, required review before a public production launch)
 
 | Variable | Purpose |

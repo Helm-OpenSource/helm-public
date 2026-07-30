@@ -186,6 +186,19 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 120 个字符，部署入口会 fail closed。该展示配置不替代下方工商登记证据与法律页面
 激活流程。
 
+### RUNTIME_ATTESTATION（可选，source-built 发布绑定）
+
+| 变量 | 用途 |
+|---|---|
+| `HELM_HEALTH_ATTESTATION_MODE` | 缺失、空值或 `reachability` 时保持既有公开可达性检查；只有精确为 `artifact-bound` 才启用源码发布绑定 |
+| `HELM_RUNTIME_DEPLOYMENT_ID` | 私有发布流程注入的 non-secret opaque ID；仅允许 1–128 个 ASCII 字符，并匹配 `[A-Za-z0-9][A-Za-z0-9._:-]*` |
+
+`artifact-bound` 是显式选择：ID 缺失、超长、含空白、控制字符或其他非法字符时，
+`GET /api/health` 固定返回 `503`，且不会回显非法原值。合法时，该端点在
+`data.runtimeDeploymentId` 回显 opaque ID，供 source-deployment heartbeat 与已验证
+发布回执做精确绑定。默认 `reachability` 的既有 `200` 契约保持不变；公开健康仍不证明
+数据库、客户业务、Webhook、连接器或生产采用已经就绪。
+
 ### PUBLIC_IDENTITY（可选，正式公开部署前必审）
 
 | 变量 | 用途 |
