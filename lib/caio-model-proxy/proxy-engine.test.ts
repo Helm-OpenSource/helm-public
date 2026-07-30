@@ -212,6 +212,11 @@ function baseExecuteInput(overrides: Record<string, unknown> = {}) {
       workspaceId: "ws-1",
       userRef: "user-1",
       clientType: "codex" as const,
+      // The token's alias grant. Both the primary alias and the fallback
+      // candidate's alias are granted here so the fallback fixtures below
+      // exercise the fallback rules rather than the grant gate; the grant gate
+      // itself is exercised in "alias grant enforcement".
+      grantedAliases: ["caio-codex-default", "caio-codex-fallback"],
     },
     alias: "caio-codex-default",
     protocol: "responses" as const,
@@ -281,6 +286,184 @@ describe("alias resolution", () => {
       reasonCode: "protocol_mismatch",
     });
     expect(h.chatInvoke).not.toHaveBeenCalled();
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+});
+
+// P1-1 regression: execute() validated alias / status / protocol but never
+// resolved the CALLER's alias grant, so any holder of a valid model token could
+// drive any protocol-matching active binding (a WorkBuddy token could run the
+// Codex-only alias). The grant is now enforced before the audit claim, before
+// any credential load, and before any upstream contact — on the primary route
+// AND on the fallback candidate.
+describe("alias grant enforcement", () => {
+  it("refuses a workbuddy token driving the codex default alias before audit, credential, or upstream", async () => {
+    const h = makeHarness();
+    const result = await h.proxy.execute(
+      baseExecuteInput({
+        audienceContext: {
+          workspaceId: "ws-1",
+          userRef: "user-1",
+          clientType: "workbuddy" as const,
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "alias_not_granted",
+      httpStatus: 403,
+      reasonCode: "alias_not_granted",
+      receiptId: null,
+      auditRefusal: null,
+    });
+    expect(h.claimDispatch).not.toHaveBeenCalled();
+    expect(h.credentialLoad).not.toHaveBeenCalled();
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+    expect(h.responsesStream).not.toHaveBeenCalled();
+    expect(h.chatInvoke).not.toHaveBeenCalled();
+    expect(h.events).toEqual([]);
+  });
+
+  it("allows the client-type default grant with no explicit grant configured", async () => {
+    const h = makeHarness();
+    const result = await h.proxy.execute(
+      baseExecuteInput({
+        audienceContext: {
+          workspaceId: "ws-1",
+          userRef: "user-1",
+          clientType: "codex" as const,
+        },
+      }),
+    );
+    expect(result.status).toBe("ok");
+    expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("honours an explicit grant that names the alias", async () => {
+    const h = makeHarness();
+    const result = await h.proxy.execute(
+      baseExecuteInput({
+        audienceContext: {
+          workspaceId: "ws-1",
+          userRef: "user-1",
+          clientType: "workbuddy" as const,
+          grantedAliases: ["caio-codex-default"],
+        },
+      }),
+    );
+    expect(result.status).toBe("ok");
+  });
+
+  it("refuses when the explicit grant is empty even for the client-type default alias", async () => {
+    const h = makeHarness();
+    const result = await h.proxy.execute(
+      baseExecuteInput({
+        audienceContext: {
+          workspaceId: "ws-1",
+          userRef: "user-1",
+          clientType: "codex" as const,
+          grantedAliases: [],
+        },
+      }),
+    );
+    expect(result.status).toBe("alias_not_granted");
+    expect(result.httpStatus).toBe(403);
+    expect(h.claimDispatch).not.toHaveBeenCalled();
+  });
+
+  it("refuses the ungranted alias without disclosing whether it is disabled", async () => {
+    const h = makeHarness({
+      bindings: [makeBinding({ status: "disabled" })],
+    });
+    const result = await h.proxy.execute(
+      baseExecuteInput({
+        audienceContext: {
+          workspaceId: "ws-1",
+          userRef: "user-1",
+          clientType: "workbuddy" as const,
+        },
+      }),
+    );
+    expect(result.status).toBe("alias_not_granted");
+    expect(result.reasonCode).toBe("alias_not_granted");
+  });
+
+  it("does NOT fall back to a candidate whose alias is outside the grant", async () => {
+    const h = makeHarness({
+      bindings: [
+        makeBinding({ fallbackCandidates: [makeCandidate()] }),
+      ],
+      responsesInvokeResults: [UPSTREAM_500],
+    });
+    const result = await h.proxy.execute(
+      baseExecuteInput({
+        audienceContext: {
+          workspaceId: "ws-1",
+          userRef: "user-1",
+          clientType: "codex" as const,
+          // The primary alias only: the equivalence-passing candidate
+          // "caio-codex-fallback" is NOT granted.
+          grantedAliases: ["caio-codex-default"],
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "upstream_error",
+      httpStatus: 502,
+      fallbackAttempted: false,
+      fallbackSucceeded: false,
+      fallbackReceiptId: null,
+    });
+    // No second claim, no second credential load, no second egress.
+    expect(h.claimDispatch).toHaveBeenCalledTimes(1);
+    expect(h.credentialLoad).toHaveBeenCalledTimes(1);
+    expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to a candidate that IS inside the grant", async () => {
+    const h = makeHarness({
+      bindings: [
+        makeBinding({ fallbackCandidates: [makeCandidate()] }),
+      ],
+      responsesInvokeResults: [
+        UPSTREAM_500,
+        { status: "ok", upstreamStatus: 200, body: { id: "resp_fb" } },
+      ],
+    });
+    const result = await h.proxy.execute(
+      baseExecuteInput({
+        audienceContext: {
+          workspaceId: "ws-1",
+          userRef: "user-1",
+          clientType: "codex" as const,
+          grantedAliases: ["caio-codex-default", "caio-codex-fallback"],
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "ok",
+      fallbackAttempted: true,
+      fallbackSucceeded: true,
+    });
+    expect(h.responsesInvoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores malformed explicit grant entries instead of trusting them", async () => {
+    const h = makeHarness();
+    const result = await h.proxy.execute(
+      baseExecuteInput({
+        audienceContext: {
+          workspaceId: "ws-1",
+          userRef: "user-1",
+          clientType: "codex" as const,
+          grantedAliases: [
+            "../escape",
+            "*",
+            42 as unknown as string,
+          ],
+        },
+      }),
+    );
+    expect(result.status).toBe("alias_not_granted");
     expect(h.responsesInvoke).not.toHaveBeenCalled();
   });
 });

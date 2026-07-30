@@ -9,7 +9,9 @@ import {
   type CaioGatewayRequest,
   type CaioModelDispatchOutcome,
 } from "@/lib/caio-access-gateway/gateway-http-core";
+import { assertToolAllowed } from "@/lib/caio-access-gateway/mcp-allowlist";
 import { createInMemoryCaioSourceIpRateLimiter } from "@/lib/caio-access-gateway/source-ip-rate-limiter";
+import { DEFAULT_WORKBUDDY_FEATURE_FLAGS } from "@/lib/caio-collaboration/feature-flags";
 import type { CaioAccessPrincipal } from "@/lib/caio-access-gateway/token-store.service";
 import type { CaioAuditGateReadiness } from "@/lib/caio-audit-state/audit-state-contracts";
 import {
@@ -82,6 +84,7 @@ function createHarness(
     modelProxy: Partial<CaioGatewayHandlerDependencies["modelProxy"]>;
     auditGate: CaioGatewayHandlerDependencies["auditGate"];
     preAuthRateLimiter: CaioGatewayHandlerDependencies["preAuthRateLimiter"];
+    featureFlags: CaioGatewayHandlerDependencies["featureFlags"];
     projectRefs: readonly string[];
     maxBodyBytes: number;
   }> = {},
@@ -177,6 +180,7 @@ function createHarness(
       },
     },
     maxBodyBytes: overrides.maxBodyBytes,
+    featureFlags: overrides.featureFlags,
   };
   return {
     handler: createCaioGatewayHandler(deps),
@@ -629,6 +633,205 @@ describe("project membership gate on the real MCP wire shape", () => {
     expect((dispatchGateError as CaioAccessGatewayError).code).toBe(
       "project_access_revoked",
     );
+  });
+});
+
+// P1-2 regression: a tools/list answer was returned verbatim from the
+// dispatcher, so presence / mutation / non-allowlisted definitions could be
+// enumerated through the gateway even with every feature flag off. Every
+// tools/list response is now projected through the allowlist AND the
+// feature-flag state before it leaves the gateway.
+describe("tools/list enumeration contract", () => {
+  const TOOLS_LIST_BODY = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 7,
+    method: "tools/list",
+    params: {},
+  });
+
+  /** A dispatcher that over-answers: read, presence, mutation and unknown. */
+  function overAnsweringDispatcher(): CaioGatewayHandlerDependencies["mcpDispatch"] {
+    return async () => ({
+      jsonrpc: "2.0",
+      id: 7,
+      result: {
+        tools: [
+          { name: "get_p1c_read_projection", risk: "read" },
+          { name: "list_pending_ceo_prompts", risk: "read" },
+          { name: "get_ceo_prompt", risk: "read" },
+          { name: "poll_ceo_prompts", risk: "delivery" },
+          { name: "begin_owner_presence_challenge", risk: "presence" },
+          { name: "complete_owner_presence_challenge", risk: "presence" },
+          { name: "prepare_advice_decision", risk: "mutation" },
+          { name: "submit_advice_decision", risk: "mutation" },
+          { name: "adopt_memory_candidate", risk: "mutation" },
+          { name: "submit_restricted_candidate", risk: "mutation" },
+          { name: "totally_unknown_tool", risk: "read" },
+        ],
+      },
+    });
+  }
+
+  function listedNames(body: unknown): string[] {
+    const tools = (
+      body as { result?: { tools?: Array<{ name?: unknown }> } }
+    ).result?.tools;
+    expect(Array.isArray(tools)).toBe(true);
+    return (tools ?? []).map((tool) => String(tool.name));
+  }
+
+  it("returns an EMPTY tool list when every feature flag is off (the default)", async () => {
+    const harness = createHarness({ mcpDispatch: overAnsweringDispatcher() });
+    const response = await harness.handler(
+      request({ body: TOOLS_LIST_BODY }),
+    );
+    expect(response.status).toBe(200);
+    expect(listedNames(response.body)).toEqual([]);
+  });
+
+  it("never enumerates presence, delivery, mutation or unknown tools even with every flag ON", async () => {
+    const harness = createHarness({
+      mcpDispatch: overAnsweringDispatcher(),
+      featureFlags: {
+        gatewayEnabled: true,
+        readEnabled: true,
+        pushEnabled: true,
+        presenceEnabled: true,
+        mutationsEnabled: true,
+        promptResponsesEnabled: true,
+        questionSelectionsEnabled: true,
+        adviceDecisionsEnabled: true,
+      },
+    });
+    const response = await harness.handler(
+      request({ body: TOOLS_LIST_BODY }),
+    );
+    expect(response.status).toBe(200);
+    const names = listedNames(response.body);
+    for (const forbidden of [
+      "poll_ceo_prompts",
+      "begin_owner_presence_challenge",
+      "complete_owner_presence_challenge",
+      "prepare_advice_decision",
+      "submit_advice_decision",
+      "adopt_memory_candidate",
+      "submit_restricted_candidate",
+      "totally_unknown_tool",
+    ]) {
+      expect(names).not.toContain(forbidden);
+    }
+  });
+
+  it("enumerates exactly the usable read set once the gateway + read flags are on", async () => {
+    const harness = createHarness({
+      mcpDispatch: overAnsweringDispatcher(),
+      featureFlags: {
+        ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+        gatewayEnabled: true,
+        readEnabled: true,
+      },
+    });
+    const response = await harness.handler(
+      request({ body: TOOLS_LIST_BODY }),
+    );
+    expect(response.status).toBe(200);
+    expect(listedNames(response.body).sort()).toEqual([
+      "get_ceo_prompt",
+      "get_p1c_read_projection",
+      "list_pending_ceo_prompts",
+    ]);
+  });
+
+  it("cannot enumerate anything assertToolAllowed would reject", async () => {
+    const harness = createHarness({
+      mcpDispatch: overAnsweringDispatcher(),
+      featureFlags: {
+        ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+        gatewayEnabled: true,
+        readEnabled: true,
+      },
+    });
+    const response = await harness.handler(
+      request({ body: TOOLS_LIST_BODY }),
+    );
+    for (const name of listedNames(response.body)) {
+      expect(() => assertToolAllowed(name)).not.toThrow();
+    }
+  });
+
+  it("filters a bare {tools:[...]} result shape too", async () => {
+    const harness = createHarness({
+      mcpDispatch: async () => ({
+        tools: [
+          { name: "get_ceo_prompt" },
+          { name: "begin_owner_presence_challenge" },
+        ],
+      }),
+      featureFlags: {
+        ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+        gatewayEnabled: true,
+        readEnabled: true,
+      },
+    });
+    const response = await harness.handler(
+      request({ body: TOOLS_LIST_BODY }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ tools: [{ name: "get_ceo_prompt" }] });
+  });
+
+  it("cannot be defeated by padding the catalog with a nameless entry", async () => {
+    const harness = createHarness({
+      mcpDispatch: async () => ({
+        result: {
+          tools: [
+            { title: "no name at all" },
+            { name: "begin_owner_presence_challenge", risk: "presence" },
+            { name: "adopt_memory_candidate", risk: "mutation" },
+            { name: "get_ceo_prompt", risk: "read" },
+          ],
+        },
+      }),
+      featureFlags: {
+        ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+        gatewayEnabled: true,
+        readEnabled: true,
+      },
+    });
+    const response = await harness.handler(
+      request({ body: TOOLS_LIST_BODY }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      result: {
+        tools: [
+          { title: "no name at all" },
+          { name: "get_ceo_prompt", risk: "read" },
+        ],
+      },
+    });
+  });
+
+  it("leaves a tools/call response untouched", async () => {
+    const harness = createHarness({
+      mcpDispatch: async () => ({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { rows: [{ name: "Acme Portfolio" }] },
+      }),
+      featureFlags: {
+        ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+        gatewayEnabled: true,
+        readEnabled: true,
+      },
+    });
+    const response = await harness.handler(request({ body: P1C_ALPHA_BODY }));
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { rows: [{ name: "Acme Portfolio" }] },
+    });
   });
 });
 

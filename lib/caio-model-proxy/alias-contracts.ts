@@ -22,13 +22,23 @@ export const CAIO_CODEX_DEFAULT_ALIAS = "caio-codex-default";
 export const CAIO_WORKBUDDY_DEFAULT_ALIAS = "caio-workbuddy-default";
 
 // The stable alias surface the gateway commits to. Each entry pins the client
-// protocol the alias serves; the two protocols remain separate clients.
+// protocol the alias serves AND the client type the alias is granted to by
+// default; the two protocols remain separate clients.
 export const CAIO_STABLE_MODEL_ALIASES = [
-  { alias: CAIO_CODEX_DEFAULT_ALIAS, protocol: "responses" },
-  { alias: CAIO_WORKBUDDY_DEFAULT_ALIAS, protocol: "chat_completions" },
+  {
+    alias: CAIO_CODEX_DEFAULT_ALIAS,
+    protocol: "responses",
+    clientType: "codex",
+  },
+  {
+    alias: CAIO_WORKBUDDY_DEFAULT_ALIAS,
+    protocol: "chat_completions",
+    clientType: "workbuddy",
+  },
 ] as const satisfies readonly {
   alias: string;
   protocol: CaioModelProtocol;
+  clientType: string;
 }[];
 
 export const caioModelAliasSchema = z
@@ -131,6 +141,55 @@ export function listModelsForGrant(input: {
   }
   data.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { object: "list", data };
+}
+
+/**
+ * The DEFAULT alias grant for a client type, derived from the stable alias
+ * surface above. Fail-closed: a client type the surface does not model gets an
+ * empty grant, never a wildcard.
+ */
+export function caioDefaultGrantedAliases(
+  clientType: string,
+): readonly string[] {
+  return Object.freeze(
+    CAIO_STABLE_MODEL_ALIASES.filter(
+      (entry) => entry.clientType === clientType,
+    ).map((entry) => entry.alias),
+  );
+}
+
+/**
+ * Resolve the alias grant a caller actually holds.
+ *
+ * Two sources, in this order:
+ *   1. An EXPLICIT grant carried by the caller's audience context. When
+ *      present it is authoritative (including an empty grant, which grants
+ *      nothing), because it is the per-token configuration an operator set —
+ *      the client cannot supply it.
+ *   2. Otherwise the client type's default grant from the stable alias surface.
+ *
+ * Every entry is validated against the alias schema, so a malformed value can
+ * never widen a grant: unparseable entries are dropped rather than trusted.
+ * The result is a SET so callers cannot accidentally treat "present in the
+ * configured bindings" as "granted to this caller".
+ */
+export function resolveCaioGrantedAliases(
+  input: Readonly<{
+    clientType: string;
+    grantedAliases?: readonly string[];
+  }>,
+): ReadonlySet<string> {
+  const source =
+    input.grantedAliases === undefined
+      ? caioDefaultGrantedAliases(input.clientType)
+      : input.grantedAliases;
+  const granted = new Set<string>();
+  for (const candidate of source) {
+    if (caioModelAliasSchema.safeParse(candidate).success) {
+      granted.add(candidate);
+    }
+  }
+  return granted;
 }
 
 // Governed dimensions that must match EXACTLY for a fallback to be allowed.

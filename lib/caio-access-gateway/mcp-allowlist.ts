@@ -9,9 +9,16 @@
  * Approval, send, presence, and canonical production-write tools (the
  * prepare_ / submit_ mutation pairs from the WorkBuddy dispatcher) are
  * deliberately NOT allowlisted.
+ *
+ * The allowlist is a CEILING, not the enumeration contract: what a token may
+ * see listed is additionally gated by the feature-flag state
+ * (isCaioToolFlagEnabled here, composed in gateway-http-core.ts). With the
+ * default flags — everything off — nothing is enumerable at all.
  */
 
 import { CaioAccessGatewayError } from "@/lib/caio-access-gateway/gateway-error-contract";
+import type { WorkBuddyFeatureFlags } from "@/lib/caio-collaboration/feature-flags";
+import type { WorkBuddyToolRisk } from "@/lib/caio-collaboration/mcp-tool-dispatcher";
 
 export const CAIO_GATEWAY_CAPABILITY_KEYS = [
   "caio.p1c.read",
@@ -115,6 +122,31 @@ export const CAIO_GATEWAY_TOOLS_BY_CAPABILITY: Readonly<
   ]),
 });
 
+/**
+ * Risk class per allowlisted tool, in the WorkBuddy dispatcher's OWN vocabulary
+ * (WorkBuddyToolRisk) so the gateway's enumeration gate and the dispatcher's
+ * enablement gate cannot drift into two different classifications. MUST stay
+ * total over CAIO_GATEWAY_ALLOWED_TOOL_NAMES (asserted by test): a tool added to
+ * the allowlist without a risk class is a build-time-visible omission rather
+ * than a silently enumerable definition.
+ *
+ * Only "read" and "mutation" appear: nothing with delivery or presence risk is
+ * allowlisted at all (see CAIO_GATEWAY_WRITING_TOOL_NAMES).
+ */
+export const CAIO_GATEWAY_TOOL_RISK_BY_NAME: Readonly<
+  Record<string, WorkBuddyToolRisk>
+> = Object.freeze({
+  get_p1c_read_projection: "read",
+  list_pending_ceo_prompts: "read",
+  get_ceo_prompt: "read",
+  list_context_receipts: "read",
+  get_context_receipt: "read",
+  query_memory_candidates: "read",
+  adopt_memory_candidate: "mutation",
+  reject_memory_candidate: "mutation",
+  submit_restricted_candidate: "mutation",
+});
+
 function buildAllowedToolIndex(): ReadonlyMap<
   string,
   CaioGatewayCapabilityKey
@@ -175,4 +207,29 @@ export function filterToolDefinitions<T extends Readonly<{ name: string }>>(
   return Object.freeze(
     tools.filter((tool) => ALLOWED_TOOL_INDEX.has(tool.name)),
   );
+}
+
+/**
+ * Whether the feature-flag state permits a tool to be USED through the gateway
+ * at all, evaluated with the same rules the WorkBuddy dispatcher applies
+ * (isDefinitionEnabled in mcp-tool-dispatcher.ts):
+ *
+ *   - nothing is permitted while `gatewayEnabled` is false;
+ *   - a read tool additionally requires `readEnabled`;
+ *   - a mutation tool would require `mutationsEnabled` AND its own per-mutation
+ *     feature flag. None of the three mutation flags
+ *     (promptResponses / questionSelections / adviceDecisions) governs an
+ *     allowlisted tool, so no allowlisted mutation is ever permitted — exactly
+ *     like a dispatcher definition with no `mutationFeatureFlag`;
+ *   - an unknown or unclassified name is never permitted.
+ */
+export function isCaioToolFlagEnabled(
+  toolName: string,
+  flags: WorkBuddyFeatureFlags,
+): boolean {
+  if (!flags.gatewayEnabled) return false;
+  if (!ALLOWED_TOOL_INDEX.has(toolName)) return false;
+  return CAIO_GATEWAY_TOOL_RISK_BY_NAME[toolName] === "read"
+    ? flags.readEnabled
+    : false;
 }

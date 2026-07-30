@@ -25,6 +25,13 @@
  * never participates in receipt identity or idempotency, so a client cannot
  * collide with, poison, or probe another caller's audit slot.
  *
+ * Tool enumeration: a POST /mcp `tools/list` response is never forwarded
+ * verbatim. It is projected through the server-side allowlist AND the
+ * feature-flag state (projectCaioToolsListPayload), so the enumerated set can
+ * never exceed what assertToolAllowed plus the flags would let this token call,
+ * and presence / delivery / mutation definitions can never appear. With the
+ * default flag set (everything off) the enumeration is empty.
+ *
  * Project scope: POST /mcp payloads are resolved through
  * mcp-request-scope.ts, which knows the JSON-RPC shape and refuses any
  * request whose project scope cannot be determined. Membership is asserted
@@ -77,7 +84,13 @@ import {
   type CaioGatewayWireError,
 } from "@/lib/caio-access-gateway/gateway-error-contract";
 import {
+  CAIO_GATEWAY_ALLOWED_TOOL_NAMES,
+  filterToolDefinitions,
+  isCaioToolFlagEnabled,
+} from "@/lib/caio-access-gateway/mcp-allowlist";
+import {
   assertPayloadRefsAuthorized,
+  CAIO_TOOL_PROJECT_SCOPES,
   resolveRequestProjectRefs,
 } from "@/lib/caio-access-gateway/mcp-request-scope";
 import {
@@ -95,6 +108,10 @@ import {
   type CaioCanonicalAuditClaim,
   type CaioCanonicalAuditGatePort,
 } from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
+import {
+  DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+  type WorkBuddyFeatureFlags,
+} from "@/lib/caio-collaboration/feature-flags";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 
 export const CAIO_GATEWAY_DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
@@ -268,6 +285,14 @@ export type CaioGatewayHandlerDependencies = Readonly<{
    */
   auditGate: CaioCanonicalAuditGatePort;
   readinessProbe: CaioReadinessProbePort;
+  /**
+   * Feature-flag state governing which tools may be USED — and therefore which
+   * may be ENUMERATED — through this gateway. The ONE flag vocabulary
+   * (WorkBuddyFeatureFlags) is reused, so the gateway's enumeration gate and the
+   * dispatcher's enablement gate cannot drift. Omitted means
+   * DEFAULT_WORKBUDDY_FEATURE_FLAGS: everything off, nothing enumerable.
+   */
+  featureFlags?: WorkBuddyFeatureFlags;
   maxBodyBytes?: number;
   rateLimitPerMinute?: number;
   now?: () => Date;
@@ -495,6 +520,125 @@ function readModelDispatchOutcome(outcome: unknown): AuditBackedOutcome {
   return { claimed: false, wire: auditUnavailableWireError() };
 }
 
+/**
+ * The JSON-RPC method whose response ENUMERATES tools. Only this response is
+ * projected: a tools/call result carries business data whose objects may
+ * legitimately have `name` fields, and rewriting those would corrupt a read.
+ */
+const MCP_TOOLS_LIST_METHOD = "tools/list";
+
+/**
+ * The tools a token may see enumerated, for a given feature-flag state.
+ *
+ * Strictly narrower than `assertToolAllowed`, by construction:
+ *   1. only explicitly allowlisted names are considered at all;
+ *   2. the feature-flag state must permit the tool's risk class, so nothing is
+ *      listed while the gateway flag is off and no mutation is ever listed;
+ *   3. the tool must have a RESOLVABLE declared project scope — a tool whose
+ *      argument schema is not in-tree is refused at call time
+ *      (project_scope_unresolved), so advertising it would enumerate a
+ *      capability the gateway always denies.
+ *
+ * With the default flags (everything off) this is the empty list.
+ */
+export function caioGatewayListableToolNames(
+  flags: WorkBuddyFeatureFlags,
+): readonly string[] {
+  return Object.freeze(
+    CAIO_GATEWAY_ALLOWED_TOOL_NAMES.filter((name) => {
+      if (!isCaioToolFlagEnabled(name, flags)) return false;
+      const scope = CAIO_TOOL_PROJECT_SCOPES[name];
+      return scope !== undefined && scope.kind !== "unresolvable";
+    }).sort(),
+  );
+}
+
+/** Bounds for the tools/list projection walk. */
+const MAX_TOOLS_LIST_DEPTH = 12;
+const MAX_TOOLS_LIST_NODES = 5_000;
+
+function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/**
+ * A tool-definition-shaped entry: a plain record carrying a string `name`.
+ *
+ * Any array holding at least ONE of these is treated as a tool catalog — not
+ * only an array where EVERY entry qualifies, which a single nameless element
+ * would have been enough to defeat.
+ */
+function isNamedRecord(
+  value: unknown,
+): value is Readonly<{ name: string }> {
+  return isPlainObject(value) && typeof value.name === "string";
+}
+
+/**
+ * Project a dispatcher's tools/list answer so the enumerated set can never
+ * exceed what this token may actually use.
+ *
+ * The dispatcher is an injected port answering `unknown`, so the tool catalog is
+ * located structurally rather than assumed at one path: in EVERY array anywhere
+ * in the response, every `{name: ...}` entry must survive both the server-side
+ * allowlist (filterToolDefinitions) and the feature-flag state. A presence,
+ * delivery, mutation or non-allowlisted definition therefore cannot survive at
+ * `result.tools`, at a bare `tools`, or at any other position a dispatcher might
+ * use — and cannot be smuggled through by padding the array with an entry that
+ * carries no name. Entries that name nothing are left alone: they advertise no
+ * callable tool.
+ *
+ * A response too deep or too large to walk exhaustively is REFUSED rather than
+ * partially filtered.
+ */
+export function projectCaioToolsListPayload(
+  response: unknown,
+  flags: WorkBuddyFeatureFlags,
+): unknown {
+  const listable = new Set(caioGatewayListableToolNames(flags));
+  let nodes = 0;
+  const walk = (value: unknown, depth: number): unknown => {
+    nodes += 1;
+    if (depth > MAX_TOOLS_LIST_DEPTH || nodes > MAX_TOOLS_LIST_NODES) {
+      throw new CaioAccessGatewayError("upstream_failed");
+    }
+    if (Array.isArray(value)) {
+      const entries: readonly unknown[] = value;
+      const named = entries.filter(isNamedRecord);
+      if (named.length > 0) {
+        // Allowlist first (the ceiling), then the flag state (what this
+        // deployment actually permits). A name must clear BOTH to stay.
+        const allowlisted = new Set(
+          filterToolDefinitions(named).map((tool) => tool.name),
+        );
+        return Object.freeze(
+          entries
+            .filter(
+              (entry) =>
+                !isNamedRecord(entry) ||
+                (allowlisted.has(entry.name) && listable.has(entry.name)),
+            )
+            .map((entry) => walk(entry, depth + 1)),
+        );
+      }
+      return entries.map((entry) => walk(entry, depth + 1));
+    }
+    if (!isPlainObject(value)) return value;
+    const projected: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      projected[key] = walk(entry, depth + 1);
+    }
+    return projected;
+  };
+  return walk(response, 0);
+}
+
 export function createCaioGatewayHandler(
   dependencies: CaioGatewayHandlerDependencies,
 ): CaioGatewayHandler {
@@ -506,6 +650,9 @@ export function createCaioGatewayHandler(
   const mcpAuditPolicyVersion =
     dependencies.mcpAuditPolicyVersion ??
     CAIO_GATEWAY_MCP_AUDIT_POLICY_VERSION;
+  // Fail-closed default: an unwired flag set enumerates nothing.
+  const featureFlags =
+    dependencies.featureFlags ?? DEFAULT_WORKBUDDY_FEATURE_FLAGS;
 
   /**
    * Readiness, mapped from the audit gate's four states onto the probe's three.
@@ -646,9 +793,12 @@ export function createCaioGatewayHandler(
     //    missing declared scoping field), so there is no shape that reaches
     //    an executor without having been scope-checked.
     let toolName: string | null = null;
+    /** The resolved JSON-RPC method, used to gate the tools/list projection. */
+    let mcpMethod: string | null = null;
     let authorizedProjectRefs: readonly string[] = Object.freeze([]);
     if (route.kind === "mcp") {
       const scope = resolveRequestProjectRefs(payload);
+      mcpMethod = scope.method;
       if (scope.kind === "tool_call") {
         // The tool's own workspace argument must be the authenticated
         // workspace: a token may never drive another workspace's tools.
@@ -698,7 +848,17 @@ export function createCaioGatewayHandler(
           authorizedProjectRefs,
           assertProjectAccess: boundAssertProjectAccess,
         });
-        return okResponse(result, clientCorrelationId);
+        // ENUMERATION CONTRACT: a tools/list answer is projected through the
+        // allowlist and the feature-flag state before it leaves the gateway, so
+        // the listing can never exceed what assertToolAllowed + the flags would
+        // let this token actually call. Every other method's payload is
+        // forwarded unchanged.
+        return okResponse(
+          mcpMethod === MCP_TOOLS_LIST_METHOD
+            ? projectCaioToolsListPayload(result, featureFlags)
+            : result,
+          clientCorrelationId,
+        );
       }
       case "model_responses": {
         const dispatched = readModelDispatchOutcome(

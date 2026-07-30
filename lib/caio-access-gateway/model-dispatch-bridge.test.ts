@@ -258,6 +258,25 @@ describe("caioModelDispatchOutcomeFromProxyResult", () => {
     expect(error.wireStatus).toBe(503);
   });
 
+  // P1-1: an alias the caller is not granted is an AUTHORIZATION refusal. It
+  // must not be reported as a retryable 503 availability answer.
+  it("raises a typed 403 scope_violation when the alias is outside the caller's grant", () => {
+    const error = caught(() =>
+      caioModelDispatchOutcomeFromProxyResult(
+        proxyResult({
+          status: "alias_not_granted",
+          httpStatus: 403,
+          reasonCode: "alias_not_granted",
+          receiptId: null,
+          body: null,
+        }),
+      ),
+    );
+    expect(error.code).toBe("scope_violation");
+    expect(error.wireStatus).toBe(403);
+    expect(error.retryAfterSeconds).toBeNull();
+  });
+
   it("raises a typed failure for a credential outage even though a receipt exists", () => {
     // The claim succeeded, so a naive mapping would return the allowed arm and
     // the gateway would answer 200 with a null body for a dispatch that failed.

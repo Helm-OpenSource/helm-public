@@ -130,6 +130,13 @@ export function caioModelDispatchOutcomeFromProxyResult(
     case "no_route":
       throw new CaioAccessGatewayError("no_route");
 
+    case "alias_not_granted":
+      // Authorization, not availability: the caller's alias grant does not
+      // cover the requested route. 403 scope_violation — never a retryable 503,
+      // which would both invite a retry that can never succeed and describe an
+      // ungranted route as merely unavailable.
+      throw new CaioAccessGatewayError("scope_violation");
+
     case "credential_unavailable":
       // A receipt may exist, but no upstream was reached: 503, not 200.
       throw new CaioAccessGatewayError("no_route");

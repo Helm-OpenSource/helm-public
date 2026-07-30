@@ -1,10 +1,19 @@
 // CAIO model proxy — orchestration engine used by the LAN gateway.
 //
-// Pipeline (fail-closed at every step): resolve alias binding → protocol
-// check → local rate limit → hash input → claim audit dispatch (BEFORE any
-// upstream traffic; audit down means no egress) → load credential → invoke
-// the protocol-matching upstream client → optional single fallback attempt
-// (only before any streamed byte, only to a fail-closed-equivalent binding).
+// Pipeline (fail-closed at every step): resolve alias binding → ALIAS GRANT
+// check → protocol check → local rate limit → hash input → claim audit dispatch
+// (BEFORE any upstream traffic; audit down means no egress) → load credential →
+// invoke the protocol-matching upstream client → optional single fallback
+// attempt (only before any streamed byte, only to a fail-closed-equivalent
+// binding, and only to a candidate inside the caller's grant).
+//
+// ALIAS GRANT: a valid model token is not authority over every configured
+// binding. The caller's granted alias set is resolved from the audience context
+// (explicit per-token grant, else the client type's default grant from the
+// stable alias surface) and enforced on the primary route AND on the fallback
+// candidate, before the audit claim, the credential load and any upstream
+// contact. A non-granted alias is a 403-class `alias_not_granted` refusal, not
+// a 503 availability answer.
 //
 // The audit claim carries ONLY {requestId, workspaceId, clientType,
 // modelAlias, inputHash, policyVersion} — never the request body, never
@@ -40,6 +49,7 @@ import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import {
   caioModelAliasBindingSchema,
   isFallbackAllowed,
+  resolveCaioGrantedAliases,
   type CaioModelAliasBinding,
   type CaioModelAliasFallbackCandidate,
   type CaioModelProtocol,
@@ -58,6 +68,14 @@ export type CaioAudienceContext = {
   workspaceId: string;
   userRef: string;
   clientType: CaioProxyClientType;
+  /**
+   * The alias grant this caller holds, when the caller's token carries an
+   * explicit one. OMITTED means "use the client type's default grant"; an
+   * EMPTY array means "nothing is granted" and refuses every alias. It is
+   * operator configuration resolved from the authenticated principal — never a
+   * value a client can supply on the request.
+   */
+  grantedAliases?: readonly string[];
 };
 
 /**
@@ -162,6 +180,12 @@ export type CaioProxyUpstreamDescriptor = {
 export type CaioProxyExecuteStatus =
   | "ok"
   | "no_route"
+  /**
+   * The caller's alias grant does not cover the requested alias. An
+   * authorization refusal (403), never an availability problem (503): retrying
+   * cannot help and the route may not be disclosed as merely unavailable.
+   */
+  | "alias_not_granted"
   | "rate_limited"
   | CaioProxyAuditRefusalStatus
   | "credential_unavailable"
@@ -224,6 +248,27 @@ function noRoute(reasonCode: string): CaioProxyExecuteResult {
     status: "no_route",
     httpStatus: 503,
     reasonCode,
+    receiptId: null,
+    retryAfterSeconds: null,
+    body: null,
+    upstream: null,
+    fallbackAttempted: false,
+    fallbackSucceeded: false,
+    fallbackReceiptId: null,
+    auditRefusal: null,
+  };
+}
+
+/**
+ * The caller is not granted the alias. A 403-class refusal with no receipt, no
+ * upstream descriptor and no retry advice: nothing about the binding (its
+ * status, provider, or even whether it exists in a usable state) is disclosed.
+ */
+function aliasNotGranted(): CaioProxyExecuteResult {
+  return {
+    status: "alias_not_granted",
+    httpStatus: 403,
+    reasonCode: "alias_not_granted",
     receiptId: null,
     retryAfterSeconds: null,
     body: null,
@@ -490,6 +535,17 @@ export function createCaioModelProxy(
   ): Promise<CaioProxyExecuteResult> {
     const binding = bindingsByAlias.get(input.alias);
     if (!binding) return noRoute("alias_unknown");
+
+    // The caller's OWN grant, resolved before anything else the binding could
+    // reveal. A valid model token is not authority over every protocol-matching
+    // active binding: without this, a WorkBuddy token could drive a Codex-only
+    // alias. Placed ahead of the status/protocol checks so an ungranted alias
+    // discloses nothing about the binding behind it, and ahead of the audit
+    // claim, the credential load and every upstream call so the refusal costs
+    // no receipt and produces no egress.
+    const grantedAliases = resolveCaioGrantedAliases(input.audienceContext);
+    if (!grantedAliases.has(binding.alias)) return aliasNotGranted();
+
     if (binding.status !== "active") return noRoute("alias_disabled");
     if (binding.protocol !== input.protocol) {
       return noRoute("protocol_mismatch");
@@ -589,8 +645,14 @@ export function createCaioModelProxy(
       );
     }
 
-    const candidate = binding.fallbackCandidates.find((c) =>
-      isFallbackAllowed(binding, c),
+    // A fallback is egress on a DIFFERENT route (its own endpoint, upstream
+    // model and credential), so it must be inside the caller's grant too — the
+    // grant gate cannot be bypassed by an upstream failure on the primary
+    // route. An ungranted candidate is not a candidate at all: it is skipped
+    // before its receipt is claimed, before its credential is loaded and before
+    // any call to it.
+    const candidate = binding.fallbackCandidates.find(
+      (c) => isFallbackAllowed(binding, c) && grantedAliases.has(c.alias),
     );
     if (!candidate) {
       return upstreamErrorResult(

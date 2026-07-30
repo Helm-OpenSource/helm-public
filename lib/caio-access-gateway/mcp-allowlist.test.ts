@@ -11,13 +11,19 @@ import {
   CAIO_GATEWAY_CAPABILITY_KEYS,
   CAIO_GATEWAY_FORBIDDEN_TOOL_NAME_PATTERNS,
   CAIO_GATEWAY_INTENDED_MUTATION_TOOL_NAMES,
+  CAIO_GATEWAY_TOOL_RISK_BY_NAME,
   CAIO_GATEWAY_TOOLS_BY_CAPABILITY,
   CAIO_GATEWAY_WRITING_TOOL_NAMES,
   assertToolAllowed,
   capabilityForCaioTool,
   filterToolDefinitions,
   isCaioToolAllowed,
+  isCaioToolFlagEnabled,
 } from "@/lib/caio-access-gateway/mcp-allowlist";
+import {
+  DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+  type WorkBuddyFeatureFlags,
+} from "@/lib/caio-collaboration/feature-flags";
 
 function expectScopeViolation(work: () => void): void {
   try {
@@ -192,5 +198,81 @@ describe("caio gateway capability allowlist", () => {
       "get_p1c_read_projection",
       "query_memory_candidates",
     ]);
+  });
+});
+
+// P1-2: the allowlist alone is not the enumeration contract — the feature-flag
+// state must be applied too, or a default-off deployment still advertises tools.
+describe("feature-flag gating of allowlisted tools", () => {
+  const ALL_ON: WorkBuddyFeatureFlags = Object.freeze({
+    gatewayEnabled: true,
+    readEnabled: true,
+    pushEnabled: true,
+    presenceEnabled: true,
+    mutationsEnabled: true,
+    promptResponsesEnabled: true,
+    questionSelectionsEnabled: true,
+    adviceDecisionsEnabled: true,
+  });
+
+  it("declares a risk class for every allowlisted tool and nothing else", () => {
+    expect(Object.keys(CAIO_GATEWAY_TOOL_RISK_BY_NAME).sort()).toEqual(
+      [...CAIO_GATEWAY_ALLOWED_TOOL_NAMES].sort(),
+    );
+    // Nothing with delivery or presence risk is allowlisted at all.
+    for (const risk of Object.values(CAIO_GATEWAY_TOOL_RISK_BY_NAME)) {
+      expect(["read", "mutation"]).toContain(risk);
+    }
+  });
+
+  it("enables nothing at all under the default (all-off) flags", () => {
+    for (const name of CAIO_GATEWAY_ALLOWED_TOOL_NAMES) {
+      expect(
+        isCaioToolFlagEnabled(name, DEFAULT_WORKBUDDY_FEATURE_FLAGS),
+      ).toBe(false);
+    }
+  });
+
+  it("enables nothing while gatewayEnabled is false, even with read on", () => {
+    const readOnlyNoGateway: WorkBuddyFeatureFlags = {
+      ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+      readEnabled: true,
+    };
+    for (const name of CAIO_GATEWAY_ALLOWED_TOOL_NAMES) {
+      expect(isCaioToolFlagEnabled(name, readOnlyNoGateway)).toBe(false);
+    }
+  });
+
+  it("never enables an allowlisted mutation, even with every flag on", () => {
+    for (const name of CAIO_GATEWAY_INTENDED_MUTATION_TOOL_NAMES) {
+      expect(isCaioToolFlagEnabled(name, ALL_ON)).toBe(false);
+    }
+  });
+
+  it("enables the read tools only with gateway + read on", () => {
+    const readEnabled: WorkBuddyFeatureFlags = {
+      ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+      gatewayEnabled: true,
+      readEnabled: true,
+    };
+    const enabled = CAIO_GATEWAY_ALLOWED_TOOL_NAMES.filter((name) =>
+      isCaioToolFlagEnabled(name, readEnabled),
+    );
+    expect(enabled.sort()).toEqual(
+      CAIO_GATEWAY_ALLOWED_TOOL_NAMES.filter(
+        (name) => CAIO_GATEWAY_TOOL_RISK_BY_NAME[name] === "read",
+      ).sort(),
+    );
+  });
+
+  it("never enables a name outside the allowlist", () => {
+    for (const name of [
+      "poll_ceo_prompts",
+      "begin_owner_presence_challenge",
+      "submit_prompt_response",
+      "totally_unknown_tool",
+    ]) {
+      expect(isCaioToolFlagEnabled(name, ALL_ON)).toBe(false);
+    }
   });
 });
