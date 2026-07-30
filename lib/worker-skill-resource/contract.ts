@@ -72,6 +72,7 @@ export const effectModes = [
   "read_only",
   "draft_only",
   "internal_write",
+  "human_seat_write",
   "customer_visible_send",
 ] as const;
 
@@ -206,7 +207,8 @@ const effectModeRank: Record<(typeof effectModes)[number], number> = {
   read_only: 0,
   draft_only: 1,
   internal_write: 2,
-  customer_visible_send: 3,
+  human_seat_write: 3,
+  customer_visible_send: 4,
 };
 
 function indexById<T extends Record<string, unknown>, K extends keyof T>(
@@ -255,6 +257,18 @@ export function validateWorkerSkillResourceContractBundle(
       );
     }
 
+    if (skill.effectMode === "human_seat_write" && skill.allowsAutoExecution) {
+      throw new Error("human_seat_write skills must not allow automatic execution");
+    }
+
+    if (skill.effectMode === "human_seat_write" && !skill.requiresReview) {
+      throw new Error("human_seat_write skills must require review");
+    }
+
+    if (skill.effectMode === "human_seat_write" && !skill.requiresApproval) {
+      throw new Error("human_seat_write skills must require approval");
+    }
+
     if (skill.customerFacingAllowed && !skill.requiresReview) {
       throw new Error("customer-facing skills must require review");
     }
@@ -295,6 +309,15 @@ export function validateWorkerSkillResourceContractBundle(
       if (binding.skillId !== skill.skillId) {
         throw new Error(
           `binding ${binding.bindingId} must point back to skill ${skill.skillId}`,
+        );
+      }
+
+      if (
+        skill.effectMode === "human_seat_write" &&
+        binding.authMode !== "workspace_member_context"
+      ) {
+        throw new Error(
+          `human_seat_write skill ${skill.skillId} binding ${binding.bindingId} must use workspace_member_context`,
         );
       }
 

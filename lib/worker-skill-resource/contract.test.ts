@@ -39,6 +39,7 @@ describe("worker skill resource contract", () => {
       "read_only",
       "draft_only",
       "internal_write",
+      "human_seat_write",
       "customer_visible_send",
     ]);
   });
@@ -176,6 +177,52 @@ describe("worker skill resource contract", () => {
     expect(() =>
       createWorkerSkillResourceContractBundle(approvalWithoutReview),
     ).toThrow("approval-required skills must also require review");
+  });
+
+  it("requires human-reviewed, approved, member-context execution for human seat writes", () => {
+    const humanSeatWrite = JSON.parse(
+      JSON.stringify(workerSkillResourceSprint1Blueprint),
+    );
+    humanSeatWrite.skills[0].effectMode = "human_seat_write";
+    humanSeatWrite.skills[0].allowsAutoExecution = true;
+
+    expect(() =>
+      createWorkerSkillResourceContractBundle(humanSeatWrite),
+    ).toThrow("human_seat_write skills must not allow automatic execution");
+
+    humanSeatWrite.skills[0].allowsAutoExecution = false;
+    humanSeatWrite.skills[0].requiresReview = false;
+
+    expect(() =>
+      createWorkerSkillResourceContractBundle(humanSeatWrite),
+    ).toThrow("human_seat_write skills must require review");
+
+    humanSeatWrite.skills[0].requiresReview = true;
+
+    expect(() =>
+      createWorkerSkillResourceContractBundle(humanSeatWrite),
+    ).toThrow("human_seat_write skills must require approval");
+
+    humanSeatWrite.skills[0].requiresApproval = true;
+
+    expect(() =>
+      createWorkerSkillResourceContractBundle(humanSeatWrite),
+    ).toThrow(
+      "human_seat_write skill followup-draft-skill binding followup-crm-binding must use workspace_member_context",
+    );
+
+    humanSeatWrite.resourceBindings.find(
+      (binding: { bindingId: string }) => binding.bindingId === "followup-crm-binding",
+    ).authMode = "workspace_member_context";
+    for (const flow of humanSeatWrite.representativeFlows.filter(
+      (flow: { skillId: string }) => flow.skillId === "followup-draft-skill",
+    )) {
+      flow.controlPlaneChecks.push("approval");
+    }
+
+    expect(() =>
+      createWorkerSkillResourceContractBundle(humanSeatWrite),
+    ).not.toThrow();
   });
 
   it("rejects role or flow mismatches introduced in Sprint 2", () => {
