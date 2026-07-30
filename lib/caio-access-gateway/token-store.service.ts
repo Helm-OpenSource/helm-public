@@ -270,6 +270,30 @@ export function createCaioAccessTokenService(
         hashCaioAccessToken(input.rawToken),
       );
       if (!record) throw unauthorized("token_unknown");
+
+      // The rate slot is claimed as soon as the token RESOLVES, before the
+      // revoked/rotated/expired/audience/source-ip branches, so a holder of
+      // an invalid-but-existing credential consumes budget instead of
+      // polling the gateway for free.
+      //
+      // The claim RESULT is deliberately not allowed to change the failure
+      // taxonomy below: converting a 401/403 into a 429 once the window is
+      // exhausted would turn the limiter into an oracle for "this token
+      // exists and is live". A refusal is therefore only raised on the path
+      // that would otherwise have succeeded.
+      const limit = Math.max(
+        1,
+        Math.floor(
+          input.rateLimitPerMinute ?? CAIO_DEFAULT_RATE_LIMIT_PER_MINUTE,
+        ),
+      );
+      const slot = await persistence.claimRateSlot({
+        tokenId: record.id,
+        now: input.now,
+        windowMs: CAIO_RATE_WINDOW_MS,
+        limit,
+      });
+
       if (record.status === "revoked") throw unauthorized("token_revoked");
       if (record.status === "rotated") throw unauthorized("token_rotated");
       if (
@@ -286,18 +310,6 @@ export function createCaioAccessTokenService(
       if (record.approvedSourceIp !== input.sourceIp) {
         throw new CaioAccessGatewayError("source_ip_mismatch");
       }
-      const limit = Math.max(
-        1,
-        Math.floor(
-          input.rateLimitPerMinute ?? CAIO_DEFAULT_RATE_LIMIT_PER_MINUTE,
-        ),
-      );
-      const slot = await persistence.claimRateSlot({
-        tokenId: record.id,
-        now: input.now,
-        windowMs: CAIO_RATE_WINDOW_MS,
-        limit,
-      });
       if (!slot.allowed) {
         throw new CaioAccessGatewayError("rate_limited", {
           retryAfterSeconds: slot.retryAfterSeconds,

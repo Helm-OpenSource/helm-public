@@ -7,7 +7,17 @@
  * token hashes, prompts, or upstream raw bodies — reasons are constrained
  * to a snake_case identifier alphabet and replaced with "unspecified"
  * otherwise.
+ *
+ * A refused audit claim has THREE wire shapes, not one:
+ *   audit_unavailable      503 + Retry-After   the store may recover
+ *   receipt_conflict       409                 retrying can never help
+ *   replay_limit_exceeded  429                 the receipt's replay cap is spent
+ * Collapsing the last two into 503 told a client to retry a request that can
+ * never succeed. Retry-After is emitted ONLY when the refusal carries a numeric
+ * retryAfterSeconds, so `Retry-After: undefined` can never be serialized.
  */
+
+import type { CaioCanonicalAuditGateOutcome } from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
 
 export type CaioAccessGatewayErrorCode =
   // 400-class
@@ -23,18 +33,31 @@ export type CaioAccessGatewayErrorCode =
   | "source_ip_mismatch"
   | "project_access_revoked"
   | "scope_violation"
+  /**
+   * The request's project scope could not be determined, so it cannot be
+   * authorized. Deliberately fail-closed: an undeterminable scope is a
+   * refusal, never a silent allow.
+   */
+  | "project_scope_unresolved"
   // 404 / 405 routing
   | "not_found"
   | "method_not_allowed"
   // 409-class
   | "active_token_exists"
   | "rotation_conflict"
+  /**
+   * The same [workspace, requestId] already carries a DIFFERENT durable audit
+   * receipt. Not an outage: retrying cannot fix it, so it is never a 503.
+   */
+  | "audit_receipt_conflict"
   // 413-class
   | "payload_too_large"
   // 422-class
   | "external_release_denied"
   // 429-class
   | "rate_limited"
+  /** The per-receipt repeat-dispatch cap is spent for this request identity. */
+  | "audit_replay_limit_exceeded"
   // 502-class
   | "upstream_failed"
   // 503-class
@@ -67,13 +90,16 @@ const WIRE_STATUS_BY_CODE: Readonly<
   source_ip_mismatch: 403,
   project_access_revoked: 403,
   scope_violation: 403,
+  project_scope_unresolved: 403,
   not_found: 404,
   method_not_allowed: 405,
   active_token_exists: 409,
   rotation_conflict: 409,
+  audit_receipt_conflict: 409,
   payload_too_large: 413,
   external_release_denied: 422,
   rate_limited: 429,
+  audit_replay_limit_exceeded: 429,
   upstream_failed: 502,
   audit_unavailable: 503,
   no_route: 503,
@@ -123,15 +149,25 @@ export type CaioGatewayErrorInput =
   | Readonly<{ status: 404 }>
   | Readonly<{ status: 405; allow: readonly string[] }>
   | Readonly<{ status: 409; reason: string }>
+  | Readonly<{ status: 409; error: "caio_audit_receipt_conflict" }>
   | Readonly<{ status: 413 }>
   | Readonly<{ status: 422 }>
   | Readonly<{ status: 429; retryAfterSeconds: number }>
+  | Readonly<{
+      status: 429;
+      error: "caio_audit_replay_limit_exceeded";
+      /** null when retrying cannot help; no Retry-After is then emitted. */
+      retryAfterSeconds: number | null;
+    }>
   | Readonly<{ status: 502 }>
   | Readonly<{
       status: 503;
       error: "caio_audit_unavailable" | "caio_no_route";
-      retryAfterSeconds: number;
+      /** null when the dependency gave no retry advice at all. */
+      retryAfterSeconds: number | null;
     }>;
+
+const NO_HEADERS: Readonly<Record<string, string>> = Object.freeze({});
 
 const SAFE_REASON_PATTERN = /^[a-z][a-z0-9_]{0,79}$/;
 
@@ -139,13 +175,21 @@ function safeReason(reason: string): string {
   return SAFE_REASON_PATTERN.test(reason) ? reason : "unspecified";
 }
 
-function retryAfterHeader(seconds: number): Readonly<Record<string, string>> {
+/**
+ * Retry-After headers, or NO header at all when there is no numeric advice.
+ * A null/undefined/non-finite value must never become the string "undefined"
+ * (or "NaN") on the wire: the absence of the header is the correct signal.
+ */
+function retryAfterHeader(
+  seconds: number | null | undefined,
+): Readonly<Record<string, string>> {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) {
+    return NO_HEADERS;
+  }
   return Object.freeze({
     "retry-after": String(Math.max(1, Math.ceil(seconds))),
   });
 }
-
-const NO_HEADERS: Readonly<Record<string, string>> = Object.freeze({});
 
 /**
  * Build the wire representation for a gateway failure class. This is the
@@ -197,6 +241,15 @@ export function toGatewayError(
         body: Object.freeze({ error: "caio_method_not_allowed" }),
       });
     case 409:
+      if ("error" in input) {
+        // A receipt conflict is permanent: no reason string (nothing about the
+        // other receipt may be disclosed) and never a Retry-After.
+        return Object.freeze({
+          status: 409,
+          headers: NO_HEADERS,
+          body: Object.freeze({ error: input.error }),
+        });
+      }
       return Object.freeze({
         status: 409,
         headers: NO_HEADERS,
@@ -221,7 +274,9 @@ export function toGatewayError(
       return Object.freeze({
         status: 429,
         headers: retryAfterHeader(input.retryAfterSeconds),
-        body: Object.freeze({ error: "caio_rate_limited" }),
+        body: Object.freeze({
+          error: "error" in input ? input.error : "caio_rate_limited",
+        }),
       });
     case 502:
       return Object.freeze({
@@ -260,12 +315,27 @@ export function caioGatewayWireErrorFromError(
     case 405:
       return toGatewayError({ status: 405, allow: [] });
     case 409:
+      if (error.code === "audit_receipt_conflict") {
+        return toGatewayError({
+          status: 409,
+          error: "caio_audit_receipt_conflict",
+        });
+      }
       return toGatewayError({ status: 409, reason: error.code });
     case 413:
       return toGatewayError({ status: 413 });
     case 422:
       return toGatewayError({ status: 422 });
     case 429:
+      if (error.code === "audit_replay_limit_exceeded") {
+        // The replay cap is spent for this receipt identity; a bare retry after
+        // N seconds cannot clear it, so no retry advice is invented here.
+        return toGatewayError({
+          status: 429,
+          error: "caio_audit_replay_limit_exceeded",
+          retryAfterSeconds: error.retryAfterSeconds,
+        });
+      }
       return toGatewayError({
         status: 429,
         retryAfterSeconds:
@@ -283,5 +353,65 @@ export function caioGatewayWireErrorFromError(
         retryAfterSeconds:
           error.retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS,
       });
+  }
+}
+
+/** A refused canonical audit-gate outcome (the non-allowed arm). */
+export type CaioAuditRefusalOutcome = Extract<
+  CaioCanonicalAuditGateOutcome,
+  { errorCode: string }
+>;
+
+/** The three refusal statuses a transport must be able to distinguish. */
+export type CaioAuditRefusalStatus = CaioAuditRefusalOutcome["status"];
+
+/**
+ * Map a refused audit claim onto the wire.
+ *
+ * The refusal's `status` discriminant decides the HTTP status — NOT its
+ * `httpStatus` number. The audit-gate port is an injectable extension point, so
+ * a JS implementation can report `httpStatus: 200` on a refusal; trusting the
+ * number would turn a refusal into a success shape. An unmodelled status is
+ * reported as a retryable 503, never as allowed.
+ *
+ * `errorCode`/`httpStatus` are accepted (a whole canonical outcome can be
+ * passed straight in) but deliberately unused: the wire identifier is fixed
+ * here so a dependency can never choose the error string a client sees.
+ */
+export function caioAuditRefusalWireError(
+  refusal: Readonly<{
+    status: CaioAuditRefusalStatus;
+    retryAfterSeconds: number | null;
+    errorCode?: string;
+    httpStatus?: number;
+  }>,
+): CaioGatewayWireError {
+  switch (refusal.status) {
+    case "receipt_conflict":
+      return toGatewayError({
+        status: 409,
+        error: "caio_audit_receipt_conflict",
+      });
+    case "replay_limit_exceeded":
+      return toGatewayError({
+        status: 429,
+        error: "caio_audit_replay_limit_exceeded",
+        retryAfterSeconds: refusal.retryAfterSeconds ?? null,
+      });
+    case "audit_unavailable":
+      return toGatewayError({
+        status: 503,
+        error: "caio_audit_unavailable",
+        retryAfterSeconds: refusal.retryAfterSeconds ?? null,
+      });
+    default: {
+      const unexpected: never = refusal.status;
+      void unexpected;
+      return toGatewayError({
+        status: 503,
+        error: "caio_audit_unavailable",
+        retryAfterSeconds: refusal.retryAfterSeconds ?? null,
+      });
+    }
   }
 }

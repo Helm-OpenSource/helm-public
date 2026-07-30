@@ -9,7 +9,10 @@ import { CaioAccessGatewayError } from "@/lib/caio-access-gateway/gateway-error-
 import {
   CAIO_GATEWAY_ALLOWED_TOOL_NAMES,
   CAIO_GATEWAY_CAPABILITY_KEYS,
+  CAIO_GATEWAY_FORBIDDEN_TOOL_NAME_PATTERNS,
+  CAIO_GATEWAY_INTENDED_MUTATION_TOOL_NAMES,
   CAIO_GATEWAY_TOOLS_BY_CAPABILITY,
+  CAIO_GATEWAY_WRITING_TOOL_NAMES,
   assertToolAllowed,
   capabilityForCaioTool,
   filterToolDefinitions,
@@ -38,6 +41,54 @@ describe("caio gateway capability allowlist", () => {
       "caio.memory_candidate.reject",
       "caio.candidate.submit_restricted",
     ]);
+  });
+
+  it("every allowlisted tool maps to an intended capability key and is not a forbidden name", () => {
+    const intended = new Set<string>(CAIO_GATEWAY_INTENDED_MUTATION_TOOL_NAMES);
+    for (const name of CAIO_GATEWAY_ALLOWED_TOOL_NAMES) {
+      const capability = capabilityForCaioTool(name);
+      expect(capability).not.toBeNull();
+      expect(CAIO_GATEWAY_CAPABILITY_KEYS).toContain(capability);
+      if (intended.has(name)) continue;
+      for (const pattern of CAIO_GATEWAY_FORBIDDEN_TOOL_NAME_PATTERNS) {
+        expect(
+          pattern.test(name),
+          `allowlisted tool ${name} matches forbidden pattern ${String(pattern)}`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("only the three intended memory-candidate mutations may carry a mutation name", () => {
+    expect(CAIO_GATEWAY_INTENDED_MUTATION_TOOL_NAMES).toEqual([
+      "adopt_memory_candidate",
+      "reject_memory_candidate",
+      "submit_restricted_candidate",
+    ]);
+    for (const name of CAIO_GATEWAY_INTENDED_MUTATION_TOOL_NAMES) {
+      const capability = capabilityForCaioTool(name);
+      expect([
+        "caio.memory_candidate.adopt",
+        "caio.memory_candidate.reject",
+        "caio.candidate.submit_restricted",
+      ]).toContain(capability);
+    }
+  });
+
+  it("refuses every in-tree tool whose executor performs a write", () => {
+    // poll_ceo_prompts writes: it claims prompts (delivery.service claimedAt),
+    // records presentations (presentedAt) and transitions envelopes to
+    // "delivered". A read capability must never map onto it.
+    expect(CAIO_GATEWAY_WRITING_TOOL_NAMES).toContain("poll_ceo_prompts");
+    for (const name of CAIO_GATEWAY_WRITING_TOOL_NAMES) {
+      expect(isCaioToolAllowed(name)).toBe(false);
+      expectScopeViolation(() => assertToolAllowed(name));
+    }
+    for (const capability of CAIO_GATEWAY_CAPABILITY_KEYS) {
+      for (const name of CAIO_GATEWAY_TOOLS_BY_CAPABILITY[capability]) {
+        expect(CAIO_GATEWAY_WRITING_TOOL_NAMES).not.toContain(name);
+      }
+    }
   });
 
   it("maps p1c/delivery read onto existing dispatcher read tools", () => {
@@ -130,7 +181,7 @@ describe("caio gateway capability allowlist", () => {
   it("filterToolDefinitions drops everything not allowlisted", () => {
     const tools = [
       { name: "get_p1c_read_projection", description: "read" },
-      { name: "poll_ceo_prompts", description: "delivery" },
+      { name: "poll_ceo_prompts", description: "delivery (writes)" },
       { name: "submit_prompt_response", description: "mutation" },
       { name: "begin_owner_presence_challenge", description: "presence" },
       { name: "approve_everything", description: "forbidden" },
@@ -139,7 +190,6 @@ describe("caio gateway capability allowlist", () => {
     const filtered = filterToolDefinitions(tools);
     expect(filtered.map((tool) => tool.name)).toEqual([
       "get_p1c_read_projection",
-      "poll_ceo_prompts",
       "query_memory_candidates",
     ]);
   });

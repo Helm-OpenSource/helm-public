@@ -258,6 +258,96 @@ describe("authenticateCaioToken", () => {
     });
   });
 
+  it("charges failed authentications against the resolved token's window", async () => {
+    const { persistence, service } = setup();
+    const pair = await service.issueCaioTokenPair({ ...BINDING, now: NOW });
+
+    // Wrong audience: the token resolves but the request is refused. It must
+    // still consume rate budget so an invalid-credential holder cannot poll
+    // the gateway for free.
+    await expectGatewayError(
+      service.authenticateCaioToken({
+        rawToken: pair.mcp.rawToken,
+        expectedAudience: "model",
+        sourceIp: APPROVED_SOURCE_IP,
+        now: NOW,
+      }),
+      "audience_mismatch",
+      401,
+    );
+    expect(persistence.peek(pair.mcp.record.id)?.rateWindowRequestCount).toBe(
+      1,
+    );
+
+    // Wrong source ip: same rule.
+    await expectGatewayError(
+      service.authenticateCaioToken({
+        rawToken: pair.mcp.rawToken,
+        expectedAudience: "mcp",
+        sourceIp: OTHER_SOURCE_IP,
+        now: NOW,
+      }),
+      "source_ip_mismatch",
+      403,
+    );
+    expect(persistence.peek(pair.mcp.record.id)?.rateWindowRequestCount).toBe(
+      2,
+    );
+
+    // Revoked tokens are charged too.
+    await service.revokeCaioToken({
+      workspaceId: BINDING.workspaceId,
+      tokenId: pair.model.record.id,
+      now: NOW,
+    });
+    await expectGatewayError(
+      service.authenticateCaioToken({
+        rawToken: pair.model.rawToken,
+        expectedAudience: "model",
+        sourceIp: APPROVED_SOURCE_IP,
+        now: NOW,
+      }),
+      "token_revoked",
+      401,
+    );
+    expect(
+      persistence.peek(pair.model.record.id)?.rateWindowRequestCount,
+    ).toBe(1);
+  });
+
+  it("keeps the authentication taxonomy when a charged window is exhausted", async () => {
+    // An exhausted window must NOT convert a 401/403 into a 429: that would
+    // turn the limiter into an oracle for "this token exists and is live".
+    const { service } = setup();
+    const pair = await service.issueCaioTokenPair({ ...BINDING, now: NOW });
+    for (let index = 0; index < 3; index += 1) {
+      await expectGatewayError(
+        service.authenticateCaioToken({
+          rawToken: pair.mcp.rawToken,
+          expectedAudience: "model",
+          sourceIp: APPROVED_SOURCE_IP,
+          now: NOW,
+          rateLimitPerMinute: 1,
+        }),
+        "audience_mismatch",
+        401,
+      );
+    }
+    // The budget is spent, so the next VALID request from the same token is
+    // rate limited.
+    await expectGatewayError(
+      service.authenticateCaioToken({
+        rawToken: pair.mcp.rawToken,
+        expectedAudience: "mcp",
+        sourceIp: APPROVED_SOURCE_IP,
+        now: NOW,
+        rateLimitPerMinute: 1,
+      }),
+      "rate_limited",
+      429,
+    );
+  });
+
   it("never includes token material in authentication errors", async () => {
     const { service } = setup();
     const pair = await service.issueCaioTokenPair({ ...BINDING, now: NOW });

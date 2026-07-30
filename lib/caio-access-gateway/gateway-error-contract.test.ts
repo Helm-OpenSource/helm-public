@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CaioAccessGatewayError,
+  caioAuditRefusalWireError,
   caioGatewayWireErrorFromError,
   isCaioAccessGatewayError,
   toGatewayError,
@@ -63,6 +64,47 @@ describe("toGatewayError", () => {
     });
     expect(noRoute.body).toEqual({ error: "caio_no_route" });
     expect(noRoute.headers["retry-after"]).toBe("30");
+  });
+
+  it("maps a receipt conflict to a permanent 409 with no Retry-After", () => {
+    const wire = toGatewayError({
+      status: 409,
+      error: "caio_audit_receipt_conflict",
+    });
+    expect(wire.status).toBe(409);
+    expect(wire.body).toEqual({ error: "caio_audit_receipt_conflict" });
+    expect(wire.headers["retry-after"]).toBeUndefined();
+  });
+
+  it("maps a replay-cap hit to 429 caio_audit_replay_limit_exceeded", () => {
+    const permanent = toGatewayError({
+      status: 429,
+      error: "caio_audit_replay_limit_exceeded",
+      retryAfterSeconds: null,
+    });
+    expect(permanent.status).toBe(429);
+    expect(permanent.body).toEqual({
+      error: "caio_audit_replay_limit_exceeded",
+    });
+    expect(permanent.headers["retry-after"]).toBeUndefined();
+    const advised = toGatewayError({
+      status: 429,
+      error: "caio_audit_replay_limit_exceeded",
+      retryAfterSeconds: 11,
+    });
+    expect(advised.headers["retry-after"]).toBe("11");
+  });
+
+  it("omits Retry-After on a 503 whose retryAfterSeconds is null", () => {
+    const wire = toGatewayError({
+      status: 503,
+      error: "caio_audit_unavailable",
+      retryAfterSeconds: null,
+    });
+    expect(wire.status).toBe(503);
+    expect(wire.body).toEqual({ error: "caio_audit_unavailable" });
+    expect(wire.headers["retry-after"]).toBeUndefined();
+    expect(JSON.stringify(wire.headers)).not.toContain("undefined");
   });
 
   it("sanitizes free-form reasons so bodies never carry secrets", () => {
@@ -133,5 +175,82 @@ describe("CaioAccessGatewayError", () => {
     expect(audit.status).toBe(503);
     expect(audit.body).toEqual({ error: "caio_audit_unavailable" });
     expect(Number(audit.headers["retry-after"])).toBeGreaterThan(0);
+  });
+
+  it("binds the two audit refusal codes to 409 and 429", () => {
+    const conflict = caioGatewayWireErrorFromError(
+      new CaioAccessGatewayError("audit_receipt_conflict"),
+    );
+    expect(conflict.status).toBe(409);
+    expect(conflict.body).toEqual({ error: "caio_audit_receipt_conflict" });
+    expect(conflict.headers["retry-after"]).toBeUndefined();
+
+    const replay = caioGatewayWireErrorFromError(
+      new CaioAccessGatewayError("audit_replay_limit_exceeded"),
+    );
+    expect(replay.status).toBe(429);
+    expect(replay.body).toEqual({
+      error: "caio_audit_replay_limit_exceeded",
+    });
+    expect(replay.headers["retry-after"]).toBeUndefined();
+  });
+});
+
+describe("caioAuditRefusalWireError", () => {
+  it("maps the three canonical refusal statuses onto 503, 409 and 429", () => {
+    const unavailable = caioAuditRefusalWireError({
+      status: "audit_unavailable",
+      errorCode: "caio_audit_unavailable",
+      httpStatus: 503,
+      retryAfterSeconds: 30,
+    });
+    expect(unavailable.status).toBe(503);
+    expect(unavailable.body).toEqual({ error: "caio_audit_unavailable" });
+    expect(unavailable.headers["retry-after"]).toBe("30");
+
+    const conflict = caioAuditRefusalWireError({
+      status: "receipt_conflict",
+      errorCode: "caio_audit_receipt_conflict",
+      httpStatus: 409,
+      retryAfterSeconds: null,
+    });
+    expect(conflict.status).toBe(409);
+    expect(conflict.body).toEqual({ error: "caio_audit_receipt_conflict" });
+    expect(conflict.headers["retry-after"]).toBeUndefined();
+
+    const replayLimit = caioAuditRefusalWireError({
+      status: "replay_limit_exceeded",
+      errorCode: "caio_audit_replay_limit_exceeded",
+      httpStatus: 429,
+      retryAfterSeconds: null,
+    });
+    expect(replayLimit.status).toBe(429);
+    expect(replayLimit.body).toEqual({
+      error: "caio_audit_replay_limit_exceeded",
+    });
+    expect(replayLimit.headers["retry-after"]).toBeUndefined();
+  });
+
+  it("trusts the refusal status over a mis-set httpStatus from a JS gate", () => {
+    // The port is injectable: a JS implementation can report httpStatus 200 on
+    // a refusal. The discriminant decides the wire status, never the number.
+    const wire = caioAuditRefusalWireError({
+      status: "receipt_conflict",
+      errorCode: "caio_audit_receipt_conflict",
+      httpStatus: 200,
+      retryAfterSeconds: null,
+    });
+    expect(wire.status).toBe(409);
+  });
+
+  it("never emits an undefined Retry-After for an unmodelled status", () => {
+    const wire = caioAuditRefusalWireError({
+      status: "something_new",
+      errorCode: "caio_audit_unavailable",
+      httpStatus: 503,
+    } as never);
+    expect(wire.status).toBe(503);
+    expect(wire.body).toEqual({ error: "caio_audit_unavailable" });
+    expect(wire.headers["retry-after"]).toBeUndefined();
   });
 });

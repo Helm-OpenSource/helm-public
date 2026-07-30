@@ -6,34 +6,118 @@
  * https server adapter. All collaborators are injected ports.
  *
  * Request pipeline order (tested):
- *   parse route -> bearer extract -> authenticate(audience)
- *   -> source ip check (inside the authenticator, from the injected
- *      client ip) -> body size cap (1 MiB default) -> dispatch.
+ *   parse route -> PRE-AUTH per-source-ip rate slot -> bearer extract
+ *   -> authenticate(audience) -> source ip check (inside the
+ *      authenticator, from the injected client ip)
+ *   -> server-side request id -> body size cap (1 MiB default)
+ *   -> JSON parse -> project-scope resolution + live membership gate
+ *      (POST /mcp) -> audit claim (POST /mcp only) -> dispatch.
+ *
+ * Cost control: the per-source-ip slot is claimed BEFORE any token lookup,
+ * so requests that never present a valid credential (no bearer, unknown /
+ * revoked / expired token, wrong audience, wrong source ip) still consume
+ * budget. The per-token window inside the authenticator additionally charges
+ * failed authentications once the token resolves.
+ *
+ * Request identity: the audit `requestId` is ALWAYS generated server-side and
+ * workspace-scoped. A client-supplied `x-request-id` is kept only as a
+ * non-authoritative correlation hint (echoed back as `x-correlation-id`); it
+ * never participates in receipt identity or idempotency, so a client cannot
+ * collide with, poison, or probe another caller's audit slot.
+ *
+ * Project scope: POST /mcp payloads are resolved through
+ * mcp-request-scope.ts, which knows the JSON-RPC shape and refuses any
+ * request whose project scope cannot be determined. Membership is asserted
+ * for EVERY resolved ref and the authorized ref set is handed to the
+ * dispatcher, so the value that was authorized is the value the executor is
+ * contractually bound to use.
+ *
+ * The /v1 model routes carry provider-shaped completion payloads, not Helm
+ * tool calls: they have no project dimension and are scoped by the token's
+ * workspace plus the alias grant enforced inside the model proxy. They are
+ * deliberately NOT scanned for project field names, because a completion body
+ * may legitimately contain arbitrary text.
+ *
+ * Where the audit claim is issued:
+ *   POST /mcp            here. A tool call resolves no model alias, so the
+ *                        surface itself is the receipt's alias
+ *                        (CAIO_GATEWAY_MCP_AUDIT_ALIAS) and the inputHash is
+ *                        the canonical digest of the JSON-RPC payload.
+ *   /v1/responses,
+ *   /v1/chat/completions NOT here. The receipt requires modelAlias, inputHash
+ *                        and policyVersion, and the policy version comes from
+ *                        the resolved alias BINDING — knowledge this layer does
+ *                        not have. The claim therefore belongs to the model
+ *                        proxy engine (createCaioModelProxy), which claims
+ *                        before any upstream egress. This layer instead
+ *                        REFUSES any model dispatch outcome that is not backed
+ *                        by an audit receipt, so delegating cannot become a
+ *                        silent hole: see CaioModelDispatchOutcome.
+ *   GET /v1/models       no claim: listing the aliases granted to a token is a
+ *                        configuration read with no model dispatch and no
+ *                        egress, and a receipt has no shape that can describe
+ *                        it (no alias, no input).
  *
  * Liveness vs readiness: GET /livez only proves the process is alive and
- * never touches the database or any business port; GET /readyz reflects
- * the audit-state readiness port. HTTP liveness is deliberately not
- * conflated with db/business health.
+ * never touches the database or any business port; GET /readyz reflects the
+ * audit gate's own async readiness (four states, collapsed onto three by
+ * caioGatewayReadinessFromAuditGate, `recovering` -> `degraded`), and fails
+ * closed to 503 when the probe itself cannot answer. HTTP liveness is
+ * deliberately not conflated with db/business health.
  */
 
 import { randomUUID } from "node:crypto";
 
 import {
+  CaioAccessGatewayError,
+  caioAuditRefusalWireError,
   caioGatewayWireErrorFromError,
   isCaioAccessGatewayError,
   toGatewayError,
   type CaioGatewayWireError,
 } from "@/lib/caio-access-gateway/gateway-error-contract";
 import {
+  assertPayloadRefsAuthorized,
+  resolveRequestProjectRefs,
+} from "@/lib/caio-access-gateway/mcp-request-scope";
+import {
   assertProjectAccess,
   type ProjectMembershipResolver,
 } from "@/lib/caio-access-gateway/project-access";
+import type { CaioPreAuthRateLimiterPort } from "@/lib/caio-access-gateway/source-ip-rate-limiter";
 import type { CaioTokenAudience } from "@/lib/caio-access-gateway/token-contracts";
 import type {
   CaioAccessPrincipal,
 } from "@/lib/caio-access-gateway/token-store.service";
+import type { CaioAuditGateReadiness } from "@/lib/caio-audit-state/audit-state-contracts";
+import {
+  caioGatewayReadinessFromAuditGate,
+  type CaioCanonicalAuditClaim,
+  type CaioCanonicalAuditGatePort,
+} from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
+import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 
 export const CAIO_GATEWAY_DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+
+/**
+ * Receipt alias for the MCP tool-dispatch surface.
+ *
+ * The minimal audit receipt is a closed six-field set built for model dispatch,
+ * so an MCP tool call — which resolves no model alias — is recorded under the
+ * surface's own stable identifier. It is deliberately not a real alias: no
+ * alias grant, rate limit, or credential is ever looked up from this value.
+ */
+export const CAIO_GATEWAY_MCP_AUDIT_ALIAS = "caio-mcp-tool-dispatch";
+
+/**
+ * Policy version recorded for MCP tool dispatch. Model routes take their policy
+ * version from the resolved alias binding inside the proxy; the MCP surface has
+ * no binding, so its receipts are pinned to this gateway contract version.
+ */
+export const CAIO_GATEWAY_MCP_AUDIT_POLICY_VERSION = "caio-gateway-mcp-v1";
+
+/** Retry advice used when the gateway itself decides audit is unusable. */
+const AUDIT_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
 
 export type CaioGatewayRequest = Readonly<{
   method: string;
@@ -65,25 +149,83 @@ export type CaioTokenAuthenticatorPort = Readonly<{
 
 export type CaioMcpDispatchPort = (input: {
   principal: CaioAccessPrincipal;
+  /** Server-generated, workspace-scoped. Never client-controlled. */
   requestId: string;
+  /**
+   * Client-supplied correlation hint, or null. Non-authoritative: it must
+   * never be used as a receipt id, idempotency key, or dedupe key.
+   */
+  clientCorrelationId: string | null;
   payload: unknown;
+  /**
+   * The allowlisted tool name the gateway resolved, or null for a JSON-RPC
+   * method that carries no tool (handshake surface).
+   */
+  toolName: string | null;
+  /**
+   * CONTRACT: every project ref this request is authorized for, already
+   * checked against live membership. The executor MUST operate only on these
+   * refs — the gateway has already refused the request if the payload named
+   * any ref outside this set, so consuming a different ref would be a
+   * deliberate breach rather than a gap.
+   */
+  authorizedProjectRefs: readonly string[];
   /** Live per-request project gate bound to the injected resolver. */
   assertProjectAccess(projectRef: string): Promise<void>;
 }) => Promise<unknown>;
+
+/**
+ * Result of a model-route dispatch, as this layer consumes it.
+ *
+ * CONTRACT: a model route's audit claim is issued INSIDE the proxy, where the
+ * alias binding (and therefore modelAlias / inputHash / policyVersion) is
+ * resolved. The proxy must therefore report what its claim did, and this layer
+ * refuses anything that is not receipt-backed:
+ *
+ *   - `claim: "allowed"` with a non-empty `auditReceiptId` is the ONLY shape
+ *     whose body is served; the receipt id is the evidence that a durable audit
+ *     write happened before any egress.
+ *   - `claim: "refused"` is mapped to 503 / 409 / 429 exactly like a claim
+ *     refused at this layer.
+ *   - anything else — including an "allowed" outcome with no receipt id — is
+ *     treated as "no claim was recorded" and refused as 503, because the port is
+ *     injectable and a JS implementation can return any shape at all.
+ */
+export type CaioModelDispatchOutcome =
+  | Readonly<{
+      claim: "allowed";
+      /** Receipt id of the claim the proxy made before any upstream egress. */
+      auditReceiptId: string;
+      /** JSON-serializable upstream payload to return to the caller. */
+      body: unknown;
+    }>
+  | Readonly<{
+      claim: "refused";
+      refusal:
+        | "audit_unavailable"
+        | "receipt_conflict"
+        | "replay_limit_exceeded";
+      /** Never undefined; null means retrying cannot help. */
+      retryAfterSeconds: number | null;
+    }>;
 
 export type CaioModelProxyPort = Readonly<{
   responses(input: {
     principal: CaioAccessPrincipal;
     requestId: string;
+    clientCorrelationId: string | null;
     payload: unknown;
-  }): Promise<unknown>;
+  }): Promise<CaioModelDispatchOutcome>;
   chatCompletions(input: {
     principal: CaioAccessPrincipal;
     requestId: string;
+    clientCorrelationId: string | null;
     payload: unknown;
-  }): Promise<unknown>;
+  }): Promise<CaioModelDispatchOutcome>;
   /**
-   * Must respond only with the aliases granted to the presented token.
+   * Must respond only with the aliases granted to the presented token. This is
+   * a configuration read with no dispatch and no egress, so it carries no audit
+   * receipt (see the module header).
    */
   listModels(input: {
     workspaceId: string;
@@ -92,34 +234,46 @@ export type CaioModelProxyPort = Readonly<{
   }): Promise<unknown>;
 }>;
 
-export type CaioAuditGatePort = Readonly<{
-  /** Claim the audit slot BEFORE any dispatch work; throwing fails the
-   * request closed as 503 caio_audit_unavailable. */
-  claimDispatch(input: {
-    requestId: string;
-    route: string;
-    principal: CaioAccessPrincipal;
-    now: Date;
-  }): Promise<void>;
-}>;
-
+/**
+ * Gateway-facing readiness vocabulary. The audit gate has FOUR states; this
+ * probe has three. `recovering` (serving under a recovery admission cap) is
+ * reported as `degraded` — never as ready.
+ */
 export type CaioReadinessState = "ready" | "degraded" | "unavailable";
 
+/**
+ * Readiness source. Shaped so the audit gate itself satisfies it with no
+ * adapter: `getReadiness()` is async and answers in the gate's own four-state
+ * vocabulary. A probe that throws fails the readiness check closed.
+ */
 export type CaioReadinessProbePort = Readonly<{
-  state(): CaioReadinessState;
+  getReadiness(): Promise<CaioAuditGateReadiness>;
 }>;
 
 export type CaioGatewayHandlerDependencies = Readonly<{
+  /**
+   * Pre-authentication cost control. Required (not optional) so a wiring
+   * omission cannot silently remove the only limiter that can charge invalid
+   * credentials.
+   */
+  preAuthRateLimiter: CaioPreAuthRateLimiterPort;
   tokenAuthenticator: CaioTokenAuthenticatorPort;
   projectResolver: ProjectMembershipResolver;
   mcpDispatch: CaioMcpDispatchPort;
   modelProxy: CaioModelProxyPort;
-  auditGate: CaioAuditGatePort;
+  /**
+   * The canonical audit-gate port published by caio-audit-state. The gateway
+   * declares no port of its own: one vocabulary, one refusal taxonomy, and the
+   * real gate wires in through createCaioCanonicalAuditGatePort() with no shim.
+   */
+  auditGate: CaioCanonicalAuditGatePort;
   readinessProbe: CaioReadinessProbePort;
   maxBodyBytes?: number;
   rateLimitPerMinute?: number;
   now?: () => Date;
   requestIdFactory?: () => string;
+  /** Overrides CAIO_GATEWAY_MCP_AUDIT_POLICY_VERSION on MCP receipts. */
+  mcpAuditPolicyVersion?: string;
 }>;
 
 export type CaioGatewayHandler = (
@@ -187,6 +341,25 @@ function jsonResponse(status: number, body: unknown): CaioGatewayResponse {
   return Object.freeze({ status, headers: JSON_HEADERS, body });
 }
 
+/**
+ * 200 response, echoing the caller's correlation hint (if it was safe) under
+ * a name that cannot be confused with the authoritative request id.
+ */
+function okResponse(
+  body: unknown,
+  clientCorrelationId: string | null,
+): CaioGatewayResponse {
+  if (clientCorrelationId === null) return jsonResponse(200, body);
+  return Object.freeze({
+    status: 200,
+    headers: Object.freeze({
+      ...JSON_HEADERS,
+      "x-correlation-id": clientCorrelationId,
+    }),
+    body,
+  });
+}
+
 function extractBearerToken(
   headers: Readonly<Record<string, string | undefined>>,
 ): string | null {
@@ -208,7 +381,119 @@ function bodyText(body: string | Uint8Array | null | undefined): string {
   return Buffer.from(body).toString("utf8");
 }
 
-const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+/**
+ * A client correlation hint is accepted only in this shape, and only as an
+ * opaque echo value. It is never authoritative.
+ */
+const SAFE_CORRELATION_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+
+/** Retry-after used when the pre-auth limiter cannot be consulted. */
+const LIMITER_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
+
+function readClientCorrelationId(
+  headers: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const header = headers["x-request-id"];
+  if (typeof header !== "string") return null;
+  return SAFE_CORRELATION_ID_PATTERN.test(header) ? header : null;
+}
+
+/** The refusal every "nothing proves a durable audit write happened" path uses. */
+function auditUnavailableWireError(): CaioGatewayWireError {
+  return toGatewayError({
+    status: 503,
+    error: "caio_audit_unavailable",
+    retryAfterSeconds: AUDIT_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  });
+}
+
+/**
+ * Outcome of demanding audit evidence from a port: served, or refused.
+ * `body` is present only where the port also carries a response payload
+ * (a model dispatch); a bare claim carries none.
+ */
+type AuditBackedOutcome =
+  | Readonly<{ claimed: true; receiptId: string; body?: unknown }>
+  | Readonly<{ claimed: false; wire: CaioGatewayWireError }>;
+
+function asRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+  if (typeof value !== "object" || value === null) return null;
+  return value as Readonly<Record<string, unknown>>;
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function retryAdvice(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+const AUDIT_REFUSAL_STATUSES = Object.freeze([
+  "audit_unavailable",
+  "receipt_conflict",
+  "replay_limit_exceeded",
+] as const);
+
+function isAuditRefusalStatus(
+  value: unknown,
+): value is (typeof AUDIT_REFUSAL_STATUSES)[number] {
+  return AUDIT_REFUSAL_STATUSES.some((status) => status === value);
+}
+
+/**
+ * Read an audit-gate outcome DEFENSIVELY. The port is an injectable extension
+ * point, so neither the allow arm nor the refusal taxonomy may be trusted from
+ * types alone: an "allowed" outcome without a receipt id is not evidence of a
+ * durable write and is refused like an outage.
+ */
+function readAuditClaimOutcome(outcome: unknown): AuditBackedOutcome {
+  const record = asRecord(outcome);
+  const status = record?.status;
+  if (status === "allowed") {
+    const receiptId = nonEmptyString(record?.receiptId);
+    if (receiptId === null) {
+      return { claimed: false, wire: auditUnavailableWireError() };
+    }
+    return { claimed: true, receiptId };
+  }
+  if (isAuditRefusalStatus(status)) {
+    return {
+      claimed: false,
+      wire: caioAuditRefusalWireError({
+        status,
+        retryAfterSeconds: retryAdvice(record?.retryAfterSeconds),
+      }),
+    };
+  }
+  return { claimed: false, wire: auditUnavailableWireError() };
+}
+
+/**
+ * Read a model-route dispatch outcome DEFENSIVELY. Same reasoning as above: the
+ * claim now happens inside the proxy, so this is the only place that can prove
+ * the gateway never serves a model dispatch that no receipt covers.
+ */
+function readModelDispatchOutcome(outcome: unknown): AuditBackedOutcome {
+  const record = asRecord(outcome);
+  if (record?.claim === "allowed") {
+    const receiptId = nonEmptyString(record.auditReceiptId);
+    if (receiptId === null) {
+      return { claimed: false, wire: auditUnavailableWireError() };
+    }
+    return { claimed: true, receiptId, body: record.body ?? null };
+  }
+  if (record?.claim === "refused" && isAuditRefusalStatus(record.refusal)) {
+    return {
+      claimed: false,
+      wire: caioAuditRefusalWireError({
+        status: record.refusal,
+        retryAfterSeconds: retryAdvice(record.retryAfterSeconds),
+      }),
+    };
+  }
+  return { claimed: false, wire: auditUnavailableWireError() };
+}
 
 export function createCaioGatewayHandler(
   dependencies: CaioGatewayHandlerDependencies,
@@ -218,35 +503,90 @@ export function createCaioGatewayHandler(
   const now = dependencies.now ?? (() => new Date());
   const requestIdFactory =
     dependencies.requestIdFactory ?? (() => randomUUID());
+  const mcpAuditPolicyVersion =
+    dependencies.mcpAuditPolicyVersion ??
+    CAIO_GATEWAY_MCP_AUDIT_POLICY_VERSION;
 
-  function readinessResponse(): CaioGatewayResponse {
-    const state = dependencies.readinessProbe.state();
-    if (state === "unavailable") {
-      return wireResponse(
-        toGatewayError({
-          status: 503,
-          error: "caio_audit_unavailable",
-          retryAfterSeconds: 5,
-        }),
+  /**
+   * Readiness, mapped from the audit gate's four states onto the probe's three.
+   * A probe that throws is reported as unavailable: an unanswerable readiness
+   * question is never an implicit "ready".
+   */
+  async function readinessResponse(): Promise<CaioGatewayResponse> {
+    let state: CaioReadinessState;
+    try {
+      state = caioGatewayReadinessFromAuditGate(
+        await dependencies.readinessProbe.getReadiness(),
       );
+    } catch {
+      state = "unavailable";
+    }
+    if (state === "unavailable") {
+      return wireResponse(auditUnavailableWireError());
     }
     return jsonResponse(200, Object.freeze({ status: state }));
   }
 
+  /**
+   * Claim the pre-authentication per-source-ip slot. Fails CLOSED: a limiter
+   * that throws refuses the request, and the refusal is deliberately shaped
+   * exactly like a genuine limit hit so it discloses nothing about the
+   * limiter's state or about whether any token exists.
+   */
+  async function claimSourceIpBudget(sourceIp: string): Promise<void> {
+    let allowed: boolean;
+    let retryAfterSeconds = LIMITER_UNAVAILABLE_RETRY_AFTER_SECONDS;
+    try {
+      const slot = await dependencies.preAuthRateLimiter.claimSourceIpSlot({
+        sourceIp,
+        now: now(),
+      });
+      allowed = slot.allowed;
+      if (!slot.allowed) retryAfterSeconds = slot.retryAfterSeconds;
+    } catch (error) {
+      if (isCaioAccessGatewayError(error)) throw error;
+      allowed = false;
+    }
+    if (!allowed) {
+      throw new CaioAccessGatewayError("rate_limited", { retryAfterSeconds });
+    }
+  }
+
+  /**
+   * Claim the audit slot through the canonical port. Fails CLOSED in both
+   * directions: a refusal returns its own wire error, and a THROW (malformed
+   * claim, receipt id inside the gate's reserved replay-marker namespace, store
+   * fault) is never swallowed — it becomes a 503 with no dispatch.
+   */
+  async function claimAuditSlot(
+    claim: CaioCanonicalAuditClaim,
+  ): Promise<AuditBackedOutcome> {
+    let outcome: unknown;
+    try {
+      outcome = await dependencies.auditGate.claimDispatch(claim);
+    } catch (error) {
+      if (isCaioAccessGatewayError(error)) throw error;
+      throw new CaioAuditUnavailableSignal();
+    }
+    return readAuditClaimOutcome(outcome);
+  }
+
   async function dispatchAuthedRoute(input: {
     route: AuthedRoute;
-    routePath: string;
     request: CaioGatewayRequest;
   }): Promise<CaioGatewayResponse> {
-    const { route, routePath, request } = input;
-    const headerRequestId = request.headers["x-request-id"];
-    const requestId =
-      headerRequestId !== undefined &&
-      SAFE_REQUEST_ID_PATTERN.test(headerRequestId)
-        ? headerRequestId
-        : requestIdFactory();
+    const { route, request } = input;
 
-    // 2. Bearer extract.
+    // 2. Pre-authentication cost control, before any token lookup, so
+    //    invalid credentials cannot be replayed for free.
+    await claimSourceIpBudget(request.clientIp);
+
+    // The client's own id is a correlation hint only; the authoritative
+    // request id is generated below, after authentication, from the server's
+    // own randomness.
+    const clientCorrelationId = readClientCorrelationId(request.headers);
+
+    // 3. Bearer extract.
     const rawToken = extractBearerToken(request.headers);
     if (rawToken === null) {
       return wireResponse(
@@ -254,7 +594,7 @@ export function createCaioGatewayHandler(
       );
     }
 
-    // 3. Authenticate (audience + source ip + rate limit taxonomy).
+    // 4. Authenticate (audience + source ip + rate limit taxonomy).
     const principal = await dependencies.tokenAuthenticator.authenticate({
       rawToken,
       expectedAudience: route.audience,
@@ -263,12 +603,16 @@ export function createCaioGatewayHandler(
       rateLimitPerMinute: dependencies.rateLimitPerMinute,
     });
 
-    // 4. Body size cap (after authentication, before any parsing).
+    // 5. Server-side request identity: workspace-scoped random id. A client
+    //    can neither choose it nor collide with another workspace's ids.
+    const requestId = `${principal.workspaceId}:${requestIdFactory()}`;
+
+    // 6. Body size cap (after authentication, before any parsing).
     if (bodyByteLength(request.body) > maxBodyBytes) {
       return wireResponse(toGatewayError({ status: 413 }));
     }
 
-    // 5. Parse the JSON body where the route requires one.
+    // 7. Parse the JSON body where the route requires one.
     let payload: unknown = null;
     if (route.expectsJsonBody) {
       const text = bodyText(request.body);
@@ -294,57 +638,91 @@ export function createCaioGatewayHandler(
         projectRef,
       );
 
-    // 6. Live project membership gate for payloads that name a project.
-    if (
-      payload !== null &&
-      typeof payload === "object" &&
-      !Array.isArray(payload) &&
-      typeof (payload as { projectRef?: unknown }).projectRef === "string"
-    ) {
-      await boundAssertProjectAccess(
-        (payload as { projectRef: string }).projectRef,
-      );
+    // 8. Project-scope resolution + live membership gate for /mcp.
+    //
+    //    Fail-closed by construction: resolveRequestProjectRefs refuses any
+    //    payload whose scope it cannot determine (non-JSON-RPC body, unknown
+    //    method, non-allowlisted tool, tool with no in-tree argument schema,
+    //    missing declared scoping field), so there is no shape that reaches
+    //    an executor without having been scope-checked.
+    let toolName: string | null = null;
+    let authorizedProjectRefs: readonly string[] = Object.freeze([]);
+    if (route.kind === "mcp") {
+      const scope = resolveRequestProjectRefs(payload);
+      if (scope.kind === "tool_call") {
+        // The tool's own workspace argument must be the authenticated
+        // workspace: a token may never drive another workspace's tools.
+        if (scope.workspaceId !== principal.workspaceId) {
+          throw new CaioAccessGatewayError("scope_violation");
+        }
+        toolName = scope.toolName;
+        // EVERY resolved ref is asserted, not just the first.
+        for (const projectRef of scope.projectRefs) {
+          await boundAssertProjectAccess(projectRef);
+        }
+        authorizedProjectRefs = scope.projectRefs;
+      }
+      // Deputy guard: the exact payload forwarded below may not carry any
+      // project ref outside the set just authorized.
+      assertPayloadRefsAuthorized(payload, authorizedProjectRefs);
     }
 
-    // 7. Audit gate: claim before any dispatch work (fail closed).
-    try {
-      await dependencies.auditGate.claimDispatch({
+    // 9. Audit claim for the MCP surface: before any dispatch work, fail
+    //    closed. Model routes deliberately do NOT claim here — this layer has
+    //    no alias binding, so it cannot name modelAlias/policyVersion; the
+    //    proxy claims and step 10 refuses any outcome no receipt covers.
+    if (route.kind === "mcp") {
+      const claim: CaioCanonicalAuditClaim = {
         requestId,
-        route: routePath,
-        principal,
-        now: now(),
-      });
-    } catch (error) {
-      if (isCaioAccessGatewayError(error)) throw error;
-      throw new CaioAuditUnavailableSignal();
+        workspaceId: principal.workspaceId,
+        clientType: principal.clientType,
+        modelAlias: CAIO_GATEWAY_MCP_AUDIT_ALIAS,
+        // Content digest of the JSON-RPC payload. A digest, never the text:
+        // nothing from the request body enters the audit store.
+        inputHash: sha256(canonicalJson(payload)),
+        policyVersion: mcpAuditPolicyVersion,
+      };
+      const claimed = await claimAuditSlot(claim);
+      if (!claimed.claimed) return wireResponse(claimed.wire);
     }
 
-    // 8. Dispatch.
+    // 10. Dispatch.
     switch (route.kind) {
       case "mcp": {
         const result = await dependencies.mcpDispatch({
           principal,
           requestId,
+          clientCorrelationId,
           payload,
+          toolName,
+          authorizedProjectRefs,
           assertProjectAccess: boundAssertProjectAccess,
         });
-        return jsonResponse(200, result);
+        return okResponse(result, clientCorrelationId);
       }
       case "model_responses": {
-        const result = await dependencies.modelProxy.responses({
-          principal,
-          requestId,
-          payload,
-        });
-        return jsonResponse(200, result);
+        const dispatched = readModelDispatchOutcome(
+          await dependencies.modelProxy.responses({
+            principal,
+            requestId,
+            clientCorrelationId,
+            payload,
+          }),
+        );
+        if (!dispatched.claimed) return wireResponse(dispatched.wire);
+        return okResponse(dispatched.body, clientCorrelationId);
       }
       case "model_chat_completions": {
-        const result = await dependencies.modelProxy.chatCompletions({
-          principal,
-          requestId,
-          payload,
-        });
-        return jsonResponse(200, result);
+        const dispatched = readModelDispatchOutcome(
+          await dependencies.modelProxy.chatCompletions({
+            principal,
+            requestId,
+            clientCorrelationId,
+            payload,
+          }),
+        );
+        if (!dispatched.claimed) return wireResponse(dispatched.wire);
+        return okResponse(dispatched.body, clientCorrelationId);
       }
       case "model_list": {
         const result = await dependencies.modelProxy.listModels({
@@ -352,7 +730,7 @@ export function createCaioGatewayHandler(
           userRef: principal.userRef,
           clientType: principal.clientType,
         });
-        return jsonResponse(200, result);
+        return okResponse(result, clientCorrelationId);
       }
     }
   }
@@ -376,7 +754,7 @@ export function createCaioGatewayHandler(
       if (path === "/livez") {
         return jsonResponse(200, Object.freeze({ status: "alive" }));
       }
-      return readinessResponse();
+      return await readinessResponse();
     }
 
     const routeMethods = AUTHED_ROUTES[path];
@@ -394,16 +772,10 @@ export function createCaioGatewayHandler(
     }
 
     try {
-      return await dispatchAuthedRoute({ route, routePath: path, request });
+      return await dispatchAuthedRoute({ route, request });
     } catch (error) {
       if (error instanceof CaioAuditUnavailableSignal) {
-        return wireResponse(
-          toGatewayError({
-            status: 503,
-            error: "caio_audit_unavailable",
-            retryAfterSeconds: 5,
-          }),
-        );
+        return wireResponse(auditUnavailableWireError());
       }
       if (isCaioAccessGatewayError(error)) {
         return wireResponse(caioGatewayWireErrorFromError(error));

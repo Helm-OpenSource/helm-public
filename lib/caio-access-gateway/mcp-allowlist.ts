@@ -27,20 +27,79 @@ export type CaioGatewayCapabilityKey =
   (typeof CAIO_GATEWAY_CAPABILITY_KEYS)[number];
 
 /**
+ * The three — and only three — mutations v1 intends to expose. Every other
+ * allowlisted tool must be read-only. Names on this list are exempt from the
+ * forbidden-name patterns below; nothing else is.
+ */
+export const CAIO_GATEWAY_INTENDED_MUTATION_TOOL_NAMES: readonly string[] =
+  Object.freeze([
+    "adopt_memory_candidate",
+    "reject_memory_candidate",
+    "submit_restricted_candidate",
+  ]);
+
+/**
+ * In-tree tool names whose executor was READ and found to write. Nothing on
+ * this list may ever be allowlisted (asserted by test).
+ *
+ * - poll_ceo_prompts: despite the "read" shape of caio.delivery.read, its
+ *   executor claims prompts (delivery.service.ts claimedAt), records a
+ *   presentation (presentedAt) and transitions the delivery envelope to
+ *   "delivered". It is a state-mutating dequeue, not a read.
+ * - begin_/complete_owner_presence_challenge: presence tools.
+ * - the prepare_/submit_/get_*_receipt trio set: canonical production writes.
+ */
+export const CAIO_GATEWAY_WRITING_TOOL_NAMES: readonly string[] =
+  Object.freeze([
+    "poll_ceo_prompts",
+    "begin_owner_presence_challenge",
+    "complete_owner_presence_challenge",
+    "prepare_prompt_response",
+    "submit_prompt_response",
+    "prepare_question_selection",
+    "submit_question_selection",
+    "prepare_advice_decision",
+    "submit_advice_decision",
+  ]);
+
+/**
+ * Name-shape refusals. A tool whose NAME advertises approval, sending,
+ * execution, preparation of a production write, presence, or destruction may
+ * not be allowlisted, regardless of capability mapping.
+ */
+export const CAIO_GATEWAY_FORBIDDEN_TOOL_NAME_PATTERNS: readonly RegExp[] =
+  Object.freeze([
+    /approve/i,
+    /\bsend|_send|^send_/i,
+    /execute/i,
+    /^prepare_/i,
+    /^submit_/i,
+    /presence/i,
+    /poll_/i,
+    /delete|purge|reset/i,
+    /^write_|_write$/i,
+    /settle|dispatch_call|place_call/i,
+  ]);
+
+/**
  * Concrete MCP tool names per capability key.
  *
- * - caio.p1c.read / caio.delivery.read map onto existing read tools from
- *   lib/caio-collaboration/tool-schemas.ts.
+ * - caio.p1c.read / caio.delivery.read map onto existing READ-ONLY tools
+ *   from lib/caio-collaboration/tool-schemas.ts. poll_ceo_prompts is
+ *   deliberately NOT mapped here: its executor writes (see
+ *   CAIO_GATEWAY_WRITING_TOOL_NAMES), so a read capability must not carry it.
  * - The context-receipt / memory-candidate / restricted-submit names are
- *   NEW tool names whose executors are provided elsewhere; this module
- *   only defines the allowlist contract.
+ *   NEW tool names whose executors are provided elsewhere; this module only
+ *   defines the allowlist contract. Because their argument schemas are not in
+ *   this tree, mcp-request-scope.ts declares their project scope
+ *   "unresolvable" and the gateway REFUSES requests naming them until a
+ *   schema exists — the allowlist entry alone grants nothing.
  */
 export const CAIO_GATEWAY_TOOLS_BY_CAPABILITY: Readonly<
   Record<CaioGatewayCapabilityKey, readonly string[]>
 > = Object.freeze({
   "caio.p1c.read": Object.freeze(["get_p1c_read_projection"]),
   "caio.delivery.read": Object.freeze([
-    "poll_ceo_prompts",
     "list_pending_ceo_prompts",
     "get_ceo_prompt",
   ]),

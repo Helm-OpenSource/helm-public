@@ -188,6 +188,61 @@ describeMysql(
       );
     });
 
+    it("charges failed authentications against the real rate window row", async () => {
+      const now = new Date();
+      const deviceRef = `device-charge-${suffix}`;
+      const pair = await service.issueCaioTokenPair({
+        ...binding(deviceRef),
+        now,
+      });
+
+      // Wrong audience, then wrong source ip: both refused, both charged.
+      await expectCode(
+        service.authenticateCaioToken({
+          rawToken: pair.mcp.rawToken,
+          expectedAudience: "model",
+          sourceIp: SOURCE_IP,
+          now,
+        }),
+        "audience_mismatch",
+      );
+      await expectCode(
+        service.authenticateCaioToken({
+          rawToken: pair.mcp.rawToken,
+          expectedAudience: "mcp",
+          sourceIp: OTHER_SOURCE_IP,
+          now,
+        }),
+        "source_ip_mismatch",
+      );
+      const charged = await db.caioAccessToken.findUniqueOrThrow({
+        where: { id: pair.mcp.record.id },
+        select: { rateWindowRequestCount: true },
+      });
+      expect(charged.rateWindowRequestCount).toBe(2);
+
+      // A revoked token is charged too.
+      await service.revokeCaioToken({
+        workspaceId,
+        tokenId: pair.model.record.id,
+        now,
+      });
+      await expectCode(
+        service.authenticateCaioToken({
+          rawToken: pair.model.rawToken,
+          expectedAudience: "model",
+          sourceIp: SOURCE_IP,
+          now,
+        }),
+        "token_revoked",
+      );
+      const revokedRow = await db.caioAccessToken.findUniqueOrThrow({
+        where: { id: pair.model.record.id },
+        select: { rateWindowRequestCount: true },
+      });
+      expect(revokedRow.rateWindowRequestCount).toBe(1);
+    });
+
     it("counts the fixed rate window atomically under parallel requests", async () => {
       const now = new Date();
       const deviceRef = `device-rate-${suffix}`;
