@@ -1,19 +1,17 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-  randomUUID,
-} from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
   CAIO_AUDIT_QUEUE_ENTRY_ID_PATTERN,
+  CaioAuditQueueAppendInProgressError,
+  CaioAuditQueueContentConflictError,
   CaioAuditQueueFullError,
   CaioAuditQueueIntegrityError,
   CaioAuditQueueKeyUnavailableError,
   caioMinimalAuditReceiptSchema,
+  caioReceiptDigest,
   type CaioMinimalAuditReceipt,
 } from "@/lib/caio-audit-state/audit-state-contracts";
 
@@ -31,6 +29,27 @@ import {
  * keyProvider. The entry id is bound as GCM additional authenticated data, so
  * a ciphertext copied to a different entry name fails authentication. The
  * encrypted payload is the minimal receipt JSON only — never prompt bodies.
+ *
+ * Append is EXCLUSIVE and CONTENT-BOUND (both required for "no allowed dispatch
+ * without a durable receipt"):
+ * - the final path is created with O_CREAT|O_EXCL, so an append can never
+ *   overwrite an existing entry (the previous tmp-file + rename sequence
+ *   silently destroyed a concurrently written receipt);
+ * - the reservation is created with mode 0o000 and chmod'ed to 0600 only after
+ *   the ciphertext is fsynced. A file still at mode 0o000 is therefore an
+ *   append that has not completed: it is never reported as a durable entry, so
+ *   neither a crash nor a concurrent reader can observe a half-written receipt;
+ * - on an entry-id collision the stored receipt's content digest is compared
+ *   with the candidate's: identical content is an idempotent success, different
+ *   content is a typed conflict (CaioAuditQueueContentConflictError) that the
+ *   gate must refuse rather than allow.
+ *
+ * Known limitation: a hard process crash between reservation and seal leaves a
+ * mode-0o000 reservation that blocks that ONE entry id (fail closed: claims for
+ * it are refused, never allowed) until an operator or `remove(entryId)` clears
+ * it. It is deliberately not auto-reclaimed, because a still-running append
+ * holding the descriptor would then write into an unlinked inode and report a
+ * durable receipt that no longer exists.
  */
 export interface CaioEmergencyQueuePort {
   append(input: {
@@ -48,6 +67,10 @@ const ENTRY_MAGIC = Buffer.from("HCAQ1\n", "utf8");
 const GCM_IV_BYTES = 12;
 const GCM_TAG_BYTES = 16;
 const KEY_BYTES = 32;
+/** Sealed, durable entry. */
+const ENTRY_MODE = 0o600;
+/** Exclusive reservation held by an append that has not sealed its entry. */
+const RESERVATION_MODE = 0o000;
 
 function assertValidEntryId(entryId: string): void {
   if (!CAIO_AUDIT_QUEUE_ENTRY_ID_PATTERN.test(entryId)) {
@@ -126,6 +149,13 @@ export function createCaioEmergencyQueue(options: {
       );
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EACCES") {
+        // A mode-0o000 reservation is not readable even by its owner: the
+        // append that holds it has not sealed a durable entry yet.
+        throw new CaioAuditQueueAppendInProgressError(
+          `entry ${entryId} is an unsealed append reservation`,
+        );
+      }
       if (code === "ELOOP" || code === "EMFILE" || code === "ENXIO") {
         throw new CaioAuditQueueIntegrityError(
           `entry ${entryId} is a symlink or unreadable special file`,
@@ -145,7 +175,12 @@ export function createCaioEmergencyQueue(options: {
           `entry ${entryId} has nlink ${stat.nlink}; hardlinks are refused`,
         );
       }
-      if ((stat.mode & 0o777) !== 0o600) {
+      if ((stat.mode & 0o777) === RESERVATION_MODE) {
+        throw new CaioAuditQueueAppendInProgressError(
+          `entry ${entryId} is an unsealed append reservation`,
+        );
+      }
+      if ((stat.mode & 0o777) !== ENTRY_MODE) {
         throw new CaioAuditQueueIntegrityError(
           `entry ${entryId} must have mode 0600`,
         );
@@ -209,12 +244,17 @@ export function createCaioEmergencyQueue(options: {
     return Buffer.concat([ENTRY_MAGIC, iv, cipher.getAuthTag(), ciphertext]);
   }
 
-  async function listEntryStats(): Promise<
-    Array<{ entryId: string; mtimeNs: bigint }>
-  > {
+  type EntryStat = {
+    entryId: string;
+    mtimeNs: bigint;
+    /** "reserved" = an append holds the id but has not sealed a receipt yet. */
+    state: "durable" | "reserved";
+  };
+
+  async function listEntryStats(): Promise<EntryStat[]> {
     await ensureRoot();
     const names = await fs.readdir(rootDir);
-    const entries: Array<{ entryId: string; mtimeNs: bigint }> = [];
+    const entries: EntryStat[] = [];
     for (const name of names) {
       if (name.startsWith(".tmp-")) {
         continue;
@@ -230,7 +270,21 @@ export function createCaioEmergencyQueue(options: {
           `entry ${name} is not a regular file`,
         );
       }
-      entries.push({ entryId: name, mtimeNs: stat.mtimeNs });
+      // Mirror readEntry's hardlink refusal here so size()/list() can never
+      // count an entry that a read would reject.
+      if (Number(stat.nlink) !== 1) {
+        throw new CaioAuditQueueIntegrityError(
+          `entry ${name} has nlink ${String(stat.nlink)}; hardlinks are refused`,
+        );
+      }
+      entries.push({
+        entryId: name,
+        mtimeNs: stat.mtimeNs,
+        state:
+          (Number(stat.mode) & 0o777) === RESERVATION_MODE
+            ? "reserved"
+            : "durable",
+      });
     }
     entries.sort((a, b) => {
       if (a.mtimeNs !== b.mtimeNs) {
@@ -241,6 +295,31 @@ export function createCaioEmergencyQueue(options: {
     return entries;
   }
 
+  /**
+   * Idempotency/conflict decision for an entry id that already exists.
+   * Never overwrites: the stored receipt wins, and a divergent candidate is
+   * refused with a typed conflict the gate maps to 409.
+   */
+  async function reconcileExistingEntry(input: {
+    entryId: string;
+    stat: EntryStat;
+    receipt: CaioMinimalAuditReceipt;
+    key: Buffer;
+  }): Promise<{ entryId: string; deduplicated: true }> {
+    if (input.stat.state === "reserved") {
+      throw new CaioAuditQueueAppendInProgressError(
+        `entry ${input.entryId} is an unsealed append reservation`,
+      );
+    }
+    const stored = await readEntry(input.entryId, input.key);
+    if (caioReceiptDigest(stored) !== caioReceiptDigest(input.receipt)) {
+      throw new CaioAuditQueueContentConflictError(
+        `entry ${input.entryId} already holds a receipt with different content`,
+      );
+    }
+    return { entryId: input.entryId, deduplicated: true };
+  }
+
   return {
     async append({ entryId, receipt }) {
       const parsed = caioMinimalAuditReceiptSchema.parse(receipt);
@@ -248,46 +327,77 @@ export function createCaioEmergencyQueue(options: {
       const key = await loadKey();
       await ensureRoot();
 
-      const existing = await listEntryStats();
-      const duplicate = existing.some((entry) => entry.entryId === entryId);
-      if (duplicate) {
-        const stored = await readEntry(entryId, key);
-        if (JSON.stringify(stored) !== JSON.stringify(parsed)) {
-          throw new CaioAuditQueueIntegrityError(
-            `entry ${entryId} already exists with different content`,
+      // Exclusive creation of the FINAL path. O_EXCL is the whole duplicate
+      // detection: there is no check-then-write window an interleaved append
+      // can slip through, and no code path that overwrites an existing entry.
+      let handle;
+      try {
+        handle = await fs.open(
+          filePath,
+          fsConstants.O_WRONLY |
+            fsConstants.O_CREAT |
+            fsConstants.O_EXCL |
+            fsConstants.O_NOFOLLOW,
+          RESERVATION_MODE,
+        );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+          throw error;
+        }
+        const existing = (await listEntryStats()).find(
+          (entry) => entry.entryId === entryId,
+        );
+        if (!existing) {
+          // Vanished between EEXIST and the stat: refuse rather than guess.
+          throw new CaioAuditQueueAppendInProgressError(
+            `entry ${entryId} changed while appending`,
           );
         }
-        return { entryId, deduplicated: true };
-      }
-      if (existing.length >= maxEntries) {
-        throw new CaioAuditQueueFullError(
-          `queue holds ${existing.length} entries (cap ${maxEntries})`,
-        );
+        return await reconcileExistingEntry({
+          entryId,
+          stat: existing,
+          receipt: parsed,
+          key,
+        });
       }
 
-      // Durable atomic write: exclusive tmp file, fsync, rename, dir fsync.
-      const tmpPath = path.join(rootDir, `.tmp-${randomUUID()}`);
-      const envelope = encryptEntry(entryId, parsed, key);
-      const handle = await fs.open(
-        tmpPath,
-        fsConstants.O_WRONLY |
-          fsConstants.O_CREAT |
-          fsConstants.O_EXCL |
-          fsConstants.O_NOFOLLOW,
-        0o600,
-      );
+      // From here the reservation exists; every failure path must remove it so
+      // no unsealed entry id is left behind by an in-process error.
       try {
-        await handle.writeFile(envelope);
+        // Capacity is enforced with this reservation counted, so concurrent
+        // appends cannot both slip past the cap. Two appends racing for the last
+        // slot may both be refused rather than one being admitted — refusing is
+        // the safe direction (the caller is told to stop dispatching).
+        const held = await listEntryStats();
+        if (held.length > maxEntries) {
+          throw new CaioAuditQueueFullError(
+            `queue holds ${held.length - 1} entries (cap ${maxEntries})`,
+          );
+        }
+        const stat = await handle.stat();
+        if (!stat.isFile()) {
+          throw new CaioAuditQueueIntegrityError(
+            `entry ${entryId} is not a regular file`,
+          );
+        }
+        if (stat.nlink !== 1) {
+          throw new CaioAuditQueueIntegrityError(
+            `entry ${entryId} has nlink ${stat.nlink}; hardlinks are refused`,
+          );
+        }
+        await handle.writeFile(encryptEntry(entryId, parsed, key));
         await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      try {
-        await fs.rename(tmpPath, filePath);
+        // Seal: the mode transition publishes an entry whose ciphertext is
+        // already durable, so a reader never observes a partial receipt.
+        await handle.chmod(ENTRY_MODE);
+        await handle.sync();
       } catch (error) {
-        await fs.rm(tmpPath, { force: true });
+        await handle.close();
+        await fs.rm(filePath, { force: true });
         throw error;
       }
+      await handle.close();
+
       const dirHandle = await fs.open(rootDir, fsConstants.O_RDONLY);
       try {
         await dirHandle.sync();
@@ -307,7 +417,10 @@ export function createCaioEmergencyQueue(options: {
         entryId: string;
         receipt: CaioMinimalAuditReceipt;
       }> = [];
-      for (const { entryId } of stats) {
+      for (const { entryId, state } of stats) {
+        // Unsealed reservations are not durable receipts: they are never
+        // replayed and never counted.
+        if (state === "reserved") continue;
         entries.push({ entryId, receipt: await readEntry(entryId, key) });
       }
       return entries;
@@ -319,7 +432,9 @@ export function createCaioEmergencyQueue(options: {
     },
 
     async size() {
-      return (await listEntryStats()).length;
+      return (await listEntryStats()).filter(
+        (entry) => entry.state === "durable",
+      ).length;
     },
   };
 }

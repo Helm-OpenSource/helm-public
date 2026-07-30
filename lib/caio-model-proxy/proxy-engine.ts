@@ -9,7 +9,32 @@
 // The audit claim carries ONLY {requestId, workspaceId, clientType,
 // modelAlias, inputHash, policyVersion} — never the request body, never
 // credential material. Receipts are hash-based by construction.
+//
+// AUDIT PORT: this engine consumes the ONE canonical audit-gate port published
+// by caio-audit-state (CaioCanonicalAuditGatePort, CaioCanonicalAuditGateOutcome)
+// and declares nothing parallel. It previously declared a THIRD port whose
+// `{allowed, state}` decision was not output-compatible with that outcome, so
+// the delegation chain gateway → proxy → audit gate was not type-connected and
+// only the gateway's receipt-evidence requirement kept a silently lost claim
+// from being served. All three refusal statuses (audit_unavailable /
+// receipt_conflict / replay_limit_exceeded) now leave execute() distinctly, so a
+// transport can map 503 / 409 / 429 instead of collapsing them into one
+// retryable status.
 
+import {
+  CAIO_AUDIT_CONFLICT_ERROR_CODE,
+  CAIO_AUDIT_CONFLICT_HTTP_STATUS,
+  CAIO_AUDIT_REPLAY_LIMIT_ERROR_CODE,
+  CAIO_AUDIT_REPLAY_LIMIT_HTTP_STATUS,
+  CAIO_AUDIT_UNAVAILABLE_ERROR_CODE,
+  CAIO_AUDIT_UNAVAILABLE_HTTP_STATUS,
+} from "@/lib/caio-audit-state/audit-state-contracts";
+import type {
+  CaioCanonicalAuditClaim,
+  CaioCanonicalAuditGateOutcome,
+  CaioCanonicalAuditGatePort,
+} from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
+import { caioFallbackMarkerRequestId } from "@/lib/caio-audit-state/receipt-linkage";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 
 import {
@@ -35,28 +60,46 @@ export type CaioAudienceContext = {
   clientType: CaioProxyClientType;
 };
 
-// Minimal audit claim: hashes and refs only. Adding fields here widens what
-// leaves the request path into the audit store — keep it closed.
-export type CaioDispatchClaim = {
-  requestId: string;
-  workspaceId: string;
-  clientType: CaioProxyClientType;
-  modelAlias: string;
-  inputHash: string;
-  policyVersion: string;
-};
+/**
+ * The refused arm of the canonical audit-gate outcome, REUSED verbatim — the
+ * engine does not restate the refusal taxonomy. `status` is the discriminant a
+ * transport maps to 503 / 409 / 429.
+ */
+export type CaioProxyAuditRefusal = Extract<
+  CaioCanonicalAuditGateOutcome,
+  { errorCode: string }
+>;
 
-export type CaioAuditGateDecision =
-  | { allowed: true; receiptId: string }
-  | {
-      allowed: false;
-      state: "audit_unavailable";
-      retryAfterSeconds: number;
-    };
+/** The three refusal statuses that must stay distinguishable end to end. */
+export type CaioProxyAuditRefusalStatus = CaioProxyAuditRefusal["status"];
 
-export type CaioAuditGatePort = {
-  claimDispatch(claim: CaioDispatchClaim): Promise<CaioAuditGateDecision>;
-};
+/**
+ * HTTP status per refusal DISCRIMINANT, never the port's own `httpStatus`
+ * number: the audit gate is an injectable extension point, so a JS
+ * implementation reporting `httpStatus: 200` on a refusal must not be able to
+ * turn a refusal into a success. Declared as a total record so a new refusal
+ * status cannot be added upstream without failing this file's typecheck.
+ */
+const REFUSAL_HTTP_STATUS: Readonly<
+  Record<CaioProxyAuditRefusalStatus, number>
+> = Object.freeze({
+  audit_unavailable: CAIO_AUDIT_UNAVAILABLE_HTTP_STATUS,
+  receipt_conflict: CAIO_AUDIT_CONFLICT_HTTP_STATUS,
+  replay_limit_exceeded: CAIO_AUDIT_REPLAY_LIMIT_HTTP_STATUS,
+});
+
+/**
+ * Reason code per refusal discriminant, from the canonical audit constants.
+ * Also not taken from the port: a dependency may not choose the identifier a
+ * caller keys behaviour on.
+ */
+const REFUSAL_REASON_CODE: Readonly<
+  Record<CaioProxyAuditRefusalStatus, string>
+> = Object.freeze({
+  audit_unavailable: CAIO_AUDIT_UNAVAILABLE_ERROR_CODE,
+  receipt_conflict: CAIO_AUDIT_CONFLICT_ERROR_CODE,
+  replay_limit_exceeded: CAIO_AUDIT_REPLAY_LIMIT_ERROR_CODE,
+});
 
 export type CaioRateLimitDecision = {
   allowed: boolean;
@@ -83,7 +126,13 @@ export type CaioModelProxyDependencies = {
     responses: CaioProxyUpstreamClientPort;
     chatCompletions: CaioProxyUpstreamClientPort;
   };
-  auditGate: CaioAuditGatePort;
+  /**
+   * The ONE canonical audit-gate port published by caio-audit-state. The engine
+   * declares no port of its own, so gateway -> proxy -> audit gate is a single
+   * type-connected chain: the real gate wires in through
+   * createCaioCanonicalAuditGatePort() with no shim.
+   */
+  auditGate: CaioCanonicalAuditGatePort;
   rateLimiter?: CaioRateLimiterPort;
   now?: () => Date;
 };
@@ -105,11 +154,16 @@ export type CaioProxyUpstreamDescriptor = {
   policyVersion: string;
 };
 
+/**
+ * Result status. The audit arm IS the canonical refusal taxonomy — the three
+ * statuses stay distinct all the way out of execute() so a caller can map
+ * 503 / 409 / 429 instead of retrying a request that can never succeed.
+ */
 export type CaioProxyExecuteStatus =
   | "ok"
   | "no_route"
   | "rate_limited"
-  | "audit_unavailable"
+  | CaioProxyAuditRefusalStatus
   | "credential_unavailable"
   | "upstream_error"
   | "incomplete_stream"
@@ -127,6 +181,18 @@ export type CaioProxyExecuteResult = {
   upstream: CaioProxyUpstreamDescriptor | null;
   fallbackAttempted: boolean;
   fallbackSucceeded: boolean;
+  /**
+   * Receipt of the SECOND, linked audit claim that records the fallback route
+   * actually executed; null when no fallback was dispatched.
+   */
+  fallbackReceiptId: string | null;
+  /**
+   * The refused canonical audit outcome, verbatim, when the dispatch claim was
+   * refused; null on every other path. Carrying the canonical object (rather
+   * than a re-encoded copy) is what lets a transport map the refusal without
+   * re-deriving the taxonomy.
+   */
+  auditRefusal: CaioProxyAuditRefusal | null;
 };
 
 export type CaioModelProxy = {
@@ -164,6 +230,8 @@ function noRoute(reasonCode: string): CaioProxyExecuteResult {
     upstream: null,
     fallbackAttempted: false,
     fallbackSucceeded: false,
+    fallbackReceiptId: null,
+    auditRefusal: null,
   };
 }
 
@@ -172,6 +240,7 @@ function upstreamErrorResult(
   receiptId: string,
   upstream: CaioProxyUpstreamDescriptor,
   fallbackAttempted: boolean,
+  fallbackReceiptId: string | null = null,
 ): CaioProxyExecuteResult {
   return {
     status: "upstream_error",
@@ -183,7 +252,116 @@ function upstreamErrorResult(
     upstream,
     fallbackAttempted,
     fallbackSucceeded: false,
+    fallbackReceiptId,
+    auditRefusal: null,
   };
+}
+
+/**
+ * Maps a refused canonical audit claim to a proxy result. The refusal object is
+ * carried through unchanged so no information is lost, while status / httpStatus
+ * / reasonCode are derived from the DISCRIMINANT only, and retryAfterSeconds is
+ * always a number or null — never undefined.
+ */
+function refusedClaimResult(
+  refusal: CaioProxyAuditRefusal,
+): CaioProxyExecuteResult {
+  return {
+    status: refusal.status,
+    httpStatus: REFUSAL_HTTP_STATUS[refusal.status],
+    reasonCode: REFUSAL_REASON_CODE[refusal.status],
+    receiptId: null,
+    retryAfterSeconds: refusal.retryAfterSeconds ?? null,
+    body: null,
+    upstream: null,
+    fallbackAttempted: false,
+    fallbackSucceeded: false,
+    fallbackReceiptId: null,
+    auditRefusal: refusal,
+  };
+}
+
+/** Normalized reading of ONE canonical claim outcome. */
+type ClaimReading =
+  | { claimed: true; receiptId: string }
+  | { claimed: false; refusal: CaioProxyAuditRefusal };
+
+/** The refusal used whenever nothing proves a durable audit write happened. */
+function unprovenClaimRefusal(
+  retryAfterSeconds: number | null,
+): CaioProxyAuditRefusal {
+  return Object.freeze({
+    status: "audit_unavailable" as const,
+    errorCode: CAIO_AUDIT_UNAVAILABLE_ERROR_CODE,
+    httpStatus: CAIO_AUDIT_UNAVAILABLE_HTTP_STATUS,
+    retryAfterSeconds,
+  });
+}
+
+function isRefusalStatus(
+  value: unknown,
+): value is CaioProxyAuditRefusalStatus {
+  return (
+    typeof value === "string" && Object.hasOwn(REFUSAL_HTTP_STATUS, value)
+  );
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Read a canonical audit-gate outcome DEFENSIVELY.
+ *
+ * The port is an injectable extension point, so neither arm may be trusted from
+ * types alone. An "allowed" outcome without a non-empty receipt id is NOT
+ * evidence of a durable write and is refused exactly like an outage, and an
+ * answer outside the union is refused rather than treated as allowed — so no
+ * shape reaches a credential load or an upstream call without a receipt.
+ */
+function readClaimOutcome(outcome: unknown): ClaimReading {
+  if (typeof outcome !== "object" || outcome === null) {
+    return { claimed: false, refusal: unprovenClaimRefusal(null) };
+  }
+  const record = outcome as Readonly<Record<string, unknown>>;
+  if (record.status === "allowed") {
+    const receiptId = record.receiptId;
+    if (typeof receiptId !== "string" || receiptId.length === 0) {
+      return { claimed: false, refusal: unprovenClaimRefusal(null) };
+    }
+    return { claimed: true, receiptId };
+  }
+  if (isRefusalStatus(record.status)) {
+    return {
+      claimed: false,
+      refusal: Object.freeze({
+        status: record.status,
+        errorCode: REFUSAL_REASON_CODE[record.status],
+        httpStatus: REFUSAL_HTTP_STATUS[record.status],
+        retryAfterSeconds: numberOrNull(record.retryAfterSeconds),
+      }),
+    };
+  }
+  return { claimed: false, refusal: unprovenClaimRefusal(null) };
+}
+
+/**
+ * Forwarded-chunk count read DEFENSIVELY from any upstream outcome.
+ *
+ * The streaming contract types `upstream_error` with `chunksForwarded: 0`, but
+ * that literal erases at runtime and `deps.clients` is an injected port: a mock,
+ * a third protocol adapter, or a downstream-writer failure can report an
+ * upstream_error with bytes already handed downstream. Retry/fallback decisions
+ * consult this, so the guarantee is enforced at runtime rather than asserted by
+ * a type.
+ */
+function forwardedChunkCount(outcome: unknown): number {
+  if (typeof outcome !== "object" || outcome === null) return 0;
+  const value = (outcome as { chunksForwarded?: unknown }).chunksForwarded;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return value;
 }
 
 export function createCaioModelProxy(
@@ -244,8 +422,13 @@ export function createCaioModelProxy(
     outcome: CaioUpstreamInvokeResult | CaioUpstreamStreamResult,
     receiptId: string,
     upstream: CaioProxyUpstreamDescriptor,
-    fallback: { attempted: boolean; succeeded: boolean },
+    fallback: {
+      attempted: boolean;
+      succeeded: boolean;
+      receiptId?: string | null;
+    },
   ): CaioProxyExecuteResult {
+    const fallbackReceiptId = fallback.receiptId ?? null;
     switch (outcome.status) {
       case "ok":
         return {
@@ -258,6 +441,8 @@ export function createCaioModelProxy(
           upstream,
           fallbackAttempted: fallback.attempted,
           fallbackSucceeded: fallback.succeeded,
+          fallbackReceiptId,
+          auditRefusal: null,
         };
       case "incomplete_stream":
         // Headers were already sent when streaming began; the synthetic
@@ -272,6 +457,8 @@ export function createCaioModelProxy(
           upstream,
           fallbackAttempted: fallback.attempted,
           fallbackSucceeded: false,
+          fallbackReceiptId,
+          auditRefusal: null,
         };
       case "cancelled":
         return {
@@ -284,6 +471,8 @@ export function createCaioModelProxy(
           upstream,
           fallbackAttempted: fallback.attempted,
           fallbackSucceeded: false,
+          fallbackReceiptId,
+          auditRefusal: null,
         };
       case "upstream_error":
         return upstreamErrorResult(
@@ -291,6 +480,7 @@ export function createCaioModelProxy(
           receiptId,
           upstream,
           fallback.attempted,
+          fallbackReceiptId,
         );
     }
   }
@@ -323,15 +513,22 @@ export function createCaioModelProxy(
           upstream: null,
           fallbackAttempted: false,
           fallbackSucceeded: false,
+          fallbackReceiptId: null,
+          auditRefusal: null,
         };
       }
     }
 
     const inputHash = sha256(canonicalJson(input.body));
 
-    // Audit gate BEFORE any upstream traffic. If the audit store cannot take
-    // the claim, the request never reaches an upstream provider.
-    const claim: CaioDispatchClaim = {
+    // Audit gate BEFORE any credential load and BEFORE any upstream traffic. If
+    // the audit store cannot take the claim, the request never reaches an
+    // upstream provider and no credential is ever read.
+    //
+    // The claim carries EXACTLY the six canonical fields; the strict canonical
+    // claim schema refuses an extra key outright, so the closed set is enforced
+    // at this boundary and not only at the storage boundary.
+    const claim: CaioCanonicalAuditClaim = {
       requestId: input.requestId,
       workspaceId: input.audienceContext.workspaceId,
       clientType: input.audienceContext.clientType,
@@ -339,21 +536,13 @@ export function createCaioModelProxy(
       inputHash,
       policyVersion: binding.policyVersion,
     };
-    const gate = await deps.auditGate.claimDispatch(claim);
-    if (!gate.allowed) {
-      return {
-        status: "audit_unavailable",
-        httpStatus: 503,
-        reasonCode: "audit_unavailable",
-        receiptId: null,
-        retryAfterSeconds: gate.retryAfterSeconds,
-        body: null,
-        upstream: null,
-        fallbackAttempted: false,
-        fallbackSucceeded: false,
-      };
+    const claimed = readClaimOutcome(
+      await deps.auditGate.claimDispatch(claim),
+    );
+    if (!claimed.claimed) {
+      return refusedClaimResult(claimed.refusal);
     }
-    const receiptId = gate.receiptId;
+    const receiptId = claimed.receiptId;
 
     let apiKey: string;
     try {
@@ -372,6 +561,8 @@ export function createCaioModelProxy(
         upstream: null,
         fallbackAttempted: false,
         fallbackSucceeded: false,
+        fallbackReceiptId: null,
+        auditRefusal: null,
       };
     }
 
@@ -385,9 +576,19 @@ export function createCaioModelProxy(
       });
     }
 
-    // Fallback is only legal before any streamed byte has been forwarded.
-    // Streaming upstream_error results structurally carry chunksForwarded: 0;
-    // any post-first-byte failure surfaces as incomplete_stream (no retry).
+    // Fallback is only legal before any streamed byte has been HANDED
+    // downstream. The streaming contract types upstream_error with
+    // chunksForwarded: 0, but that erases at runtime and the client is an
+    // injected port, so the count is checked here before any retry decision.
+    if (forwardedChunkCount(primaryOutcome) > 0) {
+      return upstreamErrorResult(
+        primaryOutcome,
+        receiptId,
+        primaryUpstream,
+        false,
+      );
+    }
+
     const candidate = binding.fallbackCandidates.find((c) =>
       isFallbackAllowed(binding, c),
     );
@@ -399,6 +600,36 @@ export function createCaioModelProxy(
         false,
       );
     }
+
+    // The single receipt claimed above describes the PRIMARY route. A fallback
+    // executes on a different endpoint/model, so it gets its own linked receipt
+    // naming the route actually used — claimed BEFORE the fallback credential is
+    // loaded and before any fallback egress, exactly like the primary claim. If
+    // audit cannot record the fallback, the fallback does not happen.
+    const fallbackClaim: CaioCanonicalAuditClaim = {
+      ...claim,
+      requestId: caioFallbackMarkerRequestId({
+        requestId: input.requestId,
+        route: {
+          providerKey: candidate.providerKey,
+          endpointBaseUrl: candidate.endpointBaseUrl,
+          upstreamModel: candidate.upstreamModel,
+        },
+      }),
+      policyVersion: candidate.policyVersion,
+    };
+    const fallbackClaimed = readClaimOutcome(
+      await deps.auditGate.claimDispatch(fallbackClaim),
+    );
+    if (!fallbackClaimed.claimed) {
+      return upstreamErrorResult(
+        primaryOutcome,
+        receiptId,
+        primaryUpstream,
+        false,
+      );
+    }
+    const fallbackReceiptId = fallbackClaimed.receiptId;
 
     // Max ONE fallback attempt, to the first equivalence-passing candidate.
     let fallbackKey: string;
@@ -412,6 +643,7 @@ export function createCaioModelProxy(
         receiptId,
         primaryUpstream,
         true,
+        fallbackReceiptId,
       );
     }
 
@@ -419,6 +651,7 @@ export function createCaioModelProxy(
     return toResult(fallbackOutcome, receiptId, describeUpstream(candidate), {
       attempted: true,
       succeeded: fallbackOutcome.status === "ok",
+      receiptId: fallbackReceiptId,
     });
   }
 

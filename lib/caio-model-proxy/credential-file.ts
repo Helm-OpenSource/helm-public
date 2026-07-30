@@ -2,13 +2,27 @@
 //
 // Credentials live as one file per credentialRef inside a single fixed
 // directory owned by the gateway process uid. The loader is fail-closed:
-// strict ref grammar (no path escape), O_NOFOLLOW open (symlink attack),
-// fstat on the open fd (no TOCTOU) checking regular file, owner uid, exact
-// 0600 mode, nlink === 1 (hardlink attack), and an 8 KiB size cap. Content is
-// returned trimmed, held in memory only, and never logged.
+// strict ref grammar (no path escape), a validated allowedDir (absolute, no
+// symlinked component at ANY depth, real directory, uid-owned, no group/other
+// bits), O_NOFOLLOW open (symlink attack), fstat on the open fd (no TOCTOU)
+// checking regular file, owner uid, exact 0600 mode, nlink === 1 (hardlink
+// attack), and an 8 KiB size cap. Content is returned trimmed, held in memory
+// only, and never logged.
+//
+// Error hygiene: every failure — check failures AND filesystem operation
+// failures (open/write/fsync/rename/unlink) — surfaces as a CaioCredentialError
+// whose message is `code:detail` only. No absolute path, no errno text, and no
+// file content ever appears in a thrown message.
 
 import { constants as fsConstants } from "node:fs";
-import { open, rename, rm, type FileHandle } from "node:fs/promises";
+import {
+  lstat,
+  open,
+  realpath,
+  rename,
+  rm,
+  type FileHandle,
+} from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 
@@ -37,6 +51,10 @@ export const CAIO_CREDENTIAL_ERROR_CODES = [
   "credential_symlink_rejected",
   "credential_hardlink_rejected",
   "credential_ref_invalid",
+  // Filesystem OPERATION failures are typed too, so a raw Node errno error
+  // (which embeds the absolute path in its message) can never escape.
+  "credential_write_failed",
+  "credential_rename_failed",
 ] as const;
 
 export type CaioCredentialErrorCode =
@@ -62,11 +80,106 @@ function assertValidRef(credentialRef: string): void {
   }
 }
 
-function assertValidAllowedDir(allowedDir: string): void {
+/**
+ * Validate the credential directory itself.
+ *
+ * O_NOFOLLOW protects only the FINAL path component, so a symlinked
+ * `allowedDir` (or any symlinked ancestor) would silently redirect every
+ * join into an attacker-controlled directory: a 0600 file owned by the
+ * gateway uid placed there passes every fd check and loadCredential would
+ * return attacker-chosen upstream credential material.
+ *
+ * The walk mirrors tools/caio-admin/active-release.ts (lstat every component,
+ * refuse any symlink, then a realpath belt-and-suspenders check) and adds the
+ * checks that matter for a secret directory: it must be a directory owned by
+ * this process uid with no group/other access bits.
+ *
+ * Consequence for callers: `allowedDir` must be a fully resolved path. On
+ * macOS `os.tmpdir()` is reached through the /var -> /private/var symlink and
+ * is therefore rejected until realpath'd — deliberately, since we cannot tell
+ * an operator's symlink from an attacker's.
+ */
+async function assertSafeAllowedDir(allowedDir: string): Promise<void> {
   if (!path.isAbsolute(allowedDir)) {
     throw new CaioCredentialError(
       "credential_ref_invalid",
       "allowed_dir_not_absolute",
+    );
+  }
+  const resolved = path.resolve(allowedDir);
+  const segments = resolved.split(path.sep).filter((s) => s.length > 0);
+
+  let cursor: string = path.sep;
+  for (const segment of segments) {
+    cursor = path.join(cursor, segment);
+    let st;
+    try {
+      st = await lstat(cursor);
+    } catch (error) {
+      if (errnoCode(error) === "ENOENT") {
+        throw new CaioCredentialError(
+          "credential_not_found",
+          "allowed_dir_missing",
+        );
+      }
+      throw new CaioCredentialError(
+        "credential_unsafe_mode",
+        "allowed_dir_stat_failed",
+      );
+    }
+    if (st.isSymbolicLink()) {
+      throw new CaioCredentialError(
+        "credential_symlink_rejected",
+        "allowed_dir_symlink",
+      );
+    }
+  }
+
+  let finalStat;
+  try {
+    finalStat = await lstat(resolved);
+  } catch {
+    throw new CaioCredentialError(
+      "credential_unsafe_mode",
+      "allowed_dir_stat_failed",
+    );
+  }
+  if (!finalStat.isDirectory()) {
+    throw new CaioCredentialError(
+      "credential_unsafe_mode",
+      "allowed_dir_not_a_directory",
+    );
+  }
+  if ((finalStat.mode & 0o077) !== 0) {
+    throw new CaioCredentialError(
+      "credential_unsafe_mode",
+      "allowed_dir_mode_bits",
+    );
+  }
+  if (
+    typeof process.getuid === "function" &&
+    finalStat.uid !== process.getuid()
+  ) {
+    throw new CaioCredentialError(
+      "credential_unsafe_mode",
+      "allowed_dir_uid_mismatch",
+    );
+  }
+
+  // Belt-and-suspenders: no component may resolve elsewhere.
+  let real: string;
+  try {
+    real = await realpath(resolved);
+  } catch {
+    throw new CaioCredentialError(
+      "credential_unsafe_mode",
+      "allowed_dir_realpath_failed",
+    );
+  }
+  if (real !== resolved) {
+    throw new CaioCredentialError(
+      "credential_symlink_rejected",
+      "allowed_dir_symlink",
     );
   }
 }
@@ -145,30 +258,65 @@ export async function loadCredential(input: {
   allowedDir: string;
   credentialRef: string;
 }): Promise<string> {
-  assertValidAllowedDir(input.allowedDir);
+  await assertSafeAllowedDir(input.allowedDir);
   assertValidRef(input.credentialRef);
   // Ref grammar forbids dots and slashes, so join cannot escape allowedDir.
   const filePath = path.join(input.allowedDir, input.credentialRef);
   return readCredentialFileSafely(filePath);
 }
 
+/**
+ * Write a 0600 secret file, mapping EVERY filesystem failure onto a typed
+ * path-free error. A raw Node errno error would otherwise carry the absolute
+ * path (e.g. "EACCES: permission denied, open '/etc/caio/creds/openai.next.9f2c'")
+ * into whatever logs it.
+ */
 async function writeSecretFile(
   filePath: string,
   content: string,
 ): Promise<void> {
-  const handle = await open(
-    filePath,
-    fsConstants.O_WRONLY |
-      fsConstants.O_CREAT |
-      fsConstants.O_EXCL |
-      fsConstants.O_NOFOLLOW,
-    0o600,
-  );
+  let handle: FileHandle;
+  try {
+    handle = await open(
+      filePath,
+      fsConstants.O_WRONLY |
+        fsConstants.O_CREAT |
+        fsConstants.O_EXCL |
+        fsConstants.O_NOFOLLOW,
+      0o600,
+    );
+  } catch (error) {
+    const code = errnoCode(error);
+    if (code === "ELOOP" || code === "EMLINK") {
+      throw new CaioCredentialError(
+        "credential_symlink_rejected",
+        "symlink",
+      );
+    }
+    throw new CaioCredentialError("credential_write_failed", "open_failed");
+  }
   try {
     await handle.writeFile(content, "utf8");
     await handle.sync();
+  } catch {
+    throw new CaioCredentialError("credential_write_failed", "write_failed");
   } finally {
-    await handle.close();
+    try {
+      await handle.close();
+    } catch {
+      // A close failure cannot be reported without risking the path in the
+      // message, and the durability-relevant failure already threw above.
+    }
+  }
+}
+
+/** Remove a file, never letting a raw fs error escape the cleanup path. */
+async function removeQuietly(filePath: string): Promise<void> {
+  try {
+    await rm(filePath, { force: true });
+  } catch {
+    // Best effort: cleanup failure must not replace the original typed error
+    // and must not surface a path.
   }
 }
 
@@ -207,7 +355,7 @@ export async function rotateCredentialFile(input: {
   newContent: string;
   retainRollback: boolean;
 }): Promise<CaioCredentialRotationResult> {
-  assertValidAllowedDir(input.allowedDir);
+  await assertSafeAllowedDir(input.allowedDir);
   assertValidRef(input.credentialRef);
   const trimmed = input.newContent.trim();
   if (trimmed.length === 0) {
@@ -227,8 +375,12 @@ export async function rotateCredentialFile(input: {
   const tmpName = `${input.credentialRef}.next.${randomBytes(8).toString("hex")}`;
   const tmpPath = path.join(input.allowedDir, tmpName);
 
-  await writeSecretFile(tmpPath, trimmed);
+  // The temp write lives INSIDE the try so an open-succeeds/write-fails
+  // sequence (ENOSPC, EIO) cannot leave `${ref}.next.<hex>` on disk holding
+  // partial new secret material with no cleanup path.
   try {
+    await writeSecretFile(tmpPath, trimmed);
+
     // Validate through the exact same fail-closed loader checks.
     const validated = await readCredentialFileSafely(tmpPath);
     if (validated !== trimmed) {
@@ -261,17 +413,29 @@ export async function rotateCredentialFile(input: {
         input.allowedDir,
         `${input.credentialRef}.rollback`,
       );
-      await rm(rollbackPath, { force: true });
+      await removeQuietly(rollbackPath);
       await writeSecretFile(rollbackPath, previousContent);
       rollbackRetained = true;
     }
 
-    await rename(tmpPath, targetPath);
+    try {
+      await rename(tmpPath, targetPath);
+    } catch {
+      throw new CaioCredentialError(
+        "credential_rename_failed",
+        "rename_failed",
+      );
+    }
     await fsyncDirBestEffort(input.allowedDir);
     return { rotated: true, rollbackRetained };
   } catch (error) {
-    await rm(tmpPath, { force: true });
-    throw error;
+    await removeQuietly(tmpPath);
+    // Only typed, path-free errors may leave this function.
+    if (error instanceof CaioCredentialError) throw error;
+    throw new CaioCredentialError(
+      "credential_write_failed",
+      "rotation_failed",
+    );
   }
 }
 
@@ -284,7 +448,7 @@ export async function completeRotation(input: {
   allowedDir: string;
   credentialRef: string;
 }): Promise<CaioCredentialRotationCompletion> {
-  assertValidAllowedDir(input.allowedDir);
+  await assertSafeAllowedDir(input.allowedDir);
   assertValidRef(input.credentialRef);
   const rollbackPath = path.join(
     input.allowedDir,

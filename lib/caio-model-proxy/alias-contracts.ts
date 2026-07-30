@@ -135,6 +135,11 @@ export function listModelsForGrant(input: {
 
 // Governed dimensions that must match EXACTLY for a fallback to be allowed.
 // providerKey inclusion makes cross-provider fallback structurally impossible.
+// policyVersion inclusion makes it impossible for a fallback to execute under a
+// different policy than the one the request's audit receipt names: the receipt
+// records the primary binding's policyVersion, so a candidate on another policy
+// version would make the durable audit record describe a policy that did not
+// govern the dispatch.
 export const CAIO_FALLBACK_EQUIVALENCE_DIMENSIONS = [
   "providerKey",
   "protocol",
@@ -142,6 +147,7 @@ export const CAIO_FALLBACK_EQUIVALENCE_DIMENSIONS = [
   "dataRetentionPolicyKey",
   "trainingUsePolicyKey",
   "dataAuthorizationKey",
+  "policyVersion",
 ] as const;
 
 export type CaioFallbackEquivalenceDimension =

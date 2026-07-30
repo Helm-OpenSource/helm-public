@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { randomBytes } from "node:crypto";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   CaioAuditQueueFullError,
@@ -10,7 +15,11 @@ import {
   createCaioAuditGate,
   type CaioAuditPrimaryStorePort,
 } from "@/lib/caio-audit-state/audit-gate.service";
-import type { CaioEmergencyQueuePort } from "@/lib/caio-audit-state/emergency-queue";
+import {
+  createCaioEmergencyQueue,
+  type CaioEmergencyQueuePort,
+} from "@/lib/caio-audit-state/emergency-queue";
+import { caioReplayMarkerRequestId } from "@/lib/caio-audit-state/receipt-linkage";
 
 function receipt(requestId: string, overrides: Partial<CaioMinimalAuditReceipt> = {}): CaioMinimalAuditReceipt {
   return {
@@ -322,6 +331,371 @@ describe("caio audit gate", () => {
     release?.();
     expect((await firstClaim).allowed).toBe(true);
     await secondRecovery;
+  });
+
+  // F2 regression: persistToPrimary refused only outcome === "conflict" and
+  // returned allowed:true for everything else, so an injected store reporting
+  // an unknown outcome (or success without a receiptId) allowed dispatch with
+  // nothing written anywhere.
+  it("F2: refuses when the primary store reports an outcome outside the contract", async () => {
+    const { queue, entries } = createInMemoryQueue();
+    const gate = createCaioAuditGate({
+      primaryStore: {
+        persist: async () =>
+          ({ outcome: "skipped_noop" }) as unknown as Awaited<
+            ReturnType<CaioAuditPrimaryStorePort["persist"]>
+          >,
+      },
+      emergencyQueue: queue,
+    });
+
+    const result = await gate.claimDispatch(receipt("req-bogus"));
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.errorCode).toBe("caio_audit_unavailable");
+      expect(result.httpStatus).toBe(503);
+      expect(result.retryAfterSeconds).toBeGreaterThan(0);
+    }
+    // A store that violates its contract must not be masked by the queue:
+    // nothing was written, so nothing may dispatch.
+    expect(entries.size).toBe(0);
+    expect(gate.getState()).toBe("AUDIT_UNAVAILABLE");
+    expect(await gate.getReadiness()).toBe("unavailable");
+  });
+
+  it("F2: refuses a store success that carries no receiptId", async () => {
+    const { queue, entries } = createInMemoryQueue();
+    const gate = createCaioAuditGate({
+      primaryStore: {
+        persist: async () =>
+          ({ outcome: "persisted" }) as unknown as Awaited<
+            ReturnType<CaioAuditPrimaryStorePort["persist"]>
+          >,
+      },
+      emergencyQueue: queue,
+    });
+
+    const result = await gate.claimDispatch(receipt("req-no-id"));
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.httpStatus).toBe(503);
+    }
+    expect(entries.size).toBe(0);
+  });
+
+  it("F2: refuses an empty-string receiptId reported as success", async () => {
+    const { queue } = createInMemoryQueue();
+    const gate = createCaioAuditGate({
+      primaryStore: {
+        persist: async () => ({ outcome: "persisted", receiptId: "" }) as never,
+      },
+      emergencyQueue: queue,
+    });
+    expect((await gate.claimDispatch(receipt("req-empty-id"))).allowed).toBe(
+      false,
+    );
+  });
+
+  // F1 regression at gate level, over the real encrypted file queue: two
+  // in-flight claims sharing a client-supplied requestId with different bodies
+  // must never produce more allowed dispatches than durable receipts.
+  describe("F1: concurrent claims over the real emergency queue", () => {
+    let sandbox = "";
+
+    beforeEach(async () => {
+      sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "caio-gate-race-"));
+    });
+
+    afterEach(async () => {
+      await fs.rm(sandbox, { recursive: true, force: true });
+    });
+
+    it("never allows more dispatches than durable receipts", async () => {
+      const key = randomBytes(32);
+      const queue = createCaioEmergencyQueue({
+        rootDir: path.join(sandbox, "queue"),
+        keyProvider: async () => key,
+      });
+      const gate = createCaioAuditGate({
+        primaryStore: {
+          async persist() {
+            throw new Error("primary down");
+          },
+        },
+        emergencyQueue: queue,
+      });
+
+      const [a, b] = await Promise.all([
+        gate.claimDispatch(receipt("req-shared")),
+        gate.claimDispatch(
+          receipt("req-shared", { inputHash: `sha256:${"f".repeat(64)}` }),
+        ),
+      ]);
+
+      const allowed = [a, b].filter((result) => result.allowed);
+      const durable = await queue.list();
+      expect(allowed).toHaveLength(1);
+      expect(durable).toHaveLength(1);
+      expect(allowed.length).toBeLessThanOrEqual(durable.length);
+      const refused = [a, b].find((result) => !result.allowed);
+      expect(refused).toBeDefined();
+      if (refused && !refused.allowed) {
+        expect(["receipt_conflict", "audit_unavailable"]).toContain(
+          refused.reason,
+        );
+      }
+    });
+
+    it("refuses a divergent receipt for an already queued requestId with 409", async () => {
+      const key = randomBytes(32);
+      const queue = createCaioEmergencyQueue({
+        rootDir: path.join(sandbox, "queue-seq"),
+        keyProvider: async () => key,
+      });
+      const gate = createCaioAuditGate({
+        primaryStore: {
+          async persist() {
+            throw new Error("primary down");
+          },
+        },
+        emergencyQueue: queue,
+      });
+
+      expect((await gate.claimDispatch(receipt("req-seq"))).allowed).toBe(true);
+      const conflict = await gate.claimDispatch(
+        receipt("req-seq", { inputHash: `sha256:${"9".repeat(64)}` }),
+      );
+      expect(conflict.allowed).toBe(false);
+      if (!conflict.allowed) {
+        expect(conflict.reason).toBe("receipt_conflict");
+        expect(conflict.httpStatus).toBe(409);
+        // A conflict is never retryable: the field is defined, never undefined.
+        expect(conflict.retryAfterSeconds).toBeNull();
+      }
+      // The queue is healthy: a content conflict must not claim the audit
+      // subsystem is unavailable.
+      expect(gate.getState()).toBe("PRIMARY_DEGRADED");
+      expect(await queue.size()).toBe(1);
+    });
+  });
+
+  // F6 regression: an identical replay returned allowed:true with no new
+  // durable write and no attempt counter, so N dispatches were invisible.
+  it("F6: records a linked, bounded replay marker for every repeat dispatch", async () => {
+    const { store, rows } = createInMemoryPrimaryStore();
+    const { queue } = createInMemoryQueue();
+    const gate = createCaioAuditGate({
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
+
+    const first = await gate.claimDispatch(receipt("req-1"));
+    expect(first).toMatchObject({ allowed: true, dispatchAttempt: 1 });
+    expect(rows.size).toBe(1);
+
+    const second = await gate.claimDispatch(receipt("req-1"));
+    expect(second).toMatchObject({ allowed: true, dispatchAttempt: 2 });
+    if (second.allowed && first.allowed) {
+      // Idempotent: the caller still sees the original receipt id.
+      expect(second.receiptId).toBe(first.receiptId);
+    }
+    // ...but the dispatch is durably recorded as a linked marker row.
+    expect(rows.size).toBe(2);
+    expect(
+      rows.has(`ws-gate:${caioReplayMarkerRequestId("req-1", 2)}`),
+    ).toBe(true);
+
+    const third = await gate.claimDispatch(receipt("req-1"));
+    expect(third).toMatchObject({ allowed: true, dispatchAttempt: 3 });
+    expect(rows.size).toBe(3);
+  });
+
+  it("F6: refuses once the per-receipt replay cap is exhausted", async () => {
+    const { store, rows } = createInMemoryPrimaryStore();
+    const { queue } = createInMemoryQueue();
+    const gate = createCaioAuditGate({
+      primaryStore: store,
+      emergencyQueue: queue,
+      replayDispatchCap: 2,
+    });
+
+    expect((await gate.claimDispatch(receipt("req-1"))).allowed).toBe(true);
+    expect((await gate.claimDispatch(receipt("req-1"))).allowed).toBe(true);
+    expect((await gate.claimDispatch(receipt("req-1"))).allowed).toBe(true);
+    const overCap = await gate.claimDispatch(receipt("req-1"));
+    expect(overCap.allowed).toBe(false);
+    if (!overCap.allowed) {
+      expect(overCap.reason).toBe("replay_limit_exceeded");
+      expect(overCap.errorCode).toBe("caio_audit_replay_limit_exceeded");
+      expect(overCap.httpStatus).toBe(429);
+    }
+    // 1 original + 2 permitted replays, nothing more.
+    expect(rows.size).toBe(3);
+  });
+
+  it("F6: rejects a caller-minted replay marker requestId", async () => {
+    const { store, rows } = createInMemoryPrimaryStore();
+    const { queue } = createInMemoryQueue();
+    const gate = createCaioAuditGate({
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
+    await expect(
+      gate.claimDispatch(receipt(caioReplayMarkerRequestId("req-1", 2))),
+    ).rejects.toThrow();
+    expect(rows.size).toBe(0);
+  });
+
+  // F7 regression: recover() set NORMAL (readiness "ready") whenever the queue
+  // happened to be empty, even while the primary store was still down.
+  it("F7: does not report ready after recover() when the primary is still down", async () => {
+    const { store } = createInMemoryPrimaryStore({ failWrites: () => true });
+    const { queue } = createInMemoryQueue();
+    const gate = createCaioAuditGate({
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
+
+    // One claim degrades to the queue; the operator then drains it by hand.
+    await gate.claimDispatch(receipt("req-1"));
+    await queue.remove(computeEmergencyEntryId(receipt("req-1")));
+    expect(await queue.size()).toBe(0);
+
+    const outcome = await gate.recover();
+    expect(outcome).toEqual({ replayed: 0, remaining: 0, conflicts: 0 });
+    expect(gate.getState()).not.toBe("NORMAL");
+    expect(await gate.getReadiness()).not.toBe("ready");
+  });
+
+  it("F7: NORMAL requires a healthy primary probe, not merely an empty queue", async () => {
+    const { store } = createInMemoryPrimaryStore({ failWrites: () => true });
+    const { queue } = createInMemoryQueue();
+    let primaryHealthy = false;
+    const gate = createCaioAuditGate({
+      primaryStore: store,
+      emergencyQueue: queue,
+      primaryHealthProbe: async () => primaryHealthy,
+    });
+
+    expect(await gate.recover()).toMatchObject({ remaining: 0 });
+    expect(gate.getState()).not.toBe("NORMAL");
+    expect(await gate.getReadiness()).toBe("degraded");
+
+    primaryHealthy = true;
+    expect(await gate.recover()).toMatchObject({ remaining: 0 });
+    expect(gate.getState()).toBe("NORMAL");
+    expect(await gate.getReadiness()).toBe("ready");
+  });
+
+  it("F7: a NORMAL gate reports degraded while the primary probe fails", async () => {
+    const { store } = createInMemoryPrimaryStore();
+    const { queue } = createInMemoryQueue();
+    let primaryHealthy = true;
+    const gate = createCaioAuditGate({
+      primaryStore: store,
+      emergencyQueue: queue,
+      primaryHealthProbe: async () => primaryHealthy,
+    });
+    expect(await gate.getReadiness()).toBe("ready");
+    primaryHealthy = false;
+    expect(gate.getState()).toBe("NORMAL");
+    expect(await gate.getReadiness()).toBe("degraded");
+  });
+
+  // F8 regression: the first claim that fell back to the queue during a replay
+  // set state = PRIMARY_DEGRADED, which removed the RECOVERING admission cap
+  // for the rest of the replay.
+  it("F8: the recovery concurrency cap survives a queue fallback during replay", async () => {
+    const { queue } = createInMemoryQueue();
+    const replayed = receipt("req-queued");
+    await queue.append({
+      entryId: computeEmergencyEntryId(replayed),
+      receipt: replayed,
+    });
+
+    let releaseReplay: (() => void) | undefined;
+    const replayBlocked = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+    const gate = createCaioAuditGate({
+      primaryStore: {
+        async persist({ receipt: candidate }) {
+          if (candidate.requestId === "req-queued") {
+            await replayBlocked;
+            return { outcome: "persisted", receiptId: "row-queued" };
+          }
+          // Every NEW claim fails against the primary and falls to the queue.
+          throw new Error("primary down for new claims");
+        },
+      },
+      emergencyQueue: queue,
+      recoveryConcurrentClaimCap: 1,
+    });
+
+    const recovery = gate.recover();
+    expect(gate.getState()).toBe("RECOVERING");
+
+    // This claim degrades to the queue mid-replay. It must NOT clear the cap.
+    const degraded = await gate.claimDispatch(receipt("req-d1"));
+    expect(degraded.allowed).toBe(true);
+
+    const burst = await Promise.all(
+      ["req-d2", "req-d3", "req-d4", "req-d5", "req-d6"].map((requestId) =>
+        gate.claimDispatch(receipt(requestId)),
+      ),
+    );
+    const admitted = burst.filter((result) => result.allowed);
+    expect(admitted).toHaveLength(1);
+    for (const refused of burst.filter((result) => !result.allowed)) {
+      if (!refused.allowed) {
+        expect(refused.reason).toBe("recovery_rate_limited");
+      }
+    }
+
+    releaseReplay?.();
+    await recovery;
+  });
+
+  it("F8: the cap stays armed after an incomplete recovery until the primary is confirmed healthy", async () => {
+    const { queue } = createInMemoryQueue();
+    const entry = receipt("req-stuck");
+    await queue.append({
+      entryId: computeEmergencyEntryId(entry),
+      receipt: entry,
+    });
+    let primaryDown = true;
+    const gate = createCaioAuditGate({
+      primaryStore: {
+        async persist({ receipt: candidate }) {
+          if (primaryDown) throw new Error("primary down");
+          return { outcome: "persisted", receiptId: `row-${candidate.requestId}` };
+        },
+      },
+      emergencyQueue: queue,
+      recoveryConcurrentClaimCap: 1,
+    });
+
+    await gate.recover();
+    expect(gate.getState()).not.toBe("NORMAL");
+
+    // Replay never completed: concurrent admission is still capped.
+    primaryDown = false;
+    const burst = await Promise.all([
+      gate.claimDispatch(receipt("req-p1")),
+      gate.claimDispatch(receipt("req-p2")),
+      gate.claimDispatch(receipt("req-p3")),
+    ]);
+    expect(burst.filter((result) => result.allowed)).toHaveLength(1);
+
+    // A completed replay against a healthy primary disarms the cap.
+    expect(await gate.recover()).toMatchObject({ remaining: 0 });
+    expect(gate.getState()).toBe("NORMAL");
+    const after = await Promise.all([
+      gate.claimDispatch(receipt("req-q1")),
+      gate.claimDispatch(receipt("req-q2")),
+      gate.claimDispatch(receipt("req-q3")),
+    ]);
+    expect(after.every((result) => result.allowed)).toBe(true);
   });
 
   it("keeps conflicting queue entries as evidence during recovery", async () => {

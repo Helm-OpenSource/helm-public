@@ -1,15 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  CAIO_AUDIT_CONFLICT_ERROR_CODE,
+  CAIO_AUDIT_REPLAY_LIMIT_ERROR_CODE,
+  CAIO_AUDIT_UNAVAILABLE_ERROR_CODE,
+} from "@/lib/caio-audit-state/audit-state-contracts";
+import {
+  CAIO_CANONICAL_AUDIT_CLAIM_FIELD_MAP,
+  caioCanonicalAuditClaimSchema,
+  type CaioCanonicalAuditClaim,
+  type CaioCanonicalAuditGateOutcome,
+} from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
+import {
+  caioFallbackMarkerRequestId,
+  caioRouteFingerprint,
+} from "@/lib/caio-audit-state/receipt-linkage";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 
 import type {
   CaioModelAliasBinding,
   CaioModelAliasFallbackCandidate,
 } from "./alias-contracts";
-import {
-  createCaioModelProxy,
-  type CaioDispatchClaim,
-} from "./proxy-engine";
+import { createCaioModelProxy } from "./proxy-engine";
+import { createCaioResponsesUpstreamPort } from "./upstream/responses-client";
 import type {
   CaioProxyUpstreamClientPort,
   CaioProxyUpstreamInvocation,
@@ -26,6 +39,47 @@ const UPSTREAM_500: CaioUpstreamInvokeResult = {
   upstreamStatus: 500,
   retryAfterSeconds: null,
 };
+
+/**
+ * The canonical allowed outcome, in the vocabulary published by
+ * caio-audit-state. The engine consumes this union verbatim — it no longer
+ * declares a third `{allowed, state}` audit decision of its own.
+ */
+const ALLOWED_OUTCOME: CaioCanonicalAuditGateOutcome = Object.freeze({
+  status: "allowed",
+  receiptId: "receipt-1",
+  persistedVia: "primary",
+  dispatchAttempt: 1,
+});
+
+/** A canonical refusal, exactly as createCaioCanonicalAuditGatePort emits it. */
+function refusal(
+  status: "audit_unavailable" | "receipt_conflict" | "replay_limit_exceeded",
+  overrides: Partial<{
+    errorCode: string;
+    httpStatus: number;
+    retryAfterSeconds: number | null;
+  }> = {},
+): CaioCanonicalAuditGateOutcome {
+  const defaults = {
+    audit_unavailable: {
+      errorCode: CAIO_AUDIT_UNAVAILABLE_ERROR_CODE,
+      httpStatus: 503,
+      retryAfterSeconds: 30 as number | null,
+    },
+    receipt_conflict: {
+      errorCode: CAIO_AUDIT_CONFLICT_ERROR_CODE,
+      httpStatus: 409,
+      retryAfterSeconds: null as number | null,
+    },
+    replay_limit_exceeded: {
+      errorCode: CAIO_AUDIT_REPLAY_LIMIT_ERROR_CODE,
+      httpStatus: 429,
+      retryAfterSeconds: null as number | null,
+    },
+  }[status];
+  return Object.freeze({ status, ...defaults, ...overrides });
+}
 
 function makeCandidate(
   overrides: Partial<CaioModelAliasFallbackCandidate> = {},
@@ -116,13 +170,21 @@ function makeHarness(input: {
     chatCompletions: { invoke: chatInvoke, invokeStreaming: chatStream },
   };
 
-  const claimDispatch = vi.fn(async (_claim: CaioDispatchClaim) => {
-    events.push("audit");
-    return { allowed: true as const, receiptId: "receipt-1" };
-  });
+  const claimDispatch = vi.fn(
+    async (
+      _claim: CaioCanonicalAuditClaim,
+    ): Promise<CaioCanonicalAuditGateOutcome> => {
+      events.push("audit");
+      return ALLOWED_OUTCOME;
+    },
+  );
   const credentialLoad = vi.fn(
-    async ({ credentialRef }: { credentialRef: string }) =>
-      `loaded-secret-for-${credentialRef}`,
+    async ({ credentialRef }: { credentialRef: string }) => {
+      // Ordering probe: the audit claim must precede every credential load,
+      // on the primary path and on the fallback path.
+      events.push("credential");
+      return `loaded-secret-for-${credentialRef}`;
+    },
   );
 
   const proxy = createCaioModelProxy({
@@ -224,19 +286,25 @@ describe("alias resolution", () => {
 });
 
 describe("audit gate ordering", () => {
-  it("claims the audit dispatch BEFORE any upstream call", async () => {
+  it("claims the audit dispatch BEFORE the credential load and BEFORE any upstream call", async () => {
     const h = makeHarness();
     await h.proxy.execute(baseExecuteInput());
-    expect(h.events).toEqual(["audit", "upstream"]);
+    expect(h.events).toEqual(["audit", "credential", "upstream"]);
+  });
+
+  it("claims the audit dispatch BEFORE the credential loader is invoked (spy order)", async () => {
+    const h = makeHarness();
+    await h.proxy.execute(baseExecuteInput());
+    const claimOrder = h.claimDispatch.mock.invocationCallOrder[0];
+    const credentialOrder = h.credentialLoad.mock.invocationCallOrder[0];
+    const upstreamOrder = h.responsesInvoke.mock.invocationCallOrder[0];
+    expect(claimOrder).toBeLessThan(credentialOrder);
+    expect(credentialOrder).toBeLessThan(upstreamOrder);
   });
 
   it("returns 503 audit_unavailable and never touches upstream when the claim is denied", async () => {
     const h = makeHarness();
-    h.claimDispatch.mockResolvedValueOnce({
-      allowed: false,
-      state: "audit_unavailable",
-      retryAfterSeconds: 30,
-    } as never);
+    h.claimDispatch.mockResolvedValueOnce(refusal("audit_unavailable"));
     const result = await h.proxy.execute(baseExecuteInput());
     expect(result).toMatchObject({
       status: "audit_unavailable",
@@ -278,6 +346,164 @@ describe("audit gate ordering", () => {
     expect(serialized).not.toContain(SECRET_PROMPT);
     expect(serialized).not.toContain("loaded-secret-for");
     expect(serialized).not.toContain("provider-a-key");
+  });
+});
+
+// The engine consumes the ONE canonical audit-gate port published by
+// caio-audit-state. Before this it declared a third port with an
+// output-incompatible `{allowed, state}` decision, so the delegation chain
+// gateway -> proxy -> audit gate was not type-connected at all.
+describe("canonical audit gate port consumption", () => {
+  it("issues a claim that satisfies the canonical claim schema and field map", async () => {
+    const h = makeHarness();
+    await h.proxy.execute(baseExecuteInput());
+    const claim = h.claimDispatch.mock.calls[0][0];
+    // Strict canonical schema: an extra key (prompt, body, route, credential)
+    // would be refused here, not silently dropped at the storage boundary.
+    expect(() => caioCanonicalAuditClaimSchema.parse(claim)).not.toThrow();
+    // Exactly the six canonical fields, keyed by the published field map.
+    expect(Object.keys(claim).sort()).toEqual(
+      Object.keys(CAIO_CANONICAL_AUDIT_CLAIM_FIELD_MAP).sort(),
+    );
+  });
+
+  it("refuses fail-closed when the gate reports allowed with no receipt id", async () => {
+    const h = makeHarness();
+    // The port is an injectable extension point: a JS implementation can
+    // answer "allowed" while proving no durable write happened.
+    h.claimDispatch.mockResolvedValueOnce({
+      status: "allowed",
+      receiptId: "",
+      persistedVia: "primary",
+      dispatchAttempt: 1,
+    });
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result).toMatchObject({
+      status: "audit_unavailable",
+      httpStatus: 503,
+      receiptId: null,
+    });
+    expect(h.credentialLoad).not.toHaveBeenCalled();
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+
+  it("refuses fail-closed when the gate answers outside the canonical union", async () => {
+    const h = makeHarness();
+    h.claimDispatch.mockResolvedValueOnce(
+      undefined as unknown as CaioCanonicalAuditGateOutcome,
+    );
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result.status).toBe("audit_unavailable");
+    expect(result.httpStatus).toBe(503);
+    expect(h.credentialLoad).not.toHaveBeenCalled();
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+
+  it("propagates a thrown gate error without loading a credential or contacting upstream", async () => {
+    const h = makeHarness();
+    h.claimDispatch.mockRejectedValueOnce(
+      new Error("caio_audit_reserved_request_id"),
+    );
+    await expect(h.proxy.execute(baseExecuteInput())).rejects.toThrow(
+      /caio_audit_reserved_request_id/,
+    );
+    expect(h.credentialLoad).not.toHaveBeenCalled();
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+});
+
+// The three refusal statuses must leave execute() DISTINCTLY so a transport can
+// map 503 / 409 / 429. Collapsing receipt_conflict or replay_limit_exceeded into
+// audit_unavailable told a client to retry a request that can never succeed.
+describe("audit refusal propagation", () => {
+  it("propagates audit_unavailable as 503 carrying the gate's retry advice", async () => {
+    const h = makeHarness();
+    h.claimDispatch.mockResolvedValueOnce(
+      refusal("audit_unavailable", { retryAfterSeconds: 12 }),
+    );
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result.status).toBe("audit_unavailable");
+    expect(result.httpStatus).toBe(503);
+    expect(result.reasonCode).toBe(CAIO_AUDIT_UNAVAILABLE_ERROR_CODE);
+    expect(result.retryAfterSeconds).toBe(12);
+    expect(result.auditRefusal?.status).toBe("audit_unavailable");
+  });
+
+  it("propagates receipt_conflict as a distinct 409 that is never retryable", async () => {
+    const h = makeHarness();
+    h.claimDispatch.mockResolvedValueOnce(refusal("receipt_conflict"));
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result.status).toBe("receipt_conflict");
+    expect(result.httpStatus).toBe(409);
+    expect(result.reasonCode).toBe(CAIO_AUDIT_CONFLICT_ERROR_CODE);
+    expect(result.retryAfterSeconds).toBeNull();
+    expect(result.retryAfterSeconds).not.toBeUndefined();
+    expect(result.auditRefusal?.status).toBe("receipt_conflict");
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+    expect(h.credentialLoad).not.toHaveBeenCalled();
+  });
+
+  it("propagates replay_limit_exceeded as a distinct 429", async () => {
+    const h = makeHarness();
+    h.claimDispatch.mockResolvedValueOnce(refusal("replay_limit_exceeded"));
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result.status).toBe("replay_limit_exceeded");
+    expect(result.httpStatus).toBe(429);
+    expect(result.reasonCode).toBe(CAIO_AUDIT_REPLAY_LIMIT_ERROR_CODE);
+    expect(result.retryAfterSeconds).toBeNull();
+    expect(result.auditRefusal?.status).toBe("replay_limit_exceeded");
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+
+  it("keeps the three refusals distinguishable from one another", async () => {
+    const h = makeHarness();
+    const statuses: string[] = [];
+    for (const status of [
+      "audit_unavailable",
+      "receipt_conflict",
+      "replay_limit_exceeded",
+    ] as const) {
+      h.claimDispatch.mockResolvedValueOnce(refusal(status));
+      statuses.push((await h.proxy.execute(baseExecuteInput())).status);
+    }
+    expect(statuses).toEqual([
+      "audit_unavailable",
+      "receipt_conflict",
+      "replay_limit_exceeded",
+    ]);
+    expect(new Set(statuses).size).toBe(3);
+  });
+
+  it("derives the HTTP status from the refusal discriminant, never from the port's number", async () => {
+    const h = makeHarness();
+    // A JS gate implementation reporting httpStatus 200 on a refusal must not
+    // be able to turn a refusal into a success-shaped result.
+    h.claimDispatch.mockResolvedValueOnce(
+      refusal("receipt_conflict", { httpStatus: 200 }),
+    );
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result.status).toBe("receipt_conflict");
+    expect(result.httpStatus).toBe(409);
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+
+  it("never emits an undefined retryAfterSeconds when the gate omits it", async () => {
+    const h = makeHarness();
+    h.claimDispatch.mockResolvedValueOnce({
+      status: "audit_unavailable",
+      errorCode: CAIO_AUDIT_UNAVAILABLE_ERROR_CODE,
+      httpStatus: 503,
+    } as unknown as CaioCanonicalAuditGateOutcome);
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result.status).toBe("audit_unavailable");
+    expect(result.retryAfterSeconds).toBeNull();
+  });
+
+  it("carries no audit refusal on a successful dispatch", async () => {
+    const h = makeHarness();
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result.status).toBe("ok");
+    expect(result.auditRefusal).toBeNull();
   });
 });
 
@@ -491,7 +717,7 @@ describe("fallback", () => {
     expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
   });
 
-  it("NEVER falls back after streaming has forwarded bytes", async () => {
+  it("NEVER falls back after streaming has forwarded bytes (incomplete_stream)", async () => {
     const h = makeHarness({
       bindings: [
         makeBinding({ fallbackCandidates: [makeCandidate()] }),
@@ -515,6 +741,166 @@ describe("fallback", () => {
     });
     expect(h.responsesStream).toHaveBeenCalledTimes(1);
     expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+
+  // F4 regression: the "no retry after first byte" guarantee was a TypeScript
+  // literal only (chunksForwarded: 0 on the streaming upstream_error variant).
+  // The engine never inspected chunksForwarded, so ANY client port — a mock, a
+  // future protocol adapter, or the pre-F3 clients — that reported
+  // upstream_error with bytes already forwarded got a mid-stream retry. This
+  // constructs exactly that (type-illegal) shape: it must NOT fall back.
+  it("F4: NEVER falls back when an upstream_error reports forwarded bytes", async () => {
+    const h = makeHarness({
+      bindings: [
+        makeBinding({ fallbackCandidates: [makeCandidate()] }),
+      ],
+      responsesInvokeResults: [
+        {
+          status: "upstream_error",
+          code: "upstream_unreachable",
+          gatewayStatus: 502,
+          upstreamStatus: null,
+          retryAfterSeconds: null,
+          // Type-illegal on purpose: the runtime guard, not the type, must stop
+          // the retry.
+          chunksForwarded: 3,
+        } as unknown as CaioUpstreamStreamResult,
+      ],
+    });
+    const result = await h.proxy.execute(
+      baseExecuteInput({ streaming: true, onChunk: () => {} }),
+    );
+    expect(result).toMatchObject({
+      status: "upstream_error",
+      httpStatus: 502,
+      reasonCode: "upstream_unreachable",
+      fallbackAttempted: false,
+      fallbackSucceeded: false,
+    });
+    // The only assertion that matters: no second upstream dispatch.
+    expect(h.responsesStream).toHaveBeenCalledTimes(1);
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+    // ...and no fallback credential was loaded either.
+    expect(h.credentialLoad).toHaveBeenCalledTimes(1);
+  });
+
+  // F5 regression: exactly one claim was made, recording the PRIMARY binding,
+  // while the fallback could execute on a different host under a different
+  // policy version. policyVersion is now a governed equivalence dimension, and
+  // the executed fallback route gets its own linked receipt.
+  it("F5: does not fall back to a candidate under a different policyVersion", async () => {
+    const h = makeHarness({
+      bindings: [
+        makeBinding({
+          fallbackCandidates: [
+            makeCandidate({
+              policyVersion: "policy-v9-looser",
+              endpointBaseUrl: "https://other-tenant.example.net/v1",
+            }),
+          ],
+        }),
+      ],
+      responsesInvokeResults: [UPSTREAM_500],
+    });
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result).toMatchObject({
+      status: "upstream_error",
+      fallbackAttempted: false,
+      upstream: {
+        upstreamModel: "provider-a-large-1",
+        policyVersion: "policy-v3",
+      },
+    });
+    expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
+    expect(h.claimDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("F5: claims a second linked receipt naming the executed route BEFORE dispatching the fallback", async () => {
+    const candidate = makeCandidate({
+      endpointBaseUrl: "https://fallback.example.internal/v1",
+      upstreamModel: "provider-a-large-2",
+      credentialRef: "provider-a-key-b",
+    });
+    const h = makeHarness({
+      bindings: [makeBinding({ fallbackCandidates: [candidate] })],
+      responsesInvokeResults: [
+        UPSTREAM_500,
+        { status: "ok", upstreamStatus: 200, body: { id: "resp_fb" } },
+      ],
+    });
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result.status).toBe("ok");
+    expect(result.fallbackSucceeded).toBe(true);
+
+    expect(h.claimDispatch).toHaveBeenCalledTimes(2);
+    const fallbackClaim = h.claimDispatch.mock.calls[1][0];
+    // Linked to the original request and naming the route actually used.
+    expect(fallbackClaim.requestId).toBe(
+      caioFallbackMarkerRequestId({
+        requestId: "req-1",
+        route: {
+          providerKey: candidate.providerKey,
+          endpointBaseUrl: candidate.endpointBaseUrl,
+          upstreamModel: candidate.upstreamModel,
+        },
+      }),
+    );
+    expect(fallbackClaim.requestId).toContain(
+      caioRouteFingerprint({
+        providerKey: candidate.providerKey,
+        endpointBaseUrl: candidate.endpointBaseUrl,
+        upstreamModel: candidate.upstreamModel,
+      }),
+    );
+    expect(fallbackClaim.policyVersion).toBe(candidate.policyVersion);
+    // Still a minimal claim: no body, no credential, no extra keys.
+    expect(Object.keys(fallbackClaim).sort()).toEqual([
+      "clientType",
+      "inputHash",
+      "modelAlias",
+      "policyVersion",
+      "requestId",
+      "workspaceId",
+    ]);
+    const serialized = JSON.stringify(fallbackClaim);
+    expect(serialized).not.toContain(SECRET_PROMPT);
+    expect(serialized).not.toContain("loaded-secret-for");
+
+    // Ordering: the fallback receipt precedes the fallback credential load and
+    // the fallback dispatch.
+    expect(h.events).toEqual([
+      "audit",
+      "credential",
+      "upstream",
+      "audit",
+      "credential",
+      "upstream",
+    ]);
+    // Spy order: the SECOND claim strictly precedes the SECOND credential load.
+    expect(h.claimDispatch.mock.invocationCallOrder[1]).toBeLessThan(
+      h.credentialLoad.mock.invocationCallOrder[1],
+    );
+    expect(result.fallbackReceiptId).toBe("receipt-1");
+  });
+
+  it("F5: never dispatches the fallback when its audit claim is refused", async () => {
+    const h = makeHarness({
+      bindings: [makeBinding({ fallbackCandidates: [makeCandidate()] })],
+      responsesInvokeResults: [UPSTREAM_500],
+    });
+    h.claimDispatch
+      .mockResolvedValueOnce(ALLOWED_OUTCOME)
+      .mockResolvedValueOnce(refusal("audit_unavailable"));
+    const result = await h.proxy.execute(baseExecuteInput());
+    expect(result).toMatchObject({
+      status: "upstream_error",
+      receiptId: "receipt-1",
+      fallbackAttempted: false,
+      fallbackSucceeded: false,
+    });
+    expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
+    // The fallback credential must never be loaded without a fallback receipt.
+    expect(h.credentialLoad).toHaveBeenCalledTimes(1);
   });
 
   it("allows a fallback when a streaming attempt fails before any byte", async () => {
@@ -559,6 +945,78 @@ describe("fallback", () => {
       fallbackAttempted: false,
     });
     expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
+  });
+});
+
+// F3 + F4 end to end, over the REAL Responses client (only fetch is faked):
+// this is the reproduction that produced 2 upstream POSTs and forwarded the
+// same SSE chunk twice under a single audit receipt.
+describe("F3: streaming with a failing downstream writer (real upstream client)", () => {
+  it("issues exactly ONE upstream POST when the writer throws on the first chunk", async () => {
+    let upstreamPosts = 0;
+    const fetchImpl = vi.fn(async () => {
+      upstreamPosts += 1;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encode = (text: string) => new TextEncoder().encode(text);
+          controller.enqueue(encode('data: {"delta":"chunk-1"}\n\n'));
+          controller.enqueue(encode("event: response.completed\n\n"));
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+    const port = createCaioResponsesUpstreamPort({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const claims: CaioCanonicalAuditClaim[] = [];
+    const proxy = createCaioModelProxy({
+      bindings: [
+        makeBinding({
+          fallbackCandidates: [
+            makeCandidate({
+              endpointBaseUrl: "https://fallback.example.internal/v1",
+              credentialRef: "provider-a-key-b",
+            }),
+          ],
+        }),
+      ],
+      credentialLoader: {
+        load: async ({ credentialRef }) => `loaded-secret-for-${credentialRef}`,
+      },
+      clients: { responses: port, chatCompletions: port },
+      auditGate: {
+        async claimDispatch(claim) {
+          claims.push(claim);
+          return ALLOWED_OUTCOME;
+        },
+      },
+    });
+
+    const forwarded: string[] = [];
+    const result = await proxy.execute(
+      baseExecuteInput({
+        streaming: true,
+        onChunk: (chunk: string) => {
+          forwarded.push(chunk);
+          throw new Error("downstream write failed");
+        },
+      }),
+    );
+
+    expect(upstreamPosts).toBe(1);
+    expect(forwarded).toEqual(['data: {"delta":"chunk-1"}\n\n']);
+    expect(result).toMatchObject({
+      status: "incomplete_stream",
+      reasonCode: "downstream_write_failed",
+      fallbackAttempted: false,
+      fallbackSucceeded: false,
+    });
+    // One dispatch, one receipt: no unrecorded second upstream request.
+    expect(claims).toHaveLength(1);
   });
 });
 

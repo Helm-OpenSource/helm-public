@@ -182,6 +182,9 @@ describe("isFallbackAllowed (fail-closed equivalence)", () => {
     dataRetentionPolicyKey: "retention-90d",
     trainingUsePolicyKey: "training-allowed",
     dataAuthorizationKey: "auth-tier-2",
+    // F5: policyVersion is governed, so a candidate under a looser policy
+    // version can no longer receive traffic under the original receipt.
+    policyVersion: "policy-v9-looser",
   };
 
   for (const dimension of CAIO_FALLBACK_EQUIVALENCE_DIMENSIONS) {
@@ -227,6 +230,16 @@ describe("isFallbackAllowed (fail-closed equivalence)", () => {
       ).toBe(false);
     });
   }
+
+  it("F5: governs policyVersion so a fallback can never execute under a different policy", () => {
+    expect([...CAIO_FALLBACK_EQUIVALENCE_DIMENSIONS]).toContain("policyVersion");
+    expect(
+      isFallbackAllowed(
+        makeBinding(),
+        makeCandidate({ policyVersion: "policy-v9-looser" }),
+      ),
+    ).toBe(false);
+  });
 
   it("always denies cross-provider fallback", () => {
     expect(

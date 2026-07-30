@@ -11,6 +11,9 @@
 // bodies are never propagated into gateway errors.
 
 import {
+  CAIO_DOWNSTREAM_WRITE_FAILED_REASON,
+  CaioDownstreamForwardError,
+  createCaioChunkForwarder,
   isAbortError,
   mapUpstreamHttpError,
   type CaioProxyUpstreamClientPort,
@@ -125,8 +128,9 @@ export class CaioChatCompletionsUpstreamClient {
   }
 
   // SSE pass-through. Chunks are forwarded verbatim as they arrive. Once ANY
-  // chunk has been forwarded there is no retry path here or in the engine —
-  // failures after first byte degrade to an explicit incomplete_stream with a
+  // chunk has been HANDED to the downstream writer there is no retry path here
+  // or in the engine — including when the writer itself throws: failures after
+  // the first forward attempt degrade to an explicit incomplete_stream with a
   // synthetic terminal marker so the downstream client can tell the stream
   // did not finish cleanly.
   async invokeStreaming(input: {
@@ -164,15 +168,17 @@ export class CaioChatCompletionsUpstreamClient {
         chunksForwarded: 0,
       };
     }
+    // Counts every forward ATTEMPT, so a downstream writer failure can never be
+    // mistaken for "nothing was sent yet".
+    const forwarder = createCaioChunkForwarder(input.onChunk);
     if (!response.body) {
       const reason = "missing_body";
-      input.onChunk(syntheticIncompleteChunk(reason));
+      forwarder.emitTerminalMarker(syntheticIncompleteChunk(reason));
       return { status: "incomplete_stream", reason, chunksForwarded: 0 };
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let chunksForwarded = 0;
     let scanTail = "";
     let terminalSeen = false;
     try {
@@ -181,17 +187,25 @@ export class CaioChatCompletionsUpstreamClient {
         if (done) break;
         const text = decoder.decode(value, { stream: true });
         if (text.length === 0) continue;
-        input.onChunk(text);
-        chunksForwarded += 1;
+        forwarder.forward(text);
         const window = scanTail + text;
         if (containsChatCompletionsTerminal(window)) terminalSeen = true;
         scanTail = window.slice(-SCAN_TAIL_CHARS);
       }
     } catch (error) {
-      if (isAbortError(error, input.signal)) {
-        return { status: "cancelled", chunksForwarded };
+      if (error instanceof CaioDownstreamForwardError) {
+        // The bytes reached the downstream writer and it failed: this is an
+        // incomplete stream, never a retryable upstream error.
+        return {
+          status: "incomplete_stream",
+          reason: CAIO_DOWNSTREAM_WRITE_FAILED_REASON,
+          chunksForwarded: forwarder.forwarded,
+        };
       }
-      if (chunksForwarded === 0) {
+      if (isAbortError(error, input.signal)) {
+        return { status: "cancelled", chunksForwarded: forwarder.forwarded };
+      }
+      if (forwarder.forwarded === 0) {
         return {
           status: "upstream_error",
           code: "upstream_unreachable",
@@ -202,18 +216,26 @@ export class CaioChatCompletionsUpstreamClient {
         };
       }
       const reason = "upstream_stream_error";
-      input.onChunk(syntheticIncompleteChunk(reason));
-      return { status: "incomplete_stream", reason, chunksForwarded };
+      forwarder.emitTerminalMarker(syntheticIncompleteChunk(reason));
+      return {
+        status: "incomplete_stream",
+        reason,
+        chunksForwarded: forwarder.forwarded,
+      };
     } finally {
       reader.releaseLock();
     }
 
     if (!terminalSeen) {
       const reason = "missing_terminal_event";
-      input.onChunk(syntheticIncompleteChunk(reason));
-      return { status: "incomplete_stream", reason, chunksForwarded };
+      forwarder.emitTerminalMarker(syntheticIncompleteChunk(reason));
+      return {
+        status: "incomplete_stream",
+        reason,
+        chunksForwarded: forwarder.forwarded,
+      };
     }
-    return { status: "ok", chunksForwarded };
+    return { status: "ok", chunksForwarded: forwarder.forwarded };
   }
 }
 

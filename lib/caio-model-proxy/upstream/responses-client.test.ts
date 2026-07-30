@@ -274,6 +274,86 @@ describe("CaioResponsesUpstreamClient.invokeStreaming", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  // F3 regression: onChunk() ran BEFORE chunksForwarded += 1, so a downstream
+  // writer that threw on the first chunk reported chunksForwarded: 0 with an
+  // upstream_error status — which the engine treats as retryable even though
+  // the bytes had already been handed downstream.
+  it("F3: counts a chunk as forwarded before handing it to the writer, so a throwing writer is never retryable", async () => {
+    const fetchImpl = vi.fn(async () =>
+      sseResponse([
+        'data: {"delta":"chunk-1"}\n\n',
+        'event: response.completed\ndata: {"type":"response.completed"}\n\n',
+      ]),
+    );
+    const forwarded: string[] = [];
+    const result = await makeClient(
+      fetchImpl as unknown as typeof fetch,
+    ).invokeStreaming({
+      body: { input: "x", stream: true },
+      onChunk: (chunk) => {
+        forwarded.push(chunk);
+        throw new Error("downstream write failed");
+      },
+    });
+
+    expect(result).toEqual({
+      status: "incomplete_stream",
+      reason: "downstream_write_failed",
+      chunksForwarded: 1,
+    });
+    // Never reported as upstream_error, which is the only retryable status.
+    expect(result.status).not.toBe("upstream_error");
+    expect(forwarded).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("F3: a writer that throws on a later chunk still reports the forwarded count", async () => {
+    const fetchImpl = vi.fn(async () =>
+      sseResponse([
+        'data: {"delta":"a"}\n\n',
+        'data: {"delta":"b"}\n\n',
+        'event: response.completed\n\n',
+      ]),
+    );
+    let seen = 0;
+    const result = await makeClient(
+      fetchImpl as unknown as typeof fetch,
+    ).invokeStreaming({
+      body: { input: "x", stream: true },
+      onChunk: () => {
+        seen += 1;
+        if (seen === 2) throw new Error("downstream write failed");
+      },
+    });
+    expect(result).toEqual({
+      status: "incomplete_stream",
+      reason: "downstream_write_failed",
+      chunksForwarded: 2,
+    });
+  });
+
+  it("F3: a writer that throws while emitting the synthetic marker does not escape as an exception", async () => {
+    const fetchImpl = vi.fn(async () =>
+      sseResponse(['data: {"delta":"partial"}\n\n']),
+    );
+    let seen = 0;
+    const result = await makeClient(
+      fetchImpl as unknown as typeof fetch,
+    ).invokeStreaming({
+      body: { input: "x", stream: true },
+      onChunk: () => {
+        seen += 1;
+        // The upstream chunk lands; only the synthetic terminal marker fails.
+        if (seen > 1) throw new Error("downstream write failed");
+      },
+    });
+    expect(result).toEqual({
+      status: "incomplete_stream",
+      reason: "missing_terminal_event",
+      chunksForwarded: 1,
+    });
+  });
+
   it("returns a typed upstream_error when it fails before any streamed byte", async () => {
     const fetchImpl = vi.fn(async () =>
       new Response("upstream exploded", { status: 500 }),

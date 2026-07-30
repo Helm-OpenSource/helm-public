@@ -47,10 +47,74 @@ export type CaioUpstreamStreamResult =
   | ({
       status: "upstream_error";
       // Errors are only reportable as such when nothing has been forwarded;
-      // once bytes flow, failures degrade to incomplete_stream instead.
+      // once bytes flow, failures degrade to incomplete_stream instead. This
+      // literal documents the invariant but erases at runtime, so the engine
+      // ALSO enforces it (see forwardedChunkCount in proxy-engine.ts).
       chunksForwarded: 0;
     } & CaioUpstreamErrorInfo)
   | { status: "cancelled"; chunksForwarded: number };
+
+/** Reason reported when the DOWNSTREAM writer, not the upstream, failed. */
+export const CAIO_DOWNSTREAM_WRITE_FAILED_REASON = "downstream_write_failed";
+
+/**
+ * Raised when the downstream chunk writer (onChunk) throws. Distinct from an
+ * upstream failure: the bytes were already handed over, so the request is NEVER
+ * retryable, no matter what the upstream would have done next.
+ */
+export class CaioDownstreamForwardError extends Error {
+  readonly code = "caio_downstream_forward_failed";
+  /** The writer's own error. Never propagated to a client-visible payload. */
+  readonly forwardCause: unknown;
+
+  constructor(forwardCause: unknown) {
+    super("caio_downstream_forward_failed");
+    this.name = "CaioDownstreamForwardError";
+    this.forwardCause = forwardCause;
+  }
+}
+
+/**
+ * Chunk forwarding accounting shared by the protocol clients.
+ *
+ * `forward()` increments the counter BEFORE handing the chunk to the writer:
+ * once the writer has been called the bytes may already be on the downstream
+ * socket, so the attempt itself must make retry illegal. Counting afterwards
+ * (the original order) let a writer that threw on the first chunk report
+ * "0 chunks forwarded" and earn a second upstream POST that replayed the same
+ * bytes.
+ *
+ * `emitTerminalMarker()` is best-effort and never counted: it carries the
+ * synthetic incomplete-stream marker, and if the writer is already broken there
+ * is nothing left to tell it.
+ */
+export function createCaioChunkForwarder(onChunk: (chunk: string) => void): {
+  forward(chunk: string): void;
+  emitTerminalMarker(chunk: string): void;
+  readonly forwarded: number;
+} {
+  let forwarded = 0;
+  return {
+    forward(chunk: string): void {
+      forwarded += 1;
+      try {
+        onChunk(chunk);
+      } catch (error) {
+        throw new CaioDownstreamForwardError(error);
+      }
+    },
+    emitTerminalMarker(chunk: string): void {
+      try {
+        onChunk(chunk);
+      } catch {
+        // Downstream is already unwritable; the typed result carries the reason.
+      }
+    },
+    get forwarded(): number {
+      return forwarded;
+    },
+  };
+}
 
 // Maps an upstream non-2xx HTTP status to a typed gateway error. Upstream
 // response bodies are intentionally NEVER read into the mapped error — only

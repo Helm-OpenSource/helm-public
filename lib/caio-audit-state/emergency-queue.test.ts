@@ -6,6 +6,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  CaioAuditQueueContentConflictError,
   CaioAuditQueueFullError,
   CaioAuditQueueIntegrityError,
   CaioAuditQueueKeyUnavailableError,
@@ -179,6 +180,86 @@ describe("caio emergency queue", () => {
     await expect(
       queue.append({ entryId: "entry-0001", receipt: receipt("req-other") }),
     ).rejects.toBeInstanceOf(CaioAuditQueueIntegrityError);
+  });
+
+  // F1 regression: append() used to duplicate-check with listEntryStats() and
+  // then fs.rename() over the final path, which silently overwrites. Two
+  // concurrent appends sharing an entry id both passed the check and the second
+  // rename destroyed the first receipt.
+  it("F1: refuses a same-id append with different content instead of overwriting the stored receipt", async () => {
+    const queue = createCaioEmergencyQueue({ rootDir, keyProvider });
+    await queue.append({ entryId: "entry-0001", receipt: receipt("req-1") });
+
+    await expect(
+      queue.append({ entryId: "entry-0001", receipt: receipt("req-other") }),
+    ).rejects.toBeInstanceOf(CaioAuditQueueContentConflictError);
+
+    const listed = await queue.list();
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.receipt.requestId).toBe("req-1");
+  });
+
+  it("F1: two concurrent appends with the same id and different content yield exactly one success and one conflict", async () => {
+    const queue = createCaioEmergencyQueue({ rootDir, keyProvider });
+    const settled = await Promise.allSettled([
+      queue.append({ entryId: "entry-race01", receipt: receipt("req-a") }),
+      queue.append({ entryId: "entry-race01", receipt: receipt("req-b") }),
+    ]);
+
+    const fulfilled = settled.filter((r) => r.status === "fulfilled");
+    const rejected = settled.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    // The loser is refused, never silently overwritten: either the winner had
+    // already sealed a divergent entry (content conflict) or the winner still
+    // held the exclusive reservation (append in progress). Both fail closed.
+    const reason = (rejected[0] as PromiseRejectedResult).reason;
+    expect(reason).toBeInstanceOf(CaioAuditQueueIntegrityError);
+
+    // Durable receipts must never be fewer than successful appends.
+    const listed = await queue.list();
+    expect(listed).toHaveLength(fulfilled.length);
+    expect(await queue.size()).toBe(1);
+  });
+
+  it("F1: an identical concurrent re-append is idempotent and keeps exactly one durable receipt", async () => {
+    const queue = createCaioEmergencyQueue({ rootDir, keyProvider });
+    await queue.append({ entryId: "entry-idem01", receipt: receipt("req-1") });
+    const settled = await Promise.allSettled([
+      queue.append({ entryId: "entry-idem01", receipt: receipt("req-1") }),
+      queue.append({ entryId: "entry-idem01", receipt: receipt("req-1") }),
+    ]);
+    for (const result of settled) {
+      expect(result.status).toBe("fulfilled");
+      if (result.status === "fulfilled") {
+        expect(result.value.deduplicated).toBe(true);
+      }
+    }
+    expect(await queue.size()).toBe(1);
+  });
+
+  it("F1: an aborted append rolls back its exclusive reservation and leaves no half-written entry", async () => {
+    const queue = createCaioEmergencyQueue({
+      rootDir,
+      keyProvider,
+      maxEntries: 1,
+    });
+    await queue.append({ entryId: "entry-0001", receipt: receipt("req-1") });
+    await expect(
+      queue.append({ entryId: "entry-0002", receipt: receipt("req-2") }),
+    ).rejects.toBeInstanceOf(CaioAuditQueueFullError);
+
+    // No reservation file survives a refused append, so the entry id stays
+    // usable and list()/size() never trip over a partial entry.
+    expect(await fs.readdir(rootDir)).toEqual(["entry-0001"]);
+    expect(await queue.size()).toBe(1);
+    await queue.remove("entry-0001");
+    const later = await queue.append({
+      entryId: "entry-0002",
+      receipt: receipt("req-2"),
+    });
+    expect(later.deduplicated).toBe(false);
+    expect((await queue.list())[0]!.receipt.requestId).toBe("req-2");
   });
 
   it("stores only the minimal receipt payload and refuses extra keys", async () => {

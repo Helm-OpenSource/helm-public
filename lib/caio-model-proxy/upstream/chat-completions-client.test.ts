@@ -276,6 +276,34 @@ describe("CaioChatCompletionsUpstreamClient.invokeStreaming", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  // F3 regression (identical to the Responses client): onChunk() ran BEFORE
+  // chunksForwarded += 1, so a throwing downstream writer produced a retryable
+  // upstream_error with chunksForwarded: 0 after bytes had been handed over.
+  it("F3: counts a chunk as forwarded before handing it to the writer, so a throwing writer is never retryable", async () => {
+    const fetchImpl = vi.fn(async () =>
+      sseResponse(['data: {"x":1}\n\n', "data: [DONE]\n\n"]),
+    );
+    const forwarded: string[] = [];
+    const result = await makeClient(
+      fetchImpl as unknown as typeof fetch,
+    ).invokeStreaming({
+      body: { messages: [], stream: true },
+      onChunk: (chunk) => {
+        forwarded.push(chunk);
+        throw new Error("downstream write failed");
+      },
+    });
+
+    expect(result).toEqual({
+      status: "incomplete_stream",
+      reason: "downstream_write_failed",
+      chunksForwarded: 1,
+    });
+    expect(result.status).not.toBe("upstream_error");
+    expect(forwarded).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("returns a typed upstream_error when it fails before any streamed byte", async () => {
     const fetchImpl = vi.fn(async () =>
       new Response("upstream exploded", { status: 503 }),

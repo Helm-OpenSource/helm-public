@@ -9,6 +9,7 @@ import { createCaioAuditGate } from "@/lib/caio-audit-state/audit-gate.service";
 import { createCaioEmergencyQueue } from "@/lib/caio-audit-state/emergency-queue";
 import { createPrismaCaioAuditReceiptStore } from "@/lib/caio-audit-state/prisma-audit-receipt-store";
 import type { CaioMinimalAuditReceipt } from "@/lib/caio-audit-state/audit-state-contracts";
+import { caioReplayMarkerRequestId } from "@/lib/caio-audit-state/receipt-linkage";
 import { db } from "@/lib/db";
 
 const integrationDatabaseUrl = process.env.CAIO_AUDIT_STATE_DATABASE_URL;
@@ -107,16 +108,36 @@ describeMysql("caio audit gate with an isolated MySQL primary store", () => {
     expect(stored.persistedVia).toBe("primary");
     expect(stored.clientType).toBe("workbuddy");
 
+    // F6: a repeat dispatch of the same [workspace, requestId] with identical
+    // content stays idempotent for the caller (same receipt id, no duplicate
+    // receipt row) but is no longer invisible: it is durably recorded as a
+    // linked replay marker row and reported with its attempt ordinal.
     const replay = await gate.claimDispatch(receipt(`req-primary-${suffix}`));
     expect(replay.allowed).toBe(true);
     if (replay.allowed && first.allowed) {
       expect(replay.receiptId).toBe(first.receiptId);
+      expect(replay.dispatchAttempt).toBe(2);
     }
     expect(
       await db.caioAuditDispatchReceipt.count({
         where: { workspaceId, requestId: `req-primary-${suffix}` },
       }),
     ).toBe(1);
+    const replayMarker = await db.caioAuditDispatchReceipt.findUniqueOrThrow({
+      where: {
+        workspaceId_requestId: {
+          workspaceId,
+          requestId: caioReplayMarkerRequestId(`req-primary-${suffix}`, 2),
+        },
+      },
+    });
+    expect(replayMarker.inputHash).toBe(`sha256:${"a".repeat(64)}`);
+    expect(replayMarker.persistedVia).toBe("primary");
+    expect(
+      await db.caioAuditDispatchReceipt.count({
+        where: { workspaceId, requestId: { startsWith: `req-primary-${suffix}` } },
+      }),
+    ).toBe(2);
 
     const conflict = await gate.claimDispatch(
       receipt(`req-primary-${suffix}`, {

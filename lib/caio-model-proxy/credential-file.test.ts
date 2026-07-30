@@ -1,5 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, stat, symlink, link, writeFile, chmod, readdir } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  link,
+  writeFile,
+  chmod,
+  readdir,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -15,7 +27,9 @@ import {
 let sandbox: string;
 
 beforeEach(async () => {
-  sandbox = await mkdtemp(path.join(tmpdir(), "caio-cred-"));
+  // realpath: allowedDir must contain no symlinked component, and on macOS
+  // os.tmpdir() itself is reached through the /var -> /private/var symlink.
+  sandbox = await realpath(await mkdtemp(path.join(tmpdir(), "caio-cred-")));
 });
 
 afterEach(async () => {
@@ -164,6 +178,140 @@ describe("loadCredential", () => {
     );
     expect(err.message).not.toContain("super-secret-token");
     expect(err.message).not.toContain(sandbox);
+  });
+});
+
+describe("allowedDir ancestor validation", () => {
+  it("refuses an allowedDir reached through a symlinked ancestor", async () => {
+    const realParent = path.join(sandbox, "real-parent");
+    await mkdir(path.join(realParent, "creds"), { recursive: true });
+    await chmod(path.join(realParent, "creds"), 0o700);
+    await writeFile(path.join(realParent, "creds", "upstream-key"), "secret", {
+      mode: 0o600,
+    });
+    await chmod(path.join(realParent, "creds", "upstream-key"), 0o600);
+
+    // A symlinked ANCESTOR: O_NOFOLLOW on the final component cannot see it.
+    const linkedParent = path.join(sandbox, "linked-parent");
+    await symlink(realParent, linkedParent);
+    const viaSymlink = path.join(linkedParent, "creds");
+
+    // Sanity: the same credential loads fine through the real path.
+    await expect(
+      loadCredential({
+        allowedDir: path.join(realParent, "creds"),
+        credentialRef: "upstream-key",
+      }),
+    ).resolves.toBe("secret");
+
+    const err = await expectCredentialError(
+      loadCredential({
+        allowedDir: viaSymlink,
+        credentialRef: "upstream-key",
+      }),
+      "credential_symlink_rejected",
+    );
+    expect(err.message).not.toContain(sandbox);
+  });
+
+  it("refuses an allowedDir that is itself a symlink", async () => {
+    const realDir = path.join(sandbox, "real-dir");
+    await mkdir(realDir);
+    await chmod(realDir, 0o700);
+    const linked = path.join(sandbox, "linked-dir");
+    await symlink(realDir, linked);
+    await expectCredentialError(
+      loadCredential({ allowedDir: linked, credentialRef: "upstream-key" }),
+      "credential_symlink_rejected",
+    );
+  });
+
+  it("refuses an allowedDir that is not a directory", async () => {
+    const notDir = path.join(sandbox, "not-a-dir");
+    await writeFile(notDir, "x", { mode: 0o600 });
+    await expectCredentialError(
+      loadCredential({ allowedDir: notDir, credentialRef: "upstream-key" }),
+      "credential_unsafe_mode",
+    );
+  });
+
+  it("refuses a group/other-accessible allowedDir", async () => {
+    const looseDir = path.join(sandbox, "loose-dir");
+    await mkdir(looseDir);
+    await chmod(looseDir, 0o755);
+    await expectCredentialError(
+      loadCredential({ allowedDir: looseDir, credentialRef: "upstream-key" }),
+      "credential_unsafe_mode",
+    );
+  });
+
+  it("applies the same ancestor validation to rotation and completion", async () => {
+    const linked = path.join(sandbox, "linked-dir-2");
+    await symlink(sandbox, linked);
+    await expectCredentialError(
+      rotateCredentialFile({
+        allowedDir: linked,
+        credentialRef: "upstream-key",
+        newContent: "new-secret",
+        retainRollback: false,
+      }),
+      "credential_symlink_rejected",
+    );
+    await expectCredentialError(
+      completeRotation({ allowedDir: linked, credentialRef: "upstream-key" }),
+      "credential_symlink_rejected",
+    );
+  });
+});
+
+describe("filesystem failures are typed and leak-free", () => {
+  it("maps a failed temp write to a typed error without path or content", async () => {
+    // Induce an open() failure on the temp file by making the credential
+    // directory unwritable after validation.
+    const lockedDir = path.join(sandbox, "locked-dir");
+    await mkdir(lockedDir);
+    await chmod(lockedDir, 0o500);
+    try {
+      const err = await expectCredentialError(
+        rotateCredentialFile({
+          allowedDir: lockedDir,
+          credentialRef: "upstream-key",
+          newContent: "brand-new-secret-material",
+          retainRollback: false,
+        }),
+        "credential_write_failed",
+      );
+      expect(err.message).not.toContain(lockedDir);
+      expect(err.message).not.toContain(sandbox);
+      expect(err.message).not.toContain("brand-new-secret-material");
+      expect(err.message).not.toMatch(/[/\\]/);
+    } finally {
+      await chmod(lockedDir, 0o700);
+    }
+  });
+
+  it("leaves no partially written temp secret behind when the write fails", async () => {
+    const dir = path.join(sandbox, "write-fail-dir");
+    await mkdir(dir);
+    await chmod(dir, 0o700);
+    // A directory occupying the deterministic rollback name is not enough to
+    // fail the temp write, so fail the write itself: make the new content a
+    // valid string but pre-create an unreadable target after the temp write
+    // succeeds. Simpler and deterministic: an EISDIR on the target rename.
+    await mkdir(path.join(dir, "upstream-key"));
+    await expectCredentialError(
+      rotateCredentialFile({
+        allowedDir: dir,
+        credentialRef: "upstream-key",
+        newContent: "next-secret-material",
+        retainRollback: false,
+      }),
+      "credential_rename_failed",
+    );
+    const leftovers = (await readdir(dir)).filter((entry) =>
+      entry.includes(".next."),
+    );
+    expect(leftovers).toEqual([]);
   });
 });
 
