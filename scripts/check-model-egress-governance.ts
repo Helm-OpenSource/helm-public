@@ -201,8 +201,10 @@ const REQUIRED_OWNER_READOUT_TOKENS = [
 ] as const;
 const REQUIRED_MYSQL_CI_TOKENS = [
   "image: mysql:8.4",
-  "DATABASE_URL:",
-  "MODEL_EGRESS_STORE_DATABASE_URL:",
+  // Connection strings are minted at runtime and injected through
+  // $GITHUB_ENV, so the gate pins the injection point, not a literal value.
+  "DATABASE_URL=",
+  "MODEL_EGRESS_STORE_DATABASE_URL=",
   "MODEL_EGRESS_STORE_TEST_DATABASE_NAME: helm_caio_p1d_ci",
   "npx tsx prisma/setup-db.ts prepare",
   "npm run test:model-egress:mysql",

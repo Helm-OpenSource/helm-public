@@ -177,11 +177,20 @@ const EXPECTED_GATE_COMMAND =
 const REQUIRED_CI_TOKENS = [
   "caio-pro-v1-mysql:",
   "MYSQL_DATABASE: helm_caio_pro_v1_ci",
-  "CAIO_PRO_V1_DATABASE_URL: mysql://root:root@127.0.0.1:3306/helm_caio_pro_v1_ci?charset=utf8mb4",
+  // The connection string is minted at runtime and injected through
+  // $GITHUB_ENV, so the gate pins the injection point, not a literal
+  // credential. Committing a credentialed URL is separately rejected by
+  // COMMITTED_CREDENTIAL_URL below.
+  "CAIO_PRO_V1_DATABASE_URL=",
   "CAIO_PRO_V1_TEST_DATABASE_NAME: helm_caio_pro_v1_ci",
   "npx tsx prisma/setup-db.ts prepare",
   "npm run test:caio-pro-v1:mysql",
 ] as const;
+
+// A committed `scheme://user:password@host` literal. Runtime-composed URLs use
+// shell expansion (`${...}`) in the user or password position and never match.
+const COMMITTED_CREDENTIAL_URL =
+  /\b(?:mysql|mariadb|postgres|postgresql):\/\/[A-Za-z0-9_.-]+:[^@\s"'$]+@/u;
 
 function read(repoRoot: string, file: string): string | null {
   const absolutePath = path.join(repoRoot, file);
@@ -902,6 +911,14 @@ export function checkCaioProV1Static(
           detail: `required CI token is missing: ${token}`,
         });
       }
+    }
+    if (COMMITTED_CREDENTIAL_URL.test(workflowContent)) {
+      violations.push({
+        rule: "CPV1-CI",
+        file: CI_WORKFLOW,
+        detail:
+          "CI workflow must not commit a database connection string that carries credentials",
+      });
     }
     const jobStart = workflowContent.indexOf("caio-pro-v1-mysql:");
     if (jobStart >= 0) {
