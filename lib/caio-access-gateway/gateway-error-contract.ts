@@ -39,6 +39,13 @@ export type CaioAccessGatewayErrorCode =
    * refusal, never a silent allow.
    */
   | "project_scope_unresolved"
+  /**
+   * No ACTIVE, human-OWNER-approved governed model-route policy admits the
+   * route behind the requested alias (or the binding disagrees with it). An
+   * authorization refusal, not an outage: retrying cannot help, and which
+   * governance condition failed is deliberately not disclosed.
+   */
+  | "route_not_governed"
   // 404 / 405 routing
   | "not_found"
   | "method_not_allowed"
@@ -91,6 +98,7 @@ const WIRE_STATUS_BY_CODE: Readonly<
   project_access_revoked: 403,
   scope_violation: 403,
   project_scope_unresolved: 403,
+  route_not_governed: 403,
   not_found: 404,
   method_not_allowed: 405,
   active_token_exists: 409,

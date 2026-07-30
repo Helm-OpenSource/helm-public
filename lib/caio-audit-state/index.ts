@@ -29,15 +29,35 @@ export {
   type CaioMinimalAuditReceipt,
 } from "@/lib/caio-audit-state/audit-state-contracts";
 export {
+  CAIO_DEPLOYMENT_POSTURES,
+  CaioDeploymentPostureError,
+  caioDeploymentPostureSchema,
+  isCaioDeploymentPosture,
+  parseCaioDeploymentPosture,
+  type CaioDeploymentPosture,
+} from "@/lib/caio-audit-state/deployment-posture";
+export {
   createCaioEmergencyQueue,
   type CaioEmergencyQueuePort,
 } from "@/lib/caio-audit-state/emergency-queue";
 export {
+  createCaioEmergencyQueueAdmission,
+  createCaioNoDegradedAdmission,
+  type CaioDegradedAdmission,
+  type CaioDegradedAdmissionOutcome,
+  type CaioDegradedAdmissionRefusal,
+  type CaioGovernedFdeDegradedAdmission,
+  type CaioSelfServiceDegradedAdmission,
+} from "@/lib/caio-audit-state/degraded-admission";
+export {
+  CaioAuditPostureMismatchError,
   computeEmergencyEntryId,
   createCaioAuditGate,
+  type CaioAuditClaimCandidate,
   type CaioAuditClaimRefusalReason,
   type CaioAuditClaimResult,
   type CaioAuditGate,
+  type CaioAuditGateDependencies,
   type CaioAuditPrimaryStorePort,
 } from "@/lib/caio-audit-state/audit-gate.service";
 export {

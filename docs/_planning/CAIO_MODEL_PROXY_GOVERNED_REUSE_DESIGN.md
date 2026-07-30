@@ -536,3 +536,24 @@ Option (b) is the sanctioned seam but inherits every one of those prerequisites,
 **The four-state audit machine and the encrypted emergency queue survive C-1 and C-2 unchanged**, because C-1 introduces no per-request database dependency. The one honest availability regression is a cold start during a database outage. Do not paper over it with a locally cached snapshot — that would recreate the second independent stack this work exists to remove.
 
 **Owner decisions required**: (D-1) may a LAN model request proceed when the central governance database is unreachable? (D-2) what does a CAIO audit receipt assert? (D-3) is a developer's LAN prompt an enterprise data asset?
+
+## Owner 裁定（2026-07-30）
+
+问题原文：**LAN 模型请求在中心治理库不可达时是否允许继续？**
+
+Owner 裁定：**两种形态都要**，作为两条并行的接入方式，而不是二选一。
+
+- **自助形态（推荐默认）**：客户自己就能装起来。LAN 直通，主库不可达时经本地加密队列继续服务，网关进入 `PRIMARY_DEGRADED`。可用性优先。
+- **受治理形态（FDE 协助）**：面向有要求的客户，由 FDE 协助部署。走完整受治理准入，治理库不可达即拒绝，无降级放行。安全性优先。
+
+### 这条裁定对实现的约束（不是措辞，是硬约束）
+
+1. **形态是显式声明的部署属性，不是运行时开关。** 必须在 overlay binding 与 control-plane BOM 中声明，并由验证器钉住；不得从环境推断，不得由请求参数选择。
+2. **一种形态不得冒充另一种。** 每张审计回执必须记录产生它的形态；`/readyz` 与状态面必须显示当前形态。缺少形态声明即 fail closed，不得默认成任意一种。
+3. **受治理形态下，降级放行路径必须在代码层不可达**，而不是靠一个配置项关掉——配置能被改，代码路径不存在才是保证。
+4. **两种形态都从属于治理**：即便是自助形态，alias binding 也必须指名一条经真人 OWNER 批准的 ACTIVE 治理 route，未准入的 route 在 audit claim 之前即拒绝；出站 body 必须过 Context Broker 的硬边界检测。自助 ≠ 无治理，自助 = 治理准入 + 可用性优先的降级策略。
+5. **可用性代价必须写进文档而非被掩盖**：自助形态的准入快照在装载时解析，owner 撤销策略后运行中的进程要到重启/重载才感知；受治理形态是逐请求重验。产品材料不得对自助形态声称「撤销即时生效」。
+
+### 与评审工作令的已知偏差（须由 CodeX 裁定）
+
+工作令 Public 第 2 项要求「禁止新 proxy 直接构造并发送 provider 请求」。在自助形态下，代理仍然直接向上游发请求——这正是 LAN 直通的定义。本裁定把该项从「消灭直通」改为「直通必须从属于治理准入」。这是 owner 的产品决策，不是工程规避；实施方不得据此自称该项已按原文关闭，须由 CodeX 独立裁定该偏差可否接受。

@@ -65,6 +65,7 @@ describeMysql("caio audit gate with an isolated MySQL primary store", () => {
       modelAlias: "caio-default",
       inputHash: `sha256:${"a".repeat(64)}`,
       policyVersion: "policy-v3",
+      posture: "self_service",
       ...overrides,
     };
   }
@@ -88,6 +89,7 @@ describeMysql("caio audit gate with an isolated MySQL primary store", () => {
 
   it("persists a durable primary receipt before allowing dispatch and replays idempotently", async () => {
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: createPrismaCaioAuditReceiptStore(),
       emergencyQueue: createCaioEmergencyQueue({
         rootDir: path.join(sandbox, "queue-primary"),
@@ -151,6 +153,7 @@ describeMysql("caio audit gate with an isolated MySQL primary store", () => {
     const primary = createPrismaCaioAuditReceiptStore();
     let primaryDown = true;
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: {
         async persist(input) {
           if (primaryDown) {

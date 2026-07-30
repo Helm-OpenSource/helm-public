@@ -21,6 +21,11 @@ import type {
   CaioModelAliasBinding,
   CaioModelAliasFallbackCandidate,
 } from "./alias-contracts";
+import type {
+  CaioGovernedAdmissionSnapshot,
+  CaioGovernedRouteAdmission,
+} from "./governed-admission-contracts";
+import { createCaioFrozenGovernedAdmission } from "./governed-route-admission.service";
 import { createCaioModelProxy } from "./proxy-engine";
 import { createCaioResponsesUpstreamPort } from "./upstream/responses-client";
 import type {
@@ -81,6 +86,19 @@ function refusal(
   return Object.freeze({ status, ...defaults, ...overrides });
 }
 
+// Every binding names a GOVERNED route (owner ruling, 2026-07-30): the two
+// fields are required by the alias contract, and the frozen admission snapshot
+// below is what admits them.
+const GOVERNED_POLICY_KEY = "caio-lan-default";
+const PRIMARY_ROUTE_REF = "route-provider-a-primary";
+const FALLBACK_ROUTE_REF = "route-provider-a-fallback";
+// Governed admission and fallback EQUIVALENCE are independent layers: these
+// two routes are legitimately admitted by the policy, and the fallback rule
+// still refuses to fall back onto them (different provider / different region).
+const PROVIDER_B_ROUTE_REF = "route-provider-b";
+const REGION_US_ROUTE_REF = "route-provider-a-us";
+const POLICY_VALID_UNTIL = "2099-01-01T00:00:00.000Z";
+
 function makeCandidate(
   overrides: Partial<CaioModelAliasFallbackCandidate> = {},
 ): CaioModelAliasFallbackCandidate {
@@ -92,11 +110,13 @@ function makeCandidate(
     credentialRef: "provider-a-key-b",
     endpointBaseUrl: "https://upstream.example.internal/v1",
     region: "cn-hangzhou",
-    dataRetentionPolicyKey: "retention-30d",
-    trainingUsePolicyKey: "no-training",
+    dataRetentionPolicyKey: "retention-days:30",
+    trainingUsePolicyKey: "prohibited",
     dataAuthorizationKey: "auth-tier-1",
     policyVersion: "policy-v3",
     status: "active",
+    governedPolicyKey: GOVERNED_POLICY_KEY,
+    governedRouteRef: FALLBACK_ROUTE_REF,
     ...overrides,
   };
 }
@@ -109,7 +129,66 @@ function makeBinding(
     alias: "caio-codex-default",
     upstreamModel: "provider-a-large-1",
     credentialRef: "provider-a-key",
+    governedRouteRef: PRIMARY_ROUTE_REF,
     fallbackCandidates: [],
+    ...overrides,
+  };
+}
+
+function makeRoute(
+  overrides: Partial<CaioGovernedRouteAdmission> = {},
+): CaioGovernedRouteAdmission {
+  return {
+    routeRef: PRIMARY_ROUTE_REF,
+    policyKey: GOVERNED_POLICY_KEY,
+    policyId: "policy:caio-lan-default-v1",
+    policyHash: `sha256:${"e".repeat(64)}`,
+    policyHeadVersion: 3,
+    policyRevocationEpoch: 0,
+    provider: "provider-a",
+    credentialRef: "provider-a-key",
+    region: "cn-hangzhou",
+    deploymentForm: "private_deployment",
+    jurisdiction: "customer_premises",
+    retentionPolicyKey: "retention-days:30",
+    trainingUsePolicyKey: "prohibited",
+    pricingVersion: "provider-a-pricing-202607",
+    maxOutputTokens: 4_000,
+    policyValidUntil: POLICY_VALID_UNTIL,
+    ...overrides,
+  };
+}
+
+/** The frozen snapshot a self-service install resolves once, at load. */
+function makeSnapshot(
+  routes: readonly CaioGovernedRouteAdmission[] = [
+    makeRoute(),
+    makeRoute({
+      routeRef: FALLBACK_ROUTE_REF,
+      credentialRef: "provider-a-key-b",
+    }),
+    makeRoute({
+      routeRef: PROVIDER_B_ROUTE_REF,
+      provider: "provider-b",
+      credentialRef: "provider-a-key-b",
+    }),
+    makeRoute({
+      routeRef: REGION_US_ROUTE_REF,
+      region: "us-east-1",
+      credentialRef: "provider-a-key-b",
+    }),
+  ],
+  overrides: Partial<CaioGovernedAdmissionSnapshot> = {},
+): CaioGovernedAdmissionSnapshot {
+  return {
+    policyKey: GOVERNED_POLICY_KEY,
+    policyId: "policy:caio-lan-default-v1",
+    policyHash: `sha256:${"e".repeat(64)}`,
+    policyHeadVersion: 3,
+    policyRevocationEpoch: 0,
+    resolvedAt: "2026-07-30T00:00:00.000Z",
+    validUntil: POLICY_VALID_UNTIL,
+    routes: new Map(routes.map((route) => [route.routeRef, route])),
     ...overrides,
   };
 }
@@ -119,6 +198,8 @@ function makeHarness(input: {
   responsesInvokeResults?: Array<
     CaioUpstreamInvokeResult | CaioUpstreamStreamResult
   >;
+  snapshot?: CaioGovernedAdmissionSnapshot;
+  now?: () => Date;
 } = {}) {
   const events: string[] = [];
   const okResult: CaioUpstreamInvokeResult = {
@@ -188,10 +269,15 @@ function makeHarness(input: {
   );
 
   const proxy = createCaioModelProxy({
+    posture: "self_service",
     bindings: input.bindings ?? [makeBinding()],
     credentialLoader: { load: credentialLoad },
     clients,
-    auditGate: { claimDispatch },
+    auditGate: { posture: "self_service", claimDispatch },
+    governedAdmission: createCaioFrozenGovernedAdmission(
+      input.snapshot ?? makeSnapshot(),
+    ),
+    ...(input.now ? { now: input.now } : {}),
   });
 
   return {
@@ -766,7 +852,9 @@ describe("rate limiter", () => {
     const check = vi.fn(() => ({ allowed: false, retryAfterSeconds: 5 }));
     const h = makeHarness();
     const proxy = createCaioModelProxy({
+      posture: "self_service",
       bindings: [makeBinding()],
+      governedAdmission: createCaioFrozenGovernedAdmission(makeSnapshot()),
       credentialLoader: { load: h.credentialLoad },
       clients: {
         responses: {
@@ -778,7 +866,7 @@ describe("rate limiter", () => {
           invokeStreaming: h.chatStream,
         },
       },
-      auditGate: { claimDispatch: h.claimDispatch },
+      auditGate: { posture: "self_service", claimDispatch: h.claimDispatch },
       rateLimiter: { check },
     });
     const result = await proxy.execute(baseExecuteInput());
@@ -799,8 +887,12 @@ describe("fallback", () => {
       bindings: [
         makeBinding({
           fallbackCandidates: [
-            // Cross-provider: must be skipped by the fail-closed rule.
-            makeCandidate({ providerKey: "provider-b" }),
+            // Cross-provider: admitted by the policy on its own route, and
+            // still skipped by the fail-closed fallback equivalence rule.
+            makeCandidate({
+              providerKey: "provider-b",
+              governedRouteRef: PROVIDER_B_ROUTE_REF,
+            }),
             makeCandidate(),
             // A second equivalent candidate that must never be tried.
             makeCandidate({ upstreamModel: "provider-a-large-3" }),
@@ -862,8 +954,14 @@ describe("fallback", () => {
       bindings: [
         makeBinding({
           fallbackCandidates: [
-            makeCandidate({ providerKey: "provider-b" }),
-            makeCandidate({ region: "us-east-1" }),
+            makeCandidate({
+              providerKey: "provider-b",
+              governedRouteRef: PROVIDER_B_ROUTE_REF,
+            }),
+            makeCandidate({
+              region: "us-east-1",
+              governedRouteRef: REGION_US_ROUTE_REF,
+            }),
             makeCandidate({ status: "disabled" }),
           ],
         }),
@@ -1157,6 +1255,8 @@ describe("F3: streaming with a failing downstream writer (real upstream client)"
     });
     const claims: CaioCanonicalAuditClaim[] = [];
     const proxy = createCaioModelProxy({
+      posture: "self_service",
+      governedAdmission: createCaioFrozenGovernedAdmission(makeSnapshot()),
       bindings: [
         makeBinding({
           fallbackCandidates: [
@@ -1172,6 +1272,7 @@ describe("F3: streaming with a failing downstream writer (real upstream client)"
       },
       clients: { responses: port, chatCompletions: port },
       auditGate: {
+        posture: "self_service",
         async claimDispatch(claim) {
           claims.push(claim);
           return ALLOWED_OUTCOME;

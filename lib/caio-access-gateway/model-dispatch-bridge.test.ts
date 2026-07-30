@@ -277,6 +277,44 @@ describe("caioModelDispatchOutcomeFromProxyResult", () => {
     expect(error.retryAfterSeconds).toBeNull();
   });
 
+  // Owner ruling 2026-07-30: an unadmitted governed route is a governance
+  // refusal (403), never a retryable availability answer and never a 200.
+  it("raises a typed 403 route_not_governed when no policy admits the route", () => {
+    const error = caught(() =>
+      caioModelDispatchOutcomeFromProxyResult(
+        proxyResult({
+          status: "route_not_admitted",
+          httpStatus: 403,
+          reasonCode: "route_not_admitted",
+          receiptId: null,
+          body: null,
+        }),
+      ),
+    );
+    expect(error.code).toBe("route_not_governed");
+    expect(error.wireStatus).toBe(403);
+    expect(error.retryAfterSeconds).toBeNull();
+  });
+
+  // A body that crossed the hard content boundary reuses the existing 422
+  // release-denied identifier rather than minting a second one for the same
+  // meaning.
+  it("raises a typed 422 external_release_denied when the content boundary refuses", () => {
+    const error = caught(() =>
+      caioModelDispatchOutcomeFromProxyResult(
+        proxyResult({
+          status: "content_boundary_denied",
+          httpStatus: 422,
+          reasonCode: "content_boundary_denied",
+          receiptId: null,
+          body: null,
+        }),
+      ),
+    );
+    expect(error.code).toBe("external_release_denied");
+    expect(error.wireStatus).toBe(422);
+  });
+
   it("raises a typed failure for a credential outage even though a receipt exists", () => {
     // The claim succeeded, so a naive mapping would return the allowed arm and
     // the gateway would answer 200 with a null body for a dispatch that failed.

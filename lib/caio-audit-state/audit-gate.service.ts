@@ -9,8 +9,6 @@ import {
   CAIO_AUDIT_REPLAY_LIMIT_HTTP_STATUS,
   CAIO_AUDIT_UNAVAILABLE_ERROR_CODE,
   CAIO_AUDIT_UNAVAILABLE_HTTP_STATUS,
-  CaioAuditQueueAppendInProgressError,
-  CaioAuditQueueContentConflictError,
   CaioAuditStoreContractError,
   caioAuditPersistOutcomeSchema,
   caioMinimalAuditReceiptSchema,
@@ -20,6 +18,16 @@ import {
   type CaioAuditPersistedVia,
   type CaioMinimalAuditReceipt,
 } from "@/lib/caio-audit-state/audit-state-contracts";
+import {
+  createCaioEmergencyQueueAdmission,
+  createCaioNoDegradedAdmission,
+  type CaioDegradedAdmission,
+} from "@/lib/caio-audit-state/degraded-admission";
+import {
+  CaioDeploymentPostureError,
+  parseCaioDeploymentPosture,
+  type CaioDeploymentPosture,
+} from "@/lib/caio-audit-state/deployment-posture";
 import type { CaioEmergencyQueuePort } from "@/lib/caio-audit-state/emergency-queue";
 import {
   caioReplayMarkerRequestId,
@@ -83,7 +91,22 @@ export type CaioAuditClaimResult =
     };
 
 export interface CaioAuditGate {
-  claimDispatch(receipt: CaioMinimalAuditReceipt): Promise<CaioAuditClaimResult>;
+  /**
+   * The declared deployment posture of THIS gate. Callers (the model proxy,
+   * the canonical port, the readiness surface) read it rather than declaring
+   * one of their own, so a process cannot report one posture while admitting
+   * under the rules of the other.
+   */
+  readonly posture: CaioDeploymentPosture;
+  /**
+   * The receipt is stamped with this gate's posture before it is persisted;
+   * a candidate that already carries a DIFFERENT posture is refused (thrown),
+   * never rewritten. A receipt therefore always names the installation that
+   * produced it.
+   */
+  claimDispatch(
+    receipt: CaioAuditClaimCandidate,
+  ): Promise<CaioAuditClaimResult>;
   recover(): Promise<{
     replayed: number;
     remaining: number;
@@ -91,6 +114,31 @@ export interface CaioAuditGate {
   }>;
   getState(): CaioAuditGateState;
   getReadiness(): Promise<CaioAuditGateReadiness>;
+}
+
+/**
+ * What a caller may hand to claimDispatch: the receipt WITHOUT its posture
+ * (the gate stamps its own), or a full receipt whose posture must already
+ * equal the gate's. There is no way for a caller to choose a posture the gate
+ * was not constructed with.
+ */
+export type CaioAuditClaimCandidate =
+  | Omit<CaioMinimalAuditReceipt, "posture">
+  | CaioMinimalAuditReceipt;
+
+/**
+ * Raised when a claim carries a posture other than the gate's own. Fail
+ * closed: the dispatch is not recorded and not allowed, because a receipt
+ * written under the wrong posture would let one deployment shape impersonate
+ * the other.
+ */
+export class CaioAuditPostureMismatchError extends Error {
+  readonly code = "caio_audit_posture_mismatch";
+
+  constructor(detail: string) {
+    super(`caio_audit_posture_mismatch: ${detail}`);
+    this.name = "CaioAuditPostureMismatchError";
+  }
 }
 
 /**
@@ -109,6 +157,24 @@ export function computeEmergencyEntryId(
   return createHash("sha256").update(encoded, "utf8").digest("hex").slice(0, 48);
 }
 
+/**
+ * A self-service gate without a queue would silently behave like a governed
+ * one (refuse instead of degrade), which is exactly the impersonation the
+ * ruling forbids — so the omission fails construction instead.
+ */
+function requireEmergencyQueue(
+  deps: CaioAuditGateDependencies,
+): CaioEmergencyQueuePort {
+  const queue = (deps as { emergencyQueue?: CaioEmergencyQueuePort })
+    .emergencyQueue;
+  if (queue === undefined || queue === null) {
+    throw new CaioDeploymentPostureError(
+      "self_service posture requires an emergency queue",
+    );
+  }
+  return queue;
+}
+
 /** Normalized result of one durable-write attempt for one receipt. */
 type ReceiptWrite =
   | { kind: "fresh"; receiptId: string; via: "primary" | "emergency_queue" }
@@ -116,21 +182,8 @@ type ReceiptWrite =
   | { kind: "conflict" }
   | { kind: "refused"; result: CaioAuditClaimResult };
 
-/**
- * Audit-gated dispatch state machine.
- *
- * Contract: `allowed: true` is only ever returned AFTER a durable audit write
- * (primary store fsync-equivalent commit, or fsync'd emergency-queue entry)
- * whose content matches the claim, and always with a non-empty receipt id.
- * When neither store can persist, the claim is refused and the caller MUST
- * map the refusal to its declared httpStatus (503 caio_audit_unavailable with
- * Retry-After, 409 caio_audit_receipt_conflict, 429 replay cap) and MUST NOT
- * dispatch upstream. There is no code path that allows dispatch before
- * persistence succeeds, including the emergency-queue and replay paths.
- */
-export function createCaioAuditGate(deps: {
+type CaioAuditGateCommonDependencies = {
   primaryStore: CaioAuditPrimaryStorePort;
-  emergencyQueue: CaioEmergencyQueuePort;
   now?: () => Date;
   retryAfterSeconds?: number;
   recoveryConcurrentClaimCap?: number;
@@ -145,7 +198,60 @@ export function createCaioAuditGate(deps: {
    * to the last observed store answer (a store that threw is not healthy).
    */
   primaryHealthProbe?: () => Promise<boolean>;
-}): CaioAuditGate {
+};
+
+/**
+ * Gate dependencies, discriminated by the DECLARED deployment posture.
+ *
+ * `posture` is required: there is no default, and it is never read from the
+ * environment or from a request. The two arms differ in one structural way —
+ * the governed_fde arm types `emergencyQueue` as `never`, so a queue cannot be
+ * handed to it at all. That, plus the queue-free admission strategy the
+ * constructor selects, is why the degraded-admission path is unreachable in
+ * that posture rather than merely switched off.
+ */
+export type CaioAuditGateDependencies =
+  | (CaioAuditGateCommonDependencies & {
+      posture: Extract<CaioDeploymentPosture, "self_service">;
+      emergencyQueue: CaioEmergencyQueuePort;
+    })
+  | (CaioAuditGateCommonDependencies & {
+      posture: Extract<CaioDeploymentPosture, "governed_fde">;
+      /** No degraded store exists in this posture; passing one is a type error. */
+      emergencyQueue?: never;
+    });
+
+/**
+ * Audit-gated dispatch state machine.
+ *
+ * Contract: `allowed: true` is only ever returned AFTER a durable audit write
+ * (primary store fsync-equivalent commit, or fsync'd emergency-queue entry)
+ * whose content matches the claim, and always with a non-empty receipt id.
+ * When neither store can persist, the claim is refused and the caller MUST
+ * map the refusal to its declared httpStatus (503 caio_audit_unavailable with
+ * Retry-After, 409 caio_audit_receipt_conflict, 429 replay cap) and MUST NOT
+ * dispatch upstream. There is no code path that allows dispatch before
+ * persistence succeeds, including the emergency-queue and replay paths.
+ *
+ * POSTURE: `self_service` keeps the emergency-queue arm described above;
+ * `governed_fde` is built with a queue-free admission strategy, so a failed
+ * primary write can only end in a refusal — the degraded arm is absent from
+ * this gate's object graph rather than switched off inside it.
+ */
+export function createCaioAuditGate(
+  deps: CaioAuditGateDependencies,
+): CaioAuditGate {
+  // Construction-time, fail-closed: an undeclared or unparseable posture is a
+  // configuration error, never an implicit choice of the permissive posture.
+  const posture = parseCaioDeploymentPosture(
+    (deps as { posture?: unknown }).posture,
+  );
+  // ONE decision, made here and never re-made at admission time. After this
+  // line the governed_fde gate holds no reference to any queue.
+  const admission: CaioDegradedAdmission =
+    posture === "self_service"
+      ? createCaioEmergencyQueueAdmission(requireEmergencyQueue(deps))
+      : createCaioNoDegradedAdmission();
   const now = deps.now ?? (() => new Date());
   const retryAfterSeconds =
     deps.retryAfterSeconds ?? CAIO_AUDIT_DEFAULT_RETRY_AFTER_SECONDS;
@@ -251,39 +357,68 @@ export function createCaioAuditGate(deps: {
     return parsed.data;
   }
 
-  async function queueReceipt(
+  /**
+   * The primary store could not take this receipt. What happens next is the
+   * POSTURE's answer, delegated to the admission strategy chosen at
+   * construction:
+   *   self_service → the encrypted queue takes it and the dispatch proceeds
+   *   governed_fde → `no_degraded_path`; nothing is written and the claim is
+   *                  refused. That strategy holds no queue, so this function
+   *                  cannot reach one.
+   */
+  async function admitWithoutPrimary(
     receipt: CaioMinimalAuditReceipt,
   ): Promise<ReceiptWrite> {
-    try {
-      const appended = await deps.emergencyQueue.append({
-        entryId: computeEmergencyEntryId(receipt),
-        receipt,
-      });
+    const outcome = await admission.admitWithoutPrimary(
+      receipt,
+      computeEmergencyEntryId(receipt),
+    );
+    if (outcome.admitted) {
       transitionFromClaim("PRIMARY_DEGRADED");
       return {
-        kind: appended.deduplicated ? "duplicate" : "fresh",
-        receiptId: appended.entryId,
+        kind: outcome.deduplicated ? "duplicate" : "fresh",
+        receiptId: outcome.entryId,
         via: "emergency_queue",
       };
-    } catch (error) {
-      if (error instanceof CaioAuditQueueContentConflictError) {
-        // The queue is healthy; THIS receipt diverges from the durable one.
+    }
+    switch (outcome.reason) {
+      case "conflict":
+        // The degraded store is healthy; THIS receipt diverges from the
+        // durable one.
         transitionFromClaim("PRIMARY_DEGRADED");
         return { kind: "conflict" };
-      }
-      if (error instanceof CaioAuditQueueAppendInProgressError) {
-        // Another append holds the id and has not sealed a receipt: nothing
-        // durable exists for this claim, so refuse. A retry may succeed.
+      case "in_progress":
+        // An exclusive reservation holds the id and has not sealed a receipt:
+        // nothing durable exists for this claim, so refuse. A retry may succeed.
         transitionFromClaim("PRIMARY_DEGRADED");
         return { kind: "refused", result: refuseUnavailable() };
+      case "unavailable":
+      case "no_degraded_path":
+        // Either the degraded store failed (full, key, integrity), or this
+        // posture has none. Both mean: nothing durable, no dispatch.
+        transitionFromClaim("AUDIT_UNAVAILABLE");
+        return { kind: "refused", result: refuseUnavailable() };
+      default: {
+        const unexpected: never = outcome.reason;
+        void unexpected;
+        transitionFromClaim("AUDIT_UNAVAILABLE");
+        return { kind: "refused", result: refuseUnavailable() };
       }
-      // Queue full, key unavailable, or integrity violation: fail closed.
-      transitionFromClaim("AUDIT_UNAVAILABLE");
-      return { kind: "refused", result: refuseUnavailable() };
     }
   }
 
-  /** Durably record exactly one receipt: primary first, queue as fallback. */
+  /**
+   * Entries awaiting replay into the primary store. A posture with no degraded
+   * store has no backlog by construction (`backlog: null`), so it answers 0/[]
+   * rather than probing a queue it does not have.
+   */
+  async function backlogSize(unknownAs: number): Promise<number> {
+    const backlog = admission.backlog;
+    if (backlog === null) return 0;
+    return await backlog.size().catch(() => unknownAs);
+  }
+
+  /** Durably record exactly one receipt: primary first, degraded path second. */
   async function persistReceipt(
     receipt: CaioMinimalAuditReceipt,
   ): Promise<ReceiptWrite> {
@@ -299,7 +434,7 @@ export function createCaioAuditGate(deps: {
         return { kind: "refused", result: refuseUnavailable() };
       }
       primaryConfirmedHealthy = false;
-      return await queueReceipt(receipt);
+      return await admitWithoutPrimary(receipt);
     }
 
     switch (outcome.outcome) {
@@ -309,7 +444,7 @@ export function createCaioAuditGate(deps: {
       case "replayed": {
         if (state === "PRIMARY_DEGRADED") {
           // Primary is back; queued entries may still await replay.
-          const backlog = await deps.emergencyQueue.size().catch(() => 1);
+          const backlog = await backlogSize(1);
           if (backlog === 0) {
             transitionFromClaim("NORMAL");
             if (!replayInProgress) recoveryCapActive = false;
@@ -377,8 +512,23 @@ export function createCaioAuditGate(deps: {
   }
 
   return {
+    posture,
+
     async claimDispatch(candidate) {
-      const receipt = caioMinimalAuditReceiptSchema.parse(candidate);
+      // The gate STAMPS its own posture. A candidate that already names one
+      // must name THIS one: a receipt written under the other posture would
+      // let a self-service install pass its receipts off as governed ones (or
+      // the reverse), which is precisely what the ruling forbids.
+      const declared = (candidate as { posture?: unknown }).posture;
+      if (declared !== undefined && declared !== posture) {
+        throw new CaioAuditPostureMismatchError(
+          `gate posture is ${posture}; the claim named a different one`,
+        );
+      }
+      const receipt = caioMinimalAuditReceiptSchema.parse({
+        ...candidate,
+        posture,
+      });
       if (isCaioReplayMarkerRequestId(receipt.requestId)) {
         // The replay-marker namespace is minted by this gate only; a caller
         // supplying one would corrupt replay accounting.
@@ -403,6 +553,13 @@ export function createCaioAuditGate(deps: {
     },
 
     async recover() {
+      // Nothing can ever be pending in a posture with no degraded store, so
+      // recovery is a no-op there rather than a walk over a queue that does
+      // not exist.
+      const pending = admission.backlog;
+      if (pending === null) {
+        return { replayed: 0, remaining: 0, conflicts: 0 };
+      }
       const stateBeforeRecovery = state;
       replayInProgress = true;
       recoveryCapActive = true;
@@ -412,7 +569,7 @@ export function createCaioAuditGate(deps: {
       try {
         let entries;
         try {
-          entries = await deps.emergencyQueue.list();
+          entries = await pending.list();
         } catch {
           state = "AUDIT_UNAVAILABLE";
           return { replayed: 0, remaining: -1, conflicts: 0 };
@@ -426,7 +583,7 @@ export function createCaioAuditGate(deps: {
             // and leave the admission cap armed — the replay is not complete.
             primaryConfirmedHealthy = false;
             state = "PRIMARY_DEGRADED";
-            const remaining = await deps.emergencyQueue.size().catch(() => -1);
+            const remaining = await pending.size().catch(() => -1);
             return { replayed, remaining, conflicts };
           }
           if (outcome.outcome === "conflict") {
@@ -438,10 +595,10 @@ export function createCaioAuditGate(deps: {
           // Delete ONLY after the primary store confirmed the write. A crash
           // between persist and remove is safe: replay is idempotent by the
           // unique [workspace, requestId] key ("replayed" outcome).
-          await deps.emergencyQueue.remove(entry.entryId);
+          await pending.remove(entry.entryId);
           replayed += 1;
         }
-        const remaining = await deps.emergencyQueue.size().catch(() => -1);
+        const remaining = await pending.size().catch(() => -1);
         const healthy = await isPrimaryHealthy();
         if (remaining === 0 && conflicts === 0 && healthy) {
           // Only a drained queue AND a confirmed-healthy primary end recovery.
@@ -475,7 +632,7 @@ export function createCaioAuditGate(deps: {
       // NORMAL is only "ready" while the primary is observed healthy and the
       // emergency queue is drained; a stale transition can never claim ready.
       if (!(await isPrimaryHealthy())) return "degraded";
-      const backlog = await deps.emergencyQueue.size().catch(() => 1);
+      const backlog = await backlogSize(1);
       return backlog === 0 ? "ready" : "degraded";
     },
   };

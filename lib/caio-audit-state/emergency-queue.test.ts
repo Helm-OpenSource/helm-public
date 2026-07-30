@@ -25,6 +25,7 @@ function receipt(requestId: string): CaioMinimalAuditReceipt {
     modelAlias: "caio-default",
     inputHash: `sha256:${"b".repeat(64)}`,
     policyVersion: "policy-v3",
+    posture: "self_service",
   };
 }
 

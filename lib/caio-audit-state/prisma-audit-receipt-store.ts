@@ -13,6 +13,19 @@ import { db } from "@/lib/db";
  * replays idempotent — a duplicate with identical content resolves as
  * "replayed" (the stored persistedVia is preserved), a duplicate with
  * different content resolves as "conflict".
+ *
+ * KNOWN GAP (stated rather than hidden): the receipt's seventh field,
+ * `posture`, has no column on CaioAuditDispatchReceipt, so this store neither
+ * persists nor compares it. Within one installation that is harmless — a
+ * process runs under exactly one declared posture and the gate refuses any
+ * claim naming another (CaioAuditPostureMismatchError) — but if two
+ * differently-postured deployments ever shared one workspace's rows, a
+ * duplicate [workspaceId, requestId] from the other posture would resolve as
+ * "replayed" instead of "conflict". Closing it requires a `posture` column
+ * (NOT NULL) plus its inclusion in the sameContent comparison below; that is a
+ * prisma/ migration and is deliberately NOT part of this change. The encrypted
+ * emergency queue has no such gap: it binds the full receipt digest, which now
+ * covers posture.
  */
 export function createPrismaCaioAuditReceiptStore(): CaioAuditPrimaryStorePort {
   return {

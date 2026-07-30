@@ -29,6 +29,7 @@ function receipt(requestId: string, overrides: Partial<CaioMinimalAuditReceipt> 
     modelAlias: "caio-default",
     inputHash: `sha256:${"c".repeat(64)}`,
     policyVersion: "policy-v3",
+    posture: "self_service",
     ...overrides,
   };
 }
@@ -117,7 +118,11 @@ describe("caio audit gate", () => {
   it("persists to the primary store before allowing dispatch", async () => {
     const { store, rows } = createInMemoryPrimaryStore();
     const { queue } = createInMemoryQueue();
-    const gate = createCaioAuditGate({ primaryStore: store, emergencyQueue: queue });
+    const gate = createCaioAuditGate({
+      posture: "self_service",
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
 
     const result = await gate.claimDispatch(receipt("req-1"));
     expect(result).toMatchObject({ allowed: true, persistedVia: "primary" });
@@ -129,7 +134,11 @@ describe("caio audit gate", () => {
   it("is idempotent for a duplicate requestId with identical content and conflicts on different content", async () => {
     const { store } = createInMemoryPrimaryStore();
     const { queue } = createInMemoryQueue();
-    const gate = createCaioAuditGate({ primaryStore: store, emergencyQueue: queue });
+    const gate = createCaioAuditGate({
+      posture: "self_service",
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
 
     const first = await gate.claimDispatch(receipt("req-1"));
     const replay = await gate.claimDispatch(receipt("req-1"));
@@ -151,7 +160,11 @@ describe("caio audit gate", () => {
   it("rejects a receipt carrying a prompt key before any persistence", async () => {
     const { store, rows } = createInMemoryPrimaryStore();
     const { queue, entries } = createInMemoryQueue();
-    const gate = createCaioAuditGate({ primaryStore: store, emergencyQueue: queue });
+    const gate = createCaioAuditGate({
+      posture: "self_service",
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
 
     await expect(
       gate.claimDispatch({
@@ -172,6 +185,7 @@ describe("caio audit gate", () => {
       keyUnavailable: () => keyDown,
     });
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: store,
       emergencyQueue: queue,
       retryAfterSeconds: 17,
@@ -208,7 +222,11 @@ describe("caio audit gate", () => {
   it("refuses with 503 when the queue is at its maxEntries cap", async () => {
     const { store } = createInMemoryPrimaryStore({ failWrites: () => true });
     const { queue } = createInMemoryQueue({ maxEntries: 1 });
-    const gate = createCaioAuditGate({ primaryStore: store, emergencyQueue: queue });
+    const gate = createCaioAuditGate({
+      posture: "self_service",
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
 
     expect((await gate.claimDispatch(receipt("req-1"))).allowed).toBe(true);
     const refused = await gate.claimDispatch(receipt("req-2"));
@@ -225,7 +243,11 @@ describe("caio audit gate", () => {
       failWrites: () => primaryDown,
     });
     const { queue, entries } = createInMemoryQueue();
-    const gate = createCaioAuditGate({ primaryStore: store, emergencyQueue: queue });
+    const gate = createCaioAuditGate({
+      posture: "self_service",
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
 
     await gate.claimDispatch(receipt("req-1"));
     await gate.claimDispatch(receipt("req-2"));
@@ -249,7 +271,11 @@ describe("caio audit gate", () => {
       failWrites: () => primaryDown,
     });
     const { queue, entries } = createInMemoryQueue();
-    const gate = createCaioAuditGate({ primaryStore: store, emergencyQueue: queue });
+    const gate = createCaioAuditGate({
+      posture: "self_service",
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
 
     for (const requestId of ["req-1", "req-2", "req-3"]) {
       await gate.claimDispatch(receipt(requestId));
@@ -268,6 +294,7 @@ describe("caio audit gate", () => {
 
     // First recover run fails on req-2 (store failure at entry N).
     const failing = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: {
         async persist(input) {
           if (input.receipt.requestId === "req-2") {
@@ -304,6 +331,7 @@ describe("caio audit gate", () => {
       },
     };
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: slowStore,
       emergencyQueue: queue,
       recoveryConcurrentClaimCap: 1,
@@ -340,6 +368,7 @@ describe("caio audit gate", () => {
   it("F2: refuses when the primary store reports an outcome outside the contract", async () => {
     const { queue, entries } = createInMemoryQueue();
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: {
         persist: async () =>
           ({ outcome: "skipped_noop" }) as unknown as Awaited<
@@ -366,6 +395,7 @@ describe("caio audit gate", () => {
   it("F2: refuses a store success that carries no receiptId", async () => {
     const { queue, entries } = createInMemoryQueue();
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: {
         persist: async () =>
           ({ outcome: "persisted" }) as unknown as Awaited<
@@ -386,6 +416,7 @@ describe("caio audit gate", () => {
   it("F2: refuses an empty-string receiptId reported as success", async () => {
     const { queue } = createInMemoryQueue();
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: {
         persist: async () => ({ outcome: "persisted", receiptId: "" }) as never,
       },
@@ -417,6 +448,7 @@ describe("caio audit gate", () => {
         keyProvider: async () => key,
       });
       const gate = createCaioAuditGate({
+      posture: "self_service",
         primaryStore: {
           async persist() {
             throw new Error("primary down");
@@ -453,6 +485,7 @@ describe("caio audit gate", () => {
         keyProvider: async () => key,
       });
       const gate = createCaioAuditGate({
+      posture: "self_service",
         primaryStore: {
           async persist() {
             throw new Error("primary down");
@@ -485,6 +518,7 @@ describe("caio audit gate", () => {
     const { store, rows } = createInMemoryPrimaryStore();
     const { queue } = createInMemoryQueue();
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: store,
       emergencyQueue: queue,
     });
@@ -514,6 +548,7 @@ describe("caio audit gate", () => {
     const { store, rows } = createInMemoryPrimaryStore();
     const { queue } = createInMemoryQueue();
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: store,
       emergencyQueue: queue,
       replayDispatchCap: 2,
@@ -537,6 +572,7 @@ describe("caio audit gate", () => {
     const { store, rows } = createInMemoryPrimaryStore();
     const { queue } = createInMemoryQueue();
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: store,
       emergencyQueue: queue,
     });
@@ -552,6 +588,7 @@ describe("caio audit gate", () => {
     const { store } = createInMemoryPrimaryStore({ failWrites: () => true });
     const { queue } = createInMemoryQueue();
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: store,
       emergencyQueue: queue,
     });
@@ -572,6 +609,7 @@ describe("caio audit gate", () => {
     const { queue } = createInMemoryQueue();
     let primaryHealthy = false;
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: store,
       emergencyQueue: queue,
       primaryHealthProbe: async () => primaryHealthy,
@@ -592,6 +630,7 @@ describe("caio audit gate", () => {
     const { queue } = createInMemoryQueue();
     let primaryHealthy = true;
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: store,
       emergencyQueue: queue,
       primaryHealthProbe: async () => primaryHealthy,
@@ -618,6 +657,7 @@ describe("caio audit gate", () => {
       releaseReplay = resolve;
     });
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: {
         async persist({ receipt: candidate }) {
           if (candidate.requestId === "req-queued") {
@@ -665,6 +705,7 @@ describe("caio audit gate", () => {
     });
     let primaryDown = true;
     const gate = createCaioAuditGate({
+      posture: "self_service",
       primaryStore: {
         async persist({ receipt: candidate }) {
           if (primaryDown) throw new Error("primary down");
@@ -704,7 +745,11 @@ describe("caio audit gate", () => {
       failWrites: () => primaryDown,
     });
     const { queue, entries } = createInMemoryQueue();
-    const gate = createCaioAuditGate({ primaryStore: store, emergencyQueue: queue });
+    const gate = createCaioAuditGate({
+      posture: "self_service",
+      primaryStore: store,
+      emergencyQueue: queue,
+    });
 
     await gate.claimDispatch(receipt("req-1"));
     primaryDown = false;

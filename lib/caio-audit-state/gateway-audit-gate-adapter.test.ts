@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CaioAuditGate } from "@/lib/caio-audit-state/audit-gate.service";
+import type { CaioDeploymentPosture } from "@/lib/caio-audit-state/deployment-posture";
 import {
   CAIO_CANONICAL_AUDIT_CLAIM_FIELD_MAP,
   caioAuditWireRefusal,
@@ -19,8 +20,12 @@ const CLAIM: CaioCanonicalAuditClaim = {
   policyVersion: "policy-v3",
 };
 
-function gateReturning(result: unknown): CaioAuditGate {
+function gateReturning(
+  result: unknown,
+  posture: CaioDeploymentPosture = "self_service",
+): CaioAuditGate {
   return {
+    posture,
     claimDispatch: async () =>
       result as Awaited<ReturnType<CaioAuditGate["claimDispatch"]>>,
     recover: async () => ({ replayed: 0, remaining: 0, conflicts: 0 }),
@@ -34,13 +39,14 @@ describe("canonical audit gate port", () => {
   // .strict() receipt schema, so a naive adapter threw ZodError. The mapping is
   // now published as data and as one function.
   it("maps the canonical claim vocabulary onto the strict receipt shape", () => {
-    expect(toCaioMinimalAuditReceipt(CLAIM)).toEqual({
+    expect(toCaioMinimalAuditReceipt(CLAIM, "self_service")).toEqual({
       requestId: "req-canonical-1",
       client: "codex",
       workspace: "ws-1",
       modelAlias: "caio-codex-default",
       inputHash: `sha256:${"a".repeat(64)}`,
       policyVersion: "policy-v3",
+      posture: "self_service",
     });
     expect(CAIO_CANONICAL_AUDIT_CLAIM_FIELD_MAP.workspaceId).toBe("workspace");
     expect(CAIO_CANONICAL_AUDIT_CLAIM_FIELD_MAP.clientType).toBe("client");
@@ -56,10 +62,13 @@ describe("canonical audit gate port", () => {
 
   it("rejects a claim carrying an extra key before anything is persisted", () => {
     expect(() =>
-      toCaioMinimalAuditReceipt({
-        ...CLAIM,
-        prompt: "leak",
-      } as unknown as CaioCanonicalAuditClaim),
+      toCaioMinimalAuditReceipt(
+        {
+          ...CLAIM,
+          prompt: "leak",
+        } as unknown as CaioCanonicalAuditClaim,
+        "self_service",
+      ),
     ).toThrow();
   });
 
@@ -162,6 +171,7 @@ describe("canonical audit gate port", () => {
 
   it("propagates a thrown gate error so the transport fails closed", async () => {
     const port = createCaioCanonicalAuditGatePort({
+      posture: "self_service",
       claimDispatch: async () => {
         throw new Error("caio_audit_reserved_request_id");
       },
@@ -172,6 +182,47 @@ describe("canonical audit gate port", () => {
     await expect(port.claimDispatch(CLAIM)).rejects.toThrow(
       /reserved_request_id/u,
     );
+  });
+
+  // Owner ruling 2026-07-30: the posture is a property of the installation,
+  // never of the request. The claim vocabulary has no posture field and the
+  // strict claim schema refuses one, so an HTTP surface cannot pick the
+  // posture its receipts are recorded under.
+  it("stamps the gate's own posture and refuses a caller-supplied one", async () => {
+    const governedPort = createCaioCanonicalAuditGatePort(
+      gateReturning(
+        {
+          allowed: true,
+          receiptId: "row-1",
+          persistedVia: "primary",
+          dispatchAttempt: 1,
+        },
+        "governed_fde",
+      ),
+    );
+    expect(governedPort.posture).toBe("governed_fde");
+    expect(toCaioMinimalAuditReceipt(CLAIM, governedPort.posture).posture).toBe(
+      "governed_fde",
+    );
+    expect("posture" in CAIO_CANONICAL_AUDIT_CLAIM_FIELD_MAP).toBe(false);
+    expect(() =>
+      toCaioMinimalAuditReceipt(
+        {
+          ...CLAIM,
+          posture: "self_service",
+        } as unknown as CaioCanonicalAuditClaim,
+        "governed_fde",
+      ),
+    ).toThrow();
+  });
+
+  it("refuses to build a receipt when no posture is declared", () => {
+    expect(() =>
+      toCaioMinimalAuditReceipt(
+        CLAIM,
+        undefined as unknown as CaioDeploymentPosture,
+      ),
+    ).toThrow(/caio_deployment_posture_invalid/u);
   });
 
   it("collapses the four gate readiness states onto the gateway's three", () => {

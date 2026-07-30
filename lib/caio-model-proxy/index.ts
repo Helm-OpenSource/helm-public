@@ -65,7 +65,49 @@ export {
 } from "./upstream/chat-completions-client";
 
 export {
+  CAIO_ROUTE_ADMISSION_DENIALS,
+  CAIO_GOVERNED_CREDENTIAL_REF_PREFIX,
+  CaioGovernedAdmissionError,
+  caioGovernedCredentialRef,
+  caioGovernedRetentionPolicyKey,
+  type CaioFrozenGovernedAdmissionPort,
+  type CaioGovernedAdmissionPort,
+  type CaioGovernedAdmissionSnapshot,
+  type CaioGovernedRouteAdmission,
+  type CaioGovernedRouteVerdict,
+  type CaioLiveGovernedAdmissionPort,
+  type CaioRouteAdmissionDenial,
+} from "./governed-admission-contracts";
+
+export {
+  CAIO_GOVERNED_ADMISSION_DIMENSIONS,
+  admitFromSnapshot,
+  admitLiveRoute,
+  assertBindingAdmitted,
+  compareBindingToGovernedRoute,
+  type CaioGovernedAdmissionDimension,
+  type CaioGovernedAdmissionSubject,
+} from "./governed-admission-gate";
+
+export {
+  createCaioFrozenGovernedAdmission,
+  createCaioLiveGovernedAdmission,
+  resolveCaioGovernedAdmissionSnapshot,
+  type CaioGovernedAdmissionSource,
+  type CaioGovernedAdmissionTransactionRunner,
+} from "./governed-route-admission.service";
+
+export {
+  CAIO_OUTBOUND_DENY_CATEGORIES,
+  CaioOutboundContentDeniedError,
+  assertCaioOutboundContentAllowed,
+  assessCaioOutboundContent,
+  type CaioOutboundContentAssessment,
+} from "./outbound-content-gate";
+
+export {
   CAIO_PROXY_CLIENT_TYPES,
+  CaioModelProxyConfigError,
   createCaioModelProxy,
   type CaioAudienceContext,
   type CaioCredentialLoaderPort,

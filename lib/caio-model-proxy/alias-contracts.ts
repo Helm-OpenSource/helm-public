@@ -97,6 +97,20 @@ const bindingCoreShape = {
   dataAuthorizationKey: policyKeySchema,
   policyVersion: z.string().min(1).max(100),
   status: caioAliasBindingStatusSchema,
+  /**
+   * The governed policy this binding is subordinate to, and the route inside
+   * it this binding is allowed to reach. BOTH are required: a binding that
+   * names no governed route cannot be admitted in either deployment posture,
+   * and the schema is `.strict()`, so the omission fails at parse time rather
+   * than degrading into an ungoverned passthrough.
+   *
+   * The governed route is resolved from an ACTIVE, human-OWNER-approved
+   * TenantModelRoutePolicy (self_service: once, frozen at load; governed_fde:
+   * live, per request) and every governed dimension of this binding must match
+   * it exactly — see governed-admission-gate.ts.
+   */
+  governedPolicyKey: policyKeySchema,
+  governedRouteRef: z.string().min(1).max(200),
 } as const;
 
 // A fallback candidate carries the full binding shape (minus further nesting)

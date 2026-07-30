@@ -43,7 +43,24 @@ import type {
   CaioCanonicalAuditGateOutcome,
   CaioCanonicalAuditGatePort,
 } from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
+import {
+  parseCaioDeploymentPosture,
+  type CaioDeploymentPosture,
+} from "@/lib/caio-audit-state/deployment-posture";
 import { caioFallbackMarkerRequestId } from "@/lib/caio-audit-state/receipt-linkage";
+import {
+  CaioGovernedAdmissionError,
+  type CaioFrozenGovernedAdmissionPort,
+  type CaioGovernedRouteVerdict,
+  type CaioLiveGovernedAdmissionPort,
+} from "@/lib/caio-model-proxy/governed-admission-contracts";
+import {
+  admitFromSnapshot,
+  admitLiveRoute,
+  assertBindingAdmitted,
+  type CaioGovernedAdmissionSubject,
+} from "@/lib/caio-model-proxy/governed-admission-gate";
+import { assessCaioOutboundContent } from "@/lib/caio-model-proxy/outbound-content-gate";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 
 import {
@@ -137,7 +154,7 @@ export type CaioCredentialLoaderPort = {
   load(input: { credentialRef: string }): Promise<string>;
 };
 
-export type CaioModelProxyDependencies = {
+type CaioModelProxyCommonDependencies = {
   bindings: readonly CaioModelAliasBinding[];
   credentialLoader: CaioCredentialLoaderPort;
   clients: {
@@ -154,6 +171,30 @@ export type CaioModelProxyDependencies = {
   rateLimiter?: CaioRateLimiterPort;
   now?: () => Date;
 };
+
+/**
+ * Proxy dependencies, discriminated by the DECLARED deployment posture.
+ *
+ * `posture` is required and is never inferred: not from the environment, not
+ * from a request field, and never defaulted (an unparseable value fails
+ * construction). It also has to AGREE with the audit gate's own posture —
+ * checked at construction — so a process cannot admit under one posture while
+ * writing receipts under the other.
+ *
+ * The two arms demand different admission PORTS, which is what makes the
+ * self-service snapshot and the governed live check impossible to confuse:
+ *   self_service → a frozen snapshot resolved once at construction
+ *   governed_fde → a live, per-request verification against the policy head
+ */
+export type CaioModelProxyDependencies =
+  | (CaioModelProxyCommonDependencies & {
+      posture: Extract<CaioDeploymentPosture, "self_service">;
+      governedAdmission: CaioFrozenGovernedAdmissionPort;
+    })
+  | (CaioModelProxyCommonDependencies & {
+      posture: Extract<CaioDeploymentPosture, "governed_fde">;
+      governedAdmission: CaioLiveGovernedAdmissionPort;
+    });
 
 export type CaioProxyExecuteInput = {
   audienceContext: CaioAudienceContext;
@@ -186,6 +227,20 @@ export type CaioProxyExecuteStatus =
    * cannot help and the route may not be disclosed as merely unavailable.
    */
   | "alias_not_granted"
+  /**
+   * No ACTIVE, owner-approved governed policy admits this binding's route (or
+   * the binding disagrees with it). A 403-class governance refusal raised
+   * BEFORE the audit claim, the credential load and any upstream contact, in
+   * BOTH postures. The coarse code is deliberate: which governance condition
+   * failed is not disclosed to a LAN client.
+   */
+  | "route_not_admitted"
+  /**
+   * The outbound body crossed the Context Broker's hard content boundary.
+   * 422-class, also raised before the audit claim, the credential load and any
+   * upstream contact — the body never leaves.
+   */
+  | "content_boundary_denied"
   | "rate_limited"
   | CaioProxyAuditRefusalStatus
   | "credential_unavailable"
@@ -223,10 +278,96 @@ export type CaioModelProxy = {
   execute(input: CaioProxyExecuteInput): Promise<CaioProxyExecuteResult>;
 };
 
-class CaioModelProxyConfigError extends Error {
+export class CaioModelProxyConfigError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CaioModelProxyConfigError";
+  }
+}
+
+/** Resolve one route's admission for a target binding at a point in time. */
+type CaioRouteAdmitter = (
+  target: CaioGovernedAdmissionSubject,
+  at: Date,
+) => Promise<CaioGovernedRouteVerdict>;
+
+const UNVERIFIABLE: CaioGovernedRouteVerdict = Object.freeze({
+  admitted: false as const,
+  reason: "admission_unverifiable" as const,
+});
+
+/**
+ * Build the posture's admission strategy ONCE.
+ *
+ * self_service returns a reader over the frozen snapshot — no IO, no await on
+ * a live policy, which is exactly what lets this posture keep serving from the
+ * encrypted emergency queue while the primary store is down. Its documented
+ * cost: an owner revocation is observed only when the process reloads the
+ * snapshot, so product material must NOT claim instant revocation here. The
+ * snapshot still hard-expires at the policy's validUntil.
+ *
+ * governed_fde returns a verifier that re-reads the live policy head
+ * (including its version and revocation epoch) for every request. A read that
+ * fails for any reason answers "not admitted"; there is no cached answer to
+ * fall back to.
+ */
+function buildRouteAdmitter(
+  deps: CaioModelProxyDependencies,
+): CaioRouteAdmitter {
+  if (deps.posture === "self_service") {
+    const port: CaioFrozenGovernedAdmissionPort = deps.governedAdmission;
+    return async (target, at) => {
+      try {
+        return admitFromSnapshot({
+          snapshot: port.snapshot(),
+          binding: target,
+          now: at,
+        });
+      } catch {
+        return UNVERIFIABLE;
+      }
+    };
+  }
+  const port: CaioLiveGovernedAdmissionPort = deps.governedAdmission;
+  return async (target, at) => {
+    try {
+      const verdict = await port.verify({
+        routeRef: target.governedRouteRef,
+        now: at,
+      });
+      return admitLiveRoute({ binding: target, verdict });
+    } catch {
+      return UNVERIFIABLE;
+    }
+  };
+}
+
+/**
+ * Construction-time subordination check. self_service can compare the whole
+ * binding against the frozen snapshot; governed_fde has no policy in hand yet,
+ * so it verifies the one thing it can — that the binding names the policy this
+ * gateway will verify against — and defers the route check to the request path.
+ */
+function assertBindingSubordinate(
+  deps: CaioModelProxyDependencies,
+  binding: CaioGovernedAdmissionSubject,
+  now: Date,
+  role: string,
+): void {
+  if (deps.posture === "self_service") {
+    assertBindingAdmitted({
+      snapshot: deps.governedAdmission.snapshot(),
+      binding,
+      now,
+      role,
+    });
+    return;
+  }
+  if (binding.governedPolicyKey !== deps.governedAdmission.policyKey) {
+    throw new CaioGovernedAdmissionError(
+      "route_not_in_policy",
+      `${role} ${binding.alias} names governed policy ${binding.governedPolicyKey}, but this gateway verifies ${deps.governedAdmission.policyKey}`,
+    );
   }
 }
 
@@ -269,6 +410,44 @@ function aliasNotGranted(): CaioProxyExecuteResult {
     status: "alias_not_granted",
     httpStatus: 403,
     reasonCode: "alias_not_granted",
+    receiptId: null,
+    retryAfterSeconds: null,
+    body: null,
+    upstream: null,
+    fallbackAttempted: false,
+    fallbackSucceeded: false,
+    fallbackReceiptId: null,
+    auditRefusal: null,
+  };
+}
+
+/**
+ * The governed policy does not admit this route. Like alias_not_granted: no
+ * receipt, no credential, no upstream, no retry advice, and nothing disclosed
+ * about the binding or about which governance condition failed.
+ */
+function routeNotAdmitted(): CaioProxyExecuteResult {
+  return {
+    status: "route_not_admitted",
+    httpStatus: 403,
+    reasonCode: "route_not_admitted",
+    receiptId: null,
+    retryAfterSeconds: null,
+    body: null,
+    upstream: null,
+    fallbackAttempted: false,
+    fallbackSucceeded: false,
+    fallbackReceiptId: null,
+    auditRefusal: null,
+  };
+}
+
+/** The body may not leave. No receipt, no credential, no upstream contact. */
+function contentBoundaryDenied(): CaioProxyExecuteResult {
+  return {
+    status: "content_boundary_denied",
+    httpStatus: 422,
+    reasonCode: "content_boundary_denied",
     receiptId: null,
     retryAfterSeconds: null,
     body: null,
@@ -412,6 +591,36 @@ function forwardedChunkCount(outcome: unknown): number {
 export function createCaioModelProxy(
   deps: CaioModelProxyDependencies,
 ): CaioModelProxy {
+  // The declared posture, parsed fail-closed: absent or unparseable is a
+  // construction error, never an implicit choice of the permissive posture.
+  const posture = parseCaioDeploymentPosture(
+    (deps as { posture?: unknown }).posture,
+  );
+  // No impersonation: the audit gate this proxy claims through must be the
+  // same posture. A self-service proxy wired to a governed gate (or the
+  // reverse) would produce receipts describing a deployment shape that never
+  // ran, so it cannot be constructed at all.
+  if (deps.auditGate.posture !== posture) {
+    throw new CaioModelProxyConfigError(
+      `posture mismatch: proxy is ${posture}, audit gate is ${String(
+        deps.auditGate.posture,
+      )}`,
+    );
+  }
+  if (deps.governedAdmission.posture !== posture) {
+    throw new CaioModelProxyConfigError(
+      `posture mismatch: proxy is ${posture}, governed admission is ${String(
+        deps.governedAdmission.posture,
+      )}`,
+    );
+  }
+  const clock = deps.now ?? (() => new Date());
+
+  // ONE admission strategy, selected at construction. The self-service arm can
+  // only ever read the frozen snapshot; the governed arm has no snapshot to
+  // read and must complete a live verification for every request.
+  const admitRoute = buildRouteAdmitter(deps);
+
   // Fail fast on malformed gateway configuration: every binding must satisfy
   // the alias contract and aliases must be unique.
   const bindingsByAlias = new Map<string, CaioModelAliasBinding>();
@@ -420,6 +629,22 @@ export function createCaioModelProxy(
     if (bindingsByAlias.has(binding.alias)) {
       throw new CaioModelProxyConfigError(
         `duplicate alias binding: ${binding.alias}`,
+      );
+    }
+    // Governed subordination, checked as early as the posture allows:
+    //   self_service — the snapshot exists now, so the binding AND every
+    //     fallback candidate are matched against the approved policy here; a
+    //     binding the policy does not admit refuses to start.
+    //   governed_fde — the policy is read per request, so only the declared
+    //     policy key can be checked now; the route itself is verified live,
+    //     before the audit claim, on every request.
+    assertBindingSubordinate(deps, binding, clock(), "alias binding");
+    for (const candidate of binding.fallbackCandidates) {
+      assertBindingSubordinate(
+        deps,
+        candidate,
+        clock(),
+        `fallback candidate of ${binding.alias}`,
       );
     }
     bindingsByAlias.set(binding.alias, binding);
@@ -546,6 +771,16 @@ export function createCaioModelProxy(
     const grantedAliases = resolveCaioGrantedAliases(input.audienceContext);
     if (!grantedAliases.has(binding.alias)) return aliasNotGranted();
 
+    // GOVERNED ADMISSION. Both postures: the route this binding names must be
+    // admitted by an ACTIVE, human-OWNER-approved policy right now. Placed
+    // ahead of the status/protocol checks so an unadmitted alias discloses
+    // nothing about the binding behind it, and ahead of the audit claim, the
+    // credential load and every upstream call so the refusal costs no receipt
+    // and produces no egress.
+    const at = clock();
+    const admission = await admitRoute(binding, at);
+    if (!admission.admitted) return routeNotAdmitted();
+
     if (binding.status !== "active") return noRoute("alias_disabled");
     if (binding.protocol !== input.protocol) {
       return noRoute("protocol_mismatch");
@@ -573,6 +808,15 @@ export function createCaioModelProxy(
           auditRefusal: null,
         };
       }
+    }
+
+    // OUTBOUND CONTENT BOUNDARY, in both postures. The body is forwarded
+    // verbatim (only `model` is replaced), so this is the last point at which
+    // a secret can be stopped from leaving the enterprise network. Before the
+    // audit claim, the credential load and any upstream contact: a refused
+    // body costs no receipt and produces no egress.
+    if (assessCaioOutboundContent(input.body).denied) {
+      return contentBoundaryDenied();
     }
 
     const inputHash = sha256(canonicalJson(input.body));
@@ -651,9 +895,19 @@ export function createCaioModelProxy(
     // route. An ungranted candidate is not a candidate at all: it is skipped
     // before its receipt is claimed, before its credential is loaded and before
     // any call to it.
-    const candidate = binding.fallbackCandidates.find(
-      (c) => isFallbackAllowed(binding, c) && grantedAliases.has(c.alias),
-    );
+    // A fallback also runs on its own GOVERNED route, so it needs its own
+    // admission: a candidate whose route is no longer admitted is not a
+    // candidate at all. Checked here, before its receipt is claimed, before its
+    // credential is loaded and before any call to it.
+    let candidate: CaioModelAliasFallbackCandidate | undefined;
+    for (const option of binding.fallbackCandidates) {
+      if (!isFallbackAllowed(binding, option)) continue;
+      if (!grantedAliases.has(option.alias)) continue;
+      const optionAdmission = await admitRoute(option, clock());
+      if (!optionAdmission.admitted) continue;
+      candidate = option;
+      break;
+    }
     if (!candidate) {
       return upstreamErrorResult(
         primaryOutcome,

@@ -52,6 +52,8 @@ import {
   CAIO_CODEX_DEFAULT_ALIAS,
   type CaioModelAliasBinding,
 } from "@/lib/caio-model-proxy/alias-contracts";
+import type { CaioGovernedAdmissionSnapshot } from "@/lib/caio-model-proxy/governed-admission-contracts";
+import { createCaioFrozenGovernedAdmission } from "@/lib/caio-model-proxy/governed-route-admission.service";
 import { createCaioModelProxy } from "@/lib/caio-model-proxy/proxy-engine";
 import { createCaioResponsesUpstreamPort } from "@/lib/caio-model-proxy/upstream/responses-client";
 
@@ -69,6 +71,9 @@ const PRINCIPAL: CaioAccessPrincipal = Object.freeze({
   audience: "model",
 });
 
+const GOVERNED_POLICY_KEY = "caio-lan-default";
+const GOVERNED_ROUTE_REF = "route-provider-a-primary";
+
 const BINDING: CaioModelAliasBinding = Object.freeze({
   alias: CAIO_CODEX_DEFAULT_ALIAS,
   protocol: "responses",
@@ -77,12 +82,52 @@ const BINDING: CaioModelAliasBinding = Object.freeze({
   credentialRef: "provider-a-key",
   endpointBaseUrl: "https://upstream.example.internal/v1",
   region: "cn-hangzhou",
-  dataRetentionPolicyKey: "retention-30d",
-  trainingUsePolicyKey: "no-training",
+  dataRetentionPolicyKey: "retention-days:30",
+  trainingUsePolicyKey: "prohibited",
   dataAuthorizationKey: "auth-tier-1",
   policyVersion: "policy-v3",
   status: "active",
+  governedPolicyKey: GOVERNED_POLICY_KEY,
+  governedRouteRef: GOVERNED_ROUTE_REF,
   fallbackCandidates: [],
+});
+
+/**
+ * The frozen governed admission a self-service install resolves once at load:
+ * an ACTIVE, human-OWNER-approved policy route that matches every governed
+ * dimension of the binding above.
+ */
+const GOVERNED_ADMISSION: CaioGovernedAdmissionSnapshot = Object.freeze({
+  policyKey: GOVERNED_POLICY_KEY,
+  policyId: "policy:caio-lan-default-v1",
+  policyHash: `sha256:${"f".repeat(64)}`,
+  policyHeadVersion: 2,
+  policyRevocationEpoch: 0,
+  resolvedAt: "2026-07-30T00:00:00.000Z",
+  validUntil: "2099-01-01T00:00:00.000Z",
+  routes: new Map([
+    [
+      GOVERNED_ROUTE_REF,
+      Object.freeze({
+        routeRef: GOVERNED_ROUTE_REF,
+        policyKey: GOVERNED_POLICY_KEY,
+        policyId: "policy:caio-lan-default-v1",
+        policyHash: `sha256:${"f".repeat(64)}`,
+        policyHeadVersion: 2,
+        policyRevocationEpoch: 0,
+        provider: "provider-a",
+        credentialRef: "provider-a-key",
+        region: "cn-hangzhou",
+        deploymentForm: "private_deployment",
+        jurisdiction: "customer_premises",
+        retentionPolicyKey: "retention-days:30",
+        trainingUsePolicyKey: "prohibited",
+        pricingVersion: "provider-a-pricing-202607",
+        maxOutputTokens: 4_000,
+        policyValidUntil: "2099-01-01T00:00:00.000Z",
+      }),
+    ],
+  ]),
 });
 
 /** Deterministic non-secret test key material for the encrypted queue. */
@@ -148,7 +193,11 @@ function createWiring(options: { requestIdFactory?: () => string } = {}): Wiring
     keyProvider: async () => queueKey(),
   });
   const primaryStore = createInMemoryPrimaryStore();
-  const gate = createCaioAuditGate({ primaryStore, emergencyQueue: queue });
+  const gate = createCaioAuditGate({
+    posture: "self_service",
+    primaryStore,
+    emergencyQueue: queue,
+  });
 
   // The ONLY stub inside the proxy: the upstream HTTP call.
   const upstreamFetch = vi.fn(
@@ -163,6 +212,8 @@ function createWiring(options: { requestIdFactory?: () => string } = {}): Wiring
   });
 
   const proxy = createCaioModelProxy({
+    posture: "self_service",
+    governedAdmission: createCaioFrozenGovernedAdmission(GOVERNED_ADMISSION),
     bindings: [BINDING],
     credentialLoader: {
       load: async ({ credentialRef }) => `loaded-secret-for-${credentialRef}`,
@@ -244,9 +295,13 @@ describe("gateway -> model proxy -> canonical audit gate, end to end", () => {
       "inputHash",
       "modelAlias",
       "policyVersion",
+      "posture",
       "requestId",
       "workspace",
     ]);
+    // The receipt names the deployment posture that produced it, so a
+    // self-service receipt can never be read as a governed-FDE one.
+    expect(receipt.posture).toBe("self_service");
     expect(receipt.workspace).toBe("ws_e2e");
     expect(receipt.client).toBe("codex");
     expect(receipt.modelAlias).toBe(CAIO_CODEX_DEFAULT_ALIAS);

@@ -6,6 +6,7 @@ import {
   CAIO_STABLE_MODEL_ALIASES,
   CAIO_WORKBUDDY_DEFAULT_ALIAS,
   caioModelAliasBindingSchema,
+  caioModelAliasFallbackCandidateSchema,
   isCaioSecureUpstreamEndpoint,
   isFallbackAllowed,
   listModelsForGrant,
@@ -29,6 +30,10 @@ function makeCandidate(
     dataAuthorizationKey: "auth-tier-1",
     policyVersion: "policy-v3",
     status: "active",
+    // Governed subordination (owner ruling, 2026-07-30): a binding that names
+    // no governed route cannot be parsed at all, in either posture.
+    governedPolicyKey: "caio-lan-default",
+    governedRouteRef: "route-provider-a-primary",
     ...overrides,
   };
 }
@@ -67,6 +72,33 @@ describe("caioModelAliasBindingSchema", () => {
       fallbackCandidates: [makeCandidate()],
     });
     expect(caioModelAliasBindingSchema.parse(binding)).toEqual(binding);
+  });
+
+  // Owner ruling 2026-07-30: both postures are subordinate to governance, so a
+  // binding that names no governed route is not a weaker binding — it is not a
+  // binding at all.
+  it("rejects a binding that names no governed policy or route", () => {
+    const { governedPolicyKey: _key, ...withoutPolicyKey } = makeBinding();
+    expect(
+      caioModelAliasBindingSchema.safeParse(withoutPolicyKey).success,
+    ).toBe(false);
+    const { governedRouteRef: _ref, ...withoutRouteRef } = makeBinding();
+    expect(
+      caioModelAliasBindingSchema.safeParse(withoutRouteRef).success,
+    ).toBe(false);
+    expect(
+      caioModelAliasBindingSchema.safeParse(
+        makeBinding({ governedRouteRef: "" }),
+      ).success,
+    ).toBe(false);
+    // A fallback candidate carries the same requirement: it is egress on its
+    // own governed route.
+    const { governedRouteRef: _candidateRef, ...candidateWithoutRoute } =
+      makeCandidate();
+    expect(
+      caioModelAliasFallbackCandidateSchema.safeParse(candidateWithoutRoute)
+        .success,
+    ).toBe(false);
   });
 
   it("rejects a credentialRef containing dots or slashes", () => {
@@ -278,6 +310,8 @@ describe("upstream endpoint transport", () => {
     dataAuthorizationKey: "authorized",
     policyVersion: "p1",
     status: "active",
+    governedPolicyKey: "caio-lan-default",
+    governedRouteRef: "route-provider-a-primary",
     fallbackCandidates: [],
   });
 

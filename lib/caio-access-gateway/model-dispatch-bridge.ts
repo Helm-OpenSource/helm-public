@@ -137,6 +137,18 @@ export function caioModelDispatchOutcomeFromProxyResult(
       // ungranted route as merely unavailable.
       throw new CaioAccessGatewayError("scope_violation");
 
+    case "route_not_admitted":
+      // Governance, not availability: no approved policy admits this route, so
+      // the request is refused with a 403 that discloses nothing further. It
+      // never reached the audit gate, a credential, or an upstream.
+      throw new CaioAccessGatewayError("route_not_governed");
+
+    case "content_boundary_denied":
+      // The outbound body crossed the hard content boundary. Reuses the
+      // existing 422 external_release_denied code rather than minting a new
+      // wire identifier for the same meaning: this release is not permitted.
+      throw new CaioAccessGatewayError("external_release_denied");
+
     case "credential_unavailable":
       // A receipt may exist, but no upstream was reached: 503, not 200.
       throw new CaioAccessGatewayError("no_route");

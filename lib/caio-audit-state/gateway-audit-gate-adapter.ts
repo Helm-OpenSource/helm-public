@@ -36,6 +36,10 @@ import type {
   CaioAuditClaimResult,
   CaioAuditGate,
 } from "@/lib/caio-audit-state/audit-gate.service";
+import {
+  parseCaioDeploymentPosture,
+  type CaioDeploymentPosture,
+} from "@/lib/caio-audit-state/deployment-posture";
 
 /**
  * Canonical claim shape. Field names follow the request-path vocabulary
@@ -74,7 +78,14 @@ export const caioCanonicalAuditClaimSchema = z
   })
   .strict();
 
-/** Canonical claim field -> minimal receipt field. */
+/**
+ * Canonical claim field -> minimal receipt field.
+ *
+ * `posture` is deliberately ABSENT from this map: it is not a claim field. The
+ * receipt's seventh field comes from the gate's construction-time declaration,
+ * never from the caller (see toCaioMinimalAuditReceipt below), so no HTTP
+ * surface can choose the posture its receipts are recorded under.
+ */
 export const CAIO_CANONICAL_AUDIT_CLAIM_FIELD_MAP = Object.freeze({
   requestId: "requestId",
   workspaceId: "workspace",
@@ -84,9 +95,16 @@ export const CAIO_CANONICAL_AUDIT_CLAIM_FIELD_MAP = Object.freeze({
   policyVersion: "policyVersion",
 } as const);
 
-/** Bridges the canonical claim vocabulary to the persisted receipt shape. */
+/**
+ * Bridges the canonical claim vocabulary to the persisted receipt shape.
+ *
+ * `posture` is a REQUIRED second argument rather than part of the claim: the
+ * caller of this function is the adapter below, which reads it off the gate it
+ * wraps. A request can never reach this parameter.
+ */
 export function toCaioMinimalAuditReceipt(
   claim: CaioCanonicalAuditClaim,
+  posture: CaioDeploymentPosture,
 ): CaioMinimalAuditReceipt {
   const parsed = caioCanonicalAuditClaimSchema.parse(claim);
   return caioMinimalAuditReceiptSchema.parse({
@@ -96,6 +114,7 @@ export function toCaioMinimalAuditReceipt(
     modelAlias: parsed.modelAlias,
     inputHash: parsed.inputHash,
     policyVersion: parsed.policyVersion,
+    posture: parseCaioDeploymentPosture(posture),
   });
 }
 
@@ -115,6 +134,13 @@ export type CaioCanonicalAuditGateOutcome =
     }>;
 
 export type CaioCanonicalAuditGatePort = Readonly<{
+  /**
+   * The deployment posture this port's gate was constructed with. Published on
+   * the port so consumers (the model proxy, the readiness/liveness surfaces)
+   * report and cross-check the posture actually in force instead of declaring
+   * a second, possibly divergent one.
+   */
+  posture: CaioDeploymentPosture;
   claimDispatch(
     claim: CaioCanonicalAuditClaim,
   ): Promise<CaioCanonicalAuditGateOutcome>;
@@ -173,8 +199,11 @@ export function createCaioCanonicalAuditGatePort(
   gate: CaioAuditGate,
 ): CaioCanonicalAuditGatePort {
   return Object.freeze({
+    posture: gate.posture,
     async claimDispatch(claim) {
-      const result = await gate.claimDispatch(toCaioMinimalAuditReceipt(claim));
+      const result = await gate.claimDispatch(
+        toCaioMinimalAuditReceipt(claim, gate.posture),
+      );
       if (result.allowed) {
         return Object.freeze({
           status: "allowed" as const,

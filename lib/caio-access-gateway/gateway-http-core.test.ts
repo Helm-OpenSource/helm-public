@@ -161,6 +161,9 @@ function createHarness(
       },
     },
     auditGate: overrides.auditGate ?? {
+      // The posture is declared where the gate is constructed; the gateway
+      // reports it rather than declaring one of its own.
+      posture: "self_service",
       claimDispatch: async (claim) => {
         calls.push("auditGate");
         auditClaims.push(claim);
@@ -244,7 +247,10 @@ describe("probes", () => {
       request({ method: "GET", path: "/livez", headers: {}, body: null }),
     );
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: "alive" });
+    expect(response.body).toEqual({
+      status: "alive",
+      posture: "self_service",
+    });
     expect(harness.calls).toEqual([]);
   });
 
@@ -257,19 +263,25 @@ describe("probes", () => {
 
     const ready = await probe();
     expect(ready.status).toBe(200);
-    expect(ready.body).toEqual({ status: "ready" });
+    expect(ready.body).toEqual({ status: "ready", posture: "self_service" });
 
     harness.setReadiness("degraded");
     const degraded = await probe();
     expect(degraded.status).toBe(200);
-    expect(degraded.body).toEqual({ status: "degraded" });
+    expect(degraded.body).toEqual({
+      status: "degraded",
+      posture: "self_service",
+    });
 
     // The gate has a fourth state the gateway probe does not: serving under a
     // recovery admission cap is reported as degraded, never as ready.
     harness.setReadiness("recovering");
     const recovering = await probe();
     expect(recovering.status).toBe(200);
-    expect(recovering.body).toEqual({ status: "degraded" });
+    expect(recovering.body).toEqual({
+      status: "degraded",
+      posture: "self_service",
+    });
 
     harness.setReadiness("unavailable");
     const unavailable = await probe();
@@ -981,6 +993,7 @@ describe("audit gate", () => {
   it("fails closed as 503 caio_audit_unavailable when the claim throws", async () => {
     const harness = createHarness({
       auditGate: {
+        posture: "self_service",
         claimDispatch: async () => {
           throw new Error("audit ledger down: mysql://user:pass@host/db");
         },
@@ -1010,6 +1023,7 @@ describe("audit gate", () => {
     ]) {
       const harness = createHarness({
         auditGate: {
+          posture: "self_service",
           claimDispatch: async () => {
             throw thrown;
           },
@@ -1052,6 +1066,7 @@ describe("audit gate", () => {
   it("refuses a receipt conflict as a permanent 409 and never dispatches", async () => {
     const harness = createHarness({
       auditGate: {
+        posture: "self_service",
         claimDispatch: async () => ({
           status: "receipt_conflict",
           errorCode: "caio_audit_receipt_conflict",
@@ -1070,6 +1085,7 @@ describe("audit gate", () => {
   it("refuses a replay-cap hit as 429 caio_audit_replay_limit_exceeded", async () => {
     const harness = createHarness({
       auditGate: {
+        posture: "self_service",
         claimDispatch: async () => ({
           status: "replay_limit_exceeded",
           errorCode: "caio_audit_replay_limit_exceeded",
@@ -1090,6 +1106,7 @@ describe("audit gate", () => {
   it("refuses an unavailable audit store as 503 with Retry-After", async () => {
     const harness = createHarness({
       auditGate: {
+        posture: "self_service",
         claimDispatch: async () => ({
           status: "audit_unavailable",
           errorCode: "caio_audit_unavailable",
@@ -1108,6 +1125,7 @@ describe("audit gate", () => {
   it("emits no Retry-After when a refusal carries a null retryAfterSeconds", async () => {
     const harness = createHarness({
       auditGate: {
+        posture: "self_service",
         claimDispatch: async () => ({
           status: "audit_unavailable",
           errorCode: "caio_audit_unavailable",
@@ -1125,6 +1143,7 @@ describe("audit gate", () => {
   it("treats an allowed outcome without a receipt id as not claimed", async () => {
     const harness = createHarness({
       auditGate: {
+        posture: "self_service",
         claimDispatch: async () =>
           ({
             status: "allowed",

@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
+import { caioDeploymentPostureSchema } from "@/lib/caio-audit-state/deployment-posture";
+
 /**
  * Audit-gated dispatch state machine states.
  *
@@ -47,6 +49,17 @@ export type CaioAuditGateReadiness =
  * request identity and policy binding, never prompt/response bodies.
  * `.strict()`: any extra key (e.g. "prompt", "body", "messages") is rejected
  * so raw model traffic can never leak into audit persistence.
+ *
+ * SEVEN fields, not six. `posture` was added by the owner ruling of
+ * 2026-07-30: two deployment postures ship, and a receipt that does not say
+ * which one produced it lets either impersonate the other. It is NOT a value a
+ * caller supplies — the audit gate stamps its own construction-time posture
+ * onto every receipt it persists (see audit-gate.service.ts) and refuses a
+ * receipt carrying a different one, so the field records a property of the
+ * installation rather than a claim made by the request.
+ *
+ * The set is still CLOSED: widening it again means changing this schema, the
+ * canonical payload below, and therefore caioReceiptDigest, in lockstep.
  */
 export const caioMinimalAuditReceiptSchema = z
   .object({
@@ -56,6 +69,7 @@ export const caioMinimalAuditReceiptSchema = z
     modelAlias: z.string().min(1).max(200),
     inputHash: z.string().regex(/^(?:sha256:)?[a-f0-9]{64}$/),
     policyVersion: z.string().min(1).max(200),
+    posture: caioDeploymentPostureSchema,
   })
   .strict();
 
@@ -70,6 +84,16 @@ export type CaioMinimalAuditReceipt = z.infer<
  * values always produce the same bytes regardless of how they were built. This
  * is the digest input used to decide whether a duplicate audit record carries
  * identical content or is a divergent receipt that must be refused.
+ *
+ * `posture` is the SEVENTH position and is part of the digest by design: the
+ * same request recorded under a different deployment posture is a DIFFERENT
+ * receipt, so a queue entry written by a self-service install can never be
+ * read back as a governed-FDE receipt (it reports a content conflict instead).
+ *
+ * UPGRADE CONSEQUENCE: adding the position changed every digest value, so
+ * entries already sitting in an encrypted emergency queue would be seen as
+ * content conflicts. The upgrade step must DRAIN the queue (`gate.recover()`
+ * until `remaining === 0`) before the new build starts.
  */
 export function canonicalCaioReceiptPayload(
   receipt: CaioMinimalAuditReceipt,
@@ -81,6 +105,7 @@ export function canonicalCaioReceiptPayload(
     receipt.modelAlias,
     receipt.inputHash,
     receipt.policyVersion,
+    receipt.posture,
   ]);
 }
 

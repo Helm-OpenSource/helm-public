@@ -655,9 +655,21 @@ export function createCaioGatewayHandler(
     dependencies.featureFlags ?? DEFAULT_WORKBUDDY_FEATURE_FLAGS;
 
   /**
+   * The deployment posture actually in force, read off the wired audit-gate
+   * port rather than declared separately here. A gateway therefore cannot
+   * report one posture on its status surface while admitting under the other's
+   * rules — there is only one declaration, made where the gate is constructed.
+   */
+  const activePosture = dependencies.auditGate.posture;
+
+  /**
    * Readiness, mapped from the audit gate's four states onto the probe's three.
    * A probe that throws is reported as unavailable: an unanswerable readiness
    * question is never an implicit "ready".
+   *
+   * The active posture is reported alongside the state: `degraded` means
+   * "serving through the encrypted emergency queue" only under `self_service`,
+   * and an operator must be able to see which contract the answer belongs to.
    */
   async function readinessResponse(): Promise<CaioGatewayResponse> {
     let state: CaioReadinessState;
@@ -671,7 +683,10 @@ export function createCaioGatewayHandler(
     if (state === "unavailable") {
       return wireResponse(auditUnavailableWireError());
     }
-    return jsonResponse(200, Object.freeze({ status: state }));
+    return jsonResponse(
+      200,
+      Object.freeze({ status: state, posture: activePosture }),
+    );
   }
 
   /**
@@ -912,7 +927,13 @@ export function createCaioGatewayHandler(
       // /livez: process-alive only. It must never touch the database or
       // any business port, so it answers before any dependency is used.
       if (path === "/livez") {
-        return jsonResponse(200, Object.freeze({ status: "alive" }));
+        // The posture is a constant read from the already-wired audit-gate
+        // port, not a dependency call, so liveness stays dependency-free while
+        // still naming the deployment shape this process runs under.
+        return jsonResponse(
+          200,
+          Object.freeze({ status: "alive", posture: activePosture }),
+        );
       }
       return await readinessResponse();
     }

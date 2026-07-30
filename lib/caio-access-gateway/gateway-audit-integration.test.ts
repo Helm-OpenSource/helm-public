@@ -142,7 +142,11 @@ async function createWiring(): Promise<Wiring> {
     keyProvider: async () => queueKey(),
   });
   const primaryStore = createInMemoryPrimaryStore();
-  const gate = createCaioAuditGate({ primaryStore, emergencyQueue: queue });
+  const gate = createCaioAuditGate({
+    posture: "self_service",
+    primaryStore,
+    emergencyQueue: queue,
+  });
   const dispatches: string[] = [];
   const modelDispatches: string[] = [];
 
@@ -262,9 +266,12 @@ describe("gateway HTTP core wired to the real audit gate", () => {
       "inputHash",
       "modelAlias",
       "policyVersion",
+      "posture",
       "requestId",
       "workspace",
     ]);
+    // Seventh field, stamped by the gate rather than supplied by the request.
+    expect(receipt.posture).toBe("self_service");
     expect(JSON.stringify(receipt)).not.toContain("project:alpha");
     expect(await wiring.queue.size()).toBe(0);
   });
@@ -272,7 +279,7 @@ describe("gateway HTTP core wired to the real audit gate", () => {
   it("reports readiness through the gate's own four-state probe", async () => {
     const ready = await wiring.handler(readyzRequest());
     expect(ready.status).toBe(200);
-    expect(ready.body).toEqual({ status: "ready" });
+    expect(ready.body).toEqual({ status: "ready", posture: "self_service" });
   });
 
   it("keeps serving through the encrypted emergency queue while the primary store fails", async () => {
@@ -291,7 +298,10 @@ describe("gateway HTTP core wired to the real audit gate", () => {
     // recovering/degraded both collapse to "degraded" on the 3-state probe.
     const degraded = await wiring.handler(readyzRequest());
     expect(degraded.status).toBe(200);
-    expect(degraded.body).toEqual({ status: "degraded" });
+    expect(degraded.body).toEqual({
+      status: "degraded",
+      posture: "self_service",
+    });
 
     // Once the primary recovers, replay drains the queue and readiness returns.
     wiring.primaryStore.setFailing(false);
@@ -299,7 +309,10 @@ describe("gateway HTTP core wired to the real audit gate", () => {
     expect(recovery).toEqual({ replayed: 1, remaining: 0, conflicts: 0 });
     expect(wiring.primaryStore.persistedVia()).toEqual(["emergency_replay"]);
     const recovered = await wiring.handler(readyzRequest());
-    expect(recovered.body).toEqual({ status: "ready" });
+    expect(recovered.body).toEqual({
+      status: "ready",
+      posture: "self_service",
+    });
   });
 
   it("refuses with 503 and dispatches nothing when nothing can persist", async () => {
@@ -336,7 +349,11 @@ describe("gateway HTTP core wired to the real audit gate", () => {
       keyProvider: async () => queueKey(),
     });
     const primaryStore = createInMemoryPrimaryStore();
-    const gate = createCaioAuditGate({ primaryStore, emergencyQueue: queue });
+    const gate = createCaioAuditGate({
+    posture: "self_service",
+    primaryStore,
+    emergencyQueue: queue,
+  });
     const dispatches: string[] = [];
     const handler = createCaioGatewayHandler({
       preAuthRateLimiter: { claimSourceIpSlot: async () => ({ allowed: true }) },
