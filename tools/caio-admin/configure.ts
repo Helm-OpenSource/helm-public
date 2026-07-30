@@ -16,7 +16,10 @@ import {
   failedResult,
   okResult,
 } from "@/tools/caio-admin/contracts";
-import { looksLikeSecretValue } from "@/tools/caio-admin/redaction";
+import {
+  isCredentialFlagName,
+  looksLikeSecretValue,
+} from "@/tools/caio-admin/redaction";
 
 export const CONFIG_FILE_NAME = "caio-admin.json";
 export const CONFIG_ROOT_MODE = 0o700;
@@ -49,17 +52,62 @@ export interface ConfigureInput {
 }
 
 /**
- * Returns the indexes of argv entries that look like secret values. Values
- * after `--flag=` separators are checked too. Paths are exempt.
+ * Returns the indexes of argv entries that carry secret material.
+ *
+ * Detection is STRUCTURAL FIRST — the entropy of a value can never prove the
+ * absence of a secret:
+ *
+ *   1. NAME: a credential-ish flag name (`--token`, `--password`, `--api-key`,
+ *      `--database-url`, …) marks the value it carries — the following argv
+ *      entry, or the `--flag=value` inline form — as a secret whatever its
+ *      length, entropy or whitespace. `--token hunter2` and
+ *      `--password "four word phrase"` are refused. Pointer flags
+ *      (`--credential-ref NAME`, `--secret-file PATH`) are the supported way to
+ *      pass credentials and are exempt from the name rule (see
+ *      isCredentialFlagName); their values are still shape-checked. A path
+ *      passed to a VALUE flag (`--password /run/secrets/db`) is still refused —
+ *      the blocked finding points the operator at the pointer form.
+ *   2. SHAPE: every remaining entry (bare positionals, values of non-credential
+ *      flags) is checked for URL-embedded credentials, PEM armor and long
+ *      high-entropy blobs. A bare SHORT low-entropy positional cannot be
+ *      distinguished from a benign argument (`configure`, `proxy`, `abc`), so it
+ *      is not refused — with no flag name in hand there is no signal to act on.
+ *
+ * Only positions are returned; the values are never copied or echoed.
  */
 export function findSecretArgvIndexes(argv: readonly string[]): number[] {
-  const hits: number[] = [];
-  argv.forEach((arg, index) => {
+  const hits = new Set<number>();
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const isFlag = arg.startsWith("-") && arg.length > 1;
+    if (!isFlag) {
+      if (looksLikeSecretValue(arg)) hits.add(index);
+      continue;
+    }
     const eq = arg.indexOf("=");
-    const candidate = arg.startsWith("--") && eq > 2 ? arg.slice(eq + 1) : arg;
-    if (looksLikeSecretValue(candidate)) hits.push(index);
-  });
-  return hits;
+    const inlineForm = eq > 1;
+    const name = inlineForm ? arg.slice(0, eq) : arg;
+    const credentialNamed = isCredentialFlagName(name);
+    if (inlineForm) {
+      const value = arg.slice(eq + 1);
+      // An empty inline value carries no secret material.
+      if (value.trim().length > 0 && (credentialNamed || looksLikeSecretValue(value))) {
+        hits.add(index);
+      }
+      continue;
+    }
+    const next = argv[index + 1];
+    // `--token --json` / a trailing `--token` attach no value: nothing leaked.
+    if (
+      credentialNamed &&
+      next !== undefined &&
+      !next.startsWith("-") &&
+      next.trim().length > 0
+    ) {
+      hits.add(index + 1);
+    }
+  }
+  return [...hits].sort((a, b) => a - b);
 }
 
 export async function caioAdminConfigure(input: ConfigureInput): Promise<CaioAdminResult> {

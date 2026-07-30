@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALLOWED_PLIST_ENV_KEYS,
   caioAdminProvisionService,
   validateLaunchdPlistTemplate,
   type LaunchdPorts,
@@ -62,6 +63,16 @@ function makePorts(contract: ServiceContract | null, smokeOk = true): {
   return { ports, written, smokeRuns };
 }
 
+function envPlist(entries: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.example.caio</string>
+  <key>EnvironmentVariables</key><dict>
+${entries}
+  </dict>
+</dict></plist>`;
+}
+
 describe("validateLaunchdPlistTemplate", () => {
   it("accepts a clean plist", () => {
     expect(validateLaunchdPlistTemplate(CLEAN_PLIST)).toEqual({ ok: true });
@@ -76,6 +87,84 @@ describe("validateLaunchdPlistTemplate", () => {
       "<plist><dict><key>API_TOKEN</key><string>short</string></dict></plist>",
     );
     expect(secretKey.ok).toBe(false);
+  });
+
+  // Structural, key-name based rules: entropy/length of the VALUE is never
+  // what makes a plist acceptable.
+  it("rejects a short credential-named env value that no entropy heuristic catches", () => {
+    // 8 characters, contains punctuation, no whitespace — the previous
+    // length >= 20 entropy cut let this through into a world-readable plist.
+    const shortPassword = ["hunter", "2", "!"].join("");
+    const result = validateLaunchdPlistTemplate(
+      envPlist(`    <key>DB_PASS</key><string>${shortPassword}</string>`),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.reason).toContain("DB_PASS");
+  });
+
+  it("rejects a short token env value", () => {
+    const result = validateLaunchdPlistTemplate(
+      envPlist("    <key>API_TOKEN</key><string>t0k</string>"),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a spaced passphrase env value", () => {
+    const result = validateLaunchdPlistTemplate(
+      envPlist(
+        "    <key>SERVICE_PASSPHRASE</key><string>correct horse battery staple</string>",
+      ),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects an env key that is not on the non-secret allowlist (fail closed)", () => {
+    const result = validateLaunchdPlistTemplate(
+      envPlist("    <key>SOME_NEW_THING</key><string>plain</string>"),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.reason).toContain("SOME_NEW_THING");
+  });
+
+  it("rejects a value embedding URL credentials even under an allowlisted key", () => {
+    // Assembled at runtime so the public-release static line scan never sees a
+    // URL-embedded credential literal.
+    const dsn = ["mysql:", "//", "svc:", "Pw1@", "127.0.0.1", "/db"].join("");
+    const result = validateLaunchdPlistTemplate(
+      envPlist(`    <key>CAIO_LISTEN_ADDRESS</key><string>${dsn}</string>`),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a nested structure inside EnvironmentVariables", () => {
+    const result = validateLaunchdPlistTemplate(
+      envPlist("    <key>NODE_ENV</key><dict><key>x</key><string>y</string></dict>"),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts every allowlisted env key individually (allowlist is not dead weight)", () => {
+    for (const key of ALLOWED_PLIST_ENV_KEYS) {
+      const result = validateLaunchdPlistTemplate(
+        envPlist(`    <key>${key}</key><string>plain-value</string>`),
+      );
+      expect(result, `env key ${key}`).toEqual({ ok: true });
+    }
+  });
+
+  it("still accepts legitimate non-secret environment variables", () => {
+    const result = validateLaunchdPlistTemplate(
+      envPlist(
+        [
+          "    <key>NODE_ENV</key><string>production</string>",
+          "    <key>PATH</key><string>/usr/bin:/bin</string>",
+          "    <key>CAIO_CONFIG_ROOT</key><string>/etc/caio</string>",
+        ].join("\n"),
+      ),
+    );
+    expect(result).toEqual({ ok: true });
   });
 });
 
@@ -113,6 +202,18 @@ describe("caioAdminProvisionService", () => {
     const result = await caioAdminProvisionService({ releaseDir: "/rel", ports });
     expect(result.status).toBe("blocked");
     expect(result.blockedReason).toBe("blocked:plist_contains_secrets");
+    expect(written).toHaveLength(0);
+  });
+
+  it("blocks a package-supplied service label that is not a safe path component", async () => {
+    const { ports, written } = makePorts({
+      label: "../../../../Users/victim/Library/LaunchAgents/evil",
+      plistTemplate: CLEAN_PLIST,
+      contractTested: true,
+    });
+    const result = await caioAdminProvisionService({ releaseDir: "/rel", ports });
+    expect(result.status).toBe("blocked");
+    expect(result.blockedReason).toBe("blocked:service_label_invalid");
     expect(written).toHaveLength(0);
   });
 

@@ -42,6 +42,26 @@ function collectKeys(value: unknown, out: string[] = []): string[] {
   return out;
 }
 
+/** Revocation port that reports the gateway refused/failed to revoke. */
+function refusingRevocation(calls: string[]): TokenRevocationPort {
+  return {
+    revoke: async (reason) => {
+      calls.push(reason);
+      return { revoked: false };
+    },
+  };
+}
+
+/** Revocation port that is itself unreachable. */
+function throwingRevocation(calls: string[]): TokenRevocationPort {
+  return {
+    revoke: async (reason) => {
+      calls.push(reason);
+      throw new Error("gateway unreachable");
+    },
+  };
+}
+
 describe("config-writer", () => {
   let sandbox: string;
   let revocations: string[];
@@ -135,6 +155,96 @@ describe("config-writer", () => {
       expect(revocations).toEqual(["secure_storage_write_failed"]);
       await expect(fs.readFile(configPath, "utf8")).rejects.toThrow();
     });
+
+    it("blocks an unparseable existing launch config, leaving it byte-identical", async () => {
+      const stored: Array<[string, string, string]> = [];
+      const keychain: KeychainPort = {
+        setSecret: async (service, account, value) => {
+          stored.push([service, account, value]);
+        },
+      };
+      const configPath = path.join(sandbox, "codex", "config.toml");
+      await fs.mkdir(path.dirname(configPath), { recursive: true });
+      const original = '[profile]\nmodel = "gpt-5"\n';
+      await fs.writeFile(configPath, original);
+      const before = await fs.readFile(configPath);
+
+      const result = await writeCodexClientConfig({
+        tokens: TOKENS,
+        keychain,
+        revocation,
+        launchConfigPath: configPath,
+        now: NOW,
+      });
+      expect(result.status).toBe("blocked");
+      if (result.status !== "blocked") throw new Error("unreachable");
+      expect(result.blockedReason).toBe("blocked:unsupported_config_format");
+      // The operator's file is untouched: same bytes, no backup, no temp file.
+      expect((await fs.readFile(configPath)).equals(before)).toBe(true);
+      await expect(fs.readdir(path.dirname(configPath))).resolves.toEqual(["config.toml"]);
+      // Nothing was stored in secure storage, and the tokens were revoked.
+      expect(stored).toEqual([]);
+      expect(revocations).toEqual(["unsupported_config_format"]);
+      expect(result.tokensPossiblyLive).toBe(false);
+    });
+
+    it("blocks a JSON launch config of an unrecognized schema version", async () => {
+      const keychain: KeychainPort = { setSecret: async () => {} };
+      const configPath = path.join(sandbox, "codex", "launch.json");
+      await fs.mkdir(path.dirname(configPath), { recursive: true });
+      const foreign = JSON.stringify({ schemaVersion: "someone.else/9", keep: true });
+      await fs.writeFile(configPath, foreign);
+
+      const result = await writeCodexClientConfig({
+        tokens: TOKENS,
+        keychain,
+        revocation,
+        launchConfigPath: configPath,
+        now: NOW,
+      });
+      expect(result.status).toBe("blocked");
+      if (result.status !== "blocked") throw new Error("unreachable");
+      expect(result.blockedReason).toBe("blocked:unsupported_config_format");
+      await expect(fs.readFile(configPath, "utf8")).resolves.toBe(foreign);
+      expect(revocations).toEqual(["unsupported_config_format"]);
+    });
+
+    it("round-trips a recognized launch config through backup and restore byte-identically", async () => {
+      const keychain: KeychainPort = { setSecret: async () => {} };
+      const configPath = path.join(sandbox, "codex", "launch.json");
+      const first = await writeCodexClientConfig({
+        tokens: TOKENS,
+        keychain,
+        revocation,
+        launchConfigPath: configPath,
+        now: NOW - 5000,
+      });
+      expect(first.status).toBe("ok");
+      const before = await fs.readFile(configPath);
+
+      const second = await writeCodexClientConfig({
+        tokens: TOKENS,
+        keychain,
+        revocation,
+        launchConfigPath: configPath,
+        now: NOW,
+      });
+      expect(second.status).toBe("ok");
+      if (second.status !== "ok" || !second.backupPath) throw new Error("unreachable");
+      const backup = await fs.readFile(second.backupPath);
+      expect(backup.equals(before)).toBe(true);
+      expect((await fs.stat(second.backupPath)).mode & 0o777).toBe(0o600);
+      expect((await fs.readFile(configPath)).equals(before)).toBe(false);
+
+      const restored = await restoreBackup({
+        configPath,
+        backupPath: second.backupPath,
+        now: NOW + 1000,
+      });
+      expect(restored.restored).toBe(true);
+      expect((await fs.readFile(configPath)).equals(before)).toBe(true);
+      expect((await fs.stat(configPath)).mode & 0o777).toBe(0o600);
+    });
   });
 
   describe("writeWorkBuddyConfig", () => {
@@ -142,6 +252,7 @@ describe("config-writer", () => {
       const configPath = path.join(sandbox, "workbuddy", "config.json");
       const result = await writeWorkBuddyConfig({
         tokens: TOKENS,
+        revocation,
         configPath,
         gatewayHost: TEST_PRIVATE_IPV4,
         gatewayPort: 8443,
@@ -153,6 +264,8 @@ describe("config-writer", () => {
         schemaVersion: string;
       };
       expect(parsed.schemaVersion).toBe(WORKBUDDY_SCHEMA_VERSION);
+      // Success path: the issued tokens are NOT revoked.
+      expect(revocations).toEqual([]);
     });
 
     it("blocks on an unknown existing config shape without guessing or destroying it", async () => {
@@ -163,6 +276,7 @@ describe("config-writer", () => {
 
       const result = await writeWorkBuddyConfig({
         tokens: TOKENS,
+        revocation,
         configPath,
         gatewayHost: TEST_PRIVATE_IPV4,
         gatewayPort: 8443,
@@ -171,22 +285,99 @@ describe("config-writer", () => {
       expect(result.status).toBe("blocked");
       if (result.status !== "blocked") throw new Error("unreachable");
       expect(result.blockedReason).toBe("blocked:unsupported_config_format");
+      // Tokens were already issued at this point, so they must be revoked.
+      expect(revocations).toEqual(["unsupported_config_format"]);
+      expect(result.revocation.revoked).toBe(true);
+      expect(result.tokensPossiblyLive).toBe(false);
       await expect(fs.readFile(configPath, "utf8")).resolves.toBe(foreign);
       // No backup, no temp files: the foreign config is untouched entirely.
       await expect(fs.readdir(path.dirname(configPath))).resolves.toEqual(["config.json"]);
     });
 
-    it("backs up an existing supported config with secrets stripped before replacing", async () => {
+    it("revokes the issued tokens when the config write itself fails", async () => {
+      // The parent of configPath is a regular FILE, so mkdir/write must fail.
+      const blocker = path.join(sandbox, "workbuddy-file");
+      await fs.writeFile(blocker, "not a directory\n");
+      const configPath = path.join(blocker, "config.json");
+
+      const result = await writeWorkBuddyConfig({
+        tokens: TOKENS,
+        revocation,
+        configPath,
+        gatewayHost: TEST_PRIVATE_IPV4,
+        gatewayPort: 8443,
+        now: NOW,
+      });
+      expect(result.status).toBe("blocked");
+      if (result.status !== "blocked") throw new Error("unreachable");
+      expect(result.blockedReason).toBe("blocked:config_write_failed");
+      expect(revocations).toEqual(["config_write_failed"]);
+      expect(result.revocation.revoked).toBe(true);
+      expect(result.tokensRevoked).toBe(true);
+      expect(result.tokensPossiblyLive).toBe(false);
+    });
+
+    it("reports revoked:false with a reason when the gateway does not confirm revocation", async () => {
+      const calls: string[] = [];
+      const blocker = path.join(sandbox, "workbuddy-file");
+      await fs.writeFile(blocker, "not a directory\n");
+
+      const result = await writeWorkBuddyConfig({
+        tokens: TOKENS,
+        revocation: refusingRevocation(calls),
+        configPath: path.join(blocker, "config.json"),
+        gatewayHost: TEST_PRIVATE_IPV4,
+        gatewayPort: 8443,
+        now: NOW,
+      });
+      expect(result.status).toBe("blocked");
+      if (result.status !== "blocked") throw new Error("unreachable");
+      expect(calls).toEqual(["config_write_failed"]);
+      expect(result.revocation.revoked).toBe(false);
+      expect(result.revocation.reason).toBeTruthy();
+      expect(result.tokensPossiblyLive).toBe(true);
+    });
+
+    it("fails hard and names the tokens as possibly live when the revocation port fails", async () => {
+      const calls: string[] = [];
+      const blocker = path.join(sandbox, "workbuddy-file");
+      await fs.writeFile(blocker, "not a directory\n");
+
+      const result = await writeWorkBuddyConfig({
+        tokens: TOKENS,
+        revocation: throwingRevocation(calls),
+        configPath: path.join(blocker, "config.json"),
+        gatewayHost: TEST_PRIVATE_IPV4,
+        gatewayPort: 8443,
+        now: NOW,
+      });
+      expect(calls).toEqual(["config_write_failed"]);
+      expect(result.status).toBe("failed");
+      if (result.status !== "failed") throw new Error("unreachable");
+      expect(result.failureReason).toBe("revocation_port_failed");
+      expect(result.tokensPossiblyLive).toBe(true);
+      expect(result.tokensRevoked).toBe(false);
+      expect(result.message).toMatch(/may still be live/i);
+      // The operator message never carries token material.
+      expect(result.message).not.toContain(TOKENS.mcpToken);
+      expect(result.message).not.toContain(TOKENS.modelToken);
+    });
+
+    it("backs up the previous config verbatim (0600) without the newly issued tokens", async () => {
       const configPath = path.join(sandbox, "workbuddy", "config.json");
       await writeWorkBuddyConfig({
         tokens: OLD_TOKENS,
+        revocation,
         configPath,
         gatewayHost: TEST_PRIVATE_IPV4,
         gatewayPort: 8443,
         now: NOW - 5000,
       });
+      const before = await fs.readFile(configPath);
+
       const result = await writeWorkBuddyConfig({
         tokens: TOKENS,
+        revocation,
         configPath,
         gatewayHost: TEST_PRIVATE_IPV4,
         gatewayPort: 8443,
@@ -195,17 +386,51 @@ describe("config-writer", () => {
       expect(result.status).toBe("ok");
       if (result.status !== "ok") throw new Error("unreachable");
       expect(result.backupPath).toBe(`${configPath}.caio-backup-${NOW}`);
-      const backup = await fs.readFile(result.backupPath as string, "utf8");
-      expect(backup).not.toContain(OLD_TOKENS.mcpToken);
-      expect(backup).not.toContain(OLD_TOKENS.modelToken);
-      expect(backup).toContain("<stripped>");
+      const backup = await fs.readFile(result.backupPath as string);
+      // Restorable: byte-identical to what the file contained before.
+      expect(backup.equals(before)).toBe(true);
+      // ... and it never carries the NEWLY issued token material.
+      const backupText = backup.toString("utf8");
+      expect(backupText).not.toContain(TOKENS.mcpToken);
+      expect(backupText).not.toContain(TOKENS.modelToken);
       expect((await fs.stat(result.backupPath as string)).mode & 0o777).toBe(0o600);
+    });
+
+    it("strips a newly issued token from the backup if the previous config already held it", async () => {
+      const configPath = path.join(sandbox, "workbuddy", "config.json");
+      await fs.mkdir(path.dirname(configPath), { recursive: true });
+      await fs.writeFile(
+        configPath,
+        `${JSON.stringify(
+          {
+            schemaVersion: WORKBUDDY_SCHEMA_VERSION,
+            credentials: { mcpToken: TOKENS.mcpToken },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      const result = await writeWorkBuddyConfig({
+        tokens: TOKENS,
+        revocation,
+        configPath,
+        gatewayHost: TEST_PRIVATE_IPV4,
+        gatewayPort: 8443,
+        now: NOW,
+      });
+      expect(result.status).toBe("ok");
+      if (result.status !== "ok" || !result.backupPath) throw new Error("unreachable");
+      const backup = await fs.readFile(result.backupPath, "utf8");
+      expect(backup).not.toContain(TOKENS.mcpToken);
+      expect(result.backupVerbatim).toBe(false);
     });
 
     it("never sets any feature-flag key (pairing enables no features)", async () => {
       const configPath = path.join(sandbox, "workbuddy", "config.json");
       await writeWorkBuddyConfig({
         tokens: TOKENS,
+        revocation,
         configPath,
         gatewayHost: TEST_PRIVATE_IPV4,
         gatewayPort: 8443,
@@ -228,17 +453,20 @@ describe("config-writer", () => {
     expect((stripped.gateway as { host: string }).host).toBe(TEST_PRIVATE_IPV4);
   });
 
-  it("restoreBackup atomically restores the (secret-free) backup", async () => {
+  it("restoreBackup atomically restores the previous config byte-identically", async () => {
     const configPath = path.join(sandbox, "workbuddy", "config.json");
     await writeWorkBuddyConfig({
-      tokens: TOKENS,
+      tokens: OLD_TOKENS,
+      revocation,
       configPath,
       gatewayHost: TEST_PRIVATE_IPV4,
       gatewayPort: 8443,
       now: NOW - 5000,
     });
+    const before = await fs.readFile(configPath);
     const replaced = await writeWorkBuddyConfig({
       tokens: TOKENS,
+      revocation,
       configPath,
       gatewayHost: TEST_PRIVATE_IPV4,
       gatewayPort: 9443,
@@ -252,9 +480,7 @@ describe("config-writer", () => {
       now: NOW + 1000,
     });
     expect(restored.restored).toBe(true);
-    const body = await fs.readFile(configPath, "utf8");
-    expect(body).toContain("<stripped>");
-    expect(body).not.toContain(TOKENS.mcpToken);
+    expect((await fs.readFile(configPath)).equals(before)).toBe(true);
     expect((await fs.stat(configPath)).mode & 0o777).toBe(0o600);
 
     const missing = await restoreBackup({

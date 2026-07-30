@@ -63,7 +63,51 @@ export const INSTALL_CONTRACT_STEPS: ReadonlyArray<{
   { key: "build", command: "npm", args: ["run", "build"] },
 ];
 
+/**
+ * Package-supplied strings NEVER reach a path without passing this grammar.
+ * Lowercase alphanumerics and single dashes only: no dot, no separator in any
+ * encoding (`%` and `\` are outside the class), no control character, no NUL,
+ * length 2..64, and it can never be `.`/`..`.
+ */
+export const PACKAGE_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{1,63}$/;
+
+/** A manifest digest is a bare lowercase sha256 hex string — nothing else. */
+export const MANIFEST_SHA256_PATTERN = /^[a-f0-9]{64}$/;
+
+/**
+ * Explicit deny list applied BEFORE the grammar. Redundant by construction,
+ * kept so that a future grammar relaxation cannot silently re-open a path
+ * escape, and so rejections are attributable.
+ */
+const UNSAFE_PATH_CHARS = /[/\\:%\s]|[\x00-\x1f\x7f]/;
+
+/** True when `value` is safe to use as a single path component. */
+export function isSafePackageKey(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length === 0 || value.length > 64) return false;
+  if (UNSAFE_PATH_CHARS.test(value)) return false;
+  if (value.includes("..") || value === "." || value === "..") return false;
+  if (value !== path.basename(value)) return false;
+  return PACKAGE_KEY_PATTERN.test(value);
+}
+
+/** True when `value` is a bare sha256 hex digest. */
+export function isSafeManifestSha256(value: unknown): value is string {
+  return typeof value === "string" && MANIFEST_SHA256_PATTERN.test(value);
+}
+
+/**
+ * Compose the single release directory NAME. Throws on any input that is not
+ * already validated — no caller may build a release path from package content
+ * that has not passed the grammar.
+ */
 export function releaseDirName(packageKey: string, manifestSha256: string): string {
+  if (!isSafePackageKey(packageKey)) {
+    throw new Error("invalid packageKey: refusing to compose a release path");
+  }
+  if (!isSafeManifestSha256(manifestSha256)) {
+    throw new Error("invalid manifest digest: refusing to compose a release path");
+  }
   return `${packageKey}-${manifestSha256.slice(0, 12)}`;
 }
 
@@ -85,13 +129,59 @@ export async function readReleaseSeal(releaseDir: string): Promise<ReleaseSeal |
   }
 }
 
-async function pathExists(p: string): Promise<boolean> {
+async function lstatOrNull(p: string) {
   try {
-    await fs.lstat(p);
-    return true;
+    return await fs.lstat(p);
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  return (await lstatOrNull(p)) !== null;
+}
+
+/**
+ * Containment gate run BEFORE anything is created: the release directory must
+ * be a DIRECT child of the resolved releases root, and no component at or
+ * below the root may be a symlink (mirrors the walk in active-release.ts).
+ * Returns a blocked reason token, or null when the path is safe to create.
+ */
+async function releasePathRefusal(
+  releasesRoot: string,
+  dirName: string,
+): Promise<string | null> {
+  const root = path.resolve(releasesRoot);
+  const target = path.resolve(root, dirName);
+
+  // Direct child only: exactly one component below the root, no traversal.
+  const rel = path.relative(root, target);
+  if (
+    rel === "" ||
+    rel.startsWith("..") ||
+    path.isAbsolute(rel) ||
+    rel.split(path.sep).length !== 1 ||
+    rel !== dirName
+  ) {
+    return "release_outside_root";
+  }
+
+  // If the root does not exist yet nothing below it can exist either.
+  const rootStat = await lstatOrNull(root);
+  if (rootStat === null) return null;
+
+  const targetStat = await lstatOrNull(target);
+  if (targetStat === null) return null;
+  if (targetStat.isSymbolicLink()) return "symlink_in_release_path";
+
+  // Belt-and-suspenders: with the root's own symlinks resolved, the existing
+  // target must still be exactly the direct child we intend to touch.
+  const rootReal = await fs.realpath(root);
+  const targetReal = await fs.realpath(target);
+  if (targetReal !== path.join(rootReal, dirName)) {
+    return "release_outside_root";
+  }
+  return null;
 }
 
 export async function caioAdminInstall(input: InstallInput): Promise<CaioAdminResult> {
@@ -108,6 +198,33 @@ export async function caioAdminInstall(input: InstallInput): Promise<CaioAdminRe
       ],
     });
   }
+  // Package-supplied strings are validated at the EARLIEST point they are
+  // read — before any of them is echoed, joined into a path, or used to
+  // create anything on disk.
+  if (!isSafePackageKey(verification.packageKey)) {
+    return blockedResult("install", "package_key_invalid", {
+      findings: [
+        {
+          checkKey: "package_key",
+          status: "fail",
+          detail:
+            "manifest packageKey does not match the required grammar [a-z0-9][a-z0-9-]{1,63}; refusing to compose a release path",
+        },
+      ],
+    });
+  }
+  if (!isSafeManifestSha256(verification.manifestSha256)) {
+    return blockedResult("install", "manifest_digest_invalid", {
+      findings: [
+        {
+          checkKey: "package_manifest",
+          status: "fail",
+          detail: "manifest digest is not a bare sha256 hex string",
+        },
+      ],
+    });
+  }
+
   findings.push({
     checkKey: "package_manifest",
     status: "ok",
@@ -116,6 +233,22 @@ export async function caioAdminInstall(input: InstallInput): Promise<CaioAdminRe
 
   const dirName = releaseDirName(verification.packageKey, verification.manifestSha256);
   const targetDir = path.join(releasesRoot, dirName);
+
+  // Containment BEFORE creating anything.
+  const refusal = await releasePathRefusal(releasesRoot, dirName);
+  if (refusal !== null) {
+    return blockedResult("install", refusal, {
+      findings: [
+        ...findings,
+        {
+          checkKey: "release_path",
+          status: "fail",
+          detail: "release path is not a symlink-free direct child of the releases root",
+        },
+      ],
+      detail: { releaseDir: targetDir },
+    });
+  }
 
   // Immutability: never overwrite an existing release directory.
   if (await pathExists(targetDir)) {
@@ -146,6 +279,23 @@ export async function caioAdminInstall(input: InstallInput): Promise<CaioAdminRe
 
   await fs.mkdir(releasesRoot, { recursive: true });
   const stagingDir = `${targetDir}.staging-${now}`;
+
+  // A pre-existing staging path (including a planted symlink) is a refusal,
+  // never something to write through. mkdir below is non-recursive, so the
+  // final component is created by us or not at all.
+  if (await pathExists(stagingDir)) {
+    return blockedResult("install", "staging_path_exists", {
+      findings: [
+        ...findings,
+        {
+          checkKey: "staging_path",
+          status: "fail",
+          detail: "staging path already exists; refusing to reuse or write through it",
+        },
+      ],
+      detail: { releaseDir: targetDir },
+    });
+  }
 
   try {
     await fs.mkdir(stagingDir);

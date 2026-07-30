@@ -19,18 +19,26 @@ import {
 
 const MANIFEST_SHA = "a".repeat(64);
 
-function goodVerifier(): PackageVerifierPort {
+/** Verifier that reports attacker-chosen package-supplied strings. */
+function keyVerifier(
+  packageKey: string,
+  manifestSha256: string = MANIFEST_SHA,
+): PackageVerifierPort {
   return {
     async verify() {
       return {
         ok: true,
-        packageKey: "caio-core",
-        manifestSha256: MANIFEST_SHA,
+        packageKey,
+        manifestSha256,
         entryCount: 3,
         treeSha256: "b".repeat(64),
       };
     },
   };
+}
+
+function goodVerifier(): PackageVerifierPort {
+  return keyVerifier("caio-core");
 }
 
 function makePorts(overrides: Partial<InstallPorts> = {}): {
@@ -179,5 +187,140 @@ describe("caioAdminInstall", () => {
     expect(
       result.findings.find((f) => f.checkKey === "step_typecheck")?.status,
     ).toBe("fail");
+  });
+
+  // -------------------------------------------------------------------------
+  // Package-supplied strings that reach a filesystem path.
+  // -------------------------------------------------------------------------
+
+  describe("package-supplied path components", () => {
+    const UNSAFE_PACKAGE_KEYS: ReadonlyArray<readonly [string, string]> = [
+      ["parent traversal", "../escaped"],
+      ["deep traversal", "../../../../Users/victim/Library/LaunchAgents/evil"],
+      ["absolute path", "/tmp/evil"],
+      ["backslash separator", "..\\escaped"],
+      ["nul byte", "caio-core\u0000/etc/evil"],
+      ["newline", "caio-core\n../escaped"],
+      ["single dot", "."],
+      ["double dot", ".."],
+      ["dotted key", "caio.core"],
+      ["empty", ""],
+      ["percent-encoded separator", "..%2f..%2fescaped"],
+      ["uppercase", "Caio-Core"],
+      ["leading dash", "-caio-core"],
+      ["too long", `${"a".repeat(65)}`],
+    ];
+
+    for (const [name, packageKey] of UNSAFE_PACKAGE_KEYS) {
+      it(`blocks an unsafe packageKey (${name}) before creating anything`, async () => {
+        const { ports, ranSteps, sealedDirs } = makePorts({
+          verifier: keyVerifier(packageKey),
+        });
+        const result = await caioAdminInstall({
+          packagePath: "/pkg.tgz",
+          releasesRoot,
+          ports,
+        });
+        expect(result.status).toBe("blocked");
+        expect(result.blockedReason).toBe("blocked:package_key_invalid");
+        expect(ranSteps).toEqual([]);
+        expect(sealedDirs).toEqual([]);
+        // Nothing was created anywhere in the sandbox — neither inside the
+        // releases root (which does not even exist) nor beside it.
+        await expect(fs.readdir(sandbox)).resolves.toEqual([]);
+      });
+    }
+
+    it("does not create the escape target for a traversal packageKey", async () => {
+      const { ports } = makePorts({ verifier: keyVerifier("../escaped") });
+      await caioAdminInstall({ packagePath: "/pkg.tgz", releasesRoot, ports });
+      await expect(
+        fs.lstat(path.join(sandbox, `escaped-${MANIFEST_SHA.slice(0, 12)}`)),
+      ).rejects.toThrow();
+      await expect(fs.readdir(sandbox)).resolves.toEqual([]);
+    });
+
+    it("blocks a manifest digest that is not plain sha256 hex before composing a path", async () => {
+      const { ports, ranSteps } = makePorts({
+        verifier: keyVerifier("caio-core", "../../../../escaped/x"),
+      });
+      const result = await caioAdminInstall({
+        packagePath: "/pkg.tgz",
+        releasesRoot,
+        ports,
+      });
+      expect(result.status).toBe("blocked");
+      expect(result.blockedReason).toBe("blocked:manifest_digest_invalid");
+      expect(ranSteps).toEqual([]);
+      await expect(fs.readdir(sandbox)).resolves.toEqual([]);
+    });
+
+    it("blocks when the release path is a symlink and leaves the link target untouched", async () => {
+      const outside = path.join(sandbox, "outside");
+      await fs.mkdir(outside, { recursive: true });
+      await fs.mkdir(releasesRoot, { recursive: true });
+      const linkPath = path.join(releasesRoot, releaseDirName("caio-core", MANIFEST_SHA));
+      await fs.symlink(outside, linkPath);
+
+      const { ports, ranSteps, sealedDirs } = makePorts();
+      const result = await caioAdminInstall({
+        packagePath: "/pkg.tgz",
+        releasesRoot,
+        ports,
+      });
+      expect(result.status).toBe("blocked");
+      expect(result.blockedReason).toBe("blocked:symlink_in_release_path");
+      expect(ranSteps).toEqual([]);
+      expect(sealedDirs).toEqual([]);
+      // The symlink is intact and nothing was written through it.
+      expect((await fs.lstat(linkPath)).isSymbolicLink()).toBe(true);
+      await expect(fs.readdir(outside)).resolves.toEqual([]);
+      await expect(fs.readdir(releasesRoot)).resolves.toEqual([
+        releaseDirName("caio-core", MANIFEST_SHA),
+      ]);
+    });
+
+    it("blocks when an ancestor of the release path below the root is a symlink", async () => {
+      const outside = path.join(sandbox, "outside");
+      await fs.mkdir(outside, { recursive: true });
+      await fs.mkdir(releasesRoot, { recursive: true });
+      // A nested release layout: the package key's first path component is a
+      // symlink out of the root. The grammar forbids separators outright, so
+      // this must be refused as an invalid key (defense in depth: even if the
+      // grammar changed, the containment walk would refuse it).
+      await fs.symlink(outside, path.join(releasesRoot, "nested"));
+      const { ports } = makePorts({ verifier: keyVerifier("nested/caio-core") });
+      const result = await caioAdminInstall({
+        packagePath: "/pkg.tgz",
+        releasesRoot,
+        ports,
+      });
+      expect(result.status).toBe("blocked");
+      expect(result.blockedReason).toBe("blocked:package_key_invalid");
+      await expect(fs.readdir(outside)).resolves.toEqual([]);
+    });
+
+    it("releaseDirName refuses to compose a path component from unsafe inputs", () => {
+      expect(() => releaseDirName("../escaped", MANIFEST_SHA)).toThrow();
+      expect(() => releaseDirName("caio-core", "../../etc")).toThrow();
+      expect(releaseDirName("caio-core", MANIFEST_SHA)).toBe(
+        `caio-core-${MANIFEST_SHA.slice(0, 12)}`,
+      );
+    });
+
+    it("still installs a legitimate packageKey", async () => {
+      const { ports, ranSteps } = makePorts({ verifier: keyVerifier("caio-core-2") });
+      const result = await caioAdminInstall({
+        packagePath: "/pkg.tgz",
+        releasesRoot,
+        ports,
+      });
+      expect(result.status).toBe("ok");
+      expect(result.detail.releaseDir).toBe(
+        path.join(releasesRoot, `caio-core-2-${MANIFEST_SHA.slice(0, 12)}`),
+      );
+      expect(ranSteps).toEqual(INSTALL_CONTRACT_STEPS.map((s) => s.key));
+      await expect(fs.readdir(sandbox)).resolves.toEqual(["releases"]);
+    });
   });
 });

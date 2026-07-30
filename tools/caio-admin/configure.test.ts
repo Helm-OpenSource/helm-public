@@ -26,6 +26,11 @@ const FAKE_DB_URL = [
   [10, 0, 0, 5].join("."),
   "/db",
 ].join("");
+// Short / spaced / tiny values that NO entropy heuristic can distinguish from a
+// benign argument — only the credential-named FLAG proves they are secrets.
+const SHORT_SECRET = ["hun", "ter", "2"].join("");
+const SPACED_SECRET = ["correct", "horse", "battery", "staple"].join(" ");
+const TINY_SECRET = ["a", "b", "c"].join("");
 
 describe("caioAdminConfigure", () => {
   let sandbox: string;
@@ -67,6 +72,67 @@ describe("caioAdminConfigure", () => {
     expect(
       findSecretArgvIndexes([FAKE_DB_URL]),
     ).toEqual([0]);
+  });
+
+  it("detects secrets by ARGUMENT NAME regardless of length, entropy, or spaces", () => {
+    // Separate `--flag value` form.
+    expect(findSecretArgvIndexes(["configure", "--token", SHORT_SECRET])).toEqual([2]);
+    expect(findSecretArgvIndexes(["configure", "--password", SPACED_SECRET])).toEqual([2]);
+    expect(findSecretArgvIndexes(["configure", "--api-key", TINY_SECRET])).toEqual([2]);
+    expect(findSecretArgvIndexes(["configure", "--pwd", SHORT_SECRET])).toEqual([2]);
+    expect(findSecretArgvIndexes(["configure", "--bearer", TINY_SECRET])).toEqual([2]);
+    // Inline `--flag=value` form.
+    expect(findSecretArgvIndexes([`--token=${SHORT_SECRET}`])).toEqual([0]);
+    expect(findSecretArgvIndexes([`--api-key=${TINY_SECRET}`])).toEqual([0]);
+    expect(findSecretArgvIndexes([`--password=${SPACED_SECRET}`])).toEqual([0]);
+    // Value-shape detection stays an additional trigger (must not regress).
+    expect(findSecretArgvIndexes(["configure", "--database-url", FAKE_DB_URL])).toEqual([2]);
+    expect(findSecretArgvIndexes(["configure", SECRET_VALUE])).toEqual([1]);
+  });
+
+  it("does not block legitimate non-secret flags, refs, or paths", () => {
+    expect(
+      findSecretArgvIndexes([
+        "install",
+        "--package",
+        "/opt/caio/packages/pkg.tar.gz",
+        "--phase",
+        "proxy",
+        "--json",
+      ]),
+    ).toEqual([]);
+    expect(
+      findSecretArgvIndexes(["configure", "--releases-root", "/opt/caio/releases"]),
+    ).toEqual([]);
+    // Pointer flags carry a ref NAME or a secret FILE path, never a value.
+    expect(
+      findSecretArgvIndexes(["configure", "--credential-ref", "db-password", secretFile]),
+    ).toEqual([]);
+    expect(findSecretArgvIndexes(["configure", "--secret-file", secretFile])).toEqual([]);
+    // A credential flag with no value attached leaks nothing.
+    expect(findSecretArgvIndexes(["configure", "--token", "--json"])).toEqual([]);
+    expect(findSecretArgvIndexes(["configure", "--token"])).toEqual([]);
+  });
+
+  it("blocks short and spaced secrets end to end without echoing them", async () => {
+    const cases: Array<{ argv: string[]; secret: string }> = [
+      { argv: ["configure", "--token", SHORT_SECRET], secret: SHORT_SECRET },
+      { argv: ["configure", "--password", SPACED_SECRET], secret: SPACED_SECRET },
+      { argv: ["configure", `--api-key=${SHORT_SECRET}`], secret: SHORT_SECRET },
+    ];
+    for (const { argv, secret } of cases) {
+      const result = await caioAdminConfigure(input({ argv }));
+      expect(result.status).toBe("blocked");
+      expect(result.blockedReason).toBe("blocked:secret_on_command_line");
+      expect(result.exitCode).toBe(3);
+      for (const rendered of [
+        renderCaioAdminResult(result, { json: true }),
+        renderCaioAdminResult(result),
+      ]) {
+        expect(rendered).not.toContain(secret);
+      }
+      await expect(fs.readdir(configRoot)).rejects.toThrow();
+    }
   });
 
   it("refuses secrets passed as CLI args without echoing them", async () => {
