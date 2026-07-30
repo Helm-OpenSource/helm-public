@@ -107,6 +107,201 @@ export function formatCitationLabel(ordinal: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Versioned context-source DESCRIPTOR contract (producer -> broker)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire contract version for the descriptor a context PRODUCER hands to the
+ * broker before any release decision is made. Producers that live outside this
+ * repository (Pack adapters, overlay adapters) may not import Core code — the
+ * dependency direction is Overlay -> Pack SDK -> Core SDK — so they reference
+ * this contract by its version STRING and mirror the shape. A conformance test
+ * parses their committed fixture with the schema below, so the two sides cannot
+ * drift silently.
+ *
+ * Bump this string (…v2) for any change that is not purely additive-optional.
+ */
+export const CAIO_CONTEXT_SOURCE_DESCRIPTOR_SCHEMA_VERSION =
+  "helm.caio.context-source-descriptor.v1" as const;
+
+/**
+ * Closed classification vocabulary for v1. Closed on purpose: an unrecognised
+ * label must be refused rather than silently treated as low sensitivity.
+ */
+export const CAIO_CONTEXT_SOURCE_CLASSIFICATIONS = [
+  "public",
+  "internal",
+  "confidential",
+  "restricted",
+] as const;
+export type CaioContextSourceClassification =
+  (typeof CAIO_CONTEXT_SOURCE_CLASSIFICATIONS)[number];
+
+/** Who produced the descriptor. Also closed for v1. */
+export const CAIO_CONTEXT_SOURCE_PRODUCERS = [
+  "pack-adapter",
+  "overlay-adapter",
+  "core-runtime",
+] as const;
+export type CaioContextSourceProducer =
+  (typeof CAIO_CONTEXT_SOURCE_PRODUCERS)[number];
+
+/**
+ * Conservative reference charset: must start alphanumeric, no whitespace, no
+ * URL scheme, no absolute or drive-letter path, no `..` traversal. A ref is
+ * governance metadata, never a URL and never credential material.
+ */
+export const CAIO_CONTEXT_SOURCE_REF_PATTERN =
+  /^(?!(?:https?|ftp|file|jdbc|data|mailto|javascript|ldaps?|smb):)(?!.*\.\.)(?![A-Za-z]:[\\/])[A-Za-z0-9][A-Za-z0-9:._/-]*$/u;
+
+/** Pack keys are lowercase kebab identifiers. */
+export const CAIO_CONTEXT_SOURCE_PACK_KEY_PATTERN =
+  /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
+
+/** `sha256:` + 64 lowercase-or-uppercase hex characters. */
+export const CAIO_CONTENT_HASH_PATTERN = /^sha256:[a-fA-F0-9]{64}$/u;
+
+/**
+ * A short human version label: `v3`, `v1.2.0`, `2026-07-30`, `rev-12`. Each
+ * dot/dash/underscore separated segment is at most 12 characters, so a dense
+ * opaque token (an access key id, a bearer token, a base64 blob) cannot pose
+ * as a version.
+ */
+export const CAIO_VERSION_LABEL_PATTERN =
+  /^[A-Za-z0-9]{1,12}(?:[._-][A-Za-z0-9]{1,12})*$/u;
+
+export function isCaioSourceVersionOrContentHash(value: string): boolean {
+  return (
+    CAIO_CONTENT_HASH_PATTERN.test(value) ||
+    CAIO_VERSION_LABEL_PATTERN.test(value)
+  );
+}
+
+/**
+ * THE context-source descriptor contract. Strict: an unknown key is a drift
+ * signal and is rejected, never ignored.
+ *
+ * This is deliberately NOT `caioContextSourceSchema`. That schema describes a
+ * source that has ALREADY been released and cited in a receipt (it carries
+ * citationLabel / redactionState / receiptId, all of which only exist after a
+ * decision). The descriptor below is the PRE-decision input, and
+ * `ContextSourceDescriptor` — the read view the evaluation pipeline consumes —
+ * is derived from this schema with `Pick`, so there is exactly one definition
+ * of the fields the broker acts on.
+ */
+export const caioContextSourceDescriptorSchema = z
+  .object({
+    schemaVersion: z.literal(CAIO_CONTEXT_SOURCE_DESCRIPTOR_SCHEMA_VERSION),
+    sourceProject: z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(CAIO_CONTEXT_SOURCE_REF_PATTERN),
+    sourceRef: z.string().min(3).max(500).regex(CAIO_CONTEXT_SOURCE_REF_PATTERN),
+    sourceVersionOrContentHash: z
+      .string()
+      .min(1)
+      .max(200)
+      .refine(isCaioSourceVersionOrContentHash, {
+        message:
+          "sourceVersionOrContentHash must be a sha256 content hash or a short version label.",
+      }),
+    classification: z.enum(CAIO_CONTEXT_SOURCE_CLASSIFICATIONS),
+    /**
+     * Structural local-only marking. `true` means the source may never
+     * contribute to an external release, whatever its content scan says. The
+     * flag is REQUIRED: an unmarked source has no basis for release.
+     */
+    localOnly: z.boolean(),
+    packKey: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(CAIO_CONTEXT_SOURCE_PACK_KEY_PATTERN),
+    producedBy: z.enum(CAIO_CONTEXT_SOURCE_PRODUCERS),
+  })
+  .strict();
+
+export type CaioContextSourceDescriptor = z.infer<
+  typeof caioContextSourceDescriptorSchema
+>;
+
+/**
+ * Validating parser for a producer-supplied descriptor. Throws
+ * `caio_invalid_input` (HTTP 400) on any deviation. The error message reports
+ * field paths and issue codes only — it never echoes a rejected value, which
+ * may itself be the sensitive material.
+ */
+export function parseCaioContextSourceDescriptor(
+  value: unknown,
+): CaioContextSourceDescriptor {
+  const parsed = caioContextSourceDescriptorSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  const issues = parsed.error.issues
+    .map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "<root>";
+      const keys =
+        issue.code === "unrecognized_keys" && "keys" in issue
+          ? `(${(issue.keys as readonly string[]).join(",")})`
+          : "";
+      return `${path}:${issue.code}${keys}`;
+    })
+    .sort()
+    .join(" ");
+  throw new CaioContextBrokerError(
+    "caio_invalid_input",
+    `Context source descriptor does not satisfy ${CAIO_CONTEXT_SOURCE_DESCRIPTOR_SCHEMA_VERSION}: ${issues}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Structural (descriptor-level) boundaries
+// ---------------------------------------------------------------------------
+
+/**
+ * A structural boundary is asserted by the DESCRIPTOR, not by scanning
+ * content. It is distinct from the `local_only_marker` hard-boundary category,
+ * which matches a LOCAL-ONLY label inside the content text: a descriptor whose
+ * `localOnly` flag is true carries no marker in its body at all, so no content
+ * detector can ever see it.
+ *
+ * Structural reasons behave exactly like the non-redactable marker categories:
+ * they can only make the outcome more restrictive and nothing — no enterprise
+ * rule, no redaction, no eligibility grant — can bypass them.
+ */
+export const LOCAL_ONLY_SOURCE_DENY_REASON =
+  "structural_boundary:local_only_source" as const;
+
+/**
+ * The flag was absent or not a boolean. The marking is unresolved, so there is
+ * no basis for external release: fail closed, exactly like an eligibility
+ * predicate that did not return `true`.
+ */
+export const LOCAL_ONLY_FLAG_UNRESOLVED_DENY_REASON =
+  "structural_boundary:local_only_flag_unresolved" as const;
+
+export const CAIO_STRUCTURAL_BOUNDARY_REASONS = [
+  LOCAL_ONLY_SOURCE_DENY_REASON,
+  LOCAL_ONLY_FLAG_UNRESOLVED_DENY_REASON,
+] as const;
+export type CaioStructuralBoundaryReason =
+  (typeof CAIO_STRUCTURAL_BOUNDARY_REASONS)[number];
+
+/**
+ * Stage 2a of the pipeline: descriptor-level exclusions. Returns the reasons a
+ * source may not contribute to an external release regardless of its content.
+ * Only `localOnly === false` clears the check.
+ */
+export function assessSourceStructuralBoundaries(
+  source: Pick<ContextSourceDescriptor, "localOnly"> | null | undefined,
+): readonly CaioStructuralBoundaryReason[] {
+  const flag: unknown = source?.localOnly;
+  if (flag === false) return Object.freeze([]);
+  if (flag === true) return Object.freeze([LOCAL_ONLY_SOURCE_DENY_REASON]);
+  return Object.freeze([LOCAL_ONLY_FLAG_UNRESOLVED_DENY_REASON]);
+}
+
+// ---------------------------------------------------------------------------
 // Built-in hard boundary categories (non-bypassable)
 // ---------------------------------------------------------------------------
 
@@ -484,11 +679,19 @@ export const caioNegativeRuleSchema = z
 
 export type CaioNegativeRule = z.infer<typeof caioNegativeRuleSchema>;
 
-export type ContextSourceDescriptor = Readonly<{
-  sourceProject: string;
-  sourceRef: string;
-  classification: string;
-}>;
+/**
+ * The read view the evaluation pipeline consumes. Derived from
+ * `caioContextSourceDescriptorSchema` with `Pick` so it can never drift from
+ * the wire contract: adding, renaming, or retyping a field there changes this
+ * type too. `localOnly` is part of the view because the pipeline ENFORCES it
+ * (see `assessSourceStructuralBoundaries`).
+ */
+export type ContextSourceDescriptor = Readonly<
+  Pick<
+    CaioContextSourceDescriptor,
+    "sourceProject" | "sourceRef" | "classification" | "localOnly"
+  >
+>;
 
 function safeRuleRegex(pattern: string): RegExp | null {
   try {
@@ -505,7 +708,12 @@ function safeRuleRegex(pattern: string): RegExp | null {
  */
 export function matchesNegativeRule(
   rule: Pick<CaioNegativeRule, "pattern">,
-  source: ContextSourceDescriptor,
+  // Rule patterns only ever match on these three fields; `localOnly` is not a
+  // rule input because no enterprise rule may relax it.
+  source: Pick<
+    ContextSourceDescriptor,
+    "sourceProject" | "sourceRef" | "classification"
+  >,
   content: string,
 ): boolean {
   const { pattern } = rule;

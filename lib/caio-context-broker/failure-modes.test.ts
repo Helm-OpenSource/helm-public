@@ -36,6 +36,7 @@ function input(
       sourceProject: "proj-b",
       sourceRef: "doc:review-notes",
       classification: "internal",
+      localOnly: false,
     },
     content: CLEAN_CONTENT,
     eligibility: FULL_ELIGIBILITY,

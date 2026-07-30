@@ -3,15 +3,18 @@
 // Fixed stage order (evaluation AND reporting order):
 //   (1) identity / workspace / project eligibility + source ip (injected
 //       predicate results, re-asserted fail-closed),
-//   (2) built-in hard boundaries (non-bypassable, evaluated BEFORE any
-//       enterprise rule — no enterprise rule can override a hard-boundary
-//       hit),
+//   (2a) structural (descriptor-level) boundaries — a source marked
+//       `localOnly` may never contribute to an external release, whatever its
+//       content says; an unresolved marking fails closed,
+//   (2b) built-in hard boundaries over CONTENT (non-bypassable, evaluated
+//       BEFORE any enterprise rule — no enterprise rule can override a
+//       hard-boundary hit),
 //   (3) published enterprise negative rules (cross-project policy, then
 //       workspace scope, then project scope; version pinned; only status
 //       "published" participates),
 //   (4) default ALLOW for cross-project sources the user can access.
 //
-// Only stage 1 short-circuits. Stages 2 and 3 are ALWAYS both evaluated and
+// Only stage 1 short-circuits. Stages 2a, 2b and 3 are ALWAYS all evaluated and
 // their outcomes are combined with strict most-restrictive-wins precedence
 //   DENY_EXTERNAL > REDACT_AND_ALLOW > ALLOW,
 // so a hard-boundary hit can only make the outcome more restrictive and can
@@ -22,6 +25,7 @@
 // DENY_EXTERNAL.
 
 import {
+  assessSourceStructuralBoundaries,
   detectHardBoundaryHits,
   isNonRedactableHardBoundaryCategory,
   matchesNegativeRule,
@@ -435,15 +439,32 @@ export function evaluateContextCandidate(
     }
   }
 
-  // Stage 2 — built-in hard boundaries, evaluated BEFORE enterprise rules.
+  // Stage 2a — structural (descriptor-level) boundaries. A `localOnly` source
+  // is excluded from every external release; the marking itself must be
+  // resolved. This is NOT a content scan, so no redaction can clear it and no
+  // enterprise rule can grant an exception. Like stages 2b and 3 it does not
+  // short-circuit: the remaining stages still run so the reported hits stay
+  // complete and the outcome can only become more restrictive.
+  const structural = assessSourceStructuralBoundaries(input.source);
+  // Stage 2b — built-in hard boundaries, evaluated BEFORE enterprise rules.
   const hard = assessHardBoundaries(input.content);
   // Stage 3 — published enterprise negative rules, always evaluated.
   const enterprise = assessEnterpriseRules(input);
 
   // Most restrictive wins: DENY_EXTERNAL > REDACT_AND_ALLOW > ALLOW. Reported
-  // hits keep the documented stage order (hard boundaries, then enterprise).
-  if (hard.denyReasons.length > 0 || enterprise.denied) {
-    return deny([...hard.hitRefs, ...hard.denyReasons, ...enterprise.hits]);
+  // hits keep the documented stage order (structural, hard boundaries, then
+  // enterprise).
+  if (
+    structural.length > 0 ||
+    hard.denyReasons.length > 0 ||
+    enterprise.denied
+  ) {
+    return deny([
+      ...structural,
+      ...hard.hitRefs,
+      ...hard.denyReasons,
+      ...enterprise.hits,
+    ]);
   }
 
   const spans = [...hard.spans, ...enterprise.spans];

@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import type { CaioNegativeRule } from "@/lib/caio-context-broker/broker-contracts";
+import {
+  LOCAL_ONLY_FLAG_UNRESOLVED_DENY_REASON,
+  LOCAL_ONLY_SOURCE_DENY_REASON,
+  type CaioNegativeRule,
+} from "@/lib/caio-context-broker/broker-contracts";
 import {
   attemptRedaction,
   evaluateContextCandidate,
   type ContextCandidateInput,
   type ContextEligibility,
 } from "@/lib/caio-context-broker/evaluation-pipeline";
+import { enrichContextWithFailureSemantics } from "@/lib/caio-context-broker/failure-modes";
 
 const FULL_ELIGIBILITY: ContextEligibility = {
   identityAuthenticated: true,
@@ -30,6 +35,7 @@ function candidate(
       sourceProject: "proj-b",
       sourceRef: "doc:review-notes",
       classification: "internal",
+      localOnly: false,
     },
     content: CLEAN_CONTENT,
     eligibility: FULL_ELIGIBILITY,
@@ -99,6 +105,127 @@ describe("stage 1 — eligibility fails closed", () => {
       }),
     );
     expect(result.ruleHits).toEqual(["eligibility:identityAuthenticated"]);
+  });
+});
+
+describe("stage 2a — structural localOnly exclusion", () => {
+  it("denies a localOnly source whose content is entirely clean", () => {
+    // Before this stage existed the same candidate returned ALLOW: the flag was
+    // carried on the descriptor and never read.
+    const result = evaluateContextCandidate(
+      candidate({
+        source: {
+          sourceProject: "proj-b",
+          sourceRef: "readout:proj-b/acceptance-settlement",
+          classification: "confidential",
+          localOnly: true,
+        },
+      }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.redactionReliable).toBe(false);
+    expect(result.ruleHits).toContain(LOCAL_ONLY_SOURCE_DENY_REASON);
+  });
+
+  it("fails closed when the localOnly marking is unresolved", () => {
+    const withoutFlag = {
+      sourceProject: "proj-b",
+      sourceRef: "doc:review-notes",
+      classification: "internal",
+    } as unknown as ContextCandidateInput["source"];
+    const result = evaluateContextCandidate(
+      candidate({ source: withoutFlag }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.ruleHits).toContain(LOCAL_ONLY_FLAG_UNRESOLVED_DENY_REASON);
+  });
+
+  it("cannot be bypassed by full eligibility, clean content, or zero rules", () => {
+    const result = evaluateContextCandidate(
+      candidate({
+        source: {
+          sourceProject: "proj-b",
+          sourceRef: "doc:local-note",
+          classification: "public",
+          localOnly: true,
+        },
+        content: "Nothing sensitive here at all.",
+        eligibility: FULL_ELIGIBILITY,
+        rules: [],
+      }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.ruleHits).toEqual([LOCAL_ONLY_SOURCE_DENY_REASON]);
+  });
+
+  it("only ever makes the outcome more restrictive and reports every stage", () => {
+    // A localOnly source that would otherwise be REDACT_AND_ALLOW must become
+    // DENY_EXTERNAL, and the content + enterprise hits stay in the report so
+    // the structural exclusion is not an escape hatch out of policy.
+    const result = evaluateContextCandidate(
+      candidate({
+        source: {
+          sourceProject: "proj-b",
+          sourceRef: "doc:review-notes",
+          classification: "internal",
+          localOnly: true,
+        },
+        content: `${CLEAN_CONTENT} Reach the pilot lead at pilot.lead@corp.example for details.`,
+        rules: [publishedRule({ ruleKey: "deny-vendor" })],
+      }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.ruleHits[0]).toBe(LOCAL_ONLY_SOURCE_DENY_REASON);
+    expect(result.ruleHits).toContain(
+      "hard_boundary:unauthorized_identity_data",
+    );
+    expect(result.ruleHits).toContain("deny-vendor@v1");
+  });
+
+  it("keeps a localOnly source out of every external release set", async () => {
+    // End-to-end through the failure-mode layer: a stored localOnly candidate
+    // is excluded from the attached set instead of released.
+    const outcome = await enrichContextWithFailureSemantics({
+      retrieveStoredContext: async () => [
+        {
+          candidateId: "local-only",
+          input: candidate({
+            source: {
+              sourceProject: "proj-b",
+              sourceRef: "readout:proj-b/local-only",
+              classification: "confidential",
+              localOnly: true,
+            },
+          }),
+        },
+        { candidateId: "releasable", input: candidate() },
+      ],
+      userSubmitted: [],
+    });
+    expect(outcome.attachedStoredContext.map((item) => item.candidateId)).toEqual(
+      ["releasable"],
+    );
+  });
+
+  it("denies the request when a user-submitted item is localOnly", async () => {
+    await expect(
+      enrichContextWithFailureSemantics({
+        retrieveStoredContext: async () => [],
+        userSubmitted: [
+          {
+            itemId: "item-1",
+            input: candidate({
+              source: {
+                sourceProject: "proj-b",
+                sourceRef: "doc:local-only",
+                classification: "internal",
+                localOnly: true,
+              },
+            }),
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "caio_external_release_denied" });
   });
 });
 

@@ -2,16 +2,28 @@ import { describe, expect, it } from "vitest";
 
 import {
   CAIO_CITATION_LABEL_PATTERN,
+  CAIO_CONTEXT_SOURCE_CLASSIFICATIONS,
+  CAIO_CONTEXT_SOURCE_DESCRIPTOR_SCHEMA_VERSION,
+  CAIO_CONTEXT_SOURCE_PRODUCERS,
+  CAIO_STRUCTURAL_BOUNDARY_REASONS,
   CaioContextBrokerError,
   HARD_BOUNDARY_CATEGORIES,
   HARD_BOUNDARY_DETECTORS,
+  LOCAL_ONLY_FLAG_UNRESOLVED_DENY_REASON,
+  LOCAL_ONLY_SOURCE_DENY_REASON,
   NON_REDACTABLE_HARD_BOUNDARY_CATEGORIES,
+  assessSourceStructuralBoundaries,
+  caioContextSourceDescriptorSchema,
+  caioContextSourceSchema,
   caioNegativeRuleSchema,
   detectHardBoundaryHits,
   formatCitationLabel,
   isNonRedactableHardBoundaryCategory,
   matchesNegativeRule,
+  parseCaioContextSourceDescriptor,
   ruleHitRef,
+  type CaioContextSourceDescriptor,
+  type ContextSourceDescriptor,
   type HardBoundaryCategory,
 } from "@/lib/caio-context-broker/broker-contracts";
 
@@ -443,5 +455,168 @@ describe("negative rule contract", () => {
         "anything",
       ),
     ).toBe(true);
+  });
+});
+
+describe("context source descriptor wire contract", () => {
+  const VALID: CaioContextSourceDescriptor = {
+    schemaVersion: CAIO_CONTEXT_SOURCE_DESCRIPTOR_SCHEMA_VERSION,
+    sourceProject: "proj-demo-a",
+    sourceRef: "docs:proj-demo-a/delivery-runbook",
+    sourceVersionOrContentHash: "v3",
+    classification: "internal",
+    localOnly: false,
+    packKey: "service-delivery",
+    producedBy: "pack-adapter",
+  };
+
+  it("pins the version string, the classification set, and the producer set", () => {
+    expect(CAIO_CONTEXT_SOURCE_DESCRIPTOR_SCHEMA_VERSION).toBe(
+      "helm.caio.context-source-descriptor.v1",
+    );
+    expect([...CAIO_CONTEXT_SOURCE_CLASSIFICATIONS]).toEqual([
+      "public",
+      "internal",
+      "confidential",
+      "restricted",
+    ]);
+    expect([...CAIO_CONTEXT_SOURCE_PRODUCERS]).toEqual([
+      "pack-adapter",
+      "overlay-adapter",
+      "core-runtime",
+    ]);
+  });
+
+  it("accepts a conforming descriptor and returns a frozen-shaped copy", () => {
+    expect(parseCaioContextSourceDescriptor(VALID)).toEqual(VALID);
+    expect(
+      parseCaioContextSourceDescriptor({
+        ...VALID,
+        sourceVersionOrContentHash: `sha256:${"a".repeat(64)}`,
+        classification: "restricted",
+        localOnly: true,
+      }).localOnly,
+    ).toBe(true);
+  });
+
+  it("is the single definition the pipeline read view derives from", () => {
+    // Compile-time proof: the parsed descriptor IS a ContextSourceDescriptor.
+    // If the contract renames or retypes any consumed field this stops
+    // compiling, so a parallel definition cannot appear.
+    const readView: ContextSourceDescriptor =
+      parseCaioContextSourceDescriptor(VALID);
+    expect(readView.sourceProject).toBe("proj-demo-a");
+    expect(readView.localOnly).toBe(false);
+  });
+
+  it("is strict: an unknown key is rejected, never ignored", () => {
+    const parsed = caioContextSourceDescriptorSchema.safeParse({
+      ...VALID,
+      tenantId: "forged-tenant",
+    });
+    expect(parsed.success).toBe(false);
+    expect(() =>
+      parseCaioContextSourceDescriptor({ ...VALID, tenantId: "forged-tenant" }),
+    ).toThrow(/unrecognized_keys\(tenantId\)/u);
+  });
+
+  it("requires localOnly to be an explicit boolean", () => {
+    const withoutFlag: Record<string, unknown> = { ...VALID };
+    delete withoutFlag.localOnly;
+    expect(() => parseCaioContextSourceDescriptor(withoutFlag)).toThrow(
+      CaioContextBrokerError,
+    );
+    expect(() =>
+      parseCaioContextSourceDescriptor({ ...VALID, localOnly: "true" }),
+    ).toThrow(/localOnly/u);
+  });
+
+  it.each([
+    ["wrong schema version", { schemaVersion: "helm.caio.context-source.v0" }],
+    ["unknown classification", { classification: "secret" }],
+    ["unknown producer", { producedBy: "external-agent" }],
+    ["url source ref", { sourceRef: "https://example.test/doc" }],
+    ["traversing source ref", { sourceRef: "docs:../../etc/passwd" }],
+    ["drive-letter source ref", { sourceRef: "C:/secrets/key" }],
+    ["whitespace source ref", { sourceRef: "docs:proj a/runbook" }],
+    ["uppercase pack key", { packKey: "Service-Delivery" }],
+    ["opaque version label", { sourceVersionOrContentHash: "AKIA" + "0123456789ABCDEF" }],
+    ["truncated content hash", { sourceVersionOrContentHash: `sha256:${"a".repeat(63)}` }],
+    ["empty source project", { sourceProject: "" }],
+  ])("rejects %s", (_label, override) => {
+    expect(() =>
+      parseCaioContextSourceDescriptor({ ...VALID, ...override }),
+    ).toThrow(CaioContextBrokerError);
+  });
+
+  it("never echoes a rejected value in the refusal message", () => {
+    const tainted = "password" + "=" + "synthetic-value";
+    let message = "";
+    try {
+      parseCaioContextSourceDescriptor({ ...VALID, sourceRef: tainted });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain("sourceRef");
+    expect(message).not.toContain("synthetic-value");
+  });
+
+  it("stays distinct from the post-decision citation source schema", () => {
+    // The receipt schema describes a source that was already RELEASED, so a
+    // pre-decision descriptor must not satisfy it and vice versa. Two shapes,
+    // two purposes, one definition each.
+    expect(caioContextSourceSchema.safeParse(VALID).success).toBe(false);
+    expect(
+      caioContextSourceDescriptorSchema.safeParse({
+        sourceProject: "proj-demo-a",
+        sourceRef: "docs:proj-demo-a/delivery-runbook",
+        sourceVersionOrContentHash: "v3",
+        citationLabel: "[CAIO:S1]",
+        classification: "internal",
+        redactionState: "none",
+        receiptId: "caio-context-receipt:1",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("structural (descriptor-level) boundaries", () => {
+  it("exports the reason vocabulary", () => {
+    expect([...CAIO_STRUCTURAL_BOUNDARY_REASONS]).toEqual([
+      "structural_boundary:local_only_source",
+      "structural_boundary:local_only_flag_unresolved",
+    ]);
+  });
+
+  it("excludes a localOnly source and clears only an explicit false", () => {
+    expect(assessSourceStructuralBoundaries({ localOnly: true })).toEqual([
+      LOCAL_ONLY_SOURCE_DENY_REASON,
+    ]);
+    expect(assessSourceStructuralBoundaries({ localOnly: false })).toEqual([]);
+  });
+
+  it.each([
+    ["missing flag", {}],
+    ["string flag", { localOnly: "true" }],
+    ["numeric flag", { localOnly: 1 }],
+    ["null flag", { localOnly: null }],
+    ["null source", null],
+    ["undefined source", undefined],
+  ])("fails closed on %s", (_label, source) => {
+    expect(
+      assessSourceStructuralBoundaries(
+        source as Pick<ContextSourceDescriptor, "localOnly"> | null | undefined,
+      ),
+    ).toEqual([LOCAL_ONLY_FLAG_UNRESOLVED_DENY_REASON]);
+  });
+
+  it("is a flag, not the content marker category", () => {
+    // A descriptor flag leaves no LOCAL-ONLY text in the body, so the content
+    // detectors cannot see it: the two mechanisms are independent and both
+    // must exist.
+    expect(detectHardBoundaryHits("plain settlement readout")).toEqual([]);
+    expect(assessSourceStructuralBoundaries({ localOnly: true })).toHaveLength(
+      1,
+    );
   });
 });

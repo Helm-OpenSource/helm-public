@@ -1,0 +1,86 @@
+{
+  "fixtureKind": "helm.caio.context-source-descriptor.contract-conformance",
+  "contract": "helm.caio.context-source-descriptor.v1",
+  "purpose": "Two-sided conformance fixture for the CAIO context-source descriptor wire contract. The Pack asserts that its adapter maps `records` into exactly `descriptors`; Core asserts that every entry of `descriptors` parses under its strict schema and that the localOnly:true entry is excluded from external release. Either side drifting fails a test.",
+  "notes": [
+    "Synthetic values only: no tenant, customer, vendor, or environment data.",
+    "Every entry uses a short version label rather than a content hash, so this fixture holds no digest-shaped literal for the pack sample scan to flag.",
+    "Descriptor order is the adapter's deterministic sort: sourceProject, then sourceRef, then sourceVersionOrContentHash."
+  ],
+  "records": [
+    {
+      "recordRef": "evidence:synthetic:contract:alpha",
+      "sourceProject": "proj-demo-a",
+      "sourceRef": "docs:proj-demo-a/delivery-runbook",
+      "sourceVersion": "v3",
+      "classification": "internal",
+      "localOnly": false
+    },
+    {
+      "recordRef": "evidence:synthetic:contract:beta",
+      "sourceProject": "proj-demo-b",
+      "sourceRef": "readout:proj-demo-b/acceptance-settlement",
+      "sourceVersion": "v1.2.0",
+      "classification": "confidential",
+      "localOnly": true
+    },
+    {
+      "recordRef": "evidence:synthetic:contract:gamma",
+      "sourceProject": "proj-demo-a",
+      "sourceRef": "docs:proj-demo-a/pack-applicability-note",
+      "sourceVersion": "2026-07-30",
+      "classification": "public",
+      "localOnly": false
+    },
+    {
+      "recordRef": "evidence:synthetic:contract:delta",
+      "sourceProject": "proj-demo-c",
+      "sourceRef": "register:proj-demo-c/restricted-scope-note",
+      "sourceVersion": "rev-12",
+      "classification": "restricted",
+      "localOnly": false
+    }
+  ],
+  "descriptors": [
+    {
+      "schemaVersion": "helm.caio.context-source-descriptor.v1",
+      "sourceProject": "proj-demo-a",
+      "sourceRef": "docs:proj-demo-a/delivery-runbook",
+      "sourceVersionOrContentHash": "v3",
+      "classification": "internal",
+      "localOnly": false,
+      "packKey": "service-delivery",
+      "producedBy": "pack-adapter"
+    },
+    {
+      "schemaVersion": "helm.caio.context-source-descriptor.v1",
+      "sourceProject": "proj-demo-a",
+      "sourceRef": "docs:proj-demo-a/pack-applicability-note",
+      "sourceVersionOrContentHash": "2026-07-30",
+      "classification": "public",
+      "localOnly": false,
+      "packKey": "service-delivery",
+      "producedBy": "pack-adapter"
+    },
+    {
+      "schemaVersion": "helm.caio.context-source-descriptor.v1",
+      "sourceProject": "proj-demo-b",
+      "sourceRef": "readout:proj-demo-b/acceptance-settlement",
+      "sourceVersionOrContentHash": "v1.2.0",
+      "classification": "confidential",
+      "localOnly": true,
+      "packKey": "service-delivery",
+      "producedBy": "pack-adapter"
+    },
+    {
+      "schemaVersion": "helm.caio.context-source-descriptor.v1",
+      "sourceProject": "proj-demo-c",
+      "sourceRef": "register:proj-demo-c/restricted-scope-note",
+      "sourceVersionOrContentHash": "rev-12",
+      "classification": "restricted",
+      "localOnly": false,
+      "packKey": "service-delivery",
+      "producedBy": "pack-adapter"
+    }
+  ]
+}

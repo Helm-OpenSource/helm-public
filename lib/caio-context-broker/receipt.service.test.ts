@@ -63,6 +63,7 @@ describe("buildContextReceipt", () => {
         sourceProject: "proj-b",
         sourceRef: "doc:secret-note",
         classification: "internal",
+        localOnly: false,
       },
       content: `credential ${seededSecret} for staging`,
       eligibility: {
