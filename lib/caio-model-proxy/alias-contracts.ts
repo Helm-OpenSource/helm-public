@@ -53,11 +53,28 @@ export const caioCredentialRefSchema = z
 
 const policyKeySchema = z.string().min(1).max(200);
 
+/**
+ * An upstream endpoint carries a credential and a projected prompt, so
+ * plaintext HTTP is refused. The one exception is an explicit loopback host,
+ * which exists for a local test double: it can only reach a listener on this
+ * machine, never a network peer.
+ */
+const LOOPBACK_HTTP_ENDPOINT =
+  /^http:\/\/(?:127\.0\.0\.1|\[::1\]|localhost)(?::\d{1,5})?(?:\/[^\s]*)?$/u;
+
+export function isCaioSecureUpstreamEndpoint(value: string): boolean {
+  if (/^https:\/\/[^\s]+$/u.test(value)) return true;
+  return LOOPBACK_HTTP_ENDPOINT.test(value);
+}
+
 const endpointBaseUrlSchema = z
   .string()
   .min(1)
   .max(500)
-  .regex(/^https?:\/\/[^\s]+$/u);
+  .refine(isCaioSecureUpstreamEndpoint, {
+    message:
+      "upstream endpoint must be https, or plain http only on an explicit loopback host",
+  });
 
 export const CAIO_ALIAS_BINDING_STATUSES = ["active", "disabled"] as const;
 export const caioAliasBindingStatusSchema = z.enum(

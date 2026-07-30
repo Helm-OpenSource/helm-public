@@ -6,6 +6,7 @@ import {
   CAIO_STABLE_MODEL_ALIASES,
   CAIO_WORKBUDDY_DEFAULT_ALIAS,
   caioModelAliasBindingSchema,
+  isCaioSecureUpstreamEndpoint,
   isFallbackAllowed,
   listModelsForGrant,
   type CaioModelAliasBinding,
@@ -260,5 +261,51 @@ describe("isFallbackAllowed (fail-closed equivalence)", () => {
     expect(isFallbackAllowed(null, makeCandidate())).toBe(false);
     expect(isFallbackAllowed(makeBinding(), null)).toBe(false);
     expect(isFallbackAllowed(undefined, undefined)).toBe(false);
+  });
+});
+
+describe("upstream endpoint transport", () => {
+  const binding = (endpointBaseUrl: string) => ({
+    alias: "caio-codex-default",
+    protocol: "responses",
+    providerKey: "vendor-a",
+    upstreamModel: "m-1",
+    credentialRef: "vendor-a-key",
+    endpointBaseUrl,
+    region: "r1",
+    dataRetentionPolicyKey: "retain-none",
+    trainingUsePolicyKey: "no-training",
+    dataAuthorizationKey: "authorized",
+    policyVersion: "p1",
+    status: "active",
+    fallbackCandidates: [],
+  });
+
+  it("refuses a plaintext HTTP endpoint on a routable host", () => {
+    for (const url of [
+      "http://api.example.com/v1",
+      `http://${[10, 0, 0, 5].join(".")}:8080`,
+      "http://[2001:db8::1]/v1",
+      "http://localhost.evil.example.com",
+    ]) {
+      expect(isCaioSecureUpstreamEndpoint(url)).toBe(false);
+      expect(
+        caioModelAliasBindingSchema.safeParse(binding(url)).success,
+      ).toBe(false);
+    }
+  });
+
+  it("accepts https and only loopback plain http", () => {
+    for (const url of [
+      "https://api.example.com/v1",
+      "http://127.0.0.1:8081/v1",
+      "http://[::1]:8081",
+      "http://localhost:8081/v1",
+    ]) {
+      expect(isCaioSecureUpstreamEndpoint(url)).toBe(true);
+      expect(
+        caioModelAliasBindingSchema.safeParse(binding(url)).success,
+      ).toBe(true);
+    }
   });
 });
