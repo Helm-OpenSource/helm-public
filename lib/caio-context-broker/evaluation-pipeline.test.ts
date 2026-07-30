@@ -309,6 +309,243 @@ describe("stage 3 — enterprise negative rules", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Adversarial review regressions (F1-F4)
+// ---------------------------------------------------------------------------
+
+const FILLER =
+  "The delivery team documented the onboarding walkthrough, the release " +
+  "cadence, the review rota, and the escalation ladder so that every " +
+  "reviewer can follow the same checklist without asking for context in " +
+  "the channel again and again during the quarter. ";
+
+const REDACTABLE_SECRET = "pilot.lead@corp.example";
+const KEYWORD_SECRET_LINE = "vault password: correct horse battery staple";
+
+describe("F1 — no stage may skip a later stage", () => {
+  const denyEverything = publishedRule({
+    ruleKey: "deny-everything",
+    ruleKind: "deny",
+    pattern: { contentRegex: "[\\s\\S]*" },
+  });
+  const isolateWorkspace = publishedRule({
+    ruleKey: "isolate-workspace",
+    ruleKind: "no_cross_project_context",
+    pattern: { sourceProject: "ignored" },
+  });
+  const isolateSourceProject = publishedRule({
+    ruleKey: "isolate-proj-b",
+    ruleKind: "no_cross_project_context",
+    scopeKind: "project",
+    scopeRef: "proj-b",
+    pattern: { sourceProject: "ignored" },
+  });
+
+  const SECRET_BEARING = `${CLEAN_CONTENT} Reach the pilot lead at ${REDACTABLE_SECRET} for details.`;
+
+  const MATRIX: ReadonlyArray<{
+    label: string;
+    rule: CaioNegativeRule;
+    content: string;
+    expectedRef: string;
+  }> = [
+    {
+      label: "deny rule + clean content",
+      rule: denyEverything,
+      content: CLEAN_CONTENT,
+      expectedRef: "deny-everything@v1",
+    },
+    {
+      label: "deny rule + secret-bearing content",
+      rule: denyEverything,
+      content: SECRET_BEARING,
+      expectedRef: "deny-everything@v1",
+    },
+    {
+      label: "workspace no_cross_project_context + clean content",
+      rule: isolateWorkspace,
+      content: CLEAN_CONTENT,
+      expectedRef: "isolate-workspace@v1",
+    },
+    {
+      label: "workspace no_cross_project_context + secret-bearing content",
+      rule: isolateWorkspace,
+      content: SECRET_BEARING,
+      expectedRef: "isolate-workspace@v1",
+    },
+    {
+      label: "project no_cross_project_context + secret-bearing content",
+      rule: isolateSourceProject,
+      content: SECRET_BEARING,
+      expectedRef: "isolate-proj-b@v1",
+    },
+    {
+      label: "project no_cross_project_context + password content",
+      rule: isolateSourceProject,
+      content: `${CLEAN_CONTENT} password=hunter2secret`,
+      expectedRef: "isolate-proj-b@v1",
+    },
+  ];
+
+  it.each(MATRIX)("denies for $label", ({ rule, content, expectedRef }) => {
+    const result = evaluateContextCandidate(
+      candidate({ content, rules: [rule] }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.ruleHits).toContain(expectedRef);
+    expect(result.redactedContent).toBeUndefined();
+  });
+
+  it("a hard-boundary hit can only make the outcome more restrictive", () => {
+    // Without any rule the same content is a reliable REDACT_AND_ALLOW; the
+    // rule must not be skipped just because the content also trips a
+    // redactable built-in detector.
+    expect(
+      evaluateContextCandidate(candidate({ content: SECRET_BEARING })).decision,
+    ).toBe("REDACT_AND_ALLOW");
+    const withRule = evaluateContextCandidate(
+      candidate({ content: SECRET_BEARING, rules: [denyEverything] }),
+    );
+    expect(withRule.decision).toBe("DENY_EXTERNAL");
+    expect(withRule.ruleHits).toContain(
+      "hard_boundary:unauthorized_identity_data",
+    );
+    expect(withRule.ruleHits).toContain("deny-everything@v1");
+  });
+
+  it("reports hard-boundary hits before enterprise rule hits", () => {
+    const result = evaluateContextCandidate(
+      candidate({ content: SECRET_BEARING, rules: [denyEverything] }),
+    );
+    expect(
+      result.ruleHits.indexOf("hard_boundary:unauthorized_identity_data"),
+    ).toBeLessThan(result.ruleHits.indexOf("deny-everything@v1"));
+  });
+});
+
+describe("F2 — marker categories are never redacted away", () => {
+  const PAYLOAD =
+    "the fallback root credential lives in the ops safe on floor three";
+
+  it.each([
+    ["LOCAL-ONLY", `LOCAL-ONLY ${PAYLOAD}`],
+    ["[[LOCAL-ONLY]]", `[[LOCAL-ONLY]] ${PAYLOAD}`],
+    ["INTERNAL USE ONLY", `INTERNAL USE ONLY ${PAYLOAD}`],
+    ["DO NOT DISTRIBUTE", `DO NOT DISTRIBUTE ${PAYLOAD}`],
+  ])("denies %s unconditionally and releases no payload", (_label, content) => {
+    const padded = `${FILLER}${content}`;
+    const result = evaluateContextCandidate(candidate({ content: padded }));
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.redactedContent).toBeUndefined();
+    expect(result.redactionReliable).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(PAYLOAD);
+    expect(
+      result.ruleHits.some((hit) =>
+        hit.startsWith("redaction:non_redactable_category:"),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("F3 — no partial-span redaction of an unbounded secret", () => {
+  it("never releases the tail of a keyword-introduced secret", () => {
+    const result = evaluateContextCandidate(
+      candidate({ content: `${FILLER}${KEYWORD_SECRET_LINE}` }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.redactedContent).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain("horse battery staple");
+    expect(result.ruleHits).toContain("hard_boundary:password");
+  });
+
+  it("denies when an enterprise redact match is a strict prefix of a longer token", () => {
+    const result = evaluateContextCandidate(
+      candidate({
+        content: `${CLEAN_CONTENT} account CUST-1234-SECRET-9999 renewed.`,
+        rules: [
+          publishedRule({
+            ruleKey: "mask-cust",
+            ruleKind: "redact",
+            pattern: { contentRegex: "CUST-\\d{4}" },
+          }),
+        ],
+      }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.redactedContent).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain("SECRET-9999");
+    expect(result.ruleHits).toContain(
+      "redaction:rule_match_not_token_bounded",
+    );
+  });
+
+  it("denies when a built-in hit continues into adjacent non-whitespace text", () => {
+    const result = evaluateContextCandidate(
+      candidate({
+        content: `${CLEAN_CONTENT} profile at ${REDACTABLE_SECRET}/private-notes today.`,
+      }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(
+      result.ruleHits.some((hit) =>
+        hit.startsWith("redaction:secret_extent_not_token_bounded:"),
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("private-notes");
+  });
+
+  it("still redacts a token-bounded enterprise match", () => {
+    const result = evaluateContextCandidate(
+      candidate({
+        content: `${CLEAN_CONTENT} account CUST-1234 renewed.`,
+        rules: [
+          publishedRule({
+            ruleKey: "mask-cust",
+            ruleKind: "redact",
+            pattern: { contentRegex: "CUST-\\d{4}" },
+          }),
+        ],
+      }),
+    );
+    expect(result.decision).toBe("REDACT_AND_ALLOW");
+    expect(result.redactedContent).toContain("[REDACTED:mask-cust]");
+  });
+});
+
+describe("F4 — reliability does not depend on caller-controlled length", () => {
+  it("decides the same for a secret line alone and padded with filler", () => {
+    const alone = evaluateContextCandidate(
+      candidate({ content: KEYWORD_SECRET_LINE }),
+    );
+    const padded = evaluateContextCandidate(
+      candidate({
+        content: `${FILLER}${FILLER}${KEYWORD_SECRET_LINE}`,
+      }),
+    );
+    expect(padded.decision).toBe(alone.decision);
+    expect(alone.decision).toBe("DENY_EXTERNAL");
+    expect(padded.decision).toBe("DENY_EXTERNAL");
+    expect(JSON.stringify(padded)).not.toContain("horse battery staple");
+  });
+
+  it("denies when many distinct hard-boundary hits appear, however long the content", () => {
+    const many = [
+      "a@corp.example",
+      "b@corp.example",
+      "c@corp.example",
+      "d@corp.example",
+      "e@corp.example",
+    ].join(" and ");
+    const result = evaluateContextCandidate(
+      candidate({ content: `${FILLER}${FILLER}${FILLER}contacts: ${many}` }),
+    );
+    expect(result.decision).toBe("DENY_EXTERNAL");
+    expect(result.ruleHits).toContain(
+      "redaction:too_many_hard_boundary_hits",
+    );
+  });
+});
+
 describe("stage 4 — default allow", () => {
   it("allows an eligible clean cross-project candidate", () => {
     const result = evaluateContextCandidate(candidate());

@@ -7,10 +7,16 @@
 // only when every one of them is ALLOW or a reliable REDACT_AND_ALLOW. Any
 // unavailable check, unreliable redaction, or DENY_EXTERNAL fails closed with
 // the typed error caio_external_release_denied (HTTP 422).
+//
+// Per-candidate evaluation is not sufficient on its own: a secret split across
+// two candidates passes both checks individually. After per-candidate
+// evaluation the concatenation of everything that would actually be released
+// is re-scanned, and any hard-boundary hit denies the whole release set.
 
 import {
   CaioContextBrokerError,
   CONTEXT_ENRICHMENT_SKIPPED_MARKER,
+  detectHardBoundaryHits,
   type ContextEnrichmentSkippedMarker,
 } from "@/lib/caio-context-broker/broker-contracts";
 import {
@@ -41,7 +47,22 @@ export type ContextEnrichmentOutcome = Readonly<{
   marker: ContextEnrichmentSkippedMarker | null;
   attachedStoredContext: readonly AttachedContextItem[];
   userSubmitted: readonly AttachedContextItem[];
+  /**
+   * Reason codes from the combined release re-scan (F6). Non-empty means the
+   * stored release set was dropped as a whole because the concatenation of
+   * what would have been released tripped a hard boundary that no single
+   * candidate tripped on its own.
+   */
+  combinedReleaseDenialReasons: readonly string[];
 }>;
+
+/**
+ * Distinct reason code for a hard boundary that only exists in the
+ * CONCATENATION of the release set (e.g. a PEM key split across two
+ * candidates). Emitted as `${COMBINED_RELEASE_DENIED_REASON}:<category>`.
+ */
+export const COMBINED_RELEASE_DENIED_REASON =
+  "combined_release_hard_boundary" as const;
 
 export type ContextEnrichmentDependencies = Readonly<{
   evaluate: typeof evaluateContextCandidate;
@@ -88,6 +109,35 @@ function releasable(
     return result.redactedContent;
   }
   return null;
+}
+
+/**
+ * Cross-candidate re-scan. Per-candidate evaluation cannot see a secret that
+ * is split across items, so the release set is re-scanned as a whole: both the
+ * newline-joined and the directly-joined concatenation are checked, because a
+ * split can fall either side of an item boundary. Any hit fails the WHOLE
+ * release set closed.
+ */
+function scanCombinedRelease(parts: readonly string[]): readonly string[] {
+  if (parts.length < 2) return Object.freeze([]);
+  const categories = new Set<string>();
+  for (const combined of [parts.join("\n"), parts.join("")]) {
+    for (const hit of detectHardBoundaryHits(combined)) {
+      categories.add(hit.category);
+    }
+  }
+  // A category that already trips on an individual released part cannot be a
+  // cross-candidate finding (per-candidate evaluation already cleared it).
+  for (const part of parts) {
+    for (const hit of detectHardBoundaryHits(part)) {
+      categories.delete(hit.category);
+    }
+  }
+  return Object.freeze(
+    [...categories].sort().map(
+      (category) => `${COMBINED_RELEASE_DENIED_REASON}:${category}`,
+    ),
+  );
 }
 
 export async function enrichContextWithFailureSemantics(input: {
@@ -169,10 +219,39 @@ export async function enrichContextWithFailureSemantics(input: {
     }
   }
 
+  // Combined release re-scan (fail closed). User-submitted items are the
+  // request itself, so a hit that involves them denies the request; a hit that
+  // only appears once stored context joins the set drops the whole stored set
+  // and marks the continuation.
+  const userParts = userSubmitted.map((item) => item.releasableContent);
+  if (scanCombinedRelease(userParts).length > 0) {
+    throw new CaioContextBrokerError(
+      "caio_external_release_denied",
+      "The combined user-submitted inputs would release hard-boundary material.",
+    );
+  }
+  let combinedReleaseDenialReasons: readonly string[] = Object.freeze([]);
+  const storedParts = attachedStoredContext.map(
+    (item) => item.releasableContent,
+  );
+  const combinedReasons = scanCombinedRelease([...userParts, ...storedParts]);
+  if (combinedReasons.length > 0) {
+    if (userParts.length > 0) {
+      throw new CaioContextBrokerError(
+        "caio_external_release_denied",
+        "The combined release set would release hard-boundary material.",
+      );
+    }
+    combinedReleaseDenialReasons = combinedReasons;
+    attachedStoredContext.length = 0;
+    marker = CONTEXT_ENRICHMENT_SKIPPED_MARKER;
+  }
+
   return Object.freeze({
     continuation: "proceed",
     marker,
     attachedStoredContext: Object.freeze(attachedStoredContext),
     userSubmitted: Object.freeze(userSubmitted),
+    combinedReleaseDenialReasons,
   });
 }

@@ -54,15 +54,19 @@ describeMysql("enterprise memory Prisma store on an isolated MySQL database", ()
     return new Date(T0.getTime() + offsetMs);
   }
 
-  async function seedCandidate(body: string) {
+  async function seedCandidate(
+    body: string,
+    options: { projectRef?: string; createdAt?: Date } = {},
+  ) {
     return store.createCandidate(
       {
         workspaceId,
         createdByRef: "user:creator",
         body,
+        ...(options.projectRef ? { projectRef: options.projectRef } : {}),
         sourceRequestId: `req-${suffix}`,
       },
-      T0,
+      options.createdAt ?? T0,
     );
   }
 
@@ -185,6 +189,81 @@ describeMysql("enterprise memory Prisma store on an isolated MySQL database", ()
     expect(stored.body).toBeNull();
     expect(stored.contentHash).toBe(sha256(body));
     expect(JSON.stringify(stored)).not.toContain(body);
+  });
+
+  // F7 regression on the Prisma path.
+  it("preserves the creation-time projectRef on adoption unless promoted", async () => {
+    const scoped = await seedCandidate(`scoped adoption ${suffix}`, {
+      projectRef: "proj-a",
+    });
+    const adopted = await store.adoptCandidate({
+      workspaceId,
+      candidateId: scoped.id,
+      actorRef: "user:creator",
+      now: at(1_000),
+    });
+    expect(adopted.projectRef).toBe("proj-a");
+
+    const promoted = await seedCandidate(`promoted adoption ${suffix}`, {
+      projectRef: "proj-a",
+    });
+    const promotedRecord = await store.adoptCandidate({
+      workspaceId,
+      candidateId: promoted.id,
+      actorRef: "user:creator",
+      promoteToWorkspaceScope: true,
+      now: at(1_000),
+    });
+    expect(promotedRecord.projectRef).toBeNull();
+  });
+
+  // F8 regression on the Prisma path: same observable order as in-memory.
+  it("returns verified entries before ephemeral ones, newest first", async () => {
+    const orderWorkspace = await db.workspace.create({
+      data: {
+        name: `Enterprise memory ordering ${suffix}`,
+        slug: `enterprise-memory-ordering-${suffix}`,
+      },
+    });
+    async function adoptAt(body: string, createdAt: Date) {
+      const created = await store.createCandidate(
+        {
+          workspaceId: orderWorkspace.id,
+          createdByRef: "user:creator",
+          body,
+          sourceRequestId: `req-${suffix}`,
+        },
+        createdAt,
+      );
+      await store.adoptCandidate({
+        workspaceId: orderWorkspace.id,
+        candidateId: created.id,
+        actorRef: "user:creator",
+        now: new Date(createdAt.getTime() + 1_000),
+      });
+      return created;
+    }
+    const olderEphemeral = await adoptAt(`ordering older ${suffix}`, T0);
+    const newerVerified = await adoptAt(
+      `ordering newer ${suffix}`,
+      at(10 * 60_000),
+    );
+    await store.verifyEphemeral({
+      workspaceId: orderWorkspace.id,
+      candidateId: newerVerified.id,
+      actorRef: "user:knowledge-owner",
+      actorIsKnowledgeOwner: true,
+      now: at(11 * 60_000),
+    });
+    const entries = await store.queryRetrievableMemory({
+      workspaceId: orderWorkspace.id,
+      now: at(12 * 60_000),
+    });
+    expect(entries.map((entry) => entry.id)).toEqual([
+      newerVerified.id,
+      olderEphemeral.id,
+    ]);
+    expect(entries[0]!.provenance.isVerified).toBe(true);
   });
 
   it("sweeps expired candidates and deletes their bodies", async () => {

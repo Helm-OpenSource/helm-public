@@ -117,6 +117,10 @@ export const HARD_BOUNDARY_CATEGORIES = [
   "connection_string",
   "api_or_session_token",
   "raw_serial_number",
+  // Opaque identifiers (UUID/GUID). Kept separate from raw_serial_number:
+  // a UUID is an identifier, not a device serial, and reporting one as the
+  // other mis-describes what was found.
+  "raw_identifier",
   "unauthorized_identity_data",
   "local_only_marker",
   "unauthorized_material",
@@ -124,9 +128,46 @@ export const HARD_BOUNDARY_CATEGORIES = [
 
 export type HardBoundaryCategory = (typeof HARD_BOUNDARY_CATEGORIES)[number];
 
+/**
+ * How reliably a hit's extent can be bounded, which decides whether
+ * REDACT_AND_ALLOW is even a candidate outcome:
+ *
+ *  - "precise": the match covers the whole sensitive value (delimited by
+ *    quotes, whitespace, or a fixed shape) → redaction may be attempted.
+ *  - "unbounded": the match is keyword-introduced free text whose true end
+ *    cannot be determined (a passphrase with spaces, a key block, a cookie
+ *    header). Partial redaction would release the tail, so the pipeline
+ *    denies instead of guessing.
+ *  - "non_redactable": the hit is a MARKER referring to the surrounding
+ *    document (LOCAL-ONLY, DO NOT DISTRIBUTE). Removing the label would
+ *    release exactly the material the marker protects → always deny.
+ */
+export const HARD_BOUNDARY_REDACTABILITIES = [
+  "precise",
+  "unbounded",
+  "non_redactable",
+] as const;
+export type HardBoundaryRedactability =
+  (typeof HARD_BOUNDARY_REDACTABILITIES)[number];
+
+/**
+ * Marker categories: the sensitive thing is the document the marker refers
+ * to, not the marker text. A hit here can never be redacted away — callers
+ * must fail closed to DENY_EXTERNAL.
+ */
+export const NON_REDACTABLE_HARD_BOUNDARY_CATEGORIES: readonly HardBoundaryCategory[] =
+  Object.freeze(["local_only_marker", "unauthorized_material"] as const);
+
+export function isNonRedactableHardBoundaryCategory(
+  category: HardBoundaryCategory,
+): boolean {
+  return NON_REDACTABLE_HARD_BOUNDARY_CATEGORIES.includes(category);
+}
+
 export type HardBoundaryDetector = Readonly<{
   category: HardBoundaryCategory;
   patternCode: string;
+  redactability: HardBoundaryRedactability;
   regex: RegExp;
 }>;
 
@@ -140,59 +181,185 @@ const HARD_BOUNDARY_CATEGORY_BY_SHARED_CODE: Record<
   raw_email_pattern: "unauthorized_identity_data",
   raw_phone_pattern: "unauthorized_identity_data",
   raw_ip_pattern: "unauthorized_identity_data",
-  raw_uuid_pattern: "raw_serial_number",
+  // A UUID is an opaque identifier, not a device serial number.
+  raw_uuid_pattern: "raw_identifier",
   raw_bearer_token_pattern: "api_or_session_token",
   raw_api_key_pattern: "api_or_session_token",
 };
 
+// Every shared pattern is a fixed-shape value, so its extent is precise.
+const SHARED_PATTERN_REDACTABILITY: HardBoundaryRedactability = "precise";
+
 const TARGETED_HARD_BOUNDARY_DETECTORS: readonly HardBoundaryDetector[] = [
+  // --- key material -------------------------------------------------------
   {
     category: "ca_private_key",
     patternCode: "ca_private_key_block",
+    redactability: "unbounded",
     regex:
-      /-----BEGIN CA PRIVATE KEY-----[\s\S]*?(?:-----END CA PRIVATE KEY-----|$)|\bcertificate[\s_-]authority\b[^\n]{0,60}\bprivate[\s_-]?key\b/giu,
+      /-----BEGIN[ \t]+CA[ \t]+PRIVATE[ \t]+KEY-----[\s\S]*?(?:-----END[ \t]+CA[ \t]+PRIVATE[ \t]+KEY-----|$)|\bcertificate[\s_-]?authority\b[^\n]{0,60}\bprivate[\s_-]?key\b/giu,
+  },
+  {
+    // Case-insensitive, tab tolerant, CRLF tolerant.
+    category: "private_key",
+    patternCode: "pem_private_key_block",
+    redactability: "unbounded",
+    regex:
+      /-----BEGIN[A-Za-z0-9 \t]*PRIVATE[ \t]+KEY(?:[ \t]+BLOCK)?-----[\s\S]*?(?:-----END[A-Za-z0-9 \t]*PRIVATE[ \t]+KEY(?:[ \t]+BLOCK)?-----|$)/giu,
   },
   {
     category: "private_key",
-    patternCode: "pem_private_key_block",
-    regex:
-      /-----BEGIN[A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END[A-Z ]*PRIVATE KEY-----|$)/gu,
+    patternCode: "putty_private_key_file",
+    redactability: "unbounded",
+    regex: /\bPuTTY-User-Key-File(?:-\d+)?\b[^\n]*/giu,
   },
+  // --- keyword-introduced secrets (extent = rest of the logical value) ----
   {
+    // The value runs to the end of the line (or to the closing quote): a
+    // passphrase may contain spaces, so stopping at the first whitespace
+    // would release its tail. `\s*` after the separator still spans a
+    // newline so YAML-style `password:\n  value` keeps being detected.
     category: "password",
     patternCode: "password_assignment",
-    regex: /\b(?:password|passwd|pwd)\s*[:=]\s*["']?[^\s"']{4,}/giu,
-  },
-  {
-    category: "connection_string",
-    patternCode: "database_connection_string",
+    redactability: "unbounded",
     regex:
-      /\b(?:mysql|mariadb|postgres(?:ql)?|mongodb(?:\+srv)?|redis|amqps?|mssql|jdbc:[a-z]+):\/\/[^\s"']+/giu,
+      /\b(?:password|passwd|passphrase|pwd)\b\s*[:=]\s*(?:["'][^"'\n]*["']|[^\n]+)/giu,
   },
   {
     category: "api_or_session_token",
-    patternCode: "session_token_assignment",
+    patternCode: "credential_assignment",
+    redactability: "unbounded",
     regex:
-      /\b(?:sess(?:ion)?[-_]?(?:id|token)|access[-_]?token|refresh[-_]?token)\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{16,}/giu,
+      /\b(?:sess(?:ion)?[-_]?(?:id|token)|(?:access|refresh|id|auth|bearer)[-_]?token|token|api[-_]?keys?|apikey|client[-_]?secret|secret[-_]?(?:access[-_]?)?key|secret|credentials?|passcode)\b\s*[:=]\s*(?:["'][^"'\n]*["']|[^\n]+)/giu,
   },
+  {
+    category: "api_or_session_token",
+    patternCode: "authorization_header",
+    redactability: "precise",
+    regex:
+      /\bAuthorization\s*:\s*(?:Basic|Bearer|Digest|Token|ApiKey|AWS4-HMAC-SHA256)[ \t]+[^\s"',;]+/giu,
+  },
+  {
+    category: "api_or_session_token",
+    patternCode: "cookie_header",
+    redactability: "unbounded",
+    regex: /\b(?:Set-)?Cookie\s*:\s*[^\n]+/giu,
+  },
+  {
+    category: "api_or_session_token",
+    patternCode: "session_cookie_value",
+    redactability: "precise",
+    regex:
+      /\b(?:JSESSIONID|PHPSESSID|ASP\.NET_SessionId|connect\.sid|sessionid|session_id)\s*=\s*[^\s;"']{6,}/giu,
+  },
+  // --- fixed-shape tokens -------------------------------------------------
+  {
+    category: "api_or_session_token",
+    patternCode: "jwt_compact_token",
+    redactability: "precise",
+    regex: /\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}/gu,
+  },
+  {
+    category: "api_or_session_token",
+    patternCode: "vendor_api_key",
+    redactability: "precise",
+    regex:
+      /\b(?:sk|pk|rk|whsec)_(?:live|test)_[A-Za-z0-9]{8,}|\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\b(?:AKIA|ASIA|AROA|AIDA|AIPA|ANPA|ANVA|ABIA|ACCA|AGPA)[0-9A-Z]{16}\b|\bxox[baprse]-[A-Za-z0-9-]{10,}|\bglpat-[A-Za-z0-9_-]{16,}/gu,
+  },
+  // --- connection strings -------------------------------------------------
+  {
+    category: "connection_string",
+    patternCode: "database_connection_string",
+    redactability: "precise",
+    regex:
+      /\b(?:mysql|mariadb|postgres(?:ql)?|mongodb|redis|rediss|amqps?|mssql|sqlserver|clickhouse|cassandra|couchbase|elasticsearch|snowflake|trino|presto|databricks|oracle|db2|cockroachdb|neo4j|influxdb)(?:\+[a-z0-9_.]+)?:\/\/[^\s"']+/giu,
+  },
+  {
+    // Any `<scheme>://user:password@host` shape, whatever the vendor.
+    category: "connection_string",
+    patternCode: "credentialed_url",
+    redactability: "precise",
+    regex: /\b[a-z][a-z0-9+.\-]*:\/\/[^\s:@/"']+:[^\s@/"']+@[^\s"']+/giu,
+  },
+  {
+    // Vendor-specific JDBC shapes, including `jdbc:oracle:thin:user/pw@host`
+    // which carries no `//`.
+    category: "connection_string",
+    patternCode: "jdbc_connection_string",
+    redactability: "precise",
+    regex: /\bjdbc:[a-z0-9]+:[^\s"']+/giu,
+  },
+  {
+    category: "connection_string",
+    patternCode: "file_backed_connection_string",
+    redactability: "precise",
+    regex:
+      /\bsqlite3?:(?:\/\/)?\/[^\s"']+|\bfile:\/{2,}[^\s"']*\.(?:db|sqlite3?)\b/giu,
+  },
+  // --- identity / serial / identifier ------------------------------------
   {
     category: "raw_serial_number",
     patternCode: "serial_number_assignment",
+    redactability: "precise",
     regex:
-      /\bserial(?:[-_\s]?(?:number|no\.?))?\s*[:#=]\s*["']?[A-Z0-9][A-Z0-9-]{5,}/giu,
+      /\bserial(?:[-_\s]?(?:number|no\.?|nr\.?))?\s*[:#=]\s*["']?[A-Z0-9][A-Z0-9-]{5,}/giu,
   },
+  {
+    // Abbreviated serial context without the literal word "serial". Kept
+    // case-sensitive so prose "sn" does not match.
+    category: "raw_serial_number",
+    patternCode: "serial_number_abbreviated",
+    redactability: "precise",
+    regex: /\b(?:S\/N|SN)[ \t]*[:#=]?[ \t]*[A-Z0-9]{6,}(?:-[A-Z0-9]+)*\b/gu,
+  },
+  {
+    // Any UUID/GUID version (the shared pattern only accepts versions 1-5,
+    // so UUIDv6/v7/v8 slipped through).
+    category: "raw_identifier",
+    patternCode: "raw_uuid_any_version",
+    redactability: "precise",
+    regex:
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu,
+  },
+  {
+    // IPv6, both the expanded and the `::`-compressed form. At least four
+    // groups are required so clock strings like 10:30:45 do not match.
+    category: "unauthorized_identity_data",
+    patternCode: "raw_ipv6_pattern",
+    redactability: "precise",
+    regex:
+      /\b(?:[0-9A-Fa-f]{1,4}:){3,7}[0-9A-Fa-f]{1,4}\b|\b[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?/gu,
+  },
+  // --- markers (never redactable) ----------------------------------------
   {
     category: "local_only_marker",
     patternCode: "local_only_marker",
+    redactability: "non_redactable",
     regex: /\[\[LOCAL[-_]?ONLY\]\]|\bLOCAL[-_]ONLY\b/giu,
   },
   {
     category: "unauthorized_material",
     patternCode: "unauthorized_material_marker",
+    redactability: "non_redactable",
     regex:
-      /\bDO NOT (?:DISTRIBUTE|SHARE)\b|\bUNAUTHORIZED[\s_-]MATERIAL\b|\bINTERNAL USE ONLY\b/giu,
+      /\bDO NOT (?:DISTRIBUTE|SHARE|FORWARD|COPY)\b|\bUNAUTHORI[SZ]ED[\s_-]MATERIAL\b|\bINTERNAL USE ONLY\b|\bNOT FOR (?:DISTRIBUTION|RELEASE|EXTERNAL USE)\b/giu,
   },
 ];
+
+// Known residual detection gaps (deliberately NOT claimed as covered):
+//  - a headerless PEM body (base64 only, no BEGIN line) is indistinguishable
+//    from other base64 payloads and is not detected;
+//  - a bare 40-character AWS secret access key with no surrounding keyword;
+//  - generic high-entropy tokens with no keyword, vendor prefix, or JWT shape
+//    (for example a raw 32-byte hex API key on its own);
+//  - passwords introduced in a natural-language sentence without a `:`/`=`
+//    separator ("the password is hunter2");
+//  - non-Latin / non-English marker wording (only the English marker phrases
+//    listed above are matched);
+//  - identity data beyond email / phone / IPv4 / IPv6 (postal addresses,
+//    national ID numbers, bank accounts);
+//  - a secret split across candidates is handled by the combined re-scan in
+//    failure-modes.ts, not by these per-value detectors.
 
 function withGlobalFlag(regex: RegExp): RegExp {
   const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
@@ -211,6 +378,7 @@ export const HARD_BOUNDARY_DETECTORS: readonly HardBoundaryDetector[] =
       Object.freeze({
         category: HARD_BOUNDARY_CATEGORY_BY_SHARED_CODE[pattern.code],
         patternCode: pattern.code,
+        redactability: SHARED_PATTERN_REDACTABILITY,
         regex: pattern.regex,
       }),
     ),
@@ -219,6 +387,7 @@ export const HARD_BOUNDARY_DETECTORS: readonly HardBoundaryDetector[] =
 export type HardBoundaryHit = Readonly<{
   category: HardBoundaryCategory;
   patternCode: string;
+  redactability: HardBoundaryRedactability;
   start: number;
   end: number;
 }>;
@@ -236,6 +405,7 @@ export function detectHardBoundaryHits(
         Object.freeze({
           category: detector.category,
           patternCode: detector.patternCode,
+          redactability: detector.redactability,
           start: match.index,
           end: match.index + match[0].length,
         }),

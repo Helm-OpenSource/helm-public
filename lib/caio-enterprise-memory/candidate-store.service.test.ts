@@ -160,7 +160,11 @@ describe("adoptCandidate", () => {
     ).rejects.toMatchObject({ name: "CaioMemoryError", code: "forbidden" });
   });
 
-  it("adopts into workspace scope (projectRef null) without a targetProjectRef", async () => {
+  // F7 regression: the previous behaviour ("adopts into workspace scope
+  // without a targetProjectRef") silently WIDENED a project-scoped candidate
+  // to workspace-wide visibility. Adoption must preserve the creation-time
+  // scope instead.
+  it("preserves the creation-time projectRef when no targetProjectRef is given", async () => {
     const store = createInMemoryCaioMemoryStore();
     const created = await seedCandidate(store, { projectRef: "proj-a" });
     const adopted = await store.adoptCandidate({
@@ -170,11 +174,59 @@ describe("adoptCandidate", () => {
       now: at(1_000),
     });
     expect(adopted.state).toBe("ephemeral");
-    expect(adopted.projectRef).toBeNull();
+    expect(adopted.projectRef).toBe("proj-a");
     expect(adopted.adoptedByRef).toBe("user:creator");
     expect(adopted.ephemeralExpiresAt).toBe(
       at(1_000 + EPHEMERAL_TTL_MS).toISOString(),
     );
+    // Still invisible from another project.
+    expect(
+      await store.queryRetrievableMemory({
+        workspaceId: "ws-1",
+        projectRef: "proj-z",
+        now: at(2_000),
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps a workspace-scoped candidate workspace-scoped", async () => {
+    const store = createInMemoryCaioMemoryStore();
+    const created = await seedCandidate(store);
+    const adopted = await store.adoptCandidate({
+      workspaceId: "ws-1",
+      candidateId: created.id,
+      actorRef: "user:creator",
+      now: at(1_000),
+    });
+    expect(adopted.projectRef).toBeNull();
+  });
+
+  it("widens to workspace scope only with an explicit promoteToWorkspaceScope opt-in", async () => {
+    const store = createInMemoryCaioMemoryStore();
+    const created = await seedCandidate(store, { projectRef: "proj-a" });
+    const adopted = await store.adoptCandidate({
+      workspaceId: "ws-1",
+      candidateId: created.id,
+      actorRef: "user:creator",
+      promoteToWorkspaceScope: true,
+      now: at(1_000),
+    });
+    expect(adopted.projectRef).toBeNull();
+  });
+
+  it("rejects a conflicting targetProjectRef + promoteToWorkspaceScope", async () => {
+    const store = createInMemoryCaioMemoryStore();
+    const created = await seedCandidate(store, { projectRef: "proj-a" });
+    await expect(
+      store.adoptCandidate({
+        workspaceId: "ws-1",
+        candidateId: created.id,
+        actorRef: "user:creator",
+        targetProjectRef: "proj-b",
+        promoteToWorkspaceScope: true,
+        now: at(1_000),
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
   });
 
   it("lands in a project only with an explicit targetProjectRef", async () => {
@@ -377,6 +429,95 @@ describe("verifyEphemeral", () => {
     });
     expect(entries[0]!.provenance.isVerified).toBe(true);
     expect(entries[0]!.provenance.state).toBe("verified");
+  });
+
+  // F8 regression: "ephemeral cannot override verified" needs an actual
+  // deterministic order in the retrieval result, not just a provenance flag.
+  describe("retrieval precedence", () => {
+    async function adoptAt(
+      store: CaioMemoryCandidateStore,
+      body: string,
+      createdAt: Date,
+    ) {
+      const created = await store.createCandidate(
+        {
+          workspaceId: "ws-1",
+          createdByRef: "user:creator",
+          body,
+          sourceRequestId: "req-1",
+        },
+        createdAt,
+      );
+      await store.adoptCandidate({
+        workspaceId: "ws-1",
+        candidateId: created.id,
+        actorRef: "user:creator",
+        now: new Date(createdAt.getTime() + 1),
+      });
+      return created;
+    }
+
+    it("orders a newer verified entry before an older ephemeral one", async () => {
+      const store = createInMemoryCaioMemoryStore();
+      const olderEphemeral = await adoptAt(store, `${BODY} older`, T0);
+      const newerVerified = await adoptAt(
+        store,
+        `${BODY} newer`,
+        at(10 * 60_000),
+      );
+      await store.verifyEphemeral({
+        workspaceId: "ws-1",
+        candidateId: newerVerified.id,
+        actorRef: "user:knowledge-owner",
+        actorIsKnowledgeOwner: true,
+        now: at(11 * 60_000),
+      });
+      const entries = await store.queryRetrievableMemory({
+        workspaceId: "ws-1",
+        now: at(12 * 60_000),
+      });
+      expect(entries.map((entry) => entry.id)).toEqual([
+        newerVerified.id,
+        olderEphemeral.id,
+      ]);
+      expect(entries[0]!.provenance.isVerified).toBe(true);
+    });
+
+    it("keeps an older verified entry ahead of a newer ephemeral one", async () => {
+      const store = createInMemoryCaioMemoryStore();
+      const olderVerified = await adoptAt(store, `${BODY} v-old`, T0);
+      await store.verifyEphemeral({
+        workspaceId: "ws-1",
+        candidateId: olderVerified.id,
+        actorRef: "user:knowledge-owner",
+        actorIsKnowledgeOwner: true,
+        now: at(60_000),
+      });
+      const newerEphemeral = await adoptAt(
+        store,
+        `${BODY} e-new`,
+        at(10 * 60_000),
+      );
+      const entries = await store.queryRetrievableMemory({
+        workspaceId: "ws-1",
+        now: at(12 * 60_000),
+      });
+      expect(entries.map((entry) => entry.id)).toEqual([
+        olderVerified.id,
+        newerEphemeral.id,
+      ]);
+    });
+
+    it("orders newest first inside the same provenance class", async () => {
+      const store = createInMemoryCaioMemoryStore();
+      const older = await adoptAt(store, `${BODY} e1`, T0);
+      const newer = await adoptAt(store, `${BODY} e2`, at(5 * 60_000));
+      const entries = await store.queryRetrievableMemory({
+        workspaceId: "ws-1",
+        now: at(6 * 60_000),
+      });
+      expect(entries.map((entry) => entry.id)).toEqual([newer.id, older.id]);
+    });
   });
 
   it("cannot verify a raw candidate (illegal transition)", async () => {

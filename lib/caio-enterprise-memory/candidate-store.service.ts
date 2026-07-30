@@ -63,7 +63,9 @@ export type RetrievableMemoryEntry = Readonly<{
   contentHash: string;
   /**
    * Provenance travels with every query result: ephemeral entries are
-   * flagged isVerified:false so they never override formal knowledge.
+   * flagged isVerified:false so they never override formal knowledge. The
+   * precedence is also materialised in the RESULT ORDER (see
+   * compareRetrievablePrecedence) instead of being delegated to the consumer.
    */
   provenance: Readonly<{
     state: RetrievableMemoryState;
@@ -86,7 +88,10 @@ export type CaioMemoryCandidateStore = Readonly<{
     workspaceId: string;
     userRef: string;
   }): Promise<readonly CaioMemoryCandidateRecord[]>;
-  /** Store-layer retrieval: state IN ("ephemeral","verified") only. */
+  /**
+   * Store-layer retrieval: state IN ("ephemeral","verified") only, ordered
+   * verified-before-ephemeral and then newest-first in both implementations.
+   */
   queryRetrievableMemory(input: {
     workspaceId: string;
     projectRef?: string;
@@ -96,14 +101,19 @@ export type CaioMemoryCandidateStore = Readonly<{
   /**
    * Single conditional transition candidate → ephemeral. Only the creator
    * may adopt; only from state "candidate" and inside the candidate TTL.
-   * Cross-project content requires an explicit targetProjectRef; otherwise
-   * the entry lands workspace-scoped (projectRef null).
+   *
+   * Scope never widens implicitly: adoption PRESERVES the creation-time
+   * projectRef. An explicit targetProjectRef re-targets the entry to that
+   * project; widening a project-scoped candidate to workspace scope
+   * (projectRef null, visible from every project) requires the explicit
+   * promoteToWorkspaceScope opt-in. Passing both is invalid_input.
    */
   adoptCandidate(input: {
     workspaceId: string;
     candidateId: string;
     actorRef: string;
     targetProjectRef?: string;
+    promoteToWorkspaceScope?: boolean;
     now: Date;
   }): Promise<CaioMemoryCandidateRecord>;
   /** Creator-only. Deletes the body; keeps contentHash + receiptJson. */
@@ -216,6 +226,53 @@ function toRetrievableEntry(
   });
 }
 
+/**
+ * Adoption scope resolution (F7). Omitting every scope argument must PRESERVE
+ * the creation-time projectRef: silently promoting a project-scoped candidate
+ * to workspace scope would make it visible from every project and detach it
+ * from any project-scoped no_cross_project_context rule.
+ */
+export function resolveAdoptionProjectRef(input: {
+  currentProjectRef: string | null;
+  targetProjectRef?: string;
+  promoteToWorkspaceScope?: boolean;
+}): string | null {
+  const promote = input.promoteToWorkspaceScope === true;
+  const target =
+    typeof input.targetProjectRef === "string" && input.targetProjectRef !== ""
+      ? input.targetProjectRef
+      : null;
+  if (promote && target !== null) {
+    throw new CaioMemoryError(
+      "invalid_input",
+      "targetProjectRef and promoteToWorkspaceScope are mutually exclusive.",
+    );
+  }
+  if (promote) return null;
+  if (target !== null) return target;
+  return input.currentProjectRef;
+}
+
+/**
+ * Deterministic retrieval precedence (F8): verified knowledge always precedes
+ * unverified ephemeral knowledge, and inside one provenance class the newest
+ * entry comes first. Both store implementations apply this comparator so the
+ * observable order is identical.
+ */
+export function compareRetrievablePrecedence(
+  left: { state: string; createdAt: string; id: string },
+  right: { state: string; createdAt: string; id: string },
+): number {
+  const rank = (state: string): number => (state === "verified" ? 0 : 1);
+  if (rank(left.state) !== rank(right.state)) {
+    return rank(left.state) - rank(right.state);
+  }
+  const leftCreated = Date.parse(left.createdAt);
+  const rightCreated = Date.parse(right.createdAt);
+  if (leftCreated !== rightCreated) return rightCreated - leftCreated;
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
 function retrievableFilterMatches(
   record: CaioMemoryCandidateRecord,
   input: { workspaceId: string; projectRef?: string; id?: string; now: Date },
@@ -301,9 +358,11 @@ export function createInMemoryCaioMemoryStore(): CaioMemoryCandidateStore {
     },
 
     async queryRetrievableMemory(input) {
+      const matched = [...records.values()]
+        .filter((record) => retrievableFilterMatches(record, input))
+        .sort(compareRetrievablePrecedence);
       const entries: RetrievableMemoryEntry[] = [];
-      for (const record of records.values()) {
-        if (!retrievableFilterMatches(record, input)) continue;
+      for (const record of matched) {
         const entry = toRetrievableEntry(record);
         if (entry) entries.push(entry);
       }
@@ -328,10 +387,15 @@ export function createInMemoryCaioMemoryStore(): CaioMemoryCandidateStore {
       }
       assertLegalMemoryTransition(record.state, "ephemeral");
       const nowIso = input.now.toISOString();
+      const adoptedProjectRef = resolveAdoptionProjectRef({
+        currentProjectRef: record.projectRef,
+        targetProjectRef: input.targetProjectRef,
+        promoteToWorkspaceScope: input.promoteToWorkspaceScope,
+      });
       return conditionalTransition(record.id, "candidate", (current) => ({
         ...current,
         state: "ephemeral",
-        projectRef: input.targetProjectRef ?? null,
+        projectRef: adoptedProjectRef,
         adoptedAt: nowIso,
         adoptedByRef: input.actorRef,
         ephemeralExpiresAt: new Date(
@@ -560,11 +624,17 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
               }
             : {}),
         },
-        orderBy: { createdAt: "asc" },
+        // Verified before ephemeral, then newest first. The SQL order is
+        // deterministic on its own; the shared comparator below then
+        // guarantees the exact same observable order as the in-memory store.
+        orderBy: [{ state: "desc" }, { createdAt: "desc" }, { id: "asc" }],
       });
+      const records = rows
+        .map(parseStoredCandidate)
+        .sort(compareRetrievablePrecedence);
       const entries: RetrievableMemoryEntry[] = [];
-      for (const row of rows) {
-        const entry = toRetrievableEntry(parseStoredCandidate(row));
+      for (const record of records) {
+        const entry = toRetrievableEntry(record);
         if (entry) entries.push(entry);
       }
       return Object.freeze(entries);
@@ -591,6 +661,11 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
         parseStoredCandidate(row).state,
         "ephemeral",
       );
+      const adoptedProjectRef = resolveAdoptionProjectRef({
+        currentProjectRef: row.projectRef,
+        targetProjectRef: input.targetProjectRef,
+        promoteToWorkspaceScope: input.promoteToWorkspaceScope,
+      });
       // Single conditional write: only one concurrent adopt can flip
       // state="candidate" to "ephemeral".
       const updated = await db.caioMemoryCandidate.updateMany({
@@ -602,7 +677,7 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
         },
         data: {
           state: "ephemeral",
-          projectRef: input.targetProjectRef ?? null,
+          projectRef: adoptedProjectRef,
           adoptedAt: input.now,
           adoptedByRef: input.actorRef,
           ephemeralExpiresAt: new Date(

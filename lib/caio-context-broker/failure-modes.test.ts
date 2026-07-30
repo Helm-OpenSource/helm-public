@@ -9,6 +9,7 @@ import type {
   ContextEligibility,
 } from "@/lib/caio-context-broker/evaluation-pipeline";
 import {
+  COMBINED_RELEASE_DENIED_REASON,
   enrichContextWithFailureSemantics,
   type StoredContextCandidate,
 } from "@/lib/caio-context-broker/failure-modes";
@@ -195,3 +196,83 @@ describe("user-submitted inputs always run the full pipeline", () => {
     expect(outcome.marker).toBe(CONTEXT_ENRICHMENT_SKIPPED_MARKER);
   });
 });
+
+// ---------------------------------------------------------------------------
+// F6 — a secret split across candidates must not be released piecewise
+// ---------------------------------------------------------------------------
+
+describe("F6 — combined release re-scan across candidates", () => {
+  // A PEM key split so that neither half trips a detector on its own.
+  const PEM_HEAD = "runbook excerpt: -----BEGIN RSA PRIVATE KEY";
+  const PEM_BODY =
+    "-----\nMIIBOgIBAAJBAKsplitacrosstwocandidates\n-----END RSA PRIVATE KEY-----";
+
+  it("releases each half on its own (the per-candidate blind spot)", async () => {
+    for (const half of [PEM_HEAD, PEM_BODY]) {
+      const outcome = await enrichContextWithFailureSemantics({
+        retrieveStoredContext: async () => [
+          { candidateId: "s1", input: input({ content: half }) },
+        ],
+        userSubmitted: [],
+      });
+      expect(outcome.attachedStoredContext).toHaveLength(1);
+      expect(outcome.attachedStoredContext[0]!.result.decision).toBe("ALLOW");
+    }
+  });
+
+  it("denies the whole stored release set when the concatenation trips a hard boundary", async () => {
+    const outcome = await enrichContextWithFailureSemantics({
+      retrieveStoredContext: async () => [
+        { candidateId: "s1", input: input({ content: PEM_HEAD }) },
+        { candidateId: "s2", input: input({ content: PEM_BODY }) },
+      ],
+      userSubmitted: [],
+    });
+    expect(outcome.attachedStoredContext).toEqual([]);
+    expect(outcome.marker).toBe(CONTEXT_ENRICHMENT_SKIPPED_MARKER);
+    expect(outcome.combinedReleaseDenialReasons).toContain(
+      `${COMBINED_RELEASE_DENIED_REASON}:private_key`,
+    );
+    expect(JSON.stringify(outcome)).not.toContain(
+      "MIIBOgIBAAJBAKsplitacrosstwocandidates",
+    );
+  });
+
+  it("fails closed with a 422 when user-submitted items combine into a hit", async () => {
+    const attempt = enrichContextWithFailureSemantics({
+      retrieveStoredContext: async () => [],
+      userSubmitted: [
+        { itemId: "u1", input: input({ content: PEM_HEAD }) },
+        { itemId: "u2", input: input({ content: PEM_BODY }) },
+      ],
+    });
+    await expect(attempt).rejects.toMatchObject({
+      name: "CaioContextBrokerError",
+      code: "caio_external_release_denied",
+      httpStatus: 422,
+    });
+  });
+
+  it("fails closed when a user item combines with stored context", async () => {
+    const attempt = enrichContextWithFailureSemantics({
+      retrieveStoredContext: async () => [
+        { candidateId: "s1", input: input({ content: PEM_BODY }) },
+      ],
+      userSubmitted: [{ itemId: "u1", input: input({ content: PEM_HEAD }) }],
+    });
+    await expect(attempt).rejects.toMatchObject({
+      code: "caio_external_release_denied",
+    });
+  });
+
+  it("leaves a clean release set untouched", async () => {
+    const outcome = await enrichContextWithFailureSemantics({
+      retrieveStoredContext: async () => [stored("s1"), stored("s2")],
+      userSubmitted: [{ itemId: "u1", input: input() }],
+    });
+    expect(outcome.attachedStoredContext).toHaveLength(2);
+    expect(outcome.marker).toBeNull();
+    expect(outcome.combinedReleaseDenialReasons).toEqual([]);
+  });
+});
+
