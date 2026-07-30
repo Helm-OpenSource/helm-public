@@ -2,7 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/lib/db";
 import { createPrismaCaioMemoryStore } from "@/lib/caio-enterprise-memory/candidate-store.service";
-import { CANDIDATE_TTL_MS } from "@/lib/caio-enterprise-memory/memory-contracts";
+import {
+  CANDIDATE_TTL_MS,
+  CaioMemoryError,
+} from "@/lib/caio-enterprise-memory/memory-contracts";
 import { sha256 } from "@/lib/expert-capability/hashing";
 
 const integrationDatabaseUrl =
@@ -116,12 +119,35 @@ describeMysql("enterprise memory Prisma store on an isolated MySQL database", ()
         now: at(1_000),
       }),
     ]);
-    expect(
-      attempts.filter((attempt) => attempt.status === "fulfilled"),
-    ).toHaveLength(1);
-    expect(
-      attempts.filter((attempt) => attempt.status === "rejected"),
-    ).toHaveLength(1);
+    // Diagnostic form: on MySQL 8.4 this reported "got 2" with no indication
+    // of why both conditional updates matched. Asserting the observed shape
+    // (outcomes + rejection codes + adopting actor) makes the CI failure
+    // self-diagnosing instead of requiring a guess.
+    const adoptedRow = await db.caioMemoryCandidate.findUniqueOrThrow({
+      where: { id: created.id },
+      select: { state: true, adoptedByRef: true, adoptedAt: true },
+    });
+    expect({
+      fulfilled: attempts.filter((a) => a.status === "fulfilled").length,
+      rejected: attempts.filter((a) => a.status === "rejected").length,
+      rejectionCodes: attempts
+        .filter(
+          (a): a is PromiseRejectedResult => a.status === "rejected",
+        )
+        .map((a) =>
+          a.reason instanceof CaioMemoryError
+            ? a.reason.code
+            : String(a.reason),
+        ),
+      storedState: adoptedRow.state,
+      adoptedByRef: adoptedRow.adoptedByRef,
+    }).toEqual({
+      fulfilled: 1,
+      rejected: 1,
+      rejectionCodes: ["conflict"],
+      storedState: "ephemeral",
+      adoptedByRef: "user:creator",
+    });
     const stored = await db.caioMemoryCandidate.findUniqueOrThrow({
       where: { id: created.id },
     });

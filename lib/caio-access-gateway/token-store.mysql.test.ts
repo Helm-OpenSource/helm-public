@@ -269,8 +269,39 @@ describeMysql(
         (attempt): attempt is PromiseRejectedResult =>
           attempt.status === "rejected",
       );
-      expect(allowed).toHaveLength(limit);
-      expect(limited).toHaveLength(6 - limit);
+      // Diagnostic form: a bare length assertion told us "got 6" on MySQL 8.4
+      // without showing WHY. Asserting the whole observed shape makes the CI
+      // failure self-diagnosing (window row state + per-attempt reasons).
+      const diagnosticRow = await db.caioAccessToken.findUniqueOrThrow({
+        where: { id: pair.mcp.record.id },
+        select: {
+          rateWindowStartedAt: true,
+          rateWindowRequestCount: true,
+        },
+      });
+      expect({
+        allowedCount: allowed.length,
+        limitedCount: limited.length,
+        finalWindowCount: diagnosticRow.rateWindowRequestCount,
+        windowMovedFromIssuance:
+          diagnosticRow.rateWindowStartedAt.getTime() !== now.getTime(),
+        rejectionCodes: limited
+          .map((entry) =>
+            entry.reason instanceof CaioAccessGatewayError
+              ? entry.reason.code
+              : String(entry.reason),
+          )
+          .sort(),
+      }).toEqual({
+        allowedCount: limit,
+        limitedCount: 6 - limit,
+        finalWindowCount: limit,
+        windowMovedFromIssuance: false,
+        rejectionCodes: Array.from(
+          { length: 6 - limit },
+          () => "rate_limited",
+        ),
+      });
       for (const rejection of limited) {
         expect(rejection.reason).toBeInstanceOf(CaioAccessGatewayError);
         const typed = rejection.reason as CaioAccessGatewayError;
