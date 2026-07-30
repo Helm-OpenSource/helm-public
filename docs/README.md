@@ -59,6 +59,7 @@ connector 授权、写回、外发或审批证明。
 - [Helm CAIO 产品与治理口径 / Helm CAIO product and governance ADR](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md) / [English](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.en.md) — 冻结品牌、治理定义、成熟度五阶段与 CEO-owner 首要 IA 位置；导航不认证 CEO、不授予权限、不激活生产
 - [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 冻结单一硬件产品、全量数据资产盘点与分级接入、初始化门、10 题候选、CEO 选 0-3 题、模型切换和 Context Agent 治理；requirements-only
 - [Helm CAIO Pro 实施主计划 / Helm CAIO Pro implementation plan](_planning/HELM_CAIO_PRO_IMPLEMENTATION_PLAN.md) — 按四仓、阶段门、PR、验证和回滚拆解；不代表客户连接、设备交付或生产激活
+- [CAIO 模型代理复用受治理出站评估 / CAIO model proxy governed-reuse assessment](_planning/CAIO_MODEL_PROXY_GOVERNED_REUSE_DESIGN.md) — 逐条列出受治理链对调用方的要求与 LAN 直通请求今天无法满足之处；含可用性差异与需 owner 裁定的问题；不代表任何接线或激活
 - [Helm CAIO 模型准入与数据出域治理 / Helm CAIO model admission and data egress governance](product/HELM_CAIO_MODEL_ADMISSION_AND_EGRESS.md) — 租户策略、adapter readiness、调用前决定、单次 claim、append-only 回执与受限 fallback；Public Core 默认无生产 adapter
 - [Helm CAIO 模型准入与数据出域 Runbook / Helm CAIO model admission and data egress runbook](operations/HELM_CAIO_MODEL_EGRESS_RUNBOOK.md) — 空库重放、隔离 MySQL、事故处置与回滚；不把合成或本地证据提升为生产事实
 - [腾讯 WorkBuddy 与 Helm CAIO Pro 内网协作设计 / Tencent WorkBuddy and Helm CAIO Pro LAN collaboration design](superpowers/specs/2026-07-23-workbuddy-caio-lan-collaboration-design.md) — CEO macOS 通过 LAN-only MCP Gateway 主动提问、读取 P1C canonical Portfolio、接收 typed prompt 并复核建议；设计已确认、实现未开始，不构成生产可用或外部执行授权
