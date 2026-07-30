@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "2026-07-30.conditional-update-cas-baseline.v1",
+  "note": "Pre-existing sites that read a conditional updateMany count as a compare-and-swap while carrying a pre-state predicate outside a transaction. On MySQL the predicate is dropped from the write, so the count cannot prove the state was unchanged. These are NOT fixed; they are recorded so the guard can block NEW occurrences without forcing an out-of-scope refactor of merged code. Each entry is a known defect awaiting its own slice.",
+  "provenance": "Found while fixing two invariants that CI on mysql:8.4 disproved; the mechanism is documented in scripts/check-conditional-update-cas.ts.",
+  "entries": [
+    {
+      "file": "features/auth/actions.ts",
+      "statePredicates": [
+        "consumedAt"
+      ]
+    },
+    {
+      "file": "features/auth/actions.ts",
+      "statePredicates": [
+        "consumedAt"
+      ]
+    },
+    {
+      "file": "lib/bi-report-skill/signal-notification.ts",
+      "statePredicates": [
+        "status"
+      ]
+    },
+    {
+      "file": "lib/caio-collaboration-runtime/workbuddy-mutation-store.service.ts",
+      "statePredicates": [
+        "consumedAt"
+      ]
+    },
+    {
+      "file": "lib/caio-collaboration-runtime/workbuddy-presence-workflow.service.ts",
+      "statePredicates": [
+        "consumedAt"
+      ]
+    },
+    {
+      "file": "lib/caio-collaboration-runtime/workbuddy-prompt-response.service.ts",
+      "statePredicates": [
+        "status"
+      ]
+    },
+    {
+      "file": "lib/conversation-capture/capture-session.service.ts",
+      "statePredicates": [
+        "status"
+      ]
+    },
+    {
+      "file": "lib/integrations/qoderwork/connection-service.ts",
+      "statePredicates": [
+        "revokedAt"
+      ]
+    },
+    {
+      "file": "lib/policies/engine.ts",
+      "statePredicates": [
+        "status"
+      ]
+    },
+    {
+      "file": "lib/policies/engine.ts",
+      "statePredicates": [
+        "status"
+      ]
+    },
+    {
+      "file": "lib/stage1-owner-loop/data-asset-catalog.service.ts",
+      "statePredicates": [
+        "status",
+        "revokedAt"
+      ]
+    }
+  ]
+}
