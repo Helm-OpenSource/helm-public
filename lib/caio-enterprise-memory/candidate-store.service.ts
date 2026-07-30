@@ -666,26 +666,34 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
         targetProjectRef: input.targetProjectRef,
         promoteToWorkspaceScope: input.promoteToWorkspaceScope,
       });
-      // Single conditional write: only one concurrent adopt can flip
-      // state="candidate" to "ephemeral".
-      const updated = await db.caioMemoryCandidate.updateMany({
-        where: {
-          id: input.candidateId,
-          workspaceId: input.workspaceId,
-          state: "candidate",
-          adoptedByRef: null,
-        },
-        data: {
-          state: "ephemeral",
-          projectRef: adoptedProjectRef,
-          adoptedAt: input.now,
-          adoptedByRef: input.actorRef,
-          ephemeralExpiresAt: new Date(
-            input.now.getTime() + EPHEMERAL_TTL_MS,
-          ),
-          updatedAt: input.now,
-        },
-      });
+      // ONE atomic statement, deliberately not Prisma's updateMany.
+      //
+      // On MySQL, Prisma compiles a conditional updateMany into a SELECT of
+      // matching ids followed by `UPDATE ... WHERE id IN (?) AND 1=1`: the
+      // pre-state predicate is evaluated at read time and dropped from the
+      // write. Two concurrent adopts therefore both selected the candidate
+      // and both wrote — measured on mysql:8.4. Keeping state="candidate" in
+      // the UPDATE's own WHERE makes InnoDB re-check it under the row lock,
+      // so exactly one caller can observe an affected row.
+      const updated = {
+        count: Number(
+          await db.$executeRaw`
+            UPDATE \`CaioMemoryCandidate\`
+               SET \`state\` = 'ephemeral',
+                   \`projectRef\` = ${adoptedProjectRef},
+                   \`adoptedAt\` = ${input.now},
+                   \`adoptedByRef\` = ${input.actorRef},
+                   \`ephemeralExpiresAt\` = ${new Date(
+                     input.now.getTime() + EPHEMERAL_TTL_MS,
+                   )},
+                   \`updatedAt\` = ${input.now}
+             WHERE \`id\` = ${input.candidateId}
+               AND \`workspaceId\` = ${input.workspaceId}
+               AND \`state\` = 'candidate'
+               AND \`adoptedByRef\` IS NULL
+          `,
+        ),
+      };
       if (updated.count !== 1) {
         throw new CaioMemoryError(
           "conflict",
@@ -706,20 +714,23 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
         );
       }
       assertLegalMemoryTransition(parseStoredCandidate(row).state, "rejected");
-      const updated = await db.caioMemoryCandidate.updateMany({
-        where: {
-          id: input.candidateId,
-          workspaceId: input.workspaceId,
-          state: "candidate",
-        },
-        data: {
-          state: "rejected",
-          body: null,
-          rejectedAt: input.now,
-          rejectedByRef: input.actorRef,
-          updatedAt: input.now,
-        },
-      });
+      // Atomic conditional write; see adoptCandidate for why Prisma's
+      // updateMany cannot carry the pre-state predicate into the write.
+      const updated = {
+        count: Number(
+          await db.$executeRaw`
+            UPDATE \`CaioMemoryCandidate\`
+               SET \`state\` = 'rejected',
+                   \`body\` = NULL,
+                   \`rejectedAt\` = ${input.now},
+                   \`rejectedByRef\` = ${input.actorRef},
+                   \`updatedAt\` = ${input.now}
+             WHERE \`id\` = ${input.candidateId}
+               AND \`workspaceId\` = ${input.workspaceId}
+               AND \`state\` = 'candidate'
+          `,
+        ),
+      };
       if (updated.count !== 1) {
         throw new CaioMemoryError(
           "conflict",
@@ -732,33 +743,36 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
     },
 
     async expireCandidates(input) {
-      const expiredCandidates = await db.caioMemoryCandidate.updateMany({
-        where: {
-          workspaceId: input.workspaceId,
-          state: "candidate",
-          candidateExpiresAt: { lte: input.now },
-        },
-        data: {
-          state: "expired",
-          body: null,
-          expiredAt: input.now,
-          updatedAt: input.now,
-        },
-      });
-      const expiredEphemerals = await db.caioMemoryCandidate.updateMany({
-        where: {
-          workspaceId: input.workspaceId,
-          state: "ephemeral",
-          ephemeralExpiresAt: { lte: input.now },
-        },
-        data: {
-          state: "expired",
-          body: null,
-          expiredAt: input.now,
-          updatedAt: input.now,
-        },
-      });
-      return expiredCandidates.count + expiredEphemerals.count;
+      // Atomic sweeps. Prisma's updateMany would select ids under the state
+      // predicate and then write by id alone, so a candidate adopted between
+      // the read and the write would be expired anyway — silently discarding
+      // an adoption and deleting its body. Keeping the state and deadline in
+      // each UPDATE's own WHERE makes the sweep skip rows that moved on.
+      const expiredCandidates = Number(
+        await db.$executeRaw`
+          UPDATE \`CaioMemoryCandidate\`
+             SET \`state\` = 'expired',
+                 \`body\` = NULL,
+                 \`expiredAt\` = ${input.now},
+                 \`updatedAt\` = ${input.now}
+           WHERE \`workspaceId\` = ${input.workspaceId}
+             AND \`state\` = 'candidate'
+             AND \`candidateExpiresAt\` <= ${input.now}
+        `,
+      );
+      const expiredEphemerals = Number(
+        await db.$executeRaw`
+          UPDATE \`CaioMemoryCandidate\`
+             SET \`state\` = 'expired',
+                 \`body\` = NULL,
+                 \`expiredAt\` = ${input.now},
+                 \`updatedAt\` = ${input.now}
+           WHERE \`workspaceId\` = ${input.workspaceId}
+             AND \`state\` = 'ephemeral'
+             AND \`ephemeralExpiresAt\` <= ${input.now}
+        `,
+      );
+      return expiredCandidates + expiredEphemerals;
     },
 
     async verifyEphemeral(input) {
@@ -780,19 +794,21 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
         );
       }
       assertLegalMemoryTransition(parseStoredCandidate(row).state, "verified");
-      const updated = await db.caioMemoryCandidate.updateMany({
-        where: {
-          id: input.candidateId,
-          workspaceId: input.workspaceId,
-          state: "ephemeral",
-        },
-        data: {
-          state: "verified",
-          verifiedAt: input.now,
-          verifiedByRef: input.actorRef,
-          updatedAt: input.now,
-        },
-      });
+      // Atomic conditional write; see adoptCandidate.
+      const updated = {
+        count: Number(
+          await db.$executeRaw`
+            UPDATE \`CaioMemoryCandidate\`
+               SET \`state\` = 'verified',
+                   \`verifiedAt\` = ${input.now},
+                   \`verifiedByRef\` = ${input.actorRef},
+                   \`updatedAt\` = ${input.now}
+             WHERE \`id\` = ${input.candidateId}
+               AND \`workspaceId\` = ${input.workspaceId}
+               AND \`state\` = 'ephemeral'
+          `,
+        ),
+      };
       if (updated.count !== 1) {
         throw new CaioMemoryError(
           "conflict",

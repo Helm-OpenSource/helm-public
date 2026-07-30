@@ -168,37 +168,38 @@ export function createPrismaCaioAccessTokenPersistence(
     }): Promise<CaioRateSlotResult> {
       const cutoff = new Date(input.now.getTime() - input.windowMs);
       for (let attempt = 0; attempt < RATE_SLOT_MAX_ATTEMPTS; attempt += 1) {
-        // Concurrent authentications target the same row, so the engine can
-        // reject a conditional update with a write conflict (MySQL 1020 /
-        // Prisma P2034). Treat that as "someone else moved the window" and
-        // take another bounded attempt instead of surfacing a raw database
-        // error to the caller.
-        const reset = await claimUpdate(() =>
-          client.caioAccessToken.updateMany({
-            where: {
-              id: input.tokenId,
-              rateWindowStartedAt: { lte: cutoff },
-            },
-            data: {
-              rateWindowStartedAt: input.now,
-              rateWindowRequestCount: 1,
-            },
-          }),
-        );
-        if (reset === null) continue;
-        if (reset.count === 1) return { allowed: true };
-        const counted = await claimUpdate(() =>
-          client.caioAccessToken.updateMany({
-            where: {
-              id: input.tokenId,
-              rateWindowStartedAt: { gt: cutoff },
-              rateWindowRequestCount: { lt: input.limit },
-            },
-            data: { rateWindowRequestCount: { increment: 1 } },
-          }),
-        );
-        if (counted === null) continue;
-        if (counted.count === 1) return { allowed: true };
+        // ONE atomic statement, deliberately not Prisma's updateMany.
+        //
+        // On MySQL, Prisma compiles a conditional updateMany into a SELECT of
+        // matching ids followed by `UPDATE ... WHERE id IN (?) AND 1=1`, so the
+        // predicate is evaluated at read time and DROPPED from the write. Six
+        // concurrent callers therefore each read count=0, each increment, and
+        // the counter reaches 6 against a limit of 3 — measured on mysql:8.4.
+        // MariaDB only appeared correct because it raises error 1020 on the
+        // racing id-update and the retry helper serialized the callers.
+        //
+        // Here the window test lives in the UPDATE's own WHERE, so InnoDB
+        // re-evaluates it against the latest committed row while holding the
+        // row lock. The SET order matters: the counter is assigned first so it
+        // still sees the pre-update rateWindowStartedAt.
+        const claimed = await claimUpdate(async () => ({
+          count: Number(
+            await client.$executeRaw`
+              UPDATE \`CaioAccessToken\`
+                 SET \`rateWindowRequestCount\` =
+                       IF(\`rateWindowStartedAt\` <= ${cutoff}, 1,
+                          \`rateWindowRequestCount\` + 1),
+                     \`rateWindowStartedAt\` =
+                       IF(\`rateWindowStartedAt\` <= ${cutoff}, ${input.now},
+                          \`rateWindowStartedAt\`)
+               WHERE \`id\` = ${input.tokenId}
+                 AND (\`rateWindowStartedAt\` <= ${cutoff}
+                      OR \`rateWindowRequestCount\` < ${input.limit})
+            `,
+          ),
+        }));
+        if (claimed === null) continue;
+        if (claimed.count === 1) return { allowed: true };
         const row = await client.caioAccessToken.findUnique({
           where: { id: input.tokenId },
           select: {
