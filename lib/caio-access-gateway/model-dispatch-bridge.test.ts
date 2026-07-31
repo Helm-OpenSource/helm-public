@@ -7,6 +7,7 @@ import {
 import {
   caioModelDispatchOutcomeFromProxyResult,
   createCaioGatewayModelDispatchPort,
+  createCaioGatewayModelListPort,
 } from "@/lib/caio-access-gateway/model-dispatch-bridge";
 import { createInMemoryCaioAccessTokenPersistence } from "@/lib/caio-access-gateway/token-store.memory";
 import {
@@ -706,5 +707,102 @@ describe("per-token alias grant: token store to proxy", () => {
     expect(isCaioAccessGatewayError(refused)).toBe(true);
     expect((refused as CaioAccessGatewayError).code).toBe("scope_violation");
     expect(upstream).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The discovery surface must be produced from the SAME bindings the dispatch
+// path resolves against, and must narrow by the SAME three-valued grant. When
+// it was left to the deployment to supply, nothing in the tree could stop an
+// implementation that answered from the client-type default and so listed
+// aliases to a token that had been granted none.
+describe("createCaioGatewayModelListPort", () => {
+  const GOVERNED_POLICY_KEY = "caio-lan-default";
+  const ROUTE_REF = "route:caio-lan-default:v3";
+
+  function binding(
+    alias: string,
+    status: "active" | "disabled" = "active",
+  ): CaioModelAliasBinding {
+    return {
+      alias,
+      protocol: "responses",
+      providerKey: "provider-a",
+      upstreamModel: `upstream-for-${alias}`,
+      credentialRef: "provider-a-key",
+      endpointBaseUrl: "https://upstream.example.internal/v1",
+      region: "cn-hangzhou",
+      dataRetentionPolicyKey: "retention-days:30",
+      trainingUsePolicyKey: "prohibited",
+      dataAuthorizationKey: "auth-tier-1",
+      policyVersion: "policy-v3",
+      status,
+      governedPolicyKey: GOVERNED_POLICY_KEY,
+      governedRouteRef: ROUTE_REF,
+      fallbackCandidates: [],
+    };
+  }
+
+  const BINDINGS = [
+    binding("caio-codex-default"),
+    binding("caio-workbuddy-default"),
+    binding("caio-codex-retired", "disabled"),
+  ];
+
+  function ids(result: unknown): string[] {
+    const data = (result as { data: { id: string }[] }).data;
+    return data.map((entry) => entry.id);
+  }
+
+  it("returns nothing for an explicit empty grant", async () => {
+    const port = createCaioGatewayModelListPort({ bindings: BINDINGS });
+    const result = await port.listModels({
+      workspaceId: "ws_1",
+      userRef: "user:ceo",
+      clientType: "codex",
+      grantedAliases: [],
+    });
+    expect(ids(result)).toEqual([]);
+  });
+
+  it("returns exactly the explicitly granted aliases", async () => {
+    const port = createCaioGatewayModelListPort({ bindings: BINDINGS });
+    const result = await port.listModels({
+      workspaceId: "ws_1",
+      userRef: "user:ceo",
+      clientType: "codex",
+      grantedAliases: ["caio-workbuddy-default"],
+    });
+    expect(ids(result)).toEqual(["caio-workbuddy-default"]);
+  });
+
+  it("falls back to the client-type default when no grant is stored", async () => {
+    const port = createCaioGatewayModelListPort({ bindings: BINDINGS });
+    const result = await port.listModels({
+      workspaceId: "ws_1",
+      userRef: "user:ceo",
+      clientType: "codex",
+    });
+    expect(ids(result)).toEqual(["caio-codex-default"]);
+  });
+
+  it("never lists a disabled binding even when it is explicitly granted", async () => {
+    const port = createCaioGatewayModelListPort({ bindings: BINDINGS });
+    const result = await port.listModels({
+      workspaceId: "ws_1",
+      userRef: "user:ceo",
+      clientType: "codex",
+      grantedAliases: ["caio-codex-retired"],
+    });
+    expect(ids(result)).toEqual([]);
+  });
+
+  it("grants nothing to a client type the stable alias surface does not model", async () => {
+    const port = createCaioGatewayModelListPort({ bindings: BINDINGS });
+    const result = await port.listModels({
+      workspaceId: "ws_1",
+      userRef: "user:ceo",
+      clientType: "not-a-modelled-client",
+    });
+    expect(ids(result)).toEqual([]);
   });
 });

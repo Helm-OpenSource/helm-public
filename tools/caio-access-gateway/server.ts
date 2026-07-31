@@ -1,11 +1,29 @@
 /**
- * THE production composition for the CAIO access gateway.
+ * The production composition for the CAIO access gateway.
  *
  * This module is the non-test caller of the gateway protocol core: it mounts
- * createCaioGatewayHandler on ONE HTTPS/mTLS listener and is what a deployment
- * runner starts. Before it existed the protocol core had no caller outside its
- * own directory and its own tests, so nothing in the tree actually served the
- * Access Gateway API.
+ * createCaioGatewayHandler on ONE HTTPS/mTLS listener. Before it existed the
+ * protocol core had no caller outside its own directory and its own tests, so
+ * nothing in the tree assembled the Access Gateway API at all.
+ *
+ * WHAT IS NOT TRUE YET — read this before treating the file as deployed
+ * ---------------------------------------------------------------------
+ * NOTHING IN ANY OF THE FOUR REPOSITORIES STARTS THIS COMPOSITION.
+ * `createCaioAccessGatewayServer` has no non-test caller: there is no CLI
+ * entrypoint, no launchd job, and no service unit that invokes it, and the
+ * launcher the delivery package generates starts a DIFFERENT process — the
+ * WorkBuddy LAN gateway (`workbuddy-lan/gateway.cli.ts`). An earlier version of
+ * this header said this module "is what a deployment runner starts", which was
+ * false in exactly the way that matters: it described an intended end state as
+ * an accomplished one, and anyone auditing the tree for "is the Access Gateway
+ * actually served" would have been told yes.
+ *
+ * What is true is narrower and worth stating precisely: the composition exists,
+ * is total over its route table, refuses to start twice, and is covered by
+ * tests. Serving traffic additionally requires an entrypoint that supplies the
+ * bind address, the TLS material and the posture — all of them deployment
+ * inputs, which is why no default is invented here. `production-caller.test.ts`
+ * fails if this paragraph and the tree ever disagree in either direction.
  *
  * ONE PROCESS, ONE SOCKET, ONE HANDLER
  * ------------------------------------
@@ -73,12 +91,14 @@ import {
   type CaioGatewayHandlerDependencies,
   type CaioGatewayResponse,
   type CaioMcpDispatchPort,
-  type CaioModelProxyPort,
   type CaioReadinessProbePort,
   type CaioTokenAuthenticatorPort,
 } from "@/lib/caio-access-gateway/gateway-http-core";
 import { toGatewayError } from "@/lib/caio-access-gateway/gateway-error-contract";
-import { createCaioGatewayModelDispatchPort } from "@/lib/caio-access-gateway/model-dispatch-bridge";
+import {
+  createCaioGatewayModelDispatchPort,
+  createCaioGatewayModelListPort,
+} from "@/lib/caio-access-gateway/model-dispatch-bridge";
 import type { ProjectMembershipResolver } from "@/lib/caio-access-gateway/project-access";
 import type { CaioPreAuthRateLimiterPort } from "@/lib/caio-access-gateway/source-ip-rate-limiter";
 import type { CaioCanonicalAuditGatePort } from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
@@ -90,6 +110,7 @@ import {
   workBuddyMtlsPeerSchema,
   type WorkBuddyMtlsPeer,
 } from "@/lib/caio-collaboration/client-identity";
+import type { CaioModelAliasBinding } from "@/lib/caio-model-proxy/alias-contracts";
 import type { CaioModelProxy } from "@/lib/caio-model-proxy/proxy-engine";
 
 import type { CaioAccessGatewayServerConfig } from "@/tools/caio-access-gateway/server-config";
@@ -235,8 +256,15 @@ export type CaioAccessGatewayIncoming = Readonly<{
 export type CaioAccessGatewayModelPorts = Readonly<{
   /** The proxy engine; the in-tree bridge adapts it to the gateway contract. */
   engine: CaioModelProxy;
-  /** Alias listing: a configuration read with no dispatch and no receipt. */
-  listModels: CaioModelProxyPort["listModels"];
+  /**
+   * The alias bindings this deployment serves. Discovery (`GET /v1/models`) is
+   * built FROM these by the in-tree list port rather than supplied as a
+   * function: a deployment-supplied listing implementation was handed no grant
+   * and so could only answer from the client type's default, which listed
+   * aliases to tokens that had been granted none. Taking data instead of a
+   * function removes that failure mode instead of documenting it.
+   */
+  bindings: readonly CaioModelAliasBinding[];
 }>;
 
 /** Production ports the deployment supplies. */
@@ -432,6 +460,12 @@ export function createCaioAccessGatewayServer(
     proxy: input.ports.modelProxy.engine,
   });
 
+  // Discovery is derived from the same bindings the dispatch path resolves
+  // against, so a suspended or ungranted route can never be advertised.
+  const modelList = createCaioGatewayModelListPort({
+    bindings: input.ports.modelProxy.bindings,
+  });
+
   const dependencies: CaioGatewayHandlerDependencies = {
     preAuthRateLimiter: input.ports.preAuthRateLimiter,
     tokenAuthenticator: input.ports.tokenAuthenticator,
@@ -440,7 +474,7 @@ export function createCaioAccessGatewayServer(
     modelProxy: {
       responses: modelDispatch.responses,
       chatCompletions: modelDispatch.chatCompletions,
-      listModels: input.ports.modelProxy.listModels,
+      listModels: modelList.listModels,
     },
     auditGate: input.ports.auditGate,
     readinessProbe: input.ports.readinessProbe,

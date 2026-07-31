@@ -65,6 +65,54 @@ describe("the gateway protocol core has a production caller", () => {
     expect(callers).toContain(COMPOSITION);
   });
 
+  // The composition having a caller and the composition BEING STARTED are two
+  // different facts, and the header used to assert the second one while only
+  // the first was true ("is what a deployment runner starts"). A reader
+  // auditing whether the Access Gateway is actually served would have been
+  // told yes. This test makes the header answerable to the tree in BOTH
+  // directions, so neither the false claim nor a stale denial can survive.
+  it("the header's launcher claim matches whether a launcher exists", () => {
+    const launchers: string[] = [];
+    for (const root of SCANNED_ROOTS) {
+      for (const file of walk(path.join(REPO_ROOT, root))) {
+        const relative = path.relative(REPO_ROOT, file);
+        if (relative === COMPOSITION) continue;
+        if (
+          readFileSync(file, "utf8").includes("createCaioAccessGatewayServer(")
+        ) {
+          launchers.push(relative);
+        }
+      }
+    }
+    const header = readFileSync(path.join(REPO_ROOT, COMPOSITION), "utf8").slice(
+      0,
+      4000,
+    );
+    const deniesLauncher = header.includes(
+      "NOTHING IN ANY OF THE FOUR REPOSITORIES STARTS THIS COMPOSITION",
+    );
+    if (launchers.length === 0) {
+      expect(
+        deniesLauncher,
+        "no module starts this composition, so the header must say so explicitly",
+      ).toBe(true);
+      // The specific false sentence must never come back AS AN ASSERTION.
+      // Quoted spans are stripped first: the header quotes the retired claim
+      // in order to explain why it was wrong, and a naive match cannot tell a
+      // statement from a citation of one. (It caught exactly that on the
+      // commit that introduced this test.)
+      const withoutQuotations = header.replace(/"[^"]*"/g, '""');
+      expect(withoutQuotations).not.toMatch(
+        /is what a deployment runner starts/,
+      );
+    } else {
+      expect(
+        deniesLauncher,
+        `these modules now start the composition, so the header's denial is stale: ${launchers.join(", ")}`,
+      ).toBe(false);
+    }
+  });
+
   it("the composition mounts the handler and owns exactly one listener", () => {
     const source = readFileSync(path.join(REPO_ROOT, COMPOSITION), "utf8");
     // Imported from the protocol core, not re-declared locally.

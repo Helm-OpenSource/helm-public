@@ -259,11 +259,22 @@ export type CaioModelProxyPort = Readonly<{
    * Must respond only with the aliases granted to the presented token. This is
    * a configuration read with no dispatch and no egress, so it carries no audit
    * receipt (see the module header).
+   *
+   * The grant is part of the input because the sentence above is otherwise
+   * unsatisfiable: an implementation that is handed only workspace/user/client
+   * type has nothing to narrow by and can do no better than the client type's
+   * default, which would list aliases to a token that was granted none.
+   *
+   * Present-vs-absent is load-bearing, exactly as on the dispatch path:
+   *   absent → no grant stored; the client type's default applies
+   *   []     → an explicit grant of nothing; every alias is refused
+   * The two may never be collapsed.
    */
   listModels(input: {
     workspaceId: string;
     userRef: string;
     clientType: string;
+    grantedAliases?: readonly string[];
   }): Promise<unknown>;
 }>;
 
@@ -928,6 +939,14 @@ export function createCaioGatewayHandler(
           workspaceId: principal.workspaceId,
           userRef: principal.userRef,
           clientType: principal.clientType,
+          // Spread rather than assign: an absent key and an explicitly empty
+          // grant mean different things, and writing `grantedAliases:
+          // principal.grantedAliases` would turn "no grant stored" into a
+          // present-but-undefined key that an implementation could read as
+          // either one.
+          ...(principal.grantedAliases === undefined
+            ? {}
+            : { grantedAliases: principal.grantedAliases }),
         });
         return okResponse(result, clientCorrelationId);
       }

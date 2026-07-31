@@ -106,10 +106,28 @@ function createPorts(
             throw new Error("no upstream in this composition test");
           },
         },
-        listModels: async () => {
-          calls.push("modelProxy.listModels");
-          return { data: [] };
-        },
+        // Discovery is built in-tree from these bindings, so the composition
+        // supplies DATA here, not a listing function. A deployment can no
+        // longer hand in an implementation that ignores the token's grant.
+        bindings: [
+          {
+            alias: "caio-codex-default",
+            protocol: "responses" as const,
+            providerKey: "provider-a",
+            upstreamModel: "upstream-for-codex",
+            credentialRef: "provider-a-key",
+            endpointBaseUrl: "https://upstream.example.internal/v1",
+            region: "cn-hangzhou",
+            dataRetentionPolicyKey: "retention-days:30",
+            trainingUsePolicyKey: "prohibited",
+            dataAuthorizationKey: "auth-tier-1",
+            policyVersion: "policy-v3",
+            status: "active" as const,
+            governedPolicyKey: "caio-lan-default",
+            governedRouteRef: "route:caio-lan-default:v3",
+            fallbackCandidates: [],
+          },
+        ],
       },
       auditGate: {
         posture,

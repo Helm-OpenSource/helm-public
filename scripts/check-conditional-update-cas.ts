@@ -190,7 +190,8 @@ export type ConditionalUpdateCasReason =
   | "no-transaction"
   | "client-from-parameter"
   | "ambient-client-inside-transaction"
-  | "isolation-not-serializable";
+  | "isolation-not-serializable"
+  | "unanalyzable-argument";
 
 export type ConditionalUpdateCasFinding = {
   readonly file: string;
@@ -565,14 +566,25 @@ function isSerializableIsolationExpression(node: ts.Expression): boolean {
   return false;
 }
 
-/** Resolve a module-level `const X = { ... }` used as the options argument. */
+/**
+ * Resolve an expression to the object literal it denotes, following a
+ * `const X = { ... }` binding declared in the same file.
+ *
+ * This serves BOTH the `$transaction` options argument and the `updateMany`
+ * argument. It was originally written for the former only, and the
+ * compare-and-swap scan required an inline literal instead of calling it —
+ * so hoisting a mutation into a local, which is an ordinary refactor, made a
+ * real site invisible to the guard while the capability to see it already
+ * existed a few hundred lines up.
+ */
 function resolveObjectLiteral(
   source: ts.SourceFile,
   node: ts.Expression,
 ): ts.ObjectLiteralExpression | null {
-  if (ts.isObjectLiteralExpression(node)) return node;
-  if (!ts.isIdentifier(node)) return null;
-  const wanted = node.text;
+  const direct = unwrapExpression(node);
+  if (ts.isObjectLiteralExpression(direct)) return direct;
+  if (!ts.isIdentifier(direct)) return null;
+  const wanted = direct.text;
   let found: ts.ObjectLiteralExpression | null = null;
   const visit = (current: ts.Node): void => {
     if (found) return;
@@ -582,9 +594,7 @@ function resolveObjectLiteral(
       current.name.text === wanted &&
       current.initializer
     ) {
-      const initializer = ts.isAsExpression(current.initializer)
-        ? current.initializer.expression
-        : current.initializer;
+      const initializer = unwrapExpression(current.initializer);
       if (ts.isObjectLiteralExpression(initializer)) {
         found = initializer;
         return;
@@ -763,6 +773,14 @@ function describe(
         `transaction client, so it runs on its own connection outside the ` +
         `transaction. ${tail}`
       );
+    case "unanalyzable-argument":
+      return (
+        `\`${variable}.count\` is read as a compare-and-swap result, but the ` +
+        `call argument could not be resolved to an object literal, so this ` +
+        `check cannot see whether the where carries the pre-state. Reported ` +
+        `rather than skipped: an unverifiable site and a safe one must not ` +
+        `look the same. Inline the argument, or make the write atomic. ${tail}`
+      );
     case "isolation-not-serializable":
       return (
         `${head} and the enclosing \`$transaction\` does not declare ` +
@@ -776,7 +794,67 @@ function scriptKindFor(file: string): ts.ScriptKind {
   return file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
 }
 
-export function findConditionalUpdateCasSites(
+export /**
+ * The property a call or access expression addresses, whether it is written as
+ * `x.updateMany` or `x["updateMany"]`. The guard used to accept only the dotted
+ * form, so an element access silently became a site the guard never saw — and
+ * `["updateMany"]` is ordinary TypeScript, not an evasion trick.
+ *
+ * A computed key that is not a string literal is genuinely unresolvable here
+ * and yields null.
+ */
+function accessedName(node: ts.Expression): string | null {
+  if (ts.isPropertyAccessExpression(node)) return node.name.text;
+  if (ts.isElementAccessExpression(node)) {
+    const key = node.argumentExpression;
+    if (key !== undefined && ts.isStringLiteralLike(key)) return key.text;
+  }
+  return null;
+}
+
+/** The receiver of a property or element access. */
+function accessTarget(node: ts.Expression): ts.Expression | null {
+  if (
+    ts.isPropertyAccessExpression(node) ||
+    ts.isElementAccessExpression(node)
+  ) {
+    return node.expression;
+  }
+  return null;
+}
+
+/** Strip the wrappers that do not change the value an expression denotes. */
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  for (;;) {
+    if (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isSatisfiesExpression(current) ||
+      ts.isNonNullExpression(current) ||
+      ts.isTypeAssertionExpression(current)
+    ) {
+      current = current.expression;
+      continue;
+    }
+    return current;
+  }
+}
+
+/** Whether the call result is bound through an object binding pattern. */
+function isDestructuredResult(node: ts.CallExpression): boolean {
+  let current: ts.Node | undefined = node.parent;
+  if (current !== undefined && ts.isAwaitExpression(current)) {
+    current = current.parent;
+  }
+  return (
+    current !== undefined &&
+    ts.isVariableDeclaration(current) &&
+    ts.isObjectBindingPattern(current.name)
+  );
+}
+
+function findConditionalUpdateCasSites(
   relativeFile: string,
   content: string,
   index: StatePredicateIndex,
@@ -794,17 +872,67 @@ export function findConditionalUpdateCasSites(
     ts.forEachChild(node, visit);
     if (!ts.isCallExpression(node)) return;
     const callee = node.expression;
-    if (!ts.isPropertyAccessExpression(callee)) return;
-    if (callee.name.text !== "updateMany") return;
-    const receiver = callee.expression;
-    if (!ts.isPropertyAccessExpression(receiver)) return;
-    const delegate = receiver.name.text;
-    const clientExpression = receiver.expression;
+    if (accessedName(callee) !== "updateMany") return;
+    const receiver = accessTarget(callee);
+    if (receiver === null) return;
+    const delegate = accessedName(receiver);
+    if (delegate === null) return;
+    const clientExpression = accessTarget(receiver);
+    if (clientExpression === null) return;
+
+    const modelOf = (): string | null =>
+      index.byDelegate.has(delegate)
+        ? delegate.charAt(0).toUpperCase() + delegate.slice(1)
+        : null;
+    const lineOf = (): number =>
+      source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
 
     const argument = node.arguments[0];
-    if (!argument || !ts.isObjectLiteralExpression(argument)) return;
+    const literal =
+      argument === undefined ? null : resolveObjectLiteral(source, argument);
+    if (literal === null) {
+      // FAIL-CLOSED. The argument could not be resolved to an object literal,
+      // so whether its `where` carries a pre-state is UNKNOWN. Skipping an
+      // unknown makes it indistinguishable from a site that was checked and
+      // found safe, which is precisely how this guard reported PASS on real
+      // compare-and-swap sites. Only calls whose `count` is read as a decision
+      // are reported: that is the shape where a lost update becomes a wrong
+      // answer rather than a no-op.
+      const unresolvedVariable = resultBinding(node);
+      if (!unresolvedVariable) return;
+      if (
+        !readsCountAsDecision(
+          enclosingScope(node),
+          unresolvedVariable,
+          isDestructuredResult(node),
+        )
+      ) {
+        return;
+      }
+      const unresolvedClient = normaliseText(clientExpression);
+      raw.push({
+        file: relativeFile,
+        line: lineOf(),
+        client: unresolvedClient,
+        delegate,
+        model: modelOf(),
+        statePredicates: [],
+        resultVariable: unresolvedVariable,
+        fingerprint: fingerprintOf([
+          relativeFile,
+          unresolvedClient,
+          delegate,
+          modelOf() ?? "<unresolved>",
+          "<unanalyzable>",
+          unresolvedVariable,
+        ]),
+        reason: "unanalyzable-argument",
+        detail: describe("unanalyzable-argument", unresolvedVariable, []),
+      });
+      return;
+    }
     let whereLiteral: ts.Expression | null = null;
-    for (const property of argument.properties) {
+    for (const property of literal.properties) {
       if (!ts.isPropertyAssignment(property)) continue;
       if (propertyName(property.name) !== "where") continue;
       whereLiteral = property.initializer;
@@ -935,7 +1063,10 @@ export function collectConditionalUpdateCasFindings(
         .join("/");
       if (relative === SELF) continue;
       const content = readFileSync(absolute, "utf8");
-      if (!content.includes(".updateMany(")) continue;
+      // Substring prefilter only: requiring the dotted call form here meant a
+      // file using `x["updateMany"](...)` was skipped before the parser ever
+      // saw it, so the AST fixes above would have been unreachable for it.
+      if (!content.includes("updateMany")) continue;
       findings.push(...findConditionalUpdateCasSites(relative, content, index));
     }
   }

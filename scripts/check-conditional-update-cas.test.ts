@@ -292,6 +292,63 @@ describe("conditional-update compare-and-swap guard", () => {
     expect(violations[0]?.reason).toBe("no-transaction");
   });
 
+  // A guard that a rename evades is not a guard. These three shapes are all
+  // ordinary TypeScript that a developer could write without any intent to
+  // avoid the check, and every one of them used to return PASS on a real
+  // compare-and-swap site.
+  it("catches an updateMany reached through element access", () => {
+    const root = sandbox({
+      "lib/claim.ts": `
+export async function claim() {
+  const claimed = await db.thing["updateMany"]({
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+    });
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.statePredicates).toEqual(["lifecyclePhase"]);
+    expect(violations[0]?.model).toBe("Thing");
+  });
+
+  it("catches an updateMany whose argument is a local const", () => {
+    const root = sandbox({
+      "lib/claim.ts": `
+export async function claim() {
+  const mutation = {
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  };
+  const claimed = await db.thing.updateMany(mutation);
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+    });
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.statePredicates).toEqual(["lifecyclePhase"]);
+  });
+
+  // Fail-closed: when the argument cannot be resolved to an object literal the
+  // guard must REPORT rather than skip. Skipping is what turned every
+  // unanalyzable shape into a silent PASS.
+  it("reports an unanalyzable updateMany argument instead of skipping it", () => {
+    const root = sandbox({
+      "lib/claim.ts": `
+export async function claim(mutation: unknown) {
+  const claimed = await db.thing.updateMany(mutation as never);
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+    });
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("unanalyzable-argument");
+  });
+
   it("catches a derived nullable *At lifecycle stamp", () => {
     const root = sandbox({
       "lib/adopt.ts": `

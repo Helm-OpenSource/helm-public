@@ -1392,6 +1392,77 @@ describe("model proxy routes", () => {
     );
   });
 
+  // The token contract defines the alias grant as three-valued, and `[]` means
+  // "explicitly nothing". Discovery has to honour that or a token that is
+  // granted no alias still learns which aliases exist — and the dispatch path
+  // already honours it, so a discovery surface that does not is inconsistent
+  // with the very token it is answering for.
+  it("hands the listing port the token's explicit empty grant", async () => {
+    const seen: unknown[] = [];
+    const harness = createHarness({
+      authenticate: async (input) => ({
+        ...PRINCIPAL,
+        audience: input.expectedAudience,
+        grantedAliases: [],
+      }),
+      modelProxy: {
+        listModels: async (input) => {
+          seen.push(input);
+          return { object: "list", data: [] };
+        },
+      },
+    });
+    const response = await harness.handler(
+      request({ method: "GET", path: "/v1/models", body: null }),
+    );
+    expect(response.status).toBe(200);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toHaveProperty("grantedAliases", []);
+  });
+
+  it("hands the listing port an explicit non-empty grant verbatim", async () => {
+    const seen: unknown[] = [];
+    const harness = createHarness({
+      authenticate: async (input) => ({
+        ...PRINCIPAL,
+        audience: input.expectedAudience,
+        grantedAliases: ["caio-codex-default"],
+      }),
+      modelProxy: {
+        listModels: async (input) => {
+          seen.push(input);
+          return { object: "list", data: [] };
+        },
+      },
+    });
+    await harness.handler(
+      request({ method: "GET", path: "/v1/models", body: null }),
+    );
+    expect(seen[0]).toHaveProperty("grantedAliases", ["caio-codex-default"]);
+  });
+
+  // Present-vs-absent is load-bearing exactly as it is on the dispatch path:
+  // an absent key means "no grant stored, apply the client type's default",
+  // which is NOT the same as an explicit grant of nothing. Collapsing the two
+  // would turn every unconfigured token into a deny-all, or every deny-all
+  // into a default grant, depending on which way it collapsed.
+  it("omits the grant key entirely when the token carries none", async () => {
+    const seen: Record<string, unknown>[] = [];
+    const harness = createHarness({
+      modelProxy: {
+        listModels: async (input) => {
+          seen.push(input as Record<string, unknown>);
+          return { object: "list", data: [] };
+        },
+      },
+    });
+    await harness.handler(
+      request({ method: "GET", path: "/v1/models", body: null }),
+    );
+    expect(seen).toHaveLength(1);
+    expect("grantedAliases" in seen[0]).toBe(false);
+  });
+
   it("collapses upstream failures to an opaque 502 without leaking messages", async () => {
     const harness = createHarness({
       modelProxy: {

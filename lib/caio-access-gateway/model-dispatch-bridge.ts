@@ -33,6 +33,12 @@ import type {
   CaioModelProxyPort,
 } from "@/lib/caio-access-gateway/gateway-http-core";
 import {
+  caioModelAliasBindingSchema,
+  listModelsForGrant,
+  resolveCaioGrantedAliases,
+  type CaioModelAliasBinding,
+} from "@/lib/caio-model-proxy/alias-contracts";
+import {
   CAIO_PROXY_CLIENT_TYPES,
   type CaioModelProxy,
   type CaioProxyClientType,
@@ -269,5 +275,55 @@ export function createCaioGatewayModelDispatchPort(deps: {
   return Object.freeze({
     responses: (input) => dispatch("responses", input),
     chatCompletions: (input) => dispatch("chat_completions", input),
+  });
+}
+
+/**
+ * Produce the gateway's alias-discovery surface from the SAME bindings the
+ * dispatch path resolves against.
+ *
+ * This used to be left to the deployment to supply, which is what made the
+ * discovery leak possible: the port was handed only workspace/user/client type,
+ * so the only answer any implementation could give was the client type's
+ * default — and a token carrying an explicit empty grant (which the token
+ * contract defines as "every alias is refused") was still told which aliases
+ * exist. Producing it here removes the possibility rather than documenting the
+ * obligation: there is no injected implementation left to get it wrong.
+ *
+ * Narrowing is delegated to the same two functions the dispatch path uses, so
+ * discovery and dispatch cannot drift apart:
+ *   - resolveCaioGrantedAliases honours the three-valued grant and drops any
+ *     entry that fails the alias schema, so a malformed stored value can never
+ *     widen a grant;
+ *   - listModelsForGrant additionally omits any binding that is not `active`,
+ *     so a suspended route is absent from discovery even when it is explicitly
+ *     granted.
+ *
+ * Bindings are re-parsed here rather than trusted: this port is constructed
+ * from deployment configuration, and a binding that would be refused at
+ * dispatch time must not be advertised at discovery time.
+ */
+export function createCaioGatewayModelListPort(deps: {
+  bindings: readonly CaioModelAliasBinding[];
+}): Pick<CaioModelProxyPort, "listModels"> {
+  const bindings = Object.freeze(
+    deps.bindings.map((raw) => caioModelAliasBindingSchema.parse(raw)),
+  );
+
+  return Object.freeze({
+    async listModels(input) {
+      const granted = resolveCaioGrantedAliases({
+        clientType: input.clientType,
+        // Present-vs-absent is preserved all the way down: passing the key with
+        // an undefined value would make the explicit-grant branch look taken.
+        ...(input.grantedAliases === undefined
+          ? {}
+          : { grantedAliases: input.grantedAliases }),
+      });
+      return listModelsForGrant({
+        bindings,
+        grantedAliases: [...granted],
+      });
+    },
   });
 }
