@@ -192,6 +192,179 @@ describeMysql("caio audit gate with an isolated MySQL primary store", () => {
     expect(stored.posture).toBe("self_service");
   });
 
+  // WHY THIS TEST RUNS SQL RATHER THAN ASSERTING A COMMENT.
+  //
+  // The first draft of the posture migration added the column `NOT NULL` with
+  // no default and asserted, in a comment, that the statement would FAIL if
+  // historical rows existed — and therefore that no row could ever be given a
+  // posture it did not have. That claim was never executed against a populated
+  // table. It is false: on MySQL 8.4 in the default strict mode the ALTER
+  // succeeds and silently backfills every existing row with the empty string,
+  // which is precisely the "invent a posture for rows whose posture is
+  // unknown" outcome the comment claimed to prevent.
+  //
+  // So both halves are MEASURED here, on a scratch table shaped like the
+  // pre-migration receipt table:
+  //   (a) the counterfactual — the NOT NULL form really does succeed and
+  //       really does write '' — so that if a future MySQL changes this, the
+  //       test says so instead of a comment quietly going stale again;
+  //   (b) the shipped phase-1 statements, read VERBATIM from migration.sql
+  //       rather than paraphrased, leaving legacy rows NULL and refusing any
+  //       non-NULL value outside the posture vocabulary.
+  it("upgrades a POPULATED table by quarantining legacy rows as NULL, never by inventing a posture", async () => {
+    const legacyColumns = `
+      \`id\` VARCHAR(191) NOT NULL,
+      \`workspaceId\` VARCHAR(191) NOT NULL,
+      \`requestId\` VARCHAR(191) NOT NULL,
+      \`clientType\` VARCHAR(191) NOT NULL,
+      \`modelAlias\` VARCHAR(191) NOT NULL,
+      \`inputHash\` VARCHAR(191) NOT NULL,
+      \`policyVersion\` VARCHAR(191) NOT NULL,
+      \`persistedVia\` VARCHAR(191) NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL,
+      PRIMARY KEY (\`id\`)
+    `;
+    const naive = `caio_posture_naive_${process.pid}`;
+    const phase1 = `caio_posture_phase1_${process.pid}`;
+    const seed = async (table: string) => {
+      await db.$executeRawUnsafe(
+        `CREATE TABLE \`${table}\` (${legacyColumns}) DEFAULT CHARACTER SET utf8mb4`,
+      );
+      await db.$executeRawUnsafe(
+        `INSERT INTO \`${table}\` VALUES ` +
+          `('r1','ws','req-1','workbuddy','caio-default','sha256:a','policy-v3','primary',UTC_TIMESTAMP(3)),` +
+          `('r2','ws','req-2','workbuddy','caio-default','sha256:b','policy-v3','primary',UTC_TIMESTAMP(3))`,
+      );
+    };
+
+    try {
+      // (a) THE COUNTERFACTUAL. This is the statement the old comment said
+      // would fail. It does not fail.
+      await seed(naive);
+      await db.$executeRawUnsafe(
+        `ALTER TABLE \`${naive}\` ADD COLUMN \`posture\` VARCHAR(191) NOT NULL`,
+      );
+      const naiveRows = await db.$queryRawUnsafe<
+        { id: string; posture: string | null }[]
+      >(`SELECT \`id\`, \`posture\` FROM \`${naive}\` ORDER BY \`id\``);
+      expect(naiveRows).toHaveLength(2);
+      // Not an endorsement — a record of the behaviour that made the comment
+      // false. Every historical row now carries a posture it never had.
+      expect(naiveRows.map((row) => row.posture)).toEqual(["", ""]);
+
+      // (b) THE SHIPPED MIGRATION, verbatim. Reading the file keeps this test
+      // bound to what actually deploys; a paraphrase could drift from it and
+      // still pass.
+      await seed(phase1);
+      const migrationSql = await fs.readFile(
+        path.join(
+          process.cwd(),
+          "prisma/migrations/20260731120000_caio_audit_receipt_posture/migration.sql",
+        ),
+        "utf8",
+      );
+      const statements = migrationSql
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("--"))
+        .join("\n")
+        .split(";")
+        .map((statement) => statement.trim())
+        .filter((statement) => statement.length > 0)
+        .map((statement) =>
+          statement
+            .replaceAll("CaioAuditDispatchReceipt_posture_chk", `${phase1}_chk`)
+            .replaceAll("CaioAuditDispatchReceipt", phase1),
+        );
+      // Two statements: the nullable ADD COLUMN and the closed-set CHECK. If
+      // the migration grows a third, this assertion forces a look at it.
+      expect(statements).toHaveLength(2);
+      for (const statement of statements) {
+        await db.$executeRawUnsafe(statement);
+      }
+
+      const upgraded = await db.$queryRawUnsafe<
+        { id: string; posture: string | null }[]
+      >(`SELECT \`id\`, \`posture\` FROM \`${phase1}\` ORDER BY \`id\``);
+      expect(upgraded).toHaveLength(2);
+      // LEGACY UNKNOWN. Not '', not a default, not a guess.
+      expect(upgraded.map((row) => row.posture)).toEqual([null, null]);
+
+      // The closed set is enforced by the database for non-NULL values, so a
+      // repair script or manual insert cannot introduce a third posture — or
+      // reintroduce the empty string the naive form produced above.
+      await expect(
+        db.$executeRawUnsafe(
+          `INSERT INTO \`${phase1}\` VALUES ('r3','ws','req-3','workbuddy','caio-default','sha256:c','policy-v3','primary',UTC_TIMESTAMP(3),'')`,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        db.$executeRawUnsafe(
+          `INSERT INTO \`${phase1}\` VALUES ('r4','ws','req-4','workbuddy','caio-default','sha256:d','policy-v3','primary',UTC_TIMESTAMP(3),'lenient')`,
+        ),
+      ).rejects.toThrow();
+      // Both vocabulary members are accepted, so the CHECK is not merely
+      // rejecting everything.
+      for (const [id, posture] of [
+        ["r5", "self_service"],
+        ["r6", "governed_fde"],
+      ]) {
+        await db.$executeRawUnsafe(
+          `INSERT INTO \`${phase1}\` VALUES ('${id}','ws','req-${id}','workbuddy','caio-default','sha256:e','policy-v3','primary',UTC_TIMESTAMP(3),'${posture}')`,
+        );
+      }
+      expect(
+        await db.$queryRawUnsafe<{ n: bigint }[]>(
+          `SELECT COUNT(*) AS n FROM \`${phase1}\` WHERE \`posture\` IS NOT NULL`,
+        ),
+      ).toEqual([{ n: 2n }]);
+    } finally {
+      await db.$executeRawUnsafe(`DROP TABLE IF EXISTS \`${naive}\``);
+      await db.$executeRawUnsafe(`DROP TABLE IF EXISTS \`${phase1}\``);
+    }
+  });
+
+  it("never lets a legacy-unknown (NULL) posture certify a new dispatch as a replay", async () => {
+    // The row a real upgrade leaves behind: content identical to what a live
+    // deployment would write, except its posture is unknown. If NULL compared
+    // equal — or were treated as "matches anything" — the store would answer
+    // "replayed" for a dispatch it holds no posture evidence about, which is
+    // the replay-vs-conflict bug the column was added to close, arriving
+    // through the one row that can least afford it.
+    const store = createPrismaCaioAuditReceiptStore();
+    const requestId = `req-legacy-null-${suffix}`;
+    await db.caioAuditDispatchReceipt.create({
+      data: {
+        id: `legacy-${suffix}`,
+        workspaceId,
+        requestId,
+        clientType: "workbuddy",
+        modelAlias: "caio-default",
+        inputHash: `sha256:${"a".repeat(64)}`,
+        policyVersion: "policy-v3",
+        posture: null,
+        persistedVia: "primary",
+        createdAt: new Date(),
+      },
+    });
+
+    for (const posture of ["self_service", "governed_fde"] as const) {
+      const outcome = await store.persist({
+        receipt: receipt(requestId, { posture }),
+        persistedVia: "primary",
+        now: new Date(),
+      });
+      expect(outcome.outcome).toBe("conflict");
+    }
+
+    // The legacy row is left exactly as it was: resolving a conflict is not a
+    // licence to fill in the missing posture.
+    const stored = await db.caioAuditDispatchReceipt.findUniqueOrThrow({
+      where: { workspaceId_requestId: { workspaceId, requestId } },
+      select: { posture: true },
+    });
+    expect(stored.posture).toBeNull();
+  });
+
   it("degrades to the encrypted queue and recovers with persistedVia=emergency_replay", async () => {
     const primary = createPrismaCaioAuditReceiptStore();
     let primaryDown = true;

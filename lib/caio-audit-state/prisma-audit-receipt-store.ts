@@ -25,6 +25,11 @@ import { db } from "@/lib/db";
  * [workspaceId, requestId] resolved as an idempotent "replayed"; it now
  * resolves as "conflict". The encrypted emergency queue never had this gap: it
  * binds the full receipt digest, which already covers posture.
+ *
+ * The column is NULLABLE, and NULL means LEGACY UNKNOWN / QUARANTINED — a row
+ * written before posture was recorded. Such a row is never equal to anything:
+ * it cannot resolve a duplicate as a replay, so a legacy row forces "conflict"
+ * rather than certifying a dispatch it has no evidence about.
  */
 export function createPrismaCaioAuditReceiptStore(): CaioAuditPrimaryStorePort {
   return {
@@ -63,12 +68,24 @@ export function createPrismaCaioAuditReceiptStore(): CaioAuditPrimaryStorePort {
         if (!existing) {
           throw error;
         }
+        // A NULL stored posture is LEGACY UNKNOWN, not a wildcard and not
+        // "the same as whatever is asking". The column is nullable precisely
+        // because a row predating posture recording cannot have one invented
+        // for it, and the one thing such a row must never do is answer the
+        // question this comparison asks. Letting NULL match would resurrect
+        // the replay-vs-conflict bug the column exists to close, in exactly
+        // the case where the evidence is weakest. Written as an explicit
+        // non-null test rather than leaning on `null === "self_service"` being
+        // false, so the intent survives a change to either side's type.
+        const storedPosture: string | null = existing.posture;
+        const samePosture =
+          storedPosture !== null && storedPosture === receipt.posture;
         const sameContent =
           existing.clientType === receipt.client &&
           existing.modelAlias === receipt.modelAlias &&
           existing.inputHash === receipt.inputHash &&
           existing.policyVersion === receipt.policyVersion &&
-          existing.posture === receipt.posture;
+          samePosture;
         if (!sameContent) {
           return { outcome: "conflict" };
         }

@@ -6812,7 +6812,15 @@ model CaioAuditDispatchReceipt {
   modelAlias    String
   inputHash     String
   policyVersion String
-  posture       String
+  // NULL is not "unset": it is LEGACY UNKNOWN / QUARANTINED — a row written
+  // before posture was recorded, whose posture cannot be recovered from the
+  // row itself. The store never lets a NULL compare equal to a live receipt's
+  // posture, so such a row cannot certify a new dispatch as an idempotent
+  // replay. Non-NULL values are constrained to CAIO_DEPLOYMENT_POSTURES by a
+  // database CHECK. NOT NULL is a later phase and only after an owner-receipted
+  // backfill; the conditions are enumerated in
+  // prisma/migrations/20260731120000_caio_audit_receipt_posture/migration.sql.
+  posture       String?
   persistedVia  String
   createdAt     DateTime
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioAuditDispatchReceipt_workspace_fkey")
