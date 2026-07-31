@@ -339,6 +339,15 @@ function installAuthCodeStore(records: AuthCodeRecord[]) {
       if (!record || record.consumedAt !== null) {
         return 0;
       }
+      // The statements decide expiry in the database at write time, so the
+      // mock must too: an expired row affects zero rows however the caller
+      // read it a moment earlier.
+      if (
+        sql.includes("`expiresAt` > UTC_TIMESTAMP(3)") &&
+        record.expiresAt.getTime() <= Date.now()
+      ) {
+        return 0;
+      }
       if (sql.includes("`attempts` = `attempts` + 1")) {
         const ceiling = values[1] as number;
         if (record.attempts >= ceiling) {
@@ -515,6 +524,56 @@ describe("auth verification code attempt cap", () => {
     expect(result.redirectTo).toBe("/login/workspaces");
     expect(result.requiresWorkspaceSelection).toBe(true);
     expect(mocks.session.activateMembershipIfInvited).not.toHaveBeenCalled();
+  });
+
+  it("refuses a code that expires between the read and the claim", async () => {
+    const record = makeCodeRecord({
+      id: "login-code-expiring",
+      purpose: AuthCodePurpose.LOGIN_PHONE,
+      target: "+8613800000000",
+      code: "123456",
+      attempts: 0,
+      userId: "user-1",
+    });
+    installAuthCodeStore([record]);
+    mocks.db.user.findFirst.mockResolvedValue(createActiveUser());
+
+    // Valid when the action reads it; the clock crosses `expiresAt` before the
+    // claim runs. The application-clock check at the top of verifyAuthCode has
+    // already passed and cannot revisit it, so only a database predicate in
+    // the claim statement can still refuse.
+    record.expiresAt = new Date(now.getTime() + 1_000);
+
+    // A thrown error would be indistinguishable from any other failure here —
+    // the action reports ok:false either way — so the violation is recorded as
+    // a fact the test asserts on directly.
+    let wroteWithoutExpiryGuard = false;
+    mocks.db.$executeRaw.mockImplementation(
+      async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        const sql = strings.join("?");
+        vi.setSystemTime(new Date(now.getTime() + 5_000));
+        if (record.id !== values[0] || record.consumedAt !== null) return 0;
+        if (!sql.includes("`expiresAt` > UTC_TIMESTAMP(3)")) {
+          wroteWithoutExpiryGuard = true;
+          return 1;
+        }
+        return record.expiresAt.getTime() <= Date.now() ? 0 : 1;
+      },
+    );
+
+    const result = await loginWithPhoneCodeAction({
+      phone: "13800000000",
+      code: "123456",
+      locale: "en-US",
+    });
+
+    // The flow must have REACHED the claim; asserting only ok===false would
+    // pass on "code not found", which proves nothing about expiry.
+    expect(mocks.db.$executeRaw).toHaveBeenCalled();
+    expect(wroteWithoutExpiryGuard).toBe(false);
+    expect(result.ok).toBe(false);
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+    expect(record.consumedAt).toBeNull();
   });
 
   it("rejects a valid login code when another request already consumed it", async () => {

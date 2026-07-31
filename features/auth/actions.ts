@@ -562,6 +562,14 @@ async function verifyAuthCode(input: {
     return { ok: false as const, reason: "missing" as const };
   }
 
+  // Fast path only, deliberately NOT the authority. It answers with the
+  // application's clock at READ time, so it cannot speak for the moment the
+  // claim is written: a code expiring between this line and the claim below
+  // would still be accepted, and two app hosts need not agree on the time.
+  // Both claim statements carry `expiresAt > UTC_TIMESTAMP(3)` in their own
+  // WHERE, so expiry is decided by the database at the instant of the write.
+  // This check survives because it produces the accurate "expired" reason for
+  // the common case; a claim refusal cannot tell expiry from a lost race.
   if (record.expiresAt.getTime() < Date.now()) {
     return { ok: false as const, reason: "expired" as const };
   }
@@ -587,6 +595,7 @@ async function verifyAuthCode(input: {
        SET \`attempts\` = \`attempts\` + 1
      WHERE \`id\` = ${record.id}
        AND \`consumedAt\` IS NULL
+       AND \`expiresAt\` > UTC_TIMESTAMP(3)
        AND \`attempts\` < ${AUTH_CODE_MAX_ATTEMPTS}
   `;
 
@@ -625,6 +634,7 @@ async function verifyAuthCode(input: {
        SET \`consumedAt\` = UTC_TIMESTAMP(3)
      WHERE \`id\` = ${record.id}
        AND \`consumedAt\` IS NULL
+       AND \`expiresAt\` > UTC_TIMESTAMP(3)
   `;
 
   if (consumeReservation !== 1) {
