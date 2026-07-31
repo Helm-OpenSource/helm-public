@@ -393,8 +393,35 @@ export async function route() {
     expect(checkConditionalUpdateCas(root)).toEqual([]);
   });
 
-  it("does not flag a count that is returned rather than compared", () => {
+  // DOCTRINE CHANGE, made deliberately. This used to assert that returning the
+  // count was NOT a finding, on the grounds that the comparison happens in a
+  // caller. That made "return the result to the caller" the cheapest possible
+  // way to delete a finding — cheaper than fixing it, and reachable by an IDE
+  // extract-method with no thought at all. Any READ of the count is now a
+  // decision read: the count leaving the function is the count being used to
+  // decide something, somewhere the guard cannot see, which is the definition
+  // of unproven.
+  it("flags a count that is returned to a caller rather than compared here", () => {
     const root = sandbox({ "lib/sweep.ts": COUNT_NOT_READ });
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("no-transaction");
+  });
+
+  it("still ignores a call whose result is discarded entirely", () => {
+    const root = sandbox({
+      "lib/discard.ts": `
+export async function sweep() {
+  await db.thing.updateMany({
+    where: { lifecyclePhase: "PENDING", claimedAt: null },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+}
+`,
+    });
+    // Nothing reads the count, so a lost update is a no-op rather than a wrong
+    // answer. This is the control that keeps the broadened rule from becoming
+    // "report every updateMany".
     expect(checkConditionalUpdateCas(root)).toEqual([]);
   });
 
@@ -740,6 +767,348 @@ export const Claimer = class mutation {
   it("does not treat a test file as production code", () => {
     const root = sandbox({ "lib/claim.test.ts": CAS_WITH_DERIVED_ENUM });
     expect(checkConditionalUpdateCas(root)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FAIL-CLOSED ON EVERY JUDGEMENT INPUT
+//
+// The guard reads six things to reach a verdict: the argument, the `where`
+// inside it, how the result is bound, how the count is read, which client the
+// write runs on, and the isolation level. Each of these used to SKIP the site
+// when it could not be understood, so "checked and safe" and "never looked"
+// produced identical CI output — while only the first of the six failed closed.
+//
+// Every fixture below was silent before that was fixed. The CONTROL is first
+// and MUST report: a fixture harness that has quietly broken (a schema the
+// parser could not read, a file the scanner never visited) reports zero for
+// everything, which is indistinguishable from a guard that has been fixed.
+// ---------------------------------------------------------------------------
+describe("conditional-update compare-and-swap guard: unreadable inputs are reported", () => {
+  const CONTROL = `
+export async function claim() {
+  const claimed = await db.thing.updateMany({
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`;
+
+  it("CONTROL: the inline form still reports (a zero here means the harness broke)", () => {
+    const violations = checkConditionalUpdateCas(sandbox({ "lib/control.ts": CONTROL }));
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("no-transaction");
+    expect(violations[0]?.statePredicates).toEqual(["lifecyclePhase"]);
+  });
+
+  // --- the `where` -------------------------------------------------------
+  it("resolves a `where` hoisted into a local and passed by shorthand", () => {
+    const violations = checkConditionalUpdateCas(
+      sandbox({
+        "lib/where-shorthand.ts": `
+export async function claim() {
+  const where = { id: "x", lifecyclePhase: "PENDING" };
+  const claimed = await db.thing.updateMany({ where, data: { lifecyclePhase: "CLAIMED" } });
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+      }),
+    );
+    // Hoisting the where is an ordinary refactor. It must not change the
+    // verdict — and, because the fingerprint is unchanged, it must not turn a
+    // baselined entry stale either, which is how a refactor used to get the
+    // guard's own endorsement for deleting a live debt record.
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.statePredicates).toEqual(["lifecyclePhase"]);
+  });
+
+  it("resolves a computed key written as a string literal", () => {
+    const violations = checkConditionalUpdateCas(
+      sandbox({
+        "lib/computed-literal-key.ts": `
+export async function claim() {
+  const claimed = await db.thing.updateMany({
+    where: { id: "x", ["lifecyclePhase"]: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+      }),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.statePredicates).toEqual(["lifecyclePhase"]);
+  });
+
+  it("reports a `where` whose key is a variable it cannot evaluate", () => {
+    const violations = checkConditionalUpdateCas(
+      sandbox({
+        "lib/computed-variable-key.ts": `
+export async function claim(key: string) {
+  const claimed = await db.thing.updateMany({
+    where: { id: "x", [key]: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+      }),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("unanalyzable-argument");
+  });
+
+  it("reports a `where` carrying a spread it cannot resolve", () => {
+    const violations = checkConditionalUpdateCas(
+      sandbox({
+        "lib/where-spread.ts": `
+export async function claim(extra: Record<string, unknown>) {
+  const claimed = await db.thing.updateMany({
+    where: { id: "x", ...extra },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+      }),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("unanalyzable-argument");
+  });
+
+  // --- how the result is bound -------------------------------------------
+  it("sees `.count` taken directly off the awaited call", () => {
+    // THIRTEEN live sites in this repository are already written this way.
+    const violations = checkConditionalUpdateCas(
+      sandbox({
+        "lib/inline-count.ts": `
+export async function claim() {
+  if ((await db.thing.updateMany({
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  })).count !== 1) {
+    throw new Error("lost");
+  }
+}
+`,
+      }),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.resultVariable).toBe("<inline-count>");
+  });
+
+  it("sees a result assigned to an already-declared variable", () => {
+    const violations = checkConditionalUpdateCas(
+      sandbox({
+        "lib/late-assignment.ts": `
+export async function claim() {
+  let claimed;
+  claimed = await db.thing.updateMany({
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+      }),
+    );
+    expect(violations).toHaveLength(1);
+  });
+
+  it("sees an array-form $transaction element destructured by position", () => {
+    const violations = checkConditionalUpdateCas(
+      sandbox({
+        "lib/array-transaction.ts": `
+export async function claim() {
+  const [claimed] = await db.$transaction([
+    db.thing.updateMany({
+      where: { id: "x", lifecyclePhase: "PENDING" },
+      data: { lifecyclePhase: "CLAIMED" },
+    }),
+  ]);
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+      }),
+    );
+    // The array form really is one transaction on one connection, so the only
+    // open question is the isolation level — and it is not declared here.
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("isolation-not-serializable");
+  });
+
+  // --- how the count is read ---------------------------------------------
+  it("treats bare truthiness, element access and an alias hop as count reads", () => {
+    const cases: [string, string][] = [
+      ["truthy", "if (claimed.count) return;"],
+      ["element-access", 'if (claimed["count"] !== 1) throw new Error("lost");'],
+      ["parenthesised", 'if ((claimed.count) !== 1) throw new Error("lost");'],
+      ["named-constant", "if (claimed.count !== EXPECTED) throw new Error('lost');"],
+      ["switch", "switch (claimed.count) { case 1: break; default: throw new Error('lost'); }"],
+      ["alias", "const outcome = claimed; if (outcome.count !== 1) throw new Error('lost');"],
+      ["late-destructure", "const { count } = claimed; if (count !== 1) throw new Error('lost');"],
+    ];
+    for (const [id, tail] of cases) {
+      const violations = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/read-${id}.ts`]: `
+const EXPECTED = 1;
+export async function claim() {
+  const claimed = await db.thing.updateMany({
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+  ${tail}
+}
+`,
+        }),
+      );
+      expect(violations, `count read form: ${id}`).toHaveLength(1);
+    }
+  });
+
+  // --- which client ------------------------------------------------------
+  it("resolves a delegate reached through a destructured or aliased client", () => {
+    for (const [id, prelude, receiver] of [
+      ["destructured", "const { thing } = db;", "thing"],
+      ["aliased-delegate", "const things = db.thing;", "things"],
+    ] as const) {
+      const violations = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/client-${id}.ts`]: `
+${prelude}
+export async function claim() {
+  const claimed = await ${receiver}.updateMany({
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+        }),
+      );
+      expect(violations, `receiver form: ${id}`).toHaveLength(1);
+      // Resolving the receiver recovers the MODEL, so the finding is checked
+      // against Thing's state columns rather than the fail-loud union.
+      expect(violations[0]?.model, `receiver form: ${id}`).toBe("Thing");
+      expect(violations[0]?.statePredicates).toEqual(["lifecyclePhase"]);
+    }
+  });
+
+  // --- which client, inside a transaction --------------------------------
+  it("refuses to certify a `tx` that is not the transaction callback's `tx`", () => {
+    // The reverse misjudgement, and the worst kind: the guard did not merely
+    // miss these, it CERTIFIED them as serialisable because the name matched.
+    for (const [id, body] of [
+      [
+        "inner-block-shadow",
+        `for (const item of items) {
+      const tx = shards.for(item);
+      const claimed = await tx.thing.updateMany({
+        where: { id: "x", lifecyclePhase: "PENDING" },
+        data: { lifecyclePhase: "CLAIMED" },
+      });
+      if (claimed.count !== 1) throw new Error("lost");
+    }`,
+      ],
+      [
+        "inner-callback-parameter",
+        `await items.map(async (tx: any) => {
+      const claimed = await tx.thing.updateMany({
+        where: { id: "x", lifecyclePhase: "PENDING" },
+        data: { lifecyclePhase: "CLAIMED" },
+      });
+      if (claimed.count !== 1) throw new Error("lost");
+    });`,
+      ],
+      [
+        "catch-binding",
+        `try { throw new Error("x"); } catch (tx: any) {
+      const claimed = await tx.thing.updateMany({
+        where: { id: "x", lifecyclePhase: "PENDING" },
+        data: { lifecyclePhase: "CLAIMED" },
+      });
+      if (claimed.count !== 1) throw new Error("lost");
+    }`,
+      ],
+    ] as const) {
+      const violations = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/shadowed-${id}.ts`]: `
+declare const items: any[];
+declare const shards: any;
+export async function claim() {
+  return db.$transaction(async (tx) => {
+    ${body}
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+`,
+        }),
+      );
+      expect(violations, `shadow form: ${id}`).toHaveLength(1);
+      expect(violations[0]?.reason, `shadow form: ${id}`).toBe(
+        "ambient-client-inside-transaction",
+      );
+    }
+  });
+
+  it("CONTROL: the genuine transaction client is still certified", () => {
+    const violations = checkConditionalUpdateCas(
+      sandbox({
+        "lib/real-tx.ts": `
+export async function claim() {
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.thing.updateMany({
+      where: { id: "x", lifecyclePhase: "PENDING" },
+      data: { lifecyclePhase: "CLAIMED" },
+    });
+    if (claimed.count !== 1) throw new Error("lost");
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+`,
+      }),
+    );
+    // Node identity must not become "refuse everything": the correct shape is
+    // still proven, or the previous test proves nothing.
+    expect(violations).toEqual([]);
+  });
+
+  // --- the isolation level -----------------------------------------------
+  it("refuses an isolation level a later spread or duplicate key can override", () => {
+    for (const [id, options] of [
+      [
+        "duplicate-key",
+        "{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }",
+      ],
+      [
+        "later-spread",
+        "{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable, ...overrides }",
+      ],
+      ["foreign-qualifier", "{ isolationLevel: levels.Serializable }"],
+    ] as const) {
+      const violations = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/isolation-${id}.ts`]: `
+declare const overrides: Record<string, unknown>;
+const levels = { Serializable: "ReadCommitted" };
+export async function claim() {
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.thing.updateMany({
+      where: { id: "x", lifecyclePhase: "PENDING" },
+      data: { lifecyclePhase: "CLAIMED" },
+    });
+    if (claimed.count !== 1) throw new Error("lost");
+  }, ${options});
+}
+`,
+        }),
+      );
+      expect(violations, `isolation form: ${id}`).toHaveLength(1);
+      expect(violations[0]?.reason, `isolation form: ${id}`).toBe(
+        "isolation-not-serializable",
+      );
+    }
   });
 });
 

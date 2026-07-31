@@ -5,6 +5,20 @@
   "provenance": "Found while fixing two invariants that CI on mysql:8.4 disproved; the mechanism is documented in scripts/check-conditional-update-cas.ts.",
   "entries": [
     {
+      "file": "lib/bi-report-skill/handoff-decision.ts",
+      "fingerprint": "29e5454fd1f92452",
+      "occurrence": 0,
+      "client": "db",
+      "delegate": "biReportBusinessHandoffDecision",
+      "model": "BiReportBusinessHandoffDecision",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "result",
+      "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
       "file": "lib/bi-report-skill/signal-notification.ts",
       "fingerprint": "d3ddf1bf58777e8c",
       "occurrence": 0,
@@ -16,6 +30,20 @@
       ],
       "resultVariable": "result",
       "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-access-gateway/token-store.prisma.ts",
+      "fingerprint": "e111ef3538a2e9fb",
+      "occurrence": 0,
+      "client": "client",
+      "delegate": "caioAccessToken",
+      "model": "CaioAccessToken",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "swept",
+      "reason": "client-from-parameter",
       "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
     },
     {
@@ -582,16 +610,14 @@
     },
     {
       "file": "lib/stage1-owner-loop/observation.service.ts",
-      "fingerprint": "4a1f050470dfdfc4",
+      "fingerprint": "976d9befed40ca28",
       "occurrence": 0,
       "client": "input.tx",
       "delegate": "dataAssetCatalogEntry",
       "model": "DataAssetCatalogEntry",
-      "statePredicates": [
-        "version"
-      ],
+      "statePredicates": [],
       "resultVariable": "claimed",
-      "reason": "client-from-parameter",
+      "reason": "unanalyzable-argument",
       "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
     },
     {

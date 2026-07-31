@@ -173,16 +173,6 @@ const SUPPLEMENTARY_STATE_PREDICATE_FIELDS: readonly string[] = [
   "revocationEpoch",
 ];
 
-const COMPARISON_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
-  ts.SyntaxKind.EqualsEqualsToken,
-  ts.SyntaxKind.EqualsEqualsEqualsToken,
-  ts.SyntaxKind.ExclamationEqualsToken,
-  ts.SyntaxKind.ExclamationEqualsEqualsToken,
-  ts.SyntaxKind.LessThanToken,
-  ts.SyntaxKind.GreaterThanToken,
-  ts.SyntaxKind.LessThanEqualsToken,
-  ts.SyntaxKind.GreaterThanEqualsToken,
-]);
 
 const RELATION_COMBINATORS: ReadonlySet<string> = new Set(["AND", "OR", "NOT"]);
 
@@ -443,33 +433,143 @@ function loadStatePredicateIndex(repoRoot: string): StatePredicateIndex {
 function propertyName(name: ts.PropertyName): string | null {
   if (ts.isIdentifier(name)) return name.text;
   if (ts.isStringLiteral(name)) return name.text;
+  // `["lifecyclePhase"]` addresses the same column as `lifecyclePhase`, so a
+  // computed key with a literal is not an unknown. A computed key built from a
+  // VARIABLE is, and returns null so the caller can fail closed on it rather
+  // than skip the property and call the object fully understood.
+  if (ts.isComputedPropertyName(name)) {
+    const expression = unwrapExpression(name.expression);
+    return ts.isStringLiteralLike(expression) ? expression.text : null;
+  }
   return null;
 }
 
-function collectWhereFields(node: ts.Node, out: Set<string>): void {
-  if (ts.isArrayLiteralExpression(node)) {
-    for (const element of node.elements) collectWhereFields(element, out);
-    return;
-  }
-  if (!ts.isObjectLiteralExpression(node)) return;
-  for (const property of node.properties) {
-    if (ts.isShorthandPropertyAssignment(property)) {
-      out.add(property.name.text);
-      continue;
+/**
+ * Collect the field names a `where` asserts.
+ *
+ * Returns FALSE when any part of the structure could not be understood — an
+ * unresolvable spread, a computed key built from a variable, a value that is
+ * not an object literal and does not resolve to one. The caller must treat
+ * false as UNKNOWN and report, never as "no state predicates found".
+ *
+ * That distinction is the whole point. The previous version returned void and
+ * simply stopped on anything it did not recognise, after which
+ * `whereFields.size === 0` sent the site down the same path as a genuinely safe
+ * one. Hoisting the where into a local — an ordinary refactor, and one this
+ * codebase already performs on other Prisma calls — therefore erased a finding
+ * AND, worse, made the matching baseline entry stale, so the guard itself
+ * instructed the author to delete the debt record for a site that was still
+ * unsound. Refactoring must not be a way to clear the ledger.
+ */
+function collectWhereFields(
+  source: ts.SourceFile,
+  node: ts.Expression,
+  out: Set<string>,
+  depth = 0,
+): boolean {
+  if (depth > 8) return false;
+  const direct = unwrapExpression(node);
+  if (ts.isArrayLiteralExpression(direct)) {
+    for (const element of direct.elements) {
+      if (!collectWhereFields(source, element, out, depth + 1)) return false;
     }
-    if (!ts.isPropertyAssignment(property)) continue;
-    const name = propertyName(property.name);
-    if (!name) continue;
-    if (RELATION_COMBINATORS.has(name)) {
+    return true;
+  }
+  const literal = resolveObjectLiteral(source, direct);
+  if (!literal) return false;
+  const flattened = flattenObjectLiteral(source, literal, depth + 1);
+  if (!flattened) return false;
+  for (const entry of flattened) {
+    if (RELATION_COMBINATORS.has(entry.name)) {
       // Combinators wrap sibling predicates; recurse rather than record.
-      collectWhereFields(property.initializer, out);
+      if (!collectWhereFields(source, entry.value, out, depth + 1)) return false;
       continue;
     }
     // Do NOT recurse into a value: `status: { in: [...] }` is still `status`,
     // and `source: { status: ... }` is a relation filter, not this model's
     // state (recorded as a documented blind spot).
-    out.add(name);
+    out.add(entry.name);
   }
+  return true;
+}
+
+/**
+ * The identifier NODE at the root of a receiver expression, so the caller can
+ * resolve it to a binding rather than compare its text. `this` has no binding
+ * node and yields null.
+ */
+function rootIdentifierNode(node: ts.Expression): ts.Identifier | null {
+  let current: ts.Node = unwrapExpression(node);
+  for (;;) {
+    if (ts.isIdentifier(current)) return current;
+    if (
+      ts.isPropertyAccessExpression(current) ||
+      ts.isElementAccessExpression(current) ||
+      ts.isCallExpression(current)
+    ) {
+      current = unwrapExpression(current.expression);
+      continue;
+    }
+    return null;
+  }
+}
+
+/**
+ * The Prisma DELEGATE a receiver addresses and the CLIENT it hangs off.
+ *
+ * `db.thing.updateMany(...)` is the easy case. But `const { thing } = db` and
+ * `const things = db.thing` and a repository field are all ordinary ways to
+ * write the same call, and for each of them the receiver is a bare identifier:
+ * `accessedName` returned null and the whole site was DROPPED before any
+ * fail-closed branch could see it. Resolving the identifier through its binding
+ * recovers the delegate; when it cannot be resolved the caller still reports,
+ * with an unknown client and the union state-field index, rather than
+ * returning.
+ */
+type ReceiverResolution = {
+  readonly delegate: string | null;
+  readonly clientExpression: ts.Expression | null;
+};
+
+function resolveReceiver(
+  source: ts.SourceFile,
+  receiver: ts.Expression,
+  depth = 0,
+): ReceiverResolution {
+  if (depth > 6) return { delegate: null, clientExpression: null };
+  const direct = unwrapExpression(receiver);
+
+  if (ts.isPropertyAccessExpression(direct) || ts.isElementAccessExpression(direct)) {
+    return {
+      delegate: accessedName(direct),
+      clientExpression: direct.expression,
+    };
+  }
+
+  if (ts.isIdentifier(direct)) {
+    const binding = resolveBindingNode(direct);
+    if (!binding) return { delegate: null, clientExpression: null };
+
+    // `const things = db.thing`
+    const initializer = constInitializerOf(binding);
+    if (initializer) return resolveReceiver(source, initializer, depth + 1);
+
+    // `const { thing } = db` / `const { thing: t } = db`
+    if (ts.isBindingElement(binding)) {
+      const property = binding.propertyName ?? binding.name;
+      const delegate = ts.isIdentifier(property) ? property.text : null;
+      const declaration = binding.parent.parent;
+      const clientExpression =
+        ts.isVariableDeclaration(declaration) &&
+        declaration.initializer !== undefined &&
+        (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+          ? declaration.initializer
+          : null;
+      return { delegate, clientExpression };
+    }
+  }
+
+  return { delegate: null, clientExpression: null };
 }
 
 function rootIdentifier(node: ts.Expression): string | null {
@@ -558,10 +658,29 @@ function isParameterBound(node: ts.Node, name: string): boolean {
   return false;
 }
 
+/**
+ * Whether an `isolationLevel` value is PROVABLY Prisma's Serializable.
+ *
+ * The qualifier is checked, not just the final name. Accepting any property
+ * access ending in `Serializable` certified `levels.Serializable` — a local
+ * constant whose value can be anything, including "ReadCommitted" — as a
+ * serialisable transaction. A guard that can be talked into certifying is worse
+ * than one that misses, because the certification is what the reader trusts.
+ */
 function isSerializableIsolationExpression(node: ts.Expression): boolean {
-  if (ts.isStringLiteralLike(node)) return node.text === "Serializable";
-  if (ts.isPropertyAccessExpression(node)) {
-    return node.name.text === "Serializable";
+  const expression = unwrapExpression(node);
+  if (ts.isStringLiteralLike(expression)) return expression.text === "Serializable";
+  if (ts.isPropertyAccessExpression(expression)) {
+    if (expression.name.text !== "Serializable") return false;
+    const qualifier = unwrapExpression(expression.expression);
+    const qualifierName = ts.isPropertyAccessExpression(qualifier)
+      ? qualifier.name.text
+      : ts.isIdentifier(qualifier)
+        ? qualifier.text
+        : null;
+    // `Prisma.TransactionIsolationLevel.Serializable`, or the enum imported
+    // directly. Anything else is an unproven constant.
+    return qualifierName === "TransactionIsolationLevel";
   }
   return false;
 }
@@ -687,52 +806,37 @@ function bindingsOwnedBy(scope: ts.Node, name: string): ts.Node[] {
   return bindings;
 }
 
-function resolveObjectLiteral(
-  _source: ts.SourceFile,
-  node: ts.Expression,
-): ts.ObjectLiteralExpression | null {
-  const direct = unwrapExpression(node);
-  if (ts.isObjectLiteralExpression(direct)) return direct;
-  if (!ts.isIdentifier(direct)) return null;
-  const wanted = direct.text;
-
+/**
+ * The single binding an identifier resolves to, or null when that cannot be
+ * decided. Shared by every question the guard asks about a name — which
+ * literal an argument denotes, which client a receiver runs on, whether a `tx`
+ * inside a `$transaction` callback IS that callback's `tx` — so all of them
+ * stop at the same scope for the same reasons.
+ *
+ * Returning the binding NODE rather than its name is what makes the transaction
+ * client check sound: two different bindings may share a name, and a name
+ * comparison cannot tell them apart.
+ */
+function resolveBindingNode(reference: ts.Identifier): ts.Node | null {
   // Walk OUTWARD from the reference through enclosing scopes and stop at the
-  // nearest one that declares the name. The previous implementation walked the
-  // whole file from its root and took the first declaration it happened to
-  // meet, which is not a scope lookup at all: two functions each declaring
-  // `const mutation` resolved to whichever appeared earlier in the file. That
-  // is worse than a miss — the guard reported PASS on a real compare-and-swap
-  // by reading a DIFFERENT function's literal, and could equally borrow one
-  // function's `Serializable` options to vouch for another's ReadCommitted
-  // transaction.
-  let scope: ts.Node | undefined = direct.parent;
+  // nearest one that declares the name. Walking the whole file from its root
+  // and taking the first declaration met is not a scope lookup at all: two
+  // functions each declaring `const mutation` would resolve to whichever
+  // appeared earlier in the file. That is worse than a miss — the guard would
+  // report PASS on a real compare-and-swap by reading a DIFFERENT function's
+  // literal, and could equally borrow one function's `Serializable` options to
+  // vouch for another's ReadCommitted transaction.
+  let scope: ts.Node | undefined = reference.parent;
   while (scope) {
     if (isScopeBoundary(scope)) {
-      const bindings = bindingsOwnedBy(scope, wanted);
+      const bindings = bindingsOwnedBy(scope, reference.text);
       // The FIRST scope that binds this name is the one that wins. Whatever it
       // binds — parameter, destructured element, import, reassignable
       // `let` — the walk STOPS here. Continuing past a binding is how an outer
       // scope's safe literal gets borrowed to vouch for an inner reference the
       // guard cannot actually see.
       if (bindings.length > 0) {
-        if (bindings.length > 1) return null;
-        const binding = bindings[0]!;
-        // Only a `const` bound directly to an object literal is analysable.
-        // Everything else — a parameter chosen by a caller, a destructured
-        // element, a `let` that can be rebound — makes the value a runtime
-        // question this guard must not answer.
-        if (!ts.isVariableDeclaration(binding)) return null;
-        const list = binding.parent;
-        if (
-          !ts.isVariableDeclarationList(list) ||
-          (list.flags & ts.NodeFlags.Const) === 0 ||
-          !binding.initializer ||
-          !ts.isIdentifier(binding.name)
-        ) {
-          return null;
-        }
-        const initializer = unwrapExpression(binding.initializer);
-        return ts.isObjectLiteralExpression(initializer) ? initializer : null;
+        return bindings.length === 1 ? bindings[0]! : null;
       }
     }
     scope = scope.parent;
@@ -740,6 +844,111 @@ function resolveObjectLiteral(
   return null;
 }
 
+/** The initializer of a `const x = <expr>` binding, or null for any other form. */
+function constInitializerOf(binding: ts.Node): ts.Expression | null {
+  // Only a `const` bound directly to an expression is analysable. Everything
+  // else — a parameter chosen by a caller, a `let` that can be rebound, an
+  // import, a catch binding — makes the value a runtime question this guard
+  // must not answer.
+  if (!ts.isVariableDeclaration(binding)) return null;
+  const list = binding.parent;
+  if (
+    !ts.isVariableDeclarationList(list) ||
+    (list.flags & ts.NodeFlags.Const) === 0 ||
+    !binding.initializer ||
+    !ts.isIdentifier(binding.name)
+  ) {
+    return null;
+  }
+  return binding.initializer;
+}
+
+type ObjectEntry = { readonly name: string; readonly value: ts.Expression };
+
+/**
+ * An object literal's properties in source order, with spreads expanded.
+ *
+ * Returns null — meaning UNKNOWN, never "no properties" — when a spread cannot
+ * be resolved to a literal or a computed key cannot be evaluated. A caller that
+ * treats null as an empty object turns "the guard could not read this" into
+ * "the guard read this and found nothing", which is the failure mode this whole
+ * file exists to prevent.
+ *
+ * Order is preserved and duplicates are kept, so a caller that must match
+ * runtime semantics can take the LAST entry for a name: `{ isolationLevel: A,
+ * ...opts }` and `{ isolationLevel: A, isolationLevel: B }` both end with a
+ * value the first-match reader would have missed.
+ */
+function flattenObjectLiteral(
+  source: ts.SourceFile,
+  literal: ts.ObjectLiteralExpression,
+  depth = 0,
+): ObjectEntry[] | null {
+  if (depth > 8) return null;
+  const entries: ObjectEntry[] = [];
+  for (const property of literal.properties) {
+    if (ts.isShorthandPropertyAssignment(property)) {
+      // `{ where }` — the property value IS this identifier, and it resolves
+      // by the ordinary scope rules like any other reference.
+      entries.push({ name: property.name.text, value: property.name });
+      continue;
+    }
+    if (ts.isPropertyAssignment(property)) {
+      const name = propertyName(property.name);
+      if (name === null) return null;
+      entries.push({ name, value: property.initializer });
+      continue;
+    }
+    if (ts.isSpreadAssignment(property)) {
+      const spread = resolveObjectLiteral(source, property.expression);
+      if (!spread) return null;
+      const nested = flattenObjectLiteral(source, spread, depth + 1);
+      if (!nested) return null;
+      entries.push(...nested);
+      continue;
+    }
+    // A method, getter or setter in a Prisma argument is not a shape this
+    // guard understands; refuse rather than ignore it.
+    return null;
+  }
+  return entries;
+}
+
+/** The LAST value bound to `name`, matching runtime override semantics. */
+function lastEntry(entries: readonly ObjectEntry[], name: string): ts.Expression | null {
+  let found: ts.Expression | null = null;
+  for (const entry of entries) {
+    if (entry.name === name) found = entry.value;
+  }
+  return found;
+}
+
+function resolveObjectLiteral(
+  _source: ts.SourceFile,
+  node: ts.Expression,
+): ts.ObjectLiteralExpression | null {
+  const direct = unwrapExpression(node);
+  if (ts.isObjectLiteralExpression(direct)) return direct;
+  if (!ts.isIdentifier(direct)) return null;
+  const binding = resolveBindingNode(direct);
+  if (!binding) return null;
+  const initializer = constInitializerOf(binding);
+  if (!initializer) return null;
+  const unwrapped = unwrapExpression(initializer);
+  return ts.isObjectLiteralExpression(unwrapped) ? unwrapped : null;
+}
+
+/**
+ * Whether the `$transaction` options PROVE a serialisable isolation level.
+ *
+ * Two ways this used to certify code it had not read. It returned at the FIRST
+ * `isolationLevel` property, so `{ isolationLevel: Serializable, ...overrides }`
+ * and a literal duplicate key both certified a value the runtime would replace
+ * with the later one. And an options object it could not flatten was treated as
+ * "no isolationLevel found" rather than "unknown". Both are resolved by reading
+ * the flattened entries and taking the LAST — the value the runtime takes —
+ * with an unflattenable object returning false (unproven).
+ */
 function transactionIsSerializable(
   source: ts.SourceFile,
   call: ts.CallExpression,
@@ -748,18 +957,29 @@ function transactionIsSerializable(
   if (!options) return false;
   const literal = resolveObjectLiteral(source, options);
   if (!literal) return false;
-  for (const property of literal.properties) {
-    if (!ts.isPropertyAssignment(property)) continue;
-    if (propertyName(property.name) !== "isolationLevel") continue;
-    return isSerializableIsolationExpression(property.initializer);
-  }
-  return false;
+  const entries = flattenObjectLiteral(source, literal);
+  if (!entries) return false;
+  const isolation = lastEntry(entries, "isolationLevel");
+  if (!isolation) return false;
+  return isSerializableIsolationExpression(isolation);
 }
 
 type TransactionContext = {
   readonly call: ts.CallExpression;
-  /** The callback's client parameter name (`tx`), or null when unnamed. */
-  readonly clientParameter: string | null;
+  /**
+   * The callback's client PARAMETER NODE (`tx`), or null when the callback has
+   * no client parameter. A node, not a name: `tx` inside the callback may be a
+   * completely different binding that merely shares the name (an inner arrow's
+   * own parameter, a `for (const tx of shards)`, a `catch (tx)`), and a name
+   * comparison certifies all of them.
+   */
+  readonly clientParameter: ts.ParameterDeclaration | null;
+  /**
+   * The array form `$transaction([...])` runs its operations in one
+   * transaction on one connection, so there is no separate client to identify
+   * and the only open question is the isolation level.
+   */
+  readonly arrayForm: boolean;
   readonly serializable: boolean;
 };
 
@@ -786,16 +1006,17 @@ function enclosingTransaction(
         (child === callback || child.pos >= callback.pos) &&
         child.end <= (callback?.end ?? -1);
       if (inCallback && callback) {
-        let clientParameter: string | null = null;
+        let clientParameter: ts.ParameterDeclaration | null = null;
         if (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) {
           const parameter = callback.parameters[0];
           if (parameter && ts.isIdentifier(parameter.name)) {
-            clientParameter = parameter.name.text;
+            clientParameter = parameter;
           }
         }
         return {
           call: current,
           clientParameter,
+          arrayForm: ts.isArrayLiteralExpression(unwrapExpression(callback)),
           serializable: transactionIsSerializable(source, current),
         };
       }
@@ -806,64 +1027,197 @@ function enclosingTransaction(
   return null;
 }
 
-function resultBinding(call: ts.CallExpression): string | null {
-  let current: ts.Node | undefined = call.parent;
-  if (current && ts.isAwaitExpression(current)) current = current.parent;
-  if (!current) return null;
-  if (ts.isVariableDeclaration(current)) {
-    if (ts.isIdentifier(current.name)) return current.name.text;
-    if (ts.isObjectBindingPattern(current.name)) {
-      for (const element of current.name.elements) {
-        const property = element.propertyName ?? element.name;
-        const propertyText = ts.isIdentifier(property) ? property.text : null;
-        if (propertyText === "count" && ts.isIdentifier(element.name)) {
-          return element.name.text;
-        }
+/**
+ * How the caller consumes the write's result.
+ *
+ *   "named"  — bound to a name (`const claimed = await ...`, `{ count }`,
+ *              `claimed = await ...`, an array-destructured `$transaction`
+ *              element); the count read is then searched for by that name.
+ *   "inline" — `.count` is taken directly off the call, so the read IS the
+ *              consumption and no name exists.
+ *   null     — the result is discarded, or handed to a caller. See the header
+ *              for why a decision made in another function is out of scope.
+ *
+ * Every wrapper that does not change the value is unwrapped first. The old
+ * version looked at exactly one parent (after an `await`) and required a
+ * VariableDeclaration, so one extra pair of parentheses, an assignment to an
+ * already-declared variable, or the extremely common
+ * `x = (await client.thing.updateMany({...})).count` all made the site
+ * invisible. THIRTEEN live sites in this repository are already written in
+ * that last form; they escape today only because their `where` addresses rows
+ * by key, so adding one state column to any of them would have been silent.
+ */
+type ResultConsumption =
+  | { readonly kind: "named"; readonly name: string; readonly destructured: boolean }
+  | { readonly kind: "inline" };
+
+function unwrapValuePreservingParents(node: ts.Node): ts.Node | undefined {
+  let current: ts.Node | undefined = node.parent;
+  while (
+    current &&
+    (ts.isAwaitExpression(current) ||
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isSatisfiesExpression(current) ||
+      ts.isNonNullExpression(current) ||
+      ts.isTypeAssertionExpression(current))
+  ) {
+    current = current.parent;
+  }
+  return current;
+}
+
+function bindingFromName(name: ts.BindingName): ResultConsumption | null {
+  if (ts.isIdentifier(name)) {
+    return { kind: "named", name: name.text, destructured: false };
+  }
+  if (ts.isObjectBindingPattern(name)) {
+    for (const element of name.elements) {
+      const property = element.propertyName ?? element.name;
+      const propertyText = ts.isIdentifier(property) ? property.text : null;
+      if (propertyText === "count" && ts.isIdentifier(element.name)) {
+        return { kind: "named", name: element.name.text, destructured: true };
       }
     }
-    return null;
   }
   return null;
 }
 
+function resultConsumption(call: ts.CallExpression): ResultConsumption | null {
+  const current = unwrapValuePreservingParents(call);
+  if (!current) return null;
+
+  // `(await ...).count` / `(await ...)["count"]` — the read is right here.
+  if (
+    (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) &&
+    accessedName(current) === "count"
+  ) {
+    return { kind: "inline" };
+  }
+
+  if (ts.isVariableDeclaration(current)) {
+    return bindingFromName(current.name);
+  }
+
+  // `claimed = await ...` into an already-declared variable.
+  if (
+    ts.isBinaryExpression(current) &&
+    current.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    ts.isIdentifier(current.left)
+  ) {
+    return { kind: "named", name: current.left.text, destructured: false };
+  }
+
+  // Array-form `db.$transaction([ ..., db.thing.updateMany({...}), ... ])`:
+  // the result this call produces is the element at the same index of the
+  // array the caller destructures.
+  if (ts.isArrayLiteralExpression(current)) {
+    const index = current.elements.indexOf(call as ts.Expression);
+    const owner = unwrapValuePreservingParents(current);
+    if (
+      index >= 0 &&
+      owner &&
+      ts.isCallExpression(owner) &&
+      accessedName(owner.expression) === "$transaction"
+    ) {
+      const bound = unwrapValuePreservingParents(owner);
+      if (
+        bound &&
+        ts.isVariableDeclaration(bound) &&
+        ts.isArrayBindingPattern(bound.name)
+      ) {
+        const element = bound.name.elements[index];
+        if (element && ts.isBindingElement(element)) {
+          return bindingFromName(element.name);
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Whether the result's `count` is READ anywhere in the enclosing lexical scope.
+ *
+ * The rule is deliberately "any read", not "a comparison against a numeric
+ * literal". The narrow rule missed `if (claimed.count)`, the standard batch
+ * form `claimed.count !== ids.length`, comparison against a named constant,
+ * `switch (claimed.count)`, `claimed["count"]`, `(claimed.count) !== 1`, and
+ * `const { count } = claimed` — while `if (!claimed.count)`, the same decision
+ * written the other way round, was caught. A guard whose coverage depends on
+ * which side of an operator a developer put a literal is not a guard.
+ *
+ * This file's own doctrine settles the trade: over-reporting lands in the
+ * baseline for a human to judge, under-reporting silently ships an unsound
+ * compare-and-swap. One alias hop is followed (`const outcome = claimed`),
+ * because renaming a local is not a semantic change.
+ */
 function readsCountAsDecision(
   scope: ts.Node,
   variable: string,
   destructured: boolean,
 ): boolean {
-  let found = false;
-  const matchesCount = (node: ts.Expression): boolean => {
-    if (destructured) {
-      return ts.isIdentifier(node) && node.text === variable;
+  // Names that denote the same result value: the binding plus one hop of
+  // `const alias = <name>`.
+  const names = new Set<string>([variable]);
+  const collectAliases = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer !== undefined
+    ) {
+      const initializer = unwrapExpression(node.initializer);
+      if (ts.isIdentifier(initializer) && names.has(initializer.text)) {
+        names.add(node.name.text);
+      }
     }
-    return (
-      ts.isPropertyAccessExpression(node) &&
-      node.name.text === "count" &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === variable
-    );
+    ts.forEachChild(node, collectAliases);
   };
+  collectAliases(scope);
+
+  let found = false;
+  const isTrackedName = (node: ts.Expression): boolean =>
+    ts.isIdentifier(unwrapExpression(node)) &&
+    names.has((unwrapExpression(node) as ts.Identifier).text);
+
   const visit = (node: ts.Node): void => {
     if (found) return;
-    if (ts.isBinaryExpression(node) && COMPARISON_OPERATORS.has(node.operatorToken.kind)) {
-      const left = node.left;
-      const right = node.right;
+    if (destructured) {
+      // `const { count } = await ...` — every reference to the bound name IS a
+      // read of the count. The declaration's own name node is not a reference.
       if (
-        (matchesCount(left) && ts.isNumericLiteral(right)) ||
-        (matchesCount(right) && ts.isNumericLiteral(left))
+        ts.isIdentifier(node) &&
+        node.text === variable &&
+        !(ts.isBindingElement(node.parent) && node.parent.name === node) &&
+        !(ts.isVariableDeclaration(node.parent) && node.parent.name === node)
       ) {
         found = true;
         return;
       }
-    }
-    if (
-      ts.isPrefixUnaryExpression(node) &&
-      node.operator === ts.SyntaxKind.ExclamationToken &&
-      matchesCount(node.operand)
-    ) {
-      // `if (!claimed.count)` is a comparison against zero.
-      found = true;
-      return;
+    } else {
+      if (
+        (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
+        accessedName(node) === "count" &&
+        isTrackedName(node.expression)
+      ) {
+        found = true;
+        return;
+      }
+      // `const { count } = claimed` is a read of the count too.
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isObjectBindingPattern(node.name) &&
+        node.initializer !== undefined &&
+        isTrackedName(node.initializer) &&
+        node.name.elements.some((element) => {
+          const property = element.propertyName ?? element.name;
+          return ts.isIdentifier(property) && property.text === "count";
+        })
+      ) {
+        found = true;
+        return;
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -975,18 +1329,8 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
   }
 }
 
-/** Whether the call result is bound through an object binding pattern. */
-function isDestructuredResult(node: ts.CallExpression): boolean {
-  let current: ts.Node | undefined = node.parent;
-  if (current !== undefined && ts.isAwaitExpression(current)) {
-    current = current.parent;
-  }
-  return (
-    current !== undefined &&
-    ts.isVariableDeclaration(current) &&
-    ts.isObjectBindingPattern(current.name)
-  );
-}
+/** Written into a fingerprint wherever the guard could not read the code. */
+const UNRESOLVED = "<unresolved>";
 
 function findConditionalUpdateCasSites(
   relativeFile: string,
@@ -1002,6 +1346,14 @@ function findConditionalUpdateCasSites(
   );
   const raw: Omit<ConditionalUpdateCasFinding, "occurrence" | "key">[] = [];
 
+  // FAIL-CLOSED IS A PATTERN HERE, NOT A BRANCH.
+  //
+  // Every input to the verdict — the argument, the `where`, the receiver, how
+  // the count is read, which client the write runs on, the isolation level —
+  // can be unreadable. Before this rewrite only the TOP-LEVEL ARGUMENT routed
+  // an unknown to a finding; every other input returned early, so "the guard
+  // checked this and it is safe" and "the guard never looked" produced the
+  // same CI output. `report()` below is the single exit for all of them.
   const visit = (node: ts.Node): void => {
     ts.forEachChild(node, visit);
     if (!ts.isCallExpression(node)) return;
@@ -1009,141 +1361,136 @@ function findConditionalUpdateCasSites(
     if (accessedName(callee) !== "updateMany") return;
     const receiver = accessTarget(callee);
     if (receiver === null) return;
-    const delegate = accessedName(receiver);
-    if (delegate === null) return;
-    const clientExpression = accessTarget(receiver);
-    if (clientExpression === null) return;
 
-    const modelOf = (): string | null =>
-      index.byDelegate.has(delegate)
+    const resolvedReceiver = resolveReceiver(source, receiver);
+    const delegate = resolvedReceiver.delegate;
+    const clientExpression = resolvedReceiver.clientExpression;
+    const delegateText = delegate ?? UNRESOLVED;
+    const model =
+      delegate !== null && index.byDelegate.has(delegate)
         ? delegate.charAt(0).toUpperCase() + delegate.slice(1)
         : null;
-    const lineOf = (): number =>
+    // An unknown delegate cannot be narrowed to one model's columns, so the
+    // union of every model's state fields is used — fail loud, not fail open.
+    const stateFields =
+      delegate !== null
+        ? (index.byDelegate.get(delegate) ?? index.union)
+        : index.union;
+    const clientText =
+      clientExpression === null ? UNRESOLVED : normaliseText(clientExpression);
+    const line =
       source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
 
+    // The count must be consumed as a decision for this to be a
+    // compare-and-swap at all; a discarded count is a no-op, not a wrong
+    // answer. This is the ONE early return that is not a fail-open, and it is
+    // the guard's documented lexical boundary.
+    const consumption = resultConsumption(node);
+    if (consumption === null) return;
+    const resultVariable =
+      consumption.kind === "inline" ? "<inline-count>" : consumption.name;
+    if (
+      consumption.kind === "named" &&
+      !readsCountAsDecision(
+        enclosingScope(node),
+        consumption.name,
+        consumption.destructured,
+      )
+    ) {
+      return;
+    }
+
+    const report = (
+      reason: ConditionalUpdateCasReason,
+      statePredicates: readonly string[],
+    ): void => {
+      const predicates = [...statePredicates];
+      raw.push({
+        file: relativeFile,
+        line,
+        client: clientText,
+        delegate: delegateText,
+        model,
+        statePredicates: predicates,
+        resultVariable,
+        fingerprint: fingerprintOf([
+          relativeFile,
+          clientText,
+          delegateText,
+          model ?? UNRESOLVED,
+          reason === "unanalyzable-argument"
+            ? "<unanalyzable>"
+            : predicates.join(","),
+          resultVariable,
+        ]),
+        reason,
+        detail: describe(reason, resultVariable, predicates),
+      });
+    };
+
+    // ---- the argument, and the `where` inside it ----------------------------
     const argument = node.arguments[0];
     const literal =
       argument === undefined ? null : resolveObjectLiteral(source, argument);
     if (literal === null) {
-      // FAIL-CLOSED. The argument could not be resolved to an object literal,
-      // so whether its `where` carries a pre-state is UNKNOWN. Skipping an
-      // unknown makes it indistinguishable from a site that was checked and
-      // found safe, which is precisely how this guard reported PASS on real
-      // compare-and-swap sites. Only calls whose `count` is read as a decision
-      // are reported: that is the shape where a lost update becomes a wrong
-      // answer rather than a no-op.
-      const unresolvedVariable = resultBinding(node);
-      if (!unresolvedVariable) return;
-      if (
-        !readsCountAsDecision(
-          enclosingScope(node),
-          unresolvedVariable,
-          isDestructuredResult(node),
-        )
-      ) {
-        return;
-      }
-      const unresolvedClient = normaliseText(clientExpression);
-      raw.push({
-        file: relativeFile,
-        line: lineOf(),
-        client: unresolvedClient,
-        delegate,
-        model: modelOf(),
-        statePredicates: [],
-        resultVariable: unresolvedVariable,
-        fingerprint: fingerprintOf([
-          relativeFile,
-          unresolvedClient,
-          delegate,
-          modelOf() ?? "<unresolved>",
-          "<unanalyzable>",
-          unresolvedVariable,
-        ]),
-        reason: "unanalyzable-argument",
-        detail: describe("unanalyzable-argument", unresolvedVariable, []),
-      });
+      report("unanalyzable-argument", []);
       return;
     }
-    let whereLiteral: ts.Expression | null = null;
-    for (const property of literal.properties) {
-      if (!ts.isPropertyAssignment(property)) continue;
-      if (propertyName(property.name) !== "where") continue;
-      whereLiteral = property.initializer;
+    const entries = flattenObjectLiteral(source, literal);
+    if (entries === null) {
+      report("unanalyzable-argument", []);
+      return;
     }
-    if (!whereLiteral) return;
+    const whereValue = lastEntry(entries, "where");
+    // No `where` at all asserts no pre-state: a blanket update cannot be a
+    // compare-and-swap, so this is a real absence rather than an unknown.
+    if (whereValue === null) return;
 
     const whereFields = new Set<string>();
-    collectWhereFields(whereLiteral, whereFields);
-    if (whereFields.size === 0) return;
-
-    const model =
-      index.byDelegate.has(delegate)
-        ? delegate.charAt(0).toUpperCase() + delegate.slice(1)
-        : null;
-    const stateFields = index.byDelegate.get(delegate) ?? index.union;
+    if (!collectWhereFields(source, whereValue, whereFields)) {
+      report("unanalyzable-argument", []);
+      return;
+    }
     const statePredicates = [...whereFields]
       .filter((field) => stateFields.has(field))
       .sort();
     if (statePredicates.length === 0) return;
 
-    const variable = resultBinding(node);
-    if (!variable) return;
-    const destructured =
-      node.parent !== undefined &&
-      (() => {
-        let current: ts.Node | undefined = node.parent;
-        if (current && ts.isAwaitExpression(current)) current = current.parent;
-        return (
-          current !== undefined &&
-          ts.isVariableDeclaration(current) &&
-          ts.isObjectBindingPattern(current.name)
-        );
-      })();
-
-    const scope = enclosingScope(node);
-    if (!readsCountAsDecision(scope, variable, destructured)) return;
-
+    // ---- which client, and is it held by a serialisable transaction? -------
     const transaction = enclosingTransaction(source, node);
-    const clientRoot = rootIdentifier(clientExpression);
     let reason: ConditionalUpdateCasReason | null = null;
     if (!transaction) {
+      const clientRoot =
+        clientExpression === null ? null : rootIdentifier(clientExpression);
       reason =
         clientRoot !== null && isParameterBound(node, clientRoot)
           ? "client-from-parameter"
           : "no-transaction";
-    } else if (
-      transaction.clientParameter === null ||
-      clientRoot !== transaction.clientParameter
-    ) {
+    } else if (transaction.arrayForm) {
+      // The array form runs every operation in one transaction on one
+      // connection, so client identity is settled by construction and only the
+      // isolation level is in question.
+      reason = transaction.serializable ? null : "isolation-not-serializable";
+    } else if (transaction.clientParameter === null) {
       reason = "ambient-client-inside-transaction";
-    } else if (!transaction.serializable) {
-      reason = "isolation-not-serializable";
+    } else {
+      // NODE IDENTITY, not name equality. `tx` inside the callback may be an
+      // inner arrow's own parameter, a `for (const tx of shards)`, a
+      // `catch (tx)` or a plain inner `const tx = db` — all of which satisfied
+      // a name comparison while the write went somewhere else entirely, and
+      // all of which the guard then CERTIFIED as serialisable. An unresolvable
+      // client is not the callback's client either.
+      const clientRootNode =
+        clientExpression === null ? null : rootIdentifierNode(clientExpression);
+      const bound = clientRootNode === null ? null : resolveBindingNode(clientRootNode);
+      if (bound === null || bound !== transaction.clientParameter) {
+        reason = "ambient-client-inside-transaction";
+      } else if (!transaction.serializable) {
+        reason = "isolation-not-serializable";
+      }
     }
     if (reason === null) return;
-
-    const client = normaliseText(clientExpression);
-    const line =
-      source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
-    raw.push({
-      file: relativeFile,
-      line,
-      client,
-      delegate,
-      model,
-      statePredicates,
-      resultVariable: variable,
-      fingerprint: fingerprintOf([
-        relativeFile,
-        client,
-        delegate,
-        model ?? "<unresolved>",
-        statePredicates.join(","),
-        variable,
-      ]),
-      reason,
-      detail: describe(reason, variable, statePredicates),
-    });
+    report(reason, statePredicates);
   };
   visit(source);
 
