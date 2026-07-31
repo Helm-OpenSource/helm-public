@@ -8,7 +8,10 @@
 
 import { z } from "zod";
 
+import { Prisma } from "@prisma/client";
+
 import { db } from "@/lib/db";
+import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import {
   CANDIDATE_TTL_MS,
@@ -675,6 +678,18 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
       // and both wrote — measured on mysql:8.4. Keeping state="candidate" in
       // the UPDATE's own WHERE makes InnoDB re-check it under the row lock,
       // so exactly one caller can observe an affected row.
+      //
+      // THE DEADLINE IS IN THE WHERE TOO, and read from the DATABASE's clock.
+      // The `input.now` check above is a fast path that produces the accurate
+      // "expired" reason for the common case; it cannot speak for the moment
+      // the write lands. Everything between the two — read→write latency, a
+      // GC pause, a retry, an app host whose clock runs slow — is a window in
+      // which a candidate passes the check and is adopted after its deadline.
+      // Measured on MySQL 8.4.8 AT CONCURRENCY 1: 32 successes, 7 of them past
+      // deadline; the window closed exactly when the margin exceeded
+      // read→write latency, which is the signature of a check-then-act bug and
+      // not of an interleaving race. Two clocks also cannot be assumed to
+      // agree across app hosts, and only one of them is holding the row.
       const updated = {
         count: Number(
           await db.$executeRaw`
@@ -691,6 +706,7 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
                AND \`workspaceId\` = ${input.workspaceId}
                AND \`state\` = 'candidate'
                AND \`adoptedByRef\` IS NULL
+               AND \`candidateExpiresAt\` > UTC_TIMESTAMP(3)
           `,
         ),
       };
@@ -716,6 +732,14 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
       assertLegalMemoryTransition(parseStoredCandidate(row).state, "rejected");
       // Atomic conditional write; see adoptCandidate for why Prisma's
       // updateMany cannot carry the pre-state predicate into the write.
+      //
+      // NO TTL PREDICATE HERE, deliberately — this is not an oversight and not
+      // a copy of the adopt statement. Rejection is terminal and destroys the
+      // body, which is the same direction the sweep would take the row anyway;
+      // refusing a late rejection would turn a harmless no-op into a conflict
+      // error and could leave a body alive that its creator asked to delete.
+      // The rule is "a late write must not GRANT anything", and rejecting
+      // grants nothing.
       const updated = {
         count: Number(
           await db.$executeRaw`
@@ -748,31 +772,46 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
       // the read and the write would be expired anyway — silently discarding
       // an adoption and deleting its body. Keeping the state and deadline in
       // each UPDATE's own WHERE makes the sweep skip rows that moved on.
-      const expiredCandidates = Number(
-        await db.$executeRaw`
-          UPDATE \`CaioMemoryCandidate\`
-             SET \`state\` = 'expired',
-                 \`body\` = NULL,
-                 \`expiredAt\` = ${input.now},
-                 \`updatedAt\` = ${input.now}
-           WHERE \`workspaceId\` = ${input.workspaceId}
-             AND \`state\` = 'candidate'
-             AND \`candidateExpiresAt\` <= ${input.now}
-        `,
-      );
-      const expiredEphemerals = Number(
-        await db.$executeRaw`
-          UPDATE \`CaioMemoryCandidate\`
-             SET \`state\` = 'expired',
-                 \`body\` = NULL,
-                 \`expiredAt\` = ${input.now},
-                 \`updatedAt\` = ${input.now}
-           WHERE \`workspaceId\` = ${input.workspaceId}
-             AND \`state\` = 'ephemeral'
-             AND \`ephemeralExpiresAt\` <= ${input.now}
-        `,
-      );
-      return expiredCandidates + expiredEphemerals;
+      //
+      // ONE TRANSACTION, AND A BOUNDED RETRY. Two decisions, both forced by
+      // measurement rather than taste:
+      //
+      //   (a) The two sweeps are ONE transaction. As separate autocommit
+      //       writes, a failure on the second left the first COMMITTED and
+      //       returned no count at all, so the caller could neither trust the
+      //       number nor assume nothing had happened. A sweep that reports
+      //       "it failed" while having half-run is worse than either outcome.
+      //
+      //   (b) The whole thing runs under the shared write-conflict retry.
+      //       A point update by primary key (verifyEphemeral) racing these
+      //       workspace-wide index scans DEADLOCKS: measured at 9 deadlocks in
+      //       60 rounds at 32-way concurrency on a hot single-row workspace,
+      //       and zero once the workspace held 40 filler rows. Unlike the
+      //       token store, this store used bare `$executeRaw` with no retry
+      //       helper, so MySQL 1213 surfaced as a raw Prisma engine error and
+      //       took down a caller as an unhandled rejection.
+      //
+      // Retrying is safe precisely because each statement carries its own
+      // state and deadline predicate: a re-run skips whatever the previous
+      // attempt already moved. Worth recording what was NOT wrong — no state
+      // invariant was violated in any measured deadlock round; no live row
+      // lost its body and none was both adopted and rejected. This is an
+      // availability and error-contract defect, not corruption.
+      try {
+        return await runWithWriteConflictRetry(() =>
+          db.$transaction(async (tx) => sweepExpired(tx, input)),
+        );
+      } catch (error) {
+        if (error instanceof CaioMemoryError) throw error;
+        // The store's callers are promised CaioMemoryError. A database engine
+        // error reaching them is itself the defect: it cannot be classified,
+        // cannot be mapped to a status, and here it arrived as an unhandled
+        // rejection.
+        throw new CaioMemoryError(
+          "conflict",
+          "The memory expiry sweep could not complete because the rows were being written concurrently.",
+        );
+      }
     },
 
     async verifyEphemeral(input) {
@@ -794,7 +833,23 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
         );
       }
       assertLegalMemoryTransition(parseStoredCandidate(row).state, "verified");
-      // Atomic conditional write; see adoptCandidate.
+      // Atomic conditional write; see adoptCandidate — including why the
+      // ephemeral deadline is re-checked from the DATABASE's clock inside the
+      // WHERE rather than trusted from the read above.
+      //
+      // THIS IS THE STATEMENT WHERE A LATE WRITE IS WORST. `verified` carries
+      // NO FURTHER TTL, so an entry that slips through here does not merely
+      // expire late — it never expires. One measured run ended 10 of 60 rounds
+      // with `state = verified` on a row already past its ephemeral deadline.
+      // For a product whose proposition is bounded retention that is a
+      // data-governance failure, not a timing nit.
+      //
+      // `ephemeralExpiresAt IS NOT NULL` is stated explicitly: `NULL >
+      // UTC_TIMESTAMP(3)` evaluates to NULL, which is not TRUE and so would
+      // already exclude the row, but relying on three-valued logic to enforce
+      // a retention rule is the kind of implicit reasoning this file keeps
+      // getting caught by. The read-time check treats a missing deadline as
+      // expired; the write says so in its own words.
       const updated = {
         count: Number(
           await db.$executeRaw`
@@ -806,6 +861,8 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
              WHERE \`id\` = ${input.candidateId}
                AND \`workspaceId\` = ${input.workspaceId}
                AND \`state\` = 'ephemeral'
+               AND \`ephemeralExpiresAt\` IS NOT NULL
+               AND \`ephemeralExpiresAt\` > UTC_TIMESTAMP(3)
           `,
         ),
       };
@@ -820,4 +877,41 @@ export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
       );
     },
   });
+}
+
+/**
+ * The two expiry statements, as one unit of work. Kept out of the store object
+ * so both can run on the transaction client rather than the ambient one — an
+ * ambient-client write inside a transaction callback opens its own connection
+ * and is not in the transaction at all.
+ */
+async function sweepExpired(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; now: Date },
+): Promise<number> {
+  const expiredCandidates = Number(
+    await tx.$executeRaw`
+          UPDATE \`CaioMemoryCandidate\`
+             SET \`state\` = 'expired',
+                 \`body\` = NULL,
+                 \`expiredAt\` = ${input.now},
+                 \`updatedAt\` = ${input.now}
+           WHERE \`workspaceId\` = ${input.workspaceId}
+             AND \`state\` = 'candidate'
+             AND \`candidateExpiresAt\` <= ${input.now}
+    `,
+  );
+  const expiredEphemerals = Number(
+    await tx.$executeRaw`
+          UPDATE \`CaioMemoryCandidate\`
+             SET \`state\` = 'expired',
+                 \`body\` = NULL,
+                 \`expiredAt\` = ${input.now},
+                 \`updatedAt\` = ${input.now}
+           WHERE \`workspaceId\` = ${input.workspaceId}
+             AND \`state\` = 'ephemeral'
+             AND \`ephemeralExpiresAt\` <= ${input.now}
+    `,
+  );
+  return expiredCandidates + expiredEphemerals;
 }
