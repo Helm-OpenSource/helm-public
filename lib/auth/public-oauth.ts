@@ -17,6 +17,10 @@ import {
   resolveDeploymentPostLoginPath,
 } from "@/lib/auth/deployment-entry";
 import { normalizePhoneNumber } from "@/lib/auth/formal-auth";
+import {
+  parseSignedCookiePayload,
+  serializeSignedCookiePayload,
+} from "@/lib/auth/signed-cookie-payload";
 import { recordUserLastLogin } from "@/lib/auth/login-activity";
 import { db } from "@/lib/db";
 import { type UiLocale, resolveUiLocale, UI_LOCALE_COOKIE } from "@/lib/i18n/config";
@@ -26,6 +30,8 @@ export const WECOM_PUBLIC_AUTH_STATE_COOKIE = "helm-wecom-public-auth-state";
 export const FEISHU_PUBLIC_AUTH_STATE_COOKIE = "helm-feishu-public-auth-state";
 export const PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE = "helm-public-oauth-signup-prefill";
 const PUBLIC_OAUTH_SIGNUP_PREFILL_TTL_SECONDS = 60 * 5;
+/** Domain-separation label: a signature minted here is valid nowhere else. */
+const PUBLIC_OAUTH_SIGNUP_PREFILL_PURPOSE = "public-oauth-signup-prefill";
 const PUBLIC_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const PUBLIC_OAUTH_STATE_DIR = path.join(tmpdir(), "helm-public-oauth-states");
 const PUBLIC_OAUTH_STATE_KEY_PATTERN = /^[a-zA-Z0-9-]+$/;
@@ -355,13 +361,22 @@ export function writePublicOauthSignupPrefillCookie(
     expiresAt: new Date(now.getTime() + PUBLIC_OAUTH_SIGNUP_PREFILL_TTL_SECONDS * 1000).toISOString(),
   } satisfies PublicOauthSignupPrefillPayload;
 
-  cookieStore.set(PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE, JSON.stringify(payload), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/login",
-    maxAge: PUBLIC_OAUTH_SIGNUP_PREFILL_TTL_SECONDS,
-  });
+  // SIGNED, not merely serialised. Everything this cookie carries — the
+  // identity that decides whether signup verification codes may be skipped,
+  // and the workspace the new account is offered — is read back as an
+  // authorization input by a public, unauthenticated server action. Unsigned,
+  // it was just a request field the caller filled in themselves.
+  cookieStore.set(
+    PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE,
+    serializeSignedCookiePayload(PUBLIC_OAUTH_SIGNUP_PREFILL_PURPOSE, payload),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/login",
+      maxAge: PUBLIC_OAUTH_SIGNUP_PREFILL_TTL_SECONDS,
+    },
+  );
 }
 
 export function readPublicOauthSignupPrefillCookie(
@@ -373,7 +388,17 @@ export function readPublicOauthSignupPrefillCookie(
   }
 
   try {
-    const parsed = JSON.parse(rawValue) as PublicOauthSignupPrefillPayload;
+    // THE SIGNATURE IS CHECKED BEFORE ANY FIELD IS READ. Everything below —
+    // provider, expiry, identity, invited workspace — used to be validated
+    // against values from the very payload being validated, which proves
+    // nothing at all: the caller supplied both the claim and its evidence.
+    const parsed = parseSignedCookiePayload<PublicOauthSignupPrefillPayload>(
+      PUBLIC_OAUTH_SIGNUP_PREFILL_PURPOSE,
+      rawValue,
+    );
+    if (!parsed) {
+      return null;
+    }
 
     if (
       parsed.provider !== "dingtalk" &&

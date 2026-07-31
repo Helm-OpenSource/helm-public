@@ -1203,8 +1203,23 @@ export async function completeTrialSignupVerificationAction(
     },
   });
 
+  // A COOKIE IS NOT AN INVITE, even a signed one. The workspace id in the
+  // prefill originates in the OAuth start URL's query parameters, so whoever
+  // began the flow chose it; signing proves only that WE serialised it, never
+  // that the person completing signup was invited to that workspace. Joining
+  // is therefore gated on a real Membership row for this identity —
+  // `hasAllowedInviteMembership`, the check this file already contained and
+  // which this path did not call. Previously a workspace id named in an
+  // unauthenticated cookie was upserted straight to ACTIVE MEMBER, and the
+  // only obstacle was knowing a valid workspace id.
   const invitedWorkspaceId =
-    canSkipVerificationCodes && invitePrefill?.invitedWorkspaceId
+    canSkipVerificationCodes &&
+    invitePrefill?.invitedWorkspaceId &&
+    (await hasAllowedInviteMembership({
+      cookieStore,
+      email: enrollment.email,
+      phone: enrollment.phone,
+    }))
       ? invitePrefill.invitedWorkspaceId
       : null;
   let workspaceIdForSession: string;

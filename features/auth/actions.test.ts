@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthCodeChannel, AuthCodePurpose, MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { hashVerificationCode } from "@/lib/auth/formal-auth";
+import { writePublicOauthSignupPrefillCookie } from "@/lib/auth/public-oauth";
 
 const mocks = vi.hoisted(() => {
   const cookieStore = {
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => {
     findUnique: vi.fn(),
   };
   const membership = {
+    findFirst: vi.fn(),
     findUnique: vi.fn(),
     upsert: vi.fn(),
   };
@@ -248,6 +250,30 @@ function createSignupInput() {
     confirmPassword: "Password123",
     locale: "en-US" as const,
   };
+}
+
+/**
+ * Issue a prefill cookie the way the OAuth callback does — through the real
+ * writer, so the tests below exercise a genuinely signed value. Hand-rolling
+ * the JSON here would be forging it, which is what the attack tests do on
+ * purpose and what the legitimate-flow tests must NOT do: a fixture that can
+ * mint its own credentials cannot tell a working signature from an absent one.
+ */
+function issuePrefillCookie(input: {
+  email?: string | null;
+  phone?: string | null;
+  name?: string | null;
+  organizationName?: string | null;
+  invitedWorkspaceId?: string | null;
+  title?: string | null;
+}): string {
+  let issued = "";
+  writePublicOauthSignupPrefillCookie(
+    { set: (_name: string, value: string) => { issued = value; } },
+    { provider: "dingtalk", ...input },
+    now,
+  );
+  return issued;
 }
 
 function installAuthCodeStore(records: AuthCodeRecord[]) {
@@ -955,13 +981,11 @@ describe("auth verification code attempt cap", () => {
 
   it("skips signup auth codes when dingtalk oauth prefill matches enrollment identity", async () => {
     installAuthCodeStore([]);
-    const prefillCookie = JSON.stringify({
-      provider: "dingtalk",
+    const prefillCookie = issuePrefillCookie({
       name: "Owner",
       email: "owner@example.com",
       phone: "+8613800000000",
       organizationName: "Acme",
-      expiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
@@ -987,13 +1011,11 @@ describe("auth verification code attempt cap", () => {
 
   it("completes signup without auth codes when dingtalk oauth prefill matches enrollment identity", async () => {
     installAuthCodeStore([]);
-    const prefillCookie = JSON.stringify({
-      provider: "dingtalk",
+    const prefillCookie = issuePrefillCookie({
       name: "Owner",
       email: "owner@example.com",
       phone: "+8613800000000",
       organizationName: "Acme",
-      expiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
@@ -1048,14 +1070,12 @@ describe("auth verification code attempt cap", () => {
 
   it("joins invited workspace instead of creating a new trial workspace when prefill carries workspace id", async () => {
     installAuthCodeStore([]);
-    const prefillCookie = JSON.stringify({
-      provider: "dingtalk",
+    const prefillCookie = issuePrefillCookie({
       name: "Owner",
       email: "owner@example.com",
       phone: "+8613800000000",
       organizationName: "Acme",
       invitedWorkspaceId: "workspace-invite-1",
-      expiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
@@ -1082,6 +1102,13 @@ describe("auth verification code attempt cap", () => {
       name: "Owner",
       phone: "+8613800000000",
       title: null,
+    });
+    // The genuine invite this flow requires: a Membership row already exists
+    // for this identity in the target workspace. Without it the cookie is just
+    // a request field naming a workspace.
+    mocks.db.membership.findFirst.mockResolvedValue({
+      workspaceId: "workspace-invite-1",
+      workspace: { id: "workspace-invite-1", slug: "invite", systemKey: null },
     });
     mocks.db.workspace.findUnique.mockResolvedValue({
       id: "workspace-invite-1",
@@ -1126,15 +1153,13 @@ describe("auth verification code attempt cap", () => {
 
   it("fills membership title from invite prefill when signup form title is empty", async () => {
     installAuthCodeStore([]);
-    const prefillCookie = JSON.stringify({
-      provider: "dingtalk",
+    const prefillCookie = issuePrefillCookie({
       name: "Owner",
       email: "owner@example.com",
       phone: "+8613800000000",
       organizationName: "Acme",
       invitedWorkspaceId: "workspace-invite-1",
       title: "高级JAVA开发工程师",
-      expiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
@@ -1161,6 +1186,13 @@ describe("auth verification code attempt cap", () => {
       name: "Owner",
       phone: "+8613800000000",
       title: "高级JAVA开发工程师",
+    });
+    // The genuine invite this flow requires: a Membership row already exists
+    // for this identity in the target workspace. Without it the cookie is just
+    // a request field naming a workspace.
+    mocks.db.membership.findFirst.mockResolvedValue({
+      workspaceId: "workspace-invite-1",
+      workspace: { id: "workspace-invite-1", slug: "invite", systemKey: null },
     });
     mocks.db.workspace.findUnique.mockResolvedValue({
       id: "workspace-invite-1",
@@ -1191,6 +1223,221 @@ describe("auth verification code attempt cap", () => {
         }),
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE PREFILL COOKIE IS AN AUTHORIZATION INPUT, SO IT MUST BE UNFORGEABLE.
+//
+// `completeTrialSignupVerificationAction` lives in a "use server" module: it is
+// publicly invocable and unauthenticated. It reads the OAuth signup prefill
+// COOKIE and lets it decide two things — whether email and phone verification
+// codes are required at all, and which workspace the new account joins.
+// `httpOnly` does not help here: it stops page JavaScript from READING the
+// cookie, it does nothing about a client that simply sends whatever Cookie
+// header it likes.
+//
+// These tests are written as an attacker, not as a description of the fix:
+// they forge a cookie and assert the outcome the attacker wants is REFUSED.
+// ---------------------------------------------------------------------------
+describe("forged OAuth signup prefill cookie", () => {
+  const FORGED = JSON.stringify({
+    provider: "dingtalk",
+    name: "Mallory",
+    email: "attacker@example.com",
+    phone: "+8613900000000",
+    organizationName: "Anything",
+    invitedWorkspaceId: "workspace-victim",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+
+  function sendCookie(value: string) {
+    mocks.cookieStore.get.mockImplementation((name?: string) => {
+      if (name === "helm-public-oauth-signup-prefill") return { value };
+      if (name === "helm-ui-locale") return { value: "en-US" };
+      return undefined;
+    });
+  }
+
+  function attackerEnrollment() {
+    return {
+      id: "enrollment-attack",
+      name: "Mallory",
+      email: "attacker@example.com",
+      phone: "+8613900000000",
+      organizationName: "Anything",
+      locale: "en-US",
+      passwordHash: "scrypt:hash",
+      expiresAt: new Date(now.getTime() + 30 * 60 * 1000),
+    };
+  }
+
+  beforeEach(() => {
+    installAuthCodeStore([]);
+    mocks.db.authEnrollment.findUnique.mockResolvedValue(attackerEnrollment());
+    mocks.db.user.findUnique.mockResolvedValue(null);
+    mocks.db.user.create.mockResolvedValue({
+      id: "user-attacker",
+      email: "attacker@example.com",
+      name: "Mallory",
+      phone: "+8613900000000",
+      title: null,
+      passwordHash: "scrypt:hash",
+    });
+    mocks.db.user.update.mockResolvedValue({
+      id: "user-attacker",
+      email: "attacker@example.com",
+      name: "Mallory",
+      phone: "+8613900000000",
+      title: null,
+    });
+    mocks.db.workspace.findUnique.mockResolvedValue({ id: "workspace-victim" });
+    mocks.db.membership.findUnique.mockResolvedValue(null);
+    mocks.db.membership.upsert.mockResolvedValue({
+      workspaceId: "workspace-victim",
+      userId: "user-attacker",
+      role: WorkspaceRole.MEMBER,
+      status: MembershipStatus.ACTIVE,
+    });
+    // No membership exists for this identity in the target workspace: the
+    // attacker was never invited. This is the fact the fix must consult.
+    mocks.db.membership.findFirst.mockResolvedValue(null);
+  });
+
+  it("CONTROL: the harness can reach a successful signup (a refusal here means the setup broke)", async () => {
+    // Same fixtures, real verification codes, no cookie. If this cannot
+    // succeed, the refusals asserted below prove nothing.
+    sendCookie("");
+    const enrollment = attackerEnrollment();
+    installAuthCodeStore([
+      makeCodeRecord({
+        id: "signup-email",
+        purpose: AuthCodePurpose.SIGNUP_EMAIL,
+        channel: AuthCodeChannel.EMAIL,
+        target: enrollment.email,
+        code: "123456",
+        enrollmentId: enrollment.id,
+      }),
+      makeCodeRecord({
+        id: "signup-phone",
+        purpose: AuthCodePurpose.SIGNUP_PHONE,
+        channel: AuthCodeChannel.PHONE,
+        target: enrollment.phone,
+        code: "123456",
+        enrollmentId: enrollment.id,
+      }),
+    ]);
+
+    const result = await completeTrialSignupVerificationAction({
+      enrollmentId: enrollment.id,
+      emailCode: "123456",
+      phoneCode: "123456",
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses to skip verification codes for an unsigned, attacker-authored cookie", async () => {
+    sendCookie(FORGED);
+
+    const result = await completeTrialSignupVerificationAction({
+      enrollmentId: "enrollment-attack",
+      // No codes at all. The whole point of the attack is that the cookie
+      // makes the codes optional.
+      emailCode: "",
+      phoneCode: "",
+    });
+
+    expect(result.ok).toBe(false);
+    // The account must not exist, and must certainly not be stamped as having
+    // had its email and phone verified.
+    expect(mocks.db.user.create).not.toHaveBeenCalled();
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+  });
+
+  it("refuses to grant workspace membership named by an unsigned cookie", async () => {
+    sendCookie(FORGED);
+
+    await completeTrialSignupVerificationAction({
+      enrollmentId: "enrollment-attack",
+      emailCode: "",
+      phoneCode: "",
+    });
+
+    // ACTIVE MEMBER of a workspace the attacker merely named in a cookie is
+    // the payload of this attack; nothing less than zero upserts is a pass.
+    expect(mocks.db.membership.upsert).not.toHaveBeenCalled();
+  });
+
+  // A SIGNATURE PROVES ORIGIN, NOT ENTITLEMENT. The workspace id in this
+  // cookie comes from the OAuth start URL's query parameters, so whoever began
+  // the flow chose it; the signature only says WE serialised it. An attacker
+  // who completes a perfectly genuine DingTalk sign-in, having started it with
+  // someone else's workspace id in the URL, holds a validly signed cookie
+  // naming a workspace they were never invited to. Membership must therefore
+  // rest on a real invite record, never on the cookie.
+  it("refuses workspace membership from a GENUINELY SIGNED cookie with no invite behind it", async () => {
+    const enrollment = attackerEnrollment();
+    mocks.cookieStore.get.mockImplementation((name?: string) => {
+      if (name === "helm-public-oauth-signup-prefill") {
+        return {
+          value: issuePrefillCookie({
+            name: enrollment.name,
+            email: enrollment.email,
+            phone: enrollment.phone,
+            organizationName: "Anything",
+            invitedWorkspaceId: "workspace-victim",
+          }),
+        };
+      }
+      if (name === "helm-ui-locale") return { value: "en-US" };
+      return undefined;
+    });
+    // The decisive fact: no Membership row ties this identity to that
+    // workspace.
+    mocks.db.membership.findFirst.mockResolvedValue(null);
+    mocks.trialOnboarding.createSelfServeTrialOrganization.mockResolvedValue({
+      workspace: { id: "workspace-fresh-trial" },
+    });
+
+    const result = await completeTrialSignupVerificationAction({
+      enrollmentId: enrollment.id,
+      emailCode: "",
+      phoneCode: "",
+    });
+
+    // Signup itself may proceed — the OAuth identity is genuine — but the
+    // account must land in its own new trial workspace, never as an ACTIVE
+    // MEMBER of the one the cookie named.
+    expect(mocks.db.membership.upsert).not.toHaveBeenCalled();
+    expect(mocks.session.createSession).not.toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "workspace-victim" }),
+    );
+    if (result.ok) {
+      expect(mocks.trialOnboarding.createSelfServeTrialOrganization).toHaveBeenCalled();
+    }
+  });
+
+  it("refuses a cookie whose JSON is well-formed but whose signature is absent or wrong", async () => {
+    for (const value of [
+      FORGED,
+      `${FORGED}.`,
+      `${FORGED}.not-a-real-signature`,
+      `.${FORGED}`,
+    ]) {
+      mocks.db.user.create.mockClear();
+      mocks.db.membership.upsert.mockClear();
+      sendCookie(value);
+
+      const result = await completeTrialSignupVerificationAction({
+        enrollmentId: "enrollment-attack",
+        emailCode: "",
+        phoneCode: "",
+      });
+
+      expect(result.ok, `cookie variant: ${value.slice(0, 24)}`).toBe(false);
+      expect(mocks.db.membership.upsert).not.toHaveBeenCalled();
+    }
   });
 });
 
