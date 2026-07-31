@@ -592,28 +592,70 @@ function isScopeBoundary(node: ts.Node): boolean {
 }
 
 /**
- * Variable declarations named `name` that belong to `scope` ITSELF — nested
- * scopes are not descended into, because a binding declared inside a nested
- * block is not visible to the code that encloses it.
+ * Every binding named `name` introduced by `scope` ITSELF, whatever its form.
+ *
+ * A scope is not made only of `const` declarations. A parameter, a catch
+ * binding, a destructured element, an import, a function or class declaration
+ * all introduce the same name, and a lookup that recognises only
+ * `VariableDeclaration` walks straight past them into an outer scope that
+ * happens to declare something safe. That is the same borrowing bug as reading
+ * the first match in the file, just one level subtler: the guard would resolve
+ * a caller-supplied parameter to an outer literal and certify it.
+ *
+ * Nested scopes are not descended into: a binding declared inside a nested
+ * block is not visible to the code that encloses it. Parameters are the
+ * exception — they belong to the function scope, so they are collected when
+ * `scope` IS that function even though the parameter list is its own subtree.
  */
-function declarationsOwnedBy(
-  scope: ts.Node,
-  name: string,
-): ts.VariableDeclaration[] {
-  const declarations: ts.VariableDeclaration[] = [];
+function bindingsOwnedBy(scope: ts.Node, name: string): ts.Node[] {
+  const bindings: ts.Node[] = [];
+
+  const collectBindingName = (binding: ts.BindingName, owner: ts.Node): void => {
+    if (ts.isIdentifier(binding)) {
+      if (binding.text === name) bindings.push(owner);
+      return;
+    }
+    for (const element of binding.elements) {
+      if (ts.isBindingElement(element)) collectBindingName(element.name, element);
+    }
+  };
+
+  if (isFunctionLike(scope)) {
+    for (const parameter of scope.parameters) {
+      collectBindingName(parameter.name, parameter);
+    }
+  }
+
   const visit = (current: ts.Node): void => {
     if (isScopeBoundary(current)) return;
-    if (
-      ts.isVariableDeclaration(current) &&
-      ts.isIdentifier(current.name) &&
-      current.name.text === name
+    if (ts.isVariableDeclaration(current)) {
+      collectBindingName(current.name, current);
+    } else if (
+      (ts.isFunctionDeclaration(current) || ts.isClassDeclaration(current)) &&
+      current.name?.text === name
     ) {
-      declarations.push(current);
+      bindings.push(current);
+    } else if (
+      ts.isImportSpecifier(current) ||
+      ts.isImportClause(current) ||
+      ts.isNamespaceImport(current)
+    ) {
+      const bound = current.name;
+      if (bound && ts.isIdentifier(bound) && bound.text === name) {
+        bindings.push(current);
+      }
+    } else if (
+      ts.isCatchClause(current) &&
+      current.variableDeclaration &&
+      ts.isIdentifier(current.variableDeclaration.name) &&
+      current.variableDeclaration.name.text === name
+    ) {
+      bindings.push(current.variableDeclaration);
     }
     ts.forEachChild(current, visit);
   };
   ts.forEachChild(scope, visit);
-  return declarations;
+  return bindings;
 }
 
 function resolveObjectLiteral(
@@ -637,26 +679,30 @@ function resolveObjectLiteral(
   let scope: ts.Node | undefined = direct.parent;
   while (scope) {
     if (isScopeBoundary(scope)) {
-      const declarations = declarationsOwnedBy(scope, wanted);
-      // More than one declaration of the same name in one scope is not valid
-      // TypeScript for `const`, so it means this walk is wrong about the
-      // scope. Fail closed rather than pick one.
-      if (declarations.length > 1) return null;
-      const declaration = declarations[0];
-      if (declaration) {
-        const list = declaration.parent;
-        // `const` is required, and it is what makes reading a single
-        // declaration sound: `let`/`var` can be rebound between the
-        // declaration and the call, so the literal reaching the call is a
-        // runtime question this guard must not answer.
+      const bindings = bindingsOwnedBy(scope, wanted);
+      // The FIRST scope that binds this name is the one that wins. Whatever it
+      // binds — parameter, destructured element, import, reassignable
+      // `let` — the walk STOPS here. Continuing past a binding is how an outer
+      // scope's safe literal gets borrowed to vouch for an inner reference the
+      // guard cannot actually see.
+      if (bindings.length > 0) {
+        if (bindings.length > 1) return null;
+        const binding = bindings[0]!;
+        // Only a `const` bound directly to an object literal is analysable.
+        // Everything else — a parameter chosen by a caller, a destructured
+        // element, a `let` that can be rebound — makes the value a runtime
+        // question this guard must not answer.
+        if (!ts.isVariableDeclaration(binding)) return null;
+        const list = binding.parent;
         if (
           !ts.isVariableDeclarationList(list) ||
           (list.flags & ts.NodeFlags.Const) === 0 ||
-          !declaration.initializer
+          !binding.initializer ||
+          !ts.isIdentifier(binding.name)
         ) {
           return null;
         }
-        const initializer = unwrapExpression(declaration.initializer);
+        const initializer = unwrapExpression(binding.initializer);
         return ts.isObjectLiteralExpression(initializer) ? initializer : null;
       }
     }

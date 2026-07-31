@@ -569,6 +569,64 @@ export async function claim(pending: boolean) {
     expect(checkConditionalUpdateCas(root)).toHaveLength(1);
   });
 
+  // A scope is not made only of `const` declarations. A parameter, a catch
+  // binding or a destructured element introduces the SAME name, and a walk
+  // that only recognises variable declarations walks straight past them into
+  // an outer scope that happens to declare something safe.
+  it("stops at a parameter that shadows an outer const of the same name", () => {
+    const root = sandbox({
+      "lib/param-shadow.ts": `
+const mutation = {
+  where: { id: "x" },
+  data: { label: "renamed" },
+};
+
+export async function relabel() {
+  await db.thing.updateMany(mutation);
+}
+
+export async function claim(mutation: { where: unknown; data: unknown }) {
+  const claimed = await db.thing.updateMany(mutation);
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+    });
+    // The argument is a parameter, so its contents are decided by a caller and
+    // cannot be read here. Fail closed.
+    expect(checkConditionalUpdateCas(root)).toHaveLength(1);
+  });
+
+  it("stops at a parameter that shadows an outer const transaction options", () => {
+    const root = sandbox({
+      "lib/param-shadow-options.ts": `
+const options = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+};
+
+export async function strictlyIsolated() {
+  return db.$transaction(async (tx) => {
+    await tx.thing.updateMany({
+      where: { id: "x" },
+      data: { label: "renamed" },
+    });
+  }, options);
+}
+
+export async function callerChosen(options: { isolationLevel: string }) {
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.thing.updateMany({
+      where: { id: "x", claimedAt: null },
+      data: { claimedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw new Error("lost");
+  }, options);
+}
+`,
+    });
+    // The isolation level is chosen by a caller, so it cannot be proven here.
+    expect(checkConditionalUpdateCas(root)).toHaveLength(1);
+  });
+
   it("accepts the atomic raw statement that replaces the pattern", () => {
     const root = sandbox({ "lib/atomic.ts": ATOMIC_RAW });
     expect(checkConditionalUpdateCas(root)).toEqual([]);
