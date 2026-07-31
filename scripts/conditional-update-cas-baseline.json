@@ -652,34 +652,6 @@
       "resultVariable": "claimed",
       "reason": "isolation-not-serializable",
       "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
-    },
-    {
-      "file": "features/auth/actions.ts",
-      "fingerprint": "7b0303455a3e28f3",
-      "occurrence": 0,
-      "client": "db",
-      "delegate": "authVerificationCode",
-      "model": "AuthVerificationCode",
-      "statePredicates": [
-        "consumedAt"
-      ],
-      "resultVariable": "attemptReservation",
-      "reason": "no-transaction",
-      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
-    },
-    {
-      "file": "features/auth/actions.ts",
-      "fingerprint": "925ddca67fd8cf32",
-      "occurrence": 0,
-      "client": "db",
-      "delegate": "authVerificationCode",
-      "model": "AuthVerificationCode",
-      "statePredicates": [
-        "consumedAt"
-      ],
-      "resultVariable": "consumeReservation",
-      "reason": "no-transaction",
-      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
     }
   ]
 }

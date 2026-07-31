@@ -42,6 +42,10 @@ const mocks = vi.hoisted(() => {
       user,
       workspace,
       membership,
+      // One-time code claims are single atomic statements rather than
+      // conditional updateMany calls, because Prisma drops the predicate from
+      // the write on MySQL. The mock below emulates the statements' semantics.
+      $executeRaw: vi.fn(),
     },
     trialOnboarding: {
       createSelfServeTrialOrganization: vi.fn(),
@@ -323,6 +327,34 @@ function installAuthCodeStore(records: AuthCodeRecord[]) {
     return { count: 1 };
   });
 
+  // Emulates the two atomic claim statements in `verifyAuthCode`. Both carry
+  // the pre-state in the UPDATE's own WHERE, so a row that is already consumed
+  // — or already at the attempt ceiling — yields zero affected rows rather
+  // than a successful claim. Anything else throws: a silent 0 would let an
+  // implementation change pass as "no rows matched" instead of failing.
+  mocks.db.$executeRaw.mockImplementation(
+    async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join("?");
+      const record = records.find((candidate) => candidate.id === values[0]);
+      if (!record || record.consumedAt !== null) {
+        return 0;
+      }
+      if (sql.includes("`attempts` = `attempts` + 1")) {
+        const ceiling = values[1] as number;
+        if (record.attempts >= ceiling) {
+          return 0;
+        }
+        record.attempts += 1;
+        return 1;
+      }
+      if (sql.includes("`consumedAt` = UTC_TIMESTAMP(3)")) {
+        record.consumedAt = new Date();
+        return 1;
+      }
+      throw new Error(`unexpected raw auth code statement: ${sql}`);
+    },
+  );
+
   mocks.db.authVerificationCode.update.mockImplementation(async ({ where, data }) => {
     const record = records.find((candidate) => candidate.id === where.id);
     if (!record) {
@@ -415,15 +447,21 @@ describe("auth verification code attempt cap", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain("Request a new code");
-    expect(mocks.db.authVerificationCode.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          id: "login-code-2",
-          attempts: { lt: 5 },
-          consumedAt: null,
-        }),
-      }),
+    // The attempt reservation must carry BOTH pre-state conditions in the
+    // statement that performs the write, not merely in a preceding read.
+    const reservation = mocks.db.$executeRaw.mock.calls.find(
+      ([strings]: [TemplateStringsArray]) =>
+        strings.join("?").includes("`attempts` = `attempts` + 1"),
     );
+    expect(reservation).toBeDefined();
+    const [reservationSql, ...reservationValues] = reservation as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    expect(reservationSql.join("?")).toContain("`consumedAt` IS NULL");
+    expect(reservationSql.join("?")).toContain("`attempts` < ?");
+    expect(reservationValues).toEqual(["login-code-2", 5]);
+    expect(mocks.db.authVerificationCode.updateMany).not.toHaveBeenCalled();
     expect(mocks.db.authVerificationCode.update).not.toHaveBeenCalled();
     expect(record.attempts).toBe(5);
     expect(record.consumedAt).toBeNull();
@@ -489,13 +527,24 @@ describe("auth verification code attempt cap", () => {
       userId: "user-1",
     });
     installAuthCodeStore([record]);
-    mocks.db.authVerificationCode.updateMany.mockImplementation(async ({ where, data }) => {
-      if (where.attempts?.lt) {
-        record.attempts += data.attempts.increment;
-        return { count: 1 };
-      }
-      return { count: 0 };
-    });
+    // A competing request consumes the code between this caller's attempt
+    // reservation and its claim: the reservation still succeeds, but the
+    // claim's `consumedAt IS NULL` no longer holds at write time, so the
+    // statement affects zero rows. This is exactly the interleaving a
+    // conditional updateMany cannot detect.
+    mocks.db.$executeRaw.mockImplementation(
+      async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+        const sql = strings.join("?");
+        if (sql.includes("`attempts` = `attempts` + 1")) {
+          record.attempts += 1;
+          return 1;
+        }
+        if (sql.includes("`consumedAt` = UTC_TIMESTAMP(3)")) {
+          return 0;
+        }
+        throw new Error(`unexpected raw auth code statement: ${sql}`);
+      },
+    );
     mocks.db.user.findFirst.mockResolvedValue(createActiveUser());
 
     const result = await loginWithPhoneCodeAction({

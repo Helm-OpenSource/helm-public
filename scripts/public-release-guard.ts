@@ -1030,6 +1030,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "test:caio-stage1:mysql",
   "test:caio-pro-v1:mysql",
   "test:caio-access-gateway:mysql",
+  "test:auth-verification-code:mysql",
   "test:caio-context-memory:mysql",
   "test:caio-audit-state:mysql",
   "test:public:guards",

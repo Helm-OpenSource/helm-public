@@ -586,6 +586,13 @@ jobs:
       - name: Verify the CAIO access token store against MySQL
         run: npm run test:caio-access-gateway:mysql
 
+      # Shares this job's MySQL 8.4 service and its already-migrated isolated
+      # database rather than provisioning a second one. The suite inherits the
+      # same helm_caio_gw_ prefix assertion, so it can never point at a default
+      # or shared database.
+      - name: Verify one-time auth code claims against MySQL
+        run: npm run test:auth-verification-code:mysql
+
   caio-context-memory-mysql:
     name: CAIO Context Broker and Enterprise Memory MySQL
     runs-on: ubuntu-latest

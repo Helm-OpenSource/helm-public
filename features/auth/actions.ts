@@ -570,16 +570,27 @@ async function verifyAuthCode(input: {
     return { ok: false as const, reason: "attempts_exceeded" as const };
   }
 
-  const attemptReservation = await db.authVerificationCode.updateMany({
-    where: {
-      id: record.id,
-      consumedAt: null,
-      attempts: { lt: AUTH_CODE_MAX_ATTEMPTS },
-    },
-    data: { attempts: { increment: 1 } },
-  });
+  // Reserving an attempt is a compare-and-swap: the row must still be
+  // unconsumed AND under the attempt ceiling at the moment of the write.
+  //
+  // This cannot be a conditional `updateMany`. Prisma compiles one into
+  // `SELECT id WHERE <predicate>` followed by `UPDATE ... WHERE id IN (?)`,
+  // so the predicate is evaluated at READ time and dropped from the write.
+  // Two concurrent verifications of the same code therefore both observe
+  // `attempts < MAX`, both increment, and both see count === 1 — which is
+  // how a brute-force ceiling silently stops being a ceiling.
+  //
+  // One statement, with the pre-state in the UPDATE's own WHERE, is the only
+  // form where the affected-row count actually proves the state was unchanged.
+  const attemptReservation = await db.$executeRaw`
+    UPDATE \`AuthVerificationCode\`
+       SET \`attempts\` = \`attempts\` + 1
+     WHERE \`id\` = ${record.id}
+       AND \`consumedAt\` IS NULL
+       AND \`attempts\` < ${AUTH_CODE_MAX_ATTEMPTS}
+  `;
 
-  if (attemptReservation.count !== 1) {
+  if (attemptReservation !== 1) {
     return { ok: false as const, reason: "attempts_exceeded" as const };
   }
 
@@ -600,17 +611,23 @@ async function verifyAuthCode(input: {
     };
   }
 
-  const consumeReservation = await db.authVerificationCode.updateMany({
-    where: {
-      id: record.id,
-      consumedAt: null,
-    },
-    data: {
-      consumedAt: new Date(),
-    },
-  });
+  // Consuming the code is the one-time-credential claim, and it has the same
+  // shape problem as the attempt reservation above: a conditional
+  // `updateMany` drops `consumedAt IS NULL` from the write, so two concurrent
+  // verifications of the SAME code can both report count === 1 and both
+  // return ok — the code is spent twice. That is a replayable one-time
+  // credential, not a rate-limit nuisance.
+  //
+  // `consumedAt` is written from the database's own clock rather than the
+  // application's, so the timestamp cannot disagree between two app hosts.
+  const consumeReservation = await db.$executeRaw`
+    UPDATE \`AuthVerificationCode\`
+       SET \`consumedAt\` = UTC_TIMESTAMP(3)
+     WHERE \`id\` = ${record.id}
+       AND \`consumedAt\` IS NULL
+  `;
 
-  if (consumeReservation.count !== 1) {
+  if (consumeReservation !== 1) {
     return { ok: false as const, reason: "attempts_exceeded" as const };
   }
 
