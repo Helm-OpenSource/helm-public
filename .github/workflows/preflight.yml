@@ -5,13 +5,18 @@ name: Preflight (Fast PR Feedback)
 # 中文说明：这是快速 PR feedback 链，只跑 lint / typecheck / boundary 等轻量 gate。
 # 交付工程师可用它快速判断 PR 是否值得进入完整 CI review。
 #
-# Lightweight CI that runs only the three fastest gates (lint / typecheck /
-# boundary) for quick PR reviewer feedback. Heavier checks (build / test /
-# e2e / quality regression) continue to run in ci.yml.
+# Lightweight CI that runs the fast static gates (lint / typecheck / boundary
+# plus three small guards) for quick PR reviewer feedback. Heavier checks
+# (build / test / e2e / quality regression) continue to run in ci.yml.
 #
-# Goal: finish this bounded gate before the heavier ci.yml chain. Runtime includes
-# dependency installation and therefore grows with the repository; it is not an
-# asserted sub-three-minute service level.
+# MEASURED runtime, not a promise: 7m45s on 2026-07-30 (run 30542171638) —
+# lint:strict 4m42s, typecheck 58s, boundary 1m07s, guards ~20s. That is still
+# roughly half of the full ci.yml chain, which is the point of this workflow.
+#
+# TIMEOUT BUDGET: the limit must clear the measured runtime with real headroom.
+# It previously sat at 8 minutes against a 7m45s run — 15 seconds of margin, so
+# one slow `npm ci` or a cold cache turned a clean branch into a FAILED required
+# check. scripts/preflight-workflow-budget.test.ts pins the headroom rule.
 
 on:
   pull_request:
@@ -28,7 +33,8 @@ jobs:
   preflight:
     name: Lint + Typecheck + Boundary
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # ~2x the measured 7m45s runtime; see the TIMEOUT BUDGET note above.
+    timeout-minutes: 16
     steps:
       - uses: actions/checkout@v5
 

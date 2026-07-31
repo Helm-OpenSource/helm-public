@@ -329,17 +329,100 @@ describe("upstream endpoint transport", () => {
     }
   });
 
-  it("accepts https and only loopback plain http", () => {
+  it("refuses plaintext HTTP on loopback: there is no production exception", () => {
+    // A loopback hop still carries a credential and a projected prompt, and a
+    // running gateway cannot tell "a local test double" from "a plaintext
+    // listener someone started". The exception is gone from the contract
+    // rather than gated on the URL shape.
     for (const url of [
-      "https://api.example.com/v1",
       "http://127.0.0.1:8081/v1",
       "http://[::1]:8081",
       "http://localhost:8081/v1",
+      "http://localhost",
+    ]) {
+      expect(isCaioSecureUpstreamEndpoint(url)).toBe(false);
+      expect(
+        caioModelAliasBindingSchema.safeParse(binding(url)).success,
+      ).toBe(false);
+    }
+  });
+
+  it("accepts https endpoints, with or without an explicit port", () => {
+    for (const url of [
+      "https://api.example.com/v1",
+      "https://api.example.internal:8443/v1",
+      "https://[2001:db8::1]:8443/v1",
+      "https://api.example.com",
     ]) {
       expect(isCaioSecureUpstreamEndpoint(url)).toBe(true);
       expect(
         caioModelAliasBindingSchema.safeParse(binding(url)).success,
       ).toBe(true);
     }
+  });
+
+  it("refuses a value a strict URL parse rejects, not just a pattern miss", () => {
+    for (const url of [
+      "https://ho st/v1",
+      "https:/api.example.com/v1",
+      "api.example.com/v1",
+      "wss://api.example.com/v1",
+      "file:///etc/hosts",
+      "",
+    ]) {
+      expect(isCaioSecureUpstreamEndpoint(url)).toBe(false);
+      expect(
+        caioModelAliasBindingSchema.safeParse(binding(url)).success,
+      ).toBe(false);
+    }
+  });
+
+  it("refuses userinfo embedded in the endpoint URL", () => {
+    for (const url of [
+      "https://user:secret@api.example.com/v1",
+      "https://user@api.example.com/v1",
+      // Empty userinfo: the parser silently drops the "@", so the RAW value
+      // has to be what gets refused.
+      "https://@api.example.com/v1",
+    ]) {
+      expect(isCaioSecureUpstreamEndpoint(url)).toBe(false);
+      expect(
+        caioModelAliasBindingSchema.safeParse(binding(url)).success,
+      ).toBe(false);
+    }
+  });
+
+  it("refuses a fragment, a query string, or surrounding whitespace", () => {
+    for (const url of [
+      "https://api.example.com/v1#frag",
+      "https://api.example.com/v1?key=secret",
+      " https://api.example.com/v1",
+      "https://api.example.com/v1\t",
+    ]) {
+      expect(isCaioSecureUpstreamEndpoint(url)).toBe(false);
+      expect(
+        caioModelAliasBindingSchema.safeParse(binding(url)).success,
+      ).toBe(false);
+    }
+  });
+
+  it("refuses a port outside 1-65535", () => {
+    for (const url of [
+      "https://api.example.com:0/v1",
+      "https://api.example.com:65536/v1",
+      "https://api.example.com:99999/v1",
+      "https://api.example.com:-1/v1",
+    ]) {
+      expect(isCaioSecureUpstreamEndpoint(url)).toBe(false);
+      expect(
+        caioModelAliasBindingSchema.safeParse(binding(url)).success,
+      ).toBe(false);
+    }
+    expect(isCaioSecureUpstreamEndpoint("https://api.example.com:1/v1")).toBe(
+      true,
+    );
+    expect(
+      isCaioSecureUpstreamEndpoint("https://api.example.com:65535/v1"),
+    ).toBe(true);
   });
 });

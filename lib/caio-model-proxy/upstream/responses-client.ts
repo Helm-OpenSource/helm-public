@@ -6,25 +6,22 @@
 // verbatim (the proxy engine swaps the alias for the upstream model before
 // invoking); tool/function-call fields are untouched.
 //
+// NOT STREAMING. The gateway serves one buffered JSON body per request, so
+// this client has one call shape and no SSE path. The gateway refuses
+// `stream: true` with 400 rather than answering it as buffered JSON.
+//
 // Security posture: the API key is fetched per request via apiKeyProvider,
 // used for exactly one call, and never cached or logged. Upstream error
-// bodies are never propagated into gateway errors.
+// bodies are never propagated into gateway errors. Redirects are REFUSED
+// (redirect: "error"), so a 3xx can never move the request — with its
+// credential and its projected prompt — to another host or down to plaintext.
 
 import {
-  CAIO_DOWNSTREAM_WRITE_FAILED_REASON,
-  CaioDownstreamForwardError,
-  createCaioChunkForwarder,
   isAbortError,
   mapUpstreamHttpError,
   type CaioProxyUpstreamClientPort,
   type CaioUpstreamInvokeResult,
-  type CaioUpstreamStreamResult,
 } from "./upstream-contracts";
-
-// Terminal SSE marker for the Responses streaming protocol.
-const RESPONSES_TERMINAL_EVENT = "response.completed";
-// Keep enough tail across chunk boundaries to detect a split terminal token.
-const SCAN_TAIL_CHARS = 256;
 
 export type CaioResponsesUpstreamClientOptions = {
   fetchImpl: typeof fetch;
@@ -34,18 +31,6 @@ export type CaioResponsesUpstreamClientOptions = {
 
 function joinUrl(base: string, path: string): string {
   return `${base.replace(/\/+$/u, "")}${path}`;
-}
-
-function containsResponsesTerminal(text: string): boolean {
-  return (
-    text.includes(`event: ${RESPONSES_TERMINAL_EVENT}`) ||
-    text.includes(`"type":"${RESPONSES_TERMINAL_EVENT}"`) ||
-    text.includes(`"type": "${RESPONSES_TERMINAL_EVENT}"`)
-  );
-}
-
-function syntheticIncompleteChunk(reason: string): string {
-  return `data: ${JSON.stringify({ caio_incomplete_stream: true, reason })}\n\n`;
 }
 
 export class CaioResponsesUpstreamClient {
@@ -62,7 +47,6 @@ export class CaioResponsesUpstreamClient {
   private async post(input: {
     body: Record<string, unknown>;
     signal?: AbortSignal;
-    streaming: boolean;
   }): Promise<Response> {
     // Key is scoped to this call only; never stored on the instance.
     const apiKey = await this.apiKeyProvider();
@@ -71,9 +55,12 @@ export class CaioResponsesUpstreamClient {
       headers: {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
-        ...(input.streaming ? { accept: "text/event-stream" } : {}),
       },
       body: JSON.stringify(input.body),
+      // A followed redirect is an unreviewed second egress: it can move the
+      // bearer key and the prompt to a different host, or to plaintext http.
+      // The binding named ONE https endpoint, so a 3xx is a transport failure.
+      redirect: "error",
       ...(input.signal ? { signal: input.signal } : {}),
     });
   }
@@ -87,12 +74,13 @@ export class CaioResponsesUpstreamClient {
       response = await this.post({
         body: input.body,
         ...(input.signal ? { signal: input.signal } : {}),
-        streaming: false,
       });
     } catch (error) {
       if (isAbortError(error, input.signal)) {
         return { status: "cancelled" };
       }
+      // Includes the refused-redirect TypeError: no hop was completed, so
+      // this is indistinguishable from "the endpoint could not be reached".
       return {
         status: "upstream_error",
         code: "upstream_unreachable",
@@ -127,117 +115,6 @@ export class CaioResponsesUpstreamClient {
     }
     return { status: "ok", upstreamStatus: response.status, body };
   }
-
-  // SSE pass-through. Chunks are forwarded verbatim as they arrive. Once ANY
-  // chunk has been HANDED to the downstream writer there is no retry path here
-  // or in the engine — including when the writer itself throws: failures after
-  // the first forward attempt degrade to an explicit incomplete_stream with a
-  // synthetic terminal marker so the downstream client can tell the stream
-  // did not finish cleanly.
-  async invokeStreaming(input: {
-    body: Record<string, unknown>;
-    signal?: AbortSignal;
-    onChunk: (chunk: string) => void;
-  }): Promise<CaioUpstreamStreamResult> {
-    let response: Response;
-    try {
-      response = await this.post({
-        body: input.body,
-        ...(input.signal ? { signal: input.signal } : {}),
-        streaming: true,
-      });
-    } catch (error) {
-      if (isAbortError(error, input.signal)) {
-        return { status: "cancelled", chunksForwarded: 0 };
-      }
-      return {
-        status: "upstream_error",
-        code: "upstream_unreachable",
-        gatewayStatus: 502,
-        upstreamStatus: null,
-        retryAfterSeconds: null,
-        chunksForwarded: 0,
-      };
-    }
-    if (!response.ok) {
-      return {
-        status: "upstream_error",
-        ...mapUpstreamHttpError({
-          upstreamStatus: response.status,
-          retryAfterHeader: response.headers.get("retry-after"),
-        }),
-        chunksForwarded: 0,
-      };
-    }
-    // Counts every forward ATTEMPT, so a downstream writer failure can never be
-    // mistaken for "nothing was sent yet".
-    const forwarder = createCaioChunkForwarder(input.onChunk);
-    if (!response.body) {
-      const reason = "missing_body";
-      forwarder.emitTerminalMarker(syntheticIncompleteChunk(reason));
-      return { status: "incomplete_stream", reason, chunksForwarded: 0 };
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let scanTail = "";
-    let terminalSeen = false;
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        if (text.length === 0) continue;
-        forwarder.forward(text);
-        const window = scanTail + text;
-        if (containsResponsesTerminal(window)) terminalSeen = true;
-        scanTail = window.slice(-SCAN_TAIL_CHARS);
-      }
-    } catch (error) {
-      if (error instanceof CaioDownstreamForwardError) {
-        // The bytes reached the downstream writer and it failed: this is an
-        // incomplete stream, never a retryable upstream error.
-        return {
-          status: "incomplete_stream",
-          reason: CAIO_DOWNSTREAM_WRITE_FAILED_REASON,
-          chunksForwarded: forwarder.forwarded,
-        };
-      }
-      if (isAbortError(error, input.signal)) {
-        return { status: "cancelled", chunksForwarded: forwarder.forwarded };
-      }
-      if (forwarder.forwarded === 0) {
-        return {
-          status: "upstream_error",
-          code: "upstream_unreachable",
-          gatewayStatus: 502,
-          upstreamStatus: response.status,
-          retryAfterSeconds: null,
-          chunksForwarded: 0,
-        };
-      }
-      const reason = "upstream_stream_error";
-      forwarder.emitTerminalMarker(syntheticIncompleteChunk(reason));
-      return {
-        status: "incomplete_stream",
-        reason,
-        chunksForwarded: forwarder.forwarded,
-      };
-    } finally {
-      reader.releaseLock();
-    }
-
-    if (!terminalSeen) {
-      const reason = "missing_terminal_event";
-      forwarder.emitTerminalMarker(syntheticIncompleteChunk(reason));
-      return {
-        status: "incomplete_stream",
-        reason,
-        chunksForwarded: forwarder.forwarded,
-      };
-    }
-    return { status: "ok", chunksForwarded: forwarder.forwarded };
-  }
 }
 
 // Per-request port used by the proxy engine: endpoint + key arrive with each
@@ -254,11 +131,5 @@ export function createCaioResponsesUpstreamPort(deps: {
         endpointBaseUrl,
         apiKeyProvider: async () => apiKey,
       }).invoke({ body, ...(signal ? { signal } : {}) }),
-    invokeStreaming: ({ endpointBaseUrl, apiKey, body, signal, onChunk }) =>
-      new CaioResponsesUpstreamClient({
-        fetchImpl: deps.fetchImpl,
-        endpointBaseUrl,
-        apiKeyProvider: async () => apiKey,
-      }).invokeStreaming({ body, onChunk, ...(signal ? { signal } : {}) }),
   };
 }

@@ -276,4 +276,3 @@ describe("F6 — combined release re-scan across candidates", () => {
     expect(outcome.combinedReleaseDenialReasons).toEqual([]);
   });
 });
-

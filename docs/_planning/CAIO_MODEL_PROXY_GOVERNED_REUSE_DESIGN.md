@@ -21,7 +21,7 @@ public_safety: Public-safe design document. It contains no customer data, creden
 
 1. **task class 是封闭枚举，没有 LAN 直通这一类。** `lib/llm/model-route-contracts.ts:12-21` 的八个值全部是 Helm 自己的分析型任务（embedding_index / extraction_classification / redaction_projection / retrieval_rerank / summary_briefing / reasoning_counterfactual / multi_pass_review / voice_input_understanding）。把"开发者的任意 agent 请求"塞进其中任何一个都是错误标注，且 taskClass 参与 `requestHash`（`model-egress-store.service.ts:1724-1745`）与 route 准入（`routeAllowsClassification`），不是可以随便填的自由文本。
 2. **投影回执的 `redactionStatus` 只有 `synthetic | redacted | alias_only` 三个取值**（`lib/llm/model-egress-store.service.ts:156-159`、`lib/llm/governed-model-projection.service.ts:45`），没有"原样直通"这一档。LAN 直通把客户端原始 body 原样转发（`lib/caio-model-proxy/proxy-engine.ts:444-447`，只替换 `model` 字段）。为它签发一张投影回执 = 出具一份虚假证明。
-3. **治理链的 adapter 契约是非流式、JSON 进 JSON 出**（`lib/llm/governed-model-adapter-registry.service.ts:109-121`：`invoke(...) => Promise<GovernedModelAdapterResult<TOutput>>`，无 chunk 回调、无 stream 语义）。CAIO 代理引擎支持流式转发（`proxy-engine.ts:448-457`）。虽然当前 HTTP 桥接层显式拒绝 `stream: true`（`lib/caio-access-gateway/model-dispatch-bridge.ts:219-223`），流式能力仍是 proxy 引擎已实现并被测试覆盖的能力（`proxy-engine.test.ts:903, 1089, 1137`），走 (a)/(b) 等于删除它。
+3. **治理链的 adapter 契约是非流式、JSON 进 JSON 出**（`lib/llm/governed-model-adapter-registry.service.ts:109-121`：`invoke(...) => Promise<GovernedModelAdapterResult<TOutput>>`，无 chunk 回调、无 stream 语义）。CAIO 侧同样如此：代理引擎、两个上游客户端与 HTTP 桥接层都只有一种调用形状——一次请求、一份缓冲 JSON；`stream: true` 由桥接层以 400 拒绝（`lib/caio-access-gateway/model-dispatch-bridge.ts`）。此前 proxy 引擎里存在一条 SSE 直通实现，但它在网关层不可达，属于产品并不交付的能力声明，已随本轮整改删除（见本文件末尾"流式能力声明"）。因此这条维度上两侧不再有差异。
 
 **最关键的一条，且它不是工程问题而是产品问题：** CAIO 审计门在主库不可用时，会把回执写进本地加密应急队列并**放行**（`lib/caio-audit-state/audit-gate.service.ts:301-302` → `queueReceipt` :254-267 → `claimCore` :343-350 返回 `allowed:true, persistedVia:"emergency_queue"`）。治理链的 `claimModelRouteDispatch` 则整体运行在一个 `Serializable` 事务里（`lib/llm/model-egress-store.service.ts:2226-2229`、`TRANSACTION_OPTIONS` :60-64），**没有任何降级路径**。因此：
 
@@ -175,7 +175,7 @@ public_safety: Public-safe design document. It contains no customer data, creden
 1. 新建 `lib/llm/caio-lan-projection-engine.ts`，实现一个 `GovernedProjectionEngine`，把客户端 body 当"投影产物"；给它伪造 `projectorRegistrationRef` / `scannerRegistrationRef`。
 2. 扩 `MODEL_ROUTE_TASK_CLASSES` 增加 `lan_passthrough`（改 `model-route-contracts.ts:12-21`，波及 policy hash、已有测试、`routeAllowsClassification`）。
 3. 把 `proxy-engine.ts` 的 dispatch 段搬进 `lib/llm`，改写为 `GovernedModelProviderAdapter`。
-4. 删除流式路径（adapter 契约不支持）。
+4. 流式路径已不存在（proxy 引擎与上游客户端均只有缓冲 JSON 一种调用形状），本步无事可做。
 5. 为每工作区预置资产目录条目 + route policy + owner 批准 + readiness 回执。
 
 **爆炸半径**
@@ -185,7 +185,7 @@ public_safety: Public-safe design document. It contains no customer data, creden
 - `MODEL_ROUTE_TASK_CLASSES` 改动会改变 `computeModelRouteRequestHash` 的输入域与 policy 契约 hash → `lib/llm/model-route-contracts.test.ts`、`model-egress-contracts.test.ts`、`governed-model-gateway.service.test.ts`、`lib/llm/model-egress-store.mysql.test.ts` 全部要改，而这四个正是 `check:model-egress-governance` 门里跑的测试。
 - `lib/caio-model-proxy/` 与 `lib/llm/` 的目录边界被打穿：一个 LAN HTTP 传输层的实现细节进入模型治理核心。
 
-**会坏掉什么**：流式（三个测试直接删除）；应急队列语义（见下）；`lib/caio-access-gateway/gateway-audit-integration.test.ts:278` "keeps serving through the encrypted emergency queue while the primary store fails" 必然失败。
+**会坏掉什么**：应急队列语义（见下）；`lib/caio-access-gateway/gateway-audit-integration.test.ts:278` "keeps serving through the encrypted emergency queue while the primary store fails" 必然失败。
 
 **应急队列的下场**：删除或降级为"只记录、不放行"。治理链没有等价物，`claimModelRouteDispatch` 必须有活的数据库。
 
@@ -250,7 +250,7 @@ CAIO 回执增加治理链接字段 `governedPolicyId` / `governedPolicyHash` / 
 
 理由，直说：
 
-1. **(a) 是我明确不选的方案。** 它把一个 LAN HTTP 传输的实现细节搬进模型治理核心，为了让它编译通过要扩 `MODEL_ROUTE_TASK_CLASSES`，而那个枚举参与 policy 契约 hash 和 route 准入判定 —— 为了迁移一个未接线的参考实现去改动一个已冻结、已被静态守卫和 26 个 MySQL 行为测试锚定的治理契约，收益与风险完全倒挂。它同时删除流式能力和整个应急队列语义。
+1. **(a) 是我明确不选的方案。** 它把一个 LAN HTTP 传输的实现细节搬进模型治理核心，为了让它编译通过要扩 `MODEL_ROUTE_TASK_CLASSES`，而那个枚举参与 policy 契约 hash 和 route 准入判定 —— 为了迁移一个未接线的参考实现去改动一个已冻结、已被静态守卫和 26 个 MySQL 行为测试锚定的治理契约，收益与风险完全倒挂。它同时删除整个应急队列语义。
 2. **(b) 在概念上是"正确"的复用方式（它就是官方接缝），但它的前置条件不是工程可以自己满足的**：逐请求投影回执 → 需要企业数据资产目录条目；route policy → 需要真人 owner 批准；readiness 回执 → 需要运维探针；终态回执的 cost/pricingVersion/providerRequestRef → 需要 adapter 解析上游响应体（今天的直通刻意不解析）。任何一项缺失，结果都不是"降级运行"，而是每个请求产出一条 `blocked` 决定并 503。把它当本轮任务实施 = 交付一个必然全量拒绝的网关。
 3. **(c) 是唯一能在本轮真正落地、且落地后确实消灭了"独立"这个性质的方案。** C-1 之后，"CAIO 有自己的一套模型出站策略"这句话不再成立：能出站到哪里，由治理链的 owner 批准策略单方面决定；CAIO 侧只剩传输与本地审计。剩下的"两条回执链"问题由 C-2 用一条链接字段收口。
 4. **(c) 不需要放宽任何治理守卫。** 这是它相对 (b) 的决定性优势 —— (b) 必须把新 adapter 文件加进 `MEG-GATEWAY-BYPASS` 的白名单。
@@ -494,7 +494,7 @@ export async function resolveGovernedLanAdmissionSnapshot(input: {
 >
 > 构造一个**完全正常**的 proxy：binding active、协议匹配、alias 在 grant 内、rate limiter 放行、audit gate 永远返回 `allowed`（带真实 receiptId）、credentialLoader 返回一个 key、两个 upstream client 都返回 200。**唯一的偏差**：`governedAdmission.snapshot()` 返回 `routes` 为空的快照。
 >
-> 断言：`execute()` 返回 `status === "route_not_admitted"`；且 `auditGate.claimDispatch` 调用次数 === 0；且 `credentialLoader.load` 调用次数 === 0；且两个 upstream client 的 `invoke` 与 `invokeStreaming` 调用次数均 === 0；且 `result.body === null`、`result.receiptId === null`。
+> 断言：`execute()` 返回 `status === "route_not_admitted"`；且 `auditGate.claimDispatch` 调用次数 === 0；且 `credentialLoader.load` 调用次数 === 0；且两个 upstream client 的 `invoke` 调用次数均 === 0；且 `result.body === null`、`result.receiptId === null`。
 >
 > 这条测试在今天的代码上**必然失败**（今天没有 `governedAdmission` 这个概念，请求会一路跑到 upstream 并返回 200）。它变绿即证明从属关系是真实的执行路径，而不是文档里的一句话。
 
@@ -557,3 +557,16 @@ Owner 裁定：**两种形态都要**，作为两条并行的接入方式，而�
 ### 与评审工作令的已知偏差（须由 CodeX 裁定）
 
 工作令 Public 第 2 项要求「禁止新 proxy 直接构造并发送 provider 请求」。在自助形态下，代理仍然直接向上游发请求——这正是 LAN 直通的定义。本裁定把该项从「消灭直通」改为「直通必须从属于治理准入」。这是 owner 的产品决策，不是工程规避；实施方不得据此自称该项已按原文关闭，须由 CodeX 独立裁定该偏差可否接受。
+
+## 流式能力声明（2026-07-31 收口）
+
+审查结论：合同不支持流式。网关的响应类型是一份缓冲 JSON body，桥接层对 `stream: true` 直接回 400，
+所以 proxy 引擎与两个上游客户端里的 SSE 直通实现从网关侧永远不可达——它是一条"实现了但不交付"的能力。
+按"若合同明确不支持，则删除虚假的能力声明"处理：`invokeStreaming`、`CaioUpstreamStreamResult`、
+chunk 转发计数、`incomplete_stream` 状态与相应测试全部删除；留下的唯一流式相关行为是桥接层那个
+400 拒绝，它现在是产品的真实契约而不是临时限制。
+
+Streaming claim (closed 2026-07-31): the contract does not support streaming — the gateway serves one
+buffered JSON body and refuses `stream: true` with 400 — so the SSE pass-through that existed one layer
+down was unreachable and has been removed together with its result type, chunk accounting,
+`incomplete_stream` status and tests. The 400 refusal is now the product's real contract.

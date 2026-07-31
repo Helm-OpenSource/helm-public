@@ -30,6 +30,15 @@ export type InMemoryCaioAccessTokenPersistence =
       peek(tokenId: string): CaioAccessTokenRecord | null;
       /** Test hook: all stored row snapshots. */
       rows(): readonly CaioAccessTokenRecord[];
+      /**
+       * Test hook: replace a stored alias grant, including with entries the
+       * service would have refused at issuance. Exists so the "storage is not
+       * a trust boundary" behaviour can be exercised.
+       */
+      overwriteGrantForTest(
+        tokenId: string,
+        grantedAliases: readonly string[] | null,
+      ): void;
     }>;
 
 export function createInMemoryCaioAccessTokenPersistence(): InMemoryCaioAccessTokenPersistence {
@@ -181,6 +190,15 @@ export function createInMemoryCaioAccessTokenPersistence(): InMemoryCaioAccessTo
 
     rows(): readonly CaioAccessTokenRecord[] {
       return Object.freeze([...byId.values()].map(snapshot));
+    },
+
+    overwriteGrantForTest(
+      tokenId: string,
+      grantedAliases: readonly string[] | null,
+    ): void {
+      const stored = byId.get(tokenId);
+      if (!stored) throw new Error("Unknown CAIO access token id.");
+      stored.grantedAliases = grantedAliases;
     },
   });
 }

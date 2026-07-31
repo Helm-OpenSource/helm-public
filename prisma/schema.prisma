@@ -6699,6 +6699,11 @@ model CaioAccessToken {
   rotatedFromTokenId     String?
   rateWindowStartedAt    DateTime
   rateWindowRequestCount Int       @default(0)
+  // Per-token alias grant as a JSON array of stable CAIO aliases. NULL means
+  // no grant was configured (the client type's default applies); "[]" is an
+  // explicit grant of nothing. Additive and nullable, so existing rows keep
+  // their current behaviour.
+  grantedAliases         String?   @db.Text
   workspace              Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioAccessToken_workspace_fkey")
 
   @@unique([id, workspaceId], map: "CaioAccessToken_id_workspace_key")

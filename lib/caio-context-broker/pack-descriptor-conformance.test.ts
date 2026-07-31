@@ -19,6 +19,11 @@
 //     drift detector: the Pack test pins the fixture to its adapter's real
 //     output, this test pins the same bytes to Core's schema, so a change on
 //     either side that is not mirrored fails here.
+//
+// WHEN THE SECOND SOURCE IS ABSENT it is REPORTED, not silently skipped: the
+// test that covers it always runs and says in its NAME whether the cross-repo
+// comparison happened, warns with the env var to set, and fails outright when
+// HELM_PACKS_ROOT_REQUIRED=1 declares that the comparison was expected.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -43,6 +48,8 @@ const PACK_FIXTURE_RELATIVE_PATH =
   "packs/service-delivery/operations/fixtures/caio-context-source-descriptors.contract.json";
 
 const PACK_ROOT_ENV = "HELM_PACKS_ROOT";
+/** Set to "1" to make a missing HELM_PACKS_ROOT a failure, not a report. */
+const PACK_ROOT_REQUIRED_ENV = "HELM_PACKS_ROOT_REQUIRED";
 
 function readCommittedFixture(): string {
   return readFileSync(resolve(process.cwd(), COMMITTED_FIXTURE_PATH), "utf8");
@@ -160,19 +167,51 @@ describe("pack descriptor conformance — helm.caio.context-source-descriptor.v1
     ).toBe(false);
   });
 
+  // CROSS-REPO DRIFT DETECTOR — reported, never silent.
+  //
+  // helm-packs is a separate repository and this repo's CI has no checkout of
+  // it, so the live comparison cannot run there. The DECISION is therefore:
+  // keep the committed byte-identical copy as the gate that always runs, and
+  // make the missing half impossible to miss:
+  //   1. a test that ALWAYS runs states, by name, whether the live comparison
+  //      ran — so "0 failures" can never be mistaken for "both halves ran";
+  //   2. a warning names the env var and what was not checked;
+  //   3. HELM_PACKS_ROOT_REQUIRED=1 turns the absence into a FAILURE, so a job
+  //      that means to run the cross-repo check cannot silently skip it.
   const packRoot = process.env[PACK_ROOT_ENV];
-  const liveFixtureTest = packRoot ? it : it.skip;
+  const packRootRequired = process.env[PACK_ROOT_REQUIRED_ENV] === "1";
 
-  liveFixtureTest(
-    `matches the live helm-packs fixture byte for byte (set ${PACK_ROOT_ENV} to run)`,
+  it(
+    packRoot
+      ? `cross-repo drift detector RAN against ${PACK_ROOT_ENV}`
+      : `cross-repo drift detector DID NOT RUN — ${PACK_ROOT_ENV} is unset (committed copy still gates this contract)`,
     () => {
-      // Skipped with this name when HELM_PACKS_ROOT is unset: the committed
-      // copy above still gates the contract, so an unset env var never makes
-      // the suite vacuous.
-      const live = readFileSync(
-        resolve(packRoot as string, PACK_FIXTURE_RELATIVE_PATH),
-        "utf8",
-      );
+      if (!packRoot) {
+        const message =
+          `[pack-descriptor-conformance] cross-repo drift check SKIPPED: ${PACK_ROOT_ENV} is unset. ` +
+          `The committed copy at ${COMMITTED_FIXTURE_PATH} was still asserted against Core's schema, ` +
+          `but nothing here proves it still matches ${PACK_FIXTURE_RELATIVE_PATH} in helm-packs. ` +
+          `Set ${PACK_ROOT_ENV}=<helm-packs checkout> to run it, or ${PACK_ROOT_REQUIRED_ENV}=1 to make its absence a failure.`;
+        console.warn(message);
+        expect(
+          packRootRequired,
+          `${PACK_ROOT_REQUIRED_ENV}=1 demands the cross-repo comparison, but ${PACK_ROOT_ENV} is unset`,
+        ).toBe(false);
+        return;
+      }
+      const livePath = resolve(packRoot, PACK_FIXTURE_RELATIVE_PATH);
+      let live: string;
+      try {
+        live = readFileSync(livePath, "utf8");
+      } catch {
+        // A pointed-at checkout with no fixture is a DRIFT report, not an
+        // ENOENT stack: the pack side has not landed (or has removed) the file
+        // this committed copy mirrors.
+        throw new Error(
+          `${PACK_ROOT_ENV} points at ${packRoot}, but ${PACK_FIXTURE_RELATIVE_PATH} is absent there. ` +
+            `Check out the helm-packs branch that carries the fixture, or unset ${PACK_ROOT_ENV} to rely on the committed copy.`,
+        );
+      }
       expect(live).toBe(committed);
     },
   );

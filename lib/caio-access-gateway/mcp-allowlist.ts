@@ -233,3 +233,50 @@ export function isCaioToolFlagEnabled(
     ? flags.readEnabled
     : false;
 }
+
+/**
+ * ADMISSION, part 1: is the gateway's MCP surface enabled at all?
+ *
+ * Throws the typed 403-class `scope_violation` while `gatewayEnabled` is false,
+ * which is the DEFAULT state. It is checked before the JSON-RPC payload is even
+ * scope-resolved, so with the default flag set NOTHING on POST /mcp reaches the
+ * dispatcher — not a tool call, not a handshake, not an enumeration — and no
+ * audit slot is spent on a request the deployment never enabled.
+ *
+ * The refusal deliberately reuses `scope_violation` rather than minting a
+ * "feature disabled" identifier: whether a capability exists but is switched
+ * off is not disclosed to a LAN client.
+ */
+export function assertCaioMcpSurfaceEnabled(
+  flags: WorkBuddyFeatureFlags,
+): void {
+  if (!flags.gatewayEnabled) {
+    throw new CaioAccessGatewayError("scope_violation");
+  }
+}
+
+/**
+ * ADMISSION, part 2: may THIS tool be called for THIS flag state?
+ *
+ * Reads exactly the same predicate the enumeration gate reads
+ * (isCaioToolFlagEnabled, composed by caioGatewayListableToolNames in
+ * gateway-http-core.ts), so `tools/call` and `tools/list` cannot drift into two
+ * different answers: a name the flags refuse to enumerate is a name the flags
+ * refuse to call, and a listed name is always a callable name.
+ *
+ * Consequences of that single source, all asserted by test:
+ *   - every flag off  -> nothing is callable (part 1 already refused);
+ *   - gateway + read  -> only the read-classified allowlist entries;
+ *   - every flag on   -> mutations are STILL refused, because no allowlisted
+ *     mutation is governed by any of the three mutation flags;
+ *   - presence / delivery-writing names are not allowlisted at all, so they are
+ *     already refused by assertToolAllowed before reaching here.
+ */
+export function assertCaioToolCallEnabled(
+  toolName: string,
+  flags: WorkBuddyFeatureFlags,
+): void {
+  if (!isCaioToolFlagEnabled(toolName, flags)) {
+    throw new CaioAccessGatewayError("scope_violation");
+  }
+}

@@ -152,4 +152,3 @@ CREATE TABLE `CaioCredentialRefState` (
     UNIQUE INDEX `CaioCredentialRefState_workspace_ref_key`(`workspaceId`, `credentialRef`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-

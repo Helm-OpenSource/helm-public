@@ -163,11 +163,9 @@ export function caioModelDispatchOutcomeFromProxyResult(
           )
         : new CaioAccessGatewayError("upstream_failed");
 
-    case "incomplete_stream":
     case "cancelled":
-      // This bridge never requests streaming, so neither status can arise from
-      // it; if a caller drives the proxy differently, fail closed rather than
-      // answer 200 for a truncated or abandoned dispatch.
+      // The caller abandoned the dispatch before the upstream answered. There
+      // is no body to serve, so fail closed rather than answer 200 with null.
       throw new CaioAccessGatewayError("upstream_failed");
 
     default: {
@@ -220,7 +218,18 @@ export function createCaioGatewayModelDispatchPort(deps: {
   async function dispatch(
     protocol: "responses" | "chat_completions",
     input: {
-      principal: { workspaceId: string; userRef: string; clientType: string };
+      principal: {
+        workspaceId: string;
+        userRef: string;
+        clientType: string;
+        /**
+         * The per-token alias grant read from the token row at authentication.
+         * Carried verbatim: `undefined` means "no grant stored, use the client
+         * type's default", and `[]` means "explicitly nothing", so the two may
+         * never be collapsed.
+         */
+        grantedAliases?: readonly string[];
+      };
       requestId: string;
       /** Correlation hint only: never an audit identity. Unused on purpose. */
       clientCorrelationId: string | null;
@@ -229,8 +238,10 @@ export function createCaioGatewayModelDispatchPort(deps: {
   ): Promise<CaioModelDispatchOutcome> {
     const body = asJsonObjectPayload(input.payload);
     if (body.stream === true) {
-      // The gateway response shape is a buffered JSON body; answering a
-      // streaming request with one would silently break the client.
+      // The product does not ship streaming: the gateway response shape is a
+      // buffered JSON body and no layer below it has a streaming call shape
+      // either. Refusing is the honest answer — serving a buffered body to a
+      // client that asked for SSE would silently break it.
       throw new CaioAccessGatewayError("bad_request");
     }
     const result = await deps.proxy.execute({
@@ -238,6 +249,12 @@ export function createCaioGatewayModelDispatchPort(deps: {
         workspaceId: input.principal.workspaceId,
         userRef: input.principal.userRef,
         clientType: asClientType(input.principal.clientType),
+        // Present-vs-absent is load-bearing: an absent key means the proxy
+        // resolves the client type's default grant, while an empty array is an
+        // explicit grant of nothing.
+        ...(input.principal.grantedAliases === undefined
+          ? {}
+          : { grantedAliases: input.principal.grantedAliases }),
       },
       alias: readAlias(body),
       protocol,

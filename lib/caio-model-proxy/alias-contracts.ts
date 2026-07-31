@@ -53,18 +53,61 @@ export const caioCredentialRefSchema = z
 
 const policyKeySchema = z.string().min(1).max(200);
 
-/**
- * An upstream endpoint carries a credential and a projected prompt, so
- * plaintext HTTP is refused. The one exception is an explicit loopback host,
- * which exists for a local test double: it can only reach a listener on this
- * machine, never a network peer.
- */
-const LOOPBACK_HTTP_ENDPOINT =
-  /^http:\/\/(?:127\.0\.0\.1|\[::1\]|localhost)(?::\d{1,5})?(?:\/[^\s]*)?$/u;
+const HTTPS_SCHEME_PREFIX = "https://";
 
+/**
+ * An upstream endpoint carries a credential and a projected prompt, so the
+ * transport must be TLS in EVERY deployment posture. There is no loopback
+ * plaintext exception: a running gateway cannot distinguish "a local test
+ * double" from "a plaintext listener someone started on this host", so the
+ * exception would have been an unauthenticated, unencrypted egress path that
+ * only had to look like loopback. Local test doubles are wired by injecting
+ * `fetchImpl` into the upstream clients, which needs no listener at all.
+ *
+ * Validation is a strict `URL` parse rather than a pattern match. A pattern
+ * accepts a shape; the parser answers what a client will actually dial:
+ *   - protocol must be exactly `https:`
+ *   - the authority may carry NO userinfo (credentials in a config value leak
+ *     into logs and receipts, and `https://@host` parses as a bare host)
+ *   - an explicit port must be an integer in 1-65535 (`:0` parses but cannot
+ *     be dialed)
+ *   - no query string and no fragment: the endpoint is a BASE url that a
+ *     request path is appended to, so either one silently breaks the joined
+ *     URL — and a query string is a common place to hide a key
+ *   - no surrounding whitespace: `URL` trims it, so the trimmed value would
+ *     be dialed while the configured value said something else
+ */
 export function isCaioSecureUpstreamEndpoint(value: string): boolean {
-  if (/^https:\/\/[^\s]+$/u.test(value)) return true;
-  return LOOPBACK_HTTP_ENDPOINT.test(value);
+  if (typeof value !== "string" || value.length === 0) return false;
+  // `URL` trims leading/trailing whitespace; refuse rather than silently dial
+  // something the configuration does not literally say.
+  if (value !== value.trim()) return false;
+  // Literal scheme prefix, checked before parsing: `URL` silently repairs
+  // `https:/host/v1` into `https://host/v1`, which would mean the configured
+  // value and the dialed value are not the same string. It also makes the
+  // authority slice below exact.
+  if (!value.startsWith(HTTPS_SCHEME_PREFIX)) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  if (parsed.hostname.length === 0) return false;
+  if (parsed.username !== "" || parsed.password !== "") return false;
+  // An empty userinfo ("https://@host") is dropped by the parser, so the raw
+  // authority is inspected too.
+  if (value.slice(HTTPS_SCHEME_PREFIX.length).split("/", 1)[0]?.includes("@")) {
+    return false;
+  }
+  if (parsed.search !== "" || parsed.hash !== "") return false;
+  if (parsed.port !== "") {
+    if (!/^[0-9]{1,5}$/u.test(parsed.port)) return false;
+    const port = Number(parsed.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
+  }
+  return true;
 }
 
 const endpointBaseUrlSchema = z
@@ -73,7 +116,7 @@ const endpointBaseUrlSchema = z
   .max(500)
   .refine(isCaioSecureUpstreamEndpoint, {
     message:
-      "upstream endpoint must be https, or plain http only on an explicit loopback host",
+      "upstream endpoint must be an https URL with no userinfo, query, fragment, or out-of-range port",
   });
 
 export const CAIO_ALIAS_BINDING_STATUSES = ["active", "disabled"] as const;

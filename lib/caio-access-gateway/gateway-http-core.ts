@@ -10,7 +10,8 @@
  *   -> authenticate(audience) -> source ip check (inside the
  *      authenticator, from the injected client ip)
  *   -> server-side request id -> body size cap (1 MiB default)
- *   -> JSON parse -> project-scope resolution + live membership gate
+ *   -> JSON parse -> feature-flag admission (POST /mcp)
+ *   -> project-scope resolution + live membership gate
  *      (POST /mcp) -> audit claim (POST /mcp only) -> dispatch.
  *
  * Cost control: the per-source-ip slot is claimed BEFORE any token lookup,
@@ -25,12 +26,25 @@
  * never participates in receipt identity or idempotency, so a client cannot
  * collide with, poison, or probe another caller's audit slot.
  *
+ * Feature flags, ONE authoritative source: the wired `featureFlags` state (the
+ * fail-closed default is DEFAULT_WORKBUDDY_FEATURE_FLAGS — everything off) is
+ * read by BOTH MCP paths through the same predicate in mcp-allowlist.ts.
+ *   tools/call  assertCaioMcpSurfaceEnabled + assertCaioToolCallEnabled, on the
+ *               request path, before the membership gate, the audit claim and
+ *               the dispatcher. With every flag off the dispatcher is never
+ *               invoked at all.
+ *   tools/list  the same predicate, composed by caioGatewayListableToolNames
+ *               and applied to the answer (projectCaioToolsListPayload).
+ * The two therefore cannot drift: a name the flags refuse to enumerate is a
+ * name the flags refuse to call. Previously only the enumeration consulted the
+ * flags while a call consulted the allowlist alone, so an every-flag-off
+ * deployment still dispatched (and audited) an allowlisted read.
+ *
  * Tool enumeration: a POST /mcp `tools/list` response is never forwarded
  * verbatim. It is projected through the server-side allowlist AND the
  * feature-flag state (projectCaioToolsListPayload), so the enumerated set can
  * never exceed what assertToolAllowed plus the flags would let this token call,
- * and presence / delivery / mutation definitions can never appear. With the
- * default flag set (everything off) the enumeration is empty.
+ * and presence / delivery / mutation definitions can never appear.
  *
  * Project scope: POST /mcp payloads are resolved through
  * mcp-request-scope.ts, which knows the JSON-RPC shape and refuses any
@@ -84,6 +98,8 @@ import {
   type CaioGatewayWireError,
 } from "@/lib/caio-access-gateway/gateway-error-contract";
 import {
+  assertCaioMcpSurfaceEnabled,
+  assertCaioToolCallEnabled,
   CAIO_GATEWAY_ALLOWED_TOOL_NAMES,
   filterToolDefinitions,
   isCaioToolFlagEnabled,
@@ -812,6 +828,10 @@ export function createCaioGatewayHandler(
     let mcpMethod: string | null = null;
     let authorizedProjectRefs: readonly string[] = Object.freeze([]);
     if (route.kind === "mcp") {
+      // FEATURE-FLAG ADMISSION, before the payload is even scope-resolved: the
+      // MCP surface is off unless this deployment enabled it. With the default
+      // flag set the dispatcher is never invoked and no audit slot is spent.
+      assertCaioMcpSurfaceEnabled(featureFlags);
       const scope = resolveRequestProjectRefs(payload);
       mcpMethod = scope.method;
       if (scope.kind === "tool_call") {
@@ -820,6 +840,10 @@ export function createCaioGatewayHandler(
         if (scope.workspaceId !== principal.workspaceId) {
           throw new CaioAccessGatewayError("scope_violation");
         }
+        // The SAME source the enumeration gate reads: a tool the flags refuse
+        // to list is a tool the flags refuse to call. Checked before the
+        // membership gate, the audit claim and the dispatch.
+        assertCaioToolCallEnabled(scope.toolName, featureFlags);
         toolName = scope.toolName;
         // EVERY resolved ref is asserted, not just the first.
         for (const projectRef of scope.projectRefs) {

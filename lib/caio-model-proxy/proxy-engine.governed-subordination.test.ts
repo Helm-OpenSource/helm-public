@@ -135,11 +135,7 @@ function makeSpies() {
     upstreamStatus: 200,
     body: { id: "resp_ok" },
   }));
-  const invokeStreaming = vi.fn(async () => ({
-    status: "ok" as const,
-    chunksForwarded: 1,
-  }));
-  return { claimDispatch, credentialLoad, invoke, invokeStreaming };
+  return { claimDispatch, credentialLoad, invoke };
 }
 
 type Spies = ReturnType<typeof makeSpies>;
@@ -148,13 +144,11 @@ function expectUntouched(spies: Spies): void {
   expect(spies.claimDispatch).toHaveBeenCalledTimes(0);
   expect(spies.credentialLoad).toHaveBeenCalledTimes(0);
   expect(spies.invoke).toHaveBeenCalledTimes(0);
-  expect(spies.invokeStreaming).toHaveBeenCalledTimes(0);
 }
 
 function commonDeps(spies: Spies, bindings: CaioModelAliasBinding[]) {
   const client = {
     invoke: spies.invoke,
-    invokeStreaming: spies.invokeStreaming,
   } as unknown as CaioModelProxyDependencies["clients"]["responses"];
   return {
     bindings,

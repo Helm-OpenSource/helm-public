@@ -8,16 +8,24 @@ import {
   caioModelDispatchOutcomeFromProxyResult,
   createCaioGatewayModelDispatchPort,
 } from "@/lib/caio-access-gateway/model-dispatch-bridge";
-import type { CaioAccessPrincipal } from "@/lib/caio-access-gateway/token-store.service";
+import { createInMemoryCaioAccessTokenPersistence } from "@/lib/caio-access-gateway/token-store.memory";
+import {
+  createCaioAccessTokenService,
+  type CaioAccessPrincipal,
+} from "@/lib/caio-access-gateway/token-store.service";
 import {
   CAIO_AUDIT_CONFLICT_ERROR_CODE,
   CAIO_AUDIT_REPLAY_LIMIT_ERROR_CODE,
   CAIO_AUDIT_UNAVAILABLE_ERROR_CODE,
 } from "@/lib/caio-audit-state/audit-state-contracts";
-import type {
-  CaioModelProxy,
-  CaioProxyAuditRefusal,
-  CaioProxyExecuteResult,
+import type { CaioModelAliasBinding } from "@/lib/caio-model-proxy/alias-contracts";
+import type { CaioGovernedAdmissionSnapshot } from "@/lib/caio-model-proxy/governed-admission-contracts";
+import { createCaioFrozenGovernedAdmission } from "@/lib/caio-model-proxy/governed-route-admission.service";
+import {
+  createCaioModelProxy,
+  type CaioModelProxy,
+  type CaioProxyAuditRefusal,
+  type CaioProxyExecuteResult,
 } from "@/lib/caio-model-proxy/proxy-engine";
 
 const PRINCIPAL: CaioAccessPrincipal = Object.freeze({
@@ -363,15 +371,13 @@ describe("caioModelDispatchOutcomeFromProxyResult", () => {
     expect(error.retryAfterSeconds).toBe(12);
   });
 
-  it("raises a typed failure for streamed and cancelled dispatches", () => {
-    for (const status of ["incomplete_stream", "cancelled"] as const) {
-      const error = caught(() =>
-        caioModelDispatchOutcomeFromProxyResult(
-          proxyResult({ status, body: null }),
-        ),
-      );
-      expect(error.wireStatus).toBe(502);
-    }
+  it("raises a typed failure for a cancelled dispatch", () => {
+    const error = caught(() =>
+      caioModelDispatchOutcomeFromProxyResult(
+        proxyResult({ status: "cancelled", body: null }),
+      ),
+    );
+    expect(error.wireStatus).toBe(502);
   });
 });
 
@@ -427,10 +433,54 @@ describe("createCaioGatewayModelDispatchPort", () => {
     expect(JSON.stringify(call)).not.toContain("client-hint-1");
   });
 
-  it("never requests streaming: the gateway response shape cannot stream", async () => {
+  // Per-token alias grant: the principal is the ONLY place the grant can come
+  // from (a client cannot supply it), so the bridge has to carry it verbatim —
+  // including an empty grant, which denies every alias and must not be
+  // confused with "no grant configured".
+  it("carries the principal's explicit alias grant into the proxy", async () => {
+    const h = harness();
+    await h.port.responses({
+      ...REQUEST,
+      principal: { ...PRINCIPAL, grantedAliases: ["caio-codex-default"] },
+    });
+    expect(h.execute.mock.calls[0][0].audienceContext.grantedAliases).toEqual([
+      "caio-codex-default",
+    ]);
+  });
+
+  it("carries an EMPTY grant as an empty grant, never as an absent one", async () => {
+    const h = harness();
+    await h.port.responses({
+      ...REQUEST,
+      principal: { ...PRINCIPAL, grantedAliases: [] },
+    });
+    expect(h.execute.mock.calls[0][0].audienceContext.grantedAliases).toEqual(
+      [],
+    );
+  });
+
+  it("omits grantedAliases when the token carries none, so the client-type default applies", async () => {
     const h = harness();
     await h.port.responses(REQUEST);
-    expect(h.execute.mock.calls[0][0].streaming).toBeUndefined();
+    expect(
+      "grantedAliases" in h.execute.mock.calls[0][0].audienceContext,
+    ).toBe(false);
+  });
+
+  it("asks the proxy for a plain dispatch: no streaming field exists to set", async () => {
+    const h = harness();
+    await h.port.responses(REQUEST);
+    // The proxy input has no streaming/chunk surface at all — the product does
+    // not ship streaming, so there is nothing here to turn on by accident.
+    expect(
+      Object.keys(h.execute.mock.calls[0][0] as Record<string, unknown>).sort(),
+    ).toEqual([
+      "alias",
+      "audienceContext",
+      "body",
+      "protocol",
+      "requestId",
+    ]);
   });
 
   it("refuses a payload that is not a JSON object", async () => {
@@ -492,5 +542,169 @@ describe("createCaioGatewayModelDispatchPort", () => {
       refusal: "receipt_conflict",
       retryAfterSeconds: null,
     });
+  });
+});
+
+// THE DATA PATH, END TO END: issue a token with a grant → authenticate it →
+// dispatch through the bridge → the real proxy enforces exactly that grant.
+// Before this path existed the explicit branch of resolveCaioGrantedAliases
+// was unreachable in production and every token fell back to the client-type
+// default, so these three cases are the ones that prove it is real.
+describe("per-token alias grant: token store to proxy", () => {
+  const GOVERNED_POLICY_KEY = "caio-lan-default";
+  const ROUTE_REF = "route-provider-a-primary";
+  const POLICY_VALID_UNTIL = "2099-01-01T00:00:00.000Z";
+  const NOW = new Date("2026-07-31T08:00:00.000Z");
+  const SOURCE_IP = [192, 168, 1, 10].join(".");
+
+  function binding(alias: string): CaioModelAliasBinding {
+    return {
+      alias,
+      protocol: "responses",
+      providerKey: "provider-a",
+      upstreamModel: `upstream-for-${alias}`,
+      credentialRef: "provider-a-key",
+      endpointBaseUrl: "https://upstream.example.internal/v1",
+      region: "cn-hangzhou",
+      dataRetentionPolicyKey: "retention-days:30",
+      trainingUsePolicyKey: "prohibited",
+      dataAuthorizationKey: "auth-tier-1",
+      policyVersion: "policy-v3",
+      status: "active",
+      governedPolicyKey: GOVERNED_POLICY_KEY,
+      governedRouteRef: ROUTE_REF,
+      fallbackCandidates: [],
+    };
+  }
+
+  function snapshot(): CaioGovernedAdmissionSnapshot {
+    return {
+      policyKey: GOVERNED_POLICY_KEY,
+      policyId: "policy:caio-lan-default-v1",
+      policyHash: `sha256:${"e".repeat(64)}`,
+      policyHeadVersion: 3,
+      policyRevocationEpoch: 0,
+      resolvedAt: "2026-07-30T00:00:00.000Z",
+      validUntil: POLICY_VALID_UNTIL,
+      routes: new Map([
+        [
+          ROUTE_REF,
+          {
+            routeRef: ROUTE_REF,
+            policyKey: GOVERNED_POLICY_KEY,
+            policyId: "policy:caio-lan-default-v1",
+            policyHash: `sha256:${"e".repeat(64)}`,
+            policyHeadVersion: 3,
+            policyRevocationEpoch: 0,
+            provider: "provider-a",
+            credentialRef: "provider-a-key",
+            region: "cn-hangzhou",
+            deploymentForm: "private_deployment",
+            jurisdiction: "customer_premises",
+            retentionPolicyKey: "retention-days:30",
+            trainingUsePolicyKey: "prohibited",
+            pricingVersion: "provider-a-pricing-202607",
+            maxOutputTokens: 4_000,
+            policyValidUntil: POLICY_VALID_UNTIL,
+          },
+        ],
+      ]),
+    };
+  }
+
+  const ALT_ALIAS = "caio-codex-alt";
+
+  async function chain(grantedAliases?: readonly string[]) {
+    const persistence = createInMemoryCaioAccessTokenPersistence();
+    const tokens = createCaioAccessTokenService({ persistence });
+    const pair = await tokens.issueCaioTokenPair({
+      workspaceId: "ws_bridge",
+      userRef: "user:ceo",
+      clientType: "codex",
+      deviceRef: "device:mac-studio",
+      approvedSourceIp: SOURCE_IP,
+      ...(grantedAliases === undefined ? {} : { grantedAliases }),
+      now: NOW,
+    });
+    const principal = await tokens.authenticateCaioToken({
+      rawToken: pair.model.rawToken,
+      expectedAudience: "model",
+      sourceIp: SOURCE_IP,
+      now: NOW,
+    });
+    const upstream = vi.fn(async () => ({
+      status: "ok" as const,
+      upstreamStatus: 200,
+      body: { id: "resp_ok" },
+    }));
+    const client = { invoke: upstream };
+    const proxy = createCaioModelProxy({
+      posture: "self_service",
+      bindings: [binding("caio-codex-default"), binding(ALT_ALIAS)],
+      governedAdmission: createCaioFrozenGovernedAdmission(snapshot()),
+      credentialLoader: { load: async () => "loaded-secret" },
+      clients: { responses: client, chatCompletions: client },
+      auditGate: {
+        posture: "self_service",
+        claimDispatch: async () => ({
+          status: "allowed" as const,
+          receiptId: "receipt-1",
+          persistedVia: "primary" as const,
+          dispatchAttempt: 1,
+        }),
+      },
+    });
+    const port = createCaioGatewayModelDispatchPort({ proxy });
+
+    async function drive(alias: string) {
+      return port
+        .responses({
+          principal,
+          requestId: "ws_bridge:req-1",
+          clientCorrelationId: null,
+          payload: { model: alias, input: "hello" },
+        })
+        .then((outcome) => outcome as unknown)
+        .catch((error: unknown) => error);
+    }
+
+    return { drive, upstream };
+  }
+
+  it("an explicit grant drives ONLY the granted alias", async () => {
+    const { drive, upstream } = await chain([ALT_ALIAS]);
+
+    const granted = await drive(ALT_ALIAS);
+    expect(granted).toMatchObject({ claim: "allowed" });
+
+    // The client-type DEFAULT alias is now refused: the explicit grant is
+    // authoritative, not additive.
+    const refused = await drive("caio-codex-default");
+    expect(isCaioAccessGatewayError(refused)).toBe(true);
+    expect((refused as CaioAccessGatewayError).code).toBe("scope_violation");
+    expect((refused as CaioAccessGatewayError).wireStatus).toBe(403);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it("an EMPTY explicit grant drives nothing at all", async () => {
+    const { drive, upstream } = await chain([]);
+    for (const alias of ["caio-codex-default", ALT_ALIAS]) {
+      const refused = await drive(alias);
+      expect(isCaioAccessGatewayError(refused)).toBe(true);
+      expect((refused as CaioAccessGatewayError).code).toBe("scope_violation");
+    }
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it("no stored grant falls back to the client-type default", async () => {
+    const { drive, upstream } = await chain();
+
+    const allowed = await drive("caio-codex-default");
+    expect(allowed).toMatchObject({ claim: "allowed" });
+
+    const refused = await drive(ALT_ALIAS);
+    expect(isCaioAccessGatewayError(refused)).toBe(true);
+    expect((refused as CaioAccessGatewayError).code).toBe("scope_violation");
+    expect(upstream).toHaveBeenCalledTimes(1);
   });
 });

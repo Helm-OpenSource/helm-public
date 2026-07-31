@@ -518,3 +518,110 @@ describe("expireSweep", () => {
     );
   });
 });
+
+// Per-token alias grant: the grant an operator configured for ONE token,
+// stored with it, read at authentication, and carried on the principal. Absent
+// this path every token silently falls back to its client-type default, so the
+// explicit branch in resolveCaioGrantedAliases is unreachable in production.
+describe("per-token alias grant", () => {
+  it("carries an explicit grant from issuance onto the authenticated principal", async () => {
+    const { service } = setup();
+    const pair = await service.issueCaioTokenPair({
+      ...BINDING,
+      grantedAliases: ["caio-codex-default"],
+      now: NOW,
+    });
+    expect(pair.model.record.grantedAliases).toEqual(["caio-codex-default"]);
+
+    const principal = await service.authenticateCaioToken({
+      rawToken: pair.model.rawToken,
+      expectedAudience: "model",
+      sourceIp: APPROVED_SOURCE_IP,
+      now: NOW,
+    });
+    expect(principal.grantedAliases).toEqual(["caio-codex-default"]);
+  });
+
+  it("carries an EMPTY explicit grant, which is not the same as no grant", async () => {
+    const { service } = setup();
+    const pair = await service.issueCaioTokenPair({
+      ...BINDING,
+      grantedAliases: [],
+      now: NOW,
+    });
+    const principal = await service.authenticateCaioToken({
+      rawToken: pair.model.rawToken,
+      expectedAudience: "model",
+      sourceIp: APPROVED_SOURCE_IP,
+      now: NOW,
+    });
+    expect(principal.grantedAliases).toEqual([]);
+    expect(principal.grantedAliases).not.toBeUndefined();
+  });
+
+  it("omits the grant when none was stored, so the client-type default applies", async () => {
+    const { service } = setup();
+    const pair = await service.issueCaioTokenPair({ ...BINDING, now: NOW });
+    expect(pair.model.record.grantedAliases).toBeNull();
+    const principal = await service.authenticateCaioToken({
+      rawToken: pair.model.rawToken,
+      expectedAudience: "model",
+      sourceIp: APPROVED_SOURCE_IP,
+      now: NOW,
+    });
+    expect(principal.grantedAliases).toBeUndefined();
+  });
+
+  it("refuses issuance with a malformed grant entry instead of storing it", async () => {
+    const { persistence, service } = setup();
+    await expectGatewayError(
+      service.issueCaioTokenPair({
+        ...BINDING,
+        grantedAliases: ["caio-codex-default", "NOT AN ALIAS"],
+        now: NOW,
+      }),
+      "bad_request",
+      400,
+    );
+    expect(persistence.rows()).toHaveLength(0);
+  });
+
+  it("drops a malformed stored entry rather than widening the grant", async () => {
+    const { persistence, service } = setup();
+    const pair = await service.issueCaioTokenPair({
+      ...BINDING,
+      grantedAliases: ["caio-codex-default"],
+      now: NOW,
+    });
+    // Storage is not a trust boundary: a row edited outside the service (or
+    // written by an older adapter) must narrow the grant, never widen it.
+    persistence.overwriteGrantForTest(pair.model.record.id, [
+      "caio-codex-default",
+      "NOT AN ALIAS",
+      "",
+    ]);
+
+    const principal = await service.authenticateCaioToken({
+      rawToken: pair.model.rawToken,
+      expectedAudience: "model",
+      sourceIp: APPROVED_SOURCE_IP,
+      now: NOW,
+    });
+    expect(principal.grantedAliases).toEqual(["caio-codex-default"]);
+  });
+
+  it("carries the grant across rotation", async () => {
+    const { service } = setup();
+    const pair = await service.issueCaioTokenPair({
+      ...BINDING,
+      grantedAliases: ["caio-codex-default"],
+      now: NOW,
+    });
+    const rotated = await service.rotateCaioToken({
+      workspaceId: BINDING.workspaceId,
+      tokenId: pair.model.record.id,
+      now: NOW,
+    });
+    expect(rotated.record.grantedAliases).toEqual(["caio-codex-default"]);
+  });
+});

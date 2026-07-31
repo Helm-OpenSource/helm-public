@@ -27,12 +27,10 @@ import type {
 } from "./governed-admission-contracts";
 import { createCaioFrozenGovernedAdmission } from "./governed-route-admission.service";
 import { createCaioModelProxy } from "./proxy-engine";
-import { createCaioResponsesUpstreamPort } from "./upstream/responses-client";
 import type {
   CaioProxyUpstreamClientPort,
   CaioProxyUpstreamInvocation,
   CaioUpstreamInvokeResult,
-  CaioUpstreamStreamResult,
 } from "./upstream/upstream-contracts";
 
 const SECRET_PROMPT = "TOP-SECRET-PROMPT-CONTENT";
@@ -195,9 +193,7 @@ function makeSnapshot(
 
 function makeHarness(input: {
   bindings?: CaioModelAliasBinding[];
-  responsesInvokeResults?: Array<
-    CaioUpstreamInvokeResult | CaioUpstreamStreamResult
-  >;
+  responsesInvokeResults?: CaioUpstreamInvokeResult[];
   snapshot?: CaioGovernedAdmissionSnapshot;
   now?: () => Date;
 } = {}) {
@@ -216,30 +212,10 @@ function makeHarness(input: {
       return nextResult() as CaioUpstreamInvokeResult;
     },
   );
-  const responsesStream = vi.fn(
-    async (
-      _input: CaioProxyUpstreamInvocation & {
-        onChunk: (chunk: string) => void;
-      },
-    ) => {
-      events.push("upstream");
-      return nextResult() as CaioUpstreamStreamResult;
-    },
-  );
   const chatInvoke = vi.fn(
     async (_input: CaioProxyUpstreamInvocation) => {
       events.push("upstream-chat");
       return okResult;
-    },
-  );
-  const chatStream = vi.fn(
-    async (
-      _input: CaioProxyUpstreamInvocation & {
-        onChunk: (chunk: string) => void;
-      },
-    ) => {
-      events.push("upstream-chat");
-      return { status: "ok", chunksForwarded: 1 } as CaioUpstreamStreamResult;
     },
   );
 
@@ -247,8 +223,8 @@ function makeHarness(input: {
     responses: CaioProxyUpstreamClientPort;
     chatCompletions: CaioProxyUpstreamClientPort;
   } = {
-    responses: { invoke: responsesInvoke, invokeStreaming: responsesStream },
-    chatCompletions: { invoke: chatInvoke, invokeStreaming: chatStream },
+    responses: { invoke: responsesInvoke },
+    chatCompletions: { invoke: chatInvoke },
   };
 
   const claimDispatch = vi.fn(
@@ -284,9 +260,7 @@ function makeHarness(input: {
     proxy,
     events,
     responsesInvoke,
-    responsesStream,
     chatInvoke,
-    chatStream,
     claimDispatch,
     credentialLoad,
   };
@@ -404,7 +378,6 @@ describe("alias grant enforcement", () => {
     expect(h.claimDispatch).not.toHaveBeenCalled();
     expect(h.credentialLoad).not.toHaveBeenCalled();
     expect(h.responsesInvoke).not.toHaveBeenCalled();
-    expect(h.responsesStream).not.toHaveBeenCalled();
     expect(h.chatInvoke).not.toHaveBeenCalled();
     expect(h.events).toEqual([]);
   });
@@ -582,7 +555,6 @@ describe("audit gate ordering", () => {
       receiptId: null,
     });
     expect(h.responsesInvoke).not.toHaveBeenCalled();
-    expect(h.responsesStream).not.toHaveBeenCalled();
     expect(h.credentialLoad).not.toHaveBeenCalled();
   });
 
@@ -857,14 +829,8 @@ describe("rate limiter", () => {
       governedAdmission: createCaioFrozenGovernedAdmission(makeSnapshot()),
       credentialLoader: { load: h.credentialLoad },
       clients: {
-        responses: {
-          invoke: h.responsesInvoke,
-          invokeStreaming: h.responsesStream,
-        },
-        chatCompletions: {
-          invoke: h.chatInvoke,
-          invokeStreaming: h.chatStream,
-        },
+        responses: { invoke: h.responsesInvoke },
+        chatCompletions: { invoke: h.chatInvoke },
       },
       auditGate: { posture: "self_service", claimDispatch: h.claimDispatch },
       rateLimiter: { check },
@@ -882,7 +848,7 @@ describe("rate limiter", () => {
 });
 
 describe("fallback", () => {
-  it("attempts at most ONE equivalence-passing fallback on pre-stream upstream failure", async () => {
+  it("attempts at most ONE equivalence-passing fallback on upstream failure", async () => {
     const h = makeHarness({
       bindings: [
         makeBinding({
@@ -996,73 +962,6 @@ describe("fallback", () => {
       fallbackSucceeded: false,
     });
     expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
-  });
-
-  it("NEVER falls back after streaming has forwarded bytes (incomplete_stream)", async () => {
-    const h = makeHarness({
-      bindings: [
-        makeBinding({ fallbackCandidates: [makeCandidate()] }),
-      ],
-      responsesInvokeResults: [
-        {
-          status: "incomplete_stream",
-          reason: "upstream_stream_error",
-          chunksForwarded: 3,
-        },
-      ],
-    });
-    const result = await h.proxy.execute(
-      baseExecuteInput({ streaming: true, onChunk: () => {} }),
-    );
-    expect(result).toMatchObject({
-      status: "incomplete_stream",
-      reasonCode: "upstream_stream_error",
-      fallbackAttempted: false,
-      fallbackSucceeded: false,
-    });
-    expect(h.responsesStream).toHaveBeenCalledTimes(1);
-    expect(h.responsesInvoke).not.toHaveBeenCalled();
-  });
-
-  // F4 regression: the "no retry after first byte" guarantee was a TypeScript
-  // literal only (chunksForwarded: 0 on the streaming upstream_error variant).
-  // The engine never inspected chunksForwarded, so ANY client port — a mock, a
-  // future protocol adapter, or the pre-F3 clients — that reported
-  // upstream_error with bytes already forwarded got a mid-stream retry. This
-  // constructs exactly that (type-illegal) shape: it must NOT fall back.
-  it("F4: NEVER falls back when an upstream_error reports forwarded bytes", async () => {
-    const h = makeHarness({
-      bindings: [
-        makeBinding({ fallbackCandidates: [makeCandidate()] }),
-      ],
-      responsesInvokeResults: [
-        {
-          status: "upstream_error",
-          code: "upstream_unreachable",
-          gatewayStatus: 502,
-          upstreamStatus: null,
-          retryAfterSeconds: null,
-          // Type-illegal on purpose: the runtime guard, not the type, must stop
-          // the retry.
-          chunksForwarded: 3,
-        } as unknown as CaioUpstreamStreamResult,
-      ],
-    });
-    const result = await h.proxy.execute(
-      baseExecuteInput({ streaming: true, onChunk: () => {} }),
-    );
-    expect(result).toMatchObject({
-      status: "upstream_error",
-      httpStatus: 502,
-      reasonCode: "upstream_unreachable",
-      fallbackAttempted: false,
-      fallbackSucceeded: false,
-    });
-    // The only assertion that matters: no second upstream dispatch.
-    expect(h.responsesStream).toHaveBeenCalledTimes(1);
-    expect(h.responsesInvoke).not.toHaveBeenCalled();
-    // ...and no fallback credential was loaded either.
-    expect(h.credentialLoad).toHaveBeenCalledTimes(1);
   });
 
   // F5 regression: exactly one claim was made, recording the PRIMARY binding,
@@ -1184,34 +1083,6 @@ describe("fallback", () => {
     expect(h.credentialLoad).toHaveBeenCalledTimes(1);
   });
 
-  it("allows a fallback when a streaming attempt fails before any byte", async () => {
-    const h = makeHarness({
-      bindings: [
-        makeBinding({ fallbackCandidates: [makeCandidate()] }),
-      ],
-      responsesInvokeResults: [
-        {
-          status: "upstream_error",
-          code: "upstream_unreachable",
-          gatewayStatus: 502,
-          upstreamStatus: null,
-          retryAfterSeconds: null,
-          chunksForwarded: 0,
-        },
-        { status: "ok", chunksForwarded: 5 },
-      ],
-    });
-    const result = await h.proxy.execute(
-      baseExecuteInput({ streaming: true, onChunk: () => {} }),
-    );
-    expect(result).toMatchObject({
-      status: "ok",
-      fallbackAttempted: true,
-      fallbackSucceeded: true,
-    });
-    expect(h.responsesStream).toHaveBeenCalledTimes(2);
-  });
-
   it("does not fall back on cancellation", async () => {
     const h = makeHarness({
       bindings: [
@@ -1226,81 +1097,6 @@ describe("fallback", () => {
       fallbackAttempted: false,
     });
     expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
-  });
-});
-
-// F3 + F4 end to end, over the REAL Responses client (only fetch is faked):
-// this is the reproduction that produced 2 upstream POSTs and forwarded the
-// same SSE chunk twice under a single audit receipt.
-describe("F3: streaming with a failing downstream writer (real upstream client)", () => {
-  it("issues exactly ONE upstream POST when the writer throws on the first chunk", async () => {
-    let upstreamPosts = 0;
-    const fetchImpl = vi.fn(async () => {
-      upstreamPosts += 1;
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          const encode = (text: string) => new TextEncoder().encode(text);
-          controller.enqueue(encode('data: {"delta":"chunk-1"}\n\n'));
-          controller.enqueue(encode("event: response.completed\n\n"));
-          controller.close();
-        },
-      });
-      return new Response(body, {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-      });
-    });
-    const port = createCaioResponsesUpstreamPort({
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-    const claims: CaioCanonicalAuditClaim[] = [];
-    const proxy = createCaioModelProxy({
-      posture: "self_service",
-      governedAdmission: createCaioFrozenGovernedAdmission(makeSnapshot()),
-      bindings: [
-        makeBinding({
-          fallbackCandidates: [
-            makeCandidate({
-              endpointBaseUrl: "https://fallback.example.internal/v1",
-              credentialRef: "provider-a-key-b",
-            }),
-          ],
-        }),
-      ],
-      credentialLoader: {
-        load: async ({ credentialRef }) => `loaded-secret-for-${credentialRef}`,
-      },
-      clients: { responses: port, chatCompletions: port },
-      auditGate: {
-        posture: "self_service",
-        async claimDispatch(claim) {
-          claims.push(claim);
-          return ALLOWED_OUTCOME;
-        },
-      },
-    });
-
-    const forwarded: string[] = [];
-    const result = await proxy.execute(
-      baseExecuteInput({
-        streaming: true,
-        onChunk: (chunk: string) => {
-          forwarded.push(chunk);
-          throw new Error("downstream write failed");
-        },
-      }),
-    );
-
-    expect(upstreamPosts).toBe(1);
-    expect(forwarded).toEqual(['data: {"delta":"chunk-1"}\n\n']);
-    expect(result).toMatchObject({
-      status: "incomplete_stream",
-      reasonCode: "downstream_write_failed",
-      fallbackAttempted: false,
-      fallbackSucceeded: false,
-    });
-    // One dispatch, one receipt: no unrecorded second upstream request.
-    expect(claims).toHaveLength(1);
   });
 });
 

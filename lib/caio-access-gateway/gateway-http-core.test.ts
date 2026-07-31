@@ -4,12 +4,18 @@ import { CaioAccessGatewayError } from "@/lib/caio-access-gateway/gateway-error-
 import {
   CAIO_GATEWAY_MCP_AUDIT_ALIAS,
   CAIO_GATEWAY_MCP_AUDIT_POLICY_VERSION,
+  caioGatewayListableToolNames,
   createCaioGatewayHandler,
   type CaioGatewayHandlerDependencies,
   type CaioGatewayRequest,
   type CaioModelDispatchOutcome,
 } from "@/lib/caio-access-gateway/gateway-http-core";
-import { assertToolAllowed } from "@/lib/caio-access-gateway/mcp-allowlist";
+import {
+  assertCaioToolCallEnabled,
+  assertToolAllowed,
+  CAIO_GATEWAY_ALLOWED_TOOL_NAMES,
+  isCaioToolFlagEnabled,
+} from "@/lib/caio-access-gateway/mcp-allowlist";
 import { createInMemoryCaioSourceIpRateLimiter } from "@/lib/caio-access-gateway/source-ip-rate-limiter";
 import { DEFAULT_WORKBUDDY_FEATURE_FLAGS } from "@/lib/caio-collaboration/feature-flags";
 import type { CaioAccessPrincipal } from "@/lib/caio-access-gateway/token-store.service";
@@ -69,6 +75,17 @@ type Harness = {
   setReadiness(state: CaioAuditGateReadiness): void;
   setReadinessFailure(failing: boolean): void;
 };
+
+/**
+ * The flag state the harness uses unless a test declares its own: the MCP
+ * surface on and reads enabled. Every allowlisted mutation stays refused even
+ * here, and the all-off default is exercised explicitly by the admission tests.
+ */
+const HARNESS_READ_ENABLED_FLAGS = Object.freeze({
+  ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+  gatewayEnabled: true,
+  readEnabled: true,
+});
 
 /** Default allowed model dispatch: a receipt-backed proxy outcome. */
 const MODEL_DISPATCH_OK: CaioModelDispatchOutcome = Object.freeze({
@@ -183,7 +200,10 @@ function createHarness(
       },
     },
     maxBodyBytes: overrides.maxBodyBytes,
-    featureFlags: overrides.featureFlags,
+    // Default for tests that are about something OTHER than the flags: the
+    // read surface a real deployment turns on first. The flag-admission tests
+    // below pass their own state, including the all-off default.
+    featureFlags: overrides.featureFlags ?? HARNESS_READ_ENABLED_FLAGS,
   };
   return {
     handler: createCaioGatewayHandler(deps),
@@ -692,13 +712,31 @@ describe("tools/list enumeration contract", () => {
     return (tools ?? []).map((tool) => String(tool.name));
   }
 
-  it("returns an EMPTY tool list when every feature flag is off (the default)", async () => {
-    const harness = createHarness({ mcpDispatch: overAnsweringDispatcher() });
+  it("returns an EMPTY tool list when the gateway is on but no risk class is enabled", async () => {
+    const harness = createHarness({
+      mcpDispatch: overAnsweringDispatcher(),
+      featureFlags: {
+        ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+        gatewayEnabled: true,
+      },
+    });
     const response = await harness.handler(
       request({ body: TOOLS_LIST_BODY }),
     );
     expect(response.status).toBe(200);
     expect(listedNames(response.body)).toEqual([]);
+  });
+
+  it("refuses tools/list outright — no dispatch at all — with the default flags", async () => {
+    const harness = createHarness({
+      mcpDispatch: overAnsweringDispatcher(),
+      featureFlags: DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+    });
+    const response = await harness.handler(
+      request({ body: TOOLS_LIST_BODY }),
+    );
+    expect(response.status).toBe(403);
+    expect(harness.calls).not.toContain("mcpDispatch");
   });
 
   it("never enumerates presence, delivery, mutation or unknown tools even with every flag ON", async () => {
@@ -844,6 +882,187 @@ describe("tools/list enumeration contract", () => {
       id: 1,
       result: { rows: [{ name: "Acme Portfolio" }] },
     });
+  });
+});
+
+// P1-3 regression: `tools/list` was projected through the feature-flag state
+// while `tools/call` consulted only the allowlist, so with EVERY flag off a
+// call still reached the dispatcher (and spent an audit claim) for a tool the
+// same flags refused to enumerate. Both paths now read ONE authoritative
+// source: the wired featureFlags plus isCaioToolFlagEnabled.
+describe("one authoritative feature-flag source for tools/call and tools/list", () => {
+  const ALL_OFF = DEFAULT_WORKBUDDY_FEATURE_FLAGS;
+  const READ_ON = Object.freeze({
+    ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+    gatewayEnabled: true,
+    readEnabled: true,
+  });
+  const EVERYTHING_ON = Object.freeze({
+    gatewayEnabled: true,
+    readEnabled: true,
+    pushEnabled: true,
+    presenceEnabled: true,
+    mutationsEnabled: true,
+    promptResponsesEnabled: true,
+    questionSelectionsEnabled: true,
+    adviceDecisionsEnabled: true,
+  });
+  const TOOLS_LIST_BODY = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 7,
+    method: "tools/list",
+    params: {},
+  });
+
+  /** Schema-correct arguments per allowlisted tool (tool-schemas.ts). */
+  function argumentsFor(name: string): Record<string, unknown> {
+    if (name === "get_p1c_read_projection") {
+      return { workspaceId: "ws_1", portfolioRef: "project:alpha" };
+    }
+    if (name === "get_ceo_prompt") {
+      return { workspaceId: "ws_1", deliveryObjectId: "delivery:1" };
+    }
+    return { workspaceId: "ws_1" };
+  }
+
+  it("never invokes the dispatcher on a tools/call while every flag is off", async () => {
+    const harness = createHarness({ featureFlags: ALL_OFF });
+    const response = await harness.handler(request({ body: P1C_ALPHA_BODY }));
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({
+      error: "caio_forbidden",
+      reason: "scope_violation",
+    });
+    // The dispatcher spy received ZERO calls, and no audit slot was spent on a
+    // request the flags never permitted.
+    expect(harness.dispatches).toEqual([]);
+    expect(harness.calls).not.toContain("mcpDispatch");
+    expect(harness.auditClaims).toEqual([]);
+  });
+
+  it("never invokes the dispatcher on tools/list while every flag is off", async () => {
+    const harness = createHarness({ featureFlags: ALL_OFF });
+    const response = await harness.handler(request({ body: TOOLS_LIST_BODY }));
+    expect(response.status).toBe(403);
+    expect(harness.dispatches).toEqual([]);
+    expect(harness.calls).not.toContain("mcpDispatch");
+    expect(harness.auditClaims).toEqual([]);
+  });
+
+  it("refuses every allowlisted tool name while every flag is off", async () => {
+    for (const name of CAIO_GATEWAY_ALLOWED_TOOL_NAMES) {
+      const harness = createHarness({ featureFlags: ALL_OFF });
+      const response = await harness.handler(
+        request({ body: jsonRpcToolCall(name, argumentsFor(name)) }),
+      );
+      expect(response.status).toBe(403);
+      expect(harness.dispatches).toEqual([]);
+    }
+  });
+
+  it("admits only P1C read and delivery read once gateway + read are on", async () => {
+    const admitted: string[] = [];
+    for (const name of CAIO_GATEWAY_ALLOWED_TOOL_NAMES) {
+      const harness = createHarness({ featureFlags: READ_ON });
+      await harness.handler(
+        request({ body: jsonRpcToolCall(name, argumentsFor(name)) }),
+      );
+      if (harness.dispatches.length > 0) admitted.push(name);
+    }
+    expect(admitted.sort()).toEqual([
+      "get_ceo_prompt",
+      "get_p1c_read_projection",
+      "list_pending_ceo_prompts",
+    ]);
+  });
+
+  it("refuses a read tools/call while the surface is on but the read flag is off", async () => {
+    // The per-tool half of the admission gate: the surface flag alone admits
+    // NOTHING, so a read tool still needs its own risk-class flag. Without this
+    // case the surface check alone would look like sufficient coverage.
+    const surfaceOnlyFlags = Object.freeze({
+      ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+      gatewayEnabled: true,
+    });
+    for (const name of [
+      "get_p1c_read_projection",
+      "get_ceo_prompt",
+      "list_pending_ceo_prompts",
+    ]) {
+      const harness = createHarness({ featureFlags: surfaceOnlyFlags });
+      const response = await harness.handler(
+        request({ body: jsonRpcToolCall(name, argumentsFor(name)) }),
+      );
+      expect(response.status).toBe(403);
+      expect(response.body).toEqual({
+        error: "caio_forbidden",
+        reason: "scope_violation",
+      });
+      expect(harness.dispatches).toEqual([]);
+      expect(harness.calls).not.toContain("mcpDispatch");
+      expect(harness.auditClaims).toEqual([]);
+    }
+  });
+
+  it("keeps every allowlisted mutation fail-closed even with every flag on", async () => {
+    for (const name of [
+      "adopt_memory_candidate",
+      "reject_memory_candidate",
+      "submit_restricted_candidate",
+    ]) {
+      // The one authoritative source says the tool may not be used...
+      expect(isCaioToolFlagEnabled(name, EVERYTHING_ON)).toBe(false);
+      expect(() => assertCaioToolCallEnabled(name, EVERYTHING_ON)).toThrow(
+        CaioAccessGatewayError,
+      );
+      // ...and the request path agrees: 403, dispatcher never invoked.
+      const harness = createHarness({ featureFlags: EVERYTHING_ON });
+      const response = await harness.handler(
+        request({ body: jsonRpcToolCall(name, { workspaceId: "ws_1" }) }),
+      );
+      expect(response.status).toBe(403);
+      expect(harness.dispatches).toEqual([]);
+    }
+  });
+
+  it("keeps presence and delivery-writing tool calls fail-closed with every flag on", async () => {
+    for (const name of [
+      "poll_ceo_prompts",
+      "begin_owner_presence_challenge",
+      "complete_owner_presence_challenge",
+    ]) {
+      const harness = createHarness({ featureFlags: EVERYTHING_ON });
+      const response = await harness.handler(
+        request({ body: jsonRpcToolCall(name, { workspaceId: "ws_1" }) }),
+      );
+      expect(response.status).toBe(403);
+      expect(harness.dispatches).toEqual([]);
+    }
+  });
+
+  it("can never enumerate a name whose tools/call the same flags would refuse", async () => {
+    for (const flags of [ALL_OFF, READ_ON, EVERYTHING_ON]) {
+      for (const name of caioGatewayListableToolNames(flags)) {
+        // Enumeration and admission are two readings of ONE source, so a
+        // listed name is always a callable name for the same flag state.
+        expect(() => assertCaioToolCallEnabled(name, flags)).not.toThrow();
+      }
+    }
+  });
+
+  it("still enumerates nothing when the gateway flag is on but read is off", async () => {
+    const harness = createHarness({
+      featureFlags: {
+        ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+        gatewayEnabled: true,
+      },
+      mcpDispatch: async () => ({
+        result: { tools: [{ name: "get_ceo_prompt", risk: "read" }] },
+      }),
+    });
+    const response = await harness.handler(request({ body: TOOLS_LIST_BODY }));
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ result: { tools: [] } });
   });
 });
 

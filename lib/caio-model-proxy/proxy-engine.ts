@@ -4,8 +4,14 @@
 // check → protocol check → local rate limit → hash input → claim audit dispatch
 // (BEFORE any upstream traffic; audit down means no egress) → load credential →
 // invoke the protocol-matching upstream client → optional single fallback
-// attempt (only before any streamed byte, only to a fail-closed-equivalent
-// binding, and only to a candidate inside the caller's grant).
+// attempt (only to a fail-closed-equivalent binding, and only to a candidate
+// inside the caller's grant).
+//
+// NOT STREAMING. Every dispatch is one request and one buffered JSON body:
+// the engine has no chunk callback, no SSE path and no incomplete-stream
+// status, because no surface above it can stream. A `stream: true` request is
+// refused at the gateway with 400 rather than silently answered as buffered
+// JSON.
 //
 // ALIAS GRANT: a valid model token is not authority over every configured
 // binding. The caller's granted alias set is resolved from the audience context
@@ -75,7 +81,6 @@ import type {
   CaioProxyUpstreamClientPort,
   CaioUpstreamErrorInfo,
   CaioUpstreamInvokeResult,
-  CaioUpstreamStreamResult,
 } from "./upstream/upstream-contracts";
 
 export const CAIO_PROXY_CLIENT_TYPES = ["codex", "workbuddy"] as const;
@@ -203,8 +208,6 @@ export type CaioProxyExecuteInput = {
   body: Record<string, unknown>;
   requestId: string;
   signal?: AbortSignal;
-  streaming?: boolean;
-  onChunk?: (chunk: string) => void;
 };
 
 export type CaioProxyUpstreamDescriptor = {
@@ -245,7 +248,6 @@ export type CaioProxyExecuteStatus =
   | CaioProxyAuditRefusalStatus
   | "credential_unavailable"
   | "upstream_error"
-  | "incomplete_stream"
   | "cancelled";
 
 export type CaioProxyExecuteResult = {
@@ -254,8 +256,7 @@ export type CaioProxyExecuteResult = {
   reasonCode: string | null;
   receiptId: string | null;
   retryAfterSeconds: number | null;
-  // Upstream JSON body for non-streaming success; null otherwise (streamed
-  // content flows through onChunk and is never buffered here).
+  // Upstream JSON body on success; null on every other status.
   body: unknown;
   upstream: CaioProxyUpstreamDescriptor | null;
   fallbackAttempted: boolean;
@@ -569,25 +570,6 @@ function readClaimOutcome(outcome: unknown): ClaimReading {
   return { claimed: false, refusal: unprovenClaimRefusal(null) };
 }
 
-/**
- * Forwarded-chunk count read DEFENSIVELY from any upstream outcome.
- *
- * The streaming contract types `upstream_error` with `chunksForwarded: 0`, but
- * that literal erases at runtime and `deps.clients` is an injected port: a mock,
- * a third protocol adapter, or a downstream-writer failure can report an
- * upstream_error with bytes already handed downstream. Retry/fallback decisions
- * consult this, so the guarantee is enforced at runtime rather than asserted by
- * a type.
- */
-function forwardedChunkCount(outcome: unknown): number {
-  if (typeof outcome !== "object" || outcome === null) return 0;
-  const value = (outcome as { chunksForwarded?: unknown }).chunksForwarded;
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return 0;
-  }
-  return value;
-}
-
 export function createCaioModelProxy(
   deps: CaioModelProxyDependencies,
 ): CaioModelProxy {
@@ -662,7 +644,7 @@ export function createCaioModelProxy(
     target: CaioModelAliasFallbackCandidate | CaioModelAliasBinding,
     input: CaioProxyExecuteInput,
     apiKey: string,
-  ): Promise<CaioUpstreamInvokeResult | CaioUpstreamStreamResult> {
+  ): Promise<CaioUpstreamInvokeResult> {
     const client = clientForProtocol(target.protocol);
     // Passthrough body with ONLY the model field replaced by the upstream
     // model name; tool/function-call fields flow through untouched.
@@ -670,16 +652,6 @@ export function createCaioModelProxy(
       ...input.body,
       model: target.upstreamModel,
     };
-    if (input.streaming) {
-      const onChunk = input.onChunk ?? (() => {});
-      return client.invokeStreaming({
-        endpointBaseUrl: target.endpointBaseUrl,
-        apiKey,
-        body: upstreamBody,
-        onChunk,
-        ...(input.signal ? { signal: input.signal } : {}),
-      });
-    }
     return client.invoke({
       endpointBaseUrl: target.endpointBaseUrl,
       apiKey,
@@ -689,7 +661,7 @@ export function createCaioModelProxy(
   }
 
   function toResult(
-    outcome: CaioUpstreamInvokeResult | CaioUpstreamStreamResult,
+    outcome: CaioUpstreamInvokeResult,
     receiptId: string,
     upstream: CaioProxyUpstreamDescriptor,
     fallback: {
@@ -707,26 +679,10 @@ export function createCaioModelProxy(
           reasonCode: null,
           receiptId,
           retryAfterSeconds: null,
-          body: "body" in outcome ? outcome.body : null,
+          body: outcome.body,
           upstream,
           fallbackAttempted: fallback.attempted,
           fallbackSucceeded: fallback.succeeded,
-          fallbackReceiptId,
-          auditRefusal: null,
-        };
-      case "incomplete_stream":
-        // Headers were already sent when streaming began; the synthetic
-        // terminal marker chunk has been emitted by the client.
-        return {
-          status: "incomplete_stream",
-          httpStatus: 200,
-          reasonCode: outcome.reason,
-          receiptId,
-          retryAfterSeconds: null,
-          body: null,
-          upstream,
-          fallbackAttempted: fallback.attempted,
-          fallbackSucceeded: false,
           fallbackReceiptId,
           auditRefusal: null,
         };
@@ -874,19 +830,6 @@ export function createCaioModelProxy(
         attempted: false,
         succeeded: false,
       });
-    }
-
-    // Fallback is only legal before any streamed byte has been HANDED
-    // downstream. The streaming contract types upstream_error with
-    // chunksForwarded: 0, but that erases at runtime and the client is an
-    // injected port, so the count is checked here before any retry decision.
-    if (forwardedChunkCount(primaryOutcome) > 0) {
-      return upstreamErrorResult(
-        primaryOutcome,
-        receiptId,
-        primaryUpstream,
-        false,
-      );
     }
 
     // A fallback is egress on a DIFFERENT route (its own endpoint, upstream

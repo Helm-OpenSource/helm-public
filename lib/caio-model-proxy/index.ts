@@ -49,7 +49,6 @@ export {
   type CaioUpstreamErrorCode,
   type CaioUpstreamErrorInfo,
   type CaioUpstreamInvokeResult,
-  type CaioUpstreamStreamResult,
 } from "./upstream/upstream-contracts";
 
 export {

@@ -124,6 +124,95 @@ describeMysql(
       }
     });
 
+    it("round-trips the per-token alias grant through a real column", async () => {
+      const now = new Date();
+      const grantedDevice = `device-grant-${suffix}`;
+      const grantedPair = await service.issueCaioTokenPair({
+        ...binding(grantedDevice),
+        grantedAliases: ["caio-codex-default"],
+        now,
+      });
+      const grantedRow = await db.caioAccessToken.findUniqueOrThrow({
+        where: { id: grantedPair.model.record.id },
+        select: { grantedAliases: true },
+      });
+      expect(grantedRow.grantedAliases).toBe('["caio-codex-default"]');
+      const grantedPrincipal = await service.authenticateCaioToken({
+        rawToken: grantedPair.model.rawToken,
+        expectedAudience: "model",
+        sourceIp: SOURCE_IP,
+        now,
+      });
+      expect(grantedPrincipal.grantedAliases).toEqual(["caio-codex-default"]);
+
+      // An EMPTY grant is stored as "[]" and stays an empty grant: it must not
+      // read back as "no grant configured".
+      const emptyDevice = `device-grant-empty-${suffix}`;
+      const emptyPair = await service.issueCaioTokenPair({
+        ...binding(emptyDevice),
+        grantedAliases: [],
+        now,
+      });
+      const emptyRow = await db.caioAccessToken.findUniqueOrThrow({
+        where: { id: emptyPair.model.record.id },
+        select: { grantedAliases: true },
+      });
+      expect(emptyRow.grantedAliases).toBe("[]");
+      const emptyPrincipal = await service.authenticateCaioToken({
+        rawToken: emptyPair.model.rawToken,
+        expectedAudience: "model",
+        sourceIp: SOURCE_IP,
+        now,
+      });
+      expect(emptyPrincipal.grantedAliases).toEqual([]);
+
+      // No grant configured: the column stays NULL and the principal carries
+      // nothing, so the client-type default applies.
+      const defaultDevice = `device-grant-null-${suffix}`;
+      const defaultPair = await service.issueCaioTokenPair({
+        ...binding(defaultDevice),
+        now,
+      });
+      const defaultRow = await db.caioAccessToken.findUniqueOrThrow({
+        where: { id: defaultPair.model.record.id },
+        select: { grantedAliases: true },
+      });
+      expect(defaultRow.grantedAliases).toBeNull();
+      const defaultPrincipal = await service.authenticateCaioToken({
+        rawToken: defaultPair.model.rawToken,
+        expectedAudience: "model",
+        sourceIp: SOURCE_IP,
+        now,
+      });
+      expect(defaultPrincipal.grantedAliases).toBeUndefined();
+
+      // Storage is not a trust boundary: a hand-edited row narrows, never
+      // widens.
+      await db.caioAccessToken.update({
+        where: { id: grantedPair.model.record.id },
+        data: { grantedAliases: '["caio-codex-default","NOT AN ALIAS"]' },
+      });
+      const narrowed = await service.authenticateCaioToken({
+        rawToken: grantedPair.model.rawToken,
+        expectedAudience: "model",
+        sourceIp: SOURCE_IP,
+        now,
+      });
+      expect(narrowed.grantedAliases).toEqual(["caio-codex-default"]);
+
+      await db.caioAccessToken.update({
+        where: { id: grantedPair.model.record.id },
+        data: { grantedAliases: "not-json" },
+      });
+      const unreadable = await service.authenticateCaioToken({
+        rawToken: grantedPair.model.rawToken,
+        expectedAudience: "model",
+        sourceIp: SOURCE_IP,
+        now,
+      });
+      expect(unreadable.grantedAliases).toEqual([]);
+    });
+
     it("rejects a second active pair for the same binding", async () => {
       const now = new Date();
       const deviceRef = `device-conflict-${suffix}`;

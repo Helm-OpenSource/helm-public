@@ -261,6 +261,13 @@ jobs:
               "${HELM_CI_MYSQL_USER}" "${app_password}"
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers. With binary logging on,
+            # MySQL 8 refuses that from a user without SUPER (error 1419).
+            # SET_USER_ID is the documented narrow replacement, scoped to this
+            # user; flipping log_bin_trust_function_creators would relax the
+            # check for every creator on the server instead.
+            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
             printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
@@ -342,6 +349,13 @@ jobs:
               "${HELM_CI_MYSQL_USER}" "${app_password}"
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers. With binary logging on,
+            # MySQL 8 refuses that from a user without SUPER (error 1419).
+            # SET_USER_ID is the documented narrow replacement, scoped to this
+            # user; flipping log_bin_trust_function_creators would relax the
+            # check for every creator on the server instead.
+            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
             printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
@@ -422,6 +436,13 @@ jobs:
               "${HELM_CI_MYSQL_USER}" "${app_password}"
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers. With binary logging on,
+            # MySQL 8 refuses that from a user without SUPER (error 1419).
+            # SET_USER_ID is the documented narrow replacement, scoped to this
+            # user; flipping log_bin_trust_function_creators would relax the
+            # check for every creator on the server instead.
+            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
             printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
@@ -502,6 +523,13 @@ jobs:
               "${HELM_CI_MYSQL_USER}" "${app_password}"
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers. With binary logging on,
+            # MySQL 8 refuses that from a user without SUPER (error 1419).
+            # SET_USER_ID is the documented narrow replacement, scoped to this
+            # user; flipping log_bin_trust_function_creators would relax the
+            # check for every creator on the server instead.
+            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
             printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
@@ -582,6 +610,13 @@ jobs:
               "${HELM_CI_MYSQL_USER}" "${app_password}"
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers. With binary logging on,
+            # MySQL 8 refuses that from a user without SUPER (error 1419).
+            # SET_USER_ID is the documented narrow replacement, scoped to this
+            # user; flipping log_bin_trust_function_creators would relax the
+            # check for every creator on the server instead.
+            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
             printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
@@ -662,6 +697,13 @@ jobs:
               "${HELM_CI_MYSQL_USER}" "${app_password}"
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers. With binary logging on,
+            # MySQL 8 refuses that from a user without SUPER (error 1419).
+            # SET_USER_ID is the documented narrow replacement, scoped to this
+            # user; flipping log_bin_trust_function_creators would relax the
+            # check for every creator on the server instead.
+            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
             printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \

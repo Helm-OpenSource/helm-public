@@ -24,6 +24,7 @@ import {
   createCaioAccessTokenMaterial,
   hashCaioAccessToken,
   isWellFormedCaioToken,
+  sanitizeCaioAliasGrant,
   type CaioClientType,
   type CaioTokenAudience,
   type CaioTokenStatus,
@@ -51,6 +52,12 @@ export type CaioAccessTokenRecord = Readonly<{
   rotatedFromTokenId: string | null;
   rateWindowStartedAt: Date;
   rateWindowRequestCount: number;
+  /**
+   * The per-token alias grant an operator configured, or null when none was
+   * configured. `null` and `[]` are DIFFERENT: null falls back to the client
+   * type's default grant, `[]` grants nothing at all.
+   */
+  grantedAliases: readonly string[] | null;
 }>;
 
 export type CaioRateSlotResult =
@@ -119,6 +126,17 @@ export type CaioAccessPrincipal = Readonly<{
   clientType: CaioClientType;
   deviceRef: string;
   audience: CaioTokenAudience;
+  /**
+   * The alias grant carried by THIS token, re-validated on the way out of the
+   * store. Three-valued on purpose:
+   *   undefined → no grant stored; the client type's default applies
+   *   []        → an explicit grant of nothing; every alias is refused
+   *   [alias]   → exactly these aliases
+   * A client can never supply this: it is operator configuration read from the
+   * token row, which is what makes the explicit branch of
+   * resolveCaioGrantedAliases reachable in production.
+   */
+  grantedAliases?: readonly string[];
 }>;
 
 export type CaioIssuedToken = Readonly<{
@@ -145,6 +163,12 @@ export type CaioAccessTokenService = Readonly<{
     clientType: CaioClientType;
     deviceRef: string;
     approvedSourceIp: string;
+    /**
+     * Optional per-token alias grant. Omitted stores no grant (client-type
+     * default at authentication time); `[]` stores an explicit empty grant.
+     * A malformed entry fails issuance rather than being stored.
+     */
+    grantedAliases?: readonly string[];
     now: Date;
   }): Promise<CaioIssuedTokenPair>;
   authenticateCaioToken(input: {
@@ -196,6 +220,7 @@ export function createCaioAccessTokenService(
       clientType: CaioClientType;
       deviceRef: string;
       approvedSourceIp: string;
+      grantedAliases?: readonly string[];
     };
     audience: CaioTokenAudience;
     now: Date;
@@ -223,6 +248,10 @@ export function createCaioAccessTokenService(
       rotatedFromTokenId: input.rotatedFromTokenId ?? null,
       rateWindowStartedAt: input.now,
       rateWindowRequestCount: 0,
+      grantedAliases:
+        input.binding.grantedAliases === undefined
+          ? null
+          : Object.freeze([...input.binding.grantedAliases]),
     });
     return Object.freeze({ rawToken: material.rawToken, record });
   }
@@ -235,6 +264,12 @@ export function createCaioAccessTokenService(
         clientType: input.clientType,
         deviceRef: input.deviceRef,
         approvedSourceIp: input.approvedSourceIp,
+        // A malformed alias is refused here, before anything is written: a
+        // stored grant is only ever narrowed on read, so a typo that got in
+        // would silently persist as an unusable entry.
+        ...(input.grantedAliases === undefined
+          ? {}
+          : { grantedAliases: input.grantedAliases }),
       });
       if (!parsed.success) {
         throw new CaioAccessGatewayError("bad_request");
@@ -242,6 +277,11 @@ export function createCaioAccessTokenService(
       const issued = {} as Record<CaioTokenAudience, CaioIssuedToken>;
       for (const audience of CAIO_TOKEN_AUDIENCES) {
         issued[audience] = buildRecord({
+          // Both rows of the pair carry the binding's grant, including the mcp
+          // row: the pair describes ONE operator-configured binding, and a
+          // rotation of either audience must not be able to resurrect a
+          // different grant. Only the model surface ever reads it — the MCP
+          // surface resolves no alias at all.
           binding: parsed.data,
           audience,
           now: input.now,
@@ -315,6 +355,10 @@ export function createCaioAccessTokenService(
           retryAfterSeconds: slot.retryAfterSeconds,
         });
       }
+      // Re-validated on the way out: the persistence port is injectable, so
+      // the entries reaching a principal are filtered even though the record
+      // type already says they are aliases. Dropping can only narrow a grant.
+      const grantedAliases = sanitizeCaioAliasGrant(record.grantedAliases);
       return Object.freeze({
         tokenId: record.id,
         workspaceId: record.workspaceId,
@@ -322,6 +366,7 @@ export function createCaioAccessTokenService(
         clientType: record.clientType,
         deviceRef: record.deviceRef,
         audience: record.audience,
+        ...(grantedAliases === undefined ? {} : { grantedAliases }),
       });
     },
 
@@ -345,6 +390,11 @@ export function createCaioAccessTokenService(
           clientType: existing.clientType,
           deviceRef: existing.deviceRef,
           approvedSourceIp: existing.approvedSourceIp,
+          // Rotation replaces the credential, never the authorization it
+          // carries: the grant follows the token to its replacement.
+          ...(existing.grantedAliases === null
+            ? {}
+            : { grantedAliases: existing.grantedAliases }),
         },
         audience: existing.audience,
         now: input.now,

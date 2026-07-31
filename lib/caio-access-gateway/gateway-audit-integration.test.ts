@@ -34,6 +34,7 @@ import {
   type CaioGatewayRequest,
 } from "@/lib/caio-access-gateway/gateway-http-core";
 import type { CaioAccessPrincipal } from "@/lib/caio-access-gateway/token-store.service";
+import { DEFAULT_WORKBUDDY_FEATURE_FLAGS } from "@/lib/caio-collaboration/feature-flags";
 import {
   caioReceiptDigest,
   type CaioAuditPersistOutcome,
@@ -52,6 +53,13 @@ import {
 import { createCaioCanonicalAuditGatePort } from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
 
 const CLIENT_LAN_IP = [192, 168, 1, 21].join(".");
+
+/** The MCP read surface enabled; every mutation flag still off. */
+const READ_ENABLED_FLAGS = Object.freeze({
+  ...DEFAULT_WORKBUDDY_FEATURE_FLAGS,
+  gatewayEnabled: true,
+  readEnabled: true,
+});
 
 const PRINCIPAL: CaioAccessPrincipal = Object.freeze({
   tokenId: "tok_int_1",
@@ -189,6 +197,10 @@ async function createWiring(): Promise<Wiring> {
     // The real gate object IS the readiness probe. Its async four-state
     // getReadiness() is consumed directly.
     readinessProbe: gate,
+    // This file proves the AUDIT substrate, so the MCP surface is enabled for
+    // reads: with the fail-closed default flag state no /mcp request reaches
+    // the audit gate at all.
+    featureFlags: READ_ENABLED_FLAGS,
   });
 
   return {
@@ -388,6 +400,7 @@ describe("gateway HTTP core wired to the real audit gate", () => {
       auditGate: createCaioCanonicalAuditGatePort(gate),
       readinessProbe: gate,
       requestIdFactory: () => "pinned-id",
+      featureFlags: READ_ENABLED_FLAGS,
     });
 
     const first = await handler(mcpRequest());

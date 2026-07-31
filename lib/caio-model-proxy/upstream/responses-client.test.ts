@@ -7,6 +7,8 @@ import {
 
 const BASE_URL = "https://upstream.example.internal/v1";
 const API_KEY = "sk-upstream-secret-key";
+/** Where a redirect would take the request if the client followed one. */
+const PLAINTEXT_HOP = "http://upstream.example.internal/v1/responses";
 
 function makeClient(fetchImpl: typeof fetch) {
   return new CaioResponsesUpstreamClient({
@@ -20,29 +22,6 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
-  });
-}
-
-function sseResponse(
-  chunks: string[],
-  options: { errorAfter?: Error } = {},
-): Response {
-  const encoder = new TextEncoder();
-  let nextChunk = 0;
-  const stream = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (nextChunk < chunks.length) {
-        controller.enqueue(encoder.encode(chunks[nextChunk]));
-        nextChunk += 1;
-        return;
-      }
-      if (options.errorAfter) controller.error(options.errorAfter);
-      else controller.close();
-    },
-  });
-  return new Response(stream, {
-    status: 200,
-    headers: { "content-type": "text/event-stream" },
   });
 }
 
@@ -174,219 +153,31 @@ describe("CaioResponsesUpstreamClient.invoke", () => {
     ).invoke({ body: { input: "x" }, signal: controller.signal });
     expect(result).toEqual({ status: "cancelled" });
   });
-});
 
-describe("CaioResponsesUpstreamClient.invokeStreaming", () => {
-  it("forwards SSE chunks verbatim and completes on response.completed", async () => {
-    const chunks = [
-      'event: response.output_text.delta\ndata: {"delta":"he"}\n\n',
-      'event: response.output_text.delta\ndata: {"delta":"llo"}\n\n',
-      'event: response.completed\ndata: {"type":"response.completed"}\n\n',
-    ];
-    const fetchImpl = vi.fn(async () => sseResponse(chunks));
-    const forwarded: string[] = [];
+  it("refuses a redirect instead of following it down to plaintext", async () => {
+    // Models real fetch: under redirect:"error" a 3xx becomes a TypeError and
+    // there is no second hop; under any other setting the redirect is followed
+    // transparently, which is exactly how an https route downgrades to http.
+    const dialled: string[] = [];
+    const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+      dialled.push(url);
+      if (init.redirect === "error") {
+        throw new TypeError("unexpected redirect");
+      }
+      dialled.push(PLAINTEXT_HOP);
+      return jsonResponse({ id: "resp_from_plaintext_hop" });
+    });
+
     const result = await makeClient(
       fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: (c) => forwarded.push(c),
-    });
-    expect(result).toEqual({ status: "ok", chunksForwarded: 3 });
-    expect(forwarded).toEqual(chunks);
-  });
+    ).invoke({ body: { input: "x" } });
 
-  it("detects a terminal event split across chunk boundaries", async () => {
-    const fetchImpl = vi.fn(async () =>
-      sseResponse([
-        'data: {"delta":"hi"}\n\nevent: response.co',
-        'mpleted\ndata: {"type":"response.completed"}\n\n',
-      ]),
-    );
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: () => {},
-    });
-    expect(result.status).toBe("ok");
-  });
-
-  it("emits a synthetic terminal marker when the stream ends without response.completed", async () => {
-    const fetchImpl = vi.fn(async () =>
-      sseResponse(['data: {"delta":"partial"}\n\n']),
-    );
-    const forwarded: string[] = [];
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: (c) => forwarded.push(c),
-    });
-    expect(result).toEqual({
-      status: "incomplete_stream",
-      reason: "missing_terminal_event",
-      chunksForwarded: 1,
-    });
-    const marker = JSON.parse(
-      forwarded[forwarded.length - 1].replace(/^data: /, "").trim(),
-    );
-    expect(marker).toEqual({
-      caio_incomplete_stream: true,
-      reason: "missing_terminal_event",
-    });
-  });
-
-  it("does NOT treat the chat-completions [DONE] marker as terminal", async () => {
-    const fetchImpl = vi.fn(async () =>
-      sseResponse(['data: {"delta":"x"}\n\n', "data: [DONE]\n\n"]),
-    );
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: () => {},
-    });
-    expect(result.status).toBe("incomplete_stream");
-  });
-
-  it("degrades to incomplete_stream on mid-stream failure and never retries", async () => {
-    const fetchImpl = vi.fn(async () =>
-      sseResponse(['data: {"delta":"started"}\n\n'], {
-        errorAfter: new Error("connection reset"),
-      }),
-    );
-    const forwarded: string[] = [];
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: (c) => forwarded.push(c),
-    });
-    expect(result).toEqual({
-      status: "incomplete_stream",
-      reason: "upstream_stream_error",
-      chunksForwarded: 1,
-    });
-    expect(forwarded[forwarded.length - 1]).toContain(
-      '"caio_incomplete_stream":true',
-    );
-    // NO automatic retry once any streamed byte has been forwarded.
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
-
-  // F3 regression: onChunk() ran BEFORE chunksForwarded += 1, so a downstream
-  // writer that threw on the first chunk reported chunksForwarded: 0 with an
-  // upstream_error status — which the engine treats as retryable even though
-  // the bytes had already been handed downstream.
-  it("F3: counts a chunk as forwarded before handing it to the writer, so a throwing writer is never retryable", async () => {
-    const fetchImpl = vi.fn(async () =>
-      sseResponse([
-        'data: {"delta":"chunk-1"}\n\n',
-        'event: response.completed\ndata: {"type":"response.completed"}\n\n',
-      ]),
-    );
-    const forwarded: string[] = [];
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: (chunk) => {
-        forwarded.push(chunk);
-        throw new Error("downstream write failed");
-      },
-    });
-
-    expect(result).toEqual({
-      status: "incomplete_stream",
-      reason: "downstream_write_failed",
-      chunksForwarded: 1,
-    });
-    // Never reported as upstream_error, which is the only retryable status.
-    expect(result.status).not.toBe("upstream_error");
-    expect(forwarded).toHaveLength(1);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
-
-  it("F3: a writer that throws on a later chunk still reports the forwarded count", async () => {
-    const fetchImpl = vi.fn(async () =>
-      sseResponse([
-        'data: {"delta":"a"}\n\n',
-        'data: {"delta":"b"}\n\n',
-        'event: response.completed\n\n',
-      ]),
-    );
-    let seen = 0;
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: () => {
-        seen += 1;
-        if (seen === 2) throw new Error("downstream write failed");
-      },
-    });
-    expect(result).toEqual({
-      status: "incomplete_stream",
-      reason: "downstream_write_failed",
-      chunksForwarded: 2,
-    });
-  });
-
-  it("F3: a writer that throws while emitting the synthetic marker does not escape as an exception", async () => {
-    const fetchImpl = vi.fn(async () =>
-      sseResponse(['data: {"delta":"partial"}\n\n']),
-    );
-    let seen = 0;
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: () => {
-        seen += 1;
-        // The upstream chunk lands; only the synthetic terminal marker fails.
-        if (seen > 1) throw new Error("downstream write failed");
-      },
-    });
-    expect(result).toEqual({
-      status: "incomplete_stream",
-      reason: "missing_terminal_event",
-      chunksForwarded: 1,
-    });
-  });
-
-  it("returns a typed upstream_error when it fails before any streamed byte", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response("upstream exploded", { status: 500 }),
-    );
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: () => {},
-    });
     expect(result).toMatchObject({
       status: "upstream_error",
-      code: "upstream_failed",
+      code: "upstream_unreachable",
       gatewayStatus: 502,
-      chunksForwarded: 0,
     });
-  });
-
-  it("reports cancelled with forwarded chunk count on mid-stream abort", async () => {
-    const fetchImpl = vi.fn(async () =>
-      sseResponse(['data: {"delta":"a"}\n\n'], {
-        errorAfter: Object.assign(new Error("aborted"), {
-          name: "AbortError",
-        }),
-      }),
-    );
-    const result = await makeClient(
-      fetchImpl as unknown as typeof fetch,
-    ).invokeStreaming({
-      body: { input: "x", stream: true },
-      onChunk: () => {},
-    });
-    expect(result).toEqual({ status: "cancelled", chunksForwarded: 1 });
+    expect(dialled).toEqual([`${BASE_URL}/responses`]);
   });
 });
 

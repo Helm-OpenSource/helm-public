@@ -11,6 +11,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { z } from "zod";
 
+import { caioModelAliasSchema } from "@/lib/caio-model-proxy/alias-contracts";
+
 export const CAIO_TOKEN_AUDIENCES = ["mcp", "model"] as const;
 export type CaioTokenAudience = (typeof CAIO_TOKEN_AUDIENCES)[number];
 
@@ -122,6 +124,81 @@ export const caioSourceIpSchema = z
     message: "approvedSourceIp must be a literal IPv4 or IPv6 address.",
   });
 
+/**
+ * The per-token alias grant, as an OPERATOR configures it at issuance.
+ *
+ * Semantics are three-valued and all three are distinct:
+ *   omitted / null → no grant is stored; the client type's default applies
+ *   []             → an explicit grant of nothing; every alias is refused
+ *   [alias, ...]   → exactly these aliases, and nothing else
+ *
+ * Every entry must parse as a model alias. Issuance REFUSES a malformed entry
+ * rather than storing it, so a typo cannot become a persisted grant.
+ */
+export const CAIO_MAX_GRANTED_ALIASES = 32;
+
+export const caioAliasGrantSchema = z
+  .array(caioModelAliasSchema)
+  .max(CAIO_MAX_GRANTED_ALIASES);
+
+/** Serializes a grant for storage. `null` means "no grant stored". */
+export function serializeCaioAliasGrant(
+  grantedAliases: readonly string[] | null | undefined,
+): string | null {
+  if (grantedAliases === null || grantedAliases === undefined) return null;
+  return JSON.stringify([...grantedAliases]);
+}
+
+/**
+ * Reads a stored grant back, fail-closed in both directions.
+ *
+ * Storage is not a trust boundary: a row written by an older adapter, restored
+ * from a backup, or edited by hand must never WIDEN what a token can drive.
+ *   - `null` (the column was never written) → undefined, i.e. fall back to the
+ *     client-type default; this is the only widening answer and it is the one
+ *     case where nothing was ever configured.
+ *   - unparseable JSON, or JSON that is not an array → an EMPTY grant, which
+ *     denies every alias. A grant that cannot be read is not a grant.
+ *   - an array with malformed entries → the malformed entries are DROPPED and
+ *     the valid ones are kept, so a corrupted entry can only narrow.
+ */
+export function parseCaioStoredAliasGrant(
+  raw: string | null | undefined,
+): readonly string[] | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw);
+  } catch {
+    return Object.freeze([]);
+  }
+  if (!Array.isArray(decoded)) return Object.freeze([]);
+  const granted: string[] = [];
+  for (const entry of decoded) {
+    if (caioModelAliasSchema.safeParse(entry).success) {
+      granted.push(entry as string);
+    }
+  }
+  return Object.freeze(granted.slice(0, CAIO_MAX_GRANTED_ALIASES));
+}
+
+/**
+ * Narrows an in-memory grant the same way a stored one is narrowed. The record
+ * type says `string[]`, but the record arrives from an injected persistence
+ * port, so the entries are re-validated before they reach a principal.
+ */
+export function sanitizeCaioAliasGrant(
+  grantedAliases: readonly string[] | null | undefined,
+): readonly string[] | undefined {
+  if (grantedAliases === null || grantedAliases === undefined) return undefined;
+  if (!Array.isArray(grantedAliases)) return Object.freeze([]);
+  return Object.freeze(
+    grantedAliases
+      .filter((entry) => caioModelAliasSchema.safeParse(entry).success)
+      .slice(0, CAIO_MAX_GRANTED_ALIASES),
+  );
+}
+
 export const caioTokenIssuanceInputSchema = z
   .object({
     workspaceId: caioSafeRefSchema,
@@ -129,6 +206,7 @@ export const caioTokenIssuanceInputSchema = z
     clientType: caioClientTypeSchema,
     deviceRef: caioSafeRefSchema,
     approvedSourceIp: caioSourceIpSchema,
+    grantedAliases: caioAliasGrantSchema.optional(),
   })
   .strict();
 export type CaioTokenIssuanceInput = z.infer<

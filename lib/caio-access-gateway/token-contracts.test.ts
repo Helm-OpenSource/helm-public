@@ -14,7 +14,10 @@ import {
   createCaioAccessTokenMaterial,
   hashCaioAccessToken,
   isWellFormedCaioToken,
+  parseCaioStoredAliasGrant,
   parseCaioTokenAudience,
+  sanitizeCaioAliasGrant,
+  serializeCaioAliasGrant,
 } from "@/lib/caio-access-gateway/token-contracts";
 
 // RFC1918 example address constructed at runtime so the public-release
@@ -125,5 +128,51 @@ describe("caio token contracts", () => {
         force: true,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("stored alias grant", () => {
+  it("reads a stored grant back verbatim", () => {
+    expect(parseCaioStoredAliasGrant('["caio-codex-default"]')).toEqual([
+      "caio-codex-default",
+    ]);
+  });
+
+  it("distinguishes NULL (no grant) from an empty grant", () => {
+    expect(parseCaioStoredAliasGrant(null)).toBeUndefined();
+    expect(parseCaioStoredAliasGrant("[]")).toEqual([]);
+  });
+
+  it("drops a malformed entry instead of widening the grant", () => {
+    expect(
+      parseCaioStoredAliasGrant(
+        '["caio-codex-default","NOT AN ALIAS","",7,null]',
+      ),
+    ).toEqual(["caio-codex-default"]);
+  });
+
+  it("reads unreadable content as an EMPTY grant, never as no grant", () => {
+    for (const raw of ["not-json", '{"alias":"caio-codex-default"}', '"x"']) {
+      expect(parseCaioStoredAliasGrant(raw)).toEqual([]);
+    }
+  });
+
+  it("round-trips through serialization", () => {
+    expect(serializeCaioAliasGrant(null)).toBeNull();
+    expect(serializeCaioAliasGrant(undefined)).toBeNull();
+    expect(serializeCaioAliasGrant([])).toBe("[]");
+    expect(
+      parseCaioStoredAliasGrant(
+        serializeCaioAliasGrant(["caio-codex-default"]),
+      ),
+    ).toEqual(["caio-codex-default"]);
+  });
+
+  it("sanitizes an in-memory grant the same way", () => {
+    expect(sanitizeCaioAliasGrant(null)).toBeUndefined();
+    expect(sanitizeCaioAliasGrant([])).toEqual([]);
+    expect(
+      sanitizeCaioAliasGrant(["caio-codex-default", "NOT AN ALIAS"]),
+    ).toEqual(["caio-codex-default"]);
   });
 });

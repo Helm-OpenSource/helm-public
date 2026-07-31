@@ -19,6 +19,8 @@ import {
   caioClientTypeSchema,
   caioTokenAudienceSchema,
   caioTokenStatusSchema,
+  parseCaioStoredAliasGrant,
+  serializeCaioAliasGrant,
 } from "@/lib/caio-access-gateway/token-contracts";
 import type {
   CaioAccessTokenPersistence,
@@ -76,6 +78,9 @@ function toRecord(row: StoredToken): CaioAccessTokenRecord {
     rotatedFromTokenId: row.rotatedFromTokenId,
     rateWindowStartedAt: row.rateWindowStartedAt,
     rateWindowRequestCount: row.rateWindowRequestCount,
+    // A stored grant that cannot be read is an EMPTY grant, never a fallback
+    // to the client-type default: see parseCaioStoredAliasGrant.
+    grantedAliases: parseCaioStoredAliasGrant(row.grantedAliases) ?? null,
   });
 }
 
@@ -100,6 +105,7 @@ function toRow(
     rotatedFromTokenId: record.rotatedFromTokenId,
     rateWindowStartedAt: record.rateWindowStartedAt,
     rateWindowRequestCount: record.rateWindowRequestCount,
+    grantedAliases: serializeCaioAliasGrant(record.grantedAliases),
   };
 }
 
