@@ -577,10 +577,17 @@ function isSerializableIsolationExpression(node: ts.Expression): boolean {
  * real site invisible to the guard while the capability to see it already
  * existed a few hundred lines up.
  */
-/** Nodes that introduce a lexical scope for `const` bindings. */
+/**
+ * Nodes that introduce a lexical scope for `const` bindings.
+ *
+ * A CLASS EXPRESSION is listed because a NAMED one binds its own name inside
+ * itself; without it here that binding has no scope to be owned by, and the
+ * outward walk sails past it into an outer declaration of the same name.
+ */
 function isScopeBoundary(node: ts.Node): boolean {
   return (
     ts.isSourceFile(node) ||
+    ts.isClassExpression(node) ||
     ts.isBlock(node) ||
     ts.isModuleBlock(node) ||
     ts.isCaseBlock(node) ||
@@ -603,9 +610,19 @@ function isScopeBoundary(node: ts.Node): boolean {
  * a caller-supplied parameter to an outer literal and certify it.
  *
  * Nested scopes are not descended into: a binding declared inside a nested
- * block is not visible to the code that encloses it. Parameters are the
- * exception — they belong to the function scope, so they are collected when
- * `scope` IS that function even though the parameter list is its own subtree.
+ * block is not visible to the code that encloses it. Three forms are the
+ * exception, because the binding they introduce belongs to `scope` even though
+ * the node carrying it is a scope of its own:
+ *   - a function's PARAMETERS, collected when `scope` IS that function;
+ *   - a function/class DECLARATION, whose name is bound in the scope that
+ *     encloses it. Its body must not be descended into, but the name has to be
+ *     recorded BEFORE refusing to descend — a boundary check performed first
+ *     makes the registration unreachable, and a block-scoped
+ *     `function mutation() {}` shadowing an outer `const mutation` then goes
+ *     unseen;
+ *   - a NAMED function/class EXPRESSION's own name, which is bound inside its
+ *     own scope (that is what lets such a function refer to itself), so it
+ *     shadows a same-named outer binding for every reference in its body.
  */
 function bindingsOwnedBy(scope: ts.Node, name: string): ts.Node[] {
   const bindings: ts.Node[] = [];
@@ -626,15 +643,27 @@ function bindingsOwnedBy(scope: ts.Node, name: string): ts.Node[] {
     }
   }
 
+  // A named function or class EXPRESSION binds its own name inside itself.
+  if (
+    (ts.isFunctionExpression(scope) || ts.isClassExpression(scope)) &&
+    scope.name?.text === name
+  ) {
+    bindings.push(scope);
+  }
+
   const visit = (current: ts.Node): void => {
-    if (isScopeBoundary(current)) return;
-    if (ts.isVariableDeclaration(current)) {
-      collectBindingName(current.name, current);
-    } else if (
+    // Declarations first: the name they introduce belongs to THIS scope even
+    // though a function declaration is itself a scope boundary.
+    if (
       (ts.isFunctionDeclaration(current) || ts.isClassDeclaration(current)) &&
       current.name?.text === name
     ) {
       bindings.push(current);
+      return;
+    }
+    if (isScopeBoundary(current)) return;
+    if (ts.isVariableDeclaration(current)) {
+      collectBindingName(current.name, current);
     } else if (
       ts.isImportSpecifier(current) ||
       ts.isImportClause(current) ||

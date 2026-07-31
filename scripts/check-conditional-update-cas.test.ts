@@ -627,6 +627,111 @@ export async function callerChosen(options: { isolationLevel: string }) {
     expect(checkConditionalUpdateCas(root)).toHaveLength(1);
   });
 
+  // A function declaration binds its name in the scope that ENCLOSES it, and in
+  // a block it is that block's binding. The scope walk therefore has to record
+  // it before refusing to descend into the function's own body — a boundary
+  // check performed first makes the registration unreachable and the shadowing
+  // invisible, so the outer `const` gets borrowed to vouch for a reference that
+  // does not resolve to it at all.
+  it("stops at a block-scoped function declaration that shadows an outer const", () => {
+    const root = sandbox({
+      "lib/function-declaration-shadow.ts": `
+const mutation = {
+  where: { id: "x" },
+  data: { label: "renamed" },
+};
+
+export async function relabel() {
+  await db.thing.updateMany(mutation);
+}
+
+export async function claim(pending: boolean) {
+  if (pending) {
+    function mutation(this: void) {
+      return { where: { id: "x", lifecyclePhase: "PENDING" }, data: {} };
+    }
+    const claimed = await db.thing.updateMany(mutation);
+    if (claimed.count !== 1) throw new Error("lost");
+  }
+}
+`,
+    });
+    // The argument names the block's function declaration, not the outer
+    // literal. It cannot be read as an object literal here, so the site is
+    // unverifiable and must be reported rather than certified by a binding the
+    // reference never reaches.
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("unanalyzable-argument");
+  });
+
+  // A NAMED function expression binds its own name inside its own scope. The
+  // name is therefore shadowed for every reference in that body, including one
+  // that would otherwise resolve to a same-named outer `const`.
+  it("stops at a named function expression's own name binding", () => {
+    const root = sandbox({
+      "lib/named-function-expression-shadow.ts": `
+const options = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+};
+
+export async function strictlyIsolated() {
+  return db.$transaction(async (tx) => {
+    await tx.thing.updateMany({
+      where: { id: "x" },
+      data: { label: "renamed" },
+    });
+  }, options);
+}
+
+export const callerChosen = function options(this: void) {
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.thing.updateMany({
+      where: { id: "x", claimedAt: null },
+      data: { claimedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw new Error("lost");
+  }, options);
+};
+`,
+    });
+    // Inside the named function expression `options` is the function itself,
+    // not the outer transaction options, so no Serializable isolation can be
+    // proven at this site.
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("isolation-not-serializable");
+  });
+
+  // Same rule, the class form: a named class expression binds its own name
+  // inside itself, which also makes it a scope the outward walk has to stop at.
+  it("stops at a named class expression's own name binding", () => {
+    const root = sandbox({
+      "lib/named-class-expression-shadow.ts": `
+const mutation = {
+  where: { id: "x" },
+  data: { label: "renamed" },
+};
+
+export async function relabel() {
+  await db.thing.updateMany(mutation);
+}
+
+export const Claimer = class mutation {
+  async claim() {
+    const claimed = await db.thing.updateMany(mutation);
+    if (claimed.count !== 1) throw new Error("lost");
+  }
+};
+`,
+    });
+    // Inside the class body `mutation` is the class itself, not the outer
+    // literal, so the argument cannot be read here.
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toBe("unanalyzable-argument");
+  });
+
   it("accepts the atomic raw statement that replaces the pattern", () => {
     const root = sandbox({ "lib/atomic.ts": ATOMIC_RAW });
     expect(checkConditionalUpdateCas(root)).toEqual([]);
