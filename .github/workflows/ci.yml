@@ -262,11 +262,14 @@ jobs:
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
             # Migrations create append-only triggers. With binary logging on,
-            # MySQL 8 refuses that from a user without SUPER (error 1419).
-            # SET_USER_ID is the documented narrow replacement, scoped to this
-            # user; flipping log_bin_trust_function_creators would relax the
-            # check for every creator on the server instead.
-            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+            # the server refuses that from a user lacking SUPER (error 1419).
+            # SET_ANY_DEFINER is the narrow replacement on MySQL 8.4, which
+            # REMOVED the older SET_USER_ID — granting that name here is a
+            # syntax error, not a privilege problem. Keep this in step with the
+            # pinned mysql:8.4 service image; flipping
+            # log_bin_trust_function_creators would instead relax the check for
+            # every creator on the server.
+            printf "GRANT SET_ANY_DEFINER ON *.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
@@ -350,11 +353,14 @@ jobs:
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
             # Migrations create append-only triggers. With binary logging on,
-            # MySQL 8 refuses that from a user without SUPER (error 1419).
-            # SET_USER_ID is the documented narrow replacement, scoped to this
-            # user; flipping log_bin_trust_function_creators would relax the
-            # check for every creator on the server instead.
-            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+            # the server refuses that from a user lacking SUPER (error 1419).
+            # SET_ANY_DEFINER is the narrow replacement on MySQL 8.4, which
+            # REMOVED the older SET_USER_ID — granting that name here is a
+            # syntax error, not a privilege problem. Keep this in step with the
+            # pinned mysql:8.4 service image; flipping
+            # log_bin_trust_function_creators would instead relax the check for
+            # every creator on the server.
+            printf "GRANT SET_ANY_DEFINER ON *.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
@@ -437,11 +443,14 @@ jobs:
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
             # Migrations create append-only triggers. With binary logging on,
-            # MySQL 8 refuses that from a user without SUPER (error 1419).
-            # SET_USER_ID is the documented narrow replacement, scoped to this
-            # user; flipping log_bin_trust_function_creators would relax the
-            # check for every creator on the server instead.
-            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+            # the server refuses that from a user lacking SUPER (error 1419).
+            # SET_ANY_DEFINER is the narrow replacement on MySQL 8.4, which
+            # REMOVED the older SET_USER_ID — granting that name here is a
+            # syntax error, not a privilege problem. Keep this in step with the
+            # pinned mysql:8.4 service image; flipping
+            # log_bin_trust_function_creators would instead relax the check for
+            # every creator on the server.
+            printf "GRANT SET_ANY_DEFINER ON *.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
@@ -524,11 +533,14 @@ jobs:
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
             # Migrations create append-only triggers. With binary logging on,
-            # MySQL 8 refuses that from a user without SUPER (error 1419).
-            # SET_USER_ID is the documented narrow replacement, scoped to this
-            # user; flipping log_bin_trust_function_creators would relax the
-            # check for every creator on the server instead.
-            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+            # the server refuses that from a user lacking SUPER (error 1419).
+            # SET_ANY_DEFINER is the narrow replacement on MySQL 8.4, which
+            # REMOVED the older SET_USER_ID — granting that name here is a
+            # syntax error, not a privilege problem. Keep this in step with the
+            # pinned mysql:8.4 service image; flipping
+            # log_bin_trust_function_creators would instead relax the check for
+            # every creator on the server.
+            printf "GRANT SET_ANY_DEFINER ON *.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
@@ -611,11 +623,14 @@ jobs:
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
             # Migrations create append-only triggers. With binary logging on,
-            # MySQL 8 refuses that from a user without SUPER (error 1419).
-            # SET_USER_ID is the documented narrow replacement, scoped to this
-            # user; flipping log_bin_trust_function_creators would relax the
-            # check for every creator on the server instead.
-            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+            # the server refuses that from a user lacking SUPER (error 1419).
+            # SET_ANY_DEFINER is the narrow replacement on MySQL 8.4, which
+            # REMOVED the older SET_USER_ID — granting that name here is a
+            # syntax error, not a privilege problem. Keep this in step with the
+            # pinned mysql:8.4 service image; flipping
+            # log_bin_trust_function_creators would instead relax the check for
+            # every creator on the server.
+            printf "GRANT SET_ANY_DEFINER ON *.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
@@ -698,11 +713,14 @@ jobs:
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
             # Migrations create append-only triggers. With binary logging on,
-            # MySQL 8 refuses that from a user without SUPER (error 1419).
-            # SET_USER_ID is the documented narrow replacement, scoped to this
-            # user; flipping log_bin_trust_function_creators would relax the
-            # check for every creator on the server instead.
-            printf "GRANT SET_USER_ID ON *.* TO '%s'@'%%';\n" \
+            # the server refuses that from a user lacking SUPER (error 1419).
+            # SET_ANY_DEFINER is the narrow replacement on MySQL 8.4, which
+            # REMOVED the older SET_USER_ID — granting that name here is a
+            # syntax error, not a privilege problem. Keep this in step with the
+            # pinned mysql:8.4 service image; flipping
+            # log_bin_trust_function_creators would instead relax the check for
+            # every creator on the server.
+            printf "GRANT SET_ANY_DEFINER ON *.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_USER}"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
               "${root_password}"
