@@ -149,6 +149,49 @@ describeMysql("caio audit gate with an isolated MySQL primary store", () => {
     expect(conflict.allowed).toBe(false);
   });
 
+  it("treats the same request recorded under another posture as a conflict, not a replay", async () => {
+    // The gate refuses a claim naming a posture other than its own, so this
+    // interleaving needs two differently-postured deployments sharing one
+    // workspace's rows — which is a deployment topology, not a code path the
+    // gate can rule out. The STORE is therefore the last line: posture is the
+    // receipt's seventh field and part of its digest, so a duplicate
+    // [workspaceId, requestId] carrying a different posture describes a
+    // different dispatch and must not resolve as an idempotent replay.
+    const store = createPrismaCaioAuditReceiptStore();
+    const requestId = `req-posture-${suffix}`;
+    const now = new Date();
+
+    const first = await store.persist({
+      receipt: receipt(requestId, { posture: "self_service" }),
+      persistedVia: "primary",
+      now,
+    });
+    expect(first.outcome).toBe("persisted");
+
+    const crossPosture = await store.persist({
+      receipt: receipt(requestId, { posture: "governed_fde" }),
+      persistedVia: "primary",
+      now,
+    });
+    expect(crossPosture.outcome).toBe("conflict");
+
+    // An identical re-persist under the ORIGINAL posture must still be a
+    // replay: the new column narrows what counts as the same receipt, it does
+    // not turn every duplicate into a conflict.
+    const samePosture = await store.persist({
+      receipt: receipt(requestId, { posture: "self_service" }),
+      persistedVia: "primary",
+      now,
+    });
+    expect(samePosture.outcome).toBe("replayed");
+
+    const stored = await db.caioAuditDispatchReceipt.findUniqueOrThrow({
+      where: { workspaceId_requestId: { workspaceId, requestId } },
+      select: { posture: true },
+    });
+    expect(stored.posture).toBe("self_service");
+  });
+
   it("degrades to the encrypted queue and recovers with persistedVia=emergency_replay", async () => {
     const primary = createPrismaCaioAuditReceiptStore();
     let primaryDown = true;

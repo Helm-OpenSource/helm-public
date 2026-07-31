@@ -14,18 +14,17 @@ import { db } from "@/lib/db";
  * "replayed" (the stored persistedVia is preserved), a duplicate with
  * different content resolves as "conflict".
  *
- * KNOWN GAP (stated rather than hidden): the receipt's seventh field,
- * `posture`, has no column on CaioAuditDispatchReceipt, so this store neither
- * persists nor compares it. Within one installation that is harmless — a
- * process runs under exactly one declared posture and the gate refuses any
- * claim naming another (CaioAuditPostureMismatchError) — but if two
- * differently-postured deployments ever shared one workspace's rows, a
- * duplicate [workspaceId, requestId] from the other posture would resolve as
- * "replayed" instead of "conflict". Closing it requires a `posture` column
- * (NOT NULL) plus its inclusion in the sameContent comparison below; that is a
- * prisma/ migration and is deliberately NOT part of this change. The encrypted
- * emergency queue has no such gap: it binds the full receipt digest, which now
- * covers posture.
+ * The receipt's seventh field, `posture`, is persisted and compared. It has to
+ * be: posture is part of the receipt digest, so the same request recorded
+ * under a different deployment posture is a DIFFERENT dispatch. Within one
+ * installation the gate already refuses a claim naming another posture
+ * (CaioAuditPostureMismatchError), but that check cannot reach the case this
+ * column exists for — two differently-postured deployments sharing one
+ * workspace's rows, which is a deployment topology rather than a code path the
+ * gate can rule out. Without the column such a duplicate
+ * [workspaceId, requestId] resolved as an idempotent "replayed"; it now
+ * resolves as "conflict". The encrypted emergency queue never had this gap: it
+ * binds the full receipt digest, which already covers posture.
  */
 export function createPrismaCaioAuditReceiptStore(): CaioAuditPrimaryStorePort {
   return {
@@ -40,6 +39,7 @@ export function createPrismaCaioAuditReceiptStore(): CaioAuditPrimaryStorePort {
             modelAlias: receipt.modelAlias,
             inputHash: receipt.inputHash,
             policyVersion: receipt.policyVersion,
+            posture: receipt.posture,
             persistedVia,
             createdAt: now,
           },
@@ -67,7 +67,8 @@ export function createPrismaCaioAuditReceiptStore(): CaioAuditPrimaryStorePort {
           existing.clientType === receipt.client &&
           existing.modelAlias === receipt.modelAlias &&
           existing.inputHash === receipt.inputHash &&
-          existing.policyVersion === receipt.policyVersion;
+          existing.policyVersion === receipt.policyVersion &&
+          existing.posture === receipt.posture;
         if (!sameContent) {
           return { outcome: "conflict" };
         }

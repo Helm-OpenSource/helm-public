@@ -6812,6 +6812,7 @@ model CaioAuditDispatchReceipt {
   modelAlias    String
   inputHash     String
   policyVersion String
+  posture       String
   persistedVia  String
   createdAt     DateTime
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioAuditDispatchReceipt_workspace_fkey")
