@@ -576,6 +576,83 @@ describe("auth verification code attempt cap", () => {
     expect(record.consumedAt).toBeNull();
   });
 
+  // The test above crosses expiry BEFORE the first write, so the ATTEMPT
+  // RESERVATION is the statement that refuses and the consume claim is never
+  // reached — deleting the consume statement's own expiry predicate left the
+  // suite green. Here the reservation SUCCEEDS and expiry is crossed only
+  // afterwards, which puts the consume claim in the position of being the only
+  // thing that can still refuse. Two claims, two predicates, two tests.
+  it("refuses to consume a code that expires after the attempt reservation", async () => {
+    const record = makeCodeRecord({
+      id: "login-code-expiring-after-reservation",
+      purpose: AuthCodePurpose.LOGIN_PHONE,
+      target: "+8613800000000",
+      code: "123456",
+      attempts: 0,
+      userId: "user-1",
+    });
+    installAuthCodeStore([record]);
+    mocks.db.user.findFirst.mockResolvedValue(createActiveUser());
+
+    // Still valid at the read AND at the attempt reservation; it lapses in the
+    // window between the reservation and the claim.
+    record.expiresAt = new Date(now.getTime() + 1_000);
+
+    let reservationSucceeded = false;
+    let consumeAttempted = false;
+    let consumedWithoutExpiryGuard = false;
+    mocks.db.$executeRaw.mockImplementation(
+      async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        const sql = strings.join("?");
+        // The database decides expiry from ITS clock at the instant of each
+        // write, which is what `Date.now()` stands in for here.
+        const expired = record.expiresAt.getTime() <= Date.now();
+        if (record.id !== values[0] || record.consumedAt !== null) return 0;
+
+        if (sql.includes("`attempts` = `attempts` + 1")) {
+          if (sql.includes("`expiresAt` > UTC_TIMESTAMP(3)") && expired) return 0;
+          record.attempts += 1;
+          reservationSucceeded = true;
+          // Only NOW does the clock cross expiry: the reservation is already
+          // committed and cannot be revisited.
+          vi.setSystemTime(new Date(now.getTime() + 5_000));
+          return 1;
+        }
+
+        if (sql.includes("`consumedAt` = UTC_TIMESTAMP(3)")) {
+          consumeAttempted = true;
+          if (!sql.includes("`expiresAt` > UTC_TIMESTAMP(3)")) {
+            // A claim with no expiry predicate spends the code regardless of
+            // the database clock. Recorded as a fact rather than thrown: the
+            // action reports ok:false on any throw, which would hide it.
+            consumedWithoutExpiryGuard = true;
+            record.consumedAt = new Date();
+            return 1;
+          }
+          return expired ? 0 : 1;
+        }
+
+        throw new Error(`unexpected raw auth code statement: ${sql}`);
+      },
+    );
+
+    const result = await loginWithPhoneCodeAction({
+      phone: "13800000000",
+      code: "123456",
+      locale: "en-US",
+    });
+
+    // The flow must have got PAST the reservation and reached the claim;
+    // otherwise this test would prove the same thing as the one above.
+    expect(reservationSucceeded).toBe(true);
+    expect(record.attempts).toBe(1);
+    expect(consumeAttempted).toBe(true);
+    expect(consumedWithoutExpiryGuard).toBe(false);
+    expect(result.ok).toBe(false);
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+    expect(record.consumedAt).toBeNull();
+  });
+
   it("rejects a valid login code when another request already consumed it", async () => {
     const record = makeCodeRecord({
       id: "login-code-4",
