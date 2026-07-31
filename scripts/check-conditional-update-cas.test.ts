@@ -482,6 +482,93 @@ export async function elsewhere(claimed: { count: number }) {
     expect(checkConditionalUpdateCas(root)).toEqual([]);
   });
 
+  // Both fixtures below put the SAFE-LOOKING declaration first on purpose: a
+  // whole-file walk that takes the first same-named `const` resolves to it and
+  // reports PASS, so the guard would vouch for the unsafe site rather than
+  // merely miss it.
+  it("resolves a mutation argument in the caller's scope, not another function's", () => {
+    const root = sandbox({
+      "lib/shadowed-mutation.ts": `
+export async function relabel() {
+  const mutation = {
+    where: { id: "x" },
+    data: { label: "renamed" },
+  };
+  await db.thing.updateMany(mutation);
+}
+
+export async function claim() {
+  const mutation = {
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  };
+  const claimed = await db.thing.updateMany(mutation);
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+    });
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.statePredicates).toEqual(["lifecyclePhase"]);
+    expect(violations[0]?.reason).toBe("no-transaction");
+  });
+
+  it("does not borrow another function's Serializable transaction options", () => {
+    const root = sandbox({
+      "lib/shadowed-options.ts": `
+export async function strictlyIsolated() {
+  const options = {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  };
+  return db.$transaction(async (tx) => {
+    await tx.thing.updateMany({
+      where: { id: "x" },
+      data: { label: "renamed" },
+    });
+  }, options);
+}
+
+export async function looselyIsolated() {
+  const options = {
+    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+  };
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.thing.updateMany({
+      where: { id: "x", claimedAt: null },
+      data: { claimedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw new Error("lost");
+  }, options);
+}
+`,
+    });
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.statePredicates).toEqual(["claimedAt"]);
+  });
+
+  it("fails closed when a reassigned binding makes the argument unknowable", () => {
+    const root = sandbox({
+      "lib/reassigned-mutation.ts": `
+export async function claim(pending: boolean) {
+  let mutation = {
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  };
+  if (!pending) {
+    mutation = { where: { id: "x" }, data: { label: "renamed" } };
+  }
+  const claimed = await db.thing.updateMany(mutation);
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+    });
+    // The binding is not a stable `const`, so which literal reaches the call
+    // is a runtime question. Reporting is the fail-closed answer: a guard that
+    // stayed silent here would be silent on the branch that IS a CAS.
+    expect(checkConditionalUpdateCas(root)).toHaveLength(1);
+  });
+
   it("accepts the atomic raw statement that replaces the pattern", () => {
     const root = sandbox({ "lib/atomic.ts": ATOMIC_RAW });
     expect(checkConditionalUpdateCas(root)).toEqual([]);

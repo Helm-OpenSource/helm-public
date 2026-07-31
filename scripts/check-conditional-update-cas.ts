@@ -577,33 +577,92 @@ function isSerializableIsolationExpression(node: ts.Expression): boolean {
  * real site invisible to the guard while the capability to see it already
  * existed a few hundred lines up.
  */
+/** Nodes that introduce a lexical scope for `const` bindings. */
+function isScopeBoundary(node: ts.Node): boolean {
+  return (
+    ts.isSourceFile(node) ||
+    ts.isBlock(node) ||
+    ts.isModuleBlock(node) ||
+    ts.isCaseBlock(node) ||
+    ts.isForStatement(node) ||
+    ts.isForInStatement(node) ||
+    ts.isForOfStatement(node) ||
+    isFunctionLike(node)
+  );
+}
+
+/**
+ * Variable declarations named `name` that belong to `scope` ITSELF — nested
+ * scopes are not descended into, because a binding declared inside a nested
+ * block is not visible to the code that encloses it.
+ */
+function declarationsOwnedBy(
+  scope: ts.Node,
+  name: string,
+): ts.VariableDeclaration[] {
+  const declarations: ts.VariableDeclaration[] = [];
+  const visit = (current: ts.Node): void => {
+    if (isScopeBoundary(current)) return;
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isIdentifier(current.name) &&
+      current.name.text === name
+    ) {
+      declarations.push(current);
+    }
+    ts.forEachChild(current, visit);
+  };
+  ts.forEachChild(scope, visit);
+  return declarations;
+}
+
 function resolveObjectLiteral(
-  source: ts.SourceFile,
+  _source: ts.SourceFile,
   node: ts.Expression,
 ): ts.ObjectLiteralExpression | null {
   const direct = unwrapExpression(node);
   if (ts.isObjectLiteralExpression(direct)) return direct;
   if (!ts.isIdentifier(direct)) return null;
   const wanted = direct.text;
-  let found: ts.ObjectLiteralExpression | null = null;
-  const visit = (current: ts.Node): void => {
-    if (found) return;
-    if (
-      ts.isVariableDeclaration(current) &&
-      ts.isIdentifier(current.name) &&
-      current.name.text === wanted &&
-      current.initializer
-    ) {
-      const initializer = unwrapExpression(current.initializer);
-      if (ts.isObjectLiteralExpression(initializer)) {
-        found = initializer;
-        return;
+
+  // Walk OUTWARD from the reference through enclosing scopes and stop at the
+  // nearest one that declares the name. The previous implementation walked the
+  // whole file from its root and took the first declaration it happened to
+  // meet, which is not a scope lookup at all: two functions each declaring
+  // `const mutation` resolved to whichever appeared earlier in the file. That
+  // is worse than a miss — the guard reported PASS on a real compare-and-swap
+  // by reading a DIFFERENT function's literal, and could equally borrow one
+  // function's `Serializable` options to vouch for another's ReadCommitted
+  // transaction.
+  let scope: ts.Node | undefined = direct.parent;
+  while (scope) {
+    if (isScopeBoundary(scope)) {
+      const declarations = declarationsOwnedBy(scope, wanted);
+      // More than one declaration of the same name in one scope is not valid
+      // TypeScript for `const`, so it means this walk is wrong about the
+      // scope. Fail closed rather than pick one.
+      if (declarations.length > 1) return null;
+      const declaration = declarations[0];
+      if (declaration) {
+        const list = declaration.parent;
+        // `const` is required, and it is what makes reading a single
+        // declaration sound: `let`/`var` can be rebound between the
+        // declaration and the call, so the literal reaching the call is a
+        // runtime question this guard must not answer.
+        if (
+          !ts.isVariableDeclarationList(list) ||
+          (list.flags & ts.NodeFlags.Const) === 0 ||
+          !declaration.initializer
+        ) {
+          return null;
+        }
+        const initializer = unwrapExpression(declaration.initializer);
+        return ts.isObjectLiteralExpression(initializer) ? initializer : null;
       }
     }
-    ts.forEachChild(current, visit);
-  };
-  visit(source);
-  return found;
+    scope = scope.parent;
+  }
+  return null;
 }
 
 function transactionIsSerializable(
