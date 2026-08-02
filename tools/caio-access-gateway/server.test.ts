@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
@@ -12,9 +14,8 @@ import {
   caioAccessGatewayMtlsPeer,
   caioAccessGatewayRouteOwner,
   CaioAccessGatewayServerError,
-  createCaioAccessGatewayServer,
+  createCaioAccessGatewayMount,
   readCaioAccessGatewayBody,
-  type CaioAccessGatewayListenerFactory,
   type CaioAccessGatewayServerPorts,
 } from "@/tools/caio-access-gateway/server";
 import {
@@ -151,64 +152,62 @@ function createPorts(
   };
 }
 
-type ListenerCapture = {
-  factory: CaioAccessGatewayListenerFactory;
-  created: Array<{
-    requestCert: boolean;
-    rejectUnauthorized: boolean;
-    ca: string;
-    cert: string;
-    key: string;
-  }>;
-  bound: Array<{ host: string; port: number }>;
-  closed: number;
-};
-
-function captureListener(): ListenerCapture {
-  const created: ListenerCapture["created"] = [];
-  const bound: ListenerCapture["bound"] = [];
-  const capture: ListenerCapture = {
-    created,
-    bound,
-    closed: 0,
-    factory: (input) => {
-      created.push({
-        requestCert: input.tls.requestCert,
-        rejectUnauthorized: input.tls.rejectUnauthorized,
-        ca: String(input.tls.ca),
-        cert: String(input.tls.cert),
-        key: String(input.tls.key),
-      });
-      return {
-        async listen(target) {
-          bound.push(target);
-        },
-        async close() {
-          capture.closed += 1;
-        },
-      };
-    },
-  };
-  return capture;
-}
-
 function createServer(
   overrides: Partial<{
     posture: "self_service" | "governed_fde";
     ports: CaioAccessGatewayServerPorts;
-    listenerFactory: CaioAccessGatewayListenerFactory;
   }> = {},
 ) {
-  return createCaioAccessGatewayServer({
+  return createCaioAccessGatewayMount({
     config: CONFIG,
     posture: overrides.posture ?? "self_service",
     ports: overrides.ports ?? createPorts().ports,
-    listenerFactory: overrides.listenerFactory ?? captureListener().factory,
-    tlsMaterialLoader: async () => ({
-      cert: "CERT",
-      key: "KEY",
-      ca: "CA",
-    }),
+  });
+}
+
+/** A minimal ServerResponse stand-in: what the host writes to the wire. */
+function captureNodeResponse() {
+  const capture = {
+    status: 0,
+    headers: {} as Record<string, unknown>,
+    body: "",
+    ended: false,
+  };
+  return {
+    capture,
+    response: {
+      writeHead(status: number, headers: Record<string, unknown>) {
+        capture.status = status;
+        capture.headers = { ...headers };
+        return this;
+      },
+      end(chunk?: string) {
+        capture.ended = true;
+        if (typeof chunk === "string") capture.body = chunk;
+      },
+    },
+  };
+}
+
+function nodeRequest(input: {
+  method: string;
+  url: string;
+  headers?: Record<string, string | string[] | undefined>;
+  body?: string;
+  socket?: Record<string, unknown>;
+}) {
+  const stream = Readable.from([Buffer.from(input.body ?? "", "utf8")]);
+  return Object.assign(stream, {
+    method: input.method,
+    url: input.url,
+    headers: input.headers ?? {},
+    socket: input.socket ?? {
+      authorized: true,
+      remoteAddress: CLIENT_ADDRESS,
+      getPeerCertificate: () => ({
+        fingerprint256: "AB:".repeat(31) + "AB",
+      }),
+    },
   });
 }
 
@@ -259,7 +258,7 @@ describe("route table: which surfaces this listener owns", () => {
     expect(
       CAIO_ACCESS_GATEWAY_ROUTE_TABLE.find(
         (row) => row.path === CAIO_WORKBUDDY_MCP_PATH,
-      )?.servedByThisProcess,
+      )?.servedByThisSurface,
     ).toBe(false);
   });
 
@@ -407,45 +406,95 @@ describe("mTLS is required for every surface on this listener", () => {
   });
 });
 
-describe("exactly ONE listener, bound to the configured private address", () => {
-  it("creates one client-certificate-demanding listener on the configured socket", async () => {
-    const listener = captureListener();
-    const server = createServer({ listenerFactory: listener.factory });
-    await server.start();
-    expect(listener.created).toHaveLength(1);
-    expect(listener.created[0]).toEqual({
-      requestCert: true,
-      rejectUnauthorized: true,
-      ca: "CA",
-      cert: "CERT",
-      key: "KEY",
-    });
-    expect(listener.bound).toEqual([
-      { host: LAN_ADDRESS, port: CAIO_ACCESS_GATEWAY_LISTEN_PORT },
-    ]);
-    await server.close();
-    expect(listener.closed).toBe(1);
+describe("this surface owns NO socket: the host binds the one listener", () => {
+  it("creates no listener of its own and offers no way to bind one", () => {
+    const mount = createServer() as unknown as Record<string, unknown>;
+    // The mount is a surface, not a server: nothing here can open a socket,
+    // so a deployment cannot end up with the Access Gateway on a second
+    // listener that contends with the WorkBuddy one for the pinned port.
+    expect(mount.start).toBeUndefined();
+    expect(mount.close).toBeUndefined();
+    expect(typeof mount.serveNodeRequest).toBe("function");
+    // The declared socket is still carried, so the host can be checked
+    // against it — declaring is not binding.
+    expect(mount.config).toEqual(CONFIG);
+    expect((mount.config as typeof CONFIG).port).toBe(
+      CAIO_ACCESS_GATEWAY_LISTEN_PORT,
+    );
   });
 
-  it("refuses a second start rather than opening a second socket on 7443", async () => {
-    const listener = captureListener();
-    const server = createServer({ listenerFactory: listener.factory });
-    await server.start();
-    await expect(server.start()).rejects.toThrow(/already/i);
-    expect(listener.created).toHaveLength(1);
-    expect(listener.bound).toHaveLength(1);
+  it("contains no socket-creating code at all", () => {
+    const source = readFileSync(
+      path.join(__dirname, "server.ts"),
+      "utf8",
+    );
+    // A second listener is not a configuration mistake to document, it is a
+    // composition that must not be constructible from this module.
+    expect(source).not.toMatch(/from "node:https"/);
+    expect(source).not.toMatch(/createServer\(/);
+    expect(source).not.toMatch(/\.listen\(/);
+    expect(source).not.toMatch(/exclusive/);
+  });
+
+  it("serves a node request onto the host's response", async () => {
+    const mount = createServer();
+    const { capture, response } = captureNodeResponse();
+    await mount.serveNodeRequest(
+      nodeRequest({ method: "GET", url: "/livez" }) as never,
+      response as never,
+    );
+    expect(capture.status).toBe(200);
+    expect(capture.headers["content-type"]).toBe(
+      "application/json; charset=utf-8",
+    );
+    expect(JSON.parse(capture.body)).toEqual({
+      status: "alive",
+      posture: "self_service",
+    });
+    expect(capture.ended).toBe(true);
+  });
+
+  it("refuses a node request whose socket carries no verified peer", async () => {
+    const mount = createServer();
+    const { capture, response } = captureNodeResponse();
+    await mount.serveNodeRequest(
+      nodeRequest({
+        method: "GET",
+        url: "/livez",
+        socket: { authorized: false, remoteAddress: CLIENT_ADDRESS },
+      }) as never,
+      response as never,
+    );
+    expect(capture.status).toBe(401);
+  });
+
+  it("refuses a node request whose body exceeds the cap", async () => {
+    const mount = createCaioAccessGatewayMount({
+      config: CONFIG,
+      posture: "self_service",
+      ports: createPorts().ports,
+      maxBodyBytes: 4,
+    });
+    const { capture, response } = captureNodeResponse();
+    await mount.serveNodeRequest(
+      nodeRequest({
+        method: "POST",
+        url: "/mcp",
+        body: "0123456789",
+      }) as never,
+      response as never,
+    );
+    expect(capture.status).toBe(413);
   });
 });
 
 describe("construction fails closed on a missing or disagreeing posture", () => {
   it("refuses to construct with no declared posture", () => {
     expect(() =>
-      createCaioAccessGatewayServer({
+      createCaioAccessGatewayMount({
         config: CONFIG,
         posture: undefined as never,
         ports: createPorts().ports,
-        listenerFactory: captureListener().factory,
-        tlsMaterialLoader: async () => ({ cert: "C", key: "K", ca: "A" }),
       }),
       // The declared-posture parser refuses it — not the later cross-check.
     ).toThrow(CaioDeploymentPostureError);
@@ -453,12 +502,10 @@ describe("construction fails closed on a missing or disagreeing posture", () => 
 
   it("refuses a posture that disagrees with the wired audit gate", () => {
     expect(() =>
-      createCaioAccessGatewayServer({
+      createCaioAccessGatewayMount({
         config: CONFIG,
         posture: "governed_fde",
         ports: createPorts("self_service").ports,
-        listenerFactory: captureListener().factory,
-        tlsMaterialLoader: async () => ({ cert: "C", key: "K", ca: "A" }),
       }),
     ).toThrow(CaioAccessGatewayServerError);
   });

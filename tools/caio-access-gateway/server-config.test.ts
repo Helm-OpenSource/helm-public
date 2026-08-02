@@ -117,38 +117,53 @@ describe("CAIO access gateway server config", () => {
     }
   });
 
-  it("refuses to start when the WorkBuddy LAN gateway claims the same socket", () => {
+  // The two surfaces are served by ONE process on ONE socket. The rule that
+  // used to live here was the exact inverse — it refused the shared socket and
+  // permitted a split one — which described an arrangement the deployment
+  // cannot actually run: only one approved private address and port is bound,
+  // so a second listener never gets one.
+  it("accepts the WorkBuddy LAN gateway on THIS socket: that is the composition", () => {
+    const config = loadCaioAccessGatewayServerConfig(
+      env({
+        CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: LAN_ADDRESS,
+        CAIO_WORKBUDDY_GATEWAY_PORT: String(CAIO_ACCESS_GATEWAY_LISTEN_PORT),
+      }),
+    );
+    expect(config.bindAddress).toBe(LAN_ADDRESS);
+    expect(config.port).toBe(CAIO_ACCESS_GATEWAY_LISTEN_PORT);
+  });
+
+  it("refuses a WorkBuddy socket that differs from this one", () => {
     expect(
       codeOf(() =>
         loadCaioAccessGatewayServerConfig(
           env({
-            CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: LAN_ADDRESS,
+            CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: OTHER_LAN_ADDRESS,
             CAIO_WORKBUDDY_GATEWAY_PORT: String(
               CAIO_ACCESS_GATEWAY_LISTEN_PORT,
             ),
           }),
         ),
       ),
-    ).toBe("LISTENER_CONFLICT");
+    ).toBe("LISTENER_SPLIT");
+    expect(
+      codeOf(() =>
+        loadCaioAccessGatewayServerConfig(
+          env({
+            CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: LAN_ADDRESS,
+            CAIO_WORKBUDDY_GATEWAY_PORT: "8443",
+          }),
+        ),
+      ),
+    ).toBe("LISTENER_SPLIT");
   });
 
-  it("allows the WorkBuddy LAN gateway on a different socket", () => {
-    expect(
-      loadCaioAccessGatewayServerConfig(
-        env({
-          CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: OTHER_LAN_ADDRESS,
-          CAIO_WORKBUDDY_GATEWAY_PORT: String(CAIO_ACCESS_GATEWAY_LISTEN_PORT),
-        }),
-      ).bindAddress,
-    ).toBe(LAN_ADDRESS);
-    expect(
-      loadCaioAccessGatewayServerConfig(
-        env({
-          CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: LAN_ADDRESS,
-          CAIO_WORKBUDDY_GATEWAY_PORT: "8443",
-        }),
-      ).bindAddress,
-    ).toBe(LAN_ADDRESS);
+  it("says nothing about a WorkBuddy socket that was never declared", () => {
+    // CONTROL: with no WorkBuddy declaration at all the rule must not fire,
+    // otherwise the two cases above would pass for the wrong reason.
+    expect(loadCaioAccessGatewayServerConfig(env()).bindAddress).toBe(
+      LAN_ADDRESS,
+    );
   });
 
   it("carries the ONE feature-flag vocabulary, fail-closed by default", () => {

@@ -65,22 +65,25 @@ describe("the gateway protocol core has a production caller", () => {
     expect(callers).toContain(COMPOSITION);
   });
 
-  // The composition having a caller and the composition BEING STARTED are two
-  // different facts, and the header used to assert the second one while only
-  // the first was true ("is what a deployment runner starts"). A reader
-  // auditing whether the Access Gateway is actually served would have been
-  // told yes. This test makes the header answerable to the tree in BOTH
-  // directions, so neither the false claim nor a stale denial can survive.
-  it("the header's launcher claim matches whether a launcher exists", () => {
-    const launchers: string[] = [];
+  // Being mounted and being SERVED are two different facts, and the header
+  // used to assert the second one while only the first was true ("is what a
+  // deployment runner starts"). A reader auditing whether the Access Gateway
+  // is actually served would have been told yes. The surface no longer owns a
+  // socket at all — the host that binds the one listener lives in the overlay
+  // repository, which this repository cannot see — so the honest in-repo claim
+  // is that NOTHING HERE binds it. This test makes the header answerable to
+  // the tree in BOTH directions, so neither the false claim nor a stale denial
+  // can survive.
+  it("the header's host claim matches whether an in-repo host exists", () => {
+    const hosts: string[] = [];
     for (const root of SCANNED_ROOTS) {
       for (const file of walk(path.join(REPO_ROOT, root))) {
         const relative = path.relative(REPO_ROOT, file);
         if (relative === COMPOSITION) continue;
         if (
-          readFileSync(file, "utf8").includes("createCaioAccessGatewayServer(")
+          readFileSync(file, "utf8").includes("createCaioAccessGatewayMount(")
         ) {
-          launchers.push(relative);
+          hosts.push(relative);
         }
       }
     }
@@ -88,13 +91,13 @@ describe("the gateway protocol core has a production caller", () => {
       0,
       4000,
     );
-    const deniesLauncher = header.includes(
-      "NOTHING IN ANY OF THE FOUR REPOSITORIES STARTS THIS COMPOSITION",
+    const deniesHost = header.includes(
+      "NO MODULE IN THIS REPOSITORY BINDS A SOCKET FOR THIS SURFACE",
     );
-    if (launchers.length === 0) {
+    if (hosts.length === 0) {
       expect(
-        deniesLauncher,
-        "no module starts this composition, so the header must say so explicitly",
+        deniesHost,
+        "no module here mounts this surface, so the header must say so explicitly",
       ).toBe(true);
       // The specific false sentence must never come back AS AN ASSERTION.
       // Quoted spans are stripped first: the header quotes the retired claim
@@ -107,20 +110,40 @@ describe("the gateway protocol core has a production caller", () => {
       );
     } else {
       expect(
-        deniesLauncher,
-        `these modules now start the composition, so the header's denial is stale: ${launchers.join(", ")}`,
+        deniesHost,
+        `these modules now mount this surface, so the header's denial is stale: ${hosts.join(", ")}`,
       ).toBe(false);
     }
   });
 
-  it("the composition mounts the handler and owns exactly one listener", () => {
+  it("the composition mounts the handler once and binds no socket", () => {
     const source = readFileSync(path.join(REPO_ROOT, COMPOSITION), "utf8");
     // Imported from the protocol core, not re-declared locally.
     expect(source).toMatch(
       /import[\s\S]*createCaioGatewayHandler[\s\S]*from "@\/lib\/caio-access-gateway\/gateway-http-core"/,
     );
-    // Mounted exactly once: one handler, one listener.
+    // Mounted exactly once: one handler for the whole surface.
     expect(source.match(/createCaioGatewayHandler\(/g)).toHaveLength(1);
-    expect(source.match(/listenerFactory\(/g)).toHaveLength(1);
+    // And no second listener can be built from here: the deployment binds one
+    // approved private address and port, and the host owns it.
+    expect(source).not.toMatch(/from "node:https"/);
+    expect(source).not.toMatch(/\.listen\(/);
+  });
+
+  // CONTROL: the scanner must be able to SEE a caller, otherwise every
+  // assertion above would pass on an empty file list. gateway-http-core.ts is
+  // excluded by DEFINITION, so a positive control proves the walk reaches
+  // real files with real content.
+  it("the scanner actually reads the tree it claims to scan", () => {
+    const files = SCANNED_ROOTS.flatMap((root) =>
+      walk(path.join(REPO_ROOT, root)),
+    );
+    expect(files.length).toBeGreaterThan(100);
+    expect(files.map((file) => path.relative(REPO_ROOT, file))).toContain(
+      DEFINITION,
+    );
+    expect(
+      readFileSync(path.join(REPO_ROOT, DEFINITION), "utf8"),
+    ).toContain("createCaioGatewayHandler");
   });
 });

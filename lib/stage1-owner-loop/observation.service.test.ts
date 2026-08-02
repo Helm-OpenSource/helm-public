@@ -348,6 +348,12 @@ describe("Stage 1 observation runtime", () => {
     });
   });
 
+  // `now` is passed for the same reason every sibling case passes it: the
+  // fixture's authorization window ends at a fixed instant, and a case that
+  // omits it reads the wall clock instead. This one did, so it asserted the
+  // revocation reason only until real time passed that instant — after which
+  // it failed on `asset_authorization_window_inactive`, which is a fact about
+  // the calendar, not about revocation.
   it("fails source registration when revocation wins the transactional active-program claim", async () => {
     dbMock.enterpriseObservationProgram.findFirst.mockResolvedValue(program());
     dbMock.dataAssetCatalogEntry.findFirst.mockResolvedValue(
@@ -373,6 +379,7 @@ describe("Stage 1 observation runtime", () => {
         retentionDays: 30,
         actorName: "Owner",
         actorUserId: "owner-1",
+        now,
       }),
     ).rejects.toMatchObject({ reasons: ["program_not_active"] });
 

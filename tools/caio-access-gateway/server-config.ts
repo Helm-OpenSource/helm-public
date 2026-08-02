@@ -1,20 +1,20 @@
 /**
- * Configuration for the ONE CAIO access gateway listener.
+ * Configuration for the CAIO Access Gateway SURFACE.
  *
- * WHAT THIS PROCESS IS
- * A single HTTPS/mTLS listener on a private LAN address, port 7443, serving the
- * Access Gateway API (see server.ts for the route table). It is NOT the
- * WorkBuddy LAN gateway: that surface (`/mcp/workbuddy`) is terminated by a
- * separate process, and this config REFUSES to start when the two are
- * configured onto the same socket, so two listeners can never fight over 7443.
+ * WHAT THIS DESCRIBES
+ * The one socket both CAIO surfaces are served on: a private LAN address, port
+ * 7443. The Access Gateway API (see server.ts for the route table) and the
+ * WorkBuddy MCP surface (`/mcp/workbuddy`) share it, routed by path by one
+ * host. This config therefore REFUSES a WorkBuddy declaration naming a
+ * DIFFERENT socket — that would be a second listener, and the deployment binds
+ * exactly one approved private address and port.
  *
  * FAIL-CLOSED RULES
  *   1. The bind address is REQUIRED and is validated by the shared
  *      validateCaioGatewayBindAddress: a wildcard, a public address, or a
  *      hostname is refused. There is no default and no fallback interface.
  *   2. The port is PINNED to 7443. An env value is accepted only if it names
- *      the pinned port, so an operator cannot quietly move the listener (and
- *      a moved listener cannot be mistaken for the WorkBuddy one).
+ *      the pinned port, so an operator cannot quietly move the socket.
  *   3. All THREE pieces of mTLS material (server certificate, private key,
  *      client CA) are REQUIRED as absolute paths. A missing or relative path is
  *      a construction error, never "start without client certificates".
@@ -53,8 +53,8 @@ export type CaioAccessGatewayServerConfigErrorCode =
   | "PORT_PINNED"
   /** A certificate, key or client-CA path is missing or not absolute. */
   | "MTLS_MATERIAL_REQUIRED"
-  /** Another gateway process is configured onto this exact socket. */
-  | "LISTENER_CONFLICT";
+  /** The WorkBuddy surface is declared on a DIFFERENT socket than this one. */
+  | "LISTENER_SPLIT";
 
 export class CaioAccessGatewayServerConfigError extends Error {
   readonly code: CaioAccessGatewayServerConfigErrorCode;
@@ -127,16 +127,24 @@ function requirePinnedPort(env: Environment): number {
 }
 
 /**
- * Refuse to start when the WorkBuddy LAN gateway is configured onto the very
- * socket this process binds.
+ * Refuse a WorkBuddy socket that DIFFERS from this one.
+ *
+ * This rule used to be the exact inverse: it refused the shared socket and
+ * permitted a split one. That described an arrangement the deployment cannot
+ * run — exactly one approved private address and port is bound — and the
+ * consequence was that only one of the two surfaces was ever served. Both
+ * surfaces are now served by ONE host on ONE socket, so a WorkBuddy
+ * declaration naming a different address or port means someone is trying to
+ * build a second listener, and that is what fails closed here.
  *
  * Read straight off the WorkBuddy env keys rather than through
  * loadWorkBuddyGatewayConfig: that loader demands a complete HTTPS/mTLS
  * configuration as soon as the shared `gatewayEnabled` flag is on, and this
- * process must not require the OTHER process's configuration to be present in
- * order to boot. Only the socket coordinates matter here.
+ * surface must not require the whole WorkBuddy configuration to be present in
+ * order to load. Only the socket coordinates matter here. An absent
+ * declaration says nothing and is not an error: the host declares the socket.
  */
-function assertNoListenerConflict(
+function assertNoListenerSplit(
   env: Environment,
   bindAddress: string,
   port: number,
@@ -144,10 +152,10 @@ function assertNoListenerConflict(
   const otherAddress = env.CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS?.trim();
   const otherPort = Number(env.CAIO_WORKBUDDY_GATEWAY_PORT?.trim());
   if (!otherAddress || !Number.isInteger(otherPort)) return;
-  if (otherAddress === bindAddress && otherPort === port) {
+  if (otherAddress !== bindAddress || otherPort !== port) {
     throw new CaioAccessGatewayServerConfigError(
-      "LISTENER_CONFLICT",
-      "The WorkBuddy LAN gateway is configured on this exact socket; two listeners may not contend for it.",
+      "LISTENER_SPLIT",
+      "The WorkBuddy LAN gateway is declared on a different socket; both surfaces are served by one host on one socket.",
     );
   }
 }
@@ -157,7 +165,7 @@ export function loadCaioAccessGatewayServerConfig(
 ): CaioAccessGatewayServerConfig {
   const bindAddress = requireBindAddress(env);
   const port = requirePinnedPort(env);
-  assertNoListenerConflict(env, bindAddress, port);
+  assertNoListenerSplit(env, bindAddress, port);
 
   return Object.freeze({
     bindAddress,

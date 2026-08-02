@@ -1,37 +1,48 @@
 /**
- * The production composition for the CAIO access gateway.
+ * The CAIO Access Gateway SURFACE: the protocol core mounted onto a host.
  *
  * This module is the non-test caller of the gateway protocol core: it mounts
- * createCaioGatewayHandler on ONE HTTPS/mTLS listener. Before it existed the
- * protocol core had no caller outside its own directory and its own tests, so
- * nothing in the tree assembled the Access Gateway API at all.
+ * createCaioGatewayHandler once. Before it existed the protocol core had no
+ * caller outside its own directory and its own tests, so nothing in the tree
+ * assembled the Access Gateway API at all.
+ *
+ * WHY THIS IS A SURFACE AND NOT A SERVER
+ * --------------------------------------
+ * It used to create its own HTTPS listener on the pinned port. So does the
+ * WorkBuddy LAN gateway, and the deployment binds exactly ONE approved private
+ * address and port — so the two could never both be served, and the installed
+ * process (workbuddy-lan/gateway.cli.ts) served WorkBuddy only. Every Access
+ * Gateway route was absent from a real install while the tests, this module's
+ * guards, and the packaged evidence all passed. That was not a configuration
+ * mistake to document: it was a composition that cannot exist. The listener is
+ * therefore gone from here. One host binds one socket and routes by path to
+ * both surfaces; this module answers for the Access Gateway paths only.
  *
  * WHAT IS NOT TRUE YET — read this before treating the file as deployed
  * ---------------------------------------------------------------------
- * NOTHING IN ANY OF THE FOUR REPOSITORIES STARTS THIS COMPOSITION.
- * `createCaioAccessGatewayServer` has no non-test caller: there is no CLI
- * entrypoint, no launchd job, and no service unit that invokes it, and the
- * launcher the delivery package generates starts a DIFFERENT process — the
- * WorkBuddy LAN gateway (`workbuddy-lan/gateway.cli.ts`). An earlier version of
+ * NO MODULE IN THIS REPOSITORY BINDS A SOCKET FOR THIS SURFACE. The host that
+ * does lives in the Overlay repository (helm-self workbuddy-lan composed
+ * gateway), which this repository cannot see or test. An earlier version of
  * this header said this module "is what a deployment runner starts", which was
  * false in exactly the way that matters: it described an intended end state as
  * an accomplished one, and anyone auditing the tree for "is the Access Gateway
  * actually served" would have been told yes.
  *
- * What is true is narrower and worth stating precisely: the composition exists,
- * is total over its route table, refuses to start twice, and is covered by
- * tests. Serving traffic additionally requires an entrypoint that supplies the
- * bind address, the TLS material and the posture — all of them deployment
- * inputs, which is why no default is invented here. `production-caller.test.ts`
- * fails if this paragraph and the tree ever disagree in either direction.
+ * What is true is narrower and worth stating precisely: the surface exists, is
+ * total over its route table, is mountable onto a host listener, and is covered
+ * by tests. Serving traffic additionally requires a host that supplies the
+ * socket and the TLS material, and ports that are deployment inputs — which is
+ * why no default is invented here. `production-caller.test.ts` fails if this
+ * paragraph and the tree ever disagree in either direction.
  *
- * ONE PROCESS, ONE SOCKET, ONE HANDLER
- * ------------------------------------
- * Exactly one TLS listener is created (listenerFactory is called once, from
- * start()), bound to the configured private-LAN address on the pinned port
- * 7443. A second start() is refused rather than opening a second socket, and
- * server-config.ts refuses to load at all when the WorkBuddy LAN gateway is
- * configured onto the same address:port — two listeners can never contend.
+ * ONE SOCKET, ONE HANDLER
+ * -----------------------
+ * No listener is created here and none can be: `server.test.ts` scans this
+ * source and fails on a node:https import, a createServer call or a .listen
+ * call. The config still carries the declared bind address and the pinned port
+ * 7443 so a host can be checked against them, and server-config.ts now refuses
+ * a WorkBuddy socket that DIFFERS from this one — the shared socket is the
+ * composition, a split one is the error.
  *
  * THE ROUTE TABLE (explicit, tested, and owner-labelled)
  * -----------------------------------------------------
@@ -44,24 +55,23 @@
  *   /readyz                 GET      access_gateway_api     yes
  *   /mcp/workbuddy          *        workbuddy_lan_gateway  NO
  *
- * This composition owns the ACCESS GATEWAY API only. The WorkBuddy MCP surface
- * (`/mcp/workbuddy`) is terminated by a different process with its own mTLS
- * material and its own dispatcher; it is listed here precisely so it can be
- * refused explicitly (404, before any port is touched) instead of falling
- * through to the API handler. One surface may never answer for the other, and
- * an operator reading this table can see which process owns which path.
+ * This surface owns the ACCESS GATEWAY API only. The WorkBuddy MCP surface
+ * (`/mcp/workbuddy`) is terminated by the OTHER surface on the same host, with
+ * its own dispatcher; it is listed here precisely so it can be refused
+ * explicitly (404) instead of falling through to the API handler. The host
+ * routes it away before this module ever sees it, and this refusal is the
+ * second line: one surface may never answer for the other.
  *
  * mTLS
  * ----
- * The listener demands a client certificate (`requestCert` + `rejectUnauthorized`
- * against the configured client CA), and every request is additionally required
- * to carry a verified peer — derived through the existing client-identity seam
- * (workBuddyMtlsPeerSchema in lib/caio-collaboration/client-identity.ts), which
- * accepts only an authorized socket with a sha256 fingerprint and a source
- * address. A request with no verified peer is refused 401 before any gateway
- * port runs, including on the probe routes: everything on this listener is
- * mutually authenticated. Bearer tokens are the SECOND factor, enforced inside
- * the protocol core.
+ * The host demands a client certificate at the TLS layer, and every request is
+ * additionally required here to carry a verified peer — derived through the
+ * existing client-identity seam (workBuddyMtlsPeerSchema in
+ * lib/caio-collaboration/client-identity.ts), which accepts only an authorized
+ * socket with a sha256 fingerprint and a source address. A request with no
+ * verified peer is refused 401 before any gateway port runs, including on the
+ * probe routes. Bearer tokens are the SECOND factor, enforced inside the
+ * protocol core.
  *
  * POSTURE
  * -------
@@ -74,15 +84,12 @@
  *
  * FAIL-CLOSED CONSTRUCTION
  * ------------------------
- * Certificate paths, bind address and port come from
- * loadCaioAccessGatewayServerConfig, which throws rather than defaulting;
- * the posture throws when absent; the TLS material is read at start() and a
- * read failure propagates instead of starting a plaintext or
- * certificate-less listener.
+ * Bind address and port come from loadCaioAccessGatewayServerConfig, which
+ * throws rather than defaulting; the posture throws when absent. Nothing here
+ * degrades to a plaintext or certificate-less path, because nothing here
+ * terminates TLS at all.
  */
 
-import { readFile } from "node:fs/promises";
-import { createServer as createHttpsServer } from "node:https";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
@@ -115,10 +122,10 @@ import type { CaioModelProxy } from "@/lib/caio-model-proxy/proxy-engine";
 
 import type { CaioAccessGatewayServerConfig } from "@/tools/caio-access-gateway/server-config";
 
-/** The path the WorkBuddy LAN gateway owns — in a DIFFERENT process. */
+/** The path the WorkBuddy LAN surface owns on the same host. */
 export const CAIO_WORKBUDDY_MCP_PATH = "/mcp/workbuddy";
 
-/** Which process owns a path. `unowned` is anything neither surface declares. */
+/** Which surface owns a path. `unowned` is anything neither surface declares. */
 export type CaioAccessGatewaySurfaceOwner =
   | "access_gateway_api"
   | "workbuddy_lan_gateway"
@@ -129,7 +136,7 @@ export type CaioAccessGatewayRoute = Readonly<{
   /** `*` means every method, used only for a path this process refuses. */
   methods: readonly string[];
   owner: CaioAccessGatewaySurfaceOwner;
-  servedByThisProcess: boolean;
+  servedByThisSurface: boolean;
 }>;
 
 /**
@@ -144,44 +151,44 @@ export const CAIO_ACCESS_GATEWAY_ROUTE_TABLE: readonly CaioAccessGatewayRoute[] 
       path: "/mcp",
       methods: Object.freeze(["POST"]),
       owner: "access_gateway_api" as const,
-      servedByThisProcess: true,
+      servedByThisSurface: true,
     }),
     Object.freeze({
       path: "/v1/responses",
       methods: Object.freeze(["POST"]),
       owner: "access_gateway_api" as const,
-      servedByThisProcess: true,
+      servedByThisSurface: true,
     }),
     Object.freeze({
       path: "/v1/chat/completions",
       methods: Object.freeze(["POST"]),
       owner: "access_gateway_api" as const,
-      servedByThisProcess: true,
+      servedByThisSurface: true,
     }),
     Object.freeze({
       path: "/v1/models",
       methods: Object.freeze(["GET"]),
       owner: "access_gateway_api" as const,
-      servedByThisProcess: true,
+      servedByThisSurface: true,
     }),
     Object.freeze({
       path: "/livez",
       methods: Object.freeze(["GET"]),
       owner: "access_gateway_api" as const,
-      servedByThisProcess: true,
+      servedByThisSurface: true,
     }),
     Object.freeze({
       path: "/readyz",
       methods: Object.freeze(["GET"]),
       owner: "access_gateway_api" as const,
-      servedByThisProcess: true,
+      servedByThisSurface: true,
     }),
     Object.freeze({
       // Declared so it is refused EXPLICITLY here, never answered by the API.
       path: CAIO_WORKBUDDY_MCP_PATH,
       methods: Object.freeze(["*"]),
       owner: "workbuddy_lan_gateway" as const,
-      servedByThisProcess: false,
+      servedByThisSurface: false,
     }),
   ]);
 
@@ -278,37 +285,7 @@ export type CaioAccessGatewayServerPorts = Readonly<{
   readinessProbe: CaioReadinessProbePort;
 }>;
 
-export type CaioAccessGatewayTlsMaterial = Readonly<{
-  cert: string | Buffer;
-  key: string | Buffer;
-  ca: string | Buffer;
-}>;
-
-export type CaioAccessGatewayTlsOptions = CaioAccessGatewayTlsMaterial &
-  Readonly<{
-    requestCert: true;
-    rejectUnauthorized: true;
-    minVersion: "TLSv1.2";
-  }>;
-
-export type CaioAccessGatewayListener = Readonly<{
-  listen(target: Readonly<{ host: string; port: number }>): Promise<void>;
-  close(): Promise<void>;
-}>;
-
-export type CaioAccessGatewayListenerFactory = (
-  input: Readonly<{
-    tls: CaioAccessGatewayTlsOptions;
-    onRequest: (
-      request: IncomingMessage,
-      response: ServerResponse,
-    ) => Promise<void>;
-  }>,
-) => CaioAccessGatewayListener;
-
-export type CaioAccessGatewayServerErrorCode =
-  | "ALREADY_STARTED"
-  | "POSTURE_MISMATCH";
+export type CaioAccessGatewayServerErrorCode = "POSTURE_MISMATCH";
 
 export class CaioAccessGatewayServerError extends Error {
   readonly code: CaioAccessGatewayServerErrorCode;
@@ -320,27 +297,36 @@ export class CaioAccessGatewayServerError extends Error {
   }
 }
 
-export type CaioAccessGatewayServer = Readonly<{
+/**
+ * The mounted Access Gateway surface.
+ *
+ * It answers requests; it never owns a socket. The host that binds the one
+ * listener routes the paths in `apiPaths` here and everything else elsewhere.
+ */
+export type CaioAccessGatewayMount = Readonly<{
   config: CaioAccessGatewayServerConfig;
   posture: CaioDeploymentPosture;
   routeTable: readonly CaioAccessGatewayRoute[];
+  /** The paths a host must route to this surface. */
+  apiPaths: readonly string[];
   /** Serve one normalized request through the route table. */
   handle(request: CaioAccessGatewayIncoming): Promise<CaioGatewayResponse>;
-  /** Bind THE listener. Refuses a second call. */
-  start(): Promise<Readonly<{ host: string; port: number }>>;
-  close(): Promise<void>;
+  /**
+   * Serve one node request onto the host's response. The host has already
+   * terminated TLS and demanded the client certificate; the verified peer is
+   * read back off the socket here so this surface never trusts a header.
+   */
+  serveNodeRequest(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void>;
 }>;
 
-export type CaioAccessGatewayServerInput = Readonly<{
+export type CaioAccessGatewayMountInput = Readonly<{
   config: CaioAccessGatewayServerConfig;
   /** Declared, never inferred; must equal the audit gate's own posture. */
   posture: CaioDeploymentPosture;
   ports: CaioAccessGatewayServerPorts;
-  /** Injection seam for tests; production uses the node https listener. */
-  listenerFactory?: CaioAccessGatewayListenerFactory;
-  tlsMaterialLoader?: (
-    config: CaioAccessGatewayServerConfig,
-  ) => Promise<CaioAccessGatewayTlsMaterial>;
   maxBodyBytes?: number;
   rateLimitPerMinute?: number;
 }>;
@@ -400,45 +386,9 @@ export async function readCaioAccessGatewayBody(
   });
 }
 
-/** Production listener: ONE node https server demanding client certificates. */
-function createNodeHttpsListener(
-  input: Parameters<CaioAccessGatewayListenerFactory>[0],
-): CaioAccessGatewayListener {
-  const server = createHttpsServer(input.tls, (request, response) => {
-    void input.onRequest(request, response);
-  });
-  return Object.freeze({
-    listen: (target) =>
-      new Promise<void>((resolve, reject) => {
-        const onError = (error: Error) => reject(error);
-        server.once("error", onError);
-        // `exclusive` so a second process cannot silently share this socket.
-        server.listen({ ...target, exclusive: true }, () => {
-          server.off("error", onError);
-          resolve();
-        });
-      }),
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      }),
-  });
-}
-
-async function readTlsMaterialFromDisk(
-  config: CaioAccessGatewayServerConfig,
-): Promise<CaioAccessGatewayTlsMaterial> {
-  const [cert, key, ca] = await Promise.all([
-    readFile(config.mtls.certificatePath),
-    readFile(config.mtls.privateKeyPath),
-    readFile(config.mtls.clientCaPath),
-  ]);
-  return Object.freeze({ cert, key, ca });
-}
-
-export function createCaioAccessGatewayServer(
-  input: CaioAccessGatewayServerInput,
-): CaioAccessGatewayServer {
+export function createCaioAccessGatewayMount(
+  input: CaioAccessGatewayMountInput,
+): CaioAccessGatewayMount {
   // Declared posture, parsed fail-closed: absent or unparseable cannot start.
   const posture = parseCaioDeploymentPosture(input.posture);
   if (input.ports.auditGate.posture !== posture) {
@@ -451,8 +401,6 @@ export function createCaioAccessGatewayServer(
   }
 
   const maxBodyBytes = input.maxBodyBytes ?? CAIO_GATEWAY_DEFAULT_MAX_BODY_BYTES;
-  const listenerFactory = input.listenerFactory ?? createNodeHttpsListener;
-  const loadTlsMaterial = input.tlsMaterialLoader ?? readTlsMaterialFromDisk;
 
   // The /v1 dispatch surface, composed from the in-tree bridge so the chain
   // gateway -> proxy -> canonical audit gate is the real one.
@@ -483,10 +431,8 @@ export function createCaioAccessGatewayServer(
     rateLimitPerMinute: input.rateLimitPerMinute,
   };
 
-  // THE mounted protocol core. One handler for every surface this process owns.
+  // THE mounted protocol core. One handler for every path this surface owns.
   const handler = createCaioGatewayHandler(dependencies);
-
-  let listener: CaioAccessGatewayListener | null = null;
 
   async function handle(
     request: CaioAccessGatewayIncoming,
@@ -528,7 +474,7 @@ export function createCaioAccessGatewayServer(
     });
   }
 
-  async function onRequest(
+  async function serveNodeRequest(
     request: IncomingMessage,
     response: ServerResponse,
   ): Promise<void> {
@@ -561,39 +507,8 @@ export function createCaioAccessGatewayServer(
     config: input.config,
     posture,
     routeTable: CAIO_ACCESS_GATEWAY_ROUTE_TABLE,
+    apiPaths: CAIO_ACCESS_GATEWAY_API_PATHS,
     handle,
-    async start() {
-      if (listener !== null) {
-        throw new CaioAccessGatewayServerError(
-          "ALREADY_STARTED",
-          "The CAIO access gateway listener is already started; one process owns one socket.",
-        );
-      }
-      const material = await loadTlsMaterial(input.config);
-      listener = listenerFactory({
-        tls: Object.freeze({
-          ...material,
-          // Client certificates are demanded by the listener itself, not only
-          // checked afterwards.
-          requestCert: true as const,
-          rejectUnauthorized: true as const,
-          minVersion: "TLSv1.2" as const,
-        }),
-        onRequest,
-      });
-      await listener.listen({
-        host: input.config.bindAddress,
-        port: input.config.port,
-      });
-      return Object.freeze({
-        host: input.config.bindAddress,
-        port: input.config.port,
-      });
-    },
-    async close() {
-      const current = listener;
-      listener = null;
-      if (current !== null) await current.close();
-    },
+    serveNodeRequest,
   });
 }
