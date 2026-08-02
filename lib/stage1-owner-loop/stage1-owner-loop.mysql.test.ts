@@ -42,7 +42,8 @@ import type { OwnerCommandDraft } from "./types";
 // 授权窗上界必须**始终在未来**：本文件的派发路径用真实时钟校验决策 validUntil
 // （decision-follow-through 的 `record.validUntil <= now`）。原先写死 2026-08-01，
 // 真实日期越过后固定报 decision_expired —— 用例从 2026-08-02 起必然失败并卡死下游构建。
-// 用相对锚点表达"授权仍然有效"这一夹具意图，用例不再随日历漂移。
+// 用相对锚点表达"授权/决策仍然有效"这一夹具意图，用例不再随日历漂移。
+// 同时用于决策对象的 expiryOrReviewAt（它才是 decision_expired 的直接判据）。
 const PROGRAM_EXPIRES_AT = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
 const integrationDatabaseUrl = process.env.STAGE1_OWNER_LOOP_DATABASE_URL;
@@ -803,7 +804,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       riskLevel: "high",
       allowedActionLevel: "draft_task",
       ownerGate: "approval_required",
-      expiryOrReviewAt: "2026-08-01T00:00:00.000Z",
+      expiryOrReviewAt: PROGRAM_EXPIRES_AT.toISOString(),
       rollbackPath: "Withdraw the work packet before execution",
     };
     const record = await createStage1DecisionRecord({
