@@ -1,5 +1,6 @@
 // Regression guard: the CAIO access gateway protocol core must have a
-// NON-TEST production caller.
+// NON-TEST production caller, and its header must keep telling the truth about
+// what V1 serves.
 //
 // The gateway handler (createCaioGatewayHandler) once existed with no caller
 // outside its own directory and its own tests: a protocol core nothing
@@ -7,6 +8,11 @@
 // only. This file fails if that state ever returns — either because the
 // composition stops mounting the handler, or because the composition module
 // disappears.
+//
+// It also guards the V1 PRODUCT BOUNDARY: this surface is not mounted in V1.
+// That is a decision, and a decision that lives only in a commit message stops
+// being readable within a week. The header must state it, and this file fails
+// if the statement is removed or quietly softened back into a TODO.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -41,6 +47,21 @@ function walk(dir: string): string[] {
     found.push(full);
   }
   return found;
+}
+
+/**
+ * The composition's leading block comment, in full.
+ *
+ * This used to be `source.slice(0, 4000)`. A character budget is not a
+ * definition of "the header": adding a paragraph could push a required
+ * sentence past the cut and turn a documentation edit into a mystery test
+ * failure, and the reverse — a claim surviving because it slid below the cut —
+ * is worse. The block comment has an exact end, so use it.
+ */
+function compositionHeader(): string {
+  const source = readFileSync(path.join(REPO_ROOT, COMPOSITION), "utf8");
+  const end = source.indexOf("*/");
+  return end === -1 ? "" : source.slice(0, end + 2);
 }
 
 function productionCallers(): string[] {
@@ -87,10 +108,7 @@ describe("the gateway protocol core has a production caller", () => {
         }
       }
     }
-    const header = readFileSync(path.join(REPO_ROOT, COMPOSITION), "utf8").slice(
-      0,
-      4000,
-    );
+    const header = compositionHeader();
     const deniesHost = header.includes(
       "NO MODULE IN THIS REPOSITORY BINDS A SOCKET FOR THIS SURFACE",
     );
@@ -114,6 +132,74 @@ describe("the gateway protocol core has a production caller", () => {
         `these modules now mount this surface, so the header's denial is stale: ${hosts.join(", ")}`,
       ).toBe(false);
     }
+  });
+
+  // The V1 decision, asserted against the file a reader actually opens.
+  //
+  // Before this, the only thing in the tree that said "not served" said it as
+  // a mechanism ("the ports are unwired"), which reads as a task somebody
+  // forgot. The mechanism is true, but it is the SECOND fact. The first is
+  // that not serving this surface is the shipped product boundary for V1.
+  it("the header declares the V1 boundary, not just the missing wiring", () => {
+    const header = compositionHeader();
+
+    // CONTROL: the header really was read. Without this every toContain below
+    // would also pass against a header this function failed to locate — and an
+    // empty string trivially satisfies nothing, so assert a sentence that has
+    // been in this file since before the decision.
+    expect(header.length).toBeGreaterThan(1000);
+    expect(header).toContain("ONE SOCKET, ONE HANDLER");
+
+    // FACT ONE — the product edge. Absence here is finished work.
+    expect(header).toContain("V1 PRODUCT BOUNDARY");
+    expect(header).toContain("NOT MOUNTED IN V1");
+    expect(header).toContain("serves WorkBuddy only");
+    expect(header).toContain("404");
+
+    // FACT TWO — the mechanism, named port by port so nobody has to go and
+    // count them. These are the implementations that do not exist anywhere.
+    for (const port of [
+      "token authenticator",
+      "project resolver",
+      "MCP dispatcher",
+      "model alias bindings",
+      "canonical audit gate",
+      "readiness probe",
+    ]) {
+      expect(header, `the header must name the ${port} port`).toContain(port);
+    }
+
+    // The way back, in one place, so nobody reconstructs it from four files.
+    expect(header).toContain("RE-ENTRY CONDITIONS");
+    expect(header).toContain("control_plane_authorization_pending");
+    expect(header).toContain("ownerAuthorizationRecorded");
+
+    // And why the seam survives the decision.
+    expect(header).toContain("createCaioAccessGatewayMount");
+  });
+
+  // Reversal guard. Nothing here can observe the overlay host, but this repo
+  // CAN observe whether it started claiming the surface is served. A header
+  // that says "served", "deployed", or "mounted in production" while no module
+  // here binds a socket is exactly the false reading this file exists to stop.
+  it("the header never claims this surface is served", () => {
+    // Quoted spans are stripped first: the header cites the retired claims in
+    // order to explain why they were wrong, and a naive match cannot tell a
+    // statement from a citation of one.
+    const withoutQuotations = compositionHeader().replace(/"[^"]*"/g, '""');
+    for (const claim of [
+      /is what a deployment runner starts/,
+      /\bserved in V1\b/,
+      /\bmounted in production\b/,
+      /\bcoming soon\b/i,
+    ]) {
+      expect(withoutQuotations, `header must not claim: ${claim}`).not.toMatch(
+        claim,
+      );
+    }
+    // CONTROL: the stripper must leave the header readable rather than
+    // blanking it, otherwise every assertion above passes on an empty string.
+    expect(withoutQuotations).toContain("V1 PRODUCT BOUNDARY");
   });
 
   it("the composition mounts the handler once and binds no socket", () => {

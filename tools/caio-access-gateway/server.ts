@@ -1,6 +1,61 @@
 /**
  * The CAIO Access Gateway SURFACE: the protocol core mounted onto a host.
  *
+ * V1 PRODUCT BOUNDARY — READ THIS BEFORE ANYTHING ELSE
+ * ----------------------------------------------------
+ * This surface is NOT MOUNTED IN V1. By owner decision the composed gateway
+ * serves WorkBuddy only. Every path this surface owns (/mcp, /v1/responses,
+ * /v1/chat/completions, /v1/models, /livez, /readyz) is answered 404 by the
+ * host's route table — an explicit refusal, because a path no surface declares
+ * belongs to nobody and is never a fallthrough.
+ *
+ * TWO THINGS ARE TRUE AT ONCE, and a reader needs both.
+ *
+ *   1. A PRODUCT EDGE. Not serving the Access surface is what V1 ships. Its
+ *      absence is finished work, not an open task, and a delivery that answers
+ *      only /mcp/workbuddy is the delivery working as designed.
+ *
+ *   2. A MECHANICAL FACT. The six production ports this surface demands have
+ *      no implementation anywhere in the four repositories:
+ *        - token authenticator
+ *        - project resolver
+ *        - MCP dispatcher
+ *        - model alias bindings (with their upstream credentials)
+ *        - canonical audit gate
+ *        - readiness probe
+ *      They are deployment inputs, and writing plausible ones here would
+ *      produce a facade that LOOKS like an Access Gateway while
+ *      authenticating nobody and auditing nothing.
+ *
+ * Stating only (2) makes this file read as a TODO somebody forgot; stating
+ * only (1) hides that re-entry is real engineering. Both stay.
+ *
+ * RE-ENTRY CONDITIONS — all three, or this stays unmounted
+ * -------------------------------------------------------
+ *   1. The six production ports named above exist as real implementations,
+ *      supplied by the deployment rather than invented in-tree.
+ *   2. helm-self's caio-access-gateway-binding.json no longer records
+ *      activation.status = control_plane_authorization_pending.
+ *   3. Owner authorization is recorded: boundaries.ownerAuthorizationRecorded
+ *      is true in that same binding.
+ *
+ * Mounting is a decision reversal, not a wiring step, and crossing the owner
+ * activation gate as a side effect of a refactor is the specific accident this
+ * paragraph exists to prevent. The overlay repository states the identical
+ * three conditions in one place
+ * (overlays/helm-self/lib/workbuddy-lan/access-gateway-v1-boundary.ts) and its
+ * gates hold the declaration and the enforcement together.
+ *
+ * WHY THE MOUNT STAYS ANYWAY
+ * --------------------------
+ * createCaioAccessGatewayMount below has no production caller in any
+ * repository; it is exercised by tests and by nothing else. It is kept
+ * deliberately. It is the seam a later version mounts, and deleting it would
+ * force whoever re-enters to re-derive the route table, the mTLS-first
+ * ordering and the surface-ownership split from scratch — the parts that are
+ * genuinely hard and are genuinely finished. Mountable and tested is the whole
+ * claim being made here.
+ *
  * This module is the non-test caller of the gateway protocol core: it mounts
  * createCaioGatewayHandler once. Before it existed the protocol core had no
  * caller outside its own directory and its own tests, so nothing in the tree
@@ -46,7 +101,7 @@
  *
  * THE ROUTE TABLE (explicit, tested, and owner-labelled)
  * -----------------------------------------------------
- *   path                    methods  owner                  served here
+ *   path                    methods  owner                  owned here
  *   /mcp                    POST     access_gateway_api     yes
  *   /v1/responses           POST     access_gateway_api     yes
  *   /v1/chat/completions    POST     access_gateway_api     yes
@@ -54,6 +109,11 @@
  *   /livez                  GET      access_gateway_api     yes
  *   /readyz                 GET      access_gateway_api     yes
  *   /mcp/workbuddy          *        workbuddy_lan_gateway  NO
+ *
+ * The column says which paths this surface would answer IF a host routed them
+ * to it. Per the V1 boundary above, no host does: in V1 every row marked
+ * access_gateway_api is 404 at the delivery, and `servedByThisSurface` in the
+ * data below means "owned by this surface", never "reachable in V1".
  *
  * This surface owns the ACCESS GATEWAY API only. The WorkBuddy MCP surface
  * (`/mcp/workbuddy`) is terminated by the OTHER surface on the same host, with
