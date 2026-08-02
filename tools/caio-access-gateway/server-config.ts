@@ -150,8 +150,30 @@ function assertNoListenerSplit(
   port: number,
 ): void {
   const otherAddress = env.CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS?.trim();
-  const otherPort = Number(env.CAIO_WORKBUDDY_GATEWAY_PORT?.trim());
-  if (!otherAddress || !Number.isInteger(otherPort)) return;
+  const rawPort = env.CAIO_WORKBUDDY_GATEWAY_PORT?.trim();
+
+  // SILENCE IS BOTH HALVES ABSENT, nothing less. The earlier form returned as
+  // soon as EITHER half was missing or unparseable, which read a HALF
+  // declaration as no declaration and accepted it — fail-open against exactly
+  // the operator this rule exists for, the one who has started declaring a
+  // second listener. Half a declaration cannot be shown to name this socket,
+  // so it cannot be cleared.
+  if (!otherAddress && !rawPort) return;
+
+  // `Number("")` is 0 and `Number.isInteger(0)` is true, so an empty port used
+  // to pass the completeness check and then fail the comparison: the right
+  // refusal reached by the wrong reasoning. Parse explicitly, and treat
+  // anything that is not a whole number as a declaration this surface cannot
+  // verify rather than as silence.
+  const otherPort =
+    rawPort !== undefined && /^[0-9]+$/u.test(rawPort) ? Number(rawPort) : null;
+
+  if (!otherAddress || otherPort === null) {
+    throw new CaioAccessGatewayServerConfigError(
+      "LISTENER_SPLIT",
+      "The WorkBuddy LAN gateway socket is only partly declared; a half declaration cannot be shown to name this socket, and both surfaces are served by one host on one socket.",
+    );
+  }
   if (otherAddress !== bindAddress || otherPort !== port) {
     throw new CaioAccessGatewayServerConfigError(
       "LISTENER_SPLIT",

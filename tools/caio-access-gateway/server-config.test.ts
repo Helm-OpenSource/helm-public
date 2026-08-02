@@ -158,6 +158,45 @@ describe("CAIO access gateway server config", () => {
     ).toBe("LISTENER_SPLIT");
   });
 
+  it("refuses a PARTIAL WorkBuddy socket declaration", () => {
+    // Half a declaration cannot be checked for agreement, and treating it as
+    // silence is fail-OPEN: it accepts exactly the operator who declared one
+    // half of a second listener. Both halves absent is silence (the control
+    // below); one half present is a declaration this surface cannot verify.
+    expect(
+      codeOf(() =>
+        loadCaioAccessGatewayServerConfig(
+          env({ CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: [10, 0, 0, 7].join(".") }),
+        ),
+      ),
+    ).toBe("LISTENER_SPLIT");
+    expect(
+      codeOf(() =>
+        loadCaioAccessGatewayServerConfig(
+          env({ CAIO_WORKBUDDY_GATEWAY_PORT: "8443" }),
+        ),
+      ),
+    ).toBe("LISTENER_SPLIT");
+  });
+
+  it("refuses a WorkBuddy port that is not an integer", () => {
+    // `Number("")` is 0, an integer, so an empty port used to pass the
+    // completeness guard and then fail the comparison — the right outcome for
+    // the wrong reason. A non-numeric port used to be read as silence.
+    for (const port of ["", "  ", "not-a-port", "8443.5"]) {
+      expect(
+        codeOf(() =>
+          loadCaioAccessGatewayServerConfig(
+            env({
+              CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: LAN_ADDRESS,
+              CAIO_WORKBUDDY_GATEWAY_PORT: port,
+            }),
+          ),
+        ),
+      ).toBe("LISTENER_SPLIT");
+    }
+  });
+
   it("says nothing about a WorkBuddy socket that was never declared", () => {
     // CONTROL: with no WorkBuddy declaration at all the rule must not fire,
     // otherwise the two cases above would pass for the wrong reason.
