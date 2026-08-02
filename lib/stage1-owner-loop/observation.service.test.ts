@@ -1,5 +1,5 @@
 import { ActorType } from "@prisma/client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { dbMock, auditMock, serviceGovernanceMock } = vi.hoisted(() => {
   const client = {
@@ -180,7 +180,13 @@ function run(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Stage 1 observation runtime", () => {
+  // 夹具是绝对日期（授权窗上界 expiresAt = 2026-08-01），而被测服务用的是真实时钟：
+  // 一旦真实时间越过该上界，窗口检查先于"程序未激活"检查触发，用例从 2026-08-02 起必然失败，
+  // 且会卡死所有下游构建（本仓 npm test 是 control-plane source-owner-gate 的一部分）。
+  // 冻结系统时钟到夹具锚点 now，使全部日期关系恒定成立——用例永久确定性，不随日历漂移。
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
     vi.clearAllMocks();
     dbMock.$transaction.mockImplementation(
       (callback: (tx: typeof dbMock) => unknown) => callback(dbMock),
@@ -194,6 +200,10 @@ describe("Stage 1 observation runtime", () => {
       id: "receipt-current",
     });
     dbMock.dataAssetCatalogEntry.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
   });
 
   it("refuses a program write when the membership was deactivated after the outer gate (TOCTOU)", async () => {
