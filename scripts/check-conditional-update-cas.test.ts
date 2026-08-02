@@ -125,7 +125,21 @@ export async function relabel() {
 }
 `;
 
+// Fixtures that mean to PROVE a serialisable isolation level import `Prisma`
+// the way every real site in this repository does. The guard traces the
+// qualifier back to that import, so a fixture that leaves the name unbound
+// would be testing the unproven path while claiming to test the proven one.
+const PRISMA_IMPORT = `import { Prisma } from "@prisma/client";`;
+
+/** The conditional write, issued on whatever `tx` denotes where it is placed. */
+const SHADOWED_TX_WRITE = `const claimed = await tx.thing.updateMany({
+      where: { id: "x", lifecyclePhase: "PENDING" },
+      data: { lifecyclePhase: "CLAIMED" },
+    });
+    if (claimed.count !== 1) throw new Error("lost");`;
+
 const SERIALIZABLE_TX = `
+${PRISMA_IMPORT}
 export async function claimInTx() {
   return db.$transaction(async (tx) => {
     const claimed = await tx.thing.updateMany({
@@ -138,6 +152,7 @@ export async function claimInTx() {
 `;
 
 const SERIALIZABLE_TX_VIA_CONST = `
+${PRISMA_IMPORT}
 const TRANSACTION_OPTIONS = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
 } as const;
@@ -154,6 +169,7 @@ export async function claimInTx() {
 `;
 
 const AMBIENT_CLIENT_INSIDE_TX = `
+${PRISMA_IMPORT}
 export async function claimInTx() {
   return db.$transaction(async (tx) => {
     await tx.other.findFirst({ where: { id: "x" } });
@@ -179,6 +195,7 @@ export async function claimInTx() {
 `;
 
 const TX_WITH_READ_COMMITTED = `
+${PRISMA_IMPORT}
 export async function claimInTx() {
   return db.$transaction(async (tx) => {
     const claimed = await tx.thing.updateMany({
@@ -468,6 +485,7 @@ export async function sweep() {
   it("does not cross a function boundary when looking for the enclosing transaction", () => {
     const root = sandbox({
       "lib/sibling.ts": `
+${PRISMA_IMPORT}
 export async function inTx() {
   return db.$transaction(async (tx) => {
     await tx.other.findFirst({ where: { id: "x" } });
@@ -543,6 +561,7 @@ export async function claim() {
   it("does not borrow another function's Serializable transaction options", () => {
     const root = sandbox({
       "lib/shadowed-options.ts": `
+${PRISMA_IMPORT}
 export async function strictlyIsolated() {
   const options = {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -626,6 +645,7 @@ export async function claim(mutation: { where: unknown; data: unknown }) {
   it("stops at a parameter that shadows an outer const transaction options", () => {
     const root = sandbox({
       "lib/param-shadow-options.ts": `
+${PRISMA_IMPORT}
 const options = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
 };
@@ -698,6 +718,7 @@ export async function claim(pending: boolean) {
   it("stops at a named function expression's own name binding", () => {
     const root = sandbox({
       "lib/named-function-expression-shadow.ts": `
+${PRISMA_IMPORT}
 const options = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
 };
@@ -1032,10 +1053,35 @@ export async function claim() {
       if (claimed.count !== 1) throw new Error("lost");
     }`,
       ],
+      // A declaration form is a binding too. Each of these shadows the
+      // callback's `tx` for the whole block, so the write goes to the shadow —
+      // and a walk that does not register the form resolves the receiver to the
+      // callback parameter and certifies a write the transaction never sees.
+      [
+        "enum-shadow",
+        `enum tx { A = "a" }
+    ${SHADOWED_TX_WRITE}`,
+      ],
+      [
+        "const-enum-shadow",
+        `const enum tx { A = "a" }
+    ${SHADOWED_TX_WRITE}`,
+      ],
+      [
+        "namespace-shadow",
+        `namespace tx { export const thing: any = null; }
+    ${SHADOWED_TX_WRITE}`,
+      ],
+      [
+        "module-keyword-shadow",
+        `module tx { export const thing: any = null; }
+    ${SHADOWED_TX_WRITE}`,
+      ],
     ] as const) {
       const violations = checkConditionalUpdateCas(
         sandbox({
           [`lib/shadowed-${id}.ts`]: `
+${PRISMA_IMPORT}
 declare const items: any[];
 declare const shards: any;
 export async function claim() {
@@ -1057,6 +1103,7 @@ export async function claim() {
     const violations = checkConditionalUpdateCas(
       sandbox({
         "lib/real-tx.ts": `
+${PRISMA_IMPORT}
 export async function claim() {
   return db.$transaction(async (tx) => {
     const claimed = await tx.thing.updateMany({
@@ -1090,6 +1137,7 @@ export async function claim() {
       const violations = checkConditionalUpdateCas(
         sandbox({
           [`lib/isolation-${id}.ts`]: `
+${PRISMA_IMPORT}
 declare const overrides: Record<string, unknown>;
 const levels = { Serializable: "ReadCommitted" };
 export async function claim() {
@@ -1108,6 +1156,215 @@ export async function claim() {
       expect(violations[0]?.reason, `isolation form: ${id}`).toBe(
         "isolation-not-serializable",
       );
+    }
+  });
+
+  // An `enum`, a `const enum`, a `namespace`/`module` block and an
+  // `import X = ...` bind a value name exactly as a `const` does. A scope walk
+  // that recognises only the familiar forms steps PAST the shadow and answers
+  // from an outer declaration — reading a `where` the call does not use, or a
+  // `Serializable` options object it does not carry. Both channels are covered
+  // because the same lookup serves both.
+  it("stops at an enum, namespace or import-equals that shadows an outer const", () => {
+    const SAFE_MUTATION = `{ where: { id: "x" }, data: { lifecyclePhase: "CLAIMED" } }`;
+    const UNSAFE_WRITE = `const claimed = await tx.thing.updateMany({
+      where: { id: "x", lifecyclePhase: "PENDING" },
+      data: { lifecyclePhase: "CLAIMED" },
+    });
+    if (claimed.count !== 1) throw new Error("lost");`;
+
+    // Shadows that are legal inside a block.
+    for (const [id, shadow] of [
+      ["enum", `enum NAME { A = "a" }`],
+      ["const-enum", `const enum NAME { A = "a" }`],
+      ["namespace", `namespace NAME { export const A = "a"; }`],
+      ["module-keyword", `module NAME { export const A = "a"; }`],
+    ] as const) {
+      // The updateMany ARGUMENT: the outer literal asserts no pre-state, so
+      // borrowing it hides the site completely.
+      const argument = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/argument-shadow-${id}.ts`]: `
+const mutation = ${SAFE_MUTATION};
+export async function claim() {
+  ${shadow.replace("NAME", "mutation")}
+  const claimed = await db.thing.updateMany(mutation);
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+        }),
+      );
+      expect(argument, `argument shadow: ${id}`).toHaveLength(1);
+      expect(argument[0]?.reason, `argument shadow: ${id}`).toBe(
+        "unanalyzable-argument",
+      );
+
+      // The $transaction OPTIONS argument: the outer literal proves
+      // Serializable, so borrowing it CERTIFIES a transaction that declares
+      // nothing of the sort.
+      const options = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/options-shadow-${id}.ts`]: `
+${PRISMA_IMPORT}
+const options = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
+export async function claim() {
+  ${shadow.replace("NAME", "options")}
+  return db.$transaction(async (tx) => {
+    ${UNSAFE_WRITE}
+  }, options);
+}
+`,
+        }),
+      );
+      expect(options, `options shadow: ${id}`).toHaveLength(1);
+      expect(options[0]?.reason, `options shadow: ${id}`).toBe(
+        "isolation-not-serializable",
+      );
+    }
+
+    // `import X = ...` is legal only at the top level of a module or a
+    // namespace body, so it shadows from inside a namespace.
+    const importEquals = checkConditionalUpdateCas(
+      sandbox({
+        "lib/argument-shadow-import-equals.ts": `
+declare namespace Legacy { const mutation: any; }
+const mutation = ${SAFE_MUTATION};
+export namespace Ops {
+  import mutation = Legacy.mutation;
+  export async function claim() {
+    const claimed = await db.thing.updateMany(mutation);
+    if (claimed.count !== 1) throw new Error("lost");
+  }
+}
+`,
+      }),
+    );
+    expect(importEquals).toHaveLength(1);
+    expect(importEquals[0]?.reason).toBe("unanalyzable-argument");
+  });
+
+  // The mirror image: forms that do NOT bind a value name must not be mistaken
+  // for a shadow, or the guard reports sites it can in fact read.
+  it("CONTROL: a type-space or non-enclosing declaration is not a shadow", () => {
+    for (const [id, extra] of [
+      ["interface", `  interface mutation { a: string }`],
+      ["type-alias", `  type mutation = { a: string };`],
+      // `namespace Outer.mutation` binds `Outer` here and `mutation` only
+      // INSIDE `Outer`, so the call's `mutation` is still the outer const.
+      ["dotted-namespace-member", `}\nnamespace Outer.mutation { export const A = "a"; }\nexport function unused() {`],
+      ["nested-block", `  { enum mutation { A = "a" } void mutation; }`],
+      ["sibling-scope", `}\nexport function other() { enum mutation { A = "a" }; return mutation; }\nexport function unused() {`],
+    ] as const) {
+      const violations = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/not-a-shadow-${id}.ts`]: `
+const mutation = { where: { id: "x" }, data: { lifecyclePhase: "CLAIMED" } };
+export async function claim() {
+${extra}
+  const claimed = await db.thing.updateMany(mutation);
+  if (claimed.count !== 1) throw new Error("lost");
+}
+`,
+        }),
+      );
+      expect(violations, `not a shadow: ${id}`).toEqual([]);
+    }
+  });
+
+  // A qualifier that merely SPELLS the Prisma enum is not the Prisma enum. The
+  // guard traces the root of the property access back to an import of the
+  // generated client, because certification is what the reader trusts.
+  it("refuses an isolation level whose qualifier is not the Prisma client's", () => {
+    for (const [id, prelude, options] of [
+      [
+        "local-object-named-prisma",
+        `const Prisma = { TransactionIsolationLevel: { Serializable: "ReadCommitted" } };`,
+        "{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }",
+      ],
+      [
+        "local-object-named-enum",
+        `const TransactionIsolationLevel = { Serializable: "ReadCommitted" };`,
+        "{ isolationLevel: TransactionIsolationLevel.Serializable }",
+      ],
+      [
+        "imported-from-elsewhere",
+        `import { Prisma } from "@/lib/legacy-shims";`,
+        "{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }",
+      ],
+      [
+        "unbound-identifier",
+        `declare const unrelated: string;`,
+        "{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }",
+      ],
+    ] as const) {
+      const violations = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/qualifier-${id}.ts`]: `
+${prelude}
+export async function claim() {
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.thing.updateMany({
+      where: { id: "x", lifecyclePhase: "PENDING" },
+      data: { lifecyclePhase: "CLAIMED" },
+    });
+    if (claimed.count !== 1) throw new Error("lost");
+  }, ${options});
+}
+`,
+        }),
+      );
+      expect(violations, `qualifier form: ${id}`).toHaveLength(1);
+      expect(violations[0]?.reason, `qualifier form: ${id}`).toBe(
+        "isolation-not-serializable",
+      );
+    }
+  });
+
+  it("CONTROL: every spelling that really is the Prisma enum stays certified", () => {
+    for (const [id, prelude, options] of [
+      [
+        "namespace-object",
+        PRISMA_IMPORT,
+        "{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }",
+      ],
+      [
+        "enum-imported-directly",
+        `import { TransactionIsolationLevel } from "@prisma/client";`,
+        "{ isolationLevel: TransactionIsolationLevel.Serializable }",
+      ],
+      [
+        "namespace-import",
+        `import * as PrismaClient from "@prisma/client";`,
+        "{ isolationLevel: PrismaClient.TransactionIsolationLevel.Serializable }",
+      ],
+      [
+        "import-equals-require",
+        `import Prisma = require("@prisma/client");`,
+        "{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }",
+      ],
+      // Prisma accepts the bare string, and a string cannot denote anything
+      // other than itself.
+      ["string-literal", `declare const unrelated: string;`, `{ isolationLevel: "Serializable" }`],
+    ] as const) {
+      const violations = checkConditionalUpdateCas(
+        sandbox({
+          [`lib/proven-${id}.ts`]: `
+${prelude}
+export async function claim() {
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.thing.updateMany({
+      where: { id: "x", lifecyclePhase: "PENDING" },
+      data: { lifecyclePhase: "CLAIMED" },
+    });
+    if (claimed.count !== 1) throw new Error("lost");
+  }, ${options});
+}
+`,
+        }),
+      );
+      // Tightening the qualifier must not become "refuse everything": the real
+      // spellings are what the previous test is measured against.
+      expect(violations, `proven form: ${id}`).toEqual([]);
     }
   });
 });

@@ -658,29 +658,78 @@ function isParameterBound(node: ts.Node, name: string): boolean {
   return false;
 }
 
+/** The module specifier a binding was imported from, or null if it is not an import. */
+function importedFromModule(binding: ts.Node): string | null {
+  let current: ts.Node | undefined = binding;
+  while (current) {
+    if (ts.isImportDeclaration(current)) {
+      return ts.isStringLiteralLike(current.moduleSpecifier)
+        ? current.moduleSpecifier.text
+        : null;
+    }
+    if (ts.isImportEqualsDeclaration(current)) {
+      const reference = current.moduleReference;
+      return ts.isExternalModuleReference(reference) &&
+        ts.isStringLiteralLike(reference.expression)
+        ? reference.expression.text
+        : null;
+    }
+    if (ts.isSourceFile(current)) return null;
+    current = current.parent;
+  }
+  return null;
+}
+
+/** The modules that can supply the real `TransactionIsolationLevel` enum. */
+const PRISMA_CLIENT_MODULES = new Set([
+  "@prisma/client",
+  "@prisma/client/edge",
+  ".prisma/client",
+]);
+
+/** Whether an identifier is bound by an import of the generated Prisma client. */
+function isPrismaClientImport(node: ts.Expression): boolean {
+  if (!ts.isIdentifier(node)) return false;
+  const binding = resolveBindingNode(node);
+  if (binding === null) return false;
+  const specifier = importedFromModule(binding);
+  return specifier !== null && PRISMA_CLIENT_MODULES.has(specifier);
+}
+
 /**
  * Whether an `isolationLevel` value is PROVABLY Prisma's Serializable.
  *
- * The qualifier is checked, not just the final name. Accepting any property
- * access ending in `Serializable` certified `levels.Serializable` — a local
- * constant whose value can be anything, including "ReadCommitted" — as a
- * serialisable transaction. A guard that can be talked into certifying is worse
- * than one that misses, because the certification is what the reader trusts.
+ * Two things are checked beyond the final name, because certification is what
+ * the reader trusts and a guard that can be talked into it is worse than one
+ * that misses:
+ *
+ *   - the QUALIFIER, so `levels.Serializable` — a local constant whose value can
+ *     be anything, including "ReadCommitted" — does not certify a transaction;
+ *   - where the qualifier COMES FROM, so a local object that merely borrows the
+ *     name (`const Prisma = { TransactionIsolationLevel: { Serializable:
+ *     "ReadCommitted" } }`) does not certify one either. The root must be bound
+ *     by an import of the generated Prisma client; an identifier this file
+ *     cannot see a binding for is not proof of anything.
+ *
+ * The bare string `"Serializable"` is accepted because Prisma itself accepts it:
+ * it is the enum's value, not a name that could denote something else.
  */
 function isSerializableIsolationExpression(node: ts.Expression): boolean {
   const expression = unwrapExpression(node);
   if (ts.isStringLiteralLike(expression)) return expression.text === "Serializable";
-  if (ts.isPropertyAccessExpression(expression)) {
-    if (expression.name.text !== "Serializable") return false;
-    const qualifier = unwrapExpression(expression.expression);
-    const qualifierName = ts.isPropertyAccessExpression(qualifier)
-      ? qualifier.name.text
-      : ts.isIdentifier(qualifier)
-        ? qualifier.text
-        : null;
-    // `Prisma.TransactionIsolationLevel.Serializable`, or the enum imported
-    // directly. Anything else is an unproven constant.
-    return qualifierName === "TransactionIsolationLevel";
+  if (!ts.isPropertyAccessExpression(expression)) return false;
+  if (expression.name.text !== "Serializable") return false;
+  const qualifier = unwrapExpression(expression.expression);
+  // `TransactionIsolationLevel.Serializable` — the enum imported directly.
+  if (ts.isIdentifier(qualifier)) {
+    return qualifier.text === "TransactionIsolationLevel" && isPrismaClientImport(qualifier);
+  }
+  // `Prisma.TransactionIsolationLevel.Serializable` — through the namespace.
+  if (ts.isPropertyAccessExpression(qualifier)) {
+    return (
+      qualifier.name.text === "TransactionIsolationLevel" &&
+      isPrismaClientImport(unwrapExpression(qualifier.expression))
+    );
   }
   return false;
 }
@@ -713,8 +762,61 @@ function isScopeBoundary(node: ts.Node): boolean {
     ts.isForStatement(node) ||
     ts.isForInStatement(node) ||
     ts.isForOfStatement(node) ||
+    isDeclarationScope(node) ||
     isFunctionLike(node)
   );
+}
+
+/**
+ * Declarations that both BIND a name in the enclosing scope and OPEN a scope of
+ * their own. They are listed in `isScopeBoundary` so the collector stops at the
+ * declaration node instead of descending into its body: `namespace A.B {}`
+ * binds `A` in the enclosing scope and `B` only inside `A`, and a walk that
+ * descends would attribute `B` to the file.
+ */
+function isDeclarationScope(node: ts.Node): boolean {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isEnumDeclaration(node) ||
+    ts.isModuleDeclaration(node)
+  );
+}
+
+/**
+ * Whether `node` is a declaration binding the VALUE name `name` in the scope
+ * that encloses it.
+ *
+ * Every form here introduces a name that shadows an outer one, so the scope
+ * walk must stop at it. Registering only `function`/`class` let an `enum`,
+ * a `const enum` (the same node kind), a `namespace`/`module` block or an
+ * `import X = ...` pass unseen, and the walk then resolved the shadowed
+ * reference to an OUTER declaration's literal — reading a safe `{ where }` or
+ * a `Serializable` options object that the code at hand does not use.
+ *
+ * TYPE-only declarations (`interface`, `type`) are deliberately absent: they do
+ * not occupy the value space, so registering them would shadow a real `const`
+ * that legitimately coexists with them and report a site the guard can in fact
+ * read.
+ */
+function declaresValueName(node: ts.Node, name: string): boolean {
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isEnumDeclaration(node)
+  ) {
+    return node.name?.text === name;
+  }
+  if (ts.isImportEqualsDeclaration(node)) {
+    return node.name.text === name;
+  }
+  if (ts.isModuleDeclaration(node)) {
+    // `declare module "pkg"` and `declare global` augment an outer scope rather
+    // than binding a local name; only the identifier form binds one.
+    if ((node.flags & ts.NodeFlags.GlobalAugmentation) !== 0) return false;
+    return ts.isIdentifier(node.name) && node.name.text === name;
+  }
+  return false;
 }
 
 /**
@@ -742,6 +844,15 @@ function isScopeBoundary(node: ts.Node): boolean {
  *   - a NAMED function/class EXPRESSION's own name, which is bound inside its
  *     own scope (that is what lets such a function refer to itself), so it
  *     shadows a same-named outer binding for every reference in its body.
+ *
+ * An ENUM, a `const enum`, a NAMESPACE/MODULE and an `import X = ...` bind a
+ * value name exactly as a `const` does, and are registered here for the same
+ * reason: the walk must stop at the first scope that binds the name whatever
+ * the form of the binding, or it borrows an outer scope's literal to answer a
+ * question about an inner name it cannot actually read. The residual
+ * over-report — a non-instantiated (types-only) namespace merged onto a
+ * same-named value — costs a finding the reader can dismiss, which is the
+ * direction this file errs in by design.
  */
 function bindingsOwnedBy(scope: ts.Node, name: string): ts.Node[] {
   const bindings: ts.Node[] = [];
@@ -772,11 +883,8 @@ function bindingsOwnedBy(scope: ts.Node, name: string): ts.Node[] {
 
   const visit = (current: ts.Node): void => {
     // Declarations first: the name they introduce belongs to THIS scope even
-    // though a function declaration is itself a scope boundary.
-    if (
-      (ts.isFunctionDeclaration(current) || ts.isClassDeclaration(current)) &&
-      current.name?.text === name
-    ) {
+    // though the declaration is itself a scope boundary.
+    if (declaresValueName(current, name)) {
       bindings.push(current);
       return;
     }
@@ -1523,7 +1631,10 @@ function listFiles(root: string): string[] {
     if (entry === "node_modules" || entry === ".next") continue;
     const absolute = path.join(root, entry);
     if (statSync(absolute).isDirectory()) {
-      files.push(...listFiles(absolute));
+      // Appended one at a time on purpose: `push(...nested)` passes every path
+      // as an argument and overflows the call stack once a directory holds tens
+      // of thousands of files, which makes the guard CRASH rather than report.
+      for (const nested of listFiles(absolute)) files.push(nested);
     } else if (SOURCE_FILE.test(entry) && !TEST_FILE.test(entry)) {
       files.push(absolute);
     }
