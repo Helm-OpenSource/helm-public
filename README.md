@@ -240,7 +240,8 @@ open http://localhost:3000    # 5. 访问
 ASR 支持两个 provider：默认 `openai`（transcription path），以及 `ASR_PROVIDER=dashscope`
 （Qwen `qwen3-asr-flash`，OpenAI 兼容 chat 端点 + base64 内联音频，音频不出境、不产生
 公网 URL；需 `DASHSCOPE_API_KEY`）。`delivery:doctor --region cn` 会按 provider 判定
-中国交付红线：OpenAI-only 仍要求 `ASR_ENABLED=false`。
+中国交付红线：在中国 profile 启用 ASR 时，选择 OpenAI，或选择 DashScope 但缺少 key，
+都会告警。
 
 ---
 

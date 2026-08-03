@@ -233,7 +233,7 @@ npm run delivery:doctor -- --region cn
 
 这条命令不会联网，也不会读取客户系统。它会提示常见中国交付误配：Qwen 只填了
 `OPENAI_API_KEY`、region / residency 仍为 `global`、未配置 npm 镜像提示，或在中国
-profile 下启用了当前仍是 OpenAI-only 的 ASR 路径。
+profile 下启用 ASR 时选择 OpenAI，或选择 DashScope 但没有配置所需 key。
 
 ---
 
