@@ -58,6 +58,45 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
         run: npm run lint:strict
 
+  caio-overlay-composition-contract:
+    name: CAIO Public-Overlay composition contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The EXACT Overlay commit this repository names. Read from the pin file
+      # rather than written twice: a ref here that disagreed with the pin would
+      # check out one tree and verify the SHA of another.
+      - name: Read the pinned Overlay commit
+        id: pin
+        run: |
+          echo "commit=$(node -p "require('./tools/caio-access-gateway/overlay-composition-pin.json').commit")" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the pinned Overlay
+        uses: actions/checkout@v5
+        with:
+          repository: Helm-Developers/helm-overlays
+          ref: ${{ steps.pin.outputs.commit }}
+          path: .deps/helm-overlays
+
+      # No checkout, a checkout at the wrong commit, or a composition that has
+      # stopped mounting the real interface all fail here. The suite has no case
+      # that can pass without the external tree.
+      - name: Verify the composition contract
+        run: npx vitest run --config vitest.overlay-contract.config.ts
+        env:
+          HELM_OVERLAYS_ROOT: .deps/helm-overlays
+
   repo-guards:
     name: Repo Guards
     runs-on: ubuntu-latest

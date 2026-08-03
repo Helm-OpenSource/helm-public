@@ -4,7 +4,6 @@ import { Readable } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
-import type { CaioAccessPrincipal } from "@/lib/caio-access-gateway/token-store.service";
 import { CaioDeploymentPostureError } from "@/lib/caio-audit-state/deployment-posture";
 import type { WorkBuddyMtlsPeer } from "@/lib/caio-collaboration/client-identity";
 import {
@@ -22,135 +21,27 @@ import {
   CAIO_ACCESS_GATEWAY_LISTEN_PORT,
   type CaioAccessGatewayServerConfig,
 } from "@/tools/caio-access-gateway/server-config";
+import {
+  CAIO_MOUNT_FIXTURE_CLIENT_ADDRESS,
+  CAIO_MOUNT_FIXTURE_CONFIG,
+  CAIO_MOUNT_FIXTURE_FINGERPRINT,
+  createCaioMountFixturePorts,
+} from "@/tools/caio-access-gateway/mount-fixture";
 
-// Addresses are assembled at runtime so no address literal sits in this file.
-const LAN_ADDRESS = [10, 0, 0, 12].join(".");
-const CLIENT_ADDRESS = [10, 0, 0, 40].join(".");
-const CERT_DIR = path.join(path.sep, "etc", "caio", "tls");
-
-const FINGERPRINT = `sha256:${"ab".repeat(32)}`;
-
+// The mount fixture is SHARED with the Public↔Overlay contract suite. Two
+// copies of these deployment-input doubles would drift, and a contract test
+// standing on its own private idea of the ports would be asserting against a
+// composition nobody deploys.
+const CLIENT_ADDRESS = CAIO_MOUNT_FIXTURE_CLIENT_ADDRESS;
+const FINGERPRINT = CAIO_MOUNT_FIXTURE_FINGERPRINT;
 const PEER: WorkBuddyMtlsPeer = Object.freeze({
   certificateFingerprint: FINGERPRINT,
   sourceAddress: CLIENT_ADDRESS,
   authorized: true,
 });
+const CONFIG: CaioAccessGatewayServerConfig = CAIO_MOUNT_FIXTURE_CONFIG;
 
-const PRINCIPAL: CaioAccessPrincipal = Object.freeze({
-  tokenId: "tok_1",
-  workspaceId: "ws_1",
-  userRef: "user:ceo",
-  clientType: "codex",
-  deviceRef: "device:mac-studio",
-  audience: "mcp",
-});
-
-const CONFIG: CaioAccessGatewayServerConfig = Object.freeze({
-  bindAddress: LAN_ADDRESS,
-  port: CAIO_ACCESS_GATEWAY_LISTEN_PORT,
-  mtls: Object.freeze({
-    certificatePath: path.join(CERT_DIR, "server.crt"),
-    privateKeyPath: path.join(CERT_DIR, "server.key"),
-    clientCaPath: path.join(CERT_DIR, "client-ca.crt"),
-    requireClientCertificate: true as const,
-  }),
-  featureFlags: Object.freeze({
-    gatewayEnabled: true,
-    readEnabled: true,
-    pushEnabled: false,
-    presenceEnabled: false,
-    mutationsEnabled: false,
-    promptResponsesEnabled: false,
-    questionSelectionsEnabled: false,
-    adviceDecisionsEnabled: false,
-  }),
-});
-
-type Spy = {
-  ports: CaioAccessGatewayServerPorts;
-  calls: string[];
-};
-
-function createPorts(
-  posture: "self_service" | "governed_fde" = "self_service",
-): Spy {
-  const calls: string[] = [];
-  return {
-    calls,
-    ports: {
-      preAuthRateLimiter: {
-        claimSourceIpSlot: async () => {
-          calls.push("preAuthRateLimiter");
-          return { allowed: true };
-        },
-      },
-      tokenAuthenticator: {
-        authenticate: async (input) => {
-          calls.push("authenticate");
-          return { ...PRINCIPAL, audience: input.expectedAudience };
-        },
-      },
-      projectResolver: {
-        async listAccessibleProjectRefs() {
-          calls.push("projectResolver");
-          return ["project:alpha"];
-        },
-      },
-      mcpDispatch: async () => {
-        calls.push("mcpDispatch");
-        return { ok: true };
-      },
-      modelProxy: {
-        engine: {
-          execute: async () => {
-            calls.push("modelProxy.execute");
-            throw new Error("no upstream in this composition test");
-          },
-        },
-        // Discovery is built in-tree from these bindings, so the composition
-        // supplies DATA here, not a listing function. A deployment can no
-        // longer hand in an implementation that ignores the token's grant.
-        bindings: [
-          {
-            alias: "caio-codex-default",
-            protocol: "responses" as const,
-            providerKey: "provider-a",
-            upstreamModel: "upstream-for-codex",
-            credentialRef: "provider-a-key",
-            endpointBaseUrl: "https://upstream.example.internal/v1",
-            region: "cn-hangzhou",
-            dataRetentionPolicyKey: "retention-days:30",
-            trainingUsePolicyKey: "prohibited",
-            dataAuthorizationKey: "auth-tier-1",
-            policyVersion: "policy-v3",
-            status: "active" as const,
-            governedPolicyKey: "caio-lan-default",
-            governedRouteRef: "route:caio-lan-default:v3",
-            fallbackCandidates: [],
-          },
-        ],
-      },
-      auditGate: {
-        posture,
-        claimDispatch: async () => {
-          calls.push("auditGate");
-          return {
-            status: "allowed" as const,
-            receiptId: "receipt:1",
-            persistedVia: "primary" as const,
-            dispatchAttempt: 1,
-          };
-        },
-      },
-      readinessProbe: {
-        getReadiness: async () => {
-          calls.push("readinessProbe");
-          return "ready" as const;
-        },
-      },
-    },
-  };
-}
+const createPorts = createCaioMountFixturePorts;
 
 function createServer(
   overrides: Partial<{
