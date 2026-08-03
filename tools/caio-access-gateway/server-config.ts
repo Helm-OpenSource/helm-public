@@ -149,16 +149,29 @@ function assertNoListenerSplit(
   bindAddress: string,
   port: number,
 ): void {
-  const otherAddress = env.CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS?.trim();
-  const rawPort = env.CAIO_WORKBUDDY_GATEWAY_PORT?.trim();
+  // ABSENCE IS THE KEY NOT BEING THERE, not the key being empty. Read the raw
+  // values first: `"".trim()` is falsy and so is `undefined?.trim()`, and
+  // collapsing those two made an operator who exported the variable and left it
+  // blank indistinguishable from one who never set it.
+  const rawAddress = env.CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS;
+  const rawPortValue = env.CAIO_WORKBUDDY_GATEWAY_PORT;
+  const otherAddress = rawAddress?.trim();
+  const rawPort = rawPortValue?.trim();
 
-  // SILENCE IS BOTH HALVES ABSENT, nothing less. The earlier form returned as
-  // soon as EITHER half was missing or unparseable, which read a HALF
-  // declaration as no declaration and accepted it — fail-open against exactly
-  // the operator this rule exists for, the one who has started declaring a
-  // second listener. Half a declaration cannot be shown to name this socket,
-  // so it cannot be cleared.
-  if (!otherAddress && !rawPort) return;
+  // SILENCE IS BOTH KEYS ABSENT, nothing less. Two earlier forms of this line
+  // were both fail-open, in the same direction:
+  //
+  //   1. It returned as soon as EITHER half was missing, reading a HALF
+  //      declaration as no declaration.
+  //   2. It then required both halves to be FALSY, which still accepted an
+  //      operator who exported both variables and left them blank — a person
+  //      who has touched this configuration and got it wrong, reported as a
+  //      person who never touched it.
+  //
+  // A variable that is set and empty is a declaration this surface cannot
+  // verify, exactly like a half one. The overlay draws the same distinction
+  // between an absent deployment file and one that exists but does not parse.
+  if (rawAddress === undefined && rawPortValue === undefined) return;
 
   // `Number("")` is 0 and `Number.isInteger(0)` is true, so an empty port used
   // to pass the completeness check and then fail the comparison: the right

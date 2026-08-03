@@ -205,6 +205,39 @@ describe("CAIO access gateway server config", () => {
     );
   });
 
+  it("refuses a declaration that is PRESENT but blank, in either half or both", () => {
+    // A variable that is SET AND EMPTY is not silence. The operator touched
+    // this configuration and got it wrong, and reading that as "never
+    // declared" hides their mistake behind an accepted start — the same
+    // distinction the overlay draws between an absent deployment file and one
+    // that exists but does not parse.
+    //
+    // Both-blank is the case that survived the earlier fix: `"".trim()` is
+    // falsy on both halves, so the completeness guard read two explicit blanks
+    // as two absences.
+    for (const [label, declared] of [
+      ["both halves blank", {
+        CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: "",
+        CAIO_WORKBUDDY_GATEWAY_PORT: "",
+      }],
+      ["both halves whitespace", {
+        CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: "   ",
+        CAIO_WORKBUDDY_GATEWAY_PORT: "  ",
+      }],
+      ["address blank, port absent", {
+        CAIO_WORKBUDDY_GATEWAY_BIND_ADDRESS: "",
+      }],
+      ["port blank, address absent", {
+        CAIO_WORKBUDDY_GATEWAY_PORT: "",
+      }],
+    ] as const) {
+      expect(
+        codeOf(() => loadCaioAccessGatewayServerConfig(env(declared))),
+        label,
+      ).toBe("LISTENER_SPLIT");
+    }
+  });
+
   it("carries the ONE feature-flag vocabulary, fail-closed by default", () => {
     expect(loadCaioAccessGatewayServerConfig(env()).featureFlags).toEqual({
       gatewayEnabled: false,
