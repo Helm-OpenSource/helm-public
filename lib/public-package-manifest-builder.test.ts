@@ -36,8 +36,17 @@ describe("public package manifest builder", () => {
       license: "Apache-2.0",
       scripts: {
         dev: "next dev",
+        "field-capture-agent:check":
+          "npm --prefix tools/agora-field-capture-agent run check",
+        "field-capture-agent:device-check":
+          "npm --prefix tools/agora-field-capture-agent run device:check -- --test",
+        "field-capture-agent:start":
+          "npm --prefix tools/agora-field-capture-agent start",
         [`seed:${tenantSlug}`]: `tsx ${privateScriptPath}`,
         "self-check": "tsx scripts/helm-self-check-refactored.ts",
+      },
+      dependencies: {
+        "agora-token": "2.0.5",
       },
     };
     writeJson("package.json", sourceManifest);
@@ -62,11 +71,20 @@ describe("public package manifest builder", () => {
       license: "Apache-2.0",
       scripts: {
         dev: "next dev",
+        "field-capture-agent:check":
+          "npm --prefix tools/agora-field-capture-agent run check",
+        "field-capture-agent:device-check":
+          "npm --prefix tools/agora-field-capture-agent run device:check -- --test",
+        "field-capture-agent:start":
+          "npm --prefix tools/agora-field-capture-agent start",
         "self-check":
           "npm run public:smoke:static && npm run check:secret-history",
         "public:smoke:static":
           "npm run check:public-docs && node --import tsx scripts/public-mirror-smoke.ts --repo-root .",
         "public:smoke": "node --import tsx scripts/public-mirror-smoke.ts --repo-root . --run-commands",
+      },
+      dependencies: {
+        "agora-token": "2.0.5",
       },
     });
     expect(JSON.parse(readText("package.json"))).toEqual(sourceManifest);

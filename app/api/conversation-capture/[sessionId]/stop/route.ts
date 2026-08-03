@@ -7,6 +7,7 @@ import {
   getCaptureManagementDeniedMessage,
 } from "@/lib/auth/capture-runtime-governance";
 import { assertWorkspaceCaptureSessionOwnership, isWorkspaceOwnershipError } from "@/lib/auth/tenant-ownership";
+import { inspectCaptureAudioFile } from "@/lib/conversation-capture/audio-upload-boundary";
 import { stopCaptureSession } from "@/lib/conversation-capture/capture-session.service";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { errorResponse, successResponse } from "@/lib/memory/shared";
@@ -58,6 +59,29 @@ export async function POST(
 
   if (!parsed.success) {
     return errorResponse(english ? "Please provide the fields required to stop capture" : "请补充结束记录所需的信息", "INVALID_CAPTURE_STOP", 400);
+  }
+
+  if (audioFile) {
+    const inspection = inspectCaptureAudioFile(audioFile);
+    if (!inspection.ok) {
+      const message =
+        inspection.code === "AUDIO_TOO_LARGE"
+          ? english
+            ? "The audio file exceeds the 25 MB capture limit"
+            : "录音文件超过 25 MB 的采集上限"
+          : inspection.code === "AUDIO_TYPE_UNSUPPORTED"
+            ? english
+              ? "The uploaded file is not a supported audio type"
+              : "上传文件不是支持的音频类型"
+            : english
+              ? "The uploaded audio is empty"
+              : "上传的录音为空";
+      return errorResponse(
+        message,
+        inspection.code,
+        inspection.code === "AUDIO_TOO_LARGE" ? 413 : 400,
+      );
+    }
   }
 
   try {

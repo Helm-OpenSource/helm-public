@@ -95,6 +95,7 @@ connector 授权、写回、外发或审批证明。
 ## 贡献与运营 / Contribution And Operations
 
 - [集成模板 / Integration template](integrations/INTEGRATION_TEMPLATE.md)
+- [声网直连的销售现场采集 / Agora-direct field capture](integrations/AGORA_FIELD_CAPTURE.md) - implementation in progress；不代表客户部署、生产授权或 live ASR 回执
 - [公开双语化计划 / Public bilingualization plan](./_planning/HELM_PUBLIC_BILINGUALIZATION_PLAN.md)
 - [开源运营模型 / Open source operating model](operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md)
 - [公开试点作业手册 / Public trial runbook](pilot/PUBLIC_TRIAL_RUNBOOK.md)

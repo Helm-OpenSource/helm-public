@@ -57,6 +57,15 @@ describe("public env example builder", () => {
     );
     expect(readText(".env.example")).not.toMatch(privateTermPattern);
     expect(readText(".env.example")).toContain("CONNECTOR_TOKEN_SECRET=");
+    expect(readText(".env.example")).toContain('AGORA_STT_MODE="MOCK"');
+    expect(readText(".env.example")).toContain(
+      'AGORA_STT_BASE_URL="https://api.sd-rtn.com"',
+    );
+    expect(readText(".env.example")).toContain('AGORA_APP_ID=""');
+    expect(readText(".env.example")).toContain('AGORA_APP_CERTIFICATE=""');
+    expect(readText(".env.example")).toContain('AGORA_CUSTOMER_ID=""');
+    expect(readText(".env.example")).toContain('AGORA_CUSTOMER_SECRET=""');
+    expect(readText(".env.example")).toContain('AGORA_STT_WEBHOOK_SECRET=""');
   });
 
   it("fails check mode when the file is not projected", () => {

@@ -7,6 +7,7 @@ import {
   ConversationInsightType,
   ObjectType,
   SourceType,
+  type TranscriptSourceType,
 } from "@prisma/client";
 import { differenceInSeconds } from "date-fns";
 import { logEvent } from "@/lib/analytics";
@@ -150,6 +151,7 @@ export async function stopCaptureSession(
     transcriptConfidence?: number | null;
     transcriptProvider?: string | null;
     transcriptModel?: string | null;
+    transcriptSourceType?: TranscriptSourceType | null;
   },
 ) {
   await assertWorkspaceCaptureServiceAccess({
@@ -262,6 +264,7 @@ export async function stopCaptureSession(
     transcriptConfidence: input.transcriptConfidence,
     transcriptProvider: input.transcriptProvider,
     transcriptModel: input.transcriptModel,
+    transcriptSourceType: input.transcriptSourceType,
   });
 }
 
@@ -509,6 +512,7 @@ export async function ingestConversationCapture(
     transcriptConfidence?: number | null;
     transcriptProvider?: string | null;
     transcriptModel?: string | null;
+    transcriptSourceType?: TranscriptSourceType | null;
   },
 ) {
   const session = await startCaptureSession(input);
@@ -526,5 +530,6 @@ export async function ingestConversationCapture(
     transcriptConfidence: input.transcriptConfidence,
     transcriptProvider: input.transcriptProvider,
     transcriptModel: input.transcriptModel,
+    transcriptSourceType: input.transcriptSourceType,
   });
 }

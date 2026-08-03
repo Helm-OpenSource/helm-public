@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clock3, Loader2, Mic, Sparkles, UploadCloud } from "lucide-react";
@@ -18,7 +18,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { AudioInputPicker } from "@/features/conversation-capture/audio-input-picker";
+import {
+  isCapturePanelCloseBlocked,
+  type CapturePanelStage,
+} from "@/features/conversation-capture/capture-panel-lifecycle";
 import { formatCaptureDisplayText } from "@/features/conversation-capture/display-copy";
+import { useBrowserAudioCapture } from "@/features/conversation-capture/use-browser-audio-capture";
 
 type CaptureSessionPanelProps = {
   open: boolean;
@@ -28,8 +34,6 @@ type CaptureSessionPanelProps = {
   objectLabel?: string;
   defaultTitle?: string;
 };
-
-type PanelStage = "idle" | "recording" | "processing" | "completed";
 
 export function CaptureSessionPanel({
   open,
@@ -50,7 +54,7 @@ export function CaptureSessionPanel({
         ? "Live capture"
         : "现场记录");
   const [pending, startTransition] = useTransition();
-  const [stage, setStage] = useState<PanelStage>("idle");
+  const [stage, setStage] = useState<CapturePanelStage>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const [title, setTitle] = useState(buildDefaultTitle);
@@ -71,9 +75,10 @@ export function CaptureSessionPanel({
     recommendationObjectCount: number;
     approvalCount: number;
   } | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const mediaChunksRef = useRef<Blob[]>([]);
+  const browserAudio = useBrowserAudioCapture({
+    enabled: open && (stage === "idle" || stage === "recording"),
+    fallbackLabelPrefix: english ? "Microphone" : "麦克风",
+  });
 
   const copy = {
     panelTitle: english ? "Start capture" : "开始记录",
@@ -83,10 +88,10 @@ export function CaptureSessionPanel({
     entryBadge: english ? "Live capture entry" : "现场记录入口",
     currentObject: english ? "Current object:" : "当前对象：",
     classifyLater: english ? "Classify later" : "稍后归类",
-    browserMvp: english ? "Browser audio MVP" : "浏览器录音最小可用版",
+    browserMvp: english ? "Selectable browser audio" : "可选外接麦克风",
     entryDescription: english
-      ? "Open it during customer calls, candidate conversations, partnership discussions or internal priority sessions. The front-end only handles start and stop; the backend handles transcription, understanding and writeback. If the device cannot record audio, it automatically falls back to note mode."
-      : "适合在客户会、候选人沟通、合作讨论和内部优先级会话里直接打开。前台只做开始与结束，后台会自动完成转写、理解和写回；如果当前设备不支持录音，会自动回退到速记模式。",
+      ? "Choose the microphone used for this session. The selection stays in this browser only; if the device cannot record, capture falls back to note mode."
+      : "选择本场会话使用的麦克风。设备选择只保留在当前浏览器；如果设备无法录音，会回退到速记模式。",
     titleLabel: english ? "Session title" : "会话标题",
     titlePlaceholder: english
       ? "Example: Payment timing alignment with Starbridge"
@@ -107,7 +112,6 @@ export function CaptureSessionPanel({
       ? "Paste live notes here. If ASR is unavailable, Helm will prefer this text; if this is also empty, it falls back to the demo transcript."
       : "可以直接粘贴现场速记。若真实语音转写不可用，Helm会优先使用这里的文本；如果这里也为空，才会回退到演示转写。",
     stop: english ? "Stop and process" : "结束记录并处理",
-    close: english ? "Close for now" : "稍后继续",
     processing: english ? "Processing capture" : "正在处理现场记录",
     processingSteps: english
       ? [
@@ -138,15 +142,6 @@ export function CaptureSessionPanel({
     openMeeting: english ? "Open linked meeting" : "查看关联会议",
   };
 
-  const releaseMediaResources = () => {
-    mediaRecorderRef.current = null;
-    mediaChunksRef.current = [];
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    }
-  };
-
   const elapsed = useMemo(() => {
     if (!startedAt || !currentTime) return "00:00";
     const total = Math.max(0, Math.floor((currentTime - startedAt) / 1000));
@@ -163,86 +158,8 @@ export function CaptureSessionPanel({
     return () => window.clearInterval(timer);
   }, [stage]);
 
-  useEffect(() => () => releaseMediaResources(), []);
-
-  const startBrowserRecording = async () => {
-    if (
-      typeof window === "undefined" ||
-      !navigator.mediaDevices?.getUserMedia ||
-      typeof MediaRecorder === "undefined"
-    ) {
-      setCaptureMode("notes");
-      return false;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      const preferredMimeTypes = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/mp4",
-      ];
-      const selectedMimeType = preferredMimeTypes.find((mimeType) =>
-        typeof MediaRecorder.isTypeSupported === "function"
-          ? MediaRecorder.isTypeSupported(mimeType)
-          : false,
-      );
-      const recorder = selectedMimeType
-        ? new MediaRecorder(stream, { mimeType: selectedMimeType })
-        : new MediaRecorder(stream);
-
-      mediaChunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          mediaChunksRef.current.push(event.data);
-        }
-      };
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
-      setCaptureMode("audio");
-      return true;
-    } catch {
-      setCaptureMode("notes");
-      return false;
-    }
-  };
-
-  const stopBrowserRecording = async () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") {
-      releaseMediaResources();
-      return null;
-    }
-
-    return new Promise<File | null>((resolve) => {
-      const mimeType =
-        recorder.mimeType || mediaChunksRef.current[0]?.type || "audio/webm";
-      recorder.onstop = () => {
-        const blob = new Blob(mediaChunksRef.current, { type: mimeType });
-        releaseMediaResources();
-        if (!blob.size) {
-          resolve(null);
-          return;
-        }
-
-        const extension = mimeType.includes("mp4") ? "m4a" : "webm";
-        const file = new File([blob], `capture-${Date.now()}.${extension}`, {
-          type: mimeType,
-        });
-        setAudioMeta({
-          mimeType,
-          sizeKb: Math.max(1, Math.round(file.size / 1024)),
-        });
-        resolve(file);
-      };
-
-      recorder.stop();
-    });
-  };
-
   const resetPanel = () => {
-    releaseMediaResources();
+    browserAudio.releaseMediaResources();
     setStage("idle");
     setSessionId(null);
     setMeetingId(null);
@@ -257,6 +174,22 @@ export function CaptureSessionPanel({
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && isCapturePanelCloseBlocked(stage, pending)) {
+      toast.error(
+        stage === "recording"
+          ? english
+            ? "Stop this capture before closing the panel"
+            : "请先结束本次记录，再关闭面板"
+          : stage === "processing"
+            ? english
+              ? "Wait for capture processing to finish before closing the panel"
+              : "请等待现场记录处理完成，再关闭面板"
+            : english
+              ? "Wait for capture startup to finish before closing the panel"
+              : "请等待现场记录启动完成，再关闭面板",
+      );
+      return;
+    }
     if (!nextOpen) {
       resetPanel();
     }
@@ -274,28 +207,38 @@ export function CaptureSessionPanel({
     }
 
     startTransition(async () => {
-      const response = await fetch("/api/conversation-capture/start", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title,
-          objectType,
-          objectId,
-          consent: consentConfirmed
-            ? {
-                confirmed: true,
-                counterpartyNotified: true,
-                noticeTextVersion: "capture-consent-notice/v2",
-              }
-            : undefined,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
+      let response: Response;
+      try {
+        response = await fetch("/api/conversation-capture/start", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title,
+            objectType,
+            objectId,
+            consent: consentConfirmed
+              ? {
+                  confirmed: true,
+                  counterpartyNotified: true,
+                  noticeTextVersion: "capture-consent-notice/v2",
+                }
+              : undefined,
+          }),
+        });
+      } catch {
         toast.error(
-          payload.message ??
+          english
+            ? "Cannot reach the capture service. Check the connection and retry."
+            : "无法连接现场记录服务，请检查网络后重试。",
+        );
+        return;
+      }
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) {
+        toast.error(
+          payload?.message ??
             (english ? "Failed to start capture" : "开始记录失败"),
         );
         return;
@@ -305,14 +248,16 @@ export function CaptureSessionPanel({
       const now = Date.now();
       setStartedAt(now);
       setCurrentTime(now);
-      const audioStarted = await startBrowserRecording();
-      if (audioStarted) {
+      const audioStart = await browserAudio.startRecording();
+      if (audioStart.started) {
+        setCaptureMode("audio");
         toast.success(
           english
-            ? "Capture started. Real audio is being collected and will enter the ASR + operating-understanding pipeline when you stop."
-            : "现场记录已开始，正在采集真实音频，结束后会进入语音转写与经营理解链路。",
+            ? `Capture started with ${audioStart.profile.label}. Audio will enter the ASR and operating-understanding pipeline when you stop.`
+            : `现场记录已使用 ${audioStart.profile.label} 开始，结束后音频会进入语音转写与经营理解链路。`,
         );
       } else {
+        setCaptureMode("notes");
         toast.success(
           english
             ? "Capture started, but microphone audio is unavailable (usually a browser mic permission or device issue). Switched to note mode — paste a transcript to continue. To use audio next time, allow mic access in your browser settings."
@@ -327,7 +272,13 @@ export function CaptureSessionPanel({
 
     startTransition(async () => {
       setStage("processing");
-      const audioFile = await stopBrowserRecording();
+      const audioFile = await browserAudio.stopRecording();
+      if (audioFile) {
+        setAudioMeta({
+          mimeType: audioFile.type,
+          sizeKb: Math.max(1, Math.round(audioFile.size / 1024)),
+        });
+      }
       const response = await fetch(
         `/api/conversation-capture/${sessionId}/stop`,
         {
@@ -354,13 +305,16 @@ export function CaptureSessionPanel({
                 "Content-Type": "application/json",
               },
         },
-      );
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
+      ).catch(() => null);
+      const payload = await response?.json().catch(() => null);
+      if (!response?.ok || !payload?.success) {
+        setCaptureMode("notes");
         setStage("recording");
         toast.error(
-          payload.message ??
-            (english ? "Failed to stop capture" : "结束记录失败"),
+          payload?.message ??
+            (english
+              ? "Audio capture stopped, but processing failed. Add notes and retry."
+              : "音频采集已停止，但处理失败。请补充速记后重试。"),
         );
         return;
       }
@@ -435,6 +389,22 @@ export function CaptureSessionPanel({
             />
           </div>
 
+          {stage === "idle" || stage === "recording" ? (
+            <AudioInputPicker
+              english={english}
+              inputs={browserAudio.audioInputs}
+              selectedDeviceId={browserAudio.selectedAudioInputId}
+              status={browserAudio.status}
+              activeProfile={browserAudio.activeProfile}
+              audioLevel={browserAudio.audioLevel}
+              disabled={pending || stage === "recording"}
+              onSelect={browserAudio.setSelectedAudioInputId}
+              onRefresh={() => {
+                void browserAudio.refreshAudioInputs({ requestPermission: true });
+              }}
+            />
+          ) : null}
+
           {captureConsentRequired && stage === "idle" ? (
             <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)] px-4 py-4">
               <p className="text-sm font-semibold text-[color:var(--status-warning-text)]">
@@ -506,13 +476,6 @@ export function CaptureSessionPanel({
                   onClick={handleStop}
                 >
                   {copy.stop}
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={pending}
-                  onClick={() => handleOpenChange(false)}
-                >
-                  {copy.close}
                 </Button>
               </div>
             </div>

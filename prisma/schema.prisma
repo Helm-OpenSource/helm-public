@@ -1063,11 +1063,35 @@ enum CaptureSessionStatus {
 
 enum CaptureSourceType {
   MANUAL_CAPTURE
+  FIELD_DEVICE
   ZOOM
   TENCENT_MEETING
   CALL_CENTER
   OPENCLAW
   OTHER
+}
+
+enum CaptureAgentCredentialStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum CaptureProvider {
+  AGORA
+}
+
+enum CaptureProviderSessionStatus {
+  STARTING
+  RUNNING
+  DEGRADED
+  STOPPING
+  STOPPED
+  FAILED
+}
+
+enum CaptureTranscriptRetentionMode {
+  DERIVED_ONLY
+  TRANSCRIPT_AND_DERIVED
 }
 
 enum ExternalSyncProvider {
@@ -1092,6 +1116,7 @@ enum TranscriptSourceType {
   MANUAL_TEXT
   OPENAI_ASR
   DASHSCOPE_ASR
+  AGORA_REALTIME_ASR
   FALLBACK_DEMO
   EXTERNAL_INGEST
 }
@@ -1224,6 +1249,7 @@ model User {
   llmCallLogs                          LLMCallLog[]
   captureSessions                      CaptureSession[]
   captureConsentRecords                CaptureConsentRecord[]
+  createdCaptureAgentCredentials       CaptureAgentCredential[]          @relation("CaptureAgentCredentialCreator")
   usageLedgerEntries                   UsageLedger[]
   authVerificationCodes                AuthVerificationCode[]
   authSessions                         AuthSession[]
@@ -1383,6 +1409,9 @@ model Workspace {
   llmCallLogs                          LLMCallLog[]
   captureSessions                      CaptureSession[]
   captureConsentRecords                CaptureConsentRecord[]
+  captureAgentCredentials              CaptureAgentCredential[]
+  captureProviderSessions              CaptureProviderSession[]
+  captureTranscriptSegments            CaptureTranscriptSegment[]
   conversationTranscripts              ConversationTranscript[]
   conversationInsights                 ConversationInsight[]
   importSources                        ImportSource[]
@@ -3430,28 +3459,28 @@ model ActionItem {
 }
 
 model ApprovalTask {
-  id              String         @id @default(cuid())
-  workspaceId     String
-  actionItemId    String         @unique
-  approverId      String?
-  reviewedById    String?
-  status          ApprovalStatus @default(PENDING)
-  channel         String?
-  isHighRisk      Boolean        @default(false)
-  autoExecute     Boolean        @default(false)
-  contextSnapshot String?
-  reasoning       String?
-  editableContent String?
-  resultPreview   String?
-  decisionReason  String?
+  id                  String               @id @default(cuid())
+  workspaceId         String
+  actionItemId        String               @unique
+  approverId          String?
+  reviewedById        String?
+  status              ApprovalStatus       @default(PENDING)
+  channel             String?
+  isHighRisk          Boolean              @default(false)
+  autoExecute         Boolean              @default(false)
+  contextSnapshot     String?
+  reasoning           String?
+  editableContent     String?
+  resultPreview       String?
+  decisionReason      String?
   rejectionReasonCode RejectionReasonCode?
-  reviewedAt      DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  actionItem      ActionItem     @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
-  approver        User?          @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
-  reviewedBy      User?          @relation("ApprovalReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt          DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actionItem          ActionItem           @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+  approver            User?                @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  reviewedBy          User?                @relation("ApprovalReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 }
 
 // Structured execution receipt for the light task chain (AgentOS v1.1 receipt
@@ -4646,30 +4675,32 @@ model BriefingSnapshot {
 }
 
 model CaptureSession {
-  id               String                  @id @default(cuid())
+  id               String                     @id @default(cuid())
   workspaceId      String
   userId           String?
   linkedMeetingId  String?
   title            String?
-  status           CaptureSessionStatus    @default(RECORDING)
-  sourceType       CaptureSourceType       @default(MANUAL_CAPTURE)
+  status           CaptureSessionStatus       @default(RECORDING)
+  sourceType       CaptureSourceType          @default(MANUAL_CAPTURE)
   sourceId         String?
   objectType       ObjectType?
   objectId         String?
-  startedAt        DateTime                @default(now())
+  startedAt        DateTime                   @default(now())
   endedAt          DateTime?
   durationSeconds  Int?
-  transcriptStatus CaptureProcessingStatus @default(PENDING)
-  processingStatus CaptureProcessingStatus @default(PENDING)
+  transcriptStatus CaptureProcessingStatus    @default(PENDING)
+  processingStatus CaptureProcessingStatus    @default(PENDING)
   errorMessage     String?
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
-  workspace        Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user             User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  linkedMeeting    Meeting?                @relation("CaptureSessionMeeting", fields: [linkedMeetingId], references: [id], onDelete: SetNull)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  workspace        Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  linkedMeeting    Meeting?                   @relation("CaptureSessionMeeting", fields: [linkedMeetingId], references: [id], onDelete: SetNull)
   transcript       ConversationTranscript?
   insights         ConversationInsight[]
   consentRecord    CaptureConsentRecord?
+  providerSession  CaptureProviderSession?
+  providerSegments CaptureTranscriptSegment[]
 
   @@index([workspaceId, createdAt])
   @@index([workspaceId, status, createdAt])
@@ -4691,6 +4722,104 @@ model CaptureConsentRecord {
   confirmedByUser      User?                @relation(fields: [confirmedByUserId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, confirmedAt])
+}
+
+model CaptureAgentCredential {
+  id                  String                         @id @default(cuid())
+  workspaceId         String
+  name                String
+  tokenPrefix         String                         @unique
+  tokenHash           String                         @unique
+  status              CaptureAgentCredentialStatus   @default(ACTIVE)
+  transcriptRetention CaptureTranscriptRetentionMode @default(DERIVED_ONLY)
+  createdByUserId     String?
+  expiresAt           DateTime?
+  revokedAt           DateTime?
+  lastSeenAt          DateTime?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+  workspace           Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdByUser       User?                          @relation("CaptureAgentCredentialCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  providerSessions    CaptureProviderSession[]
+
+  @@index([workspaceId, status, expiresAt])
+  @@index([workspaceId, createdAt])
+  @@index([createdByUserId])
+}
+
+model CaptureProviderSession {
+  id                  String                          @id @default(cuid())
+  workspaceId         String
+  captureSessionId    String                          @unique
+  agentCredentialId   String
+  provider            CaptureProvider                 @default(AGORA)
+  status              CaptureProviderSessionStatus    @default(STARTING)
+  activeAgentSlot     String?                         @unique
+  channelName         String                          @unique
+  taskName            String                          @unique
+  publisherUid        String
+  subscriberBotUid    String
+  publisherBotUid     String
+  providerAgentId     String?                         @unique
+  language            String                          @default("zh-CN")
+  transcriptRetention CaptureTranscriptRetentionMode  @default(DERIVED_ONLY)
+  mock                Boolean                         @default(true)
+  startedAt           DateTime?
+  stoppedAt           DateTime?
+  lastSegmentAt       DateTime?
+  degradedReason      String?
+  errorMessage        String?                         @db.LongText
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  workspace           Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  captureSession      CaptureSession                  @relation(fields: [captureSessionId], references: [id], onDelete: Cascade)
+  agentCredential     CaptureAgentCredential          @relation(fields: [agentCredentialId], references: [id], onDelete: Restrict)
+  transcriptSegments  CaptureTranscriptSegment[]
+  webhookReceipts     CaptureProviderWebhookReceipt[]
+
+  @@index([workspaceId, status, createdAt])
+  @@index([agentCredentialId, status, createdAt])
+}
+
+model CaptureTranscriptSegment {
+  id                String                 @id @default(cuid())
+  workspaceId       String
+  captureSessionId  String
+  providerSessionId String
+  sourceUid         String
+  sentenceId        String
+  text              String                 @db.LongText
+  textTsMs          String
+  durationMs        Int
+  language          String                 @default("zh-CN")
+  receivedAt        DateTime               @default(now())
+  workspace         Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  captureSession    CaptureSession         @relation(fields: [captureSessionId], references: [id], onDelete: Cascade)
+  providerSession   CaptureProviderSession @relation(fields: [providerSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([providerSessionId, sourceUid, sentenceId])
+  @@index([workspaceId, captureSessionId, receivedAt])
+  @@index([providerSessionId, receivedAt])
+}
+
+model CaptureProviderWebhookReceipt {
+  id                      String                  @id @default(cuid())
+  provider                CaptureProvider
+  noticeId                String
+  providerSessionId       String?
+  providerAgentId         String?
+  productId               Int?
+  eventType               Int
+  notifyMs                String?
+  payloadFingerprint      String
+  duplicateReceptionCount Int                     @default(0)
+  receivedAt              DateTime                @default(now())
+  processedAt             DateTime?
+  providerSession         CaptureProviderSession? @relation(fields: [providerSessionId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, noticeId])
+  @@index([providerAgentId, eventType, receivedAt])
+  @@index([providerSessionId, receivedAt])
 }
 
 model ConversationTranscript {

@@ -50,6 +50,14 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Electron's main process, preload bridge, and Node test runner use CommonJS.
+  // Keep the exception scoped to this isolated native capture tool.
+  {
+    files: ["tools/agora-field-capture-agent/**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

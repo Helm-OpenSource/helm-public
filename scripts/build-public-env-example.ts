@@ -60,6 +60,18 @@ ASR_DASHSCOPE_MODEL="qwen3-asr-flash"
 ASR_DASHSCOPE_BASE_URL=""
 ASR_LANGUAGE="zh"
 
+# Sales-floor field capture defaults to an explicit non-live mode. REAL mode
+# additionally requires the five server-only credentials below. Never expose
+# App Certificate, REST credentials, or webhook secret to a capture device.
+AGORA_STT_MODE="MOCK"
+AGORA_STT_BASE_URL="https://api.sd-rtn.com"
+AGORA_RTC_TOKEN_TTL_SECONDS="3600"
+AGORA_APP_ID=""
+AGORA_APP_CERTIFICATE=""
+AGORA_CUSTOMER_ID=""
+AGORA_CUSTOMER_SECRET=""
+AGORA_STT_WEBHOOK_SECRET=""
+
 SIGNAL_COLLECTION_SCHEDULER_ENABLED="false"
 LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED="false"
 

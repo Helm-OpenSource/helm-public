@@ -1,0 +1,25 @@
+{
+  "name": "@helm/agora-field-capture-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native field-capture agent that publishes authorized microphone audio directly to Agora RTC",
+  "main": "main.cjs",
+  "scripts": {
+    "setup": "install-electron",
+    "start": "electron .",
+    "device:check": "node device-check.cjs",
+    "test": "node --test test/*.test.cjs",
+    "syntax": "node --check main.cjs && node --check preload.cjs && node --check renderer.js && node --check local-monitor.js && node --check device-check.cjs && node --check lib/*.cjs",
+    "check": "npm run syntax && npm test"
+  },
+  "dependencies": {
+    "agora-rtc-sdk-ng": "4.24.6",
+    "protobufjs": "8.7.1"
+  },
+  "devDependencies": {
+    "electron": "43.1.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

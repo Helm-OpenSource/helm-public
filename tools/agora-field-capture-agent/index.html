@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https: wss:; media-src 'self' blob:; worker-src 'self' blob:; img-src 'self' data:; font-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Helm Field Capture</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="product">HELM</p>
+          <h1>现场采集 Agent</h1>
+        </div>
+        <div class="mode-badge" id="modeBadge">检测中</div>
+      </header>
+
+      <section class="status-band" aria-live="polite">
+        <div class="status-line">
+          <span class="status-dot" id="statusDot"></span>
+          <strong id="statusText">正在初始化</strong>
+        </div>
+        <div class="meta-row">
+          <span id="helmOrigin">Helm 未配置</span>
+          <span id="deliveryStatus">待发送 0</span>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="field-row wide">
+          <label for="sessionTitle">现场名称</label>
+          <input id="sessionTitle" maxlength="120" autocomplete="off" />
+        </div>
+
+        <div class="field-grid">
+          <div class="field-row">
+            <label for="language">语言</label>
+            <select id="language">
+              <option value="zh-CN">中文</option>
+              <option value="en-US">English</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="microphone">麦克风</label>
+            <div class="inline-control">
+              <select id="microphone"></select>
+              <button class="secondary compact" id="refreshDevices" type="button">刷新</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="meter-row">
+          <button class="secondary" id="testDevice" type="button">测试麦克风</button>
+          <button
+            class="secondary monitor-toggle"
+            id="toggleMonitor"
+            type="button"
+            aria-pressed="false"
+          >
+            开启本地监听
+          </button>
+          <div class="meter" aria-label="麦克风电平">
+            <span id="meterFill"></span>
+          </div>
+          <span class="meter-value" id="meterValue">0%</span>
+        </div>
+      </section>
+
+      <section class="consent-section">
+        <label class="check-row">
+          <input type="checkbox" id="employeeConsent" />
+          <span>现场员工已确认本次记录</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="counterpartyNotice" />
+          <span>顾客或对方已完成告知</span>
+        </label>
+      </section>
+
+      <section class="live-section">
+        <div class="live-head">
+          <div>
+            <span class="recording-mark" id="recordingMark"></span>
+            <strong id="liveLabel">未开始</strong>
+          </div>
+          <span class="timer" id="timer">00:00</span>
+        </div>
+        <div class="transcript-preview" id="transcriptPreview">等待最终转写</div>
+      </section>
+
+      <footer class="actions">
+        <button class="primary" id="startCapture" type="button">开始现场记录</button>
+        <button class="danger" id="stopCapture" type="button" disabled>停止并分析</button>
+      </footer>
+
+      <div class="error-strip" id="errorStrip" role="alert" hidden></div>
+    </main>
+
+    <script src="node_modules/agora-rtc-sdk-ng/AgoraRTC_N-production.js"></script>
+    <script src="local-monitor.js"></script>
+    <script src="renderer.js"></script>
+  </body>
+</html>

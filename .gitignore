@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/tools/agora-field-capture-agent/node_modules/
+/tools/agora-field-capture-agent/dist/
 /.pnp
 .pnp.*
 .yarn/*

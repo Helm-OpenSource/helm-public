@@ -8,6 +8,7 @@ import {
   OpportunityStage,
   OpportunityType,
   RiskLevel,
+  type TranscriptSourceType,
 } from "@prisma/client";
 import { addMinutes } from "date-fns";
 import { generatePostMeetingActionSuggestions } from "@/lib/ai";
@@ -60,6 +61,7 @@ type ProcessCaptureInput = MemoryActorContext & {
   transcriptConfidence?: number | null;
   transcriptProvider?: string | null;
   transcriptModel?: string | null;
+  transcriptSourceType?: TranscriptSourceType | null;
 };
 
 function trimTitle(value: string, max = 24) {
@@ -752,6 +754,7 @@ export async function processConversationCapture(input: ProcessCaptureInput) {
       transcriptConfidence: input.transcriptConfidence,
       transcriptProvider: input.transcriptProvider,
       transcriptModel: input.transcriptModel,
+      transcriptSourceType: input.transcriptSourceType,
       context,
     });
 

@@ -208,7 +208,7 @@ More detail in [docs/getting-started.en.md](docs/getting-started.en.md).
 | `/memory` | Operating memory: facts, commitments, blockers, corrections — citable, reviewable; unified trace timeline remains a release hard gate |
 | `/search?mode=ask` | Object navigation, or ask Helm directly (read-only, with citations) |
 | `/setup` | 6-step / 12-min setup; first judgment card in 5 min |
-| `/capture` | Press to record → 60-min meeting → 90s candidate generation (facts / commitments / follow-ups); high-risk items go to review |
+| `/capture` | Select and remember an external microphone in the current browser; press to record → 60-min meeting → 90s candidate generation (facts / commitments / follow-ups); high-risk items go to review |
 | `/reports` | Weekly recap: last 2 weeks at a glance + next week's focus |
 | `/settings` | Workspace console: connectors, policies, pilot mode, retention, self-serve export |
 | `/health` | User-visible degraded surface: DB / LLM / connector / capture / audit trace |

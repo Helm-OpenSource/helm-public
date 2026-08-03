@@ -1,4 +1,10 @@
-import { ActorType, type CaptureSession, type CaptureSourceType, type ObjectType } from "@prisma/client";
+import {
+  ActorType,
+  type CaptureSession,
+  type CaptureSourceType,
+  type ObjectType,
+  type TranscriptSourceType,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/analytics";
 import { writeAuditLog } from "@/lib/audit";
@@ -26,6 +32,7 @@ type BuildTranscriptInput = MemoryActorContext & {
   transcriptConfidence?: number | null;
   transcriptProvider?: string | null;
   transcriptModel?: string | null;
+  transcriptSourceType?: TranscriptSourceType | null;
   context: CaptureContextSummary;
 };
 
@@ -103,8 +110,11 @@ export function buildSegments(input: {
 export async function generateConversationTranscript(input: BuildTranscriptInput) {
   const manualText = input.transcriptText?.trim() || "";
   let fullText = manualText;
-  let sourceType: "MANUAL_TEXT" | "OPENAI_ASR" | "DASHSCOPE_ASR" | "FALLBACK_DEMO" | "EXTERNAL_INGEST" =
-    input.session.sourceType !== "MANUAL_CAPTURE" && manualText ? "EXTERNAL_INGEST" : "MANUAL_TEXT";
+  let sourceType: TranscriptSourceType =
+    input.transcriptSourceType ??
+    (input.session.sourceType !== "MANUAL_CAPTURE" && manualText
+      ? "EXTERNAL_INGEST"
+      : "MANUAL_TEXT");
   let provider: string | null = input.transcriptProvider ?? null;
   let model: string | null = input.transcriptModel ?? null;
   let confidence = input.transcriptConfidence ?? (manualText ? 81 : 67);
@@ -130,9 +140,10 @@ export async function generateConversationTranscript(input: BuildTranscriptInput
     } catch {
       fullText = manualText || buildFallbackTranscript(input);
       sourceType = manualText
-        ? input.session.sourceType !== "MANUAL_CAPTURE"
-          ? "EXTERNAL_INGEST"
-          : "MANUAL_TEXT"
+        ? input.transcriptSourceType ??
+          (input.session.sourceType !== "MANUAL_CAPTURE"
+            ? "EXTERNAL_INGEST"
+            : "MANUAL_TEXT")
         : "FALLBACK_DEMO";
       confidence = input.transcriptConfidence ?? (manualText ? 79 : 67);
     }
