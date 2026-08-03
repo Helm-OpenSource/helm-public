@@ -9,8 +9,9 @@ name: Preflight (Fast PR Feedback)
 # boundary) for quick PR reviewer feedback. Heavier checks (build / test /
 # e2e / quality regression) continue to run in ci.yml.
 #
-# Goal: < 3 min feedback on every PR push, vs ~15 min for full ci.yml.
-# Reviewers can decline a PR early instead of waiting for the full chain.
+# Goal: finish this bounded gate before the heavier ci.yml chain. Runtime includes
+# dependency installation and therefore grows with the repository; it is not an
+# asserted sub-three-minute service level.
 
 on:
   pull_request:
@@ -27,7 +28,7 @@ jobs:
   preflight:
     name: Lint + Typecheck + Boundary
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
