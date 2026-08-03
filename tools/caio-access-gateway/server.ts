@@ -375,10 +375,17 @@ export type CaioAccessGatewayMount = Readonly<{
    * Serve one node request onto the host's response. The host has already
    * terminated TLS and demanded the client certificate; the verified peer is
    * read back off the socket here so this surface never trusts a header.
+   *
+   * `options.signal` is the HOST's cancellation for this request — shutdown or
+   * the request deadline. It is honoured before any port is touched, during the
+   * body read, and again before the answer is written, so a host that is
+   * draining can actually stop this work rather than wait on it or report
+   * itself idle while it runs.
    */
   serveNodeRequest(
     request: IncomingMessage,
     response: ServerResponse,
+    options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<void>;
 }>;
 
@@ -426,18 +433,34 @@ function wireResponse(
 /**
  * Read a request body with a hard cap, refusing rather than buffering past it.
  * Exported so the cap is testable without a socket.
+ *
+ * The optional `signal` is the HOST's cancellation. A body is the one part of a
+ * request whose length the peer controls, so it is where an unbounded read
+ * lives: without a signal the loop below runs until the client decides to stop,
+ * and a host trying to shut down can only wait or lie about being idle. The
+ * check is at the top of each iteration, so an already-aborted signal reads
+ * nothing at all.
  */
 export async function readCaioAccessGatewayBody(
   chunks: AsyncIterable<Buffer | string>,
   maxBytes: number,
-): Promise<Readonly<{ ok: true; body: string }> | Readonly<{ ok: false }>> {
+  signal?: AbortSignal,
+): Promise<
+  | Readonly<{ ok: true; body: string }>
+  | Readonly<{ ok: false; reason: "too-large" | "aborted" }>
+> {
   const parts: Buffer[] = [];
   let size = 0;
   for await (const chunk of chunks) {
+    if (signal?.aborted) {
+      return Object.freeze({ ok: false as const, reason: "aborted" as const });
+    }
     const buffer =
       typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
     size += buffer.byteLength;
-    if (size > maxBytes) return Object.freeze({ ok: false as const });
+    if (size > maxBytes) {
+      return Object.freeze({ ok: false as const, reason: "too-large" as const });
+    }
     parts.push(buffer);
   }
   return Object.freeze({
@@ -537,24 +560,53 @@ export function createCaioAccessGatewayMount(
   async function serveNodeRequest(
     request: IncomingMessage,
     response: ServerResponse,
+    options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<void> {
+    const signal = options?.signal;
     let result: CaioGatewayResponse;
+    // BEFORE ANY PORT IS TOUCHED. The host aborts on shutdown and on the
+    // request deadline; starting work it has already given up on would make
+    // its drain wait for something nobody is waiting for, and would let a
+    // request that arrived after shutdown reach a token authenticator, a model
+    // proxy or an audit gate.
+    if (signal?.aborted) {
+      result = wireResponse(toGatewayError({ status: 503 }));
+      response.writeHead(result.status, { ...result.headers });
+      response.end(JSON.stringify(result.body ?? null));
+      return;
+    }
     try {
-      const read = await readCaioAccessGatewayBody(request, maxBodyBytes);
-      result = read.ok
-        ? await handle({
-            method: request.method ?? "",
-            url: request.url ?? "",
-            headers: request.headers,
-            clientIp:
-              (request.socket as unknown as CaioTlsSocketFacts).remoteAddress ??
-              null,
-            peer: caioAccessGatewayMtlsPeer(
-              request.socket as unknown as CaioTlsSocketFacts,
-            ),
-            body: read.body,
-          })
-        : wireResponse(toGatewayError({ status: 413 }));
+      const read = await readCaioAccessGatewayBody(
+        request,
+        maxBodyBytes,
+        signal,
+      );
+      if (read.ok) {
+        result = await handle({
+          method: request.method ?? "",
+          url: request.url ?? "",
+          headers: request.headers,
+          clientIp:
+            (request.socket as unknown as CaioTlsSocketFacts).remoteAddress ??
+            null,
+          peer: caioAccessGatewayMtlsPeer(
+            request.socket as unknown as CaioTlsSocketFacts,
+          ),
+          body: read.body,
+        });
+        // Aborted while the route was running: the host is no longer waiting
+        // for this answer, and sending a success would report work as
+        // delivered that the host has already accounted as cancelled.
+        if (signal?.aborted) {
+          result = wireResponse(toGatewayError({ status: 503 }));
+        }
+      } else {
+        // A cancelled read and an oversized one are different facts: one is the
+        // host withdrawing, the other is the peer exceeding a cap.
+        result = wireResponse(
+          toGatewayError({ status: read.reason === "aborted" ? 503 : 413 }),
+        );
+      }
     } catch {
       // Nothing about an internal failure reaches the wire.
       result = wireResponse(toGatewayError({ status: 502 }));

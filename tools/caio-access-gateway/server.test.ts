@@ -194,9 +194,13 @@ function nodeRequest(input: {
   url: string;
   headers?: Record<string, string | string[] | undefined>;
   body?: string;
+  /** A body that does not simply end, for cancellation cases. */
+  bodyStream?: AsyncIterable<Buffer | string>;
   socket?: Record<string, unknown>;
 }) {
-  const stream = Readable.from([Buffer.from(input.body ?? "", "utf8")]);
+  const stream = input.bodyStream
+    ? Readable.from(input.bodyStream)
+    : Readable.from([Buffer.from(input.body ?? "", "utf8")]);
   return Object.assign(stream, {
     method: input.method,
     url: input.url,
@@ -468,6 +472,89 @@ describe("this surface owns NO socket: the host binds the one listener", () => {
     expect(capture.status).toBe(401);
   });
 
+  // THE HOST'S CANCELLATION, not this surface's own.
+  //
+  // Both surfaces are served by one host on one socket, so shutdown and the
+  // request deadline belong to the host. It hands this mount a signal; before
+  // this the mount could not accept one, so a composed host had no way to stop
+  // work it had started, and its drain had to either wait forever or lie.
+  it("refuses a node request whose signal is already aborted", async () => {
+    const { ports, calls } = createPorts();
+    const mount = createCaioAccessGatewayMount({
+      config: CONFIG,
+      posture: "self_service",
+      ports,
+    });
+    const { capture, response } = captureNodeResponse();
+    const controller = new AbortController();
+    controller.abort();
+
+    await mount.serveNodeRequest(
+      nodeRequest({ method: "GET", url: "/livez" }) as never,
+      response as never,
+      { signal: controller.signal },
+    );
+
+    expect(capture.status).toBe(503);
+    expect(capture.ended).toBe(true);
+    // Not merely a 503 on the wire: no port was touched, so nothing was
+    // started that the host would then have to wait for.
+    expect(calls).toEqual([]);
+  });
+
+  it("still serves when the host's signal is live", async () => {
+    // CONTROL for the case above. Without it, a mount that refused every
+    // request carrying a signal would pass that assertion.
+    const mount = createServer();
+    const { capture, response } = captureNodeResponse();
+    const controller = new AbortController();
+
+    await mount.serveNodeRequest(
+      nodeRequest({ method: "GET", url: "/livez" }) as never,
+      response as never,
+      { signal: controller.signal },
+    );
+
+    expect(capture.status).toBe(200);
+    expect(JSON.parse(capture.body)).toEqual({
+      status: "alive",
+      posture: "self_service",
+    });
+  });
+
+  it("stops reading a body once the host aborts", async () => {
+    const mount = createServer();
+    const { capture, response } = captureNodeResponse();
+    const controller = new AbortController();
+    let chunksRead = 0;
+    // A body that would never end on its own. Only the host's signal can
+    // release it; without one, the read is unbounded and the host's drain has
+    // nothing it can do about it.
+    const endlessBody = {
+      async *[Symbol.asyncIterator]() {
+        for (;;) {
+          chunksRead += 1;
+          if (chunksRead === 2) controller.abort();
+          yield Buffer.from("x");
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+      },
+    };
+
+    await mount.serveNodeRequest(
+      nodeRequest({
+        method: "POST",
+        url: "/v1/models",
+        bodyStream: endlessBody,
+      }) as never,
+      response as never,
+      { signal: controller.signal },
+    );
+
+    expect(capture.status).toBe(503);
+    expect(chunksRead).toBeLessThan(50);
+  });
+
   it("refuses a node request whose body exceeds the cap", async () => {
     const mount = createCaioAccessGatewayMount({
       config: CONFIG,
@@ -535,8 +622,38 @@ describe("request body reading", () => {
   });
 
   it("refuses a body over the cap instead of buffering it", async () => {
+    // The refusal now says WHY. A cap breach and a host cancellation are
+    // different facts and become different statuses (413 vs 503); a bare
+    // `{ ok: false }` forced the caller to guess, and it guessed 413 for both.
     expect(await readCaioAccessGatewayBody(chunks("0123456789"), 4)).toEqual({
       ok: false,
+      reason: "too-large",
     });
+  });
+
+  it("reads nothing at all when the host's signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let pulled = 0;
+    async function* counted() {
+      pulled += 1;
+      yield Buffer.from("0123456789", "utf8");
+    }
+    expect(
+      await readCaioAccessGatewayBody(counted(), 1024, controller.signal),
+    ).toEqual({ ok: false, reason: "aborted" });
+    // CONTROL: the same generator without a signal is consumed, so the
+    // assertion above is about cancellation and not about an inert fixture.
+    let pulledAgain = 0;
+    async function* countedAgain() {
+      pulledAgain += 1;
+      yield Buffer.from("0123456789", "utf8");
+    }
+    expect(await readCaioAccessGatewayBody(countedAgain(), 1024)).toEqual({
+      ok: true,
+      body: "0123456789",
+    });
+    expect(pulled).toBe(1);
+    expect(pulledAgain).toBe(1);
   });
 });
