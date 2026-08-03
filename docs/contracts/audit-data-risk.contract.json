@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "helm.audit-data-risk-contract/v1",
+  "contractKey": "audit-data-risk",
+  "contractVersion": "2026-08-04.3",
+  "moduleSha256": "85c3c3a4452f9b6b482bfa2d382b3b7c27ed2df35d33dbe3b1b9e5a3bac548b2",
+  "status": "public_safe_digest_anchor",
+  "consumers": [
+    "pack-boundary-audit",
+    "overlay-boundary-audit"
+  ],
+  "boundary": {
+    "containsModuleSource": false,
+    "containsCustomerData": false,
+    "containsCredentials": false,
+    "authorizesDeployment": false,
+    "provesRuntimeActivation": false
+  },
+  "verification": {
+    "meaning": "A consumer whose module bytes and declared contract version match this anchor implements the reviewed public-safe audit contract.",
+    "requiredPosture": "CI must fetch this file from an immutable helm-public commit and fail when the anchor is missing, malformed, version-mismatched, or digest-mismatched.",
+    "doesNotProve": [
+      "production deployment",
+      "runtime activation",
+      "absence of all sensitive data",
+      "customer or owner authorization"
+    ]
+  }
+}
