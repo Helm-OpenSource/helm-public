@@ -82,12 +82,31 @@ jobs:
         run: |
           echo "commit=$(node -p "require('./tools/caio-access-gateway/overlay-composition-pin.json').commit")" >> "$GITHUB_OUTPUT"
 
+      # CROSS-ORG. This repository is in Helm-OpenSource; the Overlay is in
+      # Helm-Developers, so the workflow's own GITHUB_TOKEN cannot read it —
+      # the checkout fails with "Repository not found". A read token has to be
+      # provisioned by the owner as a repository secret.
+      #
+      # When it is absent this job FAILS rather than skipping. The claim being
+      # made is "the cross-repo contract is verified in CI"; with no way to
+      # fetch the other repository that claim is false, and a skipped job that
+      # reports green would say it anyway.
+      - name: Require the cross-org read token
+        env:
+          OVERLAYS_TOKEN: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}
+        run: |
+          if [ -z "$OVERLAYS_TOKEN" ]; then
+            echo "caio-overlay-composition-contract: cannot run — secret HELM_OVERLAYS_READ_TOKEN is not set. This repository (Helm-OpenSource) cannot read Helm-Developers/helm-overlays with the default GITHUB_TOKEN, so the contract is UNVERIFIED. Provision a read-only token for that repository as HELM_OVERLAYS_READ_TOKEN." >&2
+            exit 1
+          fi
+
       - name: Check out the pinned Overlay
         uses: actions/checkout@v5
         with:
           repository: Helm-Developers/helm-overlays
           ref: ${{ steps.pin.outputs.commit }}
           path: .deps/helm-overlays
+          token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}
 
       # No checkout, a checkout at the wrong commit, or a composition that has
       # stopped mounting the real interface all fail here. The suite has no case
