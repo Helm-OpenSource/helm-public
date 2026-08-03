@@ -137,27 +137,35 @@ describe("the gateway protocol core has a production caller", () => {
   // The V1 decision, asserted against the file a reader actually opens.
   //
   // Before this, the only thing in the tree that said "not served" said it as
-  // a mechanism ("the ports are unwired"), which reads as a task somebody
-  // forgot. The mechanism is true, but it is the SECOND fact. The first is
-  // that not serving this surface is the shipped product boundary for V1.
-  it("the header declares the V1 boundary, not just the missing wiring", () => {
+  // The header used to lead with a mechanism ("the ports are unwired"), which
+  // reads as a task somebody forgot. After the owner reversed the decision on
+  // 2026-08-03 the shape of the claim changed but the requirement did not: the
+  // header must state WHAT IS SERVED and WHAT IS NOT, and why the gap that
+  // remains is a boundary rather than an unfinished chore.
+  it("the header declares what V1 mounts and what it still does not", () => {
     const header = compositionHeader();
 
     // CONTROL: the header really was read. Without this every toContain below
     // would also pass against a header this function failed to locate — and an
     // empty string trivially satisfies nothing, so assert a sentence that has
-    // been in this file since before the decision.
+    // been in this file since before either decision.
     expect(header.length).toBeGreaterThan(1000);
     expect(header).toContain("ONE SOCKET, ONE HANDLER");
 
-    // FACT ONE — the product edge. Absence here is finished work.
+    // THE DECISION, and its date, so the reversal is readable rather than
+    // inferred from a diff.
     expect(header).toContain("V1 PRODUCT BOUNDARY");
-    expect(header).toContain("NOT MOUNTED IN V1");
-    expect(header).toContain("serves WorkBuddy only");
+    expect(header).toContain("IS MOUNTED IN V1");
+    expect(header).toContain("2026-08-03");
+
+    // WHAT IS NOT SERVED. /mcp has no dispatcher, and the header must say so
+    // rather than leave a reader to discover it from the port type.
+    expect(header).toContain("/mcp");
+    expect(header).toContain("OPTIONAL");
     expect(header).toContain("404");
 
-    // FACT TWO — the mechanism, named port by port so nobody has to go and
-    // count them. These are the implementations that do not exist anywhere.
+    // The ports, named one by one so nobody has to go and count them. The list
+    // is the same; what changed is that five of them now exist.
     for (const port of [
       "token authenticator",
       "project resolver",
@@ -169,12 +177,15 @@ describe("the gateway protocol core has a production caller", () => {
       expect(header, `the header must name the ${port} port`).toContain(port);
     }
 
-    // The way back, in one place, so nobody reconstructs it from four files.
+    // The way back for the part that is still out, in one place.
     expect(header).toContain("RE-ENTRY CONDITIONS");
-    expect(header).toContain("control_plane_authorization_pending");
     expect(header).toContain("ownerAuthorizationRecorded");
+    // The reason /mcp cannot simply reuse the WorkBuddy dispatcher must stay
+    // stated: it is an authentication boundary, and a later reader who does not
+    // see that will read the gap as missing wiring.
+    expect(header).toContain("BEARER TOKEN");
 
-    // And why the seam survives the decision.
+    // And why the seam survives either decision.
     expect(header).toContain("createCaioAccessGatewayMount");
   });
 

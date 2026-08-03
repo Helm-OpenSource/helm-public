@@ -157,6 +157,82 @@ describe("route table: which surfaces this listener owns", () => {
     ).toBe(false);
   });
 
+  // A DEPLOYMENT MAY MOUNT THE SUBSET IT CAN ACTUALLY SERVE.
+  //
+  // Five of the six ports this surface needs have real in-tree implementations;
+  // the MCP dispatcher has none, and inventing one would produce a facade that
+  // dispatches nothing while looking like it dispatches. So `/mcp` is owned
+  // only when a dispatcher is supplied, and a mount without one does not claim
+  // the path at all — the host's router then 404s it, exactly as it does for a
+  // path no surface declares.
+  describe("a mount without an MCP dispatcher", () => {
+    function createPartialMount() {
+      const spy = createPorts();
+      const { mcpDispatch: _dropped, ...withoutDispatch } = spy.ports;
+      return {
+        spy,
+        mount: createCaioAccessGatewayMount({
+          config: CONFIG,
+          posture: "self_service",
+          ports: withoutDispatch,
+        }),
+      };
+    }
+
+    it("does not declare /mcp among the paths it owns", () => {
+      const { mount } = createPartialMount();
+      expect(mount.apiPaths).not.toContain("/mcp");
+      // CONTROL: everything else is still owned, so this is a subset and not a
+      // mount that quietly stopped serving.
+      expect([...mount.apiPaths].sort()).toEqual([
+        "/livez",
+        "/readyz",
+        "/v1/chat/completions",
+        "/v1/models",
+        "/v1/responses",
+      ]);
+      // And a mount WITH a dispatcher still owns it.
+      expect(createServer().apiPaths).toContain("/mcp");
+    });
+
+    it("says so in its own route table, not only in the path list", () => {
+      const { mount } = createPartialMount();
+      expect(
+        mount.routeTable.find((row) => row.path === "/mcp")?.servedByThisSurface,
+      ).toBe(false);
+      expect(
+        createServer().routeTable.find((row) => row.path === "/mcp")
+          ?.servedByThisSurface,
+      ).toBe(true);
+    });
+
+    it("refuses /mcp without touching a single port", async () => {
+      const { mount, spy } = createPartialMount();
+      const response = await mount.handle(
+        incoming({
+          method: "POST",
+          url: "/mcp",
+          headers: { authorization: "Bearer hcaio_mcp_test" },
+          body: "{}",
+        }),
+      );
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: "caio_not_found" });
+      // Not one port ran: the refusal is ownership, decided before
+      // authentication, so an unserved path cannot consume a rate-limit slot or
+      // reach a token store.
+      expect(spy.calls).toEqual([]);
+    });
+
+    it("still serves the routes it does own", async () => {
+      const { mount } = createPartialMount();
+      const alive = await mount.handle(incoming({ url: "/livez" }));
+      expect(alive.status).toBe(200);
+      const ready = await mount.handle(incoming({ url: "/readyz" }));
+      expect(ready.body).toEqual({ status: "ready", posture: "self_service" });
+    });
+  });
+
   it("mounts the REAL Access Gateway handler and reports the declared posture", async () => {
     const server = createServer();
     const response = await server.handle(incoming({ url: "/livez" }));

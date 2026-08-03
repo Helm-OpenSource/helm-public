@@ -3,46 +3,63 @@
  *
  * V1 PRODUCT BOUNDARY — READ THIS BEFORE ANYTHING ELSE
  * ----------------------------------------------------
- * This surface is NOT MOUNTED IN V1. By owner decision the composed gateway
- * serves WorkBuddy only. Every path this surface owns (/mcp, /v1/responses,
- * /v1/chat/completions, /v1/models, /livez, /readyz) is answered 404 by the
- * host's route table — an explicit refusal, because a path no surface declares
- * belongs to nobody and is never a fallthrough.
+ * This surface IS MOUNTED IN V1, as the subset a deployment can actually serve.
+ * The owner reversed the earlier "WorkBuddy only" decision on 2026-08-03, on
+ * the specific question of whether to mount; the reversal is recorded in
+ * helm-self's caio-access-gateway-binding.json, and the overlay composition is
+ * what performs the mount. This repository still binds no socket.
  *
- * TWO THINGS ARE TRUE AT ONCE, and a reader needs both.
+ * WHAT IS SERVED, AND WHAT IS NOT
+ * -------------------------------
+ * Owned when the deployment supplies the ports for them:
+ *   /v1/responses  /v1/chat/completions  /v1/models  /livez  /readyz
  *
- *   1. A PRODUCT EDGE. Not serving the Access surface is what V1 ships. Its
- *      absence is finished work, not an open task, and a delivery that answers
- *      only /mcp/workbuddy is the delivery working as designed.
+ * NOT owned unless an MCP dispatcher is supplied:
+ *   /mcp
  *
- *   2. A MECHANICAL FACT. The six production ports this surface demands have
- *      no implementation anywhere in the four repositories:
- *        - token authenticator
- *        - project resolver
- *        - MCP dispatcher
- *        - model alias bindings (with their upstream credentials)
- *        - canonical audit gate
- *        - readiness probe
- *      They are deployment inputs, and writing plausible ones here would
- *      produce a facade that LOOKS like an Access Gateway while
- *      authenticating nobody and auditing nothing.
+ * That is not a bug to fix later. Five of the six production ports this surface
+ * needs now have real implementations in this repository — token authenticator
+ * (createCaioAccessTokenService over the Prisma persistence), project resolver,
+ * canonical audit gate, readiness probe, and the model proxy engine, with the
+ * model alias bindings supplied as deployment DATA by design. The MCP
+ * dispatcher has none, and writing a plausible one here would produce a facade
+ * that dispatches nothing while looking like it dispatches — the failure this
+ * paragraph has warned about since before the mount existed.
  *
- * Stating only (2) makes this file read as a TODO somebody forgot; stating
- * only (1) hides that re-entry is real engineering. Both stay.
+ * So `mcpDispatch` is the one OPTIONAL port. Without it the mount does not
+ * claim /mcp: the path drops out of `apiPaths`, its route-table row reports
+ * servedByThisSurface: false, and `handle` refuses it on ownership before
+ * authentication — the same 404 any undeclared path gets, decided before a
+ * rate-limit slot or a token store is touched. A deployment therefore serves
+ * what it can serve, instead of choosing between a facade and no gateway.
  *
- * RE-ENTRY CONDITIONS — all three, or this stays unmounted
- * -------------------------------------------------------
- *   1. The six production ports named above exist as real implementations,
- *      supplied by the deployment rather than invented in-tree.
- *   2. helm-self's caio-access-gateway-binding.json no longer records
- *      activation.status = control_plane_authorization_pending.
- *   3. Owner authorization is recorded: boundaries.ownerAuthorizationRecorded
- *      is true in that same binding.
+ * WHAT THE PREVIOUS BOUNDARY SAID, AND WHY IT CHANGED
+ * ---------------------------------------------------
+ * Until 2026-08-03 this header said the surface was NOT mounted, on two
+ * grounds: a product edge (WorkBuddy-only was what V1 shipped) and a mechanical
+ * fact (the six ports had no implementation anywhere). The mechanical claim had
+ * gone stale — five of the six acquired real implementations while the sentence
+ * stayed — and the product edge was the owner's to move. Both changed, and this
+ * is the record of it rather than a silent edit.
  *
- * Mounting is a decision reversal, not a wiring step, and crossing the owner
- * activation gate as a side effect of a refactor is the specific accident this
- * paragraph exists to prevent. The overlay repository states the identical
- * three conditions in one place
+ * RE-ENTRY CONDITIONS FOR /mcp — all of them, or it stays unowned
+ * ---------------------------------------------------------------
+ *   1. An MCP dispatcher exists as a real implementation, supplied by the
+ *      deployment rather than invented in-tree. The Access Gateway's /mcp
+ *      authenticates by BEARER TOKEN with capability grants and project
+ *      scoping; the WorkBuddy dispatcher authenticates by mTLS client identity.
+ *      Bridging the two is an authentication-boundary decision, not an adapter,
+ *      and is the owner's to make.
+ *   2. helm-self's caio-access-gateway-binding.json records the dispatcher as
+ *      supplied, alongside the mount it already records.
+ *   3. Owner authorization for that specific surface is recorded in the same
+ *      binding — a boundaries.ownerAuthorizationRecorded entry naming /mcp,
+ *      as one now records the mount itself.
+ *
+ * Crossing an owner activation gate as a side effect of a wiring change is the
+ * accident this paragraph exists to prevent, and it applies to /mcp now exactly
+ * as it applied to the whole surface before. The overlay repository states the
+ * same conditions in one place
  * (overlays/helm-self/lib/workbuddy-lan/access-gateway-v1-boundary.ts) and its
  * gates hold the declaration and the enforcement together.
  *
@@ -339,13 +356,35 @@ export type CaioAccessGatewayServerPorts = Readonly<{
   preAuthRateLimiter: CaioPreAuthRateLimiterPort;
   tokenAuthenticator: CaioTokenAuthenticatorPort;
   projectResolver: ProjectMembershipResolver;
-  mcpDispatch: CaioMcpDispatchPort;
+  /**
+   * OPTIONAL, and the only optional port here.
+   *
+   * Five of the six ports this surface needs have real implementations in this
+   * repository. The MCP dispatcher does not, and writing a plausible one
+   * in-tree would produce a facade that dispatches nothing while looking like
+   * it dispatches — the specific failure this surface's header warns about.
+   *
+   * When it is absent, `/mcp` is NOT OWNED by the mount: it drops out of
+   * `apiPaths`, its route-table row reports `servedByThisSurface: false`, and
+   * `handle` refuses it on ownership before authentication. A deployment can
+   * therefore serve the subset it can actually serve, instead of choosing
+   * between a facade and no gateway at all.
+   */
+  mcpDispatch?: CaioMcpDispatchPort;
   modelProxy: CaioAccessGatewayModelPorts;
   auditGate: CaioCanonicalAuditGatePort;
   readinessProbe: CaioReadinessProbePort;
 }>;
 
-export type CaioAccessGatewayServerErrorCode = "POSTURE_MISMATCH";
+export type CaioAccessGatewayServerErrorCode =
+  | "POSTURE_MISMATCH"
+  /**
+   * Raised only if a path this mount does not own somehow reaches the protocol
+   * core. It cannot happen through `handle`, which refuses an unowned /mcp on
+   * ownership first; it exists so that a future change breaking that ordering
+   * fails loudly instead of quietly serving a path the mount never claimed.
+   */
+  | "MCP_DISPATCH_UNAVAILABLE";
 
 export class CaioAccessGatewayServerError extends Error {
   readonly code: CaioAccessGatewayServerErrorCode;
@@ -497,11 +536,39 @@ export function createCaioAccessGatewayMount(
     bindings: input.ports.modelProxy.bindings,
   });
 
+  // Which paths THIS mount owns. `/mcp` only when a dispatcher was supplied;
+  // see the port's declaration for why it is the one optional input.
+  const servesMcp = typeof input.ports.mcpDispatch === "function";
+  const routeTable: readonly CaioAccessGatewayRoute[] = Object.freeze(
+    CAIO_ACCESS_GATEWAY_ROUTE_TABLE.map((row) =>
+      row.path === "/mcp"
+        ? Object.freeze({ ...row, servedByThisSurface: servesMcp })
+        : row,
+    ),
+  );
+  const apiPaths: readonly string[] = Object.freeze(
+    routeTable
+      .filter((row) => row.owner === "access_gateway_api" && row.servedByThisSurface)
+      .map((row) => row.path),
+  );
+
   const dependencies: CaioGatewayHandlerDependencies = {
     preAuthRateLimiter: input.ports.preAuthRateLimiter,
     tokenAuthenticator: input.ports.tokenAuthenticator,
     projectResolver: input.ports.projectResolver,
-    mcpDispatch: input.ports.mcpDispatch,
+    // Unreachable when no dispatcher was supplied: `handle` refuses /mcp on
+    // ownership before anything here runs, and a test asserts no port is
+    // touched. It throws rather than returning a plausible answer so that a
+    // future change which breaks that ordering fails loudly instead of
+    // silently serving an unowned path.
+    mcpDispatch:
+      input.ports.mcpDispatch ??
+      (() => {
+        throw new CaioAccessGatewayServerError(
+          "MCP_DISPATCH_UNAVAILABLE",
+          "no MCP dispatcher was supplied to this mount; /mcp is not owned by it",
+        );
+      }),
     modelProxy: {
       responses: modelDispatch.responses,
       chatCompletions: modelDispatch.chatCompletions,
@@ -534,6 +601,13 @@ export function createCaioAccessGatewayMount(
     //    Access Gateway API can never answer for the WorkBuddy gateway.
     const owner = caioAccessGatewayRouteOwner(request.url);
     if (owner === "workbuddy_lan_gateway") {
+      return wireResponse(toGatewayError({ status: 404 }));
+    }
+    // A path this MOUNT does not own is refused here too, on the same terms and
+    // in the same place. /mcp without a dispatcher is not "a route that will
+    // fail later": it is not served, so it is answered exactly as any undeclared
+    // path is — before authentication, before the rate limiter, before any port.
+    if (!servesMcp && (request.url.split("?")[0] ?? "") === "/mcp") {
       return wireResponse(toGatewayError({ status: 404 }));
     }
 
@@ -637,8 +711,8 @@ export function createCaioAccessGatewayMount(
   return Object.freeze({
     config: input.config,
     posture,
-    routeTable: CAIO_ACCESS_GATEWAY_ROUTE_TABLE,
-    apiPaths: CAIO_ACCESS_GATEWAY_API_PATHS,
+    routeTable,
+    apiPaths,
     handle,
     serveNodeRequest,
   });
