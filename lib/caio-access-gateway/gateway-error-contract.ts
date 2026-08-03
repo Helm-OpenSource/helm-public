@@ -170,7 +170,18 @@ export type CaioGatewayErrorInput =
   | Readonly<{ status: 502 }>
   | Readonly<{
       status: 503;
-      error: "caio_audit_unavailable" | "caio_no_route";
+      error:
+        | "caio_audit_unavailable"
+        | "caio_no_route"
+        /**
+         * The HOST withdrew this request — it is shutting down, or the request
+         * deadline elapsed. Distinct from the two above on purpose: those name
+         * a dependency that failed, and a client that reads "audit unavailable"
+         * when the gateway is merely draining is being told something false
+         * about which part of the system is unwell. Retrying helps, so this
+         * arm carries retry advice like the others.
+         */
+        | "caio_request_cancelled";
       /** null when the dependency gave no retry advice at all. */
       retryAfterSeconds: number | null;
     }>;

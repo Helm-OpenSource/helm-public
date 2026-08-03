@@ -570,7 +570,13 @@ export function createCaioAccessGatewayMount(
     // request that arrived after shutdown reach a token authenticator, a model
     // proxy or an audit gate.
     if (signal?.aborted) {
-      result = wireResponse(toGatewayError({ status: 503 }));
+      result = wireResponse(
+        toGatewayError({
+          status: 503,
+          error: "caio_request_cancelled",
+          retryAfterSeconds: 1,
+        }),
+      );
       response.writeHead(result.status, { ...result.headers });
       response.end(JSON.stringify(result.body ?? null));
       return;
@@ -598,14 +604,27 @@ export function createCaioAccessGatewayMount(
         // for this answer, and sending a success would report work as
         // delivered that the host has already accounted as cancelled.
         if (signal?.aborted) {
-          result = wireResponse(toGatewayError({ status: 503 }));
+          result = wireResponse(
+        toGatewayError({
+          status: 503,
+          error: "caio_request_cancelled",
+          retryAfterSeconds: 1,
+        }),
+      );
         }
       } else {
         // A cancelled read and an oversized one are different facts: one is the
         // host withdrawing, the other is the peer exceeding a cap.
-        result = wireResponse(
-          toGatewayError({ status: read.reason === "aborted" ? 503 : 413 }),
-        );
+        result =
+          read.reason === "aborted"
+            ? wireResponse(
+                toGatewayError({
+                  status: 503,
+                  error: "caio_request_cancelled",
+                  retryAfterSeconds: 1,
+                }),
+              )
+            : wireResponse(toGatewayError({ status: 413 }));
       }
     } catch {
       // Nothing about an internal failure reaches the wire.
