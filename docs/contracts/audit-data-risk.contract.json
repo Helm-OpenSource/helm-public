@@ -2,8 +2,8 @@
   "schemaVersion": "helm.audit-data-risk-contract/v1",
   "contractKey": "audit-data-risk",
   "contractVersion": "2026-08-04.5",
-  "moduleSha256": "31d3187d4c5c3325e62dd4b9fa671d78b10ed418e28a304ece25c74b72ace09e",
-  "contractTestSha256": "16fcb19a3ae3ceb235ea3f3c854b5ce12dc65061de9229835a9f09a2bd80703d",
+  "moduleSha256": "bdf19e919d86ef5fcb231013b03913336cc285bd4b363985cca283a6495fb0a6",
+  "contractTestSha256": "2a482d490139ac4b8294db5b799b6d6f11896d52b2b03030d57ca5233e80c436",
   "status": "public_safe_digest_anchor",
   "consumers": [
     "pack-boundary-audit",
