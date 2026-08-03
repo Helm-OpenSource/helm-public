@@ -36,7 +36,9 @@ function buildFileMap(overrides: Record<string, string | null> = {}) {
       'LLM_DEFAULT_PROVIDER="qwen"',
       'LLM_ENABLED="false"',
       'ASR_ENABLED="false"',
+      'ASR_PROVIDER="openai"',
       'ASR_OPENAI_MODEL="gpt-4o-mini-transcribe"',
+      'ASR_DASHSCOPE_MODEL="qwen3-asr-flash"',
       'CONNECTOR_TOKEN_SECRET="public-local-connector-token-secret-000000000000"',
     ].join("\n"),
     "README.md": "For delivery engineers",
@@ -412,7 +414,7 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
     expect(check?.detail).toContain("dashscope");
   });
 
-  it("keeps the China delivery profile and OpenAI-only ASR precheck visible", () => {
+  it("keeps the China delivery profile and ASR provider contract visible", () => {
     const summary = runWithFiles(buildFileMap());
 
     expect(
@@ -427,7 +429,68 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
     ).toBe("pass");
   });
 
-  it("fails when ASR is configured as a Qwen or generic provider path", () => {
+  it("accepts dashscope as an explicit disabled-by-default ASR provider", () => {
+    const summary = runWithFiles(
+      buildFileMap({
+        ".env.example": [
+          `${helmEnvKey("DEPLOYMENT", "REGION")}="global"`,
+          `${helmEnvKey("DATA", "RESIDENCY")}="global"`,
+          'NPM_CONFIG_REGISTRY="https://registry.npmjs.org/"',
+          'DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"',
+          'LLM_DEFAULT_PROVIDER="qwen"',
+          'ASR_PROVIDER="dashscope"',
+          'ASR_ENABLED="false"',
+          'ASR_DASHSCOPE_MODEL="qwen3-asr-flash"',
+          'CONNECTOR_TOKEN_SECRET="public-local-connector-token-secret-000000000000"',
+        ].join("\n"),
+      }),
+    );
+
+    const check = summary.checks.find(
+      (entry) => entry.id === "asr:openai-only-precheck",
+    );
+    expect(summary.passed).toBe(true);
+    expect(check?.status).toBe("pass");
+    expect(check?.detail).toContain("dashscope");
+  });
+
+  it.each([
+    { provider: "openai", modelKey: "ASR_OPENAI_MODEL", modelValue: undefined },
+    { provider: "openai", modelKey: "ASR_OPENAI_MODEL", modelValue: "" },
+    { provider: "openai", modelKey: "ASR_OPENAI_MODEL", modelValue: "   " },
+    { provider: "dashscope", modelKey: "ASR_DASHSCOPE_MODEL", modelValue: undefined },
+    { provider: "dashscope", modelKey: "ASR_DASHSCOPE_MODEL", modelValue: "" },
+    { provider: "dashscope", modelKey: "ASR_DASHSCOPE_MODEL", modelValue: "   " },
+  ])(
+    "fails when $provider has a missing or blank $modelKey",
+    ({ provider, modelKey, modelValue }) => {
+      const modelLine = modelValue === undefined ? [] : [`${modelKey}="${modelValue}"`];
+      const summary = runWithFiles(
+        buildFileMap({
+          ".env.example": [
+            `${helmEnvKey("DEPLOYMENT", "REGION")}="global"`,
+            `${helmEnvKey("DATA", "RESIDENCY")}="global"`,
+            'NPM_CONFIG_REGISTRY="https://registry.npmjs.org/"',
+            'DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"',
+            'LLM_DEFAULT_PROVIDER="qwen"',
+            `ASR_PROVIDER="${provider}"`,
+            'ASR_ENABLED="false"',
+            ...modelLine,
+            'CONNECTOR_TOKEN_SECRET="public-local-connector-token-secret-000000000000"',
+          ].join("\n"),
+        }),
+      );
+
+      const check = summary.checks.find(
+        (entry) => entry.id === "asr:openai-only-precheck",
+      );
+      expect(summary.passed).toBe(false);
+      expect(check?.status).toBe("fail");
+      expect(check?.detail).toContain(modelKey);
+    },
+  );
+
+  it("fails when ASR uses an unsupported generic provider", () => {
     const summary = runWithFiles(
       buildFileMap({
         ".env.example": [
@@ -445,10 +508,27 @@ describe("runDeliveryEngineerGoldenPathDoctor", () => {
       }),
     );
 
-    const check = summary.checks.find((entry) => entry.id === "asr:openai-only-precheck");
+    const check = summary.checks.find(
+      (entry) => entry.id === "asr:openai-only-precheck",
+    );
     expect(summary.passed).toBe(false);
     expect(check?.status).toBe("fail");
     expect(check?.detail).toContain("ASR_PROVIDER");
-    expect(check?.detail).toContain("ASR_OPENAI_MODEL");
+  });
+
+  it("fails when public ASR defaults are enabled", () => {
+    const files = buildFileMap();
+    files[".env.example"] = files[".env.example"]?.replace(
+      'ASR_ENABLED="false"',
+      'ASR_ENABLED="true"',
+    ) ?? "";
+    const summary = runWithFiles(files);
+    const check = summary.checks.find(
+      (entry) => entry.id === "asr:openai-only-precheck",
+    );
+
+    expect(summary.passed).toBe(false);
+    expect(check?.status).toBe("fail");
+    expect(check?.detail).toContain("ASR_ENABLED");
   });
 });

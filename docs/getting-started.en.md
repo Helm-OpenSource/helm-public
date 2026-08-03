@@ -244,7 +244,8 @@ npm run delivery:doctor -- --region cn
 The command does not make network calls or read customer systems. It flags
 common China-delivery misconfigurations: Qwen configured with only
 `OPENAI_API_KEY`, region / residency still set to `global`, missing npm mirror
-hints, or enabling the current OpenAI-only ASR path under a China profile.
+hints, or enabling ASR under a China profile while selecting OpenAI or selecting
+DashScope without its required key.
 
 ---
 

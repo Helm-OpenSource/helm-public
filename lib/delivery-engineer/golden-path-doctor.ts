@@ -629,7 +629,7 @@ function asrChinaBoundaryStatus(
       detail:
         regionProfile !== "cn"
           ? "global profile selected; China ASR boundary preflight is skipped"
-          : "ASR_ENABLED is not true; OpenAI-only ASR path is disabled for this China preflight",
+          : "ASR_ENABLED is not true; the capture ASR path is disabled for this China preflight",
     };
   }
 
@@ -653,8 +653,9 @@ function asrChinaBoundaryStatus(
     id: "config:asr-openai-china-boundary",
     title: "ASR China boundary",
     status: "warn",
-    detail:
-      "China profile requested and ASR_ENABLED=true, but the selected capture ASR provider is OpenAI-only",
+    detail: `China profile requested and ASR_ENABLED=true, but ASR_PROVIDER=${
+      asrProvider || "openai (default)"
+    } does not select the configured in-region DashScope path`,
     nextAction:
       "set ASR_PROVIDER=dashscope with DASHSCOPE_API_KEY for an in-region path, or keep ASR_ENABLED=false for China customer delivery",
   };
@@ -715,40 +716,46 @@ function chinaProfileStatus(env: Record<string, string> | null): DeliveryDoctorC
   };
 }
 
-function asrOpenAIOnlyStatus(env: Record<string, string> | null): DeliveryDoctorCheck {
+function asrProviderContractStatus(env: Record<string, string> | null): DeliveryDoctorCheck {
   if (!env) {
     return {
+      // Keep the v1 check id stable for machine-readable doctor consumers.
       id: "asr:openai-only-precheck",
-      title: "OpenAI-only ASR precheck",
+      title: "ASR provider contract precheck",
       status: "fail",
       detail: ".env.example is missing; ASR provider posture cannot be checked",
-      nextAction: "restore .env.example with ASR_OPENAI_MODEL and ASR_ENABLED defaults",
+      nextAction:
+        "restore .env.example with ASR_PROVIDER, ASR_ENABLED, and provider-specific model defaults",
     };
   }
 
   const issues: string[] = [];
-  if ("ASR_PROVIDER" in env) {
-    issues.push("ASR_PROVIDER must not be declared; ASR is OpenAI-only in public Core");
+  const provider = env.ASR_PROVIDER;
+  if (provider !== "openai" && provider !== "dashscope") {
+    issues.push("ASR_PROVIDER must be openai or dashscope");
   }
-  if (!env.ASR_OPENAI_MODEL) {
-    issues.push("ASR_OPENAI_MODEL is required for the OpenAI-only ASR path");
+  if (env.ASR_ENABLED !== "false") {
+    issues.push("ASR_ENABLED must default to false in .env.example");
   }
-  if (!("ASR_ENABLED" in env)) {
-    issues.push("ASR_ENABLED is required so forks can keep ASR disabled by default");
+  if (provider === "openai" && !env.ASR_OPENAI_MODEL?.trim()) {
+    issues.push("ASR_OPENAI_MODEL is required when ASR_PROVIDER=openai");
+  }
+  if (provider === "dashscope" && !env.ASR_DASHSCOPE_MODEL?.trim()) {
+    issues.push("ASR_DASHSCOPE_MODEL is required when ASR_PROVIDER=dashscope");
   }
 
   return {
     id: "asr:openai-only-precheck",
-    title: "OpenAI-only ASR precheck",
+    title: "ASR provider contract precheck",
     status: issues.length === 0 ? "pass" : "fail",
     detail:
       issues.length === 0
-        ? "ASR is explicitly OpenAI-only and disabled-by-default in .env.example"
+        ? `ASR_PROVIDER=${provider} is supported and ASR is disabled-by-default in .env.example`
         : issues.join("; "),
     nextAction:
       issues.length === 0
         ? undefined
-        : "remove generic / Qwen ASR provider wiring and keep ASR behind OpenAI configuration",
+        : "restore a supported ASR provider, its model default, and ASR_ENABLED=false without adding real credentials",
   };
 }
 
@@ -807,7 +814,7 @@ export function runDeliveryEngineerGoldenPathDoctor(
     chinaDockerMirrorGuidanceStatus(rootDir, exists, readFile),
     asrChinaBoundaryStatus(regionProfile, doctorEnv),
     chinaProfileStatus(envExample),
-    asrOpenAIOnlyStatus(envExample),
+    asrProviderContractStatus(envExample),
     connectorTokenSecretStatus(envExample),
   ];
 
