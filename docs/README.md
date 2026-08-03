@@ -70,7 +70,7 @@ connector 授权、写回、外发或审批证明。
 
 ## 公开契约 / Public Contracts
 
-- [数据风险审计摘要锚 / Data-risk audit digest anchor](contracts/audit-data-risk.contract.json) — 只固定跨仓审计模块的公开安全版本与 SHA-256；不是源码镜像、敏感数据扫描结果、部署授权或运行时回执。
+- [数据风险审计摘要锚 / Data-risk audit digest anchor](contracts/audit-data-risk.contract.json) — 只固定跨仓审计模块与契约测试的公开安全版本及 SHA-256；不是源码镜像、敏感数据扫描结果、部署授权或运行时回执。
 - [AI 推荐治理契约 / AI recommendation governance](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md)
 - [诊断与自动化证据层要求 / Diagnostic automation evidence layer requirements](product/HELM_DIAGNOSTIC_AUTOMATION_EVIDENCE_LAYER_REQUIREMENTS.md)
 - [智能体化实施工程治理需求 / Agentic implementation engineering governance requirements](product/HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md)
