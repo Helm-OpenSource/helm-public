@@ -233,6 +233,63 @@ describe("route table: which surfaces this listener owns", () => {
     });
   });
 
+  // THE SAME RULE, ONE LEVEL DOWN.
+  //
+  // /v1/responses and /v1/chat/completions call an upstream model provider with
+  // that provider's credentials — real external egress. /v1/models does not: it
+  // is discovery, built in-tree from the alias bindings the deployment supplies
+  // as DATA. A deployment that has bindings but no upstream engine can serve
+  // discovery honestly, and must not appear to offer dispatch it cannot do.
+  describe("a mount without an upstream model engine", () => {
+    function createDiscoveryOnlyMount() {
+      const spy = createPorts();
+      const { engine: _dropped, ...modelProxyWithoutEngine } =
+        spy.ports.modelProxy;
+      return {
+        spy,
+        mount: createCaioAccessGatewayMount({
+          config: CONFIG,
+          posture: "self_service",
+          ports: { ...spy.ports, modelProxy: modelProxyWithoutEngine },
+        }),
+      };
+    }
+
+    it("owns discovery but not dispatch", () => {
+      const { mount } = createDiscoveryOnlyMount();
+      expect(mount.apiPaths).toContain("/v1/models");
+      expect(mount.apiPaths).not.toContain("/v1/responses");
+      expect(mount.apiPaths).not.toContain("/v1/chat/completions");
+      // CONTROL: with an engine, both dispatch paths are owned.
+      expect(createServer().apiPaths).toContain("/v1/responses");
+      expect(createServer().apiPaths).toContain("/v1/chat/completions");
+    });
+
+    it("refuses dispatch without touching a port, and never calls upstream", async () => {
+      const { mount, spy } = createDiscoveryOnlyMount();
+      for (const url of ["/v1/responses", "/v1/chat/completions"]) {
+        const response = await mount.handle(
+          incoming({
+            method: "POST",
+            url,
+            headers: { authorization: "Bearer hcaio_mcp_test" },
+            body: "{}",
+          }),
+        );
+        expect(response.status, url).toBe(404);
+      }
+      // No credential loader, no upstream client, no audit receipt: an unowned
+      // path costs nothing and reaches nothing.
+      expect(spy.calls).toEqual([]);
+    });
+
+    it("still answers discovery and the probes", async () => {
+      const { mount } = createDiscoveryOnlyMount();
+      const ready = await mount.handle(incoming({ url: "/readyz" }));
+      expect(ready.status).toBe(200);
+    });
+  });
+
   it("mounts the REAL Access Gateway handler and reports the declared posture", async () => {
     const server = createServer();
     const response = await server.handle(incoming({ url: "/livez" }));

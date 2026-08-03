@@ -338,8 +338,20 @@ export type CaioAccessGatewayIncoming = Readonly<{
 
 /** Model ports this composition binds onto the /v1 surface. */
 export type CaioAccessGatewayModelPorts = Readonly<{
-  /** The proxy engine; the in-tree bridge adapts it to the gateway contract. */
-  engine: CaioModelProxy;
+  /**
+   * The proxy engine; the in-tree bridge adapts it to the gateway contract.
+   *
+   * OPTIONAL, for the same reason mcpDispatch is. Dispatch calls an upstream
+   * model provider with that provider's credentials — real external egress —
+   * whereas discovery (`GET /v1/models`) is built in-tree from `bindings` and
+   * calls nothing. A deployment that has bindings but no upstream engine can
+   * serve discovery honestly; without this it would have to choose between
+   * fabricating an engine and mounting nothing.
+   *
+   * When it is absent, /v1/responses and /v1/chat/completions are NOT OWNED by
+   * the mount, on exactly the terms /mcp is not owned without a dispatcher.
+   */
+  engine?: CaioModelProxy;
   /**
    * The alias bindings this deployment serves. Discovery (`GET /v1/models`) is
    * built FROM these by the in-tree list port rather than supplied as a
@@ -384,7 +396,9 @@ export type CaioAccessGatewayServerErrorCode =
    * ownership first; it exists so that a future change breaking that ordering
    * fails loudly instead of quietly serving a path the mount never claimed.
    */
-  | "MCP_DISPATCH_UNAVAILABLE";
+  | "MCP_DISPATCH_UNAVAILABLE"
+  /** As above, for the two upstream dispatch paths. */
+  | "MODEL_DISPATCH_UNAVAILABLE";
 
 export class CaioAccessGatewayServerError extends Error {
   readonly code: CaioAccessGatewayServerErrorCode;
@@ -526,9 +540,10 @@ export function createCaioAccessGatewayMount(
 
   // The /v1 dispatch surface, composed from the in-tree bridge so the chain
   // gateway -> proxy -> canonical audit gate is the real one.
-  const modelDispatch = createCaioGatewayModelDispatchPort({
-    proxy: input.ports.modelProxy.engine,
-  });
+  const engine = input.ports.modelProxy.engine;
+  const modelDispatch = engine
+    ? createCaioGatewayModelDispatchPort({ proxy: engine })
+    : null;
 
   // Discovery is derived from the same bindings the dispatch path resolves
   // against, so a suspended or ungranted route can never be advertised.
@@ -539,10 +554,19 @@ export function createCaioAccessGatewayMount(
   // Which paths THIS mount owns. `/mcp` only when a dispatcher was supplied;
   // see the port's declaration for why it is the one optional input.
   const servesMcp = typeof input.ports.mcpDispatch === "function";
+  const servesModelDispatch = modelDispatch !== null;
+  const UNOWNED_WITHOUT_PORT: Readonly<Record<string, boolean>> = Object.freeze({
+    "/mcp": servesMcp,
+    "/v1/responses": servesModelDispatch,
+    "/v1/chat/completions": servesModelDispatch,
+  });
   const routeTable: readonly CaioAccessGatewayRoute[] = Object.freeze(
     CAIO_ACCESS_GATEWAY_ROUTE_TABLE.map((row) =>
-      row.path === "/mcp"
-        ? Object.freeze({ ...row, servedByThisSurface: servesMcp })
+      row.path in UNOWNED_WITHOUT_PORT
+        ? Object.freeze({
+            ...row,
+            servedByThisSurface: UNOWNED_WITHOUT_PORT[row.path] === true,
+          })
         : row,
     ),
   );
@@ -570,8 +594,25 @@ export function createCaioAccessGatewayMount(
         );
       }),
     modelProxy: {
-      responses: modelDispatch.responses,
-      chatCompletions: modelDispatch.chatCompletions,
+      // Unreachable without an engine: `handle` refuses both dispatch paths on
+      // ownership first. Throwing rather than answering keeps a future ordering
+      // mistake loud instead of plausible.
+      responses:
+        modelDispatch?.responses ??
+        (() => {
+          throw new CaioAccessGatewayServerError(
+            "MODEL_DISPATCH_UNAVAILABLE",
+            "no upstream model engine was supplied to this mount; /v1/responses is not owned by it",
+          );
+        }),
+      chatCompletions:
+        modelDispatch?.chatCompletions ??
+        (() => {
+          throw new CaioAccessGatewayServerError(
+            "MODEL_DISPATCH_UNAVAILABLE",
+            "no upstream model engine was supplied to this mount; /v1/chat/completions is not owned by it",
+          );
+        }),
       listModels: modelList.listModels,
     },
     auditGate: input.ports.auditGate,
@@ -607,7 +648,11 @@ export function createCaioAccessGatewayMount(
     // in the same place. /mcp without a dispatcher is not "a route that will
     // fail later": it is not served, so it is answered exactly as any undeclared
     // path is — before authentication, before the rate limiter, before any port.
-    if (!servesMcp && (request.url.split("?")[0] ?? "") === "/mcp") {
+    const requestPath = request.url.split("?")[0] ?? "";
+    if (
+      requestPath in UNOWNED_WITHOUT_PORT &&
+      UNOWNED_WITHOUT_PORT[requestPath] !== true
+    ) {
       return wireResponse(toGatewayError({ status: 404 }));
     }
 
