@@ -17,14 +17,27 @@
  * NOT owned unless an MCP dispatcher is supplied:
  *   /mcp
  *
- * That is not a bug to fix later. Five of the six production ports this surface
- * needs now have real implementations in this repository — token authenticator
- * (createCaioAccessTokenService over the Prisma persistence), project resolver,
- * canonical audit gate, readiness probe, and the model proxy engine, with the
- * model alias bindings supplied as deployment DATA by design. The MCP
- * dispatcher has none, and writing a plausible one here would produce a facade
- * that dispatches nothing while looking like it dispatches — the failure this
- * paragraph has warned about since before the mount existed.
+ * That is not a bug to fix later. Verified one by one, THREE of the six
+ * production ports are constructible in this repository today. The
+ * token authenticator (createCaioAccessTokenService over
+ * createPrismaCaioAccessTokenPersistence), the canonical audit gate
+ * (createCaioAuditGate over createPrismaCaioAuditReceiptStore and
+ * createCaioEmergencyQueue), and the readiness probe derived from that gate —
+ * with the model alias bindings supplied as deployment DATA by design. Two are
+ * absent: the MCP dispatcher has nothing but test doubles, and the
+ * project resolver is a TYPE ONLY — declared alongside a helper that consumes
+ * one, while nothing anywhere produces one.
+ *
+ * AN EARLIER VERSION OF THIS PARAGRAPH SAID FIVE OF SIX. That was wrong, and
+ * the error is worth naming because of how it was made: the survey matched the
+ * file that DECLARES the project-resolver type and read that as an
+ * implementation. The count mattered — it was part of the case for re-making
+ * the mount decision — so it is corrected here rather than quietly restated.
+ *
+ * Writing a plausible in-tree stand-in for either absent port would produce a
+ * facade that dispatches nothing, or authorizes every project, while looking
+ * like it works — the failure this paragraph has warned about since before the
+ * mount existed.
  *
  * So `mcpDispatch` is the one OPTIONAL port. Without it the mount does not
  * claim /mcp: the path drops out of `apiPaths`, its route-table row reports
