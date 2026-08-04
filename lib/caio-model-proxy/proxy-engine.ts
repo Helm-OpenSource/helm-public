@@ -156,7 +156,7 @@ export type CaioRateLimiterPort = {
 };
 
 export type CaioCredentialLoaderPort = {
-  load(input: { credentialRef: string }): Promise<string>;
+  load(input: { credentialRef: string; signal?: AbortSignal }): Promise<string>;
 };
 
 type CaioModelProxyCommonDependencies = {
@@ -399,6 +399,69 @@ function noRoute(reasonCode: string): CaioProxyExecuteResult {
     fallbackReceiptId: null,
     auditRefusal: null,
   };
+}
+
+function cancelledResult(): CaioProxyExecuteResult {
+  return {
+    status: "cancelled",
+    httpStatus: 499,
+    reasonCode: "client_cancelled",
+    receiptId: null,
+    retryAfterSeconds: null,
+    body: null,
+    upstream: null,
+    fallbackAttempted: false,
+    fallbackSucceeded: false,
+    fallbackReceiptId: null,
+    auditRefusal: null,
+  };
+}
+
+class CaioProxyCancellation extends Error {
+  constructor() {
+    super("caio_proxy_cancelled");
+    this.name = "CaioProxyCancellation";
+  }
+}
+
+/**
+ * Stop awaiting a non-cooperative port when the host withdraws the request.
+ * The operation is lazy so a pre-aborted request cannot touch the port.
+ */
+async function runWithCaioProxyCancellation<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (signal?.aborted) throw new CaioProxyCancellation();
+  if (!signal) return operation();
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const onAbort = () => finish(() => reject(new CaioProxyCancellation()));
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+
+    let pending: Promise<T>;
+    try {
+      pending = Promise.resolve(operation());
+    } catch (error) {
+      finish(() => reject(error));
+      return;
+    }
+    pending.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
 }
 
 /**
@@ -711,9 +774,10 @@ export function createCaioModelProxy(
     }
   }
 
-  async function execute(
+  async function executeUncancelled(
     input: CaioProxyExecuteInput,
   ): Promise<CaioProxyExecuteResult> {
+    if (input.signal?.aborted) throw new CaioProxyCancellation();
     const binding = bindingsByAlias.get(input.alias);
     if (!binding) return noRoute("alias_unknown");
 
@@ -734,7 +798,10 @@ export function createCaioModelProxy(
     // credential load and every upstream call so the refusal costs no receipt
     // and produces no egress.
     const at = clock();
-    const admission = await admitRoute(binding, at);
+    const admission = await runWithCaioProxyCancellation(
+      () => admitRoute(binding, at),
+      input.signal,
+    );
     if (!admission.admitted) return routeNotAdmitted();
 
     if (binding.status !== "active") return noRoute("alias_disabled");
@@ -793,7 +860,10 @@ export function createCaioModelProxy(
       policyVersion: binding.policyVersion,
     };
     const claimed = readClaimOutcome(
-      await deps.auditGate.claimDispatch(claim),
+      await runWithCaioProxyCancellation(
+        () => deps.auditGate.claimDispatch(claim),
+        input.signal,
+      ),
     );
     if (!claimed.claimed) {
       return refusedClaimResult(claimed.refusal);
@@ -802,10 +872,15 @@ export function createCaioModelProxy(
 
     let apiKey: string;
     try {
-      apiKey = await deps.credentialLoader.load({
-        credentialRef: binding.credentialRef,
-      });
-    } catch {
+      apiKey = await runWithCaioProxyCancellation(
+        () => deps.credentialLoader.load({
+          credentialRef: binding.credentialRef,
+          ...(input.signal ? { signal: input.signal } : {}),
+        }),
+        input.signal,
+      );
+    } catch (error) {
+      if (error instanceof CaioProxyCancellation) throw error;
       // Never propagate loader error details (they can describe key files).
       return {
         status: "credential_unavailable",
@@ -822,7 +897,10 @@ export function createCaioModelProxy(
       };
     }
 
-    const primaryOutcome = await invokeBinding(binding, input, apiKey);
+    const primaryOutcome = await runWithCaioProxyCancellation(
+      () => invokeBinding(binding, input, apiKey),
+      input.signal,
+    );
     const primaryUpstream = describeUpstream(binding);
 
     if (primaryOutcome.status !== "upstream_error") {
@@ -846,7 +924,10 @@ export function createCaioModelProxy(
     for (const option of binding.fallbackCandidates) {
       if (!isFallbackAllowed(binding, option)) continue;
       if (!grantedAliases.has(option.alias)) continue;
-      const optionAdmission = await admitRoute(option, clock());
+      const optionAdmission = await runWithCaioProxyCancellation(
+        () => admitRoute(option, clock()),
+        input.signal,
+      );
       if (!optionAdmission.admitted) continue;
       candidate = option;
       break;
@@ -878,7 +959,10 @@ export function createCaioModelProxy(
       policyVersion: candidate.policyVersion,
     };
     const fallbackClaimed = readClaimOutcome(
-      await deps.auditGate.claimDispatch(fallbackClaim),
+      await runWithCaioProxyCancellation(
+        () => deps.auditGate.claimDispatch(fallbackClaim),
+        input.signal,
+      ),
     );
     if (!fallbackClaimed.claimed) {
       return upstreamErrorResult(
@@ -893,10 +977,15 @@ export function createCaioModelProxy(
     // Max ONE fallback attempt, to the first equivalence-passing candidate.
     let fallbackKey: string;
     try {
-      fallbackKey = await deps.credentialLoader.load({
-        credentialRef: candidate.credentialRef,
-      });
-    } catch {
+      fallbackKey = await runWithCaioProxyCancellation(
+        () => deps.credentialLoader.load({
+          credentialRef: candidate.credentialRef,
+          ...(input.signal ? { signal: input.signal } : {}),
+        }),
+        input.signal,
+      );
+    } catch (error) {
+      if (error instanceof CaioProxyCancellation) throw error;
       return upstreamErrorResult(
         primaryOutcome,
         receiptId,
@@ -906,12 +995,26 @@ export function createCaioModelProxy(
       );
     }
 
-    const fallbackOutcome = await invokeBinding(candidate, input, fallbackKey);
+    const fallbackOutcome = await runWithCaioProxyCancellation(
+      () => invokeBinding(candidate, input, fallbackKey),
+      input.signal,
+    );
     return toResult(fallbackOutcome, receiptId, describeUpstream(candidate), {
       attempted: true,
       succeeded: fallbackOutcome.status === "ok",
       receiptId: fallbackReceiptId,
     });
+  }
+
+  async function execute(
+    input: CaioProxyExecuteInput,
+  ): Promise<CaioProxyExecuteResult> {
+    try {
+      return await executeUncancelled(input);
+    } catch (error) {
+      if (error instanceof CaioProxyCancellation) return cancelledResult();
+      throw error;
+    }
   }
 
   return { execute };

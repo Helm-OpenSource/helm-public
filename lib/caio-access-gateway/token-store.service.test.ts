@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CaioAccessGatewayError } from "@/lib/caio-access-gateway/gateway-error-contract";
 import { createInMemoryCaioAccessTokenPersistence } from "@/lib/caio-access-gateway/token-store.memory";
@@ -109,6 +109,40 @@ describe("issueCaioTokenPair", () => {
 });
 
 describe("authenticateCaioToken", () => {
+  it("does not claim a rate slot after cancellation while token lookup is pending", async () => {
+    const { persistence, service: issuingService } = setup();
+    const pair = await issuingService.issueCaioTokenPair({ ...BINDING, now: NOW });
+    const record = persistence.peek(pair.mcp.record.id);
+    expect(record).not.toBeNull();
+
+    let releaseLookup!: () => void;
+    const lookup = new Promise<typeof record>((resolve) => {
+      releaseLookup = () => resolve(record);
+    });
+    const claimRateSlot = vi.fn(persistence.claimRateSlot);
+    const service = createCaioAccessTokenService({
+      persistence: {
+        ...persistence,
+        findByTokenHash: async () => lookup,
+        claimRateSlot,
+      },
+    });
+    const controller = new AbortController();
+
+    const pending = service.authenticateCaioToken({
+      rawToken: pair.mcp.rawToken,
+      expectedAudience: "mcp",
+      sourceIp: BINDING.approvedSourceIp,
+      now: NOW,
+      signal: controller.signal,
+    });
+    controller.abort();
+    releaseLookup();
+
+    await expectGatewayError(pending, "request_cancelled", 503);
+    expect(claimRateSlot).not.toHaveBeenCalled();
+  });
+
   it("authenticates a valid token into a principal", async () => {
     const { service } = setup();
     const pair = await service.issueCaioTokenPair({ ...BINDING, now: NOW });

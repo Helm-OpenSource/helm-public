@@ -161,6 +161,8 @@ export type CaioGatewayRequest = Readonly<{
   /** Client ip as observed by the transport adapter (not any header). */
   clientIp: string;
   body?: string | Uint8Array | null;
+  /** Host shutdown/deadline cancellation, never supplied by the client. */
+  signal?: AbortSignal;
 }>;
 
 export type CaioGatewayResponse = Readonly<{
@@ -177,6 +179,7 @@ export type CaioTokenAuthenticatorPort = Readonly<{
     sourceIp: string;
     now: Date;
     rateLimitPerMinute?: number;
+    signal?: AbortSignal;
   }): Promise<CaioAccessPrincipal>;
 }>;
 
@@ -203,6 +206,7 @@ export type CaioMcpDispatchPort = (input: {
    * deliberate breach rather than a gap.
    */
   authorizedProjectRefs: readonly string[];
+  signal?: AbortSignal;
   /** Live per-request project gate bound to the injected resolver. */
   assertProjectAccess(projectRef: string): Promise<void>;
 }) => Promise<unknown>;
@@ -248,12 +252,14 @@ export type CaioModelProxyPort = Readonly<{
     requestId: string;
     clientCorrelationId: string | null;
     payload: unknown;
+    signal?: AbortSignal;
   }): Promise<CaioModelDispatchOutcome>;
   chatCompletions(input: {
     principal: CaioAccessPrincipal;
     requestId: string;
     clientCorrelationId: string | null;
     payload: unknown;
+    signal?: AbortSignal;
   }): Promise<CaioModelDispatchOutcome>;
   /**
    * Must respond only with the aliases granted to the presented token. This is
@@ -275,6 +281,7 @@ export type CaioModelProxyPort = Readonly<{
     userRef: string;
     clientType: string;
     grantedAliases?: readonly string[];
+    signal?: AbortSignal;
   }): Promise<unknown>;
 }>;
 
@@ -291,7 +298,7 @@ export type CaioReadinessState = "ready" | "degraded" | "unavailable";
  * vocabulary. A probe that throws fails the readiness check closed.
  */
 export type CaioReadinessProbePort = Readonly<{
-  getReadiness(): Promise<CaioAuditGateReadiness>;
+  getReadiness(options?: Readonly<{ signal?: AbortSignal }>): Promise<CaioAuditGateReadiness>;
 }>;
 
 export type CaioGatewayHandlerDependencies = Readonly<{
@@ -391,6 +398,56 @@ function wireResponse(error: CaioGatewayWireError): CaioGatewayResponse {
 
 function jsonResponse(status: number, body: unknown): CaioGatewayResponse {
   return Object.freeze({ status, headers: JSON_HEADERS, body });
+}
+
+function requestCancelledError(): CaioAccessGatewayError {
+  return new CaioAccessGatewayError("request_cancelled", {
+    retryAfterSeconds: 1,
+  });
+}
+
+function throwIfRequestCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw requestCancelledError();
+}
+
+/**
+ * Stop waiting as soon as the host withdraws the request. The operation is
+ * supplied lazily so an already-aborted signal cannot touch the port at all.
+ */
+async function runWithRequestCancellation<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  throwIfRequestCancelled(signal);
+  if (!signal) return operation();
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const onAbort = () => finish(() => reject(requestCancelledError()));
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+
+    let pending: Promise<T>;
+    try {
+      pending = Promise.resolve(operation());
+    } catch (error) {
+      finish(() => reject(error));
+      return;
+    }
+    pending.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
 }
 
 /**
@@ -698,13 +755,23 @@ export function createCaioGatewayHandler(
    * "serving through the encrypted emergency queue" only under `self_service`,
    * and an operator must be able to see which contract the answer belongs to.
    */
-  async function readinessResponse(): Promise<CaioGatewayResponse> {
+  async function readinessResponse(
+    signal?: AbortSignal,
+  ): Promise<CaioGatewayResponse> {
     let state: CaioReadinessState;
     try {
       state = caioGatewayReadinessFromAuditGate(
-        await dependencies.readinessProbe.getReadiness(),
+        await runWithRequestCancellation(
+          () => dependencies.readinessProbe.getReadiness(
+            signal ? { signal } : undefined,
+          ),
+          signal,
+        ),
       );
-    } catch {
+    } catch (error) {
+      if (isCaioAccessGatewayError(error)) {
+        return wireResponse(caioGatewayWireErrorFromError(error));
+      }
       state = "unavailable";
     }
     if (state === "unavailable") {
@@ -722,14 +789,21 @@ export function createCaioGatewayHandler(
    * exactly like a genuine limit hit so it discloses nothing about the
    * limiter's state or about whether any token exists.
    */
-  async function claimSourceIpBudget(sourceIp: string): Promise<void> {
+  async function claimSourceIpBudget(
+    sourceIp: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     let allowed: boolean;
     let retryAfterSeconds = LIMITER_UNAVAILABLE_RETRY_AFTER_SECONDS;
     try {
-      const slot = await dependencies.preAuthRateLimiter.claimSourceIpSlot({
-        sourceIp,
-        now: now(),
-      });
+      const slot = await runWithRequestCancellation(
+        () => dependencies.preAuthRateLimiter.claimSourceIpSlot({
+          sourceIp,
+          now: now(),
+          ...(signal ? { signal } : {}),
+        }),
+        signal,
+      );
       allowed = slot.allowed;
       if (!slot.allowed) retryAfterSeconds = slot.retryAfterSeconds;
     } catch (error) {
@@ -749,10 +823,14 @@ export function createCaioGatewayHandler(
    */
   async function claimAuditSlot(
     claim: CaioCanonicalAuditClaim,
+    signal?: AbortSignal,
   ): Promise<AuditBackedOutcome> {
     let outcome: unknown;
     try {
-      outcome = await dependencies.auditGate.claimDispatch(claim);
+      outcome = await runWithRequestCancellation(
+        () => dependencies.auditGate.claimDispatch(claim),
+        signal,
+      );
     } catch (error) {
       if (isCaioAccessGatewayError(error)) throw error;
       throw new CaioAuditUnavailableSignal();
@@ -768,7 +846,7 @@ export function createCaioGatewayHandler(
 
     // 2. Pre-authentication cost control, before any token lookup, so
     //    invalid credentials cannot be replayed for free.
-    await claimSourceIpBudget(request.clientIp);
+    await claimSourceIpBudget(request.clientIp, request.signal);
 
     // The client's own id is a correlation hint only; the authoritative
     // request id is generated below, after authentication, from the server's
@@ -784,13 +862,17 @@ export function createCaioGatewayHandler(
     }
 
     // 4. Authenticate (audience + source ip + rate limit taxonomy).
-    const principal = await dependencies.tokenAuthenticator.authenticate({
-      rawToken,
-      expectedAudience: route.audience,
-      sourceIp: request.clientIp,
-      now: now(),
-      rateLimitPerMinute: dependencies.rateLimitPerMinute,
-    });
+    const principal = await runWithRequestCancellation(
+      () => dependencies.tokenAuthenticator.authenticate({
+        rawToken,
+        expectedAudience: route.audience,
+        sourceIp: request.clientIp,
+        now: now(),
+        rateLimitPerMinute: dependencies.rateLimitPerMinute,
+        ...(request.signal ? { signal: request.signal } : {}),
+      }),
+      request.signal,
+    );
 
     // 5. Server-side request identity: workspace-scoped random id. A client
     //    can neither choose it nor collide with another workspace's ids.
@@ -820,11 +902,15 @@ export function createCaioGatewayHandler(
     }
 
     const boundAssertProjectAccess = (projectRef: string) =>
-      assertProjectAccess(
-        dependencies.projectResolver,
-        principal.workspaceId,
-        principal.userRef,
-        projectRef,
+      runWithRequestCancellation(
+        () => assertProjectAccess(
+          dependencies.projectResolver,
+          principal.workspaceId,
+          principal.userRef,
+          projectRef,
+          request.signal,
+        ),
+        request.signal,
       );
 
     // 8. Project-scope resolution + live membership gate for /mcp.
@@ -882,22 +968,26 @@ export function createCaioGatewayHandler(
         inputHash: sha256(canonicalJson(payload)),
         policyVersion: mcpAuditPolicyVersion,
       };
-      const claimed = await claimAuditSlot(claim);
+      const claimed = await claimAuditSlot(claim, request.signal);
       if (!claimed.claimed) return wireResponse(claimed.wire);
     }
 
     // 10. Dispatch.
     switch (route.kind) {
       case "mcp": {
-        const result = await dependencies.mcpDispatch({
-          principal,
-          requestId,
-          clientCorrelationId,
-          payload,
-          toolName,
-          authorizedProjectRefs,
-          assertProjectAccess: boundAssertProjectAccess,
-        });
+        const result = await runWithRequestCancellation(
+          () => dependencies.mcpDispatch({
+            principal,
+            requestId,
+            clientCorrelationId,
+            payload,
+            toolName,
+            authorizedProjectRefs,
+            ...(request.signal ? { signal: request.signal } : {}),
+            assertProjectAccess: boundAssertProjectAccess,
+          }),
+          request.signal,
+        );
         // ENUMERATION CONTRACT: a tools/list answer is projected through the
         // allowlist and the feature-flag state before it leaves the gateway, so
         // the listing can never exceed what assertToolAllowed + the flags would
@@ -912,42 +1002,54 @@ export function createCaioGatewayHandler(
       }
       case "model_responses": {
         const dispatched = readModelDispatchOutcome(
-          await dependencies.modelProxy.responses({
-            principal,
-            requestId,
-            clientCorrelationId,
-            payload,
-          }),
+          await runWithRequestCancellation(
+            () => dependencies.modelProxy.responses({
+              principal,
+              requestId,
+              clientCorrelationId,
+              payload,
+              ...(request.signal ? { signal: request.signal } : {}),
+            }),
+            request.signal,
+          ),
         );
         if (!dispatched.claimed) return wireResponse(dispatched.wire);
         return okResponse(dispatched.body, clientCorrelationId);
       }
       case "model_chat_completions": {
         const dispatched = readModelDispatchOutcome(
-          await dependencies.modelProxy.chatCompletions({
-            principal,
-            requestId,
-            clientCorrelationId,
-            payload,
-          }),
+          await runWithRequestCancellation(
+            () => dependencies.modelProxy.chatCompletions({
+              principal,
+              requestId,
+              clientCorrelationId,
+              payload,
+              ...(request.signal ? { signal: request.signal } : {}),
+            }),
+            request.signal,
+          ),
         );
         if (!dispatched.claimed) return wireResponse(dispatched.wire);
         return okResponse(dispatched.body, clientCorrelationId);
       }
       case "model_list": {
-        const result = await dependencies.modelProxy.listModels({
-          workspaceId: principal.workspaceId,
-          userRef: principal.userRef,
-          clientType: principal.clientType,
-          // Spread rather than assign: an absent key and an explicitly empty
-          // grant mean different things, and writing `grantedAliases:
-          // principal.grantedAliases` would turn "no grant stored" into a
-          // present-but-undefined key that an implementation could read as
-          // either one.
-          ...(principal.grantedAliases === undefined
-            ? {}
-            : { grantedAliases: principal.grantedAliases }),
-        });
+        const result = await runWithRequestCancellation(
+          () => dependencies.modelProxy.listModels({
+            workspaceId: principal.workspaceId,
+            userRef: principal.userRef,
+            clientType: principal.clientType,
+            // Spread rather than assign: an absent key and an explicitly empty
+            // grant mean different things, and writing `grantedAliases:
+            // principal.grantedAliases` would turn "no grant stored" into a
+            // present-but-undefined key that an implementation could read as
+            // either one.
+            ...(principal.grantedAliases === undefined
+              ? {}
+              : { grantedAliases: principal.grantedAliases }),
+            ...(request.signal ? { signal: request.signal } : {}),
+          }),
+          request.signal,
+        );
         return okResponse(result, clientCorrelationId);
       }
     }
@@ -956,6 +1058,9 @@ export function createCaioGatewayHandler(
   return async function handleCaioGatewayRequest(
     request: CaioGatewayRequest,
   ): Promise<CaioGatewayResponse> {
+    if (request.signal?.aborted) {
+      return wireResponse(caioGatewayWireErrorFromError(requestCancelledError()));
+    }
     // 1. Parse route (before anything else; unknown -> 404, method -> 405).
     const path = request.path.split("?")[0] ?? "";
     const method = request.method.toUpperCase();
@@ -978,7 +1083,7 @@ export function createCaioGatewayHandler(
           Object.freeze({ status: "alive", posture: activePosture }),
         );
       }
-      return await readinessResponse();
+      return await readinessResponse(request.signal);
     }
 
     const routeMethods = AUTHED_ROUTES[path];

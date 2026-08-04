@@ -15,6 +15,7 @@ export type ProjectMembershipResolver = Readonly<{
   listAccessibleProjectRefs(
     workspaceId: string,
     userRef: string,
+    options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<readonly string[]>;
 }>;
 
@@ -27,10 +28,12 @@ export async function assertProjectAccess(
   workspaceId: string,
   userRef: string,
   projectRef: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const accessible = await resolver.listAccessibleProjectRefs(
     workspaceId,
     userRef,
+    signal ? { signal } : undefined,
   );
   if (!accessible.includes(projectRef)) {
     throw new CaioAccessGatewayError("project_access_revoked");

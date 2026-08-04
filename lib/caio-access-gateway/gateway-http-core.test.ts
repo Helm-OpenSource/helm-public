@@ -100,6 +100,7 @@ function createHarness(
     mcpDispatch: CaioGatewayHandlerDependencies["mcpDispatch"];
     modelProxy: Partial<CaioGatewayHandlerDependencies["modelProxy"]>;
     auditGate: CaioGatewayHandlerDependencies["auditGate"];
+    readinessProbe: CaioGatewayHandlerDependencies["readinessProbe"];
     preAuthRateLimiter: CaioGatewayHandlerDependencies["preAuthRateLimiter"];
     featureFlags: CaioGatewayHandlerDependencies["featureFlags"];
     projectRefs: readonly string[];
@@ -192,7 +193,7 @@ function createHarness(
         };
       },
     },
-    readinessProbe: {
+    readinessProbe: overrides.readinessProbe ?? {
       getReadiness: async () => {
         calls.push("readinessProbe");
         if (readinessFails) throw new Error("audit store down");
@@ -319,6 +320,40 @@ describe("probes", () => {
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ error: "caio_audit_unavailable" });
     expect(Number(response.headers["retry-after"])).toBeGreaterThan(0);
+  });
+
+  it("cancels a readiness probe that has not answered", async () => {
+    let started!: () => void;
+    const probeStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const harness = createHarness({
+      readinessProbe: {
+        getReadiness: async () => {
+          started();
+          return new Promise<CaioAuditGateReadiness>((resolve) =>
+            setTimeout(() => resolve("ready"), 100),
+          );
+        },
+      },
+    });
+    const controller = new AbortController();
+    const pending = harness.handler(
+      request({
+        method: "GET",
+        path: "/readyz",
+        headers: {},
+        body: null,
+        signal: controller.signal,
+      } as Partial<CaioGatewayRequest> & { signal: AbortSignal }),
+    );
+    await probeStarted;
+    controller.abort();
+
+    const response = await pending;
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ error: "caio_request_cancelled" });
+    expect(response.headers["retry-after"]).toBe("1");
   });
 });
 
@@ -1380,6 +1415,43 @@ describe("audit gate", () => {
 });
 
 describe("model proxy routes", () => {
+  it("propagates cancellation into a pending model dispatch", async () => {
+    let started!: () => void;
+    const dispatchStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let observedSignal: AbortSignal | undefined;
+    const harness = createHarness({
+      modelProxy: {
+        responses: async (input) => {
+          observedSignal = (
+            input as typeof input & { signal?: AbortSignal }
+          ).signal;
+          started();
+          return new Promise<CaioModelDispatchOutcome>((resolve) =>
+            setTimeout(() => resolve(MODEL_DISPATCH_OK), 100),
+          );
+        },
+      },
+    });
+    const controller = new AbortController();
+    const pending = harness.handler(
+      request({
+        path: "/v1/responses",
+        body: JSON.stringify({ model: "caio-codex-default", input: "hello" }),
+        signal: controller.signal,
+      } as Partial<CaioGatewayRequest> & { signal: AbortSignal }),
+    );
+    await dispatchStarted;
+    controller.abort();
+
+    const response = await pending;
+    expect(observedSignal).toBe(controller.signal);
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ error: "caio_request_cancelled" });
+    expect(response.headers["retry-after"]).toBe("1");
+  });
+
   it("GET /v1/models delegates with the token's workspace/user/clientType", async () => {
     const harness = createHarness();
     const response = await harness.handler(

@@ -655,6 +655,30 @@ describe("request body reading", () => {
     });
   });
 
+  it("closes the request iterator when the body exceeds the cap", async () => {
+    let returnCalls = 0;
+    const oversizedBody: AsyncIterable<Buffer> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next: async () => ({
+            done: false as const,
+            value: Buffer.from("0123456789", "utf8"),
+          }),
+          return: async () => {
+            returnCalls += 1;
+            return { done: true as const, value: undefined };
+          },
+        };
+      },
+    };
+
+    expect(await readCaioAccessGatewayBody(oversizedBody, 4)).toEqual({
+      ok: false,
+      reason: "too-large",
+    });
+    expect(returnCalls).toBe(1);
+  });
+
   it("reads nothing at all when the host's signal is already aborted", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -677,7 +701,39 @@ describe("request body reading", () => {
       ok: true,
       body: "0123456789",
     });
-    expect(pulled).toBe(1);
+    expect(pulled).toBe(0);
     expect(pulledAgain).toBe(1);
+  });
+
+  it("stops while the first body chunk is still pending", async () => {
+    const controller = new AbortController();
+    let returnCalls = 0;
+    const pendingBody: AsyncIterable<Buffer> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next: () => new Promise<IteratorResult<Buffer>>(() => {}),
+          return: async () => {
+            returnCalls += 1;
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    };
+
+    const reading = readCaioAccessGatewayBody(
+      pendingBody,
+      1024,
+      controller.signal,
+    );
+    controller.abort();
+
+    const result = await Promise.race([
+      reading,
+      new Promise<"timed-out">((resolve) =>
+        setTimeout(() => resolve("timed-out"), 50),
+      ),
+    ]);
+    expect(result).toEqual({ ok: false, reason: "aborted" });
+    expect(returnCalls).toBe(1);
   });
 });

@@ -3,19 +3,21 @@
  *
  * V1 PRODUCT BOUNDARY — READ THIS BEFORE ANYTHING ELSE
  * ----------------------------------------------------
- * This surface IS MOUNTED IN V1, as the subset a deployment can actually serve.
- * The owner reversed the earlier "WorkBuddy only" decision on 2026-08-03, on
- * the specific question of whether to mount; the reversal is recorded in
- * helm-self's caio-access-gateway-binding.json, and the overlay composition is
- * what performs the mount. This repository still binds no socket.
+ * MOUNT AUTHORIZED IN V1; NOT UNCONDITIONALLY MOUNTED. On 2026-08-03 the owner
+ * authorized the Overlay composition to mount this surface when every required
+ * deployment input is present. Missing any input produces a named, fail-closed
+ * unmounted declaration. This public repository supplies the mount factory; it
+ * contains no deployment receipt and cannot claim that any runtime is mounted,
+ * reachable, or activated.
  *
- * WHAT IS SERVED, AND WHAT IS NOT
- * -------------------------------
- * Owned when the deployment supplies the ports for them:
- *   /v1/responses  /v1/chat/completions  /v1/models  /livez  /readyz
+ * WHAT THE SURFACE CAN OWN, AND WHAT IT CANNOT
+ * --------------------------------------------
+ * Base paths when the deployment supplies all required inputs:
+ *   /v1/models  /livez  /readyz
  *
- * NOT owned unless an MCP dispatcher is supplied:
- *   /mcp
+ * OPTIONAL capabilities unlock narrower paths:
+ *   model engine    /v1/responses  /v1/chat/completions
+ *   MCP dispatcher  /mcp
  *
  * That is not a bug to fix later. Verified one by one, THREE of the six
  * production ports are constructible in this repository today. The
@@ -39,21 +41,20 @@
  * like it works — the failure this paragraph has warned about since before the
  * mount existed.
  *
- * So `mcpDispatch` is the one OPTIONAL port. Without it the mount does not
- * claim /mcp: the path drops out of `apiPaths`, its route-table row reports
- * servedByThisSurface: false, and `handle` refuses it on ownership before
- * authentication — the same 404 any undeclared path gets, decided before a
- * rate-limit slot or a token store is touched. A deployment therefore serves
- * what it can serve, instead of choosing between a facade and no gateway.
+ * Both `mcpDispatch` and the nested model engine are OPTIONAL capabilities.
+ * Without one, its dispatch paths drop out of `apiPaths`, report
+ * servedByThisSurface: false, and return the same 404 as an undeclared path
+ * before authentication or any business port is touched. Discovery remains a
+ * local projection of model alias bindings and performs no provider egress.
  *
  * WHAT THE PREVIOUS BOUNDARY SAID, AND WHY IT CHANGED
  * ---------------------------------------------------
  * Until 2026-08-03 this header said the surface was NOT mounted, on two
  * grounds: a product edge (WorkBuddy-only was what V1 shipped) and a mechanical
  * fact (the six ports had no implementation anywhere). The mechanical claim had
- * gone stale — five of the six acquired real implementations while the sentence
- * stayed — and the product edge was the owner's to move. Both changed, and this
- * is the record of it rather than a silent edit.
+ * gone stale — three ports became constructible and the alias-binding input was
+ * formalized while the sentence stayed — and the product edge was the owner's
+ * to move. Both changed, and this is the record rather than a silent edit.
  *
  * RE-ENTRY CONDITIONS FOR /mcp — all of them, or it stays unowned
  * ---------------------------------------------------------------
@@ -64,7 +65,7 @@
  *      Bridging the two is an authentication-boundary decision, not an adapter,
  *      and is the owner's to make.
  *   2. helm-self's caio-access-gateway-binding.json records the dispatcher as
- *      supplied, alongside the mount it already records.
+ *      supplied, alongside the conditional mount policy.
  *   3. Owner authorization for that specific surface is recorded in the same
  *      binding — a boundaries.ownerAuthorizationRecorded entry naming /mcp,
  *      as one now records the mount itself.
@@ -78,13 +79,10 @@
  *
  * WHY THE MOUNT STAYS ANYWAY
  * --------------------------
- * createCaioAccessGatewayMount below has no production caller in any
- * repository; it is exercised by tests and by nothing else. It is kept
- * deliberately. It is the seam a later version mounts, and deleting it would
- * force whoever re-enters to re-derive the route table, the mTLS-first
- * ordering and the surface-ownership split from scratch — the parts that are
- * genuinely hard and are genuinely finished. Mountable and tested is the whole
- * claim being made here.
+ * createCaioAccessGatewayMount is the public composition boundary consumed by
+ * an Overlay host. Keeping it here gives the host one tested route table, the
+ * mTLS-first ordering and the surface-ownership split. That cross-repository
+ * composition evidence is still not deployment or runtime activation evidence.
  *
  * This module is the non-test caller of the gateway protocol core: it mounts
  * createCaioGatewayHandler once. Before it existed the protocol core had no
@@ -105,20 +103,19 @@
  *
  * WHAT IS NOT TRUE YET — read this before treating the file as deployed
  * ---------------------------------------------------------------------
- * NO MODULE IN THIS REPOSITORY BINDS A SOCKET FOR THIS SURFACE. The host that
- * does lives in the Overlay repository (helm-self workbuddy-lan composed
- * gateway), which this repository cannot see or test. An earlier version of
+ * NO MODULE IN THIS REPOSITORY BINDS A SOCKET FOR THIS SURFACE. A compatible
+ * host composition lives in the Overlay repository and decides mount state
+ * from deployment inputs. An earlier version of
  * this header said this module "is what a deployment runner starts", which was
  * false in exactly the way that matters: it described an intended end state as
  * an accomplished one, and anyone auditing the tree for "is the Access Gateway
  * actually served" would have been told yes.
  *
- * What is true is narrower and worth stating precisely: the surface exists, is
- * total over its route table, is mountable onto a host listener, and is covered
- * by tests. Serving traffic additionally requires a host that supplies the
- * socket and the TLS material, and ports that are deployment inputs — which is
- * why no default is invented here. `production-caller.test.ts` fails if this
- * paragraph and the tree ever disagree in either direction.
+ * What is true is narrower: the surface exists, is total over its route table,
+ * is mountable onto a host listener, and is covered by tests. Serving traffic
+ * additionally requires a host, TLS material, every required deployment input,
+ * and a recorded runtime result. `production-caller.test.ts` fails if this
+ * paragraph overclaims what the public tree proves.
  *
  * ONE SOCKET, ONE HANDLER
  * -----------------------
@@ -140,10 +137,10 @@
  *   /readyz                 GET      access_gateway_api     yes
  *   /mcp/workbuddy          *        workbuddy_lan_gateway  NO
  *
- * The column says which paths this surface would answer IF a host routed them
- * to it. Per the V1 boundary above, no host does: in V1 every row marked
- * access_gateway_api is 404 at the delivery, and `servedByThisSurface` in the
- * data below means "owned by this surface", never "reachable in V1".
+ * The static table records path ownership. createCaioAccessGatewayMount derives
+ * a per-mount table that disables dispatch paths whose OPTIONAL capability is
+ * absent. Neither table says a deployment supplied the required inputs or that
+ * a runtime is reachable.
  *
  * This surface owns the ACCESS GATEWAY API only. The WorkBuddy MCP surface
  * (`/mcp/workbuddy`) is terminated by the OTHER surface on the same host, with
@@ -191,7 +188,10 @@ import {
   type CaioReadinessProbePort,
   type CaioTokenAuthenticatorPort,
 } from "@/lib/caio-access-gateway/gateway-http-core";
-import { toGatewayError } from "@/lib/caio-access-gateway/gateway-error-contract";
+import {
+  caioRequestCancelledWireError,
+  toGatewayError,
+} from "@/lib/caio-access-gateway/gateway-error-contract";
 import {
   createCaioGatewayModelDispatchPort,
   createCaioGatewayModelListPort,
@@ -282,7 +282,7 @@ export const CAIO_ACCESS_GATEWAY_ROUTE_TABLE: readonly CaioAccessGatewayRoute[] 
     }),
   ]);
 
-/** The API paths this process serves. */
+/** Every API path declared before per-mount capability filtering. */
 export const CAIO_ACCESS_GATEWAY_API_PATHS: readonly string[] = Object.freeze(
   CAIO_ACCESS_GATEWAY_ROUTE_TABLE.filter(
     (route) => route.owner === "access_gateway_api",
@@ -347,6 +347,8 @@ export type CaioAccessGatewayIncoming = Readonly<{
   /** The verified mTLS peer, or null when the transport could not verify one. */
   peer: WorkBuddyMtlsPeer | null;
   body: string | null;
+  /** Host shutdown/deadline cancellation, never a request header. */
+  signal?: AbortSignal;
 }>;
 
 /** Model ports this composition binds onto the /v1 surface. */
@@ -382,10 +384,10 @@ export type CaioAccessGatewayServerPorts = Readonly<{
   tokenAuthenticator: CaioTokenAuthenticatorPort;
   projectResolver: ProjectMembershipResolver;
   /**
-   * OPTIONAL, and the only optional port here.
+   * OPTIONAL capability for /mcp. The model engine nested under modelProxy is
+   * independently optional for the two model-dispatch paths.
    *
-   * Five of the six ports this surface needs have real implementations in this
-   * repository. The MCP dispatcher does not, and writing a plausible one
+   * The MCP dispatcher has no in-tree implementation, and writing a plausible one
    * in-tree would produce a facade that dispatches nothing while looking like
    * it dispatches — the specific failure this surface's header warns about.
    *
@@ -517,14 +519,58 @@ export async function readCaioAccessGatewayBody(
 > {
   const parts: Buffer[] = [];
   let size = 0;
-  for await (const chunk of chunks) {
+  const iterator = chunks[Symbol.asyncIterator]();
+  const abortResult = Symbol("caio-body-read-aborted");
+  const closeIterator = (): void => {
+    try {
+      const closed = iterator.return?.();
+      if (closed) void Promise.resolve(closed).catch(() => undefined);
+    } catch {
+      // Cancellation is already the answer; iterator cleanup cannot replace it.
+    }
+  };
+
+  for (;;) {
     if (signal?.aborted) {
+      closeIterator();
       return Object.freeze({ ok: false as const, reason: "aborted" as const });
     }
+
+    const next = Promise.resolve(iterator.next());
+    const item = signal
+      ? await new Promise<IteratorResult<Buffer | string> | typeof abortResult>(
+          (resolve, reject) => {
+            let settled = false;
+            const finish = (callback: () => void): void => {
+              if (settled) return;
+              settled = true;
+              signal.removeEventListener("abort", onAbort);
+              callback();
+            };
+            const onAbort = () => finish(() => resolve(abortResult));
+            signal.addEventListener("abort", onAbort, { once: true });
+            if (signal.aborted) {
+              onAbort();
+              return;
+            }
+            next.then(
+              (value) => finish(() => resolve(value)),
+              (error) => finish(() => reject(error)),
+            );
+          },
+        )
+      : await next;
+    if (item === abortResult) {
+      closeIterator();
+      return Object.freeze({ ok: false as const, reason: "aborted" as const });
+    }
+    if (item.done) break;
+    const chunk = item.value;
     const buffer =
       typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
     size += buffer.byteLength;
     if (size > maxBytes) {
+      closeIterator();
       return Object.freeze({ ok: false as const, reason: "too-large" as const });
     }
     parts.push(buffer);
@@ -686,6 +732,7 @@ export function createCaioAccessGatewayMount(
       headers: lowerCasedHeaders(request.headers),
       clientIp,
       body: request.body,
+      ...(request.signal ? { signal: request.signal } : {}),
     });
   }
 
@@ -702,13 +749,7 @@ export function createCaioAccessGatewayMount(
     // request that arrived after shutdown reach a token authenticator, a model
     // proxy or an audit gate.
     if (signal?.aborted) {
-      result = wireResponse(
-        toGatewayError({
-          status: 503,
-          error: "caio_request_cancelled",
-          retryAfterSeconds: 1,
-        }),
-      );
+      result = wireResponse(caioRequestCancelledWireError());
       response.writeHead(result.status, { ...result.headers });
       response.end(JSON.stringify(result.body ?? null));
       return;
@@ -731,18 +772,13 @@ export function createCaioAccessGatewayMount(
             request.socket as unknown as CaioTlsSocketFacts,
           ),
           body: read.body,
+          ...(signal ? { signal } : {}),
         });
         // Aborted while the route was running: the host is no longer waiting
         // for this answer, and sending a success would report work as
         // delivered that the host has already accounted as cancelled.
         if (signal?.aborted) {
-          result = wireResponse(
-        toGatewayError({
-          status: 503,
-          error: "caio_request_cancelled",
-          retryAfterSeconds: 1,
-        }),
-      );
+          result = wireResponse(caioRequestCancelledWireError());
         }
       } else {
         // A cancelled read and an oversized one are different facts: one is the
@@ -750,11 +786,7 @@ export function createCaioAccessGatewayMount(
         result =
           read.reason === "aborted"
             ? wireResponse(
-                toGatewayError({
-                  status: 503,
-                  error: "caio_request_cancelled",
-                  retryAfterSeconds: 1,
-                }),
+                caioRequestCancelledWireError(),
               )
             : wireResponse(toGatewayError({ status: 413 }));
       }

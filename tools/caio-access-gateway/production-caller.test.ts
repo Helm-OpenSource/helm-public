@@ -1,6 +1,6 @@
-// Regression guard: the CAIO access gateway protocol core must have a
-// NON-TEST production caller, and its header must keep telling the truth about
-// what V1 serves.
+// Regression guard: the CAIO access gateway protocol core must have a NON-TEST
+// composition caller, and its header must keep telling the truth about what the
+// public tree does and does not prove.
 //
 // The gateway handler (createCaioGatewayHandler) once existed with no caller
 // outside its own directory and its own tests: a protocol core nothing
@@ -9,10 +9,9 @@
 // composition stops mounting the handler, or because the composition module
 // disappears.
 //
-// It also guards the V1 PRODUCT BOUNDARY: this surface is not mounted in V1.
-// That is a decision, and a decision that lives only in a commit message stops
-// being readable within a week. The header must state it, and this file fails
-// if the statement is removed or quietly softened back into a TODO.
+// It also guards the V1 PRODUCT BOUNDARY: conditional mount authorization is
+// not runtime evidence. The header must state both facts and this file fails if
+// either is quietly promoted into a deployment claim.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -64,7 +63,7 @@ function compositionHeader(): string {
   return end === -1 ? "" : source.slice(0, end + 2);
 }
 
-function productionCallers(): string[] {
+function nonTestCompositionCallers(): string[] {
   const callers: string[] = [];
   for (const root of SCANNED_ROOTS) {
     const absoluteRoot = path.join(REPO_ROOT, root);
@@ -79,9 +78,9 @@ function productionCallers(): string[] {
   return callers.sort();
 }
 
-describe("the gateway protocol core has a production caller", () => {
+describe("the gateway protocol core has a non-test composition caller", () => {
   it("is called from at least one non-test module outside its own definition", () => {
-    const callers = productionCallers();
+    const callers = nonTestCompositionCallers();
     expect(callers.length).toBeGreaterThan(0);
     expect(callers).toContain(COMPOSITION);
   });
@@ -155,7 +154,8 @@ describe("the gateway protocol core has a production caller", () => {
     // THE DECISION, and its date, so the reversal is readable rather than
     // inferred from a diff.
     expect(header).toContain("V1 PRODUCT BOUNDARY");
-    expect(header).toContain("IS MOUNTED IN V1");
+    expect(header).toContain("MOUNT AUTHORIZED IN V1");
+    expect(header).toContain("NOT UNCONDITIONALLY MOUNTED");
     expect(header).toContain("2026-08-03");
 
     // WHAT IS NOT SERVED. /mcp has no dispatcher, and the header must say so
@@ -164,8 +164,8 @@ describe("the gateway protocol core has a production caller", () => {
     expect(header).toContain("OPTIONAL");
     expect(header).toContain("404");
 
-    // The ports, named one by one so nobody has to go and count them. The list
-    // is the same; what changed is that five of them now exist.
+    // The ports, named one by one so required deployment inputs and optional
+    // capabilities cannot disappear inside generic wiring language.
     for (const port of [
       "token authenticator",
       "project resolver",

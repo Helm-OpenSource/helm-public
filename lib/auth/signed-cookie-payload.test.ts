@@ -80,6 +80,16 @@ describe("signed cookie payloads", () => {
     expect(parseSignedCookiePayload(PURPOSE, issued)).toEqual({ ok: true });
   });
 
+  it("never signs with the previous secret when the current secret is absent", () => {
+    delete process.env.CONNECTOR_TOKEN_SECRET;
+    process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS = "b".repeat(48);
+    vi.stubEnv("NODE_ENV", "production");
+
+    expect(() => serializeSignedCookiePayload(PURPOSE, { ok: true })).toThrow(
+      SignedCookieSecretMissingError,
+    );
+  });
+
   it("refuses malformed and empty input rather than throwing", () => {
     for (const value of [null, undefined, "", ".", "no-separator", "a.", ".b"]) {
       expect(parseSignedCookiePayload(PURPOSE, value)).toBeNull();

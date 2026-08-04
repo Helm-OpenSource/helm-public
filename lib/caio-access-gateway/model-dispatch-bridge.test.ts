@@ -378,7 +378,8 @@ describe("caioModelDispatchOutcomeFromProxyResult", () => {
         proxyResult({ status: "cancelled", body: null }),
       ),
     );
-    expect(error.wireStatus).toBe(502);
+    expect(error.code).toBe("request_cancelled");
+    expect(error.wireStatus).toBe(503);
   });
 });
 
@@ -416,6 +417,17 @@ describe("createCaioGatewayModelDispatchPort", () => {
       },
       body: { model: "caio-codex-default", input: "hello" },
     });
+  });
+
+  it("carries the host cancellation signal into the proxy", async () => {
+    const h = harness();
+    const controller = new AbortController();
+    await h.port.responses({
+      ...REQUEST,
+      signal: controller.signal,
+    } as Parameters<typeof h.port.responses>[0] & { signal: AbortSignal });
+
+    expect(h.execute.mock.calls[0][0].signal).toBe(controller.signal);
   });
 
   it("dispatches /v1/chat/completions on the chat_completions protocol", async () => {

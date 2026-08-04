@@ -33,6 +33,7 @@ export type CaioPreAuthRateLimiterPort = Readonly<{
   claimSourceIpSlot(input: {
     sourceIp: string;
     now: Date;
+    signal?: AbortSignal;
   }): Promise<CaioRateSlotResult>;
 }>;
 

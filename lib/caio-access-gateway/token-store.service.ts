@@ -85,7 +85,10 @@ export type CaioAccessTokenPersistence = Readonly<{
   insertIfNoActiveBinding(
     rows: readonly CaioAccessTokenRecord[],
   ): Promise<CaioTokenInsertResult>;
-  findByTokenHash(tokenHash: string): Promise<CaioAccessTokenRecord | null>;
+  findByTokenHash(
+    tokenHash: string,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<CaioAccessTokenRecord | null>;
   findById(input: {
     workspaceId: string;
     tokenId: string;
@@ -99,6 +102,7 @@ export type CaioAccessTokenPersistence = Readonly<{
     now: Date;
     windowMs: number;
     limit: number;
+    signal?: AbortSignal;
   }): Promise<CaioRateSlotResult>;
   /**
    * Single transaction: conditionally flip the old row from
@@ -177,6 +181,7 @@ export type CaioAccessTokenService = Readonly<{
     sourceIp: string;
     now: Date;
     rateLimitPerMinute?: number;
+    signal?: AbortSignal;
   }): Promise<CaioAccessPrincipal>;
   rotateCaioToken(input: {
     workspaceId: string;
@@ -204,6 +209,14 @@ function unauthorized(
     | "audience_mismatch",
 ): CaioAccessGatewayError {
   return new CaioAccessGatewayError(code);
+}
+
+function throwIfRequestCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new CaioAccessGatewayError("request_cancelled", {
+      retryAfterSeconds: 1,
+    });
+  }
 }
 
 export function createCaioAccessTokenService(
@@ -301,6 +314,7 @@ export function createCaioAccessTokenService(
     },
 
     async authenticateCaioToken(input): Promise<CaioAccessPrincipal> {
+      throwIfRequestCancelled(input.signal);
       // Malformed tokens are indistinguishable from unknown tokens so the
       // failure reveals nothing about the token space.
       if (!isWellFormedCaioToken(input.rawToken)) {
@@ -308,7 +322,11 @@ export function createCaioAccessTokenService(
       }
       const record = await persistence.findByTokenHash(
         hashCaioAccessToken(input.rawToken),
+        input.signal ? { signal: input.signal } : undefined,
       );
+      // Prisma cannot cancel an in-flight query, but a query released after
+      // host cancellation must not start the stateful rate-slot claim below.
+      throwIfRequestCancelled(input.signal);
       if (!record) throw unauthorized("token_unknown");
 
       // The rate slot is claimed as soon as the token RESOLVES, before the
@@ -332,7 +350,9 @@ export function createCaioAccessTokenService(
         now: input.now,
         windowMs: CAIO_RATE_WINDOW_MS,
         limit,
+        ...(input.signal ? { signal: input.signal } : {}),
       });
+      throwIfRequestCancelled(input.signal);
 
       if (record.status === "revoked") throw unauthorized("token_revoked");
       if (record.status === "rotated") throw unauthorized("token_rotated");

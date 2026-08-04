@@ -136,6 +136,7 @@ describe("CaioAccessGatewayError", () => {
         ["rate_limited", 429],
         ["upstream_failed", 502],
         ["audit_unavailable", 503],
+        ["request_cancelled", 503],
         ["no_route", 503],
       ];
     for (const [code, status] of cases) {
@@ -175,6 +176,13 @@ describe("CaioAccessGatewayError", () => {
     expect(audit.status).toBe(503);
     expect(audit.body).toEqual({ error: "caio_audit_unavailable" });
     expect(Number(audit.headers["retry-after"])).toBeGreaterThan(0);
+
+    const cancelled = caioGatewayWireErrorFromError(
+      new CaioAccessGatewayError("request_cancelled"),
+    );
+    expect(cancelled.status).toBe(503);
+    expect(cancelled.body).toEqual({ error: "caio_request_cancelled" });
+    expect(cancelled.headers["retry-after"]).toBe("1");
   });
 
   it("binds the two audit refusal codes to 409 and 429", () => {

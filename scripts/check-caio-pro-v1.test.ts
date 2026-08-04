@@ -415,4 +415,78 @@ describe("caio-pro-v1 aggregate gate", () => {
       },
     );
   });
+
+  it("rejects a cross-org checkout that persists its read token", () => {
+    withFixture(
+      {
+        ".github/workflows/ci.yml": [
+          "jobs:",
+          "  caio-overlay-composition-contract:",
+          "    permissions:",
+          "      contents: read",
+          "    steps:",
+          "      - uses: actions/checkout@v5",
+          "        with:",
+          "          repository: Helm-Developers/helm-overlays",
+          "          token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}",
+          "          persist-credentials: true",
+          "",
+          "  caio-pro-v1-mysql:",
+          "    env:",
+          "      MYSQL_DATABASE: helm_caio_pro_v1_ci",
+          "      CAIO_PRO_V1_TEST_DATABASE_NAME: helm_caio_pro_v1_ci",
+          "    steps:",
+          "      - run: printf 'CAIO_PRO_V1_DATABASE_URL=%s\\n' \"${url}\"",
+          "      - run: npx tsx prisma/setup-db.ts prepare",
+          "      - run: npm run test:caio-pro-v1:mysql",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.detail.includes("persist-credentials"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("requires least-privilege permissions on the cross-org contract job", () => {
+    withFixture(
+      {
+        ".github/workflows/ci.yml": [
+          "jobs:",
+          "  caio-overlay-composition-contract:",
+          "    steps:",
+          "      - uses: actions/checkout@v5",
+          "        with:",
+          "          repository: Helm-Developers/helm-overlays",
+          "          token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}",
+          "          persist-credentials: false",
+          "",
+          "  caio-pro-v1-mysql:",
+          "    env:",
+          "      MYSQL_DATABASE: helm_caio_pro_v1_ci",
+          "      CAIO_PRO_V1_TEST_DATABASE_NAME: helm_caio_pro_v1_ci",
+          "    steps:",
+          "      - run: printf 'CAIO_PRO_V1_DATABASE_URL=%s\\n' \"${url}\"",
+          "      - run: npx tsx prisma/setup-db.ts prepare",
+          "      - run: npm run test:caio-pro-v1:mysql",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.detail.includes("least-privilege"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
 });

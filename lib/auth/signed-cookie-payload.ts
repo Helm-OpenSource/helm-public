@@ -40,11 +40,20 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
+/** The only secret allowed to mint a new cookie. */
+function configuredSigningSecret(): string | null {
+  const primary = process.env.CONNECTOR_TOKEN_SECRET?.trim();
+  if (primary) return primary;
+  if (isProduction()) return null;
+  return EPHEMERAL_DEVELOPMENT_SECRET;
+}
+
 /**
  * Every secret a signature may be verified against: the current one first, then
- * the previous one during a rotation window. Signing always uses the first.
+ * the previous one during a rotation window. A previous secret is never
+ * promoted to signing authority when the current secret is absent.
  */
-function configuredSecrets(): string[] {
+function configuredVerificationSecrets(): string[] {
   const primary = process.env.CONNECTOR_TOKEN_SECRET?.trim();
   const previous = process.env.CONNECTOR_TOKEN_SECRET_PREVIOUS?.trim();
   const secrets = [primary, previous].filter(
@@ -94,7 +103,7 @@ export function serializeSignedCookiePayload(
   purpose: string,
   payload: unknown,
 ): string {
-  const secret = configuredSecrets()[0];
+  const secret = configuredSigningSecret();
   if (!secret) throw new SignedCookieSecretMissingError();
   if (isProduction() && secret.length < MIN_PRODUCTION_SECRET_LENGTH) {
     throw new Error(
@@ -123,7 +132,7 @@ export function parseSignedCookiePayload<T>(
   const encoded = rawValue.slice(0, separator);
   const signature = rawValue.slice(separator + 1);
 
-  const accepted = configuredSecrets().some((secret) =>
+  const accepted = configuredVerificationSecrets().some((secret) =>
     signaturesMatch(signature, sign(encoded, secret, purpose)),
   );
   if (!accepted) return null;

@@ -175,6 +175,8 @@ const EXPECTED_GATE_COMMAND =
   "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts";
 
 const REQUIRED_CI_TOKENS = [
+  "caio-overlay-composition-contract:",
+  "HELM_OVERLAYS_READ_TOKEN",
   "caio-pro-v1-mysql:",
   "MYSQL_DATABASE: helm_caio_pro_v1_ci",
   // The connection string is minted at runtime and injected through
@@ -931,6 +933,42 @@ export function checkCaioProV1Static(
           file: CI_WORKFLOW,
           detail: "caio-pro-v1-mysql job must not be skippable",
         });
+      }
+    }
+    const compositionJobStart = workflowContent.indexOf(
+      "caio-overlay-composition-contract:",
+    );
+    if (compositionJobStart >= 0) {
+      const rest = workflowContent.slice(compositionJobStart);
+      const nextJob = rest.slice(1).search(/\n {2}[a-z][a-z0-9-]*:\n/u);
+      const jobBlock = nextJob >= 0 ? rest.slice(0, nextJob + 1) : rest;
+      if (!/\n {4}permissions:\n {6}contents: read\s*(?:\n|$)/u.test(jobBlock)) {
+        violations.push({
+          rule: "CPV1-CI",
+          file: CI_WORKFLOW,
+          detail:
+            "caio-overlay-composition-contract must declare least-privilege contents: read permissions",
+        });
+      }
+
+      const privateToken =
+        "token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}";
+      const privateTokenIndex = jobBlock.indexOf(privateToken);
+      if (privateTokenIndex >= 0) {
+        const stepStart = jobBlock.lastIndexOf("\n      - ", privateTokenIndex);
+        const nextStep = jobBlock.indexOf("\n      - ", privateTokenIndex);
+        const checkoutStep = jobBlock.slice(
+          Math.max(0, stepStart),
+          nextStep >= 0 ? nextStep : undefined,
+        );
+        if (!/\n {10}persist-credentials:\s*false\s*(?:\n|$)/u.test(checkoutStep)) {
+          violations.push({
+            rule: "CPV1-CI",
+            file: CI_WORKFLOW,
+            detail:
+              "the private Overlay checkout must set persist-credentials: false so PR-controlled steps cannot recover its read token",
+          });
+        }
       }
     }
   }

@@ -61,8 +61,12 @@ jobs:
   caio-overlay-composition-contract:
     name: CAIO Public-Overlay composition contract
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -107,6 +111,7 @@ jobs:
           ref: ${{ steps.pin.outputs.commit }}
           path: .deps/helm-overlays
           token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}
+          persist-credentials: false
 
       # No checkout, a checkout at the wrong commit, or a composition that has
       # stopped mounting the real interface all fail here. The suite has no case

@@ -172,7 +172,9 @@ export function caioModelDispatchOutcomeFromProxyResult(
     case "cancelled":
       // The caller abandoned the dispatch before the upstream answered. There
       // is no body to serve, so fail closed rather than answer 200 with null.
-      throw new CaioAccessGatewayError("upstream_failed");
+      throw new CaioAccessGatewayError("request_cancelled", {
+        retryAfterSeconds: 1,
+      });
 
     default: {
       const unexpected: never = result.status;
@@ -240,6 +242,7 @@ export function createCaioGatewayModelDispatchPort(deps: {
       /** Correlation hint only: never an audit identity. Unused on purpose. */
       clientCorrelationId: string | null;
       payload: unknown;
+      signal?: AbortSignal;
     },
   ): Promise<CaioModelDispatchOutcome> {
     const body = asJsonObjectPayload(input.payload);
@@ -268,6 +271,7 @@ export function createCaioGatewayModelDispatchPort(deps: {
       // The server-generated request id is the audit identity. The client's own
       // correlation header is never used here.
       requestId: input.requestId,
+      ...(input.signal ? { signal: input.signal } : {}),
     });
     return caioModelDispatchOutcomeFromProxyResult(result);
   }

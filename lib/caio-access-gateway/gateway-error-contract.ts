@@ -69,6 +69,7 @@ export type CaioAccessGatewayErrorCode =
   | "upstream_failed"
   // 503-class
   | "audit_unavailable"
+  | "request_cancelled"
   | "no_route";
 
 export type CaioGatewayWireStatus =
@@ -110,6 +111,7 @@ const WIRE_STATUS_BY_CODE: Readonly<
   audit_replay_limit_exceeded: 429,
   upstream_failed: 502,
   audit_unavailable: 503,
+  request_cancelled: 503,
   no_route: 503,
 });
 
@@ -312,6 +314,15 @@ export function toGatewayError(
   }
 }
 
+/** The host withdrew the request; this is not a dependency outage. */
+export function caioRequestCancelledWireError(): CaioGatewayWireError {
+  return toGatewayError({
+    status: 503,
+    error: "caio_request_cancelled",
+    retryAfterSeconds: 1,
+  });
+}
+
 const DEFAULT_RETRY_AFTER_SECONDS = 5;
 
 /**
@@ -363,6 +374,9 @@ export function caioGatewayWireErrorFromError(
     case 502:
       return toGatewayError({ status: 502 });
     case 503:
+      if (error.code === "request_cancelled") {
+        return caioRequestCancelledWireError();
+      }
       return toGatewayError({
         status: 503,
         error:

@@ -1098,6 +1098,82 @@ describe("fallback", () => {
     });
     expect(h.responsesInvoke).toHaveBeenCalledTimes(1);
   });
+
+  it("touches no audit, credential, or upstream port when already cancelled", async () => {
+    const h = makeHarness();
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await h.proxy.execute(
+      baseExecuteInput({ signal: controller.signal }),
+    );
+
+    expect(result.status).toBe("cancelled");
+    expect(h.claimDispatch).not.toHaveBeenCalled();
+    expect(h.credentialLoad).not.toHaveBeenCalled();
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+
+  it("does not load a credential after cancellation during the audit claim", async () => {
+    const h = makeHarness();
+    const controller = new AbortController();
+    let releaseClaim!: (outcome: CaioCanonicalAuditGateOutcome) => void;
+    h.claimDispatch.mockImplementationOnce(
+      () =>
+        new Promise<CaioCanonicalAuditGateOutcome>((resolve) => {
+          releaseClaim = resolve;
+        }),
+    );
+
+    const pending = h.proxy.execute(
+      baseExecuteInput({ signal: controller.signal }),
+    );
+    await vi.waitFor(() => expect(h.claimDispatch).toHaveBeenCalledTimes(1));
+    controller.abort();
+
+    const result = await Promise.race([
+      pending,
+      new Promise<"timed-out">((resolve) =>
+        setTimeout(() => resolve("timed-out"), 50),
+      ),
+    ]);
+    releaseClaim(ALLOWED_OUTCOME);
+    await pending;
+    expect(result).not.toBe("timed-out");
+    expect(result).toMatchObject({ status: "cancelled" });
+    expect(h.credentialLoad).not.toHaveBeenCalled();
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
+
+  it("does not dispatch after cancellation during credential loading", async () => {
+    const h = makeHarness();
+    const controller = new AbortController();
+    let releaseCredential!: (credential: string) => void;
+    h.credentialLoad.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          releaseCredential = resolve;
+        }),
+    );
+
+    const pending = h.proxy.execute(
+      baseExecuteInput({ signal: controller.signal }),
+    );
+    await vi.waitFor(() => expect(h.credentialLoad).toHaveBeenCalledTimes(1));
+    controller.abort();
+
+    const result = await Promise.race([
+      pending,
+      new Promise<"timed-out">((resolve) =>
+        setTimeout(() => resolve("timed-out"), 50),
+      ),
+    ]);
+    releaseCredential("late-secret");
+    await pending;
+    expect(result).not.toBe("timed-out");
+    expect(result).toMatchObject({ status: "cancelled" });
+    expect(h.responsesInvoke).not.toHaveBeenCalled();
+  });
 });
 
 describe("normalized result hygiene", () => {
