@@ -416,7 +416,7 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
-  it("rejects private Overlay credentials and checkout from Public CI", () => {
+  it("rejects variable-driven external checkout and generic secrets from Public CI", () => {
     withFixture(
       {
         ".github/workflows/ci.yml": [
@@ -433,12 +433,48 @@ describe("caio-pro-v1 aggregate gate", () => {
         ].join("\n"),
         ".github/workflows/private-composition.yml": [
           "jobs:",
-          "  caio-overlay-composition-contract:",
+          "  composition-contract:",
           "    steps:",
           "      - uses: actions/checkout@v5",
           "        with:",
-          "          repository: Helm-Developers/helm-overlays",
-          "          token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}",
+          "          \"repository\": ${{ vars.CROSS_REPO }}",
+          "          token: ${{ secrets['READ_ONLY_REPOSITORY'] }}",
+          "          persist-credentials: false",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        const violations = checkCaioProV1Static(root);
+        expect(
+          violations.some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file ===
+                ".github/workflows/private-composition.yml" &&
+              violation.detail.includes("external checkout is not allowlisted"),
+          ),
+        ).toBe(true);
+        expect(
+          violations.some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file ===
+                ".github/workflows/private-composition.yml" &&
+              violation.detail.includes("must not reference Actions secrets"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects manual repository fetches from Public CI", () => {
+    withFixture(
+      {
+        ".github/workflows/remote-fetch.yml": [
+          "jobs:",
+          "  composition-contract:",
+          "    steps:",
+          "      - run: git -C .deps/downstream fetch origin ${{ vars.CROSS_REPO }}",
           "",
         ].join("\n"),
       },
@@ -447,26 +483,85 @@ describe("caio-pro-v1 aggregate gate", () => {
           checkCaioProV1Static(root).some(
             (violation) =>
               violation.rule === "CPV1-CI" &&
-              violation.file ===
-                ".github/workflows/private-composition.yml" &&
-              violation.detail.includes("must not read a private Overlay"),
+              violation.file === ".github/workflows/remote-fetch.yml" &&
+              violation.detail.includes("shell network commands"),
           ),
         ).toBe(true);
       },
     );
   });
 
-  it("rejects reverse-composition artifacts owned by Public Core", () => {
+  it("rejects dynamic or unreviewed workflow actions", () => {
     withFixture(
       {
-        "tools/caio-access-gateway/overlay-composition-pin.json": "{}\n",
+        ".github/workflows/private-action.yml": [
+          "jobs:",
+          "  composition-contract:",
+          "    steps:",
+          "      - { uses: ${{ vars.CROSS_REPO_ACTION }} }",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/private-action.yml" &&
+              violation.detail.includes("workflow action is not allowlisted"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects renamed reverse-composition artifacts owned by Public Core", () => {
+    withFixture(
+      {
+        "tools/caio-access-gateway/downstream-pin.json": `${JSON.stringify({ commit: "a".repeat(40) })}\n`,
+        "tools/caio-access-gateway/downstream-composition.test.ts":
+          "export const load = (root: string) => import(root);\n",
+        "vitest.downstream.config.ts": "export default {};\n",
+      },
+      (root) => {
+        const violations = checkCaioProV1Static(root);
+        expect(
+          violations.some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file.endsWith("downstream-pin.json") &&
+              violation.detail.includes("explicit Core-owned allowlist"),
+          ),
+        ).toBe(true);
+        expect(
+          violations.some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "vitest.downstream.config.ts" &&
+              violation.detail.includes("dedicated reverse-composition runner"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects reverse-composition semantics hidden in an allowed Core test", () => {
+    withFixture(
+      {
+        "tools/caio-access-gateway/server.test.ts": [
+          "const root = process.env.CROSS_REPO;",
+          "export const load = () => import(root);",
+          "",
+        ].join("\n"),
       },
       (root) => {
         expect(
           checkCaioProV1Static(root).some(
             (violation) =>
               violation.rule === "CPV1-BOUNDARY" &&
-              violation.detail.includes("must not own an Overlay pin"),
+              violation.file ===
+                "tools/caio-access-gateway/server.test.ts" &&
+              violation.detail.includes("reverse-composition semantics"),
           ),
         ).toBe(true);
       },

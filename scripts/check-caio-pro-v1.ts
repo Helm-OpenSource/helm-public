@@ -34,10 +34,11 @@
 //   5. CPV1-HYGIENE  — the synthetic loop suite and the operating-question
 //                      fixtures contain no phone/email/endpoint/secret-shaped
 //                      strings (synthetic identifiers only).
-//   6. CPV1-BOUNDARY / CPV1-WIRING / CPV1-CI — Public owns no reverse Overlay
-//                      pin or composition suite, package.json carries the
-//                      frozen loop-suite and gate commands inside the boundary
-//                      chain, and CI carries a non-skippable isolated MySQL job.
+//   6. CPV1-BOUNDARY / CPV1-WIRING / CPV1-CI — Public owns no reverse
+//                      composition runner or external checkout, Public
+//                      workflows remain secret-free and action-allowlisted,
+//                      package.json carries the frozen loop-suite and gate
+//                      commands, and CI carries a non-skippable MySQL job.
 //
 // Passing this gate is a statement that the SYNTHETIC reference loop is
 // formed on the public path. It is NOT customer initialization, NOT
@@ -99,12 +100,29 @@ const TERMINOLOGY_GUARD = "scripts/check-caio-terminology.ts";
 const PACKAGE_FILE = "package.json";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
 const WORKFLOW_DIRECTORY = ".github/workflows";
-const FORBIDDEN_PUBLIC_OVERLAY_COMPOSITION_FILES = [
-  "tools/caio-access-gateway/overlay-composition-contract.test.ts",
-  "tools/caio-access-gateway/overlay-composition-pin.json",
-  "tools/caio-access-gateway/overlay-composition-types.ts",
-  "vitest.overlay-contract.config.ts",
-] as const;
+const CAIO_ACCESS_GATEWAY_DIRECTORY = "tools/caio-access-gateway";
+const ALLOWED_CAIO_ACCESS_GATEWAY_FILES = new Set([
+  "mount-fixture.ts",
+  "production-caller.test.ts",
+  "server-config.test.ts",
+  "server-config.ts",
+  "server.test.ts",
+  "server.ts",
+]);
+const ALLOWED_VITEST_CONFIG_FILES = new Set([
+  "vitest.config.ts",
+  "vitest.public.config.ts",
+]);
+const ALLOWED_WORKFLOW_ACTIONS = new Set([
+  "actions/checkout@v5",
+  "actions/setup-node@v5",
+  "actions/upload-artifact@v6",
+  "peter-evans/create-pull-request@v6",
+]);
+// Empty by design. Public Core currently owns no cross-repository checkout.
+// Adding an anonymous public dependency is an explicit boundary change, not a
+// value that may arrive through vars or a renamed workflow.
+const ALLOWED_ANONYMOUS_CHECKOUT_REPOSITORIES = new Set<string>();
 
 const REQUIRED_STATUS_TOKENS = [
   "Helm CAIO Pro V1",
@@ -195,11 +213,43 @@ const REQUIRED_CI_TOKENS = [
   "npm run test:caio-pro-v1:mysql",
 ] as const;
 
-const FORBIDDEN_PRIVATE_OVERLAY_CI_TOKENS = [
-  ["caio", "-overlay-composition-contract:"].join(""),
-  ["helm", "-overlays"].join(""),
-  "HELM_OVERLAYS",
+const WORKFLOW_SECRET_EXPRESSION = /\$\{\{[^}]*\bsecrets\b/iu;
+const WORKFLOW_MANUAL_REMOTE_FETCH =
+  /\b(?:curl|wget)\b|\bgh\s+repo\s+clone\b|\bgit\b[^\n]{0,160}\b(?:clone|fetch|remote\s+add)\b/iu;
+const WORKFLOW_ID_TOKEN_WRITE = /^\s*id-token\s*:\s*write\s*(?:#.*)?$/imu;
+const WORKFLOW_USES =
+  /(?:^|[-,{])\s*["']?uses["']?\s*:\s*["']?([^\s"'#},]+)["']?/gimu;
+
+const GATEWAY_REVERSE_COMPOSITION_MARKERS = [
+  {
+    label: "split-repository name",
+    pattern: new RegExp(["helm", "-overlays"].join(""), "iu"),
+  },
+  { label: "external repository URL", pattern: /github\.com\//iu },
+  {
+    label: "external checkout root",
+    pattern: /\b(?:CROSS_REPO|PRIVATE_REPO|HELM_OVERLAYS|DOWNSTREAM_ROOT)\b/iu,
+  },
+  {
+    label: "external dependency path",
+    pattern: /(?:^|["'`/\\])\.deps(?:["'`/\\]|$)/iu,
+  },
+  { label: "pinned external commit", pattern: /\b[0-9a-f]{40}\b/iu },
+  {
+    label: "computed dynamic import",
+    pattern: /\bimport\s*\(\s*(?!["'`])/u,
+  },
+  { label: "child-process repository access", pattern: /node:child_process/iu },
+  {
+    label: "environment-owned test dependency",
+    pattern: /\bprocess\.env\b/u,
+  },
 ] as const;
+
+const VITEST_REVERSE_COMPOSITION_MARKERS =
+  GATEWAY_REVERSE_COMPOSITION_MARKERS.filter(
+    ({ label }) => label !== "environment-owned test dependency",
+  );
 
 // A committed `scheme://user:password@host` literal. Runtime-composed URLs use
 // shell expansion (`${...}`) in the user or password position and never match.
@@ -222,6 +272,191 @@ function listWorkflowFiles(repoRoot: string): string[] {
         (entry.name.endsWith(".yml") || entry.name.endsWith(".yaml")),
     )
     .map((entry) => path.posix.join(WORKFLOW_DIRECTORY, entry.name));
+}
+
+function blankWholeLineComments(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => (/^\s*#/u.test(line) ? "" : line))
+    .join("\n");
+}
+
+function extractWorkflowStepBlocks(source: string): string[] {
+  const lines = blankWholeLineComments(source).split("\n");
+  const blocks: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const start = lines[index]?.match(/^(\s*)-\s+/u);
+    if (!start) continue;
+    const indent = start[1]?.length ?? 0;
+    let end = index + 1;
+    while (end < lines.length) {
+      const next = lines[end] ?? "";
+      const nextStep = next.match(/^(\s*)-\s+/u);
+      if (nextStep && (nextStep[1]?.length ?? 0) <= indent) break;
+      if (next.trim() !== "" && next.length - next.trimStart().length < indent) {
+        break;
+      }
+      end += 1;
+    }
+    blocks.push(lines.slice(index, end).join("\n"));
+    index = end - 1;
+  }
+  return blocks;
+}
+
+function readWorkflowInput(stepBlock: string, key: string): string | null {
+  const match = stepBlock.match(
+    new RegExp(
+      `(?:^|[\\s,{])["']?${key}["']?\\s*:\\s*(?:"([^"]*)"|'([^']*)'|([^\\s,}#]+))`,
+      "imu",
+    ),
+  );
+  return match ? (match[1] ?? match[2] ?? match[3] ?? "") : null;
+}
+
+function checkPublicWorkflowIsolation(
+  workflowFile: string,
+  source: string,
+): CaioProV1Violation[] {
+  const violations: CaioProV1Violation[] = [];
+  const executableSource = blankWholeLineComments(source);
+  const normalizedCommandSource = executableSource.replace(
+    /\\\s*\n\s*/gu,
+    " ",
+  );
+  const reject = (detail: string) =>
+    violations.push({ rule: "CPV1-CI", file: workflowFile, detail });
+
+  if (WORKFLOW_SECRET_EXPRESSION.test(executableSource)) {
+    reject(
+      "Public workflows must not reference Actions secrets; private-repository credentials belong to no Public CI job",
+    );
+  }
+  if (WORKFLOW_ID_TOKEN_WRITE.test(executableSource)) {
+    reject(
+      "Public workflows must not mint external credentials through id-token: write",
+    );
+  }
+  if (WORKFLOW_MANUAL_REMOTE_FETCH.test(normalizedCommandSource)) {
+    reject(
+      "Public workflows must not fetch another repository through shell network commands",
+    );
+  }
+
+  for (const match of executableSource.matchAll(WORKFLOW_USES)) {
+    const action = match[1] ?? "";
+    if (!ALLOWED_WORKFLOW_ACTIONS.has(action)) {
+      reject(`workflow action is not allowlisted for Public CI: ${action}`);
+    }
+  }
+
+  for (const stepBlock of extractWorkflowStepBlocks(executableSource)) {
+    if (!/\buses\s*:\s*["']?actions\/checkout@/iu.test(stepBlock)) {
+      continue;
+    }
+    if (
+      /(?:^|[,{])\s*["'][^"'\r\n]+["']\s*:/mu.test(stepBlock) ||
+      /\bwith\s*:[ \t]*(?:\$\{\{|\*|\S)/iu.test(stepBlock) ||
+      /(?:^|\s)<<\s*:/mu.test(stepBlock)
+    ) {
+      reject(
+        "actions/checkout inputs must use plain explicit mapping keys; quoted keys, scalar expressions, aliases, and YAML merges cannot hide repository ownership",
+      );
+    }
+    const repository = readWorkflowInput(stepBlock, "repository");
+    const token = readWorkflowInput(stepBlock, "token");
+    if (repository !== null) {
+      if (!ALLOWED_ANONYMOUS_CHECKOUT_REPOSITORIES.has(repository)) {
+        reject(
+          `external checkout is not allowlisted for Public CI: ${repository}`,
+        );
+      }
+      if (readWorkflowInput(stepBlock, "persist-credentials") !== "false") {
+        reject(
+          "an allowlisted anonymous checkout must set persist-credentials: false",
+        );
+      }
+    }
+    if (token !== null) {
+      reject(
+        "actions/checkout must not receive an explicit token in Public CI",
+      );
+    }
+  }
+
+  return violations;
+}
+
+function findReverseCompositionMarkers(
+  file: string,
+  content: string,
+  markers: readonly { label: string; pattern: RegExp }[],
+): CaioProV1Violation[] {
+  return markers
+    .filter(({ pattern }) => pattern.test(content))
+    .map(({ label }) => ({
+      rule: "CPV1-BOUNDARY",
+      file,
+      detail: `Public Core must not own reverse-composition semantics: ${label}`,
+    }));
+}
+
+function checkPublicCompositionOwnership(
+  repoRoot: string,
+): CaioProV1Violation[] {
+  const violations: CaioProV1Violation[] = [];
+  const gatewayRoot = path.join(repoRoot, CAIO_ACCESS_GATEWAY_DIRECTORY);
+  if (existsSync(gatewayRoot)) {
+    for (const entry of readdirSync(gatewayRoot, { withFileTypes: true })) {
+      const file = path.posix.join(CAIO_ACCESS_GATEWAY_DIRECTORY, entry.name);
+      if (!entry.isFile() || !ALLOWED_CAIO_ACCESS_GATEWAY_FILES.has(entry.name)) {
+        violations.push({
+          rule: "CPV1-BOUNDARY",
+          file,
+          detail:
+            "Public CAIO Access Gateway file is not in the explicit Core-owned allowlist; cross-repository composition belongs downstream",
+        });
+        continue;
+      }
+      const content = read(repoRoot, file);
+      if (content !== null) {
+        violations.push(
+          ...findReverseCompositionMarkers(
+            file,
+            content,
+            GATEWAY_REVERSE_COMPOSITION_MARKERS,
+          ),
+        );
+      }
+    }
+  }
+
+  for (const entry of readdirSync(repoRoot, { withFileTypes: true })) {
+    if (!entry.isFile() || !/^vitest(?:\.[^.]+)*\.config\.[cm]?[jt]s$/u.test(entry.name)) {
+      continue;
+    }
+    if (!ALLOWED_VITEST_CONFIG_FILES.has(entry.name)) {
+      violations.push({
+        rule: "CPV1-BOUNDARY",
+        file: entry.name,
+        detail:
+          "Public Vitest config is not allowlisted; a dedicated reverse-composition runner belongs downstream",
+      });
+      continue;
+    }
+    const content = read(repoRoot, entry.name);
+    if (content !== null) {
+      violations.push(
+        ...findReverseCompositionMarkers(
+          entry.name,
+          content,
+          VITEST_REVERSE_COMPOSITION_MARKERS,
+        ),
+      );
+    }
+  }
+
+  return violations;
 }
 
 function findHygieneViolations(
@@ -756,17 +991,7 @@ export function checkCaioProV1Static(
   repoRoot = process.cwd(),
 ): CaioProV1Violation[] {
   const violations: CaioProV1Violation[] = [];
-
-  for (const file of FORBIDDEN_PUBLIC_OVERLAY_COMPOSITION_FILES) {
-    if (existsSync(path.join(repoRoot, file))) {
-      violations.push({
-        rule: "CPV1-BOUNDARY",
-        file,
-        detail:
-          "Public Core must not own an Overlay pin or reverse-composition suite; the downstream Overlay gate owns cross-repository composition",
-      });
-    }
-  }
+  violations.push(...checkPublicCompositionOwnership(repoRoot));
 
   for (const doc of REQUIRED_DOCS) {
     if (!existsSync(path.join(repoRoot, doc))) {
@@ -975,18 +1200,8 @@ export function checkCaioProV1Static(
 
   for (const workflowFile of listWorkflowFiles(repoRoot)) {
     const content = read(repoRoot, workflowFile);
-    if (
-      content !== null &&
-      FORBIDDEN_PRIVATE_OVERLAY_CI_TOKENS.some((token) =>
-        content.includes(token),
-      )
-    ) {
-      violations.push({
-        rule: "CPV1-CI",
-        file: workflowFile,
-        detail:
-          "Public CI must not read a private Overlay repository or accept credentials for one; cross-repository composition is owned by the downstream Overlay gate",
-      });
+    if (content !== null) {
+      violations.push(...checkPublicWorkflowIsolation(workflowFile, content));
     }
   }
 
