@@ -3371,6 +3371,25 @@ describe("caio-pro-v1 aggregate gate", () => {
         "}",
       ].join("\n"),
     ],
+    [
+      "with-shadowed computed fetch call",
+      [
+        'const method = "setTimeout";',
+        'with ({ method: "fetch" }) {',
+        '  globalThis[method]("https://example.test/private.tar.gz");',
+        "}",
+      ].join("\n"),
+    ],
+    [
+      "with-shadowed computed child-process call",
+      [
+        'const method = "constants";',
+        'const child = require("node:child_process");',
+        'with ({ method: "execFileSync" }) {',
+        '  child[method]("gh", ["api", "repos/example/private/tarball/main"]);',
+        "}",
+      ].join("\n"),
+    ],
   ])("rejects repository access through a %s", (_label, source) => {
     withFixture(
       {

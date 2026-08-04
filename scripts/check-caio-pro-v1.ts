@@ -3056,6 +3056,14 @@ function helperHasRemoteRepositoryAccess(
       scope !== undefined;
       scope = scope.parent
     ) {
+      if (
+        ts.isWithStatement(scope) &&
+        identifier.getStart(inspection.source) >=
+          scope.statement.getStart(inspection.source) &&
+        identifier.getEnd() <= scope.statement.getEnd()
+      ) {
+        return null;
+      }
       let resolution = unresolvedBinding;
       if (
         ts.isBlock(scope) ||
