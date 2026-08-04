@@ -44,7 +44,7 @@
 // production evidence, and NOT value evidence; it changes no permission,
 // route, API, database, or execution state machine.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -98,6 +98,7 @@ const MANIFEST_FILE = "docs/public-docs-manifest.json";
 const TERMINOLOGY_GUARD = "scripts/check-caio-terminology.ts";
 const PACKAGE_FILE = "package.json";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
+const WORKFLOW_DIRECTORY = ".github/workflows";
 const FORBIDDEN_PUBLIC_OVERLAY_COMPOSITION_FILES = [
   "tools/caio-access-gateway/overlay-composition-contract.test.ts",
   "tools/caio-access-gateway/overlay-composition-pin.json",
@@ -196,9 +197,8 @@ const REQUIRED_CI_TOKENS = [
 
 const FORBIDDEN_PRIVATE_OVERLAY_CI_TOKENS = [
   ["caio", "-overlay-composition-contract:"].join(""),
-  ["repository: Helm", "-Developers/helm", "-overlays"].join(""),
-  "HELM_OVERLAYS_READ",
-  "HELM_OVERLAYS_ROOT",
+  ["helm", "-overlays"].join(""),
+  "HELM_OVERLAYS",
 ] as const;
 
 // A committed `scheme://user:password@host` literal. Runtime-composed URLs use
@@ -209,6 +209,19 @@ const COMMITTED_CREDENTIAL_URL =
 function read(repoRoot: string, file: string): string | null {
   const absolutePath = path.join(repoRoot, file);
   return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : null;
+}
+
+function listWorkflowFiles(repoRoot: string): string[] {
+  const workflowRoot = path.join(repoRoot, WORKFLOW_DIRECTORY);
+  if (!existsSync(workflowRoot)) return [];
+
+  return readdirSync(workflowRoot, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        (entry.name.endsWith(".yml") || entry.name.endsWith(".yaml")),
+    )
+    .map((entry) => path.posix.join(WORKFLOW_DIRECTORY, entry.name));
 }
 
 function findHygieneViolations(
@@ -937,18 +950,6 @@ export function checkCaioProV1Static(
         });
       }
     }
-    if (
-      FORBIDDEN_PRIVATE_OVERLAY_CI_TOKENS.some((token) =>
-        workflowContent.includes(token),
-      )
-    ) {
-      violations.push({
-        rule: "CPV1-CI",
-        file: CI_WORKFLOW,
-        detail:
-          "Public CI must not read a private Overlay repository or accept credentials for one; cross-repository composition is owned by the downstream Overlay gate",
-      });
-    }
     if (COMMITTED_CREDENTIAL_URL.test(workflowContent)) {
       violations.push({
         rule: "CPV1-CI",
@@ -969,6 +970,23 @@ export function checkCaioProV1Static(
           detail: "caio-pro-v1-mysql job must not be skippable",
         });
       }
+    }
+  }
+
+  for (const workflowFile of listWorkflowFiles(repoRoot)) {
+    const content = read(repoRoot, workflowFile);
+    if (
+      content !== null &&
+      FORBIDDEN_PRIVATE_OVERLAY_CI_TOKENS.some((token) =>
+        content.includes(token),
+      )
+    ) {
+      violations.push({
+        rule: "CPV1-CI",
+        file: workflowFile,
+        detail:
+          "Public CI must not read a private Overlay repository or accept credentials for one; cross-repository composition is owned by the downstream Overlay gate",
+      });
     }
   }
 

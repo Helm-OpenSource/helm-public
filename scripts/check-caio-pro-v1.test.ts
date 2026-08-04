@@ -421,16 +421,6 @@ describe("caio-pro-v1 aggregate gate", () => {
       {
         ".github/workflows/ci.yml": [
           "jobs:",
-          "  caio-overlay-composition-contract:",
-          "    steps:",
-          "      - uses: actions/checkout@v5",
-          "        with:",
-          "          repository: Helm-Developers/helm-overlays",
-          "          token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}",
-          "      - run: npx vitest run --config vitest.overlay-contract.config.ts",
-          "        env:",
-          "          HELM_OVERLAYS_ROOT: .deps/helm-overlays",
-          "",
           "  caio-pro-v1-mysql:",
           "    env:",
           "      MYSQL_DATABASE: helm_caio_pro_v1_ci",
@@ -441,12 +431,24 @@ describe("caio-pro-v1 aggregate gate", () => {
           "      - run: npm run test:caio-pro-v1:mysql",
           "",
         ].join("\n"),
+        ".github/workflows/private-composition.yml": [
+          "jobs:",
+          "  caio-overlay-composition-contract:",
+          "    steps:",
+          "      - uses: actions/checkout@v5",
+          "        with:",
+          "          repository: Helm-Developers/helm-overlays",
+          "          token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}",
+          "",
+        ].join("\n"),
       },
       (root) => {
         expect(
           checkCaioProV1Static(root).some(
             (violation) =>
               violation.rule === "CPV1-CI" &&
+              violation.file ===
+                ".github/workflows/private-composition.yml" &&
               violation.detail.includes("must not read a private Overlay"),
           ),
         ).toBe(true);
