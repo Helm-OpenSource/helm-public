@@ -343,19 +343,25 @@ function checkPublicWorkflowIsolation(
     );
   }
 
-  for (const match of executableSource.matchAll(WORKFLOW_USES)) {
-    const action = match[1] ?? "";
+  const workflowActions = [...executableSource.matchAll(WORKFLOW_USES)].map(
+    (match) => match[1] ?? "",
+  );
+  for (const action of workflowActions) {
     if (!ALLOWED_WORKFLOW_ACTIONS.has(action)) {
       reject(`workflow action is not allowlisted for Public CI: ${action}`);
     }
   }
 
+  let parsedCheckoutCount = 0;
   for (const stepBlock of extractWorkflowStepBlocks(executableSource)) {
-    if (!/\buses\s*:\s*["']?actions\/checkout@/iu.test(stepBlock)) {
+    if (readWorkflowInput(stepBlock, "uses") !== "actions/checkout@v5") {
       continue;
     }
+    parsedCheckoutCount += 1;
     if (
-      /(?:^|[,{])\s*["'][^"'\r\n]+["']\s*:/mu.test(stepBlock) ||
+      /(?:^[ \t]*(?:-[ \t]*)?|[,{][ \t]*)["'][^"'\r\n]+["'][ \t]*:/mu.test(
+        stepBlock,
+      ) ||
       /\bwith\s*:[ \t]*(?:\$\{\{|\*|\S)/iu.test(stepBlock) ||
       /(?:^|\s)<<\s*:/mu.test(stepBlock)
     ) {
@@ -382,6 +388,15 @@ function checkPublicWorkflowIsolation(
         "actions/checkout must not receive an explicit token in Public CI",
       );
     }
+  }
+
+  const checkoutActionCount = workflowActions.filter(
+    (action) => action === "actions/checkout@v5",
+  ).length;
+  if (parsedCheckoutCount !== checkoutActionCount) {
+    reject(
+      "every actions/checkout step must use an explicit block mapping so repository ownership can be verified",
+    );
   }
 
   return violations;

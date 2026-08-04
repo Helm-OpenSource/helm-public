@@ -515,6 +515,64 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("rejects a quoted checkout key that hides external repository ownership", () => {
+    withFixture(
+      {
+        ".github/workflows/quoted-checkout.yml": [
+          "jobs:",
+          "  composition-contract:",
+          "    steps:",
+          '      - "uses": actions/checkout@v5',
+          "        with:",
+          "          repository: Helm-OpenSource/another-public-repo",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        const violations = checkCaioProV1Static(root);
+        expect(
+          violations.some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/quoted-checkout.yml" &&
+              violation.detail.includes("external checkout is not allowlisted"),
+          ),
+        ).toBe(true);
+        expect(
+          violations.some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/quoted-checkout.yml" &&
+              violation.detail.includes("plain explicit mapping keys"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects a flow-style checkout step that cannot be ownership-checked", () => {
+    withFixture(
+      {
+        ".github/workflows/flow-checkout.yml": [
+          "jobs:",
+          "  composition-contract:",
+          "    steps: [{ uses: actions/checkout@v5, with: { repository: Helm-OpenSource/another-public-repo } }]",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/flow-checkout.yml" &&
+              violation.detail.includes("explicit block mapping"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it("rejects renamed reverse-composition artifacts owned by Public Core", () => {
     withFixture(
       {
