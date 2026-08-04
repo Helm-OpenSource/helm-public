@@ -1,4 +1,10 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -44,6 +50,11 @@ const CLEAN_HYGIENE_COMPANIONS = {
   "lib/stage1-owner-loop/caio-pro-completion.test-fixtures.ts":
     "export const clean = true;\n",
 } as const;
+
+const D2_SMOKE_HELPER = readFileSync(
+  path.join(process.cwd(), "scripts/d2-docker-smoke.sh"),
+  "utf8",
+);
 
 function withFixture(
   files: Record<string, string>,
@@ -108,8 +119,9 @@ describe("caio-pro-v1 aggregate gate", () => {
         actorUserRef: "user:ceo:synthetic-caio",
         idempotencyKey: "selection:synthetic-caio:test-four",
         previousReceipt: null,
-        selections: portfolio.candidates.slice(0, 4).map(
-          (candidate, index) => ({
+        selections: portfolio.candidates
+          .slice(0, 4)
+          .map((candidate, index) => ({
             questionId: candidate.questionId,
             questionOverride: null,
             goal: `Synthetic selection goal ${index + 1}`,
@@ -126,8 +138,7 @@ describe("caio-pro-v1 aggregate gate", () => {
             startsAt: null,
             endsAt: null,
             prohibitedActions: ["external_side_effect"],
-          }),
-        ),
+          })),
         reasonCodes: ["ceo_selected_operating_focus"],
         evidenceRefs: ["evidence:operating:1"],
         selectedAt: "2026-07-23T10:00:00.000Z",
@@ -162,10 +173,7 @@ describe("caio-pro-v1 aggregate gate", () => {
     // refusal (the content hash no longer matches).
     expect(() =>
       createCaioInitializationAcceptanceReceipt(
-        acceptanceInput(
-          { ...ready, decision: "not_ready" },
-          "test-tampered",
-        ),
+        acceptanceInput({ ...ready, decision: "not_ready" }, "test-tampered"),
       ),
     ).toThrow("caio_initialization_assessment_invalid");
     // A genuinely not-ready assessment (a registered write path is a hard
@@ -437,7 +445,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           "    steps:",
           "      - uses: actions/checkout@v5",
           "        with:",
-          "          \"repository\": ${{ vars.CROSS_REPO }}",
+          '          "repository": ${{ vars.CROSS_REPO }}',
           "          token: ${{ secrets['READ_ONLY_REPOSITORY'] }}",
           "          persist-credentials: false",
           "",
@@ -449,8 +457,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           violations.some(
             (violation) =>
               violation.rule === "CPV1-CI" &&
-              violation.file ===
-                ".github/workflows/private-composition.yml" &&
+              violation.file === ".github/workflows/private-composition.yml" &&
               violation.detail.includes("external checkout is not allowlisted"),
           ),
         ).toBe(true);
@@ -458,8 +465,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           violations.some(
             (violation) =>
               violation.rule === "CPV1-CI" &&
-              violation.file ===
-                ".github/workflows/private-composition.yml" &&
+              violation.file === ".github/workflows/private-composition.yml" &&
               violation.detail.includes("must not reference Actions secrets"),
           ),
         ).toBe(true);
@@ -617,8 +623,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           checkCaioProV1Static(root).some(
             (violation) =>
               violation.rule === "CPV1-BOUNDARY" &&
-              violation.file ===
-                "tools/caio-access-gateway/server.test.ts" &&
+              violation.file === "tools/caio-access-gateway/server.test.ts" &&
               violation.detail.includes("reverse-composition semantics"),
           ),
         ).toBe(true);
@@ -637,8 +642,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           checkCaioProV1Static(root).some(
             (violation) =>
               violation.rule === "CPV1-BOUNDARY" &&
-              violation.file ===
-                "tools/caio-access-gateway/server.test.ts" &&
+              violation.file === "tools/caio-access-gateway/server.test.ts" &&
               violation.detail.includes("computed dynamic import"),
           ),
         ).toBe(true);
@@ -657,8 +661,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           checkCaioProV1Static(root).some(
             (violation) =>
               violation.rule === "CPV1-BOUNDARY" &&
-              violation.file ===
-                "tools/caio-access-gateway/server.test.ts" &&
+              violation.file === "tools/caio-access-gateway/server.test.ts" &&
               violation.detail.includes("computed dynamic import"),
           ),
         ).toBe(true);
@@ -755,7 +758,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           "jobs:",
           "  composition-contract:",
           "    steps:",
-          '      - run: node -e "fetch(process.env.ACTIONS_ID_TOKEN_REQUEST_URL,{headers:{Authorization:\'Bearer \'+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}})"',
+          "      - run: node -e \"fetch(process.env.ACTIONS_ID_TOKEN_REQUEST_URL,{headers:{Authorization:'Bearer '+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}})\"",
           "",
         ].join("\n"),
       },
@@ -798,4 +801,820 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("rejects a workflow-reachable shell helper that fetches a repository", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: bash ops/fetch-private.sh",
+          "",
+        ].join("\n"),
+        "ops/fetch-private.sh":
+          "gh api repos/example/private/tarball/main > private.tar.gz\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === "ops/fetch-private.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects a workflow-reachable module helper that uses fetch", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npm run acquire-private",
+          "",
+        ].join("\n"),
+        "package.json": JSON.stringify({
+          scripts: { "acquire-private": "node ops/fetch-private.mjs" },
+        }),
+        "ops/fetch-private.mjs":
+          'await fetch("https://example.test/private-repository.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === "ops/fetch-private.mjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each([
+    "curl -fsSL https://example.test/repository.tar.gz -o repository.tar.gz",
+    "git -C .deps/repository fetch origin main",
+  ])("rejects workflow-reachable shell repository access: %s", (command) => {
+    withFixture(
+      {
+        ".github/workflows/helper-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: bash ops/fetch-private.sh",
+          "",
+        ].join("\n"),
+        "ops/fetch-private.sh": `${command}\n`,
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === "ops/fetch-private.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects repository access in a nested workflow-reachable shell helper", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: bash ops/entrypoint",
+          "",
+        ].join("\n"),
+        "ops/entrypoint": "#!/usr/bin/env bash\nbash ops/nested.sh\n",
+        "ops/nested.sh":
+          "#!/usr/bin/env bash\ngit fetch https://example.test/private.git main\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === "ops/nested.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects property-access fetch in a workflow-reachable module helper", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: node ops/fetch-private.mjs",
+          "",
+        ].join("\n"),
+        "ops/fetch-private.mjs":
+          'await globalThis.fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === "ops/fetch-private.mjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects repository access in a statically imported helper module", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: node ops/entrypoint.mjs",
+          "",
+        ].join("\n"),
+        "ops/entrypoint.mjs": 'import "./network.mjs";\n',
+        "ops/network.mjs":
+          'await fetch("https://example.test/private-repository.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === "ops/network.mjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("does not let the local D2 binding allow unrelated repository access", () => {
+    withFixture(
+      {
+        ".github/workflows/d2-docker-smoke.yml": [
+          "jobs:",
+          "  d2-docker-smoke:",
+          "    env:",
+          "      HELM_D2_SMOKE_REPO_URL: ${{ github.workspace }}",
+          "      HELM_D2_SMOKE_REF: HEAD",
+          "    steps:",
+          "      - run: bash scripts/d2-docker-smoke.sh",
+          "",
+        ].join("\n"),
+        "scripts/d2-docker-smoke.sh":
+          "gh api repos/example/private/tarball/main > private.tar.gz\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === "scripts/d2-docker-smoke.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects an escaped semantic id-token write permission", () => {
+    withFixture(
+      {
+        ".github/workflows/escaped-oidc.yml": [
+          "permissions:",
+          '  "\\u0069d-token": "write"',
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npm test",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/escaped-oidc.yml" &&
+              violation.detail.includes("mint external credentials"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects an escaped job-level id-token write permission", () => {
+    withFixture(
+      {
+        ".github/workflows/job-oidc.yml": [
+          "jobs:",
+          "  verify:",
+          "    permissions:",
+          '      "\\u0069d-token": "write"',
+          "    steps:",
+          "      - run: npm test",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/job-oidc.yml" &&
+              violation.detail.includes("mint external credentials"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("fails closed when workflow YAML cannot be parsed", () => {
+    withFixture(
+      {
+        ".github/workflows/invalid.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: [unterminated",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/invalid.yml" &&
+              violation.detail.includes("valid YAML"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects a command that concatenates an OIDC request environment name", () => {
+    withFixture(
+      {
+        ".github/workflows/spliced-oidc.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          '      - run: printf "%s" "$ACTIONS_ID_TOKEN_REQUEST_U""RL"',
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/spliced-oidc.yml" &&
+              violation.detail.includes("mint external credentials"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("fails closed when a workflow helper entry is not statically resolvable", () => {
+    withFixture(
+      {
+        ".github/workflows/dynamic-helper.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          '      - run: bash "$HELPER_PATH"',
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/dynamic-helper.yml" &&
+              violation.detail.includes("could not be resolved statically"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("does not let comments forge a computed-import allowance", () => {
+    withFixture(
+      {
+        "instrumentation.ts": [
+          "const packBootstrapPath = process.env.PACK_BOOTSTRAP_PATH;",
+          '// const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");',
+          "// const { registerAllPacks } = (await import(packBootstrapPath)) as {",
+          "export async function register() {",
+          "  await import(packBootstrapPath);",
+          "}",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "instrumentation.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("scans executable source in a nested directory named coverage", () => {
+    withFixture(
+      {
+        "src/coverage/escape.ts":
+          "export const load = (target: string) => import(target);\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "src/coverage/escape.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects the actual runner config referenced by a package script", () => {
+    withFixture(
+      {
+        "package.json": JSON.stringify({
+          scripts: {
+            verify: "vitest run --config runner/downstream.vitest.config.ts",
+          },
+        }),
+        "runner/downstream.vitest.config.ts": "export default {};\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "runner/downstream.vitest.config.ts" &&
+              violation.detail.includes("test-runner config"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects the actual runner config referenced by a workflow command", () => {
+    withFixture(
+      {
+        ".github/workflows/custom-runner.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: vitest run --config runner/custom-runner.ts",
+          "",
+        ].join("\n"),
+        "runner/custom-runner.ts": "export default {};\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "runner/custom-runner.ts" &&
+              violation.detail.includes("test-runner config"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("fails closed when TypeScript source has parse diagnostics", () => {
+    withFixture(
+      {
+        "src/malformed.ts": [
+          "const broken = `unterminated;",
+          "export const load = (target: string) => import(target);",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "src/malformed.ts" &&
+              violation.detail.includes("could not be parsed"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects top-level write-all permissions as OIDC-capable", () => {
+    withFixture(
+      {
+        ".github/workflows/write-all.yml": [
+          "permissions: write-all",
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/write-all.yml" &&
+              violation.detail.includes("mint external credentials"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("fails closed for a non-literal job-level id-token permission", () => {
+    withFixture(
+      {
+        ".github/workflows/matrix-oidc.yml": [
+          "jobs:",
+          "  verify:",
+          "    permissions:",
+          "      id-token: ${{ matrix.permission }}",
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/matrix-oidc.yml" &&
+              violation.detail.includes("mint external credentials"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("allows an explicitly disabled id-token permission", () => {
+    withFixture(
+      {
+        ".github/workflows/no-oidc.yml": [
+          "permissions:",
+          "  id-token: none",
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).filter(
+            (violation) =>
+              violation.file === ".github/workflows/no-oidc.yml" &&
+              violation.detail.includes("mint external credentials"),
+          ),
+        ).toEqual([]);
+      },
+    );
+  });
+
+  it("rejects a step-level override of the D2 local clone binding", () => {
+    withFixture(
+      {
+        ".github/workflows/d2-docker-smoke.yml": [
+          "jobs:",
+          "  d2-docker-smoke:",
+          "    env:",
+          "      HELM_D2_SMOKE_REPO_URL: ${{ github.workspace }}",
+          "      HELM_D2_SMOKE_REF: HEAD",
+          "    steps:",
+          "      - run: bash scripts/d2-docker-smoke.sh",
+          "        env:",
+          "          HELM_D2_SMOKE_REPO_URL: https://example.test/private.git",
+          "",
+        ].join("\n"),
+        "scripts/d2-docker-smoke.sh": D2_SMOKE_HELPER,
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "scripts/d2-docker-smoke.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects a run-prefix override of the D2 local clone binding", () => {
+    withFixture(
+      {
+        ".github/workflows/d2-docker-smoke.yml": [
+          "jobs:",
+          "  d2-docker-smoke:",
+          "    env:",
+          "      HELM_D2_SMOKE_REPO_URL: ${{ github.workspace }}",
+          "      HELM_D2_SMOKE_REF: HEAD",
+          "    steps:",
+          "      - run: HELM_D2_SMOKE_REPO_URL=https://example.test/private.git bash scripts/d2-docker-smoke.sh",
+          "",
+        ].join("\n"),
+        "scripts/d2-docker-smoke.sh": D2_SMOKE_HELPER,
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.detail.includes("workflow-reachable"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects a D2 helper that rewrites the local repository binding", () => {
+    withFixture(
+      {
+        ".github/workflows/d2-docker-smoke.yml": [
+          "jobs:",
+          "  d2-docker-smoke:",
+          "    env:",
+          "      HELM_D2_SMOKE_REPO_URL: ${{ github.workspace }}",
+          "      HELM_D2_SMOKE_REF: HEAD",
+          "    steps:",
+          "      - run: bash scripts/d2-docker-smoke.sh",
+          "",
+        ].join("\n"),
+        "scripts/d2-docker-smoke.sh": D2_SMOKE_HELPER.replace(
+          'repo_url="${HELM_D2_SMOKE_REPO_URL:-$(git config --get remote.origin.url)}"',
+          'repo_url="https://example.test/private.git"',
+        ),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "scripts/d2-docker-smoke.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each(["  bash ops/fetch.sh", "source ops/fetch.sh", ". ops/fetch.sh"])(
+    "resolves a shell helper invocation form: %s",
+    (runCommand) => {
+      withFixture(
+        {
+          ".github/workflows/helper-form.yml": [
+            "jobs:",
+            "  verify:",
+            "    steps:",
+            "      - run: |",
+            `          ${runCommand}`,
+            "",
+          ].join("\n"),
+          "ops/fetch.sh":
+            "curl -fsSL https://example.test/private.tar.gz -o private.tar.gz\n",
+        },
+        (root) => {
+          expect(
+            checkCaioProV1Static(root).some(
+              (violation) =>
+                violation.file === "ops/fetch.sh" &&
+                violation.detail.includes("workflow-reachable helper"),
+            ),
+          ).toBe(true);
+        },
+      );
+    },
+  );
+
+  it("fails closed for a shell -c wrapper around a local helper", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-form.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: bash -c 'source ops/fetch.sh'",
+          "",
+        ].join("\n"),
+        "ops/fetch.sh":
+          "curl -fsSL https://example.test/private.tar.gz -o private.tar.gz\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/helper-form.yml" &&
+              violation.detail.includes("could not be resolved statically"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("fails closed for a dynamic source inside a reachable shell helper", () => {
+    withFixture(
+      {
+        ".github/workflows/dynamic-source.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: bash ops/entry.sh",
+          "",
+        ].join("\n"),
+        "ops/entry.sh": 'source "$HELPER_PATH"\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/entry.sh" &&
+              violation.detail.includes("could not be resolved statically"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each(["fetch", "globalThis.fetch"])(
+    "rejects inline node -e %s",
+    (fetchExpression) => {
+      withFixture(
+        {
+          ".github/workflows/inline-fetch.yml": [
+            "jobs:",
+            "  verify:",
+            "    steps:",
+            `      - run: node -e '${fetchExpression}("https://example.test/private.tar.gz")'`,
+            "",
+          ].join("\n"),
+        },
+        (root) => {
+          expect(
+            checkCaioProV1Static(root).some(
+              (violation) =>
+                violation.file === ".github/workflows/inline-fetch.yml" &&
+                violation.detail.includes("fetch another repository"),
+            ),
+          ).toBe(true);
+        },
+      );
+    },
+  );
+
+  it("rejects an allowlisted initializer outside the import lexical scope", () => {
+    withFixture(
+      {
+        "instrumentation.ts": [
+          "export async function register() {",
+          "  if (false) {",
+          '    const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");',
+          "  }",
+          "  await import(packBootstrapPath);",
+          "}",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "instrumentation.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("requires node:path and node:url provenance for the SQLite allowance", () => {
+    withFixture(
+      {
+        "scripts/archive/sqlite-to-mysql-migration.ts": [
+          'import path from "node:path";',
+          'import { pathToFileURL } from "node:url";',
+          "const projectRoot = process.cwd();",
+          "async function load() {",
+          "  const path = { resolve: (...parts: string[]) => parts.join('/') };",
+          "  const pathToFileURL = (value: string) => ({ href: value });",
+          "  const sqliteClientModulePath = pathToFileURL(",
+          '    path.resolve(projectRoot, "generated/sqlite-client/index.js"),',
+          "  ).href;",
+          "  await import(sqliteClientModulePath);",
+          "}",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file ===
+                "scripts/archive/sqlite-to-mysql-migration.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("recognizes a runner config after a shell line continuation", () => {
+    withFixture(
+      {
+        "package.json": JSON.stringify({
+          scripts: {
+            verify:
+              "vitest run --config \\\n  runner/downstream.vitest.config.ts",
+          },
+        }),
+        "runner/downstream.vitest.config.ts": "export default {};\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "runner/downstream.vitest.config.ts" &&
+              violation.detail.includes("test-runner config"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("ignores .git and node_modules directories at every depth", () => {
+    withFixture(
+      {
+        "nested/.git/escape.ts":
+          "export const load = (target: string) => import(target);\n",
+        "nested/node_modules/escape.ts":
+          "export const load = (target: string) => import(target);\n",
+      },
+      (root) => {
+        const files = checkCaioProV1Static(root)
+          .filter((violation) => violation.rule === "CPV1-BOUNDARY")
+          .map((violation) => violation.file);
+        expect(files).not.toContain("nested/.git/escape.ts");
+        expect(files).not.toContain("nested/node_modules/escape.ts");
+      },
+    );
+  });
+
+  it("lets the all-repository guard reject dynamic import in a JS helper", () => {
+    withFixture(
+      {
+        ".github/workflows/dynamic-import.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: node ops/entry.mjs",
+          "",
+        ].join("\n"),
+        "ops/entry.mjs": "export const load = (target) => import(target);\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "ops/entry.mjs" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
 });
