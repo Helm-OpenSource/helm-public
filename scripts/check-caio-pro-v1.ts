@@ -45,6 +45,7 @@
 // production evidence, and NOT value evidence; it changes no permission,
 // route, API, database, or execution state machine.
 
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -278,6 +279,11 @@ const WORKFLOW_OIDC_REQUEST_ENVIRONMENT_OBFUSCATED =
   /ACTIONS_ID_TOKEN_REQUEST_(?:URL|TOKEN)/u;
 const WORKFLOW_USES =
   /(?:^|[-,{])\s*["']?uses["']?\s*:\s*["']?([^\s"'#},]+)["']?/gimu;
+const D2_DOCKER_SMOKE_WORKFLOW = ".github/workflows/d2-docker-smoke.yml";
+const D2_DOCKER_SMOKE_HELPER = "scripts/d2-docker-smoke.sh";
+const D2_DOCKER_SMOKE_INVOCATION = "bash scripts/d2-docker-smoke.sh";
+const D2_DOCKER_SMOKE_HELPER_SHA256 =
+  "1385d785b7692aaec20cc79f8ff00ec8474b1966f19e10d283ef8e3bfe6c7431";
 const GATEWAY_REVERSE_COMPOSITION_MARKERS = [
   {
     label: "split-repository name",
@@ -548,7 +554,8 @@ function hasBoundComputedImportAllowance(
 
   if (
     allowance.initializerKind === "sqlite_client_module_path" &&
-    !hasSqlitePathImportProvenance(inspection.source)
+    (!hasSqlitePathImportProvenance(inspection.source) ||
+      !hasSafeProjectRootBinding(inspection.source, declaration))
   ) {
     return false;
   }
@@ -568,6 +575,90 @@ function hasBoundComputedImportAllowance(
       computedImport.call.end <= declarationScope.end
     );
   });
+}
+
+function hasSafeProjectRootBinding(
+  source: ts.SourceFile,
+  sqliteModuleDeclaration: ts.VariableDeclaration,
+): boolean {
+  const declarations: ts.VariableDeclaration[] = [];
+  let mutated = false;
+  let rebound = false;
+  const isProjectRoot = (node: ts.Node): node is ts.Identifier =>
+    ts.isIdentifier(node) && node.text === "projectRoot";
+  const bindingContainsProjectRoot = (name: ts.BindingName): boolean =>
+    ts.isIdentifier(name)
+      ? name.text === "projectRoot"
+      : name.elements.some(
+          (element) =>
+            !ts.isOmittedExpression(element) &&
+            bindingContainsProjectRoot(element.name),
+        );
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node)) {
+      if (isProjectRoot(node.name)) {
+        declarations.push(node);
+      } else if (bindingContainsProjectRoot(node.name)) {
+        rebound = true;
+      }
+    }
+    if (
+      (ts.isParameter(node) && bindingContainsProjectRoot(node.name)) ||
+      (ts.isImportSpecifier(node) && node.name.text === "projectRoot") ||
+      (ts.isImportClause(node) && node.name?.text === "projectRoot") ||
+      ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
+        node.name?.text === "projectRoot")
+    ) {
+      rebound = true;
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      isProjectRoot(unwrapTransparentExpression(node.left)) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+    ) {
+      mutated = true;
+    }
+    if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      isProjectRoot(unwrapTransparentExpression(node.operand)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken ||
+        node.operator === ts.SyntaxKind.MinusMinusToken)
+    ) {
+      mutated = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+
+  const declaration = declarations[0];
+  if (
+    declarations.length !== 1 ||
+    declaration?.initializer === undefined ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    mutated ||
+    rebound
+  ) {
+    return false;
+  }
+  const initializer = unwrapTransparentExpression(declaration.initializer);
+  if (
+    !ts.isCallExpression(initializer) ||
+    initializer.arguments.length !== 0 ||
+    !ts.isPropertyAccessExpression(initializer.expression) ||
+    !ts.isIdentifier(initializer.expression.expression) ||
+    initializer.expression.expression.text !== "process" ||
+    initializer.expression.name.text !== "cwd"
+  ) {
+    return false;
+  }
+  const scope = findLexicalDeclarationScope(declaration);
+  return (
+    declaration.getStart(source) < sqliteModuleDeclaration.getStart(source) &&
+    scope.pos <= sqliteModuleDeclaration.pos &&
+    sqliteModuleDeclaration.end <= scope.end
+  );
 }
 
 function findLexicalDeclarationScope(
@@ -709,10 +800,15 @@ function readWorkflowInput(stepBlock: string, key: string): string | null {
 
 type UnknownRecord = Record<string, unknown>;
 
+type WorkflowCommand = Readonly<{
+  command: string;
+  cwd: string;
+  d2LocalCloneAllowed: boolean;
+}>;
+
 type WorkflowSemanticModel = Readonly<{
-  commands: readonly string[];
+  commands: readonly WorkflowCommand[];
   actions: readonly string[];
-  locallyBoundHelpers: ReadonlySet<string>;
   hasOidcWrite: boolean;
   errors: readonly string[];
 }>;
@@ -733,6 +829,51 @@ function hasOidcWritePermission(value: unknown): boolean {
   );
 }
 
+function readWorkflowWorkingDirectory(
+  value: unknown,
+  inherited: string,
+  errors: string[],
+  label: string,
+): string {
+  if (value === undefined) return inherited;
+  if (typeof value !== "string") {
+    errors.push(`${label} working-directory could not be verified`);
+    return inherited;
+  }
+  if (value.includes("${{") || path.posix.isAbsolute(value)) {
+    errors.push(`${label} working-directory must be a static repository path`);
+    return inherited;
+  }
+  const normalized = path.posix.normalize(value.replace(/^\.\//u, ""));
+  if (normalized === "." || normalized === "") {
+    return "";
+  }
+  if (normalized === ".." || normalized.startsWith("../")) {
+    errors.push(`${label} working-directory leaves the repository`);
+    return inherited;
+  }
+  return normalized;
+}
+
+function readDefaultsWorkingDirectory(
+  defaults: unknown,
+  inherited: string,
+  errors: string[],
+  label: string,
+): string {
+  if (defaults === undefined) return inherited;
+  if (!isRecord(defaults) || !isRecord(defaults.run)) {
+    errors.push(`${label} defaults.run could not be verified`);
+    return inherited;
+  }
+  return readWorkflowWorkingDirectory(
+    defaults.run["working-directory"],
+    inherited,
+    errors,
+    `${label} defaults.run`,
+  );
+}
+
 function parseWorkflowSemantics(source: string): WorkflowSemanticModel {
   const errors: string[] = [];
   let parsed: unknown;
@@ -745,7 +886,6 @@ function parseWorkflowSemantics(source: string): WorkflowSemanticModel {
       return {
         commands: [],
         actions: [],
-        locallyBoundHelpers: new Set(),
         hasOidcWrite: false,
         errors: [
           "workflow must be valid YAML before CI ownership can be verified",
@@ -757,7 +897,6 @@ function parseWorkflowSemantics(source: string): WorkflowSemanticModel {
     return {
       commands: [],
       actions: [],
-      locallyBoundHelpers: new Set(),
       hasOidcWrite: false,
       errors: [
         "workflow must be valid YAML before CI ownership can be verified",
@@ -768,15 +907,19 @@ function parseWorkflowSemantics(source: string): WorkflowSemanticModel {
     return {
       commands: [],
       actions: [],
-      locallyBoundHelpers: new Set(),
       hasOidcWrite: false,
       errors: ["workflow jobs must be an explicit mapping"],
     };
   }
 
-  const commands: string[] = [];
+  const commands: WorkflowCommand[] = [];
   const actions: string[] = [];
-  const locallyBoundHelpers = new Set<string>();
+  const workflowWorkingDirectory = readDefaultsWorkingDirectory(
+    parsed.defaults,
+    "",
+    errors,
+    "workflow",
+  );
   let hasOidcWrite = hasOidcWritePermission(parsed.permissions);
   for (const [jobName, jobValue] of Object.entries(parsed.jobs)) {
     if (!isRecord(jobValue)) {
@@ -793,6 +936,12 @@ function parseWorkflowSemantics(source: string): WorkflowSemanticModel {
       continue;
     }
     const jobEnvironment = isRecord(jobValue.env) ? jobValue.env : {};
+    const jobWorkingDirectory = readDefaultsWorkingDirectory(
+      jobValue.defaults,
+      workflowWorkingDirectory,
+      errors,
+      `workflow job ${jobName}`,
+    );
     const jobHasLocalRepositoryBinding =
       jobEnvironment.HELM_D2_SMOKE_REPO_URL === "${{ github.workspace }}" &&
       jobEnvironment.HELM_D2_SMOKE_REF === "HEAD";
@@ -809,17 +958,25 @@ function parseWorkflowSemantics(source: string): WorkflowSemanticModel {
             `workflow job ${jobName} step ${stepIndex + 1} run command could not be verified`,
           );
         } else {
-          commands.push(stepValue.run);
           const stepEnvironment = isRecord(stepValue.env) ? stepValue.env : {};
           const stepOverridesLocalBinding =
             "HELM_D2_SMOKE_REPO_URL" in stepEnvironment ||
             "HELM_D2_SMOKE_REF" in stepEnvironment ||
             /\bHELM_D2_SMOKE_(?:REPO_URL|REF)=/u.test(stepValue.run);
-          if (jobHasLocalRepositoryBinding && !stepOverridesLocalBinding) {
-            for (const helper of extractLocalHelperPaths(stepValue.run)) {
-              locallyBoundHelpers.add(helper);
-            }
-          }
+          const stepWorkingDirectory = readWorkflowWorkingDirectory(
+            stepValue["working-directory"],
+            jobWorkingDirectory,
+            errors,
+            `workflow job ${jobName} step ${stepIndex + 1}`,
+          );
+          commands.push({
+            command: stepValue.run,
+            cwd: stepWorkingDirectory,
+            d2LocalCloneAllowed:
+              jobName === "d2-docker-smoke" &&
+              jobHasLocalRepositoryBinding &&
+              !stepOverridesLocalBinding,
+          });
         }
       }
       if ("uses" in stepValue) {
@@ -833,7 +990,7 @@ function parseWorkflowSemantics(source: string): WorkflowSemanticModel {
       }
     }
   }
-  return { commands, actions, locallyBoundHelpers, hasOidcWrite, errors };
+  return { commands, actions, hasOidcWrite, errors };
 }
 
 function normalizeObfuscatedCommand(source: string): string {
@@ -856,15 +1013,15 @@ function extractNpmScriptNames(command: string): string[] {
 function extractLocalHelperPaths(command: string): string[] {
   const helpers = new Set<string>();
   const patterns = [
-    /(?:^|[;&|\n]\s*)[ \t]*(?:(?:env[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:bash|sh|zsh)[ \t]+(?:-[A-Za-z]+[ \t]+)*([./A-Za-z0-9_-]+(?:\.(?:sh|bash|zsh))?)\b/gu,
-    /(?:^|[;&|\n]\s*)[ \t]*(?:(?:env[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:source|\.)[ \t]+([./A-Za-z0-9_-]+(?:\.(?:sh|bash|zsh))?)\b/gu,
-    /(?:^|[;&|\n]\s*)[ \t]*(?:(?:env[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:node|tsx)[ \t]+(?:(?:--import[ \t]+\S+|--[A-Za-z-]+(?:=\S+)?)[ \t]+)*([./A-Za-z0-9_-]+\.(?:[cm]?[jt]s|tsx))\b/gu,
-    /(?:^|[;&|\n]\s*)[ \t]*(?:(?:env[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*npx[ \t]+(?:--yes[ \t]+)?tsx[ \t]+([./A-Za-z0-9_-]+\.(?:[cm]?[jt]s|tsx))\b/gu,
-    /(?:^|[;&|\n]\s*)[ \t]*\.\/([A-Za-z0-9_./-]+\.(?:sh|bash|zsh|[cm]?[jt]s|tsx))\b/gu,
+    /(?:^|[;&|\n])[ \t]*(?:env[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:\/(?:usr\/)?bin\/)?(?:bash|sh|zsh)[ \t]+(?:-[A-Za-z]+[ \t]+)*(?:"([^"\n]+)"|'([^'\n]+)'|([./A-Za-z0-9_-]+(?:\.(?:sh|bash|zsh))?))/gu,
+    /(?:^|[;&|\n])[ \t]*(?:env[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:source|\.)[ \t]+(?:"([^"\n]+)"|'([^'\n]+)'|([./A-Za-z0-9_-]+(?:\.(?:sh|bash|zsh))?))/gu,
+    /(?:^|[;&|\n])[ \t]*(?:env[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:node|tsx)[ \t]+(?:(?:--import[ \t]+\S+|--[A-Za-z-]+(?:=\S+)?)[ \t]+)*(?:"([^"\n]+\.(?:[cm]?[jt]s|tsx))"|'([^'\n]+\.(?:[cm]?[jt]s|tsx))'|([./A-Za-z0-9_-]+\.(?:[cm]?[jt]s|tsx)))/gu,
+    /(?:^|[;&|\n])[ \t]*(?:env[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*npx[ \t]+(?:--yes[ \t]+)?tsx[ \t]+(?:"([^"\n]+\.(?:[cm]?[jt]s|tsx))"|'([^'\n]+\.(?:[cm]?[jt]s|tsx))'|([./A-Za-z0-9_-]+\.(?:[cm]?[jt]s|tsx)))/gu,
+    /(?:^|[;&|\n])[ \t]*\.\/([A-Za-z0-9_./-]+\.(?:sh|bash|zsh|[cm]?[jt]s|tsx))/gu,
   ];
   for (const pattern of patterns) {
     for (const match of command.matchAll(pattern)) {
-      const helper = match[1];
+      const helper = match[1] ?? match[2] ?? match[3];
       if (helper !== undefined) helpers.add(helper.replace(/^\.\//u, ""));
     }
   }
@@ -885,138 +1042,187 @@ function hasUnresolvedHelperReference(command: string): boolean {
   );
 }
 
-function collectReachableHelperCommands(
-  commands: readonly string[],
-  packageScripts: Readonly<Record<string, string>>,
-): { helperPaths: string[]; errors: string[] } {
-  const helperPaths = new Set<string>();
-  const errors: string[] = [];
-  const pending = [...commands];
-  const visitedScripts = new Set<string>();
-  while (pending.length > 0) {
-    const command = pending.shift()!;
-    for (const helper of extractLocalHelperPaths(command)) {
-      helperPaths.add(helper);
-    }
-    for (const scriptName of extractNpmScriptNames(command)) {
-      if (visitedScripts.has(scriptName)) continue;
-      visitedScripts.add(scriptName);
-      const script = packageScripts[scriptName];
-      if (script === undefined) {
-        errors.push(`workflow npm script could not be resolved: ${scriptName}`);
-      } else {
-        pending.push(script);
-      }
-    }
-    if (hasUnresolvedHelperReference(command)) {
-      errors.push("workflow helper entry could not be resolved statically");
-    }
-  }
-  return { helperPaths: [...helperPaths], errors };
+type PendingHelper = Readonly<{
+  file: string;
+  cwd: string;
+  d2LocalCloneAllowed: boolean;
+}>;
+
+type ReachableCommand = WorkflowCommand &
+  Readonly<{
+    sourceFile: string;
+  }>;
+
+type ReachableHelperCheck = Readonly<{
+  violations: readonly CaioProV1Violation[];
+  commands: readonly Pick<WorkflowCommand, "command" | "cwd">[];
+}>;
+
+function resolveWorkflowHelperPath(
+  cwd: string,
+  helperPath: string,
+): string | null {
+  if (path.posix.isAbsolute(helperPath)) return null;
+  const normalized = path.posix.normalize(
+    path.posix.join(cwd, helperPath.replace(/^\.\//u, "")),
+  );
+  if (normalized === ".." || normalized.startsWith("../")) return null;
+  return normalized;
 }
 
 function checkWorkflowReachableHelpers(
   repoRoot: string,
   workflowFile: string,
-  commands: readonly string[],
+  commands: readonly WorkflowCommand[],
   packageScripts: Readonly<Record<string, string>>,
-  locallyBoundHelpers: ReadonlySet<string>,
-): CaioProV1Violation[] {
+): ReachableHelperCheck {
   const violations: CaioProV1Violation[] = [];
-  const reachable = collectReachableHelperCommands(commands, packageScripts);
-  for (const detail of reachable.errors) {
-    violations.push({ rule: "CPV1-CI", file: workflowFile, detail });
-  }
-  const pendingHelpers = [...reachable.helperPaths];
+  const reachableCommands = new Map<
+    string,
+    Pick<WorkflowCommand, "command" | "cwd">
+  >();
+  const pendingCommands: ReachableCommand[] = commands.map((command) => ({
+    ...command,
+    sourceFile: workflowFile,
+  }));
+  const pendingHelpers: PendingHelper[] = [];
+  const visitedCommands = new Set<string>();
   const visitedHelpers = new Set<string>();
-  while (pendingHelpers.length > 0) {
-    const helperPath = pendingHelpers.shift()!;
-    const normalized = path.posix.normalize(helperPath);
-    if (visitedHelpers.has(normalized)) continue;
-    visitedHelpers.add(normalized);
-    if (
-      path.posix.isAbsolute(normalized) ||
-      normalized === ".." ||
-      normalized.startsWith("../")
-    ) {
-      violations.push({
-        rule: "CPV1-CI",
-        file: workflowFile,
-        detail: `workflow helper path leaves the repository: ${helperPath}`,
-      });
+  while (pendingCommands.length > 0 || pendingHelpers.length > 0) {
+    const pendingCommand = pendingCommands.shift();
+    if (pendingCommand !== undefined) {
+      const commandKey = `${pendingCommand.cwd}\u0000${pendingCommand.d2LocalCloneAllowed ? "local" : "ordinary"}\u0000${pendingCommand.command}`;
+      if (visitedCommands.has(commandKey)) continue;
+      visitedCommands.add(commandKey);
+      reachableCommands.set(
+        `${pendingCommand.cwd}\u0000${pendingCommand.command}`,
+        { command: pendingCommand.command, cwd: pendingCommand.cwd },
+      );
+      for (const helperPath of extractLocalHelperPaths(
+        pendingCommand.command,
+      )) {
+        const resolved = resolveWorkflowHelperPath(
+          pendingCommand.cwd,
+          helperPath,
+        );
+        if (resolved === null) {
+          violations.push({
+            rule: "CPV1-CI",
+            file: workflowFile,
+            detail: `workflow helper path leaves the repository: ${helperPath}`,
+          });
+        } else {
+          pendingHelpers.push({
+            file: resolved,
+            cwd: pendingCommand.cwd,
+            d2LocalCloneAllowed:
+              pendingCommand.d2LocalCloneAllowed &&
+              workflowFile === D2_DOCKER_SMOKE_WORKFLOW &&
+              pendingCommand.cwd === "" &&
+              pendingCommand.command === D2_DOCKER_SMOKE_INVOCATION &&
+              resolved === D2_DOCKER_SMOKE_HELPER,
+          });
+        }
+      }
+      for (const scriptName of extractNpmScriptNames(pendingCommand.command)) {
+        const script = packageScripts[scriptName];
+        if (script === undefined) {
+          violations.push({
+            rule: "CPV1-CI",
+            file: workflowFile,
+            detail: `workflow npm script could not be resolved: ${scriptName}`,
+          });
+        } else {
+          pendingCommands.push({
+            command: script,
+            cwd: "",
+            d2LocalCloneAllowed: false,
+            sourceFile: pendingCommand.sourceFile,
+          });
+        }
+      }
+      if (hasUnresolvedHelperReference(pendingCommand.command)) {
+        violations.push({
+          rule: "CPV1-CI",
+          file: pendingCommand.sourceFile,
+          detail: "workflow helper entry could not be resolved statically",
+        });
+      }
       continue;
     }
-    const content = read(repoRoot, normalized);
+
+    const helper = pendingHelpers.shift()!;
+    const helperKey = `${helper.file}\u0000${helper.cwd}\u0000${helper.d2LocalCloneAllowed ? "local" : "ordinary"}`;
+    if (visitedHelpers.has(helperKey)) continue;
+    visitedHelpers.add(helperKey);
+    const content = read(repoRoot, helper.file);
     if (content === null) {
       violations.push({
         rule: "CPV1-CI",
         file: workflowFile,
-        detail: `workflow-reachable helper could not be read: ${normalized}`,
+        detail: `workflow-reachable helper could not be read: ${helper.file}`,
       });
       continue;
     }
-    if (isShellHelper(normalized, content)) {
-      for (const childHelper of extractLocalHelperPaths(content)) {
-        if (!visitedHelpers.has(childHelper)) pendingHelpers.push(childHelper);
-      }
-      if (hasUnresolvedHelperReference(content)) {
+    if (isShellHelper(helper.file, content)) {
+      pendingCommands.push({
+        command: blankWholeLineComments(content),
+        cwd: helper.cwd,
+        d2LocalCloneAllowed: false,
+        sourceFile: helper.file,
+      });
+    } else {
+      const inspection = inspectSourceFile(helper.file, content);
+      if (inspection.parseDiagnostics.length > 0) {
         violations.push({
           rule: "CPV1-CI",
-          file: normalized,
-          detail: "workflow helper entry could not be resolved statically",
+          file: helper.file,
+          detail: "workflow-reachable helper could not be parsed statically",
         });
       }
-    } else {
-      for (const moduleSpecifier of findStaticLocalModuleSpecifiers(
-        normalized,
-        content,
-      )) {
-        const childHelper = resolveLocalModulePath(
+      for (const moduleSpecifier of findStaticModuleSpecifiers(inspection)) {
+        const resolution = resolveLocalModulePath(
           repoRoot,
-          normalized,
+          helper.file,
           moduleSpecifier,
         );
-        if (childHelper === null) {
+        if (resolution.kind === "unresolved") {
           violations.push({
             rule: "CPV1-CI",
-            file: normalized,
+            file: helper.file,
             detail: `workflow-reachable local module could not be resolved: ${moduleSpecifier}`,
           });
-        } else if (!visitedHelpers.has(childHelper)) {
-          pendingHelpers.push(childHelper);
+        } else if (resolution.kind === "resolved") {
+          pendingHelpers.push({
+            file: resolution.file,
+            cwd: helper.cwd,
+            d2LocalCloneAllowed: false,
+          });
         }
       }
     }
     if (
-      helperHasRemoteRepositoryAccess(normalized, content) &&
+      helperHasRemoteRepositoryAccess(helper.file, content) &&
       !(
-        locallyBoundHelpers.has(normalized) &&
-        isSafeLocalCloneHelper(normalized, content)
+        helper.d2LocalCloneAllowed &&
+        isSafeLocalCloneHelper(helper.file, content)
       )
     ) {
       violations.push({
         rule: "CPV1-CI",
-        file: normalized,
+        file: helper.file,
         detail: "workflow-reachable helper must not fetch remote repositories",
       });
     }
   }
-  return violations;
+  return { violations, commands: [...reachableCommands.values()] };
 }
 
-function findStaticLocalModuleSpecifiers(
-  file: string,
-  content: string,
-): string[] {
-  const inspection = inspectSourceFile(file, content);
+function findStaticModuleSpecifiers(inspection: SourceInspection): string[] {
   if (inspection.parseDiagnostics.length > 0) return [];
   const specifiers = new Set<string>();
   const add = (node: ts.Expression | undefined): void => {
-    if (
-      node !== undefined &&
-      ts.isStringLiteralLike(node) &&
-      node.text.startsWith(".")
-    ) {
+    if (node !== undefined && ts.isStringLiteralLike(node)) {
       specifiers.add(node.text);
     }
   };
@@ -1037,14 +1243,14 @@ function findStaticLocalModuleSpecifiers(
   return [...specifiers];
 }
 
-function resolveLocalModulePath(
+type LocalModuleResolution =
+  | Readonly<{ kind: "external" | "unresolved" }>
+  | Readonly<{ kind: "resolved"; file: string }>;
+
+function resolveSourceFileCandidate(
   repoRoot: string,
-  parentFile: string,
-  moduleSpecifier: string,
+  base: string,
 ): string | null {
-  const base = path.posix.normalize(
-    path.posix.join(path.posix.dirname(parentFile), moduleSpecifier),
-  );
   if (base === ".." || base.startsWith("../") || path.posix.isAbsolute(base)) {
     return null;
   }
@@ -1064,43 +1270,72 @@ function resolveLocalModulePath(
   );
 }
 
+function resolveLocalModulePath(
+  repoRoot: string,
+  parentFile: string,
+  moduleSpecifier: string,
+): LocalModuleResolution {
+  if (moduleSpecifier.startsWith(".")) {
+    const base = path.posix.normalize(
+      path.posix.join(path.posix.dirname(parentFile), moduleSpecifier),
+    );
+    const file = resolveSourceFileCandidate(repoRoot, base);
+    return file === null ? { kind: "unresolved" } : { kind: "resolved", file };
+  }
+
+  const tsconfigContent = read(repoRoot, "tsconfig.json");
+  if (tsconfigContent === null) return { kind: "external" };
+  const parsed = ts.parseConfigFileTextToJson("tsconfig.json", tsconfigContent);
+  if (parsed.error !== undefined || !isRecord(parsed.config)) {
+    return moduleSpecifier.startsWith("@/")
+      ? { kind: "unresolved" }
+      : { kind: "external" };
+  }
+  const compilerOptions = isRecord(parsed.config.compilerOptions)
+    ? parsed.config.compilerOptions
+    : {};
+  const paths = isRecord(compilerOptions.paths) ? compilerOptions.paths : {};
+  const baseUrl =
+    typeof compilerOptions.baseUrl === "string" ? compilerOptions.baseUrl : ".";
+  for (const [pattern, targetValue] of Object.entries(paths)) {
+    if (!Array.isArray(targetValue)) continue;
+    const wildcardIndex = pattern.indexOf("*");
+    const prefix =
+      wildcardIndex < 0 ? pattern : pattern.slice(0, wildcardIndex);
+    const suffix = wildcardIndex < 0 ? "" : pattern.slice(wildcardIndex + 1);
+    if (
+      (wildcardIndex < 0 && moduleSpecifier !== pattern) ||
+      (wildcardIndex >= 0 &&
+        (!moduleSpecifier.startsWith(prefix) ||
+          !moduleSpecifier.endsWith(suffix)))
+    ) {
+      continue;
+    }
+    const wildcard =
+      wildcardIndex < 0
+        ? ""
+        : moduleSpecifier.slice(
+            prefix.length,
+            moduleSpecifier.length - suffix.length,
+          );
+    for (const target of targetValue) {
+      if (typeof target !== "string") return { kind: "unresolved" };
+      const base = path.posix.normalize(
+        path.posix.join(baseUrl, target.replace("*", wildcard)),
+      );
+      const file = resolveSourceFileCandidate(repoRoot, base);
+      if (file !== null) return { kind: "resolved", file };
+    }
+    return { kind: "unresolved" };
+  }
+  return { kind: "external" };
+}
+
 function isSafeLocalCloneHelper(file: string, content: string): boolean {
-  if (file !== "scripts/d2-docker-smoke.sh") return false;
-  const repoUrlAssignments = content.match(/^[ \t]*repo_url=.*$/gmu) ?? [];
-  const refAssignments = content.match(/^[ \t]*ref=.*$/gmu) ?? [];
-  if (
-    repoUrlAssignments.length !== 1 ||
-    repoUrlAssignments[0] !==
-      'repo_url="${HELM_D2_SMOKE_REPO_URL:-$(git config --get remote.origin.url)}"' ||
-    refAssignments.length !== 1 ||
-    refAssignments[0] !== 'ref="${HELM_D2_SMOKE_REF:-HEAD}"' ||
-    /^[ \t]*(?:export[ \t]+)?HELM_D2_SMOKE_(?:REPO_URL|REF)=/mu.test(content)
-  ) {
-    return false;
-  }
-  const remoteLines = content
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => WORKFLOW_MANUAL_REMOTE_FETCH.test(line));
-  const allowedRemoteLine = (line: string): boolean =>
-    /^code="\$\(curl [^\n]* "\$url" \|\| true\)"$/u.test(line) ||
-    /^curl --verbose --location "\$url" >&2 \|\| true$/u.test(line) ||
-    /^git clone --no-checkout "\$repo_url" "\$workdir"$/u.test(line) ||
-    /^git -C "\$workdir" fetch --depth 1 origin "\$ref"$/u.test(line);
-  if (
-    remoteLines.length !== 4 ||
-    !remoteLines.every((line) => allowedRemoteLine(line))
-  ) {
-    return false;
-  }
-  const waitTargets = [...content.matchAll(/wait_for_url\s+"([^"]+)"/gu)].map(
-    (match) => match[1] ?? "",
-  );
   return (
-    waitTargets.length === 4 &&
-    waitTargets.every((target) =>
-      /^http:\/\/localhost(?::\d+)?\//u.test(target),
-    )
+    file === D2_DOCKER_SMOKE_HELPER &&
+    createHash("sha256").update(content).digest("hex") ===
+      D2_DOCKER_SMOKE_HELPER_SHA256
   );
 }
 
@@ -1133,10 +1368,35 @@ function helperHasRemoteRepositoryAccess(
           calleeName,
         )
       ) {
-        const command = node.arguments
-          .filter((argument) => ts.isStringLiteralLike(argument))
-          .map((argument) => (argument as ts.StringLiteralLike).text)
-          .join(" ");
+        const firstArgument = node.arguments[0];
+        if (firstArgument === undefined) {
+          return;
+        }
+        const firstValue = unwrapTransparentExpression(firstArgument);
+        const staticCommand = ts.isStringLiteralLike(firstValue)
+          ? firstValue.text
+          : firstValue.getText(inspection.source);
+        const commandParts = [staticCommand];
+        if (/^(?:execFile|execFileSync|spawn|spawnSync)$/u.test(calleeName)) {
+          const argv = node.arguments[1];
+          if (argv !== undefined) {
+            if (
+              !ts.isArrayLiteralExpression(argv) ||
+              argv.elements.some((element) => !ts.isStringLiteralLike(element))
+            ) {
+              if (/^(?:curl|gh|wget)$/u.test(staticCommand)) {
+                remoteAccess = true;
+              }
+              return;
+            }
+            commandParts.push(
+              ...argv.elements.map(
+                (element) => (element as ts.StringLiteralLike).text,
+              ),
+            );
+          }
+        }
+        const command = commandParts.join(" ");
         if (WORKFLOW_MANUAL_REMOTE_FETCH.test(command)) {
           remoteAccess = true;
           return;
@@ -1164,12 +1424,17 @@ function hasInlineNodeFetch(command: string): boolean {
   );
 }
 
+type WorkflowIsolationCheck = Readonly<{
+  violations: readonly CaioProV1Violation[];
+  reachableCommands: readonly Pick<WorkflowCommand, "command" | "cwd">[];
+}>;
+
 function checkPublicWorkflowIsolation(
   repoRoot: string,
   workflowFile: string,
   source: string,
   packageScripts: Readonly<Record<string, string>>,
-): CaioProV1Violation[] {
+): WorkflowIsolationCheck {
   const violations: CaioProV1Violation[] = [];
   const semantic = parseWorkflowSemantics(source);
   const executableSource = blankWholeLineComments(source);
@@ -1187,7 +1452,7 @@ function checkPublicWorkflowIsolation(
   if (
     semantic.hasOidcWrite ||
     WORKFLOW_OIDC_REQUEST_ENVIRONMENT.test(executableSource) ||
-    semantic.commands.some((command) =>
+    semantic.commands.some(({ command }) =>
       WORKFLOW_OIDC_REQUEST_ENVIRONMENT_OBFUSCATED.test(
         normalizeObfuscatedCommand(command),
       ),
@@ -1202,7 +1467,7 @@ function checkPublicWorkflowIsolation(
       "Public workflows must not fetch another repository through shell network commands",
     );
   }
-  if (semantic.commands.some((command) => hasInlineNodeFetch(command))) {
+  if (semantic.commands.some(({ command }) => hasInlineNodeFetch(command))) {
     reject(
       "Public workflows must not fetch another repository through inline node evaluation",
     );
@@ -1268,17 +1533,15 @@ function checkPublicWorkflowIsolation(
     );
   }
 
-  violations.push(
-    ...checkWorkflowReachableHelpers(
-      repoRoot,
-      workflowFile,
-      semantic.commands,
-      packageScripts,
-      semantic.locallyBoundHelpers,
-    ),
+  const reachable = checkWorkflowReachableHelpers(
+    repoRoot,
+    workflowFile,
+    semantic.commands,
+    packageScripts,
   );
+  violations.push(...reachable.violations);
 
-  return violations;
+  return { violations, reachableCommands: reachable.commands };
 }
 
 function findReverseCompositionMarkers(
@@ -1295,16 +1558,20 @@ function findReverseCompositionMarkers(
     }));
 }
 
-function findReferencedRunnerConfigs(commands: readonly string[]): Set<string> {
+function findReferencedRunnerConfigs(
+  commands: readonly Pick<WorkflowCommand, "command" | "cwd">[],
+): Set<string> {
   const configs = new Set<string>();
-  for (const command of commands) {
+  for (const { command, cwd } of commands) {
     const normalizedCommand = command.replace(/\\\s*\n\s*/gu, " ");
     for (const match of normalizedCommand.matchAll(
-      /\b(?:npx\s+)?(?:vitest|vite)\b[^;&|\n]*?--config(?:=|\s+)(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/gu,
+      /\b(?:npx\s+)?(?:vitest|vite)\b[^;&|\n]*?(?:--config(?:=|\s+)|-c\s+)(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/gu,
     )) {
       const raw = match[1] ?? match[2] ?? match[3];
       if (raw === undefined) continue;
-      const normalized = path.posix.normalize(raw.replace(/^\.\//u, ""));
+      const normalized = path.posix.normalize(
+        path.posix.join(cwd, raw.replace(/^\.\//u, "")),
+      );
       configs.add(normalized);
     }
   }
@@ -1980,13 +2247,26 @@ export function checkCaioProV1Static(
     }
   }
   const workflowFiles = listWorkflowFiles(repoRoot);
-  const workflowCommands = workflowFiles.flatMap((workflowFile) => {
+  const workflowIsolation = new Map<string, WorkflowIsolationCheck>();
+  for (const workflowFile of workflowFiles) {
     const content = read(repoRoot, workflowFile);
-    return content === null ? [] : parseWorkflowSemantics(content).commands;
-  });
+    if (content !== null) {
+      workflowIsolation.set(
+        workflowFile,
+        checkPublicWorkflowIsolation(
+          repoRoot,
+          workflowFile,
+          content,
+          packageScripts,
+        ),
+      );
+    }
+  }
   const referencedRunnerConfigs = findReferencedRunnerConfigs([
-    ...Object.values(packageScripts),
-    ...workflowCommands,
+    ...Object.values(packageScripts).map((command) => ({ command, cwd: "" })),
+    ...[...workflowIsolation.values()].flatMap(
+      ({ reachableCommands }) => reachableCommands,
+    ),
   ]);
   violations.push(
     ...checkPublicCompositionOwnership(repoRoot, referencedRunnerConfigs),
@@ -2197,17 +2477,7 @@ export function checkCaioProV1Static(
   }
 
   for (const workflowFile of workflowFiles) {
-    const content = read(repoRoot, workflowFile);
-    if (content !== null) {
-      violations.push(
-        ...checkPublicWorkflowIsolation(
-          repoRoot,
-          workflowFile,
-          content,
-          packageScripts,
-        ),
-      );
-    }
+    violations.push(...(workflowIsolation.get(workflowFile)?.violations ?? []));
   }
 
   return violations;

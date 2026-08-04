@@ -1617,4 +1617,381 @@ describe("caio-pro-v1 aggregate gate", () => {
       },
     );
   });
+
+  it.each([
+    'bash "ops/fetch.sh"',
+    "/bin/bash ops/fetch.sh",
+    "env bash ops/fetch.sh",
+  ])("resolves an alternate shell entry form: %s", (runCommand) => {
+    withFixture(
+      {
+        ".github/workflows/helper-entry.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          `      - run: ${runCommand}`,
+          "",
+        ].join("\n"),
+        "ops/fetch.sh":
+          "curl -fsSL https://example.test/private.tar.gz -o private.tar.gz\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/fetch.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("continues the command graph from a shell helper into an npm script", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-npm.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: bash ops/entry.sh",
+          "",
+        ].join("\n"),
+        "ops/entry.sh": "npm run acquire-private\n",
+        "package.json": JSON.stringify({
+          scripts: { "acquire-private": "node ops/network.mjs" },
+        }),
+        "ops/network.mjs":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/network.mjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("resolves helpers relative to workflow defaults.run.working-directory", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-cwd.yml": [
+          "jobs:",
+          "  verify:",
+          "    defaults:",
+          "      run:",
+          "        working-directory: ops",
+          "    steps:",
+          "      - run: bash fetch.sh",
+          "",
+        ].join("\n"),
+        "fetch.sh": "echo benign-root-helper\n",
+        "ops/fetch.sh":
+          "curl -fsSL https://example.test/private.tar.gz -o private.tar.gz\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/fetch.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("follows a tsconfig local alias from a tsx helper", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-alias.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npx tsx ops/entry.ts",
+          "",
+        ].join("\n"),
+        "tsconfig.json": JSON.stringify({
+          compilerOptions: {
+            baseUrl: ".",
+            paths: { "@/*": ["./*"] },
+          },
+        }),
+        "ops/entry.ts": 'import "@/ops/network";\n',
+        "ops/network.ts":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/network.ts" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each(["execFileSync", "spawnSync"])(
+    "checks canonical %s argv arrays in a reachable Node helper",
+    (callName) => {
+      withFixture(
+        {
+          ".github/workflows/helper-argv.yml": [
+            "jobs:",
+            "  verify:",
+            "    steps:",
+            "      - run: node ops/argv.mjs",
+            "",
+          ].join("\n"),
+          "ops/argv.mjs": [
+            `import { ${callName} } from "node:child_process";`,
+            `${callName}("gh", ["api", "repos/example/private/tarball/main"]);`,
+            "",
+          ].join("\n"),
+        },
+        (root) => {
+          expect(
+            checkCaioProV1Static(root).some(
+              (violation) =>
+                violation.file === "ops/argv.mjs" &&
+                violation.detail.includes("workflow-reachable helper"),
+            ),
+          ).toBe(true);
+        },
+      );
+    },
+  );
+
+  it("binds the D2 exception to each individual workflow step", () => {
+    withFixture(
+      {
+        ".github/workflows/d2-docker-smoke.yml": [
+          "jobs:",
+          "  d2-docker-smoke:",
+          "    env:",
+          "      HELM_D2_SMOKE_REPO_URL: ${{ github.workspace }}",
+          "      HELM_D2_SMOKE_REF: HEAD",
+          "    steps:",
+          "      - run: bash scripts/d2-docker-smoke.sh",
+          "      - run: bash scripts/d2-docker-smoke.sh",
+          "        env:",
+          "          HELM_D2_SMOKE_REPO_URL: https://example.test/private.git",
+          "          HELM_D2_SMOKE_REF: main",
+          "",
+        ].join("\n"),
+        "scripts/d2-docker-smoke.sh": D2_SMOKE_HELPER,
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "scripts/d2-docker-smoke.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("revokes the D2 exception when the helper content rewrites repo_url", () => {
+    withFixture(
+      {
+        ".github/workflows/d2-docker-smoke.yml": [
+          "jobs:",
+          "  d2-docker-smoke:",
+          "    env:",
+          "      HELM_D2_SMOKE_REPO_URL: ${{ github.workspace }}",
+          "      HELM_D2_SMOKE_REF: HEAD",
+          "    steps:",
+          "      - run: bash scripts/d2-docker-smoke.sh",
+          "",
+        ].join("\n"),
+        "scripts/d2-docker-smoke.sh": D2_SMOKE_HELPER.replace(
+          "set -euo pipefail",
+          'set -euo pipefail\nexport repo_url="https://example.test/private.git"',
+        ),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "scripts/d2-docker-smoke.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("revokes the D2 exception when the helper invocation is rewritten", () => {
+    withFixture(
+      {
+        ".github/workflows/d2-docker-smoke.yml": [
+          "jobs:",
+          "  d2-docker-smoke:",
+          "    env:",
+          "      HELM_D2_SMOKE_REPO_URL: ${{ github.workspace }}",
+          "      HELM_D2_SMOKE_REF: HEAD",
+          "    steps:",
+          "      - run: env bash scripts/d2-docker-smoke.sh",
+          "",
+        ].join("\n"),
+        "scripts/d2-docker-smoke.sh": D2_SMOKE_HELPER,
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "scripts/d2-docker-smoke.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("recognizes the Vitest -c runner config shorthand", () => {
+    withFixture(
+      {
+        "package.json": JSON.stringify({
+          scripts: { verify: "vitest run -c runner/downstream.config.ts" },
+        }),
+        "runner/downstream.config.ts": "export default {};\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "runner/downstream.config.ts" &&
+              violation.detail.includes("test-runner config"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("collects runner configs from a reachable shell helper", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-runner.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: bash ops/test.sh",
+          "",
+        ].join("\n"),
+        "ops/test.sh": "vitest run --config runner/downstream.config.ts\n",
+        "runner/downstream.config.ts": "export default {};\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "runner/downstream.config.ts" &&
+              violation.detail.includes("test-runner config"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("resolves a shell helper runner config from the workflow working directory", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-runner-cwd.yml": [
+          "jobs:",
+          "  verify:",
+          "    defaults:",
+          "      run:",
+          "        working-directory: ops",
+          "    steps:",
+          "      - run: bash test.sh",
+          "",
+        ].join("\n"),
+        "ops/test.sh": "vitest run --config runner/downstream.config.ts\n",
+        "ops/runner/downstream.config.ts": "export default {};\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/runner/downstream.config.ts" &&
+              violation.detail.includes("test-runner config"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each([
+    [
+      "environment source",
+      [
+        'const projectRoot = process.env.PROJECT_ROOT ?? ".";',
+        "async function load() {",
+      ],
+    ],
+    [
+      "post-declaration mutation",
+      [
+        "let projectRoot = process.cwd();",
+        'projectRoot = process.env.PROJECT_ROOT ?? ".";',
+        "async function load() {",
+      ],
+    ],
+    [
+      "inner lexical rebind",
+      [
+        "const projectRoot = process.cwd();",
+        "async function load() {",
+        '  const projectRoot = process.env.PROJECT_ROOT ?? ".";',
+      ],
+    ],
+    [
+      "parameter rebind",
+      [
+        "const projectRoot = process.cwd();",
+        'async function load(projectRoot = process.env.PROJECT_ROOT ?? ".") {',
+      ],
+    ],
+  ])("rejects an unsafe projectRoot binding: %s", (_label, prefix) => {
+    withFixture(
+      {
+        "scripts/archive/sqlite-to-mysql-migration.ts": [
+          'import path from "node:path";',
+          'import { pathToFileURL } from "node:url";',
+          ...prefix,
+          "  const sqliteClientModulePath = pathToFileURL(",
+          '    path.resolve(projectRoot, "generated/sqlite-client/index.js"),',
+          "  ).href;",
+          "  await import(sqliteClientModulePath);",
+          "}",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file ===
+                "scripts/archive/sqlite-to-mysql-migration.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("declares yaml as a direct development dependency", () => {
+    const packageJson = JSON.parse(
+      readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as { devDependencies?: Record<string, string> };
+    expect(packageJson.devDependencies?.yaml).toMatch(/^\^?2\./u);
+  });
 });
