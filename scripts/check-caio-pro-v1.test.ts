@@ -55,6 +55,10 @@ const D2_SMOKE_HELPER = readFileSync(
   path.join(process.cwd(), "scripts/d2-docker-smoke.sh"),
   "utf8",
 );
+const D2_SMOKE_WORKFLOW = readFileSync(
+  path.join(process.cwd(), ".github/workflows/d2-docker-smoke.yml"),
+  "utf8",
+);
 
 function withFixture(
   files: Record<string, string>,
@@ -827,6 +831,61 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("rejects an extensionless executable helper that fetches a repository", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: ./ops/fetch",
+          "",
+        ].join("\n"),
+        "ops/fetch":
+          "#!/usr/bin/env bash\ngh api repos/example/private/tarball/main\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/fetch" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each([
+    '"/bin/bash" ops/fetch.sh',
+    "/usr/bin/env bash ops/fetch.sh",
+    "env -i bash ops/fetch.sh",
+    "command bash ops/fetch.sh",
+  ])("resolves an ordinary wrapped shell helper entry: %s", (runCommand) => {
+    withFixture(
+      {
+        ".github/workflows/helper-entry.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          `      - run: ${JSON.stringify(runCommand)}`,
+          "",
+        ].join("\n"),
+        "ops/fetch.sh":
+          "gh api repos/example/private/tarball/main > private.tar.gz\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/fetch.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it("rejects a workflow-reachable module helper that uses fetch", () => {
     withFixture(
       {
@@ -931,6 +990,56 @@ describe("caio-pro-v1 aggregate gate", () => {
               violation.rule === "CPV1-CI" &&
               violation.file === "ops/fetch-private.mjs" &&
               violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each([
+    'await globalThis["fetch"]("https://example.test/private.tar.gz");',
+    'await fetch.call(globalThis, "https://example.test/private.tar.gz");',
+  ])("rejects an indirect fetch call in a reachable helper: %s", (source) => {
+    withFixture(
+      {
+        ".github/workflows/helper-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: node ops/fetch-private.mjs",
+          "",
+        ].join("\n"),
+        "ops/fetch-private.mjs": `${source}\n`,
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/fetch-private.mjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects bracket-access fetch in inline Node evaluation", () => {
+    withFixture(
+      {
+        ".github/workflows/inline-fetch.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          '      - run: node -e \'globalThis["fetch"]("https://example.test/private.tar.gz")\'',
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/inline-fetch.yml" &&
+              violation.detail.includes("inline node evaluation"),
           ),
         ).toBe(true);
       },
@@ -1116,6 +1225,37 @@ describe("caio-pro-v1 aggregate gate", () => {
       },
     );
   });
+
+  it.each(["python3 ops/fetch.py", '"/usr/bin/python3" ops/fetch.py'])(
+    "fails closed for an unsupported local interpreter helper: %s",
+    (runCommand) => {
+      withFixture(
+        {
+          ".github/workflows/python-helper.yml": [
+            "jobs:",
+            "  verify:",
+            "    steps:",
+            `      - run: ${JSON.stringify(runCommand)}`,
+            "",
+          ].join("\n"),
+          "ops/fetch.py": [
+            "from urllib.request import urlopen",
+            'urlopen("https://example.test/private.tar.gz")',
+            "",
+          ].join("\n"),
+        },
+        (root) => {
+          expect(
+            checkCaioProV1Static(root).some(
+              (violation) =>
+                violation.file === ".github/workflows/python-helper.yml" &&
+                violation.detail.includes("unsupported local interpreter"),
+            ),
+          ).toBe(true);
+        },
+      );
+    },
+  );
 
   it("does not let comments forge a computed-import allowance", () => {
     withFixture(
@@ -1676,6 +1816,70 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("resolves npm scripts from the workflow working directory package", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-npm-cwd.yml": [
+          "jobs:",
+          "  verify:",
+          "    defaults:",
+          "      run:",
+          "        working-directory: ops",
+          "    steps:",
+          "      - run: bash entry.sh",
+          "",
+        ].join("\n"),
+        "ops/entry.sh": "npm run acquire-private\n",
+        "package.json": JSON.stringify({
+          scripts: { "acquire-private": "echo benign-root-script" },
+        }),
+        "ops/package.json": JSON.stringify({
+          scripts: { "acquire-private": "node network.mjs" },
+        }),
+        "ops/network.mjs":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/network.mjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects remote access executed directly by an npm script", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-npm.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npm run acquire-private",
+          "",
+        ].join("\n"),
+        "package.json": JSON.stringify({
+          scripts: {
+            "acquire-private":
+              "curl -fsSL https://example.test/private.tar.gz -o private.tar.gz",
+          },
+        }),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "package.json" &&
+              violation.detail.includes("workflow-reachable command"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it("resolves helpers relative to workflow defaults.run.working-directory", () => {
     withFixture(
       {
@@ -1737,6 +1941,68 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("follows a tsconfig baseUrl import from a reachable helper", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-base-url.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npx tsx ops/entry.ts",
+          "",
+        ].join("\n"),
+        "tsconfig.json": JSON.stringify({
+          compilerOptions: { baseUrl: "." },
+        }),
+        "ops/entry.ts": 'import "ops/network";\n',
+        "ops/network.ts":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/network.ts" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("follows a tsconfig alias inherited through extends", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-extends.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npx tsx ops/entry.ts",
+          "",
+        ].join("\n"),
+        "tsconfig.json": JSON.stringify({ extends: "./config/base.json" }),
+        "config/base.json": JSON.stringify({
+          compilerOptions: {
+            baseUrl: "..",
+            paths: { "@ops/*": ["ops/*"] },
+          },
+        }),
+        "ops/entry.ts": 'import "@ops/network";\n',
+        "ops/network.ts":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/network.ts" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it.each(["execFileSync", "spawnSync"])(
     "checks canonical %s argv arrays in a reachable Node helper",
     (callName) => {
@@ -1767,6 +2033,34 @@ describe("caio-pro-v1 aggregate gate", () => {
       );
     },
   );
+
+  it("rejects repository access through an imported child-process alias", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-argv.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: node ops/argv.mjs",
+          "",
+        ].join("\n"),
+        "ops/argv.mjs": [
+          'import { execFileSync as run } from "node:child_process";',
+          'run("gh", ["api", "repos/example/private/tarball/main"]);',
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/argv.mjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
 
   it("binds the D2 exception to each individual workflow step", () => {
     withFixture(
@@ -1856,11 +2150,87 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it.each([
+    [
+      "a previous step writes GITHUB_ENV",
+      D2_SMOKE_WORKFLOW.replace(
+        "      - name: Run D2 fresh-clone Docker smoke",
+        [
+          "      - name: Rewrite D2 binding",
+          '        run: echo "HELM_D2_SMOKE_REPO_URL=https://example.test/private.git" >> "$GITHUB_ENV"',
+          "",
+          "      - name: Run D2 fresh-clone Docker smoke",
+        ].join("\n"),
+      ),
+    ],
+    [
+      "BASH_ENV can alter the helper environment",
+      D2_SMOKE_WORKFLOW.replace(
+        "      HELM_D2_SMOKE_REF: HEAD",
+        [
+          "      HELM_D2_SMOKE_REF: HEAD",
+          "      BASH_ENV: scripts/d2-env-override.sh",
+        ].join("\n"),
+      ),
+    ],
+    [
+      "a previous step replaces the helper",
+      D2_SMOKE_WORKFLOW.replace(
+        "      - name: Run D2 fresh-clone Docker smoke",
+        [
+          "      - name: Replace helper",
+          "        run: cp scripts/replacement.sh scripts/d2-docker-smoke.sh",
+          "",
+          "      - name: Run D2 fresh-clone Docker smoke",
+        ].join("\n"),
+      ),
+    ],
+  ])("revokes the D2 exception when %s", (_label, workflow) => {
+    withFixture(
+      {
+        ".github/workflows/d2-docker-smoke.yml": workflow,
+        "scripts/d2-docker-smoke.sh": D2_SMOKE_HELPER,
+        "scripts/d2-env-override.sh":
+          'export HELM_D2_SMOKE_REPO_URL="https://example.test/private.git"\n',
+        "scripts/replacement.sh": "gh api repos/example/private/tarball/main\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "scripts/d2-docker-smoke.sh" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it("recognizes the Vitest -c runner config shorthand", () => {
     withFixture(
       {
         "package.json": JSON.stringify({
           scripts: { verify: "vitest run -c runner/downstream.config.ts" },
+        }),
+        "runner/downstream.config.ts": "export default {};\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "runner/downstream.config.ts" &&
+              violation.detail.includes("test-runner config"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("recognizes the Vitest -c= runner config shorthand", () => {
+    withFixture(
+      {
+        "package.json": JSON.stringify({
+          scripts: { verify: "vitest run -c=runner/downstream.config.ts" },
         }),
         "runner/downstream.config.ts": "export default {};\n",
       },
@@ -1960,6 +2330,14 @@ describe("caio-pro-v1 aggregate gate", () => {
         'async function load(projectRoot = process.env.PROJECT_ROOT ?? ".") {',
       ],
     ],
+    [
+      "prior cwd mutation",
+      [
+        'process.chdir(process.env.CROSS_REPO_ROOT ?? ".");',
+        "const projectRoot = process.cwd();",
+        "async function load() {",
+      ],
+    ],
   ])("rejects an unsafe projectRoot binding: %s", (_label, prefix) => {
     withFixture(
       {
@@ -1967,6 +2345,36 @@ describe("caio-pro-v1 aggregate gate", () => {
           'import path from "node:path";',
           'import { pathToFileURL } from "node:url";',
           ...prefix,
+          "  const sqliteClientModulePath = pathToFileURL(",
+          '    path.resolve(projectRoot, "generated/sqlite-client/index.js"),',
+          "  ).href;",
+          "  await import(sqliteClientModulePath);",
+          "}",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file ===
+                "scripts/archive/sqlite-to-mysql-migration.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects projectRoot derived from a shadowed process binding", () => {
+    withFixture(
+      {
+        "scripts/archive/sqlite-to-mysql-migration.ts": [
+          'import path from "node:path";',
+          'import { pathToFileURL } from "node:url";',
+          "const process = { cwd: () => process.env.CROSS_REPO_ROOT! };",
+          "const projectRoot = process.cwd();",
+          "async function load() {",
           "  const sqliteClientModulePath = pathToFileURL(",
           '    path.resolve(projectRoot, "generated/sqlite-client/index.js"),',
           "  ).href;",
