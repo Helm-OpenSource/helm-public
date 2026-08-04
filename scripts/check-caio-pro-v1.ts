@@ -1022,12 +1022,33 @@ function readDefaultsWorkingDirectory(
     errors.push(`${label} defaults.run could not be verified`);
     return inherited;
   }
+  readWorkflowShell(
+    defaults.run.shell,
+    errors,
+    `${label} defaults.run`,
+  );
   return readWorkflowWorkingDirectory(
     defaults.run["working-directory"],
     inherited,
     errors,
     `${label} defaults.run`,
   );
+}
+
+const VERIFIED_WORKFLOW_SHELLS = new Set(["bash", "sh"]);
+
+function readWorkflowShell(
+  value: unknown,
+  errors: string[],
+  label: string,
+): void {
+  if (value === undefined) return;
+  if (
+    typeof value !== "string" ||
+    !VERIFIED_WORKFLOW_SHELLS.has(value.trim())
+  ) {
+    errors.push(`${label} shell could not be verified statically`);
+  }
 }
 
 const IMPLICIT_EXECUTION_ENVIRONMENT_KEYS = new Set([
@@ -1070,6 +1091,19 @@ function readWorkflowEnvironment(
     }
   }
   return value;
+}
+
+function readJobContainerEnvironment(
+  value: unknown,
+  errors: string[],
+  label: string,
+): void {
+  if (value === undefined || typeof value === "string") return;
+  if (!isRecord(value)) {
+    errors.push(`${label} container could not be verified`);
+    return;
+  }
+  readWorkflowEnvironment(value.env, errors, `${label} container`);
 }
 
 function parseWorkflowSemantics(
@@ -1142,6 +1176,11 @@ function parseWorkflowSemantics(
       errors,
       `workflow job ${jobName}`,
     );
+    readJobContainerEnvironment(
+      jobValue.container,
+      errors,
+      `workflow job ${jobName}`,
+    );
     const jobWorkingDirectory = readDefaultsWorkingDirectory(
       jobValue.defaults,
       workflowWorkingDirectory,
@@ -1158,17 +1197,22 @@ function parseWorkflowSemantics(
         );
         continue;
       }
+      const stepEnvironment = readWorkflowEnvironment(
+        stepValue.env,
+        errors,
+        `workflow job ${jobName} step ${stepIndex + 1}`,
+      );
+      readWorkflowShell(
+        stepValue.shell,
+        errors,
+        `workflow job ${jobName} step ${stepIndex + 1}`,
+      );
       if ("run" in stepValue) {
         if (typeof stepValue.run !== "string") {
           errors.push(
             `workflow job ${jobName} step ${stepIndex + 1} run command could not be verified`,
           );
         } else {
-          const stepEnvironment = readWorkflowEnvironment(
-            stepValue.env,
-            errors,
-            `workflow job ${jobName} step ${stepIndex + 1}`,
-          );
           const stepOverridesLocalBinding =
             "HELM_D2_SMOKE_REPO_URL" in stepEnvironment ||
             "HELM_D2_SMOKE_REF" in stepEnvironment ||
@@ -2121,14 +2165,75 @@ function hasUnsupportedLocalInterpreter(command: string): boolean {
   );
 }
 
+const VERIFIED_GITHUB_ENV_DATABASE_KEYS = new Set([
+  "DATABASE_URL",
+  "STAGE1_OWNER_LOOP_DATABASE_URL",
+  "CAIO_INITIALIZATION_GATE_DATABASE_URL",
+  "CAIO_PRO_V1_DATABASE_URL",
+  "MODEL_EGRESS_STORE_DATABASE_URL",
+  "CAIO_ACCESS_GATEWAY_DATABASE_URL",
+  "CAIO_CONTEXT_MEMORY_DATABASE_URL",
+  "CAIO_AUDIT_STATE_DATABASE_URL",
+]);
+
+function readVerifiedGitHubEnvPrintfKey(command: string): string | null {
+  const match = command.match(
+    /^\s*printf\s+(['"])([A-Za-z_][A-Za-z0-9_]*)=[^'"]*\1(?:\s+[^;&|`]*)?\s*$/u,
+  );
+  const key = match?.[2];
+  return key !== undefined && VERIFIED_GITHUB_ENV_DATABASE_KEYS.has(key)
+    ? key
+    : null;
+}
+
+function readGitHubEnvAppendProducer(line: string): string | null {
+  if ((line.match(/\bGITHUB_ENV\b/gu) ?? []).length !== 1) return null;
+  const match = line.match(
+    /^(.*?)\s*>>\s*(?:"\$\{GITHUB_ENV\}"|"\$GITHUB_ENV"|'\$\{GITHUB_ENV\}'|'\$GITHUB_ENV'|\$\{GITHUB_ENV\}|\$GITHUB_ENV)\s*$/u,
+  );
+  return match?.[1]?.trim() ?? null;
+}
+
+function hasOnlyVerifiedGitHubEnvWrites(command: string): boolean {
+  const lines = blankWholeLineComments(command).split("\n");
+  let sawWrite = false;
+  for (const [index, line] of lines.entries()) {
+    if (!/\bGITHUB_ENV\b/u.test(line)) continue;
+    sawWrite = true;
+    const producer = readGitHubEnvAppendProducer(line);
+    if (producer === null) return false;
+    if (producer !== "}") {
+      if (readVerifiedGitHubEnvPrintfKey(producer) === null) return false;
+      continue;
+    }
+
+    let groupStart = index - 1;
+    while (groupStart >= 0 && lines[groupStart]?.trim() !== "{") {
+      groupStart -= 1;
+    }
+    if (groupStart < 0) return false;
+    const writers = lines
+      .slice(groupStart + 1, index)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (
+      writers.length === 0 ||
+      writers.some(
+        (writer) => readVerifiedGitHubEnvPrintfKey(writer) === null,
+      )
+    ) {
+      return false;
+    }
+  }
+  return sawWrite;
+}
+
 function hasImplicitWorkflowExecutionMutation(command: string): boolean {
   const executable = blankWholeLineComments(command);
   if (/\bGITHUB_PATH\b/u.test(executable)) return true;
   return (
     /\bGITHUB_ENV\b/u.test(executable) &&
-    /\b(?:BASH_ENV|DYLD_INSERT_LIBRARIES|ENV|LD_PRELOAD|NODE_OPTIONS|NODE_PATH|PATH|PERL5OPT|PYTHONPATH|RUBYOPT)\s*(?:\+?=|<<)/u.test(
-      executable,
-    )
+    !hasOnlyVerifiedGitHubEnvWrites(executable)
   );
 }
 
@@ -2807,10 +2912,14 @@ function helperHasRemoteRepositoryAccess(
       !ts.isImportDeclaration(statement) ||
       !ts.isStringLiteral(statement.moduleSpecifier) ||
       !/^(?:node:)?child_process$/u.test(statement.moduleSpecifier.text) ||
-      statement.importClause?.namedBindings === undefined
+      statement.importClause === undefined
     ) {
       continue;
     }
+    if (statement.importClause.name !== undefined) {
+      childProcessModuleAliases.add(statement.importClause.name.text);
+    }
+    if (statement.importClause.namedBindings === undefined) continue;
     if (ts.isNamespaceImport(statement.importClause.namedBindings)) {
       childProcessModuleAliases.add(
         statement.importClause.namedBindings.name.text,
@@ -2953,6 +3062,46 @@ function helperHasRemoteRepositoryAccess(
           isChildProcessModuleReference(initializer.expression)
         ) {
           childProcessCallAliases.set(node.name.text, importedName);
+        }
+      }
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isObjectLiteralExpression(unwrapTransparentExpression(node.left))
+    ) {
+      const pattern = unwrapTransparentExpression(
+        node.left,
+      ) as ts.ObjectLiteralExpression;
+      const value = unwrapTransparentExpression(node.right);
+      for (const property of pattern.properties) {
+        let importedName: string | null = null;
+        let alias: string | null = null;
+        if (
+          ts.isPropertyAssignment(property) &&
+          ts.isIdentifier(unwrapTransparentExpression(property.initializer))
+        ) {
+          importedName = ts.isIdentifier(property.name)
+            ? property.name.text
+            : ts.isStringLiteralLike(property.name)
+              ? property.name.text
+              : null;
+          alias = (
+            unwrapTransparentExpression(property.initializer) as ts.Identifier
+          ).text;
+        } else if (ts.isShorthandPropertyAssignment(property)) {
+          importedName = property.name.text;
+          alias = property.name.text;
+        }
+        if (importedName === null || alias === null) continue;
+        if (importedName === "fetch") fetchCallAliases.add(alias);
+        if (
+          isChildProcessModuleReference(value) &&
+          /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
+            importedName,
+          )
+        ) {
+          childProcessCallAliases.set(alias, importedName);
         }
       }
     }
