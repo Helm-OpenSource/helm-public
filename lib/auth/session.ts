@@ -595,7 +595,25 @@ export function resolvePreferredMembership<T extends { workspaceId: string; stat
     }
   }
 
-  return activeMemberships[0] ?? invitedMemberships[0] ?? memberships[0] ?? null;
+  // NO FALLBACK TO THE UNFILTERED LIST.
+  //
+  // This line used to end `?? memberships[0] ?? null`, reading the ORIGINAL
+  // array after the INACTIVE filter above had been applied to everything else.
+  // MembershipStatus has exactly three members, so `activeMemberships` and
+  // `invitedMemberships` already cover every selectable one — the discarded arm
+  // could contribute an INACTIVE membership and nothing else. A user whose
+  // memberships were all revoked got a session seated on a revoked one, and
+  // every caller treats this answer as the workspace the session may act in.
+  //
+  // The existing "ignores inactive memberships" test could not catch it: its
+  // fixture carries an INVITED membership beside the INACTIVE one, so the
+  // INVITED arm answers and the filter never carries weight.
+  //
+  // Null is also the right answer for a status this function does not know. If
+  // a fourth member is added to the enum it has to be admitted here
+  // deliberately rather than inherited by a fallback: an authorization decision
+  // fails closed on the unfamiliar.
+  return activeMemberships[0] ?? invitedMemberships[0] ?? null;
 }
 
 // Membership activation retries the same MySQL 1020 / Prisma P2034 family
@@ -835,7 +853,23 @@ export async function getCurrentWorkspaceSessionOrNull() {
     },
   });
 
-  if (!currentMembership) {
+  // THE RE-READ IS WHERE A CONCURRENT REVOKE BECOMES VISIBLE, so its status has
+  // to be judged and not only its existence.
+  //
+  // `membership` above was resolved from the memberships embedded in the auth
+  // session record — a snapshot taken before the activation attempt. This read
+  // happens after it. A membership deleted in that window was already refused
+  // by the null check; one REVOKED in the same window was not, because an
+  // INACTIVE row is still a row, and the session was seated on it.
+  //
+  // Only ACTIVE and INVITED may seat a session. Anything else is refused rather
+  // than enumerated, so a status added to the enum later has to be admitted
+  // here deliberately instead of inheriting a session by default.
+  if (
+    !currentMembership ||
+    (currentMembership.status !== MembershipStatus.ACTIVE &&
+      currentMembership.status !== MembershipStatus.INVITED)
+  ) {
     return null;
   }
 
