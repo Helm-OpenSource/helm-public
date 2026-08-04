@@ -674,6 +674,28 @@ function hasUnshadowedGlobalProcessBinding(source: ts.SourceFile): boolean {
             !ts.isOmittedExpression(element) &&
             bindingContainsProcess(element.name),
         );
+  const isGlobalProcessReference = (node: ts.Expression): boolean => {
+    const expression = unwrapTransparentExpression(node);
+    if (ts.isIdentifier(expression)) return expression.text === "process";
+    if (
+      ts.isPropertyAccessExpression(expression) &&
+      ts.isIdentifier(unwrapTransparentExpression(expression.expression))
+    ) {
+      return (
+        (unwrapTransparentExpression(expression.expression) as ts.Identifier)
+          .text === "globalThis" && expression.name.text === "process"
+      );
+    }
+    return (
+      ts.isElementAccessExpression(expression) &&
+      ts.isIdentifier(unwrapTransparentExpression(expression.expression)) &&
+      (unwrapTransparentExpression(expression.expression) as ts.Identifier)
+        .text === "globalThis" &&
+      expression.argumentExpression !== undefined &&
+      ts.isStringLiteralLike(expression.argumentExpression) &&
+      expression.argumentExpression.text === "process"
+    );
+  };
   const isProcessMemberReference = (
     node: ts.Expression,
     member: string,
@@ -681,14 +703,10 @@ function hasUnshadowedGlobalProcessBinding(source: ts.SourceFile): boolean {
     const expression = unwrapTransparentExpression(node);
     return (
       (ts.isPropertyAccessExpression(expression) &&
-        ts.isIdentifier(unwrapTransparentExpression(expression.expression)) &&
-        (unwrapTransparentExpression(expression.expression) as ts.Identifier)
-          .text === "process" &&
+        isGlobalProcessReference(expression.expression) &&
         expression.name.text === member) ||
       (ts.isElementAccessExpression(expression) &&
-        ts.isIdentifier(unwrapTransparentExpression(expression.expression)) &&
-        (unwrapTransparentExpression(expression.expression) as ts.Identifier)
-          .text === "process" &&
+        isGlobalProcessReference(expression.expression) &&
         expression.argumentExpression !== undefined &&
         ts.isStringLiteralLike(expression.argumentExpression) &&
         expression.argumentExpression.text === member)
@@ -697,13 +715,17 @@ function hasUnshadowedGlobalProcessBinding(source: ts.SourceFile): boolean {
   const isProcessReference = (node: ts.Expression): boolean => {
     const expression = unwrapTransparentExpression(node);
     return (
-      (ts.isIdentifier(expression) && expression.text === "process") ||
+      isGlobalProcessReference(expression) ||
       isProcessMemberReference(expression, "cwd")
     );
   };
   const visit = (node: ts.Node): void => {
     if (unsafe) return;
     if (
+      (ts.isVariableDeclaration(node) &&
+        node.initializer !== undefined &&
+        (isGlobalProcessReference(node.initializer) ||
+          isProcessMemberReference(node.initializer, "chdir"))) ||
       ((ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
         bindingContainsProcess(node.name)) ||
       (ts.isImportClause(node) && node.name?.text === "process") ||
@@ -723,11 +745,42 @@ function hasUnshadowedGlobalProcessBinding(source: ts.SourceFile): boolean {
       unsafe = true;
       return;
     }
+    if (ts.isCallExpression(node)) {
+      const callee = unwrapTransparentExpression(node.expression);
+      const mutatorName = ts.isPropertyAccessExpression(callee)
+        ? callee.name.text
+        : null;
+      const mutatorOwner =
+        ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(unwrapTransparentExpression(callee.expression))
+          ? (unwrapTransparentExpression(callee.expression) as ts.Identifier)
+              .text
+          : null;
+      const target = node.arguments[0];
+      const member = node.arguments[1];
+      if (
+        target !== undefined &&
+        isGlobalProcessReference(target) &&
+        member !== undefined &&
+        ts.isStringLiteralLike(unwrapTransparentExpression(member)) &&
+        /^(?:cwd|chdir)$/u.test(
+          (unwrapTransparentExpression(member) as ts.StringLiteralLike).text,
+        ) &&
+        ((mutatorOwner === "Reflect" && mutatorName === "set") ||
+          (mutatorOwner === "Object" &&
+            /^(?:defineProperty|assign)$/u.test(mutatorName ?? "")))
+      ) {
+        unsafe = true;
+        return;
+      }
+    }
     if (
       ts.isBinaryExpression(node) &&
-      isProcessReference(node.left) &&
       node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      (isProcessReference(node.left) ||
+        isGlobalProcessReference(node.right) ||
+        isProcessMemberReference(node.right, "chdir"))
     ) {
       unsafe = true;
       return;
@@ -1093,17 +1146,323 @@ function normalizeObfuscatedCommand(source: string): string {
   return source.replace(/[\s'"`\\+${}]/gu, "");
 }
 
-function extractNpmScriptNames(command: string): string[] {
-  const names = new Set<string>();
-  for (const match of command.matchAll(
-    /\bnpm\s+(?:run(?:-script)?\s+)?([A-Za-z0-9:_-]+)\b/gu,
-  )) {
-    const name = match[1];
-    if (name !== undefined && name !== "ci" && name !== "install") {
-      names.add(name);
+type StaticCommandInvocation = Readonly<{
+  executable: string;
+  args: readonly string[];
+  unresolved: boolean;
+}>;
+
+// This tokenizer only recovers static command boundaries and quoted words.
+// Dynamic entries remain unresolved; it is not an execution-capable shell parser.
+function tokenizeStaticShellCommands(source: string): Readonly<{
+  commands: readonly Readonly<{
+    tokens: readonly string[];
+    complete: boolean;
+  }>[];
+}> {
+  const commands: Array<{ tokens: string[]; complete: boolean }> = [];
+  let command: string[] = [];
+  let token = "";
+  let quote: "single" | "double" | null = null;
+  let commandComplete = true;
+  const finishToken = () => {
+    if (token !== "") command.push(token);
+    token = "";
+  };
+  const finishCommand = () => {
+    finishToken();
+    if (command.length > 0) {
+      commands.push({ tokens: command, complete: commandComplete });
     }
+    command = [];
+    commandComplete = true;
+  };
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]!;
+    const next = source[index + 1];
+    if (quote === "single") {
+      if (character === "'") quote = null;
+      else token += character;
+      continue;
+    }
+    if (quote === "double") {
+      if (character === '"') {
+        quote = null;
+      } else if (character === "\\" && next !== undefined) {
+        if (next === "\n") index += 1;
+        else {
+          token += next;
+          index += 1;
+        }
+      } else {
+        token += character;
+      }
+      continue;
+    }
+    if (character === "'") {
+      quote = "single";
+      continue;
+    }
+    if (character === '"') {
+      quote = "double";
+      continue;
+    }
+    if (character === "\\") {
+      if (next === "\n") index += 1;
+      else if (next !== undefined) {
+        token += next;
+        index += 1;
+      } else {
+        commandComplete = false;
+      }
+      continue;
+    }
+    if (
+      (character === "$" || character === "<" || character === ">") &&
+      next === "("
+    ) {
+      token += `${character}(`;
+      index += 1;
+      let depth = 1;
+      while (index + 1 < source.length && depth > 0) {
+        index += 1;
+        const nested = source[index]!;
+        token += nested;
+        if (nested === "(") depth += 1;
+        else if (nested === ")") depth -= 1;
+      }
+      if (depth !== 0) commandComplete = false;
+      continue;
+    }
+    if (character === "`") {
+      token += character;
+      let closed = false;
+      while (index + 1 < source.length) {
+        index += 1;
+        const nested = source[index]!;
+        token += nested;
+        if (nested === "`" && source[index - 1] !== "\\") {
+          closed = true;
+          break;
+        }
+      }
+      if (!closed) commandComplete = false;
+      continue;
+    }
+    if (character === "#" && token === "" && command.length === 0) {
+      while (index + 1 < source.length && source[index + 1] !== "\n") {
+        index += 1;
+      }
+      continue;
+    }
+    if (/\s/u.test(character)) {
+      finishToken();
+      if (character === "\n") finishCommand();
+      continue;
+    }
+    if (character === ";" || character === "|" || character === "&") {
+      finishCommand();
+      while (source[index + 1] === character) index += 1;
+      continue;
+    }
+    token += character;
   }
-  return [...names];
+  if (quote !== null) commandComplete = false;
+  finishCommand();
+  return { commands };
+}
+
+function unwrapStaticCommand(
+  tokens: readonly string[],
+  tokenizationComplete: boolean,
+): StaticCommandInvocation | null {
+  let index = 0;
+  let unresolved = !tokenizationComplete;
+  const isAssignment = (value: string) =>
+    /^[A-Za-z_][A-Za-z0-9_]*=/u.test(value);
+  while (isAssignment(tokens[index] ?? "")) index += 1;
+
+  while (index < tokens.length) {
+    const executable = path.posix.basename(tokens[index] ?? "");
+    if (executable === "env") {
+      index += 1;
+      while (index < tokens.length) {
+        const option = tokens[index]!;
+        if (option === "--") {
+          index += 1;
+          break;
+        }
+        if (option === "-u" || option === "--unset") {
+          if (tokens[index + 1] === undefined) unresolved = true;
+          index += 2;
+          continue;
+        }
+        if (/^--unset=/u.test(option) || option === "-i") {
+          index += 1;
+          continue;
+        }
+        if (isAssignment(option)) {
+          index += 1;
+          continue;
+        }
+        if (option.startsWith("-")) {
+          unresolved = true;
+          index += 1;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
+    if (executable === "command") {
+      index += 1;
+      while (tokens[index]?.startsWith("-")) {
+        const option = tokens[index]!;
+        if (option === "-v" || option === "-V") return null;
+        if (option !== "-p" && option !== "--") unresolved = true;
+        index += 1;
+      }
+      continue;
+    }
+    if (executable === "exec") {
+      index += 1;
+      while (tokens[index]?.startsWith("-")) {
+        const option = tokens[index]!;
+        if (option === "-a") index += 2;
+        else {
+          if (option !== "-c" && option !== "-l" && option !== "--") {
+            unresolved = true;
+          }
+          index += 1;
+        }
+      }
+      continue;
+    }
+    if (executable === "nohup") {
+      index += 1;
+      while (tokens[index]?.startsWith("-")) {
+        if (tokens[index] !== "--") unresolved = true;
+        index += 1;
+      }
+      continue;
+    }
+    break;
+  }
+  const executable = tokens[index];
+  if (executable === undefined) return null;
+  if (/[`$]/u.test(executable)) unresolved = true;
+  return { executable, args: tokens.slice(index + 1), unresolved };
+}
+
+function extractStaticCommandInvocations(
+  command: string,
+): StaticCommandInvocation[] {
+  const tokenized = tokenizeStaticShellCommands(command);
+  return tokenized.commands.flatMap(({ tokens, complete }) => {
+    const invocation = unwrapStaticCommand(tokens, complete);
+    return invocation === null ? [] : [invocation];
+  });
+}
+
+type NpmInvocation = Readonly<{
+  kind: "install" | "script";
+  scriptName: string | null;
+  prefix: string | null;
+  workspace: string | null;
+  ignoreScripts: boolean;
+  unresolved: boolean;
+}>;
+
+// npm changes package context through prefix/workspace flags and runs lifecycle
+// hooks implicitly, so command reachability must retain that context.
+function extractNpmInvocations(command: string): NpmInvocation[] {
+  const invocations: NpmInvocation[] = [];
+  for (const invocation of extractStaticCommandInvocations(command)) {
+    if (path.posix.basename(invocation.executable) !== "npm") continue;
+    let prefix: string | null = null;
+    let workspace: string | null = null;
+    let ignoreScripts = false;
+    let unresolved = invocation.unresolved;
+    const positionals: string[] = [];
+    for (let index = 0; index < invocation.args.length; index += 1) {
+      const argument = invocation.args[index]!;
+      if (argument === "--") break;
+      if (argument === "--prefix" || argument === "-C") {
+        const value = invocation.args[index + 1];
+        if (value === undefined || prefix !== null) unresolved = true;
+        else prefix = value;
+        index += 1;
+        continue;
+      }
+      if (argument.startsWith("--prefix=")) {
+        if (prefix !== null) unresolved = true;
+        prefix = argument.slice("--prefix=".length);
+        continue;
+      }
+      if (argument === "--workspace" || argument === "-w") {
+        const value = invocation.args[index + 1];
+        if (value === undefined || workspace !== null) unresolved = true;
+        else workspace = value;
+        index += 1;
+        continue;
+      }
+      if (argument.startsWith("--workspace=")) {
+        if (workspace !== null) unresolved = true;
+        workspace = argument.slice("--workspace=".length);
+        continue;
+      }
+      if (argument === "--ignore-scripts") {
+        ignoreScripts = true;
+        continue;
+      }
+      if (
+        /^(?:--silent|--if-present|--foreground-scripts|--include-workspace-root|--no-audit|--no-fund)$/u.test(
+          argument,
+        )
+      ) {
+        continue;
+      }
+      if (argument.startsWith("-")) {
+        unresolved = true;
+        continue;
+      }
+      positionals.push(argument);
+    }
+    const commandName = positionals[0];
+    if (
+      commandName === "ci" ||
+      commandName === "install" ||
+      commandName === "i"
+    ) {
+      invocations.push({
+        kind: "install",
+        scriptName: null,
+        prefix,
+        workspace,
+        ignoreScripts,
+        unresolved,
+      });
+      continue;
+    }
+    const scriptName =
+      commandName === "run" || commandName === "run-script"
+        ? positionals[1]
+        : commandName;
+    invocations.push({
+      kind: "script",
+      scriptName: scriptName ?? null,
+      prefix,
+      workspace,
+      ignoreScripts,
+      unresolved:
+        unresolved ||
+        scriptName === undefined ||
+        commandName === "exec" ||
+        commandName === "x",
+    });
+  }
+  return invocations;
 }
 
 type NpmScriptResolution =
@@ -1118,11 +1477,17 @@ type NpmScriptResolution =
       packageFile: string | null;
     }>;
 
-function resolveNpmScript(
+type NpmPackageResolution = Readonly<{
+  cwd: string;
+  packageFile: string;
+  manifest: UnknownRecord;
+  scripts: Readonly<Record<string, unknown>>;
+}>;
+
+function resolveNpmPackage(
   repoRoot: string,
   cwd: string,
-  scriptName: string,
-): NpmScriptResolution {
+): NpmPackageResolution | null {
   let packageRoot = cwd;
   while (true) {
     const packageFile = packageRoot
@@ -1134,30 +1499,138 @@ function resolveNpmScript(
       try {
         parsed = JSON.parse(packageContent);
       } catch {
-        return { kind: "invalid_package", packageFile };
+        return null;
       }
-      if (!isRecord(parsed)) {
-        return { kind: "invalid_package", packageFile };
+      if (
+        !isRecord(parsed) ||
+        (parsed.scripts !== undefined && !isRecord(parsed.scripts))
+      ) {
+        return null;
       }
-      const scripts = parsed.scripts;
-      if (scripts !== undefined && !isRecord(scripts)) {
-        return { kind: "invalid_package", packageFile };
-      }
-      if (!isRecord(scripts) || typeof scripts[scriptName] !== "string") {
-        return { kind: "missing_script", packageFile };
-      }
-      const commands = [
-        scripts[`pre${scriptName}`],
-        scripts[scriptName],
-        scripts[`post${scriptName}`],
-      ].filter((command): command is string => typeof command === "string");
-      return { kind: "resolved", cwd: packageRoot, packageFile, commands };
+      return {
+        cwd: packageRoot,
+        packageFile,
+        manifest: parsed,
+        scripts: isRecord(parsed.scripts) ? parsed.scripts : {},
+      };
     }
     if (packageRoot === "") break;
     const parent = path.posix.dirname(packageRoot);
     packageRoot = parent === "." ? "" : parent;
   }
-  return { kind: "missing_package", packageFile: null };
+  return null;
+}
+
+function resolveNpmScript(
+  repoRoot: string,
+  cwd: string,
+  scriptName: string,
+): NpmScriptResolution {
+  const resolvedPackage = resolveNpmPackage(repoRoot, cwd);
+  if (resolvedPackage === null) {
+    return { kind: "missing_package", packageFile: null };
+  }
+  if (typeof resolvedPackage.scripts[scriptName] !== "string") {
+    return {
+      kind: "missing_script",
+      packageFile: resolvedPackage.packageFile,
+    };
+  }
+  const commands = [
+    resolvedPackage.scripts[`pre${scriptName}`],
+    resolvedPackage.scripts[scriptName],
+    resolvedPackage.scripts[`post${scriptName}`],
+  ].filter((command): command is string => typeof command === "string");
+  return {
+    kind: "resolved",
+    cwd: resolvedPackage.cwd,
+    packageFile: resolvedPackage.packageFile,
+    commands,
+  };
+}
+
+const NPM_INSTALL_LIFECYCLE_SCRIPTS = [
+  "preinstall",
+  "install",
+  "postinstall",
+  "prepublish",
+  "preprepare",
+  "prepare",
+  "postprepare",
+] as const;
+
+function resolveNpmInvocationCwd(
+  repoRoot: string,
+  currentCwd: string,
+  invocation: NpmInvocation,
+): string | null {
+  let effectiveCwd = currentCwd;
+  if (invocation.prefix !== null) {
+    const prefixed = resolveWorkflowHelperPath(currentCwd, invocation.prefix);
+    if (
+      prefixed === null ||
+      read(
+        repoRoot,
+        prefixed ? path.posix.join(prefixed, PACKAGE_FILE) : PACKAGE_FILE,
+      ) === null
+    ) {
+      return null;
+    }
+    effectiveCwd = prefixed;
+  }
+  if (invocation.workspace === null) return effectiveCwd;
+
+  const rootPackage = resolveNpmPackage(repoRoot, effectiveCwd);
+  if (rootPackage === null || /[`$]/u.test(invocation.workspace)) return null;
+  const directWorkspace = resolveWorkflowHelperPath(
+    rootPackage.cwd,
+    invocation.workspace,
+  );
+  if (
+    directWorkspace !== null &&
+    read(
+      repoRoot,
+      directWorkspace
+        ? path.posix.join(directWorkspace, PACKAGE_FILE)
+        : PACKAGE_FILE,
+    ) !== null
+  ) {
+    return directWorkspace;
+  }
+
+  const configuredWorkspaces = Array.isArray(rootPackage.manifest.workspaces)
+    ? rootPackage.manifest.workspaces
+    : isRecord(rootPackage.manifest.workspaces) &&
+        Array.isArray(rootPackage.manifest.workspaces.packages)
+      ? rootPackage.manifest.workspaces.packages
+      : [];
+  for (const configuredWorkspace of configuredWorkspaces) {
+    if (
+      typeof configuredWorkspace !== "string" ||
+      /[*?{}[\]]/u.test(configuredWorkspace)
+    ) {
+      continue;
+    }
+    const candidate = resolveWorkflowHelperPath(
+      rootPackage.cwd,
+      configuredWorkspace,
+    );
+    if (candidate === null) continue;
+    const packageFile = candidate
+      ? path.posix.join(candidate, PACKAGE_FILE)
+      : PACKAGE_FILE;
+    const content = read(repoRoot, packageFile);
+    if (content === null) continue;
+    try {
+      const manifest = JSON.parse(content) as unknown;
+      if (isRecord(manifest) && manifest.name === invocation.workspace) {
+        return candidate;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 function extractLocalHelperPaths(command: string): string[] {
@@ -1178,9 +1651,127 @@ function extractLocalHelperPaths(command: string): string[] {
   return [...helpers];
 }
 
+type LocalHelperReference = Readonly<{
+  path: string;
+  tsconfigPath: string | null;
+}>;
+
+function extractLocalHelperReferences(command: string): Readonly<{
+  references: readonly LocalHelperReference[];
+  unresolved: boolean;
+}> {
+  const references = new Map<string, LocalHelperReference>();
+  let unresolved = false;
+  const add = (helperPath: string | undefined, tsconfigPath: string | null) => {
+    if (helperPath === undefined) return;
+    if (/^[`$]|\$\{|\$\(/u.test(helperPath)) {
+      unresolved = true;
+      return;
+    }
+    const normalized = helperPath.replace(/^\.\//u, "");
+    references.set(`${normalized}\u0000${tsconfigPath ?? ""}`, {
+      path: normalized,
+      tsconfigPath,
+    });
+  };
+  for (const helperPath of extractLocalHelperPaths(command)) {
+    add(helperPath, null);
+  }
+
+  const parseNodeLike = (
+    args: readonly string[],
+    allowTsconfig: boolean,
+  ): void => {
+    let tsconfigPath: string | null = null;
+    for (let index = 0; index < args.length; index += 1) {
+      const argument = args[index]!;
+      if (argument === "--tsconfig") {
+        const value = args[index + 1];
+        if (value === undefined || tsconfigPath !== null) unresolved = true;
+        else tsconfigPath = value;
+        index += 1;
+        continue;
+      }
+      if (argument.startsWith("--tsconfig=")) {
+        if (tsconfigPath !== null) unresolved = true;
+        tsconfigPath = argument.slice("--tsconfig=".length);
+        continue;
+      }
+      if (
+        argument === "-e" ||
+        argument === "--eval" ||
+        argument === "-p" ||
+        argument === "--print"
+      ) {
+        return;
+      }
+      if (
+        argument === "--import" ||
+        argument === "-r" ||
+        argument === "--require"
+      ) {
+        if (args[index + 1] === undefined) unresolved = true;
+        index += 1;
+        continue;
+      }
+      if (argument === "--") continue;
+      if (argument.startsWith("-")) continue;
+      if (!allowTsconfig && tsconfigPath !== null) unresolved = true;
+      add(argument, tsconfigPath);
+      return;
+    }
+  };
+
+  for (const invocation of extractStaticCommandInvocations(command)) {
+    const executable = path.posix.basename(invocation.executable);
+    const relevantExecutable =
+      /^(?:bash|sh|zsh|ksh|node|tsx|npx|npm|python(?:\d+(?:\.\d+)*)?|ruby|perl|php|bun|deno|pwsh|powershell)$/u.test(
+        executable,
+      ) || invocation.executable.startsWith("./");
+    unresolved ||= invocation.unresolved && relevantExecutable;
+    if (/^(?:bash|sh|zsh|ksh)$/u.test(executable)) {
+      for (let index = 0; index < invocation.args.length; index += 1) {
+        const argument = invocation.args[index]!;
+        if (argument === "-c" || /^-[A-Za-z]*c[A-Za-z]*$/u.test(argument)) {
+          unresolved = true;
+          break;
+        }
+        if (argument === "-o" || argument === "-O") {
+          if (invocation.args[index + 1] === undefined) unresolved = true;
+          index += 1;
+          continue;
+        }
+        if (argument === "--") continue;
+        if (argument.startsWith("-")) continue;
+        add(argument, null);
+        break;
+      }
+      continue;
+    }
+    if (executable === "node" || executable === "tsx") {
+      parseNodeLike(invocation.args, executable === "tsx");
+      continue;
+    }
+    if (executable === "npx") {
+      let index = 0;
+      while (invocation.args[index]?.startsWith("-")) index += 1;
+      if (path.posix.basename(invocation.args[index] ?? "") === "tsx") {
+        parseNodeLike(invocation.args.slice(index + 1), true);
+      }
+      continue;
+    }
+    if (invocation.executable.startsWith("./")) {
+      add(invocation.executable, null);
+    }
+  }
+  return { references: [...references.values()], unresolved };
+}
+
 function hasUnsupportedLocalInterpreter(command: string): boolean {
-  return /(?:^|[;&|\n])[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:(?:command|exec|nohup)[ \t]+)?(?:(?:"(?:\/(?:usr\/)?bin\/)?env"|'(?:\/(?:usr\/)?bin\/)?env'|(?:\/(?:usr\/)?bin\/)?env)[ \t]+(?:-[A-Za-z-]+[ \t]+)*(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*)?(?:"(?:\/(?:usr\/)?bin\/)?(?:python(?:\d+(?:\.\d+)*)?|ruby|perl|php|bun|deno|pwsh|powershell)"|'(?:\/(?:usr\/)?bin\/)?(?:python(?:\d+(?:\.\d+)*)?|ruby|perl|php|bun|deno|pwsh|powershell)'|(?:\/(?:usr\/)?bin\/)?(?:python(?:\d+(?:\.\d+)*)?|ruby|perl|php|bun|deno|pwsh|powershell))(?=[ \t]|$)/u.test(
-    command,
+  return extractStaticCommandInvocations(command).some((invocation) =>
+    /^(?:python(?:\d+(?:\.\d+)*)?|ruby|perl|php|bun|deno|pwsh|powershell)$/u.test(
+      path.posix.basename(invocation.executable),
+    ),
   );
 }
 
@@ -1202,6 +1793,7 @@ type PendingHelper = Readonly<{
   file: string;
   cwd: string;
   d2LocalCloneAllowed: boolean;
+  tsconfigFile: string | null;
 }>;
 
 type ReachableCommand = WorkflowCommand &
@@ -1224,6 +1816,23 @@ function resolveWorkflowHelperPath(
   );
   if (normalized === ".." || normalized.startsWith("../")) return null;
   return normalized;
+}
+
+function findNearestRepoFile(
+  repoRoot: string,
+  cwd: string,
+  fileName: string,
+): string | null {
+  let directory = cwd;
+  while (true) {
+    const candidate = directory
+      ? path.posix.join(directory, fileName)
+      : fileName;
+    if (read(repoRoot, candidate) !== null) return candidate;
+    if (directory === "") return null;
+    const parent = path.posix.dirname(directory);
+    directory = parent === "." ? "" : parent;
+  }
 }
 
 function checkWorkflowReachableHelpers(
@@ -1273,20 +1882,39 @@ function checkWorkflowReachableHelpers(
             "workflow-reachable command must not fetch remote repositories",
         });
       }
-      for (const helperPath of extractLocalHelperPaths(
+      const helperExtraction = extractLocalHelperReferences(
         pendingCommand.command,
-      )) {
+      );
+      for (const helperReference of helperExtraction.references) {
         const resolved = resolveWorkflowHelperPath(
           pendingCommand.cwd,
-          helperPath,
+          helperReference.path,
         );
         if (resolved === null) {
           violations.push({
             rule: "CPV1-CI",
             file: workflowFile,
-            detail: `workflow helper path leaves the repository: ${helperPath}`,
+            detail: `workflow helper path leaves the repository: ${helperReference.path}`,
           });
         } else {
+          const explicitTsconfig =
+            helperReference.tsconfigPath === null
+              ? null
+              : resolveWorkflowHelperPath(
+                  pendingCommand.cwd,
+                  helperReference.tsconfigPath,
+                );
+          if (
+            helperReference.tsconfigPath !== null &&
+            explicitTsconfig === null
+          ) {
+            violations.push({
+              rule: "CPV1-CI",
+              file: pendingCommand.sourceFile,
+              detail: `workflow tsconfig path leaves the repository: ${helperReference.tsconfigPath}`,
+            });
+            continue;
+          }
           pendingHelpers.push({
             file: resolved,
             cwd: pendingCommand.cwd,
@@ -1296,15 +1924,73 @@ function checkWorkflowReachableHelpers(
               pendingCommand.cwd === "" &&
               pendingCommand.command === D2_DOCKER_SMOKE_INVOCATION &&
               resolved === D2_DOCKER_SMOKE_HELPER,
+            tsconfigFile:
+              explicitTsconfig ??
+              findNearestRepoFile(
+                repoRoot,
+                pendingCommand.cwd,
+                "tsconfig.json",
+              ),
           });
         }
       }
-      for (const scriptName of extractNpmScriptNames(pendingCommand.command)) {
-        const resolution = resolveNpmScript(
+      for (const npmInvocation of extractNpmInvocations(
+        pendingCommand.command,
+      )) {
+        if (npmInvocation.unresolved) {
+          violations.push({
+            rule: "CPV1-CI",
+            file: pendingCommand.sourceFile,
+            detail: "workflow npm invocation could not be resolved statically",
+          });
+          continue;
+        }
+        const npmCwd = resolveNpmInvocationCwd(
           repoRoot,
           pendingCommand.cwd,
-          scriptName,
+          npmInvocation,
         );
+        if (npmCwd === null) {
+          violations.push({
+            rule: "CPV1-CI",
+            file: pendingCommand.sourceFile,
+            detail: "workflow npm execution context could not be resolved",
+          });
+          continue;
+        }
+        if (npmInvocation.kind === "install") {
+          if (npmInvocation.ignoreScripts) continue;
+          const resolvedPackage = resolveNpmPackage(repoRoot, npmCwd);
+          if (resolvedPackage === null) {
+            violations.push({
+              rule: "CPV1-CI",
+              file: pendingCommand.sourceFile,
+              detail: "workflow npm package could not be resolved",
+            });
+            continue;
+          }
+          for (const lifecycleName of NPM_INSTALL_LIFECYCLE_SCRIPTS) {
+            const lifecycleCommand = resolvedPackage.scripts[lifecycleName];
+            if (typeof lifecycleCommand !== "string") continue;
+            pendingCommands.push({
+              command: lifecycleCommand,
+              cwd: resolvedPackage.cwd,
+              d2LocalCloneAllowed: false,
+              sourceFile: resolvedPackage.packageFile,
+            });
+          }
+          continue;
+        }
+        const scriptName = npmInvocation.scriptName;
+        if (scriptName === null) {
+          violations.push({
+            rule: "CPV1-CI",
+            file: pendingCommand.sourceFile,
+            detail: "workflow npm script name could not be resolved",
+          });
+          continue;
+        }
+        const resolution = resolveNpmScript(repoRoot, npmCwd, scriptName);
         if (resolution.kind !== "resolved") {
           const packageContext =
             resolution.packageFile === null
@@ -1329,7 +2015,10 @@ function checkWorkflowReachableHelpers(
           }
         }
       }
-      if (hasUnresolvedHelperReference(pendingCommand.command)) {
+      if (
+        helperExtraction.unresolved ||
+        hasUnresolvedHelperReference(pendingCommand.command)
+      ) {
         violations.push({
           rule: "CPV1-CI",
           file: pendingCommand.sourceFile,
@@ -1340,7 +2029,7 @@ function checkWorkflowReachableHelpers(
     }
 
     const helper = pendingHelpers.shift()!;
-    const helperKey = `${helper.file}\u0000${helper.cwd}\u0000${helper.d2LocalCloneAllowed ? "local" : "ordinary"}`;
+    const helperKey = `${helper.file}\u0000${helper.cwd}\u0000${helper.tsconfigFile ?? ""}\u0000${helper.d2LocalCloneAllowed ? "local" : "ordinary"}`;
     if (visitedHelpers.has(helperKey)) continue;
     visitedHelpers.add(helperKey);
     const content = read(repoRoot, helper.file);
@@ -1368,11 +2057,22 @@ function checkWorkflowReachableHelpers(
           detail: "workflow-reachable helper could not be parsed statically",
         });
       }
+      if (
+        helper.tsconfigFile !== null &&
+        readTsModuleResolutionConfig(repoRoot, helper.tsconfigFile) === null
+      ) {
+        violations.push({
+          rule: "CPV1-CI",
+          file: helper.tsconfigFile,
+          detail: "workflow TypeScript configuration could not be resolved",
+        });
+      }
       for (const moduleSpecifier of findStaticModuleSpecifiers(inspection)) {
         const resolution = resolveLocalModulePath(
           repoRoot,
           helper.file,
           moduleSpecifier,
+          helper.tsconfigFile,
         );
         if (resolution.kind === "unresolved") {
           violations.push({
@@ -1385,6 +2085,7 @@ function checkWorkflowReachableHelpers(
             file: resolution.file,
             cwd: helper.cwd,
             d2LocalCloneAllowed: false,
+            tsconfigFile: helper.tsconfigFile,
           });
         }
       }
@@ -1437,8 +2138,10 @@ type LocalModuleResolution =
 
 type TsModuleResolutionConfig = Readonly<{
   baseUrl: string | null;
+  hasBaseUrl: boolean;
   paths: Readonly<Record<string, unknown>>;
   pathsBase: string;
+  hasPaths: boolean;
 }>;
 
 function resolveRepoRelativePath(base: string, target: string): string | null {
@@ -1466,48 +2169,73 @@ function readTsModuleResolutionConfig(
   const localDirectory = configDirectory === "." ? "" : configDirectory;
   let inherited: TsModuleResolutionConfig = {
     baseUrl: null,
+    hasBaseUrl: false,
     paths: {},
     pathsBase: localDirectory,
+    hasPaths: false,
   };
   if (parsed.config.extends !== undefined) {
-    if (
-      typeof parsed.config.extends !== "string" ||
-      !parsed.config.extends.startsWith(".")
-    ) {
+    const extendedConfigs =
+      typeof parsed.config.extends === "string"
+        ? [parsed.config.extends]
+        : Array.isArray(parsed.config.extends) &&
+            parsed.config.extends.every(
+              (entry): entry is string => typeof entry === "string",
+            )
+          ? parsed.config.extends
+          : null;
+    if (extendedConfigs === null) {
       return null;
     }
-    let extendedFile = resolveRepoRelativePath(
-      localDirectory,
-      parsed.config.extends,
-    );
-    if (extendedFile === null) return null;
-    if (!path.posix.extname(extendedFile)) extendedFile += ".json";
-    const resolvedParent = readTsModuleResolutionConfig(
-      repoRoot,
-      extendedFile,
-      visited,
-    );
-    if (resolvedParent === null) return null;
-    inherited = resolvedParent;
+    for (const extendedConfig of extendedConfigs) {
+      if (!extendedConfig.startsWith(".")) return null;
+      let extendedFile = resolveRepoRelativePath(
+        localDirectory,
+        extendedConfig,
+      );
+      if (extendedFile === null) return null;
+      if (!path.posix.extname(extendedFile)) extendedFile += ".json";
+      const resolvedParent = readTsModuleResolutionConfig(
+        repoRoot,
+        extendedFile,
+        new Set(visited),
+      );
+      if (resolvedParent === null) return null;
+      inherited = {
+        baseUrl: resolvedParent.hasBaseUrl
+          ? resolvedParent.baseUrl
+          : inherited.baseUrl,
+        hasBaseUrl: inherited.hasBaseUrl || resolvedParent.hasBaseUrl,
+        paths: resolvedParent.hasPaths ? resolvedParent.paths : inherited.paths,
+        pathsBase: resolvedParent.hasPaths
+          ? resolvedParent.pathsBase
+          : inherited.pathsBase,
+        hasPaths: inherited.hasPaths || resolvedParent.hasPaths,
+      };
+    }
   }
 
   const compilerOptions = isRecord(parsed.config.compilerOptions)
     ? parsed.config.compilerOptions
     : {};
   let baseUrl = inherited.baseUrl;
+  let hasBaseUrl = inherited.hasBaseUrl;
   if (compilerOptions.baseUrl !== undefined) {
     if (typeof compilerOptions.baseUrl !== "string") return null;
     baseUrl = resolveRepoRelativePath(localDirectory, compilerOptions.baseUrl);
     if (baseUrl === null) return null;
+    hasBaseUrl = true;
   }
   let paths = inherited.paths;
   let pathsBase = inherited.pathsBase;
+  let hasPaths = inherited.hasPaths;
   if (compilerOptions.paths !== undefined) {
     if (!isRecord(compilerOptions.paths)) return null;
     paths = compilerOptions.paths;
     pathsBase = baseUrl ?? localDirectory;
+    hasPaths = true;
   }
-  return { baseUrl, paths, pathsBase };
+  return { baseUrl, hasBaseUrl, paths, pathsBase, hasPaths };
 }
 
 function resolveSourceFileCandidate(
@@ -1537,6 +2265,7 @@ function resolveLocalModulePath(
   repoRoot: string,
   parentFile: string,
   moduleSpecifier: string,
+  tsconfigFile: string | null,
 ): LocalModuleResolution {
   if (moduleSpecifier.startsWith(".")) {
     const base = path.posix.normalize(
@@ -1546,11 +2275,10 @@ function resolveLocalModulePath(
     return file === null ? { kind: "unresolved" } : { kind: "resolved", file };
   }
 
-  const config = readTsModuleResolutionConfig(repoRoot);
+  if (tsconfigFile === null) return { kind: "external" };
+  const config = readTsModuleResolutionConfig(repoRoot, tsconfigFile);
   if (config === null) {
-    return moduleSpecifier.startsWith("@/")
-      ? { kind: "unresolved" }
-      : { kind: "external" };
+    return { kind: "unresolved" };
   }
   for (const [pattern, targetValue] of Object.entries(config.paths)) {
     if (!Array.isArray(targetValue)) continue;
@@ -1631,6 +2359,47 @@ function helperHasRemoteRepositoryAccess(
       }
     }
   }
+  const isChildProcessRequire = (expression: ts.Expression): boolean => {
+    const value = unwrapTransparentExpression(expression);
+    return (
+      ts.isCallExpression(value) &&
+      ts.isIdentifier(value.expression) &&
+      value.expression.text === "require" &&
+      value.arguments.length === 1 &&
+      ts.isStringLiteralLike(value.arguments[0]!) &&
+      /^(?:node:)?child_process$/u.test(value.arguments[0].text)
+    );
+  };
+  const collectCommonJsAliases = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isObjectBindingPattern(node.name) &&
+      node.initializer !== undefined &&
+      isChildProcessRequire(node.initializer)
+    ) {
+      for (const element of node.name.elements) {
+        if (!ts.isIdentifier(element.name)) continue;
+        const importedName =
+          element.propertyName?.getText(inspection.source) ?? element.name.text;
+        const normalizedImportedName = importedName.replace(
+          /^["']|["']$/gu,
+          "",
+        );
+        if (
+          /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
+            normalizedImportedName,
+          )
+        ) {
+          childProcessCallAliases.set(
+            element.name.text,
+            normalizedImportedName,
+          );
+        }
+      }
+    }
+    ts.forEachChild(node, collectCommonJsAliases);
+  };
+  collectCommonJsAliases(inspection.source);
   const staticPropertyName = (expression: ts.Expression): string | null => {
     const value = unwrapTransparentExpression(expression);
     if (ts.isPropertyAccessExpression(value)) return value.name.text;
@@ -1734,10 +2503,29 @@ function isShellHelper(file: string, content: string): boolean {
 }
 
 function hasInlineNodeFetch(command: string): boolean {
-  const normalized = command.replace(/\\\s*\n\s*/gu, " ");
-  return /\bnode\b[^;&|\n]*?(?:\s-e\b|\s--eval\b)[^;&|\n]*?(?:(?:globalThis\.)?fetch|globalThis\[["']fetch["']\])(?:\.(?:call|apply))?\s*\(/u.test(
-    normalized,
-  );
+  for (const invocation of extractStaticCommandInvocations(command)) {
+    if (path.posix.basename(invocation.executable) !== "node") continue;
+    for (let index = 0; index < invocation.args.length; index += 1) {
+      const argument = invocation.args[index]!;
+      const inlineSource =
+        argument === "-e" ||
+        argument === "--eval" ||
+        argument === "-p" ||
+        argument === "--print"
+          ? invocation.args[index + 1]
+          : argument.startsWith("--eval=")
+            ? argument.slice("--eval=".length)
+            : null;
+      if (
+        inlineSource !== null &&
+        inlineSource !== undefined &&
+        helperHasRemoteRepositoryAccess("inline-node.mjs", inlineSource)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 type WorkflowIsolationCheck = Readonly<{

@@ -1,0 +1,2 @@
+.github/workflows/d2-docker-smoke.yml text eol=lf
+scripts/d2-docker-smoke.sh text eol=lf
