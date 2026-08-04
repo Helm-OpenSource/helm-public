@@ -1230,6 +1230,13 @@ function resultConsumption(call: ts.CallExpression): ResultConsumption | null {
     return { kind: "inline" };
   }
 
+  // Expression-body helpers return their expression without a ReturnStatement
+  // node: `const claim = () => db.thing.updateMany(...)`. The wrapper walk
+  // reaches the ArrowFunction only when this call is the complete body.
+  if (ts.isArrowFunction(current) && !ts.isBlock(current.body)) {
+    return { kind: "inline" };
+  }
+
   // `claimed = await ...` into an already-declared variable.
   if (
     ts.isBinaryExpression(current) &&

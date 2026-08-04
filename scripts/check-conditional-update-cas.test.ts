@@ -1388,6 +1388,22 @@ export async function claim() {
     expect(violations[0]?.reason).toBe("no-transaction");
   });
 
+  it("flags an updateMany result returned by an expression-body helper", () => {
+    const root = sandbox({
+      "lib/returned-arrow-helper.ts": `
+export const claim = () => db.thing.updateMany({
+  where: { id: "x", lifecyclePhase: "PENDING" },
+  data: { lifecyclePhase: "CLAIMED" },
+});
+`,
+    });
+
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.resultVariable).toBe("<inline-count>");
+    expect(violations[0]?.reason).toBe("no-transaction");
+  });
+
   it("throws when the Prisma schema cannot be read", () => {
     const root = sandbox({ "lib/claim.ts": CAS_WITH_DERIVED_ENUM });
     rmSync(path.join(root, "prisma/schema.prisma"));
