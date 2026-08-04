@@ -3351,6 +3351,26 @@ describe("caio-pro-v1 aggregate gate", () => {
         'child[method]("gh", ["api", "repos/example/private/tarball/main"]);',
       ].join("\n"),
     ],
+    [
+      "parameter-shadowed computed fetch call",
+      [
+        'function unrelated() { const method = "safeBusinessField"; }',
+        "async function load(method) {",
+        '  await globalThis[method]("https://example.test/private.tar.gz");',
+        "}",
+      ].join("\n"),
+    ],
+    [
+      "parameter-shadowed computed child-process alias",
+      [
+        'function unrelated() { const method = "safeBusinessField"; }',
+        "function runCommand(method) {",
+        '  const child = require("node:child_process");',
+        "  const run = child[method];",
+        '  run("gh", ["api", "repos/example/private/tarball/main"]);',
+        "}",
+      ].join("\n"),
+    ],
   ])("rejects repository access through a %s", (_label, source) => {
     withFixture(
       {
@@ -3371,6 +3391,35 @@ describe("caio-pro-v1 aggregate gate", () => {
               violation.detail.includes("workflow-reachable helper"),
           ),
         ).toBe(true);
+      },
+    );
+  });
+
+  it("allows a lexically resolved safe computed global property", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-safe-computed.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: node ops/safe-computed.cjs",
+          "",
+        ].join("\n"),
+        "ops/safe-computed.cjs": [
+          'const method = "setTimeout";',
+          "const schedule = globalThis[method];",
+          "schedule(() => undefined, 0);",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/safe-computed.cjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(false);
       },
     );
   });

@@ -2929,33 +2929,200 @@ function helperHasRemoteRepositoryAccess(
   }
   const inspection = inspectSourceFile(file, content);
   if (inspection.parseDiagnostics.length > 0) return true;
-  const staticConstStrings = new Map<string, string | null>();
-  const collectStaticConstStrings = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
-      const declarationList = node.parent;
+  type StaticBindingResolution = Readonly<{
+    found: boolean;
+    value: string | null;
+  }>;
+  const unresolvedBinding: StaticBindingResolution = {
+    found: false,
+    value: null,
+  };
+  const bindingNameIncludes = (
+    binding: ts.BindingName,
+    target: string,
+  ): boolean => {
+    if (ts.isIdentifier(binding)) return binding.text === target;
+    return binding.elements.some(
+      (element) =>
+        !ts.isOmittedExpression(element) &&
+        bindingNameIncludes(element.name, target),
+    );
+  };
+  const resolveVariableDeclarations = (
+    declarations: readonly ts.VariableDeclaration[],
+    target: string,
+  ): StaticBindingResolution => {
+    let count = 0;
+    let value: string | null = null;
+    for (const declaration of declarations) {
+      if (!bindingNameIncludes(declaration.name, target)) continue;
+      count += 1;
+      const declarationList = declaration.parent;
       const initializer =
-        node.initializer === undefined
+        declaration.initializer === undefined
           ? null
-          : unwrapTransparentExpression(node.initializer);
-      const value =
+          : unwrapTransparentExpression(declaration.initializer);
+      value =
+        count === 1 &&
+        ts.isIdentifier(declaration.name) &&
         ts.isVariableDeclarationList(declarationList) &&
         (declarationList.flags & ts.NodeFlags.Const) !== 0 &&
         initializer !== null &&
         ts.isStringLiteralLike(initializer)
           ? initializer.text
           : null;
-      staticConstStrings.set(
-        node.name.text,
-        staticConstStrings.has(node.name.text) ? null : value,
-      );
     }
-    ts.forEachChild(node, collectStaticConstStrings);
+    return count === 0 ? unresolvedBinding : { found: true, value };
   };
-  collectStaticConstStrings(inspection.source);
+  const resolveStatementBindings = (
+    statements: readonly ts.Statement[],
+    target: string,
+  ): StaticBindingResolution => {
+    let count = 0;
+    let value: string | null = null;
+    const record = (candidate: string | null): void => {
+      count += 1;
+      value = count === 1 ? candidate : null;
+    };
+    for (const statement of statements) {
+      if (ts.isVariableStatement(statement)) {
+        const resolution = resolveVariableDeclarations(
+          statement.declarationList.declarations,
+          target,
+        );
+        if (resolution.found) record(resolution.value);
+        continue;
+      }
+      if (
+        (ts.isFunctionDeclaration(statement) ||
+          ts.isClassDeclaration(statement) ||
+          ts.isEnumDeclaration(statement)) &&
+        statement.name?.text === target
+      ) {
+        record(null);
+        continue;
+      }
+      if (
+        ts.isModuleDeclaration(statement) &&
+        ts.isIdentifier(statement.name) &&
+        statement.name.text === target
+      ) {
+        record(null);
+        continue;
+      }
+      if (ts.isImportEqualsDeclaration(statement)) {
+        if (statement.name.text === target) record(null);
+        continue;
+      }
+      if (!ts.isImportDeclaration(statement)) continue;
+      const clause = statement.importClause;
+      if (clause?.name?.text === target) record(null);
+      const bindings = clause?.namedBindings;
+      if (
+        bindings !== undefined &&
+        ((ts.isNamespaceImport(bindings) && bindings.name.text === target) ||
+          (ts.isNamedImports(bindings) &&
+            bindings.elements.some((element) => element.name.text === target)))
+      ) {
+        record(null);
+      }
+    }
+    return count === 0 ? unresolvedBinding : { found: true, value };
+  };
+  const scopeHasVarBinding = (scope: ts.Node, target: string): boolean => {
+    let found = false;
+    const visit = (node: ts.Node): void => {
+      if (found) return;
+      if (node !== scope && ts.isFunctionLike(node)) return;
+      if (
+        ts.isVariableDeclarationList(node) &&
+        (node.flags & ts.NodeFlags.BlockScoped) === 0 &&
+        node.declarations.some((declaration) =>
+          bindingNameIncludes(declaration.name, target),
+        )
+      ) {
+        found = true;
+        return;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(scope);
+    return found;
+  };
+  const resolveLexicalConstString = (identifier: ts.Identifier): string | null => {
+    const target = identifier.text;
+    for (
+      let scope: ts.Node | undefined = identifier.parent;
+      scope !== undefined;
+      scope = scope.parent
+    ) {
+      let resolution = unresolvedBinding;
+      if (
+        ts.isBlock(scope) ||
+        ts.isSourceFile(scope) ||
+        ts.isModuleBlock(scope)
+      ) {
+        if (ts.isSourceFile(scope) && scopeHasVarBinding(scope, target)) {
+          return null;
+        }
+        resolution = resolveStatementBindings(scope.statements, target);
+      } else if (ts.isCaseBlock(scope)) {
+        resolution = resolveStatementBindings(
+          scope.clauses.flatMap((clause) => [...clause.statements]),
+          target,
+        );
+      } else if (
+        ts.isForStatement(scope) &&
+        scope.initializer !== undefined &&
+        ts.isVariableDeclarationList(scope.initializer)
+      ) {
+        resolution = resolveVariableDeclarations(
+          scope.initializer.declarations,
+          target,
+        );
+      } else if (
+        (ts.isForInStatement(scope) || ts.isForOfStatement(scope)) &&
+        ts.isVariableDeclarationList(scope.initializer)
+      ) {
+        resolution = resolveVariableDeclarations(
+          scope.initializer.declarations,
+          target,
+        );
+      } else if (
+        ts.isCatchClause(scope) &&
+        scope.variableDeclaration !== undefined &&
+        bindingNameIncludes(scope.variableDeclaration.name, target)
+      ) {
+        return null;
+      } else if (ts.isFunctionLike(scope)) {
+        if (
+          scope.parameters.some((parameter) =>
+            bindingNameIncludes(parameter.name, target),
+          ) ||
+          scopeHasVarBinding(scope, target)
+        ) {
+          return null;
+        }
+        if (
+          ts.isFunctionExpression(scope) &&
+          scope.name?.text === target
+        ) {
+          return null;
+        }
+      } else if (
+        ts.isClassExpression(scope) &&
+        scope.name?.text === target
+      ) {
+        return null;
+      }
+      if (resolution.found) return resolution.value;
+    }
+    return null;
+  };
   const staticStringValue = (expression: ts.Expression): string | null => {
     const value = unwrapTransparentExpression(expression);
     if (ts.isStringLiteralLike(value)) return value.text;
-    if (ts.isIdentifier(value)) return staticConstStrings.get(value.text) ?? null;
+    if (ts.isIdentifier(value)) return resolveLexicalConstString(value);
     return null;
   };
   let hasUnverifiedComputedProperty = false;
