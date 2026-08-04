@@ -285,6 +285,7 @@ jobs:
           rm -f "${bootstrap_sql}"
           credential="${HELM_CI_MYSQL_USER}:${app_password}"
           url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'STAGE1_OWNER_LOOP_DATABASE_URL=%s\n' "${url}"
@@ -378,6 +379,7 @@ jobs:
           rm -f "${bootstrap_sql}"
           credential="${HELM_CI_MYSQL_USER}:${app_password}"
           url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'CAIO_PRO_V1_DATABASE_URL=%s\n' "${url}"
@@ -470,6 +472,7 @@ jobs:
           rm -f "${bootstrap_sql}"
           credential="${HELM_CI_MYSQL_USER}:${app_password}"
           url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'MODEL_EGRESS_STORE_DATABASE_URL=%s\n' "${url}"
@@ -562,6 +565,7 @@ jobs:
           rm -f "${bootstrap_sql}"
           credential="${HELM_CI_MYSQL_USER}:${app_password}"
           url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'CAIO_ACCESS_GATEWAY_DATABASE_URL=%s\n' "${url}"
@@ -661,6 +665,7 @@ jobs:
           rm -f "${bootstrap_sql}"
           credential="${HELM_CI_MYSQL_USER}:${app_password}"
           url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'CAIO_CONTEXT_MEMORY_DATABASE_URL=%s\n' "${url}"
@@ -753,6 +758,7 @@ jobs:
           rm -f "${bootstrap_sql}"
           credential="${HELM_CI_MYSQL_USER}:${app_password}"
           url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'CAIO_AUDIT_STATE_DATABASE_URL=%s\n' "${url}"

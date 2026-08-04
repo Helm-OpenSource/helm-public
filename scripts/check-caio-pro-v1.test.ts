@@ -1234,6 +1234,65 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it.each([
+    "--env BASH_ENV=/__w/helm-public/helm-public/ops/env.sh",
+    "--env-file ops/environment",
+  ])("fails closed for unverified job container options: %s", (options) => {
+    withFixture(
+      {
+        ".github/workflows/container-options.yml": [
+          "jobs:",
+          "  verify:",
+          "    container:",
+          "      image: node:22",
+          `      options: ${options}`,
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+        "ops/environment": "BASH_ENV=ops/env.sh\n",
+        "ops/env.sh":
+          "gh api repos/example/private/tarball/main > private.tar.gz\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/container-options.yml" &&
+              violation.detail.includes("container options could not be verified"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("fails closed for an unverified job container volume", () => {
+    withFixture(
+      {
+        ".github/workflows/container-volume.yml": [
+          "jobs:",
+          "  verify:",
+          "    container:",
+          "      image: node:22",
+          "      volumes:",
+          "        - ops:/workspace/ops",
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/container-volume.yml" &&
+              violation.detail.includes("container volumes could not be verified"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it("checks implicit execution environment on an action step", () => {
     withFixture(
       {
@@ -1265,6 +1324,7 @@ describe("caio-pro-v1 aggregate gate", () => {
     `printf '%s=%s\\n' BASH_ENV ops/env.sh >> "$GITHUB_ENV"`,
     `cat ops/environment >> "$GITHUB_ENV"`,
     `echo 'BASH_ENV'='ops/env.sh' >> "$GITHUB_ENV"`,
+    `printf 'DATABASE_URL=mysql://safe\\nBASH_ENV=ops/env.sh\\n' >> "$GITHUB_ENV"`,
   ])("fails closed for an unverified GITHUB_ENV writer: %s", (runCommand) => {
     withFixture(
       {
@@ -1291,6 +1351,33 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("requires a fail-closed line check before an audited GITHUB_ENV group", () => {
+    withFixture(
+      {
+        ".github/workflows/github-env-unchecked.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: |",
+          '          url="mysql://app@127.0.0.1/test"',
+          "          {",
+          "            printf 'DATABASE_URL=%s\\n' \"${url}\"",
+          '          } >>"${GITHUB_ENV}"',
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/github-env-unchecked.yml" &&
+              violation.detail.includes("implicit execution state mutation"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it("allows the audited database URL block to write GITHUB_ENV", () => {
     withFixture(
       {
@@ -1300,6 +1387,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           "    steps:",
           "      - run: |",
           '          url="mysql://app@127.0.0.1/test"',
+          "          [[ \"${url}\" != *$'\\n'* && \"${url}\" != *$'\\r'* ]] || exit 1",
           "          {",
           "            printf 'DATABASE_URL=%s\\n' \"${url}\"",
           "            printf 'CAIO_PRO_V1_DATABASE_URL=%s\\n' \"${url}\"",
@@ -3163,6 +3251,38 @@ describe("caio-pro-v1 aggregate gate", () => {
       [
         "let run;",
         '({ execFileSync: run } = require("node:child_process"));',
+        'run("gh", ["api", "repos/example/private/tarball/main"]);',
+      ].join("\n"),
+    ],
+    [
+      "ESM named default child-process alias",
+      [
+        'import { default as child } from "node:child_process";',
+        "const run = child.execFileSync;",
+        'run("gh", ["api", "repos/example/private/tarball/main"]);',
+      ].join("\n"),
+    ],
+    [
+      "secondary child-process module alias",
+      [
+        'import * as child from "node:child_process";',
+        "const runner = child;",
+        "const run = runner.execFileSync;",
+        'run("gh", ["api", "repos/example/private/tarball/main"]);',
+      ].join("\n"),
+    ],
+    [
+      "computed destructuring-assignment fetch alias",
+      [
+        "let request;",
+        '({ ["fetch"]: request } = globalThis);',
+        'await request("https://example.test/private.tar.gz");',
+      ].join("\n"),
+    ],
+    [
+      "CommonJS computed destructuring child-process alias",
+      [
+        'const { ["execFileSync"]: run } = require("node:child_process");',
         'run("gh", ["api", "repos/example/private/tarball/main"]);',
       ].join("\n"),
     ],

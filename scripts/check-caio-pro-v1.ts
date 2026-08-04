@@ -1104,6 +1104,12 @@ function readJobContainerEnvironment(
     return;
   }
   readWorkflowEnvironment(value.env, errors, `${label} container`);
+  if (value.options !== undefined) {
+    errors.push(`${label} container options could not be verified statically`);
+  }
+  if (value.volumes !== undefined) {
+    errors.push(`${label} container volumes could not be verified statically`);
+  }
 }
 
 function parseWorkflowSemantics(
@@ -1623,7 +1629,9 @@ type NpmInvocation = Readonly<{
 // hooks implicitly, so command reachability must retain that context.
 function extractNpmInvocations(command: string): NpmInvocation[] {
   const invocations: NpmInvocation[] = [];
-  for (const invocation of extractStaticCommandInvocations(command)) {
+  for (const invocation of extractStaticCommandInvocations(
+    stripVerifiedGitHubEnvGuardLines(command),
+  )) {
     if (path.posix.basename(invocation.executable) !== "npm") continue;
     let prefix: string | null = null;
     let workspace: string | null = null;
@@ -2088,7 +2096,9 @@ function extractLocalHelperReferences(
     }
   };
 
-  for (const invocation of extractStaticCommandInvocations(command)) {
+  for (const invocation of extractStaticCommandInvocations(
+    stripVerifiedGitHubEnvGuardLines(command),
+  )) {
     const executable = path.posix.basename(invocation.executable);
     unresolved ||= invocation.unresolved;
     if (executable === "source" || executable === ".") {
@@ -2176,9 +2186,21 @@ const VERIFIED_GITHUB_ENV_DATABASE_KEYS = new Set([
   "CAIO_AUDIT_STATE_DATABASE_URL",
 ]);
 
+const VERIFIED_GITHUB_ENV_URL_GUARD =
+  "[[ \"${url}\" != *$'\\n'* && \"${url}\" != *$'\\r'* ]] || exit 1";
+
+function stripVerifiedGitHubEnvGuardLines(command: string): string {
+  return command
+    .split("\n")
+    .map((line) =>
+      line.trim() === VERIFIED_GITHUB_ENV_URL_GUARD ? "" : line,
+    )
+    .join("\n");
+}
+
 function readVerifiedGitHubEnvPrintfKey(command: string): string | null {
   const match = command.match(
-    /^\s*printf\s+(['"])([A-Za-z_][A-Za-z0-9_]*)=[^'"]*\1(?:\s+[^;&|`]*)?\s*$/u,
+    /^\s*printf\s+(['"])([A-Za-z_][A-Za-z0-9_]*)=%s\\n\1\s+"\$\{url\}"\s*$/u,
   );
   const key = match?.[2];
   return key !== undefined && VERIFIED_GITHUB_ENV_DATABASE_KEYS.has(key)
@@ -2201,17 +2223,20 @@ function hasOnlyVerifiedGitHubEnvWrites(command: string): boolean {
     if (!/\bGITHUB_ENV\b/u.test(line)) continue;
     sawWrite = true;
     const producer = readGitHubEnvAppendProducer(line);
-    if (producer === null) return false;
-    if (producer !== "}") {
-      if (readVerifiedGitHubEnvPrintfKey(producer) === null) return false;
-      continue;
-    }
+    if (producer !== "}") return false;
 
     let groupStart = index - 1;
     while (groupStart >= 0 && lines[groupStart]?.trim() !== "{") {
       groupStart -= 1;
     }
     if (groupStart < 0) return false;
+    let guardIndex = groupStart - 1;
+    while (guardIndex >= 0 && lines[guardIndex]?.trim() === "") {
+      guardIndex -= 1;
+    }
+    if (lines[guardIndex]?.trim() !== VERIFIED_GITHUB_ENV_URL_GUARD) {
+      return false;
+    }
     const writers = lines
       .slice(groupStart + 1, index)
       .map((entry) => entry.trim())
@@ -2929,6 +2954,10 @@ function helperHasRemoteRepositoryAccess(
     if (!ts.isNamedImports(statement.importClause.namedBindings)) continue;
     for (const element of statement.importClause.namedBindings.elements) {
       const importedName = element.propertyName?.text ?? element.name.text;
+      if (importedName === "default") {
+        childProcessModuleAliases.add(element.name.text);
+        continue;
+      }
       if (
         /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
           importedName,
@@ -2958,6 +2987,24 @@ function helperHasRemoteRepositoryAccess(
       ts.isStringLiteralLike(value.argumentExpression)
     ) {
       return value.argumentExpression.text;
+    }
+    return null;
+  };
+  const staticDeclaredPropertyName = (
+    name: ts.PropertyName | undefined,
+    fallback: string,
+  ): string | null => {
+    if (name === undefined) return fallback;
+    if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) {
+      return name.text;
+    }
+    if (
+      ts.isComputedPropertyName(name) &&
+      ts.isStringLiteralLike(unwrapTransparentExpression(name.expression))
+    ) {
+      return (
+        unwrapTransparentExpression(name.expression) as ts.StringLiteralLike
+      ).text;
     }
     return null;
   };
@@ -3001,9 +3048,11 @@ function helperHasRemoteRepositoryAccess(
     ) {
       for (const element of node.name.elements) {
         if (!ts.isIdentifier(element.name)) continue;
-        const propertyName =
-          element.propertyName?.getText(inspection.source) ?? element.name.text;
-        if (propertyName.replace(/^['"]|['"]$/gu, "") === "fetch") {
+        const propertyName = staticDeclaredPropertyName(
+          element.propertyName,
+          element.name.text,
+        );
+        if (propertyName === "fetch") {
           fetchCallAliases.add(element.name.text);
         }
       }
@@ -3016,12 +3065,11 @@ function helperHasRemoteRepositoryAccess(
     ) {
       for (const element of node.name.elements) {
         if (!ts.isIdentifier(element.name)) continue;
-        const importedName =
-          element.propertyName?.getText(inspection.source) ?? element.name.text;
-        const normalizedImportedName = importedName.replace(
-          /^["']|["']$/gu,
-          "",
+        const normalizedImportedName = staticDeclaredPropertyName(
+          element.propertyName,
+          element.name.text,
         );
+        if (normalizedImportedName === null) continue;
         if (
           /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
             normalizedImportedName,
@@ -3040,7 +3088,7 @@ function helperHasRemoteRepositoryAccess(
       node.initializer !== undefined
     ) {
       const initializer = unwrapTransparentExpression(node.initializer);
-      if (isChildProcessRequire(initializer)) {
+      if (isChildProcessModuleReference(initializer)) {
         childProcessModuleAliases.add(node.name.text);
       }
       if (isFetchReference(initializer)) {
@@ -3081,11 +3129,7 @@ function helperHasRemoteRepositoryAccess(
           ts.isPropertyAssignment(property) &&
           ts.isIdentifier(unwrapTransparentExpression(property.initializer))
         ) {
-          importedName = ts.isIdentifier(property.name)
-            ? property.name.text
-            : ts.isStringLiteralLike(property.name)
-              ? property.name.text
-              : null;
+          importedName = staticDeclaredPropertyName(property.name, "");
           alias = (
             unwrapTransparentExpression(property.initializer) as ts.Identifier
           ).text;
@@ -3114,7 +3158,9 @@ function helperHasRemoteRepositoryAccess(
         .text;
       const value = unwrapTransparentExpression(node.right);
       if (isFetchReference(value)) fetchCallAliases.add(alias);
-      if (isChildProcessRequire(value)) childProcessModuleAliases.add(alias);
+      if (isChildProcessModuleReference(value)) {
+        childProcessModuleAliases.add(alias);
+      }
       if (
         ts.isPropertyAccessExpression(value) ||
         (ts.isElementAccessExpression(value) &&
