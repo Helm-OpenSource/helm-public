@@ -1039,6 +1039,12 @@ describe("caio-pro-v1 aggregate gate", () => {
   it.each([
     "PATH=ops:$PATH; fetch-private",
     "export PATH=ops:$PATH; fetch-private",
+    "PATH=ops:$PATH export PATH; fetch-private",
+    "PATH=ops:$PATH readonly PATH; fetch-private",
+    "PATH=ops:$PATH builtin export PATH; fetch-private",
+    "PATH=ops:$PATH declare -x PATH; fetch-private",
+    "PATH+=:ops; fetch-private",
+    "export PATH+=:ops; fetch-private",
   ])("fails closed for a persistent PATH mutation: %s", (runCommand) => {
     withFixture(
       {
@@ -1063,6 +1069,53 @@ describe("caio-pro-v1 aggregate gate", () => {
       },
     );
   });
+
+  it.each([
+    ["BASH_ENV", ["env:", "  BASH_ENV: ops/env.sh"], "      - run: echo ok"],
+    [
+      "NODE_OPTIONS preload",
+      ["env:", "  NODE_OPTIONS: --require ./ops/preload.cjs"],
+      "      - run: node -e \"console.log('ok')\"",
+    ],
+    ["GITHUB_PATH", [], '      - run: echo "ops" >> "$GITHUB_PATH"'],
+    [
+      "GITHUB_ENV execution hook",
+      [],
+      '      - run: echo "BASH_ENV=ops/env.sh" >> "$GITHUB_ENV"',
+    ],
+  ])(
+    "fails closed for implicit workflow execution through %s",
+    (_label, workflowPrefix, runStep) => {
+      withFixture(
+        {
+          ".github/workflows/implicit-entry.yml": [
+            ...workflowPrefix,
+            "jobs:",
+            "  verify:",
+            "    steps:",
+            runStep,
+            "      - run: fetch-private",
+            "",
+          ].join("\n"),
+          "ops/env.sh":
+            "gh api repos/example/private/tarball/main > private.tar.gz\n",
+          "ops/preload.cjs":
+            'require("node:child_process").execFileSync("gh", ["api", "repos/example/private/tarball/main"]);\n',
+          "ops/fetch-private":
+            "#!/usr/bin/env bash\ngh api repos/example/private/tarball/main\n",
+        },
+        (root) => {
+          expect(
+            checkCaioProV1Static(root).some(
+              (violation) =>
+                violation.file === ".github/workflows/implicit-entry.yml" &&
+                violation.detail.includes("implicit execution"),
+            ),
+          ).toBe(true);
+        },
+      );
+    },
+  );
 
   it("rejects a workflow-reachable module helper that uses fetch", () => {
     withFixture(
@@ -2864,6 +2917,29 @@ describe("caio-pro-v1 aggregate gate", () => {
         'run("gh", ["api", "repos/example/private/tarball/main"]);',
       ].join("\n"),
     ],
+    [
+      "destructured fetch alias",
+      [
+        "const { fetch: request } = globalThis;",
+        'await request("https://example.test/private.tar.gz");',
+      ].join("\n"),
+    ],
+    [
+      "assigned fetch alias",
+      [
+        "let request;",
+        "request = fetch;",
+        'await request("https://example.test/private.tar.gz");',
+      ].join("\n"),
+    ],
+    [
+      "ESM child-process namespace alias",
+      [
+        'import * as child from "node:child_process";',
+        "const run = child.execFileSync;",
+        'run("gh", ["api", "repos/example/private/tarball/main"]);',
+      ].join("\n"),
+    ],
   ])("rejects repository access through a %s", (_label, source) => {
     withFixture(
       {
@@ -2881,6 +2957,35 @@ describe("caio-pro-v1 aggregate gate", () => {
           checkCaioProV1Static(root).some(
             (violation) =>
               violation.file === "ops/alias.cjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("resolves a local module through package.json imports", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-package-import.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: node ops/entry.mjs",
+          "",
+        ].join("\n"),
+        "package.json": JSON.stringify({
+          imports: { "#network": "./ops/network.mjs" },
+        }),
+        "ops/entry.mjs": 'import "#network";\n',
+        "ops/network.mjs":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/network.mjs" &&
               violation.detail.includes("workflow-reachable helper"),
           ),
         ).toBe(true);

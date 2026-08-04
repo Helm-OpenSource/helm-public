@@ -1030,6 +1030,48 @@ function readDefaultsWorkingDirectory(
   );
 }
 
+const IMPLICIT_EXECUTION_ENVIRONMENT_KEYS = new Set([
+  "BASH_ENV",
+  "DYLD_INSERT_LIBRARIES",
+  "ENV",
+  "LD_PRELOAD",
+  "NODE_PATH",
+  "PATH",
+  "PERL5OPT",
+  "PYTHONPATH",
+  "RUBYOPT",
+]);
+
+function readWorkflowEnvironment(
+  value: unknown,
+  errors: string[],
+  label: string,
+): UnknownRecord {
+  if (value === undefined) return {};
+  if (!isRecord(value)) {
+    errors.push(`${label} environment could not be verified`);
+    return {};
+  }
+  for (const [key, environmentValue] of Object.entries(value)) {
+    if (IMPLICIT_EXECUTION_ENVIRONMENT_KEYS.has(key)) {
+      errors.push(
+        `${label} environment enables implicit execution through ${key}`,
+      );
+      continue;
+    }
+    if (
+      key === "NODE_OPTIONS" &&
+      (typeof environmentValue !== "string" ||
+        !/^--max-old-space-size=\d+$/u.test(environmentValue.trim()))
+    ) {
+      errors.push(
+        `${label} environment enables implicit execution through NODE_OPTIONS`,
+      );
+    }
+  }
+  return value;
+}
+
 function parseWorkflowSemantics(
   source: string,
   d2WorkflowDigestMatches: boolean,
@@ -1073,6 +1115,7 @@ function parseWorkflowSemantics(
 
   const commands: WorkflowCommand[] = [];
   const actions: string[] = [];
+  readWorkflowEnvironment(parsed.env, errors, "workflow");
   const workflowWorkingDirectory = readDefaultsWorkingDirectory(
     parsed.defaults,
     "",
@@ -1094,7 +1137,11 @@ function parseWorkflowSemantics(
       errors.push(`workflow job ${jobName} steps could not be verified`);
       continue;
     }
-    const jobEnvironment = isRecord(jobValue.env) ? jobValue.env : {};
+    const jobEnvironment = readWorkflowEnvironment(
+      jobValue.env,
+      errors,
+      `workflow job ${jobName}`,
+    );
     const jobWorkingDirectory = readDefaultsWorkingDirectory(
       jobValue.defaults,
       workflowWorkingDirectory,
@@ -1117,7 +1164,11 @@ function parseWorkflowSemantics(
             `workflow job ${jobName} step ${stepIndex + 1} run command could not be verified`,
           );
         } else {
-          const stepEnvironment = isRecord(stepValue.env) ? stepValue.env : {};
+          const stepEnvironment = readWorkflowEnvironment(
+            stepValue.env,
+            errors,
+            `workflow job ${jobName} step ${stepIndex + 1}`,
+          );
           const stepOverridesLocalBinding =
             "HELM_D2_SMOKE_REPO_URL" in stepEnvironment ||
             "HELM_D2_SMOKE_REF" in stepEnvironment ||
@@ -1375,10 +1426,13 @@ function unwrapStaticCommand(
   let unresolved = !tokenizationComplete;
   let pathDirectories: string[] | null = null;
   const isAssignment = (value: string) =>
-    /^[A-Za-z_][A-Za-z0-9_]*=/u.test(value);
+    /^[A-Za-z_][A-Za-z0-9_]*\+?=/u.test(value);
   const recordAssignment = (assignment: string) => {
     const separatorIndex = assignment.indexOf("=");
-    if (assignment.slice(0, separatorIndex) !== "PATH") return;
+    const variableName = assignment
+      .slice(0, separatorIndex)
+      .replace(/\+$/u, "");
+    if (variableName !== "PATH") return;
     const directories: string[] = [];
     for (const directory of assignment.slice(separatorIndex + 1).split(":")) {
       if (directory === "$PATH" || directory === "${PATH}") continue;
@@ -1489,7 +1543,8 @@ function unwrapStaticCommand(
     /^(?:declare|export|readonly|typeset)$/u.test(
       path.posix.basename(executable),
     ) &&
-    args.some((argument) => /^PATH=/u.test(argument))
+    (pathDirectories !== null ||
+      args.some((argument) => /^PATH(?:\+?=.*)?$/u.test(argument)))
   ) {
     unresolved = true;
   }
@@ -2066,6 +2121,17 @@ function hasUnsupportedLocalInterpreter(command: string): boolean {
   );
 }
 
+function hasImplicitWorkflowExecutionMutation(command: string): boolean {
+  const executable = blankWholeLineComments(command);
+  if (/\bGITHUB_PATH\b/u.test(executable)) return true;
+  return (
+    /\bGITHUB_ENV\b/u.test(executable) &&
+    /\b(?:BASH_ENV|DYLD_INSERT_LIBRARIES|ENV|LD_PRELOAD|NODE_OPTIONS|NODE_PATH|PATH|PERL5OPT|PYTHONPATH|RUBYOPT)\s*(?:\+?=|<<)/u.test(
+      executable,
+    )
+  );
+}
+
 type PendingHelper = Readonly<{
   file: string;
   cwd: string;
@@ -2145,6 +2211,14 @@ function checkWorkflowReachableHelpers(
           file: pendingCommand.sourceFile,
           detail:
             "workflow-reachable command uses an unsupported local interpreter and could not be verified statically",
+        });
+      }
+      if (hasImplicitWorkflowExecutionMutation(pendingCommand.command)) {
+        violations.push({
+          rule: "CPV1-CI",
+          file: pendingCommand.sourceFile,
+          detail:
+            "workflow implicit execution state mutation could not be resolved statically",
         });
       }
       if (
@@ -2571,6 +2645,53 @@ function resolveSourceFileCandidate(
   );
 }
 
+function resolvePackageImportPath(
+  repoRoot: string,
+  parentFile: string,
+  moduleSpecifier: string,
+): LocalModuleResolution {
+  const packageFile = findNearestRepoFile(
+    repoRoot,
+    path.posix.dirname(parentFile),
+    PACKAGE_FILE,
+  );
+  if (packageFile === null) return { kind: "unresolved" };
+  const content = read(repoRoot, packageFile);
+  if (content === null) return { kind: "unresolved" };
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(content);
+  } catch {
+    return { kind: "unresolved" };
+  }
+  if (!isRecord(manifest) || !isRecord(manifest.imports)) {
+    return { kind: "unresolved" };
+  }
+
+  let target: unknown;
+  if (Object.prototype.hasOwnProperty.call(manifest.imports, moduleSpecifier)) {
+    target = manifest.imports[moduleSpecifier];
+  } else {
+    return { kind: "unresolved" };
+  }
+
+  if (typeof target !== "string") return { kind: "unresolved" };
+  if (!target.startsWith("./")) {
+    return target.startsWith("../") || path.posix.isAbsolute(target)
+      ? { kind: "unresolved" }
+      : { kind: "external" };
+  }
+  if (target.includes("*")) return { kind: "unresolved" };
+  const packageDirectory = path.posix.dirname(packageFile);
+  const base = resolveRepoRelativePath(
+    packageDirectory === "." ? "" : packageDirectory,
+    target,
+  );
+  if (base === null) return { kind: "unresolved" };
+  const file = resolveSourceFileCandidate(repoRoot, base);
+  return file === null ? { kind: "unresolved" } : { kind: "resolved", file };
+}
+
 function resolveLocalModulePath(
   repoRoot: string,
   parentFile: string,
@@ -2583,6 +2704,10 @@ function resolveLocalModulePath(
     );
     const file = resolveSourceFileCandidate(repoRoot, base);
     return file === null ? { kind: "unresolved" } : { kind: "resolved", file };
+  }
+
+  if (moduleSpecifier.startsWith("#")) {
+    return resolvePackageImportPath(repoRoot, parentFile, moduleSpecifier);
   }
 
   if (tsconfigFile === null) return { kind: "external" };
@@ -2682,11 +2807,17 @@ function helperHasRemoteRepositoryAccess(
       !ts.isImportDeclaration(statement) ||
       !ts.isStringLiteral(statement.moduleSpecifier) ||
       !/^(?:node:)?child_process$/u.test(statement.moduleSpecifier.text) ||
-      statement.importClause?.namedBindings === undefined ||
-      !ts.isNamedImports(statement.importClause.namedBindings)
+      statement.importClause?.namedBindings === undefined
     ) {
       continue;
     }
+    if (ts.isNamespaceImport(statement.importClause.namedBindings)) {
+      childProcessModuleAliases.add(
+        statement.importClause.namedBindings.name.text,
+      );
+      continue;
+    }
+    if (!ts.isNamedImports(statement.importClause.namedBindings)) continue;
     for (const element of statement.importClause.namedBindings.elements) {
       const importedName = element.propertyName?.text ?? element.name.text;
       if (
@@ -2757,6 +2888,20 @@ function helperHasRemoteRepositoryAccess(
     if (
       ts.isVariableDeclaration(node) &&
       ts.isObjectBindingPattern(node.name) &&
+      node.initializer !== undefined
+    ) {
+      for (const element of node.name.elements) {
+        if (!ts.isIdentifier(element.name)) continue;
+        const propertyName =
+          element.propertyName?.getText(inspection.source) ?? element.name.text;
+        if (propertyName.replace(/^['"]|['"]$/gu, "") === "fetch") {
+          fetchCallAliases.add(element.name.text);
+        }
+      }
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isObjectBindingPattern(node.name) &&
       node.initializer !== undefined &&
       isChildProcessModuleReference(node.initializer)
     ) {
@@ -2808,6 +2953,35 @@ function helperHasRemoteRepositoryAccess(
           isChildProcessModuleReference(initializer.expression)
         ) {
           childProcessCallAliases.set(node.name.text, importedName);
+        }
+      }
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isIdentifier(unwrapTransparentExpression(node.left))
+    ) {
+      const alias = (unwrapTransparentExpression(node.left) as ts.Identifier)
+        .text;
+      const value = unwrapTransparentExpression(node.right);
+      if (isFetchReference(value)) fetchCallAliases.add(alias);
+      if (isChildProcessRequire(value)) childProcessModuleAliases.add(alias);
+      if (
+        ts.isPropertyAccessExpression(value) ||
+        (ts.isElementAccessExpression(value) &&
+          value.argumentExpression !== undefined &&
+          ts.isStringLiteralLike(value.argumentExpression))
+      ) {
+        const importedName = ts.isPropertyAccessExpression(value)
+          ? value.name.text
+          : (value.argumentExpression as ts.StringLiteralLike).text;
+        if (
+          /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
+            importedName,
+          ) &&
+          isChildProcessModuleReference(value.expression)
+        ) {
+          childProcessCallAliases.set(alias, importedName);
         }
       }
     }
