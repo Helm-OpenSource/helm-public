@@ -1222,7 +1222,12 @@ export async function completeTrialSignupVerificationAction(
     }))
       ? invitePrefill.invitedWorkspaceId
       : null;
-  let workspaceIdForSession: string;
+  // Null until a workspace is actually settled on. The self-serve fallback below
+  // is keyed on THIS VALUE rather than on whether an invite id was carried in:
+  // the invited branch can be entered and then decline — a membership found
+  // revoked is not an invite — and a separate flag could disagree with the value
+  // it is supposed to describe.
+  let workspaceIdForSession: string | null = null;
   let redirectTo = "/setup?onboarding=trial";
 
   if (invitedWorkspaceId) {
@@ -1258,6 +1263,10 @@ export async function completeTrialSignupVerificationAction(
         role: true,
         title: true,
         persona: true,
+        // Read the CURRENT status. hasAllowedInviteMembership matched by email
+        // or phone, which is not necessarily the row this write targets, and it
+        // ran before this point in any case.
+        status: true,
       },
     });
 
@@ -1268,39 +1277,72 @@ export async function completeTrialSignupVerificationAction(
       invitedMembershipTitle ||
       null;
 
-    await db.membership.upsert({
-      where: {
-        workspaceId_userId: {
+    // A REVOKED MEMBERSHIP IS NOT AN INVITE.
+    //
+    // hasAllowedInviteMembership established that SOME non-inactive membership
+    // exists for this email or phone. It did not establish that THIS row is
+    // live, and it ran before this point. An INACTIVE row is somebody having
+    // been removed from the workspace, so signup must not carry them back in —
+    // it declines the join and falls through to the self-serve path below,
+    // exactly as it does for a user who was never invited.
+    if (existingMembership?.status !== MembershipStatus.INACTIVE) {
+      await db.membership.upsert({
+        where: {
+          workspaceId_userId: {
+            workspaceId: invitedWorkspace.id,
+            userId: savedUser.id,
+          },
+        },
+        create: {
           workspaceId: invitedWorkspace.id,
           userId: savedUser.id,
+          role: existingMembership?.role ?? WorkspaceRole.MEMBER,
+          status: MembershipStatus.ACTIVE,
+          ...(invitedMembershipTitle ? { title: invitedMembershipTitle } : {}),
+          ...(invitedMembershipPersona ? { persona: invitedMembershipPersona } : {}),
         },
-      },
-      create: {
-        workspaceId: invitedWorkspace.id,
-        userId: savedUser.id,
-        role: existingMembership?.role ?? WorkspaceRole.MEMBER,
-        status: MembershipStatus.ACTIVE,
-        ...(invitedMembershipTitle ? { title: invitedMembershipTitle } : {}),
-        ...(invitedMembershipPersona ? { persona: invitedMembershipPersona } : {}),
-      },
-      update: {
-        role: existingMembership?.role ?? WorkspaceRole.MEMBER,
-        status: MembershipStatus.ACTIVE,
-        ...(invitedMembershipTitle && !existingMembership?.title
-          ? { title: invitedMembershipTitle }
-          : {}),
-        ...(invitedMembershipPersona && !existingMembership?.persona
-          ? { persona: invitedMembershipPersona }
-          : {}),
-      },
-    });
+        update: {
+          role: existingMembership?.role ?? WorkspaceRole.MEMBER,
+          // STATUS IS DELIBERATELY ABSENT FROM THIS BRANCH.
+          //
+          // It used to be `status: ACTIVE` unconditionally, which is what made
+          // a revoke landing between the read above and this write come back
+          // ACTIVE. An upsert cannot express a conditional update, so the
+          // transition is done by the guarded statement below instead and this
+          // branch is left unable to resurrect anything.
+          ...(invitedMembershipTitle && !existingMembership?.title
+            ? { title: invitedMembershipTitle }
+            : {}),
+          ...(invitedMembershipPersona && !existingMembership?.persona
+            ? { persona: invitedMembershipPersona }
+            : {}),
+        },
+      });
 
-    workspaceIdForSession = invitedWorkspace.id;
-    redirectTo = resolveDeploymentPostLoginPath(
-      "/dashboard",
-      deploymentConfig,
-    );
-  } else {
+      // The INVITED -> ACTIVE transition, with the pre-state inside the UPDATE.
+      // Same shape and same reason as markInvitedMembershipActive in
+      // lib/auth/session.ts: Prisma's updateMany can select ids and then update
+      // by id, so its count is not a sound compare-and-swap under concurrency.
+      // A row revoked in the meantime does not match, and stays revoked.
+      await db.$executeRaw`
+        UPDATE \`Membership\`
+           SET \`status\` = ${MembershipStatus.ACTIVE},
+               \`joinedAt\` = UTC_TIMESTAMP(3),
+               \`updatedAt\` = UTC_TIMESTAMP(3)
+         WHERE \`workspaceId\` = ${invitedWorkspace.id}
+           AND \`userId\` = ${savedUser.id}
+           AND \`status\` = ${MembershipStatus.INVITED}
+      `;
+
+      workspaceIdForSession = invitedWorkspace.id;
+      redirectTo = resolveDeploymentPostLoginPath(
+        "/dashboard",
+        deploymentConfig,
+      );
+    }
+  }
+
+  if (!workspaceIdForSession) {
     const { workspace } = await createSelfServeTrialOrganization({
       user: {
         id: savedUser.id,
