@@ -3354,8 +3354,8 @@ export async function restoreDefaultPoliciesAction() {
   }
 
   await Promise.all(
-    Object.entries(policyDefaults).map(([actionType, defaults]) =>
-      db.policyRule.updateMany({
+    Object.entries(policyDefaults).map(async ([actionType, defaults]) => {
+      await db.policyRule.updateMany({
         where: {
           workspaceId: workspace.id,
           actionType: actionType as keyof typeof policyDefaults,
@@ -3365,8 +3365,8 @@ export async function restoreDefaultPoliciesAction() {
           riskThreshold: defaults.riskThreshold,
           enabled: true,
         },
-      }),
-    ),
+      });
+    }),
   );
 
   await writeAuditLog({

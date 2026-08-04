@@ -1381,6 +1381,23 @@ model Workspace {
   caioProV1CompletionAssessments       CaioProV1CompletionAssessment[]
   caioProV1CompletionGateReceipts      CaioProV1CompletionGateReceipt[]
   caioProV1CompletionGateHead          CaioProV1CompletionGateHead?
+  workBuddyDeliveryEnvelopes           WorkBuddyDeliveryEnvelope[]
+  workBuddyDeliveryClientBindings      WorkBuddyDeliveryClientBinding[]
+  workBuddyDeliveryLanes               WorkBuddyDeliveryLane[]
+  workBuddyDeliveryClaims              WorkBuddyDeliveryClaim[]
+  workBuddyDeliveryPresentations       WorkBuddyDeliveryPresentation[]
+  workBuddyDeliverySuppressions        WorkBuddyDeliverySuppression[]
+  workBuddyMutationChallenges          WorkBuddyMutationChallenge[]
+  workBuddyMutationReceipts            WorkBuddyMutationReceipt[]
+  workBuddyPresenceChallenges          WorkBuddyPresenceChallenge[]
+  workBuddyPromptResponseReceipts      WorkBuddyPromptResponseReceipt[]
+  caioAccessTokens                     CaioAccessToken[]
+  caioPairingRequests                  CaioPairingRequest[]
+  caioContextNegativeRules             CaioContextNegativeRule[]
+  caioContextReceipts                  CaioContextReceipt[]
+  caioMemoryCandidates                 CaioMemoryCandidate[]
+  caioAuditDispatchReceipts            CaioAuditDispatchReceipt[]
+  caioCredentialRefStates              CaioCredentialRefState[]
   contextAgentInvitations              ContextAgentInvitation[]
   contextAgentConsentReceipts          ContextAgentConsentReceipt[]
   contextAgentScopeRevisions           ContextAgentScopeRevision[]
@@ -6406,4 +6423,423 @@ model ContextAgentDeletionReceipt {
   @@unique([workspaceId, idempotencyKey], map: "CtxAgentDeletion_workspace_idem_key")
   @@index([workspaceId, outcome, recordedAt], map: "CtxAgentDeletion_workspace_outcome_time_idx")
   @@index([workspaceId, memberUserId, recordedAt], map: "CtxAgentDeletion_workspace_member_time_idx")
+}
+
+// ===== WorkBuddy CAIO LAN collaboration transport records =====
+// These rows are delivery/challenge/receipt infrastructure only. They do not
+// define questions, advice, decisions, tasks, permissions, mandates, or
+// execution authority. Canonical objects remain owned by their existing
+// models and are referenced through typed, workspace-bound identifiers.
+
+model WorkBuddyDeliveryEnvelope {
+  id                     String                           @id
+  workspaceId            String
+  deliveryKey            String
+  deliveryVersion        Int
+  sourceObjectKind       String
+  sourceObjectId         String
+  sourceObjectVersion    Int
+  sourceObjectHash       String
+  severity               String
+  category               String
+  triggerRuleRef         String
+  triggerSnapshotHash    String
+  validUntil             DateTime
+  status                 String
+  snoozedUntil           DateTime?
+  envelopeJson           String                           @db.LongText
+  contentHash            String
+  createdAt              DateTime
+  updatedAt              DateTime
+  workspace              Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBDeliveryEnvelope_workspace_fkey")
+  claims                 WorkBuddyDeliveryClaim[]
+  promptResponseReceipts WorkBuddyPromptResponseReceipt[]
+
+  @@unique([id, workspaceId], map: "WBDeliveryEnvelope_id_workspace_key")
+  @@unique([id, workspaceId, deliveryKey, deliveryVersion, severity], map: "WBDeliveryEnvelope_claim_binding_key")
+  @@unique([workspaceId, deliveryKey, deliveryVersion], map: "WBDeliveryEnvelope_workspace_key_version_key")
+  @@unique([workspaceId, deliveryKey, triggerSnapshotHash], map: "WBDeliveryEnvelope_workspace_key_snapshot_key")
+  @@index([workspaceId, severity, status, createdAt], map: "WBDeliveryEnvelope_workspace_lane_status_idx")
+  @@index([workspaceId, sourceObjectKind, sourceObjectId, sourceObjectVersion], map: "WBDeliveryEnvelope_workspace_source_idx")
+}
+
+model WorkBuddyDeliveryClientBinding {
+  workspaceId  String                   @id
+  clientId     String
+  registeredAt DateTime
+  lastSeenAt   DateTime
+  workspace    Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBDeliveryClient_workspace_fkey")
+  lanes        WorkBuddyDeliveryLane[]
+  claims       WorkBuddyDeliveryClaim[]
+
+  @@unique([workspaceId, clientId], map: "WBDeliveryClient_workspace_client_key")
+}
+
+model WorkBuddyDeliveryLane {
+  id          String                         @id @default(cuid())
+  workspaceId String
+  clientId    String
+  severity    String
+  sequence    Int                            @default(0)
+  updatedAt   DateTime                       @updatedAt
+  workspace   Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBDeliveryLane_workspace_fkey")
+  client      WorkBuddyDeliveryClientBinding @relation(fields: [workspaceId, clientId], references: [workspaceId, clientId], onDelete: Restrict, map: "WBDeliveryLane_client_fkey")
+
+  @@unique([workspaceId, clientId, severity], map: "WBDeliveryLane_workspace_client_severity_key")
+}
+
+model WorkBuddyDeliveryClaim {
+  id               String                          @id
+  workspaceId      String
+  clientId         String
+  deliveryObjectId String
+  deliveryKey      String
+  deliveryVersion  Int
+  severity         String
+  claimJson        String                          @db.LongText
+  contentHash      String
+  claimedAt        DateTime
+  workspace        Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBDeliveryClaim_workspace_fkey")
+  client           WorkBuddyDeliveryClientBinding  @relation(fields: [workspaceId, clientId], references: [workspaceId, clientId], onDelete: Restrict, map: "WBDeliveryClaim_client_fkey")
+  envelope         WorkBuddyDeliveryEnvelope       @relation(fields: [deliveryObjectId, workspaceId, deliveryKey, deliveryVersion, severity], references: [id, workspaceId, deliveryKey, deliveryVersion, severity], onDelete: Restrict, onUpdate: Restrict, map: "WBDeliveryClaim_envelope_binding_fkey")
+  presentations    WorkBuddyDeliveryPresentation[]
+  promptResponseReceipts WorkBuddyPromptResponseReceipt[]
+
+  @@unique([id, workspaceId], map: "WBDeliveryClaim_id_workspace_key")
+  @@unique([id, workspaceId, contentHash], map: "WBDeliveryClaim_receipt_binding_key")
+  @@unique([id, workspaceId, clientId, severity], map: "WBDeliveryClaim_presentation_binding_key")
+  @@unique([workspaceId, deliveryKey, deliveryVersion, clientId], map: "WBDeliveryClaim_workspace_key_version_client_key")
+  @@index([deliveryObjectId, workspaceId, deliveryKey, deliveryVersion, severity], map: "WBDeliveryClaim_envelope_binding_idx")
+}
+
+model WorkBuddyDeliveryPresentation {
+  id               String                 @id
+  workspaceId      String
+  deliveryClaimId  String
+  clientId         String
+  severity         String
+  sequence         Int
+  cause            String
+  presentationJson String                 @db.LongText
+  contentHash      String
+  presentedAt      DateTime
+  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBDeliveryPresentation_workspace_fkey")
+  claim            WorkBuddyDeliveryClaim @relation(fields: [deliveryClaimId, workspaceId, clientId, severity], references: [id, workspaceId, clientId, severity], onDelete: Restrict, onUpdate: Restrict, map: "WBDeliveryPresentation_claim_binding_fkey")
+
+  @@unique([id, workspaceId], map: "WBDeliveryPresentation_id_workspace_key")
+  @@unique([workspaceId, clientId, severity, sequence], map: "WBDeliveryPresentation_workspace_client_lane_seq_key")
+  @@index([deliveryClaimId, workspaceId, clientId, severity], map: "WBDeliveryPresentation_claim_binding_idx")
+}
+
+model WorkBuddyDeliverySuppression {
+  id              String    @id
+  workspaceId     String
+  category        String
+  scopeKind       String
+  objectKind      String?
+  objectId        String?
+  validFrom       DateTime
+  validUntil      DateTime
+  revokedAt       DateTime?
+  suppressionJson String    @db.LongText
+  contentHash     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBDeliverySuppression_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "WBDeliverySuppression_id_workspace_key")
+  @@index([workspaceId, category, validFrom, validUntil], map: "WBDeliverySuppression_workspace_category_time_idx")
+}
+
+model WorkBuddyMutationChallenge {
+  id               String                    @id
+  workspaceId      String
+  clientId         String
+  actorUserId      String
+  ceoBindingRef    String
+  mandateRef       String
+  ceoRef           String
+  actionKind       String
+  targetObjectKind String
+  targetObjectId   String
+  expectedVersion  Int
+  summaryHash      String
+  idempotencyKey   String
+  nonceHash        String
+  bindingHash      String
+  issuedAt         DateTime
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  proofHash        String?
+  challengeJson    String                    @db.LongText
+  contentHash      String
+  createdAt        DateTime                  @default(now())
+  workspace        Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBMutationChallenge_workspace_fkey")
+  receipt          WorkBuddyMutationReceipt?
+
+  @@unique([id, workspaceId], map: "WBMutationChallenge_id_workspace_key")
+  @@unique([id, workspaceId, bindingHash], map: "WBMutationChallenge_receipt_binding_key")
+  @@unique([workspaceId, actionKind, idempotencyKey], map: "WBMutationChallenge_workspace_action_idem_key")
+  @@unique([workspaceId, clientId, nonceHash], map: "WBMutationChallenge_workspace_client_nonce_key")
+  @@index([workspaceId, clientId, expiresAt], map: "WBMutationChallenge_workspace_client_expiry_idx")
+}
+
+model WorkBuddyMutationReceipt {
+  id                  String                     @id
+  workspaceId         String
+  challengeId         String
+  actionKind          String
+  idempotencyKey      String
+  targetObjectKind    String
+  targetObjectId      String
+  expectedVersion     Int
+  summaryHash         String
+  bindingHash         String
+  canonicalReceiptRef String
+  receiptJson         String                     @db.LongText
+  contentHash         String
+  authorityEffect     String
+  recordedAt          DateTime
+  createdAt           DateTime                   @default(now())
+  workspace           Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBMutationReceipt_workspace_fkey")
+  challenge           WorkBuddyMutationChallenge @relation(fields: [challengeId, workspaceId, bindingHash], references: [id, workspaceId, bindingHash], onDelete: Restrict, onUpdate: Restrict, map: "WBMutationReceipt_challenge_binding_fkey")
+
+  @@unique([id, workspaceId], map: "WBMutationReceipt_id_workspace_key")
+  @@unique([challengeId, workspaceId, bindingHash], map: "WBMutationReceipt_challenge_binding_key")
+  @@unique([workspaceId, actionKind, idempotencyKey], map: "WBMutationReceipt_workspace_action_idem_key")
+  @@index([workspaceId, recordedAt], map: "WBMutationReceipt_workspace_time_idx")
+}
+
+model WorkBuddyPresenceChallenge {
+  id                       String    @id
+  workspaceId              String
+  clientId                 String
+  actorUserId              String
+  ceoBindingRef            String
+  mandateRef               String
+  ceoRef                   String
+  beginIdempotencyKey      String
+  completionIdempotencyKey String?
+  issuedAt                 DateTime
+  expiresAt                DateTime
+  consumedAt               DateTime?
+  challengeJson            String    @db.LongText
+  challengeHash            String
+  nonceHash                String
+  proofHash                String?
+  attestationJson          String?   @db.LongText
+  attestationHash          String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBPresenceChallenge_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "WBPresenceChallenge_id_workspace_key")
+  @@unique([workspaceId, clientId, beginIdempotencyKey], map: "WBPresenceChallenge_workspace_client_begin_key")
+  @@unique([workspaceId, clientId, completionIdempotencyKey], map: "WBPresenceChallenge_workspace_client_complete_key")
+  @@unique([workspaceId, clientId, nonceHash], map: "WBPresenceChallenge_workspace_client_nonce_key")
+  @@index([workspaceId, clientId, expiresAt], map: "WBPresenceChallenge_workspace_client_expiry_idx")
+}
+
+model WorkBuddyPromptResponseReceipt {
+  id               String                    @id
+  workspaceId      String
+  deliveryObjectId String
+  deliveryClaimId  String
+  deliveryClaimHash String
+  clientId         String
+  actorUserId      String
+  ceoBindingRef    String
+  mandateRef       String
+  ceoRef           String
+  sourceObjectKind String
+  sourceObjectId   String
+  sourceObjectHash String
+  expectedVersion  Int
+  responseKind     String
+  resultingStatus  String
+  idempotencyKey   String
+  requestHash      String
+  responseJson     String                    @db.LongText
+  receiptJson      String                    @db.LongText
+  contentHash      String
+  authorityEffect  String
+  recordedAt       DateTime
+  createdAt        DateTime                  @default(now())
+  workspace        Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBPromptResponse_workspace_fkey")
+  envelope         WorkBuddyDeliveryEnvelope @relation(fields: [deliveryObjectId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "WBPromptResponse_envelope_workspace_fkey")
+  deliveryClaim    WorkBuddyDeliveryClaim    @relation(fields: [deliveryClaimId, workspaceId, deliveryClaimHash], references: [id, workspaceId, contentHash], onDelete: Restrict, onUpdate: Restrict, map: "WBPromptResponse_claim_binding_fkey")
+
+  @@unique([id, workspaceId], map: "WBPromptResponse_id_workspace_key")
+  @@unique([workspaceId, idempotencyKey], map: "WBPromptResponse_workspace_idem_key")
+  @@index([deliveryObjectId, workspaceId, recordedAt], map: "WBPromptResponse_envelope_workspace_time_idx")
+}
+
+
+// ===== CAIO Pro next-version access gateway records =====
+// Identity, pairing, context policy, enterprise memory, and audit dispatch
+// records for the CAIO Access Gateway. Rows hold governance and transport
+// metadata only: no raw bearer tokens, no private keys, no prompt or response
+// bodies, no attachment bodies, no connection strings.
+
+model CaioAccessToken {
+  id                     String    @id
+  workspaceId            String
+  userRef                String
+  clientType             String
+  deviceRef              String
+  audience               String
+  tokenHash              String    @unique(map: "CaioAccessToken_token_hash_key")
+  tokenPrefix            String
+  approvedSourceIp       String
+  status                 String
+  createdAt              DateTime
+  expiresAt              DateTime
+  rotatedAt              DateTime?
+  revokedAt              DateTime?
+  rotatedFromTokenId     String?
+  rateWindowStartedAt    DateTime
+  rateWindowRequestCount Int       @default(0)
+  // Per-token alias grant as a JSON array of stable CAIO aliases. NULL means
+  // no grant was configured (the client type's default applies); "[]" is an
+  // explicit grant of nothing. Additive and nullable, so existing rows keep
+  // their current behaviour.
+  grantedAliases         String?   @db.Text
+  workspace              Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioAccessToken_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "CaioAccessToken_id_workspace_key")
+  // Three key columns only: five VARCHAR(191) columns exceed the 3072-byte
+  // index limit. clientType/userRef/status stay as WHERE filters.
+  @@index([workspaceId, deviceRef, audience], map: "CaioAccessToken_binding_idx")
+  @@index([workspaceId, status, expiresAt], map: "CaioAccessToken_status_expiry_idx")
+}
+
+model CaioPairingRequest {
+  id                String    @id
+  workspaceId       String
+  userRef           String
+  clientType        String
+  deviceRef         String
+  sourceIp          String
+  matchCodeHash     String
+  clientPublicKey   String
+  status            String
+  createdAt         DateTime
+  expiresAt         DateTime
+  approvedAt        DateTime?
+  approvedByRef     String?
+  completedAt       DateTime?
+  revokedAt         DateTime?
+  issuedMcpTokenId  String?
+  issuedModelTokenId String?
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioPairingRequest_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "CaioPairingRequest_id_workspace_key")
+  @@index([workspaceId, status, expiresAt], map: "CaioPairingRequest_status_expiry_idx")
+}
+
+model CaioContextNegativeRule {
+  id             String    @id
+  workspaceId    String
+  ruleKey        String
+  scopeKind      String
+  scopeRef       String?
+  ruleKind       String
+  patternJson    String    @db.LongText
+  version        Int
+  status         String
+  createdByRef   String
+  publishedByRef String?
+  createdAt      DateTime
+  publishedAt    DateTime?
+  revokedAt      DateTime?
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioContextNegativeRule_workspace_fkey")
+
+  @@unique([workspaceId, ruleKey, version], map: "CaioContextNegativeRule_key_version_key")
+  @@index([workspaceId, status, scopeKind], map: "CaioContextNegativeRule_status_idx")
+}
+
+model CaioContextReceipt {
+  id                String   @id
+  workspaceId       String
+  userRef           String
+  requestId         String
+  decision          String
+  policyVersion     String
+  ruleHitsJson      String   @db.LongText
+  sourcesJson       String   @db.LongText
+  redactionReliable Boolean
+  contentHash       String
+  createdAt         DateTime
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioContextReceipt_workspace_fkey")
+
+  @@unique([workspaceId, requestId], map: "CaioContextReceipt_workspace_request_key")
+  @@index([workspaceId, userRef, createdAt], map: "CaioContextReceipt_user_time_idx")
+}
+
+model CaioMemoryCandidate {
+  id                 String    @id
+  workspaceId        String
+  projectRef         String?
+  createdByRef       String
+  state              String
+  body               String?   @db.LongText
+  contentHash        String
+  sourceRequestId    String?
+  receiptJson        String    @db.LongText
+  createdAt          DateTime
+  candidateExpiresAt DateTime
+  adoptedAt          DateTime?
+  adoptedByRef       String?
+  ephemeralExpiresAt DateTime?
+  verifiedAt         DateTime?
+  verifiedByRef      String?
+  rejectedAt         DateTime?
+  rejectedByRef      String?
+  expiredAt          DateTime?
+  updatedAt          DateTime
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioMemoryCandidate_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "CaioMemoryCandidate_id_workspace_key")
+  @@index([workspaceId, state, candidateExpiresAt], map: "CaioMemoryCandidate_state_ttl_idx")
+  @@index([workspaceId, createdByRef, state], map: "CaioMemoryCandidate_owner_state_idx")
+}
+
+model CaioAuditDispatchReceipt {
+  id            String   @id
+  workspaceId   String
+  requestId     String
+  clientType    String
+  modelAlias    String
+  inputHash     String
+  policyVersion String
+  // NULL is not "unset": it is LEGACY UNKNOWN / QUARANTINED — a row written
+  // before posture was recorded, whose posture cannot be recovered from the
+  // row itself. The store never lets a NULL compare equal to a live receipt's
+  // posture, so such a row cannot certify a new dispatch as an idempotent
+  // replay. Non-NULL values are constrained to CAIO_DEPLOYMENT_POSTURES by a
+  // database CHECK. NOT NULL is a later phase and only after an owner-receipted
+  // backfill; the conditions are enumerated in
+  // prisma/migrations/20260731120000_caio_audit_receipt_posture/migration.sql.
+  posture       String?
+  persistedVia  String
+  createdAt     DateTime
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioAuditDispatchReceipt_workspace_fkey")
+
+  @@unique([workspaceId, requestId], map: "CaioAuditDispatchReceipt_workspace_request_key")
+  @@index([workspaceId, createdAt], map: "CaioAuditDispatchReceipt_time_idx")
+}
+
+model CaioCredentialRefState {
+  id            String    @id
+  workspaceId   String
+  credentialRef String
+  providerKey   String
+  status        String
+  version       Int
+  rotatedAt     DateTime?
+  createdAt     DateTime
+  updatedAt     DateTime
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioCredentialRefState_workspace_fkey")
+
+  @@unique([workspaceId, credentialRef], map: "CaioCredentialRefState_workspace_ref_key")
 }

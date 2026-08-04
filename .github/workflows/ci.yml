@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -45,7 +45,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -69,7 +69,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -127,7 +127,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -144,14 +144,16 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [type-check, lint, repo-guards, model-egress-mysql]
+    needs: [type-check, lint, repo-guards, model-egress-mysql,
+            caio-access-gateway-mysql, caio-context-memory-mysql,
+            caio-audit-state-mysql]
     steps:
       - uses: actions/checkout@v5
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -176,14 +178,16 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    needs: [type-check, lint, repo-guards, model-egress-mysql]
+    needs: [type-check, lint, repo-guards, model-egress-mysql,
+            caio-access-gateway-mysql, caio-context-memory-mysql,
+            caio-audit-state-mysql]
     steps:
       - uses: actions/checkout@v5
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -204,6 +208,14 @@ jobs:
           path: coverage/
           retention-days: 7
 
+  # 中文说明：下面所有 MySQL job 都不提交数据库口令。service 容器以空口令 root
+  # 启动（只在 runner 本机 127.0.0.1 暴露），job 第一步在容器内生成随机口令，
+  # 先用 ::add-mask:: 注册再使用，建立只对本 job 隔离库有权限的最小权限用户，
+  # 并立刻把 root 换成随机口令关闭引导窗口。此后所有连接串只用最小权限用户，
+  # 经 $GITHUB_ENV 注入，不出现在 YAML 字面量、不出现在任何命令行参数里。
+  # English: the MySQL jobs below commit no database credential. Passwords are
+  # generated per job at runtime, masked before first use, and injected through
+  # the protected $GITHUB_ENV file. Tests never connect as root.
   caio-stage1-mysql:
     name: CAIO Stage1 MySQL
     runs-on: ubuntu-latest
@@ -212,28 +224,78 @@ jobs:
       mysql:
         image: mysql:8.4
         env:
-          MYSQL_ROOT_PASSWORD: root
+          # No database password is committed. The container boots with an
+          # empty root password on the runner loopback only; the first job
+          # step below mints a random least-privilege credential and rotates
+          # root to a random password before anything connects for real.
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
           MYSQL_DATABASE: helm_caio_stage1_ci
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
     env:
-      DATABASE_URL: mysql://root:root@127.0.0.1:3306/helm_caio_stage1_ci?charset=utf8mb4
-      STAGE1_OWNER_LOOP_DATABASE_URL: mysql://root:root@127.0.0.1:3306/helm_caio_stage1_ci?charset=utf8mb4
+      HELM_CI_MYSQL_DATABASE: helm_caio_stage1_ci
+      HELM_CI_MYSQL_USER: helm_ci
       STAGE1_OWNER_LOOP_TEST_DATABASE_NAME: helm_caio_stage1_ci
-      CAIO_INITIALIZATION_GATE_DATABASE_URL: mysql://root:root@127.0.0.1:3306/helm_caio_stage1_ci?charset=utf8mb4
       CAIO_INITIALIZATION_GATE_TEST_DATABASE_NAME: helm_caio_stage1_ci
     steps:
       - uses: actions/checkout@v5
 
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers, which the server refuses
+            # under binary logging from a user without SUPER (error 1419).
+            # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
+            # exists (granting it is a syntax error) and SET_ANY_DEFINER, its
+            # replacement, does NOT satisfy this particular check. So the root
+            # bootstrap trusts creators for this container instead, and the
+            # application user stays scoped to its own database.
+            #
+            # This is safe HERE and nowhere else: the container is ephemeral,
+            # loopback-only, and has exactly one non-root user. Do not copy this
+            # line to a server that outlives a job or serves anyone else.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'STAGE1_OWNER_LOOP_DATABASE_URL=%s\n' "${url}"
+            printf 'CAIO_INITIALIZATION_GATE_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -257,26 +319,76 @@ jobs:
       mysql:
         image: mysql:8.4
         env:
-          MYSQL_ROOT_PASSWORD: root
+          # No database password is committed. The container boots with an
+          # empty root password on the runner loopback only; the first job
+          # step below mints a random least-privilege credential and rotates
+          # root to a random password before anything connects for real.
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
           MYSQL_DATABASE: helm_caio_pro_v1_ci
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
     env:
-      DATABASE_URL: mysql://root:root@127.0.0.1:3306/helm_caio_pro_v1_ci?charset=utf8mb4
-      CAIO_PRO_V1_DATABASE_URL: mysql://root:root@127.0.0.1:3306/helm_caio_pro_v1_ci?charset=utf8mb4
+      HELM_CI_MYSQL_DATABASE: helm_caio_pro_v1_ci
+      HELM_CI_MYSQL_USER: helm_ci
       CAIO_PRO_V1_TEST_DATABASE_NAME: helm_caio_pro_v1_ci
     steps:
       - uses: actions/checkout@v5
 
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers, which the server refuses
+            # under binary logging from a user without SUPER (error 1419).
+            # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
+            # exists (granting it is a syntax error) and SET_ANY_DEFINER, its
+            # replacement, does NOT satisfy this particular check. So the root
+            # bootstrap trusts creators for this container instead, and the
+            # application user stays scoped to its own database.
+            #
+            # This is safe HERE and nowhere else: the container is ephemeral,
+            # loopback-only, and has exactly one non-root user. Do not copy this
+            # line to a server that outlives a job or serves anyone else.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'CAIO_PRO_V1_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -300,26 +412,76 @@ jobs:
       mysql:
         image: mysql:8.4
         env:
-          MYSQL_ROOT_PASSWORD: root
+          # No database password is committed. The container boots with an
+          # empty root password on the runner loopback only; the first job
+          # step below mints a random least-privilege credential and rotates
+          # root to a random password before anything connects for real.
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
           MYSQL_DATABASE: helm_caio_p1d_ci
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
     env:
-      DATABASE_URL: mysql://root:root@127.0.0.1:3306/helm_caio_p1d_ci?charset=utf8mb4
-      MODEL_EGRESS_STORE_DATABASE_URL: mysql://root:root@127.0.0.1:3306/helm_caio_p1d_ci?charset=utf8mb4
+      HELM_CI_MYSQL_DATABASE: helm_caio_p1d_ci
+      HELM_CI_MYSQL_USER: helm_ci
       MODEL_EGRESS_STORE_TEST_DATABASE_NAME: helm_caio_p1d_ci
     steps:
       - uses: actions/checkout@v5
 
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers, which the server refuses
+            # under binary logging from a user without SUPER (error 1419).
+            # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
+            # exists (granting it is a syntax error) and SET_ANY_DEFINER, its
+            # replacement, does NOT satisfy this particular check. So the root
+            # bootstrap trusts creators for this container instead, and the
+            # application user stays scoped to its own database.
+            #
+            # This is safe HERE and nowhere else: the container is ephemeral,
+            # loopback-only, and has exactly one non-root user. Do not copy this
+            # line to a server that outlives a job or serves anyone else.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'MODEL_EGRESS_STORE_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -335,6 +497,292 @@ jobs:
       - name: Verify governed model egress against MySQL
         run: npm run test:model-egress:mysql
 
+  caio-access-gateway-mysql:
+    name: CAIO Access Gateway Token Store MySQL
+    runs-on: ubuntu-latest
+    needs: [type-check, repo-guards]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          # No database password is committed. The container boots with an
+          # empty root password on the runner loopback only; the first job
+          # step below mints a random least-privilege credential and rotates
+          # root to a random password before anything connects for real.
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: helm_caio_gw_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      HELM_CI_MYSQL_DATABASE: helm_caio_gw_ci
+      HELM_CI_MYSQL_USER: helm_ci
+      CAIO_ACCESS_GATEWAY_TEST_DATABASE_NAME: helm_caio_gw_ci
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers, which the server refuses
+            # under binary logging from a user without SUPER (error 1419).
+            # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
+            # exists (granting it is a syntax error) and SET_ANY_DEFINER, its
+            # replacement, does NOT satisfy this particular check. So the root
+            # bootstrap trusts creators for this container instead, and the
+            # application user stays scoped to its own database.
+            #
+            # This is safe HERE and nowhere else: the container is ephemeral,
+            # loopback-only, and has exactly one non-root user. Do not copy this
+            # line to a server that outlives a job or serves anyone else.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'CAIO_ACCESS_GATEWAY_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Replay migrations on an empty database
+        run: npx tsx prisma/setup-db.ts prepare
+
+      - name: Verify the CAIO access token store against MySQL
+        run: npm run test:caio-access-gateway:mysql
+
+      # Shares this job's MySQL 8.4 service and its already-migrated isolated
+      # database rather than provisioning a second one. The suite inherits the
+      # same helm_caio_gw_ prefix assertion, so it can never point at a default
+      # or shared database.
+      - name: Verify one-time auth code claims against MySQL
+        run: npm run test:auth-verification-code:mysql
+
+  caio-context-memory-mysql:
+    name: CAIO Context Broker and Enterprise Memory MySQL
+    runs-on: ubuntu-latest
+    needs: [type-check, repo-guards]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          # No database password is committed. The container boots with an
+          # empty root password on the runner loopback only; the first job
+          # step below mints a random least-privilege credential and rotates
+          # root to a random password before anything connects for real.
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: helm_caio_ctx_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      HELM_CI_MYSQL_DATABASE: helm_caio_ctx_ci
+      HELM_CI_MYSQL_USER: helm_ci
+      CAIO_CONTEXT_MEMORY_TEST_DATABASE_NAME: helm_caio_ctx_ci
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers, which the server refuses
+            # under binary logging from a user without SUPER (error 1419).
+            # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
+            # exists (granting it is a syntax error) and SET_ANY_DEFINER, its
+            # replacement, does NOT satisfy this particular check. So the root
+            # bootstrap trusts creators for this container instead, and the
+            # application user stays scoped to its own database.
+            #
+            # This is safe HERE and nowhere else: the container is ephemeral,
+            # loopback-only, and has exactly one non-root user. Do not copy this
+            # line to a server that outlives a job or serves anyone else.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'CAIO_CONTEXT_MEMORY_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Replay migrations on an empty database
+        run: npx tsx prisma/setup-db.ts prepare
+
+      - name: Verify the context broker and enterprise memory stores against MySQL
+        run: npm run test:caio-context-memory:mysql
+
+  caio-audit-state-mysql:
+    name: CAIO Audit State MySQL
+    runs-on: ubuntu-latest
+    needs: [type-check, repo-guards]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          # No database password is committed. The container boots with an
+          # empty root password on the runner loopback only; the first job
+          # step below mints a random least-privilege credential and rotates
+          # root to a random password before anything connects for real.
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: helm_caio_audit_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      HELM_CI_MYSQL_DATABASE: helm_caio_audit_ci
+      HELM_CI_MYSQL_USER: helm_ci
+      CAIO_AUDIT_STATE_TEST_DATABASE_NAME: helm_caio_audit_ci
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers, which the server refuses
+            # under binary logging from a user without SUPER (error 1419).
+            # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
+            # exists (granting it is a syntax error) and SET_ANY_DEFINER, its
+            # replacement, does NOT satisfy this particular check. So the root
+            # bootstrap trusts creators for this container instead, and the
+            # application user stays scoped to its own database.
+            #
+            # This is safe HERE and nowhere else: the container is ephemeral,
+            # loopback-only, and has exactly one non-root user. Do not copy this
+            # line to a server that outlives a job or serves anyone else.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'CAIO_AUDIT_STATE_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Replay migrations on an empty database
+        run: npx tsx prisma/setup-db.ts prepare
+
+      - name: Verify the CAIO audit receipt store and gate against MySQL
+        run: npm run test:caio-audit-state:mysql
+
   quality-regression:
     name: Public Guard Regression
     runs-on: ubuntu-latest
@@ -345,7 +793,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
@@ -368,7 +816,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 

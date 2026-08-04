@@ -1,0 +1,917 @@
+// CAIO enterprise memory — candidate store (port + in-memory + Prisma).
+//
+// Retrieval exclusion is enforced at the STORE layer: queryRetrievableMemory
+// only ever returns state IN ("ephemeral","verified"), even when a candidate
+// is requested directly by id. Rejected/expired entries lose their body (set
+// to null) while contentHash, state, and the secret-free receiptJson are
+// preserved as evidence.
+
+import { z } from "zod";
+
+import { Prisma } from "@prisma/client";
+
+import { db } from "@/lib/db";
+import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
+import {
+  CANDIDATE_TTL_MS,
+  CaioMemoryError,
+  EPHEMERAL_TTL_MS,
+  assertLegalMemoryTransition,
+  caioMemoryStateSchema,
+  memoryCandidateCreateSchema,
+  type CaioMemoryState,
+  type MemoryCandidateCreateInput,
+} from "@/lib/caio-enterprise-memory/memory-contracts";
+
+export const caioMemoryCandidateRecordSchema = z
+  .object({
+    id: z.string().min(1).max(200),
+    workspaceId: z.string().min(1).max(200),
+    projectRef: z.string().min(1).max(200).nullable(),
+    createdByRef: z.string().min(1).max(200),
+    state: caioMemoryStateSchema,
+    body: z.string().nullable(),
+    contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+    sourceRequestId: z.string().min(1).max(200).nullable(),
+    receiptJson: z.string().min(2),
+    createdAt: z.string().datetime({ offset: true }),
+    candidateExpiresAt: z.string().datetime({ offset: true }),
+    adoptedAt: z.string().datetime({ offset: true }).nullable(),
+    adoptedByRef: z.string().min(1).max(200).nullable(),
+    ephemeralExpiresAt: z.string().datetime({ offset: true }).nullable(),
+    verifiedAt: z.string().datetime({ offset: true }).nullable(),
+    verifiedByRef: z.string().min(1).max(200).nullable(),
+    rejectedAt: z.string().datetime({ offset: true }).nullable(),
+    rejectedByRef: z.string().min(1).max(200).nullable(),
+    expiredAt: z.string().datetime({ offset: true }).nullable(),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export type CaioMemoryCandidateRecord = z.infer<
+  typeof caioMemoryCandidateRecordSchema
+>;
+
+/** Only these states are ever visible through the retrieval API. */
+export const RETRIEVABLE_MEMORY_STATES = ["ephemeral", "verified"] as const;
+export type RetrievableMemoryState =
+  (typeof RETRIEVABLE_MEMORY_STATES)[number];
+
+export type RetrievableMemoryEntry = Readonly<{
+  id: string;
+  workspaceId: string;
+  projectRef: string | null;
+  body: string;
+  contentHash: string;
+  /**
+   * Provenance travels with every query result: ephemeral entries are
+   * flagged isVerified:false so they never override formal knowledge. The
+   * precedence is also materialised in the RESULT ORDER (see
+   * compareRetrievablePrecedence) instead of being delegated to the consumer.
+   */
+  provenance: Readonly<{
+    state: RetrievableMemoryState;
+    isVerified: boolean;
+    createdByRef: string;
+    adoptedByRef: string | null;
+    verifiedByRef: string | null;
+    sourceRequestId: string | null;
+  }>;
+}>;
+
+export type CaioMemoryCandidateStore = Readonly<{
+  /** Auto-generated content only ever enters as state "candidate". */
+  createCandidate(
+    input: MemoryCandidateCreateInput,
+    now: Date,
+  ): Promise<CaioMemoryCandidateRecord>;
+  /** A user sees only their own candidates. */
+  listOwnCandidates(input: {
+    workspaceId: string;
+    userRef: string;
+  }): Promise<readonly CaioMemoryCandidateRecord[]>;
+  /**
+   * Store-layer retrieval: state IN ("ephemeral","verified") only, ordered
+   * verified-before-ephemeral and then newest-first in both implementations.
+   */
+  queryRetrievableMemory(input: {
+    workspaceId: string;
+    projectRef?: string;
+    id?: string;
+    now: Date;
+  }): Promise<readonly RetrievableMemoryEntry[]>;
+  /**
+   * Single conditional transition candidate → ephemeral. Only the creator
+   * may adopt; only from state "candidate" and inside the candidate TTL.
+   *
+   * Scope never widens implicitly: adoption PRESERVES the creation-time
+   * projectRef. An explicit targetProjectRef re-targets the entry to that
+   * project; widening a project-scoped candidate to workspace scope
+   * (projectRef null, visible from every project) requires the explicit
+   * promoteToWorkspaceScope opt-in. Passing both is invalid_input.
+   */
+  adoptCandidate(input: {
+    workspaceId: string;
+    candidateId: string;
+    actorRef: string;
+    targetProjectRef?: string;
+    promoteToWorkspaceScope?: boolean;
+    now: Date;
+  }): Promise<CaioMemoryCandidateRecord>;
+  /** Creator-only. Deletes the body; keeps contentHash + receiptJson. */
+  rejectCandidate(input: {
+    workspaceId: string;
+    candidateId: string;
+    actorRef: string;
+    now: Date;
+  }): Promise<CaioMemoryCandidateRecord>;
+  /** TTL sweep for candidates and ephemerals. Deletes bodies. */
+  expireCandidates(input: { workspaceId: string; now: Date }): Promise<number>;
+  /** Knowledge-owner-only confirmation ephemeral → verified. */
+  verifyEphemeral(input: {
+    workspaceId: string;
+    candidateId: string;
+    actorRef: string;
+    actorIsKnowledgeOwner: boolean;
+    now: Date;
+  }): Promise<CaioMemoryCandidateRecord>;
+}>;
+
+function candidateId(input: {
+  workspaceId: string;
+  contentHash: string;
+  createdByRef: string;
+  createdAt: string;
+}): string {
+  return `caio-memory-candidate:${sha256(canonicalJson(input)).slice(
+    "sha256:".length,
+  )}`;
+}
+
+/** Secret-free receipt: hash + refs only, never the body. */
+function buildCandidateReceiptJson(record: {
+  contentHash: string;
+  createdByRef: string;
+  sourceRequestId: string | null;
+  createdAt: string;
+}): string {
+  return canonicalJson({
+    schemaVersion: "helm.caio-memory-candidate-receipt/v1",
+    contentHash: record.contentHash,
+    createdByRef: record.createdByRef,
+    sourceRequestId: record.sourceRequestId,
+    createdAt: record.createdAt,
+  });
+}
+
+function buildNewCandidate(
+  input: MemoryCandidateCreateInput,
+  now: Date,
+): CaioMemoryCandidateRecord {
+  const parsed = memoryCandidateCreateSchema.parse(input);
+  const createdAt = now.toISOString();
+  const contentHash = sha256(parsed.body);
+  const record: CaioMemoryCandidateRecord = {
+    id: candidateId({
+      workspaceId: parsed.workspaceId,
+      contentHash,
+      createdByRef: parsed.createdByRef,
+      createdAt,
+    }),
+    workspaceId: parsed.workspaceId,
+    projectRef: parsed.projectRef ?? null,
+    createdByRef: parsed.createdByRef,
+    state: "candidate",
+    body: parsed.body,
+    contentHash,
+    sourceRequestId: parsed.sourceRequestId ?? null,
+    receiptJson: buildCandidateReceiptJson({
+      contentHash,
+      createdByRef: parsed.createdByRef,
+      sourceRequestId: parsed.sourceRequestId ?? null,
+      createdAt,
+    }),
+    createdAt,
+    candidateExpiresAt: new Date(now.getTime() + CANDIDATE_TTL_MS).toISOString(),
+    adoptedAt: null,
+    adoptedByRef: null,
+    ephemeralExpiresAt: null,
+    verifiedAt: null,
+    verifiedByRef: null,
+    rejectedAt: null,
+    rejectedByRef: null,
+    expiredAt: null,
+    updatedAt: createdAt,
+  };
+  return Object.freeze(caioMemoryCandidateRecordSchema.parse(record));
+}
+
+function toRetrievableEntry(
+  record: CaioMemoryCandidateRecord,
+): RetrievableMemoryEntry | null {
+  if (record.state !== "ephemeral" && record.state !== "verified") return null;
+  if (record.body === null) return null;
+  return Object.freeze({
+    id: record.id,
+    workspaceId: record.workspaceId,
+    projectRef: record.projectRef,
+    body: record.body,
+    contentHash: record.contentHash,
+    provenance: Object.freeze({
+      state: record.state,
+      isVerified: record.state === "verified",
+      createdByRef: record.createdByRef,
+      adoptedByRef: record.adoptedByRef,
+      verifiedByRef: record.verifiedByRef,
+      sourceRequestId: record.sourceRequestId,
+    }),
+  });
+}
+
+/**
+ * Adoption scope resolution (F7). Omitting every scope argument must PRESERVE
+ * the creation-time projectRef: silently promoting a project-scoped candidate
+ * to workspace scope would make it visible from every project and detach it
+ * from any project-scoped no_cross_project_context rule.
+ */
+export function resolveAdoptionProjectRef(input: {
+  currentProjectRef: string | null;
+  targetProjectRef?: string;
+  promoteToWorkspaceScope?: boolean;
+}): string | null {
+  const promote = input.promoteToWorkspaceScope === true;
+  const target =
+    typeof input.targetProjectRef === "string" && input.targetProjectRef !== ""
+      ? input.targetProjectRef
+      : null;
+  if (promote && target !== null) {
+    throw new CaioMemoryError(
+      "invalid_input",
+      "targetProjectRef and promoteToWorkspaceScope are mutually exclusive.",
+    );
+  }
+  if (promote) return null;
+  if (target !== null) return target;
+  return input.currentProjectRef;
+}
+
+/**
+ * Deterministic retrieval precedence (F8): verified knowledge always precedes
+ * unverified ephemeral knowledge, and inside one provenance class the newest
+ * entry comes first. Both store implementations apply this comparator so the
+ * observable order is identical.
+ */
+export function compareRetrievablePrecedence(
+  left: { state: string; createdAt: string; id: string },
+  right: { state: string; createdAt: string; id: string },
+): number {
+  const rank = (state: string): number => (state === "verified" ? 0 : 1);
+  if (rank(left.state) !== rank(right.state)) {
+    return rank(left.state) - rank(right.state);
+  }
+  const leftCreated = Date.parse(left.createdAt);
+  const rightCreated = Date.parse(right.createdAt);
+  if (leftCreated !== rightCreated) return rightCreated - leftCreated;
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function retrievableFilterMatches(
+  record: CaioMemoryCandidateRecord,
+  input: { workspaceId: string; projectRef?: string; id?: string; now: Date },
+): boolean {
+  if (record.workspaceId !== input.workspaceId) return false;
+  if (input.id !== undefined && record.id !== input.id) return false;
+  if (
+    input.projectRef !== undefined &&
+    record.projectRef !== null &&
+    record.projectRef !== input.projectRef
+  ) {
+    return false;
+  }
+  if (
+    record.state === "ephemeral" &&
+    (record.ephemeralExpiresAt === null ||
+      input.now.getTime() >= Date.parse(record.ephemeralExpiresAt))
+  ) {
+    return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// In-memory implementation (unit-test port)
+// ---------------------------------------------------------------------------
+
+export function createInMemoryCaioMemoryStore(): CaioMemoryCandidateStore {
+  const records = new Map<string, CaioMemoryCandidateRecord>();
+
+  const load = (
+    workspaceId: string,
+    id: string,
+  ): CaioMemoryCandidateRecord => {
+    const record = records.get(id);
+    if (!record || record.workspaceId !== workspaceId) {
+      throw new CaioMemoryError(
+        "not_found",
+        "The memory entry does not exist in this workspace.",
+      );
+    }
+    return record;
+  };
+
+  // Synchronous conditional state swap: the check and the write happen in one
+  // JS turn, so of two concurrent adopts exactly one observes "candidate".
+  const conditionalTransition = (
+    id: string,
+    expectedState: CaioMemoryState,
+    apply: (record: CaioMemoryCandidateRecord) => CaioMemoryCandidateRecord,
+  ): CaioMemoryCandidateRecord => {
+    const record = records.get(id);
+    if (!record) {
+      throw new CaioMemoryError("not_found", "The memory entry disappeared.");
+    }
+    if (record.state !== expectedState) {
+      throw new CaioMemoryError(
+        "illegal_transition",
+        `Memory transition from ${record.state} is not allowed here.`,
+      );
+    }
+    const next = Object.freeze(apply(record));
+    records.set(id, next);
+    return next;
+  };
+
+  return Object.freeze({
+    async createCandidate(input, now) {
+      const record = buildNewCandidate(input, now);
+      records.set(record.id, record);
+      return record;
+    },
+
+    async listOwnCandidates(input) {
+      return Object.freeze(
+        [...records.values()].filter(
+          (record) =>
+            record.workspaceId === input.workspaceId &&
+            record.createdByRef === input.userRef &&
+            record.state === "candidate",
+        ),
+      );
+    },
+
+    async queryRetrievableMemory(input) {
+      const matched = [...records.values()]
+        .filter((record) => retrievableFilterMatches(record, input))
+        .sort(compareRetrievablePrecedence);
+      const entries: RetrievableMemoryEntry[] = [];
+      for (const record of matched) {
+        const entry = toRetrievableEntry(record);
+        if (entry) entries.push(entry);
+      }
+      return Object.freeze(entries);
+    },
+
+    async adoptCandidate(input) {
+      const record = load(input.workspaceId, input.candidateId);
+      if (record.createdByRef !== input.actorRef) {
+        throw new CaioMemoryError(
+          "forbidden",
+          "Only the creator may adopt a memory candidate.",
+        );
+      }
+      if (record.state === "candidate") {
+        if (input.now.getTime() >= Date.parse(record.candidateExpiresAt)) {
+          throw new CaioMemoryError(
+            "expired",
+            "The candidate TTL elapsed; it can no longer be adopted.",
+          );
+        }
+      }
+      assertLegalMemoryTransition(record.state, "ephemeral");
+      const nowIso = input.now.toISOString();
+      const adoptedProjectRef = resolveAdoptionProjectRef({
+        currentProjectRef: record.projectRef,
+        targetProjectRef: input.targetProjectRef,
+        promoteToWorkspaceScope: input.promoteToWorkspaceScope,
+      });
+      return conditionalTransition(record.id, "candidate", (current) => ({
+        ...current,
+        state: "ephemeral",
+        projectRef: adoptedProjectRef,
+        adoptedAt: nowIso,
+        adoptedByRef: input.actorRef,
+        ephemeralExpiresAt: new Date(
+          input.now.getTime() + EPHEMERAL_TTL_MS,
+        ).toISOString(),
+        updatedAt: nowIso,
+      }));
+    },
+
+    async rejectCandidate(input) {
+      const record = load(input.workspaceId, input.candidateId);
+      if (record.createdByRef !== input.actorRef) {
+        throw new CaioMemoryError(
+          "forbidden",
+          "Only the creator may reject a memory candidate.",
+        );
+      }
+      assertLegalMemoryTransition(record.state, "rejected");
+      const nowIso = input.now.toISOString();
+      return conditionalTransition(record.id, "candidate", (current) => ({
+        ...current,
+        state: "rejected",
+        body: null,
+        rejectedAt: nowIso,
+        rejectedByRef: input.actorRef,
+        updatedAt: nowIso,
+      }));
+    },
+
+    async expireCandidates(input) {
+      let expired = 0;
+      const nowIso = input.now.toISOString();
+      for (const record of records.values()) {
+        if (record.workspaceId !== input.workspaceId) continue;
+        const candidateElapsed =
+          record.state === "candidate" &&
+          input.now.getTime() >= Date.parse(record.candidateExpiresAt);
+        const ephemeralElapsed =
+          record.state === "ephemeral" &&
+          record.ephemeralExpiresAt !== null &&
+          input.now.getTime() >= Date.parse(record.ephemeralExpiresAt);
+        if (!candidateElapsed && !ephemeralElapsed) continue;
+        assertLegalMemoryTransition(record.state, "expired");
+        records.set(
+          record.id,
+          Object.freeze({
+            ...record,
+            state: "expired" as const,
+            body: null,
+            expiredAt: nowIso,
+            updatedAt: nowIso,
+          }),
+        );
+        expired += 1;
+      }
+      return expired;
+    },
+
+    async verifyEphemeral(input) {
+      if (input.actorIsKnowledgeOwner !== true) {
+        throw new CaioMemoryError(
+          "forbidden",
+          "Only a knowledge owner may verify an ephemeral memory entry.",
+        );
+      }
+      const record = load(input.workspaceId, input.candidateId);
+      if (
+        record.state === "ephemeral" &&
+        (record.ephemeralExpiresAt === null ||
+          input.now.getTime() >= Date.parse(record.ephemeralExpiresAt))
+      ) {
+        throw new CaioMemoryError(
+          "expired",
+          "The ephemeral TTL elapsed; the entry can no longer be verified.",
+        );
+      }
+      assertLegalMemoryTransition(record.state, "verified");
+      const nowIso = input.now.toISOString();
+      return conditionalTransition(record.id, "ephemeral", (current) => ({
+        ...current,
+        state: "verified",
+        verifiedAt: nowIso,
+        verifiedByRef: input.actorRef,
+        updatedAt: nowIso,
+      }));
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Prisma adapter
+// ---------------------------------------------------------------------------
+
+type StoredCandidateRow = {
+  id: string;
+  workspaceId: string;
+  projectRef: string | null;
+  createdByRef: string;
+  state: string;
+  body: string | null;
+  contentHash: string;
+  sourceRequestId: string | null;
+  receiptJson: string;
+  createdAt: Date;
+  candidateExpiresAt: Date;
+  adoptedAt: Date | null;
+  adoptedByRef: string | null;
+  ephemeralExpiresAt: Date | null;
+  verifiedAt: Date | null;
+  verifiedByRef: string | null;
+  rejectedAt: Date | null;
+  rejectedByRef: string | null;
+  expiredAt: Date | null;
+  updatedAt: Date;
+};
+
+function parseStoredCandidate(
+  row: StoredCandidateRow,
+): CaioMemoryCandidateRecord {
+  const parsed = caioMemoryCandidateRecordSchema.safeParse({
+    id: row.id,
+    workspaceId: row.workspaceId,
+    projectRef: row.projectRef,
+    createdByRef: row.createdByRef,
+    state: row.state,
+    body: row.body,
+    contentHash: row.contentHash,
+    sourceRequestId: row.sourceRequestId,
+    receiptJson: row.receiptJson,
+    createdAt: row.createdAt.toISOString(),
+    candidateExpiresAt: row.candidateExpiresAt.toISOString(),
+    adoptedAt: row.adoptedAt?.toISOString() ?? null,
+    adoptedByRef: row.adoptedByRef,
+    ephemeralExpiresAt: row.ephemeralExpiresAt?.toISOString() ?? null,
+    verifiedAt: row.verifiedAt?.toISOString() ?? null,
+    verifiedByRef: row.verifiedByRef,
+    rejectedAt: row.rejectedAt?.toISOString() ?? null,
+    rejectedByRef: row.rejectedByRef,
+    expiredAt: row.expiredAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+  });
+  if (!parsed.success) {
+    throw new CaioMemoryError(
+      "internal_error",
+      "A stored memory candidate failed contract validation.",
+    );
+  }
+  return Object.freeze(parsed.data);
+}
+
+export function createPrismaCaioMemoryStore(): CaioMemoryCandidateStore {
+  const loadRow = async (
+    workspaceId: string,
+    id: string,
+  ): Promise<StoredCandidateRow> => {
+    const row = await db.caioMemoryCandidate.findFirst({
+      where: { id, workspaceId },
+    });
+    if (!row) {
+      throw new CaioMemoryError(
+        "not_found",
+        "The memory entry does not exist in this workspace.",
+      );
+    }
+    return row;
+  };
+
+  return Object.freeze({
+    async createCandidate(input, now) {
+      const record = buildNewCandidate(input, now);
+      await db.caioMemoryCandidate.create({
+        data: {
+          id: record.id,
+          workspaceId: record.workspaceId,
+          projectRef: record.projectRef,
+          createdByRef: record.createdByRef,
+          state: record.state,
+          body: record.body,
+          contentHash: record.contentHash,
+          sourceRequestId: record.sourceRequestId,
+          receiptJson: record.receiptJson,
+          createdAt: new Date(record.createdAt),
+          candidateExpiresAt: new Date(record.candidateExpiresAt),
+          updatedAt: new Date(record.updatedAt),
+        },
+      });
+      return record;
+    },
+
+    async listOwnCandidates(input) {
+      const rows = await db.caioMemoryCandidate.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          createdByRef: input.userRef,
+          state: "candidate",
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      return Object.freeze(rows.map(parseStoredCandidate));
+    },
+
+    async queryRetrievableMemory(input) {
+      // The state filter lives in the WHERE clause: candidates are excluded
+      // at the store layer even when an id is requested directly.
+      const rows = await db.caioMemoryCandidate.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          ...(input.id !== undefined ? { id: input.id } : {}),
+          OR: [
+            { state: "verified" },
+            {
+              state: "ephemeral",
+              ephemeralExpiresAt: { gt: input.now },
+            },
+          ],
+          ...(input.projectRef !== undefined
+            ? {
+                AND: [
+                  {
+                    OR: [
+                      { projectRef: null },
+                      { projectRef: input.projectRef },
+                    ],
+                  },
+                ],
+              }
+            : {}),
+        },
+        // Verified before ephemeral, then newest first. The SQL order is
+        // deterministic on its own; the shared comparator below then
+        // guarantees the exact same observable order as the in-memory store.
+        orderBy: [{ state: "desc" }, { createdAt: "desc" }, { id: "asc" }],
+      });
+      const records = rows
+        .map(parseStoredCandidate)
+        .sort(compareRetrievablePrecedence);
+      const entries: RetrievableMemoryEntry[] = [];
+      for (const record of records) {
+        const entry = toRetrievableEntry(record);
+        if (entry) entries.push(entry);
+      }
+      return Object.freeze(entries);
+    },
+
+    async adoptCandidate(input) {
+      const row = await loadRow(input.workspaceId, input.candidateId);
+      if (row.createdByRef !== input.actorRef) {
+        throw new CaioMemoryError(
+          "forbidden",
+          "Only the creator may adopt a memory candidate.",
+        );
+      }
+      if (
+        row.state === "candidate" &&
+        input.now.getTime() >= row.candidateExpiresAt.getTime()
+      ) {
+        throw new CaioMemoryError(
+          "expired",
+          "The candidate TTL elapsed; it can no longer be adopted.",
+        );
+      }
+      assertLegalMemoryTransition(
+        parseStoredCandidate(row).state,
+        "ephemeral",
+      );
+      const adoptedProjectRef = resolveAdoptionProjectRef({
+        currentProjectRef: row.projectRef,
+        targetProjectRef: input.targetProjectRef,
+        promoteToWorkspaceScope: input.promoteToWorkspaceScope,
+      });
+      // ONE atomic statement, deliberately not Prisma's updateMany.
+      //
+      // On MySQL, Prisma compiles a conditional updateMany into a SELECT of
+      // matching ids followed by `UPDATE ... WHERE id IN (?) AND 1=1`: the
+      // pre-state predicate is evaluated at read time and dropped from the
+      // write. Two concurrent adopts therefore both selected the candidate
+      // and both wrote — measured on mysql:8.4. Keeping state="candidate" in
+      // the UPDATE's own WHERE makes InnoDB re-check it under the row lock,
+      // so exactly one caller can observe an affected row.
+      //
+      // THE DEADLINE IS IN THE WHERE TOO, and read from the DATABASE's clock.
+      // The `input.now` check above is a fast path that produces the accurate
+      // "expired" reason for the common case; it cannot speak for the moment
+      // the write lands. Everything between the two — read→write latency, a
+      // GC pause, a retry, an app host whose clock runs slow — is a window in
+      // which a candidate passes the check and is adopted after its deadline.
+      // Measured on MySQL 8.4.8 AT CONCURRENCY 1: 32 successes, 7 of them past
+      // deadline; the window closed exactly when the margin exceeded
+      // read→write latency, which is the signature of a check-then-act bug and
+      // not of an interleaving race. Two clocks also cannot be assumed to
+      // agree across app hosts, and only one of them is holding the row.
+      const updated = {
+        count: Number(
+          await db.$executeRaw`
+            UPDATE \`CaioMemoryCandidate\`
+               SET \`state\` = 'ephemeral',
+                   \`projectRef\` = ${adoptedProjectRef},
+                   \`adoptedAt\` = ${input.now},
+                   \`adoptedByRef\` = ${input.actorRef},
+                   \`ephemeralExpiresAt\` = ${new Date(
+                     input.now.getTime() + EPHEMERAL_TTL_MS,
+                   )},
+                   \`updatedAt\` = ${input.now}
+             WHERE \`id\` = ${input.candidateId}
+               AND \`workspaceId\` = ${input.workspaceId}
+               AND \`state\` = 'candidate'
+               AND \`adoptedByRef\` IS NULL
+               AND \`candidateExpiresAt\` > UTC_TIMESTAMP(3)
+          `,
+        ),
+      };
+      if (updated.count !== 1) {
+        throw new CaioMemoryError(
+          "conflict",
+          "The candidate was transitioned concurrently.",
+        );
+      }
+      return parseStoredCandidate(
+        await loadRow(input.workspaceId, input.candidateId),
+      );
+    },
+
+    async rejectCandidate(input) {
+      const row = await loadRow(input.workspaceId, input.candidateId);
+      if (row.createdByRef !== input.actorRef) {
+        throw new CaioMemoryError(
+          "forbidden",
+          "Only the creator may reject a memory candidate.",
+        );
+      }
+      assertLegalMemoryTransition(parseStoredCandidate(row).state, "rejected");
+      // Atomic conditional write; see adoptCandidate for why Prisma's
+      // updateMany cannot carry the pre-state predicate into the write.
+      //
+      // NO TTL PREDICATE HERE, deliberately — this is not an oversight and not
+      // a copy of the adopt statement. Rejection is terminal and destroys the
+      // body, which is the same direction the sweep would take the row anyway;
+      // refusing a late rejection would turn a harmless no-op into a conflict
+      // error and could leave a body alive that its creator asked to delete.
+      // The rule is "a late write must not GRANT anything", and rejecting
+      // grants nothing.
+      const updated = {
+        count: Number(
+          await db.$executeRaw`
+            UPDATE \`CaioMemoryCandidate\`
+               SET \`state\` = 'rejected',
+                   \`body\` = NULL,
+                   \`rejectedAt\` = ${input.now},
+                   \`rejectedByRef\` = ${input.actorRef},
+                   \`updatedAt\` = ${input.now}
+             WHERE \`id\` = ${input.candidateId}
+               AND \`workspaceId\` = ${input.workspaceId}
+               AND \`state\` = 'candidate'
+          `,
+        ),
+      };
+      if (updated.count !== 1) {
+        throw new CaioMemoryError(
+          "conflict",
+          "The candidate was transitioned concurrently.",
+        );
+      }
+      return parseStoredCandidate(
+        await loadRow(input.workspaceId, input.candidateId),
+      );
+    },
+
+    async expireCandidates(input) {
+      // Atomic sweeps. Prisma's updateMany would select ids under the state
+      // predicate and then write by id alone, so a candidate adopted between
+      // the read and the write would be expired anyway — silently discarding
+      // an adoption and deleting its body. Keeping the state and deadline in
+      // each UPDATE's own WHERE makes the sweep skip rows that moved on.
+      //
+      // ONE TRANSACTION, AND A BOUNDED RETRY. Two decisions, both forced by
+      // measurement rather than taste:
+      //
+      //   (a) The two sweeps are ONE transaction. As separate autocommit
+      //       writes, a failure on the second left the first COMMITTED and
+      //       returned no count at all, so the caller could neither trust the
+      //       number nor assume nothing had happened. A sweep that reports
+      //       "it failed" while having half-run is worse than either outcome.
+      //
+      //   (b) The whole thing runs under the shared write-conflict retry.
+      //       A point update by primary key (verifyEphemeral) racing these
+      //       workspace-wide index scans DEADLOCKS: measured at 9 deadlocks in
+      //       60 rounds at 32-way concurrency on a hot single-row workspace,
+      //       and zero once the workspace held 40 filler rows. Unlike the
+      //       token store, this store used bare `$executeRaw` with no retry
+      //       helper, so MySQL 1213 surfaced as a raw Prisma engine error and
+      //       took down a caller as an unhandled rejection.
+      //
+      // Retrying is safe precisely because each statement carries its own
+      // state and deadline predicate: a re-run skips whatever the previous
+      // attempt already moved. Worth recording what was NOT wrong — no state
+      // invariant was violated in any measured deadlock round; no live row
+      // lost its body and none was both adopted and rejected. This is an
+      // availability and error-contract defect, not corruption.
+      try {
+        return await runWithWriteConflictRetry(() =>
+          db.$transaction(async (tx) => sweepExpired(tx, input)),
+        );
+      } catch (error) {
+        if (error instanceof CaioMemoryError) throw error;
+        // The store's callers are promised CaioMemoryError. A database engine
+        // error reaching them is itself the defect: it cannot be classified,
+        // cannot be mapped to a status, and here it arrived as an unhandled
+        // rejection.
+        throw new CaioMemoryError(
+          "conflict",
+          "The memory expiry sweep could not complete because the rows were being written concurrently.",
+        );
+      }
+    },
+
+    async verifyEphemeral(input) {
+      if (input.actorIsKnowledgeOwner !== true) {
+        throw new CaioMemoryError(
+          "forbidden",
+          "Only a knowledge owner may verify an ephemeral memory entry.",
+        );
+      }
+      const row = await loadRow(input.workspaceId, input.candidateId);
+      if (
+        row.state === "ephemeral" &&
+        (row.ephemeralExpiresAt === null ||
+          input.now.getTime() >= row.ephemeralExpiresAt.getTime())
+      ) {
+        throw new CaioMemoryError(
+          "expired",
+          "The ephemeral TTL elapsed; the entry can no longer be verified.",
+        );
+      }
+      assertLegalMemoryTransition(parseStoredCandidate(row).state, "verified");
+      // Atomic conditional write; see adoptCandidate — including why the
+      // ephemeral deadline is re-checked from the DATABASE's clock inside the
+      // WHERE rather than trusted from the read above.
+      //
+      // THIS IS THE STATEMENT WHERE A LATE WRITE IS WORST. `verified` carries
+      // NO FURTHER TTL, so an entry that slips through here does not merely
+      // expire late — it never expires. One measured run ended 10 of 60 rounds
+      // with `state = verified` on a row already past its ephemeral deadline.
+      // For a product whose proposition is bounded retention that is a
+      // data-governance failure, not a timing nit.
+      //
+      // `ephemeralExpiresAt IS NOT NULL` is stated explicitly: `NULL >
+      // UTC_TIMESTAMP(3)` evaluates to NULL, which is not TRUE and so would
+      // already exclude the row, but relying on three-valued logic to enforce
+      // a retention rule is the kind of implicit reasoning this file keeps
+      // getting caught by. The read-time check treats a missing deadline as
+      // expired; the write says so in its own words.
+      const updated = {
+        count: Number(
+          await db.$executeRaw`
+            UPDATE \`CaioMemoryCandidate\`
+               SET \`state\` = 'verified',
+                   \`verifiedAt\` = ${input.now},
+                   \`verifiedByRef\` = ${input.actorRef},
+                   \`updatedAt\` = ${input.now}
+             WHERE \`id\` = ${input.candidateId}
+               AND \`workspaceId\` = ${input.workspaceId}
+               AND \`state\` = 'ephemeral'
+               AND \`ephemeralExpiresAt\` IS NOT NULL
+               AND \`ephemeralExpiresAt\` > UTC_TIMESTAMP(3)
+          `,
+        ),
+      };
+      if (updated.count !== 1) {
+        throw new CaioMemoryError(
+          "conflict",
+          "The entry was transitioned concurrently.",
+        );
+      }
+      return parseStoredCandidate(
+        await loadRow(input.workspaceId, input.candidateId),
+      );
+    },
+  });
+}
+
+/**
+ * The two expiry statements, as one unit of work. Kept out of the store object
+ * so both can run on the transaction client rather than the ambient one — an
+ * ambient-client write inside a transaction callback opens its own connection
+ * and is not in the transaction at all.
+ */
+async function sweepExpired(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; now: Date },
+): Promise<number> {
+  const expiredCandidates = Number(
+    await tx.$executeRaw`
+          UPDATE \`CaioMemoryCandidate\`
+             SET \`state\` = 'expired',
+                 \`body\` = NULL,
+                 \`expiredAt\` = ${input.now},
+                 \`updatedAt\` = ${input.now}
+           WHERE \`workspaceId\` = ${input.workspaceId}
+             AND \`state\` = 'candidate'
+             AND \`candidateExpiresAt\` <= ${input.now}
+    `,
+  );
+  const expiredEphemerals = Number(
+    await tx.$executeRaw`
+          UPDATE \`CaioMemoryCandidate\`
+             SET \`state\` = 'expired',
+                 \`body\` = NULL,
+                 \`expiredAt\` = ${input.now},
+                 \`updatedAt\` = ${input.now}
+           WHERE \`workspaceId\` = ${input.workspaceId}
+             AND \`state\` = 'ephemeral'
+             AND \`ephemeralExpiresAt\` <= ${input.now}
+    `,
+  );
+  return expiredCandidates + expiredEphemerals;
+}

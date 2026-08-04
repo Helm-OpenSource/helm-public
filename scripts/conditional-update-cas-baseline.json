@@ -1,0 +1,683 @@
+{
+  "schemaVersion": "2026-07-30.conditional-update-cas-baseline.v2",
+  "note": "Pre-existing sites that read a conditional updateMany count as a compare-and-swap while carrying a pre-state predicate without a serialisable transaction on the transaction client. On MySQL the predicate is dropped from the write, so the count cannot prove the state was unchanged. These are NOT fixed; they are recorded so the guard can block NEW occurrences without forcing an out-of-scope refactor of merged code. Each entry is a known defect awaiting its own slice, never a statement that the site is safe.",
+  "matching": "Entries match a SPECIFIC finding, not a file: `fingerprint` digests (file, receiver, delegate, model, sorted state predicates, result variable) and `occurrence` disambiguates identical sites in one file. Line numbers are excluded because they churn. A new site in a baselined file FAILS; an entry that matches nothing FAILS as stale and must be deleted by whoever fixes the site.",
+  "provenance": "Found while fixing two invariants that CI on mysql:8.4 disproved; the mechanism is documented in scripts/check-conditional-update-cas.ts.",
+  "entries": [
+    {
+      "file": "lib/bi-report-skill/handoff-decision.ts",
+      "fingerprint": "29e5454fd1f92452",
+      "occurrence": 0,
+      "client": "db",
+      "delegate": "biReportBusinessHandoffDecision",
+      "model": "BiReportBusinessHandoffDecision",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "result",
+      "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/bi-report-skill/signal-notification.ts",
+      "fingerprint": "d3ddf1bf58777e8c",
+      "occurrence": 0,
+      "client": "db",
+      "delegate": "biReportSignalNotification",
+      "model": "BiReportSignalNotification",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "result",
+      "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-access-gateway/token-store.prisma.ts",
+      "fingerprint": "e111ef3538a2e9fb",
+      "occurrence": 0,
+      "client": "client",
+      "delegate": "caioAccessToken",
+      "model": "CaioAccessToken",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "swept",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-collaboration-runtime/workbuddy-mutation-store.service.ts",
+      "fingerprint": "df13bd65d3f5cd01",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "workBuddyMutationChallenge",
+      "model": "WorkBuddyMutationChallenge",
+      "statePredicates": [
+        "consumedAt"
+      ],
+      "resultVariable": "updated",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-collaboration-runtime/workbuddy-presence-workflow.service.ts",
+      "fingerprint": "40f6e9edf72c4bb6",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "workBuddyPresenceChallenge",
+      "model": "WorkBuddyPresenceChallenge",
+      "statePredicates": [
+        "consumedAt"
+      ],
+      "resultVariable": "updated",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-collaboration-runtime/workbuddy-prompt-response.service.ts",
+      "fingerprint": "74aa68ab3367964c",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "workBuddyDeliveryEnvelope",
+      "model": "WorkBuddyDeliveryEnvelope",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "updated",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/advice-store.service.ts",
+      "fingerprint": "dadd95848474afcc",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioAdviceRecord",
+      "model": "CaioAdviceRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "expired",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/advice-store.service.ts",
+      "fingerprint": "e229d57d4cfdaf1b",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioAdviceRecord",
+      "model": "CaioAdviceRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "updated",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/advice-store.service.ts",
+      "fingerprint": "e229d57d4cfdaf1b",
+      "occurrence": 1,
+      "client": "tx",
+      "delegate": "caioAdviceRecord",
+      "model": "CaioAdviceRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "updated",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/mandate-store.service.ts",
+      "fingerprint": "776f102f77e3febb",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioPrincipalBinding",
+      "model": "CaioPrincipalBinding",
+      "statePredicates": [
+        "revokedAt"
+      ],
+      "resultVariable": "updated",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/mandate-store.service.ts",
+      "fingerprint": "067d2d78d3115a1e",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioMandateRecord",
+      "model": "CaioMandateRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "superseded",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/mandate-store.service.ts",
+      "fingerprint": "97067aa4642cb596",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioMandateRecord",
+      "model": "CaioMandateRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "expired",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/mandate-store.service.ts",
+      "fingerprint": "3062322bc0a79e27",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioMandateRecord",
+      "model": "CaioMandateRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "transitioned",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/mandate-store.service.ts",
+      "fingerprint": "3062322bc0a79e27",
+      "occurrence": 1,
+      "client": "tx",
+      "delegate": "caioMandateRecord",
+      "model": "CaioMandateRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "transitioned",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/mandate-store.service.ts",
+      "fingerprint": "3062322bc0a79e27",
+      "occurrence": 2,
+      "client": "tx",
+      "delegate": "caioMandateRecord",
+      "model": "CaioMandateRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "transitioned",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/caio-governance/mandate-store.service.ts",
+      "fingerprint": "47c02e1cb73f58fc",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioGuardianStopRecord",
+      "model": "CaioGuardianStopRecord",
+      "statePredicates": [
+        "resumedAt"
+      ],
+      "resultVariable": "resumed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/conversation-capture/capture-session.service.ts",
+      "fingerprint": "23fe9480d53964d8",
+      "occurrence": 0,
+      "client": "db",
+      "delegate": "captureSession",
+      "model": "CaptureSession",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/governed-intelligence/capability-closeout-review.ts",
+      "fingerprint": "cf4fc275b073b2bc",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "artifactReview",
+      "model": "ArtifactReview",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "reviewClaim",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/governed-intelligence/capability-closeout-review.ts",
+      "fingerprint": "92568820efcea147",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "artifactBundle",
+      "model": "ArtifactBundle",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "artifactClaim",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/governed-intelligence/governed-candidate-review.ts",
+      "fingerprint": "e9b0a36ee12fd52f",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "artifactReview",
+      "model": "ArtifactReview",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimedReview",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/governed-intelligence/governed-candidate-review.ts",
+      "fingerprint": "c6659285bc4a2ca6",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "artifactBundle",
+      "model": "ArtifactBundle",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimedBundle",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/governed-intelligence/governed-candidate-review.ts",
+      "fingerprint": "b8249d639a4f6aa2",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "artifactBundle",
+      "model": "ArtifactBundle",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/integrations/openclaw-memory/sync.service.ts",
+      "fingerprint": "c0e8ac6e5c2dd029",
+      "occurrence": 0,
+      "client": "db",
+      "delegate": "externalMemorySyncState",
+      "model": "ExternalMemorySyncState",
+      "statePredicates": [
+        "provider"
+      ],
+      "resultVariable": "acquired",
+      "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/integrations/qoderwork/connection-service.ts",
+      "fingerprint": "826e230ccb89a1eb",
+      "occurrence": 0,
+      "client": "db",
+      "delegate": "externalAgentConnection",
+      "model": "ExternalAgentConnection",
+      "statePredicates": [
+        "revokedAt"
+      ],
+      "resultVariable": "updated",
+      "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/policies/engine.ts",
+      "fingerprint": "e141da6466dc5469",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "actionItem",
+      "model": "ActionItem",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/policies/engine.ts",
+      "fingerprint": "daadd6eaf5256bde",
+      "occurrence": 0,
+      "client": "db",
+      "delegate": "approvalTask",
+      "model": "ApprovalTask",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/policies/engine.ts",
+      "fingerprint": "e141da6466dc5469",
+      "occurrence": 1,
+      "client": "tx",
+      "delegate": "actionItem",
+      "model": "ActionItem",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/policies/engine.ts",
+      "fingerprint": "0a87beb5d95f0f03",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "approvalTask",
+      "model": "ApprovalTask",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/policies/engine.ts",
+      "fingerprint": "daadd6eaf5256bde",
+      "occurrence": 1,
+      "client": "db",
+      "delegate": "approvalTask",
+      "model": "ApprovalTask",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "no-transaction",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/receipts/execution-receipt.service.ts",
+      "fingerprint": "fa02a8cd9f4870bf",
+      "occurrence": 0,
+      "client": "client",
+      "delegate": "executionReceipt",
+      "model": "ExecutionReceipt",
+      "statePredicates": [
+        "verificationState"
+      ],
+      "resultVariable": "claimed",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/receipts/execution-receipt.service.ts",
+      "fingerprint": "fa02a8cd9f4870bf",
+      "occurrence": 1,
+      "client": "client",
+      "delegate": "executionReceipt",
+      "model": "ExecutionReceipt",
+      "statePredicates": [
+        "verificationState"
+      ],
+      "resultVariable": "claimed",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/receipts/execution-receipt.service.ts",
+      "fingerprint": "2c49b030ac52c924",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "executionReceipt",
+      "model": "ExecutionReceipt",
+      "statePredicates": [
+        "verificationState"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/caio-initialization-gate-store.service.ts",
+      "fingerprint": "22e1912f965d3620",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioInitializationGateHead",
+      "model": "CaioInitializationGateHead",
+      "statePredicates": [
+        "version"
+      ],
+      "resultVariable": "updated",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/caio-operating-question-store.service.ts",
+      "fingerprint": "09e62bf7d8fd9df2",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioOperatingQuestionPortfolioHead",
+      "model": "CaioOperatingQuestionPortfolioHead",
+      "statePredicates": [
+        "version"
+      ],
+      "resultVariable": "updated",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/caio-operating-question-store.service.ts",
+      "fingerprint": "d749035d523eaba3",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioQuestionSelectionHead",
+      "model": "CaioQuestionSelectionHead",
+      "statePredicates": [
+        "version"
+      ],
+      "resultVariable": "updated",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/caio-pro-completion-store.service.ts",
+      "fingerprint": "0fecd83a8499334e",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "caioProV1CompletionGateHead",
+      "model": "CaioProV1CompletionGateHead",
+      "statePredicates": [
+        "version"
+      ],
+      "resultVariable": "updated",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/data-asset-catalog.service.ts",
+      "fingerprint": "4afb2599ee3818c5",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "dataAssetCatalogEntry",
+      "model": "DataAssetCatalogEntry",
+      "statePredicates": [
+        "version"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/data-asset-catalog.service.ts",
+      "fingerprint": "98367d623ab63ce3",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "observationSource",
+      "model": "ObservationSource",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "activated",
+      "reason": "client-from-parameter",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/decision-evaluation.service.ts",
+      "fingerprint": "4ea8585bf3ef5943",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "decisionRecord",
+      "model": "DecisionRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/decision-follow-through.service.ts",
+      "fingerprint": "a567903b2a6b40ad",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "decisionRecord",
+      "model": "DecisionRecord",
+      "statePredicates": [
+        "ownerConfirmedAt",
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/decision-follow-through.service.ts",
+      "fingerprint": "91fc4f1fb9139bf1",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "decisionRecord",
+      "model": "DecisionRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "expired",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/decision-follow-through.service.ts",
+      "fingerprint": "a567903b2a6b40ad",
+      "occurrence": 1,
+      "client": "tx",
+      "delegate": "decisionRecord",
+      "model": "DecisionRecord",
+      "statePredicates": [
+        "ownerConfirmedAt",
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/decision-follow-through.service.ts",
+      "fingerprint": "2fab6245dce98e7b",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "decisionRecord",
+      "model": "DecisionRecord",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "advanced",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/observation.service.ts",
+      "fingerprint": "976d9befed40ca28",
+      "occurrence": 0,
+      "client": "input.tx",
+      "delegate": "dataAssetCatalogEntry",
+      "model": "DataAssetCatalogEntry",
+      "statePredicates": [],
+      "resultVariable": "claimed",
+      "reason": "unanalyzable-argument",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/observation.service.ts",
+      "fingerprint": "78d217a4ff24528a",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "enterpriseObservationProgram",
+      "model": "EnterpriseObservationProgram",
+      "statePredicates": [
+        "revokedAt",
+        "status"
+      ],
+      "resultVariable": "activeProgramClaim",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/observation.service.ts",
+      "fingerprint": "d239a9eafe1f4156",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "enterpriseObservationProgram",
+      "model": "EnterpriseObservationProgram",
+      "statePredicates": [
+        "revokedAt",
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/observation.service.ts",
+      "fingerprint": "d239a9eafe1f4156",
+      "occurrence": 1,
+      "client": "tx",
+      "delegate": "enterpriseObservationProgram",
+      "model": "EnterpriseObservationProgram",
+      "statePredicates": [
+        "revokedAt",
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    },
+    {
+      "file": "lib/stage1-owner-loop/observation.service.ts",
+      "fingerprint": "5b9ac2c257b2066b",
+      "occurrence": 0,
+      "client": "tx",
+      "delegate": "observationSourceRun",
+      "model": "ObservationSourceRun",
+      "statePredicates": [
+        "status"
+      ],
+      "resultVariable": "claimed",
+      "reason": "isolation-not-serializable",
+      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
+    }
+  ]
+}

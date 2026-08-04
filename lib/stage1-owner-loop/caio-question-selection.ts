@@ -101,7 +101,7 @@ function canonicalValuesMatch(left: unknown, right: unknown): boolean {
 const canonicalUtcTimestampSchema = z
   .string()
   .refine(isCanonicalUtcTimestamp, "canonical UTC timestamp required");
-const questionSelectionItemSchema: z.ZodType<CaioQuestionSelectionItem> = z
+export const caioQuestionSelectionItemSchema: z.ZodType<CaioQuestionSelectionItem> = z
   .object({
     questionId: z.string(),
     questionOverride: z.string().nullable(),
@@ -210,7 +210,7 @@ export function createCaioQuestionSelectionReceipt(input: {
     throw new Error("caio_question_selection_input_invalid");
   }
   const parsedSelections = z
-    .array(questionSelectionItemSchema)
+    .array(caioQuestionSelectionItemSchema)
     .safeParse(input.selections);
   if (!parsedSelections.success) {
     throw new Error("caio_question_selection_item_invalid");

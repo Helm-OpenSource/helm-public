@@ -18,6 +18,7 @@ const {
   ensureWorkspaceCommercialFoundationMock: vi.fn(),
   syncWorkspaceAccessStateMock: vi.fn(),
   dbMock: {
+    $executeRaw: vi.fn(),
     authSession: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -62,16 +63,19 @@ vi.mock("@/lib/billing/foundation", () => ({
 
 import {
   ACTIVE_WORKSPACE_COOKIE,
+  MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
   AUTH_SESSION_REVOKE_SCOPES,
   AUTH_SESSION_SCOPE_REVOKED_AUDIT_ACTION,
   AUTH_SESSION_WORKSPACE_REALIGNED_AUDIT_ACTION,
   buildAuthSessionRevokeConsistencySummary,
   SESSION_ID_COOKIE,
+  activateMembershipIfInvited,
   buildAuthSessionRevokePreviewVsExecutedDelta,
   buildAuthSessionRevokeScopePreview,
   clearSession,
   createSession,
   getCurrentWorkspaceSession,
+  getCurrentWorkspaceSessionOrNull,
   getCurrentUser,
   rotateCurrentAuthSession,
   revokeWorkspaceAuthSessionsByScope,
@@ -153,6 +157,108 @@ function buildAuthSessionRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
+describe("getCurrentWorkspaceSessionOrNull", () => {
+  // THIS FUNCTION HAD NO TEST, which is worth stating: it decides which
+  // workspace a session may act in, and every guarded page reaches it.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesMock.mockResolvedValue(createCookieStore({ [SESSION_ID_COOKIE]: "session-key-1" }));
+    headersMock.mockResolvedValue(createHeaderStore());
+    writeAuditLogMock.mockResolvedValue(undefined);
+    ensureWorkspaceCommercialFoundationMock.mockResolvedValue(undefined);
+    syncWorkspaceAccessStateMock.mockResolvedValue(null);
+    dbMock.authSession.updateMany.mockResolvedValue({ count: 0 });
+    dbMock.authSession.update.mockResolvedValue({});
+    dbMock.membership.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  // The SAME db.membership.findUnique mock serves two call sites: the flat read
+  // inside activateMembershipIfInvited, and the rich re-read that builds the
+  // session. One shape has to satisfy both.
+  function membershipRow(status: MembershipStatus) {
+    return {
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      status,
+      user: { id: "user-1", name: "Owner", email: "owner@example.com" },
+      workspace: {
+        id: "workspace-1",
+        name: "Workspace workspace-1",
+        slug: "workspace-1",
+        systemKey: null,
+        billingAccount: null,
+        trialState: null,
+        workerEntitlements: [],
+      },
+    };
+  }
+
+  function seatOn(status: MembershipStatus) {
+    dbMock.authSession.findUnique.mockResolvedValue(
+      buildAuthSessionRecord({
+        activeWorkspaceId: "workspace-1",
+        user: {
+          id: "user-1",
+          name: "Owner",
+          email: "owner@example.com",
+          memberships: [buildMembership("workspace-1", status)],
+        },
+      }),
+    );
+  }
+
+  it("seats a session on a live membership", async () => {
+    // CONTROL. Without it, every refusal below would also hold for a function
+    // that had stopped returning sessions at all.
+    seatOn(MembershipStatus.ACTIVE);
+    dbMock.$executeRaw.mockResolvedValue(0);
+    dbMock.membership.findUnique.mockResolvedValue(membershipRow(MembershipStatus.ACTIVE));
+
+    const session = await getCurrentWorkspaceSessionOrNull();
+    expect(session).not.toBeNull();
+    expect(session?.workspace.id).toBe("workspace-1");
+  });
+
+  // THE MEMBERSHIP IS READ BEFORE THE ACTIVATION ATTEMPT, AND THE ATTEMPT'S
+  // ANSWER WAS DISCARDED.
+  //
+  // activateMembershipIfInvited returns the membership as it stands AFTER the
+  // attempt — which is where a concurrent revoke or delete becomes visible. The
+  // caller awaited it for its side effect and then carried on with the value it
+  // had read beforehand, so a membership revoked during the window still seated
+  // a session.
+  it("refuses when the membership is revoked during activation", async () => {
+    seatOn(MembershipStatus.INVITED);
+    // The conditional UPDATE matched nothing: someone else moved the row.
+    dbMock.$executeRaw.mockResolvedValue(0);
+    // And this is what it moved to.
+    dbMock.membership.findUnique.mockResolvedValue(membershipRow(MembershipStatus.INACTIVE));
+
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+  });
+
+  it("refuses when the membership is deleted during activation", async () => {
+    seatOn(MembershipStatus.INVITED);
+    dbMock.$executeRaw.mockResolvedValue(0);
+    // The row is gone entirely.
+    dbMock.membership.findUnique.mockResolvedValue(null);
+
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+  });
+
+  it("still seats the session when activation genuinely succeeds", async () => {
+    // The invited-to-active path must keep working: this is the case the
+    // discarded return value was there to serve.
+    seatOn(MembershipStatus.INVITED);
+    dbMock.$executeRaw.mockResolvedValue(1);
+    dbMock.membership.findUnique.mockResolvedValue(membershipRow(MembershipStatus.ACTIVE));
+
+    const session = await getCurrentWorkspaceSessionOrNull();
+    expect(session).not.toBeNull();
+    expect(session?.workspace.id).toBe("workspace-1");
+  });
+});
+
 describe("resolvePreferredMembership", () => {
   const memberships = [
     {
@@ -202,6 +308,46 @@ describe("resolvePreferredMembership", () => {
       status: MembershipStatus.INVITED,
     });
   });
+
+  // THE CASE THE TEST ABOVE CANNOT REACH.
+  //
+  // That fixture carries an INVITED membership alongside the INACTIVE one, so
+  // the INVITED arm answers and the INACTIVE filter is never load-bearing. A
+  // user whose memberships are ALL inactive takes a different path: both
+  // filtered arms come back empty, and the final fallback reads the UNFILTERED
+  // list.
+  //
+  // An inactive membership is a revoked or deactivated one. Returning it is not
+  // a cosmetic preference — every caller treats the answer as the workspace
+  // this session may act in.
+  it("refuses to seat a session on an inactive membership when nothing else remains", () => {
+    const allInactive = [
+      { workspaceId: "revoked-a", status: MembershipStatus.INACTIVE },
+      { workspaceId: "revoked-b", status: MembershipStatus.INACTIVE },
+    ];
+    expect(resolvePreferredMembership([...allInactive], undefined)).toBeNull();
+    // Naming the workspace in the cookie must not change the answer: the cookie
+    // is client-supplied, and an inactive membership is inactive whether or not
+    // the client asks for it by name.
+    expect(resolvePreferredMembership([...allInactive], "revoked-a")).toBeNull();
+    // CONTROL: the same call with one ACTIVE membership still resolves, so this
+    // is about the INACTIVE status and not about the function having stopped
+    // answering.
+    expect(
+      resolvePreferredMembership(
+        [...allInactive, { workspaceId: "live", status: MembershipStatus.ACTIVE }],
+        undefined,
+      ),
+    ).toEqual({ workspaceId: "live", status: MembershipStatus.ACTIVE });
+  });
+
+  it("returns null for an empty membership list", () => {
+    // This held by accident before, because the fallback chain ended in
+    // `?? null`. Asserted so that removing the inactive fallback cannot break
+    // it on the way past.
+    expect(resolvePreferredMembership([], undefined)).toBeNull();
+    expect(resolvePreferredMembership([], "any-workspace")).toBeNull();
+  });
 });
 
 describe("auth session substrate", () => {
@@ -213,8 +359,47 @@ describe("auth session substrate", () => {
     writeAuditLogMock.mockResolvedValue(undefined);
     ensureWorkspaceCommercialFoundationMock.mockResolvedValue(undefined);
     syncWorkspaceAccessStateMock.mockResolvedValue(null);
+    dbMock.$executeRaw.mockResolvedValue(0);
     dbMock.membership.updateMany.mockResolvedValue({ count: 0 });
     dbMock.authSession.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it("activates an invited membership with one atomic conditional UPDATE", async () => {
+    dbMock.$executeRaw.mockResolvedValue(1);
+    dbMock.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      status: MembershipStatus.ACTIVE,
+    });
+
+    const membership = await activateMembershipIfInvited({
+      workspaceId: "workspace-1",
+      userId: "user-1",
+    });
+
+    expect(dbMock.membership.updateMany).not.toHaveBeenCalled();
+    expect(dbMock.$executeRaw).toHaveBeenCalledTimes(1);
+    const [query, ...values] = dbMock.$executeRaw.mock.calls[0] ?? [];
+    expect(Array.from(query as TemplateStringsArray).join("?")).toContain(
+      "UPDATE `Membership`",
+    );
+    expect(Array.from(query as TemplateStringsArray).join("?")).toContain(
+      "AND `status` = ?",
+    );
+    expect(values).toEqual([
+      MembershipStatus.ACTIVE,
+      "workspace-1",
+      "user-1",
+      MembershipStatus.INVITED,
+    ]);
+    expect(writeAuditLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
+      }),
+    );
+    expect(membership).toEqual(
+      expect.objectContaining({ status: MembershipStatus.ACTIVE }),
+    );
   });
 
   it("uses the DB-backed auth session as the current user truth and ignores the legacy email cookie", async () => {

@@ -562,6 +562,14 @@ async function verifyAuthCode(input: {
     return { ok: false as const, reason: "missing" as const };
   }
 
+  // Fast path only, deliberately NOT the authority. It answers with the
+  // application's clock at READ time, so it cannot speak for the moment the
+  // claim is written: a code expiring between this line and the claim below
+  // would still be accepted, and two app hosts need not agree on the time.
+  // Both claim statements carry `expiresAt > UTC_TIMESTAMP(3)` in their own
+  // WHERE, so expiry is decided by the database at the instant of the write.
+  // This check survives because it produces the accurate "expired" reason for
+  // the common case; a claim refusal cannot tell expiry from a lost race.
   if (record.expiresAt.getTime() < Date.now()) {
     return { ok: false as const, reason: "expired" as const };
   }
@@ -570,16 +578,28 @@ async function verifyAuthCode(input: {
     return { ok: false as const, reason: "attempts_exceeded" as const };
   }
 
-  const attemptReservation = await db.authVerificationCode.updateMany({
-    where: {
-      id: record.id,
-      consumedAt: null,
-      attempts: { lt: AUTH_CODE_MAX_ATTEMPTS },
-    },
-    data: { attempts: { increment: 1 } },
-  });
+  // Reserving an attempt is a compare-and-swap: the row must still be
+  // unconsumed AND under the attempt ceiling at the moment of the write.
+  //
+  // This cannot be a conditional `updateMany`. Prisma compiles one into
+  // `SELECT id WHERE <predicate>` followed by `UPDATE ... WHERE id IN (?)`,
+  // so the predicate is evaluated at READ time and dropped from the write.
+  // Two concurrent verifications of the same code therefore both observe
+  // `attempts < MAX`, both increment, and both see count === 1 — which is
+  // how a brute-force ceiling silently stops being a ceiling.
+  //
+  // One statement, with the pre-state in the UPDATE's own WHERE, is the only
+  // form where the affected-row count actually proves the state was unchanged.
+  const attemptReservation = await db.$executeRaw`
+    UPDATE \`AuthVerificationCode\`
+       SET \`attempts\` = \`attempts\` + 1
+     WHERE \`id\` = ${record.id}
+       AND \`consumedAt\` IS NULL
+       AND \`expiresAt\` > UTC_TIMESTAMP(3)
+       AND \`attempts\` < ${AUTH_CODE_MAX_ATTEMPTS}
+  `;
 
-  if (attemptReservation.count !== 1) {
+  if (attemptReservation !== 1) {
     return { ok: false as const, reason: "attempts_exceeded" as const };
   }
 
@@ -600,17 +620,24 @@ async function verifyAuthCode(input: {
     };
   }
 
-  const consumeReservation = await db.authVerificationCode.updateMany({
-    where: {
-      id: record.id,
-      consumedAt: null,
-    },
-    data: {
-      consumedAt: new Date(),
-    },
-  });
+  // Consuming the code is the one-time-credential claim, and it has the same
+  // shape problem as the attempt reservation above: a conditional
+  // `updateMany` drops `consumedAt IS NULL` from the write, so two concurrent
+  // verifications of the SAME code can both report count === 1 and both
+  // return ok — the code is spent twice. That is a replayable one-time
+  // credential, not a rate-limit nuisance.
+  //
+  // `consumedAt` is written from the database's own clock rather than the
+  // application's, so the timestamp cannot disagree between two app hosts.
+  const consumeReservation = await db.$executeRaw`
+    UPDATE \`AuthVerificationCode\`
+       SET \`consumedAt\` = UTC_TIMESTAMP(3)
+     WHERE \`id\` = ${record.id}
+       AND \`consumedAt\` IS NULL
+       AND \`expiresAt\` > UTC_TIMESTAMP(3)
+  `;
 
-  if (consumeReservation.count !== 1) {
+  if (consumeReservation !== 1) {
     return { ok: false as const, reason: "attempts_exceeded" as const };
   }
 
@@ -1176,11 +1203,31 @@ export async function completeTrialSignupVerificationAction(
     },
   });
 
+  // A COOKIE IS NOT AN INVITE, even a signed one. The workspace id in the
+  // prefill originates in the OAuth start URL's query parameters, so whoever
+  // began the flow chose it; signing proves only that WE serialised it, never
+  // that the person completing signup was invited to that workspace. Joining
+  // is therefore gated on a real Membership row for this identity —
+  // `hasAllowedInviteMembership`, the check this file already contained and
+  // which this path did not call. Previously a workspace id named in an
+  // unauthenticated cookie was upserted straight to ACTIVE MEMBER, and the
+  // only obstacle was knowing a valid workspace id.
   const invitedWorkspaceId =
-    canSkipVerificationCodes && invitePrefill?.invitedWorkspaceId
+    canSkipVerificationCodes &&
+    invitePrefill?.invitedWorkspaceId &&
+    (await hasAllowedInviteMembership({
+      cookieStore,
+      email: enrollment.email,
+      phone: enrollment.phone,
+    }))
       ? invitePrefill.invitedWorkspaceId
       : null;
-  let workspaceIdForSession: string;
+  // Null until a workspace is actually settled on. The self-serve fallback below
+  // is keyed on THIS VALUE rather than on whether an invite id was carried in:
+  // the invited branch can be entered and then decline — a membership found
+  // revoked is not an invite — and a separate flag could disagree with the value
+  // it is supposed to describe.
+  let workspaceIdForSession: string | null = null;
   let redirectTo = "/setup?onboarding=trial";
 
   if (invitedWorkspaceId) {
@@ -1216,6 +1263,10 @@ export async function completeTrialSignupVerificationAction(
         role: true,
         title: true,
         persona: true,
+        // Read the CURRENT status. hasAllowedInviteMembership matched by email
+        // or phone, which is not necessarily the row this write targets, and it
+        // ran before this point in any case.
+        status: true,
       },
     });
 
@@ -1226,39 +1277,72 @@ export async function completeTrialSignupVerificationAction(
       invitedMembershipTitle ||
       null;
 
-    await db.membership.upsert({
-      where: {
-        workspaceId_userId: {
+    // A REVOKED MEMBERSHIP IS NOT AN INVITE.
+    //
+    // hasAllowedInviteMembership established that SOME non-inactive membership
+    // exists for this email or phone. It did not establish that THIS row is
+    // live, and it ran before this point. An INACTIVE row is somebody having
+    // been removed from the workspace, so signup must not carry them back in —
+    // it declines the join and falls through to the self-serve path below,
+    // exactly as it does for a user who was never invited.
+    if (existingMembership?.status !== MembershipStatus.INACTIVE) {
+      await db.membership.upsert({
+        where: {
+          workspaceId_userId: {
+            workspaceId: invitedWorkspace.id,
+            userId: savedUser.id,
+          },
+        },
+        create: {
           workspaceId: invitedWorkspace.id,
           userId: savedUser.id,
+          role: existingMembership?.role ?? WorkspaceRole.MEMBER,
+          status: MembershipStatus.ACTIVE,
+          ...(invitedMembershipTitle ? { title: invitedMembershipTitle } : {}),
+          ...(invitedMembershipPersona ? { persona: invitedMembershipPersona } : {}),
         },
-      },
-      create: {
-        workspaceId: invitedWorkspace.id,
-        userId: savedUser.id,
-        role: existingMembership?.role ?? WorkspaceRole.MEMBER,
-        status: MembershipStatus.ACTIVE,
-        ...(invitedMembershipTitle ? { title: invitedMembershipTitle } : {}),
-        ...(invitedMembershipPersona ? { persona: invitedMembershipPersona } : {}),
-      },
-      update: {
-        role: existingMembership?.role ?? WorkspaceRole.MEMBER,
-        status: MembershipStatus.ACTIVE,
-        ...(invitedMembershipTitle && !existingMembership?.title
-          ? { title: invitedMembershipTitle }
-          : {}),
-        ...(invitedMembershipPersona && !existingMembership?.persona
-          ? { persona: invitedMembershipPersona }
-          : {}),
-      },
-    });
+        update: {
+          role: existingMembership?.role ?? WorkspaceRole.MEMBER,
+          // STATUS IS DELIBERATELY ABSENT FROM THIS BRANCH.
+          //
+          // It used to be `status: ACTIVE` unconditionally, which is what made
+          // a revoke landing between the read above and this write come back
+          // ACTIVE. An upsert cannot express a conditional update, so the
+          // transition is done by the guarded statement below instead and this
+          // branch is left unable to resurrect anything.
+          ...(invitedMembershipTitle && !existingMembership?.title
+            ? { title: invitedMembershipTitle }
+            : {}),
+          ...(invitedMembershipPersona && !existingMembership?.persona
+            ? { persona: invitedMembershipPersona }
+            : {}),
+        },
+      });
 
-    workspaceIdForSession = invitedWorkspace.id;
-    redirectTo = resolveDeploymentPostLoginPath(
-      "/dashboard",
-      deploymentConfig,
-    );
-  } else {
+      // The INVITED -> ACTIVE transition, with the pre-state inside the UPDATE.
+      // Same shape and same reason as markInvitedMembershipActive in
+      // lib/auth/session.ts: Prisma's updateMany can select ids and then update
+      // by id, so its count is not a sound compare-and-swap under concurrency.
+      // A row revoked in the meantime does not match, and stays revoked.
+      await db.$executeRaw`
+        UPDATE \`Membership\`
+           SET \`status\` = ${MembershipStatus.ACTIVE},
+               \`joinedAt\` = UTC_TIMESTAMP(3),
+               \`updatedAt\` = UTC_TIMESTAMP(3)
+         WHERE \`workspaceId\` = ${invitedWorkspace.id}
+           AND \`userId\` = ${savedUser.id}
+           AND \`status\` = ${MembershipStatus.INVITED}
+      `;
+
+      workspaceIdForSession = invitedWorkspace.id;
+      redirectTo = resolveDeploymentPostLoginPath(
+        "/dashboard",
+        deploymentConfig,
+      );
+    }
+  }
+
+  if (!workspaceIdForSession) {
     const { workspace } = await createSelfServeTrialOrganization({
       user: {
         id: savedUser.id,

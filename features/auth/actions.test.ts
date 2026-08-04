@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthCodeChannel, AuthCodePurpose, MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { hashVerificationCode } from "@/lib/auth/formal-auth";
+import { writePublicOauthSignupPrefillCookie } from "@/lib/auth/public-oauth";
 
 const mocks = vi.hoisted(() => {
   const cookieStore = {
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => {
     findUnique: vi.fn(),
   };
   const membership = {
+    findFirst: vi.fn(),
     findUnique: vi.fn(),
     upsert: vi.fn(),
   };
@@ -42,6 +44,10 @@ const mocks = vi.hoisted(() => {
       user,
       workspace,
       membership,
+      // One-time code claims are single atomic statements rather than
+      // conditional updateMany calls, because Prisma drops the predicate from
+      // the write on MySQL. The mock below emulates the statements' semantics.
+      $executeRaw: vi.fn(),
     },
     trialOnboarding: {
       createSelfServeTrialOrganization: vi.fn(),
@@ -246,6 +252,30 @@ function createSignupInput() {
   };
 }
 
+/**
+ * Issue a prefill cookie the way the OAuth callback does — through the real
+ * writer, so the tests below exercise a genuinely signed value. Hand-rolling
+ * the JSON here would be forging it, which is what the attack tests do on
+ * purpose and what the legitimate-flow tests must NOT do: a fixture that can
+ * mint its own credentials cannot tell a working signature from an absent one.
+ */
+function issuePrefillCookie(input: {
+  email?: string | null;
+  phone?: string | null;
+  name?: string | null;
+  organizationName?: string | null;
+  invitedWorkspaceId?: string | null;
+  title?: string | null;
+}): string {
+  let issued = "";
+  writePublicOauthSignupPrefillCookie(
+    { set: (_name: string, value: string) => { issued = value; } },
+    { provider: "dingtalk", ...input },
+    now,
+  );
+  return issued;
+}
+
 function installAuthCodeStore(records: AuthCodeRecord[]) {
   mocks.db.authVerificationCode.findFirst.mockImplementation(async ({ where }) => {
     return (
@@ -322,6 +352,43 @@ function installAuthCodeStore(records: AuthCodeRecord[]) {
     }
     return { count: 1 };
   });
+
+  // Emulates the two atomic claim statements in `verifyAuthCode`. Both carry
+  // the pre-state in the UPDATE's own WHERE, so a row that is already consumed
+  // — or already at the attempt ceiling — yields zero affected rows rather
+  // than a successful claim. Anything else throws: a silent 0 would let an
+  // implementation change pass as "no rows matched" instead of failing.
+  mocks.db.$executeRaw.mockImplementation(
+    async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join("?");
+      const record = records.find((candidate) => candidate.id === values[0]);
+      if (!record || record.consumedAt !== null) {
+        return 0;
+      }
+      // The statements decide expiry in the database at write time, so the
+      // mock must too: an expired row affects zero rows however the caller
+      // read it a moment earlier.
+      if (
+        sql.includes("`expiresAt` > UTC_TIMESTAMP(3)") &&
+        record.expiresAt.getTime() <= Date.now()
+      ) {
+        return 0;
+      }
+      if (sql.includes("`attempts` = `attempts` + 1")) {
+        const ceiling = values[1] as number;
+        if (record.attempts >= ceiling) {
+          return 0;
+        }
+        record.attempts += 1;
+        return 1;
+      }
+      if (sql.includes("`consumedAt` = UTC_TIMESTAMP(3)")) {
+        record.consumedAt = new Date();
+        return 1;
+      }
+      throw new Error(`unexpected raw auth code statement: ${sql}`);
+    },
+  );
 
   mocks.db.authVerificationCode.update.mockImplementation(async ({ where, data }) => {
     const record = records.find((candidate) => candidate.id === where.id);
@@ -415,15 +482,21 @@ describe("auth verification code attempt cap", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain("Request a new code");
-    expect(mocks.db.authVerificationCode.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          id: "login-code-2",
-          attempts: { lt: 5 },
-          consumedAt: null,
-        }),
-      }),
+    // The attempt reservation must carry BOTH pre-state conditions in the
+    // statement that performs the write, not merely in a preceding read.
+    const reservation = mocks.db.$executeRaw.mock.calls.find(
+      ([strings]: [TemplateStringsArray]) =>
+        strings.join("?").includes("`attempts` = `attempts` + 1"),
     );
+    expect(reservation).toBeDefined();
+    const [reservationSql, ...reservationValues] = reservation as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    expect(reservationSql.join("?")).toContain("`consumedAt` IS NULL");
+    expect(reservationSql.join("?")).toContain("`attempts` < ?");
+    expect(reservationValues).toEqual(["login-code-2", 5]);
+    expect(mocks.db.authVerificationCode.updateMany).not.toHaveBeenCalled();
     expect(mocks.db.authVerificationCode.update).not.toHaveBeenCalled();
     expect(record.attempts).toBe(5);
     expect(record.consumedAt).toBeNull();
@@ -479,6 +552,133 @@ describe("auth verification code attempt cap", () => {
     expect(mocks.session.activateMembershipIfInvited).not.toHaveBeenCalled();
   });
 
+  it("refuses a code that expires between the read and the claim", async () => {
+    const record = makeCodeRecord({
+      id: "login-code-expiring",
+      purpose: AuthCodePurpose.LOGIN_PHONE,
+      target: "+8613800000000",
+      code: "123456",
+      attempts: 0,
+      userId: "user-1",
+    });
+    installAuthCodeStore([record]);
+    mocks.db.user.findFirst.mockResolvedValue(createActiveUser());
+
+    // Valid when the action reads it; the clock crosses `expiresAt` before the
+    // claim runs. The application-clock check at the top of verifyAuthCode has
+    // already passed and cannot revisit it, so only a database predicate in
+    // the claim statement can still refuse.
+    record.expiresAt = new Date(now.getTime() + 1_000);
+
+    // A thrown error would be indistinguishable from any other failure here —
+    // the action reports ok:false either way — so the violation is recorded as
+    // a fact the test asserts on directly.
+    let wroteWithoutExpiryGuard = false;
+    mocks.db.$executeRaw.mockImplementation(
+      async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        const sql = strings.join("?");
+        vi.setSystemTime(new Date(now.getTime() + 5_000));
+        if (record.id !== values[0] || record.consumedAt !== null) return 0;
+        if (!sql.includes("`expiresAt` > UTC_TIMESTAMP(3)")) {
+          wroteWithoutExpiryGuard = true;
+          return 1;
+        }
+        return record.expiresAt.getTime() <= Date.now() ? 0 : 1;
+      },
+    );
+
+    const result = await loginWithPhoneCodeAction({
+      phone: "13800000000",
+      code: "123456",
+      locale: "en-US",
+    });
+
+    // The flow must have REACHED the claim; asserting only ok===false would
+    // pass on "code not found", which proves nothing about expiry.
+    expect(mocks.db.$executeRaw).toHaveBeenCalled();
+    expect(wroteWithoutExpiryGuard).toBe(false);
+    expect(result.ok).toBe(false);
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+    expect(record.consumedAt).toBeNull();
+  });
+
+  // The test above crosses expiry BEFORE the first write, so the ATTEMPT
+  // RESERVATION is the statement that refuses and the consume claim is never
+  // reached — deleting the consume statement's own expiry predicate left the
+  // suite green. Here the reservation SUCCEEDS and expiry is crossed only
+  // afterwards, which puts the consume claim in the position of being the only
+  // thing that can still refuse. Two claims, two predicates, two tests.
+  it("refuses to consume a code that expires after the attempt reservation", async () => {
+    const record = makeCodeRecord({
+      id: "login-code-expiring-after-reservation",
+      purpose: AuthCodePurpose.LOGIN_PHONE,
+      target: "+8613800000000",
+      code: "123456",
+      attempts: 0,
+      userId: "user-1",
+    });
+    installAuthCodeStore([record]);
+    mocks.db.user.findFirst.mockResolvedValue(createActiveUser());
+
+    // Still valid at the read AND at the attempt reservation; it lapses in the
+    // window between the reservation and the claim.
+    record.expiresAt = new Date(now.getTime() + 1_000);
+
+    let reservationSucceeded = false;
+    let consumeAttempted = false;
+    let consumedWithoutExpiryGuard = false;
+    mocks.db.$executeRaw.mockImplementation(
+      async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        const sql = strings.join("?");
+        // The database decides expiry from ITS clock at the instant of each
+        // write, which is what `Date.now()` stands in for here.
+        const expired = record.expiresAt.getTime() <= Date.now();
+        if (record.id !== values[0] || record.consumedAt !== null) return 0;
+
+        if (sql.includes("`attempts` = `attempts` + 1")) {
+          if (sql.includes("`expiresAt` > UTC_TIMESTAMP(3)") && expired) return 0;
+          record.attempts += 1;
+          reservationSucceeded = true;
+          // Only NOW does the clock cross expiry: the reservation is already
+          // committed and cannot be revisited.
+          vi.setSystemTime(new Date(now.getTime() + 5_000));
+          return 1;
+        }
+
+        if (sql.includes("`consumedAt` = UTC_TIMESTAMP(3)")) {
+          consumeAttempted = true;
+          if (!sql.includes("`expiresAt` > UTC_TIMESTAMP(3)")) {
+            // A claim with no expiry predicate spends the code regardless of
+            // the database clock. Recorded as a fact rather than thrown: the
+            // action reports ok:false on any throw, which would hide it.
+            consumedWithoutExpiryGuard = true;
+            record.consumedAt = new Date();
+            return 1;
+          }
+          return expired ? 0 : 1;
+        }
+
+        throw new Error(`unexpected raw auth code statement: ${sql}`);
+      },
+    );
+
+    const result = await loginWithPhoneCodeAction({
+      phone: "13800000000",
+      code: "123456",
+      locale: "en-US",
+    });
+
+    // The flow must have got PAST the reservation and reached the claim;
+    // otherwise this test would prove the same thing as the one above.
+    expect(reservationSucceeded).toBe(true);
+    expect(record.attempts).toBe(1);
+    expect(consumeAttempted).toBe(true);
+    expect(consumedWithoutExpiryGuard).toBe(false);
+    expect(result.ok).toBe(false);
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+    expect(record.consumedAt).toBeNull();
+  });
+
   it("rejects a valid login code when another request already consumed it", async () => {
     const record = makeCodeRecord({
       id: "login-code-4",
@@ -489,13 +689,24 @@ describe("auth verification code attempt cap", () => {
       userId: "user-1",
     });
     installAuthCodeStore([record]);
-    mocks.db.authVerificationCode.updateMany.mockImplementation(async ({ where, data }) => {
-      if (where.attempts?.lt) {
-        record.attempts += data.attempts.increment;
-        return { count: 1 };
-      }
-      return { count: 0 };
-    });
+    // A competing request consumes the code between this caller's attempt
+    // reservation and its claim: the reservation still succeeds, but the
+    // claim's `consumedAt IS NULL` no longer holds at write time, so the
+    // statement affects zero rows. This is exactly the interleaving a
+    // conditional updateMany cannot detect.
+    mocks.db.$executeRaw.mockImplementation(
+      async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+        const sql = strings.join("?");
+        if (sql.includes("`attempts` = `attempts` + 1")) {
+          record.attempts += 1;
+          return 1;
+        }
+        if (sql.includes("`consumedAt` = UTC_TIMESTAMP(3)")) {
+          return 0;
+        }
+        throw new Error(`unexpected raw auth code statement: ${sql}`);
+      },
+    );
     mocks.db.user.findFirst.mockResolvedValue(createActiveUser());
 
     const result = await loginWithPhoneCodeAction({
@@ -770,13 +981,11 @@ describe("auth verification code attempt cap", () => {
 
   it("skips signup auth codes when dingtalk oauth prefill matches enrollment identity", async () => {
     installAuthCodeStore([]);
-    const prefillCookie = JSON.stringify({
-      provider: "dingtalk",
+    const prefillCookie = issuePrefillCookie({
       name: "Owner",
       email: "owner@example.com",
       phone: "+8613800000000",
       organizationName: "Acme",
-      expiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
@@ -802,13 +1011,11 @@ describe("auth verification code attempt cap", () => {
 
   it("completes signup without auth codes when dingtalk oauth prefill matches enrollment identity", async () => {
     installAuthCodeStore([]);
-    const prefillCookie = JSON.stringify({
-      provider: "dingtalk",
+    const prefillCookie = issuePrefillCookie({
       name: "Owner",
       email: "owner@example.com",
       phone: "+8613800000000",
       organizationName: "Acme",
-      expiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
@@ -863,14 +1070,12 @@ describe("auth verification code attempt cap", () => {
 
   it("joins invited workspace instead of creating a new trial workspace when prefill carries workspace id", async () => {
     installAuthCodeStore([]);
-    const prefillCookie = JSON.stringify({
-      provider: "dingtalk",
+    const prefillCookie = issuePrefillCookie({
       name: "Owner",
       email: "owner@example.com",
       phone: "+8613800000000",
       organizationName: "Acme",
       invitedWorkspaceId: "workspace-invite-1",
-      expiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
@@ -897,6 +1102,13 @@ describe("auth verification code attempt cap", () => {
       name: "Owner",
       phone: "+8613800000000",
       title: null,
+    });
+    // The genuine invite this flow requires: a Membership row already exists
+    // for this identity in the target workspace. Without it the cookie is just
+    // a request field naming a workspace.
+    mocks.db.membership.findFirst.mockResolvedValue({
+      workspaceId: "workspace-invite-1",
+      workspace: { id: "workspace-invite-1", slug: "invite", systemKey: null },
     });
     mocks.db.workspace.findUnique.mockResolvedValue({
       id: "workspace-invite-1",
@@ -939,17 +1151,97 @@ describe("auth verification code attempt cap", () => {
     );
   });
 
+  // A REVOKED INVITE MUST NOT BE RESURRECTED BY SIGNUP.
+  //
+  // hasAllowedInviteMembership checks that a non-INACTIVE membership exists for
+  // this identity, and that check is real. But it runs BEFORE the write, and it
+  // matches by email/phone rather than by the row the write targets. The write
+  // itself was an upsert whose `update` branch set status: ACTIVE
+  // unconditionally, so a membership revoked in that window came back ACTIVE
+  // and the user was seated in the workspace they had just been removed from.
+  it("refuses to join a workspace whose membership has been revoked", async () => {
+    installAuthCodeStore([]);
+    const prefillCookie = issuePrefillCookie({
+      name: "Owner",
+      email: "owner@example.com",
+      phone: "+8613800000000",
+      organizationName: "Acme",
+      invitedWorkspaceId: "workspace-invite-1",
+    });
+    mocks.cookieStore.get.mockImplementation((name?: string) => {
+      if (name === "helm-public-oauth-signup-prefill") {
+        return { value: prefillCookie };
+      }
+      if (name === "helm-ui-locale") {
+        return { value: "en-US" };
+      }
+      return undefined;
+    });
+    mocks.db.authEnrollment.findUnique.mockResolvedValue(createEnrollment());
+    mocks.db.user.findUnique.mockResolvedValue(null);
+    mocks.db.user.create.mockResolvedValue({
+      id: "user-1",
+      email: "owner@example.com",
+      name: "Owner",
+      phone: "+8613800000000",
+      title: null,
+      passwordHash: "scrypt:hash",
+    });
+    mocks.db.user.update.mockResolvedValue({
+      id: "user-1",
+      email: "owner@example.com",
+      name: "Owner",
+      phone: "+8613800000000",
+      title: null,
+    });
+    // The pre-check still sees a live invite for this identity.
+    mocks.db.membership.findFirst.mockResolvedValue({
+      workspaceId: "workspace-invite-1",
+      workspace: { id: "workspace-invite-1", slug: "invite", systemKey: null },
+    });
+    mocks.db.workspace.findUnique.mockResolvedValue({
+      id: "workspace-invite-1",
+    });
+    // ...but THIS user's membership in that workspace has been revoked.
+    mocks.db.membership.findUnique.mockResolvedValue({
+      role: WorkspaceRole.MEMBER,
+      title: null,
+      persona: null,
+      status: MembershipStatus.INACTIVE,
+    });
+    mocks.trialOnboarding.createSelfServeTrialOrganization.mockResolvedValue({
+      workspace: { id: "workspace-trial-1" },
+    });
+
+    const result = await completeTrialSignupVerificationAction({
+      enrollmentId: "enrollment-1",
+      emailCode: "",
+      phoneCode: "",
+    });
+
+    // The revoked membership is never written back to ACTIVE.
+    expect(mocks.db.membership.upsert).not.toHaveBeenCalled();
+    // And no session is seated in the workspace they were removed from.
+    expect(mocks.session.createSession).not.toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "workspace-invite-1" }),
+    );
+    // Signup itself still completes: a revoked invite is not a reason to refuse
+    // the account, only a reason not to join that workspace.
+    expect(result.ok).toBe(true);
+    expect(
+      mocks.trialOnboarding.createSelfServeTrialOrganization,
+    ).toHaveBeenCalled();
+  });
+
   it("fills membership title from invite prefill when signup form title is empty", async () => {
     installAuthCodeStore([]);
-    const prefillCookie = JSON.stringify({
-      provider: "dingtalk",
+    const prefillCookie = issuePrefillCookie({
       name: "Owner",
       email: "owner@example.com",
       phone: "+8613800000000",
       organizationName: "Acme",
       invitedWorkspaceId: "workspace-invite-1",
       title: "高级JAVA开发工程师",
-      expiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
@@ -976,6 +1268,13 @@ describe("auth verification code attempt cap", () => {
       name: "Owner",
       phone: "+8613800000000",
       title: "高级JAVA开发工程师",
+    });
+    // The genuine invite this flow requires: a Membership row already exists
+    // for this identity in the target workspace. Without it the cookie is just
+    // a request field naming a workspace.
+    mocks.db.membership.findFirst.mockResolvedValue({
+      workspaceId: "workspace-invite-1",
+      workspace: { id: "workspace-invite-1", slug: "invite", systemKey: null },
     });
     mocks.db.workspace.findUnique.mockResolvedValue({
       id: "workspace-invite-1",
@@ -1006,6 +1305,221 @@ describe("auth verification code attempt cap", () => {
         }),
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE PREFILL COOKIE IS AN AUTHORIZATION INPUT, SO IT MUST BE UNFORGEABLE.
+//
+// `completeTrialSignupVerificationAction` lives in a "use server" module: it is
+// publicly invocable and unauthenticated. It reads the OAuth signup prefill
+// COOKIE and lets it decide two things — whether email and phone verification
+// codes are required at all, and which workspace the new account joins.
+// `httpOnly` does not help here: it stops page JavaScript from READING the
+// cookie, it does nothing about a client that simply sends whatever Cookie
+// header it likes.
+//
+// These tests are written as an attacker, not as a description of the fix:
+// they forge a cookie and assert the outcome the attacker wants is REFUSED.
+// ---------------------------------------------------------------------------
+describe("forged OAuth signup prefill cookie", () => {
+  const FORGED = JSON.stringify({
+    provider: "dingtalk",
+    name: "Mallory",
+    email: "attacker@example.com",
+    phone: "+8613900000000",
+    organizationName: "Anything",
+    invitedWorkspaceId: "workspace-victim",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+
+  function sendCookie(value: string) {
+    mocks.cookieStore.get.mockImplementation((name?: string) => {
+      if (name === "helm-public-oauth-signup-prefill") return { value };
+      if (name === "helm-ui-locale") return { value: "en-US" };
+      return undefined;
+    });
+  }
+
+  function attackerEnrollment() {
+    return {
+      id: "enrollment-attack",
+      name: "Mallory",
+      email: "attacker@example.com",
+      phone: "+8613900000000",
+      organizationName: "Anything",
+      locale: "en-US",
+      passwordHash: "scrypt:hash",
+      expiresAt: new Date(now.getTime() + 30 * 60 * 1000),
+    };
+  }
+
+  beforeEach(() => {
+    installAuthCodeStore([]);
+    mocks.db.authEnrollment.findUnique.mockResolvedValue(attackerEnrollment());
+    mocks.db.user.findUnique.mockResolvedValue(null);
+    mocks.db.user.create.mockResolvedValue({
+      id: "user-attacker",
+      email: "attacker@example.com",
+      name: "Mallory",
+      phone: "+8613900000000",
+      title: null,
+      passwordHash: "scrypt:hash",
+    });
+    mocks.db.user.update.mockResolvedValue({
+      id: "user-attacker",
+      email: "attacker@example.com",
+      name: "Mallory",
+      phone: "+8613900000000",
+      title: null,
+    });
+    mocks.db.workspace.findUnique.mockResolvedValue({ id: "workspace-victim" });
+    mocks.db.membership.findUnique.mockResolvedValue(null);
+    mocks.db.membership.upsert.mockResolvedValue({
+      workspaceId: "workspace-victim",
+      userId: "user-attacker",
+      role: WorkspaceRole.MEMBER,
+      status: MembershipStatus.ACTIVE,
+    });
+    // No membership exists for this identity in the target workspace: the
+    // attacker was never invited. This is the fact the fix must consult.
+    mocks.db.membership.findFirst.mockResolvedValue(null);
+  });
+
+  it("CONTROL: the harness can reach a successful signup (a refusal here means the setup broke)", async () => {
+    // Same fixtures, real verification codes, no cookie. If this cannot
+    // succeed, the refusals asserted below prove nothing.
+    sendCookie("");
+    const enrollment = attackerEnrollment();
+    installAuthCodeStore([
+      makeCodeRecord({
+        id: "signup-email",
+        purpose: AuthCodePurpose.SIGNUP_EMAIL,
+        channel: AuthCodeChannel.EMAIL,
+        target: enrollment.email,
+        code: "123456",
+        enrollmentId: enrollment.id,
+      }),
+      makeCodeRecord({
+        id: "signup-phone",
+        purpose: AuthCodePurpose.SIGNUP_PHONE,
+        channel: AuthCodeChannel.PHONE,
+        target: enrollment.phone,
+        code: "123456",
+        enrollmentId: enrollment.id,
+      }),
+    ]);
+
+    const result = await completeTrialSignupVerificationAction({
+      enrollmentId: enrollment.id,
+      emailCode: "123456",
+      phoneCode: "123456",
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses to skip verification codes for an unsigned, attacker-authored cookie", async () => {
+    sendCookie(FORGED);
+
+    const result = await completeTrialSignupVerificationAction({
+      enrollmentId: "enrollment-attack",
+      // No codes at all. The whole point of the attack is that the cookie
+      // makes the codes optional.
+      emailCode: "",
+      phoneCode: "",
+    });
+
+    expect(result.ok).toBe(false);
+    // The account must not exist, and must certainly not be stamped as having
+    // had its email and phone verified.
+    expect(mocks.db.user.create).not.toHaveBeenCalled();
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+  });
+
+  it("refuses to grant workspace membership named by an unsigned cookie", async () => {
+    sendCookie(FORGED);
+
+    await completeTrialSignupVerificationAction({
+      enrollmentId: "enrollment-attack",
+      emailCode: "",
+      phoneCode: "",
+    });
+
+    // ACTIVE MEMBER of a workspace the attacker merely named in a cookie is
+    // the payload of this attack; nothing less than zero upserts is a pass.
+    expect(mocks.db.membership.upsert).not.toHaveBeenCalled();
+  });
+
+  // A SIGNATURE PROVES ORIGIN, NOT ENTITLEMENT. The workspace id in this
+  // cookie comes from the OAuth start URL's query parameters, so whoever began
+  // the flow chose it; the signature only says WE serialised it. An attacker
+  // who completes a perfectly genuine DingTalk sign-in, having started it with
+  // someone else's workspace id in the URL, holds a validly signed cookie
+  // naming a workspace they were never invited to. Membership must therefore
+  // rest on a real invite record, never on the cookie.
+  it("refuses workspace membership from a GENUINELY SIGNED cookie with no invite behind it", async () => {
+    const enrollment = attackerEnrollment();
+    mocks.cookieStore.get.mockImplementation((name?: string) => {
+      if (name === "helm-public-oauth-signup-prefill") {
+        return {
+          value: issuePrefillCookie({
+            name: enrollment.name,
+            email: enrollment.email,
+            phone: enrollment.phone,
+            organizationName: "Anything",
+            invitedWorkspaceId: "workspace-victim",
+          }),
+        };
+      }
+      if (name === "helm-ui-locale") return { value: "en-US" };
+      return undefined;
+    });
+    // The decisive fact: no Membership row ties this identity to that
+    // workspace.
+    mocks.db.membership.findFirst.mockResolvedValue(null);
+    mocks.trialOnboarding.createSelfServeTrialOrganization.mockResolvedValue({
+      workspace: { id: "workspace-fresh-trial" },
+    });
+
+    const result = await completeTrialSignupVerificationAction({
+      enrollmentId: enrollment.id,
+      emailCode: "",
+      phoneCode: "",
+    });
+
+    // Signup itself may proceed — the OAuth identity is genuine — but the
+    // account must land in its own new trial workspace, never as an ACTIVE
+    // MEMBER of the one the cookie named.
+    expect(mocks.db.membership.upsert).not.toHaveBeenCalled();
+    expect(mocks.session.createSession).not.toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "workspace-victim" }),
+    );
+    if (result.ok) {
+      expect(mocks.trialOnboarding.createSelfServeTrialOrganization).toHaveBeenCalled();
+    }
+  });
+
+  it("refuses a cookie whose JSON is well-formed but whose signature is absent or wrong", async () => {
+    for (const value of [
+      FORGED,
+      `${FORGED}.`,
+      `${FORGED}.not-a-real-signature`,
+      `.${FORGED}`,
+    ]) {
+      mocks.db.user.create.mockClear();
+      mocks.db.membership.upsert.mockClear();
+      sendCookie(value);
+
+      const result = await completeTrialSignupVerificationAction({
+        enrollmentId: "enrollment-attack",
+        emailCode: "",
+        phoneCode: "",
+      });
+
+      expect(result.ok, `cookie variant: ${value.slice(0, 24)}`).toBe(false);
+      expect(mocks.db.membership.upsert).not.toHaveBeenCalled();
+    }
   });
 });
 
