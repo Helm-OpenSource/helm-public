@@ -18,6 +18,7 @@ const {
   ensureWorkspaceCommercialFoundationMock: vi.fn(),
   syncWorkspaceAccessStateMock: vi.fn(),
   dbMock: {
+    $executeRaw: vi.fn(),
     authSession: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -62,11 +63,13 @@ vi.mock("@/lib/billing/foundation", () => ({
 
 import {
   ACTIVE_WORKSPACE_COOKIE,
+  MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
   AUTH_SESSION_REVOKE_SCOPES,
   AUTH_SESSION_SCOPE_REVOKED_AUDIT_ACTION,
   AUTH_SESSION_WORKSPACE_REALIGNED_AUDIT_ACTION,
   buildAuthSessionRevokeConsistencySummary,
   SESSION_ID_COOKIE,
+  activateMembershipIfInvited,
   buildAuthSessionRevokePreviewVsExecutedDelta,
   buildAuthSessionRevokeScopePreview,
   clearSession,
@@ -213,8 +216,47 @@ describe("auth session substrate", () => {
     writeAuditLogMock.mockResolvedValue(undefined);
     ensureWorkspaceCommercialFoundationMock.mockResolvedValue(undefined);
     syncWorkspaceAccessStateMock.mockResolvedValue(null);
+    dbMock.$executeRaw.mockResolvedValue(0);
     dbMock.membership.updateMany.mockResolvedValue({ count: 0 });
     dbMock.authSession.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it("activates an invited membership with one atomic conditional UPDATE", async () => {
+    dbMock.$executeRaw.mockResolvedValue(1);
+    dbMock.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      status: MembershipStatus.ACTIVE,
+    });
+
+    const membership = await activateMembershipIfInvited({
+      workspaceId: "workspace-1",
+      userId: "user-1",
+    });
+
+    expect(dbMock.membership.updateMany).not.toHaveBeenCalled();
+    expect(dbMock.$executeRaw).toHaveBeenCalledTimes(1);
+    const [query, ...values] = dbMock.$executeRaw.mock.calls[0] ?? [];
+    expect(Array.from(query as TemplateStringsArray).join("?")).toContain(
+      "UPDATE `Membership`",
+    );
+    expect(Array.from(query as TemplateStringsArray).join("?")).toContain(
+      "AND `status` = ?",
+    );
+    expect(values).toEqual([
+      MembershipStatus.ACTIVE,
+      "workspace-1",
+      "user-1",
+      MembershipStatus.INVITED,
+    ]);
+    expect(writeAuditLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
+      }),
+    );
+    expect(membership).toEqual(
+      expect.objectContaining({ status: MembershipStatus.ACTIVE }),
+    );
   });
 
   it("uses the DB-backed auth session as the current user truth and ignores the legacy email cookie", async () => {

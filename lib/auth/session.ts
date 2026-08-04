@@ -614,17 +614,19 @@ function readMembership(input: { workspaceId: string; userId: string }) {
 }
 
 async function markInvitedMembershipActive(input: { workspaceId: string; userId: string }) {
-  return db.membership.updateMany({
-    where: {
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      status: MembershipStatus.INVITED,
-    },
-    data: {
-      status: MembershipStatus.ACTIVE,
-      joinedAt: new Date(),
-    },
-  });
+  // Keep the INVITED pre-state in the UPDATE itself. Prisma's MySQL updateMany
+  // path can select ids first and then update by id, so its count is not a sound
+  // compare-and-swap result under concurrency.
+  const count = await db.$executeRaw`
+    UPDATE \`Membership\`
+       SET \`status\` = ${MembershipStatus.ACTIVE},
+           \`joinedAt\` = UTC_TIMESTAMP(3),
+           \`updatedAt\` = UTC_TIMESTAMP(3)
+     WHERE \`workspaceId\` = ${input.workspaceId}
+       AND \`userId\` = ${input.userId}
+       AND \`status\` = ${MembershipStatus.INVITED}
+  `;
+  return { count };
 }
 
 export const MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION = "MEMBERSHIP_AUTO_ACTIVATED_ON_FIRST_USE";

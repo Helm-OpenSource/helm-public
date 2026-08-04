@@ -29,9 +29,8 @@
  *
  * A call site is a finding when ALL of the following hold:
  *
- *   1. It is `<client>.<delegate>.updateMany({ where: {...}, ... })`, awaited
- *      and bound to a variable (either `const x = await ...` or
- *      `const { count } = await ...`).
+ *   1. It is `<client>.<delegate>.updateMany({ where: {...}, ... })` whose
+ *      affected-row count is consumed locally or returned to an unseen caller.
  *   2. Its `where` carries at least one STATE PREDICATE field (see below) —
  *      i.e. the caller is asserting a pre-state, not merely addressing a row.
  *   3. The result count is read as a decision: `x.count <op> <number>` for any
@@ -131,7 +130,13 @@
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 import ts from "typescript";
@@ -341,11 +346,15 @@ export function parseCheckConstrainedColumns(
 
 function readMigrationSql(repoRoot: string): string {
   const root = path.join(repoRoot, MIGRATIONS_DIR);
+  if (!existsSync(root)) return "";
   let entries: string[];
   try {
     entries = readdirSync(root);
-  } catch {
-    return "";
+  } catch (error) {
+    throw new Error(
+      `conditional-update-cas: cannot traverse migrations at ${MIGRATIONS_DIR}`,
+      { cause: error },
+    );
   }
   const chunks: string[] = [];
   for (const entry of entries.sort()) {
@@ -359,9 +368,14 @@ function readMigrationSql(repoRoot: string): string {
       } else if (entry.endsWith(".sql")) {
         chunks.push(readFileSync(absolute, "utf8"));
       }
-    } catch {
-      // A migration directory that cannot be read contributes no rule (c)
-      // columns; rules (a) and (b) still apply.
+    } catch (error) {
+      throw new Error(
+        `conditional-update-cas: cannot read migration entry ${path.join(
+          MIGRATIONS_DIR,
+          entry,
+        )}`,
+        { cause: error },
+      );
     }
   }
   return chunks.join("\n");
@@ -417,11 +431,14 @@ export function buildStatePredicateIndex(
 }
 
 function loadStatePredicateIndex(repoRoot: string): StatePredicateIndex {
-  let schemaText = "";
+  let schemaText: string;
   try {
     schemaText = readFileSync(path.join(repoRoot, SCHEMA_PATH), "utf8");
-  } catch {
-    schemaText = "";
+  } catch (error) {
+    throw new Error(
+      `conditional-update-cas: cannot read Prisma schema at ${SCHEMA_PATH}`,
+      { cause: error },
+    );
   }
   return buildStatePredicateIndex(schemaText, readMigrationSql(repoRoot));
 }
@@ -1143,8 +1160,7 @@ function enclosingTransaction(
  *              element); the count read is then searched for by that name.
  *   "inline" — `.count` is taken directly off the call, so the read IS the
  *              consumption and no name exists.
- *   null     — the result is discarded, or handed to a caller. See the header
- *              for why a decision made in another function is out of scope.
+ *   null     — the result is discarded entirely.
  *
  * Every wrapper that does not change the value is unwrapped first. The old
  * version looked at exactly one parent (after an `await`) and required a
@@ -1205,6 +1221,13 @@ function resultConsumption(call: ts.CallExpression): ResultConsumption | null {
 
   if (ts.isVariableDeclaration(current)) {
     return bindingFromName(current.name);
+  }
+
+  // A helper that returns the whole BatchPayload delegates the count decision
+  // beyond this lexical scan. Treat that as consumed so extract-method cannot
+  // erase a finding without fixing the underlying write.
+  if (ts.isReturnStatement(current)) {
+    return { kind: "inline" };
   }
 
   // `claimed = await ...` into an already-declared variable.
@@ -1452,6 +1475,16 @@ function findConditionalUpdateCasSites(
     true,
     scriptKindFor(relativeFile),
   );
+  const parseDiagnostics = (
+    source as ts.SourceFile & {
+      readonly parseDiagnostics?: readonly ts.Diagnostic[];
+    }
+  ).parseDiagnostics;
+  if (parseDiagnostics && parseDiagnostics.length > 0) {
+    throw new Error(
+      `conditional-update-cas: cannot analyze TypeScript with parse errors in ${relativeFile}`,
+    );
+  }
   const raw: Omit<ConditionalUpdateCasFinding, "occurrence" | "key">[] = [];
 
   // FAIL-CLOSED IS A PATTERN HERE, NOT A BRANCH.
@@ -1620,11 +1653,15 @@ function findConditionalUpdateCasSites(
 // ---------------------------------------------------------------------------
 
 function listFiles(root: string): string[] {
+  if (!existsSync(root)) return [];
   let entries: string[];
   try {
     entries = readdirSync(root);
-  } catch {
-    return [];
+  } catch (error) {
+    throw new Error(
+      `conditional-update-cas: cannot traverse scan root ${root}`,
+      { cause: error },
+    );
   }
   const files: string[] = [];
   for (const entry of entries.sort()) {

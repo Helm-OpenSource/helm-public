@@ -1369,6 +1369,63 @@ export async function claim() {
   });
 });
 
+describe("fail-closed scan boundaries", () => {
+  it("flags an updateMany result returned directly to an unseen caller", () => {
+    const root = sandbox({
+      "lib/returned-helper.ts": `
+export async function claim() {
+  return db.thing.updateMany({
+    where: { id: "x", lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+}
+`,
+    });
+
+    const violations = checkConditionalUpdateCas(root);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.resultVariable).toBe("<inline-count>");
+    expect(violations[0]?.reason).toBe("no-transaction");
+  });
+
+  it("throws when the Prisma schema cannot be read", () => {
+    const root = sandbox({ "lib/claim.ts": CAS_WITH_DERIVED_ENUM });
+    rmSync(path.join(root, "prisma/schema.prisma"));
+
+    expect(() => collectConditionalUpdateCasFindings(root)).toThrow(
+      /cannot read Prisma schema/u,
+    );
+  });
+
+  it("throws when an existing scan root cannot be traversed", () => {
+    const root = sandbox({
+      "lib/safe.ts": "export const safe = true;",
+      features: "this path is a file, not a directory",
+    });
+
+    expect(() => collectConditionalUpdateCasFindings(root)).toThrow(
+      /cannot traverse scan root/u,
+    );
+  });
+
+  it("throws instead of certifying a source file with parse errors", () => {
+    const root = sandbox({
+      "lib/broken.ts": `
+export async function claim( {
+  return db.thing.updateMany({
+    where: { lifecyclePhase: "PENDING" },
+    data: { lifecyclePhase: "CLAIMED" },
+  });
+}
+`,
+    });
+
+    expect(() => collectConditionalUpdateCasFindings(root)).toThrow(
+      /cannot analyze TypeScript/u,
+    );
+  });
+});
+
 describe("baseline reconciliation", () => {
   it("suppresses a baselined finding but still reports it when the baseline is ignored", () => {
     const root = sandbox({ "lib/claim.ts": CAS_WITH_DERIVED_ENUM });
