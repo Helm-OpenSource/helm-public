@@ -34,9 +34,10 @@
 //   5. CPV1-HYGIENE  — the synthetic loop suite and the operating-question
 //                      fixtures contain no phone/email/endpoint/secret-shaped
 //                      strings (synthetic identifiers only).
-//   6. CPV1-WIRING / CPV1-CI — package.json carries the frozen loop-suite and
-//                      gate commands inside the boundary chain, and the CI
-//                      workflow carries a non-skippable isolated MySQL job.
+//   6. CPV1-BOUNDARY / CPV1-WIRING / CPV1-CI — Public owns no reverse Overlay
+//                      pin or composition suite, package.json carries the
+//                      frozen loop-suite and gate commands inside the boundary
+//                      chain, and CI carries a non-skippable isolated MySQL job.
 //
 // Passing this gate is a statement that the SYNTHETIC reference loop is
 // formed on the public path. It is NOT customer initialization, NOT
@@ -97,6 +98,12 @@ const MANIFEST_FILE = "docs/public-docs-manifest.json";
 const TERMINOLOGY_GUARD = "scripts/check-caio-terminology.ts";
 const PACKAGE_FILE = "package.json";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
+const FORBIDDEN_PUBLIC_OVERLAY_COMPOSITION_FILES = [
+  "tools/caio-access-gateway/overlay-composition-contract.test.ts",
+  "tools/caio-access-gateway/overlay-composition-pin.json",
+  "tools/caio-access-gateway/overlay-composition-types.ts",
+  "vitest.overlay-contract.config.ts",
+] as const;
 
 const REQUIRED_STATUS_TOKENS = [
   "Helm CAIO Pro V1",
@@ -175,8 +182,6 @@ const EXPECTED_GATE_COMMAND =
   "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts";
 
 const REQUIRED_CI_TOKENS = [
-  "caio-overlay-composition-contract:",
-  "HELM_OVERLAYS_READ_TOKEN",
   "caio-pro-v1-mysql:",
   "MYSQL_DATABASE: helm_caio_pro_v1_ci",
   // The connection string is minted at runtime and injected through
@@ -187,6 +192,13 @@ const REQUIRED_CI_TOKENS = [
   "CAIO_PRO_V1_TEST_DATABASE_NAME: helm_caio_pro_v1_ci",
   "npx tsx prisma/setup-db.ts prepare",
   "npm run test:caio-pro-v1:mysql",
+] as const;
+
+const FORBIDDEN_PRIVATE_OVERLAY_CI_TOKENS = [
+  ["caio", "-overlay-composition-contract:"].join(""),
+  ["repository: Helm", "-Developers/helm", "-overlays"].join(""),
+  "HELM_OVERLAYS_READ",
+  "HELM_OVERLAYS_ROOT",
 ] as const;
 
 // A committed `scheme://user:password@host` literal. Runtime-composed URLs use
@@ -724,13 +736,24 @@ export function checkCaioProV1FrozenLiterals(): CaioProV1Violation[] {
 
 // ---------------------------------------------------------------------------
 // Repository-relative static checks (CPV1-DOCS / FIREWALL / HYGIENE /
-// WIRING / CI). Fixture-testable via repoRoot.
+// BOUNDARY / WIRING / CI). Fixture-testable via repoRoot.
 // ---------------------------------------------------------------------------
 
 export function checkCaioProV1Static(
   repoRoot = process.cwd(),
 ): CaioProV1Violation[] {
   const violations: CaioProV1Violation[] = [];
+
+  for (const file of FORBIDDEN_PUBLIC_OVERLAY_COMPOSITION_FILES) {
+    if (existsSync(path.join(repoRoot, file))) {
+      violations.push({
+        rule: "CPV1-BOUNDARY",
+        file,
+        detail:
+          "Public Core must not own an Overlay pin or reverse-composition suite; the downstream Overlay gate owns cross-repository composition",
+      });
+    }
+  }
 
   for (const doc of REQUIRED_DOCS) {
     if (!existsSync(path.join(repoRoot, doc))) {
@@ -914,6 +937,18 @@ export function checkCaioProV1Static(
         });
       }
     }
+    if (
+      FORBIDDEN_PRIVATE_OVERLAY_CI_TOKENS.some((token) =>
+        workflowContent.includes(token),
+      )
+    ) {
+      violations.push({
+        rule: "CPV1-CI",
+        file: CI_WORKFLOW,
+        detail:
+          "Public CI must not read a private Overlay repository or accept credentials for one; cross-repository composition is owned by the downstream Overlay gate",
+      });
+    }
     if (COMMITTED_CREDENTIAL_URL.test(workflowContent)) {
       violations.push({
         rule: "CPV1-CI",
@@ -933,42 +968,6 @@ export function checkCaioProV1Static(
           file: CI_WORKFLOW,
           detail: "caio-pro-v1-mysql job must not be skippable",
         });
-      }
-    }
-    const compositionJobStart = workflowContent.indexOf(
-      "caio-overlay-composition-contract:",
-    );
-    if (compositionJobStart >= 0) {
-      const rest = workflowContent.slice(compositionJobStart);
-      const nextJob = rest.slice(1).search(/\n {2}[a-z][a-z0-9-]*:\n/u);
-      const jobBlock = nextJob >= 0 ? rest.slice(0, nextJob + 1) : rest;
-      if (!/\n {4}permissions:\n {6}contents: read\s*(?:\n|$)/u.test(jobBlock)) {
-        violations.push({
-          rule: "CPV1-CI",
-          file: CI_WORKFLOW,
-          detail:
-            "caio-overlay-composition-contract must declare least-privilege contents: read permissions",
-        });
-      }
-
-      const privateToken =
-        "token: ${{ secrets.HELM_OVERLAYS_READ_TOKEN }}";
-      const privateTokenIndex = jobBlock.indexOf(privateToken);
-      if (privateTokenIndex >= 0) {
-        const stepStart = jobBlock.lastIndexOf("\n      - ", privateTokenIndex);
-        const nextStep = jobBlock.indexOf("\n      - ", privateTokenIndex);
-        const checkoutStep = jobBlock.slice(
-          Math.max(0, stepStart),
-          nextStep >= 0 ? nextStep : undefined,
-        );
-        if (!/\n {10}persist-credentials:\s*false\s*(?:\n|$)/u.test(checkoutStep)) {
-          violations.push({
-            rule: "CPV1-CI",
-            file: CI_WORKFLOW,
-            detail:
-              "the private Overlay checkout must set persist-credentials: false so PR-controlled steps cannot recover its read token",
-          });
-        }
       }
     }
   }

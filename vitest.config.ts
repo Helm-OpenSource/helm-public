@@ -37,14 +37,6 @@ export default defineConfig({
       "scripts/**/*.test.ts",
       "tools/**/*.test.ts",
     ],
-    exclude: [
-      "tests/e2e/**",
-      // Runs against an EXTERNAL helm-overlays checkout at a pinned commit and
-      // fails when it is absent — which is right for its own gate and wrong
-      // for the ordinary suite, where it would make every local run depend on
-      // a second repository being on disk. It has its own config and its own
-      // CI job; see vitest.overlay-contract.config.ts.
-      "tools/caio-access-gateway/overlay-composition-contract.test.ts",
-    ],
+    exclude: ["tests/e2e/**"],
   },
 });

@@ -28,10 +28,10 @@ import {
   createCaioMountFixturePorts,
 } from "@/tools/caio-access-gateway/mount-fixture";
 
-// The mount fixture is SHARED with the Public↔Overlay contract suite. Two
-// copies of these deployment-input doubles would drift, and a contract test
-// standing on its own private idea of the ports would be asserting against a
-// composition nobody deploys.
+// The mount fixture is also consumed by the downstream Overlay-owned
+// composition suite. Two copies of these deployment-input doubles would drift,
+// and a contract test standing on its own private idea of the ports would be
+// asserting against a composition nobody deploys.
 const CLIENT_ADDRESS = CAIO_MOUNT_FIXTURE_CLIENT_ADDRESS;
 const FINGERPRINT = CAIO_MOUNT_FIXTURE_FINGERPRINT;
 const PEER: WorkBuddyMtlsPeer = Object.freeze({

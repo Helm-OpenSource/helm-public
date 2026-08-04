@@ -1,6 +1,0 @@
-{
-  "$comment": "The EXACT helm-overlays commit the Public↔Overlay composition contract is verified against. Moving it is a deliberate act: the test re-runs against the new Overlay composition, and a mismatch between this value and the checkout's HEAD fails the gate rather than silently testing whatever happened to be on disk.",
-  "repository": "Helm-Developers/helm-overlays",
-  "commit": "9a8aed2c4d24155874cc72ebde2eb4936d45b12b",
-  "compositionModule": "overlays/helm-self/lib/workbuddy-lan/https-gateway.ts"
-}
