@@ -896,6 +896,94 @@ describe("caio-pro-v1 aggregate gate", () => {
     },
   );
 
+  it.each([
+    ['echo "$(./ops/fetch)"', "ops/fetch"],
+    ["echo `./ops/fetch`", "ops/fetch"],
+    ["(bash ops/fetch.sh)", "ops/fetch.sh"],
+  ])("resolves a nested shell helper entry: %s", (runCommand, helperFile) => {
+    withFixture(
+      {
+        ".github/workflows/nested-entry.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          `      - run: ${JSON.stringify(runCommand)}`,
+          "",
+        ].join("\n"),
+        "ops/fetch":
+          "#!/usr/bin/env bash\ngh api repos/example/private/tarball/main\n",
+        "ops/fetch.sh":
+          "gh api repos/example/private/tarball/main > private.tar.gz\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === helperFile &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each(['"$HELPER"', "env -C ops bash fetch.sh"])(
+    "fails closed for an unresolved command context: %s",
+    (runCommand) => {
+      withFixture(
+        {
+          ".github/workflows/unresolved-entry.yml": [
+            "jobs:",
+            "  verify:",
+            "    steps:",
+            `      - run: ${JSON.stringify(runCommand)}`,
+            "",
+          ].join("\n"),
+        },
+        (root) => {
+          expect(
+            checkCaioProV1Static(root).some(
+              (violation) =>
+                violation.file === ".github/workflows/unresolved-entry.yml" &&
+                violation.detail.includes("could not be resolved statically"),
+            ),
+          ).toBe(true);
+        },
+      );
+    },
+  );
+
+  it("fails closed when a reachable command changes cwd", () => {
+    withFixture(
+      {
+        ".github/workflows/cd-npm.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: cd ops && npm run acquire-private",
+          "",
+        ].join("\n"),
+        "package.json": JSON.stringify({
+          scripts: { "acquire-private": "echo benign-root-script" },
+        }),
+        "ops/package.json": JSON.stringify({
+          scripts: { "acquire-private": "node network.mjs" },
+        }),
+        "ops/network.mjs":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/cd-npm.yml" &&
+              violation.detail.includes("working directory mutation"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it("rejects a workflow-reachable module helper that uses fetch", () => {
     withFixture(
       {
@@ -1945,6 +2033,96 @@ describe("caio-pro-v1 aggregate gate", () => {
   });
 
   it.each([
+    [
+      "workspace postinstall",
+      "npm ci",
+      {},
+      { postinstall: "node network.mjs" },
+      "ops/network.mjs",
+    ],
+    [
+      "root dependencies",
+      "npm ci",
+      { dependencies: "node network.mjs" },
+      {},
+      "network.mjs",
+    ],
+    [
+      "workspace plus included root",
+      "npm ci --workspace ops --include-workspace-root",
+      { postinstall: "node network.mjs" },
+      {},
+      "network.mjs",
+    ],
+  ])(
+    "expands npm install lifecycle for %s",
+    (_label, runCommand, rootScripts, workspaceScripts, expectedHelper) => {
+      withFixture(
+        {
+          ".github/workflows/npm-lifecycle.yml": [
+            "jobs:",
+            "  verify:",
+            "    steps:",
+            `      - run: ${JSON.stringify(runCommand)}`,
+            "",
+          ].join("\n"),
+          "package.json": JSON.stringify({
+            workspaces: ["ops"],
+            scripts: rootScripts,
+          }),
+          "ops/package.json": JSON.stringify({
+            name: "ops",
+            scripts: workspaceScripts,
+          }),
+          "network.mjs":
+            'await fetch("https://example.test/private.tar.gz");\n',
+          "ops/network.mjs":
+            'await fetch("https://example.test/private.tar.gz");\n',
+        },
+        (root) => {
+          expect(
+            checkCaioProV1Static(root).some(
+              (violation) =>
+                violation.file === expectedHelper &&
+                violation.detail.includes("workflow-reachable helper"),
+            ),
+          ).toBe(true);
+        },
+      );
+    },
+  );
+
+  it("expands a named workspace selected through a static wildcard", () => {
+    withFixture(
+      {
+        ".github/workflows/npm-workspace-glob.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npm ci --workspace @example/ops",
+          "",
+        ].join("\n"),
+        "package.json": JSON.stringify({ workspaces: ["packages/*"] }),
+        "packages/ops/package.json": JSON.stringify({
+          name: "@example/ops",
+          scripts: { postinstall: "node network.mjs" },
+        }),
+        "packages/ops/network.mjs":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "packages/ops/network.mjs" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each([
     "npm run acquire-private --workspace ops",
     "npm --prefix ops run acquire-private",
   ])("resolves an npm package execution context: %s", (runCommand) => {
@@ -2197,6 +2375,102 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("uses the most specific matching tsconfig paths pattern", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-specific-path.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npx tsx ops/entry.ts",
+          "",
+        ].join("\n"),
+        "tsconfig.json": JSON.stringify({
+          compilerOptions: {
+            baseUrl: ".",
+            paths: {
+              "@/*": ["broad/*"],
+              "@/remote/*": ["specific/*"],
+            },
+          },
+        }),
+        "ops/entry.ts": 'import "@/remote/network";\n',
+        "broad/remote/network.ts": "export const benign = true;\n",
+        "specific/network.ts":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "specific/network.ts" &&
+              violation.detail.includes("workflow-reachable helper"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("fails closed for TSX_TSCONFIG_PATH environment selection", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-env-config.yml": [
+          "env:",
+          "  TSX_TSCONFIG_PATH: ops/selected.json",
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npx tsx ops/entry.ts",
+          "",
+        ].join("\n"),
+        "ops/selected.json": JSON.stringify({
+          compilerOptions: {
+            baseUrl: "..",
+            paths: { "@ops/*": ["ops/*"] },
+          },
+        }),
+        "ops/entry.ts": 'import "@ops/network";\n',
+        "ops/network.ts":
+          'await fetch("https://example.test/private.tar.gz");\n',
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === ".github/workflows/helper-env-config.yml" &&
+              violation.detail.includes("TSX_TSCONFIG_PATH"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("fails closed when a reachable helper selects TSX_TSCONFIG_PATH", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-env-config.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: bash ops/entry.sh",
+          "",
+        ].join("\n"),
+        "ops/entry.sh":
+          "TSX_TSCONFIG_PATH=ops/selected.json npx tsx ops/entry.ts\n",
+        "ops/entry.ts": "export const benign = true;\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/entry.sh" &&
+              violation.detail.includes("TSX_TSCONFIG_PATH"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it.each(["execFileSync", "spawnSync"])(
     "checks canonical %s argv arrays in a reachable Node helper",
     (callName) => {
@@ -2303,6 +2577,67 @@ describe("caio-pro-v1 aggregate gate", () => {
             (violation) =>
               violation.file === ".github/workflows/inline-child-process.yml" &&
               violation.detail.includes("inline node evaluation"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it.each([
+    ["fetch", "node -e 'fetch(\"https://example.test/private.tar.gz\")'\n"],
+    [
+      "child process",
+      'node -e \'require("node:child_process").execFileSync("gh", ["api", "repos/example/private/tarball/main"])\'\n',
+    ],
+  ])(
+    "rejects %s repository access reached through a shell helper",
+    (_label, shellCommand) => {
+      withFixture(
+        {
+          ".github/workflows/helper-inline-node.yml": [
+            "jobs:",
+            "  verify:",
+            "    steps:",
+            "      - run: bash ops/entry.sh",
+            "",
+          ].join("\n"),
+          "ops/entry.sh": shellCommand,
+        },
+        (root) => {
+          expect(
+            checkCaioProV1Static(root).some(
+              (violation) =>
+                violation.file === "ops/entry.sh" &&
+                violation.detail.includes("fetch remote repositories"),
+            ),
+          ).toBe(true);
+        },
+      );
+    },
+  );
+
+  it("rejects repository access through a CommonJS property alias", () => {
+    withFixture(
+      {
+        ".github/workflows/helper-commonjs-property.yml": [
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: node ops/argv.cjs",
+          "",
+        ].join("\n"),
+        "ops/argv.cjs": [
+          'const run = require("node:child_process").execFileSync;',
+          'run("gh", ["api", "repos/example/private/tarball/main"]);',
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.file === "ops/argv.cjs" &&
+              violation.detail.includes("workflow-reachable helper"),
           ),
         ).toBe(true);
       },
@@ -2625,6 +2960,22 @@ describe("caio-pro-v1 aggregate gate", () => {
       "reflective cwd replacement",
       [
         'Reflect.set(process, "cwd", () => process.env.CROSS_REPO_ROOT);',
+        "const projectRoot = process.cwd();",
+        "async function load() {",
+      ],
+    ],
+    [
+      "passed process reference",
+      [
+        "move(process);",
+        "const projectRoot = process.cwd();",
+        "async function load() {",
+      ],
+    ],
+    [
+      "object-assigned cwd replacement",
+      [
+        "Object.assign(process, { cwd: () => process.env.CROSS_REPO_ROOT });",
         "const projectRoot = process.cwd();",
         "async function load() {",
       ],

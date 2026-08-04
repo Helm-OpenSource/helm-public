@@ -759,6 +759,17 @@ function hasUnshadowedGlobalProcessBinding(source: ts.SourceFile): boolean {
       const target = node.arguments[0];
       const member = node.arguments[1];
       if (
+        node.arguments.some(
+          (argument) =>
+            isGlobalProcessReference(argument) ||
+            isProcessMemberReference(argument, "cwd") ||
+            isProcessMemberReference(argument, "chdir"),
+        )
+      ) {
+        unsafe = true;
+        return;
+      }
+      if (
         target !== undefined &&
         isGlobalProcessReference(target) &&
         member !== undefined &&
@@ -1154,7 +1165,10 @@ type StaticCommandInvocation = Readonly<{
 
 // This tokenizer only recovers static command boundaries and quoted words.
 // Dynamic entries remain unresolved; it is not an execution-capable shell parser.
-function tokenizeStaticShellCommands(source: string): Readonly<{
+function tokenizeStaticShellCommands(
+  source: string,
+  recursionDepth = 0,
+): Readonly<{
   commands: readonly Readonly<{
     tokens: readonly string[];
     complete: boolean;
@@ -1177,6 +1191,69 @@ function tokenizeStaticShellCommands(source: string): Readonly<{
     command = [];
     commandComplete = true;
   };
+  const readParenthesizedSource = (
+    openIndex: number,
+  ): Readonly<{ body: string; endIndex: number; complete: boolean }> => {
+    let depth = 1;
+    let nestedQuote: "single" | "double" | null = null;
+    for (let index = openIndex + 1; index < source.length; index += 1) {
+      const character = source[index]!;
+      const next = source[index + 1];
+      if (nestedQuote === "single") {
+        if (character === "'") nestedQuote = null;
+        continue;
+      }
+      if (character === "\\") {
+        index += next === undefined ? 0 : 1;
+        continue;
+      }
+      if (character === "'") {
+        if (nestedQuote === null) nestedQuote = "single";
+        continue;
+      }
+      if (character === '"') {
+        nestedQuote = nestedQuote === "double" ? null : "double";
+        continue;
+      }
+      if (
+        nestedQuote === "double" &&
+        (character === "$" || character === "<" || character === ">") &&
+        next === "("
+      ) {
+        depth += 1;
+        index += 1;
+        continue;
+      }
+      if (nestedQuote === "double") {
+        if (character === ")" && depth > 1) depth -= 1;
+        continue;
+      }
+      if (character === "(") depth += 1;
+      if (character !== ")") continue;
+      depth -= 1;
+      if (depth === 0) {
+        return {
+          body: source.slice(openIndex + 1, index),
+          endIndex: index,
+          complete: true,
+        };
+      }
+    }
+    return {
+      body: source.slice(openIndex + 1),
+      endIndex: source.length - 1,
+      complete: false,
+    };
+  };
+  const appendNestedCommands = (nestedSource: string, complete: boolean) => {
+    if (!complete || recursionDepth >= 32) {
+      commandComplete = false;
+      return;
+    }
+    commands.push(
+      ...tokenizeStaticShellCommands(nestedSource, recursionDepth + 1).commands,
+    );
+  };
 
   for (let index = 0; index < source.length; index += 1) {
     const character = source[index]!;
@@ -1195,6 +1272,26 @@ function tokenizeStaticShellCommands(source: string): Readonly<{
           token += next;
           index += 1;
         }
+      } else if (
+        (character === "$" || character === "<" || character === ">") &&
+        next === "("
+      ) {
+        const nested = readParenthesizedSource(index + 1);
+        appendNestedCommands(nested.body, nested.complete);
+        token += `${character}(...)`;
+        index = nested.endIndex;
+      } else if (character === "`") {
+        let endIndex = index + 1;
+        while (
+          endIndex < source.length &&
+          (source[endIndex] !== "`" || source[endIndex - 1] === "\\")
+        ) {
+          endIndex += 1;
+        }
+        const complete = endIndex < source.length;
+        appendNestedCommands(source.slice(index + 1, endIndex), complete);
+        token += "`...`";
+        index = complete ? endIndex : source.length - 1;
       } else {
         token += character;
       }
@@ -1222,32 +1319,24 @@ function tokenizeStaticShellCommands(source: string): Readonly<{
       (character === "$" || character === "<" || character === ">") &&
       next === "("
     ) {
-      token += `${character}(`;
-      index += 1;
-      let depth = 1;
-      while (index + 1 < source.length && depth > 0) {
-        index += 1;
-        const nested = source[index]!;
-        token += nested;
-        if (nested === "(") depth += 1;
-        else if (nested === ")") depth -= 1;
-      }
-      if (depth !== 0) commandComplete = false;
+      const nested = readParenthesizedSource(index + 1);
+      appendNestedCommands(nested.body, nested.complete);
+      token += `${character}(...)`;
+      index = nested.endIndex;
       continue;
     }
     if (character === "`") {
-      token += character;
-      let closed = false;
-      while (index + 1 < source.length) {
-        index += 1;
-        const nested = source[index]!;
-        token += nested;
-        if (nested === "`" && source[index - 1] !== "\\") {
-          closed = true;
-          break;
-        }
+      let endIndex = index + 1;
+      while (
+        endIndex < source.length &&
+        (source[endIndex] !== "`" || source[endIndex - 1] === "\\")
+      ) {
+        endIndex += 1;
       }
-      if (!closed) commandComplete = false;
+      const complete = endIndex < source.length;
+      appendNestedCommands(source.slice(index + 1, endIndex), complete);
+      token += "`...`";
+      index = complete ? endIndex : source.length - 1;
       continue;
     }
     if (character === "#" && token === "" && command.length === 0) {
@@ -1264,6 +1353,10 @@ function tokenizeStaticShellCommands(source: string): Readonly<{
     if (character === ";" || character === "|" || character === "&") {
       finishCommand();
       while (source[index + 1] === character) index += 1;
+      continue;
+    }
+    if (character === "(" || character === ")") {
+      finishCommand();
       continue;
     }
     token += character;
@@ -1370,6 +1463,7 @@ type NpmInvocation = Readonly<{
   scriptName: string | null;
   prefix: string | null;
   workspace: string | null;
+  includeWorkspaceRoot: boolean;
   ignoreScripts: boolean;
   unresolved: boolean;
 }>;
@@ -1382,6 +1476,7 @@ function extractNpmInvocations(command: string): NpmInvocation[] {
     if (path.posix.basename(invocation.executable) !== "npm") continue;
     let prefix: string | null = null;
     let workspace: string | null = null;
+    let includeWorkspaceRoot = false;
     let ignoreScripts = false;
     let unresolved = invocation.unresolved;
     const positionals: string[] = [];
@@ -1416,8 +1511,12 @@ function extractNpmInvocations(command: string): NpmInvocation[] {
         ignoreScripts = true;
         continue;
       }
+      if (argument === "--include-workspace-root") {
+        includeWorkspaceRoot = true;
+        continue;
+      }
       if (
-        /^(?:--silent|--if-present|--foreground-scripts|--include-workspace-root|--no-audit|--no-fund)$/u.test(
+        /^(?:--silent|--if-present|--foreground-scripts|--no-audit|--no-fund)$/u.test(
           argument,
         )
       ) {
@@ -1440,6 +1539,7 @@ function extractNpmInvocations(command: string): NpmInvocation[] {
         scriptName: null,
         prefix,
         workspace,
+        includeWorkspaceRoot,
         ignoreScripts,
         unresolved,
       });
@@ -1454,6 +1554,7 @@ function extractNpmInvocations(command: string): NpmInvocation[] {
       scriptName: scriptName ?? null,
       prefix,
       workspace,
+      includeWorkspaceRoot,
       ignoreScripts,
       unresolved:
         unresolved ||
@@ -1557,6 +1658,7 @@ const NPM_INSTALL_LIFECYCLE_SCRIPTS = [
   "preprepare",
   "prepare",
   "postprepare",
+  "dependencies",
 ] as const;
 
 function resolveNpmInvocationCwd(
@@ -1598,57 +1700,131 @@ function resolveNpmInvocationCwd(
     return directWorkspace;
   }
 
-  const configuredWorkspaces = Array.isArray(rootPackage.manifest.workspaces)
-    ? rootPackage.manifest.workspaces
-    : isRecord(rootPackage.manifest.workspaces) &&
-        Array.isArray(rootPackage.manifest.workspaces.packages)
-      ? rootPackage.manifest.workspaces.packages
-      : [];
-  for (const configuredWorkspace of configuredWorkspaces) {
-    if (
-      typeof configuredWorkspace !== "string" ||
-      /[*?{}[\]]/u.test(configuredWorkspace)
-    ) {
-      continue;
-    }
-    const candidate = resolveWorkflowHelperPath(
-      rootPackage.cwd,
-      configuredWorkspace,
-    );
-    if (candidate === null) continue;
-    const packageFile = candidate
-      ? path.posix.join(candidate, PACKAGE_FILE)
-      : PACKAGE_FILE;
-    const content = read(repoRoot, packageFile);
-    if (content === null) continue;
-    try {
-      const manifest = JSON.parse(content) as unknown;
-      if (isRecord(manifest) && manifest.name === invocation.workspace) {
-        return candidate;
-      }
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  const workspacePackages = resolveDeclaredWorkspacePackages(
+    repoRoot,
+    rootPackage,
+  );
+  if (workspacePackages === null) return null;
+  return (
+    workspacePackages.find(
+      (workspacePackage) =>
+        workspacePackage.manifest.name === invocation.workspace,
+    )?.cwd ?? null
+  );
 }
 
-function extractLocalHelperPaths(command: string): string[] {
-  const helpers = new Set<string>();
-  const patterns = [
-    /(?:^|[;&|\n])[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:(?:command|exec|nohup)[ \t]+)?(?:(?:"(?:\/(?:usr\/)?bin\/)?env"|'(?:\/(?:usr\/)?bin\/)?env'|(?:\/(?:usr\/)?bin\/)?env)[ \t]+(?:-[A-Za-z-]+[ \t]+)*(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*)?(?:"(?:\/(?:usr\/)?bin\/)?(?:bash|sh|zsh)"|'(?:\/(?:usr\/)?bin\/)?(?:bash|sh|zsh)'|(?:\/(?:usr\/)?bin\/)?(?:bash|sh|zsh))[ \t]+(?:-[A-Za-z]+[ \t]+)*(?:"([^"\n]+)"|'([^'\n]+)'|([./A-Za-z0-9_-]+(?:\.(?:sh|bash|zsh))?))/gu,
-    /(?:^|[;&|\n])[ \t]*(?:env[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:source|\.)[ \t]+(?:"([^"\n]+)"|'([^'\n]+)'|([./A-Za-z0-9_-]+(?:\.(?:sh|bash|zsh))?))/gu,
-    /(?:^|[;&|\n])[ \t]*(?:env[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*(?:node|tsx)[ \t]+(?:(?:--import[ \t]+\S+|--[A-Za-z-]+(?:=\S+)?)[ \t]+)*(?:"([^"\n]+\.(?:[cm]?[jt]s|tsx))"|'([^'\n]+\.(?:[cm]?[jt]s|tsx))'|([./A-Za-z0-9_-]+\.(?:[cm]?[jt]s|tsx)))/gu,
-    /(?:^|[;&|\n])[ \t]*(?:env[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\n]*"|'[^'\n]*'|[^\s;&|]+)[ \t]+)*npx[ \t]+(?:--yes[ \t]+)?tsx[ \t]+(?:"([^"\n]+\.(?:[cm]?[jt]s|tsx))"|'([^'\n]+\.(?:[cm]?[jt]s|tsx))'|([./A-Za-z0-9_-]+\.(?:[cm]?[jt]s|tsx)))/gu,
-    /(?:^|[;&|\n])[ \t]*\.\/([A-Za-z0-9_./-]+(?:\.(?:sh|bash|zsh|[cm]?[jt]s|tsx))?)/gu,
-  ];
+function readNpmPackageAt(
+  repoRoot: string,
+  cwd: string,
+): NpmPackageResolution | null {
+  const packageFile = cwd ? path.posix.join(cwd, PACKAGE_FILE) : PACKAGE_FILE;
+  const packageContent = read(repoRoot, packageFile);
+  if (packageContent === null) return null;
+  try {
+    const manifest = JSON.parse(packageContent) as unknown;
+    if (
+      !isRecord(manifest) ||
+      (manifest.scripts !== undefined && !isRecord(manifest.scripts))
+    ) {
+      return null;
+    }
+    return {
+      cwd,
+      packageFile,
+      manifest,
+      scripts: isRecord(manifest.scripts) ? manifest.scripts : {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+function configuredWorkspacePatterns(
+  manifest: UnknownRecord,
+): readonly string[] | null {
+  if (manifest.workspaces === undefined) return [];
+  const patterns = Array.isArray(manifest.workspaces)
+    ? manifest.workspaces
+    : isRecord(manifest.workspaces) &&
+        Array.isArray(manifest.workspaces.packages)
+      ? manifest.workspaces.packages
+      : null;
+  return patterns !== null &&
+    patterns.every((pattern): pattern is string => typeof pattern === "string")
+    ? patterns
+    : null;
+}
+
+function resolveDeclaredWorkspacePackages(
+  repoRoot: string,
+  rootPackage: NpmPackageResolution,
+): readonly NpmPackageResolution[] | null {
+  const patterns = configuredWorkspacePatterns(rootPackage.manifest);
+  if (patterns === null) return null;
+  const packages = new Map<string, NpmPackageResolution>();
   for (const pattern of patterns) {
-    for (const match of command.matchAll(pattern)) {
-      const helper = match[1] ?? match[2] ?? match[3];
-      if (helper !== undefined) helpers.add(helper.replace(/^\.\//u, ""));
+    if (path.posix.isAbsolute(pattern) || /[`$?{}[\]]/u.test(pattern)) {
+      return null;
+    }
+    const starCount = [...pattern].filter(
+      (character) => character === "*",
+    ).length;
+    if (starCount === 0) {
+      const workspacePath = resolveWorkflowHelperPath(rootPackage.cwd, pattern);
+      if (workspacePath === null) return null;
+      const workspacePackage = readNpmPackageAt(repoRoot, workspacePath);
+      if (workspacePackage === null) return null;
+      packages.set(workspacePackage.packageFile, workspacePackage);
+      continue;
+    }
+    if (starCount !== 1 || !pattern.endsWith("/*")) return null;
+    const parentPattern = pattern.slice(0, -2);
+    const parent = resolveWorkflowHelperPath(rootPackage.cwd, parentPattern);
+    if (parent === null) return null;
+    const absoluteParent = path.join(repoRoot, parent);
+    if (!existsSync(absoluteParent)) return null;
+    for (const entry of readdirSync(absoluteParent, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const workspacePath = path.posix.join(parent, entry.name);
+      const workspacePackage = readNpmPackageAt(repoRoot, workspacePath);
+      if (workspacePackage !== null) {
+        packages.set(workspacePackage.packageFile, workspacePackage);
+      }
     }
   }
-  return [...helpers];
+  return [...packages.values()];
+}
+
+function resolveNpmInstallPackages(
+  repoRoot: string,
+  currentCwd: string,
+  invocation: NpmInvocation,
+): readonly NpmPackageResolution[] | null {
+  const rootCwd = resolveNpmInvocationCwd(repoRoot, currentCwd, {
+    ...invocation,
+    workspace: null,
+  });
+  if (rootCwd === null) return null;
+  const rootPackage = readNpmPackageAt(repoRoot, rootCwd);
+  if (rootPackage === null) return null;
+
+  if (invocation.workspace !== null) {
+    const selectedCwd = resolveNpmInvocationCwd(
+      repoRoot,
+      currentCwd,
+      invocation,
+    );
+    if (selectedCwd === null) return null;
+    const selectedPackage = readNpmPackageAt(repoRoot, selectedCwd);
+    if (selectedPackage === null) return null;
+    return invocation.includeWorkspaceRoot &&
+      selectedPackage.packageFile !== rootPackage.packageFile
+      ? [rootPackage, selectedPackage]
+      : [selectedPackage];
+  }
+
+  const workspaces = resolveDeclaredWorkspacePackages(repoRoot, rootPackage);
+  return workspaces === null ? null : [rootPackage, ...workspaces];
 }
 
 type LocalHelperReference = Readonly<{
@@ -1674,10 +1850,6 @@ function extractLocalHelperReferences(command: string): Readonly<{
       tsconfigPath,
     });
   };
-  for (const helperPath of extractLocalHelperPaths(command)) {
-    add(helperPath, null);
-  }
-
   const parseNodeLike = (
     args: readonly string[],
     allowTsconfig: boolean,
@@ -1724,11 +1896,15 @@ function extractLocalHelperReferences(command: string): Readonly<{
 
   for (const invocation of extractStaticCommandInvocations(command)) {
     const executable = path.posix.basename(invocation.executable);
-    const relevantExecutable =
-      /^(?:bash|sh|zsh|ksh|node|tsx|npx|npm|python(?:\d+(?:\.\d+)*)?|ruby|perl|php|bun|deno|pwsh|powershell)$/u.test(
-        executable,
-      ) || invocation.executable.startsWith("./");
-    unresolved ||= invocation.unresolved && relevantExecutable;
+    unresolved ||= invocation.unresolved;
+    if (executable === "source" || executable === ".") {
+      const helperPath = invocation.args.find(
+        (argument) => !argument.startsWith("-"),
+      );
+      if (helperPath === undefined) unresolved = true;
+      else add(helperPath, null);
+      continue;
+    }
     if (/^(?:bash|sh|zsh|ksh)$/u.test(executable)) {
       for (let index = 0; index < invocation.args.length; index += 1) {
         const argument = invocation.args[index]!;
@@ -1772,20 +1948,6 @@ function hasUnsupportedLocalInterpreter(command: string): boolean {
     /^(?:python(?:\d+(?:\.\d+)*)?|ruby|perl|php|bun|deno|pwsh|powershell)$/u.test(
       path.posix.basename(invocation.executable),
     ),
-  );
-}
-
-function hasUnresolvedHelperReference(command: string): boolean {
-  return (
-    /(?:^|[;&|\n]\s*)[ \t]*(?:(?:env[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=[^\s;&|]+[ \t]+)*(?:bash|sh|zsh)[ \t]+-[A-Za-z]*c\b/u.test(
-      command,
-    ) ||
-    /(?:^|[;&|\n]\s*)[ \t]*(?:(?:env[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=[^\s;&|]+[ \t]+)*(?:(?:bash|sh|zsh)[ \t]+(?:-[A-Za-z]+[ \t]+)*|(?:source|\.)[ \t]+)(?:["']?\$|`|\$\()/u.test(
-      command,
-    ) ||
-    /(?:^|[;&|\n]\s*)[ \t]*(?:(?:env[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=[^\s;&|]+[ \t]+)*(?:node|tsx)[ \t]+(?:(?:--import[ \t]+\S+|--[A-Za-z-]+(?:=\S+)?)[ \t]+)*(?:["']?\$|`|\$\()/u.test(
-      command,
-    )
   );
 }
 
@@ -1871,8 +2033,33 @@ function checkWorkflowReachableHelpers(
         });
       }
       if (
-        path.posix.basename(pendingCommand.sourceFile) === PACKAGE_FILE &&
-        (WORKFLOW_MANUAL_REMOTE_FETCH.test(pendingCommand.command) ||
+        !pendingCommand.d2LocalCloneAllowed &&
+        extractStaticCommandInvocations(pendingCommand.command).some(
+          (invocation) =>
+            /^(?:cd|pushd|popd)$/u.test(
+              path.posix.basename(invocation.executable),
+            ),
+        )
+      ) {
+        violations.push({
+          rule: "CPV1-CI",
+          file: pendingCommand.sourceFile,
+          detail:
+            "workflow-reachable working directory mutation could not be resolved statically",
+        });
+      }
+      if (/\bTSX_TSCONFIG_PATH\b/u.test(pendingCommand.command)) {
+        violations.push({
+          rule: "CPV1-CI",
+          file: pendingCommand.sourceFile,
+          detail:
+            "workflow TSX_TSCONFIG_PATH selection could not be resolved statically",
+        });
+      }
+      if (
+        (path.posix.basename(pendingCommand.sourceFile) === PACKAGE_FILE &&
+          WORKFLOW_MANUAL_REMOTE_FETCH.test(pendingCommand.command)) ||
+        (pendingCommand.sourceFile !== workflowFile &&
           hasInlineNodeFetch(pendingCommand.command))
       ) {
         violations.push({
@@ -1960,24 +2147,31 @@ function checkWorkflowReachableHelpers(
         }
         if (npmInvocation.kind === "install") {
           if (npmInvocation.ignoreScripts) continue;
-          const resolvedPackage = resolveNpmPackage(repoRoot, npmCwd);
-          if (resolvedPackage === null) {
+          const installPackages = resolveNpmInstallPackages(
+            repoRoot,
+            pendingCommand.cwd,
+            npmInvocation,
+          );
+          if (installPackages === null) {
             violations.push({
               rule: "CPV1-CI",
               file: pendingCommand.sourceFile,
-              detail: "workflow npm package could not be resolved",
+              detail:
+                "workflow npm install package graph could not be resolved",
             });
             continue;
           }
-          for (const lifecycleName of NPM_INSTALL_LIFECYCLE_SCRIPTS) {
-            const lifecycleCommand = resolvedPackage.scripts[lifecycleName];
-            if (typeof lifecycleCommand !== "string") continue;
-            pendingCommands.push({
-              command: lifecycleCommand,
-              cwd: resolvedPackage.cwd,
-              d2LocalCloneAllowed: false,
-              sourceFile: resolvedPackage.packageFile,
-            });
+          for (const installPackage of installPackages) {
+            for (const lifecycleName of NPM_INSTALL_LIFECYCLE_SCRIPTS) {
+              const lifecycleCommand = installPackage.scripts[lifecycleName];
+              if (typeof lifecycleCommand !== "string") continue;
+              pendingCommands.push({
+                command: lifecycleCommand,
+                cwd: installPackage.cwd,
+                d2LocalCloneAllowed: false,
+                sourceFile: installPackage.packageFile,
+              });
+            }
           }
           continue;
         }
@@ -2015,10 +2209,7 @@ function checkWorkflowReachableHelpers(
           }
         }
       }
-      if (
-        helperExtraction.unresolved ||
-        hasUnresolvedHelperReference(pendingCommand.command)
-      ) {
+      if (helperExtraction.unresolved) {
         violations.push({
           rule: "CPV1-CI",
           file: pendingCommand.sourceFile,
@@ -2045,7 +2236,9 @@ function checkWorkflowReachableHelpers(
       pendingCommands.push({
         command: blankWholeLineComments(content),
         cwd: helper.cwd,
-        d2LocalCloneAllowed: false,
+        d2LocalCloneAllowed:
+          helper.d2LocalCloneAllowed &&
+          isSafeLocalCloneHelper(helper.file, content),
         sourceFile: helper.file,
       });
     } else {
@@ -2280,28 +2473,49 @@ function resolveLocalModulePath(
   if (config === null) {
     return { kind: "unresolved" };
   }
-  for (const [pattern, targetValue] of Object.entries(config.paths)) {
-    if (!Array.isArray(targetValue)) continue;
-    const wildcardIndex = pattern.indexOf("*");
-    const prefix =
-      wildcardIndex < 0 ? pattern : pattern.slice(0, wildcardIndex);
-    const suffix = wildcardIndex < 0 ? "" : pattern.slice(wildcardIndex + 1);
-    if (
-      (wildcardIndex < 0 && moduleSpecifier !== pattern) ||
-      (wildcardIndex >= 0 &&
-        (!moduleSpecifier.startsWith(prefix) ||
-          !moduleSpecifier.endsWith(suffix)))
-    ) {
-      continue;
-    }
+  const matchingPathPatterns = Object.entries(config.paths)
+    .map(([pattern, targets]) => {
+      const wildcardIndex = pattern.indexOf("*");
+      if (
+        wildcardIndex !== pattern.lastIndexOf("*") ||
+        !Array.isArray(targets)
+      ) {
+        return null;
+      }
+      const prefix =
+        wildcardIndex < 0 ? pattern : pattern.slice(0, wildcardIndex);
+      const suffix = wildcardIndex < 0 ? "" : pattern.slice(wildcardIndex + 1);
+      const matches =
+        wildcardIndex < 0
+          ? moduleSpecifier === pattern
+          : moduleSpecifier.startsWith(prefix) &&
+            moduleSpecifier.endsWith(suffix) &&
+            moduleSpecifier.length >= prefix.length + suffix.length;
+      return matches
+        ? { pattern, targets, wildcardIndex, prefix, suffix }
+        : null;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((left, right) => {
+      const leftExact = left.wildcardIndex < 0 ? 1 : 0;
+      const rightExact = right.wildcardIndex < 0 ? 1 : 0;
+      return (
+        rightExact - leftExact ||
+        right.prefix.length - left.prefix.length ||
+        right.suffix.length - left.suffix.length ||
+        left.pattern.localeCompare(right.pattern)
+      );
+    });
+  const selectedPathPattern = matchingPathPatterns[0];
+  if (selectedPathPattern !== undefined) {
     const wildcard =
-      wildcardIndex < 0
+      selectedPathPattern.wildcardIndex < 0
         ? ""
         : moduleSpecifier.slice(
-            prefix.length,
-            moduleSpecifier.length - suffix.length,
+            selectedPathPattern.prefix.length,
+            moduleSpecifier.length - selectedPathPattern.suffix.length,
           );
-    for (const target of targetValue) {
+    for (const target of selectedPathPattern.targets) {
       if (typeof target !== "string") return { kind: "unresolved" };
       const base = path.posix.normalize(
         path.posix.join(config.pathsBase, target.replace("*", wildcard)),
@@ -2394,6 +2608,31 @@ function helperHasRemoteRepositoryAccess(
             element.name.text,
             normalizedImportedName,
           );
+        }
+      }
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer !== undefined
+    ) {
+      const initializer = unwrapTransparentExpression(node.initializer);
+      if (
+        ts.isPropertyAccessExpression(initializer) ||
+        (ts.isElementAccessExpression(initializer) &&
+          initializer.argumentExpression !== undefined &&
+          ts.isStringLiteralLike(initializer.argumentExpression))
+      ) {
+        const importedName = ts.isPropertyAccessExpression(initializer)
+          ? initializer.name.text
+          : (initializer.argumentExpression as ts.StringLiteralLike).text;
+        if (
+          /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
+            importedName,
+          ) &&
+          isChildProcessRequire(initializer.expression)
+        ) {
+          childProcessCallAliases.set(node.name.text, importedName);
         }
       }
     }
@@ -2572,6 +2811,11 @@ function checkPublicWorkflowIsolation(
   if (WORKFLOW_MANUAL_REMOTE_FETCH.test(normalizedCommandSource)) {
     reject(
       "Public workflows must not fetch another repository through shell network commands",
+    );
+  }
+  if (/\bTSX_TSCONFIG_PATH\b/u.test(executableSource)) {
+    reject(
+      "Public workflows must not select TSX_TSCONFIG_PATH because that module-resolution context cannot be verified statically",
     );
   }
   if (semantic.commands.some(({ command }) => hasInlineNodeFetch(command))) {
