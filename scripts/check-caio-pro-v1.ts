@@ -2929,6 +2929,36 @@ function helperHasRemoteRepositoryAccess(
   }
   const inspection = inspectSourceFile(file, content);
   if (inspection.parseDiagnostics.length > 0) return true;
+  const staticConstStrings = new Map<string, string | null>();
+  const collectStaticConstStrings = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      const declarationList = node.parent;
+      const initializer =
+        node.initializer === undefined
+          ? null
+          : unwrapTransparentExpression(node.initializer);
+      const value =
+        ts.isVariableDeclarationList(declarationList) &&
+        (declarationList.flags & ts.NodeFlags.Const) !== 0 &&
+        initializer !== null &&
+        ts.isStringLiteralLike(initializer)
+          ? initializer.text
+          : null;
+      staticConstStrings.set(
+        node.name.text,
+        staticConstStrings.has(node.name.text) ? null : value,
+      );
+    }
+    ts.forEachChild(node, collectStaticConstStrings);
+  };
+  collectStaticConstStrings(inspection.source);
+  const staticStringValue = (expression: ts.Expression): string | null => {
+    const value = unwrapTransparentExpression(expression);
+    if (ts.isStringLiteralLike(value)) return value.text;
+    if (ts.isIdentifier(value)) return staticConstStrings.get(value.text) ?? null;
+    return null;
+  };
+  let hasUnverifiedComputedProperty = false;
   const childProcessCallAliases = new Map<string, string>();
   const childProcessModuleAliases = new Set<string>();
   const fetchCallAliases = new Set(["fetch"]);
@@ -2983,10 +3013,9 @@ function helperHasRemoteRepositoryAccess(
     if (ts.isPropertyAccessExpression(value)) return value.name.text;
     if (
       ts.isElementAccessExpression(value) &&
-      value.argumentExpression !== undefined &&
-      ts.isStringLiteralLike(value.argumentExpression)
+      value.argumentExpression !== undefined
     ) {
-      return value.argumentExpression.text;
+      return staticStringValue(value.argumentExpression);
     }
     return null;
   };
@@ -2998,13 +3027,8 @@ function helperHasRemoteRepositoryAccess(
     if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) {
       return name.text;
     }
-    if (
-      ts.isComputedPropertyName(name) &&
-      ts.isStringLiteralLike(unwrapTransparentExpression(name.expression))
-    ) {
-      return (
-        unwrapTransparentExpression(name.expression) as ts.StringLiteralLike
-      ).text;
+    if (ts.isComputedPropertyName(name)) {
+      return staticStringValue(name.expression);
     }
     return null;
   };
@@ -3024,8 +3048,31 @@ function helperHasRemoteRepositoryAccess(
       (ts.isIdentifier(value) && childProcessModuleAliases.has(value.text))
     );
   };
+  const isGlobalFetchContainer = (expression: ts.Expression): boolean => {
+    const value = unwrapTransparentExpression(expression);
+    return (
+      ts.isIdentifier(value) &&
+      /^(?:globalThis|global|window|self)$/u.test(value.text)
+    );
+  };
+  const isUnverifiedComputedAccess = (
+    expression: ts.Expression,
+    isKnownTarget: (target: ts.Expression) => boolean,
+  ): boolean => {
+    const value = unwrapTransparentExpression(expression);
+    return (
+      ts.isElementAccessExpression(value) &&
+      value.argumentExpression !== undefined &&
+      staticStringValue(value.argumentExpression) === null &&
+      isKnownTarget(value.expression)
+    );
+  };
   const isFetchReference = (expression: ts.Expression): boolean => {
     const value = unwrapTransparentExpression(expression);
+    if (isUnverifiedComputedAccess(value, isGlobalFetchContainer)) {
+      hasUnverifiedComputedProperty = true;
+      return false;
+    }
     return (
       (ts.isIdentifier(value) && fetchCallAliases.has(value.text)) ||
       staticPropertyName(value) === "fetch"
@@ -3052,6 +3099,12 @@ function helperHasRemoteRepositoryAccess(
           element.propertyName,
           element.name.text,
         );
+        if (
+          propertyName === null &&
+          isGlobalFetchContainer(node.initializer)
+        ) {
+          hasUnverifiedComputedProperty = true;
+        }
         if (propertyName === "fetch") {
           fetchCallAliases.add(element.name.text);
         }
@@ -3069,7 +3122,10 @@ function helperHasRemoteRepositoryAccess(
           element.propertyName,
           element.name.text,
         );
-        if (normalizedImportedName === null) continue;
+        if (normalizedImportedName === null) {
+          hasUnverifiedComputedProperty = true;
+          continue;
+        }
         if (
           /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
             normalizedImportedName,
@@ -3096,14 +3152,20 @@ function helperHasRemoteRepositoryAccess(
       }
       if (
         ts.isPropertyAccessExpression(initializer) ||
-        (ts.isElementAccessExpression(initializer) &&
-          initializer.argumentExpression !== undefined &&
-          ts.isStringLiteralLike(initializer.argumentExpression))
+        ts.isElementAccessExpression(initializer)
       ) {
-        const importedName = ts.isPropertyAccessExpression(initializer)
-          ? initializer.name.text
-          : (initializer.argumentExpression as ts.StringLiteralLike).text;
+        const importedName = staticPropertyName(initializer);
         if (
+          importedName === null &&
+          isUnverifiedComputedAccess(
+            initializer,
+            isChildProcessModuleReference,
+          )
+        ) {
+          hasUnverifiedComputedProperty = true;
+        }
+        if (
+          importedName !== null &&
           /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
             importedName,
           ) &&
@@ -3137,7 +3199,16 @@ function helperHasRemoteRepositoryAccess(
           importedName = property.name.text;
           alias = property.name.text;
         }
-        if (importedName === null || alias === null) continue;
+        if (importedName === null || alias === null) {
+          if (
+            alias !== null &&
+            (isGlobalFetchContainer(value) ||
+              isChildProcessModuleReference(value))
+          ) {
+            hasUnverifiedComputedProperty = true;
+          }
+          continue;
+        }
         if (importedName === "fetch") fetchCallAliases.add(alias);
         if (
           isChildProcessModuleReference(value) &&
@@ -3163,14 +3234,17 @@ function helperHasRemoteRepositoryAccess(
       }
       if (
         ts.isPropertyAccessExpression(value) ||
-        (ts.isElementAccessExpression(value) &&
-          value.argumentExpression !== undefined &&
-          ts.isStringLiteralLike(value.argumentExpression))
+        ts.isElementAccessExpression(value)
       ) {
-        const importedName = ts.isPropertyAccessExpression(value)
-          ? value.name.text
-          : (value.argumentExpression as ts.StringLiteralLike).text;
+        const importedName = staticPropertyName(value);
         if (
+          importedName === null &&
+          isUnverifiedComputedAccess(value, isChildProcessModuleReference)
+        ) {
+          hasUnverifiedComputedProperty = true;
+        }
+        if (
+          importedName !== null &&
           /^(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)$/u.test(
             importedName,
           ) &&
@@ -3190,6 +3264,12 @@ function helperHasRemoteRepositoryAccess(
       const callee = unwrapTransparentExpression(node.expression);
       if (isFetchInvocation(callee)) {
         remoteAccess = true;
+        return;
+      }
+      if (
+        isUnverifiedComputedAccess(callee, isChildProcessModuleReference)
+      ) {
+        hasUnverifiedComputedProperty = true;
         return;
       }
       const calleeName = ts.isIdentifier(callee)
@@ -3239,7 +3319,7 @@ function helperHasRemoteRepositoryAccess(
     ts.forEachChild(node, visit);
   };
   visit(inspection.source);
-  return remoteAccess;
+  return remoteAccess || hasUnverifiedComputedProperty;
 }
 
 function isShellHelper(file: string, content: string): boolean {

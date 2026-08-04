@@ -3286,6 +3286,71 @@ describe("caio-pro-v1 aggregate gate", () => {
         'run("gh", ["api", "repos/example/private/tarball/main"]);',
       ].join("\n"),
     ],
+    [
+      "const-computed destructuring fetch alias",
+      [
+        'const method = "fetch";',
+        "const { [method]: request } = globalThis;",
+        'await request("https://example.test/private.tar.gz");',
+      ].join("\n"),
+    ],
+    [
+      "CommonJS const-computed destructuring child-process alias",
+      [
+        'const method = "execFileSync";',
+        'const { [method]: run } = require("node:child_process");',
+        'run("gh", ["api", "repos/example/private/tarball/main"]);',
+      ].join("\n"),
+    ],
+    [
+      "const-computed fetch property alias",
+      [
+        'const method = "fetch";',
+        "const request = globalThis[method];",
+        'await request("https://example.test/private.tar.gz");',
+      ].join("\n"),
+    ],
+    [
+      "CommonJS const-computed child-process property alias",
+      [
+        'const method = "execFileSync";',
+        'const child = require("node:child_process");',
+        "const run = child[method];",
+        'run("gh", ["api", "repos/example/private/tarball/main"]);',
+      ].join("\n"),
+    ],
+    [
+      "mutable computed fetch property alias",
+      [
+        'let method = "fetch";',
+        "const request = globalThis[method];",
+        'await request("https://example.test/private.tar.gz");',
+      ].join("\n"),
+    ],
+    [
+      "runtime-computed child-process property alias",
+      [
+        "const method = process.argv[2];",
+        'const child = require("node:child_process");',
+        "const run = child[method];",
+        'run("gh", ["api", "repos/example/private/tarball/main"]);',
+      ].join("\n"),
+    ],
+    [
+      "runtime-computed direct fetch call",
+      [
+        "const method = process.argv[2];",
+        'await globalThis[method]("https://example.test/private.tar.gz");',
+      ].join("\n"),
+    ],
+    [
+      "runtime-computed direct child-process call",
+      [
+        "const method = process.argv[2];",
+        'const child = require("node:child_process");',
+        'child[method]("gh", ["api", "repos/example/private/tarball/main"]);',
+      ].join("\n"),
+    ],
   ])("rejects repository access through a %s", (_label, source) => {
     withFixture(
       {
