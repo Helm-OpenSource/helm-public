@@ -626,4 +626,176 @@ describe("caio-pro-v1 aggregate gate", () => {
     );
   });
 
+  it("rejects a template-expression dynamic import in an allowed Core test", () => {
+    withFixture(
+      {
+        "tools/caio-access-gateway/server.test.ts":
+          "export const load = (root: string) => import(`${root}/router.ts`);\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file ===
+                "tools/caio-access-gateway/server.test.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects a string-concatenation dynamic import in an allowed Core test", () => {
+    withFixture(
+      {
+        "tools/caio-access-gateway/server.test.ts":
+          "export const load = (root: string) => import('./' + root);\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file ===
+                "tools/caio-access-gateway/server.test.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("does not let an allowlisted import name authorize another import site", () => {
+    withFixture(
+      {
+        "instrumentation.ts":
+          "export const load = (packBootstrapPath: string) => import(packBootstrapPath);\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "instrumentation.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects a reverse-composition test moved outside the gateway directory", () => {
+    withFixture(
+      {
+        "tests/downstream-composition.test.ts":
+          "export const load = (root: string) => import(`${root}/router.ts`);\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "tests/downstream-composition.test.ts" &&
+              violation.detail.includes("computed dynamic import"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects a renamed Vite test-runner config", () => {
+    withFixture(
+      {
+        "vite.downstream.config.ts": "export default {};\n",
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-BOUNDARY" &&
+              violation.file === "vite.downstream.config.ts" &&
+              violation.detail.includes("test-runner config"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects repository archive downloads through gh api", () => {
+    withFixture(
+      {
+        ".github/workflows/remote-archive.yml": [
+          "jobs:",
+          "  composition-contract:",
+          "    steps:",
+          "      - run: gh api repos/${{ vars.OWNER }}/${{ vars.REPO }}/tarball/${{ vars.REF }} > downstream.tar.gz",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/remote-archive.yml" &&
+              violation.detail.includes("shell network commands"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects quoted OIDC permission with a direct request-token exchange", () => {
+    withFixture(
+      {
+        ".github/workflows/oidc-fetch.yml": [
+          "permissions:",
+          '  "id-token": "write"',
+          "jobs:",
+          "  composition-contract:",
+          "    steps:",
+          '      - run: node -e "fetch(process.env.ACTIONS_ID_TOKEN_REQUEST_URL,{headers:{Authorization:\'Bearer \'+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}})"',
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/oidc-fetch.yml" &&
+              violation.detail.includes("mint external credentials"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("rejects quoted OIDC write permission without relying on request env markers", () => {
+    withFixture(
+      {
+        ".github/workflows/oidc-permission.yml": [
+          "permissions:",
+          '  "id-token": "write"',
+          "jobs:",
+          "  verify:",
+          "    steps:",
+          "      - run: npm test",
+          "",
+        ].join("\n"),
+      },
+      (root) => {
+        expect(
+          checkCaioProV1Static(root).some(
+            (violation) =>
+              violation.rule === "CPV1-CI" &&
+              violation.file === ".github/workflows/oidc-permission.yml" &&
+              violation.detail.includes("mint external credentials"),
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
 });

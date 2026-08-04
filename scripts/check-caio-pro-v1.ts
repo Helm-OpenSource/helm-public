@@ -49,6 +49,8 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import ts from "typescript";
+
 import {
   createContextAgentConsentReceipt,
   validateContextAgentConsentReceipt,
@@ -109,9 +111,69 @@ const ALLOWED_CAIO_ACCESS_GATEWAY_FILES = new Set([
   "server.test.ts",
   "server.ts",
 ]);
-const ALLOWED_VITEST_CONFIG_FILES = new Set([
+const ALLOWED_TEST_RUNNER_CONFIG_FILES = new Set([
   "vitest.config.ts",
   "vitest.public.config.ts",
+]);
+const REPOSITORY_SOURCE_EXTENSIONS = new Set([
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+]);
+const REPOSITORY_SCAN_IGNORED_DIRECTORIES = new Set([
+  ".git",
+  ".next",
+  ".turbo",
+  "coverage",
+  "node_modules",
+  "playwright-report",
+  "test-results",
+]);
+const TEST_RUNNER_CONFIG_FILE =
+  /^(?:vite|vitest)(?:\.[^.]+)*\.config\.[cm]?[jt]s$/u;
+
+// These are the only existing runtime-computed imports in Public. Both resolve
+// local files with a fixed declaration in the named module. Every new file or
+// expression is denied until this explicit ownership list is reviewed.
+type ComputedDynamicImportAllowance = Readonly<{
+  expression: string;
+  requiredFragments: readonly string[];
+}>;
+
+const ALLOWED_COMPUTED_DYNAMIC_IMPORTS = new Map<
+  string,
+  readonly ComputedDynamicImportAllowance[]
+>([
+  [
+    "instrumentation.ts",
+    [
+      {
+        expression: "packBootstrapPath",
+        requiredFragments: [
+          'const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");',
+          "const { registerAllPacks } = (await import(packBootstrapPath)) as {",
+        ],
+      },
+    ],
+  ],
+  [
+    "scripts/archive/sqlite-to-mysql-migration.ts",
+    [
+      {
+        expression: "sqliteClientModulePath",
+        requiredFragments: [
+          "const sqliteClientModulePath = pathToFileURL(",
+          'path.resolve(projectRoot, "generated/sqlite-client/index.js"),',
+          "sqliteModule = (await import(sqliteClientModulePath)) as {",
+        ],
+      },
+    ],
+  ],
 ]);
 const ALLOWED_WORKFLOW_ACTIONS = new Set([
   "actions/checkout@v5",
@@ -215,8 +277,11 @@ const REQUIRED_CI_TOKENS = [
 
 const WORKFLOW_SECRET_EXPRESSION = /\$\{\{[^}]*\bsecrets\b/iu;
 const WORKFLOW_MANUAL_REMOTE_FETCH =
-  /\b(?:curl|wget)\b|\bgh\s+repo\s+clone\b|\bgit\b[^\n]{0,160}\b(?:clone|fetch|remote\s+add)\b/iu;
-const WORKFLOW_ID_TOKEN_WRITE = /^\s*id-token\s*:\s*write\s*(?:#.*)?$/imu;
+  /\b(?:curl|wget)\b|\bgh\s+(?:api|repo\s+clone)\b|\bgit\b[^\n]{0,160}\b(?:clone|fetch|remote\s+add)\b/iu;
+const WORKFLOW_ID_TOKEN_WRITE =
+  /(?:^|[,{])\s*["']?id-token["']?\s*:\s*["']?write["']?(?=\s*(?:[,}#]|$))/imu;
+const WORKFLOW_OIDC_REQUEST_ENVIRONMENT =
+  /\bACTIONS_ID_TOKEN_REQUEST_(?:URL|TOKEN)\b/u;
 const WORKFLOW_USES =
   /(?:^|[-,{])\s*["']?uses["']?\s*:\s*["']?([^\s"'#},]+)["']?/gimu;
 
@@ -235,10 +300,6 @@ const GATEWAY_REVERSE_COMPOSITION_MARKERS = [
     pattern: /(?:^|["'`/\\])\.deps(?:["'`/\\]|$)/iu,
   },
   { label: "pinned external commit", pattern: /\b[0-9a-f]{40}\b/iu },
-  {
-    label: "computed dynamic import",
-    pattern: /\bimport\s*\(\s*(?!["'`])/u,
-  },
   { label: "child-process repository access", pattern: /node:child_process/iu },
   {
     label: "environment-owned test dependency",
@@ -272,6 +333,108 @@ function listWorkflowFiles(repoRoot: string): string[] {
         (entry.name.endsWith(".yml") || entry.name.endsWith(".yaml")),
     )
     .map((entry) => path.posix.join(WORKFLOW_DIRECTORY, entry.name));
+}
+
+function listRepositorySourceFiles(repoRoot: string): string[] {
+  const files: string[] = [];
+  const visit = (absoluteDirectory: string, relativeDirectory: string): void => {
+    for (const entry of readdirSync(absoluteDirectory, {
+      withFileTypes: true,
+    }).sort((left, right) => left.name.localeCompare(right.name))) {
+      const relativeFile = relativeDirectory
+        ? path.posix.join(relativeDirectory, entry.name)
+        : entry.name;
+      if (entry.isDirectory()) {
+        if (!REPOSITORY_SCAN_IGNORED_DIRECTORIES.has(entry.name)) {
+          visit(path.join(absoluteDirectory, entry.name), relativeFile);
+        }
+        continue;
+      }
+      if (
+        entry.isFile() &&
+        REPOSITORY_SOURCE_EXTENSIONS.has(path.extname(entry.name))
+      ) {
+        files.push(relativeFile);
+      }
+    }
+  };
+  visit(repoRoot, "");
+  return files;
+}
+
+function scriptKindFor(file: string): ts.ScriptKind {
+  if (file.endsWith(".tsx") || file.endsWith(".jsx")) {
+    return ts.ScriptKind.TSX;
+  }
+  if (file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".cjs")) {
+    return ts.ScriptKind.JS;
+  }
+  return ts.ScriptKind.TS;
+}
+
+function unwrapTransparentExpression(node: ts.Expression): ts.Expression {
+  let current = node;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function findComputedDynamicImports(file: string, content: string): string[] {
+  const source = ts.createSourceFile(
+    file,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKindFor(file),
+  );
+  const expressions: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword
+    ) {
+      const argument = node.arguments[0];
+      if (argument === undefined) {
+        expressions.push("<missing>");
+      } else {
+        const unwrapped = unwrapTransparentExpression(argument);
+        if (
+          !ts.isStringLiteral(unwrapped) &&
+          !ts.isNoSubstitutionTemplateLiteral(unwrapped)
+        ) {
+          expressions.push(unwrapped.getText(source));
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return expressions;
+}
+
+function availableComputedDynamicImportAllowances(
+  file: string,
+  content: string,
+): Map<string, number> {
+  const available = new Map<string, number>();
+  for (const allowance of ALLOWED_COMPUTED_DYNAMIC_IMPORTS.get(file) ?? []) {
+    if (
+      allowance.requiredFragments.every((fragment) => content.includes(fragment))
+    ) {
+      available.set(
+        allowance.expression,
+        (available.get(allowance.expression) ?? 0) + 1,
+      );
+    }
+  }
+  return available;
 }
 
 function blankWholeLineComments(source: string): string {
@@ -332,7 +495,10 @@ function checkPublicWorkflowIsolation(
       "Public workflows must not reference Actions secrets; private-repository credentials belong to no Public CI job",
     );
   }
-  if (WORKFLOW_ID_TOKEN_WRITE.test(executableSource)) {
+  if (
+    WORKFLOW_ID_TOKEN_WRITE.test(executableSource) ||
+    WORKFLOW_OIDC_REQUEST_ENVIRONMENT.test(executableSource)
+  ) {
     reject(
       "Public workflows must not mint external credentials through id-token: write",
     );
@@ -446,27 +612,53 @@ function checkPublicCompositionOwnership(
     }
   }
 
-  for (const entry of readdirSync(repoRoot, { withFileTypes: true })) {
-    if (!entry.isFile() || !/^vitest(?:\.[^.]+)*\.config\.[cm]?[jt]s$/u.test(entry.name)) {
-      continue;
-    }
-    if (!ALLOWED_VITEST_CONFIG_FILES.has(entry.name)) {
+  for (const file of listRepositorySourceFiles(repoRoot)) {
+    const content = read(repoRoot, file);
+    if (content === null) {
       violations.push({
         rule: "CPV1-BOUNDARY",
-        file: entry.name,
-        detail:
-          "Public Vitest config is not allowlisted; a dedicated reverse-composition runner belongs downstream",
+        file,
+        detail: "Public source ownership could not be read and verified",
       });
       continue;
     }
-    const content = read(repoRoot, entry.name);
-    if (content !== null) {
+
+    if (TEST_RUNNER_CONFIG_FILE.test(path.posix.basename(file))) {
+      if (!ALLOWED_TEST_RUNNER_CONFIG_FILES.has(file)) {
+        violations.push({
+          rule: "CPV1-BOUNDARY",
+          file,
+          detail:
+            "Public test-runner config is not allowlisted; a dedicated reverse-composition runner belongs downstream",
+        });
+      } else {
+        violations.push(
+          ...findReverseCompositionMarkers(
+            file,
+            content,
+            VITEST_REVERSE_COMPOSITION_MARKERS,
+          ),
+        );
+      }
+    }
+
+    const allowedExpressions = availableComputedDynamicImportAllowances(
+      file,
+      content,
+    );
+    for (const expression of findComputedDynamicImports(file, content)) {
+      const remainingAllowance = allowedExpressions.get(expression) ?? 0;
+      if (remainingAllowance > 0) {
+        allowedExpressions.set(expression, remainingAllowance - 1);
+        continue;
+      }
       violations.push(
-        ...findReverseCompositionMarkers(
-          entry.name,
-          content,
-          VITEST_REVERSE_COMPOSITION_MARKERS,
-        ),
+        {
+          rule: "CPV1-BOUNDARY",
+          file,
+          detail:
+            "Public source must not add a computed dynamic import outside the explicit local-module allowlist",
+        },
       );
     }
   }
