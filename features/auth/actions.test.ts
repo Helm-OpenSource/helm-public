@@ -1151,6 +1151,88 @@ describe("auth verification code attempt cap", () => {
     );
   });
 
+  // A REVOKED INVITE MUST NOT BE RESURRECTED BY SIGNUP.
+  //
+  // hasAllowedInviteMembership checks that a non-INACTIVE membership exists for
+  // this identity, and that check is real. But it runs BEFORE the write, and it
+  // matches by email/phone rather than by the row the write targets. The write
+  // itself was an upsert whose `update` branch set status: ACTIVE
+  // unconditionally, so a membership revoked in that window came back ACTIVE
+  // and the user was seated in the workspace they had just been removed from.
+  it("refuses to join a workspace whose membership has been revoked", async () => {
+    installAuthCodeStore([]);
+    const prefillCookie = issuePrefillCookie({
+      name: "Owner",
+      email: "owner@example.com",
+      phone: "+8613800000000",
+      organizationName: "Acme",
+      invitedWorkspaceId: "workspace-invite-1",
+    });
+    mocks.cookieStore.get.mockImplementation((name?: string) => {
+      if (name === "helm-public-oauth-signup-prefill") {
+        return { value: prefillCookie };
+      }
+      if (name === "helm-ui-locale") {
+        return { value: "en-US" };
+      }
+      return undefined;
+    });
+    mocks.db.authEnrollment.findUnique.mockResolvedValue(createEnrollment());
+    mocks.db.user.findUnique.mockResolvedValue(null);
+    mocks.db.user.create.mockResolvedValue({
+      id: "user-1",
+      email: "owner@example.com",
+      name: "Owner",
+      phone: "+8613800000000",
+      title: null,
+      passwordHash: "scrypt:hash",
+    });
+    mocks.db.user.update.mockResolvedValue({
+      id: "user-1",
+      email: "owner@example.com",
+      name: "Owner",
+      phone: "+8613800000000",
+      title: null,
+    });
+    // The pre-check still sees a live invite for this identity.
+    mocks.db.membership.findFirst.mockResolvedValue({
+      workspaceId: "workspace-invite-1",
+      workspace: { id: "workspace-invite-1", slug: "invite", systemKey: null },
+    });
+    mocks.db.workspace.findUnique.mockResolvedValue({
+      id: "workspace-invite-1",
+    });
+    // ...but THIS user's membership in that workspace has been revoked.
+    mocks.db.membership.findUnique.mockResolvedValue({
+      role: WorkspaceRole.MEMBER,
+      title: null,
+      persona: null,
+      status: MembershipStatus.INACTIVE,
+    });
+    mocks.trialOnboarding.createSelfServeTrialOrganization.mockResolvedValue({
+      workspace: { id: "workspace-trial-1" },
+    });
+
+    const result = await completeTrialSignupVerificationAction({
+      enrollmentId: "enrollment-1",
+      emailCode: "",
+      phoneCode: "",
+    });
+
+    // The revoked membership is never written back to ACTIVE.
+    expect(mocks.db.membership.upsert).not.toHaveBeenCalled();
+    // And no session is seated in the workspace they were removed from.
+    expect(mocks.session.createSession).not.toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "workspace-invite-1" }),
+    );
+    // Signup itself still completes: a revoked invite is not a reason to refuse
+    // the account, only a reason not to join that workspace.
+    expect(result.ok).toBe(true);
+    expect(
+      mocks.trialOnboarding.createSelfServeTrialOrganization,
+    ).toHaveBeenCalled();
+  });
+
   it("fills membership title from invite prefill when signup form title is empty", async () => {
     installAuthCodeStore([]);
     const prefillCookie = issuePrefillCookie({
