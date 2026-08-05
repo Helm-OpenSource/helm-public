@@ -899,7 +899,7 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
   "self-check":
     "npm run public:smoke:static && npm run check:secret-history",
   "check:boundaries":
-    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage",
+    "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage && npm run check:frozen-duplicates",
   "check:source-profiler-boundaries":
     "node --import tsx scripts/check-source-profiler-boundaries.ts",
   "check:golden-path-docs":
@@ -927,6 +927,8 @@ const PUBLIC_PACKAGE_SCRIPT_OVERRIDES: Readonly<Record<string, string>> = {
     "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts",
   "check:docker-smoke-coverage":
     "node --import tsx scripts/check-docker-smoke-coverage.ts && vitest run scripts/check-docker-smoke-coverage.test.ts --config vitest.public.config.ts",
+  "check:frozen-duplicates":
+    "node --import tsx scripts/check-frozen-duplicates.ts && vitest run scripts/check-frozen-duplicates.test.ts --config vitest.public.config.ts",
   "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
   "eval:llm-critic-boundaries":
     "vitest run lib/evals/llm-critic-evals.test.ts",
@@ -1010,6 +1012,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "check:conditional-update-cas",
   "check:caio-pro-v1",
   "check:docker-smoke-coverage",
+  "check:frozen-duplicates",
   "test:model-egress:mysql",
   "sarp:proof",
   "public-mirror:build",

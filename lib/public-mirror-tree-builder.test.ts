@@ -175,7 +175,7 @@ describe("public mirror tree builder", () => {
       license: "Apache-2.0",
       scripts: {
         "check:boundaries":
-          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage",
+          "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage && npm run check:frozen-duplicates",
         "check:source-profiler-boundaries":
           "node --import tsx scripts/check-source-profiler-boundaries.ts",
         "check:golden-path-docs":
@@ -203,6 +203,8 @@ describe("public mirror tree builder", () => {
           "node --import tsx scripts/check-conditional-update-cas.ts && vitest run scripts/check-conditional-update-cas.test.ts --config vitest.public.config.ts",
         "check:docker-smoke-coverage":
           "node --import tsx scripts/check-docker-smoke-coverage.ts && vitest run scripts/check-docker-smoke-coverage.test.ts --config vitest.public.config.ts",
+        "check:frozen-duplicates":
+          "node --import tsx scripts/check-frozen-duplicates.ts && vitest run scripts/check-frozen-duplicates.test.ts --config vitest.public.config.ts",
         "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
         "check:public-commit-metadata":
           "node --import tsx scripts/public-commit-metadata-check.ts",
@@ -334,7 +336,7 @@ describe("public mirror tree builder", () => {
       "npm run public:smoke:static && npm run check:secret-history",
     );
     expect(scripts["check:boundaries"]).toBe(
-      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage",
+      "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage && npm run check:frozen-duplicates",
     );
     expect(scripts["check:source-profiler-boundaries"]).toBe(
       "node --import tsx scripts/check-source-profiler-boundaries.ts",
