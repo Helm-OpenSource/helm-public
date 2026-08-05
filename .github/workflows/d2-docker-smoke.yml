@@ -1,16 +1,27 @@
 name: D2 Docker Smoke
 
+# NO `paths:` ON EITHER ARM, and a `push:` arm that is not optional.
+#
+# The Dockerfile builds the application after a whole-context `COPY . .`, so the
+# image depends on every tracked file here. The filter this replaces listed the
+# Dockerfile, compose file, package manifests, prisma/ and the smoke script — so
+# a change under app/, lib/ or components/ that broke the image build never ran
+# the smoke test that would have caught it, and neither did a change to
+# scripts/fix-local-lightningcss-signature.mjs, which the Dockerfile copies by
+# name. Without the push arm, the merged result on main was never smoke-tested
+# at all: every run validated a pull request against its own base.
+#
+# Cost, measured: 1 of the last 40 commits on main touched a listed path, so
+# this turns roughly 1 run per 40 commits into 40, at about 4 minutes each. A
+# shorter filter is only honest if the Dockerfile copies less.
+#
+# scripts/check-docker-smoke-coverage.ts holds this shape, and checks the
+# premise rather than assuming it.
 on:
   pull_request:
     branches: [main, develop]
-    paths:
-      - ".github/workflows/d2-docker-smoke.yml"
-      - "Dockerfile"
-      - "docker-compose.yml"
-      - "package.json"
-      - "package-lock.json"
-      - "prisma/**"
-      - "scripts/d2-docker-smoke.sh"
+  push:
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
