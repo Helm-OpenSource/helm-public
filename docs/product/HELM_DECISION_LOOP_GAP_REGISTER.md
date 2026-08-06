@@ -1,3 +1,11 @@
+---
+status: active
+owner: helm-core
+created: 2026-08-06
+review_after: 2026-09-06
+public_safety: Code-reachability facts about the decision and supervision loop in this repository, recorded with file paths and checked mechanically. Claims no deployment, activation, customer readiness, or owner approval. Contains no customer identifiers, private deployment information, or real tenant material.
+---
+
 # Decision loop gap register / 决策闭环缺口清单
 
 `scripts/check-decision-loop-gaps.ts` 校验本文件的每一条断言。**这不是一份状态文档，是一份被检查的清单**——每条缺口都可被机械复核，修好任何一条都会让那道闸变红，强制在同一次改动里更新本文件。
