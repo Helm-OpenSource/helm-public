@@ -8,6 +8,7 @@ import {
   checkDecisionLoopGaps,
   productionReferences,
   RECORDED_REACHABLE,
+  RECORDED_PRODUCERS,
   RECORDED_UNREACHABLE,
   REGISTER_PATH,
   wordBoundaryRegExp,
@@ -32,7 +33,8 @@ describe("decision loop gap register", () => {
   it("is checking a register that exists and records both open and closed items", () => {
     // CONTROL. An empty finding list is what "no gaps" looks like AND what a
     // guard that checks nothing looks like. Only one of them is evidence.
-    expect(RECORDED_UNREACHABLE.length).toBeGreaterThanOrEqual(2);
+    expect(RECORDED_UNREACHABLE.length).toBeGreaterThanOrEqual(1);
+    expect(RECORDED_PRODUCERS.length).toBeGreaterThanOrEqual(1);
     expect(RECORDED_REACHABLE.length).toBeGreaterThanOrEqual(4);
     expect(REGISTER_PATH).toMatch(/\.md$/u);
   });
@@ -45,6 +47,7 @@ describe("decision loop gap register", () => {
           RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
         ),
         "lib/caller.ts": `import { ${entry.symbol} } from "x";\n`,
+        "lib/producer/writer.ts": `await tx.${RECORDED_PRODUCERS[0].write}({});\n`,
         "prisma/schema.prisma": "",
         [REGISTER_PATH]: "# register\n",
         ...Object.fromEntries(
@@ -67,6 +70,7 @@ describe("decision loop gap register", () => {
           RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
         ),
         "lib/stage1-owner-loop/thing.test.ts": `import { ${entry.symbol} } from "x";\n`,
+        "lib/producer/writer.ts": `await tx.${RECORDED_PRODUCERS[0].write}({});\n`,
         "prisma/schema.prisma": "",
         [REGISTER_PATH]: "# register\n",
         ...Object.fromEntries(
@@ -82,6 +86,7 @@ describe("decision loop gap register", () => {
         ...Object.fromEntries(
           RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
         ),
+        "lib/producer/writer.ts": `await tx.${RECORDED_PRODUCERS[0].write}({});\n`,
         "prisma/schema.prisma": "model KnowledgeCard {\n  id String @id\n}\n",
         [REGISTER_PATH]: "# register\n",
         ...Object.fromEntries(
@@ -101,6 +106,7 @@ describe("decision loop gap register", () => {
         ...Object.fromEntries(
           RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
         ),
+        "lib/producer/writer.ts": `await tx.${RECORDED_PRODUCERS[0].write}({});\n`,
         "prisma/schema.prisma": "",
         [REGISTER_PATH]: "# register\n",
         ...Object.fromEntries(
@@ -122,6 +128,41 @@ describe("decision loop gap register", () => {
       expect(wordBoundaryRegExp("decisionRecord.create").test("tx.decisionRecord.create({")).toBe(true);
       expect(wordBoundaryRegExp("decisionRecord.create").test("tx.decisionRecord.created")).toBe(false);
     });
+  });
+
+  it("reports a producer the register says exists but that is gone", () => {
+    // GAP-1 was first recorded as "this symbol has no caller". Closing it
+    // through a different in-transaction path left that proxy true while the
+    // gap was shut, and the guard reported OK. It now asserts the property
+    // itself — that something writes the row — so it fails in both directions.
+    const [producer] = RECORDED_PRODUCERS;
+    const root = fixtureRepo({
+      ...Object.fromEntries(
+        RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
+      ),
+      "prisma/schema.prisma": "",
+      [REGISTER_PATH]: "# register\n",
+      ...Object.fromEntries(RECORDED_REACHABLE.map((f) => [f.file, `${f.needle}\n`])),
+    });
+    const findings = checkDecisionLoopGaps(root);
+    expect(findings.some((f) => f.gap === producer.gap)).toBe(true);
+  });
+
+  it("counts a producer wherever it lives, not only in one named symbol", () => {
+    // CONTROL for the case above: with a write present anywhere under the scan
+    // roots, the producer claim must hold — otherwise the assertion would also
+    // pass for a guard that always reports the gap.
+    const [producer] = RECORDED_PRODUCERS;
+    const root = fixtureRepo({
+      ...Object.fromEntries(
+        RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
+      ),
+      "lib/anywhere/writer.ts": `await tx.${producer.write}({});\n`,
+      "prisma/schema.prisma": "",
+      [REGISTER_PATH]: "# register\n",
+      ...Object.fromEntries(RECORDED_REACHABLE.map((f) => [f.file, `${f.needle}\n`])),
+    });
+    expect(checkDecisionLoopGaps(root)).toEqual([]);
   });
 
   it("fails when the register itself is gone", () => {
