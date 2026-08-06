@@ -18,11 +18,15 @@ public_safety: Code-reachability facts about the decision and supervision loop i
 
 ## 0. 一句话结论
 
-**决策对象已经上线并且 owner 可达；监督闭环是开环的，缺口在生产者那一侧。**
-
-界面在、查询在、渲染在、测试全绿——但除 `prisma/seed.ts` 外，**没有任何代码路径会产生这块面板要显示的东西**。
+**决策对象已上线且 owner 可达；监督闭环的第一个真实生产者已接上（GAP-1 已关闭）；决策评估仍不回流（GAP-2），企业记忆仍无持久化（GAP-3）。**
 
 缺消费者的东西看起来没做完；**缺生产者的东西看起来做完了**。这是本清单存在的理由。
+
+### 关于 GAP-1 关闭方式的一条更正
+
+本清单第一版把 GAP-1 记成"`recordStage1SupervisionSignal` 没有生产调用方"，校验器也照此断言。**那是代理指标，不是性质本身。** GAP-1 实际是通过另一条 in-transaction 路径关闭的，那个符号至今仍无调用方——于是代理为真、缺口已闭，闸报绿。
+
+校验器已改为断言真正的性质：**`supervisionSignalRecord.create` 在 `prisma/seed.ts` 之外是否存在生产写入点**，不论由谁执行。
 
 ---
 
@@ -41,16 +45,18 @@ public_safety: Code-reachability facts about the decision and supervision loop i
 
 ## 2. 缺口
 
-### GAP-1 监督信号没有生产者（闭环开在写侧）
+### GAP-1 监督信号没有生产者 —— **已关闭（2026-08-06）**
 
-`recordStage1SupervisionSignal` 定义于 `lib/stage1-owner-loop/decision-follow-through.service.ts`，内部 `tx.supervisionSignalRecord.create`。
+原状：`/caio` 的"监督异常"面板只可能显示 `prisma/seed.ts` 造的数据。
 
-**全仓引用 = 它自己的定义 + 它自己的测试。`lib/`、`app/`、`features/`、`tools/` 中零生产调用。**
+**关闭方式**：`recordStage1OwnerReviewOutcome` 在 owner 答复 reject / defer / request_evidence 时，于**同一事务内**写一条 `drift` 监督信号。
 
-唯一真正写入过该表的地方是 `prisma/seed.ts`。因此 `/caio` 上的"监督异常"面板**只可能显示种子数据**。
+- **为什么是这个接缝**：owner 没有采纳 AI 建议，就是判断发生分歧；`drift` 正是为此而设，而这条记录也正是 observer → shadow 晋级唯一能据以论证的**分歧语料**。
+- **为什么同事务**：上游那个原子抢占已经决定了本次结果恰好被记录一次，信号继承该保证；幂等重放走提前返回分支，不会写第二条。事后 best-effort 补写，正是生产者悄悄停产而无人知晓的方式。
+- **为什么不复用 `recordStage1SupervisionSignal`**：它自己开事务、且带 P2002 捕获的幂等路径，两者在别人的提交边界内都不正确。**该函数至今仍无生产调用方**——这不是缺口，是有意的：治理门在调用方（`assertWorkspaceGovernedActionManagementServiceAccess`，USER 强制）已经执行过。
+- **route 一律为 `watch`（含 reject）**：目前没有任何东西消费 `recommendedRoute`，面板只读 status 与 severity。写更强的 route 等于声称一个并不存在的下游交接。
 
-- **影响**：监督闭环不成立。没有真实监督信号，就没有"发现偏差 / 知识过期 / 策略漂移 / 回执缺失"的输入。
-- **可证伪**：关掉 seed，该面板应当无数据。
+**顺带发现（未修）**：`prisma/seed.ts` 写的 `signalType: "process_deviation"` **不在** `SUPERVISION_SIGNAL_TYPES` 闭集内——seed 直连 Prisma，绕过了服务函数的枚举校验，而 DB 列是自由 String。因此面板今天展示的类型是契约不允许的值。
 
 ### GAP-2 决策评估没有生产者（结果不回流）
 
@@ -82,8 +88,8 @@ GAP-1 与 GAP-2 合起来的后果，单列是因为它决定监督层能否**�
 
 ## 3. 修复顺序（建议）
 
-1. **GAP-1** — 工程量最小（读侧、schema、路由都在），且解锁面最大
-2. **GAP-2** — 与 GAP-1 同一条服务，一并做代价低
+1. ~~**GAP-1**~~ — **已关闭**
+2. **GAP-2** — 需要 dispatch → 执行推进 → receipt → 第二人 verify 的完整链路，比 GAP-1 大一档
 3. **GAP-3** — 需要 schema 与迁移，是独立一档
 4. 之后才谈评测实验室与自治等级升级
 

@@ -338,6 +338,117 @@ describe("Stage 1 decision follow-through runtime", () => {
     );
   });
 
+  //
+  // GAP-1: the supervision panel had a reader, a route and green tests, and
+  // nothing outside prisma/seed.ts ever produced a row for it to show. An owner
+  // who rejects, defers or asks for more evidence is diverging from the AI
+  // recommendation, which is exactly what a `drift` signal is for — and exactly
+  // the divergence record an observer -> shadow promotion has to be argued
+  // from. These cases hold that the signal is written, that it commits with the
+  // outcome rather than after it, and that a replay does not write a second one.
+  //
+  it.each([
+    ["reject", "REJECTED", "warning"],
+    ["request_evidence", "EVIDENCE_REQUESTED", "watch"],
+  ] as const)(
+    "produces one drift supervision signal when the owner answers %s",
+    async (action, status, severity) => {
+      const reviewed = decisionRow({
+        status,
+        ownerRef: "owner-1",
+        ownerConclusion: "Evidence is insufficient for this decision",
+        ownerConfirmedAt: null,
+      });
+      dbMock.decisionRecord.updateMany.mockResolvedValue({ count: 1 });
+      dbMock.decisionRecord.findFirst.mockResolvedValue(reviewed);
+
+      await recordStage1OwnerReviewOutcome({
+        workspaceId: "workspace-1",
+        decisionRecordId: "decision-1",
+        action,
+        reason: "Evidence is insufficient for this decision",
+        actorName: "Owner",
+        actorUserId: "owner-1",
+      });
+
+      expect(dbMock.supervisionSignalRecord.create).toHaveBeenCalledTimes(1);
+      const created = dbMock.supervisionSignalRecord.create.mock.calls[0][0];
+      expect(created.data).toEqual(
+        expect.objectContaining({
+          workspaceId: "workspace-1",
+          decisionRecordId: "decision-1",
+          signalKey: `signal:decision-record:decision-1:owner_${action}`,
+          signalType: "drift",
+          severity,
+          status: "open",
+        }),
+      );
+      // The panel filters on open/acknowledged/routed, so a signal that is not
+      // one of those would be written and still never appear.
+      expect(["open", "acknowledged", "routed"]).toContain(created.data.status);
+      // Evidence is required by the contract; an empty list is refused, and a
+      // signal nobody can trace back is not evidence.
+      expect(String(created.data.evidenceRefs)).toContain("decision-record:decision-1");
+    },
+  );
+
+  it("writes the supervision signal in the same transaction as the outcome", async () => {
+    // If the signal were written after the outcome commits, a failure would
+    // leave the act recorded and the evidence of it missing — and "best effort"
+    // is how a producer silently stops producing.
+    const reviewed = decisionRow({
+      status: "REJECTED",
+      ownerRef: "owner-1",
+      ownerConclusion: "Not now",
+      ownerConfirmedAt: null,
+    });
+    dbMock.decisionRecord.updateMany.mockResolvedValue({ count: 1 });
+    dbMock.decisionRecord.findFirst.mockResolvedValue(reviewed);
+
+    await recordStage1OwnerReviewOutcome({
+      workspaceId: "workspace-1",
+      decisionRecordId: "decision-1",
+      action: "reject",
+      reason: "Not now",
+      actorName: "Owner",
+      actorUserId: "owner-1",
+    });
+
+    // The transaction client is what the outcome's own audit entry is written
+    // through, so requiring the same client proves one commit boundary.
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: "STAGE1_DECISION_REJECTED" }),
+      { client: dbMock },
+    );
+    expect(dbMock.supervisionSignalRecord.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not write a second signal when the owner review is replayed", async () => {
+    // CONTROL for the cases above: they assert a signal IS written, which also
+    // holds for an implementation that writes one on every call. The claim is
+    // exactly-once, and the idempotent branch is where that is decided.
+    const reviewed = decisionRow({
+      status: "REJECTED",
+      ownerRef: "owner-1",
+      ownerConclusion: "Not now",
+      ownerConfirmedAt: null,
+    });
+    dbMock.decisionRecord.updateMany.mockResolvedValue({ count: 0 });
+    dbMock.decisionRecord.findFirst.mockResolvedValue(reviewed);
+
+    const result = await recordStage1OwnerReviewOutcome({
+      workspaceId: "workspace-1",
+      decisionRecordId: "decision-1",
+      action: "reject",
+      reason: "Not now",
+      actorName: "Owner",
+      actorUserId: "owner-1",
+    });
+
+    expect(result).toBe(reviewed);
+    expect(dbMock.supervisionSignalRecord.create).not.toHaveBeenCalled();
+  });
+
   it("records a future deferral without creating an owner confirmation", async () => {
     const deferUntil = new Date(Date.now() + 86_400_000).toISOString();
     const reviewed = decisionRow({

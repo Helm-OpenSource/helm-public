@@ -85,14 +85,30 @@ export function productionReferences(
 /** Symbols the register says have no production caller. */
 export const RECORDED_UNREACHABLE = Object.freeze([
   Object.freeze({
-    gap: "GAP-1",
-    symbol: "recordStage1SupervisionSignal",
-    definedIn: "lib/stage1-owner-loop/decision-follow-through.service.ts",
-  }),
-  Object.freeze({
     gap: "GAP-2",
     symbol: "evaluateStage1DecisionRecord",
     definedIn: "lib/stage1-owner-loop/decision-evaluation.service.ts",
+  }),
+]);
+
+/**
+ * Tables the register claims are, or are no longer, written only by seed.
+ *
+ * This asks the question GAP-1 was actually about. The first version asked
+ * whether one exported symbol had a caller, and closing GAP-1 through a
+ * different in-transaction path left that proxy true while the gap itself was
+ * shut — the check was right about its proxy and the proxy was not the
+ * property. Producers are counted by writes to the table, whoever performs
+ * them.
+ */
+export const RECORDED_PRODUCERS = Object.freeze([
+  Object.freeze({
+    gap: "GAP-1",
+    write: "supervisionSignalRecord.create",
+    // Seed is not a producer: it populates a demo workspace, and a panel that
+    // can only ever show seed rows is the defect, not the fix.
+    excluding: ["prisma/seed.ts"],
+    expected: "present" as const,
   }),
 ]);
 
@@ -147,6 +163,19 @@ export function checkDecisionLoopGaps(repoRoot: string = process.cwd()): Finding
       findings.push({
         gap: entry.gap,
         detail: `${entry.symbol} now has production caller(s) — ${callers.join(", ")}; this gap is CLOSED, update ${REGISTER_PATH} in this change`,
+      });
+    }
+  }
+
+  // GAP-1: does anything still produce the row the panel displays?
+  for (const entry of RECORDED_PRODUCERS) {
+    const producers = productionReferences(repoRoot, entry.write, "").filter(
+      (file) => !entry.excluding.includes(file),
+    );
+    if (entry.expected === "present" && producers.length === 0) {
+      findings.push({
+        gap: entry.gap,
+        detail: `nothing outside ${entry.excluding.join(", ")} writes ${entry.write}; the register records this producer as present, so either it was removed or ${REGISTER_PATH} is wrong`,
       });
     }
   }

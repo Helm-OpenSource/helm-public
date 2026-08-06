@@ -503,6 +503,95 @@ export type Stage1OwnerReviewAction =
   | "defer"
   | "request_evidence";
 
+/**
+ * Severity per owner answer.
+ *
+ * A rejection says the recommendation was wrong; asking for evidence or
+ * deferring says it was not yet decidable. Those are different amounts of
+ * divergence and the panel sorts on severity, so they are not collapsed.
+ */
+const OWNER_DIVERGENCE_SEVERITY: Readonly<
+  Record<Stage1OwnerReviewAction, SupervisionSignal["severity"]>
+> = {
+  reject: "warning",
+  defer: "watch",
+  request_evidence: "watch",
+};
+
+/**
+ * Write the `drift` signal for an owner answer that was not an approval.
+ *
+ * Runs on the CALLER's transaction so the signal commits with the act that
+ * produced it. It deliberately does not reuse recordStage1SupervisionSignal:
+ * that function opens its own transaction and carries a P2002-catch idempotency
+ * path, neither of which is correct inside someone else's commit boundary.
+ * Exactly-once comes from the caller's atomic claim instead.
+ *
+ * ROUTE. Every one of these is routed `watch`, including rejections. A stronger
+ * route would be a claim about something downstream doing the routing, and
+ * nothing consumes recommendedRoute yet — the panel reads status and severity.
+ * Recording `pack_candidate` here would assert a hand-off that does not exist.
+ */
+async function writeOwnerDivergenceSupervisionSignal(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  input: {
+    workspaceId: string;
+    decisionRecordId: string;
+    action: Stage1OwnerReviewAction;
+    reason: string;
+    ownerUserId?: string | null;
+  },
+): Promise<void> {
+  const observedObjectRef = `decision-record:${input.decisionRecordId}`;
+  const signal: SupervisionSignal = {
+    signalId: `signal:${observedObjectRef}:owner_${input.action}`,
+    tenantRef: `workspace:${input.workspaceId}`,
+    signalType: "drift",
+    observedObjectRef,
+    baselineRef: "baseline:ai-recommendation",
+    evidenceRefs: [observedObjectRef],
+    severity: OWNER_DIVERGENCE_SEVERITY[input.action],
+    // The owner performed the act being recorded, so the divergence is observed
+    // rather than inferred.
+    confidence: "high",
+    recommendedRoute: "watch",
+    ownerRef: input.ownerUserId ?? null,
+    deadlineOrSla: null,
+    status: "open",
+    observedFact: `Owner answered ${input.action} on ${observedObjectRef}`,
+    interpretation: input.reason,
+  };
+  // Route through the same closed contract the public entry point uses. This is
+  // a proof that the value is inside the allowed set, never an execution.
+  if (!routeSupervisionSignal(signal)) {
+    throw new Stage1DecisionGateError(["invalid_recommended_route"]);
+  }
+  await tx.supervisionSignalRecord.create({
+    data: {
+      workspaceId: input.workspaceId,
+      signalKey: signal.signalId,
+      decisionRecordId: input.decisionRecordId,
+      signalType: signal.signalType,
+      observedObjectRef: signal.observedObjectRef,
+      baselineRef: signal.baselineRef,
+      evidenceRefs: jsonStringify(signal.evidenceRefs),
+      severity: signal.severity,
+      confidence: signal.confidence,
+      recommendedRoute: signal.recommendedRoute,
+      ownerRef: signal.ownerRef,
+      deadlineOrSla: null,
+      status: signal.status,
+      observedFact: signal.observedFact,
+      interpretation: signal.interpretation,
+      expectedState: "Owner approves the recommended decision",
+      actualState: `Owner answered ${input.action}`,
+      responsibilityScopeRef: `workspace:${input.workspaceId}`,
+      escalationCondition:
+        "Review the recommendation quality if owner divergence repeats on this decision class",
+    },
+  });
+}
+
 export async function recordStage1OwnerReviewOutcome(input: {
   workspaceId: string;
   decisionRecordId: string;
@@ -608,6 +697,24 @@ export async function recordStage1OwnerReviewOutcome(input: {
       },
       { client: tx },
     );
+    // The owner answered something other than "approve", so the owner's
+    // judgement and the AI recommendation diverged. That is what `drift` is
+    // for, and it is the record an observer -> shadow promotion has to be
+    // argued from: with no divergence written down, "the AI was right" and
+    // "nothing was ever measured" are the same evidence.
+    //
+    // Written on THIS transaction, not after it. The atomic claim above has
+    // already decided this outcome is recorded exactly once, so the signal
+    // inherits that guarantee, and a replay returns from the idempotent branch
+    // without reaching here. Recording it afterwards on a best-effort basis is
+    // how a producer stops producing with nothing saying so.
+    await writeOwnerDivergenceSupervisionSignal(tx, {
+      workspaceId: input.workspaceId,
+      decisionRecordId: record.id,
+      action: input.action,
+      reason,
+      ownerUserId: input.actorUserId,
+    });
     return { kind: "recorded" as const, record };
   });
   if (outcome.kind === "not_found") {
