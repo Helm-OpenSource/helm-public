@@ -728,7 +728,7 @@ describe("public release guard fixture coverage", () => {
       "db:prepare":
         "node -e \"console.log('public mirror: database prepare is not required')\"",
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage && npm run check:frozen-duplicates",
+        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage && npm run check:frozen-duplicates && npm run check:decision-loop-gaps",
       "check:source-profiler-boundaries":
         "node --import tsx scripts/check-source-profiler-boundaries.ts",
       "check:golden-path-docs":
@@ -756,6 +756,8 @@ describe("public release guard fixture coverage", () => {
         "node --import tsx scripts/check-docker-smoke-coverage.ts && vitest run scripts/check-docker-smoke-coverage.test.ts --config vitest.public.config.ts",
       "check:frozen-duplicates":
         "node --import tsx scripts/check-frozen-duplicates.ts && vitest run scripts/check-frozen-duplicates.test.ts --config vitest.public.config.ts",
+      "check:decision-loop-gaps":
+        "node --import tsx scripts/check-decision-loop-gaps.ts && vitest run scripts/check-decision-loop-gaps.test.ts --config vitest.public.config.ts",
       "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
       "eval:llm-critic-boundaries":
         "vitest run lib/evals/llm-critic-evals.test.ts",
@@ -904,7 +906,7 @@ describe("public release guard fixture coverage", () => {
     expect(result.publicPackageManifest?.manifest.private).toBe(false);
     expect(result.publicPackageManifest?.manifest.scripts).toEqual({
       "check:boundaries":
-        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage && npm run check:frozen-duplicates",
+        "npm run public:smoke:static && npm run check:golden-path-docs && npm run check:source-profiler-boundaries && npm run check:diagnostics-risk && npm run check:llm-candidate-boundaries && npm run check:recoverable-agent-runtime && npm run check:agentic-sarp && npm run check:work-unit-governance && npm run check:ai-shelf-trust-center-contract && npm run check:stage1-owner-loop && npm run check:caio-terminology && npm run check:model-egress-governance && npm run check:conditional-update-cas && npm run check:caio-pro-v1 && npm run check:docker-smoke-coverage && npm run check:frozen-duplicates && npm run check:decision-loop-gaps",
       "check:source-profiler-boundaries":
         "node --import tsx scripts/check-source-profiler-boundaries.ts",
       "check:golden-path-docs":
@@ -932,6 +934,8 @@ describe("public release guard fixture coverage", () => {
         "node --import tsx scripts/check-docker-smoke-coverage.ts && vitest run scripts/check-docker-smoke-coverage.test.ts --config vitest.public.config.ts",
       "check:frozen-duplicates":
         "node --import tsx scripts/check-frozen-duplicates.ts && vitest run scripts/check-frozen-duplicates.test.ts --config vitest.public.config.ts",
+      "check:decision-loop-gaps":
+        "node --import tsx scripts/check-decision-loop-gaps.ts && vitest run scripts/check-decision-loop-gaps.test.ts --config vitest.public.config.ts",
       "check:caio-pro-v1":
         "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts",
       "sarp:proof": "node --import tsx scripts/sarp-proof.ts",
