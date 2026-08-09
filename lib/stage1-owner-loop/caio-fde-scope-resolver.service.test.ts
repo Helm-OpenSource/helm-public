@@ -27,8 +27,11 @@ function observationRun(overrides: Record<string, unknown> = {}) {
     windowEnd: new Date("2026-08-10T00:30:00.000Z"),
     status: "SUCCEEDED",
     observedAt: new Date("2026-08-09T23:30:00.000Z"),
+    summaryHash: `sha256:${"a".repeat(64)}`,
+    completenessPercent: 100,
     freshness: "FRESH",
     outcome: "SUCCESS",
+    errorCodes: null,
     evidenceRefs: JSON.stringify([
       "opportunity:opportunity-1",
       "decision-record:decision-1",
@@ -42,6 +45,7 @@ function observationRun(overrides: Record<string, unknown> = {}) {
       startsAt: new Date("2026-08-01T00:00:00.000Z"),
       expiresAt: new Date("2026-09-01T00:00:00.000Z"),
       authorizationVersion: 3,
+      authorizationRef: "authorization:program-1",
       scopeRefs: JSON.stringify(["opportunity:opportunity-1"]),
     },
     source: {
@@ -51,6 +55,7 @@ function observationRun(overrides: Record<string, unknown> = {}) {
       status: "ACTIVE",
       sourceKind: "crm",
       freshnessSlaMinutes: 30,
+      authorizationRef: "authorization:program-1",
     },
     ...overrides,
   };
@@ -332,6 +337,73 @@ describe("CAIO Pro FDE workspace scope resolver", () => {
         "observation_evidence_binding_mismatch",
         "observation_evidence_outcome_mismatch",
       ]),
+    });
+  });
+
+  it("reconstructs and validates the complete canonical observation receipt", async () => {
+    const invalidRuns = [
+      observationRun({ summaryHash: null }),
+      observationRun({ completenessPercent: null }),
+      observationRun({ completenessPercent: 101 }),
+      observationRun({ freshness: "UNKNOWN_VALUE" }),
+      observationRun({ errorCodes: "not-json" }),
+      observationRun({ status: "SUCCEEDED", outcome: "FAILURE" }),
+      observationRun({
+        status: "FAILED",
+        outcome: "FAILURE",
+        summaryHash: null,
+        completenessPercent: null,
+        errorCodes: JSON.stringify([]),
+      }),
+      observationRun({
+        source: {
+          ...observationRun().source,
+          authorizationRef: "authorization:other-program",
+        },
+      }),
+      observationRun({ id: "run-other" }),
+    ];
+
+    for (const run of invalidRuns) {
+      const db = client();
+      db.observationSourceRun.findFirst.mockResolvedValue(run);
+      await expect(
+        resolveCaioFdeObservationEvidence({
+          client: db as never,
+          workspaceId: "workspace-1",
+          evidenceRef: "observation-run:run-1",
+          portfolioRef: "opportunity:opportunity-1",
+          now: NOW,
+        }),
+      ).rejects.toBeInstanceOf(CaioFdeScopeResolutionError);
+    }
+  });
+
+  it("accepts a canonical failed observation only with failure identity and error codes", async () => {
+    const db = client();
+    db.observationSourceRun.findFirst.mockResolvedValue(
+      observationRun({
+        status: "FAILED",
+        outcome: "FAILURE",
+        summaryHash: null,
+        completenessPercent: null,
+        freshness: "UNKNOWN",
+        errorCodes: JSON.stringify(["connector_timeout"]),
+      }),
+    );
+
+    await expect(
+      resolveCaioFdeObservationEvidence({
+        client: db as never,
+        workspaceId: "workspace-1",
+        evidenceRef: "observation-run:run-1",
+        portfolioRef: "opportunity:opportunity-1",
+        expectedBusinessResult: "failure",
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({
+      runId: "run-1",
+      outcome: "FAILURE",
     });
   });
 });

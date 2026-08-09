@@ -5,6 +5,8 @@ import {
   ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
   ExecutionReceiptVerificationState,
+  MembershipStatus,
+  WorkspaceRole,
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,6 +18,7 @@ const { dbMock, receiptMock } = vi.hoisted(() => ({
     opportunity: { findFirst: vi.fn() },
     observationSourceRun: { findFirst: vi.fn() },
     actionItem: { updateMany: vi.fn() },
+    membership: { findUnique: vi.fn() },
   },
   receiptMock: {
     recordExecutionReceipt: vi.fn(),
@@ -43,7 +46,7 @@ const NOW = new Date("2026-08-10T00:00:00.000Z");
 const PRINCIPAL: CaioAccessPrincipal = Object.freeze({
   tokenId: "token-1",
   workspaceId: "workspace-1",
-  userRef: "service:workbuddy-1",
+  userRef: "user:executor-1",
   clientType: "workbuddy",
   deviceRef: "device:workbuddy-1",
   audience: "mcp",
@@ -85,6 +88,26 @@ function claim(overrides: Record<string, unknown> = {}) {
     workspaceId: "workspace-1",
     decisionRecordId: "decision-1",
     actionItemId: "action-1",
+    ownerCommandJson: JSON.stringify({
+      commandId: "command-1",
+      workspaceRef: "workspace:workspace-1",
+      decisionRef: "decision-1",
+      ownerRef: "user:owner-1",
+      executionTargetRef: "user:executor-1",
+      portfolioRef: "opportunity:opportunity-1",
+      goal: "Close the governed work packet",
+      action: "Submit the private execution result",
+      dueAt: "2026-08-11T00:00:00.000Z",
+      acceptanceCriteria: ["The result is independently reviewable"],
+      evidenceRequirements: ["proof:executor-result-1"],
+      invalidationConditions: ["The owner revokes the work packet"],
+      escalationOwnerRef: "user:owner-1",
+      automationLevel: "assist",
+      allowedToolRefs: ["tool:private-executor"],
+      externalSideEffects: [],
+      policyEnvelopeRef: null,
+      status: "owner_confirmed",
+    }),
     decisionRecord: {
       id: "decision-1",
       workspaceId: "workspace-1",
@@ -94,12 +117,14 @@ function claim(overrides: Record<string, unknown> = {}) {
       id: "action-1",
       workspaceId: "workspace-1",
       opportunityId: "opportunity-1",
+      ownerId: null,
       status: ActionStatus.APPROVED,
       updatedAt: new Date("2026-08-09T23:50:00.000Z"),
       approvalTask: {
         id: "approval-1",
         workspaceId: "workspace-1",
         status: ApprovalStatus.EXECUTED,
+        approverId: null,
       },
       executionReceipt: null,
     },
@@ -118,6 +143,8 @@ function observationRun() {
     windowEnd: new Date("2026-08-10T00:30:00.000Z"),
     status: "SUCCEEDED",
     observedAt: new Date("2026-08-09T23:54:00.000Z"),
+    summaryHash: `sha256:${"a".repeat(64)}`,
+    completenessPercent: 100,
     freshness: "FRESH",
     outcome: "SUCCESS",
     evidenceRefs: JSON.stringify([
@@ -135,6 +162,7 @@ function observationRun() {
       startsAt: new Date("2026-08-01T00:00:00.000Z"),
       expiresAt: new Date("2026-09-01T00:00:00.000Z"),
       authorizationVersion: 2,
+      authorizationRef: "authorization:program-1",
       scopeRefs: JSON.stringify(["opportunity:opportunity-1"]),
     },
     source: {
@@ -143,7 +171,10 @@ function observationRun() {
       programId: "program-1",
       status: "ACTIVE",
       sourceKind: "execution_proof",
+      freshnessSlaMinutes: 30,
+      authorizationRef: "authorization:program-1",
     },
+    errorCodes: JSON.stringify([]),
   };
 }
 
@@ -191,6 +222,10 @@ describe("private execution result production ingress", () => {
       workspaceId: "workspace-1",
     });
     dbMock.observationSourceRun.findFirst.mockResolvedValue(observationRun());
+    dbMock.membership.findUnique.mockResolvedValue({
+      status: MembershipStatus.ACTIVE,
+      role: WorkspaceRole.OPERATOR,
+    });
     dbMock.actionItem.updateMany.mockResolvedValue({ count: 1 });
     receiptMock.recordExecutionReceipt.mockResolvedValue(canonicalReceipt());
     receiptMock.auditExecutionReceiptRecorded.mockResolvedValue(undefined);
@@ -266,6 +301,10 @@ describe("private execution result production ingress", () => {
         },
       }),
     );
+    dbMock.observationSourceRun.findFirst.mockResolvedValue({
+      ...observationRun(),
+      source: { ...observationRun().source, status: "REVOKED" },
+    });
 
     await expect(
       ingestCaioPrivateExecutionResultProjection({
@@ -276,6 +315,112 @@ describe("private execution result production ingress", () => {
     ).resolves.toMatchObject({ kind: "replayed", receiptId: "receipt-1" });
     expect(dbMock.actionItem.updateMany).not.toHaveBeenCalled();
     expect(receiptMock.recordExecutionReceipt).not.toHaveBeenCalled();
+    expect(dbMock.opportunity.findFirst).not.toHaveBeenCalled();
+    expect(dbMock.observationSourceRun.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rechecks ACTIVE membership and the dedicated operation capability after locking", async () => {
+    dbMock.membership.findUnique.mockResolvedValueOnce({
+      status: MembershipStatus.INACTIVE,
+      role: WorkspaceRole.OPERATOR,
+    });
+    await expect(
+      ingestCaioPrivateExecutionResultProjection({
+        principal: PRINCIPAL,
+        projection: projection(),
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["private_execution_result_membership_inactive"],
+    });
+
+    dbMock.membership.findUnique.mockResolvedValueOnce({
+      status: MembershipStatus.ACTIVE,
+      role: WorkspaceRole.REVIEWER,
+    });
+    await expect(
+      ingestCaioPrivateExecutionResultProjection({
+        principal: PRINCIPAL,
+        projection: projection(),
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["private_execution_result_operation_permission_required"],
+    });
+    expect(dbMock.membership.findUnique).toHaveBeenCalledWith({
+      where: {
+        workspaceId_userId: {
+          workspaceId: "workspace-1",
+          userId: "executor-1",
+        },
+      },
+      select: { role: true, status: true },
+    });
+    expect(dbMock.opportunity.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("requires the caller to match an existing work-packet executor binding", async () => {
+    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+      claim({
+        ownerCommandJson: JSON.stringify({
+          ...JSON.parse(claim().ownerCommandJson),
+          executionTargetRef: "user:other-executor",
+        }),
+      }),
+    );
+
+    await expect(
+      ingestCaioPrivateExecutionResultProjection({
+        principal: PRINCIPAL,
+        projection: projection(),
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["private_execution_result_executor_binding_required"],
+    });
+    expect(dbMock.actionItem.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("accepts ActionItem owner or ApprovalTask assignee as existing executor bindings", async () => {
+    for (const actionItem of [
+      { ...claim().actionItem, ownerId: "executor-1" },
+      {
+        ...claim().actionItem,
+        approvalTask: {
+          ...claim().actionItem.approvalTask,
+          approverId: "executor-1",
+        },
+      },
+    ]) {
+      vi.clearAllMocks();
+      dbMock.$transaction.mockImplementation(
+        (callback: (tx: typeof dbMock) => Promise<unknown>) => callback(dbMock),
+      );
+      dbMock.$queryRaw.mockResolvedValue([{ id: "claim-1" }]);
+      dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+        claim({ ownerCommandJson: "{}", actionItem }),
+      );
+      dbMock.membership.findUnique.mockResolvedValue({
+        status: MembershipStatus.ACTIVE,
+        role: WorkspaceRole.OPERATOR,
+      });
+      dbMock.opportunity.findFirst.mockResolvedValue({
+        id: "opportunity-1",
+        workspaceId: "workspace-1",
+      });
+      dbMock.observationSourceRun.findFirst.mockResolvedValue(observationRun());
+      dbMock.actionItem.updateMany.mockResolvedValue({ count: 1 });
+      receiptMock.recordExecutionReceipt.mockResolvedValue(canonicalReceipt());
+      receiptMock.auditExecutionReceiptRecorded.mockResolvedValue(undefined);
+
+      await expect(
+        ingestCaioPrivateExecutionResultProjection({
+          principal: PRINCIPAL,
+          projection: projection(),
+          now: NOW,
+        }),
+      ).resolves.toMatchObject({ kind: "recorded" });
+    }
   });
 
   it("rejects a conflicting replay instead of overwriting canonical truth", async () => {

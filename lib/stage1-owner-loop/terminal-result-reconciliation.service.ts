@@ -4,9 +4,14 @@ import {
   ActorType,
   ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
+  MembershipStatus,
   Prisma,
 } from "@prisma/client";
 
+import {
+  WORKSPACE_CAPABILITIES,
+  workspaceRoleHasCapability,
+} from "@/lib/auth/authorization";
 import {
   assertWorkspaceInsightServiceAccess,
   isWorkspaceServiceGovernanceError,
@@ -163,6 +168,9 @@ export async function reconcileStage1TerminalResult(
   validateInput(input);
   const actorType = ActorType.USER;
   try {
+    // Preserve the route's early denial contract, but do not trust this read
+    // for any write. The authoritative check is repeated after the packet lock
+    // inside the SERIALIZABLE transaction below.
     await assertWorkspaceInsightServiceAccess({
       workspaceId: input.workspaceId,
       userId: input.actorUserId,
@@ -184,6 +192,27 @@ export async function reconcileStage1TerminalResult(
           FOR UPDATE`;
         if (lockedClaims.length === 0) {
           return { kind: "not_stage1" as const };
+        }
+        const membership = await tx.membership.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId: input.workspaceId,
+              userId: input.actorUserId!,
+            },
+          },
+          select: { role: true, status: true },
+        });
+        if (
+          !membership ||
+          membership.status !== MembershipStatus.ACTIVE ||
+          !workspaceRoleHasCapability(
+            membership.role,
+            WORKSPACE_CAPABILITIES.MANAGE_INSIGHTS,
+          )
+        ) {
+          throw new Stage1TerminalResultReconciliationError([
+            "workspace_insight_permission_required",
+          ]);
         }
         const claim = await tx.decisionWorkPacketClaim.findFirst({
           where: {
@@ -300,6 +329,8 @@ export async function reconcileStage1TerminalResult(
             actorType,
             english: input.english ?? false,
           },
+          // The membership and capability were re-read after the work-packet
+          // lock in this same SERIALIZABLE transaction.
           { client: tx, governanceAlreadyAsserted: true },
         );
 

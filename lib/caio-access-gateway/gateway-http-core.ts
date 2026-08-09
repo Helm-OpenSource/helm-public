@@ -113,6 +113,11 @@ import {
   assertProjectAccess,
   type ProjectMembershipResolver,
 } from "@/lib/caio-access-gateway/project-access";
+import {
+  assertWorkspaceOperationCapability,
+  type WorkspaceOperationCapabilityResolver,
+} from "@/lib/caio-access-gateway/operation-access";
+import { WORKSPACE_CAPABILITIES } from "@/lib/auth/authorization";
 import type { CaioPreAuthRateLimiterPort } from "@/lib/caio-access-gateway/source-ip-rate-limiter";
 import type { CaioTokenAudience } from "@/lib/caio-access-gateway/token-contracts";
 import type {
@@ -344,6 +349,7 @@ export type CaioGatewayHandlerDependencies = Readonly<{
   tokenAuthenticator: CaioTokenAuthenticatorPort;
   projectResolver: ProjectMembershipResolver;
   operatingQuestionGeneration: CaioOperatingQuestionGenerationPort;
+  operationResolver: WorkspaceOperationCapabilityResolver;
   privateExecutionResultIngress: CaioPrivateExecutionResultIngressPort;
   mcpDispatch: CaioMcpDispatchPort;
   modelProxy: CaioModelProxyPort;
@@ -1053,6 +1059,17 @@ export function createCaioGatewayHandler(
       ) {
         throw new CaioAccessGatewayError("scope_violation");
       }
+      await runWithRequestCancellation(
+        () =>
+          assertWorkspaceOperationCapability(
+            dependencies.operationResolver,
+            principal.workspaceId,
+            principal.userRef,
+            WORKSPACE_CAPABILITIES.SUBMIT_PRIVATE_EXECUTION_RESULT,
+            request.signal,
+          ),
+        request.signal,
+      );
       await boundAssertProjectAccess(privateExecutionResult.portfolioRef);
     }
 

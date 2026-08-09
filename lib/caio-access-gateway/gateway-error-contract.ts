@@ -32,6 +32,7 @@ export type CaioAccessGatewayErrorCode =
   // 403-class
   | "source_ip_mismatch"
   | "project_access_revoked"
+  | "operation_access_revoked"
   | "scope_violation"
   /**
    * The request's project scope could not be determined, so it cannot be
@@ -97,6 +98,7 @@ const WIRE_STATUS_BY_CODE: Readonly<
   audience_mismatch: 401,
   source_ip_mismatch: 403,
   project_access_revoked: 403,
+  operation_access_revoked: 403,
   scope_violation: 403,
   project_scope_unresolved: 403,
   route_not_governed: 403,

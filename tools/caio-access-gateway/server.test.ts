@@ -174,12 +174,11 @@ describe("route table: which surfaces this listener owns", () => {
 
   // A DEPLOYMENT MAY MOUNT THE SUBSET IT CAN ACTUALLY SERVE.
   //
-  // Five of the six ports this surface needs have real in-tree implementations;
-  // the MCP dispatcher has none, and inventing one would produce a facade that
-  // dispatches nothing while looking like it dispatches. So `/mcp` is owned
-  // only when a dispatcher is supplied, and a mount without one does not claim
-  // the path at all — the host's router then 404s it, exactly as it does for a
-  // path no surface declares.
+  // The MCP dispatcher has no in-tree implementation, and inventing one would
+  // produce a facade that dispatches nothing while looking like it dispatches.
+  // So `/mcp` is owned only when a dispatcher is supplied, and a mount without
+  // one does not claim the path at all — the host's router then 404s it, exactly
+  // as it does for a path no surface declares.
   describe("a mount without an MCP dispatcher", () => {
     function createPartialMount() {
       const spy = createPorts();

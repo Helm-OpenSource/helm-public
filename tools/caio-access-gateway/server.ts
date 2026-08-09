@@ -21,19 +21,20 @@
  *   mounted Pack operating-input provider
  *                   /v1/operating-questions/generate
  *
- * That is not a bug to fix later. Verified one by one, THREE of the seven
- * production ports are constructible in this repository today. The
+ * That is not a bug to fix later. Verified one by one, only three production
+ * inputs are constructible in this repository today. The
  * token authenticator (createCaioAccessTokenService over
  * createPrismaCaioAccessTokenPersistence), the canonical audit gate
  * (createCaioAuditGate over createPrismaCaioAuditReceiptStore and
  * createCaioEmergencyQueue), and the readiness probe derived from that gate —
- * with the model alias bindings supplied as deployment DATA by design. Three
- * are absent: the MCP dispatcher has nothing but test doubles; the project resolver
- * is a TYPE ONLY — declared alongside a helper that consumes one,
- * while nothing anywhere produces one; and the mounted Pack operating-input
- * provider is intentionally a deployment input whose implementation and
- * mounting evidence must come from helm-packs and the deployment composition,
- * not from Public Core.
+ * with the model alias bindings supplied as deployment DATA by design.
+ * Deployment-supplied inputs remain absent: the MCP dispatcher has nothing but
+ * test doubles; the project resolver is a TYPE ONLY declared alongside a helper
+ * that consumes one, while nothing anywhere produces one; the
+ * operation capability resolver is likewise a required input with no in-tree
+ * producer;
+ * and the mounted Pack operating-input provider must come from helm-packs and
+ * the deployment composition, not from Public Core.
  *
  * AN EARLIER VERSION OF THIS PARAGRAPH SAID FIVE OF SIX. That was wrong, and
  * the error is worth naming because of how it was made: the survey matched the
@@ -42,9 +43,9 @@
  * the mount decision — so it is corrected here rather than quietly restated.
  *
  * Writing a plausible in-tree stand-in for any absent port would produce a
- * facade that dispatches nothing, or authorizes every project, while looking
- * like it works — the failure this paragraph has warned about since before the
- * mount existed.
+ * facade that dispatches nothing, authorizes every project, or grants every
+ * write operation while looking like it works — the failure this paragraph has
+ * warned about since before the mount existed.
  *
  * `mcpDispatch`, the nested model engine, and the mounted Pack operating-input
  * provider are OPTIONAL capabilities.
@@ -208,6 +209,7 @@ import {
   createCaioGatewayModelListPort,
 } from "@/lib/caio-access-gateway/model-dispatch-bridge";
 import type { ProjectMembershipResolver } from "@/lib/caio-access-gateway/project-access";
+import type { WorkspaceOperationCapabilityResolver } from "@/lib/caio-access-gateway/operation-access";
 import type { CaioPreAuthRateLimiterPort } from "@/lib/caio-access-gateway/source-ip-rate-limiter";
 import type { CaioCanonicalAuditGatePort } from "@/lib/caio-audit-state/gateway-audit-gate-adapter";
 import {
@@ -422,6 +424,7 @@ export type CaioAccessGatewayServerPorts = Readonly<{
   preAuthRateLimiter: CaioPreAuthRateLimiterPort;
   tokenAuthenticator: CaioTokenAuthenticatorPort;
   projectResolver: ProjectMembershipResolver;
+  operationResolver: WorkspaceOperationCapabilityResolver;
   /**
    * OPTIONAL capability for /mcp. The model engine nested under modelProxy is
    * independently optional for the two model-dispatch paths.
@@ -716,6 +719,7 @@ export function createCaioAccessGatewayMount(
         throw error;
       }
     },
+    operationResolver: input.ports.operationResolver,
     privateExecutionResultIngress: async ({ principal, projection }) => {
       try {
         return await ingestCaioPrivateExecutionResultProjection({

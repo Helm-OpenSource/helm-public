@@ -6,11 +6,16 @@ import {
   ApprovalStatus,
   ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
+  MembershipStatus,
   Prisma,
   type ExecutionReceipt,
 } from "@prisma/client";
 
 import type { CaioAccessPrincipal } from "@/lib/caio-access-gateway/token-store.service";
+import {
+  WORKSPACE_CAPABILITIES,
+  workspaceRoleHasCapability,
+} from "@/lib/auth/authorization";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import {
@@ -27,6 +32,8 @@ import {
   resolveCaioFdeObservationEvidence,
   resolveCaioFdePortfolioScope,
 } from "./caio-fde-scope-resolver.service";
+import { validateOwnerCommandDraft } from "./contracts";
+import type { OwnerCommandDraft } from "./types";
 
 const TRANSACTION_OPTIONS = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -47,6 +54,74 @@ export class CaioPrivateExecutionResultIngressError extends Error {
 
 function opaqueId(ref: string): string {
   return ref.slice(ref.indexOf(":") + 1);
+}
+
+function principalUserId(userRef: string): string {
+  if (!userRef.startsWith("user:")) {
+    throw new CaioPrivateExecutionResultIngressError([
+      "private_execution_result_user_principal_required",
+    ]);
+  }
+  const userId = userRef.slice("user:".length);
+  if (!userId || userId.trim() !== userId || userId.includes(":")) {
+    throw new CaioPrivateExecutionResultIngressError([
+      "private_execution_result_user_principal_required",
+    ]);
+  }
+  return userId;
+}
+
+async function assertTransactionAuthorization(input: {
+  client: Prisma.TransactionClient;
+  workspaceId: string;
+  userId: string;
+  userRef: string;
+  ownerCommandJson: string;
+  actionOwnerId: string | null;
+  approvalAssigneeId: string | null;
+}) {
+  const membership = await input.client.membership.findUnique({
+    where: {
+      workspaceId_userId: {
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+      },
+    },
+    select: { role: true, status: true },
+  });
+  if (!membership || membership.status !== MembershipStatus.ACTIVE) {
+    throw new CaioPrivateExecutionResultIngressError([
+      "private_execution_result_membership_inactive",
+    ]);
+  }
+  if (
+    !workspaceRoleHasCapability(
+      membership.role,
+      WORKSPACE_CAPABILITIES.SUBMIT_PRIVATE_EXECUTION_RESULT,
+    )
+  ) {
+    throw new CaioPrivateExecutionResultIngressError([
+      "private_execution_result_operation_permission_required",
+    ]);
+  }
+
+  const ownerCommand = safeParseJson<OwnerCommandDraft | null>(
+    input.ownerCommandJson,
+    null,
+  );
+  const explicitGrantMatches =
+    ownerCommand !== null &&
+    validateOwnerCommandDraft(ownerCommand).valid &&
+    ownerCommand.executionTargetRef === input.userRef;
+  if (
+    input.actionOwnerId !== input.userId &&
+    input.approvalAssigneeId !== input.userId &&
+    !explicitGrantMatches
+  ) {
+    throw new CaioPrivateExecutionResultIngressError([
+      "private_execution_result_executor_binding_required",
+    ]);
+  }
 }
 
 function receiptOutcome(
@@ -150,6 +225,7 @@ export async function ingestCaioPrivateExecutionResultProjection(input: {
       "projection_workspace_mismatch",
     ]);
   }
+  const userId = principalUserId(input.principal.userRef);
   const now = input.now ?? new Date();
   const recordedAt = new Date(projection.recordedAt);
   if (recordedAt > now) {
@@ -214,6 +290,33 @@ export async function ingestCaioPrivateExecutionResultProjection(input: {
           ]);
         }
 
+        await assertTransactionAuthorization({
+          client: tx,
+          workspaceId,
+          userId,
+          userRef: input.principal.userRef,
+          ownerCommandJson: claim.ownerCommandJson,
+          actionOwnerId: claim.actionItem.ownerId,
+          approvalAssigneeId: approvalTask.approverId,
+        });
+
+        if (receipt) {
+          if (
+            claim.actionItem.status === ActionStatus.EXECUTED &&
+            exactReceiptReplay({ receipt, projection })
+          ) {
+            return {
+              kind: "replayed" as const,
+              receiptId: receipt.id,
+              projectionRef: projection.projectionRef,
+              contentHash: projection.contentHash,
+            };
+          }
+          throw new CaioPrivateExecutionResultIngressError([
+            "projection_replay_conflict",
+          ]);
+        }
+
         await resolveCaioFdePortfolioScope({
           client: tx,
           workspaceId,
@@ -240,22 +343,6 @@ export async function ingestCaioPrivateExecutionResultProjection(input: {
           ]);
         }
 
-        if (receipt) {
-          if (
-            claim.actionItem.status === ActionStatus.EXECUTED &&
-            exactReceiptReplay({ receipt, projection })
-          ) {
-            return {
-              kind: "replayed" as const,
-              receiptId: receipt.id,
-              projectionRef: projection.projectionRef,
-              contentHash: projection.contentHash,
-            };
-          }
-          throw new CaioPrivateExecutionResultIngressError([
-            "projection_replay_conflict",
-          ]);
-        }
         if (
           claim.decisionRecord.status !== "DISPATCHED" ||
           claim.actionItem.status !== ActionStatus.APPROVED ||

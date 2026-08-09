@@ -48,6 +48,7 @@ function harness(input?: {
   workspaceId?: string;
   projectRefs?: readonly string[];
   mutationsEnabled?: boolean;
+  operationAllowed?: boolean;
 }) {
   const calls: string[] = [];
   const ingress = vi.fn(async () => ({
@@ -69,11 +70,17 @@ function harness(input?: {
         return {
           tokenId: "token-1",
           workspaceId: input?.workspaceId ?? "workspace-1",
-          userRef: "service:workbuddy-1",
+          userRef: "user:executor-1",
           clientType: input?.clientType ?? "workbuddy",
           deviceRef: "device:workbuddy-1",
           audience: expectedAudience,
         };
+      },
+    },
+    operationResolver: {
+      hasWorkspaceOperationCapability: async () => {
+        calls.push("operation-access");
+        return input?.operationAllowed ?? true;
       },
     },
     projectResolver: {
@@ -139,7 +146,7 @@ function request(body: unknown = projection()) {
 }
 
 describe("private execution result gateway route", () => {
-  it("authenticates, checks live Portfolio access, claims audit, then enters Core", async () => {
+  it("authenticates, checks live operation and Portfolio access, claims audit, then enters Core", async () => {
     const test = harness();
 
     await expect(test.handler(request())).resolves.toMatchObject({
@@ -149,6 +156,7 @@ describe("private execution result gateway route", () => {
     expect(test.calls).toEqual([
       "rate-limit",
       "authenticate",
+      "operation-access",
       "project-access",
       "audit",
       "private-ingress",
@@ -161,6 +169,24 @@ describe("private execution result gateway route", () => {
         }),
       }),
     );
+  });
+
+  it("rejects project-visible callers without the private result operation", async () => {
+    const test = harness({ operationAllowed: false });
+
+    await expect(test.handler(request())).resolves.toMatchObject({
+      status: 403,
+      body: {
+        error: "caio_forbidden",
+        reason: "operation_access_revoked",
+      },
+    });
+    expect(test.calls).toEqual([
+      "rate-limit",
+      "authenticate",
+      "operation-access",
+    ]);
+    expect(test.ingress).not.toHaveBeenCalled();
   });
 
   it("keeps the route fail-closed while mutation capability is disabled", async () => {
@@ -193,6 +219,7 @@ describe("private execution result gateway route", () => {
     expect(revoked.calls).toEqual([
       "rate-limit",
       "authenticate",
+      "operation-access",
       "project-access",
     ]);
 

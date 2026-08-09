@@ -3,6 +3,8 @@ import {
   ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
   ExecutionReceiptVerificationState,
+  MembershipStatus,
+  WorkspaceRole,
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -52,6 +54,7 @@ const {
       const client = {
         $queryRaw: vi.fn(),
         decisionWorkPacketClaim: { findFirst: vi.fn() },
+        membership: { findUnique: vi.fn() },
       };
       return {
         ...client,
@@ -162,6 +165,10 @@ describe("Stage 1 terminal result reconciliation", () => {
     vi.clearAllMocks();
     dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(claim());
     dbMock.$queryRaw.mockResolvedValue([{ id: "locked" }]);
+    dbMock.membership.findUnique.mockResolvedValue({
+      status: MembershipStatus.ACTIVE,
+      role: WorkspaceRole.OWNER,
+    });
     evidenceMock.resolveCaioFdeObservationEvidence.mockResolvedValue({
       runId: "run-1",
       outcome: "SUCCESS",
@@ -208,6 +215,21 @@ describe("Stage 1 terminal result reconciliation", () => {
         where: { workspaceId: "workspace-1", actionItemId: "action-1" },
       }),
     );
+    expect(dbMock.membership.findUnique).toHaveBeenCalledWith({
+      where: {
+        workspaceId_userId: {
+          workspaceId: "workspace-1",
+          userId: "reviewer-1",
+        },
+      },
+      select: { role: true, status: true },
+    });
+    expect(governanceMock.assertWorkspaceInsightServiceAccess).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      userId: "reviewer-1",
+      actorType: ActorType.USER,
+      english: true,
+    });
     expect(receiptMock.verifyExecutionReceipt).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: "workspace-1",
@@ -256,6 +278,27 @@ describe("Stage 1 terminal result reconciliation", () => {
     ).toBeLessThan(
       supervisionMock.recordStage1SupervisionSignal.mock.invocationCallOrder[0],
     );
+  });
+
+  it("rechecks ACTIVE insight permission inside the locked transaction", async () => {
+    dbMock.membership.findUnique.mockResolvedValueOnce({
+      status: MembershipStatus.INACTIVE,
+      role: WorkspaceRole.OWNER,
+    });
+
+    await expect(reconcileStage1TerminalResult(input())).rejects.toMatchObject({
+      reasons: ["workspace_insight_permission_required"],
+    });
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
+
+    dbMock.membership.findUnique.mockResolvedValueOnce({
+      status: MembershipStatus.ACTIVE,
+      role: WorkspaceRole.REVIEWER,
+    });
+    await expect(reconcileStage1TerminalResult(input())).rejects.toMatchObject({
+      reasons: ["workspace_insight_permission_required"],
+    });
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
   });
 
   it("rejects a hand-filled result that conflicts with the canonical receipt outcome", async () => {

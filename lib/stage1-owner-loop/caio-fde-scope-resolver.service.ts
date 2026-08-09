@@ -3,6 +3,12 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 
 import { safeParseJson } from "@/lib/utils";
+import { validateSourceObservationReceipt } from "./contracts";
+import type {
+  EvidenceFreshnessState,
+  ObservationOutcome,
+  SourceObservationReceipt,
+} from "./types";
 
 const OPAQUE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/u;
 const SOURCE_KIND_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
@@ -40,6 +46,13 @@ type ObservationEvidenceRun = Prisma.ObservationSourceRunGetPayload<{
   include: { program: true; source: true };
 }>;
 
+const OUTCOME_BY_TERMINAL_STATUS: Readonly<Record<string, ObservationOutcome>> =
+  Object.freeze({
+    SUCCEEDED: "success",
+    PARTIAL: "partial_success",
+    FAILED: "failure",
+  });
+
 export class CaioFdeScopeResolutionError extends Error {
   readonly reasons: readonly string[];
 
@@ -62,11 +75,18 @@ function parseExactRef(ref: string, prefix: string, reason: string): string {
   return id;
 }
 
-function parseStoredRefs(raw: string | null, reason: string): string[] {
+function parseStoredStringArray(
+  raw: string | null,
+  reason: string,
+  options: Readonly<{ allowEmpty?: boolean }> = {},
+): string[] {
+  if (raw === null && options.allowEmpty) {
+    return [];
+  }
   const parsed = safeParseJson<unknown>(raw, null);
   if (
     !Array.isArray(parsed) ||
-    parsed.length === 0 ||
+    (!options.allowEmpty && parsed.length === 0) ||
     parsed.length > 256 ||
     !parsed.every(
       (value) =>
@@ -78,6 +98,10 @@ function parseStoredRefs(raw: string | null, reason: string): string[] {
     throw new CaioFdeScopeResolutionError([reason]);
   }
   return [...new Set(parsed.map((value) => value.trim()))];
+}
+
+function parseStoredRefs(raw: string | null, reason: string): string[] {
+  return parseStoredStringArray(raw, reason);
 }
 
 export async function resolveCaioFdePortfolioScope(input: {
@@ -133,10 +157,11 @@ export async function resolveCaioFdeObservationEvidence(input: {
       "observation_evidence_workspace_mismatch",
     ]);
   }
-  return resolveObservationEvidenceRun({ ...input, run });
+  return resolveObservationEvidenceRun({ ...input, expectedRunId: runId, run });
 }
 
 function resolveObservationEvidenceRun(input: {
+  expectedRunId: string;
   run: ObservationEvidenceRun;
   workspaceId: string;
   portfolioRef: string;
@@ -148,11 +173,20 @@ function resolveObservationEvidenceRun(input: {
   const now = input.now ?? new Date();
   const reasons: string[] = [];
   if (
+    run.id !== input.expectedRunId ||
     run.program.workspaceId !== input.workspaceId ||
     run.source.workspaceId !== input.workspaceId ||
+    run.program.id !== run.programId ||
+    run.source.id !== run.sourceId ||
     run.source.programId !== run.programId
   ) {
     reasons.push("observation_evidence_workspace_mismatch");
+  }
+  if (
+    !run.program.authorizationRef ||
+    run.source.authorizationRef !== run.program.authorizationRef
+  ) {
+    reasons.push("observation_evidence_authorization_identity_mismatch");
   }
   if (
     run.program.status !== "ACTIVE" ||
@@ -178,9 +212,13 @@ function resolveObservationEvidenceRun(input: {
   if (!storedFreshness) {
     reasons.push("observation_evidence_freshness_invalid");
   }
+  const canonicalOutcome = OUTCOME_BY_TERMINAL_STATUS[run.status];
+  const storedOutcome = run.outcome.toLowerCase();
   if (
     run.authorizationVersion !== run.program.authorizationVersion ||
     !TERMINAL_OBSERVATION_STATUSES.has(run.status) ||
+    canonicalOutcome === undefined ||
+    storedOutcome !== canonicalOutcome ||
     !run.observedAt ||
     run.observedAt < run.windowStart ||
     run.observedAt > run.windowEnd ||
@@ -208,15 +246,47 @@ function resolveObservationEvidenceRun(input: {
     reasons.push("observation_evidence_binding_mismatch");
   }
 
+  const errorCodes = parseStoredStringArray(
+    run.errorCodes,
+    "observation_evidence_error_codes_invalid",
+    { allowEmpty: true },
+  );
+  if (canonicalOutcome !== undefined && run.observedAt) {
+    const canonicalReceipt: SourceObservationReceipt = {
+      receiptId: run.id,
+      workspaceRef: `workspace:${input.workspaceId}`,
+      sourceRef: `observation-source:${run.source.id}`,
+      programRef: `observation-program:${run.program.id}`,
+      windowStart: run.windowStart.toISOString(),
+      windowEnd: run.windowEnd.toISOString(),
+      observedAt: run.observedAt.toISOString(),
+      summaryHash: run.summaryHash,
+      completenessPercent: run.completenessPercent,
+      freshness: run.freshness.toLowerCase() as EvidenceFreshnessState,
+      outcome: canonicalOutcome,
+      evidenceRefs,
+      errorCodes,
+    };
+    const canonicalValidation =
+      validateSourceObservationReceipt(canonicalReceipt);
+    reasons.push(
+      ...canonicalValidation.errors.map((reason) =>
+        reason === "freshness_invalid"
+          ? "observation_evidence_freshness_invalid"
+          : reason,
+      ),
+    );
+  }
+
   if (
     input.expectedBusinessResult === "success" &&
-    run.outcome !== "SUCCESS"
+    canonicalOutcome !== "success"
   ) {
     reasons.push("observation_evidence_outcome_mismatch");
   }
   if (
     input.expectedBusinessResult === "failure" &&
-    !["PARTIAL_SUCCESS", "FAILURE"].includes(run.outcome)
+    !["partial_success", "failure"].includes(canonicalOutcome ?? "")
   ) {
     reasons.push("observation_evidence_outcome_mismatch");
   }
@@ -278,6 +348,7 @@ export async function resolveCaioFdeObservationEvidenceBatch(input: {
   }
   return runIds.map((runId) =>
     resolveObservationEvidenceRun({
+      expectedRunId: runId,
       run: runsById.get(runId)!,
       workspaceId: input.workspaceId,
       portfolioRef: input.portfolioRef,

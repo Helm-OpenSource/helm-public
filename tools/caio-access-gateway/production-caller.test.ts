@@ -169,6 +169,7 @@ describe("the gateway protocol core has a non-test composition caller", () => {
     for (const port of [
       "token authenticator",
       "project resolver",
+      "operation capability resolver",
       "MCP dispatcher",
       "mounted Pack operating-input provider",
       "model alias bindings",

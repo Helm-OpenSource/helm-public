@@ -5,6 +5,7 @@ import {
   ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
   ExecutionReceiptVerificationState,
+  MembershipStatus,
   MemoryStatus,
   OpportunityStage,
   OpportunityType,
@@ -114,7 +115,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
   const privateExecutorPrincipal = (): CaioAccessPrincipal => ({
     tokenId: `token-${suffix}`,
     workspaceId,
-    userRef: `service:workbuddy-${suffix}`,
+    userRef: `user:${ownerUserId}`,
     clientType: "workbuddy",
     deviceRef: `device:workbuddy-${suffix}`,
     audience: "mcp",
@@ -970,7 +971,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       workspaceRef: `workspace:${workspaceId}`,
       decisionRef: record.id,
       ownerRef: ownerUserId,
-      executionTargetRef: "team:synthetic-delivery",
+      executionTargetRef: `user:${ownerUserId}`,
       portfolioRef: `opportunity:${portfolioOpportunityId}`,
       goal: "Resolve the synthetic delivery risk",
       action: "Prepare a recovery plan after approval",
@@ -1091,29 +1092,186 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       terminalProjectionInput,
     );
 
-    await db.observationSource.update({
-      where: { id: terminalObservationSourceId },
-      data: { status: "REVOKED" },
-    });
-    await expect(
-      ingestCaioPrivateExecutionResultProjection({
+    const attemptWhileMembershipChanges = async (input: {
+      membership: { role?: WorkspaceRole; status?: MembershipStatus };
+      reason: string;
+    }) => {
+      let releasePacketLock!: () => void;
+      let packetLocked!: () => void;
+      const release = new Promise<void>((resolve) => {
+        releasePacketLock = resolve;
+      });
+      const locked = new Promise<void>((resolve) => {
+        packetLocked = resolve;
+      });
+      const holder = db.$transaction(async (tx) => {
+        await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT claim.id
+          FROM DecisionWorkPacketClaim claim
+          WHERE claim.workspaceId = ${workspaceId}
+            AND claim.actionItemId = ${dispatchedActionItemId}
+          FOR UPDATE`;
+        packetLocked();
+        await release;
+      });
+      await locked;
+      const attempt = ingestCaioPrivateExecutionResultProjection({
         principal: privateExecutorPrincipal(),
         projection,
         now: new Date(),
-      }),
-    ).rejects.toMatchObject({
-      reasons: ["observation_evidence_source_inactive"],
+      });
+      try {
+        await db.membership.update({
+          where: {
+            workspaceId_userId: { workspaceId, userId: ownerUserId },
+          },
+          data: input.membership,
+        });
+        releasePacketLock();
+        await holder;
+        await expect(attempt).rejects.toMatchObject({ reasons: [input.reason] });
+      } finally {
+        releasePacketLock();
+        await holder.catch(() => undefined);
+        await attempt.catch(() => undefined);
+        await db.membership.update({
+          where: {
+            workspaceId_userId: { workspaceId, userId: ownerUserId },
+          },
+          data: {
+            role: WorkspaceRole.OWNER,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+      }
+    };
+
+    await attemptWhileMembershipChanges({
+      membership: { status: MembershipStatus.INACTIVE },
+      reason: "private_execution_result_membership_inactive",
     });
+    await attemptWhileMembershipChanges({
+      membership: { role: WorkspaceRole.REVIEWER },
+      reason: "private_execution_result_operation_permission_required",
+    });
+
+    const observationBeforeFault = await db.observationSourceRun.findUniqueOrThrow({
+      where: { id: observation.run.id },
+      select: {
+        status: true,
+        summaryHash: true,
+        completenessPercent: true,
+        freshness: true,
+        outcome: true,
+        evidenceRefs: true,
+        errorCodes: true,
+      },
+    });
+    const supervisionBeforeFault = await db.supervisionSignalRecord.count({
+      where: { workspaceId, decisionRecordId: dispatchedDecisionRecordId },
+    });
+    const receiptsBeforeFault = await db.executionReceipt.findMany({
+      where: {
+        workspaceId,
+        OR: [
+          { actionItemId: dispatchedActionItemId },
+          {
+            subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+            subjectId: dispatchedActionItemId,
+          },
+        ],
+      },
+      select: { id: true, actionItemId: true, subjectType: true, subjectId: true },
+      orderBy: { id: "asc" },
+    });
+    const receiptWriteFaultProjection =
+      createCaioProPrivateExecutionResultProjection({
+        ...terminalProjectionInput,
+        // The public projection contract permits this length, while the
+        // current MySQL ExecutionReceipt.actionTaken column is VARCHAR(191).
+        // MySQL therefore rejects the receipt write after the ActionItem CAS.
+        actionTaken: "x".repeat(192),
+      });
+    await expect(
+      ingestCaioPrivateExecutionResultProjection({
+        principal: privateExecutorPrincipal(),
+        projection: receiptWriteFaultProjection,
+        now: new Date(),
+      }),
+    ).rejects.toMatchObject({ code: "P2000" });
     expect(
-      await db.actionItem.findUnique({
+      await db.actionItem.findUniqueOrThrow({
         where: { id: dispatchedActionItemId },
         select: { status: true, executionReceipt: { select: { id: true } } },
       }),
     ).toEqual({ status: ActionStatus.APPROVED, executionReceipt: null });
-    await db.observationSource.update({
-      where: { id: terminalObservationSourceId },
-      data: { status: "ACTIVE" },
-    });
+    expect(
+      await db.observationSourceRun.findUniqueOrThrow({
+        where: { id: observation.run.id },
+        select: {
+          status: true,
+          summaryHash: true,
+          completenessPercent: true,
+          freshness: true,
+          outcome: true,
+          evidenceRefs: true,
+          errorCodes: true,
+        },
+      }),
+    ).toEqual(observationBeforeFault);
+    expect(
+      await db.supervisionSignalRecord.count({
+        where: { workspaceId, decisionRecordId: dispatchedDecisionRecordId },
+      }),
+    ).toBe(supervisionBeforeFault);
+    expect(
+      await db.executionReceipt.findMany({
+        where: {
+          workspaceId,
+          OR: [
+            { actionItemId: dispatchedActionItemId },
+            {
+              subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+              subjectId: dispatchedActionItemId,
+            },
+          ],
+        },
+        select: {
+          id: true,
+          actionItemId: true,
+          subjectType: true,
+          subjectId: true,
+        },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(receiptsBeforeFault);
+
+    try {
+      await db.observationSource.update({
+        where: { id: terminalObservationSourceId },
+        data: { status: "REVOKED" },
+      });
+      await expect(
+        ingestCaioPrivateExecutionResultProjection({
+          principal: privateExecutorPrincipal(),
+          projection,
+          now: new Date(),
+        }),
+      ).rejects.toMatchObject({
+        reasons: ["observation_evidence_source_inactive"],
+      });
+      expect(
+        await db.actionItem.findUnique({
+          where: { id: dispatchedActionItemId },
+          select: { status: true, executionReceipt: { select: { id: true } } },
+        }),
+      ).toEqual({ status: ActionStatus.APPROVED, executionReceipt: null });
+    } finally {
+      await db.observationSource.update({
+        where: { id: terminalObservationSourceId },
+        data: { status: "ACTIVE" },
+      });
+    }
 
     const ingress = () =>
       ingestCaioPrivateExecutionResultProjection({
@@ -1149,19 +1307,43 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       outcome: ExecutionReceiptOutcome.SUCCESS,
     });
 
-    const conflictingProjection =
-      createCaioProPrivateExecutionResultProjection({
+    const originalProgram = await db.enterpriseObservationProgram.findUniqueOrThrow({
+      where: { id: observation.program.id },
+      select: { expiresAt: true },
+    });
+    try {
+      await db.enterpriseObservationProgram.update({
+        where: { id: observation.program.id },
+        data: { expiresAt: new Date(Date.now() - 1_000) },
+      });
+      await expect(ingress()).resolves.toMatchObject({
+        kind: "replayed",
+        receiptId: expect.any(String),
+      });
+
+      const conflictingProjection = createCaioProPrivateExecutionResultProjection({
         ...terminalProjectionInput,
         actionTaken:
           "Changed action text must not overwrite the canonical receipt.",
       });
-    await expect(
-      ingestCaioPrivateExecutionResultProjection({
-        principal: privateExecutorPrincipal(),
-        projection: conflictingProjection,
-        now: new Date(),
-      }),
-    ).rejects.toMatchObject({ reasons: ["projection_replay_conflict"] });
+      await expect(
+        ingestCaioPrivateExecutionResultProjection({
+          principal: privateExecutorPrincipal(),
+          projection: conflictingProjection,
+          now: new Date(),
+        }),
+      ).rejects.toMatchObject({ reasons: ["projection_replay_conflict"] });
+      expect(
+        await db.executionReceipt.count({
+          where: { workspaceId, actionItemId: dispatchedActionItemId },
+        }),
+      ).toBe(1);
+    } finally {
+      await db.enterpriseObservationProgram.update({
+        where: { id: observation.program.id },
+        data: { expiresAt: originalProgram.expiresAt },
+      });
+    }
   });
 
   it("rolls back receipt verification and evaluation when supervision conflicts, then converges", async () => {

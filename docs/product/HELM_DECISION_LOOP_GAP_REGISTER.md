@@ -52,12 +52,12 @@ governance 权限，不新建角色或 ACL。
 | GAP-1 closed | 非 seed、非测试的终态协调器在同一 `SERIALIZABLE` 事务内调用 `recordStage1SupervisionSignal` | 确定性 `signalId=stage1-terminal-result:{decisionRecordId}`；监督冲突的真实 MySQL 用例证明 receipt verification、evaluation 与 memory 一并回滚 |
 | GAP-2 closed | 同一事务先调用 `evaluateStage1DecisionRecord`，把与 canonical receipt 一致的明确业务结果回流现有 `DecisionRecord` | 评估先于监督；冲突重放由既有 DecisionRecord 内容一致性拒绝；门禁固定事务与调用顺序 |
 | terminal trigger reachable | 现有 `/approvals` 客户端调用 server action；Stage1 进入原子协调器，非 Stage1 继续独立验证 receipt | `features/approvals/approvals-client.tsx`、`features/approvals/actions.ts`、`features/approvals/queries.ts` |
-| trusted evidence closed | outcome ref 必须解析为当前 workspace、Portfolio、DecisionRecord、ActionItem、ApprovalTask 范围内仍有效的 `ObservationSourceRun` | `caio-fde-scope-resolver.service.ts` 与 unit / isolated MySQL revoked-source 拒绝测试 |
-| private ingress reachable | 受认证 WorkBuddy MCP principal 通过 Gateway 的 `/v1/execution-results` 进入 Core；Core 校验 identity/hash/scope/CAS 后唯一调用 `recordExecutionReceipt` | Gateway、`private-execution-result-ingress.service.ts`、并发 exact replay 与冲突 replay MySQL 测试；不证明私有 executor 已部署 |
+| trusted evidence closed | 新写的 outcome ref 必须解析为当前 workspace、Portfolio、DecisionRecord、ActionItem、ApprovalTask 范围内仍有效的 `ObservationSourceRun`；resolver 从持久化行重建 canonical `SourceObservationReceipt` 并调用既有 validator，核对摘要、完整度、新鲜度、错误码、终态/outcome、授权及证据 identity | `caio-fde-scope-resolver.service.ts` canonical fixture/unit tests 与 isolated MySQL revoked-source 拒绝测试 |
+| private ingress reachable | 受认证 WorkBuddy MCP user principal 通过 Gateway 的 `/v1/execution-results` 进入 Core；project visibility 与专用 `submit_private_execution_result` operation capability 分离检查，Core 锁 Work Packet 后在同一 `SERIALIZABLE` 事务重验 ACTIVE membership、operation capability 与 executor binding，再由唯一 writer 写 receipt | Gateway、`private-execution-result-ingress.service.ts`、锁后撤权/降权及 executor-binding tests；不证明 resolver 已由 Overlay 供给或私有 executor 已部署 |
 | Pack portable contract S1 closed | 完整 artifact 与版本化 semantic verifier 共同形成 contract identity；semantic graph 显式声明 `evidenceRef -> evidenceKind`，重复、悬空、coverage 与 kind 冲突全部 fail-closed | TS / JSON artifact differential 与逐叶 mutation 测试；不证明 production composition caller、Core 自生成问题或 Pack 已挂载 |
 | Pack Core generator S2 closed | Pack seam 拒绝外部 candidates、问题正文、score/rank；Core 从 workspace Portfolio、可信 G0 evidence traces、S1 bindings 与完整 semantic graph 派生 eligibility、内容、事实/推论、score/rank、validation metric 与 narrow loop | generator/store focused tests 覆盖语义敏感性、exactly-10、约束后 `insufficient_evidence`、幂等 request hash 与既有 canonical writer；不证明 production mount |
 | Public production caller S3 reachable | 受认证 WorkBuddy Gateway 独立 route 只接收 `portfolioRef + generationKey`，以当前 principal/workspace/Portfolio 解析唯一注入 provider，再进入 S2 Core generator/store；重复 provider 在 mount 构造时拒绝 | route、registry、真实 composition 测试与 AST 门禁锁定唯一 caller/registration，覆盖未挂载、重复挂载、跨 workspace、无 G0、insufficient 与重放；只证明 Public caller 可达，不证明 Pack 已提供组件、部署已挂载或 runtime 已激活 |
-| replay / concurrency closed | private ingress、receipt verification、decision evaluation 和 supervision 使用既有锁、CAS、幂等内容匹配与唯一键 | focused tests 与一次性 `helm_caio_stage1_*` MySQL 并发、冲突、回滚测试 |
+| replay / concurrency closed | private ingress 每次重验 caller project/operation 权限；锁后先识别 strict exact receipt replay，再对新写校验当前 evidence authorization；receipt verification、decision evaluation 和 supervision 继续使用既有锁、CAS、幂等内容匹配与唯一键 | focused tests 与一次性 `helm_caio_stage1_*` MySQL 撤权/降权 interleaving、CAS 后故障回滚、授权过期 exact replay、变更 payload conflict 测试 |
 | read side reachable | `/caio` 先显示 unresolved critical，再显示其他 unresolved，剩余额度才显示 resolved；每条显示 status | `features/dashboard/stage1-owner-loop-query.ts`、console 与 mixed-status regression |
 
 ### 1.1 调用顺序与失败恢复
@@ -76,9 +76,11 @@ governance 权限，不新建角色或 ACL。
 证据引用或是否采纳建议发生漂移时 fail-closed，不能覆盖历史。
 
 私有 executor 只提交严格版本化、带 content hash 的结果投影。Gateway 先执行 mTLS/token、
-workspace 与 Portfolio membership 检查，Core ingress 再锁定 Work Packet、解析当前证据并通过
-唯一 `recordExecutionReceipt` writer 写 `SELF_REPORTED` receipt。该链只记录已经发生的私有
-执行证明，不授权、不发起任何外部副作用。
+workspace、Portfolio membership 与专用 operation capability 检查。Core ingress 锁定 Work
+Packet 后，以同一事务中的当前 membership/capability/executor binding 作为写权限真值。strict
+exact replay 仍要求这些当前 caller 权限，但不因首次成功后历史 evidence authorization 到期而
+改写既有回执；任何 payload 漂移均冲突，只有新写继续要求当前 evidence authorization。该链只
+记录已经发生的私有执行证明，不授权、不发起任何外部副作用。
 
 ## 2. 仍开放
 
