@@ -6,17 +6,40 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkDecisionLoopGaps,
+  functionCallIndex,
   productionReferences,
+  RECORDED_CLOSED_GAPS,
+  RECORDED_OPEN_GAPS,
   RECORDED_REACHABLE,
-  RECORDED_UNREACHABLE,
   REGISTER_PATH,
+  REQUIRED_REGISTER_MARKERS,
   wordBoundaryRegExp,
 } from "./check-decision-loop-gaps";
 
 /** A throwaway repository shaped like the claims this guard makes. */
-function fixtureRepo(files: Readonly<Record<string, string>>): string {
+function fixtureRepo(files: Readonly<Record<string, string>> = {}): string {
   const root = mkdtempSync(path.join(tmpdir(), "gap-register-"));
-  for (const [file, contents] of Object.entries(files)) {
+  const fixtureFiles: Record<string, string> = {
+    [REGISTER_PATH]: `${REQUIRED_REGISTER_MARKERS.join("\n")}\n`,
+    "prisma/schema.prisma": "",
+    "lib/stage1-owner-loop/decision-follow-through.service.ts":
+      "export function recordStage1SupervisionSignal() {}\n",
+    "lib/stage1-owner-loop/decision-evaluation.service.ts":
+      "export function evaluateStage1DecisionRecord() {}\n",
+    "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts": [
+      "const evaluation = await evaluateStage1DecisionRecord({});",
+      "const supervisionSignal = await recordStage1SupervisionSignal({});",
+    ].join("\n"),
+    "features/approvals/actions.ts": [
+      "await verifyExecutionReceipt({});",
+      "await reconcileStage1TerminalResult({});",
+    ].join("\n"),
+    ...Object.fromEntries(
+      RECORDED_REACHABLE.map((fact) => [fact.file, `${fact.needle}\n`]),
+    ),
+    ...files,
+  };
+  for (const [file, contents] of Object.entries(fixtureFiles)) {
     const full = path.join(root, file);
     mkdirSync(path.dirname(full), { recursive: true });
     writeFileSync(full, contents);
@@ -29,104 +52,214 @@ describe("decision loop gap register", () => {
     expect(checkDecisionLoopGaps(process.cwd())).toEqual([]);
   });
 
-  it("is checking a register that exists and records both open and closed items", () => {
-    // CONTROL. An empty finding list is what "no gaps" looks like AND what a
-    // guard that checks nothing looks like. Only one of them is evidence.
-    expect(RECORDED_UNREACHABLE.length).toBeGreaterThanOrEqual(2);
+  it("checks two closed producer gaps, one open persistence gap, and controls", () => {
+    expect(RECORDED_CLOSED_GAPS.map((entry) => entry.gap)).toEqual([
+      "GAP-1",
+      "GAP-2",
+    ]);
+    expect(RECORDED_OPEN_GAPS.map((entry) => entry.gap)).toEqual(["GAP-3"]);
     expect(RECORDED_REACHABLE.length).toBeGreaterThanOrEqual(4);
+    expect(REQUIRED_REGISTER_MARKERS).toHaveLength(3);
     expect(REGISTER_PATH).toMatch(/\.md$/u);
   });
 
-  describe("a gap that closes must be reported, not silently kept", () => {
-    it("reports a recorded-unreachable symbol that gained a caller", () => {
-      const entry = RECORDED_UNREACHABLE[0];
+  describe("closed production paths", () => {
+    for (const entry of ["GAP-1", "GAP-2"] as const) {
+      it(`fails when ${entry}'s terminal producer call is removed`, () => {
+        const closed = RECORDED_CLOSED_GAPS.find(
+          (candidate) => candidate.gap === entry,
+        );
+        expect(closed).toBeDefined();
+        const other = RECORDED_CLOSED_GAPS.find(
+          (candidate) => candidate.gap !== entry,
+        );
+        expect(other).toBeDefined();
+        const root = fixtureRepo({
+          [closed!.producerFile]: [
+            `const evaluation = await ${
+              entry === "GAP-2"
+                ? `${closed!.producerNeedle}Removed`
+                : other!.producerNeedle
+            }({});`,
+            `const supervisionSignal = await ${
+              entry === "GAP-1"
+                ? `${closed!.producerNeedle}Removed`
+                : other!.producerNeedle
+            }({});`,
+          ].join("\n"),
+        });
+
+        const findings = checkDecisionLoopGaps(root);
+        expect(findings.some((finding) => finding.gap === entry)).toBe(true);
+      });
+    }
+
+    it("fails when approvals no longer invokes the terminal reconciler after receipt verification", () => {
       const root = fixtureRepo({
-        ...Object.fromEntries(
-          RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
-        ),
-        "lib/caller.ts": `import { ${entry.symbol} } from "x";\n`,
-        "prisma/schema.prisma": "",
-        [REGISTER_PATH]: "# register\n",
-        ...Object.fromEntries(
-          RECORDED_REACHABLE.map((fact) => [fact.file, `${fact.needle}\n`]),
-        ),
+        "features/approvals/actions.ts": "await verifyExecutionReceipt({});\n",
       });
       const findings = checkDecisionLoopGaps(root);
-      expect(findings).toHaveLength(1);
-      expect(findings[0]?.gap).toBe(entry.gap);
-      expect(findings[0]?.detail).toContain("lib/caller.ts");
-      expect(findings[0]?.detail).toContain("update");
+
+      expect(findings.filter((finding) => finding.gap === "GAP-1")).toHaveLength(
+        1,
+      );
+      expect(findings.filter((finding) => finding.gap === "GAP-2")).toHaveLength(
+        1,
+      );
     });
 
-    it("does not count the definition file or tests as callers", () => {
-      // The distinction the whole register is about: a test exercising a
-      // function proves it works, it does not put it on a path anything runs.
-      const entry = RECORDED_UNREACHABLE[0];
+    it("fails when supervision is attempted before the decision evaluation", () => {
       const root = fixtureRepo({
-        ...Object.fromEntries(
-          RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
-        ),
-        "lib/stage1-owner-loop/thing.test.ts": `import { ${entry.symbol} } from "x";\n`,
-        "prisma/schema.prisma": "",
-        [REGISTER_PATH]: "# register\n",
-        ...Object.fromEntries(
-          RECORDED_REACHABLE.map((fact) => [fact.file, `${fact.needle}\n`]),
-        ),
+        "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts": [
+          "const supervisionSignal = await recordStage1SupervisionSignal({});",
+          "const evaluation = await evaluateStage1DecisionRecord({});",
+        ].join("\n"),
       });
+      const findings = checkDecisionLoopGaps(root);
+
+      expect(findings.some((finding) => finding.detail.includes("order"))).toBe(
+        true,
+      );
+    });
+
+    it("recognizes governed producer calls wrapped by an error normalizer", () => {
+      const source = [
+        "const evaluation = await runStep(() =>",
+        "  evaluateStage1DecisionRecord({}),",
+        ");",
+        "const supervision = await runStep(() =>",
+        "  recordStage1SupervisionSignal({}),",
+        ");",
+      ].join("\n");
+      const root = fixtureRepo({
+        "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts":
+          source,
+      });
+
+      expect(functionCallIndex(source, "evaluateStage1DecisionRecord")).toBeLessThan(
+        functionCallIndex(source, "recordStage1SupervisionSignal"),
+      );
       expect(checkDecisionLoopGaps(root)).toEqual([]);
-      expect(productionReferences(root, entry.symbol, entry.definedIn)).toEqual([]);
     });
 
-    it("reports a Prisma model the register says is absent", () => {
+    it("finds a production reference but excludes definitions and tests", () => {
       const root = fixtureRepo({
-        ...Object.fromEntries(
-          RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
+        "lib/caller.ts":
+          'import { recordStage1SupervisionSignal } from "x";\n',
+        "lib/thing.test.ts":
+          'import { recordStage1SupervisionSignal } from "x";\n',
+      });
+
+      expect(
+        productionReferences(
+          root,
+          "recordStage1SupervisionSignal",
+          "lib/stage1-owner-loop/decision-follow-through.service.ts",
         ),
+      ).toEqual([
+        "lib/caller.ts",
+        "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts",
+      ]);
+    });
+
+    it("fails when a second production path calls a canonical producer directly", () => {
+      const root = fixtureRepo({
+        "lib/alternate-terminal-runtime.ts":
+          "await recordStage1SupervisionSignal({});\n",
+      });
+
+      const findings = checkDecisionLoopGaps(root);
+
+      expect(findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            gap: "GAP-1",
+            detail: expect.stringContaining("alternate-terminal-runtime.ts"),
+          }),
+        ]),
+      );
+    });
+
+    it("fails when a second production entry invokes the terminal reconciler", () => {
+      const root = fixtureRepo({
+        "app/api/alternate-terminal/route.ts":
+          "await reconcileStage1TerminalResult({});\n",
+      });
+
+      const findings = checkDecisionLoopGaps(root);
+
+      expect(findings.filter((finding) => finding.gap === "GAP-1")).toHaveLength(
+        1,
+      );
+      expect(findings.filter((finding) => finding.gap === "GAP-2")).toHaveLength(
+        1,
+      );
+      expect(findings[0]?.detail).toContain("alternate-terminal/route.ts");
+    });
+  });
+
+  describe("the remaining open gap", () => {
+    it("fails when a Company Memory persistence model appears", () => {
+      const root = fixtureRepo({
         "prisma/schema.prisma": "model KnowledgeCard {\n  id String @id\n}\n",
-        [REGISTER_PATH]: "# register\n",
-        ...Object.fromEntries(
-          RECORDED_REACHABLE.map((fact) => [fact.file, `${fact.needle}\n`]),
-        ),
       });
       const findings = checkDecisionLoopGaps(root);
+
       expect(findings).toHaveLength(1);
       expect(findings[0]?.gap).toBe("GAP-3");
     });
   });
 
-  describe("the closed-loop controls", () => {
+  describe("register and closed-loop controls", () => {
     it("fails when a recorded-closed fact stops being true", () => {
       const [fact] = RECORDED_REACHABLE;
-      const root = fixtureRepo({
-        ...Object.fromEntries(
-          RECORDED_UNREACHABLE.map((e) => [e.definedIn, `export function ${e.symbol}() {}\n`]),
-        ),
-        "prisma/schema.prisma": "",
-        [REGISTER_PATH]: "# register\n",
-        ...Object.fromEntries(
-          RECORDED_REACHABLE.map((f) => [f.file, f === fact ? "gone\n" : `${f.needle}\n`]),
-        ),
-      });
+      const root = fixtureRepo({ [fact.file]: "gone\n" });
       const findings = checkDecisionLoopGaps(root);
+
       expect(findings).toHaveLength(1);
       expect(findings[0]?.gap).toBe("control");
       expect(findings[0]?.detail).toContain(fact.file);
     });
 
+    it("fails when a checked gap status marker is missing", () => {
+      const root = fixtureRepo({
+        [REGISTER_PATH]: `${REQUIRED_REGISTER_MARKERS.slice(1).join("\n")}\n`,
+      });
+      const findings = checkDecisionLoopGaps(root);
+
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.gap).toBe("register");
+    });
+
     it("matches on a word boundary, so a rename cannot survive the check", () => {
-      // Found by mutation: `includes("Stage1DecisionQueue")` is still satisfied
-      // by `Stage1DecisionQueueX`, which made this control nearly unbreakable.
-      // A control that cannot fail is not a control.
-      expect(wordBoundaryRegExp("Stage1DecisionQueue").test("<Stage1DecisionQueue />")).toBe(true);
-      expect(wordBoundaryRegExp("Stage1DecisionQueue").test("<Stage1DecisionQueueX />")).toBe(false);
-      expect(wordBoundaryRegExp("decisionRecord.create").test("tx.decisionRecord.create({")).toBe(true);
-      expect(wordBoundaryRegExp("decisionRecord.create").test("tx.decisionRecord.created")).toBe(false);
+      expect(
+        wordBoundaryRegExp("Stage1DecisionQueue").test(
+          "<Stage1DecisionQueue />",
+        ),
+      ).toBe(true);
+      expect(
+        wordBoundaryRegExp("Stage1DecisionQueue").test(
+          "<Stage1DecisionQueueX />",
+        ),
+      ).toBe(false);
+      expect(
+        wordBoundaryRegExp("decisionRecord.create").test(
+          "tx.decisionRecord.create({",
+        ),
+      ).toBe(true);
+      expect(
+        wordBoundaryRegExp("decisionRecord.create").test(
+          "tx.decisionRecord.created",
+        ),
+      ).toBe(false);
     });
   });
 
   it("fails when the register itself is gone", () => {
-    // FAIL-CLOSED. Deleting the document must not make the guard vacuously OK.
-    const root = fixtureRepo({ "prisma/schema.prisma": "" });
+    const root = mkdtempSync(path.join(tmpdir(), "gap-register-missing-"));
+    mkdirSync(path.join(root, "prisma"), { recursive: true });
+    writeFileSync(path.join(root, "prisma/schema.prisma"), "");
+
     const findings = checkDecisionLoopGaps(root);
     expect(findings).toHaveLength(1);
     expect(findings[0]?.detail).toContain(REGISTER_PATH);

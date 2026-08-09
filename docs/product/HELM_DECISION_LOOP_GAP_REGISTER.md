@@ -3,101 +3,105 @@ status: active
 owner: helm-core
 created: 2026-08-06
 review_after: 2026-09-06
-public_safety: Code-reachability facts about the decision and supervision loop in this repository, recorded with file paths and checked mechanically. Claims no deployment, activation, customer readiness, or owner approval. Contains no customer identifiers, private deployment information, or real tenant material.
+public_safety: Code-reachability facts about the decision and supervision loop in this repository, recorded with file paths and checked mechanically. Claims no deployment, activation, customer readiness, external-action authorization, or business value. Contains no customer identifiers, private deployment information, or real tenant material.
 ---
 
 # Decision loop gap register / 决策闭环缺口清单
 
-`scripts/check-decision-loop-gaps.ts` 校验本文件的每一条断言。**这不是一份状态文档，是一份被检查的清单**——每条缺口都可被机械复核，修好任何一条都会让那道闸变红，强制在同一次改动里更新本文件。
+`scripts/check-decision-loop-gaps.ts` 校验本文的状态标记、生产调用点、调用顺序、挂载读侧和
+剩余持久化缺口。代码或文档任一侧变化都会使门禁失败，不能把测试引用当成生产可达性。
 
-之所以这样做，是因为 `docs/STATUS.md` 已经在**两个相反方向**上失真（见 §4）。一份告诉你"进度在哪"的文档，如果没有东西校验它，就会同时高估和低估自己。
+<!-- decision-loop-gap:GAP-1=closed -->
+<!-- decision-loop-gap:GAP-2=closed -->
+<!-- decision-loop-gap:GAP-3=open -->
 
-> 本文件只陈述代码可达性事实。不声明部署、激活、客户就绪或 owner 批准。
+> 本文件只陈述当前提交的代码可达性事实。GAP-1/2 闭合不证明组合包、现场部署、运行激活、
+> owner 外部动作授权或经营价值成立。
 
----
+## 0. 结论
 
-## 0. 一句话结论
+GAP-1 与 GAP-2 已由同一条生产可达、workspace scoped、可重放的终态路径闭合；GAP-3
+仍开放。本轮没有新增 Prisma model 或 migration，也没有增加写回、真拨、通知、外部连接或
+自动执行。
 
-**决策对象已经上线并且 owner 可达；监督闭环是开环的，缺口在生产者那一侧。**
+```text
+/approvals existing terminal action
+  -> verifyExecutionReceipt
+  -> reconcileStage1TerminalResult
+       -> evaluateStage1DecisionRecord
+       -> recordStage1SupervisionSignal
+  -> /caio reads current DecisionRecord / receipt / supervision records
+```
 
-界面在、查询在、渲染在、测试全绿——但除 `prisma/seed.ts` 外，**没有任何代码路径会产生这块面板要显示的东西**。
+选择 `features/approvals/actions.ts#verifyExecutedTaskReceiptAction` 作为唯一 terminal trigger，
+因为它已经位于真实 approvals 入口，能在既有独立复核后确认 canonical `ExecutionReceipt`；
+Stage 1 终态还必须显式提交最终业务结果和 evidence ref。普通回执验证仍保持原权限，Stage 1
+结果回流额外复用现有 insight governance 权限，不新建角色或 ACL。
 
-缺消费者的东西看起来没做完；**缺生产者的东西看起来做完了**。这是本清单存在的理由。
+## 1. 已闭合且持续检查
 
----
+| 状态 | 事实 | 机械证据 |
+|---|---|---|
+| GAP-1 closed | 非 seed、非测试的终态协调器幂等调用 `recordStage1SupervisionSignal` | `lib/stage1-owner-loop/terminal-result-reconciliation.service.ts`；确定性 `signalId=stage1-terminal-result:{decisionRecordId}`；`scripts/check-decision-loop-gaps.ts` 固定生产调用与入口 |
+| GAP-2 closed | 同一协调器先调用 `evaluateStage1DecisionRecord`，把明确业务结果回流现有 `DecisionRecord` | 评估先于监督；冲突重放先由既有 DecisionRecord CAS 拒绝；门禁固定调用顺序 |
+| terminal trigger reachable | 现有 `/approvals` 客户端调用 server action；server action 先独立验证 canonical receipt，再协调结果 | `features/approvals/approvals-client.tsx`、`features/approvals/actions.ts`、`features/approvals/queries.ts` |
+| workspace / permission closed | task、claim、decision、action、approval 和 receipt 均按 workspace 收敛；跨 workspace 查找不泄漏记录 | 既有 action review、insight governance、service governance；unit + isolated MySQL 拒绝测试 |
+| replay / concurrency closed | receipt verification、decision evaluation 和 supervision signal 都使用既有幂等/CAS/唯一键；中断后可用同一输入重试收敛 | focused tests 与一次性 `helm_caio_stage1_*` MySQL 并发测试 |
+| read side reachable | `/caio` 读取全部近期监督状态；已解决成功信号可见但不计入 open/warning attention | `features/dashboard/stage1-owner-loop-query.ts` 与 readout tests |
 
-## 1. 已闭合（作为对照项记录，不是缺口）
+### 1.1 调用顺序与失败恢复
 
-这一节的存在是**控制项**：如果校验器坏了，它会连这些一起报错，而不是安静地宣布"没有缺口"。一个在自己从未测量过的东西上通过的检查，会被当成证据。
+1. server action 以当前 workspace 读取现有 `ApprovalTask`、`ActionItem` 和 Work Packet claim；
+2. 既有 action-review 权限允许独立复核，Stage 1 最终结果另需既有 insight 权限；
+3. `verifyExecutionReceipt` 先把 canonical receipt 验证到不可降级的 `VERIFIED`；
+4. 协调器重新按 workspace 读取 claim、DecisionRecord、ActionItem、ApprovalTask 与 receipt；
+5. `evaluateStage1DecisionRecord` 先写评估与 `MemoryFact.OBSERVED` 候选；
+6. `recordStage1SupervisionSignal` 再写确定性监督事实，不执行任何干预。
 
-| 事实 | 证据 |
-|---|---|
-| DecisionRecord 有真实生产者 | `lib/stage1-owner-loop/decision-follow-through.service.ts` → `tx.decisionRecord.create`；上游 `lib/stage1-owner-loop/caio-operating-question-store.service.ts` `bindCurrentCaioQuestionSelectionToDecisionRecords`，由 `tools/caio-workbuddy-gateway/prisma-runtime.ts` 调用 |
-| DecisionRecord 有真实消费者且已挂载 | `features/approvals/stage1-decision-queue-loader.ts` (`db.decisionRecord.findMany`) → `app/(workspace)/approvals/page.tsx` 渲染 `<Stage1DecisionQueue />` |
-| 决策评审是可交互的写回，不是只读 | `features/approvals/stage1-decision-queue.tsx` POST `/api/stage1/decisions/{id}/review`；路由已实现于 `app/api/stage1/decisions/[decisionId]/review/route.ts` |
-| 监督信号有真实**读侧**且已挂载 | `features/dashboard/stage1-owner-loop-query.ts` (`supervisionSignalRecord.findMany` / `groupBy`) → `app/(workspace)/caio/page.tsx` 渲染 `Stage1OwnerLoopConsole`；另有 `lib/integrations/qoderwork/tool-executor.ts` 经 `app/api/mcp/qoderwork/route.ts` 暴露 |
+若步骤 5 或 6 之间中断，重试相同终态输入会复用既有评估并收敛到同一监督键。不同业务结果
+或证据引用的重放由既有评估内容一致性/CAS fail-closed，不能覆盖历史。
 
----
-
-## 2. 缺口
-
-### GAP-1 监督信号没有生产者（闭环开在写侧）
-
-`recordStage1SupervisionSignal` 定义于 `lib/stage1-owner-loop/decision-follow-through.service.ts`，内部 `tx.supervisionSignalRecord.create`。
-
-**全仓引用 = 它自己的定义 + 它自己的测试。`lib/`、`app/`、`features/`、`tools/` 中零生产调用。**
-
-唯一真正写入过该表的地方是 `prisma/seed.ts`。因此 `/caio` 上的"监督异常"面板**只可能显示种子数据**。
-
-- **影响**：监督闭环不成立。没有真实监督信号，就没有"发现偏差 / 知识过期 / 策略漂移 / 回执缺失"的输入。
-- **可证伪**：关掉 seed，该面板应当无数据。
-
-### GAP-2 决策评估没有生产者（结果不回流）
-
-`evaluateStage1DecisionRecord` 定义于 `lib/stage1-owner-loop/decision-evaluation.service.ts`。
-
-**全仓引用 = 它自己的定义 + 单元测试 + 两个隔离 MySQL 测试（`stage1-owner-loop.mysql.test.ts`、`caio-pro-v1-synthetic-loop.mysql.test.ts`）。生产代码零调用。**
-
-- **影响**：这是挡在"评测实验室"前面的东西。没有评估写回，就凑不出「AI 建议 / 人类决定 / 最终结果」三元组。
-- **连带**：因此也拿不出 observer → shadow 升级所需的**分歧语料**——AI 与人从未被记录为分歧时，"AI 是对的"和"测量根本没生效"输出完全一样。
+## 2. 仍开放
 
 ### GAP-3 Company Memory 只有契约，没有持久化
 
-`lib/company-memory/` 有类型（`types.ts`）与 494 行纯函数治理逻辑（`governance.ts`），且自述为 contract-only：
+`lib/company-memory/` 仍是 contract-only 纯函数边界；`prisma/schema.prisma` 无
+`KnowledgeCard` / `KnowledgeSource` model。本轮产生的 `MemoryFact.OBSERVED` 仍只是候选事实，
+不得表述为持久化 Company Memory、企业世界模型或长期知识层。
 
-> `contract is pure: types + enums only, no IO, no persistence, no runtime authority.`
+- **影响**：长期知识项的来源、适用范围、失效、撤销、删除与恢复尚未形成持久化闭环。
+- **停止条件**：GAP-3 需要 schema/migration、保留和恢复设计，必须经过独立 owner 批准；
+  不能顺手并入 GAP-1/2。
+- **机械证据**：checker 要求上述两个 Prisma model 继续不存在；任一出现都会要求同步更新
+  本清单与 migration 证据。
 
-- `prisma/schema.prisma` **无** `KnowledgeCard` / `KnowledgeSource` / `CompanyMemory` 模型 → 无持久化 → 不可能有生产者。
-- 该目录之外的引用只有 evals 夹具与注释交叉引用；`lib/agentos-decision-supervision/` 只在注释里提到它。
-- **易混淆项，不要算作消费者**：`features/companies/company-detail-client.tsx` 有 "Company memory / 公司记忆" 标签，但渲染的是 CRM 的 `memoryFacts` / `memoryEntries`，与知识卡模型无代码关系。
-- **同样不算**：`companyMemoryRefs` / `companyMemoryBindings` 在 `lib/stage1-owner-loop/` 中被真实读写，但那是**不透明字符串 ref**，不构造也不读取 `KnowledgeCard`，不经过 `governance.ts`。它证明存在一个占位契约点，不证明记忆层已实现。
+### GAP-4 知识可用等级尚不能进入完整监督判断
 
-### GAP-4 决策对象未携带"援引事实的可用等级"到监督层
+这是 GAP-3 的推论，不由本轮声称闭合。`companyMemoryRefs` 等不透明引用不等于读取持久化
+知识卡；在 GAP-3 完成前，不能机械判断所有援引知识的当前可用等级。
 
-GAP-1 与 GAP-2 合起来的后果，单列是因为它决定监督层能否**机械地**发现知识过期：`lib/agentos-decision-supervision/contract.ts` 已经定义了"所有援引知识卡的最低可用等级"这一概念，但由于 GAP-3（无持久化）与 GAP-2（无评估写回），运行时不存在可被援引的知识卡，也不存在把可用等级带进监督信号的路径。
+## 3. 仍成立的控制项
 
-- **本条不被校验器直接断言**，它是前三条的推论；GAP-1..3 任一修复都应重新评估本条。
-
----
-
-## 3. 修复顺序（建议）
-
-1. **GAP-1** — 工程量最小（读侧、schema、路由都在），且解锁面最大
-2. **GAP-2** — 与 GAP-1 同一条服务，一并做代价低
-3. **GAP-3** — 需要 schema 与迁移，是独立一档
-4. 之后才谈评测实验室与自治等级升级
-
----
-
-## 4. `docs/STATUS.md` 在两个相反方向上失真
-
-「Stage 1 一把手经营闭环公共参考切片」一行同时：
-
-| 该行的说法 | 代码事实 |
+| 事实 | 证据 |
 |---|---|
-| 把「可操作的一把手决策 UI」列为**仍需下一层** | **低估**：`features/approvals/stage1-decision-queue.tsx` 已可交互提交，`app/api/stage1/decisions/[decisionId]/review/route.ts` 已实现 |
-| 把「决策结果原子评估与 `OBSERVED` Company Memory 候选回流」列为**已交付** | **高估**：`evaluateStage1DecisionRecord` 无生产调用方（GAP-2）；Company Memory 无持久化（GAP-3） |
+| DecisionRecord 有真实生产者 | `lib/stage1-owner-loop/decision-follow-through.service.ts` -> `decisionRecord.create` |
+| DecisionRecord 有已挂载消费者 | `features/approvals/stage1-decision-queue-loader.ts` -> `app/(workspace)/approvals/page.tsx` |
+| 决策评审有生产写入口 | `app/api/stage1/decisions/[decisionId]/review/route.ts` |
+| 监督信号有已挂载读侧 | `features/dashboard/stage1-owner-loop-query.ts` -> `app/(workspace)/caio/page.tsx` |
 
-**这是本清单里最该先修的一条**，因为它是做排序判断的输入。一份把已完成的说成没做、把没做的说成完成的状态文档，会同时导致重复建设和跳过必要工作。
+这些控制项防止扫描器因停止发现代码而错误返回“无缺口”。
 
-本文件不替代 `docs/STATUS.md`；它只对上述四条断言负责，并且被机械校验。
+## 4. 证据边界
+
+- **Repo truth**：当前代码有生产调用、权限收敛、幂等键、读侧和机械门禁。
+- **测试证据**：focused 与隔离 MySQL 能证明所测提交和测试环境中的行为。
+- **未成立**：package-ready implementation SHA 的独立批准、四仓固定 BOM、组合包、现场
+  部署、运行激活、owner 外部动作授权、真实业务 payload 和经营价值。
+- **GAP-3 仍开放**：不得把 `MemoryFact.OBSERVED` 候选提升成 Company Memory。
+
+## 5. 回滚
+
+本轮无 schema/migration。代码回滚时撤回终态协调器及 approvals 入口，保留已经产生的
+append-only receipt、evaluation、audit 与 supervision 历史；同时把 GAP-1/2 状态标记恢复为
+open 并更新 checker。私有部署若存在，须由其权威层回滚到上一 immutable release，不能用
+本仓文档替代部署回执。

@@ -17,6 +17,9 @@ export async function getApprovalTasksData(workspaceId: string, english = false)
           meeting: true,
           owner: true,
           recommendationLog: true,
+          decisionWorkPacketClaim: {
+            select: { decisionRecordId: true },
+          },
         },
       },
     },

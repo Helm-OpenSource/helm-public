@@ -113,6 +113,9 @@ describe("getWorkspaceStage1OwnerLoopReadout", () => {
         },
       },
     });
+    expect(dbMock.supervisionSignalRecord.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workspaceId: "workspace-1" } }),
+    );
   });
 
   it("degrades to null when the additive owner-loop schema is not deployed", async () => {

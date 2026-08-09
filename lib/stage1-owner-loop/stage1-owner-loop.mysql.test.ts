@@ -23,7 +23,7 @@ import {
   createStage1DecisionRecord,
   dispatchStage1DecisionWorkPacket,
 } from "./decision-follow-through.service";
-import { evaluateStage1DecisionRecord } from "./decision-evaluation.service";
+import { reconcileStage1TerminalResult } from "./terminal-result-reconciliation.service";
 import {
   beginObservationSourceRun,
   completeObservationSourceRun,
@@ -880,7 +880,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
     ).toBe(1);
   });
 
-  it("commits one decision evaluation and observed memory under concurrent replay", async () => {
+  it("reconciles one terminal evaluation and supervision signal under concurrent replay", async () => {
     expect(dispatchedDecisionRecordId).not.toBe("");
     expect(dispatchedActionItemId).not.toBe("");
     await db.$transaction([
@@ -921,26 +921,38 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       verifierName: "Stage 1 Reviewer",
     });
 
-    const evaluate = () =>
-      evaluateStage1DecisionRecord({
+    const reconcile = () =>
+      reconcileStage1TerminalResult({
         workspaceId,
-        decisionRecordId: dispatchedDecisionRecordId,
-        followedAiRecommendation: true,
+        actionItemId: dispatchedActionItemId,
         outcome: {
           outcomeRef: `business-outcome:synthetic-recovery-${suffix}`,
           result: "success",
+          followedAiRecommendation: true,
         },
-        actorName: "Helm Evaluation Runtime",
-        actorType: ActorType.AI,
+        actorName: "Stage 1 Owner",
+        actorUserId: ownerUserId,
+        actorType: ActorType.USER,
       });
-    const results = await Promise.all([evaluate(), evaluate()]);
+    const results = await Promise.all([reconcile(), reconcile()]);
 
-    expect(results.map((result) => result.created).sort()).toEqual([
-      false,
-      true,
+    expect(results.map((result) => result.kind)).toEqual([
+      "reconciled",
+      "reconciled",
     ]);
-    expect(results[0].evaluation).toEqual(results[1].evaluation);
-    expect(results[0].evaluation.automationImpact).toBe("promote_candidate");
+    const reconciled = results.filter(
+      (result): result is Extract<typeof result, { kind: "reconciled" }> =>
+        result.kind === "reconciled",
+    );
+    expect(
+      reconciled.map((result) => result.evaluation.created).sort(),
+    ).toEqual([false, true]);
+    expect(reconciled[0]?.evaluation.evaluation).toEqual(
+      reconciled[1]?.evaluation.evaluation,
+    );
+    expect(reconciled[0]?.evaluation.evaluation.automationImpact).toBe(
+      "promote_candidate",
+    );
     expect(
       await db.memoryFact.count({
         where: {
@@ -953,6 +965,26 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       }),
     ).toBe(1);
     expect(
+      await db.supervisionSignalRecord.findMany({
+        where: {
+          workspaceId,
+          decisionRecordId: dispatchedDecisionRecordId,
+          signalKey: `stage1-terminal-result:${dispatchedDecisionRecordId}`,
+        },
+        select: {
+          status: true,
+          severity: true,
+          recommendedRoute: true,
+        },
+      }),
+    ).toEqual([
+      {
+        status: "resolved",
+        severity: "info",
+        recommendedRoute: "watch",
+      },
+    ]);
+    expect(
       await db.decisionRecord.findUnique({
         where: { id: dispatchedDecisionRecordId },
         select: { status: true, evaluationJson: true, evaluatedAt: true },
@@ -962,6 +994,43 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       evaluationJson: expect.any(String),
       evaluatedAt: expect.any(Date),
     });
+
+    await expect(reconcile()).resolves.toMatchObject({
+      kind: "reconciled",
+      evaluation: { created: false },
+    });
+    await expect(
+      reconcileStage1TerminalResult({
+        workspaceId: `outside-${workspaceId}`,
+        actionItemId: dispatchedActionItemId,
+        outcome: {
+          outcomeRef: `business-outcome:synthetic-recovery-${suffix}`,
+          result: "success",
+          followedAiRecommendation: true,
+        },
+        actorName: "Outside workspace owner",
+        actorUserId: ownerUserId,
+        actorType: ActorType.USER,
+      }),
+    ).resolves.toEqual({ kind: "not_stage1" });
+    expect(
+      await db.memoryFact.count({
+        where: {
+          workspaceId,
+          objectId: dispatchedActionItemId,
+          sourceId: `evaluation:${dispatchedDecisionKey}`,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await db.supervisionSignalRecord.count({
+        where: {
+          workspaceId,
+          decisionRecordId: dispatchedDecisionRecordId,
+          signalKey: `stage1-terminal-result:${dispatchedDecisionRecordId}`,
+        },
+      }),
+    ).toBe(1);
   });
 
   it("never downgrades a verified receipt during concurrent record and verify", async () => {

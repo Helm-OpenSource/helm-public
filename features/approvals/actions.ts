@@ -1,6 +1,10 @@
 "use server";
 
-import { ActorType, RejectionReasonCode } from "@prisma/client";
+import {
+  ActorType,
+  ExecutionReceiptSubjectType,
+  RejectionReasonCode,
+} from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
@@ -9,6 +13,10 @@ import {
   canReviewWorkspaceGovernedActions,
   getGovernedActionReviewDeniedMessage,
 } from "@/lib/auth/action-governance";
+import {
+  canManageWorkspaceInsights,
+  getInsightGovernanceDeniedMessage,
+} from "@/lib/auth/insight-governance";
 import {
   canManageWorkspacePolicies,
   getWorkspaceGovernanceDeniedMessage,
@@ -31,7 +39,11 @@ import {
   ReceiptSelfVerificationError,
   verifyExecutionReceipt,
 } from "@/lib/receipts/execution-receipt.service";
-import { ExecutionReceiptSubjectType } from "@prisma/client";
+import { caioProTerminalBusinessOutcomeSchema } from "@/lib/stage1-owner-loop/caio-pro-fde-cross-repo-contract";
+import {
+  reconcileStage1TerminalResult,
+  Stage1TerminalResultReconciliationError,
+} from "@/lib/stage1-owner-loop/terminal-result-reconciliation.service";
 
 async function resolveApprovalTaskForWorkspace(taskId: string, workspaceId: string) {
   return db.approvalTask.findFirst({
@@ -40,7 +52,13 @@ async function resolveApprovalTaskForWorkspace(taskId: string, workspaceId: stri
       workspaceId,
     },
     include: {
-      actionItem: true,
+      actionItem: {
+        include: {
+          decisionWorkPacketClaim: {
+            select: { decisionRecordId: true },
+          },
+        },
+      },
     },
   });
 }
@@ -203,20 +221,71 @@ export async function rejectTaskAction(input: z.infer<typeof rejectSchema>) {
   return { ok: true };
 }
 
+const verifyExecutedTaskReceiptSchema = z
+  .object({
+    taskId: z.string().trim().min(1),
+    stage1TerminalResult: caioProTerminalBusinessOutcomeSchema.optional(),
+  })
+  .strict();
+
+export type VerifyExecutedTaskReceiptActionInput =
+  | string
+  | z.infer<typeof verifyExecutedTaskReceiptSchema>;
+
 // Receipt-level separation of duties: a reviewer other than the executor
 // confirms the closed action's receipt, upgrading it from SELF_REPORTED to
-// VERIFIED. Self-verification is refused as a readable governance result.
-export async function verifyExecutedTaskReceiptAction(taskId: string) {
+// VERIFIED. For a Stage 1 work packet this is also the sole terminal trigger:
+// the reviewer must provide an explicit business outcome and the action then
+// reconciles the existing DecisionRecord and SupervisionSignalRecord. Retry is
+// safe because receipt verification and both downstream writes are idempotent.
+export async function verifyExecutedTaskReceiptAction(
+  input: VerifyExecutedTaskReceiptActionInput,
+) {
   const { user, membership, workspace } = await getCurrentWorkspaceSession();
   const english = workspace.defaultLocale === "en-US";
+  const parsed = verifyExecutedTaskReceiptSchema.safeParse(
+    typeof input === "string" ? { taskId: input } : input,
+  );
+  if (!parsed.success) {
+    return { ok: false, error: english ? "Invalid parameters" : "参数错误" };
+  }
 
   if (!canReviewWorkspaceGovernedActions(membership.role)) {
     return { ok: false, error: getGovernedActionReviewDeniedMessage(english) };
   }
 
-  const task = await resolveApprovalTaskForWorkspace(taskId, workspace.id);
+  const task = await resolveApprovalTaskForWorkspace(
+    parsed.data.taskId,
+    workspace.id,
+  );
   if (!task) {
     return { ok: false, error: english ? "Approval task not found" : "审批任务不存在" };
+  }
+
+  const isStage1WorkPacket = Boolean(
+    task.actionItem.decisionWorkPacketClaim,
+  );
+  if (isStage1WorkPacket && !parsed.data.stage1TerminalResult) {
+    return {
+      ok: false,
+      error: english
+        ? "A final business outcome and evidence reference are required for this Stage 1 decision."
+        : "该 Stage 1 决策必须提供最终业务结果与证据引用。",
+    };
+  }
+  if (!isStage1WorkPacket && parsed.data.stage1TerminalResult) {
+    return {
+      ok: false,
+      error: english
+        ? "This task is not linked to a Stage 1 decision."
+        : "该任务未关联 Stage 1 决策。",
+    };
+  }
+  if (
+    isStage1WorkPacket &&
+    !canManageWorkspaceInsights(membership.role)
+  ) {
+    return { ok: false, error: getInsightGovernanceDeniedMessage(english) };
   }
 
   try {
@@ -238,7 +307,29 @@ export async function verifyExecutedTaskReceiptAction(taskId: string) {
     throw error;
   }
 
+  if (isStage1WorkPacket && parsed.data.stage1TerminalResult) {
+    try {
+      await reconcileStage1TerminalResult({
+        workspaceId: workspace.id,
+        actionItemId: task.actionItemId,
+        outcome: parsed.data.stage1TerminalResult,
+        actorName: user.name,
+        actorUserId: user.id,
+        actorType: ActorType.USER,
+        english,
+      });
+    } catch (error) {
+      if (error instanceof Stage1TerminalResultReconciliationError) {
+        return { ok: false, error: error.message };
+      }
+      throw error;
+    }
+  }
+
   revalidatePath("/approvals");
+  revalidatePath("/caio");
+  revalidatePath("/dashboard");
+  revalidatePath("/memory");
   return { ok: true };
 }
 

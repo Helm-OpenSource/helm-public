@@ -117,10 +117,7 @@ async function loadOwnerLoopRows(
       _count: { _all: true },
     }),
     tx.supervisionSignalRecord.findMany({
-      where: {
-        workspaceId,
-        status: { in: ["open", "acknowledged", "routed"] },
-      },
+      where: { workspaceId },
       select: {
         id: true,
         signalKey: true,

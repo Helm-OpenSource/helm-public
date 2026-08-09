@@ -1,5 +1,5 @@
 ---
-status: planning / proposed
+status: active / wave-1a-implementation-candidate
 owner: helm-core
 created: 2026-08-09
 review_after: 2026-09-09
@@ -8,7 +8,8 @@ public_safety: Public-safe project charter for the generic CAIO Pro FDE site ope
 
 # Helm CAIO Pro FDE 现场经营闭环项目
 
-> **项目阶段**：`proposed`，等待 owner 审阅后才进入实现。
+> **项目阶段**：Owner 已批准 Wave 1A Public Core 实施；GAP-1/2 实现候选与锁定依赖下的
+> 本地验证证据已形成，仍须经过独立 package-ready、release 与 BOM 评审。
 >
 > **证据边界**：本文是 Public Core 的项目启动规格，不是现场部署、运行激活、
 > owner 授权或经营价值证明。任何私有现场只能通过 Overlay、Control Plane 与 FDE
@@ -34,8 +35,8 @@ Public Core 只负责其中可复用、public-safe 的契约、确定性门禁�
 - `ActionItem` / `ApprovalTask` / `ExecutionReceipt`；
 - 既有 workspace membership、`WorkspaceRole.OWNER` 与 service-governance 权限模型。
 
-首个实现切片只允许闭合 Decision Loop GAP-1 与 GAP-2。GAP-3 涉及 schema、迁移、
-保留与恢复策略，必须经过独立批准后才能开始。本轮只提交本规格，不实施代码。
+Wave 1A 只闭合 Decision Loop GAP-1 与 GAP-2。GAP-3 涉及 schema、迁移、保留与恢复
+策略，必须经过独立批准后才能开始；本轮没有修改 schema/migration。
 
 ## 1. Objective / 项目目标
 
@@ -86,12 +87,12 @@ Public Core 只负责其中可复用、public-safe 的契约、确定性门禁�
 
 | 缺口 | 当前事实 | 对七项结果的影响 |
 |---|---|---|
-| GAP-1 | `recordStage1SupervisionSignal` 只有定义与测试，没有生产调用方；监督表的真实写入仅来自 seed | “监督及时”未成立；`/caio` 不能把 seed 误报为现场监督 |
-| GAP-2 | `evaluateStage1DecisionRecord` 只有定义和测试，没有生产调用方 | “执行到位”后的结果不能回流，“诊断得清”和分歧评测缺真实输入 |
+| GAP-1 | **Repo-closed in Wave 1A**：现有 approvals 终态路径在 canonical receipt 独立验收后，经协调器幂等调用 `recordStage1SupervisionSignal` | 只证明生产代码可达与测试行为，不证明现场已有真实监督数据 |
+| GAP-2 | **Repo-closed in Wave 1A**：同一协调器先幂等调用 `evaluateStage1DecisionRecord`，明确业务结果回流现有 `DecisionRecord` | 只证明 repo truth；真实结果仍需私有 executor 投影、Core ingress 与现场回执 |
 | GAP-3 | `lib/company-memory/` 是纯契约；Prisma 无 `KnowledgeCard` / `KnowledgeSource` 持久化 | “理解得了”的长期、可追溯 Company Memory 未成立 |
 
-GAP-1、GAP-2 与 GAP-3 在对应生产可达性、持久化、迁移和测试全部成立前必须保持开放。
-现有 `MemoryFact` 的 `OBSERVED` 候选不能被表述成 Company Memory 知识卡持久化。
+GAP-1/2 的关闭由 gap register 同时检查生产协调器、调用顺序和 approvals 入口；GAP-3
+继续开放。现有 `MemoryFact` 的 `OBSERVED` 候选不能被表述成 Company Memory 知识卡持久化。
 
 ### 2.3 证据分层
 
@@ -264,17 +265,40 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 
 ### 5.1 范围：GAP-1 + GAP-2
 
-在 owner 批准本规格后，下一原子切片只做：
+Owner 已批准本切片。Wave 1A 实现候选完成以下 repo-level 输出：
 
-1. 找到现有执行回执完成、独立复核和业务结果终态的 canonical 生产触发点；
-2. 在同一 workspace、DecisionRecord 和现有权限边界内调用
-   `evaluateStage1DecisionRecord`；
-3. 根据评估结果和可验证偏差调用 `recordStage1SupervisionSignal`；
-4. 保持幂等、并发安全、跨 workspace fail-closed 和 append-only 审计；
-5. 让 `/caio` 区分真实生产信号、seed、暂无数据和 degraded；
-6. 发布第 3.1 节四项版本化跨仓接口、package-ready Core implementation SHA，
-   以及 completion evaluator revision 与 contract hash/ref；
-7. 同步更新 `HELM_DECISION_LOOP_GAP_REGISTER.md` 及机械门禁，使闭合事实双向可证伪。
+1. 选择现有 `verifyExecutedTaskReceiptAction` 作为唯一 canonical terminal trigger；
+2. 在 canonical `ExecutionReceipt` 独立复核后，以同一 workspace 和 Work Packet claim 调用
+   `reconcileStage1TerminalResult`；
+3. 协调器先调用 `evaluateStage1DecisionRecord`，再调用
+   `recordStage1SupervisionSignal`，不执行任何外部动作；
+4. 重放复用既有 receipt verification、DecisionRecord CAS、evaluation content match 与
+   `workspaceId + signalKey` 唯一键；跨 workspace、缺回执、未 VERIFIED 或缺业务结果均拒绝；
+5. `/caio` 读取所有近期监督状态，使 resolved 的真实终态记录可见，同时只把
+   open/acknowledged/routed 计入待关注数量；empty/degraded 语义保持不变；
+6. `caio-pro-fde-cross-repo-contract.ts` 发布第 3.1 节四项接口的 version、兼容集合、
+   contract hash/ref 和未知版本拒绝；completion evaluator 发布 revision/hash/ref，且不暴露
+   13 项字面量给消费者；
+7. Decision Loop gap register 与机械 checker 将 GAP-1/2 固定为 closed、GAP-3 固定为 open。
+
+### 5.1.1 为什么选择该终态
+
+`ApprovalTask` 对应的 `ActionItem` 已进入执行终态，并且现有 receipt 服务完成独立复核，
+这是第一个同时具备执行证明、职责分离和生产 UI 入口的位置。更早触发会把“任务已派发或
+已执行”误写成“业务结果已成立”；更晚新建第二入口会复制任务、权限或回执语义。
+
+业务结果不从 receipt outcome 推断。Stage 1 入口必须显式提供 `success|failure`、非空
+`outcomeRef` 与是否采纳建议；receipt 证明执行，业务结果用于评估，两者保持分层。
+
+### 5.1.2 中断、并发与回滚
+
+评估先于监督，因此相同输入的并发/重放收敛到一份评估、一份 `MemoryFact.OBSERVED` 候选
+和一个确定性监督信号；冲突业务结果先在 DecisionRecord 评估一致性上 fail-closed。若评估
+成功后监督写入中断，重试复用评估并补齐同一监督键。本切片无 schema/migration，代码回滚
+保留 append-only 历史并撤回新生产入口。
+
+本次原子提交在完整门禁通过后可作为 implementation candidate；是否成为 package-ready
+Core implementation SHA，仍需独立 release/BOM 评审。项目章程提交绝不替代该 SHA。
 
 ### 5.2 明确排除
 
@@ -312,7 +336,7 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 |---|---|---|---|---|
 | T0 项目规格批准 | Public Core owner | 本文 | 批准或修改决定 | 具名 review，不是代码提交 |
 | T1 触发点与状态流设计 | `helm-public` | T0 | GAP-1/2 实施规格、事务/幂等/失败矩阵 | 代码级入口和调用链评审 |
-| T2 GAP-1/2 最小实现 | `helm-public` | T1 | 生产调用接缝、测试、守卫、读面诚实状态、第 3.1 节四项版本化接口与 completion evaluator revision/hash/ref | package-ready implementation SHA 与完整验证链；章程 SHA 禁止替代 |
+| T2 GAP-1/2 最小实现 | `helm-public` | T1 | 生产调用接缝、测试、守卫、读面诚实状态、第 3.1 节四项版本化接口与 completion evaluator revision/hash/ref | implementation candidate SHA 与完整本地验证链；章程 SHA 禁止替代，package-ready 另行评审 |
 | T3 GAP-3 批准门 | Public Core owner | T2 | 数据模型、保留、迁移、恢复和删除 ADR | schema/migration 单独批准；未批准不实施 |
 | T4 行业问题与诊断适配 | `helm-packs` | 稳定 Core SDK | 行业分类法、指标、证据适用规则和候选输入 | Pack 门禁；不得输出固定十题或 `CaioOperatingQuestionPortfolio` |
 | T5 客户现场适配 | `helm-overlays` | T2/T4 | 私有资产映射、授权引用、只读 connector、受控 executor 的执行证明/结果投影 | Overlay 边界与私有集成测试；只经版本化 Core ingress 写 canonical receipt |
@@ -325,7 +349,7 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 
 ## 7. Commands / 验证命令
 
-### 7.1 本轮规格提交
+### 7.1 文档与边界
 
 ```bash
 npx tsx scripts/check-doc-frontmatter.ts
@@ -340,32 +364,36 @@ git diff --check
 ### 7.2 第一实施切片
 
 ```bash
-npm run db:reset
-npm run self-check
-npm run check:boundaries
 npm run typecheck
 npm run lint
-npm run test
-npm run test:caio-stage1:mysql
-npm run test:caio-pro-v1:mysql
-npm run build
-npm run e2e
+npm run check:decision-loop-gaps
+npm run check:caio-pro-v1
+npm run check:public-release
+npm run check:boundaries
+npm test
 npm run quality:regression
+npm run e2e
+npm run build
 ```
 
-MySQL 专项必须使用隔离数据库，不能复用现场生产库；部署、组合和 owner 授权验证由其
-权威私有层执行，不能在 Public Core 命令中伪造。
+MySQL 专项必须使用一次性空库，并同时设置 `DATABASE_URL`、
+`STAGE1_OWNER_LOOP_DATABASE_URL` 与带 `helm_caio_stage1_` 前缀且精确匹配的
+`STAGE1_OWNER_LOOP_TEST_DATABASE_NAME`。不得执行共享库 reset，不得复用现场生产库；
+测试完成后删除一次性数据库。部署、组合和 owner 授权验证由其权威私有层执行，不能在
+Public Core 命令中伪造。
 
-## 8. Project Structure / 预计影响面
+## 8. Project Structure / 实际影响面
 
-第一实施切片预计只触及已有边界，最终文件清单以批准后的代码级设计为准：
+Wave 1A 只触及已有边界：
 
 ```text
-lib/stage1-owner-loop/                  existing canonical write services
-features/dashboard/                    existing OWNER read model and honest states
-app/(workspace)/caio/                  existing mounted operating surface
+lib/stage1-owner-loop/terminal-result-reconciliation.service.ts
+lib/stage1-owner-loop/caio-pro-fde-cross-repo-contract.ts
+lib/stage1-owner-loop/caio-pro-completion.ts
+features/approvals/                     existing terminal action and UI
+features/dashboard/                     existing OWNER read model and honest states
 scripts/check-decision-loop-gaps.ts     mechanically checked reachability truth
-tests or existing colocated *.test.ts  focused, concurrency and boundary tests
+colocated *.test.ts                     focused, permission, replay and boundary tests
 docs/product/HELM_DECISION_LOOP_GAP_REGISTER.md
 docs/STATUS.md
 ```
@@ -514,16 +542,20 @@ GAP-3 的回滚必须在其独立 migration ADR 中定义 forward-fix、备份�
 | 13 项门被简化 | “部分通过”冒充完成 | 保持 closed ordered list 与 all-or-nothing 评估 |
 | 监督延迟或噪声过多 | owner 无法及时处置 | severity、SLA、幂等、责任和升级条件结构化 |
 
-## 15. Open Questions / 待 owner 裁定
+## 15. Decisions And Open Questions / 已决与待裁定
 
-以下问题不阻止本轮规格落档，但阻止对应后续实施：
+已决：
 
-1. 是否批准第一切片仅闭合 GAP-1/GAP-2，并明确不含 GAP-3？
-2. 哪个现有终态应作为业务结果进入 GAP-2 的唯一 production trigger？
-3. 监督信号的默认 SLA、升级责任和关闭权限是否沿用现有字段，还是需要另行产品裁定？
-4. GAP-3 是否进入下一里程碑；若进入，知识卡保留、删除、恢复和客户数据权利由谁批准？
-5. 私有现场首先选择哪个经营问题进入 shadow/read-only 验证？该答案只能记录在私有 Overlay/FDE 资料中。
-6. 哪些外部动作在现场始终保持关闭，哪些可在完成门后申请单独 owner 授权？
+1. Owner 批准 Wave 1A 只闭合 GAP-1/GAP-2，明确不含 GAP-3；
+2. 唯一 production trigger 为现有 approvals 路径中的 canonical receipt 独立验收，且必须
+   显式提供最终业务结果，不能从 receipt outcome 推断。
+
+仍待裁定，且不阻止本轮 repo-level 实现：
+
+1. 监督信号的默认 SLA、升级责任和关闭权限是否沿用现有字段，还是需要另行产品裁定？
+2. GAP-3 是否进入下一里程碑；若进入，知识卡保留、删除、恢复和客户数据权利由谁批准？
+3. 私有现场首先选择哪个经营问题进入 shadow/read-only 验证？该答案只能记录在私有 Overlay/FDE 资料中。
+4. 哪些外部动作在现场始终保持关闭，哪些可在完成门后申请单独 owner 授权？
 
 ## 16. 变更记录
 
@@ -533,3 +565,7 @@ GAP-3 的回滚必须在其独立 migration ADR 中定义 forward-fix、备份�
   `CaioOperatingQuestionPortfolio`，冻结 Pack 候选输入边界、canonical
   `ExecutionReceipt` 唯一写入链、四项版本化跨仓输出、completion evaluator
   revision/hash/ref，以及章程 SHA 不得替代 package-ready implementation SHA。
+- 2026-08-09：Owner 批准 Wave 1A；选择现有 approvals canonical receipt 独立验收为
+  唯一 terminal trigger，形成 GAP-1/2 生产协调器、显式业务结果输入、并发/重放与跨
+  workspace 测试、`/caio` resolved 结果可见性、版本化跨仓 contract hash/ref 和新 gap
+  checker。GAP-3、schema/migration、组合包、部署、激活与经营价值均未成立。
