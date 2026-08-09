@@ -1,0 +1,695 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:helm:caio-pro-fde:cross-repo-interface:v1",
+  "title": "CAIO Pro FDE cross-repository interface v1",
+  "description": "Portable public-safe validation artifact for Pack operating inputs and private execution result projections. Validation grants no authority; Core still resolves every workspace, Portfolio, evidence snapshot, work object and permission at ingestion time.",
+  "interfaceIdentity": {
+    "interfaceVersion": "helm.caio-pro-fde.cross-repo-interface.v1",
+    "contractRef": "caio-pro-fde-cross-repo-interface:20ddb854742d77d0",
+    "contractHash": "sha256:20ddb854742d77d001423e15051172e54e61b12190e05b304f7c3d7665a45cf7",
+    "evaluatorRevision": "caio-pro-v1-completion-evaluator.v1",
+    "evaluatorContractRef": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
+    "evaluatorContractHash": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01"
+  },
+  "resolutionRules": [
+    "workspaceRef must equal the authenticated workspace",
+    "portfolioRef must resolve to a workspace-scoped Core Opportunity",
+    "all evidence refs must resolve within the current authorized ObservationSourceRun snapshot",
+    "a question Portfolio grants no business-asset permission",
+    "Pack candidate inputs never become questions until Core evaluates exactly ten or insufficient_evidence",
+    "a private projection never writes canonical state directly; Core alone calls recordExecutionReceipt",
+    "private execution ingress accepts only execution-attempt outcomes; NOT_EXECUTED and REJECTED remain on existing Core blocked and approval-rejection paths"
+  ],
+  "oneOf": [
+    {
+      "$ref": "#/$defs/packOperatingInput"
+    },
+    {
+      "$ref": "#/$defs/privateExecutionResultProjection"
+    }
+  ],
+  "$defs": {
+    "interfaceVersion": {
+      "type": "string",
+      "const": "helm.caio-pro-fde.cross-repo-interface.v1",
+      "maxLength": 64
+    },
+    "contractRef": {
+      "type": "string",
+      "const": "caio-pro-fde-cross-repo-interface:20ddb854742d77d0",
+      "maxLength": 256
+    },
+    "contractHash": {
+      "type": "string",
+      "const": "sha256:20ddb854742d77d001423e15051172e54e61b12190e05b304f7c3d7665a45cf7",
+      "maxLength": 71
+    },
+    "evaluatorRevision": {
+      "type": "string",
+      "const": "caio-pro-v1-completion-evaluator.v1",
+      "maxLength": 64
+    },
+    "evaluatorContractRef": {
+      "type": "string",
+      "const": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
+      "maxLength": 256
+    },
+    "evaluatorContractHash": {
+      "type": "string",
+      "const": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01",
+      "maxLength": 71
+    },
+    "consumerIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interfaceVersion",
+        "contractRef",
+        "contractHash",
+        "evaluatorRevision",
+        "evaluatorContractRef",
+        "evaluatorContractHash"
+      ],
+      "properties": {
+        "interfaceVersion": {
+          "$ref": "#/$defs/interfaceVersion"
+        },
+        "contractRef": {
+          "$ref": "#/$defs/contractRef"
+        },
+        "contractHash": {
+          "$ref": "#/$defs/contractHash"
+        },
+        "evaluatorRevision": {
+          "$ref": "#/$defs/evaluatorRevision"
+        },
+        "evaluatorContractRef": {
+          "$ref": "#/$defs/evaluatorContractRef"
+        },
+        "evaluatorContractHash": {
+          "$ref": "#/$defs/evaluatorContractHash"
+        }
+      }
+    },
+    "publicSafeRef": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 256,
+      "pattern": "^(?!.*(?:https?|file|ftp|ssh|s3|gs|mailto):)(?!.*(?:password|passwd|secret|token|api[-_]?key|authorization|bearer|mysql|postgres(?:ql)?|mongodb|redis|jdbc|connection[-_]?string))(?!.*(?:^|:)(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?:$|:))(?!.*(?:^|:)[0-9][0-9 -]{5,22}[0-9Xx](?:$|:))(?!.*(?:^|:)sk-[A-Za-z0-9_-]{16,})[a-z][a-z0-9-]{1,63}:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$",
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "(?:^|[^0-9])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?:$|[^0-9])"
+          },
+          {
+            "pattern": "(?:^|[^A-Fa-f0-9:])[A-Fa-f0-9:]*::[A-Fa-f0-9:]+(?:$|[^A-Fa-f0-9:])"
+          },
+          {
+            "pattern": "(?:^|[^A-Fa-f0-9])(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}(?:$|[^A-Fa-f0-9])"
+          },
+          {
+            "pattern": "(?:[0-9]{7,22}|[0-9]{6,21}[Xx])"
+          },
+          {
+            "pattern": "(?:^|[:._-])(?:phone|mobile|tel|id(?:entity)?[-_]?card|ssn|bank[-_]?card|card[-_]?number|account[-_]?number)(?:$|[:._-])"
+          }
+        ]
+      },
+      "description": "Syntactic public-safe opaque ref only. Core resolution against the authenticated workspace and current evidence snapshot is mandatory."
+    },
+    "workspaceRef": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/publicSafeRef"
+        },
+        {
+          "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$"
+        }
+      ]
+    },
+    "portfolioRef": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/publicSafeRef"
+        },
+        {
+          "pattern": "^opportunity:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$"
+        }
+      ]
+    },
+    "observationRunRef": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/publicSafeRef"
+        },
+        {
+          "pattern": "^observation-run:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$"
+        }
+      ]
+    },
+    "decisionRecordRef": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/publicSafeRef"
+        },
+        {
+          "pattern": "^decision-record:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$"
+        }
+      ]
+    },
+    "actionItemRef": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/publicSafeRef"
+        },
+        {
+          "pattern": "^action-item:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$"
+        }
+      ]
+    },
+    "approvalTaskRef": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/publicSafeRef"
+        },
+        {
+          "pattern": "^approval-task:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$"
+        }
+      ]
+    },
+    "shortText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "longText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "taxonomyItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "taxonomyRef",
+        "categoryRef",
+        "label"
+      ],
+      "properties": {
+        "taxonomyRef": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicSafeRef"
+            },
+            {
+              "pattern": "^taxonomy:"
+            }
+          ]
+        },
+        "categoryRef": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicSafeRef"
+            },
+            {
+              "pattern": "^category:"
+            }
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/shortText"
+        }
+      }
+    },
+    "metricItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metricRef",
+        "definition",
+        "unit",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "metricRef": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicSafeRef"
+            },
+            {
+              "pattern": "^metric:"
+            }
+          ]
+        },
+        "definition": {
+          "$ref": "#/$defs/longText"
+        },
+        "unit": {
+          "$ref": "#/$defs/identifier"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/publicSafeRef"
+          }
+        }
+      }
+    },
+    "evidenceRuleItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleRef",
+        "taxonomyRefs",
+        "acceptedEvidenceKinds"
+      ],
+      "properties": {
+        "ruleRef": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicSafeRef"
+            },
+            {
+              "pattern": "^evidence-rule:"
+            }
+          ]
+        },
+        "taxonomyRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/publicSafeRef"
+              },
+              {
+                "pattern": "^taxonomy:"
+              }
+            ]
+          }
+        },
+        "acceptedEvidenceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "candidateInputItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateRef",
+        "taxonomyRefs",
+        "metricRefs",
+        "evidenceRefs",
+        "rationale"
+      ],
+      "properties": {
+        "candidateRef": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicSafeRef"
+            },
+            {
+              "pattern": "^candidate-input:"
+            }
+          ]
+        },
+        "taxonomyRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/publicSafeRef"
+              },
+              {
+                "pattern": "^taxonomy:"
+              }
+            ]
+          }
+        },
+        "metricRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/publicSafeRef"
+              },
+              {
+                "pattern": "^metric:"
+              }
+            ]
+          }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/publicSafeRef"
+          }
+        },
+        "rationale": {
+          "$ref": "#/$defs/longText"
+        }
+      }
+    },
+    "packOperatingInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "interfaceVersion",
+        "contractRef",
+        "contractHash",
+        "evaluatorRevision",
+        "evaluatorContractRef",
+        "evaluatorContractHash",
+        "workspaceRef",
+        "portfolioRef",
+        "evidenceSnapshotRef",
+        "taxonomy",
+        "metrics",
+        "evidenceApplicabilityRules",
+        "candidateInputs",
+        "authorityEffect"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "helm.caio-pro-fde.pack-operating-input.v1",
+          "maxLength": 64
+        },
+        "interfaceVersion": {
+          "$ref": "#/$defs/interfaceVersion"
+        },
+        "contractRef": {
+          "$ref": "#/$defs/contractRef"
+        },
+        "contractHash": {
+          "$ref": "#/$defs/contractHash"
+        },
+        "evaluatorRevision": {
+          "$ref": "#/$defs/evaluatorRevision"
+        },
+        "evaluatorContractRef": {
+          "$ref": "#/$defs/evaluatorContractRef"
+        },
+        "evaluatorContractHash": {
+          "$ref": "#/$defs/evaluatorContractHash"
+        },
+        "workspaceRef": {
+          "$ref": "#/$defs/workspaceRef"
+        },
+        "portfolioRef": {
+          "$ref": "#/$defs/portfolioRef"
+        },
+        "evidenceSnapshotRef": {
+          "$ref": "#/$defs/observationRunRef"
+        },
+        "taxonomy": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/taxonomyItem"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/metricItem"
+          }
+        },
+        "evidenceApplicabilityRules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/evidenceRuleItem"
+          }
+        },
+        "candidateInputs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/candidateInputItem"
+          }
+        },
+        "authorityEffect": {
+          "type": "string",
+          "const": "none",
+          "maxLength": 4
+        }
+      }
+    },
+    "terminalOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcomeRef",
+        "result",
+        "followedAiRecommendation"
+      ],
+      "properties": {
+        "outcomeRef": {
+          "$ref": "#/$defs/observationRunRef"
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "success",
+            "failure"
+          ],
+          "maxLength": 7
+        },
+        "followedAiRecommendation": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "privateExecutionResultProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "interfaceVersion",
+        "contractRef",
+        "contractHash",
+        "evaluatorRevision",
+        "evaluatorContractRef",
+        "evaluatorContractHash",
+        "projectionRef",
+        "workspaceRef",
+        "portfolioRef",
+        "evidenceSnapshotRef",
+        "decisionRecordRef",
+        "actionItemRef",
+        "approvalTaskRef",
+        "executionProofRefs",
+        "receiptOutcome",
+        "actionTaken",
+        "outcome",
+        "recordedAt",
+        "authorityEffect",
+        "canonicalExecutionReceiptWriteAuthority",
+        "contentHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "helm.caio-pro-fde.private-execution-result-projection.v1",
+          "maxLength": 72
+        },
+        "interfaceVersion": {
+          "$ref": "#/$defs/interfaceVersion"
+        },
+        "contractRef": {
+          "$ref": "#/$defs/contractRef"
+        },
+        "contractHash": {
+          "$ref": "#/$defs/contractHash"
+        },
+        "evaluatorRevision": {
+          "$ref": "#/$defs/evaluatorRevision"
+        },
+        "evaluatorContractRef": {
+          "$ref": "#/$defs/evaluatorContractRef"
+        },
+        "evaluatorContractHash": {
+          "$ref": "#/$defs/evaluatorContractHash"
+        },
+        "projectionRef": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicSafeRef"
+            },
+            {
+              "pattern": "^private-result:"
+            }
+          ]
+        },
+        "workspaceRef": {
+          "$ref": "#/$defs/workspaceRef"
+        },
+        "portfolioRef": {
+          "$ref": "#/$defs/portfolioRef"
+        },
+        "evidenceSnapshotRef": {
+          "$ref": "#/$defs/observationRunRef"
+        },
+        "decisionRecordRef": {
+          "$ref": "#/$defs/decisionRecordRef"
+        },
+        "actionItemRef": {
+          "$ref": "#/$defs/actionItemRef"
+        },
+        "approvalTaskRef": {
+          "$ref": "#/$defs/approvalTaskRef"
+        },
+        "executionProofRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/publicSafeRef"
+          }
+        },
+        "receiptOutcome": {
+          "type": "string",
+          "enum": [
+            "SUCCESS",
+            "PARTIAL_SUCCESS",
+            "FAILURE"
+          ],
+          "maxLength": 15
+        },
+        "actionTaken": {
+          "$ref": "#/$defs/longText"
+        },
+        "outcome": {
+          "$ref": "#/$defs/terminalOutcome"
+        },
+        "recordedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "authorityEffect": {
+          "type": "string",
+          "const": "none",
+          "maxLength": 4
+        },
+        "canonicalExecutionReceiptWriteAuthority": {
+          "type": "string",
+          "const": "none",
+          "maxLength": 4
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "maxLength": 71
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "receiptOutcome": {
+                "const": "SUCCESS"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "properties": {
+                  "result": {
+                    "const": "success"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "receiptOutcome": {
+                "enum": [
+                  "PARTIAL_SUCCESS",
+                  "FAILURE"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "properties": {
+                  "result": {
+                    "const": "failure"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "x-helm-runtime-invariants": [
+        "contentHash must equal sha256(canonical JSON without contentHash)",
+        "evidenceSnapshotRef must equal outcome.outcomeRef",
+        "executionProofRefs must be present in the resolved evidence snapshot",
+        "an exact projection replay must match the immutable canonical receipt",
+        "outcome.result must match both the receiptOutcome mapping and trusted evidence; it cannot be selected independently by the caller"
+      ],
+      "x-helm-receipt-outcome-semantics": {
+        "accepted": {
+          "SUCCESS": {
+            "businessResult": "success",
+            "actionItemStatus": "EXECUTED",
+            "supervisionStatus": "resolved"
+          },
+          "PARTIAL_SUCCESS": {
+            "businessResult": "failure",
+            "actionItemStatus": "EXECUTED",
+            "supervisionStatus": "open"
+          },
+          "FAILURE": {
+            "businessResult": "failure",
+            "actionItemStatus": "EXECUTED",
+            "supervisionStatus": "open"
+          }
+        },
+        "prohibited": {
+          "NOT_EXECUTED": "existing_core_blocked_without_execution_path",
+          "REJECTED": "existing_core_approval_rejection_path"
+        },
+        "businessResultAuthority": "trusted_evidence_constrained_by_receipt_outcome"
+      }
+    }
+  }
+}

@@ -129,6 +129,10 @@ import {
   type WorkBuddyFeatureFlags,
 } from "@/lib/caio-collaboration/feature-flags";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
+import {
+  parseCaioProPrivateExecutionResultProjection,
+  type CaioProPrivateExecutionResultProjection,
+} from "@/lib/stage1-owner-loop/caio-pro-fde-cross-repo-contract";
 
 export const CAIO_GATEWAY_DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 
@@ -148,6 +152,11 @@ export const CAIO_GATEWAY_MCP_AUDIT_ALIAS = "caio-mcp-tool-dispatch";
  * no binding, so its receipts are pinned to this gateway contract version.
  */
 export const CAIO_GATEWAY_MCP_AUDIT_POLICY_VERSION = "caio-gateway-mcp-v1";
+
+export const CAIO_GATEWAY_PRIVATE_EXECUTION_RESULT_AUDIT_ALIAS =
+  "caio-private-execution-result-ingress";
+export const CAIO_GATEWAY_PRIVATE_EXECUTION_RESULT_AUDIT_POLICY_VERSION =
+  "caio-private-execution-result-ingress-v1";
 
 /** Retry advice used when the gateway itself decides audit is unusable. */
 const AUDIT_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
@@ -209,6 +218,13 @@ export type CaioMcpDispatchPort = (input: {
   signal?: AbortSignal;
   /** Live per-request project gate bound to the injected resolver. */
   assertProjectAccess(projectRef: string): Promise<void>;
+}) => Promise<unknown>;
+
+export type CaioPrivateExecutionResultIngressPort = (input: {
+  principal: CaioAccessPrincipal;
+  requestId: string;
+  projection: CaioProPrivateExecutionResultProjection;
+  signal?: AbortSignal;
 }) => Promise<unknown>;
 
 /**
@@ -310,6 +326,7 @@ export type CaioGatewayHandlerDependencies = Readonly<{
   preAuthRateLimiter: CaioPreAuthRateLimiterPort;
   tokenAuthenticator: CaioTokenAuthenticatorPort;
   projectResolver: ProjectMembershipResolver;
+  privateExecutionResultIngress: CaioPrivateExecutionResultIngressPort;
   mcpDispatch: CaioMcpDispatchPort;
   modelProxy: CaioModelProxyPort;
   /**
@@ -340,7 +357,12 @@ export type CaioGatewayHandler = (
 ) => Promise<CaioGatewayResponse>;
 
 type AuthedRoute = Readonly<{
-  kind: "mcp" | "model_responses" | "model_chat_completions" | "model_list";
+  kind:
+    | "mcp"
+    | "private_execution_result"
+    | "model_responses"
+    | "model_chat_completions"
+    | "model_list";
   audience: CaioTokenAudience;
   expectsJsonBody: boolean;
 }>;
@@ -351,6 +373,13 @@ const AUTHED_ROUTES: Readonly<
   "/mcp": Object.freeze({
     POST: Object.freeze({
       kind: "mcp" as const,
+      audience: "mcp" as const,
+      expectsJsonBody: true,
+    }),
+  }),
+  "/v1/execution-results": Object.freeze({
+    POST: Object.freeze({
+      kind: "private_execution_result" as const,
       audience: "mcp" as const,
       expectsJsonBody: true,
     }),
@@ -924,6 +953,9 @@ export function createCaioGatewayHandler(
     /** The resolved JSON-RPC method, used to gate the tools/list projection. */
     let mcpMethod: string | null = null;
     let authorizedProjectRefs: readonly string[] = Object.freeze([]);
+    let privateExecutionResult:
+      | CaioProPrivateExecutionResultProjection
+      | null = null;
     if (route.kind === "mcp") {
       // FEATURE-FLAG ADMISSION, before the payload is even scope-resolved: the
       // MCP surface is off unless this deployment enabled it. With the default
@@ -952,21 +984,52 @@ export function createCaioGatewayHandler(
       // project ref outside the set just authorized.
       assertPayloadRefsAuthorized(payload, authorizedProjectRefs);
     }
+    if (route.kind === "private_execution_result") {
+      assertCaioMcpSurfaceEnabled(featureFlags);
+      if (
+        featureFlags.mutationsEnabled !== true ||
+        principal.audience !== "mcp" ||
+        principal.clientType !== "workbuddy"
+      ) {
+        throw new CaioAccessGatewayError("scope_violation");
+      }
+      try {
+        privateExecutionResult =
+          parseCaioProPrivateExecutionResultProjection(payload);
+      } catch {
+        throw new CaioAccessGatewayError("bad_request");
+      }
+      if (
+        privateExecutionResult.workspaceRef !==
+        `workspace:${principal.workspaceId}`
+      ) {
+        throw new CaioAccessGatewayError("scope_violation");
+      }
+      await boundAssertProjectAccess(privateExecutionResult.portfolioRef);
+    }
 
-    // 9. Audit claim for the MCP surface: before any dispatch work, fail
-    //    closed. Model routes deliberately do NOT claim here — this layer has
-    //    no alias binding, so it cannot name modelAlias/policyVersion; the
-    //    proxy claims and step 10 refuses any outcome no receipt covers.
-    if (route.kind === "mcp") {
+    // 9. Audit claim for MCP and private-result ingress before any dispatch
+    //    work. Model routes deliberately do NOT claim here — this layer has no
+    //    alias binding, so the proxy claims and step 10 refuses any outcome no
+    //    receipt covers.
+    if (route.kind === "mcp" || route.kind === "private_execution_result") {
+      const privateIngress = route.kind === "private_execution_result";
       const claim: CaioCanonicalAuditClaim = {
         requestId,
         workspaceId: principal.workspaceId,
         clientType: principal.clientType,
-        modelAlias: CAIO_GATEWAY_MCP_AUDIT_ALIAS,
-        // Content digest of the JSON-RPC payload. A digest, never the text:
-        // nothing from the request body enters the audit store.
-        inputHash: sha256(canonicalJson(payload)),
-        policyVersion: mcpAuditPolicyVersion,
+        modelAlias: privateIngress
+          ? CAIO_GATEWAY_PRIVATE_EXECUTION_RESULT_AUDIT_ALIAS
+          : CAIO_GATEWAY_MCP_AUDIT_ALIAS,
+        // A digest, never request text, enters the audit store. The private
+        // projection already carries its canonical digest and was verified
+        // above; MCP hashes its JSON-RPC payload here.
+        inputHash: privateIngress
+          ? privateExecutionResult!.contentHash
+          : sha256(canonicalJson(payload)),
+        policyVersion: privateIngress
+          ? CAIO_GATEWAY_PRIVATE_EXECUTION_RESULT_AUDIT_POLICY_VERSION
+          : mcpAuditPolicyVersion,
       };
       const claimed = await claimAuditSlot(claim, request.signal);
       if (!claimed.claimed) return wireResponse(claimed.wire);
@@ -999,6 +1062,19 @@ export function createCaioGatewayHandler(
             : result,
           clientCorrelationId,
         );
+      }
+      case "private_execution_result": {
+        const result = await runWithRequestCancellation(
+          () =>
+            dependencies.privateExecutionResultIngress({
+              principal,
+              requestId,
+              projection: privateExecutionResult!,
+              ...(request.signal ? { signal: request.signal } : {}),
+            }),
+          request.signal,
+        );
+        return okResponse(result, clientCorrelationId);
       }
       case "model_responses": {
         const dispatched = readModelDispatchOutcome(

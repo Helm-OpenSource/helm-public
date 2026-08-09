@@ -70,6 +70,11 @@ export function Stage1DecisionQueue({
 
   async function submit(action: "approve" | "reject" | "defer" | "request_evidence") {
     if (!selected) return;
+    const portfolioRefs = selected.contextRefs.filter((ref) =>
+      /^opportunity:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/u.test(ref),
+    );
+    const portfolioRef =
+      portfolioRefs.length === 1 ? portfolioRefs[0] : null;
     const dueDate = new Date(dueAt);
     const deferDate = new Date(deferUntil);
     if (
@@ -84,6 +89,7 @@ export function Stage1DecisionQueue({
           action,
           conclusion,
           executionTargetRef,
+          portfolioRef,
           goal,
           workAction,
           dueAt: dueDate.toISOString(),
@@ -177,7 +183,7 @@ export function Stage1DecisionQueue({
                 <Field label={english ? "Evidence requirements, one per line" : "回执证据要求，每行一条"}><Textarea value={evidenceRequirements} onChange={(event) => setEvidenceRequirements(event.target.value)} /></Field>
                 <Field label={english ? "Invalidation conditions, one per line" : "失效条件，每行一条"}><Textarea value={invalidationConditions} onChange={(event) => setInvalidationConditions(event.target.value)} /></Field>
                 <Field label={english ? "Escalation owner" : "升级责任人"}><Input value={escalationOwnerRef} onChange={(event) => setEscalationOwnerRef(event.target.value)} /></Field>
-                <Button disabled={pending} onClick={() => void submit("approve")} className="w-full">{english ? "Approve and create Work Packet" : "批准并生成 Work Packet"}</Button>
+                <Button disabled={pending || selected.contextRefs.filter((ref) => /^opportunity:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/u.test(ref)).length !== 1} onClick={() => void submit("approve")} className="w-full">{english ? "Approve and create Work Packet" : "批准并生成 Work Packet"}</Button>
 
                 <div className="border-t border-[color:var(--border)] pt-4">
                   <Field label={english ? "Structured reason for reject, defer, or evidence request" : "拒绝、延后或补证的结构化原因"}><Textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></Field>

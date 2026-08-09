@@ -166,7 +166,7 @@ describe("verifyExecutedTaskReceiptAction", () => {
     const result = await verifyExecutedTaskReceiptAction({
       taskId: "approval-1",
       stage1TerminalResult: {
-        outcomeRef: "business-outcome:delivery-recovered",
+        outcomeRef: "observation-run:run-1",
         result: "success",
         followedAiRecommendation: true,
       },
@@ -177,25 +177,25 @@ describe("verifyExecutedTaskReceiptAction", () => {
     expect(reconciliationMock.reconcileStage1TerminalResult).not.toHaveBeenCalled();
   });
 
-  it("verifies then reconciles an authorized Stage 1 terminal result", async () => {
+  it("delegates an authorized Stage 1 terminal result to the atomic reconciler", async () => {
     dbMock.approvalTask.findFirst.mockResolvedValue(task(true));
 
     const result = await verifyExecutedTaskReceiptAction({
       taskId: "approval-1",
       stage1TerminalResult: {
-        outcomeRef: "business-outcome:delivery-recovered",
+        outcomeRef: "observation-run:run-1",
         result: "success",
         followedAiRecommendation: true,
       },
     });
 
     expect(result).toEqual({ ok: true });
-    expect(receiptMock.verifyExecutionReceipt).toHaveBeenCalledTimes(1);
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
     expect(reconciliationMock.reconcileStage1TerminalResult).toHaveBeenCalledWith({
       workspaceId: "workspace-1",
       actionItemId: "action-1",
       outcome: {
-        outcomeRef: "business-outcome:delivery-recovered",
+        outcomeRef: "observation-run:run-1",
         result: "success",
         followedAiRecommendation: true,
       },
@@ -204,12 +204,6 @@ describe("verifyExecutedTaskReceiptAction", () => {
       actorType: "USER",
       english: true,
     });
-    expect(
-      receiptMock.verifyExecutionReceipt.mock.invocationCallOrder[0],
-    ).toBeLessThan(
-      reconciliationMock.reconcileStage1TerminalResult.mock
-        .invocationCallOrder[0],
-    );
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/approvals");
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/caio");
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/dashboard");
@@ -264,7 +258,7 @@ describe("verifyExecutedTaskReceiptAction", () => {
       verifyExecutedTaskReceiptAction({
         taskId: "approval-1",
         stage1TerminalResult: {
-          outcomeRef: "business-outcome:delivery-recovered",
+        outcomeRef: "observation-run:run-1",
           result: "success",
           followedAiRecommendation: true,
         },
@@ -274,7 +268,7 @@ describe("verifyExecutedTaskReceiptAction", () => {
       error:
         "Stage 1 terminal result reconciliation denied: decision_not_dispatched",
     });
-    expect(receiptMock.verifyExecutionReceipt).toHaveBeenCalledTimes(1);
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
     expect(cacheMock.revalidatePath).not.toHaveBeenCalled();
   });
 });

@@ -221,6 +221,10 @@ describe("the gateway protocol core has a non-test composition caller", () => {
     );
     // Mounted exactly once: one handler for the whole surface.
     expect(source.match(/createCaioGatewayHandler\(/g)).toHaveLength(1);
+    expect(source).toContain("ingestCaioPrivateExecutionResultProjection");
+    expect(source).toMatch(
+      /privateExecutionResultIngress:\s*async[\s\S]*ingestCaioPrivateExecutionResultProjection/,
+    );
     // And no second listener can be built from here: the deployment binds one
     // approved private address and port, and the host owns it.
     expect(source).not.toMatch(/from "node:https"/);

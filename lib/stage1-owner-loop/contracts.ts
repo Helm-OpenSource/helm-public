@@ -296,6 +296,7 @@ export function validateOwnerCommandDraft(command: OwnerCommandDraft): ContractV
   if (!isNonEmpty(command.decisionRef)) errors.push("decision_ref_required");
   if (!isNonEmpty(command.ownerRef)) errors.push("owner_ref_required");
   if (!isNonEmpty(command.executionTargetRef)) errors.push("execution_target_required");
+  if (!isNonEmpty(command.portfolioRef)) errors.push("portfolio_ref_required");
   if (!isNonEmpty(command.goal)) errors.push("goal_required");
   if (!isNonEmpty(command.action)) errors.push("action_required");
   if (!isFiniteDate(command.dueAt)) errors.push("due_at_invalid");

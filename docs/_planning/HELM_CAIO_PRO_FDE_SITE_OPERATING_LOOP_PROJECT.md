@@ -87,8 +87,8 @@ Wave 1A 只闭合 Decision Loop GAP-1 与 GAP-2。GAP-3 涉及 schema、迁移�
 
 | 缺口 | 当前事实 | 对七项结果的影响 |
 |---|---|---|
-| GAP-1 | **Repo-closed in Wave 1A**：现有 approvals 终态路径在 canonical receipt 独立验收后，经协调器幂等调用 `recordStage1SupervisionSignal` | 只证明生产代码可达与测试行为，不证明现场已有真实监督数据 |
-| GAP-2 | **Repo-closed in Wave 1A**：同一协调器先幂等调用 `evaluateStage1DecisionRecord`，明确业务结果回流现有 `DecisionRecord` | 只证明 repo truth；真实结果仍需私有 executor 投影、Core ingress 与现场回执 |
+| GAP-1 | **Repo-closed in Wave 1A**：现有 approvals 终态路径在一个 `SERIALIZABLE` 协调事务内验证 canonical receipt 并调用 `recordStage1SupervisionSignal`；监督冲突会整体回滚 | 只证明生产代码可达与测试行为，不证明现场已有真实监督数据 |
+| GAP-2 | **Repo-closed in Wave 1A**：同一事务先调用 `evaluateStage1DecisionRecord`，明确业务结果必须与 receipt outcome 和 workspace-scoped evidence 一致 | 只证明 repo truth；真实结果仍需私有 executor 投影、Core ingress 与现场回执 |
 | GAP-3 | `lib/company-memory/` 是纯契约；Prisma 无 `KnowledgeCard` / `KnowledgeSource` 持久化 | “理解得了”的长期、可追溯 Company Memory 未成立 |
 
 GAP-1/2 的关闭由 gap register 同时检查生产协调器、调用顺序和 approvals 入口；GAP-3
@@ -268,34 +268,53 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 Owner 已批准本切片。Wave 1A 实现候选完成以下 repo-level 输出：
 
 1. 选择现有 `verifyExecutedTaskReceiptAction` 作为唯一 canonical terminal trigger；
-2. 在 canonical `ExecutionReceipt` 独立复核后，以同一 workspace 和 Work Packet claim 调用
-   `reconcileStage1TerminalResult`；
-3. 协调器先调用 `evaluateStage1DecisionRecord`，再调用
-   `recordStage1SupervisionSignal`，不执行任何外部动作；
-4. 重放复用既有 receipt verification、DecisionRecord CAS、evaluation content match 与
-   `workspaceId + signalKey` 唯一键；跨 workspace、缺回执、未 VERIFIED 或缺业务结果均拒绝；
-5. `/caio` 读取所有近期监督状态，使 resolved 的真实终态记录可见，同时只把
-   open/acknowledged/routed 计入待关注数量；empty/degraded 语义保持不变；
-6. `caio-pro-fde-cross-repo-contract.ts` 发布第 3.1 节四项接口的 version、兼容集合、
+2. Stage1 分支以同一 workspace 和 Work Packet claim 调用 `reconcileStage1TerminalResult`；
+   非 Stage1 回执继续使用原有独立验证路径；
+3. 协调器在一个 `SERIALIZABLE` 事务内锁定 claim，依次调用 `verifyExecutionReceipt`、
+   `evaluateStage1DecisionRecord` 和 `recordStage1SupervisionSignal`，任一步失败全部回滚；
+4. terminal result 必须与 receipt outcome 一致，outcome ref 必须解析为当前 workspace、
+   Opportunity Portfolio、DecisionRecord、ActionItem 与 ApprovalTask 绑定且仍有效的
+   `ObservationSourceRun`；
+5. private executor 只产生严格版本化并带 content hash 的结果投影；受认证 Gateway 与 Core
+   ingress 校验 identity、workspace、Portfolio、evidence、work packet、CAS 后，唯一通过
+   `recordExecutionReceipt` 写 canonical receipt；
+6. Pack operating input 经严格 identity 校验并绑定同一 workspace 的 Opportunity Portfolio 与
+   evidence snapshot 后，才进入既有 Core exactly-10 / `insufficient_evidence` 生成器；
+7. 重放复用既有锁、receipt writer、DecisionRecord 内容匹配与 `workspaceId + signalKey`
+   唯一键；冲突 projection 或 reconciliation payload/hash 均拒绝；
+8. `/caio` 先显示 unresolved critical，再显示其他 unresolved，剩余位置显示 resolved，且
+   每条展示 status；empty/degraded 语义保持不变；
+9. `caio-pro-fde-cross-repo-contract.ts` 与可移植 JSON Schema 发布第 3.1 节四项接口的
+   version、兼容集合、严格边界、
    contract hash/ref 和未知版本拒绝；completion evaluator 发布 revision/hash/ref，且不暴露
    13 项字面量给消费者；
-7. Decision Loop gap register 与机械 checker 将 GAP-1/2 固定为 closed、GAP-3 固定为 open。
+10. Decision Loop gap register 与机械 checker 将 GAP-1/2 固定为 closed、GAP-3 固定为 open。
 
 ### 5.1.1 为什么选择该终态
 
-`ApprovalTask` 对应的 `ActionItem` 已进入执行终态，并且现有 receipt 服务完成独立复核，
-这是第一个同时具备执行证明、职责分离和生产 UI 入口的位置。更早触发会把“任务已派发或
-已执行”误写成“业务结果已成立”；更晚新建第二入口会复制任务、权限或回执语义。
+`ApprovalTask` 对应的 `ActionItem` 已由 private ingress 记录 canonical receipt，且现有
+approvals 入口具备独立复核身份；这是第一个同时具备执行证明、职责分离和生产 UI 入口的
+位置。更早触发会把“任务已派发或已执行”误写成“业务结果已成立”；更晚新建第二入口会
+复制任务、权限或回执语义。
 
-业务结果不从 receipt outcome 推断。Stage 1 入口必须显式提供 `success|failure`、非空
-`outcomeRef` 与是否采纳建议；receipt 证明执行，业务结果用于评估，两者保持分层。
+业务结果仍须由 Stage 1 入口显式提供 `success|failure`、非空 `outcomeRef` 与是否采纳建议，
+不能由 UI 任意手填覆盖 receipt；协调器要求其与 canonical receipt outcome 一致。receipt
+证明执行，可信 ObservationSourceRun 证明结果，二者保持分层并同时受约束。
+
+private executor ingress 只接收发生过执行尝试的 `SUCCESS / PARTIAL_SUCCESS / FAILURE`：
+三者分别固定映射到 `success / failure / failure`，并把 ActionItem 收敛为 `EXECUTED`；后续
+监督分别收敛为 `resolved / open / open`。`NOT_EXECUTED` 必须走既有 blocked-without-execution
+路径，`REJECTED` 必须走既有 approval rejection 路径，二者进入该 ingress 一律在事务前
+fail-closed。投影携带的 `outcome.result` 仍由可信 ObservationSourceRun 证明，但必须同时符合
+receipt 固定映射，调用方不能独立翻转。
 
 ### 5.1.2 中断、并发与回滚
 
-评估先于监督，因此相同输入的并发/重放收敛到一份评估、一份 `MemoryFact.OBSERVED` 候选
-和一个确定性监督信号；冲突业务结果先在 DecisionRecord 评估一致性上 fail-closed。若评估
-成功后监督写入中断，重试复用评估并补齐同一监督键。本切片无 schema/migration，代码回滚
-保留 append-only 历史并撤回新生产入口。
+receipt 验证、评估、`MemoryFact.OBSERVED` 候选和监督在同一事务内提交；监督写入冲突或
+任一异常会让前述写入全部回滚，不存在用文档解释的部分成功。相同输入的并发/重放收敛到
+一份 receipt、一份评估、一份候选事实和一个确定性监督信号；receipt 结果、业务结果、证据、
+projection 或是否采纳建议发生漂移时 fail-closed。本切片无 schema/migration，代码回滚保留
+已经提交的 append-only 历史并撤回新生产入口。
 
 本次原子提交在完整门禁通过后可作为 implementation candidate；是否成为 package-ready
 Core implementation SHA，仍需独立 release/BOM 评审。项目章程提交绝不替代该 SHA。
@@ -389,9 +408,15 @@ Wave 1A 只触及已有边界：
 ```text
 lib/stage1-owner-loop/terminal-result-reconciliation.service.ts
 lib/stage1-owner-loop/caio-pro-fde-cross-repo-contract.ts
+lib/stage1-owner-loop/caio-fde-scope-resolver.service.ts
+lib/stage1-owner-loop/private-execution-result-ingress.service.ts
+lib/stage1-owner-loop/caio-operating-question-store.service.ts
 lib/stage1-owner-loop/caio-pro-completion.ts
 features/approvals/                     existing terminal action and UI
 features/dashboard/                     existing OWNER read model and honest states
+lib/caio-access-gateway/                 authenticated private projection route
+tools/caio-access-gateway/server.ts      production composition for Core ingress
+docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json
 scripts/check-decision-loop-gaps.ts     mechanically checked reachability truth
 colocated *.test.ts                     focused, permission, replay and boundary tests
 docs/product/HELM_DECISION_LOOP_GAP_REGISTER.md
@@ -424,10 +449,12 @@ import {
 
 ### 10.1 必测路径
 
-- 正常终态回执 -> 决策评估 -> 监督信号 -> OWNER 读面；
+- 认证 private projection -> canonical receipt -> 原子终态协调 -> OWNER 读面；
 - 同一事件重放不重复评估或写信号；
 - 并发请求只有一个 canonical 结果；
-- 跨 workspace 引用、缺回执、未独立复核、非终态结果全部 fail-closed；
+- 跨 workspace、失效/撤销 evidence、结果与 receipt 不一致、缺回执或非终态结果全部
+  fail-closed；
+- supervision 冲突必须回滚 receipt verification、DecisionRecord evaluation 与候选 memory；
 - OWNER/membership/service authority 不满足时拒绝；
 - seed 关闭后的 honest-empty；
 - 数据撤销、来源过期或证据缺失后，不把旧结论继续表述为当前事实；

@@ -1,5 +1,6 @@
 import {
   ActorType,
+  ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
   ExecutionReceiptVerificationState,
 } from "@prisma/client";
@@ -8,9 +9,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   dbMock,
   evaluationMock,
+  evidenceMock,
+  governanceMock,
+  receiptMock,
+  ReceiptChangedErrorMock,
+  ReceiptNotFoundErrorMock,
+  ReceiptSelfVerificationErrorMock,
   supervisionMock,
   DecisionEvaluationErrorMock,
   DecisionGateErrorMock,
+  ScopeResolutionErrorMock,
 } = vi.hoisted(() => {
   class DecisionEvaluationError extends Error {
     readonly reasons: string[];
@@ -28,18 +36,57 @@ const {
       this.reasons = reasons;
     }
   }
+  class ScopeResolutionError extends Error {
+    readonly reasons: string[];
+
+    constructor(reasons: string[]) {
+      super(reasons.join(", "));
+      this.reasons = reasons;
+    }
+  }
+  class ReceiptNotFoundError extends Error {}
+  class ReceiptSelfVerificationError extends Error {}
+  class ReceiptChangedError extends Error {}
   return {
-    dbMock: {
-      decisionWorkPacketClaim: { findFirst: vi.fn() },
-    },
+    dbMock: (() => {
+      const client = {
+        $queryRaw: vi.fn(),
+        decisionWorkPacketClaim: { findFirst: vi.fn() },
+      };
+      return {
+        ...client,
+        $transaction: vi.fn(
+          async (operation: (tx: typeof client) => Promise<unknown>) =>
+            operation(client),
+        ),
+      };
+    })(),
     evaluationMock: { evaluateStage1DecisionRecord: vi.fn() },
+    evidenceMock: { resolveCaioFdeObservationEvidence: vi.fn() },
+    governanceMock: { assertWorkspaceInsightServiceAccess: vi.fn() },
+    receiptMock: { verifyExecutionReceipt: vi.fn() },
+    ReceiptChangedErrorMock: ReceiptChangedError,
+    ReceiptNotFoundErrorMock: ReceiptNotFoundError,
+    ReceiptSelfVerificationErrorMock: ReceiptSelfVerificationError,
     supervisionMock: { recordStage1SupervisionSignal: vi.fn() },
     DecisionEvaluationErrorMock: DecisionEvaluationError,
     DecisionGateErrorMock: DecisionGateError,
+    ScopeResolutionErrorMock: ScopeResolutionError,
   };
 });
 
 vi.mock("@/lib/db", () => ({ db: dbMock }));
+vi.mock("@/lib/receipts/execution-receipt.service", () => ({
+  ExecutionReceiptNotFoundError: ReceiptNotFoundErrorMock,
+  ReceiptChangedDuringVerificationError: ReceiptChangedErrorMock,
+  ReceiptSelfVerificationError: ReceiptSelfVerificationErrorMock,
+  verifyExecutionReceipt: receiptMock.verifyExecutionReceipt,
+}));
+vi.mock("./caio-fde-scope-resolver.service", () => ({
+  CaioFdeScopeResolutionError: ScopeResolutionErrorMock,
+  resolveCaioFdeObservationEvidence:
+    evidenceMock.resolveCaioFdeObservationEvidence,
+}));
 vi.mock("./decision-evaluation.service", () => ({
   Stage1DecisionEvaluationError: DecisionEvaluationErrorMock,
   evaluateStage1DecisionRecord: evaluationMock.evaluateStage1DecisionRecord,
@@ -50,6 +97,8 @@ vi.mock("./decision-follow-through.service", () => ({
     supervisionMock.recordStage1SupervisionSignal,
 }));
 vi.mock("@/lib/auth/service-governance", () => ({
+  assertWorkspaceInsightServiceAccess:
+    governanceMock.assertWorkspaceInsightServiceAccess,
   isWorkspaceServiceGovernanceError: vi.fn(() => false),
 }));
 
@@ -72,6 +121,7 @@ function claim(overrides: Record<string, unknown> = {}) {
     actionItem: {
       id: "action-1",
       workspaceId: "workspace-1",
+      opportunityId: "opportunity-1",
       approvalTask: {
         id: "approval-1",
         workspaceId: "workspace-1",
@@ -81,7 +131,9 @@ function claim(overrides: Record<string, unknown> = {}) {
         workspaceId: "workspace-1",
         subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
         subjectId: "action-1",
-        verificationState: ExecutionReceiptVerificationState.VERIFIED,
+        verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+        outcome: ExecutionReceiptOutcome.SUCCESS,
+        evidenceRefs: JSON.stringify(["observation-run:run-1"]),
       },
     },
     ...overrides,
@@ -93,7 +145,7 @@ function input(overrides: Record<string, unknown> = {}) {
     workspaceId: "workspace-1",
     actionItemId: "action-1",
     outcome: {
-      outcomeRef: "business-outcome:delivery-recovered",
+      outcomeRef: "observation-run:run-1",
       result: "success" as const,
       followedAiRecommendation: true,
     },
@@ -109,6 +161,19 @@ describe("Stage 1 terminal result reconciliation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(claim());
+    dbMock.$queryRaw.mockResolvedValue([{ id: "locked" }]);
+    evidenceMock.resolveCaioFdeObservationEvidence.mockResolvedValue({
+      runId: "run-1",
+      outcome: "SUCCESS",
+    });
+    governanceMock.assertWorkspaceInsightServiceAccess.mockResolvedValue(
+      undefined,
+    );
+    receiptMock.verifyExecutionReceipt.mockResolvedValue({
+      ...claim().actionItem.executionReceipt,
+      verificationState: ExecutionReceiptVerificationState.VERIFIED,
+      verifiedByUserId: "reviewer-1",
+    });
     evaluationMock.evaluateStage1DecisionRecord.mockResolvedValue({
       created: true,
       evaluation: { evaluationId: "evaluation:decision-1" },
@@ -121,6 +186,7 @@ describe("Stage 1 terminal result reconciliation", () => {
   });
 
   it("does nothing for a non-Stage-1 action", async () => {
+    dbMock.$queryRaw.mockResolvedValue([]);
     dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(null);
 
     await expect(reconcileStage1TerminalResult(input())).resolves.toEqual({
@@ -130,7 +196,7 @@ describe("Stage 1 terminal result reconciliation", () => {
     expect(supervisionMock.recordStage1SupervisionSignal).not.toHaveBeenCalled();
   });
 
-  it("evaluates a verified success before recording its deterministic supervision signal", async () => {
+  it("verifies, evaluates and records supervision in one caller-owned transaction", async () => {
     const result = await reconcileStage1TerminalResult(input());
 
     expect(result).toMatchObject({
@@ -142,19 +208,24 @@ describe("Stage 1 terminal result reconciliation", () => {
         where: { workspaceId: "workspace-1", actionItemId: "action-1" },
       }),
     );
-    expect(evaluationMock.evaluateStage1DecisionRecord).toHaveBeenCalledWith({
-      workspaceId: "workspace-1",
-      decisionRecordId: "decision-1",
-      followedAiRecommendation: true,
-      outcome: {
-        outcomeRef: "business-outcome:delivery-recovered",
-        result: "success",
-      },
-      actorName: "Independent reviewer",
-      actorUserId: "reviewer-1",
-      actorType: ActorType.USER,
-      english: true,
-    });
+    expect(receiptMock.verifyExecutionReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        subjectId: "action-1",
+        verifierUserId: "reviewer-1",
+      }),
+      expect.objectContaining({ client: expect.any(Object) }),
+    );
+    expect(evaluationMock.evaluateStage1DecisionRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        decisionRecordId: "decision-1",
+      }),
+      expect.objectContaining({
+        client: expect.any(Object),
+        governanceAlreadyAsserted: true,
+      }),
+    );
     expect(supervisionMock.recordStage1SupervisionSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: "workspace-1",
@@ -168,11 +239,16 @@ describe("Stage 1 terminal result reconciliation", () => {
           status: "resolved",
           evidenceRefs: expect.arrayContaining([
             "execution-receipt:receipt-1",
-            "business-outcome:delivery-recovered",
+            "observation-run:run-1",
             "evaluation:evaluation:decision-1",
             "memory-fact:memory-1",
+            expect.stringMatching(/^stage1-reconciliation:sha256:[a-f0-9]{64}$/),
           ]),
         }),
+      }),
+      expect.objectContaining({
+        client: expect.any(Object),
+        governanceAlreadyAsserted: true,
       }),
     );
     expect(
@@ -182,11 +258,61 @@ describe("Stage 1 terminal result reconciliation", () => {
     );
   });
 
+  it("rejects a hand-filled result that conflicts with the canonical receipt outcome", async () => {
+    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+      claim({
+        actionItem: {
+          ...claim().actionItem,
+          executionReceipt: {
+            ...claim().actionItem.executionReceipt,
+            outcome: ExecutionReceiptOutcome.FAILURE,
+          },
+        },
+      }),
+    );
+
+    await expect(reconcileStage1TerminalResult(input())).rejects.toMatchObject({
+      reasons: ["business_outcome_receipt_mismatch"],
+    });
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
+    expect(evaluationMock.evaluateStage1DecisionRecord).not.toHaveBeenCalled();
+    expect(supervisionMock.recordStage1SupervisionSignal).not.toHaveBeenCalled();
+  });
+
+  it("fails before every write when the workspace-scoped outcome evidence cannot be resolved", async () => {
+    evidenceMock.resolveCaioFdeObservationEvidence.mockRejectedValue(
+      new Error("observation_evidence_workspace_mismatch"),
+    );
+
+    await expect(reconcileStage1TerminalResult(input())).rejects.toMatchObject({
+      reasons: ["observation_evidence_workspace_mismatch"],
+    });
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
+    expect(evaluationMock.evaluateStage1DecisionRecord).not.toHaveBeenCalled();
+    expect(supervisionMock.recordStage1SupervisionSignal).not.toHaveBeenCalled();
+  });
+
   it("records an unsuccessful business result as an open owner-review signal", async () => {
+    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+      claim({
+        actionItem: {
+          ...claim().actionItem,
+          executionReceipt: {
+            ...claim().actionItem.executionReceipt,
+            outcome: ExecutionReceiptOutcome.FAILURE,
+          },
+        },
+      }),
+    );
+    evidenceMock.resolveCaioFdeObservationEvidence.mockResolvedValue({
+      runId: "run-1",
+      outcome: "FAILURE",
+    });
+
     await reconcileStage1TerminalResult(
       input({
         outcome: {
-          outcomeRef: "business-outcome:target-missed",
+          outcomeRef: "observation-run:run-1",
           result: "failure",
           followedAiRecommendation: false,
         },
@@ -203,6 +329,7 @@ describe("Stage 1 terminal result reconciliation", () => {
           status: "open",
         }),
       }),
+      expect.objectContaining({ client: expect.any(Object) }),
     );
   });
 
@@ -242,7 +369,7 @@ describe("Stage 1 terminal result reconciliation", () => {
     expect(supervisionMock.recordStage1SupervisionSignal).not.toHaveBeenCalled();
   });
 
-  it("rejects missing or unverified canonical receipts before either write", async () => {
+  it("rejects a missing canonical receipt before the atomic write", async () => {
     const withoutReceipt = claim();
     withoutReceipt.actionItem.executionReceipt = null as never;
     dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValueOnce(
@@ -253,14 +380,6 @@ describe("Stage 1 terminal result reconciliation", () => {
       reasons: ["execution_receipt_required"],
     });
 
-    const unverified = claim();
-    unverified.actionItem.executionReceipt.verificationState =
-      ExecutionReceiptVerificationState.SELF_REPORTED;
-    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValueOnce(unverified);
-
-    await expect(reconcileStage1TerminalResult(input())).rejects.toMatchObject({
-      reasons: ["verified_execution_receipt_required"],
-    });
     expect(evaluationMock.evaluateStage1DecisionRecord).not.toHaveBeenCalled();
     expect(supervisionMock.recordStage1SupervisionSignal).not.toHaveBeenCalled();
   });
@@ -330,5 +449,16 @@ describe("Stage 1 terminal result reconciliation", () => {
       name: "Stage1TerminalResultReconciliationError",
       reasons: ["supervision_idempotency_conflict"],
     });
+  });
+
+  it("lets a supervision failure abort the enclosing transaction", async () => {
+    supervisionMock.recordStage1SupervisionSignal.mockRejectedValue(
+      new DecisionGateErrorMock(["supervision_idempotency_conflict"]),
+    );
+
+    await expect(reconcileStage1TerminalResult(input())).rejects.toMatchObject({
+      reasons: ["supervision_idempotency_conflict"],
+    });
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(1);
   });
 });

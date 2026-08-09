@@ -38,6 +38,8 @@ const {
       create: vi.fn(),
       updateMany: vi.fn(),
     },
+    opportunity: { findFirst: vi.fn() },
+    observationSourceRun: { findFirst: vi.fn() },
   };
   return {
     auditMock: { writeAuditLog: vi.fn() },
@@ -61,9 +63,18 @@ vi.mock("./caio-initialization-gate-store.service", () => ({
 }));
 
 import {
+  generateCaioOperatingQuestionPortfolioFromPackInput,
   generateCaioOperatingQuestionPortfolio,
   selectCaioOperatingQuestions,
 } from "./caio-operating-question-store.service";
+import {
+  CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE,
+  CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH,
+  CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF,
+  CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+  CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
+  CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
+} from "./caio-pro-fde-cross-repo-contract";
 import {
   createCaioOperatingQuestionGenerationReceipt,
   evaluateCaioOperatingQuestionGeneration,
@@ -73,6 +84,7 @@ import {
   syntheticOperatingQuestionCandidate,
   syntheticOperatingQuestionG0Source,
   syntheticOperatingQuestionGenerationInput,
+  SYNTHETIC_CAIO_EVIDENCE_REFS,
 } from "./caio-operating-question.test-fixtures";
 
 const NOW = new Date("2026-07-23T09:00:00.000Z");
@@ -143,9 +155,96 @@ function generatedReceipt(portfolio: CaioOperatingQuestionPortfolio) {
   });
 }
 
+function packOperatingInput(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
+    interfaceVersion: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
+    contractRef: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF,
+    contractHash: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH,
+    evaluatorRevision:
+      CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorRevision,
+    evaluatorContractRef:
+      CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorContractRef,
+    evaluatorContractHash:
+      CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorContractHash,
+    workspaceRef: `workspace:${WORKSPACE_ID}`,
+    portfolioRef: "opportunity:portfolio-1",
+    evidenceSnapshotRef: "observation-run:run-1",
+    taxonomy: [
+      {
+        taxonomyRef: "taxonomy:operating-risk",
+        categoryRef: "category:delivery-risk",
+        label: "Delivery risk",
+      },
+    ],
+    metrics: [
+      {
+        metricRef: "metric:on-time-completion",
+        definition: "Share completed inside the accepted operating window.",
+        unit: "percent",
+        evidenceRefs: SYNTHETIC_CAIO_EVIDENCE_REFS,
+      },
+    ],
+    evidenceApplicabilityRules: [
+      {
+        ruleRef: "evidence-rule:delivery-risk",
+        taxonomyRefs: ["taxonomy:operating-risk"],
+        acceptedEvidenceKinds: ["source_observation"],
+      },
+    ],
+    candidateInputs: [
+      {
+        candidateRef: "candidate-input:delivery-risk",
+        taxonomyRefs: ["taxonomy:operating-risk"],
+        metricRefs: ["metric:on-time-completion"],
+        evidenceRefs: SYNTHETIC_CAIO_EVIDENCE_REFS,
+        rationale: "Current evidence supports Core-owned candidate drafting.",
+      },
+    ],
+    authorityEffect: "none" as const,
+    ...overrides,
+  };
+}
+
+function observationRun() {
+  return {
+    id: "run-1",
+    workspaceId: WORKSPACE_ID,
+    programId: "program-1",
+    sourceId: "source-1",
+    authorizationVersion: 1,
+    windowStart: new Date("2026-07-23T00:00:00.000Z"),
+    windowEnd: new Date("2026-07-24T00:00:00.000Z"),
+    status: "SUCCEEDED",
+    observedAt: new Date("2026-07-23T08:30:00.000Z"),
+    outcome: "SUCCESS",
+    evidenceRefs: JSON.stringify([
+      "opportunity:portfolio-1",
+      ...SYNTHETIC_CAIO_EVIDENCE_REFS,
+    ]),
+    program: {
+      id: "program-1",
+      workspaceId: WORKSPACE_ID,
+      status: "ACTIVE",
+      revokedAt: null,
+      startsAt: new Date("2026-07-01T00:00:00.000Z"),
+      expiresAt: new Date("2026-08-01T00:00:00.000Z"),
+      authorizationVersion: 1,
+      scopeRefs: JSON.stringify(["opportunity:portfolio-1"]),
+    },
+    source: {
+      id: "source-1",
+      workspaceId: WORKSPACE_ID,
+      programId: "program-1",
+      status: "ACTIVE",
+    },
+  };
+}
+
 describe("CAIO operating question store", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbMock.$queryRaw.mockReset();
     dbMock.$transaction.mockImplementation(
       async (operation: (tx: typeof dbMock) => Promise<unknown>) =>
         operation(dbMock),
@@ -170,6 +269,11 @@ describe("CAIO operating question store", () => {
       null,
     );
     dbMock.caioQuestionSelectionReceipt.findUnique.mockResolvedValue(null);
+    dbMock.opportunity.findFirst.mockResolvedValue({
+      id: "portfolio-1",
+      workspaceId: WORKSPACE_ID,
+    });
+    dbMock.observationSourceRun.findFirst.mockResolvedValue(observationRun());
     auditMock.writeAuditLog.mockResolvedValue({ id: "audit-1" });
   });
 
@@ -212,6 +316,81 @@ describe("CAIO operating question store", () => {
         portfolioSequence: 1,
       }),
     });
+  });
+
+  it("consumes a versioned Pack input only after workspace Portfolio and evidence resolution", async () => {
+    dbMock.$queryRaw.mockResolvedValueOnce([]);
+    const candidates = Array.from({ length: 10 }, (_, index) =>
+      syntheticOperatingQuestionCandidate(index, {
+        impactObjectRefs: ["opportunity:portfolio-1"],
+      }),
+    );
+
+    const result = await generateCaioOperatingQuestionPortfolioFromPackInput({
+      interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+      packOperatingInput: packOperatingInput(),
+      workspaceId: WORKSPACE_ID,
+      actorUserId: OWNER_USER_ID,
+      generationKey: "generation:synthetic-caio:pack-1",
+      generatorRef: "generator:caio-operating-question",
+      modelRef: "model:synthetic-local",
+      candidates,
+      auditRefs: ["audit:question-generation:pack-1"],
+      now: NOW,
+    });
+
+    expect(result.portfolio?.candidates).toHaveLength(10);
+    expect(dbMock.opportunity.findFirst).toHaveBeenCalledWith({
+      where: { id: "portfolio-1", workspaceId: WORKSPACE_ID },
+      select: { id: true, workspaceId: true },
+    });
+    expect(dbMock.observationSourceRun.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "run-1", workspaceId: WORKSPACE_ID },
+      }),
+    );
+  });
+
+  it("rejects descriptor drift and candidate Portfolio drift before generation writes", async () => {
+    const candidates = Array.from({ length: 10 }, (_, index) =>
+      syntheticOperatingQuestionCandidate(index, {
+        impactObjectRefs: ["opportunity:other-portfolio"],
+      }),
+    );
+    await expect(
+      generateCaioOperatingQuestionPortfolioFromPackInput({
+        interfaceDescriptor: {
+          ...CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+          contractHash: `sha256:${"0".repeat(64)}`,
+        },
+        packOperatingInput: packOperatingInput(),
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: "generation:synthetic-caio:pack-drift",
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates,
+        auditRefs: ["audit:question-generation:pack-drift"],
+        now: NOW,
+      }),
+    ).rejects.toThrow("pack_interface_descriptor_invalid");
+    expect(dbMock.$transaction).not.toHaveBeenCalled();
+
+    await expect(
+      generateCaioOperatingQuestionPortfolioFromPackInput({
+        interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+        packOperatingInput: packOperatingInput(),
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: "generation:synthetic-caio:pack-scope-drift",
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates,
+        auditRefs: ["audit:question-generation:pack-scope-drift"],
+        now: NOW,
+      }),
+    ).rejects.toThrow("pack_core_candidate_scope_invalid");
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
   });
 
   it("records an insufficient-evidence receipt without creating or erasing a portfolio", async () => {

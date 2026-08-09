@@ -439,20 +439,6 @@
       "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
     },
     {
-      "file": "lib/receipts/execution-receipt.service.ts",
-      "fingerprint": "2c49b030ac52c924",
-      "occurrence": 0,
-      "client": "tx",
-      "delegate": "executionReceipt",
-      "model": "ExecutionReceipt",
-      "statePredicates": [
-        "verificationState"
-      ],
-      "resultVariable": "claimed",
-      "reason": "isolation-not-serializable",
-      "note": "Known defect awaiting its own slice; NOT a statement that this site is safe."
-    },
-    {
       "file": "lib/stage1-owner-loop/caio-initialization-gate-store.service.ts",
       "fingerprint": "22e1912f965d3620",
       "occurrence": 0,

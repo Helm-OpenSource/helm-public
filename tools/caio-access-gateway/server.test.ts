@@ -133,6 +133,7 @@ describe("route table: which surfaces this listener owns", () => {
       "/mcp",
       "/readyz",
       "/v1/chat/completions",
+      "/v1/execution-results",
       "/v1/models",
       "/v1/responses",
     ]);
@@ -188,6 +189,7 @@ describe("route table: which surfaces this listener owns", () => {
         "/livez",
         "/readyz",
         "/v1/chat/completions",
+        "/v1/execution-results",
         "/v1/models",
         "/v1/responses",
       ]);

@@ -27,13 +27,44 @@ function fixtureRepo(files: Readonly<Record<string, string>> = {}): string {
     "lib/stage1-owner-loop/decision-evaluation.service.ts":
       "export function evaluateStage1DecisionRecord() {}\n",
     "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts": [
+      "Prisma.TransactionIsolationLevel.Serializable;",
+      "await db.$transaction(async (tx) => {",
+      "await verifyExecutionReceipt({}, { client: tx });",
       "const evaluation = await evaluateStage1DecisionRecord({});",
-      "const supervisionSignal = await recordStage1SupervisionSignal({});",
+      "const evaluationTx = { client: tx };",
+      "const supervisionSignal = await recordStage1SupervisionSignal({}, { client: tx });",
     ].join("\n"),
     "features/approvals/actions.ts": [
-      "await verifyExecutionReceipt({});",
       "await reconcileStage1TerminalResult({});",
+      "await verifyExecutionReceipt({});",
     ].join("\n"),
+    "lib/stage1-owner-loop/private-execution-result-ingress.service.ts": [
+      "Prisma.TransactionIsolationLevel.Serializable;",
+      "await resolveCaioFdePortfolioScope({});",
+      "await resolveCaioFdeObservationEvidence({});",
+      "await recordExecutionReceipt({}, { client: tx });",
+    ].join("\n"),
+    "tools/caio-access-gateway/server.ts":
+      "await ingestCaioPrivateExecutionResultProjection({});\n",
+    "lib/caio-access-gateway/gateway-http-core.ts":
+      'path === "/v1/execution-results";\n',
+    "lib/stage1-owner-loop/caio-operating-question-store.service.ts": [
+      "export async function generateCaioOperatingQuestionPortfolioFromPackInput() {}",
+      "validateCaioProFdeInterfaceDescriptor({});",
+      "caioProPackOperatingInputSchema.safeParse({});",
+      "await resolveCaioFdePortfolioScope({});",
+      "await resolveCaioFdeObservationEvidence({});",
+      "generateCaioOperatingQuestionPortfolioInternal({});",
+    ].join("\n"),
+    "docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json":
+      JSON.stringify({
+        $id: "https://helm.dev/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json",
+        oneOf: [{}, {}],
+        $defs: {
+          packOperatingInput: { additionalProperties: false },
+          privateExecutionResultProjection: { additionalProperties: false },
+        },
+      }),
     ...Object.fromEntries(
       RECORDED_REACHABLE.map((fact) => [fact.file, `${fact.needle}\n`]),
     ),
@@ -94,7 +125,7 @@ describe("decision loop gap register", () => {
       });
     }
 
-    it("fails when approvals no longer invokes the terminal reconciler after receipt verification", () => {
+    it("fails when approvals no longer invokes the terminal reconciler", () => {
       const root = fixtureRepo({
         "features/approvals/actions.ts": "await verifyExecutionReceipt({});\n",
       });
@@ -111,6 +142,9 @@ describe("decision loop gap register", () => {
     it("fails when supervision is attempted before the decision evaluation", () => {
       const root = fixtureRepo({
         "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts": [
+          "Prisma.TransactionIsolationLevel.Serializable;",
+          "await db.$transaction(async (tx) => {",
+          "await verifyExecutionReceipt({}, { client: tx });",
           "const supervisionSignal = await recordStage1SupervisionSignal({});",
           "const evaluation = await evaluateStage1DecisionRecord({});",
         ].join("\n"),
@@ -124,11 +158,14 @@ describe("decision loop gap register", () => {
 
     it("recognizes governed producer calls wrapped by an error normalizer", () => {
       const source = [
+        "Prisma.TransactionIsolationLevel.Serializable;",
+        "await db.$transaction(async (tx) => {",
+        "await verifyExecutionReceipt({}, { client: tx });",
         "const evaluation = await runStep(() =>",
-        "  evaluateStage1DecisionRecord({}),",
+        "  evaluateStage1DecisionRecord({}, { client: tx }),",
         ");",
         "const supervision = await runStep(() =>",
-        "  recordStage1SupervisionSignal({}),",
+        "  recordStage1SupervisionSignal({}, { client: tx }),",
         ");",
       ].join("\n");
       const root = fixtureRepo({
@@ -140,6 +177,54 @@ describe("decision loop gap register", () => {
         functionCallIndex(source, "recordStage1SupervisionSignal"),
       );
       expect(checkDecisionLoopGaps(root)).toEqual([]);
+    });
+
+    it("fails when the terminal producer loses its atomic transaction boundary", () => {
+      const root = fixtureRepo({
+        "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts": [
+          "await verifyExecutionReceipt({});",
+          "await evaluateStage1DecisionRecord({});",
+          "await recordStage1SupervisionSignal({});",
+        ].join("\n"),
+      });
+
+      const findings = checkDecisionLoopGaps(root);
+      expect(
+        findings.some(
+          (finding) =>
+            finding.gap === "terminal-atomicity" &&
+            finding.detail.includes("SERIALIZABLE"),
+        ),
+      ).toBe(true);
+    });
+
+    it("fails when the authenticated private ingress is no longer production-wired", () => {
+      const root = fixtureRepo({
+        "tools/caio-access-gateway/server.ts": "ingress removed\n",
+      });
+
+      expect(checkDecisionLoopGaps(root)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ gap: "private-ingress" }),
+        ]),
+      );
+    });
+
+    it("fails when Pack input bypasses the workspace evidence resolver", () => {
+      const root = fixtureRepo({
+        "lib/stage1-owner-loop/caio-operating-question-store.service.ts": [
+          "export async function generateCaioOperatingQuestionPortfolioFromPackInput() {}",
+          "validateCaioProFdeInterfaceDescriptor({});",
+          "caioProPackOperatingInputSchema.safeParse({});",
+          "generateCaioOperatingQuestionPortfolioInternal({});",
+        ].join("\n"),
+      });
+
+      expect(checkDecisionLoopGaps(root)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ gap: "pack-consumer" }),
+        ]),
+      );
     });
 
     it("finds a production reference but excludes definitions and tests", () => {

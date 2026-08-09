@@ -8,8 +8,9 @@ public_safety: Code-reachability facts about the decision and supervision loop i
 
 # Decision loop gap register / 决策闭环缺口清单
 
-`scripts/check-decision-loop-gaps.ts` 校验本文的状态标记、生产调用点、调用顺序、挂载读侧和
-剩余持久化缺口。代码或文档任一侧变化都会使门禁失败，不能把测试引用当成生产可达性。
+`scripts/check-decision-loop-gaps.ts` 校验本文的状态标记、原子生产调用点、私有结果 ingress、
+Pack consumer、可移植跨仓 schema、挂载读侧和剩余持久化缺口。代码或文档任一侧变化都会
+使门禁失败，不能把测试引用当成生产可达性。
 
 <!-- decision-loop-gap:GAP-1=closed -->
 <!-- decision-loop-gap:GAP-2=closed -->
@@ -25,41 +26,57 @@ GAP-1 与 GAP-2 已由同一条生产可达、workspace scoped、可重放的终
 自动执行。
 
 ```text
+/private executor projection
+  -> authenticated Gateway ingress
+  -> Core recordExecutionReceipt (SELF_REPORTED)
+
 /approvals existing terminal action
-  -> verifyExecutionReceipt
-  -> reconcileStage1TerminalResult
+  -> reconcileStage1TerminalResult (one SERIALIZABLE transaction)
+       -> verifyExecutionReceipt
        -> evaluateStage1DecisionRecord
        -> recordStage1SupervisionSignal
   -> /caio reads current DecisionRecord / receipt / supervision records
 ```
 
 选择 `features/approvals/actions.ts#verifyExecutedTaskReceiptAction` 作为唯一 terminal trigger，
-因为它已经位于真实 approvals 入口，能在既有独立复核后确认 canonical `ExecutionReceipt`；
-Stage 1 终态还必须显式提交最终业务结果和 evidence ref。普通回执验证仍保持原权限，Stage 1
-结果回流额外复用现有 insight governance 权限，不新建角色或 ACL。
+因为它已经位于真实 approvals 入口，并持有既有独立复核身份。Stage 1 分支不预先提交回执
+验证，而是把 canonical `ExecutionReceipt` 验证、DecisionRecord 评估和监督记录放入同一
+事务；普通非 Stage1 回执验证仍保持原路径和权限。Stage 1 终态还必须显式提交与 receipt
+outcome 一致的最终业务结果，以及可解析的 evidence ref；结果回流额外复用现有 insight
+governance 权限，不新建角色或 ACL。
 
 ## 1. 已闭合且持续检查
 
 | 状态 | 事实 | 机械证据 |
 |---|---|---|
-| GAP-1 closed | 非 seed、非测试的终态协调器幂等调用 `recordStage1SupervisionSignal` | `lib/stage1-owner-loop/terminal-result-reconciliation.service.ts`；确定性 `signalId=stage1-terminal-result:{decisionRecordId}`；`scripts/check-decision-loop-gaps.ts` 固定生产调用与入口 |
-| GAP-2 closed | 同一协调器先调用 `evaluateStage1DecisionRecord`，把明确业务结果回流现有 `DecisionRecord` | 评估先于监督；冲突重放先由既有 DecisionRecord CAS 拒绝；门禁固定调用顺序 |
-| terminal trigger reachable | 现有 `/approvals` 客户端调用 server action；server action 先独立验证 canonical receipt，再协调结果 | `features/approvals/approvals-client.tsx`、`features/approvals/actions.ts`、`features/approvals/queries.ts` |
-| workspace / permission closed | task、claim、decision、action、approval 和 receipt 均按 workspace 收敛；跨 workspace 查找不泄漏记录 | 既有 action review、insight governance、service governance；unit + isolated MySQL 拒绝测试 |
-| replay / concurrency closed | receipt verification、decision evaluation 和 supervision signal 都使用既有幂等/CAS/唯一键；中断后可用同一输入重试收敛 | focused tests 与一次性 `helm_caio_stage1_*` MySQL 并发测试 |
-| read side reachable | `/caio` 读取全部近期监督状态；已解决成功信号可见但不计入 open/warning attention | `features/dashboard/stage1-owner-loop-query.ts` 与 readout tests |
+| GAP-1 closed | 非 seed、非测试的终态协调器在同一 `SERIALIZABLE` 事务内调用 `recordStage1SupervisionSignal` | 确定性 `signalId=stage1-terminal-result:{decisionRecordId}`；监督冲突的真实 MySQL 用例证明 receipt verification、evaluation 与 memory 一并回滚 |
+| GAP-2 closed | 同一事务先调用 `evaluateStage1DecisionRecord`，把与 canonical receipt 一致的明确业务结果回流现有 `DecisionRecord` | 评估先于监督；冲突重放由既有 DecisionRecord 内容一致性拒绝；门禁固定事务与调用顺序 |
+| terminal trigger reachable | 现有 `/approvals` 客户端调用 server action；Stage1 进入原子协调器，非 Stage1 继续独立验证 receipt | `features/approvals/approvals-client.tsx`、`features/approvals/actions.ts`、`features/approvals/queries.ts` |
+| trusted evidence closed | outcome ref 必须解析为当前 workspace、Portfolio、DecisionRecord、ActionItem、ApprovalTask 范围内仍有效的 `ObservationSourceRun` | `caio-fde-scope-resolver.service.ts` 与 unit / isolated MySQL revoked-source 拒绝测试 |
+| private ingress reachable | 受认证 WorkBuddy MCP principal 通过 Gateway 的 `/v1/execution-results` 进入 Core；Core 校验 identity/hash/scope/CAS 后唯一调用 `recordExecutionReceipt` | Gateway、`private-execution-result-ingress.service.ts`、并发 exact replay 与冲突 replay MySQL 测试；不证明私有 executor 已部署 |
+| Pack consumer reachable | strict Pack input 在绑定 workspace `Opportunity` Portfolio 与 evidence snapshot 后才进入既有 Core 问题生成器 | `generateCaioOperatingQuestionPortfolioFromPackInput`；Pack 不生成问题，Core 仍只产生 exactly-10 或 `insufficient_evidence` |
+| replay / concurrency closed | private ingress、receipt verification、decision evaluation 和 supervision 使用既有锁、CAS、幂等内容匹配与唯一键 | focused tests 与一次性 `helm_caio_stage1_*` MySQL 并发、冲突、回滚测试 |
+| read side reachable | `/caio` 先显示 unresolved critical，再显示其他 unresolved，剩余额度才显示 resolved；每条显示 status | `features/dashboard/stage1-owner-loop-query.ts`、console 与 mixed-status regression |
 
 ### 1.1 调用顺序与失败恢复
 
 1. server action 以当前 workspace 读取现有 `ApprovalTask`、`ActionItem` 和 Work Packet claim；
 2. 既有 action-review 权限允许独立复核，Stage 1 最终结果另需既有 insight 权限；
-3. `verifyExecutionReceipt` 先把 canonical receipt 验证到不可降级的 `VERIFIED`；
-4. 协调器重新按 workspace 读取 claim、DecisionRecord、ActionItem、ApprovalTask 与 receipt；
-5. `evaluateStage1DecisionRecord` 先写评估与 `MemoryFact.OBSERVED` 候选；
-6. `recordStage1SupervisionSignal` 再写确定性监督事实，不执行任何干预。
+3. 协调器开启 `SERIALIZABLE` 事务并锁定唯一 `DecisionWorkPacketClaim`；
+4. 协调器核对 canonical receipt outcome、显式 terminal result、Opportunity Portfolio 和当前
+   `ObservationSourceRun` 的 workspace、授权期、来源状态、证据绑定；
+5. `verifyExecutionReceipt` 使用同一 transaction client 把 canonical receipt 验证为 `VERIFIED`；
+6. `evaluateStage1DecisionRecord` 使用同一 client 写评估与 `MemoryFact.OBSERVED` 候选；
+7. `recordStage1SupervisionSignal` 使用同一 client 写确定性监督事实，不执行任何干预。
 
-若步骤 5 或 6 之间中断，重试相同终态输入会复用既有评估并收敛到同一监督键。不同业务结果
-或证据引用的重放由既有评估内容一致性/CAS fail-closed，不能覆盖历史。
+步骤 4-7 任一步失败，事务整体回滚，不留下 `VERIFIED + EVALUATED` 却没有有效 supervision
+的误导态。完全相同的 reconciliation payload/hash 可重放并收敛；receipt 结果、业务结果、
+证据引用或是否采纳建议发生漂移时 fail-closed，不能覆盖历史。
+
+私有 executor 只提交严格版本化、带 content hash 的结果投影。Gateway 先执行 mTLS/token、
+workspace 与 Portfolio membership 检查，Core ingress 再锁定 Work Packet、解析当前证据并通过
+唯一 `recordExecutionReceipt` writer 写 `SELF_REPORTED` receipt。该链只记录已经发生的私有
+执行证明，不授权、不发起任何外部副作用。
 
 ## 2. 仍开放
 
@@ -93,8 +110,9 @@ Stage 1 终态还必须显式提交最终业务结果和 evidence ref。普通�
 
 ## 4. 证据边界
 
-- **Repo truth**：当前代码有生产调用、权限收敛、幂等键、读侧和机械门禁。
-- **测试证据**：focused 与隔离 MySQL 能证明所测提交和测试环境中的行为。
+- **Repo truth**：当前代码有原子生产调用、trusted resolver、严格跨仓 identity、真实
+  private ingress、Pack consumer、权限收敛、幂等键、读侧和机械门禁。
+- **测试证据**：focused 与隔离 MySQL 能证明所测提交和一次性本地测试环境中的行为。
 - **未成立**：package-ready implementation SHA 的独立批准、四仓固定 BOM、组合包、现场
   部署、运行激活、owner 外部动作授权、真实业务 payload 和经营价值。
 - **GAP-3 仍开放**：不得把 `MemoryFact.OBSERVED` 候选提升成 Company Memory。

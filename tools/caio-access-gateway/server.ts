@@ -190,6 +190,7 @@ import {
 } from "@/lib/caio-access-gateway/gateway-http-core";
 import {
   caioRequestCancelledWireError,
+  CaioAccessGatewayError,
   toGatewayError,
 } from "@/lib/caio-access-gateway/gateway-error-contract";
 import {
@@ -209,6 +210,10 @@ import {
 } from "@/lib/caio-collaboration/client-identity";
 import type { CaioModelAliasBinding } from "@/lib/caio-model-proxy/alias-contracts";
 import type { CaioModelProxy } from "@/lib/caio-model-proxy/proxy-engine";
+import {
+  CaioPrivateExecutionResultIngressError,
+  ingestCaioPrivateExecutionResultProjection,
+} from "@/lib/stage1-owner-loop/private-execution-result-ingress.service";
 
 import type { CaioAccessGatewayServerConfig } from "@/tools/caio-access-gateway/server-config";
 
@@ -239,6 +244,12 @@ export const CAIO_ACCESS_GATEWAY_ROUTE_TABLE: readonly CaioAccessGatewayRoute[] 
   Object.freeze([
     Object.freeze({
       path: "/mcp",
+      methods: Object.freeze(["POST"]),
+      owner: "access_gateway_api" as const,
+      servedByThisSurface: true,
+    }),
+    Object.freeze({
+      path: "/v1/execution-results",
       methods: Object.freeze(["POST"]),
       owner: "access_gateway_api" as const,
       servedByThisSurface: true,
@@ -639,6 +650,19 @@ export function createCaioAccessGatewayMount(
     preAuthRateLimiter: input.ports.preAuthRateLimiter,
     tokenAuthenticator: input.ports.tokenAuthenticator,
     projectResolver: input.ports.projectResolver,
+    privateExecutionResultIngress: async ({ principal, projection }) => {
+      try {
+        return await ingestCaioPrivateExecutionResultProjection({
+          principal,
+          projection,
+        });
+      } catch (error) {
+        if (error instanceof CaioPrivateExecutionResultIngressError) {
+          throw new CaioAccessGatewayError("bad_request");
+        }
+        throw error;
+      }
+    },
     // Unreachable when no dispatcher was supplied: `handle` refuses /mcp on
     // ownership before anything here runs, and a test asserts no port is
     // touched. It throws rather than returning a plausible answer so that a

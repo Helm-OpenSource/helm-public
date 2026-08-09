@@ -422,8 +422,126 @@ async function lockDecisionRecord(
   }
 }
 
+export type EvaluateStage1DecisionRecordOptions = {
+  client?: Prisma.TransactionClient;
+  governanceAlreadyAsserted?: boolean;
+};
+
+async function evaluateStage1DecisionRecordInTransaction(
+  tx: Prisma.TransactionClient,
+  input: EvaluateStage1DecisionRecordInput,
+) {
+  await lockDecisionRecord(tx, {
+    workspaceId: input.workspaceId,
+    decisionRecordId: input.decisionRecordId,
+  });
+  const record = await tx.decisionRecord.findFirst({
+    where: {
+      id: input.decisionRecordId,
+      workspaceId: input.workspaceId,
+    },
+    include: {
+      workPacketClaim: {
+        include: {
+          actionItem: {
+            include: { approvalTask: true, executionReceipt: true },
+          },
+        },
+      },
+    },
+  });
+  if (!record) {
+    throw new Stage1DecisionEvaluationError(["decision_not_found"]);
+  }
+  const evaluation = buildEvaluation(record, input);
+  if (record.status === "EVALUATED" || record.evaluationJson) {
+    return resolveCommittedEvaluation(tx, record, evaluation);
+  }
+  if (record.status !== "DISPATCHED") {
+    throw new Stage1DecisionEvaluationError(["decision_not_dispatched"]);
+  }
+  const action = record.workPacketClaim?.actionItem;
+  if (!action) {
+    throw new Stage1DecisionEvaluationError(["work_packet_required"]);
+  }
+  const evaluatedAt = new Date();
+  const sourceId = evaluationSourceId(record);
+  const claimed = await tx.decisionRecord.updateMany({
+    where: {
+      id: record.id,
+      workspaceId: input.workspaceId,
+      status: "DISPATCHED",
+      evaluationJson: null,
+    },
+    data: {
+      status: "EVALUATED",
+      evaluationJson: jsonStringify(evaluation),
+      evaluatedAt,
+    },
+  });
+  if (claimed.count !== 1) {
+    throw new Stage1DecisionEvaluationError([
+      "decision_evaluation_claim_lost",
+    ]);
+  }
+
+  const memoryFact = await tx.memoryFact.create({
+    data: {
+      workspaceId: input.workspaceId,
+      objectType: ObjectType.ACTION_ITEM,
+      objectId: action.id,
+      factType: MemoryFactType.ACTION_PATTERN,
+      title: memoryTitle(evaluation, input.english ?? false),
+      content: input.english
+        ? "Observed decision-outcome evidence. It remains a review candidate and cannot promote automation by itself."
+        : "已观察到决策结果证据。该事实仍是待复核候选，不能单独提升自动化等级。",
+      normalizedValue: jsonStringify({
+        evaluation,
+        governancePosture: {
+          status: "observed",
+          ownerReviewRequired: true,
+          automationPromotionAuthorized: false,
+        },
+      }),
+      sourceType: SourceType.SYSTEM_INFERENCE,
+      sourceId,
+      confidence: 70,
+      importance: 70,
+      freshnessScore: 80,
+      status: MemoryStatus.OBSERVED,
+      confirmedByUser: false,
+      createdBySystem: true,
+    },
+  });
+  await writeAuditLog(
+    {
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      actor: input.actorName.trim(),
+      actorType: input.actorType ?? ActorType.AI,
+      actionType: "STAGE1_DECISION_EVALUATED",
+      targetType: "DecisionRecord",
+      targetId: record.id,
+      summary: input.english
+        ? "Decision outcome evaluated and recorded as an observed memory candidate"
+        : "决策结果已评估并写入待复核的观察记忆",
+      payload: {
+        evaluationId: evaluation.evaluationId,
+        actionItemId: action.id,
+        receiptRefs: evaluation.receiptRefs,
+        automationImpact: evaluation.automationImpact,
+        memoryFactId: memoryFact.id,
+        automationPromotionAuthorized: false,
+      },
+    },
+    { client: tx },
+  );
+  return { created: true as const, evaluation, memoryFact };
+}
+
 export async function evaluateStage1DecisionRecord(
   input: EvaluateStage1DecisionRecordInput,
+  options?: EvaluateStage1DecisionRecordOptions,
 ) {
   const reasons: string[] = [];
   if (!input.workspaceId.trim()) reasons.push("workspace_required");
@@ -449,123 +567,21 @@ export async function evaluateStage1DecisionRecord(
   }
 
   const actorType = input.actorType ?? ActorType.AI;
-  await assertWorkspaceInsightServiceAccess({
-    workspaceId: input.workspaceId,
-    userId: input.actorUserId,
-    actorType,
-    english: input.english ?? false,
-  });
+  if (!options?.governanceAlreadyAsserted) {
+    await assertWorkspaceInsightServiceAccess({
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      actorType,
+      english: input.english ?? false,
+    });
+  }
 
+  if (options?.client) {
+    return evaluateStage1DecisionRecordInTransaction(options.client, input);
+  }
   return runWithWriteConflictRetry(() =>
-    db.$transaction(async (tx) => {
-      await lockDecisionRecord(tx, {
-        workspaceId: input.workspaceId,
-        decisionRecordId: input.decisionRecordId,
-      });
-      const record = await tx.decisionRecord.findFirst({
-        where: {
-          id: input.decisionRecordId,
-          workspaceId: input.workspaceId,
-        },
-        include: {
-          workPacketClaim: {
-            include: {
-              actionItem: {
-                include: { approvalTask: true, executionReceipt: true },
-              },
-            },
-          },
-        },
-      });
-      if (!record) {
-        throw new Stage1DecisionEvaluationError(["decision_not_found"]);
-      }
-      const evaluation = buildEvaluation(record, input);
-      if (record.status === "EVALUATED" || record.evaluationJson) {
-        return resolveCommittedEvaluation(tx, record, evaluation);
-      }
-      if (record.status !== "DISPATCHED") {
-        throw new Stage1DecisionEvaluationError([
-          "decision_not_dispatched",
-        ]);
-      }
-      const action = record.workPacketClaim?.actionItem;
-      if (!action) {
-        throw new Stage1DecisionEvaluationError(["work_packet_required"]);
-      }
-      const evaluatedAt = new Date();
-      const sourceId = evaluationSourceId(record);
-      const claimed = await tx.decisionRecord.updateMany({
-        where: {
-          id: record.id,
-          workspaceId: input.workspaceId,
-          status: "DISPATCHED",
-          evaluationJson: null,
-        },
-        data: {
-          status: "EVALUATED",
-          evaluationJson: jsonStringify(evaluation),
-          evaluatedAt,
-        },
-      });
-      if (claimed.count !== 1) {
-        throw new Stage1DecisionEvaluationError([
-          "decision_evaluation_claim_lost",
-        ]);
-      }
-
-      const memoryFact = await tx.memoryFact.create({
-        data: {
-          workspaceId: input.workspaceId,
-          objectType: ObjectType.ACTION_ITEM,
-          objectId: action.id,
-          factType: MemoryFactType.ACTION_PATTERN,
-          title: memoryTitle(evaluation, input.english ?? false),
-          content: input.english
-            ? "Observed decision-outcome evidence. It remains a review candidate and cannot promote automation by itself."
-            : "已观察到决策结果证据。该事实仍是待复核候选，不能单独提升自动化等级。",
-          normalizedValue: jsonStringify({
-            evaluation,
-            governancePosture: {
-              status: "observed",
-              ownerReviewRequired: true,
-              automationPromotionAuthorized: false,
-            },
-          }),
-          sourceType: SourceType.SYSTEM_INFERENCE,
-          sourceId,
-          confidence: 70,
-          importance: 70,
-          freshnessScore: 80,
-          status: MemoryStatus.OBSERVED,
-          confirmedByUser: false,
-          createdBySystem: true,
-        },
-      });
-      await writeAuditLog(
-        {
-          workspaceId: input.workspaceId,
-          userId: input.actorUserId,
-          actor: input.actorName.trim(),
-          actorType,
-          actionType: "STAGE1_DECISION_EVALUATED",
-          targetType: "DecisionRecord",
-          targetId: record.id,
-          summary: input.english
-            ? "Decision outcome evaluated and recorded as an observed memory candidate"
-            : "决策结果已评估并写入待复核的观察记忆",
-          payload: {
-            evaluationId: evaluation.evaluationId,
-            actionItemId: action.id,
-            receiptRefs: evaluation.receiptRefs,
-            automationImpact: evaluation.automationImpact,
-            memoryFactId: memoryFact.id,
-            automationPromotionAuthorized: false,
-          },
-        },
-        { client: tx },
-      );
-      return { created: true as const, evaluation, memoryFact };
-    }),
+    db.$transaction((tx) =>
+      evaluateStage1DecisionRecordInTransaction(tx, input),
+    ),
   );
 }

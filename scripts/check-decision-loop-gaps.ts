@@ -13,9 +13,10 @@
  * it is read as current.
  *
  * GAP-1 and GAP-2 are now closed by one canonical terminal-result path. This
- * guard pins both producer calls, their safe order, and the existing approvals
- * entry point. Moving or deleting any part fails here instead of silently
- * turning a closed gap back into a documentation claim.
+ * guard pins the SERIALIZABLE transaction, receipt/evaluation/supervision
+ * order, private result ingress, Pack consumer, and existing approvals entry.
+ * Moving or deleting any part fails here instead of silently turning a closed
+ * gap back into a documentation claim.
  *
  * FAIL-CLOSED. Every claim is asserted in BOTH directions. The closed-loop
  * facts in §1 of the register are checked too, so a scanner that has stopped
@@ -90,6 +91,15 @@ export function productionReferences(
 const TERMINAL_RECONCILER_FILE =
   "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts";
 const TERMINAL_TRIGGER_FILE = "features/approvals/actions.ts";
+const PRIVATE_INGRESS_FILE =
+  "lib/stage1-owner-loop/private-execution-result-ingress.service.ts";
+const PRIVATE_INGRESS_COMPOSITION_FILE = "tools/caio-access-gateway/server.ts";
+const PRIVATE_INGRESS_ROUTE_FILE =
+  "lib/caio-access-gateway/gateway-http-core.ts";
+const PACK_CONSUMER_FILE =
+  "lib/stage1-owner-loop/caio-operating-question-store.service.ts";
+const CROSS_REPO_SCHEMA_FILE =
+  "docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json";
 
 /** Production producer paths the register records as CLOSED. */
 export const RECORDED_CLOSED_GAPS = Object.freeze([
@@ -231,12 +241,12 @@ export function checkDecisionLoopGaps(repoRoot: string = process.cwd()): Finding
     if (receiptVerification < 0 || reconciliation < 0) {
       findings.push({
         gap: entry.gap,
-        detail: `${entry.triggerFile} must verify the canonical receipt and invoke ${entry.triggerNeedle}`,
+        detail: `${entry.triggerFile} must route Stage 1 to ${entry.triggerNeedle} and retain standalone receipt verification for non-Stage1 actions`,
       });
-    } else if (reconciliation < receiptVerification) {
+    } else if (receiptVerification < reconciliation) {
       findings.push({
         gap: entry.gap,
-        detail: `${entry.triggerFile} terminal trigger order changed; receipt verification must precede reconciliation`,
+        detail: `${entry.triggerFile} appears to pre-verify a Stage 1 receipt; Stage 1 must enter the atomic reconciler before the non-Stage1 standalone verification branch`,
       });
     }
     const triggerCallers = productionReferences(
@@ -258,15 +268,123 @@ export function checkDecisionLoopGaps(repoRoot: string = process.cwd()): Finding
   const terminalProducerPath = path.join(repoRoot, TERMINAL_RECONCILER_FILE);
   if (existsSync(terminalProducerPath)) {
     const source = readFileSync(terminalProducerPath, "utf8");
+    const verification = functionCallIndex(source, "verifyExecutionReceipt");
     const evaluation = functionCallIndex(source, "evaluateStage1DecisionRecord");
     const supervision = functionCallIndex(source, "recordStage1SupervisionSignal");
-    if (evaluation >= 0 && supervision >= 0 && supervision < evaluation) {
+    const serializable = source.indexOf(
+      "Prisma.TransactionIsolationLevel.Serializable",
+    );
+    const transaction = source.indexOf("db.$transaction");
+    const txClientBindings = source.match(/client:\s*tx/gu)?.length ?? 0;
+    if (
+      serializable < 0 ||
+      transaction < 0 ||
+      verification < transaction ||
+      txClientBindings < 3
+    ) {
+      findings.push({
+        gap: "terminal-atomicity",
+        detail:
+          "terminal reconciliation must keep receipt verification, decision evaluation, and supervision in one SERIALIZABLE transaction using the same transaction client",
+      });
+    }
+    if (
+      verification >= 0 &&
+      evaluation >= 0 &&
+      supervision >= 0 &&
+      !(verification < evaluation && evaluation < supervision)
+    ) {
       findings.push({
         gap: "terminal-order",
         detail:
-          "terminal result order changed; decision evaluation must precede supervision so conflicting replay fails before another fact is written",
+          "terminal result order changed; receipt verification must precede decision evaluation, which must precede supervision inside the atomic boundary",
       });
     }
+  }
+
+  const privateIngressPath = path.join(repoRoot, PRIVATE_INGRESS_FILE);
+  const privateCompositionPath = path.join(
+    repoRoot,
+    PRIVATE_INGRESS_COMPOSITION_FILE,
+  );
+  const privateRoutePath = path.join(repoRoot, PRIVATE_INGRESS_ROUTE_FILE);
+  const privateIngressMarkers = [
+    "Prisma.TransactionIsolationLevel.Serializable",
+    "resolveCaioFdePortfolioScope",
+    "resolveCaioFdeObservationEvidence",
+    "recordExecutionReceipt",
+  ];
+  if (
+    !existsSync(privateIngressPath) ||
+    privateIngressMarkers.some(
+      (marker) =>
+        !readFileSync(privateIngressPath, "utf8").includes(marker),
+    ) ||
+    !existsSync(privateCompositionPath) ||
+    !readFileSync(privateCompositionPath, "utf8").includes(
+      "ingestCaioPrivateExecutionResultProjection",
+    ) ||
+    !existsSync(privateRoutePath) ||
+    !readFileSync(privateRoutePath, "utf8").includes(
+      "/v1/execution-results",
+    )
+  ) {
+    findings.push({
+      gap: "private-ingress",
+      detail:
+        "the authenticated private execution projection must remain wired through the Gateway to the sole Core receipt writer with Portfolio and evidence resolution",
+    });
+  }
+
+  const packConsumerPath = path.join(repoRoot, PACK_CONSUMER_FILE);
+  const packConsumerMarkers = [
+    "generateCaioOperatingQuestionPortfolioFromPackInput",
+    "validateCaioProFdeInterfaceDescriptor",
+    "caioProPackOperatingInputSchema.safeParse",
+    "resolveCaioFdePortfolioScope",
+    "resolveCaioFdeObservationEvidence",
+    "generateCaioOperatingQuestionPortfolioInternal",
+  ];
+  if (
+    !existsSync(packConsumerPath) ||
+    packConsumerMarkers.some(
+      (marker) => !readFileSync(packConsumerPath, "utf8").includes(marker),
+    )
+  ) {
+    findings.push({
+      gap: "pack-consumer",
+      detail:
+        "Pack operating input must remain a strict, workspace-scoped consumer of the existing Core Portfolio and evidence snapshot before Core question generation",
+    });
+  }
+
+  const portableSchemaPath = path.join(repoRoot, CROSS_REPO_SCHEMA_FILE);
+  try {
+    const portableSchema = JSON.parse(
+      readFileSync(portableSchemaPath, "utf8"),
+    ) as Record<string, unknown>;
+    const definitions = portableSchema.$defs as
+      | Record<string, unknown>
+      | undefined;
+    const packDefinition = definitions?.packOperatingInput as
+      | Record<string, unknown>
+      | undefined;
+    const projectionDefinition = definitions?.privateExecutionResultProjection as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      !Array.isArray(portableSchema.oneOf) ||
+      portableSchema.oneOf.length !== 2 ||
+      packDefinition?.additionalProperties !== false ||
+      projectionDefinition?.additionalProperties !== false
+    ) {
+      throw new Error("portable schema is incomplete");
+    }
+  } catch {
+    findings.push({
+      gap: "cross-repo-contract",
+      detail: `${CROSS_REPO_SCHEMA_FILE} must remain valid, strict, and expose both Pack input and private execution projection definitions`,
+    });
   }
 
   // GAP-3: still no persistence?

@@ -352,6 +352,20 @@ const operatingQuestionCandidateDraftSchema: z.ZodType<CaioOperatingQuestionCand
     })
     .strict();
 
+export function parseCaioOperatingQuestionCandidateDrafts(
+  candidates: unknown,
+):
+  | { success: true; data: CaioOperatingQuestionCandidateDraft[] }
+  | { success: false; data: [] } {
+  const parsed = z
+    .array(operatingQuestionCandidateDraftSchema)
+    .max(128)
+    .safeParse(candidates);
+  return parsed.success
+    ? { success: true, data: parsed.data }
+    : { success: false, data: [] };
+}
+
 function hashUnknown(value: unknown): string {
   try {
     const canonical = canonicalJson(value);
@@ -864,9 +878,9 @@ export function evaluateCaioOperatingQuestionGeneration(input: {
   auditRefs: readonly string[];
   previousPortfolio: CaioOperatingQuestionPortfolio | null;
 }): CaioOperatingQuestionGenerationEvaluation {
-  const parsedCandidates = z
-    .array(operatingQuestionCandidateDraftSchema)
-    .safeParse(input.candidates);
+  const parsedCandidates = parseCaioOperatingQuestionCandidateDrafts(
+    input.candidates,
+  );
   const normalizedCandidates = parsedCandidates.success
     ? parsedCandidates.data.map(normalizeCandidate)
     : [];

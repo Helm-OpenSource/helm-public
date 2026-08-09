@@ -4,6 +4,7 @@ import {
   ExecutionReceiptSubjectType,
   ExecutionReceiptVerificationState,
   type ExecutionReceipt,
+  type Prisma,
   type PrismaClient,
   type RejectionReasonCode,
 } from "@prisma/client";
@@ -267,8 +268,9 @@ export async function auditExecutionReceiptRecorded(
     | "qualityScore"
     | "qualityFlags"
   >,
+  options?: { client?: Prisma.TransactionClient },
 ) {
-  await writeAuditLog({
+  const audit = {
     workspaceId: input.workspaceId,
     userId: input.executedByUserId ?? undefined,
     actor: input.actorName ?? "Helm",
@@ -286,7 +288,12 @@ export async function auditExecutionReceiptRecorded(
       qualityScore: receipt.qualityScore,
       qualityFlags: safeParseJson<string[]>(receipt.qualityFlags, []),
     },
-  });
+  };
+  if (options?.client) {
+    await writeAuditLog(audit, { client: options.client });
+    return;
+  }
+  await writeAuditLog(audit);
 }
 
 export type VerifyExecutionReceiptInput = {
@@ -298,102 +305,25 @@ export type VerifyExecutionReceiptInput = {
   english?: boolean;
 };
 
-// Upgrade a receipt from SELF_REPORTED to VERIFIED. Idempotent for the same
-// verifier; hard-refuses executor self-verification.
-export async function verifyExecutionReceipt(input: VerifyExecutionReceiptInput) {
-  const english = input.english ?? false;
+export type VerifyExecutionReceiptOptions = {
+  client?: Prisma.TransactionClient;
+};
 
-  // Same atomicity rule as recordExecutionReceipt: the guarded updateMany is
-  // not atomic by itself, so the whole read-check-upgrade runs in one
-  // transaction behind a FOR UPDATE lock on the canonical row.
-  const outcome = await runWithWriteConflictRetry(() =>
-    db.$transaction(async (tx) => {
-      await tx.$queryRaw`
-        SELECT id FROM ExecutionReceipt
-        WHERE subjectType = ${input.subjectType}
-          AND subjectId = ${input.subjectId}
-        FOR UPDATE`;
-      const receipt = await tx.executionReceipt.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          subjectType: input.subjectType,
-          subjectId: input.subjectId,
-        },
-      });
+type VerifyExecutionReceiptOutcome =
+  | { kind: "idempotent"; receipt: ExecutionReceipt }
+  | {
+      kind: "verified";
+      receipt: ExecutionReceipt;
+      priorReceipt: ExecutionReceipt;
+      qualityScore: number;
+    };
 
-      if (!receipt) {
-        throw new ExecutionReceiptNotFoundError(english);
-      }
-
-      if (
-        receipt.executedByUserId &&
-        receipt.executedByUserId === input.verifierUserId
-      ) {
-        throw new ReceiptSelfVerificationError(english);
-      }
-
-      if (
-        receipt.verificationState ===
-          ExecutionReceiptVerificationState.VERIFIED &&
-        receipt.verifiedByUserId === input.verifierUserId
-      ) {
-        return { kind: "idempotent" as const, receipt };
-      }
-
-      const quality = buildQualityInput({
-        outcome: receipt.outcome,
-        evidenceRefs: safeParseJson<string[]>(receipt.evidenceRefs, []),
-        nextStep: receipt.nextStep,
-        note: receipt.note,
-        rejectionReasonCode: receipt.rejectionReasonCode,
-        verificationState: ExecutionReceiptVerificationState.VERIFIED,
-      });
-
-      const claimed = await tx.executionReceipt.updateMany({
-        where: {
-          id: receipt.id,
-          workspaceId: input.workspaceId,
-          verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
-          updatedAt: receipt.updatedAt,
-        },
-        data: {
-          verifiedByUserId: input.verifierUserId,
-          verificationState: ExecutionReceiptVerificationState.VERIFIED,
-          qualityScore: quality.score,
-          qualityFlags:
-            quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
-        },
-      });
-      if (claimed.count !== 1) {
-        const current = await tx.executionReceipt.findUniqueOrThrow({
-          where: { id: receipt.id },
-        });
-        if (
-          current.verificationState ===
-          ExecutionReceiptVerificationState.VERIFIED
-        ) {
-          return { kind: "idempotent" as const, receipt: current };
-        }
-        throw new ReceiptChangedDuringVerificationError(english);
-      }
-      const updated = await tx.executionReceipt.findUniqueOrThrow({
-        where: { id: receipt.id },
-      });
-      return {
-        kind: "verified" as const,
-        receipt: updated,
-        priorReceipt: receipt,
-        qualityScore: quality.score,
-      };
-    }),
-  );
-
-  if (outcome.kind === "idempotent") {
-    return outcome.receipt;
-  }
-
-  // Audit AFTER commit so the entry can never describe a rolled-back upgrade.
-  await writeAuditLog({
+async function auditExecutionReceiptVerified(
+  input: VerifyExecutionReceiptInput,
+  outcome: Extract<VerifyExecutionReceiptOutcome, { kind: "verified" }>,
+  client?: Prisma.TransactionClient,
+) {
+  const audit = {
     workspaceId: input.workspaceId,
     userId: input.verifierUserId,
     actor: input.verifierName,
@@ -408,7 +338,101 @@ export async function verifyExecutionReceipt(input: VerifyExecutionReceiptInput)
       executedByUserId: outcome.priorReceipt.executedByUserId,
       qualityScore: outcome.qualityScore,
     },
+  };
+  if (client) {
+    await writeAuditLog(audit, { client });
+    return;
+  }
+  await writeAuditLog(audit);
+}
+
+async function verifyExecutionReceiptWithClient(
+  client: Prisma.TransactionClient,
+  input: VerifyExecutionReceiptInput,
+): Promise<VerifyExecutionReceiptOutcome> {
+  const english = input.english ?? false;
+  await client.$queryRaw`
+    SELECT id FROM ExecutionReceipt
+    WHERE workspaceId = ${input.workspaceId}
+      AND subjectType = ${input.subjectType}
+      AND subjectId = ${input.subjectId}
+    FOR UPDATE`;
+  const receipt = await client.executionReceipt.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
+    },
   });
 
+  if (!receipt) {
+    throw new ExecutionReceiptNotFoundError(english);
+  }
+  if (
+    receipt.executedByUserId &&
+    receipt.executedByUserId === input.verifierUserId
+  ) {
+    throw new ReceiptSelfVerificationError(english);
+  }
+  if (
+    receipt.verificationState === ExecutionReceiptVerificationState.VERIFIED
+  ) {
+    return { kind: "idempotent", receipt };
+  }
+
+  const quality = buildQualityInput({
+    outcome: receipt.outcome,
+    evidenceRefs: safeParseJson<string[]>(receipt.evidenceRefs, []),
+    nextStep: receipt.nextStep,
+    note: receipt.note,
+    rejectionReasonCode: receipt.rejectionReasonCode,
+    verificationState: ExecutionReceiptVerificationState.VERIFIED,
+  });
+  const updated = await client.executionReceipt.update({
+    where: { id: receipt.id },
+    data: {
+      verifiedByUserId: input.verifierUserId,
+      verificationState: ExecutionReceiptVerificationState.VERIFIED,
+      qualityScore: quality.score,
+      qualityFlags:
+        quality.flags.length > 0 ? jsonStringify(quality.flags) : null,
+    },
+  });
+  return {
+    kind: "verified",
+    receipt: updated,
+    priorReceipt: receipt,
+    qualityScore: quality.score,
+  };
+}
+
+// Upgrade a receipt from SELF_REPORTED to VERIFIED. Idempotent for the same
+// verifier; hard-refuses executor self-verification. Stage 1 passes its
+// SERIALIZABLE transaction so verification, evaluation and supervision share
+// one rollback boundary. Standalone callers retain the existing transaction
+// and post-commit audit behavior.
+export async function verifyExecutionReceipt(
+  input: VerifyExecutionReceiptInput,
+  options?: VerifyExecutionReceiptOptions,
+) {
+  if (options?.client) {
+    const outcome = await verifyExecutionReceiptWithClient(
+      options.client,
+      input,
+    );
+    if (outcome.kind === "verified") {
+      await auditExecutionReceiptVerified(input, outcome, options.client);
+    }
+    return outcome.receipt;
+  }
+
+  const outcome = await runWithWriteConflictRetry(() =>
+    db.$transaction((tx) => verifyExecutionReceiptWithClient(tx, input)),
+  );
+
+  if (outcome.kind === "idempotent") {
+    return outcome.receipt;
+  }
+  await auditExecutionReceiptVerified(input, outcome);
   return outcome.receipt;
 }

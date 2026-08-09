@@ -288,25 +288,6 @@ export async function verifyExecutedTaskReceiptAction(
     return { ok: false, error: getInsightGovernanceDeniedMessage(english) };
   }
 
-  try {
-    await verifyExecutionReceipt({
-      workspaceId: workspace.id,
-      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
-      subjectId: task.actionItemId,
-      verifierUserId: user.id,
-      verifierName: user.name,
-      english,
-    });
-  } catch (error) {
-    if (
-      error instanceof ReceiptSelfVerificationError ||
-      error instanceof ExecutionReceiptNotFoundError
-    ) {
-      return { ok: false, error: error.message };
-    }
-    throw error;
-  }
-
   if (isStage1WorkPacket && parsed.data.stage1TerminalResult) {
     try {
       await reconcileStage1TerminalResult({
@@ -320,6 +301,25 @@ export async function verifyExecutedTaskReceiptAction(
       });
     } catch (error) {
       if (error instanceof Stage1TerminalResultReconciliationError) {
+        return { ok: false, error: error.message };
+      }
+      throw error;
+    }
+  } else {
+    try {
+      await verifyExecutionReceipt({
+        workspaceId: workspace.id,
+        subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+        subjectId: task.actionItemId,
+        verifierUserId: user.id,
+        verifierName: user.name,
+        english,
+      });
+    } catch (error) {
+      if (
+        error instanceof ReceiptSelfVerificationError ||
+        error instanceof ExecutionReceiptNotFoundError
+      ) {
         return { ok: false, error: error.message };
       }
       throw error;

@@ -73,6 +73,7 @@ connector 授权、写回、外发或审批证明。
 ## 公开契约 / Public Contracts
 
 - [数据风险审计摘要锚 / Data-risk audit digest anchor](contracts/audit-data-risk.contract.json) — 只固定跨仓审计模块与契约测试的公开安全版本及 SHA-256；不是源码镜像、敏感数据扫描结果、部署授权或运行时回执。
+- [CAIO Pro FDE 跨仓接口 JSON Schema / CAIO Pro FDE cross-repo interface JSON Schema](contracts/caio-pro-fde-cross-repo-interface.v1.schema.json) — Pack 输入与私有执行结果投影的版本化、严格、有限长可移植合同；格式校验不授予权限，Core 仍须解析 workspace、Portfolio、证据快照与工作对象并独占 canonical ExecutionReceipt 写入。
 - [AI 推荐治理契约 / AI recommendation governance](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md)
 - [诊断与自动化证据层要求 / Diagnostic automation evidence layer requirements](product/HELM_DIAGNOSTIC_AUTOMATION_EVIDENCE_LAYER_REQUIREMENTS.md)
 - [智能体化实施工程治理需求 / Agentic implementation engineering governance requirements](product/HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md)

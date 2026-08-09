@@ -18,7 +18,11 @@ import type {
   SupervisionSignal,
 } from "@/lib/agentos-decision-supervision/types";
 import { createGovernedAction } from "@/lib/policies/engine";
-import { jsonStringify } from "@/lib/utils";
+import { jsonStringify, safeParseJson } from "@/lib/utils";
+import {
+  CaioFdeScopeResolutionError,
+  resolveCaioFdePortfolioScope,
+} from "./caio-fde-scope-resolver.service";
 import {
   validateEvidenceAnswerPacket,
   validateOwnerCommandDraft,
@@ -624,7 +628,7 @@ export async function recordStage1OwnerReviewOutcome(input: {
   return outcome.record;
 }
 
-export async function recordStage1SupervisionSignal(input: {
+export type RecordStage1SupervisionSignalInput = {
   workspaceId: string;
   signal: SupervisionSignal;
   decisionRecordId?: string | null;
@@ -636,13 +640,25 @@ export async function recordStage1SupervisionSignal(input: {
   actorUserId?: string | null;
   actorType?: ActorType;
   english?: boolean;
-}) {
-  await assertWorkspaceInsightServiceAccess({
-    workspaceId: input.workspaceId,
-    userId: input.actorUserId,
-    actorType: input.actorType ?? ActorType.AI,
-    english: input.english ?? false,
-  });
+};
+
+export type RecordStage1SupervisionSignalOptions = {
+  client?: Prisma.TransactionClient;
+  governanceAlreadyAsserted?: boolean;
+};
+
+export async function recordStage1SupervisionSignal(
+  input: RecordStage1SupervisionSignalInput,
+  options?: RecordStage1SupervisionSignalOptions,
+) {
+  if (!options?.governanceAlreadyAsserted) {
+    await assertWorkspaceInsightServiceAccess({
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      actorType: input.actorType ?? ActorType.AI,
+      english: input.english ?? false,
+    });
+  }
   const reasons: string[] = [];
   if (input.signal.tenantRef !== `workspace:${input.workspaceId}`) {
     reasons.push("workspace_mismatch");
@@ -686,37 +702,84 @@ export async function recordStage1SupervisionSignal(input: {
     escalationCondition: input.escalationCondition.trim(),
   };
 
-  try {
-    return await db.$transaction(async (tx) => {
-      const record = await tx.supervisionSignalRecord.create({
+  const matchesImmutablePayload = (
+    existing: Awaited<
+      ReturnType<Prisma.TransactionClient["supervisionSignalRecord"]["findUnique"]>
+    >,
+  ) =>
+    Boolean(existing) &&
+    existing!.decisionRecordId === immutablePayload.decisionRecordId &&
+    existing!.signalType === immutablePayload.signalType &&
+    existing!.observedObjectRef === immutablePayload.observedObjectRef &&
+    existing!.baselineRef === immutablePayload.baselineRef &&
+    existing!.evidenceRefs === immutablePayload.evidenceRefs &&
+    existing!.severity === immutablePayload.severity &&
+    existing!.confidence === immutablePayload.confidence &&
+    existing!.recommendedRoute === immutablePayload.recommendedRoute &&
+    existing!.ownerRef === immutablePayload.ownerRef &&
+    sameInstant(existing!.deadlineOrSla, immutablePayload.deadlineOrSla) &&
+    existing!.status === immutablePayload.status &&
+    existing!.observedFact === immutablePayload.observedFact &&
+    existing!.interpretation === immutablePayload.interpretation &&
+    existing!.expectedState === immutablePayload.expectedState &&
+    existing!.actualState === immutablePayload.actualState &&
+    existing!.responsibilityScopeRef ===
+      immutablePayload.responsibilityScopeRef &&
+    existing!.escalationCondition === immutablePayload.escalationCondition;
+
+  const persist = async (client: Prisma.TransactionClient) => {
+    const existing = await client.supervisionSignalRecord.findUnique({
+      where: {
+        workspaceId_signalKey: {
+          workspaceId: input.workspaceId,
+          signalKey,
+        },
+      },
+    });
+    if (existing) {
+      if (!matchesImmutablePayload(existing)) {
+        throw new Stage1DecisionGateError([
+          "supervision_idempotency_conflict",
+        ]);
+      }
+      return existing;
+    }
+    const record = await client.supervisionSignalRecord.create({
         data: {
           workspaceId: input.workspaceId,
           signalKey,
           ...immutablePayload,
         },
       });
-      await writeAuditLog(
-        {
-          workspaceId: input.workspaceId,
-          userId: input.actorUserId,
-          actor: input.actorName ?? "Helm Supervision Runtime",
-          actorType: input.actorType ?? ActorType.AI,
-          actionType: "STAGE1_SUPERVISION_SIGNAL_RECORDED",
-          targetType: "SupervisionSignalRecord",
-          targetId: record.id,
-          summary: input.english
-            ? "Evidence-bounded supervision signal recorded without execution"
-            : "证据化监督信号已记录，未触发自动执行",
-          payload: {
-            signalKey: record.signalKey,
-            severity: record.severity,
-            recommendedRoute: record.recommendedRoute,
-          },
+    await writeAuditLog(
+      {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        actor: input.actorName ?? "Helm Supervision Runtime",
+        actorType: input.actorType ?? ActorType.AI,
+        actionType: "STAGE1_SUPERVISION_SIGNAL_RECORDED",
+        targetType: "SupervisionSignalRecord",
+        targetId: record.id,
+        summary: input.english
+          ? "Evidence-bounded supervision signal recorded without execution"
+          : "证据化监督信号已记录，未触发自动执行",
+        payload: {
+          signalKey: record.signalKey,
+          severity: record.severity,
+          recommendedRoute: record.recommendedRoute,
         },
-        { client: tx },
-      );
-      return record;
-    });
+      },
+      { client },
+    );
+    return record;
+  };
+
+  if (options?.client) {
+    return persist(options.client);
+  }
+
+  try {
+    return await db.$transaction(persist);
   } catch (error) {
     if (!isUniqueConstraintViolation(error)) throw error;
     const existing = await db.supervisionSignalRecord.findUnique({
@@ -728,26 +791,7 @@ export async function recordStage1SupervisionSignal(input: {
       },
     });
     if (!existing) throw error;
-    const matches =
-      existing.decisionRecordId === immutablePayload.decisionRecordId &&
-      existing.signalType === immutablePayload.signalType &&
-      existing.observedObjectRef === immutablePayload.observedObjectRef &&
-      existing.baselineRef === immutablePayload.baselineRef &&
-      existing.evidenceRefs === immutablePayload.evidenceRefs &&
-      existing.severity === immutablePayload.severity &&
-      existing.confidence === immutablePayload.confidence &&
-      existing.recommendedRoute === immutablePayload.recommendedRoute &&
-      existing.ownerRef === immutablePayload.ownerRef &&
-      sameInstant(existing.deadlineOrSla, immutablePayload.deadlineOrSla) &&
-      existing.status === immutablePayload.status &&
-      existing.observedFact === immutablePayload.observedFact &&
-      existing.interpretation === immutablePayload.interpretation &&
-      existing.expectedState === immutablePayload.expectedState &&
-      existing.actualState === immutablePayload.actualState &&
-      existing.responsibilityScopeRef ===
-        immutablePayload.responsibilityScopeRef &&
-      existing.escalationCondition === immutablePayload.escalationCondition;
-    if (!matches) {
+    if (!matchesImmutablePayload(existing)) {
       throw new Stage1DecisionGateError(["supervision_idempotency_conflict"]);
     }
     return existing;
@@ -789,6 +833,10 @@ export async function dispatchStage1DecisionWorkPacket(input: {
     reasons.push("decision_ref_mismatch");
   if (input.command.ownerRef !== input.actorUserId)
     reasons.push("command_owner_mismatch");
+  const decisionContextRefs = safeParseJson<string[]>(decision.contextRefs, []);
+  if (!decisionContextRefs.includes(input.command.portfolioRef)) {
+    reasons.push("portfolio_decision_scope_mismatch");
+  }
   if (input.command.status !== "owner_confirmed")
     reasons.push("command_not_confirmed");
   if (reasons.length > 0) throw new Stage1DecisionGateError(reasons);
@@ -822,6 +870,21 @@ export async function dispatchStage1DecisionWorkPacket(input: {
       if (committed) return resolveExisting(committed.actionItemId);
 
       const created = await db.$transaction(async (tx) => {
+        let opportunityId: string;
+        try {
+          const portfolio = await resolveCaioFdePortfolioScope({
+            client: tx,
+            workspaceId: input.workspaceId,
+            workspaceRef: input.command.workspaceRef,
+            portfolioRef: input.command.portfolioRef,
+          });
+          opportunityId = portfolio.opportunityId;
+        } catch (error) {
+          if (error instanceof CaioFdeScopeResolutionError) {
+            throw new Stage1DecisionGateError([...error.reasons]);
+          }
+          throw error;
+        }
         const governedAction = await createGovernedAction(
           {
             workspaceId: input.workspaceId,
@@ -840,6 +903,7 @@ export async function dispatchStage1DecisionWorkPacket(input: {
               : "一把手已确认该证据化决策。本 Work Packet 仍走复核优先链，并要求独立执行回执。",
             riskLevel: "HIGH",
             dueDate: new Date(input.command.dueAt),
+            opportunityId,
             sourceType: SourceType.SYSTEM_INFERENCE,
             sourceId: `decision-record:${decision.id}`,
             contentAuthorship: ActorType.AI,
@@ -848,6 +912,7 @@ export async function dispatchStage1DecisionWorkPacket(input: {
               decisionRecordId: decision.id,
               commandId: input.command.commandId,
               executionTargetRef: input.command.executionTargetRef,
+              portfolioRef: input.command.portfolioRef,
               acceptanceCriteria: input.command.acceptanceCriteria,
               evidenceRequirements: input.command.evidenceRequirements,
               invalidationConditions: input.command.invalidationConditions,

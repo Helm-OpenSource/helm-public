@@ -6,11 +6,15 @@ import {
   ExecutionReceiptSubjectType,
   ExecutionReceiptVerificationState,
   MemoryStatus,
+  OpportunityStage,
+  OpportunityType,
+  RiskLevel,
   WorkspaceRole,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { DecisionObject } from "@/lib/agentos-decision-supervision/types";
+import type { CaioAccessPrincipal } from "@/lib/caio-access-gateway/token-store.service";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import {
@@ -24,6 +28,14 @@ import {
   dispatchStage1DecisionWorkPacket,
 } from "./decision-follow-through.service";
 import { reconcileStage1TerminalResult } from "./terminal-result-reconciliation.service";
+import {
+  CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE,
+  CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH,
+  CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF,
+  CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
+  createCaioProPrivateExecutionResultProjection,
+} from "./caio-pro-fde-cross-repo-contract";
+import { ingestCaioPrivateExecutionResultProjection } from "./private-execution-result-ingress.service";
 import {
   beginObservationSourceRun,
   completeObservationSourceRun,
@@ -51,6 +63,7 @@ const confirmedIntegrationDatabaseName =
   process.env.STAGE1_OWNER_LOOP_TEST_DATABASE_NAME;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
 const suffix = `${process.pid}-${Date.now()}`;
+const publicSafeSuffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 const WORKSPACE_SLUG = `stage1-integration-${suffix}`;
 const OWNER_EMAIL = `stage1-owner-${suffix}@example.test`;
 const REVIEWER_EMAIL = `stage1-reviewer-${suffix}@example.test`;
@@ -91,6 +104,21 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
   let dispatchedDecisionRecordId = "";
   let dispatchedDecisionKey = "";
   let dispatchedActionItemId = "";
+  let dispatchedApprovalTaskId = "";
+  let portfolioOpportunityId = "";
+  let terminalObservationSourceId = "";
+  let terminalProjectionInput: Parameters<
+    typeof createCaioProPrivateExecutionResultProjection
+  >[0] | null = null;
+
+  const privateExecutorPrincipal = (): CaioAccessPrincipal => ({
+    tokenId: `token-${suffix}`,
+    workspaceId,
+    userRef: `service:workbuddy-${suffix}`,
+    clientType: "workbuddy",
+    deviceRef: `device:workbuddy-${suffix}`,
+    audience: "mcp",
+  });
 
   async function createAuthorizedCatalogAsset(input: {
     sourceKey: string;
@@ -158,6 +186,95 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
     return { entry, authorizationReceiptId };
   }
 
+  async function createTrustedTerminalObservation(input: {
+    portfolioRef: string;
+    bindingRefs: string[];
+    proofRefs: string[];
+    outcome: "success" | "failure";
+  }) {
+    const observedAt = new Date(Date.now() - 2 * 60 * 1000);
+    const startsAt = new Date(observedAt.getTime() - 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(observedAt.getTime() + 24 * 60 * 60 * 1000);
+    const sourceKey = `terminal-evidence-${suffix}`;
+    const program = await createEnterpriseObservationProgram({
+      workspaceId,
+      purpose: "Observe the governed synthetic terminal result",
+      scopeRefs: [input.portfolioRef],
+      dataCategories: ["synthetic-terminal-result"],
+      startsAt,
+      expiresAt,
+      retentionDays: 30,
+      authorizationRef: `authorization:terminal-result-${suffix}`,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+    });
+    const catalog = await createAuthorizedCatalogAsset({
+      sourceKey,
+      authorizationRef: program.authorizationRef,
+      validFrom: startsAt,
+      validUntil: expiresAt,
+    });
+    const source = await registerObservationSource({
+      workspaceId,
+      programId: program.id,
+      catalogEntryId: catalog.entry.id,
+      sourceKey,
+      sourceKind: "crm",
+      accessMode: "read_only_api",
+      ownerRef: ownerUserId,
+      freshnessSlaMinutes: 60,
+      sensitivity: "confidential",
+      authorizationRef: program.authorizationRef,
+      secretRef: `secret-manager:${sourceKey}`,
+      retentionDays: 30,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: startsAt,
+    });
+    await recordDataAssetConnectionReceipt({
+      workspaceId,
+      assetId: catalog.entry.id,
+      receiptId: `connection-${sourceKey}`,
+      idempotencyKey: `connection:${sourceKey}:v1`,
+      expectedVersion: 3,
+      connectionStatus: "connected",
+      accessMode: "read_only_api",
+      connectorRef: `connector:${sourceKey}`,
+      secretRef: `secret-manager:${sourceKey}`,
+      authorizationReceiptRef: catalog.authorizationReceiptId,
+      observationSourceRef: source.id,
+      reasonCodes: [],
+      evidenceRefs: [`evidence:connection:${sourceKey}`],
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+      now: new Date(startsAt.getTime() + 1_000),
+    });
+    const run = await beginObservationSourceRun({
+      workspaceId,
+      sourceKey,
+      executionKey: `terminal-window-${suffix}`,
+      windowStart: new Date(observedAt.getTime() - 8 * 60 * 1000),
+      windowEnd: new Date(observedAt.getTime() + 60 * 1000),
+      now: new Date(observedAt.getTime() + 2 * 60 * 1000),
+    });
+    const completed = await completeObservationSourceRun({
+      workspaceId,
+      runId: run.id,
+      observedAt,
+      summaryHash: `sha256:${"a".repeat(64)}`,
+      completenessPercent: 100,
+      freshness: "fresh",
+      outcome: input.outcome,
+      evidenceRefs: [
+        input.portfolioRef,
+        ...input.bindingRefs,
+        ...input.proofRefs,
+      ],
+      errorCodes: [],
+    });
+    return { program, source, run: completed, observedAt };
+  }
+
   beforeAll(async () => {
     assertIsolatedDatabaseTarget();
     const workspace = await db.workspace.create({
@@ -193,6 +310,18 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
     workspaceId = workspace.id;
     ownerUserId = owner.id;
     reviewerUserId = reviewer.id;
+    const opportunity = await db.opportunity.create({
+      data: {
+        workspaceId,
+        ownerId: ownerUserId,
+        title: `Stage 1 synthetic Portfolio ${suffix}`,
+        type: OpportunityType.INTERNAL,
+        stage: OpportunityStage.ADVANCING,
+        riskLevel: RiskLevel.HIGH,
+        nextAction: "Complete the governed synthetic work packet",
+      },
+    });
+    portfolioOpportunityId = opportunity.id;
   });
 
   afterAll(async () => {
@@ -240,6 +369,9 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
               where: { workspaceId: cleanupWorkspaceId },
             });
             await tx.actionItem.deleteMany({
+              where: { workspaceId: cleanupWorkspaceId },
+            });
+            await tx.opportunity.deleteMany({
               where: { workspaceId: cleanupWorkspaceId },
             });
             await tx.supervisionSignalRecord.deleteMany({
@@ -793,7 +925,10 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       decisionType: "prioritization",
       businessQuestion: "Which synthetic delivery risk should be handled first?",
       problemCategoryRef: "synthetic-delivery-risk",
-      contextRefs: ["context:synthetic-weekly-ops"],
+      contextRefs: [
+        "context:synthetic-weekly-ops",
+        `opportunity:${portfolioOpportunityId}`,
+      ],
       knowledgeRefs: ["knowledge:synthetic-delivery-policy"],
       evidenceRefs: ["evidence:synthetic-delay"],
       policyRefs: ["policy:review-first"],
@@ -836,6 +971,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       decisionRef: record.id,
       ownerRef: ownerUserId,
       executionTargetRef: "team:synthetic-delivery",
+      portfolioRef: `opportunity:${portfolioOpportunityId}`,
       goal: "Resolve the synthetic delivery risk",
       action: "Prepare a recovery plan after approval",
       dueAt: "2026-07-20T00:00:00.000Z",
@@ -861,8 +997,16 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
     dispatchedDecisionRecordId = record.id;
     dispatchedDecisionKey = record.decisionKey;
     dispatchedActionItemId = first.actionItemId;
+    dispatchedApprovalTaskId = first.approvalTaskId ?? "";
 
     expect(first.actionItemId).toBe(second.actionItemId);
+    expect(dispatchedApprovalTaskId).not.toBe("");
+    expect(
+      await db.actionItem.findUnique({
+        where: { id: first.actionItemId },
+        select: { opportunityId: true },
+      }),
+    ).toEqual({ opportunityId: portfolioOpportunityId });
     expect(
       await db.actionItem.count({
         where: { workspaceId, sourceId: `decision-record:${record.id}` },
@@ -880,9 +1024,10 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
     ).toBe(1);
   });
 
-  it("reconciles one terminal evaluation and supervision signal under concurrent replay", async () => {
+  it("accepts a scoped private projection once and converges concurrent replay", async () => {
     expect(dispatchedDecisionRecordId).not.toBe("");
     expect(dispatchedActionItemId).not.toBe("");
+    expect(dispatchedApprovalTaskId).not.toBe("");
     await db.$transaction([
       db.approvalTask.update({
         where: { actionItemId: dispatchedActionItemId },
@@ -895,30 +1040,155 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       db.actionItem.update({
         where: { id: dispatchedActionItemId },
         data: {
-          status: ActionStatus.EXECUTED,
-          executionStatus: "completed",
-          executedAt: new Date("2026-07-18T02:00:00.000Z"),
+          status: ActionStatus.APPROVED,
+          executionStatus: "approved_for_private_execution",
+          executedAt: null,
         },
       }),
     ]);
-    await recordExecutionReceipt({
-      workspaceId,
-      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
-      subjectId: dispatchedActionItemId,
-      actionItemId: dispatchedActionItemId,
-      outcome: ExecutionReceiptOutcome.SUCCESS,
-      actionTaken: "SYNTHETIC_DECISION_FOLLOW_THROUGH",
-      evidenceRefs: ["evidence:synthetic-recovery"],
-      executedByUserId: ownerUserId,
-      executedByActorType: ActorType.USER,
-      actorName: "Stage 1 Owner",
+    const portfolioRef = `opportunity:${portfolioOpportunityId}`;
+    const decisionRecordRef = `decision-record:${dispatchedDecisionRecordId}`;
+    const actionItemRef = `action-item:${dispatchedActionItemId}`;
+    const approvalTaskRef = `approval-task:${dispatchedApprovalTaskId}`;
+    const proofRef = `proof:terminal-result-${publicSafeSuffix}`;
+    const observation = await createTrustedTerminalObservation({
+      portfolioRef,
+      bindingRefs: [decisionRecordRef, actionItemRef, approvalTaskRef],
+      proofRefs: [proofRef],
+      outcome: "success",
     });
-    await verifyExecutionReceipt({
-      workspaceId,
-      subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
-      subjectId: dispatchedActionItemId,
-      verifierUserId: reviewerUserId,
-      verifierName: "Stage 1 Reviewer",
+    terminalObservationSourceId = observation.source.id;
+    terminalProjectionInput = {
+      interfaceVersion: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
+      contractRef: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF,
+      contractHash: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH,
+      evaluatorRevision:
+        CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorRevision,
+      evaluatorContractRef:
+        CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorContractRef,
+      evaluatorContractHash:
+        CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorContractHash,
+      projectionRef: `private-result:terminal-${publicSafeSuffix}`,
+      workspaceRef: `workspace:${workspaceId}`,
+      portfolioRef,
+      evidenceSnapshotRef: `observation-run:${observation.run.id}`,
+      decisionRecordRef,
+      actionItemRef,
+      approvalTaskRef,
+      executionProofRefs: [proofRef],
+      receiptOutcome: "SUCCESS",
+      actionTaken: "Recorded the governed synthetic private executor result.",
+      outcome: {
+        outcomeRef: `observation-run:${observation.run.id}`,
+        result: "success",
+        followedAiRecommendation: true,
+      },
+      recordedAt: new Date(
+        observation.observedAt.getTime() + 30_000,
+      ).toISOString(),
+    };
+    const projection = createCaioProPrivateExecutionResultProjection(
+      terminalProjectionInput,
+    );
+
+    await db.observationSource.update({
+      where: { id: terminalObservationSourceId },
+      data: { status: "REVOKED" },
+    });
+    await expect(
+      ingestCaioPrivateExecutionResultProjection({
+        principal: privateExecutorPrincipal(),
+        projection,
+        now: new Date(),
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["observation_evidence_source_inactive"],
+    });
+    expect(
+      await db.actionItem.findUnique({
+        where: { id: dispatchedActionItemId },
+        select: { status: true, executionReceipt: { select: { id: true } } },
+      }),
+    ).toEqual({ status: ActionStatus.APPROVED, executionReceipt: null });
+    await db.observationSource.update({
+      where: { id: terminalObservationSourceId },
+      data: { status: "ACTIVE" },
+    });
+
+    const ingress = () =>
+      ingestCaioPrivateExecutionResultProjection({
+        principal: privateExecutorPrincipal(),
+        projection,
+        now: new Date(),
+      });
+    const ingressResults = await Promise.all([ingress(), ingress()]);
+    expect(ingressResults.map((result) => result.kind).sort()).toEqual([
+      "recorded",
+      "replayed",
+    ]);
+    expect(
+      await db.executionReceipt.count({
+        where: {
+          workspaceId,
+          actionItemId: dispatchedActionItemId,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await db.executionReceipt.findUniqueOrThrow({
+        where: {
+          subjectType_subjectId: {
+            subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+            subjectId: dispatchedActionItemId,
+          },
+        },
+        select: { verificationState: true, outcome: true },
+      }),
+    ).toEqual({
+      verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      outcome: ExecutionReceiptOutcome.SUCCESS,
+    });
+
+    const conflictingProjection =
+      createCaioProPrivateExecutionResultProjection({
+        ...terminalProjectionInput,
+        actionTaken:
+          "Changed action text must not overwrite the canonical receipt.",
+      });
+    await expect(
+      ingestCaioPrivateExecutionResultProjection({
+        principal: privateExecutorPrincipal(),
+        projection: conflictingProjection,
+        now: new Date(),
+      }),
+    ).rejects.toMatchObject({ reasons: ["projection_replay_conflict"] });
+  });
+
+  it("rolls back receipt verification and evaluation when supervision conflicts, then converges", async () => {
+    expect(terminalProjectionInput).not.toBeNull();
+    const projectionInput = terminalProjectionInput!;
+    await db.supervisionSignalRecord.create({
+      data: {
+        workspaceId,
+        decisionRecordId: dispatchedDecisionRecordId,
+        signalKey: `stage1-terminal-result:${dispatchedDecisionRecordId}`,
+        signalType: "anomaly",
+        observedObjectRef: `action-item:${dispatchedActionItemId}`,
+        baselineRef: `decision-record:${dispatchedDecisionRecordId}`,
+        evidenceRefs: JSON.stringify(["conflict:injected-supervision"]),
+        severity: "warning",
+        confidence: "high",
+        recommendedRoute: "owner_review",
+        ownerRef: ownerUserId,
+        deadlineOrSla: null,
+        status: "open",
+        observedFact: "Injected conflicting supervision payload.",
+        interpretation: null,
+        expectedState: null,
+        actualState: "injected_conflict",
+        responsibilityScopeRef: projectionInput.portfolioRef,
+        escalationCondition: "Remove the injected test conflict before retry.",
+      },
     });
 
     const reconcile = () =>
@@ -926,7 +1196,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
         workspaceId,
         actionItemId: dispatchedActionItemId,
         outcome: {
-          outcomeRef: `business-outcome:synthetic-recovery-${suffix}`,
+          outcomeRef: projectionInput.evidenceSnapshotRef,
           result: "success",
           followedAiRecommendation: true,
         },
@@ -934,6 +1204,50 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
         actorUserId: ownerUserId,
         actorType: ActorType.USER,
       });
+    await expect(reconcile()).rejects.toMatchObject({
+      reasons: ["supervision_idempotency_conflict"],
+    });
+    expect(
+      await db.executionReceipt.findUniqueOrThrow({
+        where: {
+          subjectType_subjectId: {
+            subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+            subjectId: dispatchedActionItemId,
+          },
+        },
+        select: {
+          verificationState: true,
+          verifiedByUserId: true,
+        },
+      }),
+    ).toEqual({
+      verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      verifiedByUserId: null,
+    });
+    expect(
+      await db.decisionRecord.findUniqueOrThrow({
+        where: { id: dispatchedDecisionRecordId },
+        select: { status: true, evaluationJson: true, evaluatedAt: true },
+      }),
+    ).toEqual({ status: "DISPATCHED", evaluationJson: null, evaluatedAt: null });
+    expect(
+      await db.memoryFact.count({
+        where: {
+          workspaceId,
+          objectId: dispatchedActionItemId,
+          sourceId: `evaluation:${dispatchedDecisionKey}`,
+        },
+      }),
+    ).toBe(0);
+    await db.supervisionSignalRecord.delete({
+      where: {
+        workspaceId_signalKey: {
+          workspaceId,
+          signalKey: `stage1-terminal-result:${dispatchedDecisionRecordId}`,
+        },
+      },
+    });
+
     const results = await Promise.all([reconcile(), reconcile()]);
 
     expect(results.map((result) => result.kind)).toEqual([
@@ -1004,7 +1318,7 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
         workspaceId: `outside-${workspaceId}`,
         actionItemId: dispatchedActionItemId,
         outcome: {
-          outcomeRef: `business-outcome:synthetic-recovery-${suffix}`,
+          outcomeRef: projectionInput.evidenceSnapshotRef,
           result: "success",
           followedAiRecommendation: true,
         },
@@ -1012,7 +1326,37 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
         actorUserId: ownerUserId,
         actorType: ActorType.USER,
       }),
-    ).resolves.toEqual({ kind: "not_stage1" });
+    ).rejects.toMatchObject({
+      reasons: ["workspace_insight_permission_required"],
+    });
+    await expect(
+      reconcileStage1TerminalResult({
+        workspaceId,
+        actionItemId: dispatchedActionItemId,
+        outcome: {
+          outcomeRef: projectionInput.evidenceSnapshotRef,
+          result: "failure",
+          followedAiRecommendation: true,
+        },
+        actorName: "Stage 1 Owner",
+        actorUserId: ownerUserId,
+        actorType: ActorType.USER,
+      }),
+    ).rejects.toMatchObject({ reasons: ["business_outcome_receipt_mismatch"] });
+    await expect(
+      reconcileStage1TerminalResult({
+        workspaceId,
+        actionItemId: dispatchedActionItemId,
+        outcome: {
+          outcomeRef: projectionInput.evidenceSnapshotRef,
+          result: "success",
+          followedAiRecommendation: false,
+        },
+        actorName: "Stage 1 Owner",
+        actorUserId: ownerUserId,
+        actorType: ActorType.USER,
+      }),
+    ).rejects.toMatchObject({ reasons: ["decision_evaluation_conflict"] });
     expect(
       await db.memoryFact.count({
         where: {
