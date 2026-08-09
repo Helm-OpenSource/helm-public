@@ -25,10 +25,11 @@ public_safety: Public-safe project charter for the generic CAIO Pro FDE site ope
 
 Public Core 只负责其中可复用、public-safe 的契约、确定性门禁、读写接缝和合成验证；
 行业语义、客户映射、现场组合、部署健康、owner 授权和经营价值分别由其他权威层提供。
-本项目不创建第二套问题、决策、任务或权限模型，并复用现有：
+本项目不创建第二套问题、决策、任务或权限模型，并冻结以下术语与复用关系：
 
-- `CaioOperatingQuestionPortfolio`（Portfolio）与
-  `CaioQuestionSelectionReceipt`；
+- `Portfolio` 只表示业务资产/案件范围，不表示经营问题组合；
+- `CaioOperatingQuestionPortfolio` 才是由 Core 权威生成的恰好 10 题问题组合，
+  并继续使用 `CaioQuestionSelectionReceipt`；
 - `DecisionRecord`；
 - `ActionItem` / `ApprovalTask` / `ExecutionReceipt`；
 - 既有 workspace membership、`WorkspaceRole.OWNER` 与 service-governance 权限模型。
@@ -42,7 +43,8 @@ Public Core 只负责其中可复用、public-safe 的契约、确定性门禁�
 
 形成一条可由现场 FDE 组合、可由 owner 复核、可由系统重放的经营闭环：
 
-1. 从经授权的数据资产和 G0 上下文形成恰好 10 个经营问题；
+1. Core 权威生成器从经授权的数据资产、G0 上下文与 Pack 候选输入形成恰好 10 个
+   经营问题；证据不足时只返回 `insufficient_evidence` 和缺口，不填充或凑数；
 2. 由 CEO 选择 0-3 个问题，并绑定现有 `DecisionRecord`；
 3. 把事实、推断、未知、风险、建议和禁止动作分开呈现；
 4. 只有经既有审批链允许的动作才能进入
@@ -58,6 +60,8 @@ Public Core 只负责其中可复用、public-safe 的契约、确定性门禁�
 - 不为项目另建问题、决策、任务、回执或权限数据模型；
 - 不在首个切片增加外部写回、外呼、通知、连接器或自动执行；
 - 不把 source build、单元测试、合成闭环或组合包提升为现场部署、激活或价值证据；
+- 不让 Pack 输出固定十题，不让 Overlay 或 Control Plane 复制 Core 的 13 项完成门字面量；
+- 不让私有 executor 或 Control Plane 直接写 canonical `ExecutionReceipt`；
 - 不改变“13 项现场部署完成门全部满足才完成，且完成不等于全功能激活”的定义。
 
 ## 2. Current Repo Truth / 当前仓库真值
@@ -66,9 +70,10 @@ Public Core 只负责其中可复用、public-safe 的契约、确定性门禁�
 
 | 能力 | 当前代码真值 | 本项目处理方式 |
 |---|---|---|
-| 经营问题 | 已有恰好 10 题 Portfolio、generation receipt、CEO 0-3 题 selection receipt 与 current head | 只消费并绑定，不创建第二套问题对象 |
+| 业务范围 | `Portfolio` 的权威语义是业务资产/案件范围，不是问题列表 | 问题可引用其范围，但不得把它改名或序列化成十题组合 |
+| 经营问题组合 | 已有恰好 10 题 `CaioOperatingQuestionPortfolio`、generation receipt、CEO 0-3 题 selection receipt 与 current head；不足十题走 `insufficient_evidence` | 只由 Core 权威生成器生成并绑定，不允许 Pack/Overlay/Control Plane 固定十题或补齐数量 |
 | 决策 | `DecisionRecord` 已有生产者、已挂载消费者和 OWNER 可交互评审入口 | 继续作为唯一决策真值 |
-| 执行 | 已有 Work Packet claim、`ActionItem`、`ApprovalTask`、`ExecutionReceipt` 和独立复核 | 继续作为唯一执行链；外部副作用由私有执行器承担 |
+| 执行 | 已有 Work Packet claim、`ActionItem`、`ApprovalTask`、canonical `ExecutionReceipt` 和独立复核 | 私有 executor 只产生执行证明/结果投影；只有 Core ingress/service 可按既有事务与权限写 canonical receipt |
 | 监督读侧 | `/caio` 已挂载监督查询和读面 | 保留该入口；无真实数据时必须诚实显示暂无数据或降级原因 |
 | 完成门 | 已有封闭有序的 13 项 `CAIO_PRO_V1_COMPLETION_ITEMS` | 全部真实回执满足后才可受理，且回执不授权全功能运行 |
 | 权限 | workspace membership、OWNER role 与 service-governance 已存在 | 不新增平行角色、ACL 或 token 权限模型 |
@@ -94,7 +99,7 @@ GAP-1、GAP-2 与 GAP-3 在对应生产可达性、持久化、迁移和测试�
 |---|---|---|
 | Repo truth | 某提交中存在的代码、契约、schema、文档和门禁 | 测试通过、组合成功、现场运行 |
 | 测试证据 | 对特定提交与环境执行过的确定性、单元、集成、E2E 结果 | 包内字节、部署状态、owner 授权 |
-| 组合包证据 | Core / Pack / Overlay / Control Plane 的固定 SHA、BOM、摘要与组装回执 | 主机已安装、服务已运行 |
+| 组合包证据 | Core / Pack / Overlay / Control Plane 的 package-ready implementation SHA、BOM、摘要与组装回执 | 项目章程 SHA、主机已安装、服务已运行 |
 | 部署 truth | 目标设备、release、进程、端口、健康、数据库与恢复回执 | owner 授权、业务价值 |
 | Owner 授权 | 具名 owner 对限定动作、范围、期限和撤销条件的批准 | 技术可用性、执行成功 |
 | 经营价值证据 | 至少 30 天、基线可比、可归因的业务结果回执 | 部署或授权本身 |
@@ -113,24 +118,55 @@ Public Core 不 import Pack、Overlay 或 Control Plane 私有路径。
 
 | 责任层 | 本项目需要的输入 | 应产出的输出 | 禁止事项 |
 |---|---|---|---|
-| `helm-public` | 已有通用经营、决策、任务、回执和权限原语 | 版本化公共契约、生产可达接缝、public-safe fixture、门禁与兼容范围 | 客户标识、客户配置、行业或客户执行器 |
-| `helm-packs` | Core SDK 与兼容版本 | 行业对象、指标、诊断规则、经营问题候选方法和通用映射 | 客户 tenant、凭据、私有 endpoint、单客户流程 |
-| `helm-overlays` | Core / Pack 固定版本与公共扩展接缝 | 客户资产映射、授权引用、模型策略、只读 connector 与受控执行器 | 第二套 Core 模型、把客户逻辑回写 Public Core |
-| `helm-control-plane` | 四仓固定 SHA、设备与部署注册输入 | BOM、release、设备身份、部署、健康、回滚锚、owner 授权和回执索引 | 业务原文、私钥、把登记状态当业务价值 |
+| `helm-public` | 已有通用经营、决策、任务、回执和权限原语 | 版本化公共契约、Core 权威十题生成器、canonical receipt ingress、completion evaluator revision/hash、public-safe fixture、门禁与兼容范围 | 客户标识、客户配置、行业或客户执行器 |
+| `helm-packs` | Core SDK 与兼容版本 | 仅输出行业分类法、指标、证据适用规则和候选输入 | 固定十题、`CaioOperatingQuestionPortfolio`、客户 tenant、凭据、私有 endpoint、单客户流程 |
+| `helm-overlays` | Core / Pack 固定版本与公共扩展接缝 | 客户资产映射、授权引用、模型策略、只读 connector、受控 executor 及执行证明/结果投影 | 第二套 Core 模型、直接写 canonical receipt、复制十题或 13 项完成门字面量 |
+| `helm-control-plane` | 四仓 package-ready implementation SHA、版本化接口 ref、设备与部署注册输入 | BOM、release、设备身份、部署、健康、回滚锚、owner 授权，以及非敏感摘要/hash/ref 索引 | 业务原文、canonical receipt 正文、13 项字面量、私钥、把登记状态当业务价值 |
 | 现场 FDE | 已验证组合包、私有配置、最小权限账户和批准的接入范围 | 预检、安装、健康、恢复、验收、停止和价值回执 | 现场补包、绕过门禁、用临时配置伪造 activation |
 
-### 3.1 Public Core 输出合同
+### 3.1 四项强制跨仓输出
+
+第一实施切片必须由 Public Core 发布以下四项版本化输出；缺任一项即不能作为跨仓
+implementation handoff：
+
+1. **业务范围与问题组合语义接口**：明确 `Portfolio` 是业务资产/案件范围，
+   `CaioOperatingQuestionPortfolio` 是恰好 10 题的问题组合；二者 ID、引用和生命周期
+   不可互换。
+2. **Pack 候选输入与 Core 生成决定接口**：Pack 仅传行业分类法、指标、证据适用规则
+   和候选输入；Core 权威生成器独立验证证据并只产生两类决定：恰好 10 题的
+   `CaioOperatingQuestionPortfolio`，或 `insufficient_evidence` generation receipt 与缺口报告。
+3. **执行结果投影与 canonical receipt ingress 接口**：私有 executor 产生受版本约束的
+   执行证明/结果投影，不把它命名为 canonical receipt；Core ingress/service 重新验证
+   workspace、DecisionRecord、Work Packet、ActionItem、ApprovalTask、权限、幂等和事务
+   后写唯一 canonical `ExecutionReceipt`；Control Plane 只能索引非敏感 summary/hash/ref，
+   不写、不镜像 receipt 正文。
+4. **完成门 evaluator 身份接口**：发布接口版本、Core package-ready implementation SHA、
+   `CAIO_PRO_V1_COMPLETION_EVALUATOR_REVISION` 和由 Core 确定性产生的 evaluator contract
+   hash/ref。13 项有序清单继续只由 Core 拥有；Overlay 与 Control Plane 只能消费
+   revision/hash/ref 及评估结果，不复制、重定义或独立计算 13 项字面量。
+
+版本化接口必须有兼容范围、拒绝未知版本、摘要绑定和回滚说明。接口 ref、evaluator
+revision/hash 或 Core implementation SHA 任一不匹配时，组合与完成评估均须 fail-closed。
+
+### 3.2 Public Core 实现提交输出合同
 
 每个可供其他仓消费的实现提交至少输出：
 
-- immutable Core commit SHA 与兼容说明；
+- immutable、package-ready 的 Core implementation SHA 与兼容说明；
+- 上述四项版本化接口及其 schema/version/hash/ref；
+- completion evaluator revision 与 contract hash/ref；
 - 受影响公共契约和迁移要求；
 - 测试命令与原始结果摘要；
 - 当前开放 gap 与 fail-closed 行为；
 - 回滚方式；
 - 明确的非声明：未部署、未激活、未获 owner 授权、未证明经营价值。
 
-### 3.2 其他仓回传合同
+本项目章程所在提交的 SHA 只能作为 planning provenance。它不是、也不得被登记为
+package-ready Core implementation SHA、BOM 组件实现 pin、release stamp 或部署候选证明。
+只有包含已批准实现、测试、守卫和上述四项接口输出且通过完整门禁的后续提交，才可进入
+package-ready implementation SHA 的独立评审。
+
+### 3.3 其他仓回传合同
 
 Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身份、私有字段、真实 payload、
 凭据、endpoint、现场日志与部署回执必须留在其权威私有层；必要时仅回传脱敏摘要或不透明 ref。
@@ -141,7 +177,8 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 
 **验收**：
 
-- 固定组合包可验证 Core / Pack / Overlay / Control Plane SHA、BOM 和摘要；
+- 固定组合包可验证 Core / Pack / Overlay / Control Plane 各自 package-ready
+  implementation SHA、BOM 和摘要，不接受项目章程 SHA 代替；
 - 目标运行时从不可变 release 启动，并有进程、工作目录、启动时间、监听面和健康回执；
 - 数据库及必要依赖以最小权限完成只读或显式批准的连接检查；
 - 失败时健康面返回具体缺口，不把进程存在等同于业务 ready；
@@ -154,7 +191,7 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 **验收**：OWNER 在既有 `/caio` 经营面可以看到：
 
 - runtime 与数据来源的新鲜度、覆盖、异常和证据时间；
-- 10 题 Portfolio、0-3 题选择、DecisionRecord、执行链与监督状态；
+- 恰好 10 题的 `CaioOperatingQuestionPortfolio`、0-3 题选择、DecisionRecord、执行链与监督状态；
 - loading、暂无数据、degraded、blocked、revoked 和 error 的诚实状态；
 - 每项结论的 evidence ref、更新时间、责任人和下一门。
 
@@ -189,7 +226,8 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 
 **验收**：
 
-- current accepted G0 下只有一份 current、恰好 10 题的 Portfolio；
+- current accepted G0 下只有一份 current、恰好 10 题的
+  `CaioOperatingQuestionPortfolio`；业务 `Portfolio` 只作为资产/案件范围引用；
 - CEO 只可选择 0-3 题，选择由 `CaioQuestionSelectionReceipt` 固定；
 - 每个选题一对一绑定现有 `DecisionRecord`，包含 owner、期限、成功指标、证据、
   alternatives、风险、允许动作级别和 rollback path；
@@ -201,10 +239,13 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 **验收**：
 
 - 只有受既有权限与 owner gate 约束的决定可产生唯一 Work Packet claim；
-- 任务继续使用 `ActionItem`，审批继续使用 `ApprovalTask`，结果继续使用
-  `ExecutionReceipt`；
-- 高风险动作要求独立复核，执行回执绑定证据、结果、责任和回滚状态；
-- 私有执行器才可产生外部副作用，Public Core 不拥有客户系统凭据；
+- 任务继续使用 `ActionItem`，审批继续使用 `ApprovalTask`；
+- 私有 executor 只产生执行证明/结果投影；高风险动作要求独立复核，投影绑定证据、
+  结果、责任和回滚状态，但不得被命名或写成 canonical `ExecutionReceipt`；
+- Core ingress/service 按既有 workspace、事务、权限、审批、幂等与审计约束，写入唯一
+  canonical `ExecutionReceipt`；
+- Control Plane 只索引该 receipt 的非敏感摘要、hash 和不透明 ref，不存正文；
+- 私有 executor 才可产生外部副作用，Public Core 不拥有客户系统凭据；
 - 写回、真拨、通知、外部连接和自动执行默认关闭，并逐项独立授权；
 - 完成任务不等于结果有效，必须由 GAP-2 的真实评估路径回流业务结果。
 
@@ -231,7 +272,9 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 3. 根据评估结果和可验证偏差调用 `recordStage1SupervisionSignal`；
 4. 保持幂等、并发安全、跨 workspace fail-closed 和 append-only 审计；
 5. 让 `/caio` 区分真实生产信号、seed、暂无数据和 degraded；
-6. 同步更新 `HELM_DECISION_LOOP_GAP_REGISTER.md` 及机械门禁，使闭合事实双向可证伪。
+6. 发布第 3.1 节四项版本化跨仓接口、package-ready Core implementation SHA，
+   以及 completion evaluator revision 与 contract hash/ref；
+7. 同步更新 `HELM_DECISION_LOOP_GAP_REGISTER.md` 及机械门禁，使闭合事实双向可证伪。
 
 ### 5.2 明确排除
 
@@ -256,6 +299,10 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 - 生产调用方具备正常、重放、并发、撤销、跨 workspace、缺回执和失败恢复测试；
 - `/caio` 在无数据时诚实为空，在真实记录存在时显示来源和时间；
 - `check:decision-loop-gaps` 被同步更新为新真值，而不是删除控制项；
+- 第 3.1 节四项接口各自具有 version、hash/ref、兼容范围和未知版本 fail-closed 测试；
+- completion evaluator revision/hash 可被跨仓引用，但 13 项有序清单只由 Core 拥有；
+- package-ready Core implementation SHA 指向包含实现、测试、守卫和版本化接口的提交，
+  不得指向本项目章程提交；
 - 完整 Public Core 验证链通过；
 - 报告明确 GAP-3、现场部署、activation、owner 授权和价值证据仍未成立。
 
@@ -265,11 +312,11 @@ Public Core 只接受 public-safe 的兼容性反馈和缺口代码。客户身�
 |---|---|---|---|---|
 | T0 项目规格批准 | Public Core owner | 本文 | 批准或修改决定 | 具名 review，不是代码提交 |
 | T1 触发点与状态流设计 | `helm-public` | T0 | GAP-1/2 实施规格、事务/幂等/失败矩阵 | 代码级入口和调用链评审 |
-| T2 GAP-1/2 最小实现 | `helm-public` | T1 | 生产调用接缝、测试、守卫、读面诚实状态 | 完整验证链与原子提交 |
+| T2 GAP-1/2 最小实现 | `helm-public` | T1 | 生产调用接缝、测试、守卫、读面诚实状态、第 3.1 节四项版本化接口与 completion evaluator revision/hash/ref | package-ready implementation SHA 与完整验证链；章程 SHA 禁止替代 |
 | T3 GAP-3 批准门 | Public Core owner | T2 | 数据模型、保留、迁移、恢复和删除 ADR | schema/migration 单独批准；未批准不实施 |
-| T4 行业问题与诊断适配 | `helm-packs` | 稳定 Core SDK | 行业共性指标、问题候选与诊断规则 | Pack 门禁；不含客户配置 |
-| T5 客户现场适配 | `helm-overlays` | T2/T4 | 私有资产映射、授权引用、只读 connector、受控执行器 | Overlay 边界与私有集成测试 |
-| T6 组合与部署治理 | `helm-control-plane` | T2/T4/T5 | 固定 BOM、release、部署/健康/回滚/授权索引 | 组合包与部署回执 |
+| T4 行业问题与诊断适配 | `helm-packs` | 稳定 Core SDK | 行业分类法、指标、证据适用规则和候选输入 | Pack 门禁；不得输出固定十题或 `CaioOperatingQuestionPortfolio` |
+| T5 客户现场适配 | `helm-overlays` | T2/T4 | 私有资产映射、授权引用、只读 connector、受控 executor 的执行证明/结果投影 | Overlay 边界与私有集成测试；只经版本化 Core ingress 写 canonical receipt |
+| T6 组合与部署治理 | `helm-control-plane` | T2/T4/T5 | 固定 BOM、release、部署/健康/回滚/授权索引、非敏感 receipt summary/hash/ref 和 completion evaluator ref | 组合包与部署回执；不复制 receipt 正文或 13 项字面量 |
 | T7 FDE 只读现场启动 | 现场 FDE | T6 | 预检、安装、只读健康、G0 资料和恢复演练 | deployment truth；非 activation |
 | T8 经营闭环验证 | owner + FDE | T7 | 0-3 题、决策、执行、监督和 ≥30 天价值回执 | 13 项全部满足后方可受理完成门 |
 
@@ -356,8 +403,14 @@ import {
 - OWNER/membership/service authority 不满足时拒绝；
 - seed 关闭后的 honest-empty；
 - 数据撤销、来源过期或证据缺失后，不把旧结论继续表述为当前事实；
-- 既有 Portfolio、selection、DecisionRecord、ActionItem、ApprovalTask、
-  ExecutionReceipt 和权限契约无回归。
+- 业务 `Portfolio` 范围与 `CaioOperatingQuestionPortfolio` 十题组合不可互换；Pack 候选输入
+  不能伪装成固定十题，Core 只能生成恰好十题或 `insufficient_evidence`；
+- 私有 executor/Control Plane 直接写 canonical `ExecutionReceipt` 的路径被拒绝；只有
+  Core ingress/service 可按既有事务与权限写入；
+- 未知接口版本、错误 digest/ref 或 completion evaluator revision/hash 不匹配时 fail-closed，
+  Overlay/Control Plane 不复制 13 项字面量；
+- 既有 selection、DecisionRecord、ActionItem、ApprovalTask、ExecutionReceipt 和权限契约
+  无回归。
 
 ### 10.2 证据要求
 
@@ -381,6 +434,8 @@ import {
 - 找不到唯一 canonical 触发点、幂等键或终态语义；
 - 无法保持跨 workspace 隔离、service authority 或 owner gate；
 - 测试证据无法与部署、授权或价值证据分层；
+- 四项版本化接口、completion evaluator revision/hash/ref 缺失、未知或互相不匹配；
+- package-ready implementation SHA 被绑定为仅含项目章程、未含实现与完整门禁的提交；
 - 任何仓库固定 SHA、BOM、回执或现场状态存在冲突。
 
 ### 11.2 回滚路径
@@ -422,6 +477,9 @@ GAP-3 的回滚必须在其独立 migration ADR 中定义 forward-fix、备份�
 - 让 recommendation 充当 commitment，或让完成门回执充当全功能授权；
 - 绕过 `CaioQuestionSelectionReceipt`、`DecisionRecord`、
   `ActionItem` / `ApprovalTask` / `ExecutionReceipt` 或既有权限模型；
+- 让 Pack 输出固定十题，让 Overlay/Control Plane 直接写 canonical `ExecutionReceipt`，
+  或让它们复制 Core 的 13 项完成门字面量；
+- 把项目章程 SHA 登记为 package-ready Core implementation SHA；
 - 删除历史回执来掩盖失败、撤销、回滚或分歧。
 
 ## 13. Success Criteria / 项目完成标准
@@ -430,13 +488,16 @@ GAP-3 的回滚必须在其独立 migration ADR 中定义 forward-fix、备份�
 
 1. 七项结果分别有真实、当前、可重放的验收证据；
 2. GAP-1、GAP-2、GAP-3 均已按各自批准门闭合；
-3. 四仓固定 SHA、BOM、组合包与兼容性验证通过；
-4. 现场运行、健康、备份、恢复、安全和回滚 evidence 成立；
-5. 0-3 个选题至少一条决策、执行、监督链真实闭合；
-6. 每个进入价值验收的选题具有不少于 30 天的可比业务结果；
-7. 13 项完成门全部满足并由 CEO 受理；
-8. 全功能运行仍由独立 owner 授权决定，未授权能力保持关闭；
-9. 没有未处置的权限、数据、模型出域或执行边界事故。
+3. 四仓各自 package-ready implementation SHA、BOM、四项版本化接口、组合包与兼容性
+   验证通过，且没有用章程 SHA 替代实现 SHA；
+4. completion evaluator revision/hash/ref 可由跨仓确定性引用，13 项字面量仍只由 Core
+   拥有且未被 Overlay/Control Plane 复制；
+5. 现场运行、健康、备份、恢复、安全和回滚 evidence 成立；
+6. 0-3 个选题至少一条决策、执行、监督链真实闭合；
+7. 每个进入价值验收的选题具有不少于 30 天的可比业务结果；
+8. 13 项完成门全部满足并由 CEO 受理；
+9. 全功能运行仍由独立 owner 授权决定，未授权能力保持关闭；
+10. 没有未处置的权限、数据、模型出域或执行边界事故。
 
 ## 14. Risks And Dependencies / 风险与依赖
 
@@ -446,6 +507,9 @@ GAP-3 的回滚必须在其独立 migration ADR 中定义 forward-fix、备份�
 | GAP-1/2 触发点选错 | 重复写、漏写或状态错序 | 先做调用链和事务设计，隔离 MySQL 并发/重放测试 |
 | GAP-3 顺手并入 | schema、迁移和删除风险扩大 | 独立 owner 批准门与单独提交 |
 | 客户需求污染 Core | 破坏公开安全和依赖方向 | 客户映射与执行器只进 Overlay |
+| 跨仓各自解释接口或复制 13 项 | 十题、receipt 或完成评估发生漂移 | Core 发布版本化接口和 evaluator revision/hash/ref；其他仓只消费引用 |
+| canonical receipt 出现多写者 | 权限、事务、幂等和审计失真 | executor 只交证明/结果投影，唯一写入经 Core ingress/service |
+| 章程 SHA 被登记为实现 SHA | 未实现能力被错误装包或发布 | planning provenance 与 package-ready implementation SHA 分离并 fail-closed |
 | 自动执行范围漂移 | 未授权外部副作用 | 默认关闭、逐动作授权、kill switch 与回滚回执 |
 | 13 项门被简化 | “部分通过”冒充完成 | 保持 closed ordered list 与 all-or-nothing 评估 |
 | 监督延迟或噪声过多 | owner 无法及时处置 | severity、SLA、幂等、责任和升级条件结构化 |
@@ -465,3 +529,7 @@ GAP-3 的回滚必须在其独立 migration ADR 中定义 forward-fix、备份�
 
 - 2026-08-09：建立 `planning / proposed` 项目章程；冻结七项可测结果、六层证据、
   四仓输入输出、GAP-1/2 第一切片、GAP-3 独立批准门、停止条件与回滚路径。
+- 2026-08-09：第二轮契约修正；区分业务 `Portfolio` 与十题
+  `CaioOperatingQuestionPortfolio`，冻结 Pack 候选输入边界、canonical
+  `ExecutionReceipt` 唯一写入链、四项版本化跨仓输出、completion evaluator
+  revision/hash/ref，以及章程 SHA 不得替代 package-ready implementation SHA。
