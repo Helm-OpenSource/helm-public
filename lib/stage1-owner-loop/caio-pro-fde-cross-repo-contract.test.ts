@@ -8,12 +8,14 @@ import {
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF,
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
+  CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION,
   CAIO_PRO_FDE_OBJECT_SEMANTICS,
   CAIO_PRO_PACK_OPERATING_INPUT_CONTRACT,
   CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
   CAIO_PRO_PRIVATE_EXECUTION_RESULT_PROJECTION_CONTRACT,
   CAIO_PRO_PRIVATE_EXECUTION_RESULT_PROJECTION_SCHEMA_VERSION,
   caioProPackOperatingInputSchema,
+  validateCaioProPackOperatingInputSemanticRules,
   createCaioProPrivateExecutionResultProjection,
   validateCaioProFdeConsumerIdentity,
   validateCaioProFdeCrossRepoInterfaceVersion,
@@ -35,6 +37,12 @@ function packInput() {
     workspaceRef: "workspace:workspace-1",
     portfolioRef: "opportunity:opportunity-1",
     evidenceSnapshotRef: "observation-run:run-1",
+    evidenceBindings: [
+      {
+        evidenceRef: "observation-run:run-1",
+        evidenceKind: "source_observation",
+      },
+    ],
     taxonomy: [
       {
         taxonomyRef: "taxonomy:operating-risk",
@@ -129,6 +137,7 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
         "workspaceRef",
         "portfolioRef",
         "evidenceSnapshotRef",
+        "evidenceBindings",
         "taxonomy",
         "metrics",
         "evidenceApplicabilityRules",
@@ -178,6 +187,128 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
         })),
       }).success,
     ).toBe(false);
+  });
+
+  it("fails closed for duplicate, dangling, uncovered and evidence-kind-incompatible Pack graphs", () => {
+    const base = packInput();
+    const invalidGraphs = [
+      {
+        ...base,
+        taxonomy: [
+          ...base.taxonomy,
+          { ...base.taxonomy[0], label: "Duplicate ref with different text" },
+        ],
+      },
+      {
+        ...base,
+        metrics: [
+          ...base.metrics,
+          { ...base.metrics[0], definition: "Duplicate metric ref." },
+        ],
+      },
+      {
+        ...base,
+        evidenceApplicabilityRules: [
+          ...base.evidenceApplicabilityRules,
+          {
+            ...base.evidenceApplicabilityRules[0],
+            acceptedEvidenceKinds: ["source_observation"],
+          },
+        ],
+      },
+      {
+        ...base,
+        candidateInputs: [
+          ...base.candidateInputs,
+          { ...base.candidateInputs[0], rationale: "Duplicate candidate ref." },
+        ],
+      },
+      {
+        ...base,
+        candidateInputs: [
+          { ...base.candidateInputs[0], taxonomyRefs: ["taxonomy:missing"] },
+        ],
+      },
+      {
+        ...base,
+        candidateInputs: [
+          { ...base.candidateInputs[0], metricRefs: ["metric:missing"] },
+        ],
+      },
+      {
+        ...base,
+        evidenceApplicabilityRules: [
+          {
+            ...base.evidenceApplicabilityRules[0],
+            taxonomyRefs: ["taxonomy:missing"],
+          },
+        ],
+      },
+      {
+        ...base,
+        taxonomy: [
+          ...base.taxonomy,
+          {
+            taxonomyRef: "taxonomy:uncovered",
+            categoryRef: "category:uncovered",
+            label: "Uncovered dimension",
+          },
+        ],
+      },
+      {
+        ...base,
+        evidenceBindings: [
+          {
+            evidenceRef: "observation-run:run-1",
+            evidenceKind: "crm_record",
+          },
+        ],
+      },
+      {
+        ...base,
+        evidenceBindings: [
+          ...base.evidenceBindings,
+          {
+            evidenceRef: "observation-run:run-1",
+            evidenceKind: "verified_receipt",
+          },
+        ],
+      },
+      {
+        ...base,
+        metrics: [
+          ...base.metrics,
+          {
+            metricRef: "metric:unreachable",
+            definition: "A metric not used by any candidate input.",
+            unit: "count",
+            evidenceRefs: ["observation-run:run-1"],
+          },
+        ],
+      },
+      {
+        ...base,
+        evidenceBindings: [],
+      },
+    ];
+
+    for (const invalid of invalidGraphs) {
+      expect(caioProPackOperatingInputSchema.safeParse(invalid).success).toBe(
+        false,
+      );
+      expect(
+        validateCaioProPackOperatingInputSemanticRules(invalid).valid,
+      ).toBe(false);
+    }
+  });
+
+  it("publishes versioned semantic verifier rules for the portable contract", () => {
+    expect(CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION).toBe(
+      "helm.caio-pro-fde.portable-semantic-verifier.v1",
+    );
+    expect(validateCaioProPackOperatingInputSemanticRules(packInput())).toEqual(
+      { valid: true, errors: [] },
+    );
   });
 
   it("validates the complete interface and evaluator identity fail-closed", () => {

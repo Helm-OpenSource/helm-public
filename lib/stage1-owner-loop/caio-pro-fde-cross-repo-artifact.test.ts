@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import Ajv from "ajv";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,8 +10,14 @@ import {
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH,
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF,
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
+  CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_RULES,
   CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
   CAIO_PRO_PRIVATE_EXECUTION_RESULT_PROJECTION_SCHEMA_VERSION,
+  caioProPackOperatingInputSchema,
+  computeCaioProFdePortableContractIdentity,
+  materializeCaioProFdePortableContractArtifact,
+  validateCaioProFdePortableContractArtifactIdentity,
+  validateCaioProPackOperatingInputSemanticRules,
 } from "./caio-pro-fde-cross-repo-contract";
 
 const ARTIFACT = path.resolve(
@@ -32,6 +39,7 @@ type PortablePayloadDefinition = {
 type PortableContractArtifact = {
   interfaceIdentity: Record<string, string>;
   resolutionRules: string[];
+  "x-helm-semantic-verifier": Record<string, unknown>;
   $defs: Record<string, unknown> & {
     publicSafeRef: {
       pattern: string;
@@ -50,6 +58,109 @@ function artifact() {
   return JSON.parse(
     readFileSync(ARTIFACT, "utf8"),
   ) as PortableContractArtifact;
+}
+
+function portablePackAccepts(payload: unknown): boolean {
+  const schema = structuredClone(artifact()) as PortableContractArtifact & {
+    $schema?: string;
+    oneOf: unknown[];
+  };
+  delete schema.$schema;
+  schema.oneOf = [{ $ref: "#/$defs/packOperatingInput" }];
+  const validate = new Ajv({ allErrors: true, schemaId: "auto" }).compile(
+    schema,
+  );
+  return (
+    Boolean(validate(payload)) &&
+    validateCaioProPackOperatingInputSemanticRules(payload).valid
+  );
+}
+
+function validPackInput() {
+  const identity = artifact().interfaceIdentity;
+  return {
+    schemaVersion: CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
+    ...identity,
+    workspaceRef: "workspace:workspace-1",
+    portfolioRef: "opportunity:opportunity-1",
+    evidenceSnapshotRef: "observation-run:run-1",
+    evidenceBindings: [
+      {
+        evidenceRef: "observation-run:run-1",
+        evidenceKind: "source_observation",
+      },
+    ],
+    taxonomy: [
+      {
+        taxonomyRef: "taxonomy:operating-risk",
+        categoryRef: "category:delivery-risk",
+        label: "Delivery risk",
+      },
+    ],
+    metrics: [
+      {
+        metricRef: "metric:on-time-completion",
+        definition: "Share completed inside the accepted operating window.",
+        unit: "percent",
+        evidenceRefs: ["observation-run:run-1"],
+      },
+    ],
+    evidenceApplicabilityRules: [
+      {
+        ruleRef: "evidence-rule:delivery-risk",
+        taxonomyRefs: ["taxonomy:operating-risk"],
+        acceptedEvidenceKinds: ["source_observation"],
+      },
+    ],
+    candidateInputs: [
+      {
+        candidateRef: "candidate-input:delivery-risk",
+        taxonomyRefs: ["taxonomy:operating-risk"],
+        metricRefs: ["metric:on-time-completion"],
+        evidenceRefs: ["observation-run:run-1"],
+        rationale: "Evidence supports a Core-owned candidate input.",
+      },
+    ],
+    authorityEffect: "none",
+  };
+}
+
+function primitivePaths(
+  value: unknown,
+  pathParts: Array<string | number> = [],
+): Array<Array<string | number>> {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      primitivePaths(entry, [...pathParts, index]),
+    );
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([key, entry]) =>
+      primitivePaths(entry, [...pathParts, key]),
+    );
+  }
+  return [pathParts];
+}
+
+function mutatePrimitiveAtPath(
+  value: PortableContractArtifact,
+  pathParts: readonly (string | number)[],
+) {
+  let cursor: unknown = value;
+  for (const part of pathParts.slice(0, -1)) {
+    cursor = (cursor as Record<string | number, unknown>)[part];
+  }
+  const key = pathParts.at(-1)!;
+  const record = cursor as Record<string | number, unknown>;
+  const current = record[key];
+  record[key] =
+    typeof current === "string"
+      ? `${current}__mutated`
+      : typeof current === "number"
+        ? current + 1
+        : typeof current === "boolean"
+          ? !current
+          : "mutated";
 }
 
 function portablePublicSafeRefAccepts(value: string): boolean {
@@ -81,6 +192,160 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
       const definition = ref.slice(ref.lastIndexOf("/") + 1);
       expect((schema.$defs[definition] as { const: unknown }).const).toBe(value);
     }
+    expect(validateCaioProFdePortableContractArtifactIdentity(schema)).toEqual({
+      valid: true,
+      errors: [],
+    });
+    expect(materializeCaioProFdePortableContractArtifact(schema)).toEqual(
+      schema,
+    );
+  });
+
+  it("binds the complete canonical schema and semantic verifier bytes into identity", () => {
+    const schema = artifact();
+    expect(schema["x-helm-semantic-verifier"]).toEqual(
+      CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_RULES,
+    );
+    const baseline = computeCaioProFdePortableContractIdentity(schema);
+    const mutations = [
+      (copy: PortableContractArtifact) => {
+        (copy.$defs.publicSafeRef as { maxLength?: number }).maxLength = 255;
+      },
+      (copy: PortableContractArtifact) => {
+        copy.$defs.packOperatingInput.required = copy.$defs.packOperatingInput.required.filter(
+          (field) => field !== "candidateInputs",
+        );
+      },
+      (copy: PortableContractArtifact) => {
+        (copy.$defs.packOperatingInput.properties.candidateInputs as {
+          maxItems?: number;
+        }).maxItems = 127;
+      },
+      (copy: PortableContractArtifact) => {
+        copy["x-helm-semantic-verifier"] = {
+          ...copy["x-helm-semantic-verifier"],
+          trustedEvidenceRule: "weakened_rule",
+        };
+      },
+      (copy: PortableContractArtifact) => {
+        copy["x-helm-semantic-verifier"] = {
+          ...copy["x-helm-semantic-verifier"],
+          revision: "helm.caio-pro-fde.portable-semantic-verifier.v2",
+        };
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const copy = structuredClone(schema);
+      mutate(copy);
+      try {
+        expect(computeCaioProFdePortableContractIdentity(copy)).not.toEqual(
+          baseline,
+        );
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
+      expect(validateCaioProFdePortableContractArtifactIdentity(copy).valid).toBe(
+        false,
+      );
+    }
+  });
+
+  it("changes identity or fails the build for every nested schema and semantic-rule leaf mutation", () => {
+    const schema = artifact();
+    const baseline = computeCaioProFdePortableContractIdentity(schema);
+    const identitySelfFields = new Set([
+      "$defs.contractRef.const",
+      "$defs.contractHash.const",
+    ]);
+    const paths = [
+      ...primitivePaths(schema.$defs, ["$defs"]),
+      ...primitivePaths(schema["x-helm-semantic-verifier"], [
+        "x-helm-semantic-verifier",
+      ]),
+    ].filter((pathParts) => !identitySelfFields.has(pathParts.join(".")));
+
+    expect(paths.length).toBeGreaterThan(100);
+    for (const pathParts of paths) {
+      const copy = structuredClone(schema);
+      mutatePrimitiveAtPath(copy, pathParts);
+      try {
+        expect(computeCaioProFdePortableContractIdentity(copy)).not.toEqual(
+          baseline,
+        );
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
+    }
+  });
+
+  it("keeps TypeScript and portable artifact validation in differential agreement", () => {
+    const base = validPackInput();
+    const privateAddress = [10, 0, 0, 8].join(".");
+    const corpus = [
+      base,
+      { ...base, question: "Pack must not supply a question" },
+      {
+        ...base,
+        metrics: [
+          ...base.metrics,
+          { ...base.metrics[0], definition: "Duplicate metric ref." },
+        ],
+      },
+      {
+        ...base,
+        candidateInputs: [
+          { ...base.candidateInputs[0], taxonomyRefs: ["taxonomy:missing"] },
+        ],
+      },
+      {
+        ...base,
+        evidenceBindings: [
+          {
+            evidenceRef: "observation-run:run-1",
+            evidenceKind: "crm_record",
+          },
+        ],
+      },
+      {
+        ...base,
+        taxonomy: [
+          ...base.taxonomy,
+          { ...base.taxonomy[0], label: "Duplicate taxonomy ref" },
+        ],
+      },
+      {
+        ...base,
+        evidenceApplicabilityRules: [
+          {
+            ...base.evidenceApplicabilityRules[0],
+            taxonomyRefs: ["taxonomy:missing"],
+          },
+        ],
+      },
+      {
+        ...base,
+        evidenceBindings: [
+          ...base.evidenceBindings,
+          {
+            evidenceRef: "observation-run:run-1",
+            evidenceKind: "verified_receipt",
+          },
+        ],
+      },
+      { ...base, workspaceRef: "workspace:https:private.invalid" },
+      {
+        ...base,
+        evidenceSnapshotRef: `observation-run:${privateAddress}`,
+      },
+      { ...base, portfolioRef: "opportunity:token-secret-value" },
+    ];
+
+    for (const payload of corpus) {
+      expect(portablePackAccepts(payload)).toBe(
+        caioProPackOperatingInputSchema.safeParse(payload).success,
+      );
+    }
   });
 
   it("keeps both portable payloads strict and bounded", () => {
@@ -97,6 +362,7 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
         "workspaceRef",
         "portfolioRef",
         "evidenceSnapshotRef",
+        "evidenceBindings",
         "taxonomy",
         "metrics",
         "evidenceApplicabilityRules",

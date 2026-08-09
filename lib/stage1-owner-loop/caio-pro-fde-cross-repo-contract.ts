@@ -2,6 +2,7 @@ import { isIP } from "node:net";
 
 import { z } from "zod";
 
+import portableContractArtifactJson from "../../docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json";
 import { canonicalJson, sha256 } from "../expert-capability/hashing";
 import {
   CAIO_PRO_V1_COMPLETION_EVALUATOR_CONTRACT_HASH,
@@ -22,6 +23,10 @@ export const CAIO_PRO_CANONICAL_EXECUTION_RECEIPT_WRITER_SCHEMA_VERSION =
   "helm.caio-pro-fde.canonical-execution-receipt-writer.v1" as const;
 export const CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE_SCHEMA_VERSION =
   "helm.caio-pro-fde.completion-evaluator-interface.v1" as const;
+export const CAIO_PRO_FDE_PORTABLE_IDENTITY_ALGORITHM =
+  "helm.caio-pro-fde.canonical-portable-contract-identity.v1" as const;
+export const CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION =
+  "helm.caio-pro-fde.portable-semantic-verifier.v1" as const;
 
 export const CAIO_PRO_FDE_CONTRACT_LIMITS = Object.freeze({
   refLength: 256,
@@ -30,10 +35,116 @@ export const CAIO_PRO_FDE_CONTRACT_LIMITS = Object.freeze({
   taxonomyItems: 64,
   metricItems: 64,
   evidenceRuleItems: 64,
+  evidenceBindingItems: 256,
   candidateItems: 128,
   nestedRefs: 64,
   executionProofRefs: 64,
 });
+
+type JsonRecord = Record<string, unknown>;
+type PortableContractArtifact = JsonRecord & {
+  interfaceIdentity: JsonRecord;
+  $defs: JsonRecord;
+  "x-helm-semantic-verifier": JsonRecord;
+};
+
+const CONTRACT_REF_SENTINEL =
+  "caio-pro-fde-cross-repo-interface:canonical-contract-ref";
+const CONTRACT_HASH_SENTINEL = `sha256:${"0".repeat(64)}`;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function normalizePortableContractArtifact(
+  artifact: unknown,
+): PortableContractArtifact {
+  if (!isRecord(artifact)) {
+    throw new Error("caio_pro_fde_portable_contract_artifact_invalid");
+  }
+  const copy = cloneJson(artifact) as PortableContractArtifact;
+  const identity = copy.interfaceIdentity;
+  const definitions = copy.$defs;
+  const contractRefDefinition = definitions?.contractRef;
+  const contractHashDefinition = definitions?.contractHash;
+  const semanticVerifier = copy["x-helm-semantic-verifier"];
+  if (
+    !isRecord(identity) ||
+    !isRecord(definitions) ||
+    !isRecord(contractRefDefinition) ||
+    !isRecord(contractHashDefinition) ||
+    !isRecord(semanticVerifier) ||
+    semanticVerifier.revision !==
+      CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION
+  ) {
+    throw new Error("caio_pro_fde_portable_contract_artifact_invalid");
+  }
+  identity.contractRef = CONTRACT_REF_SENTINEL;
+  identity.contractHash = CONTRACT_HASH_SENTINEL;
+  contractRefDefinition.const = CONTRACT_REF_SENTINEL;
+  contractHashDefinition.const = CONTRACT_HASH_SENTINEL;
+  return copy;
+}
+
+export function computeCaioProFdePortableContractIdentity(artifact: unknown): {
+  contractRef: string;
+  contractHash: string;
+} {
+  const contractHash = sha256(
+    canonicalJson({
+      identityAlgorithm: CAIO_PRO_FDE_PORTABLE_IDENTITY_ALGORITHM,
+      canonicalPortableContract: normalizePortableContractArtifact(artifact),
+    }),
+  );
+  return {
+    contractHash,
+    contractRef: `caio-pro-fde-cross-repo-interface:${contractHash.slice(7, 23)}`,
+  };
+}
+
+export function materializeCaioProFdePortableContractArtifact(
+  artifact: unknown,
+): PortableContractArtifact {
+  const materialized = cloneJson(artifact) as PortableContractArtifact;
+  const identity = computeCaioProFdePortableContractIdentity(materialized);
+  const contractRefDefinition = materialized.$defs.contractRef as JsonRecord;
+  const contractHashDefinition = materialized.$defs.contractHash as JsonRecord;
+  materialized.interfaceIdentity.contractRef = identity.contractRef;
+  materialized.interfaceIdentity.contractHash = identity.contractHash;
+  contractRefDefinition.const = identity.contractRef;
+  contractHashDefinition.const = identity.contractHash;
+  return materialized;
+}
+
+export function validateCaioProFdePortableContractArtifactIdentity(
+  artifact: unknown,
+): { valid: boolean; errors: string[] } {
+  try {
+    const expected = materializeCaioProFdePortableContractArtifact(artifact);
+    if (canonicalJson(expected) !== canonicalJson(artifact)) {
+      return {
+        valid: false,
+        errors: ["caio_pro_fde_portable_contract_identity_mismatch"],
+      };
+    }
+    return { valid: true, errors: [] };
+  } catch {
+    return {
+      valid: false,
+      errors: ["caio_pro_fde_portable_contract_artifact_invalid"],
+    };
+  }
+}
+
+const portableContractArtifact =
+  portableContractArtifactJson as unknown as PortableContractArtifact;
+export const CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_RULES = Object.freeze(
+  cloneJson(portableContractArtifact["x-helm-semantic-verifier"]),
+);
 
 export const CAIO_PRO_FDE_OBJECT_SEMANTICS = Object.freeze({
   Portfolio: Object.freeze({
@@ -248,6 +359,7 @@ export const CAIO_PRO_PACK_OPERATING_INPUT_CONTRACT = Object.freeze({
     "workspaceRef",
     "portfolioRef",
     "evidenceSnapshotRef",
+    "evidenceBindings",
     "taxonomy",
     "metrics",
     "evidenceApplicabilityRules",
@@ -352,6 +464,9 @@ const caioProFdeCrossRepoInterfaceContractBasis = {
   portableContract: Object.freeze({
     schemaRef:
       "docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json" as const,
+    identityAlgorithm: CAIO_PRO_FDE_PORTABLE_IDENTITY_ALGORITHM,
+    semanticVerifierRevision:
+      CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION,
     publicSafeRefPolicyRevision:
       "helm.caio-pro-fde.public-safe-ref-policy.v2" as const,
     trustedEvidenceResolver:
@@ -365,11 +480,13 @@ const caioProFdeCrossRepoInterfaceContractBasis = {
   authorityEffect: "none" as const,
 } as const;
 
-export const CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH = sha256(
-  canonicalJson(caioProFdeCrossRepoInterfaceContractBasis),
+const portableContractIdentity = computeCaioProFdePortableContractIdentity(
+  portableContractArtifact,
 );
+export const CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH =
+  portableContractIdentity.contractHash;
 export const CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF =
-  `caio-pro-fde-cross-repo-interface:${CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH.slice(7, 23)}` as const;
+  portableContractIdentity.contractRef;
 
 export const CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR = Object.freeze({
   ...caioProFdeCrossRepoInterfaceContractBasis,
@@ -481,6 +598,250 @@ const packCandidateInputSchema = z
   })
   .strict();
 
+const packEvidenceBindingSchema = z
+  .object({
+    evidenceRef: caioProPublicSafeRefSchema,
+    evidenceKind: identifier,
+  })
+  .strict();
+
+type PackSemanticGraph = {
+  taxonomy: Array<{
+    taxonomyRef: string;
+    categoryRef: string;
+  }>;
+  metrics: Array<{
+    metricRef: string;
+    evidenceRefs: string[];
+  }>;
+  evidenceApplicabilityRules: Array<{
+    ruleRef: string;
+    taxonomyRefs: string[];
+    acceptedEvidenceKinds: string[];
+  }>;
+  candidateInputs: Array<{
+    candidateRef: string;
+    taxonomyRefs: string[];
+    metricRefs: string[];
+    evidenceRefs: string[];
+  }>;
+  evidenceBindings: Array<{
+    evidenceRef: string;
+    evidenceKind: string;
+  }>;
+};
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isPackSemanticGraph(value: unknown): value is PackSemanticGraph {
+  if (!isRecord(value)) return false;
+  const taxonomy = value.taxonomy;
+  const metrics = value.metrics;
+  const rules = value.evidenceApplicabilityRules;
+  const candidates = value.candidateInputs;
+  const bindings = value.evidenceBindings;
+  return (
+    Array.isArray(taxonomy) &&
+    taxonomy.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.taxonomyRef === "string" &&
+        typeof entry.categoryRef === "string",
+    ) &&
+    Array.isArray(metrics) &&
+    metrics.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.metricRef === "string" &&
+        isStringArray(entry.evidenceRefs),
+    ) &&
+    Array.isArray(rules) &&
+    rules.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.ruleRef === "string" &&
+        isStringArray(entry.taxonomyRefs) &&
+        isStringArray(entry.acceptedEvidenceKinds),
+    ) &&
+    Array.isArray(candidates) &&
+    candidates.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.candidateRef === "string" &&
+        isStringArray(entry.taxonomyRefs) &&
+        isStringArray(entry.metricRefs) &&
+        isStringArray(entry.evidenceRefs),
+    ) &&
+    Array.isArray(bindings) &&
+    bindings.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.evidenceRef === "string" &&
+        typeof entry.evidenceKind === "string",
+    )
+  );
+}
+
+function duplicateValues(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) duplicates.add(value);
+    seen.add(value);
+  }
+  return [...duplicates].sort();
+}
+
+function packSemanticGraphErrors(value: unknown): string[] {
+  if (!isPackSemanticGraph(value)) {
+    return ["pack_semantic_graph_structure_invalid"];
+  }
+  const errors: string[] = [];
+  const requireUnique = (values: readonly string[], reason: string) => {
+    if (duplicateValues(values).length > 0) errors.push(reason);
+  };
+
+  requireUnique(
+    value.taxonomy.map((entry) => entry.taxonomyRef),
+    "pack_taxonomy_ref_duplicate",
+  );
+  requireUnique(
+    value.taxonomy.map((entry) => entry.categoryRef),
+    "pack_category_ref_duplicate",
+  );
+  requireUnique(
+    value.metrics.map((entry) => entry.metricRef),
+    "pack_metric_ref_duplicate",
+  );
+  requireUnique(
+    value.evidenceApplicabilityRules.map((entry) => entry.ruleRef),
+    "pack_evidence_rule_ref_duplicate",
+  );
+  requireUnique(
+    value.candidateInputs.map((entry) => entry.candidateRef),
+    "pack_candidate_input_ref_duplicate",
+  );
+  requireUnique(
+    value.evidenceBindings.map((entry) => entry.evidenceRef),
+    "pack_evidence_binding_ref_duplicate",
+  );
+  for (const rule of value.evidenceApplicabilityRules) {
+    requireUnique(rule.taxonomyRefs, "pack_rule_taxonomy_ref_duplicate");
+    requireUnique(
+      rule.acceptedEvidenceKinds,
+      "pack_rule_evidence_kind_duplicate",
+    );
+  }
+  for (const candidate of value.candidateInputs) {
+    requireUnique(
+      candidate.taxonomyRefs,
+      "pack_candidate_taxonomy_ref_duplicate",
+    );
+    requireUnique(candidate.metricRefs, "pack_candidate_metric_ref_duplicate");
+    requireUnique(
+      candidate.evidenceRefs,
+      "pack_candidate_evidence_ref_duplicate",
+    );
+  }
+  for (const metric of value.metrics) {
+    requireUnique(metric.evidenceRefs, "pack_metric_evidence_ref_duplicate");
+  }
+
+  const taxonomyRefs = new Set(value.taxonomy.map((entry) => entry.taxonomyRef));
+  const metricRefs = new Set(value.metrics.map((entry) => entry.metricRef));
+  const evidenceKinds = new Map(
+    value.evidenceBindings.map((entry) => [entry.evidenceRef, entry.evidenceKind]),
+  );
+  const rulesByTaxonomy = new Map<string, typeof value.evidenceApplicabilityRules>();
+  for (const rule of value.evidenceApplicabilityRules) {
+    for (const taxonomyRef of rule.taxonomyRefs) {
+      if (!taxonomyRefs.has(taxonomyRef)) {
+        errors.push("pack_rule_taxonomy_ref_dangling");
+        continue;
+      }
+      const rules = rulesByTaxonomy.get(taxonomyRef) ?? [];
+      rules.push(rule);
+      rulesByTaxonomy.set(taxonomyRef, rules);
+    }
+  }
+  for (const taxonomyRef of taxonomyRefs) {
+    if ((rulesByTaxonomy.get(taxonomyRef) ?? []).length === 0) {
+      errors.push("pack_taxonomy_rule_coverage_missing");
+    }
+  }
+
+  const metricByRef = new Map(value.metrics.map((entry) => [entry.metricRef, entry]));
+  const reachableTaxonomyRefs = new Set(
+    value.candidateInputs.flatMap((candidate) => candidate.taxonomyRefs),
+  );
+  const reachableMetricRefs = new Set(
+    value.candidateInputs.flatMap((candidate) => candidate.metricRefs),
+  );
+  if ([...taxonomyRefs].some((ref) => !reachableTaxonomyRefs.has(ref))) {
+    errors.push("pack_taxonomy_candidate_coverage_missing");
+  }
+  if ([...metricRefs].some((ref) => !reachableMetricRefs.has(ref))) {
+    errors.push("pack_metric_candidate_coverage_missing");
+  }
+  for (const metric of value.metrics) {
+    if (metric.evidenceRefs.some((ref) => !evidenceKinds.has(ref))) {
+      errors.push("pack_metric_evidence_binding_missing");
+    }
+  }
+  for (const candidate of value.candidateInputs) {
+    const candidateTaxonomies = candidate.taxonomyRefs.filter((taxonomyRef) => {
+      if (!taxonomyRefs.has(taxonomyRef)) {
+        errors.push("pack_candidate_taxonomy_ref_dangling");
+        return false;
+      }
+      return true;
+    });
+    const candidateMetrics = candidate.metricRefs.flatMap((metricRef) => {
+      const metric = metricByRef.get(metricRef);
+      if (!metricRefs.has(metricRef) || !metric) {
+        errors.push("pack_candidate_metric_ref_dangling");
+        return [];
+      }
+      return [metric];
+    });
+    const evidenceRefs = new Set([
+      ...candidate.evidenceRefs,
+      ...candidateMetrics.flatMap((metric) => metric.evidenceRefs),
+    ]);
+    if ([...evidenceRefs].some((ref) => !evidenceKinds.has(ref))) {
+      errors.push("pack_candidate_evidence_binding_missing");
+    }
+    for (const taxonomyRef of candidateTaxonomies) {
+      const rules = rulesByTaxonomy.get(taxonomyRef) ?? [];
+      if (rules.length === 0) {
+        errors.push("pack_candidate_rule_coverage_missing");
+        continue;
+      }
+      for (const evidenceRef of evidenceRefs) {
+        const evidenceKind = evidenceKinds.get(evidenceRef);
+        if (
+          evidenceKind &&
+          !rules.some((rule) =>
+            rule.acceptedEvidenceKinds.includes(evidenceKind),
+          )
+        ) {
+          errors.push("pack_evidence_kind_not_applicable");
+        }
+      }
+    }
+  }
+  return [...new Set(errors)].sort();
+}
+
+export function validateCaioProPackOperatingInputSemanticRules(
+  value: unknown,
+): { valid: boolean; errors: string[] } {
+  const errors = packSemanticGraphErrors(value);
+  return { valid: errors.length === 0, errors };
+}
+
 // Pack contributes vocabulary and evidence-bounded candidate inputs only. It
 // cannot submit a canonical question, rank, fixed ten-item set, or portfolio.
 export const caioProPackOperatingInputSchema = z
@@ -490,6 +851,10 @@ export const caioProPackOperatingInputSchema = z
     workspaceRef: caioProPublicSafeWorkspaceRefSchema,
     portfolioRef: caioProPublicSafePortfolioRefSchema,
     evidenceSnapshotRef: caioProPublicSafeObservationRunRefSchema,
+    evidenceBindings: z
+      .array(packEvidenceBindingSchema)
+      .min(1)
+      .max(CAIO_PRO_FDE_CONTRACT_LIMITS.evidenceBindingItems),
     taxonomy: z
       .array(packTaxonomySchema)
       .min(1)
@@ -508,7 +873,12 @@ export const caioProPackOperatingInputSchema = z
       .max(CAIO_PRO_FDE_CONTRACT_LIMITS.candidateItems),
     authorityEffect: z.literal("none"),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    for (const error of packSemanticGraphErrors(value)) {
+      context.addIssue({ code: "custom", message: error });
+    }
+  });
 
 export type CaioProPackOperatingInput = z.infer<
   typeof caioProPackOperatingInputSchema

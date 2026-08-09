@@ -5,8 +5,8 @@
   "description": "Portable public-safe validation artifact for Pack operating inputs and private execution result projections. Validation grants no authority; Core still resolves every workspace, Portfolio, evidence snapshot, work object and permission at ingestion time.",
   "interfaceIdentity": {
     "interfaceVersion": "helm.caio-pro-fde.cross-repo-interface.v1",
-    "contractRef": "caio-pro-fde-cross-repo-interface:20ddb854742d77d0",
-    "contractHash": "sha256:20ddb854742d77d001423e15051172e54e61b12190e05b304f7c3d7665a45cf7",
+    "contractRef": "caio-pro-fde-cross-repo-interface:aeb075ce021b5899",
+    "contractHash": "sha256:aeb075ce021b5899c27cc94696bcfe77343c1dd6adadbf2d9b15ee114aedd2d8",
     "evaluatorRevision": "caio-pro-v1-completion-evaluator.v1",
     "evaluatorContractRef": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
     "evaluatorContractHash": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01"
@@ -20,6 +20,35 @@
     "a private projection never writes canonical state directly; Core alone calls recordExecutionReceipt",
     "private execution ingress accepts only execution-attempt outcomes; NOT_EXECUTED and REJECTED remain on existing Core blocked and approval-rejection paths"
   ],
+  "x-helm-semantic-verifier": {
+    "revision": "helm.caio-pro-fde.portable-semantic-verifier.v1",
+    "identityCanonicalization": {
+      "algorithm": "helm.caio-pro-fde.canonical-portable-contract-identity.v1",
+      "input": "canonical_json_of_complete_artifact",
+      "selfIdentityFields": [
+        "interfaceIdentity.contractRef",
+        "interfaceIdentity.contractHash",
+        "$defs.contractRef.const",
+        "$defs.contractHash.const"
+      ],
+      "selfIdentityTreatment": "replace_with_fixed_sentinels"
+    },
+    "publicSafeRefRules": [
+      "opaque_ref_pattern_and_prefix_must_match",
+      "url_locator_ip_email_secret_token_connection_string_and_pii_shapes_are_rejected"
+    ],
+    "packOperatingInputRules": [
+      "taxonomyRef_categoryRef_metricRef_ruleRef_candidateRef_and_evidenceRef_bindings_are_unique",
+      "nested_taxonomy_metric_evidence_and_kind_ref_sets_are_unique",
+      "rule_taxonomy_refs_and_candidate_taxonomy_metric_refs_are_closed_over_declared_nodes",
+      "every_declared_taxonomy_dimension_has_rule_coverage",
+      "every_declared_taxonomy_and_metric_is_reachable_from_a_candidateInput",
+      "every_metric_and_candidate_evidence_ref_has_one_evidence_kind_binding",
+      "each_candidate_evidence_kind_is_accepted_by_a_rule_for_each_candidate_taxonomy"
+    ],
+    "trustedEvidenceRule": "Core_must_resolve_each_declared_evidenceRef_kind_binding_against_the_authenticated_workspace_current_authorized_ObservationSourceRun_before_generation",
+    "authorityEffect": "none"
+  },
   "oneOf": [
     {
       "$ref": "#/$defs/packOperatingInput"
@@ -36,12 +65,12 @@
     },
     "contractRef": {
       "type": "string",
-      "const": "caio-pro-fde-cross-repo-interface:20ddb854742d77d0",
+      "const": "caio-pro-fde-cross-repo-interface:aeb075ce021b5899",
       "maxLength": 256
     },
     "contractHash": {
       "type": "string",
-      "const": "sha256:20ddb854742d77d001423e15051172e54e61b12190e05b304f7c3d7665a45cf7",
+      "const": "sha256:aeb075ce021b5899c27cc94696bcfe77343c1dd6adadbf2d9b15ee114aedd2d8",
       "maxLength": 71
     },
     "evaluatorRevision": {
@@ -257,6 +286,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/publicSafeRef"
           }
@@ -286,6 +316,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "allOf": [
               {
@@ -301,6 +332,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/identifier"
           }
@@ -332,6 +364,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "allOf": [
               {
@@ -347,6 +380,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "allOf": [
               {
@@ -362,12 +396,29 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/publicSafeRef"
           }
         },
         "rationale": {
           "$ref": "#/$defs/longText"
+        }
+      }
+    },
+    "evidenceBindingItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceRef",
+        "evidenceKind"
+      ],
+      "properties": {
+        "evidenceRef": {
+          "$ref": "#/$defs/publicSafeRef"
+        },
+        "evidenceKind": {
+          "$ref": "#/$defs/identifier"
         }
       }
     },
@@ -385,6 +436,7 @@
         "workspaceRef",
         "portfolioRef",
         "evidenceSnapshotRef",
+        "evidenceBindings",
         "taxonomy",
         "metrics",
         "evidenceApplicabilityRules",
@@ -424,10 +476,20 @@
         "evidenceSnapshotRef": {
           "$ref": "#/$defs/observationRunRef"
         },
+        "evidenceBindings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/evidenceBindingItem"
+          }
+        },
         "taxonomy": {
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/taxonomyItem"
           }
@@ -436,6 +498,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/metricItem"
           }
@@ -444,6 +507,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/evidenceRuleItem"
           }
@@ -452,6 +516,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 128,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/candidateInputItem"
           }
@@ -574,6 +639,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/publicSafeRef"
           }

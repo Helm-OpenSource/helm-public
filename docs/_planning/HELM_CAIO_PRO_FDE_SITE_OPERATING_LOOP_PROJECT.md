@@ -278,17 +278,25 @@ Owner 已批准本切片。Wave 1A 实现候选完成以下 repo-level 输出：
 5. private executor 只产生严格版本化并带 content hash 的结果投影；受认证 Gateway 与 Core
    ingress 校验 identity、workspace、Portfolio、evidence、work packet、CAS 后，唯一通过
    `recordExecutionReceipt` 写 canonical receipt；
-6. Pack operating input 经严格 identity 校验并绑定同一 workspace 的 Opportunity Portfolio 与
-   evidence snapshot 后，才进入既有 Core exactly-10 / `insufficient_evidence` 生成器；
+6. S1 发布严格 Pack semantic graph 合同：可信 evidence snapshot 显式携带
+   `evidenceRef -> evidenceKind`，taxonomy / metric / rule / candidateInput 的重复、悬空引用、
+   rule coverage 缺失和 evidence-kind 不适用全部 fail-closed；本切片不声明 production
+   composition caller 或 Core 自生成 exactly-10 已完成；
 7. 重放复用既有锁、receipt writer、DecisionRecord 内容匹配与 `workspaceId + signalKey`
    唯一键；冲突 projection 或 reconciliation payload/hash 均拒绝；
 8. `/caio` 先显示 unresolved critical，再显示其他 unresolved，剩余位置显示 resolved，且
    每条展示 status；empty/degraded 语义保持不变；
 9. `caio-pro-fde-cross-repo-contract.ts` 与可移植 JSON Schema 发布第 3.1 节四项接口的
-   version、兼容集合、严格边界、
-   contract hash/ref 和未知版本拒绝；completion evaluator 发布 revision/hash/ref，且不暴露
-   13 项字面量给消费者；
+   version、兼容集合、严格边界、contract hash/ref 和未知版本拒绝；identity 绑定规范化后的
+   完整 artifact（全部 nested schema、enum、pattern、limit、ref rule）及版本化 semantic
+   verifier rules；completion evaluator 发布 revision/hash/ref，且不暴露 13 项字面量给消费者；
 10. Decision Loop gap register 与机械 checker 将 GAP-1/2 固定为 closed、GAP-3 固定为 open。
+
+S1 当前接口身份为
+`caio-pro-fde-cross-repo-interface:aeb075ce021b5899` /
+`sha256:aeb075ce021b5899c27cc94696bcfe77343c1dd6adadbf2d9b15ee114aedd2d8`。
+该身份只证明本仓 portable contract 的规范化内容；不证明 Pack 已挂载、问题已生成、组合包已
+固定或现场已部署。
 
 ### 5.1.1 为什么选择该终态
 

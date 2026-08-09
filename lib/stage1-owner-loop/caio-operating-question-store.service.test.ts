@@ -170,6 +170,10 @@ function packOperatingInput(overrides: Record<string, unknown> = {}) {
     workspaceRef: `workspace:${WORKSPACE_ID}`,
     portfolioRef: "opportunity:portfolio-1",
     evidenceSnapshotRef: "observation-run:run-1",
+    evidenceBindings: SYNTHETIC_CAIO_EVIDENCE_REFS.map((evidenceRef) => ({
+      evidenceRef,
+      evidenceKind: "source_observation",
+    })),
     taxonomy: [
       {
         taxonomyRef: "taxonomy:operating-risk",
