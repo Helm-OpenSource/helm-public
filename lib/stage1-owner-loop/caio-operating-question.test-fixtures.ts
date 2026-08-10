@@ -17,6 +17,20 @@ export const SYNTHETIC_CAIO_EVIDENCE_REFS = Array.from(
   { length: 12 },
   (_, index) => `observation-run:operating-${index + 1}`,
 );
+export const SYNTHETIC_CAIO_EVIDENCE_KINDS = Object.freeze([
+  "portfolio_scope",
+  "source_provenance",
+  "intake_quality",
+  "recovery_health",
+  "portfolio_diagnosis",
+  "seat_capacity",
+  "work_packet",
+  "ptp_risk",
+  "repayment_forecast",
+  "compliance_signal",
+  "strategy_value",
+  "execution_supervision",
+] as const);
 
 export function syntheticOperatingQuestionG0Input(): CaioInitializationAssessmentInput {
   return {
@@ -87,11 +101,12 @@ export function syntheticOperatingQuestionG0Input(): CaioInitializationAssessmen
         };
       }),
     ],
-    evidenceTraces: SYNTHETIC_CAIO_EVIDENCE_REFS.map((evidenceRef, index) => ({
-      evidenceRef,
-      sourceRef: `source:${evidenceRef.slice("observation-run:".length)}`,
+    evidenceTraces: SYNTHETIC_CAIO_EVIDENCE_REFS.map((runRef, index) => ({
+      evidenceRef: `evidence:${runRef.slice("observation-run:".length)}`,
+      evidenceKind: SYNTHETIC_CAIO_EVIDENCE_KINDS[index],
+      sourceRef: `source:${runRef.slice("observation-run:".length)}`,
       assetRef: "asset:operating-system",
-      observationRunRef: evidenceRef.slice("observation-run:".length),
+      observationRunRef: runRef.slice("observation-run:".length),
       authorizationReceiptRef: "receipt:authorization:operating-system",
       connectionReceiptRef: "receipt:connection:operating-system",
       initializationReceiptRef: "receipt:initialization:operating-system",
@@ -116,8 +131,9 @@ export function syntheticOperatingQuestionG0Input(): CaioInitializationAssessmen
   };
 }
 
-export function syntheticOperatingQuestionG0Source() {
-  const assessmentInput = syntheticOperatingQuestionG0Input();
+export function syntheticOperatingQuestionG0Source(
+  assessmentInput = syntheticOperatingQuestionG0Input(),
+) {
   const assessment = computeCaioInitializationAssessment(assessmentInput);
   const gateReceipt = createCaioInitializationAcceptanceReceipt({
     workspaceRef: assessment.workspaceRef,

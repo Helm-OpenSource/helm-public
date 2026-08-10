@@ -49,7 +49,8 @@ function observationRun(overrides: Record<string, unknown> = {}) {
       workspaceId: "workspace-1",
       programId: "program-1",
       status: "ACTIVE",
-      sourceKind: "portfolio_scope",
+      sourceKind: "crm",
+      freshnessSlaMinutes: 30,
     },
     ...overrides,
   };
@@ -116,23 +117,23 @@ describe("CAIO Pro FDE workspace scope resolver", () => {
       runId: "run-1",
       evidenceRef: "observation-run:run-1",
       outcome: "SUCCESS",
-      sourceKind: "portfolio_scope",
+      sourceKind: "crm",
       freshness: "fresh",
     });
   });
 
-  it("derives canonical evidence kinds and freshness for a bounded run set", async () => {
+  it("recomputes current freshness for a bounded run set", async () => {
     const db = client();
     db.observationSourceRun.findMany.mockResolvedValue([
       observationRun(),
       observationRun({
         id: "run-2",
         sourceId: "source-2",
-        freshness: "STALE",
+        observedAt: new Date("2026-08-09T23:29:59.999Z"),
         source: {
           ...observationRun().source,
           id: "source-2",
-          sourceKind: "intake_quality",
+          freshnessSlaMinutes: 30,
         },
       }),
     ]);
@@ -148,12 +149,12 @@ describe("CAIO Pro FDE workspace scope resolver", () => {
     ).resolves.toMatchObject([
       {
         evidenceRef: "observation-run:run-2",
-        sourceKind: "intake_quality",
+        sourceKind: "crm",
         freshness: "stale",
       },
       {
         evidenceRef: "observation-run:run-1",
-        sourceKind: "portfolio_scope",
+        sourceKind: "crm",
         freshness: "fresh",
       },
     ]);
@@ -163,6 +164,92 @@ describe("CAIO Pro FDE workspace scope resolver", () => {
         workspaceId: "workspace-1",
       },
       include: { program: true, source: true },
+    });
+  });
+
+  it.each([
+    {
+      label: "exact SLA boundary",
+      observedAt: "2026-08-09T23:30:00.000Z",
+      storedFreshness: "FRESH",
+      slaMinutes: 30,
+      expected: "fresh",
+    },
+    {
+      label: "expired by one millisecond",
+      observedAt: "2026-08-09T23:29:59.999Z",
+      storedFreshness: "FRESH",
+      slaMinutes: 30,
+      expected: "stale",
+    },
+    {
+      label: "stored stale",
+      observedAt: "2026-08-09T23:59:00.000Z",
+      storedFreshness: "STALE",
+      slaMinutes: 30,
+      expected: "unknown",
+    },
+    {
+      label: "stored unknown",
+      observedAt: "2026-08-09T23:59:00.000Z",
+      storedFreshness: "UNKNOWN",
+      slaMinutes: 30,
+      expected: "unknown",
+    },
+    {
+      label: "invalid SLA",
+      observedAt: "2026-08-09T23:59:00.000Z",
+      storedFreshness: "FRESH",
+      slaMinutes: 0,
+      expected: "unknown",
+    },
+  ])(
+    "classifies $label freshness",
+    async ({ observedAt, storedFreshness, slaMinutes, expected }) => {
+      const db = client();
+      db.observationSourceRun.findFirst.mockResolvedValue(
+        observationRun({
+          observedAt: new Date(observedAt),
+          freshness: storedFreshness,
+          source: {
+            ...observationRun().source,
+            freshnessSlaMinutes: slaMinutes,
+          },
+        }),
+      );
+
+      await expect(
+        resolveCaioFdeObservationEvidence({
+          client: db as never,
+          workspaceId: "workspace-1",
+          evidenceRef: "observation-run:run-1",
+          portfolioRef: "opportunity:opportunity-1",
+          now: NOW,
+        }),
+      ).resolves.toMatchObject({ freshness: expected });
+    },
+  );
+
+  it("rejects evidence observed in the future", async () => {
+    const db = client();
+    db.observationSourceRun.findFirst.mockResolvedValue(
+      observationRun({
+        observedAt: new Date("2026-08-10T00:00:00.001Z"),
+      }),
+    );
+
+    await expect(
+      resolveCaioFdeObservationEvidence({
+        client: db as never,
+        workspaceId: "workspace-1",
+        evidenceRef: "observation-run:run-1",
+        portfolioRef: "opportunity:opportunity-1",
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({
+      reasons: expect.arrayContaining([
+        "observation_evidence_terminal_state_invalid",
+      ]),
     });
   });
 

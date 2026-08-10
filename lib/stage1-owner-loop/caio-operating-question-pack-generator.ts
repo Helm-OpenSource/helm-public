@@ -243,6 +243,7 @@ export function deriveCaioOperatingQuestionCandidatesFromPackInput(input: {
       taxonomies.length !== candidateInput.taxonomyRefs.length ||
       metrics.length !== candidateInput.metricRefs.length ||
       evidence.length !== evidenceRefs.length ||
+      evidence.some((entry) => entry.freshness !== "fresh") ||
       rules.length === 0 ||
       !everyTaxonomyCovered
     ) {

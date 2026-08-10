@@ -416,6 +416,7 @@ function initializationEvidenceUniverse(input: {
     ]),
     ...assessmentInput.evidenceTraces.flatMap((trace) => [
       trace.evidenceRef,
+      `observation-run:${trace.observationRunRef}`,
       trace.sourceRef,
       trace.assetRef,
       trace.observationRunRef,

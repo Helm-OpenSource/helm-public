@@ -15,6 +15,7 @@ import {
 import {
   syntheticOperatingQuestionG0Context,
   syntheticOperatingQuestionG0Source,
+  SYNTHETIC_CAIO_EVIDENCE_KINDS,
   SYNTHETIC_CAIO_EVIDENCE_REFS,
 } from "./caio-operating-question.test-fixtures";
 
@@ -34,9 +35,9 @@ function packOperatingInput(count = 10): CaioProPackOperatingInput {
     workspaceRef: "workspace:synthetic-caio",
     portfolioRef: "opportunity:portfolio-1",
     evidenceSnapshotRef: "observation-run:run-1",
-    evidenceBindings: evidenceRefs.map((evidenceRef) => ({
+    evidenceBindings: evidenceRefs.map((evidenceRef, index) => ({
       evidenceRef,
-      evidenceKind: "source_observation",
+      evidenceKind: SYNTHETIC_CAIO_EVIDENCE_KINDS[index],
     })),
     taxonomy: evidenceRefs.map((_, index) => ({
       taxonomyRef: `taxonomy:operating-risk-${index + 1}`,
@@ -52,7 +53,7 @@ function packOperatingInput(count = 10): CaioProPackOperatingInput {
     evidenceApplicabilityRules: evidenceRefs.map((_, index) => ({
       ruleRef: `evidence-rule:delivery-risk-${index + 1}`,
       taxonomyRefs: [`taxonomy:operating-risk-${index + 1}`],
-      acceptedEvidenceKinds: ["source_observation"],
+      acceptedEvidenceKinds: [SYNTHETIC_CAIO_EVIDENCE_KINDS[index]],
     })),
     candidateInputs: evidenceRefs.map((evidenceRef, index) => ({
       candidateRef: `candidate-input:delivery-risk-${index + 1}`,
@@ -73,9 +74,10 @@ function trustedEvidence(): CaioOperatingQuestionTrustedEvidence[] {
       entry.freshness,
     ]),
   );
-  return source.assessmentInput.evidenceTraces.map((trace) => ({
-    evidenceRef: trace.evidenceRef,
-    evidenceKind: "source_observation",
+  return source.assessmentInput.evidenceTraces.map((trace, index) => ({
+    evidenceRef: `observation-run:${trace.observationRunRef}`,
+    evidenceKind:
+      trace.evidenceKind ?? SYNTHETIC_CAIO_EVIDENCE_KINDS[index],
     freshness: freshnessBySource.get(trace.sourceRef) ?? "unknown",
     capturedAt: trace.capturedAt,
   }));
@@ -141,6 +143,9 @@ describe("CAIO operating question Pack generator", () => {
       "metric:on-time-completion-1",
       "metric:on-time-completion-2",
     ];
+    metricChanged.evidenceApplicabilityRules[0].acceptedEvidenceKinds.push(
+      SYNTHETIC_CAIO_EVIDENCE_KINDS[1],
+    );
     expect(
       candidateFor(metricChanged, candidateInputRef).validationMetrics,
     ).not.toEqual(baseline.validationMetrics);
@@ -153,6 +158,9 @@ describe("CAIO operating question Pack generator", () => {
       "metric:on-time-completion-1",
       "metric:on-time-completion-2",
     ];
+    rankChanged.evidenceApplicabilityRules[1].acceptedEvidenceKinds.push(
+      SYNTHETIC_CAIO_EVIDENCE_KINDS[0],
+    );
     expect(derive(rankChanged).selectedCandidateInputRefs[0]).toBe(
       "candidate-input:delivery-risk-2",
     );
@@ -208,4 +216,26 @@ describe("CAIO operating question Pack generator", () => {
     );
     expect(result.candidates).toHaveLength(9);
   });
+
+  it.each(["stale", "unknown"] as const)(
+    "excludes %s evidence from business-question generation",
+    (freshness) => {
+      const packInput = packOperatingInput();
+      const evidence = trustedEvidence();
+      evidence[9] = { ...evidence[9], freshness };
+
+      const result = deriveCaioOperatingQuestionCandidatesFromPackInput({
+        packOperatingInput: packInput,
+        portfolioRef: packInput.portfolioRef,
+        g0Context: syntheticOperatingQuestionG0Context(),
+        trustedEvidence: evidence,
+        baselineWindowEnd: "2026-07-23T07:00:00.000Z",
+      });
+
+      expect(result.ineligibleCandidateInputRefs).toContain(
+        "candidate-input:delivery-risk-10",
+      );
+      expect(result.candidates).toHaveLength(9);
+    },
+  );
 });

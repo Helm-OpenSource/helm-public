@@ -104,8 +104,10 @@ import {
 } from "./caio-operating-question";
 import {
   syntheticOperatingQuestionCandidate,
+  syntheticOperatingQuestionG0Input,
   syntheticOperatingQuestionG0Source,
   syntheticOperatingQuestionGenerationInput,
+  SYNTHETIC_CAIO_EVIDENCE_KINDS,
   SYNTHETIC_CAIO_EVIDENCE_REFS,
 } from "./caio-operating-question.test-fixtures";
 
@@ -113,21 +115,16 @@ const NOW = new Date("2026-07-23T09:00:00.000Z");
 const WORKSPACE_ID = "synthetic-caio";
 const OWNER_USER_ID = "user:ceo:synthetic-caio";
 const CEO_REF = "principal:ceo:synthetic-caio";
-const PACK_EVIDENCE_KINDS = Object.freeze([
-  "portfolio_scope",
-  "source_provenance",
-  "intake_quality",
-  "recovery_health",
-  "portfolio_diagnosis",
-  "seat_capacity",
-  "work_packet",
-  "ptp_risk",
-  "repayment_forecast",
-  "compliance_signal",
-] as const);
+const PACK_EVIDENCE_KINDS = SYNTHETIC_CAIO_EVIDENCE_KINDS.slice(0, 10);
 
-function trustedInitialization() {
-  const source = syntheticOperatingQuestionG0Source();
+function trustedInitialization(
+  mutate?: (
+    input: ReturnType<typeof syntheticOperatingQuestionG0Input>,
+  ) => void,
+) {
+  const assessmentInput = syntheticOperatingQuestionG0Input();
+  mutate?.(assessmentInput);
+  const source = syntheticOperatingQuestionG0Source(assessmentInput);
   return {
     assessmentInput: source.assessmentInput,
     assessment: source.assessment,
@@ -242,9 +239,13 @@ function packOperatingInput(
 
 function observationRun(
   id = "run-1",
-  sourceKind = "source_observation",
+  sourceKind = "crm",
   freshness = "FRESH",
 ) {
+  const evidenceRefs =
+    id === "run-1"
+      ? ["opportunity:portfolio-1", ...SYNTHETIC_CAIO_EVIDENCE_REFS]
+      : ["opportunity:portfolio-1", `evidence:${id}`];
   return {
     id,
     workspaceId: WORKSPACE_ID,
@@ -257,10 +258,7 @@ function observationRun(
     observedAt: new Date("2026-07-23T08:30:00.000Z"),
     freshness,
     outcome: "SUCCESS",
-    evidenceRefs: JSON.stringify([
-      "opportunity:portfolio-1",
-      ...SYNTHETIC_CAIO_EVIDENCE_REFS,
-    ]),
+    evidenceRefs: JSON.stringify(evidenceRefs),
     program: {
       id: "program-1",
       workspaceId: WORKSPACE_ID,
@@ -277,6 +275,7 @@ function observationRun(
       programId: "program-1",
       status: "ACTIVE",
       sourceKind,
+      freshnessSlaMinutes: 525_600,
     },
   };
 }
@@ -372,11 +371,7 @@ describe("CAIO operating question store", () => {
     dbMock.observationSourceRun.findFirst.mockResolvedValue(observationRun());
     dbMock.observationSourceRun.findMany.mockImplementation(
       async ({ where }: { where: { id: { in: string[] } } }) =>
-        where.id.in.map((id) => {
-          const evidenceRef = `observation-run:${id}`;
-          const index = SYNTHETIC_CAIO_EVIDENCE_REFS.indexOf(evidenceRef);
-          return observationRun(id, PACK_EVIDENCE_KINDS[index]);
-        }),
+        where.id.in.map((id) => observationRun(id)),
     );
     auditMock.writeAuditLog.mockResolvedValue({ id: "audit-1" });
   });
@@ -496,14 +491,157 @@ describe("CAIO operating question store", () => {
     ).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["PARTIAL", "PARTIAL_SUCCESS"],
+    ["FAILED", "FAILURE"],
+  ])(
+    "rejects a %s Pack evidence snapshot before writes",
+    async (status, outcome) => {
+      dbMock.observationSourceRun.findFirst.mockResolvedValue({
+        ...observationRun(),
+        status,
+        outcome,
+      });
+
+      await expect(
+        generateCaioOperatingQuestionPortfolioFromPackInput({
+          interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+          packOperatingInput: packOperatingInput(),
+          workspaceId: WORKSPACE_ID,
+          actorUserId: OWNER_USER_ID,
+          generationKey: `generation:synthetic-caio:snapshot-${status.toLowerCase()}`,
+          generatorRef: "generator:caio-operating-question",
+          modelRef: "model:synthetic-local",
+          auditRefs: [`audit:question-generation:snapshot-${status.toLowerCase()}`],
+          now: NOW,
+        }),
+      ).rejects.toThrow("observation_evidence_outcome_mismatch");
+      expect(
+        dbMock.caioOperatingQuestionPortfolio.create,
+      ).not.toHaveBeenCalled();
+      expect(
+        dbMock.caioOperatingQuestionGenerationReceipt.create,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["missing", "duplicate"] as const)(
+    "rejects a %s resolved G0 trace for an evidence run",
+    async (mode) => {
+      trustedContextMock.mockResolvedValueOnce(
+        trustedInitialization((assessmentInput) => {
+          const target = assessmentInput.evidenceTraces[0];
+          if (mode === "missing") {
+            assessmentInput.evidenceTraces =
+              assessmentInput.evidenceTraces.slice(1);
+          } else {
+            assessmentInput.evidenceTraces = [
+              ...assessmentInput.evidenceTraces,
+              {
+                ...target,
+                evidenceRef: `${target.evidenceRef}:duplicate`,
+              },
+            ];
+          }
+        }),
+      );
+
+      await expect(
+        generateCaioOperatingQuestionPortfolioFromPackInput({
+          interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+          packOperatingInput: packOperatingInput(),
+          workspaceId: WORKSPACE_ID,
+          actorUserId: OWNER_USER_ID,
+          generationKey: `generation:synthetic-caio:trace-${mode}`,
+          generatorRef: "generator:caio-operating-question",
+          modelRef: "model:synthetic-local",
+          auditRefs: [`audit:question-generation:trace-${mode}`],
+          now: NOW,
+        }),
+      ).rejects.toThrow("pack_operating_input_evidence_scope_invalid");
+      expect(
+        dbMock.caioOperatingQuestionPortfolio.create,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a trace whose business evidence is absent from its source run", async () => {
+    dbMock.observationSourceRun.findMany.mockImplementationOnce(
+      async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.map((id, index) => {
+          const run = observationRun(id);
+          return index === 0
+            ? {
+                ...run,
+                evidenceRefs: JSON.stringify(["opportunity:portfolio-1"]),
+              }
+            : run;
+        }),
+    );
+
+    await expect(
+      generateCaioOperatingQuestionPortfolioFromPackInput({
+        interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+        packOperatingInput: packOperatingInput(),
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: "generation:synthetic-caio:trace-business-ref-missing",
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        auditRefs: ["audit:question-generation:trace-business-ref-missing"],
+        now: NOW,
+      }),
+    ).rejects.toThrow("pack_operating_input_evidence_scope_invalid");
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["stale", "unknown"] as const)(
+    "records canonical insufficient evidence when one Pack input is %s",
+    async (freshness) => {
+      dbMock.$queryRaw.mockResolvedValueOnce([]);
+      dbMock.observationSourceRun.findMany.mockImplementationOnce(
+        async ({ where }: { where: { id: { in: string[] } } }) =>
+          where.id.in.map((id, index) => {
+            const run = observationRun(id);
+            if (index !== 0) return run;
+            return freshness === "stale"
+              ? {
+                  ...run,
+                  source: { ...run.source, freshnessSlaMinutes: 15 },
+                }
+              : { ...run, freshness: "UNKNOWN" };
+          }),
+      );
+
+      const result =
+        await generateCaioOperatingQuestionPortfolioFromPackInput({
+          interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+          packOperatingInput: packOperatingInput(),
+          workspaceId: WORKSPACE_ID,
+          actorUserId: OWNER_USER_ID,
+          generationKey: `generation:synthetic-caio:${freshness}`,
+          generatorRef: "generator:caio-operating-question",
+          modelRef: "model:synthetic-local",
+          auditRefs: [`audit:question-generation:${freshness}`],
+          now: NOW,
+        });
+
+      expect(result.portfolio).toBeNull();
+      expect(result.receipt.status).toBe("insufficient_evidence");
+      expect(
+        dbMock.caioOperatingQuestionPortfolio.create,
+      ).not.toHaveBeenCalled();
+      expect(
+        dbMock.caioOperatingQuestionGenerationReceipt.create,
+      ).toHaveBeenCalledOnce();
+    },
+  );
+
   it("rejects Core evidence runs whose source no longer matches the accepted G0 trace", async () => {
     dbMock.observationSourceRun.findMany.mockImplementationOnce(
       async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.map((id, index) => {
-          const evidenceRef = `observation-run:${id}`;
-          const evidenceIndex =
-            SYNTHETIC_CAIO_EVIDENCE_REFS.indexOf(evidenceRef);
-          const run = observationRun(id, PACK_EVIDENCE_KINDS[evidenceIndex]);
+          const run = observationRun(id);
           if (index !== 0) {
             return run;
           }

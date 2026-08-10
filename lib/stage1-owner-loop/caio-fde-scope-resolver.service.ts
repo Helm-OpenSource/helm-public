@@ -17,6 +17,25 @@ const EVIDENCE_FRESHNESS = new Map([
   ["UNKNOWN", "unknown"],
 ] as const);
 
+function currentEvidenceFreshness(input: {
+  storedFreshness: "fresh" | "stale" | "unknown";
+  observedAt: Date | null;
+  freshnessSlaMinutes: number;
+  now: Date;
+}): "fresh" | "stale" | "unknown" {
+  if (
+    input.storedFreshness !== "fresh" ||
+    !input.observedAt ||
+    !Number.isSafeInteger(input.freshnessSlaMinutes) ||
+    input.freshnessSlaMinutes <= 0 ||
+    input.observedAt > input.now
+  ) {
+    return "unknown";
+  }
+  const ageMs = input.now.getTime() - input.observedAt.getTime();
+  return ageMs > input.freshnessSlaMinutes * 60_000 ? "stale" : "fresh";
+}
+
 type ObservationEvidenceRun = Prisma.ObservationSourceRunGetPayload<{
   include: { program: true; source: true };
 }>;
@@ -153,10 +172,10 @@ function resolveObservationEvidenceRun(input: {
   ) {
     reasons.push("observation_evidence_source_kind_invalid");
   }
-  const freshness = EVIDENCE_FRESHNESS.get(
+  const storedFreshness = EVIDENCE_FRESHNESS.get(
     run.freshness as "FRESH" | "STALE" | "UNKNOWN",
   );
-  if (!freshness) {
+  if (!storedFreshness) {
     reasons.push("observation_evidence_freshness_invalid");
   }
   if (
@@ -204,6 +223,12 @@ function resolveObservationEvidenceRun(input: {
   if (reasons.length > 0) {
     throw new CaioFdeScopeResolutionError(reasons);
   }
+  const freshness = currentEvidenceFreshness({
+    storedFreshness: storedFreshness!,
+    observedAt: run.observedAt,
+    freshnessSlaMinutes: run.source.freshnessSlaMinutes,
+    now,
+  });
   return {
     runId: run.id,
     evidenceRef: `observation-run:${run.id}`,
@@ -211,6 +236,7 @@ function resolveObservationEvidenceRun(input: {
     sourceKind,
     freshness: freshness!,
     outcome: run.outcome,
+    windowStart: run.windowStart,
     observedAt: run.observedAt!,
     evidenceRefs,
   } as const;

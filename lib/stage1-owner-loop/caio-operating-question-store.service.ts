@@ -835,6 +835,7 @@ async function assertPackOperatingInputScope(
     requiredBindingRefs: packInput.evidenceBindings.map(
       (binding) => binding.evidenceRef,
     ),
+    expectedBusinessResult: "success",
     now: input.now,
   });
   const declaredEvidenceRefs = uniqueSorted([
@@ -853,11 +854,16 @@ async function assertPackOperatingInputScope(
       "pack_operating_input_evidence_scope_invalid",
     );
   }
-  const traceByEvidenceRef = new Map(
-    input.trusted.initialization.assessmentInput.evidenceTraces
-      .filter((trace) => trace.resolved)
-      .map((trace) => [trace.evidenceRef, trace]),
-  );
+  const tracesByRunRef = new Map<
+    string,
+    typeof input.trusted.initialization.assessmentInput.evidenceTraces
+  >();
+  for (const trace of input.trusted.initialization.assessmentInput.evidenceTraces) {
+    if (!trace.resolved) continue;
+    const traces = tracesByRunRef.get(trace.observationRunRef) ?? [];
+    traces.push(trace);
+    tracesByRunRef.set(trace.observationRunRef, traces);
+  }
   const bindingKindByRef = new Map(
     packInput.evidenceBindings.map((binding) => [
       binding.evidenceRef,
@@ -873,16 +879,23 @@ async function assertPackOperatingInputScope(
   });
   const trustedEvidence = resolvedEvidence.flatMap((evidence) => {
     const evidenceRef = evidence.evidenceRef;
-    const trace = traceByEvidenceRef.get(evidenceRef);
+    const traces = tracesByRunRef.get(evidence.runId) ?? [];
+    const trace = traces.length === 1 ? traces[0] : null;
+    const capturedAt = Date.parse(trace?.capturedAt ?? "");
     if (
       !trace ||
-      trace.observationRunRef !== evidence.runId ||
       trace.sourceRef !== evidence.sourceId ||
-      Date.parse(trace.capturedAt) > evidence.observedAt.getTime()
+      !evidence.evidenceRefs.includes(trace.evidenceRef) ||
+      !g0EvidenceRefs.has(trace.evidenceRef) ||
+      !Number.isFinite(capturedAt) ||
+      capturedAt < evidence.windowStart.getTime() ||
+      capturedAt > evidence.observedAt.getTime() ||
+      capturedAt > input.now.getTime() ||
+      typeof trace.evidenceKind !== "string"
     ) {
       return [];
     }
-    if (bindingKindByRef.get(evidenceRef) !== evidence.sourceKind) {
+    if (bindingKindByRef.get(evidenceRef) !== trace.evidenceKind) {
       throw new CaioOperatingQuestionStoreError(
         "pack_operating_input_evidence_kind_mismatch",
       );
@@ -890,7 +903,7 @@ async function assertPackOperatingInputScope(
     return [
       {
         evidenceRef,
-        evidenceKind: evidence.sourceKind,
+        evidenceKind: trace.evidenceKind,
         freshness: evidence.freshness,
         capturedAt: trace.capturedAt,
       } satisfies CaioOperatingQuestionTrustedEvidence,
