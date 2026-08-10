@@ -688,17 +688,21 @@ export async function setCaioFdeFullChainObservationOutcome(input: {
     input.outcome === "partial_success"
       ? ({ status: "PARTIAL", outcome: "PARTIAL_SUCCESS" } as const)
       : ({ status: "FAILED", outcome: "FAILURE" } as const);
-  const updated = await db.observationSourceRun.updateMany({
+  const run = await db.observationSourceRun.findFirst({
     where: {
       id: runId,
       workspaceId: input.workspaceId,
       status: { in: ["SUCCEEDED", "PARTIAL", "FAILED"] },
     },
-    data: terminalState,
+    select: { id: true },
   });
-  if (updated.count !== 1) {
+  if (!run) {
     throw new Error("caio_fde_full_chain_observation_run_not_found");
   }
+  await db.observationSourceRun.update({
+    where: { id: run.id },
+    data: terminalState,
+  });
 }
 
 export async function countCaioFdeFullChainRows(
