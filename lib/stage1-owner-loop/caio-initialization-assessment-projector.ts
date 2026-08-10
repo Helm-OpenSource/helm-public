@@ -392,7 +392,7 @@ function effectiveRunFreshness(input: {
     );
     return "unknown";
   }
-  if (evaluatedAt - observedAt > slaMs) {
+  if (evaluatedAt - observedAt >= slaMs) {
     input.diagnostics.push(`source_freshness_stale:${input.source.id}`);
     return "stale";
   }

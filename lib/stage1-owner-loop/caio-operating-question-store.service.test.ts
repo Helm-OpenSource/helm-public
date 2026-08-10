@@ -98,8 +98,11 @@ import {
   CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
 } from "./caio-pro-fde-cross-repo-contract";
 import {
+  CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
+  createCaioOperatingQuestionG0ContextForSchemaVersion,
   createCaioOperatingQuestionGenerationReceipt,
   evaluateCaioOperatingQuestionGeneration,
+  type CaioOperatingQuestionGenerationReceipt,
   type CaioOperatingQuestionPortfolio,
 } from "./caio-operating-question";
 import {
@@ -186,6 +189,73 @@ function generatedReceipt(portfolio: CaioOperatingQuestionPortfolio) {
   });
 }
 
+function generationReceiptRow(
+  receipt: CaioOperatingQuestionGenerationReceipt,
+) {
+  return {
+    id: receipt.receiptId,
+    workspaceId: WORKSPACE_ID,
+    initializationGateReceiptId: receipt.gateReceiptRef,
+    initializationAssessmentId: receipt.assessmentRef,
+    portfolioId: receipt.portfolioRef,
+    previousReceiptId: receipt.previousReceiptRef,
+    previousReceiptHash: receipt.previousReceiptHash,
+    sequence: receipt.sequence,
+    generationKey: receipt.generationKey,
+    requestHash: `sha256:${"d".repeat(64)}`,
+    generationInputHash: receipt.generationInputHash,
+    status: receipt.status,
+    evidenceRefs: JSON.stringify(receipt.evidenceRefs),
+    gapCodes: JSON.stringify(receipt.gapCodes),
+    generatorRevision: receipt.generatorRevision,
+    policyRef: receipt.policyRef,
+    policyHash: receipt.policyHash,
+    receiptJson: JSON.stringify(receipt),
+    contentHash: receipt.contentHash,
+    authorityEffect: receipt.authorityEffect,
+    recordedAt: new Date(receipt.recordedAt),
+    createdAt: NOW,
+  };
+}
+
+function historicalGeneratedState() {
+  const source = syntheticOperatingQuestionG0Source();
+  const g0Context = createCaioOperatingQuestionG0ContextForSchemaVersion(
+    source,
+    CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
+  );
+  const candidates = Array.from({ length: 10 }, (_, index) => {
+    const draft = syntheticOperatingQuestionCandidate(index);
+    const evidenceRef = `operating-${index + 1}`;
+    return {
+      ...draft,
+      facts: draft.facts.map((fact) => ({
+        ...fact,
+        evidenceRefs: [evidenceRef],
+      })),
+      inferences: draft.inferences.map((inference) => ({
+        ...inference,
+        evidenceRefs: [evidenceRef],
+      })),
+      evidenceRefs: [evidenceRef],
+    };
+  });
+  const evaluation = evaluateCaioOperatingQuestionGeneration({
+    ...syntheticOperatingQuestionGenerationInput(candidates),
+    g0Context,
+  });
+  if (!evaluation.portfolio) {
+    throw new Error("historical synthetic portfolio required");
+  }
+  const receipt = createCaioOperatingQuestionGenerationReceipt({
+    evaluation,
+    previousReceipt: null,
+    evidenceRefs: evaluation.portfolio.evidenceRefs,
+    recordedAt: NOW.toISOString(),
+  });
+  return { portfolio: evaluation.portfolio, receipt };
+}
+
 function packOperatingInput(
   count = 10,
   overrides: Record<string, unknown> = {},
@@ -256,8 +326,11 @@ function observationRun(
     windowEnd: new Date("2026-07-24T00:00:00.000Z"),
     status: "SUCCEEDED",
     observedAt: new Date("2026-07-23T08:30:00.000Z"),
+    summaryHash: `sha256:${"e".repeat(64)}`,
+    completenessPercent: 100,
     freshness,
     outcome: "SUCCESS",
+    errorCodes: null,
     evidenceRefs: JSON.stringify(evidenceRefs),
     program: {
       id: "program-1",
@@ -267,6 +340,7 @@ function observationRun(
       startsAt: new Date("2026-07-01T00:00:00.000Z"),
       expiresAt: new Date("2027-08-01T00:00:00.000Z"),
       authorizationVersion: 1,
+      authorizationRef: "authorization:program-1",
       scopeRefs: JSON.stringify(["opportunity:portfolio-1"]),
     },
     source: {
@@ -276,6 +350,7 @@ function observationRun(
       status: "ACTIVE",
       sourceKind,
       freshnessSlaMinutes: 525_600,
+      authorizationRef: "authorization:program-1",
     },
   };
 }
@@ -415,6 +490,48 @@ describe("CAIO operating question store", () => {
         portfolioSequence: 1,
       }),
     });
+  });
+
+  it("validates a persisted v1 head but requires an explicit accepted G0 rollover before new generation", async () => {
+    const historical = historicalGeneratedState();
+    dbMock.$queryRaw.mockResolvedValueOnce([
+      {
+        workspaceId: WORKSPACE_ID,
+        initializationGateReceiptId: historical.portfolio.gateReceiptRef,
+        initializationAssessmentId: historical.portfolio.assessmentRef,
+        currentGenerationReceiptId: historical.receipt.receiptId,
+        currentPortfolioId: historical.portfolio.portfolioId,
+        generationSequence: historical.receipt.sequence,
+        portfolioSequence: historical.portfolio.sequence,
+        version: 1,
+        updatedAt: NOW,
+      },
+    ]);
+    dbMock.caioOperatingQuestionGenerationReceipt.findFirst.mockResolvedValue(
+      generationReceiptRow(historical.receipt),
+    );
+    dbMock.caioOperatingQuestionPortfolio.findFirst.mockResolvedValue(
+      portfolioRow(historical.portfolio),
+    );
+
+    await expect(
+      generateCaioOperatingQuestionPortfolio({
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: "generation:synthetic-caio:v2-before-g0-rollover",
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates: Array.from({ length: 10 }, (_, index) =>
+          syntheticOperatingQuestionCandidate(index),
+        ),
+        auditRefs: ["audit:question-generation:v2-before-g0-rollover"],
+        now: NOW,
+      }),
+    ).rejects.toThrow("question_g0_rollover_required");
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).not.toHaveBeenCalled();
   });
 
   it("derives and persists exactly ten Core-owned questions from scoped Pack semantics", async () => {
@@ -634,6 +751,51 @@ describe("CAIO operating question store", () => {
       expect(
         dbMock.caioOperatingQuestionGenerationReceipt.create,
       ).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ["2026-07-23T06:00:00.000Z", "insufficient_evidence"],
+    ["2026-07-23T06:00:00.001Z", "generated"],
+  ] as const)(
+    "uses authoritative capturedAt %s instead of a newer run timestamp",
+    async (capturedAt, expectedStatus) => {
+      trustedContextMock.mockResolvedValueOnce(
+        trustedInitialization((assessmentInput) => {
+          assessmentInput.evidenceTraces = assessmentInput.evidenceTraces.map(
+            (trace) => ({ ...trace, capturedAt }),
+          );
+        }),
+      );
+      dbMock.$queryRaw.mockResolvedValueOnce([]);
+      dbMock.observationSourceRun.findMany.mockImplementationOnce(
+        async ({ where }: { where: { id: { in: string[] } } }) =>
+          where.id.in.map((id) => ({
+            ...observationRun(id),
+            observedAt: new Date("2026-07-23T08:59:00.000Z"),
+            source: {
+              ...observationRun(id).source,
+              freshnessSlaMinutes: 180,
+            },
+          })),
+      );
+
+      const result = await generateCaioOperatingQuestionPortfolioFromPackInput({
+        interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+        packOperatingInput: packOperatingInput(),
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: `generation:synthetic-caio:captured-at:${capturedAt}`,
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        auditRefs: [`audit:question-generation:captured-at:${capturedAt}`],
+        now: NOW,
+      });
+
+      expect(result.receipt.status).toBe(expectedStatus);
+      expect(result.portfolio === null).toBe(
+        expectedStatus === "insufficient_evidence",
+      );
     },
   );
 

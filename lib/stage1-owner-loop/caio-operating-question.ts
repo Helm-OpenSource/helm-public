@@ -25,8 +25,16 @@ export const CAIO_OPERATING_QUESTION_GENERATION_RECEIPT_SCHEMA_VERSION =
   "helm.caio.operating-question-generation-receipt.v1" as const;
 export const CAIO_OPERATING_QUESTION_GENERATOR_REVISION =
   "caio-operating-question-generator.v1" as const;
-export const CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION =
+export const CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1 =
   "helm.caio.operating-question-g0-context.v1" as const;
+export const CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V2 =
+  "helm.caio.operating-question-g0-context.v2" as const;
+export const CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION =
+  CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V2;
+
+export type CaioOperatingQuestionG0ContextSchemaVersion =
+  | typeof CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1
+  | typeof CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V2;
 
 const operatingQuestionPolicyContent = {
   policyRef: "policy:caio-operating-question-v1" as const,
@@ -114,7 +122,7 @@ export type CaioOperatingQuestionCandidate =
   };
 
 export type CaioOperatingQuestionG0Context = {
-  schemaVersion: typeof CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION;
+  schemaVersion: CaioOperatingQuestionG0ContextSchemaVersion;
   workspaceRef: string;
   gateReceiptRef: string;
   gateReceiptHash: string;
@@ -394,7 +402,7 @@ function initializationEvidenceUniverse(input: {
   assessmentInput: CaioInitializationAssessmentInput;
   assessment: CaioInitializationAssessment;
   gateReceipt: CaioInitializationGateReceipt;
-}): string[] {
+}, schemaVersion: CaioOperatingQuestionG0ContextSchemaVersion): string[] {
   const { assessmentInput, assessment, gateReceipt } = input;
   return uniqueSorted([
     ...assessmentInput.assets.flatMap((asset) => [
@@ -416,7 +424,10 @@ function initializationEvidenceUniverse(input: {
     ]),
     ...assessmentInput.evidenceTraces.flatMap((trace) => [
       trace.evidenceRef,
-      `observation-run:${trace.observationRunRef}`,
+      ...(schemaVersion ===
+      CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V2
+        ? [`observation-run:${trace.observationRunRef}`]
+        : []),
       trace.sourceRef,
       trace.assetRef,
       trace.observationRunRef,
@@ -435,12 +446,17 @@ function initializationEvidenceUniverse(input: {
   ]);
 }
 
-export function createCaioOperatingQuestionG0Context(input: {
+type CreateCaioOperatingQuestionG0ContextInput = {
   assessmentInput: CaioInitializationAssessmentInput;
   assessment: CaioInitializationAssessment;
   gateReceipt: CaioInitializationGateReceipt;
   currentHead: CaioOperatingQuestionCurrentGateHead;
-}): CaioOperatingQuestionG0Context {
+};
+
+export function createCaioOperatingQuestionG0ContextForSchemaVersion(
+  input: CreateCaioOperatingQuestionG0ContextInput,
+  schemaVersion: CaioOperatingQuestionG0ContextSchemaVersion,
+): CaioOperatingQuestionG0Context {
   const computedAssessment = computeCaioInitializationAssessment(
     input.assessmentInput,
   );
@@ -485,12 +501,12 @@ export function createCaioOperatingQuestionG0Context(input: {
   ) {
     throw new Error("caio_operating_question_g0_timestamp_invalid");
   }
-  const evidenceRefs = initializationEvidenceUniverse(input);
+  const evidenceRefs = initializationEvidenceUniverse(input, schemaVersion);
   if (evidenceRefs.length === 0) {
     throw new Error("caio_operating_question_g0_evidence_empty");
   }
   const content = {
-    schemaVersion: CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION,
+    schemaVersion,
     workspaceRef: input.assessment.workspaceRef,
     gateReceiptRef: input.gateReceipt.receiptId,
     gateReceiptHash: input.gateReceipt.contentHash,
@@ -508,13 +524,24 @@ export function createCaioOperatingQuestionG0Context(input: {
   };
 }
 
+export function createCaioOperatingQuestionG0Context(
+  input: CreateCaioOperatingQuestionG0ContextInput,
+): CaioOperatingQuestionG0Context {
+  return createCaioOperatingQuestionG0ContextForSchemaVersion(
+    input,
+    CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION,
+  );
+}
+
 export function validateCaioOperatingQuestionG0Context(
   context: CaioOperatingQuestionG0Context,
 ): CaioOperatingQuestionValidation {
   const errors: string[] = [];
   if (
-    context.schemaVersion !==
-      CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION ||
+    ![
+      CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
+      CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V2,
+    ].includes(context.schemaVersion) ||
     context.authorityEffect !== "none"
   ) {
     errors.push("g0_context_version_or_boundary_invalid");

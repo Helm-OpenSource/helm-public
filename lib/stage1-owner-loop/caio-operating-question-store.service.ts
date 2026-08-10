@@ -53,7 +53,9 @@ import {
   type CaioOperatingQuestionTrustedEvidence,
 } from "./caio-operating-question-pack-generator";
 import {
+  CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
   createCaioOperatingQuestionG0Context,
+  createCaioOperatingQuestionG0ContextForSchemaVersion,
   createCaioOperatingQuestionGenerationReceipt,
   evaluateCaioOperatingQuestionGeneration,
   validateCaioOperatingQuestionGenerationReceipt,
@@ -118,6 +120,7 @@ const WRITE_RETRY_OPTIONS = {
 type TrustedOperatingQuestionContext = {
   initialization: CurrentAcceptedCaioInitializationContext;
   g0Context: CaioOperatingQuestionG0Context;
+  compatibleG0Contexts: readonly CaioOperatingQuestionG0Context[];
 };
 
 type CurrentGenerationState = {
@@ -471,7 +474,34 @@ async function loadTrustedContextForUpdate(
     gateReceipt: initialization.receipt,
     currentHead: initialization.head,
   });
-  return { initialization, g0Context };
+  const historicalG0Context =
+    createCaioOperatingQuestionG0ContextForSchemaVersion(
+      {
+        assessmentInput: initialization.assessmentInput,
+        assessment: initialization.assessment,
+        gateReceipt: initialization.receipt,
+        currentHead: initialization.head,
+      },
+      CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
+    );
+  const compatibleG0Contexts = [g0Context, historicalG0Context].filter(
+    (context, index, contexts) =>
+      contexts.findIndex(
+        (candidate) => candidate.contentHash === context.contentHash,
+      ) === index,
+  );
+  return { initialization, g0Context, compatibleG0Contexts };
+}
+
+function resolveCompatibleG0Context(
+  trusted: TrustedOperatingQuestionContext,
+  contentHash: string,
+): CaioOperatingQuestionG0Context {
+  return (
+    trusted.compatibleG0Contexts.find(
+      (context) => context.contentHash === contentHash,
+    ) ?? trusted.g0Context
+  );
 }
 
 async function readPortfolioHeadForUpdate(
@@ -507,7 +537,7 @@ async function assertPortfolioChainIntegrity(
   input: {
     workspaceId: string;
     gateReceiptId: string;
-    g0Context: CaioOperatingQuestionG0Context;
+    trusted: TrustedOperatingQuestionContext;
     headPortfolio: CaioOperatingQuestionPortfolio;
   },
 ): Promise<void> {
@@ -522,7 +552,7 @@ async function assertPortfolioChainIntegrity(
     visited.add(current.portfolioId);
     const contextValidation = validateCaioOperatingQuestionPortfolioAgainstG0(
       current,
-      input.g0Context,
+      resolveCompatibleG0Context(input.trusted, current.g0ContextHash),
     );
     if (!contextValidation.valid) {
       throw new CaioOperatingQuestionStoreError(
@@ -582,7 +612,7 @@ async function assertGenerationReceiptChainIntegrity(
   input: {
     workspaceId: string;
     gateReceiptId: string;
-    g0Context: CaioOperatingQuestionG0Context;
+    trusted: TrustedOperatingQuestionContext;
     headReceipt: CaioOperatingQuestionGenerationReceipt;
   },
 ): Promise<void> {
@@ -598,7 +628,7 @@ async function assertGenerationReceiptChainIntegrity(
     const contextValidation =
       validateCaioOperatingQuestionGenerationReceiptAgainstG0(
         current,
-        input.g0Context,
+        resolveCompatibleG0Context(input.trusted, current.g0ContextHash),
       );
     if (!contextValidation.valid) {
       throw new CaioOperatingQuestionStoreError(
@@ -706,7 +736,7 @@ async function loadCurrentGenerationState(
   await assertGenerationReceiptChainIntegrity(tx, {
     workspaceId: input.workspaceId,
     gateReceiptId: head.initializationGateReceiptId,
-    g0Context: input.trusted.g0Context,
+    trusted: input.trusted,
     headReceipt: previousReceipt,
   });
   let previousPortfolio: CaioOperatingQuestionPortfolio | null = null;
@@ -732,7 +762,7 @@ async function loadCurrentGenerationState(
     await assertPortfolioChainIntegrity(tx, {
       workspaceId: input.workspaceId,
       gateReceiptId: head.initializationGateReceiptId,
-      g0Context: input.trusted.g0Context,
+      trusted: input.trusted,
       headPortfolio: previousPortfolio,
     });
   } else if (head.portfolioSequence !== 0) {
@@ -746,6 +776,11 @@ async function loadCurrentGenerationState(
   ) {
     throw new CaioOperatingQuestionStoreError(
       "question_portfolio_head_outcome_binding_invalid",
+    );
+  }
+  if (previousReceipt.g0ContextHash !== input.trusted.g0Context.contentHash) {
+    throw new CaioOperatingQuestionStoreError(
+      "question_g0_rollover_required",
     );
   }
   return { head, previousReceipt, previousPortfolio };
@@ -900,11 +935,20 @@ async function assertPackOperatingInputScope(
         "pack_operating_input_evidence_kind_mismatch",
       );
     }
+    const ageMs = input.now.getTime() - capturedAt;
+    const freshness =
+      evidence.freshness !== "fresh" ||
+      !Number.isSafeInteger(evidence.freshnessSlaMinutes) ||
+      evidence.freshnessSlaMinutes <= 0
+        ? "unknown"
+        : ageMs >= evidence.freshnessSlaMinutes * 60_000
+          ? "stale"
+          : "fresh";
     return [
       {
         evidenceRef,
         evidenceKind: trace.evidenceKind,
-        freshness: evidence.freshness,
+        freshness,
         capturedAt: trace.capturedAt,
       } satisfies CaioOperatingQuestionTrustedEvidence,
     ];
@@ -1528,10 +1572,14 @@ export async function selectCaioOperatingQuestions(input: {
           );
         }
         const portfolio = parseStoredPortfolio(portfolioRow);
+        const portfolioG0Context = resolveCompatibleG0Context(
+          trusted,
+          portfolio.g0ContextHash,
+        );
         const portfolioValidation =
           validateCaioOperatingQuestionPortfolioAgainstG0(
             portfolio,
-            trusted.g0Context,
+            portfolioG0Context,
           );
         if (!portfolioValidation.valid) {
           throw new CaioOperatingQuestionStoreError(
@@ -1542,7 +1590,7 @@ export async function selectCaioOperatingQuestions(input: {
         await assertPortfolioChainIntegrity(tx, {
           workspaceId: input.workspaceId,
           gateReceiptId: trusted.g0Context.gateReceiptRef,
-          g0Context: trusted.g0Context,
+          trusted,
           headPortfolio: portfolio,
         });
         const allowedEvidenceRefs = new Set(portfolio.evidenceRefs);
@@ -1875,7 +1923,7 @@ export async function bindCurrentCaioQuestionSelectionToDecisionRecords(input: {
         await assertPortfolioChainIntegrity(tx, {
           workspaceId: input.workspaceId,
           gateReceiptId: trusted.g0Context.gateReceiptRef,
-          g0Context: trusted.g0Context,
+          trusted,
           headPortfolio: portfolio,
         });
         const generationReceiptRow =

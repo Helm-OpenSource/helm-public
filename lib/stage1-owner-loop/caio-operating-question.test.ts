@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { canonicalJson, sha256 } from "../expert-capability/hashing";
 import {
+  CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION,
+  CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
   createCaioOperatingQuestionG0Context,
+  createCaioOperatingQuestionG0ContextForSchemaVersion,
   createCaioOperatingQuestionGenerationReceipt,
   evaluateCaioOperatingQuestionGeneration,
+  validateCaioOperatingQuestionG0Context,
   validateCaioOperatingQuestionGenerationReceipt,
+  validateCaioOperatingQuestionGenerationReceiptAgainstG0,
   validateCaioOperatingQuestionGenerationReceiptAgainstPrevious,
   validateCaioOperatingQuestionGenerationReceiptAgainstPortfolio,
   validateCaioOperatingQuestionPortfolio,
@@ -76,6 +81,77 @@ function generationReceiptInput(
 }
 
 describe("CAIO operating question portfolio", () => {
+  it("preserves historical v1 G0 chains while new contexts roll to v2", () => {
+    const source = syntheticOperatingQuestionG0Source();
+    const historicalContext =
+      createCaioOperatingQuestionG0ContextForSchemaVersion(
+        source,
+        CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
+      );
+    const currentContext = createCaioOperatingQuestionG0Context(source);
+    const historicalCandidates = Array.from({ length: 10 }, (_, index) => {
+      const evidenceRef = `operating-${index + 1}`;
+      const draft = candidate(index);
+      return {
+        ...draft,
+        facts: draft.facts.map((fact) => ({
+          ...fact,
+          evidenceRefs: [evidenceRef],
+        })),
+        inferences: draft.inferences.map((inference) => ({
+          ...inference,
+          evidenceRefs: [evidenceRef],
+        })),
+        evidenceRefs: [evidenceRef],
+      };
+    });
+
+    expect(historicalContext.schemaVersion).toBe(
+      CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
+    );
+    expect(currentContext.schemaVersion).toBe(
+      CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION,
+    );
+    expect(currentContext.contentHash).not.toBe(historicalContext.contentHash);
+    expect(validateCaioOperatingQuestionG0Context(historicalContext).valid).toBe(
+      true,
+    );
+
+    const evaluation = evaluateCaioOperatingQuestionGeneration({
+      ...generationInput(historicalCandidates),
+      g0Context: historicalContext,
+    });
+    expect(evaluation.status).toBe("generated");
+    if (!evaluation.portfolio) {
+      throw new Error("historical portfolio required");
+    }
+    const receipt = createCaioOperatingQuestionGenerationReceipt({
+      evaluation,
+      previousReceipt: null,
+      evidenceRefs: evaluation.portfolio.evidenceRefs,
+      recordedAt: "2026-07-23T10:00:00.000Z",
+    });
+
+    expect(
+      validateCaioOperatingQuestionPortfolioAgainstG0(
+        evaluation.portfolio,
+        historicalContext,
+      ).valid,
+    ).toBe(true);
+    expect(
+      validateCaioOperatingQuestionGenerationReceiptAgainstG0(
+        receipt,
+        historicalContext,
+      ).valid,
+    ).toBe(true);
+    expect(
+      validateCaioOperatingQuestionPortfolioAgainstG0(
+        evaluation.portfolio,
+        currentContext,
+      ).valid,
+    ).toBe(false);
+  });
+
   it("creates exactly ten ranked, evidence-bound candidates", () => {
     const result = evaluateCaioOperatingQuestionGeneration(generationInput());
 

@@ -26,7 +26,7 @@ function observationRun(overrides: Record<string, unknown> = {}) {
     windowStart: new Date("2026-08-09T22:00:00.000Z"),
     windowEnd: new Date("2026-08-10T00:30:00.000Z"),
     status: "SUCCEEDED",
-    observedAt: new Date("2026-08-09T23:30:00.000Z"),
+    observedAt: new Date("2026-08-09T23:30:00.001Z"),
     summaryHash: `sha256:${"a".repeat(64)}`,
     completenessPercent: 100,
     freshness: "FRESH",
@@ -178,7 +178,7 @@ describe("CAIO Pro FDE workspace scope resolver", () => {
       observedAt: "2026-08-09T23:30:00.000Z",
       storedFreshness: "FRESH",
       slaMinutes: 30,
-      expected: "fresh",
+      expected: "stale",
     },
     {
       label: "expired by one millisecond",

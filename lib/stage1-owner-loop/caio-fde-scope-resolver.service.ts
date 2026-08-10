@@ -39,7 +39,7 @@ function currentEvidenceFreshness(input: {
     return "unknown";
   }
   const ageMs = input.now.getTime() - input.observedAt.getTime();
-  return ageMs > input.freshnessSlaMinutes * 60_000 ? "stale" : "fresh";
+  return ageMs >= input.freshnessSlaMinutes * 60_000 ? "stale" : "fresh";
 }
 
 type ObservationEvidenceRun = Prisma.ObservationSourceRunGetPayload<{
@@ -305,6 +305,7 @@ function resolveObservationEvidenceRun(input: {
     sourceId: run.sourceId,
     sourceKind,
     freshness: freshness!,
+    freshnessSlaMinutes: run.source.freshnessSlaMinutes,
     outcome: run.outcome,
     windowStart: run.windowStart,
     observedAt: run.observedAt!,
