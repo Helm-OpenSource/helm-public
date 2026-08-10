@@ -189,6 +189,45 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
     ).toBe(false);
   });
 
+  it("accepts exact Core-generated CUID refs while rejecting arbitrary digit refs", () => {
+    const canonicalCuid = "cabcdef1234567ghijklmnopq";
+    const canonicalEvidenceRef = `observation-run:${canonicalCuid}`;
+    const canonicalInput = {
+      ...packInput(),
+      workspaceRef: `workspace:${canonicalCuid}`,
+      portfolioRef: `opportunity:${canonicalCuid}`,
+      evidenceSnapshotRef: canonicalEvidenceRef,
+      evidenceBindings: [
+        {
+          evidenceRef: canonicalEvidenceRef,
+          evidenceKind: "source_observation",
+        },
+      ],
+      metrics: [
+        {
+          ...packInput().metrics[0],
+          evidenceRefs: [canonicalEvidenceRef],
+        },
+      ],
+      candidateInputs: [
+        {
+          ...packInput().candidateInputs[0],
+          evidenceRefs: [canonicalEvidenceRef],
+        },
+      ],
+    };
+
+    expect(caioProPackOperatingInputSchema.safeParse(canonicalInput).success).toBe(
+      true,
+    );
+    expect(
+      caioProPackOperatingInputSchema.safeParse({
+        ...packInput(),
+        evidenceSnapshotRef: "observation-run:1234567",
+      }).success,
+    ).toBe(false);
+  });
+
   it("fails closed for duplicate, dangling, uncovered and evidence-kind-incompatible Pack graphs", () => {
     const base = packInput();
     const invalidGraphs = [

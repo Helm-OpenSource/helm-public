@@ -52,8 +52,7 @@ type PortableContractArtifact = {
   "x-helm-semantic-verifier": Record<string, unknown>;
   $defs: Record<string, unknown> & {
     publicSafeRef: {
-      pattern: string;
-      not?: { anyOf?: Array<{ pattern: string }> };
+      [key: string]: unknown;
     };
     consumerIdentity: {
       additionalProperties: boolean;
@@ -175,11 +174,10 @@ function mutatePrimitiveAtPath(
 
 function portablePublicSafeRefAccepts(value: string): boolean {
   const definition = artifact().$defs.publicSafeRef;
-  const acceptedByBase = new RegExp(definition.pattern, "u").test(value);
-  const rejectedByNot = (definition.not?.anyOf ?? []).some(
-    (entry: { pattern: string }) => new RegExp(entry.pattern, "u").test(value),
+  const validate = new Ajv({ allErrors: true, schemaId: "auto" }).compile(
+    definition,
   );
-  return acceptedByBase && !rejectedByNot;
+  return Boolean(validate(value));
 }
 
 describe("portable CAIO Pro FDE cross-repo schema", () => {
@@ -536,5 +534,36 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
     ]) {
       expect(portablePublicSafeRefAccepts(unsafeRef), unsafeRef).toBe(false);
     }
+  });
+
+  it("accepts exact Core-generated CUID refs with numeric entropy", () => {
+    const canonicalCuid = "cabcdef1234567ghijklmnopq";
+    const canonicalEvidenceRef = `observation-run:${canonicalCuid}`;
+    const base = validPackInput();
+    const payload = {
+      ...base,
+      workspaceRef: `workspace:${canonicalCuid}`,
+      portfolioRef: `opportunity:${canonicalCuid}`,
+      evidenceSnapshotRef: canonicalEvidenceRef,
+      evidenceBindings: [
+        {
+          evidenceRef: canonicalEvidenceRef,
+          evidenceKind: "source_observation",
+        },
+      ],
+      metrics: [
+        { ...base.metrics[0], evidenceRefs: [canonicalEvidenceRef] },
+      ],
+      candidateInputs: [
+        { ...base.candidateInputs[0], evidenceRefs: [canonicalEvidenceRef] },
+      ],
+    };
+
+    expect(portablePublicSafeRefAccepts(payload.workspaceRef)).toBe(true);
+    expect(portablePublicSafeRefAccepts(payload.portfolioRef)).toBe(true);
+    expect(portablePublicSafeRefAccepts(canonicalEvidenceRef)).toBe(true);
+    expect(portablePackAccepts(payload)).toBe(true);
+    expect(caioProPackOperatingInputSchema.safeParse(payload).success).toBe(true);
+    expect(portablePublicSafeRefAccepts("observation-run:1234567")).toBe(false);
   });
 });

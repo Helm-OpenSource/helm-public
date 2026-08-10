@@ -5,8 +5,8 @@
   "description": "Portable public-safe validation artifact for Pack operating inputs and private execution result projections. Validation grants no authority; Core still resolves every workspace, Portfolio, evidence snapshot, work object and permission at ingestion time.",
   "interfaceIdentity": {
     "interfaceVersion": "helm.caio-pro-fde.cross-repo-interface.v1",
-    "contractRef": "caio-pro-fde-cross-repo-interface:08a238de81c4c84b",
-    "contractHash": "sha256:08a238de81c4c84b2cad07bc39c9cc8ceb1b752133fa2e6aff731eb82c59fc7a",
+    "contractRef": "caio-pro-fde-cross-repo-interface:70314488f6193d01",
+    "contractHash": "sha256:70314488f6193d015ebd82ef61d3d88a7caba3ec2efe0710788664822f5d7b10",
     "evaluatorRevision": "caio-pro-v1-completion-evaluator.v1",
     "evaluatorContractRef": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
     "evaluatorContractHash": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01"
@@ -38,7 +38,8 @@
     },
     "publicSafeRefRules": [
       "opaque_ref_pattern_and_prefix_must_match",
-      "url_locator_ip_email_secret_token_connection_string_and_pii_shapes_are_rejected"
+      "url_locator_ip_email_secret_token_connection_string_and_pii_shapes_are_rejected",
+      "exact_core_workspace_opportunity_and_observation_run_cuid_refs_bypass_only_digit_shape_rejection"
     ],
     "packOperatingInputRules": [
       "shortText_and_longText_fields_must_contain_non_whitespace_content",
@@ -70,12 +71,12 @@
     },
     "contractRef": {
       "type": "string",
-      "const": "caio-pro-fde-cross-repo-interface:08a238de81c4c84b",
+      "const": "caio-pro-fde-cross-repo-interface:70314488f6193d01",
       "maxLength": 256
     },
     "contractHash": {
       "type": "string",
-      "const": "sha256:08a238de81c4c84b2cad07bc39c9cc8ceb1b752133fa2e6aff731eb82c59fc7a",
+      "const": "sha256:70314488f6193d015ebd82ef61d3d88a7caba3ec2efe0710788664822f5d7b10",
       "maxLength": 71
     },
     "evaluatorRevision": {
@@ -129,7 +130,7 @@
       "type": "string",
       "minLength": 3,
       "maxLength": 256,
-      "pattern": "^(?!.*(?:https?|file|ftp|ssh|s3|gs|mailto):)(?!.*(?:password|passwd|secret|token|api[-_]?key|authorization|bearer|mysql|postgres(?:ql)?|mongodb|redis|jdbc|connection[-_]?string))(?!.*(?:^|:)(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?:$|:))(?!.*(?:^|:)[0-9][0-9 -]{5,22}[0-9Xx](?:$|:))(?!.*(?:^|:)sk-[A-Za-z0-9_-]{16,})[a-z][a-z0-9-]{1,63}:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$",
+      "pattern": "^(?!.*(?:https?|file|ftp|ssh|s3|gs|mailto):)(?!.*(?:password|passwd|secret|token|api[-_]?key|authorization|bearer|mysql|postgres(?:ql)?|mongodb|redis|jdbc|connection[-_]?string))(?!.*(?:^|:)(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?:$|:))(?!.*(?:^|:)sk-[A-Za-z0-9_-]{16,})[a-z][a-z0-9-]{1,63}:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$",
       "not": {
         "anyOf": [
           {
@@ -142,14 +143,25 @@
             "pattern": "(?:^|[^A-Fa-f0-9])(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}(?:$|[^A-Fa-f0-9])"
           },
           {
-            "pattern": "(?:[0-9]{7,22}|[0-9]{6,21}[Xx])"
-          },
-          {
             "pattern": "(?:^|[:._-])(?:phone|mobile|tel|id(?:entity)?[-_]?card|ssn|bank[-_]?card|card[-_]?number|account[-_]?number)(?:$|[:._-])"
           }
         ]
       },
-      "description": "Syntactic public-safe opaque ref only. Core resolution against the authenticated workspace and current evidence snapshot is mandatory."
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "pattern": "^(?:workspace|opportunity|observation-run):c[a-z0-9]{24}$"
+            },
+            {
+              "not": {
+                "pattern": "(?:[0-9]{7,22}|[0-9]{6,21}[Xx])"
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Syntactic public-safe opaque ref only. Exact Core-generated workspace, opportunity and observation-run CUID refs may contain numeric entropy; all other digit-shaped PII remains rejected. Core resolution against the authenticated workspace and current evidence snapshot is mandatory."
     },
     "workspaceRef": {
       "allOf": [
