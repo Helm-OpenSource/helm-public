@@ -542,6 +542,16 @@ describe("this surface owns NO socket: the host binds the one listener", () => {
     expect(source).not.toMatch(/exclusive/);
   });
 
+  it("does not rewrite a completed protocol result after handle settlement", () => {
+    const source = readFileSync(
+      path.join(__dirname, "server.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(
+      /result = await handle\([\s\S]{0,1500}if \(signal\?\.aborted\)/u,
+    );
+  });
+
   it("serves a node request onto the host's response", async () => {
     const mount = createServer();
     const { capture, response } = captureNodeResponse();

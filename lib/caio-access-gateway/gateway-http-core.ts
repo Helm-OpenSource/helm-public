@@ -512,6 +512,20 @@ async function runWithRequestCancellation<T>(
 }
 
 /**
+ * A canonical mutation must settle exactly once with its transaction. The
+ * signal still reaches the operation so work can roll back before commit, but
+ * after the operation starts the gateway waits for that commit or rollback
+ * instead of racing it with a synthetic cancellation response.
+ */
+async function runMutationToSettlement<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  throwIfRequestCancelled(signal);
+  return operation();
+}
+
+/**
  * 200 response, echoing the caller's correlation hint (if it was safe) under
  * a name that cannot be confused with the authoritative request id.
  */
@@ -1145,7 +1159,7 @@ export function createCaioGatewayHandler(
         );
       }
       case "operating_question_generation": {
-        const result = await runWithRequestCancellation(
+        const result = await runMutationToSettlement(
           () =>
             dependencies.operatingQuestionGeneration({
               principal,
@@ -1158,7 +1172,7 @@ export function createCaioGatewayHandler(
         return okResponse(result, clientCorrelationId);
       }
       case "private_execution_result": {
-        const result = await runWithRequestCancellation(
+        const result = await runMutationToSettlement(
           () =>
             dependencies.privateExecutionResultIngress({
               principal,

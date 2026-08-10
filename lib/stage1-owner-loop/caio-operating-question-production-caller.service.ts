@@ -71,6 +71,49 @@ function resolveMountedProvider(
   }
 }
 
+async function runProviderResolutionWithCancellation<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!signal) return operation();
+  if (signal.aborted) {
+    throw new CaioOperatingQuestionProductionCallerError("REQUEST_CANCELLED");
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const onAbort = () =>
+      finish(() =>
+        reject(
+          new CaioOperatingQuestionProductionCallerError("REQUEST_CANCELLED"),
+        ),
+      );
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+
+    let pending: Promise<T>;
+    try {
+      pending = Promise.resolve(operation());
+    } catch (error) {
+      finish(() => reject(error));
+      return;
+    }
+    pending.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
 /**
  * The sole production adapter from authenticated gateway scope to the S2
  * generator/store. G0 and the evidence snapshot are reloaded and locked by S2;
@@ -101,14 +144,18 @@ export function createCaioOperatingQuestionProductionCaller(input: {
     const provider = resolveMountedProvider(input.providerRegistry);
     let provided: unknown;
     try {
-      provided = await provider.resolveOperatingInput({
-        workspaceId: call.principal.workspaceId,
-        workspaceRef: `workspace:${call.principal.workspaceId}`,
-        portfolioRef: request.portfolioRef,
-        actorUserRef: call.principal.userRef,
-        requestId: call.requestId,
-        ...(call.signal ? { signal: call.signal } : {}),
-      });
+      provided = await runProviderResolutionWithCancellation(
+        () =>
+          provider.resolveOperatingInput({
+            workspaceId: call.principal.workspaceId,
+            workspaceRef: `workspace:${call.principal.workspaceId}`,
+            portfolioRef: request.portfolioRef,
+            actorUserRef: call.principal.userRef,
+            requestId: call.requestId,
+            ...(call.signal ? { signal: call.signal } : {}),
+          }),
+        call.signal,
+      );
     } catch (error) {
       if (call.signal?.aborted) {
         throw new CaioOperatingQuestionProductionCallerError(

@@ -998,6 +998,71 @@ describe("CAIO operating question store", () => {
     ).toHaveBeenCalledOnce();
   });
 
+  it("waits for the canonical transaction to commit before settling a cancelled request", async () => {
+    dbMock.$queryRaw.mockResolvedValueOnce([]);
+    let markCallbackFinished!: () => void;
+    const callbackFinished = new Promise<void>((resolve) => {
+      markCallbackFinished = resolve;
+    });
+    let releaseCommit!: () => void;
+    const commitReleased = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    let markTransactionSettled!: () => void;
+    const transactionSettled = new Promise<void>((resolve) => {
+      markTransactionSettled = resolve;
+    });
+    dbMock.$transaction.mockImplementationOnce(
+      async (operation: (tx: typeof dbMock) => Promise<unknown>) => {
+        try {
+          const result = await operation(dbMock);
+          markCallbackFinished();
+          await commitReleased;
+          return result;
+        } finally {
+          markTransactionSettled();
+        }
+      },
+    );
+    const controller = new AbortController();
+    const test = productionGenerationMount(packOperatingInput());
+    const pendingResponse = test.mount.handle({
+      ...productionGenerationRequest(
+        "generation:production-mount:commit-barrier",
+      ),
+      signal: controller.signal,
+    });
+    let responseSettled = false;
+    void pendingResponse.finally(() => {
+      responseSettled = true;
+    });
+
+    try {
+      await callbackFinished;
+      controller.abort();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(responseSettled).toBe(false);
+      releaseCommit();
+      await expect(pendingResponse).resolves.toMatchObject({
+        status: 200,
+        body: {
+          replayed: false,
+          receipt: { status: "generated" },
+        },
+      });
+      expect(
+        dbMock.caioOperatingQuestionPortfolio.create,
+      ).toHaveBeenCalledOnce();
+      expect(
+        dbMock.caioOperatingQuestionGenerationReceipt.create,
+      ).toHaveBeenCalledOnce();
+    } finally {
+      releaseCommit();
+      await Promise.allSettled([pendingResponse, transactionSettled]);
+    }
+  });
+
   it("records canonical insufficient evidence through the production mount", async () => {
     dbMock.$queryRaw.mockResolvedValueOnce([]);
     const test = productionGenerationMount(packOperatingInput(9));

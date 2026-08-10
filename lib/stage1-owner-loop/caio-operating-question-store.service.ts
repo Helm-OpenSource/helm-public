@@ -918,6 +918,7 @@ async function assertPackOperatingInputScope(
     workspaceId: input.workspaceId,
     evidenceRefs: declaredEvidenceRefs,
     portfolioRef: portfolio.portfolioRef,
+    expectedBusinessResult: "success",
     now: input.now,
   });
   const trustedEvidence = resolvedEvidence.flatMap((evidence) => {

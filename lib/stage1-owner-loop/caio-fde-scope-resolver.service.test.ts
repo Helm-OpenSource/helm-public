@@ -172,6 +172,32 @@ describe("CAIO Pro FDE workspace scope resolver", () => {
     });
   });
 
+  it("rejects a non-success run in a batch that requires successful evidence", async () => {
+    const db = client();
+    db.observationSourceRun.findMany.mockResolvedValue([
+      observationRun({
+        status: "PARTIAL",
+        outcome: "PARTIAL_SUCCESS",
+        completenessPercent: 80,
+      }),
+    ]);
+
+    await expect(
+      resolveCaioFdeObservationEvidenceBatch({
+        client: db as never,
+        workspaceId: "workspace-1",
+        evidenceRefs: ["observation-run:run-1"],
+        portfolioRef: "opportunity:opportunity-1",
+        expectedBusinessResult: "success",
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({
+      reasons: expect.arrayContaining([
+        "observation_evidence_outcome_mismatch",
+      ]),
+    });
+  });
+
   it.each([
     {
       label: "exact SLA boundary",

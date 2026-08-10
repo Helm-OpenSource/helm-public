@@ -494,9 +494,9 @@ export type CaioAccessGatewayMount = Readonly<{
    *
    * `options.signal` is the HOST's cancellation for this request — shutdown or
    * the request deadline. It is honoured before any port is touched, during the
-   * body read, and again before the answer is written, so a host that is
-   * draining can actually stop this work rather than wait on it or report
-   * itself idle while it runs.
+   * body read, and inside the protocol core. Canonical mutations own their
+   * commit/rollback settlement, so the host cannot replace a committed success
+   * with a cancellation response after the fact.
    */
   serveNodeRequest(
     request: IncomingMessage,
@@ -870,12 +870,6 @@ export function createCaioAccessGatewayMount(
           body: read.body,
           ...(signal ? { signal } : {}),
         });
-        // Aborted while the route was running: the host is no longer waiting
-        // for this answer, and sending a success would report work as
-        // delivered that the host has already accounted as cancelled.
-        if (signal?.aborted) {
-          result = wireResponse(caioRequestCancelledWireError());
-        }
       } else {
         // A cancelled read and an oversized one are different facts: one is the
         // host withdrawing, the other is the peer exceeding a cap.

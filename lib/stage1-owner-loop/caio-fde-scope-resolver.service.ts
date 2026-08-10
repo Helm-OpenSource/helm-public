@@ -318,6 +318,7 @@ export async function resolveCaioFdeObservationEvidenceBatch(input: {
   workspaceId: string;
   evidenceRefs: readonly string[];
   portfolioRef: string;
+  expectedBusinessResult?: "success" | "failure";
   now?: Date;
 }) {
   if (input.evidenceRefs.length === 0 || input.evidenceRefs.length > 256) {
@@ -353,6 +354,7 @@ export async function resolveCaioFdeObservationEvidenceBatch(input: {
       run: runsById.get(runId)!,
       workspaceId: input.workspaceId,
       portfolioRef: input.portfolioRef,
+      expectedBusinessResult: input.expectedBusinessResult,
       now: input.now,
     }),
   );
