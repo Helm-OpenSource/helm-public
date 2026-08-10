@@ -65,6 +65,7 @@ const ISOLATION_MARKER =
   process.env.CAIO_FDE_FULL_CHAIN_ISOLATION_MARKER;
 const ISOLATED_DATABASE_PREFIX = "helm_caio_fde_full_chain_";
 const ISOLATION_MARKER_PATTERN = /^[a-z0-9][a-z0-9_]{7,63}$/u;
+const PUBLIC_SAFE_HEX_ALPHABET = "abcdefghijklmnop";
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const EVIDENCE_KIND_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
@@ -223,6 +224,10 @@ export async function provisionAcceptedCaioFdeG0(input: {
   const authorizationToken = sha256(`authorization:${suffix}`)
     .replace(/^sha256:/u, "")
     .slice(0, 24)
+    .replace(
+      /[0-9a-f]/gu,
+      (digit) => PUBLIC_SAFE_HEX_ALPHABET[Number.parseInt(digit, 16)],
+    )
     .replace(/(.{4})(?=.)/gu, "$1-");
   const programAuthorizationRef =
     `authorization:fde-full-chain-${authorizationToken}`;
