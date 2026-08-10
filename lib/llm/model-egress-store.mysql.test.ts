@@ -2050,7 +2050,9 @@ describeMysql("model egress store with an isolated MySQL database", () => {
         idempotencyKey: `readiness:${suffix}:invited`,
         receipt: invitedReadiness,
       }),
-    ).rejects.toThrow("workspace_policy_access_lost");
+    ).rejects.toMatchObject({
+      code: "WORKSPACE_SERVICE_GOVERNANCE_REQUIRED",
+    });
   });
 
   it("projects persisted uppercase storage through the owner-only read model", async () => {
