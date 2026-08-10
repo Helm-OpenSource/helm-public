@@ -7,6 +7,10 @@ import { describe, expect, it } from "vitest";
 import { CaioDeploymentPostureError } from "@/lib/caio-audit-state/deployment-posture";
 import type { WorkBuddyMtlsPeer } from "@/lib/caio-collaboration/client-identity";
 import {
+  CaioOperatingQuestionPackProviderRegistryError,
+  type CaioOperatingQuestionPackProvider,
+} from "@/lib/stage1-owner-loop/caio-operating-question-pack-provider-registry";
+import {
   CAIO_ACCESS_GATEWAY_API_PATHS,
   CAIO_ACCESS_GATEWAY_ROUTE_TABLE,
   CAIO_WORKBUDDY_MCP_PATH,
@@ -42,6 +46,15 @@ const PEER: WorkBuddyMtlsPeer = Object.freeze({
 const CONFIG: CaioAccessGatewayServerConfig = CAIO_MOUNT_FIXTURE_CONFIG;
 
 const createPorts = createCaioMountFixturePorts;
+
+function questionPackProvider(
+  providerId = "pack-provider:operating-input-v1",
+): CaioOperatingQuestionPackProvider {
+  return Object.freeze({
+    providerId,
+    resolveOperatingInput: async () => ({ authorityEffect: "none" }),
+  });
+}
 
 function createServer(
   overrides: Partial<{
@@ -135,6 +148,7 @@ describe("route table: which surfaces this listener owns", () => {
       "/v1/chat/completions",
       "/v1/execution-results",
       "/v1/models",
+      "/v1/operating-questions/generate",
       "/v1/responses",
     ]);
     for (const apiPath of CAIO_ACCESS_GATEWAY_API_PATHS) {
@@ -232,6 +246,69 @@ describe("route table: which surfaces this listener owns", () => {
       expect(alive.status).toBe(200);
       const ready = await mount.handle(incoming({ url: "/readyz" }));
       expect(ready.body).toEqual({ status: "ready", posture: "self_service" });
+    });
+  });
+
+  describe("the mounted operating-question Pack provider", () => {
+    it("does not own question generation when no Pack provider is mounted", async () => {
+      const spy = createPorts();
+      const mount = createServer({ ports: spy.ports });
+
+      expect(mount.apiPaths).not.toContain(
+        "/v1/operating-questions/generate",
+      );
+      const response = await mount.handle(
+        incoming({
+          method: "POST",
+          url: "/v1/operating-questions/generate",
+          headers: { authorization: "Bearer hcaio_mcp_test" },
+          body: JSON.stringify({
+            portfolioRef: "opportunity:portfolio-1",
+            generationKey: "generation:one",
+          }),
+        }),
+      );
+      expect(response.status).toBe(404);
+      expect(spy.calls).toEqual([]);
+    });
+
+    it("owns question generation only when exactly one provider is mounted", () => {
+      const fixture = createPorts();
+      const mount = createServer({
+        ports: {
+          ...fixture.ports,
+          operatingQuestionPackProviders: [questionPackProvider()],
+        },
+      });
+
+      expect(mount.apiPaths).toContain(
+        "/v1/operating-questions/generate",
+      );
+      expect(
+        mount.routeTable.find(
+          (row) => row.path === "/v1/operating-questions/generate",
+        )?.servedByThisSurface,
+      ).toBe(true);
+    });
+
+    it("rejects duplicate Pack provider registration during construction", () => {
+      const fixture = createPorts();
+
+      expect(() =>
+        createServer({
+          ports: {
+            ...fixture.ports,
+            operatingQuestionPackProviders: [
+              questionPackProvider("pack-provider:first"),
+              questionPackProvider("pack-provider:second"),
+            ],
+          },
+        }),
+      ).toThrowError(
+        expect.objectContaining<Partial<CaioOperatingQuestionPackProviderRegistryError>>({
+          code: "PACK_PROVIDER_ALREADY_MOUNTED",
+        }),
+      );
     });
   });
 

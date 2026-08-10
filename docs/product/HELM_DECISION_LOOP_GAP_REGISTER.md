@@ -56,6 +56,7 @@ governance 权限，不新建角色或 ACL。
 | private ingress reachable | 受认证 WorkBuddy MCP principal 通过 Gateway 的 `/v1/execution-results` 进入 Core；Core 校验 identity/hash/scope/CAS 后唯一调用 `recordExecutionReceipt` | Gateway、`private-execution-result-ingress.service.ts`、并发 exact replay 与冲突 replay MySQL 测试；不证明私有 executor 已部署 |
 | Pack portable contract S1 closed | 完整 artifact 与版本化 semantic verifier 共同形成 contract identity；semantic graph 显式声明 `evidenceRef -> evidenceKind`，重复、悬空、coverage 与 kind 冲突全部 fail-closed | TS / JSON artifact differential 与逐叶 mutation 测试；不证明 production composition caller、Core 自生成问题或 Pack 已挂载 |
 | Pack Core generator S2 closed | Pack seam 拒绝外部 candidates、问题正文、score/rank；Core 从 workspace Portfolio、可信 G0 evidence traces、S1 bindings 与完整 semantic graph 派生 eligibility、内容、事实/推论、score/rank、validation metric 与 narrow loop | generator/store focused tests 覆盖语义敏感性、exactly-10、约束后 `insufficient_evidence`、幂等 request hash 与既有 canonical writer；不证明 production mount |
+| Public production caller S3 reachable | 受认证 WorkBuddy Gateway 独立 route 只接收 `portfolioRef + generationKey`，以当前 principal/workspace/Portfolio 解析唯一注入 provider，再进入 S2 Core generator/store；重复 provider 在 mount 构造时拒绝 | route、registry、真实 composition 测试与 AST 门禁锁定唯一 caller/registration，覆盖未挂载、重复挂载、跨 workspace、无 G0、insufficient 与重放；只证明 Public caller 可达，不证明 Pack 已提供组件、部署已挂载或 runtime 已激活 |
 | replay / concurrency closed | private ingress、receipt verification、decision evaluation 和 supervision 使用既有锁、CAS、幂等内容匹配与唯一键 | focused tests 与一次性 `helm_caio_stage1_*` MySQL 并发、冲突、回滚测试 |
 | read side reachable | `/caio` 先显示 unresolved critical，再显示其他 unresolved，剩余额度才显示 resolved；每条显示 status | `features/dashboard/stage1-owner-loop-query.ts`、console 与 mixed-status regression |
 
@@ -98,13 +99,17 @@ workspace 与 Portfolio membership 检查，Core ingress 再锁定 Work Packet�
 这是 GAP-3 的推论，不由本轮声称闭合。`companyMemoryRefs` 等不透明引用不等于读取持久化
 知识卡；在 GAP-3 完成前，不能机械判断所有援引知识的当前可用等级。
 
-### S3 后续项：Pack production composition 尚未闭合
+### S3 Public caller 已可达；Pack 实际挂载仍需外部证据
 
 S1 已发布 portable semantic contract；S2 已在 Core repo 内把合法 semantic graph 转换为现有
 canonical `CaioOperatingQuestionPortfolio` / generation receipt 的 exactly-10 或
-`insufficient_evidence`。现有仓库事实仍不能证明唯一、受权、非测试的 Pack composition caller、
-route 或 worker 已挂载。S3 必须继续保持 Core 不反向依赖 Pack；在真实 provider 注入、调用链和
-行为门禁完成前，不得把 S1 identity 或 S2 focused tests 写成 production reachability。
+`insufficient_evidence`。S3 现在提供唯一、受权、非测试的 Public composition caller：Gateway
+严格绑定当前 principal/workspace/Portfolio，只有 mount 注入恰好一个 provider 时才拥有该 route，
+并由 S2 在事务内重新加载可信 G0 与 evidence snapshot。Core 仍不反向依赖 Pack。
+
+这只证明 Public caller 在满足注入条件时可达。`helm-packs` 必须另行提供实际 operating-input
+provider 组件与验证证据，部署组合还必须提供 mount/runtime receipt；本仓没有这些材料，因此
+不得声明 Pack 已挂载、现场已部署或 runtime 已激活。
 
 ## 3. 仍成立的控制项
 

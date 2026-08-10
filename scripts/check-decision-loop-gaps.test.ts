@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkDecisionLoopGaps,
   functionCallIndex,
+  productionCallReferences,
   productionReferences,
   RECORDED_CLOSED_GAPS,
   RECORDED_OPEN_GAPS,
@@ -44,10 +45,17 @@ function fixtureRepo(files: Readonly<Record<string, string>> = {}): string {
       "await resolveCaioFdeObservationEvidence({});",
       "await recordExecutionReceipt({}, { client: tx });",
     ].join("\n"),
-    "tools/caio-access-gateway/server.ts":
-      "await ingestCaioPrivateExecutionResultProjection({});\n",
-    "lib/caio-access-gateway/gateway-http-core.ts":
-      'path === "/v1/execution-results";\n',
+    "tools/caio-access-gateway/server.ts": [
+      "await ingestCaioPrivateExecutionResultProjection({});",
+      "const registry = createCaioOperatingQuestionPackProviderRegistry();",
+      "registerCaioOperatingQuestionPackProvider({ registry, provider });",
+      "const caller = createCaioOperatingQuestionProductionCaller({ providerRegistry: registry });",
+    ].join("\n"),
+    "lib/caio-access-gateway/gateway-http-core.ts": [
+      'path === "/v1/execution-results";',
+      "const request = parseCaioOperatingQuestionGenerationRequest(payload);",
+      "await dependencies.operatingQuestionGeneration({ request });",
+    ].join("\n"),
     "lib/stage1-owner-loop/caio-operating-question-store.service.ts": [
       "export async function generateCaioOperatingQuestionPortfolioFromPackInput() {}",
       "validateCaioProFdeInterfaceDescriptor({});",
@@ -55,6 +63,15 @@ function fixtureRepo(files: Readonly<Record<string, string>> = {}): string {
       "await resolveCaioFdePortfolioScope({});",
       "await resolveCaioFdeObservationEvidence({});",
       "generateCaioOperatingQuestionPortfolioInternal({});",
+    ].join("\n"),
+    "lib/stage1-owner-loop/caio-operating-question-production-caller.service.ts": [
+      "const provider = registry.resolve();",
+      "const packInput = await provider.resolveOperatingInput(scope);",
+      "return generateCaioOperatingQuestionPortfolioFromPackInput({ packInput });",
+    ].join("\n"),
+    "lib/stage1-owner-loop/caio-operating-question-pack-provider-registry.ts": [
+      "export function createCaioOperatingQuestionPackProviderRegistry() {}",
+      "export function registerCaioOperatingQuestionPackProvider() {}",
     ].join("\n"),
     "docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json":
       JSON.stringify({
@@ -227,6 +244,92 @@ describe("decision loop gap register", () => {
       );
     });
 
+    it("fails when the sole production Pack generator caller is replaced by a string marker", () => {
+      const root = fixtureRepo({
+        "lib/stage1-owner-loop/caio-operating-question-production-caller.service.ts":
+          'const marker = "generateCaioOperatingQuestionPortfolioFromPackInput({})";\n',
+        "lib/fake-pack-caller.test.ts":
+          "generateCaioOperatingQuestionPortfolioFromPackInput({});\n",
+        "lib/fake-pack-caller-schema.ts":
+          "type Definition = { generateCaioOperatingQuestionPortfolioFromPackInput(input: unknown): void };\n",
+      });
+
+      expect(checkDecisionLoopGaps(root)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ gap: "pack-consumer" }),
+        ]),
+      );
+    });
+
+    it("fails when the production composition deletes provider registration", () => {
+      const root = fixtureRepo({
+        "tools/caio-access-gateway/server.ts": [
+          "await ingestCaioPrivateExecutionResultProjection({});",
+          "const registry = createCaioOperatingQuestionPackProviderRegistry();",
+          'const marker = "registerCaioOperatingQuestionPackProvider({})";',
+          "const caller = createCaioOperatingQuestionProductionCaller({ providerRegistry: registry });",
+        ].join("\n"),
+        "lib/fake-provider-registration.test.ts":
+          "registerCaioOperatingQuestionPackProvider({});\n",
+        "lib/fake-provider-registration-schema.ts":
+          "interface Registration { registerCaioOperatingQuestionPackProvider(input: unknown): void }\n",
+      });
+
+      expect(checkDecisionLoopGaps(root)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ gap: "pack-consumer" }),
+        ]),
+      );
+    });
+
+    it("fails when a second production module calls the Core generator", () => {
+      const root = fixtureRepo({
+        "tools/alternate-question-runtime.ts":
+          "await generateCaioOperatingQuestionPortfolioFromPackInput({});\n",
+      });
+
+      expect(checkDecisionLoopGaps(root)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            gap: "pack-consumer",
+            detail: expect.stringContaining("alternate-question-runtime.ts"),
+          }),
+        ]),
+      );
+    });
+
+    it("fails when a second production module registers a Pack provider", () => {
+      const root = fixtureRepo({
+        "tools/alternate-pack-composition.ts":
+          "registerCaioOperatingQuestionPackProvider({ registry, provider });\n",
+      });
+
+      expect(checkDecisionLoopGaps(root)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            gap: "pack-consumer",
+            detail: expect.stringContaining("alternate-pack-composition.ts"),
+          }),
+        ]),
+      );
+    });
+
+    it("fails when any Public production module reverse-imports the Pack repository", () => {
+      const forbiddenModule = ["helm", "packs/runtime"].join("-");
+      const root = fixtureRepo({
+        "lib/reverse-pack-dependency.ts": `import provider from ${JSON.stringify(forbiddenModule)};\nprovider();\n`,
+      });
+
+      expect(checkDecisionLoopGaps(root)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            gap: "pack-consumer",
+            detail: expect.stringContaining("reverse-pack-dependency.ts"),
+          }),
+        ]),
+      );
+    });
+
     it("finds a production reference but excludes definitions and tests", () => {
       const root = fixtureRepo({
         "lib/caller.ts":
@@ -244,6 +347,32 @@ describe("decision loop gap register", () => {
       ).toEqual([
         "lib/caller.ts",
         "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts",
+      ]);
+    });
+
+    it("finds real production calls but excludes imports, strings, type signatures, and tests", () => {
+      const root = fixtureRepo({
+        "lib/real-call.ts":
+          "await generateCaioOperatingQuestionPortfolioFromPackInput({});\n",
+        "lib/import-only.ts":
+          'import { generateCaioOperatingQuestionPortfolioFromPackInput } from "x";\n',
+        "lib/string-only.ts":
+          'const marker = "generateCaioOperatingQuestionPortfolioFromPackInput({})";\n',
+        "lib/type-only.ts":
+          "interface Generator { generateCaioOperatingQuestionPortfolioFromPackInput(input: unknown): void }\n",
+        "lib/call-only.test.ts":
+          "generateCaioOperatingQuestionPortfolioFromPackInput({});\n",
+      });
+
+      expect(
+        productionCallReferences(
+          root,
+          "generateCaioOperatingQuestionPortfolioFromPackInput",
+          "lib/stage1-owner-loop/caio-operating-question-store.service.ts",
+        ),
+      ).toEqual([
+        "lib/real-call.ts",
+        "lib/stage1-owner-loop/caio-operating-question-production-caller.service.ts",
       ]);
     });
 

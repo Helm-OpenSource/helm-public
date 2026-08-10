@@ -26,6 +26,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 
 export const REGISTER_PATH = "docs/product/HELM_DECISION_LOOP_GAP_REGISTER.md";
 export const SCAN_ROOTS = ["lib", "app", "features", "tools"] as const;
@@ -44,10 +45,68 @@ export function wordBoundaryRegExp(needle: string): RegExp {
   return new RegExp(`${needle.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\b`, "u");
 }
 
-/** Locate a function invocation without depending on whether it is directly awaited. */
+function isCallToSymbol(
+  call: ts.CallExpression,
+  symbol: string,
+  sourceFile: ts.SourceFile,
+): boolean {
+  const expression = call.expression;
+  if (ts.isIdentifier(expression)) return expression.text === symbol;
+  if (ts.isPropertyAccessExpression(expression)) {
+    return (
+      expression.name.text === symbol ||
+      expression.getText(sourceFile) === symbol
+    );
+  }
+  return expression.getText(sourceFile) === symbol;
+}
+
+function importsModule(source: string, moduleFragment: string): boolean {
+  const sourceFile = ts.createSourceFile(
+    "decision-loop-imports.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  return sourceFile.statements.some((statement) => {
+    if (
+      !ts.isImportDeclaration(statement) &&
+      !ts.isExportDeclaration(statement)
+    ) {
+      return false;
+    }
+    const specifier = statement.moduleSpecifier;
+    return (
+      specifier !== undefined &&
+      ts.isStringLiteral(specifier) &&
+      specifier.text.includes(moduleFragment)
+    );
+  });
+}
+
+/** Locate a real function invocation without counting comments, strings, or types. */
 export function functionCallIndex(source: string, symbol: string): number {
-  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return source.search(new RegExp(`\\b${escaped}\\s*\\(`, "u"));
+  const sourceFile = ts.createSourceFile(
+    "decision-loop-source.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let first = -1;
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      isCallToSymbol(node, symbol, sourceFile)
+    ) {
+      const index = node.expression.getStart(sourceFile);
+      first = first < 0 ? index : Math.min(first, index);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return first;
 }
 
 export function listSourceFiles(repoRoot: string, root: string): string[] {
@@ -88,6 +147,23 @@ export function productionReferences(
   return hits.sort();
 }
 
+/** Production files that actually invoke `symbol`, excluding its definition and tests. */
+export function productionCallReferences(
+  repoRoot: string,
+  symbol: string,
+  definedIn: string,
+): string[] {
+  const hits: string[] = [];
+  for (const root of SCAN_ROOTS) {
+    for (const file of listSourceFiles(repoRoot, root)) {
+      if (file === definedIn || isTestFile(file)) continue;
+      const source = readFileSync(path.join(repoRoot, file), "utf8");
+      if (functionCallIndex(source, symbol) >= 0) hits.push(file);
+    }
+  }
+  return hits.sort();
+}
+
 const TERMINAL_RECONCILER_FILE =
   "lib/stage1-owner-loop/terminal-result-reconciliation.service.ts";
 const TERMINAL_TRIGGER_FILE = "features/approvals/actions.ts";
@@ -98,6 +174,16 @@ const PRIVATE_INGRESS_ROUTE_FILE =
   "lib/caio-access-gateway/gateway-http-core.ts";
 const PACK_CONSUMER_FILE =
   "lib/stage1-owner-loop/caio-operating-question-store.service.ts";
+const PACK_PRODUCTION_CALLER_FILE =
+  "lib/stage1-owner-loop/caio-operating-question-production-caller.service.ts";
+const PACK_PROVIDER_REGISTRY_FILE =
+  "lib/stage1-owner-loop/caio-operating-question-pack-provider-registry.ts";
+const PACK_COMPOSITION_FILE = "tools/caio-access-gateway/server.ts";
+const PACK_ROUTE_FILE = "lib/caio-access-gateway/gateway-http-core.ts";
+const FORBIDDEN_PACK_MODULE_FRAGMENTS = Object.freeze([
+  ["helm", "packs"].join("-"),
+  ["@helm", "pack"].join("/"),
+]);
 const CROSS_REPO_SCHEMA_FILE =
   "docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json";
 
@@ -337,24 +423,141 @@ export function checkDecisionLoopGaps(repoRoot: string = process.cwd()): Finding
   }
 
   const packConsumerPath = path.join(repoRoot, PACK_CONSUMER_FILE);
-  const packConsumerMarkers = [
-    "generateCaioOperatingQuestionPortfolioFromPackInput",
-    "validateCaioProFdeInterfaceDescriptor",
-    "caioProPackOperatingInputSchema.safeParse",
-    "resolveCaioFdePortfolioScope",
-    "resolveCaioFdeObservationEvidence",
-    "generateCaioOperatingQuestionPortfolioInternal",
+  const packCallerPath = path.join(repoRoot, PACK_PRODUCTION_CALLER_FILE);
+  const packCompositionPath = path.join(repoRoot, PACK_COMPOSITION_FILE);
+  const packRoutePath = path.join(repoRoot, PACK_ROUTE_FILE);
+  const requiredFiles = [
+    PACK_CONSUMER_FILE,
+    PACK_PRODUCTION_CALLER_FILE,
+    PACK_PROVIDER_REGISTRY_FILE,
+    PACK_COMPOSITION_FILE,
+    PACK_ROUTE_FILE,
   ];
-  if (
-    !existsSync(packConsumerPath) ||
-    packConsumerMarkers.some(
-      (marker) => !readFileSync(packConsumerPath, "utf8").includes(marker),
-    )
-  ) {
+  const missingPackFiles = requiredFiles.filter(
+    (file) => !existsSync(path.join(repoRoot, file)),
+  );
+  if (missingPackFiles.length > 0) {
     findings.push({
       gap: "pack-consumer",
-      detail:
-        "Pack operating input must remain a strict, workspace-scoped consumer of the existing Core Portfolio and evidence snapshot before Core question generation",
+      detail: `the production Pack composition is incomplete; missing ${missingPackFiles.join(", ")}`,
+    });
+  } else {
+    const packConsumerSource = readFileSync(packConsumerPath, "utf8");
+    const packCallerSource = readFileSync(packCallerPath, "utf8");
+    const packCompositionSource = readFileSync(packCompositionPath, "utf8");
+    const packRouteSource = readFileSync(packRoutePath, "utf8");
+
+    const coreBehaviorCalls = [
+      "validateCaioProFdeInterfaceDescriptor",
+      "caioProPackOperatingInputSchema.safeParse",
+      "resolveCaioFdePortfolioScope",
+      "resolveCaioFdeObservationEvidence",
+      "generateCaioOperatingQuestionPortfolioInternal",
+    ];
+    if (
+      coreBehaviorCalls.some(
+        (symbol) => functionCallIndex(packConsumerSource, symbol) < 0,
+      )
+    ) {
+      findings.push({
+        gap: "pack-consumer",
+        detail:
+          "Pack operating input must remain a strict, workspace-scoped consumer of the existing Core Portfolio and evidence snapshot before Core question generation",
+      });
+    }
+
+    const generatorCallers = productionCallReferences(
+      repoRoot,
+      "generateCaioOperatingQuestionPortfolioFromPackInput",
+      PACK_CONSUMER_FILE,
+    );
+    if (
+      generatorCallers.length !== 1 ||
+      generatorCallers[0] !== PACK_PRODUCTION_CALLER_FILE
+    ) {
+      findings.push({
+        gap: "pack-consumer",
+        detail: `Core question generation must have exactly one production caller at ${PACK_PRODUCTION_CALLER_FILE}; actual caller(s): ${generatorCallers.join(", ") || "none"}`,
+      });
+    }
+
+    const callerMounts = productionCallReferences(
+      repoRoot,
+      "createCaioOperatingQuestionProductionCaller",
+      PACK_PRODUCTION_CALLER_FILE,
+    );
+    if (
+      callerMounts.length !== 1 ||
+      callerMounts[0] !== PACK_COMPOSITION_FILE
+    ) {
+      findings.push({
+        gap: "pack-consumer",
+        detail: `the question-generation caller must be mounted exactly once by ${PACK_COMPOSITION_FILE}; actual mount(s): ${callerMounts.join(", ") || "none"}`,
+      });
+    }
+
+    const providerRegistrations = productionCallReferences(
+      repoRoot,
+      "registerCaioOperatingQuestionPackProvider",
+      PACK_PROVIDER_REGISTRY_FILE,
+    );
+    if (
+      providerRegistrations.length !== 1 ||
+      providerRegistrations[0] !== PACK_COMPOSITION_FILE
+    ) {
+      findings.push({
+        gap: "pack-consumer",
+        detail: `Pack provider registration must have exactly one production caller at ${PACK_COMPOSITION_FILE}; actual caller(s): ${providerRegistrations.join(", ") || "none"}`,
+      });
+    }
+
+    if (
+      functionCallIndex(packCallerSource, "resolveOperatingInput") < 0 ||
+      functionCallIndex(
+        packCallerSource,
+        "generateCaioOperatingQuestionPortfolioFromPackInput",
+      ) < 0 ||
+      functionCallIndex(
+        packCompositionSource,
+        "createCaioOperatingQuestionPackProviderRegistry",
+      ) < 0 ||
+      functionCallIndex(
+        packCompositionSource,
+        "registerCaioOperatingQuestionPackProvider",
+      ) < 0 ||
+      functionCallIndex(
+        packCompositionSource,
+        "createCaioOperatingQuestionProductionCaller",
+      ) < 0 ||
+      functionCallIndex(
+        packRouteSource,
+        "parseCaioOperatingQuestionGenerationRequest",
+      ) < 0 ||
+      functionCallIndex(packRouteSource, "operatingQuestionGeneration") < 0
+    ) {
+      findings.push({
+        gap: "pack-consumer",
+        detail:
+          "the authenticated Gateway route must resolve the mounted provider and invoke the sole production Core question-generation caller",
+      });
+    }
+  }
+
+  const reversePackImports = SCAN_ROOTS.flatMap((root) =>
+    listSourceFiles(repoRoot, root),
+  )
+    .filter((file) => !isTestFile(file))
+    .filter((file) => {
+      const source = readFileSync(path.join(repoRoot, file), "utf8");
+      return FORBIDDEN_PACK_MODULE_FRAGMENTS.some((fragment) =>
+        importsModule(source, fragment),
+      );
+    })
+    .sort();
+  if (reversePackImports.length > 0) {
+    findings.push({
+      gap: "pack-consumer",
+      detail: `Public Core must not import the Pack repository; reverse dependency found in: ${reversePackImports.join(", ")}`,
     });
   }
 

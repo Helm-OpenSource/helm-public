@@ -170,6 +170,7 @@ describe("the gateway protocol core has a non-test composition caller", () => {
       "token authenticator",
       "project resolver",
       "MCP dispatcher",
+      "mounted Pack operating-input provider",
       "model alias bindings",
       "canonical audit gate",
       "readiness probe",
@@ -187,6 +188,9 @@ describe("the gateway protocol core has a non-test composition caller", () => {
 
     // And why the seam survives either decision.
     expect(header).toContain("createCaioAccessGatewayMount");
+    expect(header).toContain("production caller is reachable");
+    expect(header).toContain("neither table proves");
+    expect(header).toContain("Pack supplied one");
   });
 
   // Reversal guard. Nothing here can observe the overlay host, but this repo
@@ -202,6 +206,8 @@ describe("the gateway protocol core has a non-test composition caller", () => {
       /is what a deployment runner starts/,
       /\bserved in V1\b/,
       /\bmounted in production\b/,
+      /\bPack (?:is|has been) mounted\b/i,
+      /\bthe runtime is activated\b/i,
       /\bcoming soon\b/i,
     ]) {
       expect(withoutQuotations, `header must not claim: ${claim}`).not.toMatch(

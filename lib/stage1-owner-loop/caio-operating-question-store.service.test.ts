@@ -5,6 +5,16 @@ import {
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  createCaioAccessGatewayMount,
+} from "@/tools/caio-access-gateway/server";
+import {
+  CAIO_MOUNT_FIXTURE_CLIENT_ADDRESS,
+  CAIO_MOUNT_FIXTURE_CONFIG,
+  CAIO_MOUNT_FIXTURE_FINGERPRINT,
+  createCaioMountFixturePorts,
+} from "@/tools/caio-access-gateway/mount-fixture";
+
 const {
   auditMock,
   dbMock,
@@ -57,11 +67,23 @@ vi.mock("@/lib/auth/service-governance", () => ({
   assertWorkspacePolicyServiceAccess:
     policyAccessMock.assertWorkspacePolicyServiceAccess,
 }));
-vi.mock("./caio-initialization-gate-store.service", () => ({
-  loadCurrentAcceptedCaioInitializationContextForUpdate:
-    trustedContextMock,
-}));
+vi.mock(
+  "./caio-initialization-gate-store.service",
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import("./caio-initialization-gate-store.service")
+    >();
+    return {
+      ...actual,
+      loadCurrentAcceptedCaioInitializationContextForUpdate:
+        trustedContextMock,
+    };
+  },
+);
 
+import {
+  CaioInitializationGateStoreError,
+} from "./caio-initialization-gate-store.service";
 import {
   generateCaioOperatingQuestionPortfolioFromPackInput,
   generateCaioOperatingQuestionPortfolio,
@@ -228,7 +250,7 @@ function observationRun() {
       status: "ACTIVE",
       revokedAt: null,
       startsAt: new Date("2026-07-01T00:00:00.000Z"),
-      expiresAt: new Date("2026-08-01T00:00:00.000Z"),
+      expiresAt: new Date("2027-08-01T00:00:00.000Z"),
       authorizationVersion: 1,
       scopeRefs: JSON.stringify(["opportunity:portfolio-1"]),
     },
@@ -238,6 +260,62 @@ function observationRun() {
       programId: "program-1",
       status: "ACTIVE",
     },
+  };
+}
+
+function productionGenerationMount(packInput: unknown) {
+  const fixture = createCaioMountFixturePorts();
+  const resolveOperatingInput = vi.fn(async () => packInput);
+  const mount = createCaioAccessGatewayMount({
+    config: {
+      ...CAIO_MOUNT_FIXTURE_CONFIG,
+      featureFlags: {
+        ...CAIO_MOUNT_FIXTURE_CONFIG.featureFlags,
+        mutationsEnabled: true,
+      },
+    },
+    posture: "self_service",
+    ports: {
+      ...fixture.ports,
+      tokenAuthenticator: {
+        authenticate: async ({ expectedAudience }) => ({
+          tokenId: "token:workbuddy-question-generation",
+          workspaceId: WORKSPACE_ID,
+          userRef: OWNER_USER_ID,
+          clientType: "workbuddy" as const,
+          deviceRef: "device:workbuddy-question-generation",
+          audience: expectedAudience,
+        }),
+      },
+      projectResolver: {
+        listAccessibleProjectRefs: async () => ["opportunity:portfolio-1"],
+      },
+      operatingQuestionPackProviders: [
+        Object.freeze({
+          providerId: "pack-provider:synthetic-operating-input-v1",
+          resolveOperatingInput,
+        }),
+      ],
+    },
+  });
+  return { mount, resolveOperatingInput };
+}
+
+function productionGenerationRequest(generationKey: string) {
+  return {
+    method: "POST",
+    url: "/v1/operating-questions/generate",
+    headers: { authorization: "Bearer hcaio_mcp_test" },
+    clientIp: CAIO_MOUNT_FIXTURE_CLIENT_ADDRESS,
+    peer: {
+      certificateFingerprint: CAIO_MOUNT_FIXTURE_FINGERPRINT,
+      sourceAddress: CAIO_MOUNT_FIXTURE_CLIENT_ADDRESS,
+      authorized: true as const,
+    },
+    body: JSON.stringify({
+      portfolioRef: "opportunity:portfolio-1",
+      generationKey,
+    }),
   };
 }
 
@@ -360,6 +438,160 @@ describe("CAIO operating question store", () => {
         where: { id: "run-1", workspaceId: WORKSPACE_ID },
       }),
     );
+  });
+
+  it("runs the authenticated production mount through the mounted Pack provider into the canonical store", async () => {
+    dbMock.$queryRaw.mockResolvedValueOnce([]);
+    const test = productionGenerationMount(packOperatingInput());
+
+    const response = await test.mount.handle(
+      productionGenerationRequest("generation:production-mount:exact-ten"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      replayed: false,
+      receipt: { status: "generated", authorityEffect: "none" },
+      portfolio: {
+        workspaceRef: `workspace:${WORKSPACE_ID}`,
+        candidates: expect.arrayContaining([
+          expect.objectContaining({
+            dependencyRefs: expect.arrayContaining([
+              expect.stringMatching(/^candidate-input:/u),
+              expect.stringMatching(/^taxonomy:/u),
+              expect.stringMatching(/^metric:/u),
+              expect.stringMatching(/^evidence-rule:/u),
+            ]),
+          }),
+        ]),
+      },
+    });
+    expect(
+      (response.body as { portfolio: { candidates: unknown[] } }).portfolio
+        .candidates,
+    ).toHaveLength(10);
+    expect(test.resolveOperatingInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: WORKSPACE_ID,
+        workspaceRef: `workspace:${WORKSPACE_ID}`,
+        portfolioRef: "opportunity:portfolio-1",
+        actorUserRef: OWNER_USER_ID,
+      }),
+    );
+    expect(dbMock.caioOperatingQuestionPortfolio.create).toHaveBeenCalledOnce();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).toHaveBeenCalledOnce();
+  });
+
+  it("records canonical insufficient evidence through the production mount", async () => {
+    dbMock.$queryRaw.mockResolvedValueOnce([]);
+    const test = productionGenerationMount(packOperatingInput(9));
+
+    const response = await test.mount.handle(
+      productionGenerationRequest("generation:production-mount:insufficient"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      replayed: false,
+      receipt: {
+        status: "insufficient_evidence",
+        gapCodes: expect.arrayContaining(["candidate_count_not_ten"]),
+      },
+      portfolio: null,
+    });
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).toHaveBeenCalledOnce();
+  });
+
+  it("replays a production generation key even though the gateway request id changes", async () => {
+    dbMock.$queryRaw.mockResolvedValueOnce([]);
+    const test = productionGenerationMount(packOperatingInput());
+    const request = productionGenerationRequest(
+      "generation:production-mount:replay",
+    );
+
+    const first = await test.mount.handle(request);
+    expect(first.status).toBe(200);
+    const firstBody = first.body as {
+      receipt: { receiptId: string; gateReceiptRef: string; assessmentRef: string; sequence: number };
+      portfolio: { portfolioId: string; sequence: number };
+    };
+    const portfolioData =
+      dbMock.caioOperatingQuestionPortfolio.create.mock.calls[0][0].data;
+    const receiptData =
+      dbMock.caioOperatingQuestionGenerationReceipt.create.mock.calls[0][0]
+        .data;
+    dbMock.caioOperatingQuestionGenerationReceipt.findFirst.mockResolvedValue(
+      receiptData,
+    );
+    dbMock.caioOperatingQuestionPortfolio.findFirst.mockResolvedValue(
+      portfolioData,
+    );
+    dbMock.caioOperatingQuestionGenerationReceipt.findUnique.mockResolvedValue(
+      receiptData,
+    );
+    dbMock.$queryRaw.mockResolvedValueOnce([
+      {
+        workspaceId: WORKSPACE_ID,
+        initializationGateReceiptId: firstBody.receipt.gateReceiptRef,
+        initializationAssessmentId: firstBody.receipt.assessmentRef,
+        currentGenerationReceiptId: firstBody.receipt.receiptId,
+        currentPortfolioId: firstBody.portfolio.portfolioId,
+        generationSequence: firstBody.receipt.sequence,
+        portfolioSequence: firstBody.portfolio.sequence,
+        version: 1,
+        updatedAt: NOW,
+      },
+    ]);
+
+    const replay = await test.mount.handle(request);
+
+    expect(replay.status).toBe(200);
+    expect(replay.body).toMatchObject({
+      replayed: true,
+      receipt: { receiptId: firstBody.receipt.receiptId },
+      portfolio: { portfolioId: firstBody.portfolio.portfolioId },
+    });
+    expect(dbMock.caioOperatingQuestionPortfolio.create).toHaveBeenCalledOnce();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).toHaveBeenCalledOnce();
+  });
+
+  it("rejects mounted Pack workspace drift before entering the canonical transaction", async () => {
+    const test = productionGenerationMount(
+      packOperatingInput(10, { workspaceRef: "workspace:other" }),
+    );
+
+    const response = await test.mount.handle(
+      productionGenerationRequest("generation:production-mount:wrong-workspace"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(dbMock.$transaction).not.toHaveBeenCalled();
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects generation when no current accepted G0 can be reloaded", async () => {
+    const missingG0 = new CaioInitializationGateStoreError(
+      "accepted_gate_not_found",
+    );
+    trustedContextMock.mockRejectedValueOnce(missingG0);
+    const test = productionGenerationMount(packOperatingInput());
+
+    const response = await test.mount.handle(
+      productionGenerationRequest("generation:production-mount:no-g0"),
+    );
+
+    expect(response.status).toBe(400);
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).not.toHaveBeenCalled();
   });
 
   it("rejects descriptor drift before generation writes", async () => {

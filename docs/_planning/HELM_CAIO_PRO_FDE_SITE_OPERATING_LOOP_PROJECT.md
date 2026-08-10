@@ -287,15 +287,20 @@ Owner 已批准本切片。Wave 1A 实现候选完成以下 repo-level 输出：
    `CaioOperatingQuestionPortfolio` / generation receipt writer；semantic basis 复用每题现有
    `dependencyRefs` / `requiredDataRefs` 保存 candidateInput / taxonomy / metric / rule refs，
    不新增问题或回执模型；
-8. 重放复用既有锁、receipt writer、DecisionRecord 内容匹配与 `workspaceId + signalKey`
+8. S3 在 Public 生产 composition 增加唯一受权 caller：独立 Gateway route 只接收
+   `portfolioRef + generationKey`，以认证 principal/workspace/Portfolio 解析恰好一个注入 provider，
+   再调用 S2；无 provider 时 route 不归该 mount，重复 provider、跨 workspace、无 G0 与
+   insufficient 全部 fail-closed；
+9. 重放复用既有锁、receipt writer、DecisionRecord 内容匹配与 `workspaceId + signalKey`
    唯一键；冲突 projection 或 reconciliation payload/hash 均拒绝；
-9. `/caio` 先显示 unresolved critical，再显示其他 unresolved，剩余位置显示 resolved，且
+10. `/caio` 先显示 unresolved critical，再显示其他 unresolved，剩余位置显示 resolved，且
    每条展示 status；empty/degraded 语义保持不变；
-10. `caio-pro-fde-cross-repo-contract.ts` 与可移植 JSON Schema 发布第 3.1 节四项接口的
+11. `caio-pro-fde-cross-repo-contract.ts` 与可移植 JSON Schema 发布第 3.1 节四项接口的
    version、兼容集合、严格边界、contract hash/ref 和未知版本拒绝；identity 绑定规范化后的
    完整 artifact（全部 nested schema、enum、pattern、limit、ref rule）及版本化 semantic
    verifier rules；completion evaluator 发布 revision/hash/ref，且不暴露 13 项字面量给消费者；
-11. Decision Loop gap register 与机械 checker 将 GAP-1/2 固定为 closed、GAP-3 固定为 open。
+12. Decision Loop gap register 与机械 checker 将 GAP-1/2 固定为 closed、GAP-3 固定为 open，
+    并以 AST 调用图固定 S3 唯一 production caller 与 provider registration。
 
 S1 当前接口身份为
 `caio-pro-fde-cross-repo-interface:aeb075ce021b5899` /
@@ -309,6 +314,12 @@ S2 现已在 Core repo 内形成确定性 generator/store seam：合法 Pack gra
 以 `caio-operating-question-pack-derivation.v1` 绑定幂等 request hash，但不证明 S3 的
 production composition provider、route 或 worker 已挂载，也不改变上述 portable contract
 identity。
+
+S3 现已把该 seam 接到 Public 的非测试 Gateway composition：请求不能提交 Pack descriptor、
+questions、score/rank 或可信 evidence kind；provider 只从 deployment-owned registry 注入，
+Core 在 canonical store 内重新验证 Portfolio、G0 与 evidence snapshot。该事实只说明 Public
+caller 可达且无第二条调用/注册路径；`helm-packs` 尚需提供实际 provider 组件证据，部署仍需
+提供 mount/runtime receipt，本仓不声明 Pack 已挂载、已部署或已激活。
 
 ### 5.1.1 为什么选择该终态
 

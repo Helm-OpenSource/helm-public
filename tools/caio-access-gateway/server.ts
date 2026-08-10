@@ -18,17 +18,22 @@
  * OPTIONAL capabilities unlock narrower paths:
  *   model engine    /v1/responses  /v1/chat/completions
  *   MCP dispatcher  /mcp
+ *   mounted Pack operating-input provider
+ *                   /v1/operating-questions/generate
  *
- * That is not a bug to fix later. Verified one by one, THREE of the six
+ * That is not a bug to fix later. Verified one by one, THREE of the seven
  * production ports are constructible in this repository today. The
  * token authenticator (createCaioAccessTokenService over
  * createPrismaCaioAccessTokenPersistence), the canonical audit gate
  * (createCaioAuditGate over createPrismaCaioAuditReceiptStore and
  * createCaioEmergencyQueue), and the readiness probe derived from that gate —
- * with the model alias bindings supplied as deployment DATA by design. Two are
- * absent: the MCP dispatcher has nothing but test doubles, and the
- * project resolver is a TYPE ONLY — declared alongside a helper that consumes
- * one, while nothing anywhere produces one.
+ * with the model alias bindings supplied as deployment DATA by design. Three
+ * are absent: the MCP dispatcher has nothing but test doubles; the project resolver
+ * is a TYPE ONLY — declared alongside a helper that consumes one,
+ * while nothing anywhere produces one; and the mounted Pack operating-input
+ * provider is intentionally a deployment input whose implementation and
+ * mounting evidence must come from helm-packs and the deployment composition,
+ * not from Public Core.
  *
  * AN EARLIER VERSION OF THIS PARAGRAPH SAID FIVE OF SIX. That was wrong, and
  * the error is worth naming because of how it was made: the survey matched the
@@ -36,12 +41,13 @@
  * implementation. The count mattered — it was part of the case for re-making
  * the mount decision — so it is corrected here rather than quietly restated.
  *
- * Writing a plausible in-tree stand-in for either absent port would produce a
+ * Writing a plausible in-tree stand-in for any absent port would produce a
  * facade that dispatches nothing, or authorizes every project, while looking
  * like it works — the failure this paragraph has warned about since before the
  * mount existed.
  *
- * Both `mcpDispatch` and the nested model engine are OPTIONAL capabilities.
+ * `mcpDispatch`, the nested model engine, and the mounted Pack operating-input
+ * provider are OPTIONAL capabilities.
  * Without one, its dispatch paths drop out of `apiPaths`, report
  * servedByThisSurface: false, and return the same 404 as an undeclared path
  * before authentication or any business port is touched. Discovery remains a
@@ -130,6 +136,8 @@
  * -----------------------------------------------------
  *   path                    methods  owner                  owned here
  *   /mcp                    POST     access_gateway_api     yes
+ *   /v1/operating-questions/generate
+ *                           POST     access_gateway_api     conditional
  *   /v1/responses           POST     access_gateway_api     yes
  *   /v1/chat/completions    POST     access_gateway_api     yes
  *   /v1/models              GET      access_gateway_api     yes
@@ -139,8 +147,10 @@
  *
  * The static table records path ownership. createCaioAccessGatewayMount derives
  * a per-mount table that disables dispatch paths whose OPTIONAL capability is
- * absent. Neither table says a deployment supplied the required inputs or that
- * a runtime is reachable.
+ * absent. The production caller is reachable through this composition only
+ * when exactly one mounted provider is injected; neither table proves that a
+ * Pack supplied one, that a deployment mounted it, or that a runtime is
+ * activated.
  *
  * This surface owns the ACCESS GATEWAY API only. The WorkBuddy MCP surface
  * (`/mcp/workbuddy`) is terminated by the OTHER surface on the same host, with
@@ -214,6 +224,18 @@ import {
   CaioPrivateExecutionResultIngressError,
   ingestCaioPrivateExecutionResultProjection,
 } from "@/lib/stage1-owner-loop/private-execution-result-ingress.service";
+import {
+  CAIO_OPERATING_QUESTION_GENERATION_PATH,
+} from "@/lib/stage1-owner-loop/caio-operating-question-generation-route-contract";
+import {
+  createCaioOperatingQuestionPackProviderRegistry,
+  registerCaioOperatingQuestionPackProvider,
+  type CaioOperatingQuestionPackProvider,
+} from "@/lib/stage1-owner-loop/caio-operating-question-pack-provider-registry";
+import {
+  CaioOperatingQuestionProductionCallerError,
+  createCaioOperatingQuestionProductionCaller,
+} from "@/lib/stage1-owner-loop/caio-operating-question-production-caller.service";
 
 import type { CaioAccessGatewayServerConfig } from "@/tools/caio-access-gateway/server-config";
 
@@ -250,6 +272,12 @@ export const CAIO_ACCESS_GATEWAY_ROUTE_TABLE: readonly CaioAccessGatewayRoute[] 
     }),
     Object.freeze({
       path: "/v1/execution-results",
+      methods: Object.freeze(["POST"]),
+      owner: "access_gateway_api" as const,
+      servedByThisSurface: true,
+    }),
+    Object.freeze({
+      path: CAIO_OPERATING_QUESTION_GENERATION_PATH,
       methods: Object.freeze(["POST"]),
       owner: "access_gateway_api" as const,
       servedByThisSurface: true,
@@ -409,6 +437,12 @@ export type CaioAccessGatewayServerPorts = Readonly<{
    * between a facade and no gateway at all.
    */
   mcpDispatch?: CaioMcpDispatchPort;
+  /**
+   * Optional deployment-owned Pack implementation. Public Core rejects zero at
+   * request ownership and rejects more than one during construction; it never
+   * chooses a provider by ordering or imports a Pack repository.
+   */
+  operatingQuestionPackProviders?: readonly CaioOperatingQuestionPackProvider[];
   modelProxy: CaioAccessGatewayModelPorts;
   auditGate: CaioCanonicalAuditGatePort;
   readinessProbe: CaioReadinessProbePort;
@@ -621,12 +655,29 @@ export function createCaioAccessGatewayMount(
     bindings: input.ports.modelProxy.bindings,
   });
 
-  // Which paths THIS mount owns. `/mcp` only when a dispatcher was supplied;
-  // see the port's declaration for why it is the one optional input.
+  const operatingQuestionPackProviderRegistry =
+    createCaioOperatingQuestionPackProviderRegistry();
+  for (const provider of input.ports.operatingQuestionPackProviders ?? []) {
+    registerCaioOperatingQuestionPackProvider({
+      registry: operatingQuestionPackProviderRegistry,
+      provider,
+    });
+  }
+  const operatingQuestionGeneration =
+    createCaioOperatingQuestionProductionCaller({
+      providerRegistry: operatingQuestionPackProviderRegistry,
+    });
+
+  // Capability-dependent paths are owned only when their corresponding
+  // deployment port was supplied; unavailable paths remain 404 before auth.
   const servesMcp = typeof input.ports.mcpDispatch === "function";
   const servesModelDispatch = modelDispatch !== null;
+  const servesOperatingQuestionGeneration =
+    operatingQuestionPackProviderRegistry.mountedProviderCount() === 1;
   const UNOWNED_WITHOUT_PORT: Readonly<Record<string, boolean>> = Object.freeze({
     "/mcp": servesMcp,
+    [CAIO_OPERATING_QUESTION_GENERATION_PATH]:
+      servesOperatingQuestionGeneration,
     "/v1/responses": servesModelDispatch,
     "/v1/chat/completions": servesModelDispatch,
   });
@@ -650,6 +701,21 @@ export function createCaioAccessGatewayMount(
     preAuthRateLimiter: input.ports.preAuthRateLimiter,
     tokenAuthenticator: input.ports.tokenAuthenticator,
     projectResolver: input.ports.projectResolver,
+    operatingQuestionGeneration: async (request) => {
+      try {
+        return await operatingQuestionGeneration(request);
+      } catch (error) {
+        if (error instanceof CaioOperatingQuestionProductionCallerError) {
+          throw new CaioAccessGatewayError(
+            error.code === "PRINCIPAL_NOT_AUTHORIZED" ||
+              error.code === "PACK_PROVIDER_SCOPE_MISMATCH"
+              ? "scope_violation"
+              : "bad_request",
+          );
+        }
+        throw error;
+      }
+    },
     privateExecutionResultIngress: async ({ principal, projection }) => {
       try {
         return await ingestCaioPrivateExecutionResultProjection({
