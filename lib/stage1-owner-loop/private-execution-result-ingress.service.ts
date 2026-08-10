@@ -32,6 +32,7 @@ import {
   resolveCaioFdeObservationEvidence,
   resolveCaioFdePortfolioScope,
 } from "./caio-fde-scope-resolver.service";
+import { parseCaioUserPrincipalRef } from "./caio-user-principal-ref";
 import { validateOwnerCommandDraft } from "./contracts";
 import type { OwnerCommandDraft } from "./types";
 
@@ -57,13 +58,8 @@ function opaqueId(ref: string): string {
 }
 
 function principalUserId(userRef: string): string {
-  if (!userRef.startsWith("user:")) {
-    throw new CaioPrivateExecutionResultIngressError([
-      "private_execution_result_user_principal_required",
-    ]);
-  }
-  const userId = userRef.slice("user:".length);
-  if (!userId || userId.trim() !== userId || userId.includes(":")) {
+  const userId = parseCaioUserPrincipalRef(userRef);
+  if (userId === null) {
     throw new CaioPrivateExecutionResultIngressError([
       "private_execution_result_user_principal_required",
     ]);

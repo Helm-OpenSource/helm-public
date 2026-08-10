@@ -20,6 +20,7 @@ import {
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
   caioProPackOperatingInputSchema,
 } from "./caio-pro-fde-cross-repo-contract";
+import { parseCaioUserPrincipalRef } from "./caio-user-principal-ref";
 
 export const CAIO_OPERATING_QUESTION_PRODUCTION_GENERATOR_REF =
   "generator:caio-operating-question-pack-semantic-v1" as const;
@@ -134,6 +135,12 @@ export function createCaioOperatingQuestionProductionCaller(input: {
         "PRINCIPAL_NOT_AUTHORIZED",
       );
     }
+    const actorUserId = parseCaioUserPrincipalRef(call.principal.userRef);
+    if (actorUserId === null) {
+      throw new CaioOperatingQuestionProductionCallerError(
+        "PRINCIPAL_NOT_AUTHORIZED",
+      );
+    }
     const request = (() => {
       try {
         return parseCaioOperatingQuestionGenerationRequest(call.request);
@@ -192,7 +199,7 @@ export function createCaioOperatingQuestionProductionCaller(input: {
         interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
         packOperatingInput: packOperatingInput.data,
         workspaceId: call.principal.workspaceId,
-        actorUserId: call.principal.userRef,
+        actorUserId,
         generationKey: request.generationKey,
         generatorRef: CAIO_OPERATING_QUESTION_PRODUCTION_GENERATOR_REF,
         modelRef: CAIO_OPERATING_QUESTION_PRODUCTION_MODEL_REF,

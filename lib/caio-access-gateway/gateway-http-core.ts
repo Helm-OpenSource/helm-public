@@ -1051,6 +1051,17 @@ export function createCaioGatewayHandler(
       await boundAssertProjectAccess(
         operatingQuestionGenerationRequest.portfolioRef,
       );
+      await runWithRequestCancellation(
+        () =>
+          assertWorkspaceOperationCapability(
+            dependencies.operationResolver,
+            principal.workspaceId,
+            principal.userRef,
+            WORKSPACE_CAPABILITIES.MANAGE_POLICIES,
+            request.signal,
+          ),
+        request.signal,
+      );
     }
     if (route.kind === "private_execution_result") {
       assertCaioMcpSurfaceEnabled(featureFlags);

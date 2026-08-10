@@ -16,6 +16,7 @@ import {
   CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_RULES,
   CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
   CAIO_PRO_PRIVATE_EXECUTION_RESULT_PROJECTION_SCHEMA_VERSION,
+  createCaioProPrivateExecutionResultProjection,
   caioProPublicSafeRefSchema,
   caioProPackOperatingInputSchema,
   computeCaioProFdePortableContractIdentity,
@@ -85,6 +86,19 @@ function portablePackAccepts(payload: unknown): boolean {
     Boolean(validate(payload)) &&
     validatePortablePackSemanticRules(payload).valid
   );
+}
+
+function portablePrivateProjectionAccepts(payload: unknown): boolean {
+  const schema = structuredClone(artifact()) as PortableContractArtifact & {
+    $schema?: string;
+    oneOf: unknown[];
+  };
+  delete schema.$schema;
+  schema.oneOf = [{ $ref: "#/$defs/privateExecutionResultProjection" }];
+  const validate = new Ajv({ allErrors: true, schemaId: "auto" }).compile(
+    schema,
+  );
+  return Boolean(validate(payload));
 }
 
 function validPackInput() {
@@ -581,6 +595,7 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
       "proof:ghp_abcdefghijklmnop",
       "proof:eyJabcdefgh.ijklmnop",
       "proof:user@example.invalid",
+      "proof13800138000:ordinary",
       "workspace:cabcdef1234567ghijklmnopq",
       "workspace:c123456789012345678901234",
       " proof:ordinary-ref",
@@ -634,6 +649,52 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
         unsafeTaxonomyRef,
       ).toBe(false);
     }
+  });
+
+  it("keeps complete TypeScript and portable private projections aligned on namespace PII", () => {
+    const input = {
+      interfaceVersion: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
+      contractRef: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF,
+      contractHash: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH,
+      evaluatorRevision:
+        CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorRevision,
+      evaluatorContractRef:
+        CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorContractRef,
+      evaluatorContractHash:
+        CAIO_PRO_COMPLETION_EVALUATOR_INTERFACE.evaluatorContractHash,
+      projectionRef: "private-result:execution-1",
+      workspaceRef: "workspace:workspace-1",
+      portfolioRef: "opportunity:opportunity-1",
+      evidenceSnapshotRef: "observation-run:run-1",
+      decisionRecordRef: "decision-record:decision-1",
+      actionItemRef: "action-item:action-1",
+      approvalTaskRef: "approval-task:approval-1",
+      executionProofRefs: ["observation-run:run-1"],
+      receiptOutcome: "SUCCESS" as const,
+      actionTaken: "Recorded the private executor result projection.",
+      outcome: {
+        outcomeRef: "observation-run:run-1",
+        result: "success" as const,
+        followedAiRecommendation: true,
+      },
+      recordedAt: "2026-08-09T10:00:00.000Z",
+    };
+    const validProjection = createCaioProPrivateExecutionResultProjection(input);
+    expect(portablePrivateProjectionAccepts(validProjection)).toBe(true);
+
+    const unsafeRef = "proof13800138000:ordinary";
+    expect(() =>
+      createCaioProPrivateExecutionResultProjection({
+        ...input,
+        executionProofRefs: [unsafeRef],
+      }),
+    ).toThrow();
+    expect(
+      portablePrivateProjectionAccepts({
+        ...validProjection,
+        executionProofRefs: [unsafeRef],
+      }),
+    ).toBe(false);
   });
 
   it("rejects oversized portable refs without superlinear URL scanning", () => {

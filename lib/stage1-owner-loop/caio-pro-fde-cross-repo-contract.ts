@@ -281,12 +281,12 @@ function opaqueRefIsPublicSafe(value: string): boolean {
   const separator = value.indexOf(":");
   const opaqueId = separator >= 0 ? value.slice(separator + 1) : value;
   const isCoreGeneratedCuidRef = CORE_GENERATED_CUID_REF_PATTERN.test(value);
-  if (containsIpLiteral(opaqueId)) return false;
   if (
     !isCoreGeneratedCuidRef &&
-    (DELIMITED_DIGIT_LIKE_PATTERN.test(value) ||
+    (containsIpLiteral(value) ||
+      DELIMITED_DIGIT_LIKE_PATTERN.test(value) ||
       DIGIT_LIKE_PATTERN.test(opaqueId) ||
-      EMBEDDED_DIGIT_PII_PATTERN.test(opaqueId))
+      EMBEDDED_DIGIT_PII_PATTERN.test(value))
   ) {
     return false;
   }

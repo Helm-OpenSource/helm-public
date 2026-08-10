@@ -12,6 +12,7 @@ function harness(input?: {
   clientType?: "codex" | "workbuddy";
   mutationsEnabled?: boolean;
   projectRefs?: readonly string[];
+  operationAllowed?: boolean;
 }) {
   const calls: string[] = [];
   const generation = vi.fn(async () => ({
@@ -47,6 +48,12 @@ function harness(input?: {
       listAccessibleProjectRefs: async () => {
         calls.push("project-access");
         return input?.projectRefs ?? [PORTFOLIO_REF];
+      },
+    },
+    operationResolver: {
+      hasWorkspaceOperationCapability: async () => {
+        calls.push("operation-access");
+        return input?.operationAllowed ?? true;
       },
     },
     operatingQuestionGeneration: async (request: unknown) => {
@@ -124,6 +131,7 @@ describe("operating-question production gateway route", () => {
       "rate-limit",
       "authenticate",
       "project-access",
+      "operation-access",
       "audit",
       "question-generation",
     ]);
@@ -167,6 +175,19 @@ describe("operating-question production gateway route", () => {
       "rate-limit",
       "authenticate",
       "project-access",
+    ]);
+    expect(test.generation).not.toHaveBeenCalled();
+  });
+
+  it("rejects revoked policy capability before audit, Pack resolution or generation", async () => {
+    const test = harness({ operationAllowed: false });
+
+    await expect(test.handler(request())).resolves.toMatchObject({ status: 403 });
+    expect(test.calls).toEqual([
+      "rate-limit",
+      "authenticate",
+      "project-access",
+      "operation-access",
     ]);
     expect(test.generation).not.toHaveBeenCalled();
   });

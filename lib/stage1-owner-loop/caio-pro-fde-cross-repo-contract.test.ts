@@ -474,6 +474,13 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
         }),
       ).toThrow();
     }
+
+    expect(() =>
+      createCaioProPrivateExecutionResultProjection({
+        ...privateProjectionInput(),
+        executionProofRefs: ["proof13800138000:ordinary"],
+      }),
+    ).toThrow();
   });
 
   it("publishes a tamper-evident private result projection with no canonical write authority", () => {

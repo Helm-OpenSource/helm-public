@@ -117,6 +117,7 @@ import {
 const NOW = new Date("2026-07-23T09:00:00.000Z");
 const WORKSPACE_ID = "synthetic-caio";
 const OWNER_USER_ID = "user:ceo:synthetic-caio";
+const PRODUCTION_OWNER_USER_ID = "ceo-synthetic-caio";
 const CEO_REF = "principal:ceo:synthetic-caio";
 const PACK_EVIDENCE_KINDS = SYNTHETIC_CAIO_EVIDENCE_KINDS.slice(0, 10);
 
@@ -373,7 +374,7 @@ function productionGenerationMount(packInput: unknown) {
         authenticate: async ({ expectedAudience }) => ({
           tokenId: "token:workbuddy-question-generation",
           workspaceId: WORKSPACE_ID,
-          userRef: OWNER_USER_ID,
+          userRef: `user:${PRODUCTION_OWNER_USER_ID}`,
           clientType: "workbuddy" as const,
           deviceRef: "device:workbuddy-question-generation",
           audience: expectedAudience,
@@ -989,7 +990,7 @@ describe("CAIO operating question store", () => {
         workspaceId: WORKSPACE_ID,
         workspaceRef: `workspace:${WORKSPACE_ID}`,
         portfolioRef: "opportunity:portfolio-1",
-        actorUserRef: OWNER_USER_ID,
+        actorUserRef: `user:${PRODUCTION_OWNER_USER_ID}`,
       }),
     );
     expect(dbMock.caioOperatingQuestionPortfolio.create).toHaveBeenCalledOnce();
