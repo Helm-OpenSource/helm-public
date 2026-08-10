@@ -49,7 +49,7 @@ export async function getWorkspaceRoleForUser(args: {
     },
   });
 
-  if (!membership || membership.status === MembershipStatus.INACTIVE) {
+  if (!membership || membership.status !== MembershipStatus.ACTIVE) {
     return null;
   }
 

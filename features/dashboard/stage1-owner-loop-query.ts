@@ -14,6 +14,28 @@ const OWNER_LOOP_READ_TRANSACTION_OPTIONS = {
   timeout: 30_000,
 } as const;
 
+const OPEN_SUPERVISION_SIGNAL_STATUSES = [
+  "open",
+  "acknowledged",
+  "routed",
+] as const;
+
+const SUPERVISION_SIGNAL_SELECT = {
+  id: true,
+  signalKey: true,
+  observedFact: true,
+  severity: true,
+  status: true,
+  recommendedRoute: true,
+  deadlineOrSla: true,
+  createdAt: true,
+} satisfies Prisma.SupervisionSignalRecordSelect;
+
+const SUPERVISION_SIGNAL_ORDER = [
+  { createdAt: "desc" },
+  { id: "asc" },
+] as const;
+
 export async function getWorkspaceStage1OwnerLoopReadout(input: {
   workspaceId: string;
   membershipRole: WorkspaceRole;
@@ -116,24 +138,7 @@ async function loadOwnerLoopRows(
       where: { workspaceId },
       _count: { _all: true },
     }),
-    tx.supervisionSignalRecord.findMany({
-      where: {
-        workspaceId,
-        status: { in: ["open", "acknowledged", "routed"] },
-      },
-      select: {
-        id: true,
-        signalKey: true,
-        observedFact: true,
-        severity: true,
-        status: true,
-        recommendedRoute: true,
-        deadlineOrSla: true,
-        createdAt: true,
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      take: 5,
-    }),
+    loadPrioritizedSupervisionSignals(tx, workspaceId),
     tx.supervisionSignalRecord.groupBy({
       by: ["status", "severity"],
       where: { workspaceId },
@@ -223,6 +228,60 @@ async function loadOwnerLoopRows(
     externalCandidates,
     externalCandidateAudits,
   };
+}
+
+async function loadPrioritizedSupervisionSignals(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+) {
+  const unresolvedCritical = await tx.supervisionSignalRecord.findMany({
+    where: {
+      workspaceId,
+      status: { in: [...OPEN_SUPERVISION_SIGNAL_STATUSES] },
+      severity: "critical",
+    },
+    select: SUPERVISION_SIGNAL_SELECT,
+    orderBy: [...SUPERVISION_SIGNAL_ORDER],
+    take: 5,
+  });
+
+  const unresolvedSlots = Math.max(0, 5 - unresolvedCritical.length);
+  const unresolvedRemaining =
+    unresolvedSlots === 0
+      ? []
+      : await tx.supervisionSignalRecord.findMany({
+          where: {
+            workspaceId,
+            status: { in: [...OPEN_SUPERVISION_SIGNAL_STATUSES] },
+            severity: { not: "critical" },
+          },
+          select: SUPERVISION_SIGNAL_SELECT,
+          orderBy: [...SUPERVISION_SIGNAL_ORDER],
+          take: unresolvedSlots,
+        });
+
+  const resolvedSlots = Math.max(
+    0,
+    5 - unresolvedCritical.length - unresolvedRemaining.length,
+  );
+  const resolvedRemaining =
+    resolvedSlots === 0
+      ? []
+      : await tx.supervisionSignalRecord.findMany({
+          where: {
+            workspaceId,
+            status: { notIn: [...OPEN_SUPERVISION_SIGNAL_STATUSES] },
+          },
+          select: SUPERVISION_SIGNAL_SELECT,
+          orderBy: [...SUPERVISION_SIGNAL_ORDER],
+          take: resolvedSlots,
+        });
+
+  return [
+    ...unresolvedCritical,
+    ...unresolvedRemaining,
+    ...resolvedRemaining,
+  ];
 }
 
 function isMissingOwnerLoopSchema(error: unknown): boolean {

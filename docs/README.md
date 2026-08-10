@@ -59,6 +59,7 @@ connector 授权、写回、外发或审批证明。
 - [Helm CAIO 产品与治理口径 / Helm CAIO product and governance ADR](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md) / [English](product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.en.md) — 冻结品牌、治理定义、成熟度五阶段与 CEO-owner 首要 IA 位置；导航不认证 CEO、不授予权限、不激活生产
 - [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 冻结单一硬件产品、全量数据资产盘点与分级接入、初始化门、10 题候选、CEO 选 0-3 题、模型切换和 Context Agent 治理；requirements-only
 - [Helm CAIO Pro 实施主计划 / Helm CAIO Pro implementation plan](_planning/HELM_CAIO_PRO_IMPLEMENTATION_PLAN.md) — 按四仓、阶段门、PR、验证和回滚拆解；不代表客户连接、设备交付或生产激活
+- [Helm CAIO Pro FDE 现场经营闭环项目 / Helm CAIO Pro FDE site operating-loop project](_planning/HELM_CAIO_PRO_FDE_SITE_OPERATING_LOOP_PROJECT.md) — `active / Wave 1A implementation candidate`；定义七项可测结果、六层证据与四仓输入输出，GAP-1/2 已形成 repo-level 生产协调路径，GAP-3 仍受独立批准门约束，不代表组合包、现场部署或激活
 - [CAIO 模型代理复用受治理出站评估 / CAIO model proxy governed-reuse assessment](_planning/CAIO_MODEL_PROXY_GOVERNED_REUSE_DESIGN.md) — 逐条列出受治理链对调用方的要求与 LAN 直通请求今天无法满足之处；含可用性差异与需 owner 裁定的问题；不代表任何接线或激活
 - [Helm CAIO 模型准入与数据出域治理 / Helm CAIO model admission and data egress governance](product/HELM_CAIO_MODEL_ADMISSION_AND_EGRESS.md) — 租户策略、adapter readiness、调用前决定、单次 claim、append-only 回执与受限 fallback；Public Core 默认无生产 adapter
 - [Helm CAIO 模型准入与数据出域 Runbook / Helm CAIO model admission and data egress runbook](operations/HELM_CAIO_MODEL_EGRESS_RUNBOOK.md) — 空库重放、隔离 MySQL、事故处置与回滚；不把合成或本地证据提升为生产事实
@@ -72,6 +73,7 @@ connector 授权、写回、外发或审批证明。
 ## 公开契约 / Public Contracts
 
 - [数据风险审计摘要锚 / Data-risk audit digest anchor](contracts/audit-data-risk.contract.json) — 只固定跨仓审计模块与契约测试的公开安全版本及 SHA-256；不是源码镜像、敏感数据扫描结果、部署授权或运行时回执。
+- [CAIO Pro FDE 跨仓接口 JSON Schema / CAIO Pro FDE cross-repo interface JSON Schema](contracts/caio-pro-fde-cross-repo-interface.v1.schema.json) — Pack 输入与私有执行结果投影的版本化、严格、有限长可移植合同；格式校验不授予权限，Core 仍须解析 workspace、Portfolio、证据快照与工作对象并独占 canonical ExecutionReceipt 写入。
 - [AI 推荐治理契约 / AI recommendation governance](product/HELM_AI_RECOMMENDATION_GOVERNANCE.md)
 - [诊断与自动化证据层要求 / Diagnostic automation evidence layer requirements](product/HELM_DIAGNOSTIC_AUTOMATION_EVIDENCE_LAYER_REQUIREMENTS.md)
 - [智能体化实施工程治理需求 / Agentic implementation engineering governance requirements](product/HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md)
@@ -112,6 +114,7 @@ connector 授权、写回、外发或审批证明。
 
 - [集成模板 / Integration template](integrations/INTEGRATION_TEMPLATE.md)
 - [Helm CAIO Pro 实施主计划 / Helm CAIO Pro implementation plan](_planning/HELM_CAIO_PRO_IMPLEMENTATION_PLAN.md)
+- [Helm CAIO Pro FDE 现场经营闭环项目 / Helm CAIO Pro FDE site operating-loop project](_planning/HELM_CAIO_PRO_FDE_SITE_OPERATING_LOOP_PROJECT.md) — `active / Wave 1A implementation candidate`；GAP-1/2 已形成 repo-level 生产协调路径，GAP-3、package-ready 批准、组合、部署、owner 授权与经营价值仍需各自证据
 - [公开双语化计划 / Public bilingualization plan](./_planning/HELM_PUBLIC_BILINGUALIZATION_PLAN.md)
 - [开源运营模型 / Open source operating model](operations/HELM_PUBLIC_OPEN_SOURCE_OPERATING_MODEL_2026-06-02.md)
 - [公开试点作业手册 / Public trial runbook](pilot/PUBLIC_TRIAL_RUNBOOK.md)

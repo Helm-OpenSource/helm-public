@@ -88,6 +88,7 @@ function readySnapshot(): CaioInitializationProjectionSnapshot {
   const traceContent = {
     schemaVersion: CAIO_EVIDENCE_TRACE_SCHEMA_VERSION,
     evidenceRef: "evidence:owner-answer:1",
+    evidenceKind: "portfolio_scope",
     sourceRef: "source-1",
     assetRef: "asset-1",
     observationRunRef: "run-1",
@@ -223,7 +224,7 @@ function readySnapshot(): CaioInitializationProjectionSnapshot {
         status: "ACTIVE",
         accessMode: "READ_ONLY_API",
         sensitivity: "CONFIDENTIAL",
-        freshnessSlaMinutes: 60,
+        freshnessSlaMinutes: 61,
         compatibilityMode: false,
         runRefs: ["run-1"],
         runs: [
@@ -274,6 +275,16 @@ describe("CAIO initialization assessment projector", () => {
     expect(assessment.decision).toBe("ready_for_owner_acceptance");
     expect(assessment.failures).toEqual([]);
     expect(assessment.authorityEffect).toBe("none");
+    expect(projection.input.evidenceTraces).toEqual([
+      expect.objectContaining({
+        evidenceRef: "evidence:owner-answer:1",
+        evidenceKind: "portfolio_scope",
+        sourceRef: "source-1",
+        observationRunRef: "run-1",
+        capturedAt: "2026-07-23T04:00:00.000Z",
+        resolved: true,
+      }),
+    ]);
   });
 
   it("fails closed when a referenced mapping artifact is missing", () => {
@@ -416,9 +427,10 @@ describe("CAIO initialization assessment projector", () => {
     ).toContain("initialized_asset_missing_observation_run");
   });
 
-  it("recomputes freshness from observed time and source SLA", () => {
+  it("treats the exact source SLA expiry boundary as stale", () => {
     const snapshot = readySnapshot();
-    snapshot.evaluatedAt = "2026-07-23T05:00:00.001Z";
+    snapshot.sources[0].freshnessSlaMinutes = 60;
+    snapshot.evaluatedAt = "2026-07-23T05:00:00.000Z";
 
     const projection = projectCaioInitializationAssessmentInput(snapshot);
     const assessment = computeCaioInitializationAssessment(projection.input);

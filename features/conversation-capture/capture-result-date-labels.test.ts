@@ -13,7 +13,14 @@ describe("capture result date labels", () => {
   });
 
   it("delegates Chinese capture dates to the existing formatter", () => {
-    expect(formatCaptureResultDateLabel(sampleDate, false, formatDateLabel)).toBe("08月12日 14:05");
+    const label = formatCaptureResultDateLabel(
+      sampleDate,
+      false,
+      formatDateLabel,
+    );
+
+    expect(label).toBe(formatDateLabel(sampleDate));
+    expect(label).toMatch(/[\u3400-\u9fff]/u);
   });
 
   it("keeps empty capture dates localized", () => {

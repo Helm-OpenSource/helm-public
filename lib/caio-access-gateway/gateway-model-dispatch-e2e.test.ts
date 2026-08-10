@@ -238,6 +238,9 @@ function createWiring(options: { requestIdFactory?: () => string } = {}): Wiring
         return [];
       },
     },
+    operationResolver: {
+      hasWorkspaceOperationCapability: async () => true,
+    },
     mcpDispatch: async () => ({ ok: true }),
     modelProxy: {
       ...dispatchPort,

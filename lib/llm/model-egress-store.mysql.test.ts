@@ -1,5 +1,6 @@
 import {
   MembershipStatus,
+  type Prisma,
   WorkspaceRole,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -94,6 +95,46 @@ function assertIsolatedDatabaseTarget(): void {
       "Refusing model-egress integration test: confirm the isolated database name and use the helm_caio_p1d_ prefix.",
     );
   }
+}
+
+async function waitForBlockedWorkspaceLock(): Promise<void> {
+  const pattern = "%FROM Workspace WHERE id = %FOR UPDATE%";
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const rows = await db.$queryRaw<Array<{ n: bigint | number }>>`
+      SELECT COUNT(*) AS n FROM information_schema.PROCESSLIST
+      WHERE COMMAND IN ('Query', 'Execute')
+        AND INFO LIKE ${pattern}
+        AND TIME >= 1
+        AND ID <> CONNECTION_ID()`;
+    if (Number(rows[0]?.n ?? 0) >= 1) return;
+    await new Promise((resolveSleep) =>
+      setTimeout(resolveSleep, 25),
+    );
+  }
+  throw new Error("timed out waiting for a blocked Workspace row lock");
+}
+
+function holdWorkspaceLock(workspaceId: string) {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolveGate) => {
+    release = resolveGate;
+  });
+  let acquiredResolve: () => void = () => {};
+  const acquired = new Promise<void>((resolveAcquired) => {
+    acquiredResolve = resolveAcquired;
+  });
+  const done = db.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      await tx.$queryRaw`
+        SELECT id FROM Workspace
+        WHERE id = ${workspaceId}
+        FOR UPDATE`;
+      acquiredResolve();
+      await gate;
+    },
+    { timeout: 30_000 },
+  );
+  return { acquired, release, done };
 }
 
 function route(
@@ -2050,7 +2091,89 @@ describeMysql("model egress store with an isolated MySQL database", () => {
         idempotencyKey: `readiness:${suffix}:invited`,
         receipt: invitedReadiness,
       }),
-    ).rejects.toThrow("workspace_policy_access_lost");
+    ).rejects.toMatchObject({
+      code: "WORKSPACE_SERVICE_GOVERNANCE_REQUIRED",
+    });
+  });
+
+  it("rejects a policy write when active membership is lost before the transaction recheck", async () => {
+    const actor = await db.user.create({
+      data: {
+        name: "Model egress transaction recheck owner",
+        email: `model-egress-recheck-${suffix}@example.test`,
+      },
+    });
+    await db.membership.create({
+      data: {
+        workspaceId,
+        userId: actor.id,
+        role: WorkspaceRole.OWNER,
+        status: MembershipStatus.ACTIVE,
+      },
+    });
+
+    const now = new Date();
+    const target = route(
+      `synthetic-transaction-recheck-${suffix}`,
+      HASH_A,
+    );
+    const receipt = readiness({
+      workspaceId,
+      target,
+      checkedAt: now,
+      expiresAt: new Date(now.getTime() + 60_000),
+    });
+    const idempotencyKey =
+      `readiness:${suffix}:transaction-recheck`;
+    const holder = holdWorkspaceLock(workspaceId);
+    await holder.acquired;
+    const write = recordProviderAdapterReadinessReceipt({
+      authority: GOVERNED_MODEL_READINESS_AUTHORITY,
+      workspaceId,
+      actorUserId: actor.id,
+      idempotencyKey,
+      receipt,
+    });
+
+    try {
+      await waitForBlockedWorkspaceLock();
+      await db.membership.update({
+        where: {
+          workspaceId_userId: {
+            workspaceId,
+            userId: actor.id,
+          },
+        },
+        data: { status: MembershipStatus.INVITED },
+      });
+      holder.release();
+
+      await expect(write).rejects.toThrow(
+        "workspace_policy_access_lost",
+      );
+      await holder.done;
+    } finally {
+      holder.release();
+      await Promise.allSettled([holder.done, write]);
+    }
+
+    const [readinessRows, auditRows] = await Promise.all([
+      db.providerAdapterReadinessReceipt.count({
+        where: {
+          workspaceId,
+          id: receipt.receiptId,
+        },
+      }),
+      db.auditLog.count({
+        where: {
+          workspaceId,
+          actionType: "MODEL_ADAPTER_READINESS_RECORDED",
+          targetId: receipt.receiptId,
+        },
+      }),
+    ]);
+    expect(readinessRows).toBe(0);
+    expect(auditRows).toBe(0);
   });
 
   it("projects persisted uppercase storage through the owner-only read model", async () => {

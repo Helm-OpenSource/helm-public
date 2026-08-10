@@ -113,6 +113,88 @@ describe("getWorkspaceStage1OwnerLoopReadout", () => {
         },
       },
     });
+    expect(dbMock.supervisionSignalRecord.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ workspaceId: "workspace-1" }),
+      }),
+    );
+  });
+
+  it("keeps older unresolved critical signals ahead of newer resolved signals", async () => {
+    const critical = {
+      id: "critical-open",
+      signalKey: "signal:critical-open",
+      observedFact: "An older critical signal still needs owner attention.",
+      severity: "critical",
+      status: "open",
+      recommendedRoute: "owner_review",
+      deadlineOrSla: null,
+      createdAt: new Date("2026-07-20T00:00:00.000Z"),
+    };
+    const warning = {
+      ...critical,
+      id: "warning-routed",
+      signalKey: "signal:warning-routed",
+      severity: "warning",
+      status: "routed",
+      createdAt: new Date("2026-07-22T00:00:00.000Z"),
+    };
+    const resolved = {
+      ...critical,
+      id: "resolved-newest",
+      signalKey: "signal:resolved-newest",
+      severity: "info",
+      status: "resolved",
+      recommendedRoute: "watch",
+      createdAt: new Date("2026-07-23T00:00:00.000Z"),
+    };
+    dbMock.supervisionSignalRecord.findMany.mockImplementation(
+      async (args: { where: { status?: unknown; severity?: unknown } }) => {
+        if (args.where.severity === "critical") return [critical];
+        if (
+          typeof args.where.status === "object" &&
+          args.where.status !== null &&
+          "in" in args.where.status
+        ) {
+          return [warning];
+        }
+        return [resolved];
+      },
+    );
+
+    const readout = await getWorkspaceStage1OwnerLoopReadout({
+      workspaceId: "workspace-1",
+      membershipRole: WorkspaceRole.OWNER,
+    });
+
+    expect(readout?.supervision.items.map((item) => item.id)).toEqual([
+      "critical-open",
+      "warning-routed",
+      "resolved-newest",
+    ]);
+    expect(dbMock.supervisionSignalRecord.findMany).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops querying lower-priority groups after five unresolved critical signals", async () => {
+    const criticalSignals = Array.from({ length: 5 }, (_, index) => ({
+      id: `critical-${index}`,
+      signalKey: `signal:critical-${index}`,
+      observedFact: "Owner attention is still required.",
+      severity: "critical",
+      status: "open",
+      recommendedRoute: "owner_review",
+      deadlineOrSla: null,
+      createdAt: new Date(`2026-07-${20 + index}T00:00:00.000Z`),
+    }));
+    dbMock.supervisionSignalRecord.findMany.mockResolvedValue(criticalSignals);
+
+    const readout = await getWorkspaceStage1OwnerLoopReadout({
+      workspaceId: "workspace-1",
+      membershipRole: WorkspaceRole.OWNER,
+    });
+
+    expect(readout?.supervision.items).toHaveLength(5);
+    expect(dbMock.supervisionSignalRecord.findMany).toHaveBeenCalledTimes(1);
   });
 
   it("degrades to null when the additive owner-loop schema is not deployed", async () => {

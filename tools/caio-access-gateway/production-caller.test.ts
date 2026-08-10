@@ -169,7 +169,9 @@ describe("the gateway protocol core has a non-test composition caller", () => {
     for (const port of [
       "token authenticator",
       "project resolver",
+      "operation capability resolver",
       "MCP dispatcher",
+      "mounted Pack operating-input provider",
       "model alias bindings",
       "canonical audit gate",
       "readiness probe",
@@ -187,6 +189,9 @@ describe("the gateway protocol core has a non-test composition caller", () => {
 
     // And why the seam survives either decision.
     expect(header).toContain("createCaioAccessGatewayMount");
+    expect(header).toContain("production caller is reachable");
+    expect(header).toContain("neither table proves");
+    expect(header).toContain("Pack supplied one");
   });
 
   // Reversal guard. Nothing here can observe the overlay host, but this repo
@@ -202,6 +207,8 @@ describe("the gateway protocol core has a non-test composition caller", () => {
       /is what a deployment runner starts/,
       /\bserved in V1\b/,
       /\bmounted in production\b/,
+      /\bPack (?:is|has been) mounted\b/i,
+      /\bthe runtime is activated\b/i,
       /\bcoming soon\b/i,
     ]) {
       expect(withoutQuotations, `header must not claim: ${claim}`).not.toMatch(
@@ -221,6 +228,10 @@ describe("the gateway protocol core has a non-test composition caller", () => {
     );
     // Mounted exactly once: one handler for the whole surface.
     expect(source.match(/createCaioGatewayHandler\(/g)).toHaveLength(1);
+    expect(source).toContain("ingestCaioPrivateExecutionResultProjection");
+    expect(source).toMatch(
+      /privateExecutionResultIngress:\s*async[\s\S]*ingestCaioPrivateExecutionResultProjection/,
+    );
     // And no second listener can be built from here: the deployment binds one
     // approved private address and port, and the host owns it.
     expect(source).not.toMatch(/from "node:https"/);

@@ -21,7 +21,10 @@ import {
 } from "@/lib/auth/authorization";
 import { assertWorkspacePolicyServiceAccess } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
-import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import {
+  isWriteConflictError,
+  runWithWriteConflictRetry,
+} from "@/lib/db/conflict-aware-write";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 
@@ -37,7 +40,26 @@ import {
   type CaioOperatingQuestionImplementationPlan,
 } from "./caio-operating-question-implementation-plan";
 import {
+  caioProPackOperatingInputSchema,
+  validateCaioProFdeInterfaceDescriptor,
+  type CaioProPackOperatingInput,
+} from "./caio-pro-fde-cross-repo-contract";
+import {
+  CaioFdeScopeResolutionError,
+  resolveCaioFdeObservationEvidence,
+  resolveCaioFdeObservationEvidenceBatch,
+  resolveCaioFdePortfolioScope,
+} from "./caio-fde-scope-resolver.service";
+import {
+  CAIO_OPERATING_QUESTION_PACK_DERIVATION_REVISION,
+  canonicalizeCaioProPackOperatingInputForGeneration,
+  deriveCaioOperatingQuestionCandidatesFromPackInput,
+  type CaioOperatingQuestionTrustedEvidence,
+} from "./caio-operating-question-pack-generator";
+import {
+  CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
   createCaioOperatingQuestionG0Context,
+  createCaioOperatingQuestionG0ContextForSchemaVersion,
   createCaioOperatingQuestionGenerationReceipt,
   evaluateCaioOperatingQuestionGeneration,
   validateCaioOperatingQuestionGenerationReceipt,
@@ -62,6 +84,33 @@ import {
 
 type Tx = Prisma.TransactionClient;
 
+export type GenerateCaioOperatingQuestionPortfolioInput = {
+  workspaceId: string;
+  actorUserId: string;
+  generationKey: string;
+  generatorRef: string;
+  modelRef: string;
+  candidates: unknown;
+  auditRefs: string[];
+  now?: Date;
+  english?: boolean;
+  signal?: AbortSignal;
+};
+
+export type GenerateCaioOperatingQuestionPortfolioFromPackInput =
+  Omit<GenerateCaioOperatingQuestionPortfolioInput, "candidates"> & {
+    interfaceDescriptor: unknown;
+    packOperatingInput: unknown;
+    candidates?: never;
+  };
+
+type GenerateCaioOperatingQuestionPortfolioInternalInput = Omit<
+  GenerateCaioOperatingQuestionPortfolioInput,
+  "candidates"
+> & {
+  candidates?: unknown;
+};
+
 const TRANSACTION_OPTIONS = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
   maxWait: 10_000,
@@ -76,6 +125,7 @@ const WRITE_RETRY_OPTIONS = {
 type TrustedOperatingQuestionContext = {
   initialization: CurrentAcceptedCaioInitializationContext;
   g0Context: CaioOperatingQuestionG0Context;
+  compatibleG0Contexts: readonly CaioOperatingQuestionG0Context[];
 };
 
 type CurrentGenerationState = {
@@ -96,6 +146,12 @@ export class CaioOperatingQuestionStoreError extends Error {
     super(reasons.length > 0 ? `${message}: ${reasons.join("; ")}` : message);
     this.name = "CaioOperatingQuestionStoreError";
     this.reasons = reasons;
+  }
+}
+
+function throwIfGenerationCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new CaioOperatingQuestionStoreError("request_cancelled");
   }
 }
 
@@ -142,6 +198,20 @@ function isUniqueConstraintViolation(error: unknown): boolean {
   );
 }
 
+function isQuestionGenerationConflict(error: unknown): boolean {
+  return (
+    isWriteConflictError(error) ||
+    isUniqueConstraintViolation(error) ||
+    (error instanceof CaioOperatingQuestionStoreError &&
+      error.message === "question_generation_concurrent_conflict")
+  );
+}
+
+const GENERATION_WRITE_RETRY_OPTIONS = {
+  ...WRITE_RETRY_OPTIONS,
+  isConflict: isQuestionGenerationConflict,
+} as const;
+
 function hashRequest(value: unknown): string {
   try {
     return sha256(canonicalJson(value));
@@ -187,7 +257,7 @@ async function assertPolicyAccessInTransaction(
   });
   if (
     !membership ||
-    membership.status === MembershipStatus.INACTIVE ||
+    membership.status !== MembershipStatus.ACTIVE ||
     !workspaceRoleHasCapability(
       membership.role,
       WORKSPACE_CAPABILITIES.MANAGE_POLICIES,
@@ -429,7 +499,34 @@ async function loadTrustedContextForUpdate(
     gateReceipt: initialization.receipt,
     currentHead: initialization.head,
   });
-  return { initialization, g0Context };
+  const historicalG0Context =
+    createCaioOperatingQuestionG0ContextForSchemaVersion(
+      {
+        assessmentInput: initialization.assessmentInput,
+        assessment: initialization.assessment,
+        gateReceipt: initialization.receipt,
+        currentHead: initialization.head,
+      },
+      CAIO_OPERATING_QUESTION_G0_CONTEXT_SCHEMA_VERSION_V1,
+    );
+  const compatibleG0Contexts = [g0Context, historicalG0Context].filter(
+    (context, index, contexts) =>
+      contexts.findIndex(
+        (candidate) => candidate.contentHash === context.contentHash,
+      ) === index,
+  );
+  return { initialization, g0Context, compatibleG0Contexts };
+}
+
+function resolveCompatibleG0Context(
+  trusted: TrustedOperatingQuestionContext,
+  contentHash: string,
+): CaioOperatingQuestionG0Context {
+  return (
+    trusted.compatibleG0Contexts.find(
+      (context) => context.contentHash === contentHash,
+    ) ?? trusted.g0Context
+  );
 }
 
 async function readPortfolioHeadForUpdate(
@@ -465,7 +562,7 @@ async function assertPortfolioChainIntegrity(
   input: {
     workspaceId: string;
     gateReceiptId: string;
-    g0Context: CaioOperatingQuestionG0Context;
+    trusted: TrustedOperatingQuestionContext;
     headPortfolio: CaioOperatingQuestionPortfolio;
   },
 ): Promise<void> {
@@ -480,7 +577,7 @@ async function assertPortfolioChainIntegrity(
     visited.add(current.portfolioId);
     const contextValidation = validateCaioOperatingQuestionPortfolioAgainstG0(
       current,
-      input.g0Context,
+      resolveCompatibleG0Context(input.trusted, current.g0ContextHash),
     );
     if (!contextValidation.valid) {
       throw new CaioOperatingQuestionStoreError(
@@ -540,7 +637,7 @@ async function assertGenerationReceiptChainIntegrity(
   input: {
     workspaceId: string;
     gateReceiptId: string;
-    g0Context: CaioOperatingQuestionG0Context;
+    trusted: TrustedOperatingQuestionContext;
     headReceipt: CaioOperatingQuestionGenerationReceipt;
   },
 ): Promise<void> {
@@ -556,7 +653,7 @@ async function assertGenerationReceiptChainIntegrity(
     const contextValidation =
       validateCaioOperatingQuestionGenerationReceiptAgainstG0(
         current,
-        input.g0Context,
+        resolveCompatibleG0Context(input.trusted, current.g0ContextHash),
       );
     if (!contextValidation.valid) {
       throw new CaioOperatingQuestionStoreError(
@@ -664,7 +761,7 @@ async function loadCurrentGenerationState(
   await assertGenerationReceiptChainIntegrity(tx, {
     workspaceId: input.workspaceId,
     gateReceiptId: head.initializationGateReceiptId,
-    g0Context: input.trusted.g0Context,
+    trusted: input.trusted,
     headReceipt: previousReceipt,
   });
   let previousPortfolio: CaioOperatingQuestionPortfolio | null = null;
@@ -690,7 +787,7 @@ async function loadCurrentGenerationState(
     await assertPortfolioChainIntegrity(tx, {
       workspaceId: input.workspaceId,
       gateReceiptId: head.initializationGateReceiptId,
-      g0Context: input.trusted.g0Context,
+      trusted: input.trusted,
       headPortfolio: previousPortfolio,
     });
   } else if (head.portfolioSequence !== 0) {
@@ -704,6 +801,11 @@ async function loadCurrentGenerationState(
   ) {
     throw new CaioOperatingQuestionStoreError(
       "question_portfolio_head_outcome_binding_invalid",
+    );
+  }
+  if (previousReceipt.g0ContextHash !== input.trusted.g0Context.contentHash) {
+    throw new CaioOperatingQuestionStoreError(
+      "question_g0_rollover_required",
     );
   }
   return { head, previousReceipt, previousPortfolio };
@@ -766,22 +868,136 @@ async function updatePortfolioHead(
   }
 }
 
-export async function generateCaioOperatingQuestionPortfolio(input: {
-  workspaceId: string;
-  actorUserId: string;
-  generationKey: string;
-  generatorRef: string;
-  modelRef: string;
-  candidates: unknown;
-  auditRefs: string[];
-  now?: Date;
-  english?: boolean;
-}): Promise<{
+async function assertPackOperatingInputScope(
+  tx: Tx,
+  input: {
+    workspaceId: string;
+    packOperatingInput: CaioProPackOperatingInput;
+    trusted: TrustedOperatingQuestionContext;
+    now: Date;
+  },
+): Promise<{
+  portfolioRef: string;
+  trustedEvidence: CaioOperatingQuestionTrustedEvidence[];
+}> {
+  const packInput = input.packOperatingInput;
+  const portfolio = await resolveCaioFdePortfolioScope({
+    client: tx,
+    workspaceId: input.workspaceId,
+    workspaceRef: packInput.workspaceRef,
+    portfolioRef: packInput.portfolioRef,
+  });
+  const snapshot = await resolveCaioFdeObservationEvidence({
+    client: tx,
+    workspaceId: input.workspaceId,
+    evidenceRef: packInput.evidenceSnapshotRef,
+    portfolioRef: portfolio.portfolioRef,
+    requiredBindingRefs: packInput.evidenceBindings.map(
+      (binding) => binding.evidenceRef,
+    ),
+    expectedBusinessResult: "success",
+    now: input.now,
+  });
+  const declaredEvidenceRefs = uniqueSorted([
+    ...packInput.metrics.flatMap((metric) => metric.evidenceRefs),
+    ...packInput.candidateInputs.flatMap((candidate) => candidate.evidenceRefs),
+  ]);
+  const snapshotEvidenceRefs = new Set(snapshot.evidenceRefs);
+  const g0EvidenceRefs = new Set(input.trusted.g0Context.evidenceRefs);
+  if (
+    declaredEvidenceRefs.length === 0 ||
+    declaredEvidenceRefs.some(
+      (ref) => !snapshotEvidenceRefs.has(ref) || !g0EvidenceRefs.has(ref),
+    )
+  ) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_operating_input_evidence_scope_invalid",
+    );
+  }
+  const tracesByRunRef = new Map<
+    string,
+    typeof input.trusted.initialization.assessmentInput.evidenceTraces
+  >();
+  for (const trace of input.trusted.initialization.assessmentInput.evidenceTraces) {
+    if (!trace.resolved) continue;
+    const traces = tracesByRunRef.get(trace.observationRunRef) ?? [];
+    traces.push(trace);
+    tracesByRunRef.set(trace.observationRunRef, traces);
+  }
+  const bindingKindByRef = new Map(
+    packInput.evidenceBindings.map((binding) => [
+      binding.evidenceRef,
+      binding.evidenceKind,
+    ]),
+  );
+  const resolvedEvidence = await resolveCaioFdeObservationEvidenceBatch({
+    client: tx,
+    workspaceId: input.workspaceId,
+    evidenceRefs: declaredEvidenceRefs,
+    portfolioRef: portfolio.portfolioRef,
+    expectedBusinessResult: "success",
+    now: input.now,
+  });
+  const trustedEvidence = resolvedEvidence.flatMap((evidence) => {
+    const evidenceRef = evidence.evidenceRef;
+    const traces = tracesByRunRef.get(evidence.runId) ?? [];
+    const trace = traces.length === 1 ? traces[0] : null;
+    const capturedAt = Date.parse(trace?.capturedAt ?? "");
+    if (
+      !trace ||
+      trace.sourceRef !== evidence.sourceId ||
+      !evidence.evidenceRefs.includes(trace.evidenceRef) ||
+      !g0EvidenceRefs.has(trace.evidenceRef) ||
+      !Number.isFinite(capturedAt) ||
+      capturedAt < evidence.windowStart.getTime() ||
+      capturedAt > evidence.observedAt.getTime() ||
+      capturedAt > input.now.getTime() ||
+      typeof trace.evidenceKind !== "string"
+    ) {
+      return [];
+    }
+    if (bindingKindByRef.get(evidenceRef) !== trace.evidenceKind) {
+      throw new CaioOperatingQuestionStoreError(
+        "pack_operating_input_evidence_kind_mismatch",
+      );
+    }
+    const ageMs = input.now.getTime() - capturedAt;
+    const freshness =
+      evidence.freshness !== "fresh" ||
+      !Number.isSafeInteger(evidence.freshnessSlaMinutes) ||
+      evidence.freshnessSlaMinutes <= 0
+        ? "unknown"
+        : ageMs >= evidence.freshnessSlaMinutes * 60_000
+          ? "stale"
+          : "fresh";
+    return [
+      {
+        evidenceRef,
+        evidenceKind: trace.evidenceKind,
+        freshness,
+        capturedAt: trace.capturedAt,
+      } satisfies CaioOperatingQuestionTrustedEvidence,
+    ];
+  });
+  if (trustedEvidence.length !== declaredEvidenceRefs.length) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_operating_input_evidence_scope_invalid",
+    );
+  }
+  return { portfolioRef: portfolio.portfolioRef, trustedEvidence };
+}
+
+async function generateCaioOperatingQuestionPortfolioInternal(
+  input: GenerateCaioOperatingQuestionPortfolioInternalInput,
+  packOperatingInput?: CaioProPackOperatingInput,
+): Promise<{
   receipt: CaioOperatingQuestionGenerationReceipt;
   portfolio: CaioOperatingQuestionPortfolio | null;
   replayed: boolean;
 }> {
+  throwIfGenerationCancelled(input.signal);
   await assertPolicyAccess(input);
+  throwIfGenerationCancelled(input.signal);
   const generationKey = nonEmpty(
     input.generationKey,
     "generation_key_required",
@@ -793,25 +1009,70 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
     throw new CaioOperatingQuestionStoreError("audit_ref_required");
   }
   const now = input.now ?? new Date();
+  const canonicalPackOperatingInput = packOperatingInput
+    ? canonicalizeCaioProPackOperatingInputForGeneration(packOperatingInput)
+    : undefined;
   return runWithWriteConflictRetry(
     () =>
       db.$transaction(async (tx) => {
+        throwIfGenerationCancelled(input.signal);
         const trusted = await loadTrustedContextForUpdate(tx, {
           workspaceId: input.workspaceId,
           at: now,
         });
+        throwIfGenerationCancelled(input.signal);
         await assertPolicyAccessInTransaction(tx, input);
+        throwIfGenerationCancelled(input.signal);
+        let effectiveCandidates = input.candidates;
+        if (canonicalPackOperatingInput) {
+          let scope: Awaited<ReturnType<typeof assertPackOperatingInputScope>>;
+          try {
+            scope = await assertPackOperatingInputScope(tx, {
+              workspaceId: input.workspaceId,
+              packOperatingInput: canonicalPackOperatingInput,
+              trusted,
+              now,
+            });
+          } catch (error) {
+            if (error instanceof CaioFdeScopeResolutionError) {
+              throw new CaioOperatingQuestionStoreError(
+                "pack_operating_input_scope_invalid",
+                error.reasons,
+              );
+            }
+            throw error;
+          }
+          throwIfGenerationCancelled(input.signal);
+          const derivation =
+            deriveCaioOperatingQuestionCandidatesFromPackInput({
+              packOperatingInput: canonicalPackOperatingInput,
+              portfolioRef: scope.portfolioRef,
+              g0Context: trusted.g0Context,
+              trustedEvidence: scope.trustedEvidence,
+              baselineWindowEnd:
+                trusted.initialization.assessmentInput.evaluatedAt,
+            });
+          effectiveCandidates = derivation.candidates;
+        }
         const state = await loadCurrentGenerationState(tx, {
           workspaceId: input.workspaceId,
           trusted,
         });
+        throwIfGenerationCancelled(input.signal);
         const requestHash = hashRequest({
           g0ContextHash: trusted.g0Context.contentHash,
           generationKey,
           generatorRef,
           modelRef,
-          candidates: input.candidates,
+          candidates: effectiveCandidates,
           auditRefs,
+          ...(canonicalPackOperatingInput
+            ? {
+                packDerivationRevision:
+                  CAIO_OPERATING_QUESTION_PACK_DERIVATION_REVISION,
+                packOperatingInput: canonicalPackOperatingInput,
+              }
+            : {}),
         });
         const existing =
           await tx.caioOperatingQuestionGenerationReceipt.findUnique({
@@ -872,6 +1133,7 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
               outcomeValidation.errors,
             );
           }
+          throwIfGenerationCancelled(input.signal);
           return { receipt, portfolio, replayed: true };
         }
         const evaluation = evaluateCaioOperatingQuestionGeneration({
@@ -879,7 +1141,7 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
           generationKey,
           generatorRef,
           modelRef,
-          candidates: input.candidates,
+          candidates: effectiveCandidates,
           generatedAt: now.toISOString(),
           auditRefs,
           previousPortfolio: state.previousPortfolio,
@@ -897,6 +1159,7 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
               portfolioValidation.errors,
             );
           }
+          throwIfGenerationCancelled(input.signal);
           await tx.caioOperatingQuestionPortfolio.create({
             data: {
               id: portfolio.portfolioId,
@@ -924,6 +1187,7 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
               generatedAt: new Date(portfolio.generatedAt),
             },
           });
+          throwIfGenerationCancelled(input.signal);
         }
         const receipt = createCaioOperatingQuestionGenerationReceipt({
           evaluation,
@@ -944,6 +1208,7 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
           );
         }
         try {
+          throwIfGenerationCancelled(input.signal);
           await tx.caioOperatingQuestionGenerationReceipt.create({
             data: {
               id: receipt.receiptId,
@@ -971,6 +1236,7 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
               recordedAt: new Date(receipt.recordedAt),
             },
           });
+          throwIfGenerationCancelled(input.signal);
         } catch (error) {
           if (isUniqueConstraintViolation(error)) {
             throw new CaioOperatingQuestionStoreError(
@@ -988,6 +1254,7 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
           previousPortfolio: state.previousPortfolio,
           previousHead: state.head,
         });
+        throwIfGenerationCancelled(input.signal);
         await writeAuditLog(
           {
             workspaceId: input.workspaceId,
@@ -1014,9 +1281,78 @@ export async function generateCaioOperatingQuestionPortfolio(input: {
           },
           { client: tx },
         );
+        throwIfGenerationCancelled(input.signal);
         return { receipt, portfolio, replayed: false };
       }, TRANSACTION_OPTIONS),
-    WRITE_RETRY_OPTIONS,
+    GENERATION_WRITE_RETRY_OPTIONS,
+  );
+}
+
+export async function generateCaioOperatingQuestionPortfolio(
+  input: GenerateCaioOperatingQuestionPortfolioInput,
+) {
+  return generateCaioOperatingQuestionPortfolioInternal(input);
+}
+
+export async function generateCaioOperatingQuestionPortfolioFromPackInput(
+  input: GenerateCaioOperatingQuestionPortfolioFromPackInput,
+) {
+  const externalPayload = input as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(externalPayload, "candidates")) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_external_candidates_forbidden",
+    );
+  }
+  if (
+    [
+      "question",
+      "questions",
+      "questionCandidates",
+      "questionText",
+      "title",
+      "scores",
+      "candidateScores",
+      "rank",
+    ].some((field) =>
+      Object.prototype.hasOwnProperty.call(externalPayload, field),
+    )
+  ) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_external_question_payload_forbidden",
+    );
+  }
+  const descriptorValidation = validateCaioProFdeInterfaceDescriptor(
+    input.interfaceDescriptor,
+  );
+  if (!descriptorValidation.valid) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_interface_descriptor_invalid",
+      descriptorValidation.errors,
+    );
+  }
+  const parsedPackInput = caioProPackOperatingInputSchema.safeParse(
+    input.packOperatingInput,
+  );
+  if (!parsedPackInput.success) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_operating_input_contract_invalid",
+    );
+  }
+  const {
+    interfaceDescriptor: _interfaceDescriptor,
+    packOperatingInput: _packInput,
+    ...generationInput
+  } = input;
+  return generateCaioOperatingQuestionPortfolioInternal(
+    {
+      ...generationInput,
+      auditRefs: uniqueSorted([
+        ...generationInput.auditRefs,
+        parsedPackInput.data.contractRef,
+        parsedPackInput.data.evidenceSnapshotRef,
+      ]),
+    },
+    parsedPackInput.data,
   );
 }
 
@@ -1287,10 +1623,14 @@ export async function selectCaioOperatingQuestions(input: {
           );
         }
         const portfolio = parseStoredPortfolio(portfolioRow);
+        const portfolioG0Context = resolveCompatibleG0Context(
+          trusted,
+          portfolio.g0ContextHash,
+        );
         const portfolioValidation =
           validateCaioOperatingQuestionPortfolioAgainstG0(
             portfolio,
-            trusted.g0Context,
+            portfolioG0Context,
           );
         if (!portfolioValidation.valid) {
           throw new CaioOperatingQuestionStoreError(
@@ -1301,7 +1641,7 @@ export async function selectCaioOperatingQuestions(input: {
         await assertPortfolioChainIntegrity(tx, {
           workspaceId: input.workspaceId,
           gateReceiptId: trusted.g0Context.gateReceiptRef,
-          g0Context: trusted.g0Context,
+          trusted,
           headPortfolio: portfolio,
         });
         const allowedEvidenceRefs = new Set(portfolio.evidenceRefs);
@@ -1634,7 +1974,7 @@ export async function bindCurrentCaioQuestionSelectionToDecisionRecords(input: {
         await assertPortfolioChainIntegrity(tx, {
           workspaceId: input.workspaceId,
           gateReceiptId: trusted.g0Context.gateReceiptRef,
-          g0Context: trusted.g0Context,
+          trusted,
           headPortfolio: portfolio,
         });
         const generationReceiptRow =

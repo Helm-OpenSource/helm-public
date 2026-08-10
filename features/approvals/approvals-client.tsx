@@ -132,6 +132,10 @@ import {
 } from "@/features/approvals/approval-learning-display";
 import { formatApprovalDateLabel } from "@/features/approvals/approval-date-labels";
 import { resolveApprovalObjectDetailHref } from "@/features/approvals/approval-object-detail-link";
+import {
+  getStage1TerminalReceiptMode,
+  Stage1TerminalResultControl,
+} from "@/features/approvals/stage1-terminal-result-control";
 import { GovernedCandidateReviewPanel } from "@/features/governed-candidates/governed-candidate-review-panel";
 import type { GovernedCandidateReviewListItem } from "@/lib/governed-intelligence/governed-candidate-review";
 
@@ -139,8 +143,10 @@ type ApprovalsClientProps = {
   actionGovernance: {
     canReview: boolean;
     canChangePolicy: boolean;
+    canFinalizeStage1Result: boolean;
     reviewDeniedMessage: string;
     policyDeniedMessage: string;
+    stage1ResultDeniedMessage: string;
   };
   candidateGovernance: {
     canReview: boolean;
@@ -206,6 +212,17 @@ type ApprovalsClientProps = {
       } | null;
       contact: { id: string; name: string } | null;
       meeting: { id: string; title: string } | null;
+      decisionWorkPacketClaim: {
+        decisionRecordId: string;
+      } | null;
+      executionReceipt: {
+        outcome:
+          | "SUCCESS"
+          | "PARTIAL_SUCCESS"
+          | "FAILURE"
+          | "NOT_EXECUTED"
+          | "REJECTED";
+      } | null;
     };
     recommendationFacts: Array<{
       id: string;
@@ -438,6 +455,12 @@ export function ApprovalsClient({
     "all" | "auto" | "manual"
   >("all");
   const [draft, setDraft] = useState<string | null>(null);
+  const [stage1BusinessResult, setStage1BusinessResult] = useState<
+    "" | "success" | "failure"
+  >("");
+  const [stage1OutcomeRef, setStage1OutcomeRef] = useState("");
+  const [stage1FollowedRecommendation, setStage1FollowedRecommendation] =
+    useState<"unknown" | "yes" | "no">("unknown");
   const [previewApprovalId, setPreviewApprovalId] = useState<string | null>(
     null,
   );
@@ -531,6 +554,19 @@ export function ApprovalsClient({
     selected.actionItem.status === "APPROVED";
   const selectedActionExecuted = selected?.actionItem.status === "EXECUTED";
   const selectedActionBlocked = selected?.actionItem.status === "BLOCKED";
+  const selectedActionRejected = selected?.actionItem.status === "REJECTED";
+  const selectedActionClosed =
+    selectedActionExecuted || selectedActionBlocked || selectedActionRejected;
+  const selectedStage1Decision =
+    selected?.actionItem.decisionWorkPacketClaim ?? null;
+  const selectedStage1ReceiptOutcome =
+    selected?.actionItem.executionReceipt?.outcome ?? null;
+  const selectedStage1TerminalMode = getStage1TerminalReceiptMode(
+    selectedStage1ReceiptOutcome,
+    selected?.actionItem.status,
+  );
+  const stage1TerminalResultReady =
+    stage1BusinessResult !== "" && stage1OutcomeRef.trim().length > 0;
   const selectedBiSignalId = selected?.biSource?.signalId ?? null;
   const selectedBiDecisionId = selected?.biSource?.decisionId ?? null;
   const selectedBiLatestPlan =
@@ -620,6 +656,12 @@ export function ApprovalsClient({
       window.history.replaceState(window.history.state, "", nextUrl);
     }
   }, [initialApprovalId, pathname, setSelectedApprovalId, tasks]);
+
+  useEffect(() => {
+    setStage1BusinessResult("");
+    setStage1OutcomeRef("");
+    setStage1FollowedRecommendation("unknown");
+  }, [selectedApprovalHashTargetId]);
 
   useEffect(() => {
     if (!selectedApprovalHashTargetId) {
@@ -1301,6 +1343,48 @@ export function ApprovalsClient({
       }
       toast.success(success);
       router.refresh();
+    });
+  };
+
+  const verifySelectedReceipt = () => {
+    if (!selected) {
+      return Promise.resolve({
+        ok: false,
+        error: english ? "Approval task not found" : "审批任务不存在",
+      });
+    }
+    if (!selectedStage1Decision) {
+      return verifyExecutedTaskReceiptAction(selected.id);
+    }
+    if (selectedStage1TerminalMode === "closed-without-execution") {
+      return verifyExecutedTaskReceiptAction(selected.id);
+    }
+    if (selectedStage1TerminalMode === "unresolved") {
+      return Promise.resolve({
+        ok: false,
+        error: english
+          ? "The canonical receipt outcome must be repaired or refreshed before verification."
+          : "请先修复或刷新规范回执结果，再进行验收。",
+      });
+    }
+    if (!stage1TerminalResultReady) {
+      return Promise.resolve({
+        ok: false,
+        error: english
+          ? "A final business outcome and evidence reference are required."
+          : "请填写最终业务结果与证据引用。",
+      });
+    }
+    return verifyExecutedTaskReceiptAction({
+      taskId: selected.id,
+      stage1TerminalResult: {
+        outcomeRef: stage1OutcomeRef.trim(),
+        result: stage1BusinessResult,
+        followedAiRecommendation:
+          stage1FollowedRecommendation === "unknown"
+            ? null
+            : stage1FollowedRecommendation === "yes",
+      },
     });
   };
 
@@ -3387,6 +3471,47 @@ export function ApprovalsClient({
                       : "这条动作当前已阻断，建议先确认阻断原因，再决定是否重新处理。"}
                   </div>
                 ) : null}
+                {selectedActionRejected ? (
+                  <div
+                    className="workspace-note-card p-4 text-sm leading-7 text-[color:var(--foreground)]"
+                    data-tone="amber"
+                  >
+                    {english
+                      ? "This ActionItem is in a non-canonical REJECTED state. It does not imply a business failure, but the governed state must be repaired before terminal reconciliation."
+                      : "这条 ActionItem 处于非规范的 REJECTED 状态。它不代表业务失败，但必须先修复治理状态，才能进行终态 reconciliation。"}
+                  </div>
+                ) : null}
+                {selectedActionClosed && selectedStage1Decision ? (
+                  <Stage1TerminalResultControl
+                    receiptOutcome={selectedStage1ReceiptOutcome}
+                    actionStatus={selected.actionItem.status}
+                    english={english}
+                    pending={pending}
+                    canFinalize={actionGovernance.canFinalizeStage1Result}
+                    deniedMessage={actionGovernance.stage1ResultDeniedMessage}
+                    businessResult={stage1BusinessResult}
+                    outcomeRef={stage1OutcomeRef}
+                    followedRecommendation={stage1FollowedRecommendation}
+                    onBusinessResultChange={setStage1BusinessResult}
+                    onOutcomeRefChange={setStage1OutcomeRef}
+                    onFollowedRecommendationChange={
+                      setStage1FollowedRecommendation
+                    }
+                    onVerify={() =>
+                      runAction(
+                        verifySelectedReceipt,
+                        selectedStage1TerminalMode ===
+                          "closed-without-execution"
+                          ? english
+                            ? "Closure receipt verified; owner review remains open"
+                            : "关闭回执已验收，仍需 owner review"
+                          : english
+                            ? "Receipt and business result reconciled"
+                            : "回执与业务结果已完成 reconciliation",
+                      )
+                    }
+                  />
+                ) : null}
                 <div className="grid gap-3 pt-2">
                   {selectedActionAwaitingExecution ? (
                     <>
@@ -3430,23 +3555,25 @@ export function ApprovalsClient({
                         {english ? "Mark blocked" : "标记阻断"}
                       </Button>
                     </>
-                  ) : selectedActionExecuted || selectedActionBlocked ? (
-                    <Button
-                      disabled={pending}
-                      variant="secondary"
-                      onClick={() =>
-                        runAction(
-                          () => verifyExecutedTaskReceiptAction(selected.id),
-                          english
-                            ? "Receipt verified by a second reviewer"
-                            : "回执已由他人验收确认",
-                        )
-                      }
-                    >
-                      {english
-                        ? "Verify receipt (another reviewer)"
-                        : "验收回执（需他人确认）"}
-                    </Button>
+                  ) : selectedActionClosed ? (
+                    selectedStage1Decision ? null : (
+                      <Button
+                        disabled={pending}
+                        variant="secondary"
+                        onClick={() =>
+                          runAction(
+                            verifySelectedReceipt,
+                            english
+                              ? "Receipt verified by a second reviewer"
+                              : "回执已由他人验收确认",
+                          )
+                        }
+                      >
+                        {english
+                          ? "Verify receipt (another reviewer)"
+                          : "验收回执（需他人确认）"}
+                      </Button>
+                    )
                   ) : (
                     <>
                       <Button

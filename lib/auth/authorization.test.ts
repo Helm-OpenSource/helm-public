@@ -162,6 +162,34 @@ describe("workspace capability matrix", () => {
     }
   });
 
+  it("keeps private execution-result submission on the operator-class write surface", () => {
+    for (const role of [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.ADMIN,
+      WorkspaceRole.OPERATOR,
+    ]) {
+      expect(
+        workspaceRoleHasCapability(
+          role,
+          WORKSPACE_CAPABILITIES.SUBMIT_PRIVATE_EXECUTION_RESULT,
+        ),
+      ).toBe(true);
+    }
+
+    for (const role of [
+      WorkspaceRole.BILLING_ADMIN,
+      WorkspaceRole.REVIEWER,
+      WorkspaceRole.MEMBER,
+    ]) {
+      expect(
+        workspaceRoleHasCapability(
+          role,
+          WORKSPACE_CAPABILITIES.SUBMIT_PRIVATE_EXECUTION_RESULT,
+        ),
+      ).toBe(false);
+    }
+  });
+
   it("keeps import conflict resolution on the review-capable surface", () => {
     for (const role of [
       WorkspaceRole.OWNER,

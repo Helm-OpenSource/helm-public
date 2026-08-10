@@ -48,6 +48,26 @@ export const CAIO_PRO_V1_COMPLETION_ITEMS = [
   "p8_maturity_decision_recorded",
 ] as const;
 
+const caioProV1CompletionEvaluatorContractBasis = {
+  evaluatorRevision: CAIO_PRO_V1_COMPLETION_EVALUATOR_REVISION,
+  assessmentSchemaVersion:
+    CAIO_PRO_V1_COMPLETION_ASSESSMENT_SCHEMA_VERSION,
+  gateReceiptSchemaVersion:
+    CAIO_PRO_V1_COMPLETION_GATE_RECEIPT_SCHEMA_VERSION,
+  completionItems: CAIO_PRO_V1_COMPLETION_ITEMS,
+  fullFunctionOperationBoundary:
+    CAIO_PRO_V1_FULL_FUNCTION_OPERATION_BOUNDARY,
+} as const;
+
+// Public consumers bind to this deterministic identity instead of copying the
+// 13-item checklist. The release BOM supplies the immutable implementation SHA
+// separately; a planning/charter commit is never promoted by this contract.
+export const CAIO_PRO_V1_COMPLETION_EVALUATOR_CONTRACT_HASH = sha256(
+  canonicalJson(caioProV1CompletionEvaluatorContractBasis),
+);
+export const CAIO_PRO_V1_COMPLETION_EVALUATOR_CONTRACT_REF =
+  `caio-pro-v1-completion-evaluator:${CAIO_PRO_V1_COMPLETION_EVALUATOR_CONTRACT_HASH.slice(7, 23)}` as const;
+
 export type CaioProV1CompletionItemKey =
   (typeof CAIO_PRO_V1_COMPLETION_ITEMS)[number];
 

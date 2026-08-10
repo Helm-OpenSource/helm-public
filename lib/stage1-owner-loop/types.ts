@@ -210,6 +210,7 @@ export type OwnerCommandDraft = {
   decisionRef: string;
   ownerRef: string;
   executionTargetRef: string;
+  portfolioRef: string;
   goal: string;
   action: string;
   dueAt: string;

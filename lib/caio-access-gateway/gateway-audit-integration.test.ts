@@ -173,6 +173,9 @@ async function createWiring(): Promise<Wiring> {
         return ["project:alpha"];
       },
     },
+    operationResolver: {
+      hasWorkspaceOperationCapability: async () => true,
+    },
     mcpDispatch: async (input) => {
       dispatches.push(input.requestId);
       return { ok: true };
@@ -379,6 +382,9 @@ describe("gateway HTTP core wired to the real audit gate", () => {
         async listAccessibleProjectRefs() {
           return ["project:alpha", "project:beta"];
         },
+      },
+      operationResolver: {
+        hasWorkspaceOperationCapability: async () => true,
       },
       mcpDispatch: async (input) => {
         dispatches.push(input.requestId);

@@ -554,7 +554,8 @@ export function Stage1OwnerLoopConsole({
                     </div>
                     <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                       {english ? "Suggested route" : "建议路径"}:{" "}
-                      {signal.recommendedRoute}
+                      {signal.recommendedRoute} · {english ? "Status" : "状态"}:{" "}
+                      {signal.status}
                     </p>
                   </li>
                 ))}

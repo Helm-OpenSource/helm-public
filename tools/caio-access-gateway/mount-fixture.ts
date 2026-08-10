@@ -1,10 +1,10 @@
 //
 // ONE fixture for the Access Gateway mount, shared by every suite that builds it.
 //
-// The mount's PORTS — token authenticator, project resolver, MCP dispatcher,
-// model dispatch bindings, audit gate, readiness probe — are deployment inputs
-// by design and have no in-tree production implementation, so any suite that
-// exercises the mount has to supply doubles. Written twice they drift, and a
+// The mount's PORTS — token authenticator, project resolver, operation
+// capability resolver, MCP dispatcher, model dispatch bindings, audit gate,
+// readiness probe — are deployment inputs by design, so any suite that exercises
+// the mount has to supply doubles. Written twice they drift, and a
 // cross-repo contract test standing on its own private idea of what the ports
 // look like would be asserting against a composition nobody deploys. It is
 // defined once, here.
@@ -90,6 +90,12 @@ export function createCaioMountFixturePorts(
         async listAccessibleProjectRefs() {
           calls.push("projectResolver");
           return ["project:alpha"];
+        },
+      },
+      operationResolver: {
+        async hasWorkspaceOperationCapability() {
+          calls.push("operationResolver");
+          return true;
         },
       },
       mcpDispatch: async () => {

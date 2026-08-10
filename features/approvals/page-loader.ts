@@ -17,6 +17,10 @@ import {
   getGovernedCandidatePromotionDeniedMessage,
   getGovernedActionReviewDeniedMessage,
 } from "@/lib/auth/action-governance";
+import {
+  canManageWorkspaceInsights,
+  getInsightGovernanceDeniedMessage,
+} from "@/lib/auth/insight-governance";
 import { getApprovalLearningPanels } from "@/lib/evolution/evolution-insights.service";
 import { getWorkspaceBusinessLoopGapReadout } from "@/lib/helm-v2/runtime-upgrade";
 import type { ResolvedApprovalsExtensions } from "@/lib/extensions/registry";
@@ -147,8 +151,10 @@ export async function loadApprovalsPageData(
     actionGovernance: {
       canReview: canReviewCandidates,
       canChangePolicy: canManageWorkspacePolicies(membership.role),
+      canFinalizeStage1Result: canManageWorkspaceInsights(membership.role),
       reviewDeniedMessage: getGovernedActionReviewDeniedMessage(english),
       policyDeniedMessage: getWorkspaceGovernanceDeniedMessage(english),
+      stage1ResultDeniedMessage: getInsightGovernanceDeniedMessage(english),
     },
     candidateGovernance: {
       canReview: canReviewWorkspaceGovernedActions(membership.role),

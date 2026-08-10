@@ -138,6 +138,12 @@ function createHarness(
         return overrides.projectRefs ?? ["project:alpha"];
       },
     },
+    operationResolver: {
+      async hasWorkspaceOperationCapability() {
+        calls.push("operationResolver");
+        return true;
+      },
+    },
     mcpDispatch: async (input) => {
       calls.push("mcpDispatch");
       dispatches.push({

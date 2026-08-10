@@ -23,6 +23,7 @@ const { dbMock, auditMock, serviceGovernanceMock, policyEngineMock } =
         findFirst: vi.fn(),
         updateMany: vi.fn(),
       },
+      opportunity: { findFirst: vi.fn() },
       approvalTask: { updateMany: vi.fn() },
       $transaction: vi.fn(),
     };
@@ -64,7 +65,7 @@ function decision(overrides: Partial<DecisionObject> = {}): DecisionObject {
     decisionType: "prioritization",
     businessQuestion: "Which delivery risk should the owner address first?",
     problemCategoryRef: "delivery-risk",
-    contextRefs: ["context:weekly-ops"],
+    contextRefs: ["context:weekly-ops", "opportunity:portfolio-1"],
     knowledgeRefs: ["knowledge:delivery-policy"],
     evidenceRefs: ["evidence:project-delay"],
     policyRefs: ["policy:review-first"],
@@ -89,7 +90,11 @@ function decisionRow(overrides: Record<string, unknown> = {}) {
     decisionType: "prioritization",
     businessQuestion: "Which delivery risk should the owner address first?",
     problemCategoryRef: "delivery-risk",
-    contextRefs: JSON.stringify(["context:weekly-ops"], null, 2),
+    contextRefs: JSON.stringify(
+      ["context:weekly-ops", "opportunity:portfolio-1"],
+      null,
+      2,
+    ),
     knowledgeRefs: JSON.stringify(["knowledge:delivery-policy"], null, 2),
     evidenceRefs: JSON.stringify(["evidence:project-delay"], null, 2),
     policyRefs: JSON.stringify(["policy:review-first"], null, 2),
@@ -127,6 +132,7 @@ function command(
     decisionRef: "decision-1",
     ownerRef: "owner-1",
     executionTargetRef: "team:delivery",
+    portfolioRef: "opportunity:portfolio-1",
     goal: "Resolve the highest-priority delivery risk",
     action: "Prepare and execute a recovery plan after approval",
     dueAt: "2026-07-20T00:00:00.000Z",
@@ -158,6 +164,10 @@ describe("Stage 1 decision follow-through runtime", () => {
     auditMock.writeAuditLog.mockResolvedValue({ id: "audit-1" });
     dbMock.actionItem.updateMany.mockResolvedValue({ count: 1 });
     dbMock.approvalTask.updateMany.mockResolvedValue({ count: 1 });
+    dbMock.opportunity.findFirst.mockResolvedValue({
+      id: "portfolio-1",
+      workspaceId: "workspace-1",
+    });
   });
 
   it("clamps an uncited decision to observation and keeps it in draft", async () => {
@@ -458,6 +468,64 @@ describe("Stage 1 decision follow-through runtime", () => {
     );
     expect(dbMock.decisionRecord.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "DISPATCHED" } }),
+    );
+  });
+
+  it("refuses a portfolio-less or decision-unbound work packet before creating an action", async () => {
+    dbMock.decisionRecord.findFirst.mockResolvedValue(decisionRow());
+
+    const missingPortfolio = { ...command() } as Partial<OwnerCommandDraft>;
+    delete missingPortfolio.portfolioRef;
+    await expect(
+      dispatchStage1DecisionWorkPacket({
+        workspaceId: "workspace-1",
+        decisionRecordId: "decision-1",
+        command: missingPortfolio as OwnerCommandDraft,
+        actorName: "Owner",
+        actorUserId: "owner-1",
+      }),
+    ).rejects.toMatchObject({ reasons: ["portfolio_ref_required"] });
+
+    await expect(
+      dispatchStage1DecisionWorkPacket({
+        workspaceId: "workspace-1",
+        decisionRecordId: "decision-1",
+        command: command({ portfolioRef: "opportunity:other-portfolio" }),
+        actorName: "Owner",
+        actorUserId: "owner-1",
+      }),
+    ).rejects.toMatchObject({ reasons: ["portfolio_decision_scope_mismatch"] });
+    expect(policyEngineMock.createGovernedAction).not.toHaveBeenCalled();
+  });
+
+  it("binds an explicitly scoped business Portfolio to the governed action", async () => {
+    dbMock.decisionRecord.findFirst.mockResolvedValue(decisionRow());
+    dbMock.decisionWorkPacketClaim.findUnique.mockResolvedValue(null);
+    dbMock.decisionWorkPacketClaim.create.mockResolvedValue({ id: "claim-1" });
+    dbMock.decisionRecord.updateMany.mockResolvedValue({ count: 1 });
+    dbMock.opportunity.findFirst.mockResolvedValue({
+      id: "portfolio-1",
+      workspaceId: "workspace-1",
+    });
+    policyEngineMock.createGovernedAction.mockResolvedValue({
+      actionItemId: "action-1",
+      approvalTaskId: "approval-1",
+    });
+
+    await dispatchStage1DecisionWorkPacket({
+      workspaceId: "workspace-1",
+      decisionRecordId: "decision-1",
+      command: {
+        ...command(),
+        portfolioRef: "opportunity:portfolio-1",
+      } as OwnerCommandDraft,
+      actorName: "Owner",
+      actorUserId: "owner-1",
+    });
+
+    expect(policyEngineMock.createGovernedAction).toHaveBeenCalledWith(
+      expect.objectContaining({ opportunityId: "portfolio-1" }),
+      { client: dbMock },
     );
   });
 

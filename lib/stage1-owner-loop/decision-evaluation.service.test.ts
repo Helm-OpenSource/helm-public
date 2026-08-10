@@ -189,7 +189,7 @@ describe("Stage 1 decision evaluation runtime", () => {
               outcome: ExecutionReceiptOutcome.REJECTED,
               rejectionReasonCode: RejectionReasonCode.OWNER_DISAGREEMENT,
               verificationState:
-                ExecutionReceiptVerificationState.SELF_REPORTED,
+                ExecutionReceiptVerificationState.VERIFIED,
             }),
           },
         },
@@ -201,14 +201,15 @@ describe("Stage 1 decision evaluation runtime", () => {
       decisionRecordId: "decision-1",
       followedAiRecommendation: false,
       outcome: {
-        outcomeRef: "business-outcome:owner-rejected",
-        result: "failure",
+        outcomeRef: null,
+        result: "unknown",
       },
       actorName: "Helm Evaluation Runtime",
       actorType: ActorType.AI,
     });
 
     expect(result.evaluation).toMatchObject({
+      outcomeRef: null,
       varianceReason: "owner_disagreement",
       learnable: true,
       automationImpact: "downgrade_candidate",
@@ -219,6 +220,166 @@ describe("Stage 1 decision evaluation runtime", () => {
         confirmedByUser: false,
       }),
     });
+  });
+
+  it("records NOT_EXECUTED as blocked truth without a business outcome", async () => {
+    dbMock.decisionRecord.findFirst.mockResolvedValue(
+      decisionRow({
+        workPacketClaim: {
+          workspaceId: "workspace-1",
+          actionItem: {
+            id: "action-1",
+            workspaceId: "workspace-1",
+            requiresApproval: true,
+            status: ActionStatus.BLOCKED,
+            approvalTask: { status: ApprovalStatus.EXECUTED },
+            executionReceipt: receipt({
+              outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+              verificationState:
+                ExecutionReceiptVerificationState.VERIFIED,
+            }),
+          },
+        },
+      }),
+    );
+
+    const result = await evaluateStage1DecisionRecord({
+      workspaceId: "workspace-1",
+      decisionRecordId: "decision-1",
+      followedAiRecommendation: null,
+      outcome: { outcomeRef: null, result: "unknown" },
+      actorName: "Helm Evaluation Runtime",
+      actorType: ActorType.AI,
+    });
+
+    expect(result.evaluation).toMatchObject({
+      outcomeRef: null,
+      varianceReason: "blocked_execution",
+      automationImpact: "none",
+    });
+  });
+
+  it.each([
+    {
+      receiptOutcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+      approvalStatus: ApprovalStatus.EXECUTED,
+      rejectionReasonCode: null,
+    },
+    {
+      receiptOutcome: ExecutionReceiptOutcome.REJECTED,
+      approvalStatus: ApprovalStatus.REJECTED,
+      rejectionReasonCode: RejectionReasonCode.OWNER_DISAGREEMENT,
+    },
+  ])(
+    "rejects ActionItem.REJECTED for $receiptOutcome even when approval state is canonical",
+    async ({ receiptOutcome, approvalStatus, rejectionReasonCode }) => {
+      dbMock.decisionRecord.findFirst.mockResolvedValue(
+        decisionRow({
+          workPacketClaim: {
+            workspaceId: "workspace-1",
+            actionItem: {
+              id: "action-1",
+              workspaceId: "workspace-1",
+              requiresApproval: true,
+              status: ActionStatus.REJECTED,
+              approvalTask: { status: approvalStatus },
+              executionReceipt: receipt({
+                outcome: receiptOutcome,
+                rejectionReasonCode,
+              }),
+            },
+          },
+        }),
+      );
+
+      await expect(
+        evaluateStage1DecisionRecord({
+          workspaceId: "workspace-1",
+          decisionRecordId: "decision-1",
+          followedAiRecommendation: null,
+          outcome: { outcomeRef: null, result: "unknown" },
+          actorName: "Helm Evaluation Runtime",
+          actorType: ActorType.AI,
+        }),
+      ).rejects.toMatchObject({ reasons: ["receipt_action_state_mismatch"] });
+
+      expect(dbMock.decisionRecord.updateMany).not.toHaveBeenCalled();
+      expect(dbMock.memoryFact.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses to evaluate an unverified close-without-execution receipt", async () => {
+    dbMock.decisionRecord.findFirst.mockResolvedValue(
+      decisionRow({
+        workPacketClaim: {
+          workspaceId: "workspace-1",
+          actionItem: {
+            id: "action-1",
+            workspaceId: "workspace-1",
+            requiresApproval: true,
+            status: ActionStatus.BLOCKED,
+            approvalTask: { status: ApprovalStatus.EXECUTED },
+            executionReceipt: receipt({
+              outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+              verificationState:
+                ExecutionReceiptVerificationState.SELF_REPORTED,
+              verifiedByUserId: null,
+            }),
+          },
+        },
+      }),
+    );
+
+    await expect(
+      evaluateStage1DecisionRecord({
+        workspaceId: "workspace-1",
+        decisionRecordId: "decision-1",
+        followedAiRecommendation: null,
+        outcome: { outcomeRef: null, result: "unknown" },
+        actorName: "Helm Evaluation Runtime",
+        actorType: ActorType.AI,
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["receipt_verification_required"],
+    });
+    expect(dbMock.decisionRecord.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not accept a business failure for a close-without-execution receipt", async () => {
+    dbMock.decisionRecord.findFirst.mockResolvedValue(
+      decisionRow({
+        workPacketClaim: {
+          workspaceId: "workspace-1",
+          actionItem: {
+            id: "action-1",
+            workspaceId: "workspace-1",
+            requiresApproval: true,
+            status: ActionStatus.BLOCKED,
+            approvalTask: { status: ApprovalStatus.EXECUTED },
+            executionReceipt: receipt({
+              outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+            }),
+          },
+        },
+      }),
+    );
+
+    await expect(
+      evaluateStage1DecisionRecord({
+        workspaceId: "workspace-1",
+        decisionRecordId: "decision-1",
+        followedAiRecommendation: null,
+        outcome: {
+          outcomeRef: "observation-run:forged-failure",
+          result: "failure",
+        },
+        actorName: "Helm Evaluation Runtime",
+        actorType: ActorType.AI,
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["closed_without_execution_business_outcome_forbidden"],
+    });
+    expect(dbMock.decisionRecord.updateMany).not.toHaveBeenCalled();
   });
 
   it("refuses to finalize a successful execution before independent verification", async () => {

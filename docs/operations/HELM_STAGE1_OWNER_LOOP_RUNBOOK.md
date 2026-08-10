@@ -182,7 +182,16 @@ OWNER 至少要核对 owner 和验收标准。
 
 ### 5.10 结果评估与记忆回流
 
-调用 `evaluateStage1DecisionOutcome`，提交业务结果和 `outcomeRef`。
+按 canonical `ExecutionReceipt.outcome` 分流，不能把治理关闭与业务失败混写：
+
+- `SUCCESS / PARTIAL_SUCCESS / FAILURE`：提交最终业务结果和 canonical
+  `ObservationRun` 的 `outcomeRef`；其中 `PARTIAL_SUCCESS / FAILURE` 继续按业务未成功处理。
+- `NOT_EXECUTED / REJECTED`：不提交业务结果或 `ObservationRun`，以
+  `outcomeRef=null / result=unknown` 评估既有 DecisionRecord，保留 blocked/rejected 真值并
+  形成 open owner-review supervision。不得伪造 FAILURE 或业务 Outcome ObservationRun。
+
+T2a 只形成上述后端协调能力；approvals 的无执行入口接线属于后续 T2b，不能据此声明现场
+UI 已可完成该流程。
 
 成功标准：同一事务内出现：
 
@@ -218,6 +227,7 @@ OWNER 至少要核对 owner 和验收标准。
 | 决策过期       | 标记 EXPIRED，重新收集证据               | 不复用旧 owner 结论                   |
 | 并发派工冲突   | 读取唯一 claim，比较内容                 | 不创建第二条有效任务                  |
 | 缺执行回执     | 标记 RECEIPT_MISSING，阻止结果学习       | 不以 ActionItem=EXECUTED 代替业务结果 |
+| 未执行或已拒绝 | 保留 blocked/rejected，记录 open supervision | 不伪造 FAILURE 或业务 ObservationRun |
 | 自验收         | 拒绝并审计                               | 不降低高风险职责分离门                |
 | 评估冲突       | 保留第一份原子评估，要求人工复核         | 不覆盖已有候选记忆                    |
 

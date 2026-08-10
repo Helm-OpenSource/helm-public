@@ -236,6 +236,7 @@ describe("Stage 1 owner command and state projection", () => {
     decisionRef: "decision:1",
     ownerRef: "user:owner",
     executionTargetRef: "role:operations",
+    portfolioRef: "opportunity:portfolio-1",
     goal: "Resolve the synthetic delivery risk",
     action: "Review the blocked work and submit evidence",
     dueAt: "2026-07-20T00:00:00.000Z",
@@ -268,6 +269,21 @@ describe("Stage 1 owner command and state projection", () => {
         "escalation_owner_required",
       ]),
     );
+  });
+
+  it("requires a canonical business Portfolio before dispatch", () => {
+    const missingPortfolio = { ...command } as Partial<OwnerCommandDraft>;
+    delete missingPortfolio.portfolioRef;
+
+    expect(
+      validateOwnerCommandDraft(missingPortfolio as OwnerCommandDraft).errors,
+    ).toContain("portfolio_ref_required");
+    expect(
+      validateOwnerCommandDraft({
+        ...command,
+        portfolioRef: " ",
+      }).errors,
+    ).toContain("portfolio_ref_required");
   });
 
   it("requires command identity and policy binding for declared external side effects", () => {

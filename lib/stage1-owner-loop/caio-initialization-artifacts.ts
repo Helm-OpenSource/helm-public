@@ -81,6 +81,7 @@ export type CaioInitializationArtifactValidation = {
 };
 
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
+const EVIDENCE_KIND_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -252,6 +253,13 @@ export function validateCaioEvidenceTraceArtifact(
     input.resolved !== true
   ) {
     errors.push("evidence_trace_required_field_invalid");
+  }
+  if (
+    input.evidenceKind !== undefined &&
+    (typeof input.evidenceKind !== "string" ||
+      !EVIDENCE_KIND_PATTERN.test(input.evidenceKind))
+  ) {
+    errors.push("evidence_trace_evidence_kind_invalid");
   }
   const { traceHash: _traceHash, ...content } =
     input as unknown as CaioEvidenceTraceArtifact;

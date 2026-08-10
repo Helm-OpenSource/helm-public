@@ -112,6 +112,7 @@ export type CaioInitializationSourceSnapshot = {
 
 export type CaioInitializationEvidenceTrace = {
   evidenceRef: string;
+  evidenceKind?: string;
   sourceRef: string;
   assetRef: string;
   observationRunRef: string;

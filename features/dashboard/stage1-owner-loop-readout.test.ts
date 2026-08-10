@@ -226,6 +226,73 @@ describe("Stage 1 owner-loop dashboard readout", () => {
     expect(readout.posture).toBe("attention_required");
   });
 
+  it("shows evaluated production results and resolved supervision without inflating attention", () => {
+    const readout = build({
+      decisions: [
+        decision({
+          status: "EVALUATED",
+          workPacketClaim: {
+            actionItem: {
+              status: "EXECUTED",
+              dueDate: null,
+              executionReceipt: {
+                verificationState: "VERIFIED",
+                qualityScore: 96,
+              },
+            },
+          },
+        }),
+      ],
+      decisionStatusCounts: [
+        { status: "EVALUATED", _count: { _all: 1 } },
+      ],
+      supervisionSignals: [
+        {
+          id: "signal-terminal-1",
+          signalKey: "stage1-terminal-result:decision-1",
+          observedFact:
+            "An independently verified execution receipt is paired with an explicit successful business outcome.",
+          severity: "info",
+          status: "resolved",
+          recommendedRoute: "watch",
+          deadlineOrSla: null,
+          createdAt: now,
+        },
+      ],
+      supervisionCounts: [
+        { status: "resolved", severity: "info", _count: { _all: 1 } },
+      ],
+      workPacketReceipts: [
+        {
+          decisionRecord: { status: "EVALUATED" },
+          actionItem: {
+            status: "EXECUTED",
+            executionReceipt: {
+              verificationState: "VERIFIED",
+              qualityScore: 96,
+            },
+          },
+        },
+      ],
+    });
+
+    expect(readout.decisions.items[0]?.projection).toBe("EVALUATED");
+    expect(readout.decisions.evaluated).toBe(1);
+    expect(readout.supervision).toMatchObject({
+      open: 0,
+      critical: 0,
+      warning: 0,
+      items: [
+        expect.objectContaining({
+          signalKey: "stage1-terminal-result:decision-1",
+          status: "resolved",
+          recommendedRoute: "watch",
+        }),
+      ],
+    });
+    expect(readout.posture).toBe("learning_ready");
+  });
+
   it("summarizes QoderWork connection, review, quarantine, conflict, and freshness state", () => {
     const readout = build({
       externalAgentConnections: [

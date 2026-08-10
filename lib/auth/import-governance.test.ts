@@ -55,12 +55,21 @@ describe("import governance auth seam", () => {
     }
   });
 
-  it("returns null for inactive or missing memberships", async () => {
-    dbMock.membership.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      role: WorkspaceRole.ADMIN,
-      status: MembershipStatus.INACTIVE,
-    });
+  it("returns null unless the membership is active", async () => {
+    dbMock.membership.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        role: WorkspaceRole.ADMIN,
+        status: MembershipStatus.INACTIVE,
+      })
+      .mockResolvedValueOnce({
+        role: WorkspaceRole.OWNER,
+        status: MembershipStatus.INVITED,
+      });
 
+    await expect(
+      getWorkspaceRoleForUser({ workspaceId: "workspace-1", userId: "user-1" }),
+    ).resolves.toBeNull();
     await expect(
       getWorkspaceRoleForUser({ workspaceId: "workspace-1", userId: "user-1" }),
     ).resolves.toBeNull();

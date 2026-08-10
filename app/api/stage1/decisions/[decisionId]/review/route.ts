@@ -12,6 +12,12 @@ const reviewSchema = z.discriminatedUnion("action", [
     action: z.literal("approve"),
     conclusion: z.string().trim().min(3).max(2_000),
     executionTargetRef: z.string().trim().min(3).max(191),
+    portfolioRef: z
+      .string()
+      .trim()
+      .min(13)
+      .max(203)
+      .regex(/^opportunity:[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/u),
     goal: z.string().trim().min(3).max(2_000),
     workAction: z.string().trim().min(3).max(4_000),
     dueAt: z.string().datetime({ offset: true }),
@@ -85,6 +91,7 @@ export async function POST(
         decisionRef: decision.id,
         ownerRef: user.id,
         executionTargetRef: parsed.data.executionTargetRef,
+        portfolioRef: parsed.data.portfolioRef,
         goal: parsed.data.goal,
         action: parsed.data.workAction,
         dueAt: parsed.data.dueAt,

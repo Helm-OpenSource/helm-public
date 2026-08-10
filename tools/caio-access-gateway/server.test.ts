@@ -7,6 +7,10 @@ import { describe, expect, it } from "vitest";
 import { CaioDeploymentPostureError } from "@/lib/caio-audit-state/deployment-posture";
 import type { WorkBuddyMtlsPeer } from "@/lib/caio-collaboration/client-identity";
 import {
+  CaioOperatingQuestionPackProviderRegistryError,
+  type CaioOperatingQuestionPackProvider,
+} from "@/lib/stage1-owner-loop/caio-operating-question-pack-provider-registry";
+import {
   CAIO_ACCESS_GATEWAY_API_PATHS,
   CAIO_ACCESS_GATEWAY_ROUTE_TABLE,
   CAIO_WORKBUDDY_MCP_PATH,
@@ -42,6 +46,15 @@ const PEER: WorkBuddyMtlsPeer = Object.freeze({
 const CONFIG: CaioAccessGatewayServerConfig = CAIO_MOUNT_FIXTURE_CONFIG;
 
 const createPorts = createCaioMountFixturePorts;
+
+function questionPackProvider(
+  providerId = "pack-provider:operating-input-v1",
+): CaioOperatingQuestionPackProvider {
+  return Object.freeze({
+    providerId,
+    resolveOperatingInput: async () => ({ authorityEffect: "none" }),
+  });
+}
 
 function createServer(
   overrides: Partial<{
@@ -133,7 +146,9 @@ describe("route table: which surfaces this listener owns", () => {
       "/mcp",
       "/readyz",
       "/v1/chat/completions",
+      "/v1/execution-results",
       "/v1/models",
+      "/v1/operating-questions/generate",
       "/v1/responses",
     ]);
     for (const apiPath of CAIO_ACCESS_GATEWAY_API_PATHS) {
@@ -159,12 +174,11 @@ describe("route table: which surfaces this listener owns", () => {
 
   // A DEPLOYMENT MAY MOUNT THE SUBSET IT CAN ACTUALLY SERVE.
   //
-  // Five of the six ports this surface needs have real in-tree implementations;
-  // the MCP dispatcher has none, and inventing one would produce a facade that
-  // dispatches nothing while looking like it dispatches. So `/mcp` is owned
-  // only when a dispatcher is supplied, and a mount without one does not claim
-  // the path at all — the host's router then 404s it, exactly as it does for a
-  // path no surface declares.
+  // The MCP dispatcher has no in-tree implementation, and inventing one would
+  // produce a facade that dispatches nothing while looking like it dispatches.
+  // So `/mcp` is owned only when a dispatcher is supplied, and a mount without
+  // one does not claim the path at all — the host's router then 404s it, exactly
+  // as it does for a path no surface declares.
   describe("a mount without an MCP dispatcher", () => {
     function createPartialMount() {
       const spy = createPorts();
@@ -188,6 +202,7 @@ describe("route table: which surfaces this listener owns", () => {
         "/livez",
         "/readyz",
         "/v1/chat/completions",
+        "/v1/execution-results",
         "/v1/models",
         "/v1/responses",
       ]);
@@ -230,6 +245,69 @@ describe("route table: which surfaces this listener owns", () => {
       expect(alive.status).toBe(200);
       const ready = await mount.handle(incoming({ url: "/readyz" }));
       expect(ready.body).toEqual({ status: "ready", posture: "self_service" });
+    });
+  });
+
+  describe("the mounted operating-question Pack provider", () => {
+    it("does not own question generation when no Pack provider is mounted", async () => {
+      const spy = createPorts();
+      const mount = createServer({ ports: spy.ports });
+
+      expect(mount.apiPaths).not.toContain(
+        "/v1/operating-questions/generate",
+      );
+      const response = await mount.handle(
+        incoming({
+          method: "POST",
+          url: "/v1/operating-questions/generate",
+          headers: { authorization: "Bearer hcaio_mcp_test" },
+          body: JSON.stringify({
+            portfolioRef: "opportunity:portfolio-1",
+            generationKey: "generation:one",
+          }),
+        }),
+      );
+      expect(response.status).toBe(404);
+      expect(spy.calls).toEqual([]);
+    });
+
+    it("owns question generation only when exactly one provider is mounted", () => {
+      const fixture = createPorts();
+      const mount = createServer({
+        ports: {
+          ...fixture.ports,
+          operatingQuestionPackProviders: [questionPackProvider()],
+        },
+      });
+
+      expect(mount.apiPaths).toContain(
+        "/v1/operating-questions/generate",
+      );
+      expect(
+        mount.routeTable.find(
+          (row) => row.path === "/v1/operating-questions/generate",
+        )?.servedByThisSurface,
+      ).toBe(true);
+    });
+
+    it("rejects duplicate Pack provider registration during construction", () => {
+      const fixture = createPorts();
+
+      expect(() =>
+        createServer({
+          ports: {
+            ...fixture.ports,
+            operatingQuestionPackProviders: [
+              questionPackProvider("pack-provider:first"),
+              questionPackProvider("pack-provider:second"),
+            ],
+          },
+        }),
+      ).toThrowError(
+        expect.objectContaining<Partial<CaioOperatingQuestionPackProviderRegistryError>>({
+          code: "PACK_PROVIDER_ALREADY_MOUNTED",
+        }),
+      );
     });
   });
 
@@ -462,6 +540,16 @@ describe("this surface owns NO socket: the host binds the one listener", () => {
     expect(source).not.toMatch(/createServer\(/);
     expect(source).not.toMatch(/\.listen\(/);
     expect(source).not.toMatch(/exclusive/);
+  });
+
+  it("does not rewrite a completed protocol result after handle settlement", () => {
+    const source = readFileSync(
+      path.join(__dirname, "server.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(
+      /result = await handle\([\s\S]{0,1500}if \(signal\?\.aborted\)/u,
+    );
   });
 
   it("serves a node request onto the host's response", async () => {

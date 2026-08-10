@@ -36,6 +36,9 @@ import {
   MemoryFactType,
   MemoryStatus,
   ObjectType,
+  OpportunityStage,
+  OpportunityType,
+  RiskLevel,
   SourceType,
   WorkspaceRole,
 } from "@prisma/client";
@@ -349,6 +352,7 @@ describeMysql(
     let gateReceiptHash = "";
     let portfolioRef = "";
     let portfolioHash = "";
+    let portfolioOpportunityRef = "";
     let portfolioQuestionIds: string[] = [];
     let selectionReceiptRef = "";
     let selectionReceiptHash = "";
@@ -791,6 +795,18 @@ describeMysql(
           },
         ],
       });
+      const portfolioOpportunity = await db.opportunity.create({
+        data: {
+          workspaceId,
+          ownerId: ownerUserId,
+          title: `CAIO Pro V1 business Portfolio ${suffix}`,
+          type: OpportunityType.INTERNAL,
+          stage: OpportunityStage.ADVANCING,
+          riskLevel: RiskLevel.HIGH,
+          nextAction: "Complete the governed synthetic operating review",
+        },
+      });
+      portfolioOpportunityRef = `opportunity:${portfolioOpportunity.id}`;
 
       await registerCaioPrincipalBinding({
         workspaceId,
@@ -1024,6 +1040,10 @@ describeMysql(
         const evidenceRef = evidenceRefs[index % evidenceRefs.length];
         return {
           ...candidate,
+          impactObjectRefs: [
+            ...candidate.impactObjectRefs,
+            portfolioOpportunityRef,
+          ],
           facts: candidate.facts.map((fact) => ({
             ...fact,
             evidenceRefs: [evidenceRef],
@@ -1143,6 +1163,7 @@ describeMysql(
         decisionRef: dispatchedDecisionRecordId,
         ownerRef: ownerUserId,
         executionTargetRef: "team:synthetic-operating-review",
+        portfolioRef: portfolioOpportunityRef,
         goal: "Validate the first selected operating question",
         action: "Prepare a governed review packet after approval",
         dueAt: new Date(base.getTime() + 48 * HOUR_MS).toISOString(),
