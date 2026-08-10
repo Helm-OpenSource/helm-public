@@ -568,7 +568,9 @@ function scoreIsValid(value: number): boolean {
   return Number.isInteger(value) && value >= 0 && value <= 100;
 }
 
-function compositeScore(scores: CaioOperatingQuestionScores): number {
+export function computeCaioOperatingQuestionCompositeScore(
+  scores: CaioOperatingQuestionScores,
+): number {
   const weights = CAIO_OPERATING_QUESTION_POLICY.scoreWeights;
   const weighted =
     scores.businessValue * weights.businessValue +
@@ -832,7 +834,9 @@ function finalizeCandidate(
   const content = {
     ...candidate,
     rank,
-    compositeScore: compositeScore(candidate.scores),
+    compositeScore: computeCaioOperatingQuestionCompositeScore(
+      candidate.scores,
+    ),
   };
   return {
     ...content,
@@ -1001,7 +1005,8 @@ export function evaluateCaioOperatingQuestionGeneration(input: {
   const ranked = [...normalizedCandidates]
     .sort(
       (left, right) =>
-        compositeScore(right.scores) - compositeScore(left.scores) ||
+        computeCaioOperatingQuestionCompositeScore(right.scores) -
+          computeCaioOperatingQuestionCompositeScore(left.scores) ||
         compareCodePoints(left.questionId, right.questionId),
     )
     .map((candidate, index) => finalizeCandidate(candidate, index + 1));
@@ -1245,7 +1250,8 @@ export function validateCaioOperatingQuestionPortfolio(
     portfolio.candidates.some(
       (candidate, index) =>
         candidate.rank !== index + 1 ||
-        candidate.compositeScore !== compositeScore(candidate.scores),
+        candidate.compositeScore !==
+          computeCaioOperatingQuestionCompositeScore(candidate.scores),
     )
   ) {
     errors.push("portfolio_governance_or_ranking_invalid");
@@ -1282,7 +1288,8 @@ export function validateCaioOperatingQuestionPortfolio(
   const expectedOrder = [...candidateDrafts]
     .sort(
       (left, right) =>
-        compositeScore(right.scores) - compositeScore(left.scores) ||
+        computeCaioOperatingQuestionCompositeScore(right.scores) -
+          computeCaioOperatingQuestionCompositeScore(left.scores) ||
         compareCodePoints(left.questionId, right.questionId),
     )
     .map((candidate) => candidate.questionId);

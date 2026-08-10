@@ -155,7 +155,11 @@ function generatedReceipt(portfolio: CaioOperatingQuestionPortfolio) {
   });
 }
 
-function packOperatingInput(overrides: Record<string, unknown> = {}) {
+function packOperatingInput(
+  count = 10,
+  overrides: Record<string, unknown> = {},
+) {
+  const evidenceRefs = SYNTHETIC_CAIO_EVIDENCE_REFS.slice(0, count);
   return {
     schemaVersion: CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
     interfaceVersion: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
@@ -170,41 +174,33 @@ function packOperatingInput(overrides: Record<string, unknown> = {}) {
     workspaceRef: `workspace:${WORKSPACE_ID}`,
     portfolioRef: "opportunity:portfolio-1",
     evidenceSnapshotRef: "observation-run:run-1",
-    evidenceBindings: SYNTHETIC_CAIO_EVIDENCE_REFS.map((evidenceRef) => ({
+    evidenceBindings: evidenceRefs.map((evidenceRef) => ({
       evidenceRef,
       evidenceKind: "source_observation",
     })),
-    taxonomy: [
-      {
-        taxonomyRef: "taxonomy:operating-risk",
-        categoryRef: "category:delivery-risk",
-        label: "Delivery risk",
-      },
-    ],
-    metrics: [
-      {
-        metricRef: "metric:on-time-completion",
-        definition: "Share completed inside the accepted operating window.",
-        unit: "percent",
-        evidenceRefs: SYNTHETIC_CAIO_EVIDENCE_REFS,
-      },
-    ],
-    evidenceApplicabilityRules: [
-      {
-        ruleRef: "evidence-rule:delivery-risk",
-        taxonomyRefs: ["taxonomy:operating-risk"],
-        acceptedEvidenceKinds: ["source_observation"],
-      },
-    ],
-    candidateInputs: [
-      {
-        candidateRef: "candidate-input:delivery-risk",
-        taxonomyRefs: ["taxonomy:operating-risk"],
-        metricRefs: ["metric:on-time-completion"],
-        evidenceRefs: SYNTHETIC_CAIO_EVIDENCE_REFS,
-        rationale: "Current evidence supports Core-owned candidate drafting.",
-      },
-    ],
+    taxonomy: evidenceRefs.map((_, index) => ({
+      taxonomyRef: `taxonomy:operating-risk-${index + 1}`,
+      categoryRef: `category:delivery-risk-${index + 1}`,
+      label: `Delivery risk ${index + 1}`,
+    })),
+    metrics: evidenceRefs.map((evidenceRef, index) => ({
+      metricRef: `metric:on-time-completion-${index + 1}`,
+      definition: `Share completed inside operating window ${index + 1}.`,
+      unit: "percent",
+      evidenceRefs: [evidenceRef],
+    })),
+    evidenceApplicabilityRules: evidenceRefs.map((_, index) => ({
+      ruleRef: `evidence-rule:delivery-risk-${index + 1}`,
+      taxonomyRefs: [`taxonomy:operating-risk-${index + 1}`],
+      acceptedEvidenceKinds: ["source_observation"],
+    })),
+    candidateInputs: evidenceRefs.map((evidenceRef, index) => ({
+      candidateRef: `candidate-input:delivery-risk-${index + 1}`,
+      taxonomyRefs: [`taxonomy:operating-risk-${index + 1}`],
+      metricRefs: [`metric:on-time-completion-${index + 1}`],
+      evidenceRefs: [evidenceRef],
+      rationale: `Review governed delivery evidence ${index + 1}.`,
+    })),
     authorityEffect: "none" as const,
     ...overrides,
   };
@@ -322,13 +318,8 @@ describe("CAIO operating question store", () => {
     });
   });
 
-  it("consumes a versioned Pack input only after workspace Portfolio and evidence resolution", async () => {
+  it("derives and persists exactly ten Core-owned questions from scoped Pack semantics", async () => {
     dbMock.$queryRaw.mockResolvedValueOnce([]);
-    const candidates = Array.from({ length: 10 }, (_, index) =>
-      syntheticOperatingQuestionCandidate(index, {
-        impactObjectRefs: ["opportunity:portfolio-1"],
-      }),
-    );
 
     const result = await generateCaioOperatingQuestionPortfolioFromPackInput({
       interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
@@ -338,12 +329,28 @@ describe("CAIO operating question store", () => {
       generationKey: "generation:synthetic-caio:pack-1",
       generatorRef: "generator:caio-operating-question",
       modelRef: "model:synthetic-local",
-      candidates,
       auditRefs: ["audit:question-generation:pack-1"],
       now: NOW,
     });
 
     expect(result.portfolio?.candidates).toHaveLength(10);
+    expect(result.receipt.status).toBe("generated");
+    expect(result.portfolio?.candidates.map((candidate) => candidate.rank)).toEqual(
+      Array.from({ length: 10 }, (_, index) => index + 1),
+    );
+    expect(result.portfolio?.candidates[0].dependencyRefs).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^candidate-input:/u),
+        expect.stringMatching(/^taxonomy:/u),
+        expect.stringMatching(/^metric:/u),
+        expect.stringMatching(/^evidence-rule:/u),
+      ]),
+    );
+    expect(dbMock.caioOperatingQuestionPortfolio.create).toHaveBeenCalledOnce();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).toHaveBeenCalledOnce();
+    expect(dbMock.caioQuestionSelectionReceipt.create).not.toHaveBeenCalled();
     expect(dbMock.opportunity.findFirst).toHaveBeenCalledWith({
       where: { id: "portfolio-1", workspaceId: WORKSPACE_ID },
       select: { id: true, workspaceId: true },
@@ -355,12 +362,7 @@ describe("CAIO operating question store", () => {
     );
   });
 
-  it("rejects descriptor drift and candidate Portfolio drift before generation writes", async () => {
-    const candidates = Array.from({ length: 10 }, (_, index) =>
-      syntheticOperatingQuestionCandidate(index, {
-        impactObjectRefs: ["opportunity:other-portfolio"],
-      }),
-    );
+  it("rejects descriptor drift before generation writes", async () => {
     await expect(
       generateCaioOperatingQuestionPortfolioFromPackInput({
         interfaceDescriptor: {
@@ -373,28 +375,166 @@ describe("CAIO operating question store", () => {
         generationKey: "generation:synthetic-caio:pack-drift",
         generatorRef: "generator:caio-operating-question",
         modelRef: "model:synthetic-local",
-        candidates,
         auditRefs: ["audit:question-generation:pack-drift"],
         now: NOW,
       }),
     ).rejects.toThrow("pack_interface_descriptor_invalid");
     expect(dbMock.$transaction).not.toHaveBeenCalled();
+  });
 
+  it("rejects external question candidates before entering the transaction", async () => {
     await expect(
       generateCaioOperatingQuestionPortfolioFromPackInput({
         interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
         packOperatingInput: packOperatingInput(),
         workspaceId: WORKSPACE_ID,
         actorUserId: OWNER_USER_ID,
-        generationKey: "generation:synthetic-caio:pack-scope-drift",
+        generationKey: "generation:synthetic-caio:external-candidates",
         generatorRef: "generator:caio-operating-question",
         modelRef: "model:synthetic-local",
-        candidates,
-        auditRefs: ["audit:question-generation:pack-scope-drift"],
+        candidates: Array.from({ length: 10 }, (_, index) =>
+          syntheticOperatingQuestionCandidate(index),
+        ),
+        auditRefs: ["audit:question-generation:external-candidates"],
         now: NOW,
-      }),
-    ).rejects.toThrow("pack_core_candidate_scope_invalid");
+      } as Parameters<
+        typeof generateCaioOperatingQuestionPortfolioFromPackInput
+      >[0]),
+    ).rejects.toThrow("pack_external_candidates_forbidden");
+    expect(dbMock.$transaction).not.toHaveBeenCalled();
     expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["question", "Which question should Core accept?"],
+    ["questionText", "Which question should Core accept?"],
+    ["scores", { businessValue: 100 }],
+  ])(
+    "rejects external %s before entering the transaction",
+    async (field, value) => {
+      await expect(
+        generateCaioOperatingQuestionPortfolioFromPackInput({
+          interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+          packOperatingInput: packOperatingInput(),
+          workspaceId: WORKSPACE_ID,
+          actorUserId: OWNER_USER_ID,
+          generationKey: `generation:synthetic-caio:external-${field}`,
+          generatorRef: "generator:caio-operating-question",
+          modelRef: "model:synthetic-local",
+          auditRefs: [`audit:question-generation:external-${field}`],
+          now: NOW,
+          [field]: value,
+        } as Parameters<
+          typeof generateCaioOperatingQuestionPortfolioFromPackInput
+        >[0]),
+      ).rejects.toThrow("pack_external_question_payload_forbidden");
+      expect(dbMock.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it("records insufficient evidence when fewer than ten semantic inputs are eligible", async () => {
+    dbMock.$queryRaw.mockResolvedValueOnce([]);
+
+    const result = await generateCaioOperatingQuestionPortfolioFromPackInput({
+      interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+      packOperatingInput: packOperatingInput(9),
+      workspaceId: WORKSPACE_ID,
+      actorUserId: OWNER_USER_ID,
+      generationKey: "generation:synthetic-caio:pack-insufficient",
+      generatorRef: "generator:caio-operating-question",
+      modelRef: "model:synthetic-local",
+      auditRefs: ["audit:question-generation:pack-insufficient"],
+      now: NOW,
+    });
+
+    expect(result.portfolio).toBeNull();
+    expect(result.receipt.status).toBe("insufficient_evidence");
+    expect(result.receipt.gapCodes).toContain("candidate_count_not_ten");
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).toHaveBeenCalledOnce();
+  });
+
+  it("replays the same semantic request and rejects generation-key semantic drift", async () => {
+    dbMock.$queryRaw.mockResolvedValueOnce([]);
+    const packInput = packOperatingInput();
+    const request = {
+      interfaceDescriptor: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_DESCRIPTOR,
+      packOperatingInput: packInput,
+      workspaceId: WORKSPACE_ID,
+      actorUserId: OWNER_USER_ID,
+      generationKey: "generation:synthetic-caio:pack-replay",
+      generatorRef: "generator:caio-operating-question",
+      modelRef: "model:synthetic-local",
+      auditRefs: ["audit:question-generation:pack-replay"],
+      now: NOW,
+    };
+
+    const first = await generateCaioOperatingQuestionPortfolioFromPackInput(
+      request,
+    );
+    expect(first.replayed).toBe(false);
+    expect(first.portfolio).not.toBeNull();
+
+    const portfolioData =
+      dbMock.caioOperatingQuestionPortfolio.create.mock.calls[0][0].data;
+    const receiptData =
+      dbMock.caioOperatingQuestionGenerationReceipt.create.mock.calls[0][0]
+        .data;
+    const head = {
+      workspaceId: WORKSPACE_ID,
+      initializationGateReceiptId: first.receipt.gateReceiptRef,
+      initializationAssessmentId: first.receipt.assessmentRef,
+      currentGenerationReceiptId: first.receipt.receiptId,
+      currentPortfolioId: first.portfolio?.portfolioId ?? null,
+      generationSequence: first.receipt.sequence,
+      portfolioSequence: first.portfolio?.sequence ?? 0,
+      version: 1,
+      updatedAt: NOW,
+    };
+    dbMock.caioOperatingQuestionGenerationReceipt.findFirst.mockResolvedValue(
+      receiptData,
+    );
+    dbMock.caioOperatingQuestionPortfolio.findFirst.mockResolvedValue(
+      portfolioData,
+    );
+    dbMock.caioOperatingQuestionGenerationReceipt.findUnique.mockResolvedValue(
+      receiptData,
+    );
+    dbMock.$queryRaw.mockResolvedValueOnce([head]);
+
+    const reorderedInput = structuredClone(packInput);
+    reorderedInput.taxonomy.reverse();
+    reorderedInput.metrics.reverse();
+    reorderedInput.evidenceApplicabilityRules.reverse();
+    reorderedInput.candidateInputs.reverse();
+    reorderedInput.evidenceBindings.reverse();
+    const replay = await generateCaioOperatingQuestionPortfolioFromPackInput({
+      ...request,
+      packOperatingInput: reorderedInput,
+    });
+    expect(replay.replayed).toBe(true);
+    expect(replay.receipt.receiptId).toBe(first.receipt.receiptId);
+    expect(dbMock.caioOperatingQuestionPortfolio.create).toHaveBeenCalledOnce();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).toHaveBeenCalledOnce();
+
+    const changedInput = structuredClone(packInput);
+    changedInput.candidateInputs[0].rationale =
+      "A changed semantic rationale must not overwrite the prior request.";
+    dbMock.$queryRaw.mockResolvedValueOnce([head]);
+    await expect(
+      generateCaioOperatingQuestionPortfolioFromPackInput({
+        ...request,
+        packOperatingInput: changedInput,
+      }),
+    ).rejects.toThrow("generation_key_payload_conflict");
+    expect(dbMock.caioOperatingQuestionPortfolio.create).toHaveBeenCalledOnce();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).toHaveBeenCalledOnce();
   });
 
   it("records an insufficient-evidence receipt without creating or erasing a portfolio", async () => {

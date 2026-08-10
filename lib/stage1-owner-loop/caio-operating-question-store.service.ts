@@ -46,6 +46,12 @@ import {
   resolveCaioFdePortfolioScope,
 } from "./caio-fde-scope-resolver.service";
 import {
+  CAIO_OPERATING_QUESTION_PACK_DERIVATION_REVISION,
+  canonicalizeCaioProPackOperatingInputForGeneration,
+  deriveCaioOperatingQuestionCandidatesFromPackInput,
+  type CaioOperatingQuestionTrustedEvidence,
+} from "./caio-operating-question-pack-generator";
+import {
   createCaioOperatingQuestionG0Context,
   createCaioOperatingQuestionGenerationReceipt,
   evaluateCaioOperatingQuestionGeneration,
@@ -56,7 +62,6 @@ import {
   validateCaioOperatingQuestionPortfolio,
   validateCaioOperatingQuestionPortfolioAgainstG0,
   validateCaioOperatingQuestionPortfolioAgainstPrevious,
-  parseCaioOperatingQuestionCandidateDrafts,
   type CaioOperatingQuestionG0Context,
   type CaioOperatingQuestionGenerationReceipt,
   type CaioOperatingQuestionPortfolio,
@@ -85,10 +90,18 @@ export type GenerateCaioOperatingQuestionPortfolioInput = {
 };
 
 export type GenerateCaioOperatingQuestionPortfolioFromPackInput =
-  GenerateCaioOperatingQuestionPortfolioInput & {
+  Omit<GenerateCaioOperatingQuestionPortfolioInput, "candidates"> & {
     interfaceDescriptor: unknown;
     packOperatingInput: unknown;
+    candidates?: never;
   };
+
+type GenerateCaioOperatingQuestionPortfolioInternalInput = Omit<
+  GenerateCaioOperatingQuestionPortfolioInput,
+  "candidates"
+> & {
+  candidates?: unknown;
+};
 
 const TRANSACTION_OPTIONS = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -799,11 +812,13 @@ async function assertPackOperatingInputScope(
   input: {
     workspaceId: string;
     packOperatingInput: CaioProPackOperatingInput;
-    candidates: unknown;
     trusted: TrustedOperatingQuestionContext;
     now: Date;
   },
-): Promise<void> {
+): Promise<{
+  portfolioRef: string;
+  trustedEvidence: CaioOperatingQuestionTrustedEvidence[];
+}> {
   const packInput = input.packOperatingInput;
   const portfolio = await resolveCaioFdePortfolioScope({
     client: tx,
@@ -834,32 +849,35 @@ async function assertPackOperatingInputScope(
       "pack_operating_input_evidence_scope_invalid",
     );
   }
-
-  const parsedCandidates = parseCaioOperatingQuestionCandidateDrafts(
-    input.candidates,
+  const sourceFreshnessByRef = new Map(
+    input.trusted.initialization.assessmentInput.sources.map((source) => [
+      source.sourceRef,
+      source.freshness,
+    ]),
   );
-  if (!parsedCandidates.success) {
-    throw new CaioOperatingQuestionStoreError(
-      "pack_core_candidate_drafts_invalid",
-    );
-  }
-  const declaredEvidence = new Set(declaredEvidenceRefs);
-  if (
-    parsedCandidates.data.some(
-      (candidate) =>
-        !candidate.impactObjectRefs.includes(portfolio.portfolioRef) ||
-        candidate.evidenceRefs.length === 0 ||
-        candidate.evidenceRefs.some((ref) => !declaredEvidence.has(ref)),
-    )
-  ) {
-    throw new CaioOperatingQuestionStoreError(
-      "pack_core_candidate_scope_invalid",
-    );
-  }
+  const traceByEvidenceRef = new Map(
+    input.trusted.initialization.assessmentInput.evidenceTraces
+      .filter((trace) => trace.resolved)
+      .map((trace) => [trace.evidenceRef, trace]),
+  );
+  const trustedEvidence = declaredEvidenceRefs.flatMap((evidenceRef) => {
+    const trace = traceByEvidenceRef.get(evidenceRef);
+    if (!trace) return [];
+    return [
+      {
+        evidenceRef,
+        evidenceKind: "source_observation",
+        freshness:
+          sourceFreshnessByRef.get(trace.sourceRef) ?? "unknown",
+        capturedAt: trace.capturedAt,
+      } satisfies CaioOperatingQuestionTrustedEvidence,
+    ];
+  });
+  return { portfolioRef: portfolio.portfolioRef, trustedEvidence };
 }
 
 async function generateCaioOperatingQuestionPortfolioInternal(
-  input: GenerateCaioOperatingQuestionPortfolioInput,
+  input: GenerateCaioOperatingQuestionPortfolioInternalInput,
   packOperatingInput?: CaioProPackOperatingInput,
 ): Promise<{
   receipt: CaioOperatingQuestionGenerationReceipt;
@@ -878,6 +896,9 @@ async function generateCaioOperatingQuestionPortfolioInternal(
     throw new CaioOperatingQuestionStoreError("audit_ref_required");
   }
   const now = input.now ?? new Date();
+  const canonicalPackOperatingInput = packOperatingInput
+    ? canonicalizeCaioProPackOperatingInputForGeneration(packOperatingInput)
+    : undefined;
   return runWithWriteConflictRetry(
     () =>
       db.$transaction(async (tx) => {
@@ -886,14 +907,24 @@ async function generateCaioOperatingQuestionPortfolioInternal(
           at: now,
         });
         await assertPolicyAccessInTransaction(tx, input);
-        if (packOperatingInput) {
-          await assertPackOperatingInputScope(tx, {
+        let effectiveCandidates = input.candidates;
+        if (canonicalPackOperatingInput) {
+          const scope = await assertPackOperatingInputScope(tx, {
             workspaceId: input.workspaceId,
-            packOperatingInput,
-            candidates: input.candidates,
+            packOperatingInput: canonicalPackOperatingInput,
             trusted,
             now,
           });
+          const derivation =
+            deriveCaioOperatingQuestionCandidatesFromPackInput({
+              packOperatingInput: canonicalPackOperatingInput,
+              portfolioRef: scope.portfolioRef,
+              g0Context: trusted.g0Context,
+              trustedEvidence: scope.trustedEvidence,
+              baselineWindowEnd:
+                trusted.initialization.assessmentInput.evaluatedAt,
+            });
+          effectiveCandidates = derivation.candidates;
         }
         const state = await loadCurrentGenerationState(tx, {
           workspaceId: input.workspaceId,
@@ -904,9 +935,15 @@ async function generateCaioOperatingQuestionPortfolioInternal(
           generationKey,
           generatorRef,
           modelRef,
-          candidates: input.candidates,
+          candidates: effectiveCandidates,
           auditRefs,
-          ...(packOperatingInput ? { packOperatingInput } : {}),
+          ...(canonicalPackOperatingInput
+            ? {
+                packDerivationRevision:
+                  CAIO_OPERATING_QUESTION_PACK_DERIVATION_REVISION,
+                packOperatingInput: canonicalPackOperatingInput,
+              }
+            : {}),
         });
         const existing =
           await tx.caioOperatingQuestionGenerationReceipt.findUnique({
@@ -974,7 +1011,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
           generationKey,
           generatorRef,
           modelRef,
-          candidates: input.candidates,
+          candidates: effectiveCandidates,
           generatedAt: now.toISOString(),
           auditRefs,
           previousPortfolio: state.previousPortfolio,
@@ -1124,6 +1161,30 @@ export async function generateCaioOperatingQuestionPortfolio(
 export async function generateCaioOperatingQuestionPortfolioFromPackInput(
   input: GenerateCaioOperatingQuestionPortfolioFromPackInput,
 ) {
+  const externalPayload = input as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(externalPayload, "candidates")) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_external_candidates_forbidden",
+    );
+  }
+  if (
+    [
+      "question",
+      "questions",
+      "questionCandidates",
+      "questionText",
+      "title",
+      "scores",
+      "candidateScores",
+      "rank",
+    ].some((field) =>
+      Object.prototype.hasOwnProperty.call(externalPayload, field),
+    )
+  ) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_external_question_payload_forbidden",
+    );
+  }
   const descriptorValidation = validateCaioProFdeInterfaceDescriptor(
     input.interfaceDescriptor,
   );
@@ -1141,8 +1202,11 @@ export async function generateCaioOperatingQuestionPortfolioFromPackInput(
       "pack_operating_input_contract_invalid",
     );
   }
-  const { interfaceDescriptor: _interfaceDescriptor, packOperatingInput: _packInput, ...generationInput } =
-    input;
+  const {
+    interfaceDescriptor: _interfaceDescriptor,
+    packOperatingInput: _packInput,
+    ...generationInput
+  } = input;
   return generateCaioOperatingQuestionPortfolioInternal(
     {
       ...generationInput,

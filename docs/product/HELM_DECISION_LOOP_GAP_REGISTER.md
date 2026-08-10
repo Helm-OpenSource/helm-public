@@ -55,6 +55,7 @@ governance 权限，不新建角色或 ACL。
 | trusted evidence closed | outcome ref 必须解析为当前 workspace、Portfolio、DecisionRecord、ActionItem、ApprovalTask 范围内仍有效的 `ObservationSourceRun` | `caio-fde-scope-resolver.service.ts` 与 unit / isolated MySQL revoked-source 拒绝测试 |
 | private ingress reachable | 受认证 WorkBuddy MCP principal 通过 Gateway 的 `/v1/execution-results` 进入 Core；Core 校验 identity/hash/scope/CAS 后唯一调用 `recordExecutionReceipt` | Gateway、`private-execution-result-ingress.service.ts`、并发 exact replay 与冲突 replay MySQL 测试；不证明私有 executor 已部署 |
 | Pack portable contract S1 closed | 完整 artifact 与版本化 semantic verifier 共同形成 contract identity；semantic graph 显式声明 `evidenceRef -> evidenceKind`，重复、悬空、coverage 与 kind 冲突全部 fail-closed | TS / JSON artifact differential 与逐叶 mutation 测试；不证明 production composition caller、Core 自生成问题或 Pack 已挂载 |
+| Pack Core generator S2 closed | Pack seam 拒绝外部 candidates、问题正文、score/rank；Core 从 workspace Portfolio、可信 G0 evidence traces、S1 bindings 与完整 semantic graph 派生 eligibility、内容、事实/推论、score/rank、validation metric 与 narrow loop | generator/store focused tests 覆盖语义敏感性、exactly-10、约束后 `insufficient_evidence`、幂等 request hash 与既有 canonical writer；不证明 production mount |
 | replay / concurrency closed | private ingress、receipt verification、decision evaluation 和 supervision 使用既有锁、CAS、幂等内容匹配与唯一键 | focused tests 与一次性 `helm_caio_stage1_*` MySQL 并发、冲突、回滚测试 |
 | read side reachable | `/caio` 先显示 unresolved critical，再显示其他 unresolved，剩余额度才显示 resolved；每条显示 status | `features/dashboard/stage1-owner-loop-query.ts`、console 与 mixed-status regression |
 
@@ -97,12 +98,13 @@ workspace 与 Portfolio membership 检查，Core ingress 再锁定 Work Packet�
 这是 GAP-3 的推论，不由本轮声称闭合。`companyMemoryRefs` 等不透明引用不等于读取持久化
 知识卡；在 GAP-3 完成前，不能机械判断所有援引知识的当前可用等级。
 
-### S1 后续项：Pack production composition 尚未闭合
+### S3 后续项：Pack production composition 尚未闭合
 
-本轮只发布 portable semantic contract。现有仓库事实尚不能证明唯一、受权、非测试的 Pack
-composition caller 已挂载，也不能证明 Pack semantic graph 已由 Core 自行转换为 exactly-10
-或 `insufficient_evidence`。后续实现必须继续保持 Core 不反向依赖 Pack；在该调用链和行为门禁
-完成前，不得把 S1 identity 写成 production reachability。
+S1 已发布 portable semantic contract；S2 已在 Core repo 内把合法 semantic graph 转换为现有
+canonical `CaioOperatingQuestionPortfolio` / generation receipt 的 exactly-10 或
+`insufficient_evidence`。现有仓库事实仍不能证明唯一、受权、非测试的 Pack composition caller、
+route 或 worker 已挂载。S3 必须继续保持 Core 不反向依赖 Pack；在真实 provider 注入、调用链和
+行为门禁完成前，不得把 S1 identity 或 S2 focused tests 写成 production reachability。
 
 ## 3. 仍成立的控制项
 
