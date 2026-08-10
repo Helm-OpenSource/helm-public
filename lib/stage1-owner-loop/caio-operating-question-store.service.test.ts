@@ -451,6 +451,31 @@ describe("CAIO operating question store", () => {
     auditMock.writeAuditLog.mockResolvedValue({ id: "audit-1" });
   });
 
+  it("rejects an already-cancelled generation before policy or database access", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      generateCaioOperatingQuestionPortfolio({
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: "generation:synthetic-caio:cancelled",
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates: Array.from({ length: 10 }, (_, index) =>
+          syntheticOperatingQuestionCandidate(index),
+        ),
+        auditRefs: ["audit:question-generation:cancelled"],
+        now: NOW,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow("request_cancelled");
+    expect(
+      policyAccessMock.assertWorkspacePolicyServiceAccess,
+    ).not.toHaveBeenCalled();
+    expect(dbMock.$transaction).not.toHaveBeenCalled();
+  });
+
   it("persists an exact-ten portfolio and a no-authority generation receipt", async () => {
     dbMock.$queryRaw.mockResolvedValueOnce([]);
 
@@ -532,6 +557,101 @@ describe("CAIO operating question store", () => {
     expect(
       dbMock.caioOperatingQuestionGenerationReceipt.create,
     ).not.toHaveBeenCalled();
+  });
+
+  it("rejects a tampered persisted v1 head before any write", async () => {
+    const historical = historicalGeneratedState();
+    dbMock.$queryRaw.mockResolvedValueOnce([
+      {
+        workspaceId: WORKSPACE_ID,
+        initializationGateReceiptId: historical.portfolio.gateReceiptRef,
+        initializationAssessmentId: historical.portfolio.assessmentRef,
+        currentGenerationReceiptId: historical.receipt.receiptId,
+        currentPortfolioId: historical.portfolio.portfolioId,
+        generationSequence: historical.receipt.sequence,
+        portfolioSequence: historical.portfolio.sequence,
+        version: 1,
+        updatedAt: NOW,
+      },
+    ]);
+    dbMock.caioOperatingQuestionGenerationReceipt.findFirst.mockResolvedValue(
+      generationReceiptRow(historical.receipt),
+    );
+    dbMock.caioOperatingQuestionPortfolio.findFirst.mockResolvedValue({
+      ...portfolioRow(historical.portfolio),
+      contentHash: `sha256:${"0".repeat(64)}`,
+    });
+
+    await expect(
+      generateCaioOperatingQuestionPortfolio({
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: "generation:synthetic-caio:tampered-v1",
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates: Array.from({ length: 10 }, (_, index) =>
+          syntheticOperatingQuestionCandidate(index),
+        ),
+        auditRefs: ["audit:question-generation:tampered-v1"],
+        now: NOW,
+      }),
+    ).rejects.toThrow("stored_question_portfolio_binding_invalid");
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("starts a new v2 root only after a distinct accepted G0 rollover", async () => {
+    const historical = historicalGeneratedState();
+    const nextAcceptedG0 = trustedInitialization((assessmentInput) => {
+      assessmentInput.evaluatedAt = "2026-07-23T07:05:00.000Z";
+    });
+    trustedContextMock.mockResolvedValue(nextAcceptedG0);
+    dbMock.$queryRaw.mockResolvedValueOnce([
+      {
+        workspaceId: WORKSPACE_ID,
+        initializationGateReceiptId: historical.portfolio.gateReceiptRef,
+        initializationAssessmentId: historical.portfolio.assessmentRef,
+        currentGenerationReceiptId: historical.receipt.receiptId,
+        currentPortfolioId: historical.portfolio.portfolioId,
+        generationSequence: historical.receipt.sequence,
+        portfolioSequence: historical.portfolio.sequence,
+        version: 1,
+        updatedAt: NOW,
+      },
+    ]);
+
+    const result = await generateCaioOperatingQuestionPortfolio({
+      workspaceId: WORKSPACE_ID,
+      actorUserId: OWNER_USER_ID,
+      generationKey: "generation:synthetic-caio:accepted-g0-rollover",
+      generatorRef: "generator:caio-operating-question",
+      modelRef: "model:synthetic-local",
+      candidates: Array.from({ length: 10 }, (_, index) =>
+        syntheticOperatingQuestionCandidate(index),
+      ),
+      auditRefs: ["audit:question-generation:accepted-g0-rollover"],
+      now: NOW,
+    });
+
+    expect(result.portfolio).toMatchObject({
+      sequence: 1,
+      previousPortfolioRef: null,
+      gateReceiptRef: nextAcceptedG0.receipt.receiptId,
+    });
+    expect(result.receipt).toMatchObject({
+      sequence: 1,
+      previousReceiptRef: null,
+      gateReceiptRef: nextAcceptedG0.receipt.receiptId,
+    });
+    expect(dbMock.caioOperatingQuestionPortfolioHead.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          initializationGateReceiptId: nextAcceptedG0.receipt.receiptId,
+        }),
+      }),
+    );
   });
 
   it("derives and persists exactly ten Core-owned questions from scoped Pack semantics", async () => {
@@ -1257,6 +1377,64 @@ describe("CAIO operating question store", () => {
       }),
     });
     expect(dbMock.caioQuestionSelectionHead.create).toHaveBeenCalledOnce();
+  });
+
+  it("validates a historical v1 portfolio through the CEO selection chain", async () => {
+    const historical = historicalGeneratedState();
+    dbMock.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          workspaceId: WORKSPACE_ID,
+          initializationGateReceiptId: historical.portfolio.gateReceiptRef,
+          initializationAssessmentId: historical.portfolio.assessmentRef,
+          currentGenerationReceiptId: historical.receipt.receiptId,
+          currentPortfolioId: historical.portfolio.portfolioId,
+          generationSequence: historical.receipt.sequence,
+          portfolioSequence: historical.portfolio.sequence,
+          version: 1,
+          updatedAt: NOW,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    dbMock.caioPrincipalBinding.findFirst.mockResolvedValue({
+      id: "binding:ceo:synthetic-caio",
+    });
+    dbMock.caioOperatingQuestionPortfolio.findFirst.mockResolvedValue(
+      portfolioRow(historical.portfolio),
+    );
+    const selectedQuestionId = historical.portfolio.candidates[0].questionId;
+
+    const result = await selectCaioOperatingQuestions({
+      workspaceId: WORKSPACE_ID,
+      expectedPortfolioId: historical.portfolio.portfolioId,
+      actorUserId: OWNER_USER_ID,
+      ceoPrincipalRef: CEO_REF,
+      idempotencyKey: "selection:synthetic-caio:historical-v1",
+      selections: [
+        {
+          questionId: selectedQuestionId,
+          questionOverride: null,
+          goal: "Validate the historical governed question",
+          successMetrics: [
+            { metricKey: "metric:historical-selection", target: "improve" },
+          ],
+          priority: 1,
+          implementationScopeRefs: ["scope:historical-selection"],
+          ownerRef: "role:operating-owner",
+          reviewerRef: "role:independent-reviewer",
+          startsAt: "2026-07-24T00:00:00.000Z",
+          endsAt: "2026-08-23T00:00:00.000Z",
+          prohibitedActions: ["external_send_without_review"],
+        },
+      ],
+      reasonCodes: ["ceo_historical_priority_reviewed"],
+      evidenceRefs: [historical.portfolio.evidenceRefs[0]],
+      now: NOW,
+    });
+
+    expect(result.receipt.selectedQuestionIds).toEqual([selectedQuestionId]);
+    expect(result.receipt.authorityEffect).toBe("none");
+    expect(dbMock.caioQuestionSelectionReceipt.create).toHaveBeenCalledOnce();
   });
 
   it("fails closed before writing when current accepted G0 cannot be loaded", async () => {

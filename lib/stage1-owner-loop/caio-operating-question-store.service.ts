@@ -42,6 +42,7 @@ import {
   type CaioProPackOperatingInput,
 } from "./caio-pro-fde-cross-repo-contract";
 import {
+  CaioFdeScopeResolutionError,
   resolveCaioFdeObservationEvidence,
   resolveCaioFdeObservationEvidenceBatch,
   resolveCaioFdePortfolioScope,
@@ -90,6 +91,7 @@ export type GenerateCaioOperatingQuestionPortfolioInput = {
   auditRefs: string[];
   now?: Date;
   english?: boolean;
+  signal?: AbortSignal;
 };
 
 export type GenerateCaioOperatingQuestionPortfolioFromPackInput =
@@ -141,6 +143,12 @@ export class CaioOperatingQuestionStoreError extends Error {
     super(reasons.length > 0 ? `${message}: ${reasons.join("; ")}` : message);
     this.name = "CaioOperatingQuestionStoreError";
     this.reasons = reasons;
+  }
+}
+
+function throwIfGenerationCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new CaioOperatingQuestionStoreError("request_cancelled");
   }
 }
 
@@ -969,7 +977,9 @@ async function generateCaioOperatingQuestionPortfolioInternal(
   portfolio: CaioOperatingQuestionPortfolio | null;
   replayed: boolean;
 }> {
+  throwIfGenerationCancelled(input.signal);
   await assertPolicyAccess(input);
+  throwIfGenerationCancelled(input.signal);
   const generationKey = nonEmpty(
     input.generationKey,
     "generation_key_required",
@@ -987,19 +997,34 @@ async function generateCaioOperatingQuestionPortfolioInternal(
   return runWithWriteConflictRetry(
     () =>
       db.$transaction(async (tx) => {
+        throwIfGenerationCancelled(input.signal);
         const trusted = await loadTrustedContextForUpdate(tx, {
           workspaceId: input.workspaceId,
           at: now,
         });
+        throwIfGenerationCancelled(input.signal);
         await assertPolicyAccessInTransaction(tx, input);
+        throwIfGenerationCancelled(input.signal);
         let effectiveCandidates = input.candidates;
         if (canonicalPackOperatingInput) {
-          const scope = await assertPackOperatingInputScope(tx, {
-            workspaceId: input.workspaceId,
-            packOperatingInput: canonicalPackOperatingInput,
-            trusted,
-            now,
-          });
+          let scope: Awaited<ReturnType<typeof assertPackOperatingInputScope>>;
+          try {
+            scope = await assertPackOperatingInputScope(tx, {
+              workspaceId: input.workspaceId,
+              packOperatingInput: canonicalPackOperatingInput,
+              trusted,
+              now,
+            });
+          } catch (error) {
+            if (error instanceof CaioFdeScopeResolutionError) {
+              throw new CaioOperatingQuestionStoreError(
+                "pack_operating_input_scope_invalid",
+                error.reasons,
+              );
+            }
+            throw error;
+          }
+          throwIfGenerationCancelled(input.signal);
           const derivation =
             deriveCaioOperatingQuestionCandidatesFromPackInput({
               packOperatingInput: canonicalPackOperatingInput,
@@ -1015,6 +1040,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
           workspaceId: input.workspaceId,
           trusted,
         });
+        throwIfGenerationCancelled(input.signal);
         const requestHash = hashRequest({
           g0ContextHash: trusted.g0Context.contentHash,
           generationKey,
@@ -1089,6 +1115,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
               outcomeValidation.errors,
             );
           }
+          throwIfGenerationCancelled(input.signal);
           return { receipt, portfolio, replayed: true };
         }
         const evaluation = evaluateCaioOperatingQuestionGeneration({
@@ -1114,6 +1141,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
               portfolioValidation.errors,
             );
           }
+          throwIfGenerationCancelled(input.signal);
           await tx.caioOperatingQuestionPortfolio.create({
             data: {
               id: portfolio.portfolioId,
@@ -1141,6 +1169,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
               generatedAt: new Date(portfolio.generatedAt),
             },
           });
+          throwIfGenerationCancelled(input.signal);
         }
         const receipt = createCaioOperatingQuestionGenerationReceipt({
           evaluation,
@@ -1161,6 +1190,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
           );
         }
         try {
+          throwIfGenerationCancelled(input.signal);
           await tx.caioOperatingQuestionGenerationReceipt.create({
             data: {
               id: receipt.receiptId,
@@ -1188,6 +1218,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
               recordedAt: new Date(receipt.recordedAt),
             },
           });
+          throwIfGenerationCancelled(input.signal);
         } catch (error) {
           if (isUniqueConstraintViolation(error)) {
             throw new CaioOperatingQuestionStoreError(
@@ -1205,6 +1236,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
           previousPortfolio: state.previousPortfolio,
           previousHead: state.head,
         });
+        throwIfGenerationCancelled(input.signal);
         await writeAuditLog(
           {
             workspaceId: input.workspaceId,
@@ -1231,6 +1263,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
           },
           { client: tx },
         );
+        throwIfGenerationCancelled(input.signal);
         return { receipt, portfolio, replayed: false };
       }, TRANSACTION_OPTIONS),
     WRITE_RETRY_OPTIONS,

@@ -31,8 +31,15 @@ import {
 } from "./caio-initialization-artifacts";
 import {
   acceptCaioInitializationGate,
+  loadCurrentAcceptedCaioInitializationContextForRead,
   recordCaioInitializationAssessment,
 } from "./caio-initialization-gate-store.service";
+import {
+  validateCaioOperatingQuestionGenerationReceipt,
+  validateCaioOperatingQuestionPortfolio,
+  type CaioOperatingQuestionGenerationReceipt,
+  type CaioOperatingQuestionPortfolio,
+} from "./caio-operating-question";
 import {
   createDataAssetCatalogEntry,
   recordDataAssetAuthorizationReceipt,
@@ -54,7 +61,10 @@ const INTEGRATION_DATABASE_URL =
   process.env.CAIO_FDE_FULL_CHAIN_DATABASE_URL;
 const CONFIRMED_INTEGRATION_DATABASE_NAME =
   process.env.CAIO_FDE_FULL_CHAIN_TEST_DATABASE_NAME;
+const ISOLATION_MARKER =
+  process.env.CAIO_FDE_FULL_CHAIN_ISOLATION_MARKER;
 const ISOLATED_DATABASE_PREFIX = "helm_caio_fde_full_chain_";
+const ISOLATION_MARKER_PATTERN = /^[a-z0-9][a-z0-9_]{7,63}$/u;
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const EVIDENCE_KIND_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
@@ -152,28 +162,42 @@ function assertEvidenceKinds(evidenceKinds: readonly string[]): void {
 
 export function assertCaioFdeFullChainIsolatedDatabaseTarget(): void {
   if (
+    process.env.NODE_ENV !== "test" ||
     !INTEGRATION_DATABASE_URL ||
     process.env.DATABASE_URL !== INTEGRATION_DATABASE_URL
   ) {
     throw new Error(
-      "DATABASE_URL must equal CAIO_FDE_FULL_CHAIN_DATABASE_URL for the isolated integration test.",
+      "NODE_ENV must be test and DATABASE_URL must equal CAIO_FDE_FULL_CHAIN_DATABASE_URL for the isolated integration test.",
     );
   }
   let databaseName = "";
+  let databaseUser = "";
   try {
     const parsed = new URL(INTEGRATION_DATABASE_URL);
+    if (
+      parsed.protocol !== "mysql:" ||
+      parsed.hostname !== "127.0.0.1" ||
+      parsed.port !== "3306"
+    ) {
+      throw new Error("mysql_loopback_required");
+    }
     databaseName = decodeURIComponent(parsed.pathname.replace(/^\/+/u, ""));
+    databaseUser = decodeURIComponent(parsed.username).toLowerCase();
   } catch {
     throw new Error(
-      "CAIO_FDE_FULL_CHAIN_DATABASE_URL must be a valid isolated MySQL URL.",
+      "CAIO_FDE_FULL_CHAIN_DATABASE_URL must be a valid mysql:// URL on 127.0.0.1:3306.",
     );
   }
   if (
-    !databaseName.startsWith(ISOLATED_DATABASE_PREFIX) ||
-    databaseName !== CONFIRMED_INTEGRATION_DATABASE_NAME
+    !ISOLATION_MARKER ||
+    !ISOLATION_MARKER_PATTERN.test(ISOLATION_MARKER) ||
+    databaseName !== `${ISOLATED_DATABASE_PREFIX}${ISOLATION_MARKER}` ||
+    databaseName !== CONFIRMED_INTEGRATION_DATABASE_NAME ||
+    !databaseUser ||
+    ["admin", "mysql", "root"].includes(databaseUser)
   ) {
     throw new Error(
-      "Refusing CAIO FDE full-chain test: confirm the isolated database name and use the helm_caio_fde_full_chain_ prefix.",
+      "Refusing CAIO FDE full-chain test: require a one-time database marker and a non-privileged MySQL test account.",
     );
   }
 }
@@ -319,6 +343,8 @@ export async function provisionAcceptedCaioFdeG0(input: {
 
   const pending: PendingEvidence[] = [];
   const memoryBindings: Array<{ ref: string; contentHash: string }> = [];
+  let snapshotRun: Awaited<ReturnType<typeof beginObservationSourceRun>> | null =
+    null;
   for (const [index, evidenceKind] of input.evidenceKinds.entries()) {
     const asset = await createDataAssetCatalogEntry({
       workspaceId: workspace.id,
@@ -413,6 +439,20 @@ export async function provisionAcceptedCaioFdeG0(input: {
       actorUserId: owner.id,
       now: validFrom,
     });
+    if (index === 0) {
+      snapshotRun = await beginObservationSourceRun({
+        workspaceId: workspace.id,
+        sourceKey: source.sourceKey,
+        executionKey: `snapshot-${suffix}`,
+        windowStart,
+        windowEnd,
+        now: new Date(windowEnd.getTime() + 500),
+      });
+      await db.observationSourceRun.update({
+        where: { id: snapshotRun.id },
+        data: { createdAt: new Date(base.getTime() - 10 * MINUTE_MS) },
+      });
+    }
     const run = await beginObservationSourceRun({
       workspaceId: workspace.id,
       sourceKey: source.sourceKey,
@@ -516,8 +556,7 @@ export async function provisionAcceptedCaioFdeG0(input: {
   }
 
   const declaredEvidenceRefs = pending.map((item) => item.evidenceRef);
-  const snapshotRunId = pending.at(-1)?.runId;
-  if (!snapshotRunId) {
+  if (!snapshotRun) {
     throw new Error("caio_fde_full_chain_snapshot_missing");
   }
   for (const [index, item] of pending.entries()) {
@@ -529,11 +568,7 @@ export async function provisionAcceptedCaioFdeG0(input: {
       completenessPercent: 100,
       freshness: "fresh",
       outcome: "success",
-      evidenceRefs: [
-        portfolioRef,
-        item.businessEvidenceRef,
-        ...(item.runId === snapshotRunId ? declaredEvidenceRefs : []),
-      ],
+      evidenceRefs: [portfolioRef, item.businessEvidenceRef],
       errorCodes: [],
     });
 
@@ -587,6 +622,17 @@ export async function provisionAcceptedCaioFdeG0(input: {
       },
     });
   }
+  await completeObservationSourceRun({
+    workspaceId: workspace.id,
+    runId: snapshotRun.id,
+    observedAt,
+    summaryHash: sha256(`synthetic-snapshot:${snapshotRun.id}`),
+    completenessPercent: 100,
+    freshness: "fresh",
+    outcome: "success",
+    evidenceRefs: [portfolioRef, ...declaredEvidenceRefs],
+    errorCodes: [],
+  });
 
   const orderedMemoryBindings = [...memoryBindings].sort((left, right) =>
     left.ref.localeCompare(right.ref),
@@ -646,6 +692,58 @@ export async function provisionAcceptedCaioFdeG0(input: {
   if (accepted.receipt.resultingStatus !== "accepted") {
     throw new Error("caio_fde_full_chain_g0_not_accepted");
   }
+  const acceptedContext = await db.$transaction(
+    (tx) =>
+      loadCurrentAcceptedCaioInitializationContextForRead(tx, {
+        workspaceId: workspace.id,
+        at: new Date(base.getTime() + 2_000),
+      }),
+    {
+      isolationLevel: "RepeatableRead",
+      maxWait: 10_000,
+      timeout: 30_000,
+    },
+  );
+  if (!acceptedContext) {
+    throw new Error("caio_fde_full_chain_accepted_g0_unavailable");
+  }
+  const tracesByRunRef = new Map(
+    acceptedContext.assessmentInput.evidenceTraces.map((trace) => [
+      trace.observationRunRef,
+      trace,
+    ]),
+  );
+  const sourcesByRef = new Map(
+    acceptedContext.assessmentInput.sources.map((source) => [
+      source.sourceRef,
+      source,
+    ]),
+  );
+  const canonicalEvidence = pending.map((item) => {
+    const trace = tracesByRunRef.get(item.runId);
+    const source = trace ? sourcesByRef.get(trace.sourceRef) : null;
+    if (
+      !trace ||
+      !trace.resolved ||
+      trace.evidenceRef !== item.businessEvidenceRef ||
+      trace.sourceRef !== item.sourceId ||
+      trace.assetRef !== item.assetId ||
+      trace.evidenceKind !== item.evidenceKind ||
+      !source ||
+      source.latestRunRef !== item.runId ||
+      source.latestRunStatus !== "succeeded" ||
+      source.latestRunOutcome !== "success" ||
+      !Number.isFinite(Date.parse(trace.capturedAt))
+    ) {
+      throw new Error("caio_fde_full_chain_canonical_evidence_invalid");
+    }
+    return Object.freeze({
+      evidenceRef: `observation-run:${trace.observationRunRef}`,
+      evidenceKind: trace.evidenceKind,
+      observedAt: trace.capturedAt,
+      validUntil: validUntil.toISOString(),
+    });
+  });
 
   return Object.freeze({
     label: suffix,
@@ -654,20 +752,33 @@ export async function provisionAcceptedCaioFdeG0(input: {
     ownerUserId: owner.id,
     portfolioRef,
     authorizationRef: program.authorizationRef,
-    evidenceSnapshotRef: `observation-run:${snapshotRunId}`,
+    evidenceSnapshotRef: `observation-run:${snapshotRun.id}`,
     asOf: base.toISOString(),
     validUntil: validUntil.toISOString(),
-    evidence: Object.freeze(
-      pending.map((item) =>
-        Object.freeze({
-          evidenceRef: item.evidenceRef,
-          evidenceKind: item.evidenceKind,
-          observedAt: item.observedAt.toISOString(),
-          validUntil: validUntil.toISOString(),
-        }),
-      ),
-    ),
+    evidence: Object.freeze(canonicalEvidence),
   });
+}
+
+export async function assertCaioFdeFullChainAcceptedG0Current(input: {
+  workspaceId: string;
+  at: string;
+}): Promise<void> {
+  assertCaioFdeFullChainIsolatedDatabaseTarget();
+  const current = await db.$transaction(
+    (tx) =>
+      loadCurrentAcceptedCaioInitializationContextForRead(tx, {
+        workspaceId: input.workspaceId,
+        at: new Date(input.at),
+      }),
+    {
+      isolationLevel: "RepeatableRead",
+      maxWait: 10_000,
+      timeout: 30_000,
+    },
+  );
+  if (!current) {
+    throw new Error("caio_fde_full_chain_accepted_g0_not_current");
+  }
 }
 
 export async function setCaioFdeFullChainObservationOutcome(input: {
@@ -736,6 +847,93 @@ export async function countCaioFdeFullChainRows(
     approvals,
     executions,
   };
+}
+
+export async function assertCaioFdeFullChainPersistedGeneration(input: {
+  workspaceId: string;
+  generationKey: string;
+  expectedCandidateCount: number;
+}): Promise<Readonly<{
+  portfolioRef: string;
+  receiptRef: string;
+  generationKey: string;
+  candidateCount: number;
+  authorityEffect: "none";
+}>> {
+  assertCaioFdeFullChainIsolatedDatabaseTarget();
+  const [portfolioRow, receiptRow] = await Promise.all([
+    db.caioOperatingQuestionPortfolio.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        generationKey: input.generationKey,
+      },
+    }),
+    db.caioOperatingQuestionGenerationReceipt.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        generationKey: input.generationKey,
+      },
+    }),
+  ]);
+  if (!portfolioRow || !receiptRow) {
+    throw new Error("caio_fde_full_chain_persisted_generation_missing");
+  }
+
+  let portfolio: CaioOperatingQuestionPortfolio;
+  let receipt: CaioOperatingQuestionGenerationReceipt;
+  try {
+    portfolio = JSON.parse(
+      portfolioRow.portfolioJson,
+    ) as CaioOperatingQuestionPortfolio;
+    receipt = JSON.parse(
+      receiptRow.receiptJson,
+    ) as CaioOperatingQuestionGenerationReceipt;
+  } catch {
+    throw new Error("caio_fde_full_chain_persisted_generation_json_invalid");
+  }
+  const portfolioValidation = validateCaioOperatingQuestionPortfolio(portfolio);
+  const receiptValidation =
+    validateCaioOperatingQuestionGenerationReceipt(receipt);
+  if (!portfolioValidation.valid || !receiptValidation.valid) {
+    throw new Error(
+      `caio_fde_full_chain_persisted_generation_contract_invalid:${[
+        ...portfolioValidation.errors,
+        ...receiptValidation.errors,
+      ].join(",")}`,
+    );
+  }
+  if (
+    portfolioRow.id !== portfolio.portfolioId ||
+    portfolioRow.contentHash !== portfolio.contentHash ||
+    portfolioRow.generationKey !== portfolio.generationKey ||
+    portfolioRow.generationInputHash !== portfolio.generationInputHash ||
+    portfolioRow.authorityEffect !== portfolio.authorityEffect ||
+    receiptRow.id !== receipt.receiptId ||
+    receiptRow.contentHash !== receipt.contentHash ||
+    receiptRow.generationKey !== receipt.generationKey ||
+    receiptRow.generationInputHash !== receipt.generationInputHash ||
+    receiptRow.authorityEffect !== receipt.authorityEffect ||
+    portfolio.workspaceRef !== `workspace:${input.workspaceId}` ||
+    receipt.workspaceRef !== portfolio.workspaceRef ||
+    receipt.status !== "generated" ||
+    receipt.portfolioRef !== portfolio.portfolioId ||
+    receipt.portfolioHash !== portfolio.contentHash ||
+    receipt.generationKey !== input.generationKey ||
+    receipt.generationInputHash !== portfolio.generationInputHash ||
+    portfolio.candidates.length !== input.expectedCandidateCount ||
+    portfolio.authorityEffect !== "none" ||
+    receipt.authorityEffect !== "none"
+  ) {
+    throw new Error("caio_fde_full_chain_persisted_generation_binding_invalid");
+  }
+
+  return Object.freeze({
+    portfolioRef: portfolio.portfolioId,
+    receiptRef: receipt.receiptId,
+    generationKey: receipt.generationKey,
+    candidateCount: portfolio.candidates.length,
+    authorityEffect: "none",
+  });
 }
 
 export async function disconnectCaioFdeFullChainFixture(): Promise<void> {

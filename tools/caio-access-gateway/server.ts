@@ -710,7 +710,9 @@ export function createCaioAccessGatewayMount(
       } catch (error) {
         if (error instanceof CaioOperatingQuestionProductionCallerError) {
           throw new CaioAccessGatewayError(
-            error.code === "PRINCIPAL_NOT_AUTHORIZED" ||
+            error.code === "REQUEST_CANCELLED"
+              ? "request_cancelled"
+              : error.code === "PRINCIPAL_NOT_AUTHORIZED" ||
               error.code === "PACK_PROVIDER_SCOPE_MISMATCH"
               ? "scope_violation"
               : "bad_request",

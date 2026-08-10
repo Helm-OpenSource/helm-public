@@ -34,6 +34,7 @@ export type CaioOperatingQuestionProductionCallerErrorCode =
   | "PACK_PROVIDER_RESOLUTION_FAILED"
   | "PACK_OPERATING_INPUT_INVALID"
   | "PACK_PROVIDER_SCOPE_MISMATCH"
+  | "REQUEST_CANCELLED"
   | "GENERATION_REJECTED";
 
 export class CaioOperatingQuestionProductionCallerError extends Error {
@@ -79,6 +80,9 @@ export function createCaioOperatingQuestionProductionCaller(input: {
   providerRegistry: CaioOperatingQuestionPackProviderRegistry;
 }): CaioOperatingQuestionProductionCaller {
   return async (call) => {
+    if (call.signal?.aborted) {
+      throw new CaioOperatingQuestionProductionCallerError("REQUEST_CANCELLED");
+    }
     if (
       call.principal.audience !== "mcp" ||
       call.principal.clientType !== "workbuddy"
@@ -106,12 +110,20 @@ export function createCaioOperatingQuestionProductionCaller(input: {
         ...(call.signal ? { signal: call.signal } : {}),
       });
     } catch (error) {
+      if (call.signal?.aborted) {
+        throw new CaioOperatingQuestionProductionCallerError(
+          "REQUEST_CANCELLED",
+        );
+      }
       if (error instanceof CaioOperatingQuestionProductionCallerError) {
         throw error;
       }
       throw new CaioOperatingQuestionProductionCallerError(
         "PACK_PROVIDER_RESOLUTION_FAILED",
       );
+    }
+    if (call.signal?.aborted) {
+      throw new CaioOperatingQuestionProductionCallerError("REQUEST_CANCELLED");
     }
     const packOperatingInput = caioProPackOperatingInputSchema.safeParse(provided);
     if (!packOperatingInput.success) {
@@ -149,8 +161,18 @@ export function createCaioOperatingQuestionProductionCaller(input: {
             }),
           )}`,
         ],
+        ...(call.signal ? { signal: call.signal } : {}),
       });
     } catch (error) {
+      if (
+        call.signal?.aborted ||
+        (error instanceof CaioOperatingQuestionStoreError &&
+          error.message === "request_cancelled")
+      ) {
+        throw new CaioOperatingQuestionProductionCallerError(
+          "REQUEST_CANCELLED",
+        );
+      }
       if (
         error instanceof CaioOperatingQuestionStoreError ||
         error instanceof CaioInitializationGateStoreError
