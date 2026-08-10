@@ -5,8 +5,8 @@
   "description": "Portable public-safe validation artifact for Pack operating inputs and private execution result projections. Validation grants no authority; Core still resolves every workspace, Portfolio, evidence snapshot, work object and permission at ingestion time.",
   "interfaceIdentity": {
     "interfaceVersion": "helm.caio-pro-fde.cross-repo-interface.v1",
-    "contractRef": "caio-pro-fde-cross-repo-interface:aeb075ce021b5899",
-    "contractHash": "sha256:aeb075ce021b5899c27cc94696bcfe77343c1dd6adadbf2d9b15ee114aedd2d8",
+    "contractRef": "caio-pro-fde-cross-repo-interface:af2fa7dc4d740121",
+    "contractHash": "sha256:af2fa7dc4d74012129732688ee84772188ad79692c4e071c98e05b897b8e9b4d",
     "evaluatorRevision": "caio-pro-v1-completion-evaluator.v1",
     "evaluatorContractRef": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
     "evaluatorContractHash": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01"
@@ -22,6 +22,9 @@
   ],
   "x-helm-semantic-verifier": {
     "revision": "helm.caio-pro-fde.portable-semantic-verifier.v1",
+    "modulePath": "docs/contracts/caio-pro-fde-cross-repo-interface.v1.semantic.mjs",
+    "moduleSha256": "sha256:21f84795efb7f11beaf5283cf9c806ddd593a85a941495de909d81d22fbdbce2",
+    "exportName": "validateCaioProFdePackOperatingInputSemanticRules",
     "identityCanonicalization": {
       "algorithm": "helm.caio-pro-fde.canonical-portable-contract-identity.v1",
       "input": "canonical_json_of_complete_artifact",
@@ -38,12 +41,14 @@
       "url_locator_ip_email_secret_token_connection_string_and_pii_shapes_are_rejected"
     ],
     "packOperatingInputRules": [
+      "shortText_and_longText_fields_must_contain_non_whitespace_content",
       "taxonomyRef_categoryRef_metricRef_ruleRef_candidateRef_and_evidenceRef_bindings_are_unique",
       "nested_taxonomy_metric_evidence_and_kind_ref_sets_are_unique",
       "rule_taxonomy_refs_and_candidate_taxonomy_metric_refs_are_closed_over_declared_nodes",
       "every_declared_taxonomy_dimension_has_rule_coverage",
       "every_declared_taxonomy_and_metric_is_reachable_from_a_candidateInput",
       "every_metric_and_candidate_evidence_ref_has_one_evidence_kind_binding",
+      "every_evidence_kind_binding_is_reachable_from_a_metric_or_candidateInput",
       "each_candidate_evidence_kind_is_accepted_by_a_rule_for_each_candidate_taxonomy"
     ],
     "trustedEvidenceRule": "Core_must_resolve_each_declared_evidenceRef_kind_binding_against_the_authenticated_workspace_current_authorized_ObservationSourceRun_before_generation",
@@ -65,12 +70,12 @@
     },
     "contractRef": {
       "type": "string",
-      "const": "caio-pro-fde-cross-repo-interface:aeb075ce021b5899",
+      "const": "caio-pro-fde-cross-repo-interface:af2fa7dc4d740121",
       "maxLength": 256
     },
     "contractHash": {
       "type": "string",
-      "const": "sha256:aeb075ce021b5899c27cc94696bcfe77343c1dd6adadbf2d9b15ee114aedd2d8",
+      "const": "sha256:af2fa7dc4d74012129732688ee84772188ad79692c4e071c98e05b897b8e9b4d",
       "maxLength": 71
     },
     "evaluatorRevision": {
@@ -209,12 +214,14 @@
     "shortText": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 128
+      "maxLength": 128,
+      "pattern": "\\S"
     },
     "longText": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 2048
+      "maxLength": 2048,
+      "pattern": "\\S"
     },
     "identifier": {
       "type": "string",

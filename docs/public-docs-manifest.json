@@ -13,6 +13,8 @@
     "docs/codex/README.md",
     "docs/contracts/audit-data-risk.contract.json",
     "docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json",
+    "docs/contracts/caio-pro-fde-cross-repo-interface.v1.semantic.d.mts",
+    "docs/contracts/caio-pro-fde-cross-repo-interface.v1.semantic.mjs",
     "docs/contracts/helm-core-sdk.contract.json",
     "docs/getting-started.en.md",
     "docs/getting-started.md",

@@ -779,6 +779,7 @@ function packSemanticGraphErrors(value: unknown): string[] {
   const reachableMetricRefs = new Set(
     value.candidateInputs.flatMap((candidate) => candidate.metricRefs),
   );
+  const coveredEvidenceRefs = new Set<string>();
   if ([...taxonomyRefs].some((ref) => !reachableTaxonomyRefs.has(ref))) {
     errors.push("pack_taxonomy_candidate_coverage_missing");
   }
@@ -786,6 +787,9 @@ function packSemanticGraphErrors(value: unknown): string[] {
     errors.push("pack_metric_candidate_coverage_missing");
   }
   for (const metric of value.metrics) {
+    for (const evidenceRef of metric.evidenceRefs) {
+      coveredEvidenceRefs.add(evidenceRef);
+    }
     if (metric.evidenceRefs.some((ref) => !evidenceKinds.has(ref))) {
       errors.push("pack_metric_evidence_binding_missing");
     }
@@ -810,6 +814,9 @@ function packSemanticGraphErrors(value: unknown): string[] {
       ...candidate.evidenceRefs,
       ...candidateMetrics.flatMap((metric) => metric.evidenceRefs),
     ]);
+    for (const evidenceRef of evidenceRefs) {
+      coveredEvidenceRefs.add(evidenceRef);
+    }
     if ([...evidenceRefs].some((ref) => !evidenceKinds.has(ref))) {
       errors.push("pack_candidate_evidence_binding_missing");
     }
@@ -831,6 +838,13 @@ function packSemanticGraphErrors(value: unknown): string[] {
         }
       }
     }
+  }
+  if (
+    value.evidenceBindings.some(
+      (binding) => !coveredEvidenceRefs.has(binding.evidenceRef),
+    )
+  ) {
+    errors.push("pack_evidence_binding_uncovered");
   }
   return [...new Set(errors)].sort();
 }

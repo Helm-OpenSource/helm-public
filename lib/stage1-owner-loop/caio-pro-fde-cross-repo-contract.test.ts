@@ -276,6 +276,16 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
       },
       {
         ...base,
+        evidenceBindings: [
+          ...base.evidenceBindings,
+          {
+            evidenceRef: "observation-run:uncovered",
+            evidenceKind: "source_observation",
+          },
+        ],
+      },
+      {
+        ...base,
         metrics: [
           ...base.metrics,
           {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -10,6 +11,7 @@ import {
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_HASH,
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_CONTRACT_REF,
   CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,
+  CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION,
   CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_RULES,
   CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
   CAIO_PRO_PRIVATE_EXECUTION_RESULT_PROJECTION_SCHEMA_VERSION,
@@ -19,10 +21,18 @@ import {
   validateCaioProFdePortableContractArtifactIdentity,
   validateCaioProPackOperatingInputSemanticRules,
 } from "./caio-pro-fde-cross-repo-contract";
+import {
+  CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION as PORTABLE_MODULE_REVISION,
+  validateCaioProFdePackOperatingInputSemanticRules as validatePortablePackSemanticRules,
+} from "../../docs/contracts/caio-pro-fde-cross-repo-interface.v1.semantic.mjs";
 
 const ARTIFACT = path.resolve(
   __dirname,
   "../../docs/contracts/caio-pro-fde-cross-repo-interface.v1.schema.json",
+);
+const SEMANTIC_MODULE = path.resolve(
+  __dirname,
+  "../../docs/contracts/caio-pro-fde-cross-repo-interface.v1.semantic.mjs",
 );
 
 type PortablePayloadDefinition = {
@@ -72,7 +82,7 @@ function portablePackAccepts(payload: unknown): boolean {
   );
   return (
     Boolean(validate(payload)) &&
-    validateCaioProPackOperatingInputSemanticRules(payload).valid
+    validatePortablePackSemanticRules(payload).valid
   );
 }
 
@@ -173,6 +183,29 @@ function portablePublicSafeRefAccepts(value: string): boolean {
 }
 
 describe("portable CAIO Pro FDE cross-repo schema", () => {
+  it("binds the independently executable semantic verifier bytes", () => {
+    const verifier = artifact()["x-helm-semantic-verifier"] as {
+      revision: string;
+      modulePath: string;
+      moduleSha256: string;
+      exportName: string;
+    };
+    const moduleSha256 = `sha256:${createHash("sha256")
+      .update(readFileSync(SEMANTIC_MODULE))
+      .digest("hex")}`;
+
+    expect(verifier).toMatchObject({
+      revision: CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION,
+      modulePath:
+        "docs/contracts/caio-pro-fde-cross-repo-interface.v1.semantic.mjs",
+      moduleSha256,
+      exportName: "validateCaioProFdePackOperatingInputSemanticRules",
+    });
+    expect(PORTABLE_MODULE_REVISION).toBe(
+      CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION,
+    );
+  });
+
   it("publishes the exact Core interface and evaluator identity", () => {
     const schema = artifact();
     expect(schema.interfaceIdentity).toEqual({
@@ -333,6 +366,24 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
           },
         ],
       },
+      {
+        ...base,
+        evidenceBindings: [
+          ...base.evidenceBindings,
+          {
+            evidenceRef: "observation-run:uncovered",
+            evidenceKind: "source_observation",
+          },
+        ],
+      },
+      {
+        ...base,
+        taxonomy: [{ ...base.taxonomy[0], label: "   " }],
+      },
+      {
+        ...base,
+        metrics: [{ ...base.metrics[0], definition: "\t\n" }],
+      },
       { ...base, workspaceRef: "workspace:https:private.invalid" },
       {
         ...base,
@@ -342,8 +393,17 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
     ];
 
     for (const payload of corpus) {
-      expect(portablePackAccepts(payload)).toBe(
-        caioProPackOperatingInputSchema.safeParse(payload).success,
+      const portableAccepted = portablePackAccepts(payload);
+      const typescriptAccepted =
+        caioProPackOperatingInputSchema.safeParse(payload).success;
+      expect(portableAccepted, JSON.stringify(payload)).toBe(
+        typescriptAccepted,
+      );
+      const portableSemantic = validatePortablePackSemanticRules(payload);
+      const typescriptSemantic =
+        validateCaioProPackOperatingInputSemanticRules(payload);
+      expect(portableSemantic, JSON.stringify(payload)).toEqual(
+        typescriptSemantic,
       );
     }
   });
