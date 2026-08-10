@@ -105,6 +105,24 @@ function candidateFor(
 }
 
 describe("CAIO operating question Pack generator", () => {
+  it("does not derive questions from segmented PII hidden inside candidate refs", () => {
+    for (const digits of ["123-456-7890", "138-0013-8000"]) {
+      for (const separator of [":", ".", "_", "-"]) {
+        for (const unsafeCandidateRef of [
+          `candidate-input:${digits}${separator}extra`,
+          `candidate-input:prefix${separator}${digits}${separator}extra`,
+        ]) {
+          const mutated = structuredClone(packOperatingInput());
+          mutated.candidateInputs[0].candidateRef = unsafeCandidateRef;
+
+          expect(() => derive(mutated), unsafeCandidateRef).toThrow(
+            "caio_pack_question_generation_context_invalid",
+          );
+        }
+      }
+    }
+  });
+
   it("derives exactly ten Core-owned drafts with auditable semantic basis refs", () => {
     const result = derive(packOperatingInput());
 

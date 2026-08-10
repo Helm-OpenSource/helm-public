@@ -229,7 +229,8 @@ const TOKEN_MATERIAL_PATTERN =
   /(?:^|:)(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{16,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/u;
 const EMAIL_PATTERN = /@/u;
 const DIGIT_LIKE_PATTERN = /^[0-9][0-9 -]{5,22}[0-9Xx]$/u;
-const DIGIT_LIKE_SUFFIX_PATTERN = /:[0-9][0-9 -]{5,22}[0-9Xx]$/u;
+const DELIMITED_DIGIT_LIKE_PATTERN =
+  /(?:^|[:._-])[0-9][0-9 -]{5,22}[0-9Xx](?=$|[:._-])/u;
 const EMBEDDED_DIGIT_PII_PATTERN = /(?:[0-9]{7,22}|[0-9]{6,21}[Xx])/u;
 const CORE_GENERATED_CUID_REF_PATTERN =
   /^(?:workspace|opportunity|observation-run):c(?=[a-z0-9]*[a-z])[a-z0-9]{24}$/u;
@@ -283,7 +284,7 @@ function opaqueRefIsPublicSafe(value: string): boolean {
   if (containsIpLiteral(opaqueId)) return false;
   if (
     !isCoreGeneratedCuidRef &&
-    (DIGIT_LIKE_SUFFIX_PATTERN.test(value) ||
+    (DELIMITED_DIGIT_LIKE_PATTERN.test(value) ||
       DIGIT_LIKE_PATTERN.test(opaqueId) ||
       EMBEDDED_DIGIT_PII_PATTERN.test(opaqueId))
   ) {
@@ -485,7 +486,7 @@ const caioProFdeCrossRepoInterfaceContractBasis = {
     semanticVerifierRevision:
       CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION,
     publicSafeRefPolicyRevision:
-      "helm.caio-pro-fde.public-safe-ref-policy.v6" as const,
+      "helm.caio-pro-fde.public-safe-ref-policy.v7" as const,
     trustedEvidenceResolver:
       "workspace-scoped-active-observation-source-run" as const,
     packConsumer:

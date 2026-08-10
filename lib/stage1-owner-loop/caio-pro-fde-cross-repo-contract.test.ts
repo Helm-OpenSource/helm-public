@@ -242,6 +242,13 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
   });
 
   it("rejects non-canonical whitespace, embedded IPv6 and segmented digit PII refs", () => {
+    const wrappedSegmentedPiiRefs = ["123-456-7890", "138-0013-8000"].flatMap(
+      (digits) =>
+        [":", ".", "_", "-"].flatMap((separator) => [
+          `proof:${digits}${separator}extra`,
+          `proof:prefix${separator}${digits}${separator}extra`,
+        ]),
+    );
     for (const unsafeRef of [
       " proof:ordinary-ref",
       "proof:ordinary-ref\t",
@@ -250,6 +257,7 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
       "proof:1:2:3:4:5:6:7:8:x",
       "proof:a:::x",
       "proof:case:123-456-7890",
+      ...wrappedSegmentedPiiRefs,
     ]) {
       expect(caioProPublicSafeRefSchema.safeParse(unsafeRef).success, unsafeRef).toBe(
         false,

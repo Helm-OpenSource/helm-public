@@ -5,8 +5,8 @@
   "description": "Portable public-safe validation artifact for Pack operating inputs and private execution result projections. Validation grants no authority; Core still resolves every workspace, Portfolio, evidence snapshot, work object and permission at ingestion time.",
   "interfaceIdentity": {
     "interfaceVersion": "helm.caio-pro-fde.cross-repo-interface.v1",
-    "contractRef": "caio-pro-fde-cross-repo-interface:99a3aa5309012e89",
-    "contractHash": "sha256:99a3aa5309012e89f184a89f100e5e2a8f2304c015a6b1338559fbfa7c049fe5",
+    "contractRef": "caio-pro-fde-cross-repo-interface:39378a3d5fa43a99",
+    "contractHash": "sha256:39378a3d5fa43a99d6fc65edb25bd6ab82259e6b7e94759a13a9e5b61b690c46",
     "evaluatorRevision": "caio-pro-v1-completion-evaluator.v1",
     "evaluatorContractRef": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
     "evaluatorContractHash": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01"
@@ -71,12 +71,12 @@
     },
     "contractRef": {
       "type": "string",
-      "const": "caio-pro-fde-cross-repo-interface:99a3aa5309012e89",
+      "const": "caio-pro-fde-cross-repo-interface:39378a3d5fa43a99",
       "maxLength": 256
     },
     "contractHash": {
       "type": "string",
-      "const": "sha256:99a3aa5309012e89f184a89f100e5e2a8f2304c015a6b1338559fbfa7c049fe5",
+      "const": "sha256:39378a3d5fa43a99d6fc65edb25bd6ab82259e6b7e94759a13a9e5b61b690c46",
       "maxLength": 71
     },
     "evaluatorRevision": {
@@ -149,7 +149,7 @@
             "pattern": "@"
           },
           {
-            "pattern": ":[0-9][0-9 -]{5,22}[0-9Xx]$"
+            "pattern": "(?:^|[:._-])[0-9][0-9 -]{5,22}[0-9Xx](?=$|[:._-])"
           },
           {
             "pattern": "::"

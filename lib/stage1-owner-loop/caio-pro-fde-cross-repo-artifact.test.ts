@@ -597,11 +597,19 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
 
   it("rejects the same embedded IPv6 and segmented PII refs in complete payloads", () => {
     const base = validPackInput();
+    const wrappedSegmentedPiiRefs = ["123-456-7890", "138-0013-8000"].flatMap(
+      (digits) =>
+        [":", ".", "_", "-"].flatMap((separator) => [
+          `taxonomy:${digits}${separator}extra`,
+          `taxonomy:prefix${separator}${digits}${separator}extra`,
+        ]),
+    );
     for (const unsafeTaxonomyRef of [
       "taxonomy:case:123-456-7890",
       "taxonomy:fe80::1:x",
       "taxonomy:1:2:3:4:5:6:7:8:x",
       "taxonomy:a:::x",
+      ...wrappedSegmentedPiiRefs,
     ]) {
       const payload = {
         ...base,
