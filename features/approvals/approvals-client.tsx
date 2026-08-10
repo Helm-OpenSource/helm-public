@@ -132,6 +132,10 @@ import {
 } from "@/features/approvals/approval-learning-display";
 import { formatApprovalDateLabel } from "@/features/approvals/approval-date-labels";
 import { resolveApprovalObjectDetailHref } from "@/features/approvals/approval-object-detail-link";
+import {
+  getStage1TerminalReceiptMode,
+  Stage1TerminalResultControl,
+} from "@/features/approvals/stage1-terminal-result-control";
 import { GovernedCandidateReviewPanel } from "@/features/governed-candidates/governed-candidate-review-panel";
 import type { GovernedCandidateReviewListItem } from "@/lib/governed-intelligence/governed-candidate-review";
 
@@ -210,6 +214,14 @@ type ApprovalsClientProps = {
       meeting: { id: string; title: string } | null;
       decisionWorkPacketClaim: {
         decisionRecordId: string;
+      } | null;
+      executionReceipt: {
+        outcome:
+          | "SUCCESS"
+          | "PARTIAL_SUCCESS"
+          | "FAILURE"
+          | "NOT_EXECUTED"
+          | "REJECTED";
       } | null;
     };
     recommendationFacts: Array<{
@@ -542,8 +554,17 @@ export function ApprovalsClient({
     selected.actionItem.status === "APPROVED";
   const selectedActionExecuted = selected?.actionItem.status === "EXECUTED";
   const selectedActionBlocked = selected?.actionItem.status === "BLOCKED";
+  const selectedActionRejected = selected?.actionItem.status === "REJECTED";
+  const selectedActionClosed =
+    selectedActionExecuted || selectedActionBlocked || selectedActionRejected;
   const selectedStage1Decision =
     selected?.actionItem.decisionWorkPacketClaim ?? null;
+  const selectedStage1ReceiptOutcome =
+    selected?.actionItem.executionReceipt?.outcome ?? null;
+  const selectedStage1TerminalMode = getStage1TerminalReceiptMode(
+    selectedStage1ReceiptOutcome,
+    selected?.actionItem.status,
+  );
   const stage1TerminalResultReady =
     stage1BusinessResult !== "" && stage1OutcomeRef.trim().length > 0;
   const selectedBiSignalId = selected?.biSource?.signalId ?? null;
@@ -1334,6 +1355,17 @@ export function ApprovalsClient({
     }
     if (!selectedStage1Decision) {
       return verifyExecutedTaskReceiptAction(selected.id);
+    }
+    if (selectedStage1TerminalMode === "closed-without-execution") {
+      return verifyExecutedTaskReceiptAction(selected.id);
+    }
+    if (selectedStage1TerminalMode === "unresolved") {
+      return Promise.resolve({
+        ok: false,
+        error: english
+          ? "The canonical receipt outcome must be repaired or refreshed before verification."
+          : "请先修复或刷新规范回执结果，再进行验收。",
+      });
     }
     if (!stage1TerminalResultReady) {
       return Promise.resolve({
@@ -3439,87 +3471,46 @@ export function ApprovalsClient({
                       : "这条动作当前已阻断，建议先确认阻断原因，再决定是否重新处理。"}
                   </div>
                 ) : null}
-                {(selectedActionExecuted || selectedActionBlocked) &&
-                selectedStage1Decision ? (
-                  <fieldset className="grid gap-3 border-t border-[color:var(--border)] pt-4">
-                    <legend className="px-1 text-sm font-semibold text-[color:var(--foreground)]">
-                      {english ? "Final business result" : "最终业务结果"}
-                    </legend>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <label className="grid gap-2 text-xs font-medium text-[color:var(--muted-foreground)]">
-                        {english ? "Result" : "结果"}
-                        <Select
-                          value={stage1BusinessResult}
-                          disabled={pending}
-                          onValueChange={(value) =>
-                            setStage1BusinessResult(
-                              value as "success" | "failure",
-                            )
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue
-                              placeholder={english ? "Select" : "请选择"}
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="success">
-                              {english ? "Successful" : "成功"}
-                            </SelectItem>
-                            <SelectItem value="failure">
-                              {english ? "Unsuccessful" : "未成功"}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </label>
-                      <label className="grid gap-2 text-xs font-medium text-[color:var(--muted-foreground)]">
-                        {english ? "Outcome evidence ref" : "结果证据引用"}
-                        <Input
-                          value={stage1OutcomeRef}
-                          disabled={pending}
-                          onChange={(event) =>
-                            setStage1OutcomeRef(event.target.value)
-                          }
-                          placeholder="business-outcome:..."
-                          autoComplete="off"
-                        />
-                      </label>
-                      <label className="grid gap-2 text-xs font-medium text-[color:var(--muted-foreground)]">
-                        {english
-                          ? "Followed recommendation"
-                          : "是否采纳判断建议"}
-                        <Select
-                          value={stage1FollowedRecommendation}
-                          disabled={pending}
-                          onValueChange={(value) =>
-                            setStage1FollowedRecommendation(
-                              value as "unknown" | "yes" | "no",
-                            )
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="unknown">
-                              {english ? "Not established" : "尚未确认"}
-                            </SelectItem>
-                            <SelectItem value="yes">
-                              {english ? "Yes" : "是"}
-                            </SelectItem>
-                            <SelectItem value="no">
-                              {english ? "No" : "否"}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </label>
-                    </div>
-                    {!actionGovernance.canFinalizeStage1Result ? (
-                      <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">
-                        {actionGovernance.stage1ResultDeniedMessage}
-                      </p>
-                    ) : null}
-                  </fieldset>
+                {selectedActionRejected ? (
+                  <div
+                    className="workspace-note-card p-4 text-sm leading-7 text-[color:var(--foreground)]"
+                    data-tone="amber"
+                  >
+                    {english
+                      ? "This ActionItem is in a non-canonical REJECTED state. It does not imply a business failure, but the governed state must be repaired before terminal reconciliation."
+                      : "这条 ActionItem 处于非规范的 REJECTED 状态。它不代表业务失败，但必须先修复治理状态，才能进行终态 reconciliation。"}
+                  </div>
+                ) : null}
+                {selectedActionClosed && selectedStage1Decision ? (
+                  <Stage1TerminalResultControl
+                    receiptOutcome={selectedStage1ReceiptOutcome}
+                    actionStatus={selected.actionItem.status}
+                    english={english}
+                    pending={pending}
+                    canFinalize={actionGovernance.canFinalizeStage1Result}
+                    deniedMessage={actionGovernance.stage1ResultDeniedMessage}
+                    businessResult={stage1BusinessResult}
+                    outcomeRef={stage1OutcomeRef}
+                    followedRecommendation={stage1FollowedRecommendation}
+                    onBusinessResultChange={setStage1BusinessResult}
+                    onOutcomeRefChange={setStage1OutcomeRef}
+                    onFollowedRecommendationChange={
+                      setStage1FollowedRecommendation
+                    }
+                    onVerify={() =>
+                      runAction(
+                        verifySelectedReceipt,
+                        selectedStage1TerminalMode ===
+                          "closed-without-execution"
+                          ? english
+                            ? "Closure receipt verified; owner review remains open"
+                            : "关闭回执已验收，仍需 owner review"
+                          : english
+                            ? "Receipt and business result reconciled"
+                            : "回执与业务结果已完成 reconciliation",
+                      )
+                    }
+                  />
                 ) : null}
                 <div className="grid gap-3 pt-2">
                   {selectedActionAwaitingExecution ? (
@@ -3564,30 +3555,25 @@ export function ApprovalsClient({
                         {english ? "Mark blocked" : "标记阻断"}
                       </Button>
                     </>
-                  ) : selectedActionExecuted || selectedActionBlocked ? (
-                    <Button
-                      disabled={
-                        pending ||
-                        Boolean(
-                          selectedStage1Decision &&
-                            (!actionGovernance.canFinalizeStage1Result ||
-                              !stage1TerminalResultReady),
-                        )
-                      }
-                      variant="secondary"
-                      onClick={() =>
-                        runAction(
-                          verifySelectedReceipt,
-                          english
-                            ? "Receipt verified by a second reviewer"
-                            : "回执已由他人验收确认",
-                        )
-                      }
-                    >
-                      {english
-                        ? "Verify receipt (another reviewer)"
-                        : "验收回执（需他人确认）"}
-                    </Button>
+                  ) : selectedActionClosed ? (
+                    selectedStage1Decision ? null : (
+                      <Button
+                        disabled={pending}
+                        variant="secondary"
+                        onClick={() =>
+                          runAction(
+                            verifySelectedReceipt,
+                            english
+                              ? "Receipt verified by a second reviewer"
+                              : "回执已由他人验收确认",
+                          )
+                        }
+                      >
+                        {english
+                          ? "Verify receipt (another reviewer)"
+                          : "验收回执（需他人确认）"}
+                      </Button>
+                    )
                   ) : (
                     <>
                       <Button

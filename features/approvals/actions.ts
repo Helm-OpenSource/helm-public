@@ -2,6 +2,7 @@
 
 import {
   ActorType,
+  ExecutionReceiptOutcome,
   ExecutionReceiptSubjectType,
   RejectionReasonCode,
 } from "@prisma/client";
@@ -56,6 +57,9 @@ async function resolveApprovalTaskForWorkspace(taskId: string, workspaceId: stri
         include: {
           decisionWorkPacketClaim: {
             select: { decisionRecordId: true },
+          },
+          executionReceipt: {
+            select: { outcome: true },
           },
         },
       },
@@ -235,7 +239,8 @@ export type VerifyExecutedTaskReceiptActionInput =
 // Receipt-level separation of duties: a reviewer other than the executor
 // confirms the closed action's receipt, upgrading it from SELF_REPORTED to
 // VERIFIED. For a Stage 1 work packet this is also the sole terminal trigger:
-// the reviewer must provide an explicit business outcome and the action then
+// the canonical receipt determines whether the reviewer must provide an
+// explicit business outcome or close without execution. The action then
 // reconciles the existing DecisionRecord and SupervisionSignalRecord. Retry is
 // safe because receipt verification and both downstream writes are idempotent.
 export async function verifyExecutedTaskReceiptAction(
@@ -265,12 +270,36 @@ export async function verifyExecutedTaskReceiptAction(
   const isStage1WorkPacket = Boolean(
     task.actionItem.decisionWorkPacketClaim,
   );
-  if (isStage1WorkPacket && !parsed.data.stage1TerminalResult) {
+  const canonicalReceiptOutcome = task.actionItem.executionReceipt?.outcome;
+  const closesWithoutExecution =
+    canonicalReceiptOutcome === ExecutionReceiptOutcome.NOT_EXECUTED ||
+    canonicalReceiptOutcome === ExecutionReceiptOutcome.REJECTED;
+  const hasBusinessOutcomeReceipt =
+    canonicalReceiptOutcome === ExecutionReceiptOutcome.SUCCESS ||
+    canonicalReceiptOutcome === ExecutionReceiptOutcome.PARTIAL_SUCCESS ||
+    canonicalReceiptOutcome === ExecutionReceiptOutcome.FAILURE;
+  if (
+    isStage1WorkPacket &&
+    hasBusinessOutcomeReceipt &&
+    !parsed.data.stage1TerminalResult
+  ) {
     return {
       ok: false,
       error: english
         ? "A final business outcome and evidence reference are required for this Stage 1 decision."
         : "该 Stage 1 决策必须提供最终业务结果与证据引用。",
+    };
+  }
+  if (
+    isStage1WorkPacket &&
+    closesWithoutExecution &&
+    parsed.data.stage1TerminalResult
+  ) {
+    return {
+      ok: false,
+      error: english
+        ? "A business outcome must not be provided when the canonical receipt shows no execution."
+        : "规范回执显示未执行时，不得提交业务结果。",
     };
   }
   if (!isStage1WorkPacket && parsed.data.stage1TerminalResult) {
@@ -288,12 +317,14 @@ export async function verifyExecutedTaskReceiptAction(
     return { ok: false, error: getInsightGovernanceDeniedMessage(english) };
   }
 
-  if (isStage1WorkPacket && parsed.data.stage1TerminalResult) {
+  if (isStage1WorkPacket) {
     try {
       await reconcileStage1TerminalResult({
         workspaceId: workspace.id,
         actionItemId: task.actionItemId,
-        outcome: parsed.data.stage1TerminalResult,
+        ...(parsed.data.stage1TerminalResult
+          ? { outcome: parsed.data.stage1TerminalResult }
+          : {}),
         actorName: user.name,
         actorUserId: user.id,
         actorType: ActorType.USER,

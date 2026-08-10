@@ -259,6 +259,55 @@ describe("Stage 1 decision evaluation runtime", () => {
     });
   });
 
+  it.each([
+    {
+      receiptOutcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+      approvalStatus: ApprovalStatus.EXECUTED,
+      rejectionReasonCode: null,
+    },
+    {
+      receiptOutcome: ExecutionReceiptOutcome.REJECTED,
+      approvalStatus: ApprovalStatus.REJECTED,
+      rejectionReasonCode: RejectionReasonCode.OWNER_DISAGREEMENT,
+    },
+  ])(
+    "rejects ActionItem.REJECTED for $receiptOutcome even when approval state is canonical",
+    async ({ receiptOutcome, approvalStatus, rejectionReasonCode }) => {
+      dbMock.decisionRecord.findFirst.mockResolvedValue(
+        decisionRow({
+          workPacketClaim: {
+            workspaceId: "workspace-1",
+            actionItem: {
+              id: "action-1",
+              workspaceId: "workspace-1",
+              requiresApproval: true,
+              status: ActionStatus.REJECTED,
+              approvalTask: { status: approvalStatus },
+              executionReceipt: receipt({
+                outcome: receiptOutcome,
+                rejectionReasonCode,
+              }),
+            },
+          },
+        }),
+      );
+
+      await expect(
+        evaluateStage1DecisionRecord({
+          workspaceId: "workspace-1",
+          decisionRecordId: "decision-1",
+          followedAiRecommendation: null,
+          outcome: { outcomeRef: null, result: "unknown" },
+          actorName: "Helm Evaluation Runtime",
+          actorType: ActorType.AI,
+        }),
+      ).rejects.toMatchObject({ reasons: ["receipt_action_state_mismatch"] });
+
+      expect(dbMock.decisionRecord.updateMany).not.toHaveBeenCalled();
+      expect(dbMock.memoryFact.create).not.toHaveBeenCalled();
+    },
+  );
+
   it("refuses to evaluate an unverified close-without-execution receipt", async () => {
     dbMock.decisionRecord.findFirst.mockResolvedValue(
       decisionRow({

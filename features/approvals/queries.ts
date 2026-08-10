@@ -20,6 +20,9 @@ export async function getApprovalTasksData(workspaceId: string, english = false)
           decisionWorkPacketClaim: {
             select: { decisionRecordId: true },
           },
+          executionReceipt: {
+            select: { outcome: true },
+          },
         },
       },
     },

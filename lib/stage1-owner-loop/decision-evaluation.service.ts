@@ -56,6 +56,16 @@ export type EvaluateStage1DecisionRecordInput = {
   english?: boolean;
 };
 
+const EXPECTED_ACTION_STATUS_BY_RECEIPT_OUTCOME: Readonly<
+  Record<ExecutionReceiptOutcome, ActionStatus>
+> = {
+  [ExecutionReceiptOutcome.SUCCESS]: ActionStatus.EXECUTED,
+  [ExecutionReceiptOutcome.PARTIAL_SUCCESS]: ActionStatus.EXECUTED,
+  [ExecutionReceiptOutcome.FAILURE]: ActionStatus.EXECUTED,
+  [ExecutionReceiptOutcome.NOT_EXECUTED]: ActionStatus.BLOCKED,
+  [ExecutionReceiptOutcome.REJECTED]: ActionStatus.BLOCKED,
+};
+
 export class Stage1DecisionEvaluationError extends Error {
   readonly reasons: string[];
 
@@ -204,15 +214,6 @@ function mapExecutionReceipt(
     ]);
   }
 
-  const executionOutcomes: ExecutionReceiptOutcome[] = [
-    ExecutionReceiptOutcome.SUCCESS,
-    ExecutionReceiptOutcome.PARTIAL_SUCCESS,
-    ExecutionReceiptOutcome.FAILURE,
-  ];
-  const closedWithoutExecution: ExecutionReceiptOutcome[] = [
-    ExecutionReceiptOutcome.REJECTED,
-    ExecutionReceiptOutcome.NOT_EXECUTED,
-  ];
   if (action.requiresApproval) {
     const expectedApprovalStatus =
       receipt.outcome === ExecutionReceiptOutcome.REJECTED
@@ -223,17 +224,8 @@ function mapExecutionReceipt(
     }
   }
   if (
-    executionOutcomes.includes(receipt.outcome) &&
-    action.status !== ActionStatus.EXECUTED
-  ) {
-    throw new Stage1DecisionEvaluationError([
-      "receipt_action_state_mismatch",
-    ]);
-  }
-  if (
-    closedWithoutExecution.includes(receipt.outcome) &&
-    action.status !== ActionStatus.BLOCKED &&
-    action.status !== ActionStatus.REJECTED
+    action.status !==
+    EXPECTED_ACTION_STATUS_BY_RECEIPT_OUTCOME[receipt.outcome]
   ) {
     throw new Stage1DecisionEvaluationError([
       "receipt_action_state_mismatch",

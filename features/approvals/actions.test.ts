@@ -1,4 +1,4 @@
-import { WorkspaceRole } from "@prisma/client";
+import { ExecutionReceiptOutcome, WorkspaceRole } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -88,7 +88,12 @@ vi.mock("@/lib/stage1-owner-loop/terminal-result-reconciliation.service", () => 
 
 import { verifyExecutedTaskReceiptAction } from "./actions";
 
-function task(stage1 = false) {
+function task(
+  stage1 = false,
+  receiptOutcome: ExecutionReceiptOutcome | null = stage1
+    ? ExecutionReceiptOutcome.SUCCESS
+    : null,
+) {
   return {
     id: "approval-1",
     workspaceId: "workspace-1",
@@ -99,6 +104,8 @@ function task(stage1 = false) {
       decisionWorkPacketClaim: stage1
         ? { decisionRecordId: "decision-1" }
         : null,
+      executionReceipt:
+        receiptOutcome === null ? null : { outcome: receiptOutcome },
     },
   };
 }
@@ -152,6 +159,78 @@ describe("verifyExecutedTaskReceiptAction", () => {
     });
     expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
     expect(reconciliationMock.reconcileStage1TerminalResult).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ExecutionReceiptOutcome.NOT_EXECUTED,
+    ExecutionReceiptOutcome.REJECTED,
+  ])(
+    "routes %s through the atomic close-without-execution reconciler without a business outcome",
+    async (receiptOutcome) => {
+      dbMock.approvalTask.findFirst.mockResolvedValue(
+        task(true, receiptOutcome),
+      );
+
+      await expect(
+        verifyExecutedTaskReceiptAction("approval-1"),
+      ).resolves.toEqual({ ok: true });
+
+      expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
+      expect(
+        reconciliationMock.reconcileStage1TerminalResult,
+      ).toHaveBeenCalledWith({
+        workspaceId: "workspace-1",
+        actionItemId: "action-1",
+        actorName: "Independent reviewer",
+        actorUserId: "reviewer-1",
+        actorType: "USER",
+        english: true,
+      });
+      expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/approvals");
+      expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/caio");
+    },
+  );
+
+  it("rejects a client-supplied business outcome when the canonical receipt shows no execution", async () => {
+    dbMock.approvalTask.findFirst.mockResolvedValue(
+      task(true, ExecutionReceiptOutcome.NOT_EXECUTED),
+    );
+
+    await expect(
+      verifyExecutedTaskReceiptAction({
+        taskId: "approval-1",
+        stage1TerminalResult: {
+          outcomeRef: "observation-run:run-1",
+          result: "failure",
+          followedAiRecommendation: false,
+        },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error:
+        "A business outcome must not be provided when the canonical receipt shows no execution.",
+    });
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
+    expect(
+      reconciliationMock.reconcileStage1TerminalResult,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a missing canonical receipt as a recoverable governed error", async () => {
+    dbMock.approvalTask.findFirst.mockResolvedValue(task(true, null));
+    reconciliationMock.reconcileStage1TerminalResult.mockRejectedValue(
+      new ReconciliationErrorMock(["execution_receipt_required"]),
+    );
+
+    await expect(
+      verifyExecutedTaskReceiptAction("approval-1"),
+    ).resolves.toEqual({
+      ok: false,
+      error:
+        "Stage 1 terminal result reconciliation denied: execution_receipt_required",
+    });
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
+    expect(cacheMock.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("does not let a receipt-only reviewer write Stage 1 insight state", async () => {

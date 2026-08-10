@@ -1795,6 +1795,128 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
     },
   );
 
+  it.each([
+    {
+      mode: "blocked" as const,
+      receiptOutcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+    },
+    {
+      mode: "rejected" as const,
+      receiptOutcome: ExecutionReceiptOutcome.REJECTED,
+    },
+  ])(
+    "fails closed when $receiptOutcome is paired with ActionItem.REJECTED",
+    async ({ mode, receiptOutcome }) => {
+      const packet = await createDispatchedClosurePacket(
+        `invalid-rejected-action-${mode}`,
+      );
+      const observationCountBefore = await db.observationSourceRun.count({
+        where: { workspaceId },
+      });
+
+      if (mode === "blocked") {
+        await approveApprovalTask(
+          packet.approvalTaskId,
+          "Stage 1 Reviewer",
+          reviewerUserId,
+          undefined,
+          { actorType: ActorType.USER },
+        );
+        await blockApprovedAction(
+          packet.actionItemId,
+          "Stage 1 Reviewer",
+          reviewerUserId,
+          "Synthetic execution was blocked before work began",
+          { actorType: ActorType.USER },
+        );
+      } else {
+        await rejectApprovalTask(
+          packet.approvalTaskId,
+          "Stage 1 Reviewer",
+          reviewerUserId,
+          "Synthetic owner disagreement",
+          {
+            actorType: ActorType.USER,
+            rejectionReasonCode: RejectionReasonCode.OWNER_DISAGREEMENT,
+          },
+        );
+      }
+
+      await db.actionItem.update({
+        where: { id: packet.actionItemId },
+        data: { status: ActionStatus.REJECTED },
+      });
+
+      await expect(
+        reconcileStage1TerminalResult({
+          workspaceId,
+          actionItemId: packet.actionItemId,
+          actorName: "Stage 1 Owner",
+          actorUserId: ownerUserId,
+          actorType: ActorType.USER,
+        }),
+      ).rejects.toMatchObject({
+        reasons: ["receipt_action_state_mismatch"],
+      });
+
+      expect(
+        await db.observationSourceRun.count({ where: { workspaceId } }),
+      ).toBe(observationCountBefore);
+      expect(
+        await db.actionItem.findUniqueOrThrow({
+          where: { id: packet.actionItemId },
+          select: { status: true },
+        }),
+      ).toEqual({ status: ActionStatus.REJECTED });
+      expect(
+        await db.executionReceipt.findUniqueOrThrow({
+          where: {
+            subjectType_subjectId: {
+              subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+              subjectId: packet.actionItemId,
+            },
+          },
+          select: {
+            outcome: true,
+            verificationState: true,
+            verifiedByUserId: true,
+          },
+        }),
+      ).toEqual({
+        outcome: receiptOutcome,
+        verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+        verifiedByUserId: null,
+      });
+      expect(
+        await db.decisionRecord.findUniqueOrThrow({
+          where: { id: packet.decisionRecordId },
+          select: { status: true, evaluationJson: true, evaluatedAt: true },
+        }),
+      ).toEqual({
+        status: "DISPATCHED",
+        evaluationJson: null,
+        evaluatedAt: null,
+      });
+      expect(
+        await db.memoryFact.count({
+          where: {
+            workspaceId,
+            objectId: packet.actionItemId,
+            sourceId: `evaluation:${packet.decisionKey}`,
+          },
+        }),
+      ).toBe(0);
+      expect(
+        await db.supervisionSignalRecord.count({
+          where: {
+            workspaceId,
+            decisionRecordId: packet.decisionRecordId,
+          },
+        }),
+      ).toBe(0);
+    },
+  );
+
   it("rolls back no-execution verification and evaluation when supervision conflicts", async () => {
     const packet = await createDispatchedClosurePacket(
       "close-rejected-rollback",
