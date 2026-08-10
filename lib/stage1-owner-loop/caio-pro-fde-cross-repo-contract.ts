@@ -600,7 +600,7 @@ const packCandidateInputSchema = z
 
 const packEvidenceBindingSchema = z
   .object({
-    evidenceRef: caioProPublicSafeRefSchema,
+    evidenceRef: caioProPublicSafeObservationRunRefSchema,
     evidenceKind: identifier,
   })
   .strict();

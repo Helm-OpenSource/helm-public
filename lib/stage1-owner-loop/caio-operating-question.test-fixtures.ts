@@ -15,7 +15,7 @@ const HASH_B = `sha256:${"b".repeat(64)}`;
 const HASH_C = `sha256:${"c".repeat(64)}`;
 export const SYNTHETIC_CAIO_EVIDENCE_REFS = Array.from(
   { length: 12 },
-  (_, index) => `evidence:operating:${index + 1}`,
+  (_, index) => `observation-run:operating-${index + 1}`,
 );
 
 export function syntheticOperatingQuestionG0Input(): CaioInitializationAssessmentInput {
@@ -38,7 +38,12 @@ export function syntheticOperatingQuestionG0Input(): CaioInitializationAssessmen
         connectionReceiptRef: "receipt:connection:operating-system",
         initializationStatus: "initialized",
         initializationReceiptRef: "receipt:initialization:operating-system",
-        observationRunRefs: ["run:operating-system"],
+        observationRunRefs: [
+          "run:operating-system",
+          ...SYNTHETIC_CAIO_EVIDENCE_REFS.map((ref) =>
+            ref.slice("observation-run:".length),
+          ),
+        ],
         schemaMappingRefs: ["schema-map:operating-system:v1"],
         companyMemoryBindings: [
           {
@@ -64,12 +69,29 @@ export function syntheticOperatingQuestionG0Input(): CaioInitializationAssessmen
         freshness: "fresh",
         exception: null,
       },
+      ...SYNTHETIC_CAIO_EVIDENCE_REFS.map((evidenceRef) => {
+        const observationRunRef = evidenceRef.slice(
+          "observation-run:".length,
+        );
+        return {
+          sourceRef: `source:${observationRunRef}`,
+          assetRef: "asset:operating-system",
+          compatibilityMode: false,
+          sourceStatus: "active" as const,
+          accessMode: "read_only_api" as const,
+          latestRunRef: observationRunRef,
+          latestRunStatus: "succeeded" as const,
+          latestRunOutcome: "success" as const,
+          freshness: "fresh" as const,
+          exception: null,
+        };
+      }),
     ],
     evidenceTraces: SYNTHETIC_CAIO_EVIDENCE_REFS.map((evidenceRef, index) => ({
       evidenceRef,
-      sourceRef: "source:operating-system",
+      sourceRef: `source:${evidenceRef.slice("observation-run:".length)}`,
       assetRef: "asset:operating-system",
-      observationRunRef: "run:operating-system",
+      observationRunRef: evidenceRef.slice("observation-run:".length),
       authorizationReceiptRef: "receipt:authorization:operating-system",
       connectionReceiptRef: "receipt:connection:operating-system",
       initializationReceiptRef: "receipt:initialization:operating-system",

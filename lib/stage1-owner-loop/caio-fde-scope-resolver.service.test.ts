@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CaioFdeScopeResolutionError,
   resolveCaioFdeObservationEvidence,
+  resolveCaioFdeObservationEvidenceBatch,
   resolveCaioFdePortfolioScope,
 } from "./caio-fde-scope-resolver.service";
 
@@ -11,7 +12,7 @@ const NOW = new Date("2026-08-10T00:00:00.000Z");
 function client() {
   return {
     opportunity: { findFirst: vi.fn() },
-    observationSourceRun: { findFirst: vi.fn() },
+    observationSourceRun: { findFirst: vi.fn(), findMany: vi.fn() },
   };
 }
 
@@ -26,6 +27,7 @@ function observationRun(overrides: Record<string, unknown> = {}) {
     windowEnd: new Date("2026-08-10T00:30:00.000Z"),
     status: "SUCCEEDED",
     observedAt: new Date("2026-08-09T23:30:00.000Z"),
+    freshness: "FRESH",
     outcome: "SUCCESS",
     evidenceRefs: JSON.stringify([
       "opportunity:opportunity-1",
@@ -47,6 +49,7 @@ function observationRun(overrides: Record<string, unknown> = {}) {
       workspaceId: "workspace-1",
       programId: "program-1",
       status: "ACTIVE",
+      sourceKind: "portfolio_scope",
     },
     ...overrides,
   };
@@ -113,7 +116,80 @@ describe("CAIO Pro FDE workspace scope resolver", () => {
       runId: "run-1",
       evidenceRef: "observation-run:run-1",
       outcome: "SUCCESS",
+      sourceKind: "portfolio_scope",
+      freshness: "fresh",
     });
+  });
+
+  it("derives canonical evidence kinds and freshness for a bounded run set", async () => {
+    const db = client();
+    db.observationSourceRun.findMany.mockResolvedValue([
+      observationRun(),
+      observationRun({
+        id: "run-2",
+        sourceId: "source-2",
+        freshness: "STALE",
+        source: {
+          ...observationRun().source,
+          id: "source-2",
+          sourceKind: "intake_quality",
+        },
+      }),
+    ]);
+
+    await expect(
+      resolveCaioFdeObservationEvidenceBatch({
+        client: db as never,
+        workspaceId: "workspace-1",
+        evidenceRefs: ["observation-run:run-2", "observation-run:run-1"],
+        portfolioRef: "opportunity:opportunity-1",
+        now: NOW,
+      }),
+    ).resolves.toMatchObject([
+      {
+        evidenceRef: "observation-run:run-2",
+        sourceKind: "intake_quality",
+        freshness: "stale",
+      },
+      {
+        evidenceRef: "observation-run:run-1",
+        sourceKind: "portfolio_scope",
+        freshness: "fresh",
+      },
+    ]);
+    expect(db.observationSourceRun.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["run-2", "run-1"] },
+        workspaceId: "workspace-1",
+      },
+      include: { program: true, source: true },
+    });
+  });
+
+  it.each([
+    [
+      observationRun({
+        source: { ...observationRun().source, sourceKind: "Portfolio Scope" },
+      }),
+      "observation_evidence_source_kind_invalid",
+    ],
+    [
+      observationRun({ freshness: "RECENT" }),
+      "observation_evidence_freshness_invalid",
+    ],
+  ])("rejects invalid canonical evidence metadata", async (run, reason) => {
+    const db = client();
+    db.observationSourceRun.findFirst.mockResolvedValue(run);
+
+    await expect(
+      resolveCaioFdeObservationEvidence({
+        client: db as never,
+        workspaceId: "workspace-1",
+        evidenceRef: "observation-run:run-1",
+        portfolioRef: "opportunity:opportunity-1",
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ reasons: [reason] });
   });
 
   it("fails closed for revoked, expired, stale-version or non-terminal evidence", async () => {

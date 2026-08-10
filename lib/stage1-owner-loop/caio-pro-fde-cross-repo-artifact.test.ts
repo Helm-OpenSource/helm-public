@@ -342,6 +342,24 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
       },
       {
         ...base,
+        evidenceBindings: [
+          {
+            evidenceRef: "evidence:unresolved-kind",
+            evidenceKind: "source_observation",
+          },
+        ],
+        metrics: [
+          { ...base.metrics[0], evidenceRefs: ["evidence:unresolved-kind"] },
+        ],
+        candidateInputs: [
+          {
+            ...base.candidateInputs[0],
+            evidenceRefs: ["evidence:unresolved-kind"],
+          },
+        ],
+      },
+      {
+        ...base,
         taxonomy: [
           ...base.taxonomy,
           { ...base.taxonomy[0], label: "Duplicate taxonomy ref" },

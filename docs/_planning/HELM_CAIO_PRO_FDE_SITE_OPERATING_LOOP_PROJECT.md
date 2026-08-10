@@ -303,8 +303,8 @@ Owner 已批准本切片。Wave 1A 实现候选完成以下 repo-level 输出：
     并以 AST 调用图固定 S3 唯一 production caller 与 provider registration。
 
 S1 当前接口身份为
-`caio-pro-fde-cross-repo-interface:af2fa7dc4d740121` /
-`sha256:af2fa7dc4d74012129732688ee84772188ad79692c4e071c98e05b897b8e9b4d`。
+`caio-pro-fde-cross-repo-interface:08a238de81c4c84b` /
+`sha256:08a238de81c4c84b2cad07bc39c9cc8ceb1b752133fa2e6aff731eb82c59fc7a`。
 该身份只证明本仓 portable contract 的规范化内容；不证明 Pack 已挂载、问题已生成、组合包已
 固定或现场已部署。
 
@@ -312,8 +312,13 @@ S2 现已在 Core repo 内形成确定性 generator/store seam：合法 Pack gra
 只能作为语义基底，不能携带完整问题；少于十个 eligible inputs 时沿用 canonical
 `insufficient_evidence`，十个或更多时由 Core policy 选择并排名十题。该实现与 focused tests
 以 `caio-operating-question-pack-derivation.v1` 绑定幂等 request hash，但不证明 S3 的
-production composition provider、route 或 worker 已挂载，也不改变上述 portable contract
-identity。
+production composition provider、route 或 worker 已挂载；evidence binding 收窄为
+`observation-run:*` 已由上述 portable contract identity 固定。
+
+Core store 在派生前按当前 workspace 和 Portfolio 批量解析每个 `observation-run:*` evidence
+binding，并以受权 `ObservationSource.sourceKind`、run freshness 和 G0 trace 作为唯一可信
+kind/freshness；Pack 声明与 Core 真值漂移时在写入前 fail closed。Pack 仍只声明和消费
+语义，不获得证据、问题或写入权威。
 
 S3 现已把该 seam 接到 Public 的非测试 Gateway composition：请求不能提交 Pack descriptor、
 questions、score/rank 或可信 evidence kind；provider 只从 deployment-owned registry 注入，

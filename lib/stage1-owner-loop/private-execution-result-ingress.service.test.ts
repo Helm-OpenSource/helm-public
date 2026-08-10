@@ -118,6 +118,7 @@ function observationRun() {
     windowEnd: new Date("2026-08-10T00:30:00.000Z"),
     status: "SUCCEEDED",
     observedAt: new Date("2026-08-09T23:54:00.000Z"),
+    freshness: "FRESH",
     outcome: "SUCCESS",
     evidenceRefs: JSON.stringify([
       "opportunity:opportunity-1",
@@ -141,6 +142,7 @@ function observationRun() {
       workspaceId: "workspace-1",
       programId: "program-1",
       status: "ACTIVE",
+      sourceKind: "execution_proof",
     },
   };
 }

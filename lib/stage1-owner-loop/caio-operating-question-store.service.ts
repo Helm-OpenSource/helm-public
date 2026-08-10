@@ -43,6 +43,7 @@ import {
 } from "./caio-pro-fde-cross-repo-contract";
 import {
   resolveCaioFdeObservationEvidence,
+  resolveCaioFdeObservationEvidenceBatch,
   resolveCaioFdePortfolioScope,
 } from "./caio-fde-scope-resolver.service";
 import {
@@ -831,6 +832,9 @@ async function assertPackOperatingInputScope(
     workspaceId: input.workspaceId,
     evidenceRef: packInput.evidenceSnapshotRef,
     portfolioRef: portfolio.portfolioRef,
+    requiredBindingRefs: packInput.evidenceBindings.map(
+      (binding) => binding.evidenceRef,
+    ),
     now: input.now,
   });
   const declaredEvidenceRefs = uniqueSorted([
@@ -849,30 +853,54 @@ async function assertPackOperatingInputScope(
       "pack_operating_input_evidence_scope_invalid",
     );
   }
-  const sourceFreshnessByRef = new Map(
-    input.trusted.initialization.assessmentInput.sources.map((source) => [
-      source.sourceRef,
-      source.freshness,
-    ]),
-  );
   const traceByEvidenceRef = new Map(
     input.trusted.initialization.assessmentInput.evidenceTraces
       .filter((trace) => trace.resolved)
       .map((trace) => [trace.evidenceRef, trace]),
   );
-  const trustedEvidence = declaredEvidenceRefs.flatMap((evidenceRef) => {
+  const bindingKindByRef = new Map(
+    packInput.evidenceBindings.map((binding) => [
+      binding.evidenceRef,
+      binding.evidenceKind,
+    ]),
+  );
+  const resolvedEvidence = await resolveCaioFdeObservationEvidenceBatch({
+    client: tx,
+    workspaceId: input.workspaceId,
+    evidenceRefs: declaredEvidenceRefs,
+    portfolioRef: portfolio.portfolioRef,
+    now: input.now,
+  });
+  const trustedEvidence = resolvedEvidence.flatMap((evidence) => {
+    const evidenceRef = evidence.evidenceRef;
     const trace = traceByEvidenceRef.get(evidenceRef);
-    if (!trace) return [];
+    if (
+      !trace ||
+      trace.observationRunRef !== evidence.runId ||
+      trace.sourceRef !== evidence.sourceId ||
+      Date.parse(trace.capturedAt) > evidence.observedAt.getTime()
+    ) {
+      return [];
+    }
+    if (bindingKindByRef.get(evidenceRef) !== evidence.sourceKind) {
+      throw new CaioOperatingQuestionStoreError(
+        "pack_operating_input_evidence_kind_mismatch",
+      );
+    }
     return [
       {
         evidenceRef,
-        evidenceKind: "source_observation",
-        freshness:
-          sourceFreshnessByRef.get(trace.sourceRef) ?? "unknown",
+        evidenceKind: evidence.sourceKind,
+        freshness: evidence.freshness,
         capturedAt: trace.capturedAt,
       } satisfies CaioOperatingQuestionTrustedEvidence,
     ];
   });
+  if (trustedEvidence.length !== declaredEvidenceRefs.length) {
+    throw new CaioOperatingQuestionStoreError(
+      "pack_operating_input_evidence_scope_invalid",
+    );
+  }
   return { portfolioRef: portfolio.portfolioRef, trustedEvidence };
 }
 

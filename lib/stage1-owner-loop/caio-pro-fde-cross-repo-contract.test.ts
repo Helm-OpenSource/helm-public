@@ -321,6 +321,17 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
     );
   });
 
+  it("requires every Pack evidence binding to identify an ObservationSourceRun", () => {
+    const invalid = packInput();
+    invalid.evidenceBindings[0].evidenceRef = "evidence:unresolved-kind";
+    invalid.metrics[0].evidenceRefs = ["evidence:unresolved-kind"];
+    invalid.candidateInputs[0].evidenceRefs = ["evidence:unresolved-kind"];
+
+    expect(caioProPackOperatingInputSchema.safeParse(invalid).success).toBe(
+      false,
+    );
+  });
+
   it("validates the complete interface and evaluator identity fail-closed", () => {
     const identity = {
       interfaceVersion: CAIO_PRO_FDE_CROSS_REPO_INTERFACE_VERSION,

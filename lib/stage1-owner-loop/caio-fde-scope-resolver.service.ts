@@ -5,11 +5,21 @@ import type { Prisma } from "@prisma/client";
 import { safeParseJson } from "@/lib/utils";
 
 const OPAQUE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,190}$/u;
+const SOURCE_KIND_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
 const TERMINAL_OBSERVATION_STATUSES = new Set([
   "SUCCEEDED",
   "PARTIAL",
   "FAILED",
 ]);
+const EVIDENCE_FRESHNESS = new Map([
+  ["FRESH", "fresh"],
+  ["STALE", "stale"],
+  ["UNKNOWN", "unknown"],
+] as const);
+
+type ObservationEvidenceRun = Prisma.ObservationSourceRunGetPayload<{
+  include: { program: true; source: true };
+}>;
 
 export class CaioFdeScopeResolutionError extends Error {
   readonly reasons: readonly string[];
@@ -104,6 +114,18 @@ export async function resolveCaioFdeObservationEvidence(input: {
       "observation_evidence_workspace_mismatch",
     ]);
   }
+  return resolveObservationEvidenceRun({ ...input, run });
+}
+
+function resolveObservationEvidenceRun(input: {
+  run: ObservationEvidenceRun;
+  workspaceId: string;
+  portfolioRef: string;
+  requiredBindingRefs?: readonly string[];
+  expectedBusinessResult?: "success" | "failure";
+  now?: Date;
+}) {
+  const run = input.run;
   const now = input.now ?? new Date();
   const reasons: string[] = [];
   if (
@@ -123,6 +145,19 @@ export async function resolveCaioFdeObservationEvidence(input: {
   }
   if (run.source.status !== "ACTIVE") {
     reasons.push("observation_evidence_source_inactive");
+  }
+  const sourceKind = run.source.sourceKind.trim();
+  if (
+    sourceKind !== run.source.sourceKind ||
+    !SOURCE_KIND_PATTERN.test(sourceKind)
+  ) {
+    reasons.push("observation_evidence_source_kind_invalid");
+  }
+  const freshness = EVIDENCE_FRESHNESS.get(
+    run.freshness as "FRESH" | "STALE" | "UNKNOWN",
+  );
+  if (!freshness) {
+    reasons.push("observation_evidence_freshness_invalid");
   }
   if (
     run.authorizationVersion !== run.program.authorizationVersion ||
@@ -172,8 +207,55 @@ export async function resolveCaioFdeObservationEvidence(input: {
   return {
     runId: run.id,
     evidenceRef: `observation-run:${run.id}`,
+    sourceId: run.sourceId,
+    sourceKind,
+    freshness: freshness!,
     outcome: run.outcome,
     observedAt: run.observedAt!,
     evidenceRefs,
   } as const;
+}
+
+export async function resolveCaioFdeObservationEvidenceBatch(input: {
+  client: Prisma.TransactionClient;
+  workspaceId: string;
+  evidenceRefs: readonly string[];
+  portfolioRef: string;
+  now?: Date;
+}) {
+  if (input.evidenceRefs.length === 0 || input.evidenceRefs.length > 256) {
+    throw new CaioFdeScopeResolutionError([
+      "observation_evidence_batch_invalid",
+    ]);
+  }
+  const runIds = input.evidenceRefs.map((evidenceRef) =>
+    parseExactRef(
+      evidenceRef,
+      "observation-run",
+      "observation_evidence_ref_invalid",
+    ),
+  );
+  if (new Set(runIds).size !== runIds.length) {
+    throw new CaioFdeScopeResolutionError([
+      "observation_evidence_ref_duplicate",
+    ]);
+  }
+  const runs = await input.client.observationSourceRun.findMany({
+    where: { id: { in: runIds }, workspaceId: input.workspaceId },
+    include: { program: true, source: true },
+  });
+  const runsById = new Map(runs.map((run) => [run.id, run]));
+  if (runsById.size !== runIds.length) {
+    throw new CaioFdeScopeResolutionError([
+      "observation_evidence_workspace_mismatch",
+    ]);
+  }
+  return runIds.map((runId) =>
+    resolveObservationEvidenceRun({
+      run: runsById.get(runId)!,
+      workspaceId: input.workspaceId,
+      portfolioRef: input.portfolioRef,
+      now: input.now,
+    }),
+  );
 }
