@@ -14,7 +14,7 @@ const HASH_A = `sha256:${"a".repeat(64)}`;
 const HASH_B = `sha256:${"b".repeat(64)}`;
 const HASH_C = `sha256:${"c".repeat(64)}`;
 export const SYNTHETIC_CAIO_EVIDENCE_REFS = Array.from(
-  { length: 12 },
+  { length: 14 },
   (_, index) => `observation-run:operating-${index + 1}`,
 );
 export const SYNTHETIC_CAIO_EVIDENCE_KINDS = Object.freeze([
@@ -28,8 +28,10 @@ export const SYNTHETIC_CAIO_EVIDENCE_KINDS = Object.freeze([
   "ptp_risk",
   "repayment_forecast",
   "compliance_signal",
-  "strategy_value",
-  "execution_supervision",
+  "strategy_review",
+  "capability_metrics",
+  "execution_proof",
+  "nightly_supervision",
 ] as const);
 
 export function syntheticOperatingQuestionG0Input(): CaioInitializationAssessmentInput {
