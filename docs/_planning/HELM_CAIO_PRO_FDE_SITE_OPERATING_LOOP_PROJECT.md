@@ -272,9 +272,10 @@ Owner 已批准本切片。Wave 1A 实现候选完成以下 repo-level 输出：
    非 Stage1 回执继续使用原有独立验证路径；
 3. 协调器在一个 `SERIALIZABLE` 事务内锁定 claim，依次调用 `verifyExecutionReceipt`、
    `evaluateStage1DecisionRecord` 和 `recordStage1SupervisionSignal`，任一步失败全部回滚；
-4. terminal result 必须与 receipt outcome 一致，outcome ref 必须解析为当前 workspace、
-   Opportunity Portfolio、DecisionRecord、ActionItem 与 ApprovalTask 绑定且仍有效的
-   `ObservationSourceRun`；
+4. terminal result 必须与 receipt outcome 一致：`SUCCESS / PARTIAL_SUCCESS / FAILURE` 的
+   outcome ref 必须解析为当前 workspace、Opportunity Portfolio、DecisionRecord、ActionItem
+   与 ApprovalTask 绑定且仍有效的 `ObservationSourceRun`；`NOT_EXECUTED / REJECTED` 不得
+   提供或伪造业务 outcome，而以 `unknown/null` 进入 distinct close-without-execution 路径；
 5. private executor 只产生严格版本化并带 content hash 的结果投影；受认证 Gateway 与 Core
    ingress 校验 identity、workspace、Portfolio、evidence、work packet、CAS 后，唯一通过
    `recordExecutionReceipt` 写 canonical receipt；
@@ -333,9 +334,14 @@ approvals 入口具备独立复核身份；这是第一个同时具备执行证�
 位置。更早触发会把“任务已派发或已执行”误写成“业务结果已成立”；更晚新建第二入口会
 复制任务、权限或回执语义。
 
-业务结果仍须由 Stage 1 入口显式提供 `success|failure`、非空 `outcomeRef` 与是否采纳建议，
-不能由 UI 任意手填覆盖 receipt；协调器要求其与 canonical receipt outcome 一致。receipt
-证明执行，可信 ObservationSourceRun 证明结果，二者保持分层并同时受约束。
+发生执行的业务结果仍须由 Stage 1 入口显式提供 `success|failure`、非空 `outcomeRef` 与是否
+采纳建议，不能由调用方覆盖 receipt；协调器要求其与 canonical receipt outcome 一致。
+receipt 证明执行，可信 ObservationSourceRun 证明结果，二者保持分层并同时受约束。
+
+`NOT_EXECUTED / REJECTED` 证明的是治理关闭而非业务失败：协调器禁止业务 outcome，独立验收
+canonical receipt 后，以 `outcomeRef=null / result=unknown` 评估 DecisionRecord，并创建 open
+owner-review supervision。该路径不读取、不要求、也不生成业务 Outcome ObservationRun。
+T2a 只形成后端能力；approvals action/UI 接线属于后续 T2b。
 
 private executor ingress 只接收发生过执行尝试的 `SUCCESS / PARTIAL_SUCCESS / FAILURE`：
 三者分别固定映射到 `success / failure / failure`，并把 ActionItem 收敛为 `EXECUTED`；后续

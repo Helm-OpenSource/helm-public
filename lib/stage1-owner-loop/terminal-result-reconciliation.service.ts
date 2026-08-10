@@ -44,11 +44,15 @@ import {
 } from "./decision-follow-through.service";
 
 export type Stage1TerminalBusinessOutcome = CaioProTerminalBusinessOutcome;
+type ClosedWithoutExecutionReceiptOutcome = Extract<
+  ExecutionReceiptOutcome,
+  "NOT_EXECUTED" | "REJECTED"
+>;
 
 export type ReconcileStage1TerminalResultInput = {
   workspaceId: string;
   actionItemId: string;
-  outcome: Stage1TerminalBusinessOutcome;
+  outcome?: Stage1TerminalBusinessOutcome;
   actorName: string;
   actorUserId?: string | null;
   actorType?: ActorType;
@@ -77,13 +81,17 @@ function validateInput(input: ReconcileStage1TerminalResultInput): void {
   if (!input.workspaceId.trim()) reasons.push("workspace_required");
   if (!input.actionItemId.trim()) reasons.push("action_item_required");
   if (!input.actorName.trim()) reasons.push("actor_name_required");
-  if (!input.outcome.outcomeRef?.trim()) {
-    reasons.push("business_outcome_ref_required");
-  } else if (!caioProTerminalBusinessOutcomeSchema.safeParse(input.outcome).success) {
-    reasons.push("business_outcome_ref_invalid");
-  }
-  if (!(["success", "failure"] as const).includes(input.outcome.result)) {
-    reasons.push("business_outcome_not_final");
+  if (input.outcome !== undefined) {
+    if (!input.outcome.outcomeRef?.trim()) {
+      reasons.push("business_outcome_ref_required");
+    } else if (
+      !caioProTerminalBusinessOutcomeSchema.safeParse(input.outcome).success
+    ) {
+      reasons.push("business_outcome_ref_invalid");
+    }
+    if (!(["success", "failure"] as const).includes(input.outcome.result)) {
+      reasons.push("business_outcome_not_final");
+    }
   }
   if (
     input.actorType !== undefined &&
@@ -104,6 +112,23 @@ function canonicalBusinessResult(
   return outcome === ExecutionReceiptOutcome.SUCCESS ? "success" : "failure";
 }
 
+function isClosedWithoutExecution(
+  outcome: ExecutionReceiptOutcome,
+): outcome is ClosedWithoutExecutionReceiptOutcome {
+  return (
+    outcome === ExecutionReceiptOutcome.NOT_EXECUTED ||
+    outcome === ExecutionReceiptOutcome.REJECTED
+  );
+}
+
+function closeWithoutExecutionTruth(
+  outcome: ClosedWithoutExecutionReceiptOutcome,
+): "blocked" | "rejected" {
+  return outcome === ExecutionReceiptOutcome.REJECTED
+    ? "rejected"
+    : "blocked";
+}
+
 function reconciliationHash(input: {
   workspaceId: string;
   decisionRecordId: string;
@@ -117,6 +142,25 @@ function reconciliationHash(input: {
     canonicalJson({
       schemaVersion: "helm.caio-pro-fde.stage1-reconciliation.v1",
       ...input,
+    }),
+  );
+}
+
+function closeWithoutExecutionReconciliationHash(input: {
+  workspaceId: string;
+  decisionRecordId: string;
+  actionItemId: string;
+  approvalTaskId: string;
+  receiptId: string;
+  receiptOutcome: ClosedWithoutExecutionReceiptOutcome;
+  closureTruth: "blocked" | "rejected";
+}) {
+  return sha256(
+    canonicalJson({
+      schemaVersion:
+        "helm.caio-pro-fde.stage1-close-without-execution.v1",
+      ...input,
+      businessOutcome: null,
     }),
   );
 }
@@ -158,10 +202,11 @@ function normalizeError(error: unknown): never {
   throw error;
 }
 
-// The approvals terminal result is the only Stage 1 trigger. Verification,
-// evaluation, observed-memory projection, supervision and all their audits
-// commit in one SERIALIZABLE transaction. Existing non-Stage1 verification
-// continues to use verifyExecutionReceipt's standalone path.
+// This is the Stage 1 backend terminal boundary. Verification, evaluation,
+// observed-memory projection, supervision and all their audits commit in one
+// SERIALIZABLE transaction. Existing non-Stage1 verification continues to use
+// verifyExecutionReceipt's standalone path; no-execution action/UI wiring is a
+// separate caller concern.
 export async function reconcileStage1TerminalResult(
   input: ReconcileStage1TerminalResultInput,
 ) {
@@ -278,34 +323,55 @@ export async function reconcileStage1TerminalResult(
             "execution_receipt_subject_mismatch",
           ]);
         }
-        if (canonicalBusinessResult(receipt.outcome) !== input.outcome.result) {
-          throw new Stage1TerminalResultReconciliationError([
-            "business_outcome_receipt_mismatch",
-          ]);
-        }
-        const receiptEvidenceRefs = safeParseJson<string[]>(
-          receipt.evidenceRefs,
-          [],
-        );
-        const outcomeRef = input.outcome.outcomeRef.trim();
-        if (!receiptEvidenceRefs.includes(outcomeRef)) {
-          throw new Stage1TerminalResultReconciliationError([
-            "business_outcome_not_bound_to_receipt",
-          ]);
-        }
         const portfolioRef = `opportunity:${claim.actionItem.opportunityId}`;
-        await resolveCaioFdeObservationEvidence({
-          client: tx,
-          workspaceId: input.workspaceId,
-          evidenceRef: outcomeRef,
-          portfolioRef,
-          requiredBindingRefs: [
-            `decision-record:${claim.decisionRecordId}`,
-            `action-item:${input.actionItemId}`,
-            `approval-task:${approvalTask.id}`,
-          ],
-          expectedBusinessResult: input.outcome.result,
-        });
+        const closedReceiptOutcome = isClosedWithoutExecution(receipt.outcome)
+          ? receipt.outcome
+          : null;
+        const closedWithoutExecution = closedReceiptOutcome !== null;
+        if (closedWithoutExecution && input.outcome !== undefined) {
+          throw new Stage1TerminalResultReconciliationError([
+            "closed_without_execution_business_outcome_forbidden",
+          ]);
+        }
+        if (!closedWithoutExecution && input.outcome === undefined) {
+          throw new Stage1TerminalResultReconciliationError([
+            "business_outcome_required",
+          ]);
+        }
+
+        let outcomeRef: string | null = null;
+        if (!closedWithoutExecution) {
+          const businessOutcome = input.outcome!;
+          if (
+            canonicalBusinessResult(receipt.outcome) !== businessOutcome.result
+          ) {
+            throw new Stage1TerminalResultReconciliationError([
+              "business_outcome_receipt_mismatch",
+            ]);
+          }
+          const receiptEvidenceRefs = safeParseJson<string[]>(
+            receipt.evidenceRefs,
+            [],
+          );
+          outcomeRef = businessOutcome.outcomeRef.trim();
+          if (!receiptEvidenceRefs.includes(outcomeRef)) {
+            throw new Stage1TerminalResultReconciliationError([
+              "business_outcome_not_bound_to_receipt",
+            ]);
+          }
+          await resolveCaioFdeObservationEvidence({
+            client: tx,
+            workspaceId: input.workspaceId,
+            evidenceRef: outcomeRef,
+            portfolioRef,
+            requiredBindingRefs: [
+              `decision-record:${claim.decisionRecordId}`,
+              `action-item:${input.actionItemId}`,
+              `approval-task:${approvalTask.id}`,
+            ],
+            expectedBusinessResult: businessOutcome.result,
+          });
+        }
 
         await verifyExecutionReceipt(
           {
@@ -322,8 +388,12 @@ export async function reconcileStage1TerminalResult(
           {
             workspaceId: input.workspaceId,
             decisionRecordId: claim.decisionRecordId,
-            followedAiRecommendation: input.outcome.followedAiRecommendation,
-            outcome: { outcomeRef, result: input.outcome.result },
+            followedAiRecommendation: closedWithoutExecution
+              ? null
+              : input.outcome!.followedAiRecommendation,
+            outcome: closedWithoutExecution
+              ? { outcomeRef: null, result: "unknown" }
+              : { outcomeRef, result: input.outcome!.result },
             actorName: input.actorName,
             actorUserId: input.actorUserId,
             actorType,
@@ -334,16 +404,30 @@ export async function reconcileStage1TerminalResult(
           { client: tx, governanceAlreadyAsserted: true },
         );
 
-        const hash = reconciliationHash({
-          workspaceId: input.workspaceId,
-          decisionRecordId: claim.decisionRecordId,
-          actionItemId: input.actionItemId,
-          approvalTaskId: approvalTask.id,
-          receiptId: receipt.id,
-          receiptOutcome: receipt.outcome,
-          outcome: { ...input.outcome, outcomeRef },
-        });
-        const succeeded = input.outcome.result === "success";
+        const closureTruth = closedReceiptOutcome !== null
+          ? closeWithoutExecutionTruth(closedReceiptOutcome)
+          : null;
+        const hash = closedReceiptOutcome !== null
+          ? closeWithoutExecutionReconciliationHash({
+              workspaceId: input.workspaceId,
+              decisionRecordId: claim.decisionRecordId,
+              actionItemId: input.actionItemId,
+              approvalTaskId: approvalTask.id,
+              receiptId: receipt.id,
+              receiptOutcome: closedReceiptOutcome,
+              closureTruth: closureTruth!,
+            })
+          : reconciliationHash({
+              workspaceId: input.workspaceId,
+              decisionRecordId: claim.decisionRecordId,
+              actionItemId: input.actionItemId,
+              approvalTaskId: approvalTask.id,
+              receiptId: receipt.id,
+              receiptOutcome: receipt.outcome,
+              outcome: { ...input.outcome!, outcomeRef: outcomeRef! },
+            });
+        const succeeded =
+          !closedWithoutExecution && input.outcome!.result === "success";
         const supervisionSignal = await recordStage1SupervisionSignal(
           {
             workspaceId: input.workspaceId,
@@ -356,7 +440,7 @@ export async function reconcileStage1TerminalResult(
               baselineRef: `decision-record:${claim.decisionRecordId}`,
               evidenceRefs: [
                 `execution-receipt:${receipt.id}`,
-                outcomeRef,
+                ...(outcomeRef ? [outcomeRef] : []),
                 `evaluation:${evaluation.evaluation.evaluationId}`,
                 `memory-fact:${evaluation.memoryFact.id}`,
                 `stage1-reconciliation:${hash}`,
@@ -367,18 +451,27 @@ export async function reconcileStage1TerminalResult(
               ownerRef: claim.decisionRecord.ownerRef,
               deadlineOrSla: null,
               status: succeeded ? "resolved" : "open",
-              observedFact: succeeded
-                ? "An independently verified execution receipt is paired with a resolved workspace-scoped successful outcome."
-                : "An independently verified execution receipt is paired with a resolved workspace-scoped unsuccessful outcome.",
-              interpretation: succeeded
-                ? "The governed result is available for decision evaluation; no authority or external action is granted."
-                : "The governed result requires owner review; no corrective action is executed automatically.",
+              observedFact: closedWithoutExecution
+                ? closureTruth === "rejected"
+                  ? "The governed work packet was rejected before execution; no business outcome was observed."
+                  : "The governed work packet closed without execution; no business outcome was observed."
+                : succeeded
+                  ? "An independently verified execution receipt is paired with a resolved workspace-scoped successful outcome."
+                  : "An independently verified execution receipt is paired with a resolved workspace-scoped unsuccessful outcome.",
+              interpretation: closedWithoutExecution
+                ? "This is blocked or rejected execution truth, not a business failure; owner review may decide whether to reopen or replace the work packet."
+                : succeeded
+                  ? "The governed result is available for decision evaluation; no authority or external action is granted."
+                  : "The governed result requires owner review; no corrective action is executed automatically.",
             },
-            expectedState:
-              "A terminal Stage 1 work packet has an independently verified receipt and a workspace-resolved business outcome.",
-            actualState: succeeded
-              ? "verified_receipt_with_successful_business_outcome"
-              : "verified_receipt_with_unsuccessful_business_outcome",
+            expectedState: closedWithoutExecution
+              ? "A Stage 1 work packet that did not execute has an independently verified closure receipt and no fabricated business outcome."
+              : "A terminal Stage 1 work packet has an independently verified receipt and a workspace-resolved business outcome.",
+            actualState: closedWithoutExecution
+              ? `closed_without_execution_${closureTruth}`
+              : succeeded
+                ? "verified_receipt_with_successful_business_outcome"
+                : "verified_receipt_with_unsuccessful_business_outcome",
             responsibilityScopeRef: portfolioRef,
             escalationCondition: succeeded
               ? "Re-open owner review if later evidence contradicts the recorded outcome."
@@ -393,6 +486,10 @@ export async function reconcileStage1TerminalResult(
 
         return {
           kind: "reconciled" as const,
+          terminalKind: closedWithoutExecution
+            ? ("closed_without_execution" as const)
+            : ("business_outcome" as const),
+          receiptOutcome: receipt.outcome,
           decisionRecordId: claim.decisionRecordId,
           reconciliationHash: hash,
           evaluation,

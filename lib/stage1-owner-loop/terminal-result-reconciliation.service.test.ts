@@ -160,6 +160,20 @@ function input(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function closedWithoutExecutionInput(
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    workspaceId: "workspace-1",
+    actionItemId: "action-1",
+    actorName: "Independent reviewer",
+    actorUserId: "reviewer-1",
+    actorType: ActorType.USER,
+    english: true,
+    ...overrides,
+  };
+}
+
 describe("Stage 1 terminal result reconciliation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -376,6 +390,160 @@ describe("Stage 1 terminal result reconciliation", () => {
     );
   });
 
+  it("keeps PARTIAL_SUCCESS on the existing business-failure reconciliation path", async () => {
+    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+      claim({
+        actionItem: {
+          ...claim().actionItem,
+          executionReceipt: {
+            ...claim().actionItem.executionReceipt,
+            outcome: ExecutionReceiptOutcome.PARTIAL_SUCCESS,
+          },
+        },
+      }),
+    );
+    evidenceMock.resolveCaioFdeObservationEvidence.mockResolvedValue({
+      runId: "run-1",
+      outcome: "FAILURE",
+    });
+
+    await expect(
+      reconcileStage1TerminalResult(
+        input({
+          outcome: {
+            outcomeRef: "observation-run:run-1",
+            result: "failure",
+            followedAiRecommendation: true,
+          },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      kind: "reconciled",
+      terminalKind: "business_outcome",
+      receiptOutcome: ExecutionReceiptOutcome.PARTIAL_SUCCESS,
+    });
+
+    expect(evidenceMock.resolveCaioFdeObservationEvidence).toHaveBeenCalled();
+    expect(evaluationMock.evaluateStage1DecisionRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: {
+          outcomeRef: "observation-run:run-1",
+          result: "failure",
+        },
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("closes NOT_EXECUTED without resolving or fabricating a business ObservationRun", async () => {
+    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+      claim({
+        actionItem: {
+          ...claim().actionItem,
+          executionReceipt: {
+            ...claim().actionItem.executionReceipt,
+            outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+            evidenceRefs: JSON.stringify(["approval-task:approval-1"]),
+          },
+        },
+      }),
+    );
+
+    await expect(
+      reconcileStage1TerminalResult(closedWithoutExecutionInput()),
+    ).resolves.toMatchObject({
+      kind: "reconciled",
+      terminalKind: "closed_without_execution",
+      receiptOutcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+    });
+
+    expect(evidenceMock.resolveCaioFdeObservationEvidence).not.toHaveBeenCalled();
+    expect(evaluationMock.evaluateStage1DecisionRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        followedAiRecommendation: null,
+        outcome: { outcomeRef: null, result: "unknown" },
+      }),
+      expect.objectContaining({ client: expect.any(Object) }),
+    );
+    expect(supervisionMock.recordStage1SupervisionSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signal: expect.objectContaining({
+          signalType: "anomaly",
+          severity: "warning",
+          recommendedRoute: "owner_review",
+          status: "open",
+          evidenceRefs: expect.not.arrayContaining([
+            expect.stringMatching(/^observation-run:/),
+          ]),
+        }),
+        actualState: "closed_without_execution_blocked",
+      }),
+      expect.objectContaining({ client: expect.any(Object) }),
+    );
+  });
+
+  it("preserves REJECTED as rejected truth without writing a failure outcome", async () => {
+    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+      claim({
+        actionItem: {
+          ...claim().actionItem,
+          executionReceipt: {
+            ...claim().actionItem.executionReceipt,
+            outcome: ExecutionReceiptOutcome.REJECTED,
+            evidenceRefs: JSON.stringify(["approval-task:approval-1"]),
+          },
+        },
+      }),
+    );
+
+    await reconcileStage1TerminalResult(closedWithoutExecutionInput());
+
+    expect(evidenceMock.resolveCaioFdeObservationEvidence).not.toHaveBeenCalled();
+    expect(evaluationMock.evaluateStage1DecisionRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: { outcomeRef: null, result: "unknown" },
+      }),
+      expect.any(Object),
+    );
+    expect(supervisionMock.recordStage1SupervisionSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actualState: "closed_without_execution_rejected",
+        signal: expect.objectContaining({ status: "open" }),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("rejects a fabricated business failure for a close-without-execution receipt", async () => {
+    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+      claim({
+        actionItem: {
+          ...claim().actionItem,
+          executionReceipt: {
+            ...claim().actionItem.executionReceipt,
+            outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+          },
+        },
+      }),
+    );
+
+    await expect(
+      reconcileStage1TerminalResult(
+        input({
+          outcome: {
+            outcomeRef: "observation-run:run-1",
+            result: "failure",
+            followedAiRecommendation: null,
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      reasons: ["closed_without_execution_business_outcome_forbidden"],
+    });
+    expect(evidenceMock.resolveCaioFdeObservationEvidence).not.toHaveBeenCalled();
+    expect(receiptMock.verifyExecutionReceipt).not.toHaveBeenCalled();
+  });
+
   it("replays the same deterministic evaluation and signal inputs", async () => {
     evaluationMock.evaluateStage1DecisionRecord.mockResolvedValue({
       created: false,
@@ -502,6 +670,34 @@ describe("Stage 1 terminal result reconciliation", () => {
     await expect(reconcileStage1TerminalResult(input())).rejects.toMatchObject({
       reasons: ["supervision_idempotency_conflict"],
     });
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts the no-execution transaction when open supervision cannot commit", async () => {
+    dbMock.decisionWorkPacketClaim.findFirst.mockResolvedValue(
+      claim({
+        actionItem: {
+          ...claim().actionItem,
+          executionReceipt: {
+            ...claim().actionItem.executionReceipt,
+            outcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+            evidenceRefs: JSON.stringify(["approval-task:approval-1"]),
+          },
+        },
+      }),
+    );
+    supervisionMock.recordStage1SupervisionSignal.mockRejectedValue(
+      new DecisionGateErrorMock(["supervision_idempotency_conflict"]),
+    );
+
+    await expect(
+      reconcileStage1TerminalResult(closedWithoutExecutionInput()),
+    ).rejects.toMatchObject({
+      reasons: ["supervision_idempotency_conflict"],
+    });
+    expect(evidenceMock.resolveCaioFdeObservationEvidence).not.toHaveBeenCalled();
+    expect(receiptMock.verifyExecutionReceipt).toHaveBeenCalled();
+    expect(evaluationMock.evaluateStage1DecisionRecord).toHaveBeenCalled();
     expect(dbMock.$transaction).toHaveBeenCalledTimes(1);
   });
 });

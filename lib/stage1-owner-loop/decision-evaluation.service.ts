@@ -241,23 +241,6 @@ function mapExecutionReceipt(
   }
 
   const receiptRef = `execution-receipt:${receipt.id}`;
-  if (receipt.outcome === ExecutionReceiptOutcome.REJECTED) {
-    if (!receipt.rejectionReasonCode) {
-      throw new Stage1DecisionEvaluationError(["rejection_reason_required"]);
-    }
-    return {
-      receiptRef,
-      outcome: "rejected",
-      reasonCode: receipt.rejectionReasonCode.toLowerCase(),
-    };
-  }
-  if (receipt.outcome === ExecutionReceiptOutcome.NOT_EXECUTED) {
-    return {
-      receiptRef,
-      outcome: "blocked",
-      reasonCode: "not_executed",
-    };
-  }
   if (
     receipt.verificationState !==
     ExecutionReceiptVerificationState.VERIFIED
@@ -278,6 +261,23 @@ function mapExecutionReceipt(
     throw new Stage1DecisionEvaluationError([
       "receipt_self_verification_detected",
     ]);
+  }
+  if (receipt.outcome === ExecutionReceiptOutcome.REJECTED) {
+    if (!receipt.rejectionReasonCode) {
+      throw new Stage1DecisionEvaluationError(["rejection_reason_required"]);
+    }
+    return {
+      receiptRef,
+      outcome: "rejected",
+      reasonCode: receipt.rejectionReasonCode.toLowerCase(),
+    };
+  }
+  if (receipt.outcome === ExecutionReceiptOutcome.NOT_EXECUTED) {
+    return {
+      receiptRef,
+      outcome: "blocked",
+      reasonCode: "not_executed",
+    };
   }
   if (receipt.outcome === ExecutionReceiptOutcome.SUCCESS) {
     return { receiptRef, outcome: "verified_success", reasonCode: null };
@@ -304,6 +304,30 @@ function buildEvaluation(
   const decision = reconstructDecisionObject(record);
   const action = record.workPacketClaim?.actionItem;
   const receipt = mapExecutionReceipt(record);
+  const canonicalReceipt = action?.executionReceipt;
+  if (!canonicalReceipt) {
+    throw new Stage1DecisionEvaluationError(["execution_receipt_required"]);
+  }
+  const canonicalOutcome = canonicalReceipt.outcome;
+  const closedWithoutExecution =
+    canonicalOutcome === ExecutionReceiptOutcome.NOT_EXECUTED ||
+    canonicalOutcome === ExecutionReceiptOutcome.REJECTED;
+  if (
+    closedWithoutExecution &&
+    (input.outcome.result !== "unknown" || input.outcome.outcomeRef !== null)
+  ) {
+    throw new Stage1DecisionEvaluationError([
+      "closed_without_execution_business_outcome_forbidden",
+    ]);
+  }
+  if (!closedWithoutExecution && input.outcome.result === "unknown") {
+    throw new Stage1DecisionEvaluationError(["business_outcome_not_final"]);
+  }
+  if (!closedWithoutExecution && !input.outcome.outcomeRef?.trim()) {
+    throw new Stage1DecisionEvaluationError([
+      "business_outcome_ref_required",
+    ]);
+  }
   return evaluateDecisionOutcome(
     decision,
     {
@@ -553,14 +577,8 @@ export async function evaluateStage1DecisionRecord(
   ) {
     reasons.push("actor_user_identity_required");
   }
-  if (input.outcome.result === "unknown") {
-    reasons.push("business_outcome_not_final");
-  }
   if (!["success", "failure", "unknown"].includes(input.outcome.result)) {
     reasons.push("business_outcome_invalid");
-  }
-  if (!input.outcome.outcomeRef?.trim()) {
-    reasons.push("business_outcome_ref_required");
   }
   if (reasons.length > 0) {
     throw new Stage1DecisionEvaluationError(reasons);

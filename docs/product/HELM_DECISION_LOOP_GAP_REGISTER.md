@@ -49,10 +49,10 @@ governance 权限，不新建角色或 ACL。
 
 | 状态 | 事实 | 机械证据 |
 |---|---|---|
-| GAP-1 closed | 非 seed、非测试的终态协调器在同一 `SERIALIZABLE` 事务内调用 `recordStage1SupervisionSignal` | 确定性 `signalId=stage1-terminal-result:{decisionRecordId}`；监督冲突的真实 MySQL 用例证明 receipt verification、evaluation 与 memory 一并回滚 |
-| GAP-2 closed | 同一事务先调用 `evaluateStage1DecisionRecord`，把与 canonical receipt 一致的明确业务结果回流现有 `DecisionRecord` | 评估先于监督；冲突重放由既有 DecisionRecord 内容一致性拒绝；门禁固定事务与调用顺序 |
+| GAP-1 closed | 非 seed、非测试的终态协调器在同一 `SERIALIZABLE` 事务内调用 `recordStage1SupervisionSignal`；`NOT_EXECUTED / REJECTED` 保留 blocked/rejected 真值并形成 open owner-review signal | 确定性 `signalId=stage1-terminal-result:{decisionRecordId}`；监督冲突的真实 MySQL 用例证明 receipt verification、evaluation 与 memory 一并回滚 |
+| GAP-2 closed | 同一事务先调用 `evaluateStage1DecisionRecord`；执行过的业务结果与 canonical receipt 一致，无执行关闭固定为 `outcomeRef=null / result=unknown` | 评估先于监督；blocked/rejected 不解析或伪造业务 `ObservationRun`；冲突重放由既有 DecisionRecord 内容一致性拒绝 |
 | terminal trigger reachable | 现有 `/approvals` 客户端调用 server action；Stage1 进入原子协调器，非 Stage1 继续独立验证 receipt | `features/approvals/approvals-client.tsx`、`features/approvals/actions.ts`、`features/approvals/queries.ts` |
-| trusted evidence closed | 新写的 outcome ref 必须解析为当前 workspace、Portfolio、DecisionRecord、ActionItem、ApprovalTask 范围内仍有效的 `ObservationSourceRun`；resolver 从持久化行重建 canonical `SourceObservationReceipt` 并调用既有 validator，核对摘要、完整度、新鲜度、错误码、终态/outcome、授权及证据 identity | `caio-fde-scope-resolver.service.ts` canonical fixture/unit tests 与 isolated MySQL revoked-source 拒绝测试 |
+| trusted evidence closed | `SUCCESS / PARTIAL_SUCCESS / FAILURE` 的新写 outcome ref 必须解析为当前 workspace、Portfolio、DecisionRecord、ActionItem、ApprovalTask 范围内仍有效的 `ObservationSourceRun`；`NOT_EXECUTED / REJECTED` 禁止携带业务 outcome ref | resolver canonical fixture/unit tests；close-without-execution focused 与 isolated MySQL 测试证明不读取或新增业务 ObservationRun |
 | private ingress reachable | 受认证 WorkBuddy MCP user principal 通过 Gateway 的 `/v1/execution-results` 进入 Core；project visibility 与专用 `submit_private_execution_result` operation capability 分离检查，Core 锁 Work Packet 后在同一 `SERIALIZABLE` 事务重验 ACTIVE membership、operation capability 与 executor binding，再由唯一 writer 写 receipt | Gateway、`private-execution-result-ingress.service.ts`、锁后撤权/降权及 executor-binding tests；不证明 resolver 已由 Overlay 供给或私有 executor 已部署 |
 | Pack portable contract S1 closed | 完整 artifact 与版本化 semantic verifier 共同形成 contract identity；semantic graph 显式声明 `evidenceRef -> evidenceKind`，重复、悬空、coverage 与 kind 冲突全部 fail-closed | TS / JSON artifact differential 与逐叶 mutation 测试；不证明 production composition caller、Core 自生成问题或 Pack 已挂载 |
 | Pack Core generator S2 closed | Pack seam 拒绝外部 candidates、问题正文、score/rank；Core 从 workspace Portfolio、可信 G0 evidence traces、S1 bindings 与完整 semantic graph 派生 eligibility、内容、事实/推论、score/rank、validation metric 与 narrow loop | generator/store focused tests 覆盖语义敏感性、exactly-10、约束后 `insufficient_evidence`、幂等 request hash 与既有 canonical writer；不证明 production mount |
@@ -65,8 +65,9 @@ governance 权限，不新建角色或 ACL。
 1. server action 以当前 workspace 读取现有 `ApprovalTask`、`ActionItem` 和 Work Packet claim；
 2. 既有 action-review 权限允许独立复核，Stage 1 最终结果另需既有 insight 权限；
 3. 协调器开启 `SERIALIZABLE` 事务并锁定唯一 `DecisionWorkPacketClaim`；
-4. 协调器核对 canonical receipt outcome、显式 terminal result、Opportunity Portfolio 和当前
-   `ObservationSourceRun` 的 workspace、授权期、来源状态、证据绑定；
+4. 协调器按 canonical receipt outcome 分流：执行过的业务结果核对显式 terminal result、
+   Opportunity Portfolio 和当前 `ObservationSourceRun`；`NOT_EXECUTED / REJECTED` 则拒绝业务
+   outcome，并固定为 `unknown/null` 的治理关闭；
 5. `verifyExecutionReceipt` 使用同一 transaction client 把 canonical receipt 验证为 `VERIFIED`；
 6. `evaluateStage1DecisionRecord` 使用同一 client 写评估与 `MemoryFact.OBSERVED` 候选；
 7. `recordStage1SupervisionSignal` 使用同一 client 写确定性监督事实，不执行任何干预。
@@ -74,6 +75,9 @@ governance 权限，不新建角色或 ACL。
 步骤 4-7 任一步失败，事务整体回滚，不留下 `VERIFIED + EVALUATED` 却没有有效 supervision
 的误导态。完全相同的 reconciliation payload/hash 可重放并收敛；receipt 结果、业务结果、
 证据引用或是否采纳建议发生漂移时 fail-closed，不能覆盖历史。
+
+T2a 只证明后端协调路径；approvals 对 blocked/rejected 的入口与呈现属于 T2b，当前不能把
+后端 repo truth 表述为 UI、部署或现场激活 truth。
 
 私有 executor 只提交严格版本化、带 content hash 的结果投影。Gateway 先执行 mTLS/token、
 workspace、Portfolio membership 与专用 operation capability 检查。Core ingress 锁定 Work

@@ -9,6 +9,7 @@ import {
   MemoryStatus,
   OpportunityStage,
   OpportunityType,
+  RejectionReasonCode,
   RiskLevel,
   WorkspaceRole,
 } from "@prisma/client";
@@ -18,6 +19,11 @@ import type { DecisionObject } from "@/lib/agentos-decision-supervision/types";
 import type { CaioAccessPrincipal } from "@/lib/caio-access-gateway/token-store.service";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import {
+  approveApprovalTask,
+  blockApprovedAction,
+  rejectApprovalTask,
+} from "@/lib/policies/engine";
 import {
   ReceiptChangedDuringVerificationError,
   recordExecutionReceipt,
@@ -274,6 +280,89 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
       errorCodes: [],
     });
     return { program, source, run: completed, observedAt };
+  }
+
+  async function createDispatchedClosurePacket(label: string) {
+    const packetKey = `${label}-${publicSafeSuffix}`;
+    const decision: DecisionObject = {
+      decisionId: `decision-${packetKey}`,
+      tenantRef: `workspace:${workspaceId}`,
+      decisionType: "prioritization",
+      businessQuestion: `Should ${label} close without execution?`,
+      problemCategoryRef: "synthetic-delivery-risk",
+      contextRefs: [
+        `context:${packetKey}`,
+        `opportunity:${portfolioOpportunityId}`,
+      ],
+      knowledgeRefs: ["knowledge:synthetic-delivery-policy"],
+      evidenceRefs: [`evidence:${packetKey}`],
+      policyRefs: ["policy:review-first"],
+      receiptRefs: [],
+      alternatives: ["Proceed", "Close without execution"],
+      recommendedOption: "Proceed",
+      confidence: "medium",
+      riskLevel: "high",
+      allowedActionLevel: "draft_task",
+      ownerGate: "approval_required",
+      expiryOrReviewAt: PROGRAM_EXPIRES_AT.toISOString(),
+      rollbackPath: "Keep the work packet closed and require owner review",
+    };
+    const record = await createStage1DecisionRecord({
+      workspaceId,
+      decision,
+      facts: [
+        {
+          statement: `Synthetic ${label} closure fact`,
+          evidenceRefs: [`evidence:${packetKey}`],
+          freshness: "fresh",
+        },
+      ],
+      inferences: [],
+      unknowns: ["No business outcome exists because execution did not occur"],
+      risks: ["Closure may require a replacement work packet"],
+      actorName: "Helm Decision Runtime",
+      actorType: ActorType.AI,
+    });
+    await confirmStage1DecisionRecord({
+      workspaceId,
+      decisionRecordId: record.id,
+      conclusion: "Proceed",
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+    });
+    const command: OwnerCommandDraft = {
+      commandId: `command-${packetKey}`,
+      workspaceRef: `workspace:${workspaceId}`,
+      decisionRef: record.id,
+      ownerRef: ownerUserId,
+      executionTargetRef: `user:${ownerUserId}`,
+      portfolioRef: `opportunity:${portfolioOpportunityId}`,
+      goal: `Exercise the ${label} close-without-execution path`,
+      action: "Prepare a governed synthetic recovery plan",
+      dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      acceptanceCriteria: ["Closure truth is independently verified"],
+      evidenceRequirements: [`evidence:${packetKey}`],
+      invalidationConditions: ["Synthetic test scope changes"],
+      escalationOwnerRef: ownerUserId,
+      automationLevel: "assist",
+      allowedToolRefs: ["tool:task-draft"],
+      externalSideEffects: [],
+      policyEnvelopeRef: null,
+      status: "owner_confirmed",
+    };
+    const dispatch = await dispatchStage1DecisionWorkPacket({
+      workspaceId,
+      decisionRecordId: record.id,
+      command,
+      actorName: "Stage 1 Owner",
+      actorUserId: ownerUserId,
+    });
+    return {
+      decisionRecordId: record.id,
+      decisionKey: record.decisionKey,
+      actionItemId: dispatch.actionItemId,
+      approvalTaskId: dispatch.approvalTaskId!,
+    };
   }
 
   beforeAll(async () => {
@@ -1554,6 +1643,259 @@ describeMysql("Stage 1 owner loop with an isolated MySQL database", () => {
           workspaceId,
           decisionRecordId: dispatchedDecisionRecordId,
           signalKey: `stage1-terminal-result:${dispatchedDecisionRecordId}`,
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it.each([
+    {
+      mode: "blocked" as const,
+      receiptOutcome: ExecutionReceiptOutcome.NOT_EXECUTED,
+      varianceReason: "blocked_execution",
+    },
+    {
+      mode: "rejected" as const,
+      receiptOutcome: ExecutionReceiptOutcome.REJECTED,
+      varianceReason: "owner_disagreement",
+    },
+  ])(
+    "atomically reconciles $mode without a business ObservationRun",
+    async ({ mode, receiptOutcome, varianceReason }) => {
+      const packet = await createDispatchedClosurePacket(
+        `close-${mode}`,
+      );
+      const observationCountBefore = await db.observationSourceRun.count({
+        where: { workspaceId },
+      });
+
+      if (mode === "blocked") {
+        await approveApprovalTask(
+          packet.approvalTaskId,
+          "Stage 1 Reviewer",
+          reviewerUserId,
+          undefined,
+          { actorType: ActorType.USER },
+        );
+        await blockApprovedAction(
+          packet.actionItemId,
+          "Stage 1 Reviewer",
+          reviewerUserId,
+          "Synthetic execution was blocked before work began",
+          { actorType: ActorType.USER },
+        );
+      } else {
+        await rejectApprovalTask(
+          packet.approvalTaskId,
+          "Stage 1 Reviewer",
+          reviewerUserId,
+          "Synthetic owner disagreement",
+          {
+            actorType: ActorType.USER,
+            rejectionReasonCode: RejectionReasonCode.OWNER_DISAGREEMENT,
+          },
+        );
+      }
+
+      await expect(
+        reconcileStage1TerminalResult({
+          workspaceId,
+          actionItemId: packet.actionItemId,
+          actorName: "Stage 1 Owner",
+          actorUserId: ownerUserId,
+          actorType: ActorType.USER,
+        }),
+      ).resolves.toMatchObject({
+        kind: "reconciled",
+        terminalKind: "closed_without_execution",
+        receiptOutcome,
+      });
+
+      expect(
+        await db.observationSourceRun.count({ where: { workspaceId } }),
+      ).toBe(observationCountBefore);
+      const [action, receipt, decision, signals] = await Promise.all([
+        db.actionItem.findUniqueOrThrow({
+          where: { id: packet.actionItemId },
+          select: { status: true },
+        }),
+        db.executionReceipt.findUniqueOrThrow({
+          where: {
+            subjectType_subjectId: {
+              subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+              subjectId: packet.actionItemId,
+            },
+          },
+          select: {
+            outcome: true,
+            verificationState: true,
+            verifiedByUserId: true,
+          },
+        }),
+        db.decisionRecord.findUniqueOrThrow({
+          where: { id: packet.decisionRecordId },
+          select: { status: true, evaluationJson: true },
+        }),
+        db.supervisionSignalRecord.findMany({
+          where: {
+            workspaceId,
+            decisionRecordId: packet.decisionRecordId,
+          },
+          select: {
+            status: true,
+            severity: true,
+            recommendedRoute: true,
+            actualState: true,
+            observedFact: true,
+            evidenceRefs: true,
+          },
+        }),
+      ]);
+      expect(action.status).toBe(ActionStatus.BLOCKED);
+      expect(receipt).toEqual({
+        outcome: receiptOutcome,
+        verificationState: ExecutionReceiptVerificationState.VERIFIED,
+        verifiedByUserId: ownerUserId,
+      });
+      expect(decision.status).toBe("EVALUATED");
+      const evaluation = JSON.parse(decision.evaluationJson!);
+      expect(evaluation).toMatchObject({
+        outcomeRef: null,
+        varianceReason,
+      });
+      expect(signals).toHaveLength(1);
+      expect(signals[0]).toMatchObject({
+        status: "open",
+        severity: "warning",
+        recommendedRoute: "owner_review",
+        actualState: `closed_without_execution_${mode}`,
+      });
+      expect(signals[0]!.observedFact).toContain(
+        "no business outcome was observed",
+      );
+      expect(signals[0]!.observedFact).not.toContain("unsuccessful outcome");
+      expect(
+        JSON.parse(signals[0]!.evidenceRefs).some((ref: string) =>
+          ref.startsWith("observation-run:"),
+        ),
+      ).toBe(false);
+      await expect(
+        reconcileStage1TerminalResult({
+          workspaceId,
+          actionItemId: packet.actionItemId,
+          actorName: "Stage 1 Owner",
+          actorUserId: ownerUserId,
+          actorType: ActorType.USER,
+        }),
+      ).resolves.toMatchObject({
+        kind: "reconciled",
+        terminalKind: "closed_without_execution",
+        evaluation: { created: false },
+      });
+    },
+  );
+
+  it("rolls back no-execution verification and evaluation when supervision conflicts", async () => {
+    const packet = await createDispatchedClosurePacket(
+      "close-rejected-rollback",
+    );
+    await rejectApprovalTask(
+      packet.approvalTaskId,
+      "Stage 1 Reviewer",
+      reviewerUserId,
+      "Synthetic rollback owner disagreement",
+      {
+        actorType: ActorType.USER,
+        rejectionReasonCode: RejectionReasonCode.OWNER_DISAGREEMENT,
+      },
+    );
+    const observationCountBefore = await db.observationSourceRun.count({
+      where: { workspaceId },
+    });
+    await db.supervisionSignalRecord.create({
+      data: {
+        workspaceId,
+        decisionRecordId: packet.decisionRecordId,
+        signalKey: `stage1-terminal-result:${packet.decisionRecordId}`,
+        signalType: "anomaly",
+        observedObjectRef: `action-item:${packet.actionItemId}`,
+        baselineRef: `decision-record:${packet.decisionRecordId}`,
+        evidenceRefs: JSON.stringify(["conflict:no-execution"]),
+        severity: "warning",
+        confidence: "high",
+        recommendedRoute: "owner_review",
+        ownerRef: ownerUserId,
+        deadlineOrSla: null,
+        status: "open",
+        observedFact: "Injected no-execution supervision conflict.",
+        interpretation: null,
+        expectedState: null,
+        actualState: "injected_no_execution_conflict",
+        responsibilityScopeRef: `opportunity:${portfolioOpportunityId}`,
+        escalationCondition: "Remove the injected conflict before retry.",
+      },
+    });
+
+    await expect(
+      reconcileStage1TerminalResult({
+        workspaceId,
+        actionItemId: packet.actionItemId,
+        actorName: "Stage 1 Owner",
+        actorUserId: ownerUserId,
+        actorType: ActorType.USER,
+      }),
+    ).rejects.toMatchObject({
+      reasons: ["supervision_idempotency_conflict"],
+    });
+
+    expect(
+      await db.observationSourceRun.count({ where: { workspaceId } }),
+    ).toBe(observationCountBefore);
+    expect(
+      await db.actionItem.findUniqueOrThrow({
+        where: { id: packet.actionItemId },
+        select: { status: true },
+      }),
+    ).toEqual({ status: ActionStatus.BLOCKED });
+    expect(
+      await db.executionReceipt.findUniqueOrThrow({
+        where: {
+          subjectType_subjectId: {
+            subjectType: ExecutionReceiptSubjectType.ACTION_ITEM,
+            subjectId: packet.actionItemId,
+          },
+        },
+        select: {
+          outcome: true,
+          verificationState: true,
+          verifiedByUserId: true,
+        },
+      }),
+    ).toEqual({
+      outcome: ExecutionReceiptOutcome.REJECTED,
+      verificationState: ExecutionReceiptVerificationState.SELF_REPORTED,
+      verifiedByUserId: null,
+    });
+    expect(
+      await db.decisionRecord.findUniqueOrThrow({
+        where: { id: packet.decisionRecordId },
+        select: { status: true, evaluationJson: true, evaluatedAt: true },
+      }),
+    ).toEqual({ status: "DISPATCHED", evaluationJson: null, evaluatedAt: null });
+    expect(
+      await db.memoryFact.count({
+        where: {
+          workspaceId,
+          objectId: packet.actionItemId,
+          sourceId: `evaluation:${packet.decisionKey}`,
+        },
+      }),
+    ).toBe(0);
+    expect(
+      await db.supervisionSignalRecord.count({
+        where: {
+          workspaceId,
+          decisionRecordId: packet.decisionRecordId,
         },
       }),
     ).toBe(1);
