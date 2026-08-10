@@ -21,7 +21,10 @@ import {
 } from "@/lib/auth/authorization";
 import { assertWorkspacePolicyServiceAccess } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
-import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import {
+  isWriteConflictError,
+  runWithWriteConflictRetry,
+} from "@/lib/db/conflict-aware-write";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 
@@ -194,6 +197,20 @@ function isUniqueConstraintViolation(error: unknown): boolean {
     (error as { code?: string }).code === "P2002"
   );
 }
+
+function isQuestionGenerationConflict(error: unknown): boolean {
+  return (
+    isWriteConflictError(error) ||
+    isUniqueConstraintViolation(error) ||
+    (error instanceof CaioOperatingQuestionStoreError &&
+      error.message === "question_generation_concurrent_conflict")
+  );
+}
+
+const GENERATION_WRITE_RETRY_OPTIONS = {
+  ...WRITE_RETRY_OPTIONS,
+  isConflict: isQuestionGenerationConflict,
+} as const;
 
 function hashRequest(value: unknown): string {
   try {
@@ -1267,7 +1284,7 @@ async function generateCaioOperatingQuestionPortfolioInternal(
         throwIfGenerationCancelled(input.signal);
         return { receipt, portfolio, replayed: false };
       }, TRANSACTION_OPTIONS),
-    WRITE_RETRY_OPTIONS,
+    GENERATION_WRITE_RETRY_OPTIONS,
   );
 }
 

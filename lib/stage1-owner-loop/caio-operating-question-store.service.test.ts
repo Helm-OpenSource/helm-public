@@ -1348,6 +1348,85 @@ describe("CAIO operating question store", () => {
     ).toHaveBeenCalledOnce();
   });
 
+  it("retries a concurrent generation-key winner and replays its canonical receipt", async () => {
+    let persistedPortfolio: Record<string, unknown> | null = null;
+    let persistedReceipt: Record<string, unknown> | null = null;
+
+    dbMock.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(async () => {
+        if (!persistedPortfolio || !persistedReceipt) {
+          throw new Error("concurrent generation fixture was not persisted");
+        }
+        return [
+          {
+            workspaceId: WORKSPACE_ID,
+            initializationGateReceiptId:
+              persistedReceipt.initializationGateReceiptId,
+            initializationAssessmentId:
+              persistedReceipt.initializationAssessmentId,
+            currentGenerationReceiptId: persistedReceipt.id,
+            currentPortfolioId: persistedPortfolio.id,
+            generationSequence: persistedReceipt.sequence,
+            portfolioSequence: persistedPortfolio.sequence,
+            version: 1,
+            updatedAt: NOW,
+          },
+        ];
+      });
+    dbMock.caioOperatingQuestionPortfolio.create.mockImplementationOnce(
+      async ({ data }) => {
+        persistedPortfolio = data;
+        return data;
+      },
+    );
+    dbMock.caioOperatingQuestionGenerationReceipt.create.mockImplementationOnce(
+      async ({ data }) => {
+        persistedReceipt = data;
+        throw Object.assign(new Error("concurrent generation winner"), {
+          code: "P2002",
+        });
+      },
+    );
+    dbMock.caioOperatingQuestionGenerationReceipt.findFirst.mockImplementationOnce(
+      async () => persistedReceipt,
+    );
+    dbMock.caioOperatingQuestionPortfolio.findFirst.mockImplementationOnce(
+      async () => persistedPortfolio,
+    );
+    dbMock.caioOperatingQuestionGenerationReceipt.findUnique
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(async () => persistedReceipt);
+
+    try {
+      const result = await generateCaioOperatingQuestionPortfolio({
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: "generation:synthetic-caio:concurrent-winner",
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates: Array.from({ length: 10 }, (_, index) =>
+          syntheticOperatingQuestionCandidate(index),
+        ),
+        auditRefs: ["audit:question-generation:concurrent-winner"],
+        now: NOW,
+      });
+
+      expect(result.replayed).toBe(true);
+      expect(dbMock.$transaction).toHaveBeenCalledTimes(2);
+      expect(
+        dbMock.caioOperatingQuestionPortfolio.create,
+      ).toHaveBeenCalledOnce();
+      expect(
+        dbMock.caioOperatingQuestionGenerationReceipt.create,
+      ).toHaveBeenCalledOnce();
+    } finally {
+      dbMock.caioOperatingQuestionGenerationReceipt.findFirst.mockReset();
+      dbMock.caioOperatingQuestionPortfolio.findFirst.mockReset();
+      dbMock.caioOperatingQuestionGenerationReceipt.findUnique.mockReset();
+    }
+  });
+
   it("records an insufficient-evidence receipt without creating or erasing a portfolio", async () => {
     dbMock.$queryRaw.mockResolvedValueOnce([]);
 
