@@ -189,7 +189,7 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
     ).toBe(false);
   });
 
-  it("accepts exact Core-generated CUID refs while rejecting arbitrary digit refs", () => {
+  it("accepts bounded CUID-shaped refs with letters while rejecting digit-only refs", () => {
     const canonicalCuid = "cabcdef1234567ghijklmnopq";
     const canonicalEvidenceRef = `observation-run:${canonicalCuid}`;
     const canonicalInput = {
@@ -226,6 +226,18 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
         evidenceSnapshotRef: "observation-run:1234567",
       }).success,
     ).toBe(false);
+    for (const unsafeWorkspaceRef of [
+      "workspace:c123456789012345678901234",
+      "workspace:c138001380001101051949123",
+    ]) {
+      expect(
+        caioProPackOperatingInputSchema.safeParse({
+          ...packInput(),
+          workspaceRef: unsafeWorkspaceRef,
+        }).success,
+        unsafeWorkspaceRef,
+      ).toBe(false);
+    }
   });
 
   it("fails closed for duplicate, dangling, uncovered and evidence-kind-incompatible Pack graphs", () => {

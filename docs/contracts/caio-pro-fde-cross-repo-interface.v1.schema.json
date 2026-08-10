@@ -5,8 +5,8 @@
   "description": "Portable public-safe validation artifact for Pack operating inputs and private execution result projections. Validation grants no authority; Core still resolves every workspace, Portfolio, evidence snapshot, work object and permission at ingestion time.",
   "interfaceIdentity": {
     "interfaceVersion": "helm.caio-pro-fde.cross-repo-interface.v1",
-    "contractRef": "caio-pro-fde-cross-repo-interface:70314488f6193d01",
-    "contractHash": "sha256:70314488f6193d015ebd82ef61d3d88a7caba3ec2efe0710788664822f5d7b10",
+    "contractRef": "caio-pro-fde-cross-repo-interface:d4bfbb51f545f174",
+    "contractHash": "sha256:d4bfbb51f545f1748c9d843f04279f6ae0bc8af4e8730649ec652ae0173cc51f",
     "evaluatorRevision": "caio-pro-v1-completion-evaluator.v1",
     "evaluatorContractRef": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
     "evaluatorContractHash": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01"
@@ -39,7 +39,7 @@
     "publicSafeRefRules": [
       "opaque_ref_pattern_and_prefix_must_match",
       "url_locator_ip_email_secret_token_connection_string_and_pii_shapes_are_rejected",
-      "exact_core_workspace_opportunity_and_observation_run_cuid_refs_bypass_only_digit_shape_rejection"
+      "workspace_opportunity_and_observation_run_cuid_shapes_with_alphabetic_entropy_bypass_only_digit_shape_rejection"
     ],
     "packOperatingInputRules": [
       "shortText_and_longText_fields_must_contain_non_whitespace_content",
@@ -71,12 +71,12 @@
     },
     "contractRef": {
       "type": "string",
-      "const": "caio-pro-fde-cross-repo-interface:70314488f6193d01",
+      "const": "caio-pro-fde-cross-repo-interface:d4bfbb51f545f174",
       "maxLength": 256
     },
     "contractHash": {
       "type": "string",
-      "const": "sha256:70314488f6193d015ebd82ef61d3d88a7caba3ec2efe0710788664822f5d7b10",
+      "const": "sha256:d4bfbb51f545f1748c9d843f04279f6ae0bc8af4e8730649ec652ae0173cc51f",
       "maxLength": 71
     },
     "evaluatorRevision": {
@@ -130,9 +130,24 @@
       "type": "string",
       "minLength": 3,
       "maxLength": 256,
-      "pattern": "^(?!.*(?:https?|file|ftp|ssh|s3|gs|mailto):)(?!.*(?:password|passwd|secret|token|api[-_]?key|authorization|bearer|mysql|postgres(?:ql)?|mongodb|redis|jdbc|connection[-_]?string))(?!.*(?:^|:)(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?:$|:))(?!.*(?:^|:)sk-[A-Za-z0-9_-]{16,})[a-z][a-z0-9-]{1,63}:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$",
+      "pattern": "^[a-z][a-z0-9-]{1,63}:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$",
       "not": {
         "anyOf": [
+          {
+            "pattern": "(?:[A-Za-z][A-Za-z0-9+.-]*://|^//|[Ww][Ww][Ww]\\.)"
+          },
+          {
+            "pattern": "(?:^|:)(?:[Hh][Tt][Tt][Pp][Ss]?|[Ff][Ii][Ll][Ee]|[Ff][Tt][Pp]|[Ss][Ss][Hh]|[Ss]3|[Gg][Ss]|[Mm][Aa][Ii][Ll][Tt][Oo]):"
+          },
+          {
+            "pattern": "(?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Bb][Ee][Aa][Rr][Ee][Rr]|[Mm][Yy][Ss][Qq][Ll]|[Pp][Oo][Ss][Tt][Gg][Rr][Ee][Ss](?:[Qq][Ll])?|[Mm][Oo][Nn][Gg][Oo][Dd][Bb]|[Rr][Ee][Dd][Ii][Ss]|[Jj][Dd][Bb][Cc]|[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn][-_]?[Ss][Tt][Rr][Ii][Nn][Gg])"
+          },
+          {
+            "pattern": "(?:^|:)(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{16,}|eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,})"
+          },
+          {
+            "pattern": "@"
+          },
           {
             "pattern": "(?:^|[^0-9])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?:$|[^0-9])"
           },
@@ -143,7 +158,7 @@
             "pattern": "(?:^|[^A-Fa-f0-9])(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}(?:$|[^A-Fa-f0-9])"
           },
           {
-            "pattern": "(?:^|[:._-])(?:phone|mobile|tel|id(?:entity)?[-_]?card|ssn|bank[-_]?card|card[-_]?number|account[-_]?number)(?:$|[:._-])"
+            "pattern": "(?:^|[:._-])(?:[Pp][Hh][Oo][Nn][Ee]|[Mm][Oo][Bb][Ii][Ll][Ee]|[Tt][Ee][Ll]|[Ii][Dd](?:[Ee][Nn][Tt][Ii][Tt][Yy])?[-_]?[Cc][Aa][Rr][Dd]|[Ss][Ss][Nn]|[Bb][Aa][Nn][Kk][-_]?[Cc][Aa][Rr][Dd]|[Cc][Aa][Rr][Dd][-_]?[Nn][Uu][Mm][Bb][Ee][Rr]|[Aa][Cc][Cc][Oo][Uu][Nn][Tt][-_]?[Nn][Uu][Mm][Bb][Ee][Rr])(?:$|[:._-])"
           }
         ]
       },
@@ -151,7 +166,7 @@
         {
           "anyOf": [
             {
-              "pattern": "^(?:workspace|opportunity|observation-run):c[a-z0-9]{24}$"
+              "pattern": "^(?:workspace|opportunity|observation-run):c(?=[a-z0-9]*[a-z])[a-z0-9]{24}$"
             },
             {
               "not": {
@@ -161,7 +176,7 @@
           ]
         }
       ],
-      "description": "Syntactic public-safe opaque ref only. Exact Core-generated workspace, opportunity and observation-run CUID refs may contain numeric entropy; all other digit-shaped PII remains rejected. Core resolution against the authenticated workspace and current evidence snapshot is mandatory."
+      "description": "Syntactic public-safe opaque ref only. Workspace, opportunity and observation-run CUID-shaped refs must contain alphabetic entropy before they may bypass digit-shape rejection; all-digit and other digit-shaped PII remain rejected. Core resolution against the authenticated workspace and current evidence snapshot is mandatory."
     },
     "workspaceRef": {
       "allOf": [

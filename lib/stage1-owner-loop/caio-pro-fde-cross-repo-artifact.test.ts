@@ -401,11 +401,17 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
         metrics: [{ ...base.metrics[0], definition: "\t\n" }],
       },
       { ...base, workspaceRef: "workspace:https:private.invalid" },
+      { ...base, workspaceRef: "workspace:c123456789012345678901234" },
       {
         ...base,
         evidenceSnapshotRef: `observation-run:${privateAddress}`,
       },
       { ...base, portfolioRef: "opportunity:token-secret-value" },
+      { ...base, workspaceRef: "workspace:TOKEN-VALUE" },
+      { ...base, workspaceRef: "workspace:ghp_abcdefghijklmnop" },
+      { ...base, workspaceRef: "workspace:eyJabcdefgh.ijklmnop" },
+      { ...base, workspaceRef: "workspace:www.example.invalid" },
+      { ...base, workspaceRef: "workspace:MYSQL-CONNECTION" },
     ];
 
     for (const payload of corpus) {
@@ -530,13 +536,20 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
       "proof:id-card-11010519491231002X",
       "proof:bank-card-6222020202020202020",
       "proof:token-secret-value",
+      "proof:TOKEN-VALUE",
+      "proof:ghp_abcdefghijklmnop",
+      "proof:eyJabcdefgh.ijklmnop",
+      "proof:www.example.invalid",
       "proof:mysql-username-password",
+      "proof:MYSQL-CONNECTION",
+      "workspace:c123456789012345678901234",
+      "workspace:c138001380001101051949123",
     ]) {
       expect(portablePublicSafeRefAccepts(unsafeRef), unsafeRef).toBe(false);
     }
   });
 
-  it("accepts exact Core-generated CUID refs with numeric entropy", () => {
+  it("accepts bounded CUID-shaped refs with alphabetic entropy", () => {
     const canonicalCuid = "cabcdef1234567ghijklmnopq";
     const canonicalEvidenceRef = `observation-run:${canonicalCuid}`;
     const base = validPackInput();
