@@ -15,6 +15,7 @@ import {
   CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_RULES,
   CAIO_PRO_PACK_OPERATING_INPUT_SCHEMA_VERSION,
   CAIO_PRO_PRIVATE_EXECUTION_RESULT_PROJECTION_SCHEMA_VERSION,
+  caioProPublicSafeRefSchema,
   caioProPackOperatingInputSchema,
   computeCaioProFdePortableContractIdentity,
   materializeCaioProFdePortableContractArtifact,
@@ -411,6 +412,8 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
       { ...base, workspaceRef: "workspace:ghp_abcdefghijklmnop" },
       { ...base, workspaceRef: "workspace:eyJabcdefgh.ijklmnop" },
       { ...base, workspaceRef: "workspace:www.example.invalid" },
+      { ...base, workspaceRef: "workspace:awww.example.invalid" },
+      { ...base, workspaceRef: "workspace:ahttp::x" },
       { ...base, workspaceRef: "workspace:MYSQL-CONNECTION" },
     ];
 
@@ -542,10 +545,45 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
       "proof:www.example.invalid",
       "proof:mysql-username-password",
       "proof:MYSQL-CONNECTION",
+      "proof:ahttp::x",
       "workspace:c123456789012345678901234",
       "workspace:c138001380001101051949123",
     ]) {
       expect(portablePublicSafeRefAccepts(unsafeRef), unsafeRef).toBe(false);
+    }
+  });
+
+  it("preserves the TypeScript www word boundary", () => {
+    expect(portablePublicSafeRefAccepts("proof:awww.example.invalid")).toBe(
+      true,
+    );
+  });
+
+  it("keeps the direct TypeScript and portable public-safe ref validators aligned", () => {
+    const corpus = [
+      "proof:ordinary-ref",
+      "proof:awww.example.invalid",
+      "proof:www.example.invalid",
+      "proof:WWW.example.invalid",
+      "proof:foo://example.invalid",
+      "proof:HTTP:example.invalid",
+      "proof:ahttp::x",
+      "proof:1:2:3:4:5:6:7:8",
+      "proof:999.999.999.999",
+      "proof:123-456-789",
+      "proof:1234-5678-X",
+      "proof:TOKEN-VALUE",
+      "proof:ghp_abcdefghijklmnop",
+      "proof:eyJabcdefgh.ijklmnop",
+      "proof:user@example.invalid",
+      "workspace:cabcdef1234567ghijklmnopq",
+      "workspace:c123456789012345678901234",
+    ];
+
+    for (const value of corpus) {
+      expect(portablePublicSafeRefAccepts(value), value).toBe(
+        caioProPublicSafeRefSchema.safeParse(value).success,
+      );
     }
   });
 

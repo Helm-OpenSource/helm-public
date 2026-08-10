@@ -5,8 +5,8 @@
   "description": "Portable public-safe validation artifact for Pack operating inputs and private execution result projections. Validation grants no authority; Core still resolves every workspace, Portfolio, evidence snapshot, work object and permission at ingestion time.",
   "interfaceIdentity": {
     "interfaceVersion": "helm.caio-pro-fde.cross-repo-interface.v1",
-    "contractRef": "caio-pro-fde-cross-repo-interface:d4bfbb51f545f174",
-    "contractHash": "sha256:d4bfbb51f545f1748c9d843f04279f6ae0bc8af4e8730649ec652ae0173cc51f",
+    "contractRef": "caio-pro-fde-cross-repo-interface:3fe65cccc5f4a52a",
+    "contractHash": "sha256:3fe65cccc5f4a52a3f050e262e0af30b1426f78d1fe198cbbcc75d00a5beac2f",
     "evaluatorRevision": "caio-pro-v1-completion-evaluator.v1",
     "evaluatorContractRef": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
     "evaluatorContractHash": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01"
@@ -71,12 +71,12 @@
     },
     "contractRef": {
       "type": "string",
-      "const": "caio-pro-fde-cross-repo-interface:d4bfbb51f545f174",
+      "const": "caio-pro-fde-cross-repo-interface:3fe65cccc5f4a52a",
       "maxLength": 256
     },
     "contractHash": {
       "type": "string",
-      "const": "sha256:d4bfbb51f545f1748c9d843f04279f6ae0bc8af4e8730649ec652ae0173cc51f",
+      "const": "sha256:3fe65cccc5f4a52a3f050e262e0af30b1426f78d1fe198cbbcc75d00a5beac2f",
       "maxLength": 71
     },
     "evaluatorRevision": {
@@ -134,7 +134,7 @@
       "not": {
         "anyOf": [
           {
-            "pattern": "(?:[A-Za-z][A-Za-z0-9+.-]*://|^//|[Ww][Ww][Ww]\\.)"
+            "pattern": "(?:[A-Za-z][A-Za-z0-9+.-]*://|^//|\\b[Ww][Ww][Ww]\\.)"
           },
           {
             "pattern": "(?:^|:)(?:[Hh][Tt][Tt][Pp][Ss]?|[Ff][Ii][Ll][Ee]|[Ff][Tt][Pp]|[Ss][Ss][Hh]|[Ss]3|[Gg][Ss]|[Mm][Aa][Ii][Ll][Tt][Oo]):"
@@ -147,6 +147,12 @@
           },
           {
             "pattern": "@"
+          },
+          {
+            "pattern": ":[0-9][0-9 -]{5,22}[0-9Xx]$"
+          },
+          {
+            "pattern": "::"
           },
           {
             "pattern": "(?:^|[^0-9])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?:$|[^0-9])"
