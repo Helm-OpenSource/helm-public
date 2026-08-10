@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 import Ajv from "ajv";
 import { describe, expect, it } from "vitest";
@@ -568,16 +569,23 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
       "proof:foo://example.invalid",
       "proof:HTTP:example.invalid",
       "proof:ahttp::x",
+      "proof:fe80::1:x",
       "proof:1:2:3:4:5:6:7:8",
+      "proof:1:2:3:4:5:6:7:8:x",
+      "proof:a:::x",
       "proof:999.999.999.999",
       "proof:123-456-789",
       "proof:1234-5678-X",
+      "proof:case:123-456-7890",
       "proof:TOKEN-VALUE",
       "proof:ghp_abcdefghijklmnop",
       "proof:eyJabcdefgh.ijklmnop",
       "proof:user@example.invalid",
       "workspace:cabcdef1234567ghijklmnopq",
       "workspace:c123456789012345678901234",
+      " proof:ordinary-ref",
+      "proof:ordinary-ref\t",
+      "proof:ordinary-ref\u00a0",
     ];
 
     for (const value of corpus) {
@@ -585,6 +593,51 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
         caioProPublicSafeRefSchema.safeParse(value).success,
       );
     }
+  });
+
+  it("rejects the same embedded IPv6 and segmented PII refs in complete payloads", () => {
+    const base = validPackInput();
+    for (const unsafeTaxonomyRef of [
+      "taxonomy:case:123-456-7890",
+      "taxonomy:fe80::1:x",
+      "taxonomy:1:2:3:4:5:6:7:8:x",
+      "taxonomy:a:::x",
+    ]) {
+      const payload = {
+        ...base,
+        taxonomy: [{ ...base.taxonomy[0], taxonomyRef: unsafeTaxonomyRef }],
+        evidenceApplicabilityRules: [
+          {
+            ...base.evidenceApplicabilityRules[0],
+            taxonomyRefs: [unsafeTaxonomyRef],
+          },
+        ],
+        candidateInputs: [
+          {
+            ...base.candidateInputs[0],
+            taxonomyRefs: [unsafeTaxonomyRef],
+          },
+        ],
+      };
+
+      expect(portablePackAccepts(payload), unsafeTaxonomyRef).toBe(false);
+      expect(
+        caioProPackOperatingInputSchema.safeParse(payload).success,
+        unsafeTaxonomyRef,
+      ).toBe(false);
+    }
+  });
+
+  it("rejects oversized portable refs without superlinear URL scanning", () => {
+    const definition = artifact().$defs.publicSafeRef;
+    const validate = new Ajv({ allErrors: true, schemaId: "auto" }).compile(
+      definition,
+    );
+    const oversizedRef = `proof:${"a".repeat(100_000)}`;
+    const startedAt = performance.now();
+
+    expect(validate(oversizedRef)).toBe(false);
+    expect(performance.now() - startedAt).toBeLessThan(1_500);
   });
 
   it("accepts bounded CUID-shaped refs with alphabetic entropy", () => {

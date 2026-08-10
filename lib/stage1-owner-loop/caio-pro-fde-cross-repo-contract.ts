@@ -222,22 +222,31 @@ const SECRET_OR_CONNECTION_PATTERN =
   /(?:password|passwd|secret|token|api[-_]?key|authorization|bearer|mysql|postgres(?:ql)?|mongodb|redis|jdbc|connection[-_]?string)/iu;
 const PII_LABEL_PATTERN =
   /(?:^|[:._-])(?:phone|mobile|tel|id(?:entity)?[-_]?card|ssn|bank[-_]?card|card[-_]?number|account[-_]?number)(?:$|[:._-])/iu;
-const URL_PATTERN = /(?:[a-z][a-z0-9+.-]*:\/\/|^\/\/|\bwww\.)/iu;
+const URL_PATTERN = /(?::\/\/|^\/\/|\bwww\.)/iu;
 const LOCATOR_SCHEME_PATTERN =
   /(?:^|:)(?:https?|file|ftp|ssh|s3|gs|mailto):/iu;
 const TOKEN_MATERIAL_PATTERN =
   /(?:^|:)(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{16,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/u;
 const EMAIL_PATTERN = /@/u;
 const DIGIT_LIKE_PATTERN = /^[0-9][0-9 -]{5,22}[0-9Xx]$/u;
+const DIGIT_LIKE_SUFFIX_PATTERN = /:[0-9][0-9 -]{5,22}[0-9Xx]$/u;
 const EMBEDDED_DIGIT_PII_PATTERN = /(?:[0-9]{7,22}|[0-9]{6,21}[Xx])/u;
 const CORE_GENERATED_CUID_REF_PATTERN =
   /^(?:workspace|opportunity|observation-run):c(?=[a-z0-9]*[a-z])[a-z0-9]{24}$/u;
 const EMBEDDED_IPV4_SHAPE_PATTERN =
   /(?:^|[^0-9])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?:$|[^0-9])/u;
 const EMBEDDED_IPV4_PATTERN = /(?:^|[^0-9])((?:[0-9]{1,3}\.){3}[0-9]{1,3})(?=$|[^0-9])/gu;
+const EMBEDDED_FULL_IPV6_PATTERN =
+  /(?:^|[^A-Fa-f0-9])(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}(?:$|[^A-Fa-f0-9])/u;
 
 function containsIpLiteral(value: string): boolean {
-  if (EMBEDDED_IPV4_SHAPE_PATTERN.test(value)) return true;
+  if (
+    value.includes("::") ||
+    EMBEDDED_IPV4_SHAPE_PATTERN.test(value) ||
+    EMBEDDED_FULL_IPV6_PATTERN.test(value)
+  ) {
+    return true;
+  }
   const candidates = new Set([value]);
   for (let index = 0; index < value.length; index += 1) {
     if ([":", "-", "_"].includes(value[index])) {
@@ -274,7 +283,8 @@ function opaqueRefIsPublicSafe(value: string): boolean {
   if (containsIpLiteral(opaqueId)) return false;
   if (
     !isCoreGeneratedCuidRef &&
-    (DIGIT_LIKE_PATTERN.test(opaqueId) ||
+    (DIGIT_LIKE_SUFFIX_PATTERN.test(value) ||
+      DIGIT_LIKE_PATTERN.test(opaqueId) ||
       EMBEDDED_DIGIT_PII_PATTERN.test(opaqueId))
   ) {
     return false;
@@ -295,7 +305,6 @@ function opaqueRefIsPublicSafe(value: string): boolean {
 function boundedOpaqueRef(prefix: string) {
   return z
     .string()
-    .trim()
     .min(prefix.length + 2)
     .max(CAIO_PRO_FDE_CONTRACT_LIMITS.refLength)
     .regex(OPAQUE_REF_PATTERN)
@@ -305,7 +314,6 @@ function boundedOpaqueRef(prefix: string) {
 
 export const caioProPublicSafeRefSchema = z
   .string()
-  .trim()
   .min(3)
   .max(CAIO_PRO_FDE_CONTRACT_LIMITS.refLength)
   .regex(OPAQUE_REF_PATTERN)
@@ -477,7 +485,7 @@ const caioProFdeCrossRepoInterfaceContractBasis = {
     semanticVerifierRevision:
       CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION,
     publicSafeRefPolicyRevision:
-      "helm.caio-pro-fde.public-safe-ref-policy.v5" as const,
+      "helm.caio-pro-fde.public-safe-ref-policy.v6" as const,
     trustedEvidenceResolver:
       "workspace-scoped-active-observation-source-run" as const,
     packConsumer:

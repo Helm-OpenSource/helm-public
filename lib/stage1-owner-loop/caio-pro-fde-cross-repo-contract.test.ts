@@ -15,6 +15,7 @@ import {
   CAIO_PRO_PRIVATE_EXECUTION_RESULT_PROJECTION_CONTRACT,
   CAIO_PRO_PRIVATE_EXECUTION_RESULT_PROJECTION_SCHEMA_VERSION,
   caioProPackOperatingInputSchema,
+  caioProPublicSafeRefSchema,
   validateCaioProPackOperatingInputSemanticRules,
   createCaioProPrivateExecutionResultProjection,
   validateCaioProFdeConsumerIdentity,
@@ -237,6 +238,22 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
         }).success,
         unsafeWorkspaceRef,
       ).toBe(false);
+    }
+  });
+
+  it("rejects non-canonical whitespace, embedded IPv6 and segmented digit PII refs", () => {
+    for (const unsafeRef of [
+      " proof:ordinary-ref",
+      "proof:ordinary-ref\t",
+      "proof:ordinary-ref\u00a0",
+      "proof:fe80::1:x",
+      "proof:1:2:3:4:5:6:7:8:x",
+      "proof:a:::x",
+      "proof:case:123-456-7890",
+    ]) {
+      expect(caioProPublicSafeRefSchema.safeParse(unsafeRef).success, unsafeRef).toBe(
+        false,
+      );
     }
   });
 
