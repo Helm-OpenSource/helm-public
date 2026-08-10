@@ -518,6 +518,33 @@ describe("CAIO operating question store", () => {
     });
   });
 
+  it("rejects an invited owner inside the canonical transaction before writes", async () => {
+    dbMock.$queryRaw.mockResolvedValueOnce([]);
+    dbMock.membership.findUnique.mockResolvedValue({
+      role: WorkspaceRole.OWNER,
+      status: MembershipStatus.INVITED,
+    });
+
+    await expect(
+      generateCaioOperatingQuestionPortfolio({
+        workspaceId: WORKSPACE_ID,
+        actorUserId: OWNER_USER_ID,
+        generationKey: "generation:synthetic-caio:invited-owner",
+        generatorRef: "generator:caio-operating-question",
+        modelRef: "model:synthetic-local",
+        candidates: Array.from({ length: 10 }, (_, index) =>
+          syntheticOperatingQuestionCandidate(index),
+        ),
+        auditRefs: ["audit:question-generation:invited-owner"],
+        now: NOW,
+      }),
+    ).rejects.toThrow("workspace_policy_access_lost");
+    expect(dbMock.caioOperatingQuestionPortfolio.create).not.toHaveBeenCalled();
+    expect(
+      dbMock.caioOperatingQuestionGenerationReceipt.create,
+    ).not.toHaveBeenCalled();
+  });
+
   it("validates a persisted v1 head but requires an explicit accepted G0 rollover before new generation", async () => {
     const historical = historicalGeneratedState();
     dbMock.$queryRaw.mockResolvedValueOnce([
@@ -993,6 +1020,23 @@ describe("CAIO operating question store", () => {
         actorUserRef: `user:${PRODUCTION_OWNER_USER_ID}`,
       }),
     );
+    expect(
+      policyAccessMock.assertWorkspacePolicyServiceAccess,
+    ).toHaveBeenCalledWith({
+      workspaceId: WORKSPACE_ID,
+      userId: PRODUCTION_OWNER_USER_ID,
+      actorType: ActorType.USER,
+      english: false,
+    });
+    expect(dbMock.membership.findUnique).toHaveBeenCalledWith({
+      where: {
+        workspaceId_userId: {
+          workspaceId: WORKSPACE_ID,
+          userId: PRODUCTION_OWNER_USER_ID,
+        },
+      },
+      select: { role: true, status: true },
+    });
     expect(dbMock.caioOperatingQuestionPortfolio.create).toHaveBeenCalledOnce();
     expect(
       dbMock.caioOperatingQuestionGenerationReceipt.create,

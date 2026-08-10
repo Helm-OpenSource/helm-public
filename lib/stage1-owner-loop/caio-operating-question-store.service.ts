@@ -257,7 +257,7 @@ async function assertPolicyAccessInTransaction(
   });
   if (
     !membership ||
-    membership.status === MembershipStatus.INACTIVE ||
+    membership.status !== MembershipStatus.ACTIVE ||
     !workspaceRoleHasCapability(
       membership.role,
       WORKSPACE_CAPABILITIES.MANAGE_POLICIES,

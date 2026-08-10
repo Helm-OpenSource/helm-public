@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_WORKBUDDY_FEATURE_FLAGS } from "@/lib/caio-collaboration/feature-flags";
+import { WORKSPACE_CAPABILITIES } from "@/lib/auth/authorization";
 import {
   createCaioGatewayHandler,
   type CaioGatewayHandlerDependencies,
@@ -20,6 +21,10 @@ function harness(input?: {
     portfolio: { portfolioId: "question-portfolio:1" },
     replayed: false,
   }));
+  const hasWorkspaceOperationCapability = vi.fn(async () => {
+    calls.push("operation-access");
+    return input?.operationAllowed ?? true;
+  });
   const dependencies = {
     preAuthRateLimiter: {
       claimSourceIpSlot: async () => {
@@ -51,10 +56,7 @@ function harness(input?: {
       },
     },
     operationResolver: {
-      hasWorkspaceOperationCapability: async () => {
-        calls.push("operation-access");
-        return input?.operationAllowed ?? true;
-      },
+      hasWorkspaceOperationCapability,
     },
     operatingQuestionGeneration: async (request: unknown) => {
       calls.push("question-generation");
@@ -99,6 +101,7 @@ function harness(input?: {
   return {
     calls,
     generation,
+    hasWorkspaceOperationCapability,
     handler: createCaioGatewayHandler(dependencies),
   };
 }
@@ -119,8 +122,11 @@ function request(body: unknown = {
 describe("operating-question production gateway route", () => {
   it("authenticates WorkBuddy, checks current Portfolio access, audits, then calls generation", async () => {
     const test = harness();
+    const controller = new AbortController();
 
-    await expect(test.handler(request())).resolves.toMatchObject({
+    await expect(
+      test.handler({ ...request(), signal: controller.signal }),
+    ).resolves.toMatchObject({
       status: 200,
       body: {
         receipt: { status: "generated" },
@@ -135,6 +141,12 @@ describe("operating-question production gateway route", () => {
       "audit",
       "question-generation",
     ]);
+    expect(test.hasWorkspaceOperationCapability).toHaveBeenCalledWith(
+      "workspace-1",
+      "user:owner-1",
+      WORKSPACE_CAPABILITIES.MANAGE_POLICIES,
+      { signal: controller.signal },
+    );
     expect(test.generation).toHaveBeenCalledWith(
       expect.objectContaining({
         principal: expect.objectContaining({
