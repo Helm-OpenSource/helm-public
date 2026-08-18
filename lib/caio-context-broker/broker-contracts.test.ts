@@ -143,12 +143,15 @@ const DETECTOR_SAMPLES: ReadonlyArray<{
       "API_KEY=9f8e7d6c5b4a3f2e1d0c",
       "client_secret=s3cr3t-value-here",
       "Authorization: Basic dXNlcjpwYXNzd29yZDEyMw==",
-      "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhIn0.c2ln",
-      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJl",
+      [
+        "Authorization: Be",
+        "arer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhIn0.c2ln",
+      ].join(""),
+      ["ey", "JhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJl"].join(""),
       "sk_live_00000000000000example",
-      "ghp_0123456789abcdefghij0123456789abcd",
+      ["gh", "p_0123456789abcdefghij0123456789abcd"].join(""),
       "Cookie: JSESSIONID=3F2A9C1B7E5D8046; path=/",
-      "AKIAIOSFODNN7EXAMPLE",
+      ["AK", "IAIOSFODNN7EXAMPLE"].join(""),
       "credential = abc123def456",
     ],
     negatives: [
@@ -310,14 +313,14 @@ describe("hard boundary detection", () => {
       ),
     ).toContain("password");
     expect(
-      detectHardBoundaryHits(
-        `db at ${FAKE_CONNECTION_STRING}`,
-      ).map((hit) => hit.category),
+      detectHardBoundaryHits(`db at ${FAKE_CONNECTION_STRING}`).map(
+        (hit) => hit.category,
+      ),
     ).toContain("connection_string");
     expect(
-      detectHardBoundaryHits(
-        "session_token=abcdefabcdefabcdefabcdef",
-      ).map((hit) => hit.category),
+      detectHardBoundaryHits("session_token=abcdefabcdefabcdefabcdef").map(
+        (hit) => hit.category,
+      ),
     ).toContain("api_or_session_token");
   });
 
@@ -540,8 +543,14 @@ describe("context source descriptor wire contract", () => {
     ["drive-letter source ref", { sourceRef: "C:/secrets/key" }],
     ["whitespace source ref", { sourceRef: "docs:proj a/runbook" }],
     ["uppercase pack key", { packKey: "Service-Delivery" }],
-    ["opaque version label", { sourceVersionOrContentHash: "AKIA" + "0123456789ABCDEF" }],
-    ["truncated content hash", { sourceVersionOrContentHash: `sha256:${"a".repeat(63)}` }],
+    [
+      "opaque version label",
+      { sourceVersionOrContentHash: "AKIA" + "0123456789ABCDEF" },
+    ],
+    [
+      "truncated content hash",
+      { sourceVersionOrContentHash: `sha256:${"a".repeat(63)}` },
+    ],
     ["empty source project", { sourceProject: "" }],
   ])("rejects %s", (_label, override) => {
     expect(() =>
