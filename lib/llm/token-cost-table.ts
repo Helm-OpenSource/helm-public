@@ -15,7 +15,7 @@
 
 import type { LLMProvider } from "@/lib/llm/types";
 
-export const PRICING_TABLE_VERSION = "2026-05-19";
+export const PRICING_TABLE_VERSION = "2026-08-18";
 
 export type TokenCost = {
   /** USD per 1M input tokens */
@@ -36,6 +36,30 @@ const COST_TABLE: Record<string, TokenCost> = {
   "qwen:qwen3.6-plus": { inputPerMillion: 0.55, outputPerMillion: 1.65, source: "aliyun dashscope 2026-05 (converted)" },
   "qwen:qwen-max": { inputPerMillion: 2.78, outputPerMillion: 8.33, source: "aliyun dashscope 2026-05 (converted)" },
   "qwen:qwen-turbo": { inputPerMillion: 0.04, outputPerMillion: 0.14, source: "aliyun dashscope 2026-05 (converted)" },
+
+  // Qwen 3.7 series, cn-beijing list price read off the Model Studio pricing
+  // page on 2026-08-18. These models are tier-priced by the INPUT token count
+  // of a single request; the entries below carry the 0–256K tier because every
+  // call this codebase makes is orders of magnitude below that ceiling
+  // (max_completion_tokens defaults to 900 and prompts are a few KB).
+  //
+  // The 256K–1M tier, for whoever enables long-context calls later:
+  //   qwen3.7-plus   input 0.826   output 1.101   (output is flat across tiers)
+  //   qwen3.7-flash  input 0.66    output 3.961
+  // Switching a workflow to long context WITHOUT revisiting this table
+  // under-counts spend by ~3x on input and ~4x on flash output.
+  "qwen:qwen3.7-plus": { inputPerMillion: 0.276, outputPerMillion: 1.101, source: "aliyun model studio cn-beijing list price 2026-08-18, 0-256K tier" },
+  "qwen:qwen3.7-flash": { inputPerMillion: 0.165, outputPerMillion: 0.99, source: "aliyun model studio cn-beijing list price 2026-08-18, 0-256K tier" },
+  "qwen:qwen3.7-max": { inputPerMillion: 1.65, outputPerMillion: 4.951, source: "aliyun model studio cn-beijing list price 2026-08-18" },
+
+  // qwen3.8-max is DELIBERATELY ABSENT. It is offered on the model list but
+  // its price was not published on the pricing page as of 2026-08-18, so it
+  // resolves to UNKNOWN_MODEL_FALLBACK below — deliberately ~9x the priciest
+  // Qwen entry here. That is the correct behaviour for an unpriced model, and
+  // a guarding test pins it. Do NOT "fix" it by interpolating a plausible
+  // number: a guessed price in a table whose whole job is budget enforcement
+  // is worse than an honest worst case. Add a real entry only once the vendor
+  // publishes one.
 };
 
 /**

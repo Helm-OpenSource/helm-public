@@ -69,6 +69,29 @@ const MODEL_CATALOG: LLMModelCatalogGroup[] = [
     vendor: "qwen",
     label: "Qwen",
     models: [
+      // 3.7/3.8 first: these are the models with structured-output (json_schema)
+      // support, which every LLM workflow in this repo requires. The older
+      // entries below stay selectable but only satisfy json_object.
+      {
+        id: "qwen3.8-max",
+        label: "Qwen 3.8 Max",
+        vendor: "qwen",
+      },
+      {
+        id: "qwen3.7-max",
+        label: "Qwen 3.7 Max",
+        vendor: "qwen",
+      },
+      {
+        id: "qwen3.7-plus",
+        label: "Qwen 3.7 Plus",
+        vendor: "qwen",
+      },
+      {
+        id: "qwen3.7-flash",
+        label: "Qwen 3.7 Flash",
+        vendor: "qwen",
+      },
       {
         id: "qwen3.6-plus",
         label: "Qwen 3.6 Plus",
