@@ -20,6 +20,23 @@ describe("llm model catalog", () => {
     expect(catalog[0]?.models.some((model) => model.id === getDefaultLocalGemmaModel())).toBe(true);
   });
 
+  it("offers the structured-output-capable qwen models in the settings picker", () => {
+    // Every LLM workflow in this repo sends response_format json_schema, which
+    // DashScope only honours on the 3.7-Plus / 3.7-Max / 3.8-Max families. The
+    // picker used to stop at 3.6, so an operator could not select any model
+    // that actually satisfies the requests the app makes.
+    const qwen = getLLMModelCatalog().find((group) => group.vendor === "qwen");
+    const ids = qwen?.models.map((model) => model.id) ?? [];
+
+    expect(ids).toContain("qwen3.8-max");
+    expect(ids).toContain("qwen3.7-max");
+    expect(ids).toContain("qwen3.7-plus");
+    expect(ids).toContain("qwen3.7-flash");
+    // Newest first, so the picker's default reading order matches what we want
+    // an operator to reach for.
+    expect(ids.indexOf("qwen3.8-max")).toBeLessThan(ids.indexOf("qwen3.6-plus"));
+  });
+
   it("checks healthz endpoint and does not require /models", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);

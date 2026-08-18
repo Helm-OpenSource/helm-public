@@ -25,6 +25,39 @@ describe("token-cost-table · resolveTokenCost", () => {
     expect(cost.outputPerMillion).toBeGreaterThan(0);
   });
 
+  it("prices the qwen3.7 models this deployment standardises on", () => {
+    // Regression guard: before 2026-08-18 none of these were in the table, so
+    // every call on them was costed at the $15/$60 unknown fallback — roughly
+    // 50x the real price of plus. A silently over-counted spend figure is the
+    // failure mode this test exists to prevent.
+    const plus = resolveTokenCost("qwen", "qwen3.7-plus");
+    expect(plus.inputPerMillion).toBe(0.276);
+    expect(plus.outputPerMillion).toBe(1.101);
+
+    const flash = resolveTokenCost("qwen", "qwen3.7-flash");
+    expect(flash.inputPerMillion).toBe(0.165);
+
+    const max = resolveTokenCost("qwen", "qwen3.7-max");
+    expect(max.inputPerMillion).toBe(1.65);
+
+    // Every entry must say where its number came from; a price with no
+    // provenance cannot be re-verified when the vendor changes it.
+    for (const cost of [plus, flash, max]) {
+      expect(cost.source).toContain("2026-08-18");
+      expect(cost.source).not.toContain("unknown");
+    }
+  });
+
+  it("leaves the unpriced qwen3.8-max on the worst-case fallback", () => {
+    // Intentional, not an omission: the vendor had not published a price as of
+    // 2026-08-18. Pinned so that nobody closes the gap with a guessed number —
+    // if this test starts failing because a real entry was added, update it
+    // together with the source citation in the table.
+    const cost = resolveTokenCost("qwen", "qwen3.8-max");
+    expect(cost.source).toContain("unknown");
+    expect(cost.inputPerMillion).toBeGreaterThan(resolveTokenCost("qwen", "qwen3.7-max").inputPerMillion);
+  });
+
   it("returns expensive worst-case fallback for unknown model", () => {
     const cost = resolveTokenCost("openai", "gpt-99-unknown");
     expect(cost.inputPerMillion).toBeGreaterThanOrEqual(15);
