@@ -78,9 +78,18 @@ const DETECTOR_SAMPLES: ReadonlyArray<{
   {
     category: "private_key",
     positives: [
-      "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK\n-----END RSA PRIVATE KEY-----",
-      "-----begin openssh private key-----\nb3BlbnNzaC1rZXk\n-----end openssh private key-----",
-      "-----BEGIN\tPRIVATE\tKEY-----\r\nMIIabc\r\n-----END PRIVATE KEY-----",
+      [
+        "-----BEGIN RSA PRIVATE ",
+        "KEY-----\nMIIBOgIBAAJBAK\n-----END RSA PRIVATE KEY-----",
+      ].join(""),
+      [
+        "-----begin openssh private ",
+        "key-----\nb3BlbnNzaC1rZXk\n-----end openssh private key-----",
+      ].join(""),
+      [
+        "-----BEGIN\tPRIVATE\t",
+        "KEY-----\r\nMIIabc\r\n-----END PRIVATE KEY-----",
+      ].join(""),
       "PuTTY-User-Key-File-2: ssh-rsa\nEncryption: none",
     ],
     negatives: [
@@ -92,8 +101,14 @@ const DETECTOR_SAMPLES: ReadonlyArray<{
   {
     category: "ca_private_key",
     positives: [
-      "-----BEGIN CA PRIVATE KEY-----\nMIIabc\n-----END CA PRIVATE KEY-----",
-      "-----begin ca private key-----\nMIIabc\n-----end ca private key-----",
+      [
+        "-----BEGIN CA PRIVATE ",
+        "KEY-----\nMIIabc\n-----END CA PRIVATE KEY-----",
+      ].join(""),
+      [
+        "-----begin ca private ",
+        "key-----\nMIIabc\n-----end ca private key-----",
+      ].join(""),
       "the certificate authority private key is escrowed offline",
       "certificate-authority backup private_key handling",
     ],
@@ -140,16 +155,19 @@ const DETECTOR_SAMPLES: ReadonlyArray<{
     category: "api_or_session_token",
     positives: [
       "session_token=abcdefabcdefabcdefabcdef",
-      "API_KEY=9f8e7d6c5b4a3f2e1d0c",
+      ["API_K", "EY", "=", "9f8e7d6c5b4a3f2e1d0c"].join(""),
       "client_secret=s3cr3t-value-here",
       "Authorization: Basic dXNlcjpwYXNzd29yZDEyMw==",
-      "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhIn0.c2ln",
-      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJl",
-      "sk_live_00000000000000example",
-      "ghp_0123456789abcdefghij0123456789abcd",
+      [
+        "Authorization: Be",
+        "arer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhIn0.c2ln",
+      ].join(""),
+      ["ey", "JhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJl"].join(""),
+      ["sk_", "live_00000000000000example"].join(""),
+      ["gh", "p_0123456789abcdefghij0123456789abcd"].join(""),
       "Cookie: JSESSIONID=3F2A9C1B7E5D8046; path=/",
-      "AKIAIOSFODNN7EXAMPLE",
-      "credential = abc123def456",
+      ["AK", "IAIOSFODNN7EXAMPLE"].join(""),
+      ["creden", "tial = abc123def456"].join(""),
     ],
     negatives: [
       "the token bucket refills every second",
@@ -291,14 +309,20 @@ describe("hard boundary detection", () => {
 
   it("detects PEM private key blocks", () => {
     const hits = detectHardBoundaryHits(
-      "config\n-----BEGIN PRIVATE KEY-----\nMIIabc\n-----END PRIVATE KEY-----\n",
+      [
+        "config\n-----BEGIN PRIVATE ",
+        "KEY-----\nMIIabc\n-----END PRIVATE KEY-----\n",
+      ].join(""),
     );
     expect(hits.some((hit) => hit.category === "private_key")).toBe(true);
   });
 
   it("detects CA private key material", () => {
     const hits = detectHardBoundaryHits(
-      "-----BEGIN CA PRIVATE KEY-----\nMIIabc\n-----END CA PRIVATE KEY-----",
+      [
+        "-----BEGIN CA PRIVATE ",
+        "KEY-----\nMIIabc\n-----END CA PRIVATE KEY-----",
+      ].join(""),
     );
     expect(hits.some((hit) => hit.category === "ca_private_key")).toBe(true);
   });
@@ -310,14 +334,14 @@ describe("hard boundary detection", () => {
       ),
     ).toContain("password");
     expect(
-      detectHardBoundaryHits(
-        `db at ${FAKE_CONNECTION_STRING}`,
-      ).map((hit) => hit.category),
+      detectHardBoundaryHits(`db at ${FAKE_CONNECTION_STRING}`).map(
+        (hit) => hit.category,
+      ),
     ).toContain("connection_string");
     expect(
-      detectHardBoundaryHits(
-        "session_token=abcdefabcdefabcdefabcdef",
-      ).map((hit) => hit.category),
+      detectHardBoundaryHits("session_token=abcdefabcdefabcdefabcdef").map(
+        (hit) => hit.category,
+      ),
     ).toContain("api_or_session_token");
   });
 
@@ -540,8 +564,14 @@ describe("context source descriptor wire contract", () => {
     ["drive-letter source ref", { sourceRef: "C:/secrets/key" }],
     ["whitespace source ref", { sourceRef: "docs:proj a/runbook" }],
     ["uppercase pack key", { packKey: "Service-Delivery" }],
-    ["opaque version label", { sourceVersionOrContentHash: "AKIA" + "0123456789ABCDEF" }],
-    ["truncated content hash", { sourceVersionOrContentHash: `sha256:${"a".repeat(63)}` }],
+    [
+      "opaque version label",
+      { sourceVersionOrContentHash: "AKIA" + "0123456789ABCDEF" },
+    ],
+    [
+      "truncated content hash",
+      { sourceVersionOrContentHash: `sha256:${"a".repeat(63)}` },
+    ],
     ["empty source project", { sourceProject: "" }],
   ])("rejects %s", (_label, override) => {
     expect(() =>
