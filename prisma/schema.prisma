@@ -1391,6 +1391,8 @@ model Workspace {
   workBuddyMutationReceipts            WorkBuddyMutationReceipt[]
   workBuddyPresenceChallenges          WorkBuddyPresenceChallenge[]
   workBuddyPromptResponseReceipts      WorkBuddyPromptResponseReceipt[]
+  memberWorkSignalChallenges           MemberWorkSignalChallenge[]
+  memberWorkSignalReceipts             MemberWorkSignalReceipt[]
   caioAccessTokens                     CaioAccessToken[]
   caioPairingRequests                  CaioPairingRequest[]
   caioContextNegativeRules             CaioContextNegativeRule[]
@@ -6672,6 +6674,58 @@ model WorkBuddyPromptResponseReceipt {
   @@unique([id, workspaceId], map: "WBPromptResponse_id_workspace_key")
   @@unique([workspaceId, idempotencyKey], map: "WBPromptResponse_workspace_idem_key")
   @@index([deliveryObjectId, workspaceId, recordedAt], map: "WBPromptResponse_envelope_workspace_time_idx")
+}
+
+/// Member Gateway M2b: one-time work-signal challenge (spec §6.2).
+/// Consumption is the only mutation; everything else is append-only.
+model MemberWorkSignalChallenge {
+  id                    String    @id
+  workspaceId           String
+  memberRef             String
+  deviceRegistrationRef String
+  clientId              String
+  objectRef             String
+  objectVersion         Int
+  payloadHash           String
+  issuedAt              DateTime
+  expiresAt             DateTime
+  consumedAt            DateTime?
+  consumptionReceiptRef String?
+  createdAt             DateTime  @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWSignalChallenge_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "MWSignalChallenge_id_workspace_key")
+  @@index([workspaceId, memberRef], map: "MWSignalChallenge_workspace_member_idx")
+}
+
+/// Member Gateway M2b: append-only candidate work-signal receipt (spec §5).
+/// UPDATE/DELETE are blocked by triggers; a receipt can be superseded at
+/// most once (unique on supersedesReceiptRef).
+model MemberWorkSignalReceipt {
+  id                    String   @id
+  workspaceId           String
+  memberRef             String
+  deviceRegistrationRef String
+  clientId              String
+  objectRef             String
+  objectVersion         Int
+  kind                  String
+  payloadJson           String   @db.LongText
+  payloadHash           String
+  policyRef             String
+  policyVersion         Int
+  submittedAt           DateTime
+  candidate             Boolean
+  taint                 String
+  challengeRef          String
+  supersedesReceiptRef  String?
+  createdAt             DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWSignalReceipt_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "MWSignalReceipt_id_workspace_key")
+  @@unique([workspaceId, challengeRef], map: "MWSignalReceipt_workspace_challenge_key")
+  @@unique([workspaceId, supersedesReceiptRef], map: "MWSignalReceipt_workspace_supersedes_key")
+  @@index([workspaceId, objectRef], map: "MWSignalReceipt_workspace_object_idx")
 }
 
 
