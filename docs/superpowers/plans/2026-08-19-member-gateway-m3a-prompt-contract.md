@@ -225,3 +225,17 @@ Commit: `feat(member-gateway): extend frozen-contract gate to prompt slice`
    `validateHumanResponse`。
 4. M3b(队列持久化:投递回执、幂等、cursor、withdraw/expire/snooze 的
    append-only 记录)与运行时接线留待后续切片。
+5. 最终 review 加固:`decideMemberPromptDelivery` 对"无规则 critical"设
+   防御——bypass 只属于携带确定性规则引用的 critical,无规则时按 normal
+   处理(不假设调用方先跑过 validate)。
+6. 组合义务(M3b 必须承接):投递/unsnooze 回执必须内嵌 `deliver: true`
+   的判定结果;respond 前必须先做过期清扫——转移判定本身不看时间,时序
+   一致性由 store 层组合保证。
+7. 范围判断成文:spec §5 的"稍后处理"由 `snooze` 转移承载而非响应 kind;
+   "打开"未建模;障碍/客户信号走 M2 信号通道而非 prompt 响应;
+   `suppressed` 仅可从 `pending` 到达(投递前策略决定)。
+8. `judgeAuthorityBearingAction` 当前只查授权引用在场;"对该成员、该对象、
+   该动作"的显式绑定在 M3b 接线时钉死。非绩效化约束的冻结字面量放到
+   M3b 回执形状上。
+9. 门禁 marker 是子串在场检查,是冻结字面量测试之后的纵深防御而非首要
+   机制(单删数组行不触发,typecheck 与 toEqual 测试才是首要冻结)。

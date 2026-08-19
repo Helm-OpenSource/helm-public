@@ -125,7 +125,15 @@ export function decideMemberPromptDelivery(
   if (nowMs === null || expiresAtMs === null || nowMs >= expiresAtMs) {
     return { deliver: false, heldReason: "prompt_expired" };
   }
-  if (prompt.severity === "critical") {
+  // Defensive fail-closed: the quiet-hours/DND bypass belongs only to a
+  // critical severity backed by a deterministic rule (validateMemberPrompt
+  // rejects rule-less critical, but this judgment does not assume callers
+  // validated first). A rule-less critical is treated as normal.
+  if (
+    prompt.severity === "critical" &&
+    prompt.severityRuleRef !== null &&
+    prompt.severityRuleRef.trim().length > 0
+  ) {
     return { deliver: true, heldReason: null };
   }
   if (ctx.inQuietHours) {

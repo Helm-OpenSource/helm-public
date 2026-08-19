@@ -230,6 +230,16 @@ describe("decideMemberPromptDelivery", () => {
     ).toEqual({ deliver: false, heldReason: "held_do_not_disturb" });
   });
 
+  it("a rule-less critical prompt gets no quiet-hours bypass", () => {
+    const ruleless = makePrompt({
+      severity: "critical",
+      severityRuleRef: null,
+    });
+    expect(
+      decideMemberPromptDelivery(ruleless, makeCtx({ inQuietHours: true })),
+    ).toEqual({ deliver: false, heldReason: "held_quiet_hours" });
+  });
+
   it("delivers a critical prompt through quiet hours", () => {
     const critical = makePrompt({
       severity: "critical",
