@@ -308,6 +308,16 @@ describe("decideMemberProjection", () => {
     );
     expect(decision.providerRef).toBe("");
   });
+
+  it("incomplete freshness evidence blocks as classification_unknown", () => {
+    for (const bad of [null, Number.NaN, -1]) {
+      const decision = decideMemberProjection(
+        makeProjectionInput({ freshnessMinutes: bad as number | null }),
+      );
+      expect(decision.projection).toBeNull();
+      expect(decision.blockReason).toBe("classification_unknown");
+    }
+  });
 });
 
 function makeEnvelope(
@@ -372,7 +382,7 @@ describe("validateMemberToolEnvelope", () => {
     const errors = validateMemberToolEnvelope(envelope).errors;
     expect(errors).toContain("projection_policy_ref_missing");
     expect(errors).toContain("projection_policy_version_invalid");
-    expect(errors).toContain("purpose_missing");
+    expect(errors).toContain("purpose_missing_for_projection");
   });
 
   it("rejects ok-with-error and error-with-data shapes", () => {
@@ -428,5 +438,60 @@ describe("validateMemberToolEnvelope", () => {
     expect(validateMemberToolEnvelope(envelope).errors).toContain(
       "projected_with_block_reason",
     );
+  });
+
+  it("a failure envelope must carry an error", () => {
+    expect(
+      validateMemberToolEnvelope(makeEnvelope({ ok: false, data: null }))
+        .errors,
+    ).toContain("error_missing");
+  });
+
+  it("rejects non-finite or negative freshness on projecting decisions", () => {
+    for (const bad of [Number.NaN, -3]) {
+      const envelope = makeEnvelope();
+      envelope.boundary.decision.freshnessMinutes = bad;
+      expect(validateMemberToolEnvelope(envelope).errors).toContain(
+        "freshness_invalid_for_projection",
+      );
+    }
+  });
+
+  it("every producer decision wraps into a valid well-formed envelope", () => {
+    const inputs = [
+      makeProjectionInput(),
+      makeProjectionInput({
+        classification: {
+          sensitivity: "confidential",
+          processingDisposition: "local_only",
+          classifiedAt: "2026-08-19T00:00:00Z",
+        },
+      }),
+      makeProjectionInput({
+        surface: { allowed: false, deniedDimensions: ["tool_scope"] },
+      }),
+      makeProjectionInput({ purpose: "" }),
+      makeProjectionInput({ providerRef: null }),
+      makeProjectionInput({ classification: null }),
+      makeProjectionInput({ freshnessMinutes: null }),
+      makeProjectionInput({
+        classification: {
+          sensitivity: "restricted",
+          processingDisposition: "prohibited",
+          classifiedAt: "2026-08-19T00:00:00Z",
+        },
+      }),
+    ];
+    for (const input of inputs) {
+      const decision = decideMemberProjection(input);
+      const envelope = makeEnvelope({
+        data: decision.projection === null ? null : { objectKind: "case" },
+      });
+      envelope.boundary.decision = decision;
+      expect(validateMemberToolEnvelope(envelope)).toEqual({
+        valid: true,
+        errors: [],
+      });
+    }
   });
 });

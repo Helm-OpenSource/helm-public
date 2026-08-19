@@ -104,6 +104,11 @@ export type MemberProjectionInput = {
 // restricted + local_only and never projects remotely). An unparseable
 // classifiedAt is still carried onto the decision evidence verbatim as
 // observed input; only the null-classification path carries null.
+// Classification evidence is complete only when classifiedAt is a strict
+// instant AND the producer supplied a non-negative finite freshness;
+// anything less blocks as classification_unknown. Preconditions:
+// projectionPolicyRef/Version identify the caller's active policy and are
+// copied verbatim — judging them is the envelope validator's job.
 export function decideMemberProjection(
   input: MemberProjectionInput,
 ): MemberProjectionDecision {
@@ -131,7 +136,10 @@ export function decideMemberProjection(
   }
   if (
     input.classification === null ||
-    parseInstant(input.classification.classifiedAt) === null
+    parseInstant(input.classification.classifiedAt) === null ||
+    input.freshnessMinutes === null ||
+    !Number.isFinite(input.freshnessMinutes) ||
+    input.freshnessMinutes < 0
   ) {
     return {
       ...base,
@@ -164,6 +172,9 @@ export function decideMemberProjection(
 // decision must carry its full evidence (classifiedAt, freshnessMinutes,
 // providerRef); blocked decisions are exempt — their evidence fields hold
 // whatever was observed, including the "" provider sentinel.
+// Literal membership of projection/blockReason values and serverTime
+// format are trusted to the TypeScript layer; this validator judges
+// cross-field consistency and evidence completeness only.
 export function validateMemberToolEnvelope(
   envelope: MemberToolEnvelope<unknown>,
 ): ContractValidation {
@@ -183,6 +194,9 @@ export function validateMemberToolEnvelope(
   if (!envelope.ok && envelope.data !== null) {
     errors.push("error_with_data");
   }
+  if (!envelope.ok && envelope.error === null) {
+    errors.push("error_missing");
+  }
   const decision = envelope.boundary.decision;
   if (!hasRef(decision.projectionPolicyRef)) {
     errors.push("projection_policy_ref_missing");
@@ -192,9 +206,6 @@ export function validateMemberToolEnvelope(
     decision.projectionPolicyVersion < 1
   ) {
     errors.push("projection_policy_version_invalid");
-  }
-  if (!hasRef(decision.purpose)) {
-    errors.push("purpose_missing");
   }
   if (decision.projection === null && decision.blockReason === null) {
     errors.push("blocked_without_reason");
@@ -208,9 +219,17 @@ export function validateMemberToolEnvelope(
     }
     if (decision.freshnessMinutes === null) {
       errors.push("freshness_missing_for_projection");
+    } else if (
+      !Number.isFinite(decision.freshnessMinutes) ||
+      decision.freshnessMinutes < 0
+    ) {
+      errors.push("freshness_invalid_for_projection");
     }
     if (!hasRef(decision.providerRef)) {
       errors.push("provider_ref_missing_for_projection");
+    }
+    if (!hasRef(decision.purpose)) {
+      errors.push("purpose_missing_for_projection");
     }
   }
   if (envelope.data !== null && decision.projection === null) {
