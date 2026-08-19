@@ -1,8 +1,11 @@
 // Deterministic judgment for the Member Gateway read layer. Pure functions,
 // no IO. Fail-closed: missing evidence is always a denial.
 
+import { METADATA_ONLY_FIELD_WHITELIST } from "@/lib/member-gateway/types";
 import type {
+  MemberObjectClassification,
   MemberPrincipal,
+  MemberProjectionDecision,
   MemberReadSurfaceDecision,
   MemberReadSurfaceDimension,
   MemberReadSurfaceInput,
@@ -74,4 +77,78 @@ export function decideMemberReadSurface(
     return { allowed: false, deniedDimensions: [first, ...rest] };
   }
   return { allowed: true, deniedDimensions: [] };
+}
+
+function isInstant(value: string): boolean {
+  return !Number.isNaN(Date.parse(value));
+}
+
+export type MemberProjectionInput = {
+  surface: MemberReadSurfaceDecision;
+  classification: MemberObjectClassification | null;
+  // Age of the classification at decision time, computed by the producer;
+  // carried onto the decision evidence (spec §8.2).
+  freshnessMinutes: number | null;
+  // The tenant-approved provider profile for this client; null when the
+  // client's provider is not on the tenant egress allowlist.
+  providerRef: string | null;
+  purpose: string;
+  projectionPolicyRef: string;
+  projectionPolicyVersion: number;
+  requestedFields: readonly string[];
+};
+
+// Projection judgment (spec §8.2). Order matters and is fail-closed:
+// surface → purpose → provider → classification → disposition ladder.
+// A classification whose classifiedAt cannot be parsed as an instant is
+// treated as unknown (spec §8.1: unknown defaults to restricted +
+// local_only and never projects remotely).
+export function decideMemberProjection(
+  input: MemberProjectionInput,
+): MemberProjectionDecision {
+  const base = {
+    projectionPolicyRef: input.projectionPolicyRef,
+    projectionPolicyVersion: input.projectionPolicyVersion,
+    providerRef: input.providerRef ?? "",
+    purpose: input.purpose,
+    classifiedAt: input.classification?.classifiedAt ?? null,
+    freshnessMinutes:
+      input.classification === null ? null : input.freshnessMinutes,
+    deniedFields: [] as readonly string[],
+  };
+  if (!input.surface.allowed) {
+    return { ...base, projection: null, blockReason: "read_surface_denied" };
+  }
+  if (!hasRef(input.purpose)) {
+    return { ...base, projection: null, blockReason: "purpose_missing" };
+  }
+  if (!hasRef(input.providerRef)) {
+    return { ...base, projection: null, blockReason: "provider_not_approved" };
+  }
+  if (
+    input.classification === null ||
+    !isInstant(input.classification.classifiedAt)
+  ) {
+    return {
+      ...base,
+      projection: null,
+      blockReason: "classification_unknown",
+    };
+  }
+  if (input.classification.processingDisposition === "prohibited") {
+    return { ...base, projection: null, blockReason: "LOCAL_VIEW_REQUIRED" };
+  }
+  if (input.classification.processingDisposition === "local_only") {
+    const whitelist = new Set<string>(METADATA_ONLY_FIELD_WHITELIST);
+    const deniedFields = input.requestedFields.filter(
+      (field) => !whitelist.has(field),
+    );
+    return {
+      ...base,
+      projection: "metadata_only",
+      deniedFields,
+      blockReason: null,
+    };
+  }
+  return { ...base, projection: "remote_projected", blockReason: null };
 }
