@@ -66,6 +66,33 @@ describe("validateMemberPrincipal", () => {
       validateMemberPrincipal(makePrincipal({ clientId: "" })).errors,
     ).toContain("client_id_missing");
   });
+
+  it("rejects missing workspace and member refs", () => {
+    expect(
+      validateMemberPrincipal(makePrincipal({ workspaceRef: "" })).errors,
+    ).toContain("workspace_ref_missing");
+    expect(
+      validateMemberPrincipal(makePrincipal({ memberRef: "" })).errors,
+    ).toContain("member_ref_missing");
+  });
+
+  it("an empty principal accumulates all five errors", () => {
+    const result = validateMemberPrincipal({
+      workspaceRef: "",
+      memberRef: "",
+      sessionRef: "",
+      deviceRegistrationRef: "",
+      clientId: "",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual([
+      "workspace_ref_missing",
+      "member_ref_missing",
+      "session_ref_missing",
+      "device_registration_missing",
+      "client_id_missing",
+    ]);
+  });
 });
 
 describe("decideMemberReadSurface", () => {
@@ -104,5 +131,29 @@ describe("decideMemberReadSurface", () => {
     );
     expect(decision.allowed).toBe(false);
     expect(decision.deniedDimensions).toEqual(["live_membership"]);
+  });
+
+  it("denies all seven dimensions in frozen order when nothing is authorized", () => {
+    const decision = decideMemberReadSurface(
+      makeSurfaceInput({
+        liveMembershipRef: null,
+        toolScopeRef: null,
+        objectRelationshipAuthorizationRef: null,
+        fieldPurposePolicyRef: null,
+        sourceAuthorizationRef: null,
+        tenantProviderEgressPolicyRef: null,
+        classification: null,
+      }),
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.deniedDimensions).toEqual([
+      "live_membership",
+      "tool_scope",
+      "object_relationship_authorization",
+      "field_purpose_policy",
+      "source_authorization",
+      "tenant_provider_egress_policy",
+      "current_classification",
+    ]);
   });
 });

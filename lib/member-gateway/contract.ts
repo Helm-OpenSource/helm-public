@@ -39,6 +39,9 @@ export function validateMemberPrincipal(
 // Seven-way intersection (spec §8.1). Every dimension must present explicit
 // evidence per object per call; the decision names every denied dimension so
 // callers can log a machine-readable block reason.
+// This function judges only the evidence it is given: verifying that each
+// ref actually binds to this (workspace, member, object) triple is the
+// caller/storage layer's responsibility.
 export function decideMemberReadSurface(
   input: MemberReadSurfaceInput,
 ): MemberReadSurfaceDecision {
@@ -64,6 +67,8 @@ export function decideMemberReadSurface(
   if (input.classification === null) {
     denied.push("current_classification");
   }
+  // The destructure narrows to the non-empty tuple the decision type
+  // requires, without an assertion.
   const [first, ...rest] = denied;
   if (first !== undefined) {
     return { allowed: false, deniedDimensions: [first, ...rest] };
