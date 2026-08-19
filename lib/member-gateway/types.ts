@@ -119,6 +119,9 @@ export type MemberProjectionDecision = {
   providerRef: string;
   purpose: string;
   classifiedAt: string | null;
+  // Age of the classification at decision time, computed by the producer;
+  // null when classification is absent.
+  freshnessMinutes: number | null;
   deniedFields: readonly string[];
   blockReason: MemberProjectionBlockReason | null;
 };

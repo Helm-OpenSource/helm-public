@@ -57,4 +57,20 @@ describe("member-gateway frozen literals", () => {
     expect(MEMBER_PROJECTION_BLOCK_REASONS).toContain("read_surface_denied");
     expect(MEMBER_PROJECTION_BLOCK_REASONS).toContain("classification_unknown");
   });
+
+  it("projection decision evidence carries classification freshness", () => {
+    const decision: import("@/lib/member-gateway/types").MemberProjectionDecision =
+      {
+        projection: "remote_projected",
+        projectionPolicyRef: "projection-policy-1",
+        projectionPolicyVersion: 1,
+        providerRef: "provider-profile-1",
+        purpose: "call_preparation",
+        classifiedAt: "2026-08-19T00:00:00Z",
+        freshnessMinutes: 15,
+        deniedFields: [],
+        blockReason: null,
+      };
+    expect(decision.freshnessMinutes).toBe(15);
+  });
 });
