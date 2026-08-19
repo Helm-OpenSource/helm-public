@@ -86,7 +86,13 @@ export type MemberReadSurfaceInput = {
 
 export type MemberReadSurfaceDecision =
   | { allowed: true; deniedDimensions: readonly [] }
-  | { allowed: false; deniedDimensions: readonly MemberReadSurfaceDimension[] };
+  | {
+      allowed: false;
+      deniedDimensions: readonly [
+        MemberReadSurfaceDimension,
+        ...MemberReadSurfaceDimension[],
+      ];
+    };
 
 // metadata_only is a field WHITELIST, not "everything except the body":
 // object existence, customer/project names, and person relationships leak.
@@ -94,6 +100,8 @@ export const METADATA_ONLY_FIELD_WHITELIST = [
   "objectKind",
   "evidenceRef",
   "classifiedAt",
+  // Projected-object field, distinct from the decision-evidence
+  // freshnessMinutes on MemberProjectionDecision.
   "freshness",
   "requiresLocalView",
 ] as const;
@@ -101,6 +109,8 @@ export const METADATA_ONLY_FIELD_WHITELIST = [
 export type MetadataOnlyField = (typeof METADATA_ONLY_FIELD_WHITELIST)[number];
 
 export const MEMBER_PROJECTION_BLOCK_REASONS = [
+  // SCREAMING_CASE is intentional: the design spec names this literal
+  // (§8.2), and the CEO-loop gateway already returns it verbatim.
   "LOCAL_VIEW_REQUIRED",
   "read_surface_denied",
   "classification_unknown",

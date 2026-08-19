@@ -7,6 +7,7 @@ import {
   MEMBER_READ_SURFACE_DIMENSIONS,
   METADATA_ONLY_FIELD_WHITELIST,
 } from "@/lib/member-gateway/types";
+import type { MemberProjectionDecision } from "@/lib/member-gateway/types";
 
 describe("member-gateway frozen literals", () => {
   it("freezes the projection ladder to exactly two levels", () => {
@@ -59,18 +60,17 @@ describe("member-gateway frozen literals", () => {
   });
 
   it("projection decision evidence carries classification freshness", () => {
-    const decision: import("@/lib/member-gateway/types").MemberProjectionDecision =
-      {
-        projection: "remote_projected",
-        projectionPolicyRef: "projection-policy-1",
-        projectionPolicyVersion: 1,
-        providerRef: "provider-profile-1",
-        purpose: "call_preparation",
-        classifiedAt: "2026-08-19T00:00:00Z",
-        freshnessMinutes: 15,
-        deniedFields: [],
-        blockReason: null,
-      };
+    const decision: MemberProjectionDecision = {
+      projection: "remote_projected",
+      projectionPolicyRef: "projection-policy-1",
+      projectionPolicyVersion: 1,
+      providerRef: "provider-profile-1",
+      purpose: "call_preparation",
+      classifiedAt: "2026-08-19T00:00:00Z",
+      freshnessMinutes: 15,
+      deniedFields: [],
+      blockReason: null,
+    };
     expect(decision.freshnessMinutes).toBe(15);
   });
 });
