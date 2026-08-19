@@ -781,3 +781,28 @@ export function judgeSupersedingSignalReceipt(
 - candidate/taint 是冻结字面量类型:合法类型的回执不可能声称自己是事实或可信内容。
 - 不引入 CEO 环路的 `governed-mutation` zod 契约;语义对齐(一次性、5 分钟 TTL 上限、hash 绑定)但类型独立,运行时切片再决定是否共用存储。
 - 每 commit 过全量 `check:boundaries`(含 member-gateway 门禁)。
+
+---
+
+## As-built 记录(2026-08-19 执行完毕)
+
+分支 `feat/member-gateway-m2`,7 个实现 commit(`ec1c4dcb` … `c253997b`),
+最终 64/64 模块测试、`check:member-gateway`(含 signal 冻结 marker 与负向
+验证)与全量 `check:boundaries` 绿。
+
+相对本计划的偏离(review 驱动):
+
+1. `countLinks` 改为大小写不敏感(`/https?:\/\//gi`)——计划原 regex 可被
+   `HTTP://` 绕过 §9 链接上限;并注明 protocol-less 链接由运行时恶意内容
+   检查层负责。
+2. 过期边界为**排他**(`submittedAt >= expiresAt` 拒绝),比 CEO 环路
+   governed-mutation 的包含边界严一拍,系有意为之(成员上行是更低信任面),
+   已在代码注释与本记录中声明,不视为"镜像"偏差。
+3. 补齐计划遗漏的错误码测试(challenge 主体/对象绑定、版本、提交瞬间)与
+   窗口边界钉死测试(issuedAt 含、expiresAt 排他、TTL 恰好 5 分钟允许)。
+4. `judgeSupersedingSignalReceipt` 注释明确:两张回执假定为 store 层
+   合法行,判定只裁更正关系;objectVersion 允许跨链变化。
+5. `ContractValidation` import 因 no-unused-vars 从 Task 1 提交挪至
+   Task 2 提交;最终代码形状与计划一致。
+6. 文中测试计数为撰写时估计,最终为 64(计划各步计数存在 ±1 偏差,以
+   代码为准)。
