@@ -10,6 +10,7 @@ import type {
   MemberReadSurfaceDecision,
   MemberReadSurfaceDimension,
   MemberReadSurfaceInput,
+  MemberToolEnvelope,
 } from "@/lib/member-gateway/types";
 
 export type ContractValidation = { valid: boolean; errors: string[] };
@@ -154,4 +155,66 @@ export function decideMemberProjection(
     };
   }
   return { ...base, projection: "remote_projected", blockReason: null };
+}
+
+// Envelope validation (spec §6 / §8.2). The envelope is the only shape a
+// client ever sees. MemberToolEnvelope is deliberately a loose wire shape
+// (not a discriminated union): this validator owns the ok/data/error and
+// projection/blockReason consistency rules, fail-closed. A projecting
+// decision must carry its full evidence (classifiedAt, freshnessMinutes,
+// providerRef); blocked decisions are exempt — their evidence fields hold
+// whatever was observed, including the "" provider sentinel.
+export function validateMemberToolEnvelope(
+  envelope: MemberToolEnvelope<unknown>,
+): ContractValidation {
+  const errors: string[] = [];
+  if (envelope.boundary.authorityEffect !== "none") {
+    errors.push("authority_effect_must_be_none");
+  }
+  if (envelope.boundary.externalExecutionAllowed !== false) {
+    errors.push("external_execution_must_be_false");
+  }
+  if (!hasRef(envelope.requestId)) {
+    errors.push("request_id_missing");
+  }
+  if (envelope.ok && envelope.error !== null) {
+    errors.push("ok_with_error");
+  }
+  if (!envelope.ok && envelope.data !== null) {
+    errors.push("error_with_data");
+  }
+  const decision = envelope.boundary.decision;
+  if (!hasRef(decision.projectionPolicyRef)) {
+    errors.push("projection_policy_ref_missing");
+  }
+  if (
+    !Number.isInteger(decision.projectionPolicyVersion) ||
+    decision.projectionPolicyVersion < 1
+  ) {
+    errors.push("projection_policy_version_invalid");
+  }
+  if (!hasRef(decision.purpose)) {
+    errors.push("purpose_missing");
+  }
+  if (decision.projection === null && decision.blockReason === null) {
+    errors.push("blocked_without_reason");
+  }
+  if (decision.projection !== null && decision.blockReason !== null) {
+    errors.push("projected_with_block_reason");
+  }
+  if (decision.projection !== null) {
+    if (decision.classifiedAt === null) {
+      errors.push("classified_at_missing_for_projection");
+    }
+    if (decision.freshnessMinutes === null) {
+      errors.push("freshness_missing_for_projection");
+    }
+    if (!hasRef(decision.providerRef)) {
+      errors.push("provider_ref_missing_for_projection");
+    }
+  }
+  if (envelope.data !== null && decision.projection === null) {
+    errors.push("data_released_without_projection");
+  }
+  return { valid: errors.length === 0, errors };
 }

@@ -4,11 +4,13 @@ import {
   decideMemberProjection,
   decideMemberReadSurface,
   validateMemberPrincipal,
+  validateMemberToolEnvelope,
 } from "@/lib/member-gateway/contract";
 import type { MemberProjectionInput } from "@/lib/member-gateway/contract";
 import type {
   MemberPrincipal,
   MemberReadSurfaceInput,
+  MemberToolEnvelope,
 } from "@/lib/member-gateway/types";
 
 function makePrincipal(
@@ -305,5 +307,112 @@ describe("decideMemberProjection", () => {
       makeProjectionInput({ providerRef: null }),
     );
     expect(decision.providerRef).toBe("");
+  });
+});
+
+function makeEnvelope(
+  overrides: Partial<MemberToolEnvelope<unknown>> = {},
+): MemberToolEnvelope<unknown> {
+  return {
+    ok: true,
+    requestId: "req-1",
+    serverTime: "2026-08-19T00:00:00Z",
+    data: { objectKind: "case" },
+    error: null,
+    boundary: {
+      authorityEffect: "none",
+      externalExecutionAllowed: false,
+      decision: {
+        projection: "remote_projected",
+        projectionPolicyRef: "projection-policy-1",
+        projectionPolicyVersion: 3,
+        providerRef: "provider-profile-1",
+        purpose: "call_preparation",
+        classifiedAt: "2026-08-19T00:00:00Z",
+        freshnessMinutes: 15,
+        deniedFields: [],
+        blockReason: null,
+      },
+    },
+    ...overrides,
+  };
+}
+
+describe("validateMemberToolEnvelope", () => {
+  it("accepts a complete projected envelope", () => {
+    expect(validateMemberToolEnvelope(makeEnvelope())).toEqual({
+      valid: true,
+      errors: [],
+    });
+  });
+
+  it("rejects data released without a projection decision", () => {
+    const envelope = makeEnvelope();
+    envelope.boundary.decision.projection = null;
+    envelope.boundary.decision.blockReason = "read_surface_denied";
+    expect(validateMemberToolEnvelope(envelope).errors).toContain(
+      "data_released_without_projection",
+    );
+  });
+
+  it("rejects a blocked decision without a reason", () => {
+    const envelope = makeEnvelope({ data: null });
+    envelope.boundary.decision.projection = null;
+    envelope.boundary.decision.blockReason = null;
+    expect(validateMemberToolEnvelope(envelope).errors).toContain(
+      "blocked_without_reason",
+    );
+  });
+
+  it("rejects projection decision evidence gaps", () => {
+    const envelope = makeEnvelope();
+    envelope.boundary.decision.projectionPolicyRef = "";
+    envelope.boundary.decision.projectionPolicyVersion = 0;
+    envelope.boundary.decision.purpose = "";
+    const errors = validateMemberToolEnvelope(envelope).errors;
+    expect(errors).toContain("projection_policy_ref_missing");
+    expect(errors).toContain("projection_policy_version_invalid");
+    expect(errors).toContain("purpose_missing");
+  });
+
+  it("rejects ok-with-error and error-with-data shapes", () => {
+    expect(
+      validateMemberToolEnvelope(
+        makeEnvelope({
+          error: { code: "X", message: "boom", retryable: false },
+        }),
+      ).errors,
+    ).toContain("ok_with_error");
+    const failed = makeEnvelope({
+      ok: false,
+      error: { code: "X", message: "boom", retryable: false },
+    });
+    expect(validateMemberToolEnvelope(failed).errors).toContain(
+      "error_with_data",
+    );
+  });
+
+  it("a projecting decision must carry classifiedAt, freshness, and provider", () => {
+    const envelope = makeEnvelope();
+    envelope.boundary.decision.classifiedAt = null;
+    envelope.boundary.decision.freshnessMinutes = null;
+    envelope.boundary.decision.providerRef = "";
+    const errors = validateMemberToolEnvelope(envelope).errors;
+    expect(errors).toContain("classified_at_missing_for_projection");
+    expect(errors).toContain("freshness_missing_for_projection");
+    expect(errors).toContain("provider_ref_missing_for_projection");
+  });
+
+  it("blocked decisions are exempt from projection-evidence requirements", () => {
+    const envelope = makeEnvelope({ data: null });
+    envelope.boundary.decision.projection = null;
+    envelope.boundary.decision.blockReason = "provider_not_approved";
+    envelope.boundary.decision.providerRef = "";
+    envelope.boundary.decision.classifiedAt = null;
+    envelope.boundary.decision.freshnessMinutes = null;
+    expect(validateMemberToolEnvelope(envelope)).toEqual({
+      valid: true,
+      errors: [],
+    });
   });
 });
