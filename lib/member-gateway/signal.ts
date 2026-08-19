@@ -4,6 +4,9 @@
 // work signal is ALWAYS candidate evidence with an untrusted taint; nothing
 // in this module can promote it to fact, and dispatch stays inexpressible.
 
+import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
+import { validateMemberPrincipal } from "@/lib/member-gateway/contract";
+import type { ContractValidation } from "@/lib/member-gateway/contract";
 import type {
   MemberPrincipal,
   MemberReadSurfaceDecision,
@@ -95,3 +98,54 @@ export type MemberWorkSignalReceipt = {
   // referencing the one it replaces; history is never rewritten.
   supersedesReceiptRef: string | null;
 };
+
+function hasRef(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function countLinks(text: string): number {
+  return (text.match(/https?:\/\//g) ?? []).length;
+}
+
+export function hashMemberWorkSignalPayload(
+  payload: MemberWorkSignalPayload,
+): string {
+  return sha256(canonicalJson(payload));
+}
+
+export function validateMemberWorkSignalDraft(
+  draft: MemberWorkSignalDraft,
+): ContractValidation {
+  const errors = [...validateMemberPrincipal(draft.principal).errors];
+  if (!hasRef(draft.objectRef)) {
+    errors.push("signal_object_ref_missing");
+  }
+  if (!Number.isInteger(draft.objectVersion) || draft.objectVersion < 1) {
+    errors.push("signal_object_version_invalid");
+  }
+  const { payload } = draft;
+  if (!MEMBER_WORK_SIGNAL_KINDS.includes(payload.kind)) {
+    errors.push("signal_kind_unknown");
+  }
+  if (!hasRef(payload.summary)) {
+    errors.push("signal_summary_missing");
+  } else if (payload.summary.length > MEMBER_SIGNAL_SUMMARY_MAX_CHARS) {
+    errors.push("signal_summary_too_long");
+  }
+  if (payload.detail.length > MEMBER_SIGNAL_DETAIL_MAX_CHARS) {
+    errors.push("signal_detail_too_long");
+  }
+  if (
+    countLinks(payload.summary) + countLinks(payload.detail) >
+    MEMBER_SIGNAL_MAX_LINKS
+  ) {
+    errors.push("signal_links_exceeded");
+  }
+  if (payload.relatedEvidenceRefs.length > MEMBER_SIGNAL_MAX_EVIDENCE_REFS) {
+    errors.push("signal_evidence_refs_exceeded");
+  }
+  if (!payload.relatedEvidenceRefs.every((ref) => hasRef(ref))) {
+    errors.push("signal_evidence_ref_invalid");
+  }
+  return { valid: errors.length === 0, errors };
+}
