@@ -70,9 +70,11 @@ export type MemberWorkSignalSubmission = {
   challenge: MemberWorkSignalChallenge;
   principal: MemberPrincipal;
   payload: MemberWorkSignalPayload;
-  // The member's read-surface decision for the target object: a signal may
-  // only reference an object the member is authorized to read (§9
-  // over-privilege reference check).
+  // The member's read-surface decision for the TARGET OBJECT only: a signal
+  // may only be filed against an object the member is authorized to read.
+  // The §9 over-privilege check for each relatedEvidenceRef is deliberately
+  // deferred to the store/runtime layer (M2b), which holds the per-ref
+  // authorization data this pure judgment cannot see.
   surface: MemberReadSurfaceDecision;
   submittedAt: string;
   // Non-null when the store already recorded a consumption for this

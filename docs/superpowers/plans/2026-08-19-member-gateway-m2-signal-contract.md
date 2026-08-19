@@ -806,3 +806,9 @@ export function judgeSupersedingSignalReceipt(
    Task 2 提交;最终代码形状与计划一致。
 6. 文中测试计数为撰写时估计,最终为 64(计划各步计数存在 ±1 偏差,以
    代码为准)。
+
+7. **移交 M2b 的成文义务**:`relatedEvidenceRefs` 的逐引用越权校验不在本
+   纯契约切片内(判定层看不到逐引用授权数据),由 M2b store/运行时层实现;
+   `signal.ts` 注释已把 surface 判定明确限定为"目标对象"。M2b 计划必须
+   包含该项。另:M2b 新增文件需同步加入门禁的 WorkPacket 扫描列表(当前
+   为显式枚举)。
