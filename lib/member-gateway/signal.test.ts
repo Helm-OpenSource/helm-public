@@ -12,6 +12,7 @@ import {
   hashMemberWorkSignalPayload,
   judgeMemberWorkSignalChallenge,
   judgeMemberWorkSignalSubmission,
+  judgeSupersedingSignalReceipt,
   validateMemberWorkSignalDraft,
 } from "@/lib/member-gateway/signal";
 import type {
@@ -324,5 +325,91 @@ describe("judgeMemberWorkSignalSubmission", () => {
         "challenge_payload_hash_mismatch",
       ]),
     );
+  });
+});
+
+function makeReceipt(
+  overrides: Partial<MemberWorkSignalReceipt> = {},
+): MemberWorkSignalReceipt {
+  return {
+    receiptId: "receipt-1",
+    workspaceRef: "workspace-1",
+    memberRef: "member-1",
+    deviceRegistrationRef: "device-1",
+    clientId: "workbuddy-desktop",
+    objectRef: "case-42",
+    objectVersion: 3,
+    kind: "progress",
+    payloadHash: "hash-1",
+    policyRef: "signal-policy-1",
+    policyVersion: 1,
+    submittedAt: "2026-08-19T00:01:00Z",
+    candidate: true,
+    taint: "untrusted",
+    supersedesReceiptRef: null,
+    ...overrides,
+  };
+}
+
+describe("judgeSupersedingSignalReceipt", () => {
+  const prior = makeReceipt();
+  const next = makeReceipt({
+    receiptId: "receipt-2",
+    supersedesReceiptRef: "receipt-1",
+    submittedAt: "2026-08-19T00:10:00Z",
+  });
+
+  it("accepts a well-formed correction", () => {
+    expect(
+      judgeSupersedingSignalReceipt({
+        prior,
+        next,
+        priorAlreadySupersededBy: null,
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  it("rejects ref mismatch, scope mismatch, and double supersede", () => {
+    expect(
+      judgeSupersedingSignalReceipt({
+        prior,
+        next: { ...next, supersedesReceiptRef: "receipt-9" },
+        priorAlreadySupersededBy: null,
+      }).errors,
+    ).toContain("supersedes_ref_mismatch");
+    expect(
+      judgeSupersedingSignalReceipt({
+        prior,
+        next: { ...next, memberRef: "member-2" },
+        priorAlreadySupersededBy: null,
+      }).errors,
+    ).toContain("supersedes_scope_mismatch");
+    expect(
+      judgeSupersedingSignalReceipt({
+        prior,
+        next,
+        priorAlreadySupersededBy: "receipt-8",
+      }).errors,
+    ).toContain("receipt_already_superseded");
+  });
+
+  it("rejects corrections that do not move forward in time", () => {
+    expect(
+      judgeSupersedingSignalReceipt({
+        prior,
+        next: { ...next, submittedAt: "2026-08-19T00:01:00Z" },
+        priorAlreadySupersededBy: null,
+      }).errors,
+    ).toContain("supersedes_order_invalid");
+  });
+
+  it("rejects self-supersede", () => {
+    expect(
+      judgeSupersedingSignalReceipt({
+        prior,
+        next: { ...prior, supersedesReceiptRef: "receipt-1" },
+        priorAlreadySupersededBy: null,
+      }).errors,
+    ).toContain("supersedes_self_reference");
   });
 });

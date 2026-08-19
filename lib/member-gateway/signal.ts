@@ -245,3 +245,43 @@ export function judgeMemberWorkSignalSubmission(
   }
   return { valid: errors.length === 0, errors };
 }
+
+export type SupersedingSignalJudgmentInput = {
+  prior: MemberWorkSignalReceipt;
+  next: MemberWorkSignalReceipt;
+  // Non-null when the store already recorded a correction for `prior`;
+  // a receipt can be superseded at most once (corrections chain linearly).
+  priorAlreadySupersededBy: string | null;
+};
+
+// Correction judgment (spec §6.2): a correction is a NEW receipt that
+// references and supersedes the old one. History is append-only — nothing
+// here mutates or deletes the prior receipt.
+export function judgeSupersedingSignalReceipt(
+  input: SupersedingSignalJudgmentInput,
+): ContractValidation {
+  const errors: string[] = [];
+  const { prior, next } = input;
+  if (next.receiptId === prior.receiptId) {
+    errors.push("supersedes_self_reference");
+  }
+  if (next.supersedesReceiptRef !== prior.receiptId) {
+    errors.push("supersedes_ref_mismatch");
+  }
+  if (
+    next.workspaceRef !== prior.workspaceRef ||
+    next.memberRef !== prior.memberRef ||
+    next.objectRef !== prior.objectRef
+  ) {
+    errors.push("supersedes_scope_mismatch");
+  }
+  if (input.priorAlreadySupersededBy !== null) {
+    errors.push("receipt_already_superseded");
+  }
+  const priorMs = parseInstant(prior.submittedAt);
+  const nextMs = parseInstant(next.submittedAt);
+  if (priorMs === null || nextMs === null || nextMs <= priorMs) {
+    errors.push("supersedes_order_invalid");
+  }
+  return { valid: errors.length === 0, errors };
+}
