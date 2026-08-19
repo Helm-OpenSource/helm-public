@@ -7,6 +7,7 @@ import {
   MEMBER_RESPONSE_CLASSES,
   MEMBER_TRUST_TIERS,
   decideMemberPromptDelivery,
+  judgeMemberPromptTransition,
   validateMemberPrompt,
 } from "@/lib/member-gateway/prompt";
 import type {
@@ -257,3 +258,100 @@ describe("decideMemberPromptDelivery", () => {
   });
 });
 
+describe("judgeMemberPromptTransition", () => {
+  const allowedEdges = [
+    { from: "pending", cause: "deliver", to: "delivered" },
+    { from: "pending", cause: "withdraw", to: "withdrawn" },
+    { from: "pending", cause: "expire", to: "expired" },
+    { from: "pending", cause: "suppress", to: "suppressed" },
+    { from: "delivered", cause: "snooze", to: "snoozed" },
+    { from: "delivered", cause: "respond", to: "responded" },
+    { from: "delivered", cause: "withdraw", to: "withdrawn" },
+    { from: "delivered", cause: "expire", to: "expired" },
+    { from: "snoozed", cause: "unsnooze", to: "delivered" },
+    { from: "snoozed", cause: "expire", to: "expired" },
+    { from: "snoozed", cause: "withdraw", to: "withdrawn" },
+  ] as const;
+
+  it.each(allowedEdges)(
+    "allows $from --$cause--> $to",
+    ({ from, cause, to }) => {
+      expect(judgeMemberPromptTransition({ from, to, cause })).toEqual({
+        valid: true,
+        errors: [],
+      });
+    },
+  );
+
+  it("has exactly eleven allowed edges", () => {
+    expect(allowedEdges.length).toBe(11);
+  });
+
+  it("rejects a self-loop that is not in the table", () => {
+    expect(
+      judgeMemberPromptTransition({
+        from: "delivered",
+        to: "delivered",
+        cause: "deliver",
+      }).errors,
+    ).toContain("prompt_transition_invalid");
+  });
+
+  it("rejects transitions out of a terminal state", () => {
+    expect(
+      judgeMemberPromptTransition({
+        from: "responded",
+        to: "delivered",
+        cause: "deliver",
+      }).errors,
+    ).toContain("prompt_transition_invalid");
+    expect(
+      judgeMemberPromptTransition({
+        from: "withdrawn",
+        to: "delivered",
+        cause: "deliver",
+      }).errors,
+    ).toContain("prompt_transition_invalid");
+    expect(
+      judgeMemberPromptTransition({
+        from: "expired",
+        to: "delivered",
+        cause: "deliver",
+      }).errors,
+    ).toContain("prompt_transition_invalid");
+    expect(
+      judgeMemberPromptTransition({
+        from: "suppressed",
+        to: "delivered",
+        cause: "deliver",
+      }).errors,
+    ).toContain("prompt_transition_invalid");
+    expect(
+      judgeMemberPromptTransition({
+        from: "suppressed",
+        to: "pending",
+        cause: "deliver",
+      }).errors,
+    ).toContain("prompt_transition_invalid");
+  });
+
+  it("rejects a from/to pair that is not in the table at all", () => {
+    expect(
+      judgeMemberPromptTransition({
+        from: "pending",
+        to: "snoozed",
+        cause: "snooze",
+      }).errors,
+    ).toContain("prompt_transition_invalid");
+  });
+
+  it("rejects a valid from/to pair reached with the wrong cause", () => {
+    expect(
+      judgeMemberPromptTransition({
+        from: "pending",
+        to: "delivered",
+        cause: "respond",
+      }).errors,
+    ).toContain("prompt_transition_cause_mismatch");
+  });
+});

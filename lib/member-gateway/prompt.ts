@@ -136,3 +136,52 @@ export function decideMemberPromptDelivery(
   return { deliver: true, heldReason: null };
 }
 
+export type MemberPromptTransitionCause =
+  | "deliver"
+  | "snooze"
+  | "unsnooze"
+  | "respond"
+  | "withdraw"
+  | "expire"
+  | "suppress";
+
+// spec §6.3 lifecycle table. Terminal states (responded/withdrawn/expired/
+// suppressed) never appear as a `from` here, so any transition attempted
+// from one is structurally absent from the table and rejected below.
+const MEMBER_PROMPT_TRANSITIONS: ReadonlyArray<{
+  from: MemberPromptState;
+  cause: MemberPromptTransitionCause;
+  to: MemberPromptState;
+}> = [
+  { from: "pending", cause: "deliver", to: "delivered" },
+  { from: "pending", cause: "withdraw", to: "withdrawn" },
+  { from: "pending", cause: "expire", to: "expired" },
+  { from: "pending", cause: "suppress", to: "suppressed" },
+  { from: "delivered", cause: "snooze", to: "snoozed" },
+  { from: "delivered", cause: "respond", to: "responded" },
+  { from: "delivered", cause: "withdraw", to: "withdrawn" },
+  { from: "delivered", cause: "expire", to: "expired" },
+  { from: "snoozed", cause: "unsnooze", to: "delivered" },
+  { from: "snoozed", cause: "expire", to: "expired" },
+  { from: "snoozed", cause: "withdraw", to: "withdrawn" },
+];
+
+// Transition judgment (spec §6.3). The transition itself is the receipt
+// semantics here; append-only persistence of that receipt is the M3b
+// store's job, not this pure judgment's.
+export function judgeMemberPromptTransition(input: {
+  from: MemberPromptState;
+  to: MemberPromptState;
+  cause: MemberPromptTransitionCause;
+}): ContractValidation {
+  const errors: string[] = [];
+  const pairMatch = MEMBER_PROMPT_TRANSITIONS.find(
+    (edge) => edge.from === input.from && edge.to === input.to,
+  );
+  if (pairMatch === undefined) {
+    errors.push("prompt_transition_invalid");
+  } else if (pairMatch.cause !== input.cause) {
+    errors.push("prompt_transition_cause_mismatch");
+  }
+  return { valid: errors.length === 0, errors };
+}
