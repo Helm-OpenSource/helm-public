@@ -36,6 +36,8 @@ export const MEMBER_SIGNAL_MAX_EVIDENCE_REFS = 10;
 // signal challenge may never live longer than five minutes.
 export const MEMBER_SIGNAL_CHALLENGE_TTL_CAP_MS = 5 * 60_000;
 
+// Flat by construction: the §9 nesting-depth cap is enforced structurally —
+// there is nothing nested to bound.
 export type MemberWorkSignalPayload = {
   kind: MemberWorkSignalKind;
   summary: string;
@@ -103,10 +105,15 @@ function hasRef(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+// Case-insensitive scheme match: HTTPS:// linkifies just like https://.
+// Protocol-less links (www.x, //host) are deliberately not counted here —
+// the runtime malicious-content check (spec §9-6) is a separate layer.
 function countLinks(text: string): number {
-  return (text.match(/https?:\/\//g) ?? []).length;
+  return (text.match(/https?:\/\//gi) ?? []).length;
 }
 
+// Note: relatedEvidenceRefs order is hash-significant — submit must resend
+// refs in prepare order or the challenge hash will not match.
 export function hashMemberWorkSignalPayload(
   payload: MemberWorkSignalPayload,
 ): string {

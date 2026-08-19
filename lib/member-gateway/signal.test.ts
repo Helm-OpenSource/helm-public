@@ -161,6 +161,18 @@ describe("validateMemberWorkSignalDraft", () => {
       ).errors,
     ).toContain("signal_evidence_ref_invalid");
   });
+
+  it("counts links case-insensitively", () => {
+    expect(
+      validateMemberWorkSignalDraft(
+        makeDraft({
+          payload: makePayload({
+            summary: "HTTP://a HTTPS://b Http://c https://d",
+          }),
+        }),
+      ).errors,
+    ).toContain("signal_links_exceeded");
+  });
 });
 
 describe("hashMemberWorkSignalPayload", () => {
