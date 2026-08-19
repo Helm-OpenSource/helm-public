@@ -44,7 +44,7 @@ for (const marker of frozenMarkers) {
   }
 }
 
-for (const file of ["types.ts", "contract.ts", "index.ts"]) {
+for (const file of ["types.ts", "contract.ts", "index.ts", "signal.ts"]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
     "utf8",
@@ -52,6 +52,25 @@ for (const file of ["types.ts", "contract.ts", "index.ts"]) {
   if (/WorkPacket/.test(source)) {
     violations.push(
       `lib/member-gateway/${file}: WorkPacket identifier must stay inexpressible`,
+    );
+  }
+}
+
+const signalPath = path.join(root, "lib/member-gateway/signal.ts");
+const signalSource = readFileSync(signalPath, "utf8");
+
+const signalFrozenMarkers = [
+  '"progress"',
+  '"blocker"',
+  '"customer_signal"',
+  '"untrusted"',
+  "candidate: true",
+  "supersedesReceiptRef",
+];
+for (const marker of signalFrozenMarkers) {
+  if (!signalSource.includes(marker)) {
+    violations.push(
+      `lib/member-gateway/signal.ts missing frozen marker: ${marker}`,
     );
   }
 }
