@@ -415,4 +415,18 @@ describe("validateMemberToolEnvelope", () => {
       errors: [],
     });
   });
+
+  it("rejects a blank requestId", () => {
+    expect(
+      validateMemberToolEnvelope(makeEnvelope({ requestId: " " })).errors,
+    ).toContain("request_id_missing");
+  });
+
+  it("rejects a decision carrying both projection and block reason", () => {
+    const envelope = makeEnvelope();
+    envelope.boundary.decision.blockReason = "purpose_missing";
+    expect(validateMemberToolEnvelope(envelope).errors).toContain(
+      "projected_with_block_reason",
+    );
+  });
 });
