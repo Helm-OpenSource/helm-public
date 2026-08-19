@@ -1,6 +1,7 @@
 // Deterministic judgment for the Member Gateway read layer. Pure functions,
 // no IO. Fail-closed: missing evidence is always a denial.
 
+import { parseInstant } from "@/lib/caio-governance/contract";
 import { METADATA_ONLY_FIELD_WHITELIST } from "@/lib/member-gateway/types";
 import type {
   MemberObjectClassification,
@@ -79,10 +80,6 @@ export function decideMemberReadSurface(
   return { allowed: true, deniedDimensions: [] };
 }
 
-function isInstant(value: string): boolean {
-  return !Number.isNaN(Date.parse(value));
-}
-
 export type MemberProjectionInput = {
   surface: MemberReadSurfaceDecision;
   classification: MemberObjectClassification | null;
@@ -100,15 +97,21 @@ export type MemberProjectionInput = {
 
 // Projection judgment (spec §8.2). Order matters and is fail-closed:
 // surface → purpose → provider → classification → disposition ladder.
-// A classification whose classifiedAt cannot be parsed as an instant is
-// treated as unknown (spec §8.1: unknown defaults to restricted +
-// local_only and never projects remotely).
+// A classification whose classifiedAt is not a strict, calendar-valid
+// instant (per caio-governance parseInstant; Date.parse laxity is not
+// accepted) is treated as unknown (spec §8.1: unknown defaults to
+// restricted + local_only and never projects remotely). An unparseable
+// classifiedAt is still carried onto the decision evidence verbatim as
+// observed input; only the null-classification path carries null.
 export function decideMemberProjection(
   input: MemberProjectionInput,
 ): MemberProjectionDecision {
   const base = {
     projectionPolicyRef: input.projectionPolicyRef,
     projectionPolicyVersion: input.projectionPolicyVersion,
+    // "" is the no-approved-provider sentinel; the decision type's
+    // providerRef is intentionally non-nullable. Envelope validation must
+    // not require a non-empty providerRef on blocked decisions.
     providerRef: input.providerRef ?? "",
     purpose: input.purpose,
     classifiedAt: input.classification?.classifiedAt ?? null,
@@ -127,7 +130,7 @@ export function decideMemberProjection(
   }
   if (
     input.classification === null ||
-    !isInstant(input.classification.classifiedAt)
+    parseInstant(input.classification.classifiedAt) === null
   ) {
     return {
       ...base,

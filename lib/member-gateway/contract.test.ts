@@ -271,4 +271,39 @@ describe("decideMemberProjection", () => {
     expect(decision.projection).toBe("metadata_only");
     expect(decision.deniedFields).toEqual(["summary", "customerName"]);
   });
+
+  it("rejects Date.parse-lax timestamps as classification_unknown", () => {
+    for (const lax of ["2026", "2026-02-30T00:00:00Z"]) {
+      const decision = decideMemberProjection(
+        makeProjectionInput({
+          classification: {
+            sensitivity: "internal",
+            processingDisposition: "remote_projected",
+            classifiedAt: lax,
+          },
+        }),
+      );
+      expect(decision.projection).toBeNull();
+      expect(decision.blockReason).toBe("classification_unknown");
+    }
+  });
+
+  it("read_surface_denied wins when multiple failures coincide", () => {
+    const decision = decideMemberProjection(
+      makeProjectionInput({
+        surface: { allowed: false, deniedDimensions: ["tool_scope"] },
+        purpose: "",
+        providerRef: null,
+        classification: null,
+      }),
+    );
+    expect(decision.blockReason).toBe("read_surface_denied");
+  });
+
+  it("empty-string providerRef sentinel appears on blocked decisions", () => {
+    const decision = decideMemberProjection(
+      makeProjectionInput({ providerRef: null }),
+    );
+    expect(decision.providerRef).toBe("");
+  });
 });
