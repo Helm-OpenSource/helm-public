@@ -157,6 +157,11 @@ export async function issueMemberWorkSignalChallenge(
       draftValidation.errors,
     );
   }
+  if (!Number.isFinite(input.ttlMs) || input.ttlMs <= 0) {
+    throw new MemberSignalStoreError("challenge_ttl_invalid", [
+      "challenge_ttl_invalid",
+    ]);
+  }
   const workspaceId = nonEmpty(
     input.draft.principal.workspaceRef,
     "workspace_ref_required",
@@ -261,12 +266,20 @@ export async function submitMemberWorkSignal(
         }
 
         // 2. Replay detection: same receiptId + a persisted receipt whose
-        // payloadHash matches this submission's payload -> replay. Any
-        // other already-consumed shape falls through to the contract
-        // judgment below, which rejects with challenge_already_consumed.
+        // payloadHash matches this submission's payload, AND the same
+        // principal that originally issued the challenge -> replay. Any
+        // other already-consumed shape (including a different member
+        // replaying with the same challengeRef/receiptId/payload) falls
+        // through to the contract judgment below, which rejects with
+        // challenge_already_consumed or challenge_binding_mismatch.
+        // Replay deliberately returns the recorded receipt without
+        // re-running surface/evidence checks: it is an idempotent
+        // read-back of an already-recorded fact, not a new authorization
+        // decision.
         if (
           challengeRow.consumedAt !== null &&
-          challengeRow.consumptionReceiptRef === receiptId
+          challengeRow.consumptionReceiptRef === receiptId &&
+          challengeRow.memberRef === input.principal.memberRef
         ) {
           const existingReceipt = await tx.memberWorkSignalReceipt.findUnique(
             {

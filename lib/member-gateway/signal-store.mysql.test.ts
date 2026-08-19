@@ -226,6 +226,44 @@ describeMysql(
       expect(second.receipt.payloadHash).toBe(first.receipt.payloadHash);
     });
 
+    it("rejects a replay attempt by a different member", async () => {
+      const objectRef = `case-${suffix}-3b`;
+      const { draft, challenge } = await issueAndDraft(objectRef);
+      const receiptId = `receipt-${suffix}-3b`;
+
+      const recorded = await submitMemberWorkSignal({
+        principal: draft.principal,
+        challengeRef: challenge.challengeRef,
+        payload: draft.payload,
+        surface: ALLOWED_SURFACE,
+        evidenceSurfaces: new Map(),
+        policyRef: POLICY_REF,
+        policyVersion: POLICY_VERSION,
+        receiptId,
+      });
+      expect(recorded.outcome).toBe("recorded");
+
+      const otherMemberPrincipal = principal({
+        memberRef: `member-${suffix}-other`,
+        sessionRef: `session-${suffix}-other`,
+        deviceRegistrationRef: `device-${suffix}-other`,
+      });
+
+      await expectStoreError(
+        submitMemberWorkSignal({
+          principal: otherMemberPrincipal,
+          challengeRef: challenge.challengeRef,
+          payload: draft.payload,
+          surface: ALLOWED_SURFACE,
+          evidenceSurfaces: new Map(),
+          policyRef: POLICY_REF,
+          policyVersion: POLICY_VERSION,
+          receiptId,
+        }),
+        "challenge_binding_mismatch",
+      );
+    });
+
     it("rejects submission against an expired challenge", async () => {
       const objectRef = `case-${suffix}-4`;
       const { draft, challenge } = await issueAndDraft(objectRef);
