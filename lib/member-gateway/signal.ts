@@ -4,6 +4,7 @@
 // work signal is ALWAYS candidate evidence with an untrusted taint; nothing
 // in this module can promote it to fact, and dispatch stays inexpressible.
 
+import { parseInstant } from "@/lib/caio-governance/contract";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import { validateMemberPrincipal } from "@/lib/member-gateway/contract";
 import type { ContractValidation } from "@/lib/member-gateway/contract";
@@ -153,6 +154,94 @@ export function validateMemberWorkSignalDraft(
   }
   if (!payload.relatedEvidenceRefs.every((ref) => hasRef(ref))) {
     errors.push("signal_evidence_ref_invalid");
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+export function judgeMemberWorkSignalChallenge(
+  challenge: MemberWorkSignalChallenge,
+): ContractValidation {
+  const errors: string[] = [];
+  if (!hasRef(challenge.challengeRef)) {
+    errors.push("challenge_ref_missing");
+  }
+  if (!hasRef(challenge.workspaceRef) || !hasRef(challenge.memberRef)) {
+    errors.push("challenge_principal_binding_missing");
+  }
+  if (!hasRef(challenge.objectRef)) {
+    errors.push("challenge_object_binding_missing");
+  }
+  if (
+    !Number.isInteger(challenge.objectVersion) ||
+    challenge.objectVersion < 1
+  ) {
+    errors.push("challenge_object_version_invalid");
+  }
+  if (!hasRef(challenge.payloadHash)) {
+    errors.push("challenge_payload_hash_missing");
+  }
+  const issuedAtMs = parseInstant(challenge.issuedAt);
+  const expiresAtMs = parseInstant(challenge.expiresAt);
+  if (issuedAtMs === null || expiresAtMs === null) {
+    errors.push("challenge_instant_invalid");
+  } else {
+    if (expiresAtMs <= issuedAtMs) {
+      errors.push("challenge_window_invalid");
+    } else if (expiresAtMs - issuedAtMs > MEMBER_SIGNAL_CHALLENGE_TTL_CAP_MS) {
+      errors.push("challenge_ttl_exceeds_cap");
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+// Submission judgment (spec §6.2/§9). Fail-closed: the challenge is
+// one-time (any recorded prior consumption rejects), the payload must hash
+// to the prepared payloadHash, and the target object must be inside the
+// member's authorized read surface. This judges only what it is given —
+// the store layer owns actually recording consumption atomically.
+export function judgeMemberWorkSignalSubmission(
+  submission: MemberWorkSignalSubmission,
+): ContractValidation {
+  const errors = [
+    ...judgeMemberWorkSignalChallenge(submission.challenge).errors,
+  ];
+  const { challenge, principal } = submission;
+  if (
+    principal.workspaceRef !== challenge.workspaceRef ||
+    principal.memberRef !== challenge.memberRef
+  ) {
+    errors.push("challenge_binding_mismatch");
+  }
+  errors.push(
+    ...validateMemberWorkSignalDraft({
+      principal,
+      objectRef: challenge.objectRef,
+      objectVersion: challenge.objectVersion,
+      payload: submission.payload,
+    }).errors,
+  );
+  if (
+    hashMemberWorkSignalPayload(submission.payload) !== challenge.payloadHash
+  ) {
+    errors.push("challenge_payload_hash_mismatch");
+  }
+  const submittedAtMs = parseInstant(submission.submittedAt);
+  const issuedAtMs = parseInstant(challenge.issuedAt);
+  const expiresAtMs = parseInstant(challenge.expiresAt);
+  if (submittedAtMs === null) {
+    errors.push("submission_instant_invalid");
+  } else if (issuedAtMs !== null && expiresAtMs !== null) {
+    if (submittedAtMs < issuedAtMs) {
+      errors.push("submission_before_issue");
+    } else if (submittedAtMs >= expiresAtMs) {
+      errors.push("challenge_expired");
+    }
+  }
+  if (submission.priorConsumptionRef !== null) {
+    errors.push("challenge_already_consumed");
+  }
+  if (!submission.surface.allowed) {
+    errors.push("signal_object_not_authorized");
   }
   return { valid: errors.length === 0, errors };
 }
