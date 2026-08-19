@@ -44,7 +44,14 @@ for (const marker of frozenMarkers) {
   }
 }
 
-for (const file of ["types.ts", "contract.ts", "index.ts", "signal.ts"]) {
+for (const file of [
+  "types.ts",
+  "contract.ts",
+  "index.ts",
+  "signal.ts",
+  "signal-store.service.ts",
+  "signal-store.mysql.test.ts",
+]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
     "utf8",

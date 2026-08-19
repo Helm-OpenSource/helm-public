@@ -194,3 +194,37 @@ submitMemberWorkSignal(input: {
 - 不新增 npm script、不改 CI、不动 public-release-guard(避免连锁冻结副本更新);本地验证靠显式 env 运行。
 - 挑战消费是唯一允许的行变更;receipt 表 UPDATE/DELETE 被触发器阻断。
 - `prisma/schema.prisma` 与迁移必须 Prisma-等价(drift 门禁);CHECK 与触发器对 drift 不可见,属 hand-authored 增强。
+
+---
+
+## As-built 记录(2026-08-19 执行完毕)
+
+分支 `feat/member-gateway-m2` 上 5 个 commit(schema/迁移、store、mysql 测试、
+重放绑定修复、门禁扩展)。本地可验证门禁全绿:typecheck 0 错误、
+`check:conditional-update-cas` 零新 finding、模块 64 通过 + 10 skip、
+全量 `check:boundaries` 每 commit 绿。
+
+偏离与判断记录:
+
+1. review 修复:重放分支补主体绑定校验(计划步骤 2 的措辞遗漏了该约束,
+   实现最初如实复制)——不匹配主体落回契约判定,拒绝为
+   `challenge_binding_mismatch`;并新增跨成员重放测试。
+2. 重放有意不重跑 surface/evidence 校验(幂等读回既成事实),已在代码注释
+   成文。
+3. TTL 上限经由 M2a `judgeMemberWorkSignalChallenge` 兜底而非 store 重复
+   实现;另加 `challenge_ttl_invalid` 的有限性前置校验。
+4. P2002 区分 supersedes 唯一键(`receipt_already_superseded_concurrent`)
+   与其他唯一冲突(`receipt_unique_conflict`)。
+
+### 留给 owner(本地环境与 CI)
+
+- 本地 MySQL 需以 root 执行 `SET GLOBAL log_bin_trust_function_creators = 1;`
+  后运行 `npm run db:migrate`,方可在本地应用带触发器的迁移(包括 7 月的
+  egress 迁移与本切片迁移);随后可用
+  `DATABASE_URL=<url> MEMBER_SIGNAL_STORE_DATABASE_URL=<同值>` 实跑
+  `signal-store.mysql.test.ts`(静态 review 已逐例 trace,但从未在真库跑过)。
+- CI 注册:`.github/workflows/ci.yml` 增加 member_signal_store mysql job
+  (镜像既有 `*_mysql` job:导出两个 env → db:generate → setup-db prepare →
+  vitest 跑该套件);以及 `MIGRATION_DRIFT_SHADOW_DATABASE_URL` 下的
+  drift 验证。
+- 迁移在真库的首次 deploy 验证(本地被 MySQL 1419 阻塞,已在迁移头注明)。
