@@ -199,6 +199,9 @@ export function judgeMemberWorkSignalChallenge(
 // to the prepared payloadHash, and the target object must be inside the
 // member's authorized read surface. This judges only what it is given —
 // the store layer owns actually recording consumption atomically.
+// Expiry is exclusive (submittedAt >= expiresAt rejects): one tick
+// stricter than the CEO-loop governed-mutation window, deliberately —
+// member upstream is the less-trusted surface.
 export function judgeMemberWorkSignalSubmission(
   submission: MemberWorkSignalSubmission,
 ): ContractValidation {
@@ -257,6 +260,9 @@ export type SupersedingSignalJudgmentInput = {
 // Correction judgment (spec §6.2): a correction is a NEW receipt that
 // references and supersedes the old one. History is append-only — nothing
 // here mutates or deletes the prior receipt.
+// Both receipts are assumed well-formed store rows (the store/M2b layer
+// owns that); this judgment only rules on the correction relationship,
+// and objectVersion may legitimately differ across a correction chain.
 export function judgeSupersedingSignalReceipt(
   input: SupersedingSignalJudgmentInput,
 ): ContractValidation {

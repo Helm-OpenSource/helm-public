@@ -249,12 +249,21 @@ describe("judgeMemberWorkSignalChallenge", () => {
   it("rejects missing binding refs", () => {
     expect(
       judgeMemberWorkSignalChallenge(
-        makeChallenge({ challengeRef: "", payloadHash: " " }),
+        makeChallenge({
+          challengeRef: "",
+          payloadHash: " ",
+          workspaceRef: "",
+          objectRef: " ",
+          objectVersion: 0,
+        }),
       ).errors,
     ).toEqual(
       expect.arrayContaining([
         "challenge_ref_missing",
         "challenge_payload_hash_missing",
+        "challenge_principal_binding_missing",
+        "challenge_object_binding_missing",
+        "challenge_object_version_invalid",
       ]),
     );
   });
@@ -325,6 +334,32 @@ describe("judgeMemberWorkSignalSubmission", () => {
         "challenge_payload_hash_mismatch",
       ]),
     );
+  });
+
+  it("rejects an unparseable submission instant", () => {
+    expect(
+      judgeMemberWorkSignalSubmission(
+        makeSubmission({ submittedAt: "not-a-time" }),
+      ).errors,
+    ).toContain("submission_instant_invalid");
+  });
+
+  it("pins the window boundary instants", () => {
+    expect(
+      judgeMemberWorkSignalSubmission(
+        makeSubmission({ submittedAt: "2026-08-19T00:00:00Z" }),
+      ).valid,
+    ).toBe(true);
+    expect(
+      judgeMemberWorkSignalSubmission(
+        makeSubmission({ submittedAt: "2026-08-19T00:04:00Z" }),
+      ).errors,
+    ).toContain("challenge_expired");
+    expect(
+      judgeMemberWorkSignalChallenge(
+        makeChallenge({ expiresAt: "2026-08-19T00:05:00Z" }),
+      ).valid,
+    ).toBe(true);
   });
 });
 
