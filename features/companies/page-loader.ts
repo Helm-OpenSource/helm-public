@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getApprovalTasksData } from "@/features/approvals/queries";
 import { getCompanyDetailData } from "@/features/companies/queries";
 import { generateRecommendationsForObject } from "@/lib/recommendations/recommendation.service";

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getOpportunityCommercialDetailData } from "@/data/queries";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";

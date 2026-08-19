@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ConnectorProvider } from "@prisma/client";
 import { getInboxData } from "@/features/inbox/queries";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { isEnglishLocale } from "@/lib/i18n/config";

@@ -4,7 +4,7 @@ import {
   getCompanyDetailData,
   getOpportunityCommercialDetailData,
 } from "@/data/queries";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";

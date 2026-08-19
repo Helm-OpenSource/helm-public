@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import {
   canManageWorkspaceInsights,
   getInsightGovernanceDeniedMessage,
