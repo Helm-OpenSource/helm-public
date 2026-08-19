@@ -1009,3 +1009,29 @@ Expected: 全绿(check:boundaries 现在包含 member-gateway 门禁)
 - 不得在本模块引入 Work Packet 的 object kind、payload 字段或 submit action;门禁脚本会拒绝 `WorkPacket` 标识符。
 - 不得把 `WorkspaceRole.OWNER` 或 CEO 语义引入 `MemberPrincipal`。
 - 每次 commit 都会触发全量 `check:boundaries`(husky),保持全绿是硬要求。
+
+---
+
+## As-built 记录(2026-08-19 执行完毕)
+
+执行分支 `feat/member-gateway-m1`,12 个实现 commit(`11369d7a` … `719584e1`),
+最终 39/39 测试、`check:member-gateway` 与全量 `check:boundaries` 绿,
+`npm run db:generate` 后全仓 typecheck 0 错误。
+
+相对本计划的偏离(全部由两段式 review 驱动,设计 spec 为真值):
+
+1. `MemberProjectionDecision` 增加 `freshnessMinutes`(spec §8.2 要求判定依据
+   携带 freshness);生产者输入相应携带,信封校验要求投影决定 freshness 完整。
+2. `MemberReadSurfaceDecision` 拒绝分支收紧为非空元组,"无证据的拒绝"在类型上
+   不可表达;实现以解构收窄,不用断言。
+3. `classifiedAt` 改用 `caio-governance` 的严格 `parseInstant`(拒绝
+   `Date.parse` 宽松形态);freshness 证据缺失/非法与之同路,按
+   `classification_unknown` 阻断。
+4. 信封校验:purpose/classifiedAt/freshness/providerRef 完整性只约束投影
+   决定,阻断决定豁免(错误码 `*_for_projection`);新增 `error_missing`、
+   `freshness_invalid_for_projection`;并以"生产者全部决定形状包入合规信封
+   必须通过校验"的交叉测试钉死生产者/校验器一致性。
+5. 门禁 marker 列表增加 `"requiresLocalView"`;`check:boundaries` 接线需同步
+   更新 `check:frozen-duplicates` 监管的 5 处冻结副本(public-release-guard
+   白名单与 override、caio-terminology 期望命令、两个测试 fixture)。
+6. 文中各步的测试计数为撰写时快照,最终为 39。
