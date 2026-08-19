@@ -208,3 +208,20 @@ Commit: `feat(member-gateway): extend frozen-contract gate to prompt slice`
 - critical 严重度必须携带确定性规则引用;模型自由裁量的 critical 在契约上不可表达为合法 prompt。
 - authority_bearing_action 的授权只能来自外部权限系统引用;本模块任何函数不得凭 principal/challenge/签名生成它。
 - prompt 队列的持久化(投递回执、幂等、cursor)是 M3b;本切片纯判定。
+
+---
+
+## As-built 记录(2026-08-19 执行完毕)
+
+分支 `feat/member-gateway-m2` 上 4 个 commit。模块测试全绿(prompt 切片
+新增测试见各 commit),门禁含 prompt 冻结 marker 与负向验证。
+
+判断记录:
+1. 转移表以冻结三元组列表编码;cause 不匹配与非法转移分为两个错误码。
+2. `classifyMemberPromptResponse` 用穷尽 switch + never 检查,新增 kind
+   必须显式分类,不能落入默认分支。
+3. `bridgeProtectedHumanResponse` 永不抛出——提出响应永远合法,缺陷由
+   validation 结果承载;真值唯一来源是 caio-governance 的
+   `validateHumanResponse`。
+4. M3b(队列持久化:投递回执、幂等、cursor、withdraw/expire/snooze 的
+   append-only 记录)与运行时接线留待后续切片。
