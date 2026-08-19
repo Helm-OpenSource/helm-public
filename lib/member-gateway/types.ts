@@ -79,8 +79,9 @@ export type MemberReadSurfaceInput = {
   fieldPurposePolicyRef: string | null;
   sourceAuthorizationRef: string | null;
   tenantProviderEgressPolicyRef: string | null;
-  // null means unclassified; judgment treats it as restricted + local_only
-  // and blocks (spec §8.1).
+  // null means unclassified; unclassified never projects — judgment blocks
+  // outright rather than downgrading (stricter than spec §8.1's
+  // restricted + local_only floor).
   classification: MemberObjectClassification | null;
 };
 

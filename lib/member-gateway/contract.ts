@@ -173,7 +173,8 @@ export function decideMemberProjection(
 // providerRef); blocked decisions are exempt — their evidence fields hold
 // whatever was observed, including the "" provider sentinel.
 // Literal membership of projection/blockReason values and serverTime
-// format are trusted to the TypeScript layer; this validator judges
+// format are trusted to the TypeScript layer (classifiedAt on projecting
+// decisions is instant-validated here); this validator judges
 // cross-field consistency and evidence completeness only.
 export function validateMemberToolEnvelope(
   envelope: MemberToolEnvelope<unknown>,
@@ -216,6 +217,8 @@ export function validateMemberToolEnvelope(
   if (decision.projection !== null) {
     if (decision.classifiedAt === null) {
       errors.push("classified_at_missing_for_projection");
+    } else if (parseInstant(decision.classifiedAt) === null) {
+      errors.push("classified_at_invalid_for_projection");
     }
     if (decision.freshnessMinutes === null) {
       errors.push("freshness_missing_for_projection");

@@ -447,6 +447,14 @@ describe("validateMemberToolEnvelope", () => {
     ).toContain("error_missing");
   });
 
+  it("rejects lax classifiedAt timestamps on projecting decisions", () => {
+    const envelope = makeEnvelope();
+    envelope.boundary.decision.classifiedAt = "2026";
+    expect(validateMemberToolEnvelope(envelope).errors).toContain(
+      "classified_at_invalid_for_projection",
+    );
+  });
+
   it("rejects non-finite or negative freshness on projecting decisions", () => {
     for (const bad of [Number.NaN, -3]) {
       const envelope = makeEnvelope();
