@@ -5,7 +5,8 @@
 // dispatch stays inexpressible in this module, same as the rest of the
 // Member Gateway slice.
 
-import { parseInstant } from "@/lib/caio-governance/contract";
+import { parseInstant, validateHumanResponse } from "@/lib/caio-governance/contract";
+import type { CaioHumanResponse } from "@/lib/caio-governance/types";
 import type { ContractValidation } from "@/lib/member-gateway/contract";
 
 export const MEMBER_PROMPT_SEVERITIES = ["critical", "normal"] as const;
@@ -182,6 +183,135 @@ export function judgeMemberPromptTransition(input: {
     errors.push("prompt_transition_invalid");
   } else if (pairMatch.cause !== input.cause) {
     errors.push("prompt_transition_cause_mismatch");
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+// spec §5 response write kinds, frozen, with their class mapping recorded
+// alongside each literal so the two never drift apart in review.
+export const MEMBER_PROMPT_RESPONSE_KINDS = [
+  "acknowledge", // interaction_receipt
+  "progress_report", // candidate_write
+  "free_text_answer", // candidate_write
+  "refuse", // protected_human_response
+  "pause", // protected_human_response
+  "appeal", // protected_human_response
+  "commitment_confirm", // authority_bearing_action
+] as const;
+
+export type MemberPromptResponseKind =
+  (typeof MEMBER_PROMPT_RESPONSE_KINDS)[number];
+
+function assertExhaustive(value: never): never {
+  throw new Error(`unreachable member prompt response kind: ${String(value)}`);
+}
+
+// Exhaustive by construction: adding a new MEMBER_PROMPT_RESPONSE_KINDS
+// literal without adding a case here fails typecheck at the `default`
+// branch (assertExhaustive requires `never`), not just at runtime.
+export function classifyMemberPromptResponse(
+  kind: MemberPromptResponseKind,
+): MemberResponseClass {
+  switch (kind) {
+    case "acknowledge":
+      return "interaction_receipt";
+    case "progress_report":
+    case "free_text_answer":
+      return "candidate_write";
+    case "refuse":
+    case "pause":
+    case "appeal":
+      return "protected_human_response";
+    case "commitment_confirm":
+      return "authority_bearing_action";
+    default:
+      return assertExhaustive(kind);
+  }
+}
+
+export function requiredTrustTier(cls: MemberResponseClass): MemberTrustTier {
+  switch (cls) {
+    case "candidate_write":
+    case "interaction_receipt":
+      return "challenge_write";
+    case "protected_human_response":
+      return "protected_response";
+    case "authority_bearing_action":
+      return "authority_action";
+    default:
+      return assertExhaustive(cls);
+  }
+}
+
+// Protected-path guarantee (spec §7 frozen). A failure here is a
+// platform-fault signal, NEVER a rejection of the response itself: when
+// user-presence delivery is unavailable, the local fallback MUST be
+// available, because the member's right to raise a protected response
+// (refuse/pause/appeal) may not be effectively denied by an infrastructure
+// gap. Both paths absent means the platform has failed its guarantee, not
+// that the member did anything wrong.
+export function judgeProtectedResponseRoute(input: {
+  userPresenceAvailable: boolean;
+  localFallbackAvailable: boolean;
+}): ContractValidation {
+  const errors: string[] = [];
+  if (!input.userPresenceAvailable && !input.localFallbackAvailable) {
+    errors.push("protected_response_path_unavailable");
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+// Bridge only (spec §5/§7): assembles a CaioHumanResponse for refuse/pause/
+// appeal and defers to caio-governance's validateHumanResponse as the sole
+// source of truth for its invariants — this module does not duplicate or
+// relax them. mandateRef is supplied by the governance layer; the Gateway
+// never creates a mandate. This function never throws: raising a protected
+// response is always legitimate, and any structural defect (missing
+// mandateRef, empty auditRefs, etc.) is carried in the returned
+// `validation` result rather than blocking the call. No persistence, no
+// promotion, and no authority is granted by calling this function.
+export function bridgeProtectedHumanResponse(input: {
+  responseId: string;
+  mandateRef: string;
+  responderRef: string;
+  responseType: "refuse" | "pause" | "appeal";
+  subjectPromptRef: string;
+  reason: string;
+  auditRefs: readonly string[];
+}): { response: CaioHumanResponse; validation: ContractValidation } {
+  const response: CaioHumanResponse = {
+    responseId: input.responseId,
+    mandateRef: input.mandateRef,
+    responderRef: input.responderRef,
+    responseType: input.responseType,
+    subjectWorkRef: input.subjectPromptRef,
+    reason: input.reason,
+    status: "raised",
+    auditRefs: input.auditRefs,
+    retaliationProhibited: true,
+  };
+  return { response, validation: validateHumanResponse(response) };
+}
+
+// authority_bearing_action judgment (spec §7 frozen). Member identity,
+// device signature, a challenge, and the Gateway itself can never CREATE
+// this authority — externalAuthorizationRef must already exist, sourced
+// from the external authorization system. A missing ref blocks outright;
+// no escalation or upgrade path is offered by this module.
+export function judgeAuthorityBearingAction(input: {
+  externalAuthorizationRef: string | null;
+  challengeRef: string | null;
+  userPresenceVerified: boolean;
+}): ContractValidation {
+  const errors: string[] = [];
+  if (!hasRef(input.externalAuthorizationRef)) {
+    errors.push("authority_missing");
+  }
+  if (!hasRef(input.challengeRef)) {
+    errors.push("authority_challenge_missing");
+  }
+  if (!input.userPresenceVerified) {
+    errors.push("authority_user_presence_missing");
   }
   return { valid: errors.length === 0, errors };
 }

@@ -1,13 +1,20 @@
 // lib/member-gateway/prompt.test.ts
 import { describe, expect, it } from "vitest";
 
+import { validateHumanResponse } from "@/lib/caio-governance/contract";
 import {
+  MEMBER_PROMPT_RESPONSE_KINDS,
   MEMBER_PROMPT_SEVERITIES,
   MEMBER_PROMPT_STATES,
   MEMBER_RESPONSE_CLASSES,
   MEMBER_TRUST_TIERS,
+  bridgeProtectedHumanResponse,
+  classifyMemberPromptResponse,
   decideMemberPromptDelivery,
+  judgeAuthorityBearingAction,
   judgeMemberPromptTransition,
+  judgeProtectedResponseRoute,
+  requiredTrustTier,
   validateMemberPrompt,
 } from "@/lib/member-gateway/prompt";
 import type {
@@ -47,6 +54,18 @@ describe("member prompt frozen literals", () => {
       "challenge_write",
       "protected_response",
       "authority_action",
+    ]);
+  });
+
+  it("freezes the seven response kinds", () => {
+    expect(MEMBER_PROMPT_RESPONSE_KINDS).toEqual([
+      "acknowledge",
+      "progress_report",
+      "free_text_answer",
+      "refuse",
+      "pause",
+      "appeal",
+      "commitment_confirm",
     ]);
   });
 });
@@ -353,5 +372,248 @@ describe("judgeMemberPromptTransition", () => {
         cause: "respond",
       }).errors,
     ).toContain("prompt_transition_cause_mismatch");
+  });
+});
+
+describe("classifyMemberPromptResponse", () => {
+  it("maps acknowledge to interaction_receipt", () => {
+    expect(classifyMemberPromptResponse("acknowledge")).toBe(
+      "interaction_receipt",
+    );
+  });
+
+  it("maps progress_report to candidate_write", () => {
+    expect(classifyMemberPromptResponse("progress_report")).toBe(
+      "candidate_write",
+    );
+  });
+
+  it("maps free_text_answer to candidate_write", () => {
+    expect(classifyMemberPromptResponse("free_text_answer")).toBe(
+      "candidate_write",
+    );
+  });
+
+  it("maps refuse to protected_human_response", () => {
+    expect(classifyMemberPromptResponse("refuse")).toBe(
+      "protected_human_response",
+    );
+  });
+
+  it("maps pause to protected_human_response", () => {
+    expect(classifyMemberPromptResponse("pause")).toBe(
+      "protected_human_response",
+    );
+  });
+
+  it("maps appeal to protected_human_response", () => {
+    expect(classifyMemberPromptResponse("appeal")).toBe(
+      "protected_human_response",
+    );
+  });
+
+  it("maps commitment_confirm to authority_bearing_action", () => {
+    expect(classifyMemberPromptResponse("commitment_confirm")).toBe(
+      "authority_bearing_action",
+    );
+  });
+});
+
+describe("requiredTrustTier", () => {
+  it("requires challenge_write for candidate_write", () => {
+    expect(requiredTrustTier("candidate_write")).toBe("challenge_write");
+  });
+
+  it("requires challenge_write for interaction_receipt", () => {
+    expect(requiredTrustTier("interaction_receipt")).toBe("challenge_write");
+  });
+
+  it("requires protected_response for protected_human_response", () => {
+    expect(requiredTrustTier("protected_human_response")).toBe(
+      "protected_response",
+    );
+  });
+
+  it("requires authority_action for authority_bearing_action", () => {
+    expect(requiredTrustTier("authority_bearing_action")).toBe(
+      "authority_action",
+    );
+  });
+});
+
+describe("judgeProtectedResponseRoute", () => {
+  it("accepts when user presence is available", () => {
+    expect(
+      judgeProtectedResponseRoute({
+        userPresenceAvailable: true,
+        localFallbackAvailable: false,
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  it("accepts when the local fallback is available", () => {
+    expect(
+      judgeProtectedResponseRoute({
+        userPresenceAvailable: false,
+        localFallbackAvailable: true,
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  it("accepts when both are available", () => {
+    expect(
+      judgeProtectedResponseRoute({
+        userPresenceAvailable: true,
+        localFallbackAvailable: true,
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  it("rejects when neither path is available", () => {
+    expect(
+      judgeProtectedResponseRoute({
+        userPresenceAvailable: false,
+        localFallbackAvailable: false,
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ["protected_response_path_unavailable"],
+    });
+  });
+});
+
+function makeBridgeInput(
+  overrides: Partial<Parameters<typeof bridgeProtectedHumanResponse>[0]> = {},
+) {
+  return {
+    responseId: "response-1",
+    mandateRef: "mandate-1",
+    responderRef: "member-1",
+    responseType: "refuse" as const,
+    subjectPromptRef: "prompt-1",
+    reason: "范围超出授权",
+    auditRefs: ["audit-1"],
+    ...overrides,
+  };
+}
+
+describe("bridgeProtectedHumanResponse", () => {
+  it("assembles a CaioHumanResponse that passes validateHumanResponse", () => {
+    const { response, validation } = bridgeProtectedHumanResponse(
+      makeBridgeInput(),
+    );
+    expect(validation).toEqual({ valid: true, errors: [] });
+    expect(validateHumanResponse(response)).toEqual({
+      valid: true,
+      errors: [],
+    });
+    expect(response.retaliationProhibited).toBe(true);
+    expect(response.status).toBe("raised");
+  });
+
+  it("preserves responseType across all three protected kinds", () => {
+    for (const responseType of ["refuse", "pause", "appeal"] as const) {
+      const { response } = bridgeProtectedHumanResponse(
+        makeBridgeInput({ responseType }),
+      );
+      expect(response.responseType).toBe(responseType);
+      expect(validateHumanResponse(response).valid).toBe(true);
+    }
+  });
+
+  it("maps subjectPromptRef onto subjectWorkRef", () => {
+    const { response } = bridgeProtectedHumanResponse(
+      makeBridgeInput({ subjectPromptRef: "prompt-42" }),
+    );
+    expect(response.subjectWorkRef).toBe("prompt-42");
+  });
+
+  it("never throws on a blank mandateRef, carrying the defect in validation instead", () => {
+    expect(() =>
+      bridgeProtectedHumanResponse(makeBridgeInput({ mandateRef: "" })),
+    ).not.toThrow();
+    const { validation } = bridgeProtectedHumanResponse(
+      makeBridgeInput({ mandateRef: "" }),
+    );
+    expect(validation.valid).toBe(false);
+    expect(validation.errors).toContain("mandate_ref_missing");
+  });
+
+  it("never throws on empty auditRefs, carrying the defect in validation instead", () => {
+    expect(() =>
+      bridgeProtectedHumanResponse(makeBridgeInput({ auditRefs: [] })),
+    ).not.toThrow();
+    const { validation } = bridgeProtectedHumanResponse(
+      makeBridgeInput({ auditRefs: [] }),
+    );
+    expect(validation.valid).toBe(false);
+    expect(validation.errors).toContain("audit_ref_missing");
+  });
+});
+
+describe("judgeAuthorityBearingAction", () => {
+  const complete = {
+    externalAuthorizationRef: "authz-1",
+    challengeRef: "challenge-1",
+    userPresenceVerified: true,
+  };
+
+  it("accepts when all three requirements hold", () => {
+    expect(judgeAuthorityBearingAction(complete)).toEqual({
+      valid: true,
+      errors: [],
+    });
+  });
+
+  it("rejects a missing external authorization ref", () => {
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        externalAuthorizationRef: null,
+      }).errors,
+    ).toContain("authority_missing");
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        externalAuthorizationRef: " ",
+      }).errors,
+    ).toContain("authority_missing");
+  });
+
+  it("rejects a missing challenge ref", () => {
+    expect(
+      judgeAuthorityBearingAction({ ...complete, challengeRef: null }).errors,
+    ).toContain("authority_challenge_missing");
+  });
+
+  it("rejects unverified user presence", () => {
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        userPresenceVerified: false,
+      }).errors,
+    ).toContain("authority_user_presence_missing");
+  });
+});
+
+describe("protected and authority error codes stay disjoint", () => {
+  it("shares no error code between the two judgment families", () => {
+    const protectedErrors = new Set(
+      judgeProtectedResponseRoute({
+        userPresenceAvailable: false,
+        localFallbackAvailable: false,
+      }).errors,
+    );
+    const authorityErrors = new Set([
+      ...judgeAuthorityBearingAction({
+        externalAuthorizationRef: null,
+        challengeRef: null,
+        userPresenceVerified: false,
+      }).errors,
+    ]);
+    const overlap = [...protectedErrors].filter((code) =>
+      authorityErrors.has(code),
+    );
+    expect(overlap).toEqual([]);
   });
 });
