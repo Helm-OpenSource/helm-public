@@ -173,3 +173,22 @@ transitionMemberPrompt(input: {
 - 响应内容持久化(四类写入落库、challenge 流、`bridgeProtectedHumanResponse` 产物落库)是 **M3c**;本切片 respond 只记 opaque `responseRef`。
 - "hold(静默期压住)"不是状态转移,不落回执、不改行——投递重试语义由运行时轮询承担。
 - 判定语义变化只能发生在 M3a 契约层;store 零判定复制。
+
+---
+
+## As-built 记录(2026-08-20 执行完毕)
+
+分支 `feat/member-gateway-m3b`。迁移在本地真库直接应用成功(binlog trust
+flag 已开),MySQL 套件本地真跑全绿。
+
+判断记录:
+1. createMemberPrompt 补 P2002 → `prompt_already_exists`(计划遗漏)。
+2. 无规则 critical 在 store 边界就被 validateMemberPrompt 拒绝
+   (`critical_severity_without_rule`),不可能入库——计划用例 10 相应改为
+   断言该拒绝。
+3. hold(静默期压住)不落回执、不改行,与计划一致;投递重试由运行时轮询
+   承担。
+4. CI 复用 member-gateway mysql job(改名 Member Gateway MySQL),同容器
+   同库跑两套 store 测试;CPV1 白名单增加 MEMBER_PROMPT_STORE_DATABASE_URL。
+5. M3c 待做:四类响应内容落库(challenge 流、bridgeProtectedHumanResponse
+   产物落库、authority 三元绑定钉死、非绩效化字面量延伸到响应回执)。

@@ -784,7 +784,7 @@ jobs:
         run: npm run test:caio-audit-state:mysql
 
   member-gateway-signal-mysql:
-    name: Member Gateway Signal MySQL
+    name: Member Gateway MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
     services:
@@ -854,6 +854,7 @@ jobs:
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'MEMBER_SIGNAL_STORE_DATABASE_URL=%s\n' "${url}"
+            printf 'MEMBER_PROMPT_STORE_DATABASE_URL=%s\n' "${url}"
           } >>"${GITHUB_ENV}"
 
       - name: Setup Node.js
@@ -872,7 +873,7 @@ jobs:
       - name: Replay migrations on an empty database
         run: npx tsx prisma/setup-db.ts prepare
 
-      - name: Verify the member work-signal store against MySQL
+      - name: Verify the member gateway stores against MySQL
         run: npm run test:member-gateway:mysql
 
   quality-regression:
