@@ -8,6 +8,11 @@ import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import { canonicalJson } from "@/lib/expert-capability/hashing";
 import {
+  isMemberGatewaySessionOpenAt,
+  MEMBER_GATEWAY_SESSION_WINDOW_MS,
+  newMemberGatewaySessionId,
+} from "@/lib/member-gateway/gateway-session";
+import {
   hashMemberWorkSignalPayload,
   judgeMemberWorkSignalChallenge,
   judgeMemberWorkSignalSubmission,
@@ -82,6 +87,65 @@ async function lockWorkspace(tx: Tx, workspaceId: string): Promise<void> {
   if (rows.length !== 1) {
     throw new MemberSignalStoreError("workspace_not_found");
   }
+}
+
+export type GatewaySessionTuple = {
+  workspaceId: string;
+  memberRef: string;
+  deviceRegistrationRef: string;
+  clientId: string;
+};
+
+// Resolves the MemberGatewaySession anchor for this (workspace, member,
+// device, client) tuple at challenge-issuance time (M2d, stage-two fact
+// promotion design §2.1/§3, Architecture #3): reuses the newest still-open
+// row inside the fixed window (lib/member-gateway/gateway-session.ts) or
+// opens a new one. MUST be called lexically inside the enclosing
+// Serializable $transaction, after lockWorkspace. This is a plain
+// findFirst+create, not a conditional updateMany, so — unlike the CAS
+// transition mechanics prompt-response-store.service.ts hand-copies from
+// prompt-store.service.ts — scripts/check-conditional-update-cas.ts's
+// "client-from-parameter" restriction does not apply here; this function
+// is exported and reused as-is by prompt-response-store.service.ts's
+// issueMemberPromptResponseChallenge rather than duplicated. No rolling
+// "last activity" update happens here or anywhere else: a reused row is
+// read, never written.
+export async function resolveGatewaySession(
+  tx: Tx,
+  tuple: GatewaySessionTuple,
+  now: Date,
+): Promise<string> {
+  const nowMs = now.getTime();
+  const windowStart = new Date(nowMs - MEMBER_GATEWAY_SESSION_WINDOW_MS);
+  const candidate = await tx.memberGatewaySession.findFirst({
+    where: {
+      workspaceId: tuple.workspaceId,
+      memberRef: tuple.memberRef,
+      deviceRegistrationRef: tuple.deviceRegistrationRef,
+      clientId: tuple.clientId,
+      closedAt: null,
+      openedAt: { gte: windowStart },
+    },
+    orderBy: { openedAt: "desc" },
+  });
+  // The query above is a coarse prefilter; isMemberGatewaySessionOpenAt is
+  // the single source of truth for the exact (inclusive-lower,
+  // exclusive-upper) window boundary — see its own doc comment.
+  if (candidate && isMemberGatewaySessionOpenAt(candidate, nowMs)) {
+    return candidate.id;
+  }
+  const id = newMemberGatewaySessionId();
+  await tx.memberGatewaySession.create({
+    data: {
+      id,
+      workspaceId: tuple.workspaceId,
+      memberRef: tuple.memberRef,
+      deviceRegistrationRef: tuple.deviceRegistrationRef,
+      clientId: tuple.clientId,
+      openedAt: now,
+    },
+  });
+  return id;
 }
 
 function contractChallengeFromRow(
@@ -191,6 +255,21 @@ export async function issueMemberWorkSignalChallenge(
     () =>
       db.$transaction(async (tx) => {
         await lockWorkspace(tx, workspaceId);
+        // M2d: resolve/open the gateway session anchor for this
+        // (workspace, member, device, client) tuple and stamp it onto the
+        // challenge row. This is the issuance-time anchor that
+        // submitMemberWorkSignal later copies onto the signal receipt
+        // without re-resolving (see that function's comment).
+        const gatewaySessionRef = await resolveGatewaySession(
+          tx,
+          {
+            workspaceId,
+            memberRef: candidate.memberRef,
+            deviceRegistrationRef: input.draft.principal.deviceRegistrationRef,
+            clientId: input.draft.principal.clientId,
+          },
+          issuedAt,
+        );
         await tx.memberWorkSignalChallenge.create({
           data: {
             id: candidate.challengeRef,
@@ -203,6 +282,7 @@ export async function issueMemberWorkSignalChallenge(
             payloadHash,
             issuedAt,
             expiresAt,
+            gatewaySessionRef,
           },
         });
         return Object.freeze({ ...candidate });
@@ -386,7 +466,11 @@ export async function submitMemberWorkSignal(
           throw new MemberSignalStoreError("challenge_consumption_conflict");
         }
 
-        // 7. Append-only receipt insert.
+        // 7. Append-only receipt insert. gatewaySessionRef is copied
+        // verbatim from the challenge row, NOT re-resolved: the receipt is
+        // anchored to the session that was open at ISSUANCE time (M2d),
+        // even if the current instant has since drifted past that
+        // session's window.
         try {
           const created = await tx.memberWorkSignalReceipt.create({
             data: {
@@ -407,6 +491,7 @@ export async function submitMemberWorkSignal(
               taint: MEMBER_SIGNAL_TAINT,
               challengeRef,
               supersedesReceiptRef,
+              gatewaySessionRef: challengeRow.gatewaySessionRef,
             },
           });
           return {

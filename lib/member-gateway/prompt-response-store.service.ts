@@ -58,6 +58,7 @@ import {
   type MemberWorkSignalReceipt,
 } from "@/lib/member-gateway/signal";
 import {
+  resolveGatewaySession,
   submitMemberWorkSignal,
   type SubmitMemberWorkSignalResult,
 } from "@/lib/member-gateway/signal-store.service";
@@ -324,6 +325,24 @@ export async function issueMemberPromptResponseChallenge(
           );
         }
 
+        // M2d: resolve/open the gateway session anchor AFTER the addressee
+        // binding check above — a session only opens for a legitimately
+        // addressed prompt, never for a challenge that is about to be
+        // rejected. Reuses signal-store.service.ts's resolveGatewaySession
+        // (a plain findFirst+create, not a CAS updateMany, so no
+        // check:conditional-update-cas restriction blocks importing it
+        // across files — see that function's comment).
+        const gatewaySessionRef = await resolveGatewaySession(
+          tx,
+          {
+            workspaceId,
+            memberRef: candidate.memberRef,
+            deviceRegistrationRef: input.principal.deviceRegistrationRef,
+            clientId: input.principal.clientId,
+          },
+          issuedAt,
+        );
+
         await tx.memberWorkSignalChallenge.create({
           data: {
             id: candidate.challengeRef,
@@ -336,6 +355,7 @@ export async function issueMemberPromptResponseChallenge(
             payloadHash,
             issuedAt,
             expiresAt,
+            gatewaySessionRef,
           },
         });
         return Object.freeze({ ...candidate });
@@ -797,6 +817,14 @@ export async function recordMemberPromptResponse(
                 responseRef: receiptId,
                 occurredAt,
                 evaluationUseProhibited: true,
+                // M2d: this transition is member-caused (a "respond"
+                // triggered by the member's own submission), so it
+                // inherits the issuance-time session anchor from the
+                // challenge that gated it — unlike the expiry-sweep
+                // transition above (step 2) and unlike
+                // prompt-store.service.ts's own transitionMemberPrompt,
+                // both of which are system-caused and always carry null.
+                gatewaySessionRef: challengeRow.gatewaySessionRef,
               },
             });
           } catch (error) {
@@ -816,7 +844,10 @@ export async function recordMemberPromptResponse(
           promptTransitioned = true;
         }
 
-        // 7. Append-only response receipt insert.
+        // 7. Append-only response receipt insert. gatewaySessionRef is
+        // copied verbatim from the challenge row (M2d), same
+        // issuance-time-anchor rule as submitMemberWorkSignal's receipt
+        // insert in signal-store.service.ts.
         try {
           const created = await tx.memberPromptResponseReceipt.create({
             data: {
@@ -840,6 +871,7 @@ export async function recordMemberPromptResponse(
               authorizedMemberRef,
               authorizedObjectRef,
               authorizedActionRef,
+              gatewaySessionRef: challengeRow.gatewaySessionRef,
             },
           });
           return {
