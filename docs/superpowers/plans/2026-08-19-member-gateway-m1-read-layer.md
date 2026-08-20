@@ -1,3 +1,13 @@
+---
+status: executed / as-built-recorded
+owner: helm-core
+created: 2026-08-19
+review_after: 2026-09-19
+public_safety: Implementation plan for the public member-gateway contract
+  slice, with as-built deviation record. No customer data, credential,
+  private endpoint, or production-readiness claim.
+---
+
 # Member Gateway M1 (读层契约) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
