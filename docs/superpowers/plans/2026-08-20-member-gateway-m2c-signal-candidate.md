@@ -1,0 +1,74 @@
+---
+status: planning / ready-to-execute
+owner: helm-core
+created: 2026-08-20
+review_after: 2026-09-20
+public_safety: Implementation plan for the member work-signal candidate
+  materialization slice (owner-ruled design). No customer data, credential,
+  private endpoint, or production-readiness claim.
+---
+
+# Member Gateway M2c(信号候选材料化)Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development 或 executing-plans。
+
+**Goal:** 按 owner 六项裁定(见 `2026-08-20-member-gateway-m2c-design-questions.md` 尾部"Owner 裁定记录")落地信号→审阅→晋升为任务的后端接缝:平行 artifact 类型 `member_work_signal_candidate`、taint 一等字段、脱链接化投影、可选对象锚点、opaque 证据 ref、**第一阶段只晋升为任务**(事实晋升是后续阶段)。**UI(/approvals lister 接线与审阅面)是 M2c-b,本切片到 service 层为止**(与 capability-closeout 先例一致——该先例同样零 UI)。
+
+**Architecture(绑定决定):**
+
+1. **复用 `ArtifactBundle`/`ArtifactReview` 表,不建新表。** 判别靠 `artifactType + reviewPosture + systemOfRecordWrite:false`(无 kind 列;JSON 字段名是 **`artifactsJson`** 复数)。冻结:
+   - `MEMBER_SIGNAL_CANDIDATE_ARTIFACT_TYPE = "member_work_signal_candidate.json"`
+   - `MEMBER_SIGNAL_CANDIDATE_REVIEW_POSTURE = "member_work_signal_candidate_review_required"`
+2. **契约层零 zod**(模块惯例):artifact 形状用 plain 类型 + `ContractValidation` 校验函数;写入前校验,审阅/晋升读取时**重新解析并校验**(taint 完整性,corrupt → 拒绝)。
+3. **taint 一等字段(裁定 2)**:artifact 必含 `taint: "untrusted"` 与 `evaluationUseProhibited: true` 与 `promotionAllowed: false` 字面量;candidate 本身不授予任何东西。
+4. **脱链接化投影(裁定 3)**:`projectSignalToCandidate` 把正文中 `https?://\S+`(大小写不敏感)替换为 token `[link-evidence:<n>]`,并生成 `linkEvidence: [{token, evidenceRef: "link-evidence:<signalReceiptRef>:<n>"}]`;原始 URL 只存在于信号回执,artifact 正文必须 link-free(校验函数强制)。安全扫描:私有拷贝仓内 persistable-text 正则(第三份拷贝是先例;不要 hoist 进 lib/llm——那会落入 llm-candidate 门禁根)+ `detectPIIInOutput`(从 `@/lib/llm/output-pii-scrubber` import,方向合法)。
+5. **对象锚点(裁定 4)**:`objectAnchor` 判别联合:`{resolved:true, objectType, objectId}`(objectType 为 plain string,与 proposal 侧 `objectRefSchema` 同风格,不绑 Prisma 枚举)| `{resolved:false, objectRef, objectVersion}`(保留原始 opaque ref)。解析输入由调用方提供,材料化器不做解析。
+6. **证据(裁定 5)**:artifact 只带 opaque `relatedEvidenceRefs`;审阅人按需投影(七元交集、主体换审阅人)是 M2c-b/运行时职责,本切片成文不实现。
+7. **晋升终点(裁定 6)**:只实现 promote-to-task(ActionItem + ApprovalTask,照 `governed-candidate-review.ts:398` 形状);**不调用/不实现** `projectConfirmedArtifactToMemoryCandidate` 路径。
+8. **CAS 合规从第一行开始**:先例 review/promote 的 `count!==1` CAS 是被 baseline 的不合规代码——我们的所有事务一律 `db.$transaction(..., { isolationLevel: Serializable, maxWait:10_000, timeout:30_000 })` 内联 + `lockWorkspace` 先行,零新 finding、零 baseline 写入。
+9. **材料化幂等(照 closeout 三层)**:确定性 PK `member-signal-candidate:${sha256(canonicalJson({workspaceId, artifactType, signalReceiptRef})).slice(0,32)}`(一信号一候选);存在性复读需匹配 AuditLog;P2002 捕获后重查。**被 superseded 的信号回执拒绝材料化**(`signal_receipt_superseded`,查 supersedesReceiptRef 指向它的行)——只有更正链头可成为候选。
+10. **能力门**:review 用 `assertWorkspaceGovernedActionReviewServiceAccess`(REVIEW_GOVERNED_ACTIONS);promote 用 `assertWorkspaceGovernedCandidatePromotionServiceAccess`(PROMOTE_GOVERNED_CANDIDATES)。MEMBER 能力为空集,成员不能审/晋升自己的信号——现状已正确,测试钉死一条。
+11. **ActionItem 溯源**:`sourceId = "member-signal-candidate-artifact:${bundleId}"`(晋升幂等键),`contentAuthorship: ActorType.HUMAN`(正文源自成员人写内容,区别于 governed 候选的 AI 署名);`aiReason` 写明 member-signal 溯源与 taint。其余列形状照 governed promote(CREATE_TASK / MEDIUM / REQUIRES_APPROVAL / PENDING_APPROVAL / autoExecute:false)。
+
+**设计真值:** spec §5 + 本切片新增 spec 节(Task 0);六项 owner 裁定;`capability-closeout-materializer.ts`(材料化机械先例)与 `governed-candidate-review.ts`(review/promote 形状先例,注意其 CAS 不合规不可照抄)。
+
+**分支:** `feat/member-gateway-m2c`。
+
+---
+
+### Task 0: spec 增补
+
+`docs/superpowers/specs/2026-08-19-member-workbuddy-caio-gateway-design.md` §5 的 `candidate_write` 行后新增小节 **"§5.1 候选晋升接缝(M2c)"**:六项裁定的规范化表述(平行 artifact 类型与两个冻结字符串、taint/evaluationUseProhibited/promotionAllowed 三字面量、脱链接投影与 linkEvidence、objectAnchor 判别联合、opaque 证据 + 审阅人按需投影义务、阶段一只到任务晋升 + 阶段二事实晋升需成员网关会话锚点另立设计;成员不能审阅/晋升自己的信号由能力体系保证)。英文摘要段同步补一句。Commit: `docs: specify the member signal candidate promotion seam (M2c owner rulings)`
+
+### Task 1: 契约 `lib/member-gateway/signal-candidate.ts`(+ 同址单测)
+
+导出:两个冻结字符串;`MemberWorkSignalCandidateArtifact` 类型(schemaVersion:1、taint/evaluationUseProhibited/promotionAllowed 字面量、signalReceiptRef、五元溯源 memberRef/deviceRegistrationRef/clientId/policyRef/policyVersion、kind、projectedSummary/projectedDetail(link-free)、linkEvidence、relatedEvidenceRefs、objectAnchor、submittedAt);`projectSignalToCandidate(input)`(纯函数:输入信号回执契约对象 + payload{summary,detail,relatedEvidenceRefs} + anchor;输出 artifact;链接替换实现见 Architecture 4);`validateMemberWorkSignalCandidateArtifact`(全不变量:字面量、link-free(私有正则)、锚点分支完整性、instants、refs);`computeMemberWorkSignalCandidateContentHash = sha256(canonicalJson(artifact))`。TDD:投影(含大写 HTTPS、多链接编号、无链接原样)、校验每个错误码、锚点两分支、hash 稳定性。Commit: `feat(member-gateway): add member signal candidate contract with de-linked projection`
+
+### Task 2: 材料化器 `lib/member-gateway/signal-candidate-materializer.ts`
+
+server-only;输入 `{workspaceId, signalReceiptId, objectAnchor}`;Serializable 事务:lockWorkspace → 读信号回执行(payloadJson 哈希复核,corrupt → `signal_receipt_corrupt`)→ superseded 检查 → `projectSignalToCandidate` → 校验 + 安全扫描(persistable-text 私有拷贝 + PII)→ 三层幂等(Architecture 9)→ `tx.artifactBundle.create`(列集合照 closeout::265-280:id/workspaceId/artifactType/title(固定模式 `成员信号候选:<kind>`,不含正文)/status DRAFT/systemOfRecordWrite false/summary(截断的 projectedSummary)/artifactsJson(canonical JSON)/evidenceRefs(opaque refs JSON)/sourceProvenance(taint+五元溯源 JSON)/reviewPosture)→ `tx.artifactReview.create`(PENDING 三字段)→ `tx.auditLog.create`(actionType `MEMBER_WORK_SIGNAL_CANDIDATE_MATERIALIZED`,targetType "ArtifactBundle",ActorType.SYSTEM,principal `runtime:member-signal-candidate-materializer`,trace context)。返回 `{artifactBundleId, artifactReviewId, reused}`。Commit: `feat(member-gateway): materialize work signals into reviewable candidates`
+
+### Task 3: review/promote `lib/member-gateway/signal-candidate-review.service.ts`
+
+- `reviewMemberWorkSignalCandidate`:能力门(REVIEW_GOVERNED_ACTIONS)→ 类型钉死 finder(artifactType+posture+systemOfRecordWrite:false)→ 读取时解析+校验 artifact(corrupt/taint 缺失 → `candidate_artifact_corrupt`)→ Serializable CAS:confirm → bundle DRAFT→CONFIRMED + review PENDING→CONFIRMED(带 reviewer 字段);reject → 双 REJECTED;`count!==1` → 冲突错误;audit `MEMBER_WORK_SIGNAL_CANDIDATE_REVIEWED`。
+- `promoteMemberWorkSignalCandidateToTask`:能力门(PROMOTE_GOVERNED_CANDIDATES)→ 要求 CONFIRMED bundle+review → `resolvePolicyDecision`(CREATE_TASK/MEDIUM,FORBIDDEN 与 SUGGEST_ONLY 拒绝)→ CAS CONFIRMED→CONSUMED(consumedAt)→ ActionItem(Architecture 11)+ ApprovalTask(PENDING/isHighRisk:false/autoExecute:false)+ notification + audit `MEMBER_WORK_SIGNAL_CANDIDATE_PROMOTED_TO_TASK`;晋升幂等靠 sourceType+sourceId 复读。
+- `listMemberWorkSignalCandidateReviews(workspaceId)`:类型钉死、take 50、返回冻结列表项(含 taint 字段——M2c-b UI 的读模型),照 `listGovernedJudgementCandidateReviews` 形状。
+- 明确**不实现**事实晋升路径(裁定 6 阶段一)。
+Commit: `feat(member-gateway): review and promote signal candidates to governed tasks`
+
+### Task 4: 隔离 MySQL 测试 `lib/member-gateway/signal-candidate.mysql.test.ts`
+
+env `MEMBER_SIGNAL_CANDIDATE_DATABASE_URL`(mandate 模式)。fixture 需要 OWNER 成员(能力门要过)+ 一条真实信号(走 signal-store issue+submit)。用例(≥13):材料化 happy(三行齐、artifact 校验通过、taint/promotionAllowed 在场);幂等 reused;字段漂移 → conflict;superseded 信号拒绝;带链接(含大写)信号 → artifact link-free + linkEvidence 编号正确;含凭据样式文本 → `unsafe_candidate_text`;review confirm happy;reject happy;错误 artifactType 的 bundle → 拒绝;corrupt artifactsJson($executeRaw 直改)→ `candidate_artifact_corrupt`;promote happy(ActionItem/ApprovalTask/CONSUMED/sourceId);未 CONFIRMED promote 拒绝;二次 promote 幂等复读;MEMBER 角色调用 review/promote → 能力拒绝(建一个 MEMBER 成员 fixture)。本地真库全绿。Commit: `test(member-gateway): cover candidate materialization, review, and promotion against MySQL`
+
+### Task 5: 接线与收尾
+
+`test:member-gateway:mysql` 加文件;CI job GITHUB_ENV 加 `MEMBER_SIGNAL_CANDIDATE_DATABASE_URL`;CPV1 白名单;`check-member-gateway.ts` 扫描列表 += 3 文件,冻结 marker += `'"member_work_signal_candidate.json"'`、`'"untrusted"'`(signal-candidate.ts 内)、`"promotionAllowed"`;as-built;最终整体 review;push + PR(base main)。
+
+---
+
+## 边界声明
+
+- UI(/approvals lister 接线、审阅面 taint 渲染、审阅人证据按需投影)是 **M2c-b**;本切片到 service 层为止,与 closeout 先例一致。
+- 事实晋升(MemoryCandidate/runtimeSessionId)是裁定 6 的阶段二,本切片不可表达。
+- candidate 本身不授予权限、不产生承诺;晋升产物 ActionItem 仍走 REQUIRES_APPROVAL 既有审批链。
+- 判定/投影全部在契约层;materializer/review/promote 零判定复制。
