@@ -191,35 +191,59 @@ export type HelmV2MemoryItem<TPayload = Record<string, unknown>> = {
   payload: TPayload;
 };
 
-export type HelmV2ArtifactId =
-  | "meeting_facts.json"
-  | "risk_flags.json"
-  | "action_pack.md"
-  | "search_hits.json"
-  | "grep_hits.json"
-  | "evidence_candidates.json"
-  | "worker_findings_bundle.json"
-  | "worker_handoff_note.md"
-  | "draft_comms_bundle.json"
-  | "opportunity_judgement_bundle.json"
-  | "opportunity_delta.json"
-  | "next_step_brief.md"
-  | "manager_attention_flags.json"
-  | "customer_followup_draft.md"
-  | "internal_collab_brief.md"
-  | "exec_brief.md"
-  | "email_draft.eml"
-  | "calendar_options.json"
-  | "message_variants.md"
-  | "risk_review.json"
-  | "approval_requirements.json"
-  | "sanitized_artifact.md"
-  | "handoff_pack.md"
-  | "delivery_risk_checklist.json"
-  | "first_14_day_plan.md"
-  | "human_action_execution_bundle.json"
-  | "official_write_intent.json"
-  | "limited_auto_intent.json";
+// Every string literal ever written to `ArtifactBundle.artifactType` by helm-v2
+// (via db.artifactBundle.create in opportunity-judge-runtime.ts,
+// meeting-action-pack-runtime.ts, and draft-comms-handoff-runtime.ts) plus the
+// forward-declared types read by human-action-execution-runtime.ts
+// (handoff_pack.md, first_14_day_plan.md) and the swarm workers
+// (search_hits.json, grep_hits.json, evidence_candidates.json,
+// worker_findings_bundle.json, worker_handoff_note.md) that are wired in
+// artifact-workers.ts but not yet materialized.
+//
+// ArtifactBundle is a shared table: governed_intelligence (lib/llm,
+// lib/governed-intelligence), member-gateway
+// (member_work_signal_candidate.json), and capability-closeout candidates
+// also write rows into it. This is the single source of truth for "is this
+// artifactType one of ours" — every helm-v2 selector or updateMany that reads
+// or writes ArtifactBundle by a non-unique key (runtimeEventId, meetingId, or
+// workspaceId+id) MUST pin `artifactType: { in: HELM_V2_ARTIFACT_TYPES }` (or
+// an explicit literal/sub-list drawn from this const) so it can never select
+// or mutate a bundle belonging to a foreign artifact family. Do not add a
+// string here that isn't also written by a create site or consumed by a
+// helm-v2 read site — this list IS the isolation boundary.
+export const HELM_V2_ARTIFACT_TYPES = Object.freeze([
+  "meeting_facts.json",
+  "risk_flags.json",
+  "action_pack.md",
+  "memory_draft.jsonl",
+  "search_hits.json",
+  "grep_hits.json",
+  "evidence_candidates.json",
+  "worker_findings_bundle.json",
+  "worker_handoff_note.md",
+  "draft_comms_bundle.json",
+  "opportunity_judgement_bundle.json",
+  "opportunity_delta.json",
+  "next_step_brief.md",
+  "manager_attention_flags.json",
+  "customer_followup_draft.md",
+  "internal_collab_brief.md",
+  "exec_brief.md",
+  "email_draft.eml",
+  "calendar_options.json",
+  "message_variants.md",
+  "risk_review.json",
+  "approval_requirements.json",
+  "sanitized_artifact.md",
+  "handoff_pack.md",
+  "delivery_risk_checklist.json",
+  "first_14_day_plan.md",
+  "human_action_execution_bundle.json",
+  "official_write_intent.json",
+  "limited_auto_intent.json",
+] as const);
+
+export type HelmV2ArtifactId = (typeof HELM_V2_ARTIFACT_TYPES)[number];
 
 export type HelmV2ApprovalTier = "A0" | "A1" | "A2" | "A3" | "A4";
 
