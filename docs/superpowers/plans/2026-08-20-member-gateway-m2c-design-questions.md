@@ -1,5 +1,5 @@
 ---
-status: planning / needs-owner-decision
+status: active / owner-decided-pending-spec
 owner: helm-core
 created: 2026-08-20
 review_after: 2026-09-20
@@ -65,3 +65,26 @@ public_safety: Pre-design decision memo for feeding member work-signal
 owner 逐项拍板 → superpowers:brainstorming(短轮,聚焦上述六项)→
 spec 增补(§5 candidate_write 的晋升接缝节)→ plan → 执行,复用
 M1-M3b 的两段式 review 流程。
+
+---
+
+## Owner 裁定记录(2026-08-20)
+
+六项决策 + 执行排序均已由 owner 拍板:
+
+1. **接入形状**:平行 artifact 类型 `member_work_signal_candidate`,自带
+   strict schema,复用 ArtifactBundle/ArtifactReview 与 /approvals。
+2. **taint**:schema 一等必填字面量字段(仿 `retaliationProhibited`),
+   审阅 UI 必须一等渲染。
+3. **链接**:脱链接化投影——候选正文中链接替换为 opaque 证据 ref,原文
+   保留在信号回执;新 artifact 沿用禁链接规则。
+4. **对象锚点**:可选解析 + 无锚点分支;解析不到 ObjectType 的信号仍可
+   审阅,artifact 保留原始 opaque ref。
+5. **证据升面**:审阅面默认 opaque ref;审阅人下钻时按 ref 单独跑
+   工作区级授权投影(复用七元交集,主体换审阅人)。
+6. **晋升终点**:分阶段——第一阶段只接 review + 晋升为任务
+   (ActionItem/ApprovalTask);事实晋升(MemoryCandidate,需
+   runtimeSessionId)为第二阶段,届时定成员网关会话锚点。
+7. **排序**:先 M3c(响应内容落库)后 M2c。
+
+下一步:M3c 执行;M2c 依上述裁定走 spec 增补 → plan → 执行。
