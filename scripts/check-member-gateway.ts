@@ -52,6 +52,8 @@ for (const file of [
   "signal.ts",
   "signal-store.service.ts",
   "signal-store.mysql.test.ts",
+  "prompt-store.service.ts",
+  "prompt-store.mysql.test.ts",
 ]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
