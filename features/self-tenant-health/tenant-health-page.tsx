@@ -162,7 +162,7 @@ export function TenantHealthPage({
             en: "Read-only health telemetry over customer workspaces: aliases, buckets, counts, and health states.",
           },
           wontDo: {
-            zh: "不读取租户会议、CRM 记录、提问原文或模型输出，也不自动介入任何租户。",
+            zh: "不读取租户会议、客户关系系统记录、提问原文或模型输出，也不自动介入任何租户。",
             en: "Never reads tenant meetings, CRM records, question text, or model outputs, and never intervenes in any tenant automatically.",
           },
           decider: {

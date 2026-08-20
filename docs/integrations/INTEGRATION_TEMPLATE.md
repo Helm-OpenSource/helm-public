@@ -41,7 +41,7 @@ and boundary questions should open an `integration: <system>` issue first.
 |---|---|---|---|
 | L0 diagnostic intake | 说明客户现在能给什么材料、能形成什么经营信号 | signal ledger、customer materials request | connector 授权、客户系统写回 |
 | L1 fixture / dry-run | 用 redacted / synthetic fixture 证明 mapper、eval 和 review packet | fixture、signal-quality report、HSI eval、review packet | 生产 freshness、客户部署批准 |
-| L2 read-only connector | 在最小 scope、审计 trace 和撤销路径齐备后接只读采集 | read-only ingest、failure posture、quarantine / retry path | 写回、外发、审批执行、正式 memory promotion |
+| L2 read-only connector | 在最小 scope、审计追踪和撤销路径齐备后接只读采集 | read-only ingest、failure posture、quarantine / retry path | 写回、外发、审批执行、正式 memory promotion |
 
 只有 L0/L1 的材料和边界能说清楚，才进入 L2。L3 写回、客户可见外发和审批执行不属于
 public Core 默认接入路径。
