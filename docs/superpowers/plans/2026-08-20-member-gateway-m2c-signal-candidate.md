@@ -1,5 +1,5 @@
 ---
-status: planning / ready-to-execute
+status: archived / executed-with-as-built-record
 owner: helm-core
 created: 2026-08-20
 review_after: 2026-09-20
@@ -72,3 +72,61 @@ env `MEMBER_SIGNAL_CANDIDATE_DATABASE_URL`(mandate 模式)。fixture 需要 OWNE
 - 事实晋升(MemoryCandidate/runtimeSessionId)是裁定 6 的阶段二,本切片不可表达。
 - candidate 本身不授予权限、不产生承诺;晋升产物 ActionItem 仍走 REQUIRES_APPROVAL 既有审批链。
 - 判定/投影全部在契约层;materializer/review/promote 零判定复制。
+
+---
+
+## As-built 记录(2026-08-20 执行完毕)
+
+分支 `feat/member-gateway-m2c` 上 6 个 commit(spec §5.1 增补、契约层、
+materializer、review/promote service、隔离 MySQL 测试、门禁与 CI 接线)。
+本地可验证门禁全绿:typecheck 0 错误、lint 0 违规、
+`check:conditional-update-cas` 零新 finding(47 条既有 baseline 位点不变)、
+`check:member-gateway` PASS、模块单测 167 通过(+ mysql 套件按 env 跳过)、
+隔离 MySQL 套件对本地真库实跑 16 通过 0 失败、全量 `check:boundaries`
+每 commit 绿。
+
+偏离与判断记录:
+
+1. **`ActorType.USER` 替代计划文本的 `ActorType.HUMAN`**:Prisma `ActorType`
+   枚举只有 `USER | SYSTEM | AI`,不存在 `HUMAN`。`ActionItem.contentAuthorship`
+   字段本身的 schema 注释说明:内容由人撰写的流程必须显式声明 `USER`
+   (`AI` 是默认值)。`USER` 是"成员撰写、非 AI 撰写"在本仓语义下唯一正确
+   的字面量,已在 review service 内联注释记录该替换与理由。
+2. **第四份 persistable-text 正则拷贝**:`signal-candidate-materializer.ts`
+   内的私有拷贝是仓内第四份(前三份分别是
+   `lib/llm/governed-candidate-materializer.ts`、
+   `lib/governed-intelligence/capability-closeout-materializer.ts:40-41`、
+   `lib/member-gateway/signal-candidate.ts`)。它与 Task 1 契约层的拷贝
+   扫描的是**不同文本面**:契约层只扫 `projectedSummary`+`projectedDetail`
+   (正文),materializer 这份扫描 `canonicalJson(artifact)` 全量(含
+   `relatedEvidenceRefs`/`objectAnchor`/五元溯源),因此不能靠共享一份
+   拷贝或 re-export 合并——已在 mysql 测试中用两个独立用例分别证明两层
+   各自能单独拦截(正文内的凭据样式文本在契约层校验阶段就先被拒
+   `candidate_body_link_bearing`,materializer 自身的全量扫描只在正文之
+   外的字段——例如 `relatedEvidenceRefs`——才是唯一可观察到
+   `unsafe_candidate_text` 分支触发的路径)。
+3. **晋升幂等一致性检查零 zod**:`findExistingCandidatePromotion` 用
+   `safeParseJson` 做 `ActionItem.metadata` 的字段级一致性检查,而不是像
+   `governed-candidate-review.ts` 先例那样引入 zod schema——与
+   member-gateway 模块"契约层零 zod"的既有惯例保持一致,该 metadata 只是
+   审计展示用途的 plain JSON,不是需要重新校验的契约对象。
+4. **`ActionItem.aiReason` 列长度 bug(真库实跑发现)**:该列是普通 Prisma
+   `String?`,未标注 `@db.LongText`/`@db.Text`,MySQL 侧映射为
+   `VARCHAR(191)`。晋升逻辑最初把 `artifact.kind`/`signalReceiptRef` 插值
+   进 `aiReason`,在隔离 MySQL 套件对真实 receipt id 实跑时超列宽报错
+   (`PrismaClientKnownRequestError`)。已修复为固定、简短、直接声明
+   taint 的静态字符串;可变长度的溯源信息(kind/signalReceiptRef)只保留
+   在 `metadata`(LongText)与晋升 `AuditLog.payload`(LongText)中。
+
+### 留给 owner(仍是记录在案的义务,本切片不落地)
+
+- **M2c-b UI**:`/approvals` lister 接线、审阅面 taint 一等渲染、审阅人
+  按 ref 逐条下钻的工作区级授权投影(七元交集,主体换审阅人——spec §5.1
+  裁定 5 的运行时义务,本切片 service 层完整实现了 review/promote,但
+  证据按需升面投影本身尚未实现)。
+- **阶段二事实晋升**:候选晋升为 `MemoryCandidate` 需要成员网关会话锚点
+  (`runtimeSessionId`),裁定 6 明确这是另立设计,本切片任何路径都不可
+  表达、也未表达。
+- **CI 首次真实运行**:本切片把 `MEMBER_SIGNAL_CANDIDATE_DATABASE_URL` 接
+  进既有 `member-gateway-signal-mysql` job 与 `test:member-gateway:mysql`,
+  但该 job 在 CI 环境的首次真实运行(而非本地实跑)仍待观察。

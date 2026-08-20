@@ -56,6 +56,10 @@ for (const file of [
   "prompt-store.mysql.test.ts",
   "prompt-response-store.service.ts",
   "prompt-response-store.mysql.test.ts",
+  "signal-candidate.ts",
+  "signal-candidate-materializer.ts",
+  "signal-candidate-review.service.ts",
+  "signal-candidate.mysql.test.ts",
 ]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
@@ -105,6 +109,24 @@ for (const marker of promptFrozenMarkers) {
   if (!promptSource.includes(marker)) {
     violations.push(
       `lib/member-gateway/prompt.ts missing frozen marker: ${marker}`,
+    );
+  }
+}
+
+const candidatePath = path.join(root, "lib/member-gateway/signal-candidate.ts");
+const candidateSource = readFileSync(candidatePath, "utf8");
+
+const candidateFrozenMarkers = [
+  '"member_work_signal_candidate.json"',
+  '"member_work_signal_candidate_review_required"',
+  '"untrusted"',
+  "promotionAllowed",
+  "evaluationUseProhibited",
+];
+for (const marker of candidateFrozenMarkers) {
+  if (!candidateSource.includes(marker)) {
+    violations.push(
+      `lib/member-gateway/signal-candidate.ts missing frozen marker: ${marker}`,
     );
   }
 }
