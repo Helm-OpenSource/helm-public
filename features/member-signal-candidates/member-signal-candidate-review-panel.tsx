@@ -11,10 +11,186 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  projectMemberSignalEvidenceAction,
   promoteMemberSignalCandidateToTaskAction,
   reviewMemberSignalCandidateAction,
 } from "@/features/member-signal-candidates/actions";
 import type { MemberSignalCandidateReviewListItem } from "@/lib/member-gateway/signal-candidate-review.service";
+
+// Bilingual labels for the seven M1 read-surface dimensions (spec §8.1) —
+// only rendered here, in the reviewer-facing evidence projection panel;
+// the frozen literal identifiers themselves live in lib/member-gateway/types.ts.
+const EVIDENCE_DIMENSION_LABELS: Readonly<Record<string, readonly [string, string]>> = {
+  live_membership: ["Live membership", "在职成员资格"],
+  tool_scope: ["Tool scope", "工具授权范围"],
+  object_relationship_authorization: [
+    "Object relationship authorization",
+    "对象关联授权",
+  ],
+  field_purpose_policy: ["Field purpose policy", "字段用途策略"],
+  source_authorization: ["Source authorization", "数据来源授权"],
+  tenant_provider_egress_policy: [
+    "Tenant provider egress policy",
+    "租户出站策略",
+  ],
+  current_classification: ["Current classification", "当前分级"],
+};
+
+const EVIDENCE_BLOCK_REASON_LABELS: Readonly<Record<string, readonly [string, string]>> = {
+  LOCAL_VIEW_REQUIRED: [
+    "This evidence must be viewed locally in the source system.",
+    "该证据必须在源系统本地查看。",
+  ],
+  read_surface_denied: ["The read surface was denied.", "读取面被拒绝。"],
+  classification_unknown: [
+    "The object's classification is unknown.",
+    "该对象的分级未知。",
+  ],
+  provider_not_approved: [
+    "No approved provider for this tenant.",
+    "该租户没有已批准的提供方。",
+  ],
+  purpose_missing: ["The request purpose is missing.", "请求缺少用途标识。"],
+};
+
+type EvidenceProjectionViewState =
+  | {
+      status: "blocked";
+      blockReason: string;
+      deniedDimensions: readonly string[];
+    }
+  | { status: "projected"; data: Readonly<Record<string, unknown>> }
+  | { status: "error"; message: string };
+
+function EvidenceRefRow({
+  artifactBundleId,
+  evidenceRef,
+  english,
+}: {
+  artifactBundleId: string;
+  evidenceRef: string;
+  english: boolean;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<EvidenceProjectionViewState | null>(
+    null,
+  );
+
+  const runProjection = () => {
+    startTransition(async () => {
+      const response = await projectMemberSignalEvidenceAction({
+        artifactBundleId,
+        evidenceRef,
+      });
+      if (!response.ok) {
+        setResult({ status: "error", message: response.error });
+        return;
+      }
+      const decision = response.envelope.boundary.decision;
+      if (decision.projection === null) {
+        setResult({
+          status: "blocked",
+          blockReason: decision.blockReason ?? "read_surface_denied",
+          deniedDimensions: response.deniedDimensions,
+        });
+      } else {
+        setResult({
+          status: "projected",
+          data: (response.envelope.data ?? {}) as Readonly<
+            Record<string, unknown>
+          >,
+        });
+      }
+    });
+  };
+
+  // The default fail-closed resolver denies all seven dimensions at once —
+  // that specific shape gets deployment-attributed copy ("this deployment
+  // hasn't connected a resolver") instead of a dimension-by-dimension list,
+  // so a reviewer never reads it as their own access problem.
+  const isUnconnectedDeployment =
+    result?.status === "blocked" &&
+    result.blockReason === "read_surface_denied" &&
+    result.deniedDimensions.length === 7;
+
+  return (
+    <div
+      className="rounded-md border border-[color:var(--border)] p-3"
+      data-member-signal-evidence-ref={evidenceRef}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <code className="min-w-0 truncate text-xs text-[color:var(--muted)]">
+          {evidenceRef}
+        </code>
+        <Button
+          disabled={pending}
+          onClick={runProjection}
+          size="sm"
+          variant="secondary"
+        >
+          {english ? "View authorization projection" : "查看授权投影"}
+        </Button>
+      </div>
+      {result?.status === "blocked" ? (
+        <div
+          className="mt-2 text-xs text-[color:var(--muted)]"
+          data-member-signal-evidence-result="blocked"
+        >
+          {isUnconnectedDeployment ? (
+            <p>
+              {english
+                ? "This deployment has not connected an evidence resolver; the request was denied by default."
+                : "当前部署未接入证据解析器，按默认拒绝。"}
+            </p>
+          ) : (
+            <>
+              <p>
+                {(EVIDENCE_BLOCK_REASON_LABELS[result.blockReason]?.[
+                  english ? 0 : 1
+                ]) ?? result.blockReason}
+              </p>
+              {result.deniedDimensions.length > 0 ? (
+                <ul className="mt-1 list-disc pl-4">
+                  {result.deniedDimensions.map((dimension) => (
+                    <li key={dimension}>
+                      {(EVIDENCE_DIMENSION_LABELS[dimension]?.[
+                        english ? 0 : 1
+                      ]) ?? dimension}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
+      {result?.status === "projected" ? (
+        <table
+          className="mt-2 w-full text-xs"
+          data-member-signal-evidence-result="projected"
+        >
+          <tbody>
+            {Object.entries(result.data).map(([field, value]) => (
+              <tr key={field}>
+                <td className="pr-2 align-top font-medium text-[color:var(--foreground)]">
+                  {field}
+                </td>
+                <td className="align-top text-[color:var(--muted)]">
+                  {String(value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      {result?.status === "error" ? (
+        <p className="mt-2 text-xs text-[color:var(--danger)]">
+          {result.message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 type MemberSignalCandidateReviewPanelProps = {
   items: MemberSignalCandidateReviewListItem[];
@@ -40,6 +216,7 @@ function MemberSignalCandidateRow({
   const [reviewNotes, setReviewNotes] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const runReview = (decision: "confirm" | "reject") => {
     startTransition(async () => {
@@ -143,6 +320,31 @@ function MemberSignalCandidateRow({
             {item.submittedAt ?? (english ? "Submission time unknown" : "提交时间未知")}
           </p>
         </div>
+        {item.relatedEvidenceRefs.length > 0 ? (
+          <div>
+            <Button
+              onClick={() => setEvidenceOpen((open) => !open)}
+              size="sm"
+              variant="ghost"
+            >
+              {english
+                ? `Evidence (${item.relatedEvidenceRefs.length})`
+                : `证据(${item.relatedEvidenceRefs.length})`}
+            </Button>
+            {evidenceOpen ? (
+              <div className="mt-2 space-y-2">
+                {item.relatedEvidenceRefs.map((evidenceRef) => (
+                  <EvidenceRefRow
+                    artifactBundleId={item.artifactBundleId}
+                    english={english}
+                    evidenceRef={evidenceRef}
+                    key={evidenceRef}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="min-w-0 border-t border-[color:var(--border)] pt-4 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
