@@ -95,6 +95,46 @@ CEO 版 WorkBuddy 设计（`2026-07-23-workbuddy-caio-lan-collaboration-design.m
 | `protected_human_response` | refuse / pause / appeal | canonical `CaioHumanResponse` 治理记录。**不是 candidate，不经过记忆提升即生效**；提出本身永远合法，校验只查可审计性与关联完整性，不能裁定响应越界；记录携带 `retaliationProhibited: true`，不得作为负面评价输入 |
 | `authority_bearing_action` | 可能形成组织承诺或外部影响的确认动作 | 只有既有独立权限系统对该成员、该对象、该动作明确授权后才能确认。成员身份、设备签名、challenge 和 Gateway 本身都不能创造该权限；无授权时 Gateway 返回明确阻断，不提供"升级路径" |
 
+### §5.1 候选晋升接缝（M2c，owner 裁定 2026-08-20）
+
+成员信号（`candidate_write`）从回执走向可审阅材料、再走向任务晋升的接缝，
+遵循 owner 于 2026-08-20 对
+`docs/superpowers/plans/2026-08-20-member-gateway-m2c-design-questions.md`
+六项决策问题的裁定，规范如下：
+
+1. **接入形状**：信号候选走一个与既有 governed-candidate 并列的平行
+   artifact 类型，复用既有 `ArtifactBundle`/`ArtifactReview` 表与既有
+   `/approvals` 审阅面，不新建审阅通道、不新增 kind 列。类型判别只靠两个
+   冻结字符串字面量——`artifactType = "member_work_signal_candidate.json"`、
+   `reviewPosture = "member_work_signal_candidate_review_required"`——叠加
+   `systemOfRecordWrite: false`。
+2. **taint 一等字段**：该 artifact 必须携带字面量字段
+   `taint: "untrusted"`、`evaluationUseProhibited: true`、
+   `promotionAllowed: false`；三者是 artifact 结构本身的一部分，不是可选
+   metadata，也不因下游处理而丢失。任何审阅呈现面必须把 taint 作为一等
+   标记渲染，不得降级为次要说明文字或被裁剪。`promotionAllowed: false`
+   表示 artifact 本身不构成任何授权或自动晋升依据；阶段一的"晋升为任务"
+   始终由具备能力的人经既有审批链发起，与该字面量不冲突。
+3. **脱链接化投影**：候选正文（投影后的 summary/detail）禁止携带链接；
+   信号原文中的 URL 一律替换为 opaque 的 `linkEvidence` token，原始 URL
+   只保留在信号回执（`MemberWorkSignalReceipt`）中，永不进入候选正文。
+4. **对象锚点**：候选携带的对象锚点是一个判别联合——已解析到既有对象
+   类型的分支，与保留原始 opaque 引用的未解析分支。无法解析到已知对象
+   类型的信号不因此被拒绝晋升为候选，仍然可进入审阅。
+5. **证据按需升面**：候选携带的关联证据一律是 opaque 引用；审阅人需要
+   按引用逐条下钻查看原始证据时，须为该引用重新跑一次工作区级授权投影
+   （复用既有七元交集判定，交集主体从信号提交成员换成审阅人本人），而
+   不是直接继承成员当时的授权。该投影是运行时义务；本节确认该义务存在，
+   其执行路径不在本节规范范围内。
+6. **晋升终点分两阶段**：第一阶段只允许候选晋升为任务，产物是
+   `ActionItem` + `ApprovalTask`，并沿用既有审批链既有约束（如
+   REQUIRES_APPROVAL）；候选本身不授予任何权限，不构成任何承诺。晋升为
+   经营记忆事实（`MemoryCandidate`）是第二阶段，需要为成员网关引入会话
+   锚点，属于另立设计范畴。成员不能审阅或晋升自己提交的信号——这是能力
+   体系既有的结构性结果（MEMBER 能力集合为空集，不含
+   `REVIEW_GOVERNED_ACTIONS`/`PROMOTE_GOVERNED_CANDIDATES`），本节重申其
+   适用于候选晋升接缝。
+
 ## 6. 三层能力与工具面
 
 所有工具复用 CEO 版统一 envelope（`ok / requestId / serverTime / data /
@@ -275,4 +315,8 @@ enforced server-side per object per call. Work Packet dispatch is not
 expressible in the current schema and requires a new schema version plus a
 separate design. Adoption metrics are tenant-aggregated only and must never
 feed performance evaluation; refusal, pause, appeal, non-response, and low
-usage are never negative signals.
+usage are never negative signals. §5.1 specifies the candidate promotion
+seam: candidate-write signals may materialize into a parallel, first-class
+`taint`-bearing artifact type that reuses the existing governed-artifact
+review chain and, in this stage, promotes only to tasks — never directly to
+memory fact.
