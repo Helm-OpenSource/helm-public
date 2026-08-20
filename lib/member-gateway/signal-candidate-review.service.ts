@@ -672,6 +672,12 @@ export type MemberSignalCandidateReviewListItem = Readonly<{
   memberRef: string | null;
   submittedAt: string | null;
   createdAt: string;
+  // Opaque evidence refs a reviewer may individually drill into for a
+  // per-ref authorization projection (reviewer-evidence-projection.service
+  // .ts). Parsed straight from the artifact; empty for a corrupt row —
+  // there is nothing safe to drill into when the artifact itself failed
+  // validation.
+  relatedEvidenceRefs: readonly string[];
   // A corrupt/tampered row is marked, not thrown away — one bad row must
   // never blank a reviewer's whole queue (governed-candidate-review.ts
   // lister precedent, contractStatus:"invalid" branch).
@@ -707,6 +713,7 @@ export async function listMemberWorkSignalCandidateReviews(
         memberRef: artifact.memberRef,
         submittedAt: artifact.submittedAt,
         createdAt: row.createdAt.toISOString(),
+        relatedEvidenceRefs: artifact.relatedEvidenceRefs,
         corrupt: false,
       };
     } catch {
@@ -720,6 +727,7 @@ export async function listMemberWorkSignalCandidateReviews(
         memberRef: null,
         submittedAt: null,
         createdAt: row.createdAt.toISOString(),
+        relatedEvidenceRefs: [],
         corrupt: true,
       };
     }
