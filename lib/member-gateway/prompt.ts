@@ -5,9 +5,10 @@
 // dispatch stays inexpressible in this module, same as the rest of the
 // Member Gateway slice.
 
-import { parseInstant, validateHumanResponse } from "@/lib/caio-governance/contract";
+import { validateHumanResponse } from "@/lib/caio-governance/contract";
 import type { CaioHumanResponse } from "@/lib/caio-governance/types";
 import type { ContractValidation } from "@/lib/member-gateway/contract";
+import { parseInstant } from "@/lib/time/strict-instant";
 
 export const MEMBER_PROMPT_SEVERITIES = ["critical", "normal"] as const;
 

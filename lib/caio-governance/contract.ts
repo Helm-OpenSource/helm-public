@@ -15,6 +15,16 @@ import {
   type CaioPolicyEnvelope,
   type CaioRuntimeAuthorityProjection,
 } from "@/lib/caio-governance/types";
+// Strict RFC 3339 instant parsing is pure time parsing with no authority
+// semantics — it lives in lib/time/strict-instant.ts so that
+// authority-restricted surfaces can depend on it without transitively
+// reaching this governance contract (check:caio-terminology authority
+// firewall). Imported (not redefined) and re-exported unchanged so both
+// this module's internal use and existing external callers of
+// parseInstant from this module keep working.
+import { parseInstant } from "@/lib/time/strict-instant";
+
+export { parseInstant };
 
 // ---------------------------------------------------------------------------
 // CAIO governance contract — pure, deterministic, fail-closed rules.
@@ -51,46 +61,6 @@ export type ContractValidation = {
 
 function hasRef(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim() !== "";
-}
-
-// Strict RFC 3339 instant: date, time, and an explicit zone (Z or offset).
-// Impossible calendar dates and out-of-range clock fields are rejected —
-// Date.parse's silent normalization is not accepted.
-const INSTANT_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
-
-function daysInMonth(year: number, month: number): number {
-  if (month === 2) {
-    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-    return leap ? 29 : 28;
-  }
-  return [4, 6, 9, 11].includes(month) ? 30 : 31;
-}
-
-export function parseInstant(value: string): number | null {
-  const match = INSTANT_PATTERN.exec(value);
-  if (match === null) {
-    return null;
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  if (
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > daysInMonth(year, month) ||
-    hour > 23 ||
-    minute > 59 ||
-    second > 60
-  ) {
-    return null;
-  }
-  const epoch = Date.parse(value);
-  return Number.isNaN(epoch) ? null : epoch;
 }
 
 function allRefs(values: readonly string[]): boolean {

@@ -4,7 +4,7 @@
 // work signal is ALWAYS candidate evidence with an untrusted taint; nothing
 // in this module can promote it to fact, and dispatch stays inexpressible.
 
-import { parseInstant } from "@/lib/caio-governance/contract";
+import { parseInstant } from "@/lib/time/strict-instant";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import { validateMemberPrincipal } from "@/lib/member-gateway/contract";
 import type { ContractValidation } from "@/lib/member-gateway/contract";

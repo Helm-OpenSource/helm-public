@@ -1,7 +1,7 @@
 // Deterministic judgment for the Member Gateway read layer. Pure functions,
 // no IO. Fail-closed: missing evidence is always a denial.
 
-import { parseInstant } from "@/lib/caio-governance/contract";
+import { parseInstant } from "@/lib/time/strict-instant";
 import { METADATA_ONLY_FIELD_WHITELIST } from "@/lib/member-gateway/types";
 import type {
   MemberObjectClassification,

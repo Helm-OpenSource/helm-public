@@ -9,7 +9,7 @@
 // anything: taint/evaluationUseProhibited/promotionAllowed are frozen
 // literals baked into the artifact shape itself.
 
-import { parseInstant } from "@/lib/caio-governance/contract";
+import { parseInstant } from "@/lib/time/strict-instant";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import type { ContractValidation } from "@/lib/member-gateway/contract";
 import { MEMBER_WORK_SIGNAL_KINDS } from "@/lib/member-gateway/signal";
