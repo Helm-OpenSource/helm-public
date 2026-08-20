@@ -29,12 +29,13 @@ import { randomUUID } from "node:crypto";
 
 import { Prisma } from "@prisma/client";
 
-import { parseInstant, validateHumanResponse } from "@/lib/caio-governance/contract";
+import { validateHumanResponse } from "@/lib/caio-governance/contract";
 import type { CaioHumanResponse } from "@/lib/caio-governance/types";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import { validateMemberPrincipal } from "@/lib/member-gateway/contract";
+import { parseInstant } from "@/lib/time/strict-instant";
 import {
   bridgeProtectedHumanResponse,
   classifyMemberPromptResponse,

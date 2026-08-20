@@ -2,7 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
-import { parseInstant } from "@/lib/caio-governance/contract";
+import { parseInstant } from "@/lib/time/strict-instant";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import { canonicalJson } from "@/lib/expert-capability/hashing";

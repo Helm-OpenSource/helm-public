@@ -33,6 +33,7 @@ import type { BusinessLoopGapSummary } from "@/lib/operating-system/operating-ga
 import { resolveApprovalsExtensions } from "@/lib/extensions/registry";
 import { getApprovalTasksData } from "@/features/approvals/queries";
 import { listGovernedJudgementCandidateReviews } from "@/lib/governed-intelligence/governed-candidate-review";
+import { listMemberWorkSignalCandidateReviews } from "@/lib/member-gateway/signal-candidate-review.service";
 import { resolveOptionalApprovalsReadModel } from "@/features/approvals/optional-read-model";
 
 function buildFallbackBusinessLoopGapSummary(): BusinessLoopGapSummary {
@@ -98,6 +99,12 @@ export async function loadApprovalsPageData(
         [],
       )
     : [];
+  const memberSignalCandidates = canReviewCandidates
+    ? await resolveOptionalApprovalsReadModel(
+        listMemberWorkSignalCandidateReviews(workspace.id),
+        [],
+      )
+    : [];
   const actionTypes = tasks.map(
     (task) => task.actionItem.actionType as ActionType,
   );
@@ -142,6 +149,7 @@ export async function loadApprovalsPageData(
   return {
     tasks,
     governedCandidates,
+    memberSignalCandidates,
     learningPanels,
     businessLoopGapSummary,
     firstLoopModel,

@@ -138,6 +138,8 @@ import {
 } from "@/features/approvals/stage1-terminal-result-control";
 import { GovernedCandidateReviewPanel } from "@/features/governed-candidates/governed-candidate-review-panel";
 import type { GovernedCandidateReviewListItem } from "@/lib/governed-intelligence/governed-candidate-review";
+import { MemberSignalCandidateReviewPanel } from "@/features/member-signal-candidates/member-signal-candidate-review-panel";
+import type { MemberSignalCandidateReviewListItem } from "@/lib/member-gateway/signal-candidate-review.service";
 
 type ApprovalsClientProps = {
   actionGovernance: {
@@ -155,6 +157,7 @@ type ApprovalsClientProps = {
     promotionDeniedMessage: string;
   };
   governedCandidates: GovernedCandidateReviewListItem[];
+  memberSignalCandidates: MemberSignalCandidateReviewListItem[];
   tasks: Array<{
     id: string;
     status: "PENDING" | "EXECUTED" | "REJECTED" | "WITHDRAWN";
@@ -381,6 +384,7 @@ export function ApprovalsClient({
   actionGovernance,
   candidateGovernance,
   governedCandidates,
+  memberSignalCandidates,
   tasks,
   learningPanels,
   businessLoopGapSummary,
@@ -2234,6 +2238,13 @@ export function ApprovalsClient({
       {candidateGovernance.canReview || candidateGovernance.canPromote ? (
         <GovernedCandidateReviewPanel
           items={governedCandidates}
+          governance={candidateGovernance}
+        />
+      ) : null}
+
+      {candidateGovernance.canReview || candidateGovernance.canPromote ? (
+        <MemberSignalCandidateReviewPanel
+          items={memberSignalCandidates}
           governance={candidateGovernance}
         />
       ) : null}
