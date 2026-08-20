@@ -1,5 +1,5 @@
 ---
-status: draft / stage-two-design-for-owner-review
+status: active / owner-ruled-implementing
 owner: helm-core
 created: 2026-08-20
 review_after: 2026-09-20
@@ -109,3 +109,26 @@ memory write), taint and evaluation-use-prohibited provenance carried
 into the memory layer with first-class rendering at verification, and the
 existing promotion capability. Four owner decision points are listed;
 nothing is implemented until they are ruled on.
+
+---
+
+## Owner 裁定记录(2026-08-20)
+
+§3 四项决策已由 owner 拍板,本设计转为可实现(M2d):
+
+1. **会话锚点**:一等 `MemberGatewaySession` + 对齐方式 A(`MemoryCandidate`
+   增可空 `memberGatewaySessionRef`,`runtimeSessionId` 改可空,DB CHECK
+   恰一锚点非空)。
+2. **历史回执**:无会话锚点的存量回执永久不参与事实晋升,不做回填、
+   不提供人工补锚工具;它们仍可走阶段一任务晋升。
+3. **taint 保留**:验证通过后写入的事实保留"源自未受信成员上行"的来源
+   标注——事实可信度由验证背书,来源史实不抹除。
+4. **能力**:投影动作沿用 `PROMOTE_GOVERNED_CANDIDATES`(叠加既有
+   memory 服务门,不新造能力常量)。
+
+实现细节修正(基于 2026-08-20 记忆层探查):`MemoryCandidate` 现无
+provenance 列,taint/溯源随 `sourceStatus` JSON 携带;投影函数必须放
+**新文件**(llm-candidate 门禁对 capability-closeout-review.ts 的切片扫描
+到文件尾)且**禁止写 MemoryPromotion/MemoryItem**;taint 渲染最小插点是
+`buildEvidenceSourceClasses`(lib/helm-v2/runtime-upgrade.ts:6969),零组
+件改动流入 /memory 与 operator 面板。
