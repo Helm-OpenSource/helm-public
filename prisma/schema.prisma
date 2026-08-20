@@ -1393,6 +1393,8 @@ model Workspace {
   workBuddyPromptResponseReceipts      WorkBuddyPromptResponseReceipt[]
   memberWorkSignalChallenges           MemberWorkSignalChallenge[]
   memberWorkSignalReceipts             MemberWorkSignalReceipt[]
+  memberPrompts                        MemberPrompt[]
+  memberPromptTransitionReceipts       MemberPromptTransitionReceipt[]
   caioAccessTokens                     CaioAccessToken[]
   caioPairingRequests                  CaioPairingRequest[]
   caioContextNegativeRules             CaioContextNegativeRule[]
@@ -6726,6 +6728,56 @@ model MemberWorkSignalReceipt {
   @@unique([workspaceId, challengeRef], map: "MWSignalReceipt_workspace_challenge_key")
   @@unique([workspaceId, supersedesReceiptRef], map: "MWSignalReceipt_workspace_supersedes_key")
   @@index([workspaceId, objectRef], map: "MWSignalReceipt_workspace_object_idx")
+}
+
+/// Member Gateway M3b: member prompt queue row (spec §6.3). State moves
+/// only through CAS transitions that append a receipt; `version` is the
+/// optimistic-concurrency counter (expectedVersion seam).
+model MemberPrompt {
+  id              String   @id
+  workspaceId     String
+  memberRef       String
+  severity        String
+  severityRuleRef String?
+  subjectObjectRef String
+  projectedSummary String  @db.LongText
+  evidenceRefsJson String  @db.LongText
+  state           String
+  version         Int
+  snoozeUntil     DateTime?
+  responseRef     String?
+  issuedAt        DateTime
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPrompt_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "MWPrompt_id_workspace_key")
+  @@index([workspaceId, memberRef, state], map: "MWPrompt_workspace_member_state_idx")
+}
+
+/// Member Gateway M3b: append-only prompt transition receipt. Delivery
+/// receipts embed the delivery decision; `evaluationUseProhibited` is the
+/// frozen non-performance literal (spec §12): transition timing/content
+/// must never feed member evaluation.
+model MemberPromptTransitionReceipt {
+  id            String   @id
+  workspaceId   String
+  promptRef     String
+  fromState     String
+  toState       String
+  cause         String
+  version       Int
+  deliverDecision String?
+  heldReason    String?
+  responseRef   String?
+  occurredAt    DateTime
+  evaluationUseProhibited Boolean
+  createdAt     DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPromptReceipt_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "MWPromptReceipt_id_workspace_key")
+  @@unique([workspaceId, promptRef, version], map: "MWPromptReceipt_prompt_version_key")
+  @@index([workspaceId, promptRef], map: "MWPromptReceipt_workspace_prompt_idx")
 }
 
 
