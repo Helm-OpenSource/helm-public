@@ -24,6 +24,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { ensureWorkspaceProcessingAllowed, recordUsageLedgerEntry } from "@/lib/billing/foundation";
 import { db } from "@/lib/db";
 import { resolveApprovalRule } from "@/lib/helm-v2/approval-matrix";
+import { HELM_V2_ARTIFACT_TYPES } from "@/lib/helm-v2/contracts";
 import {
   getMeetingRuntimeUpgradeSummary,
   syncMeetingRuntimeUpgradeIngest,
@@ -855,6 +856,11 @@ async function updateBundlesForReview(input: {
   const meetingEndedBundles = await db.artifactBundle.findMany({
     where: {
       runtimeEventId: input.meetingEndedEventId,
+      // runtimeEventId alone is not unique to helm-v2 bundles, and every
+      // bundle returned here gets an unconditional status/reviewPosture
+      // write below — pin the artifact family so this can never blind-write
+      // a foreign-family bundle.
+      artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
     },
   });
 
@@ -1607,6 +1613,9 @@ export async function getMeetingRuntimeSummary(workspaceId: string, meetingId: s
           { runtimeEventId: meetingEndedEvent.id },
           ...(meetingFactsEvent ? [{ runtimeEventId: meetingFactsEvent.id }] : []),
         ],
+        // runtimeEventId alone is not unique to helm-v2 bundles; pin to the
+        // helm-v2 artifact family for structural isolation.
+        artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
       },
       include: {
         approvalRequest: true,

@@ -105,17 +105,37 @@ function memberSignalCandidateArtifactBundleId(input: {
 // lib/governed-intelligence/capability-closeout-materializer.ts:40-41; the
 // third is lib/member-gateway/signal-candidate.ts (which scans only the
 // candidate BODY — summary/detail — as a contract-layer invariant). This
-// copy scans the FULL serialized artifact (refs, anchor, provenance
-// included) as a materializer-layer defense-in-depth check, a different
-// text surface than the contract-layer scan, so it needs its own instance
-// rather than a re-export.
+// copy adds the materializer-layer defense-in-depth check over the
+// MEMBER-AUTHORED text surfaces beyond the body: evidence refs and link
+// tokens are member-typed input too.
 const UNSAFE_PERSISTED_TEXT_PATTERN =
   /\bhttps?:\/\/|\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/|\b(?:password|secret|token|api[_-]?key|credential)\s*[:=]/i;
 
-function assertCandidateArtifactTextIsSafe(serializedArtifact: string): void {
+// Scans ONLY member-authored text surfaces, never system identifiers.
+// Scanning the full serialized artifact (workspace/member/receipt ids,
+// cuids) is wrong twice over: a randomly generated id can contain an
+// eleven-digit run shaped like a Chinese mobile number, which (a) made CI
+// fail intermittently depending on generated ids, and (b) in production
+// would poison EVERY candidate of an unlucky workspace. Opaque ids are
+// not PII; member text is where PII/credentials can actually arrive.
+export function memberAuthoredCandidateText(
+  artifact: MemberWorkSignalCandidateArtifact,
+): string {
+  return canonicalJson({
+    projectedSummary: artifact.projectedSummary,
+    projectedDetail: artifact.projectedDetail,
+    relatedEvidenceRefs: artifact.relatedEvidenceRefs,
+    linkEvidence: artifact.linkEvidence,
+  });
+}
+
+function assertCandidateArtifactTextIsSafe(
+  artifact: MemberWorkSignalCandidateArtifact,
+): void {
+  const memberText = memberAuthoredCandidateText(artifact);
   if (
-    UNSAFE_PERSISTED_TEXT_PATTERN.test(serializedArtifact) ||
-    detectPIIInOutput(serializedArtifact).detected
+    UNSAFE_PERSISTED_TEXT_PATTERN.test(memberText) ||
+    detectPIIInOutput(memberText).detected
   ) {
     throw new MemberSignalCandidateError("unsafe_candidate_text");
   }
@@ -246,8 +266,8 @@ async function loadAndBuildCandidate(
     );
   }
 
+  assertCandidateArtifactTextIsSafe(artifact);
   const projection = buildProjection(artifact);
-  assertCandidateArtifactTextIsSafe(projection.artifactsJson);
   return { artifact, projection };
 }
 

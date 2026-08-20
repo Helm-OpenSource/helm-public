@@ -23,6 +23,7 @@ import {
 } from "@/lib/billing/foundation";
 import { db } from "@/lib/db";
 import { resolveApprovalRule } from "@/lib/helm-v2/approval-matrix";
+import { HELM_V2_ARTIFACT_TYPES } from "@/lib/helm-v2/contracts";
 import {
   type ActionPackBundleContent,
   buildMeetingRuntimeMemoryContext,
@@ -1701,6 +1702,10 @@ async function consumeReviewedOpportunityJudgement(input: {
       id: {
         in: [input.opportunityDeltaBundleId, input.bundleArtifactId],
       },
+      // id is a primary key, but pin the artifact family anyway so this
+      // blind status/reviewPosture write can never touch a foreign-family
+      // bundle even if a caller passes a mismatched id.
+      artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
     },
     data: {
       status: ArtifactBundleStatus.CONSUMED,
@@ -2080,6 +2085,9 @@ export async function getMeetingOpportunityJudgeRuntimeSummary(
       where: {
         workspaceId,
         runtimeEventId: latestOpportunityDeltaEvent.id,
+        // runtimeEventId alone is not unique to helm-v2 bundles; pin to the
+        // helm-v2 artifact family for structural isolation.
+        artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
       },
       include: {
         approvalRequest: true,
