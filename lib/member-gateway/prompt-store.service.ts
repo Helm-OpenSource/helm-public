@@ -192,22 +192,31 @@ export async function createMemberPrompt(
     () =>
       db.$transaction(async (tx) => {
         await lockWorkspace(tx, workspaceId);
-        await tx.memberPrompt.create({
-          data: {
-            id: promptRef,
-            workspaceId,
-            memberRef: input.prompt.memberRef,
-            severity: input.prompt.severity,
-            severityRuleRef: input.prompt.severityRuleRef,
-            subjectObjectRef: input.prompt.subjectObjectRef,
-            projectedSummary: input.prompt.projectedSummary,
-            evidenceRefsJson,
-            state: "pending",
-            version: 1,
-            issuedAt: new Date(input.prompt.issuedAt),
-            expiresAt: new Date(input.prompt.expiresAt),
-          },
-        });
+        try {
+          await tx.memberPrompt.create({
+            data: {
+              id: promptRef,
+              workspaceId,
+              memberRef: input.prompt.memberRef,
+              severity: input.prompt.severity,
+              severityRuleRef: input.prompt.severityRuleRef,
+              subjectObjectRef: input.prompt.subjectObjectRef,
+              projectedSummary: input.prompt.projectedSummary,
+              evidenceRefsJson,
+              state: "pending",
+              version: 1,
+              issuedAt: new Date(input.prompt.issuedAt),
+              expiresAt: new Date(input.prompt.expiresAt),
+            },
+          });
+        } catch (error) {
+          if (isUniqueConstraintViolation(error)) {
+            throw new MemberPromptStoreError("prompt_already_exists", [
+              "prompt_already_exists",
+            ]);
+          }
+          throw error;
+        }
       }, TRANSACTION_OPTIONS),
     WRITE_RETRY_OPTIONS,
   );
