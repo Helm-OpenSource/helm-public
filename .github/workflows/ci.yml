@@ -783,6 +783,98 @@ jobs:
       - name: Verify the CAIO audit receipt store and gate against MySQL
         run: npm run test:caio-audit-state:mysql
 
+  member-gateway-signal-mysql:
+    name: Member Gateway Signal MySQL
+    runs-on: ubuntu-latest
+    needs: [type-check, repo-guards]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          # No database password is committed. The container boots with an
+          # empty root password on the runner loopback only; the first job
+          # step below mints a random least-privilege credential and rotates
+          # root to a random password before anything connects for real.
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: helm_member_gw_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      HELM_CI_MYSQL_DATABASE: helm_member_gw_ci
+      HELM_CI_MYSQL_USER: helm_ci
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Migrations create append-only triggers, which the server refuses
+            # under binary logging from a user without SUPER (error 1419).
+            # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
+            # exists (granting it is a syntax error) and SET_ANY_DEFINER, its
+            # replacement, does NOT satisfy this particular check. So the root
+            # bootstrap trusts creators for this container instead, and the
+            # application user stays scoped to its own database.
+            #
+            # This is safe HERE and nowhere else: the container is ephemeral,
+            # loopback-only, and has exactly one non-root user. Do not copy this
+            # line to a server that outlives a job or serves anyone else.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'MEMBER_SIGNAL_STORE_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Replay migrations on an empty database
+        run: npx tsx prisma/setup-db.ts prepare
+
+      - name: Verify the member work-signal store against MySQL
+        run: npm run test:member-gateway:mysql
+
   quality-regression:
     name: Public Guard Regression
     runs-on: ubuntu-latest
