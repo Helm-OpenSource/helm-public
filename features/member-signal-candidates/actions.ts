@@ -16,6 +16,10 @@ import {
   promoteMemberWorkSignalCandidateToTask,
   reviewMemberWorkSignalCandidate,
 } from "@/lib/member-gateway/signal-candidate-review.service";
+import {
+  MemberEvidenceProjectionError,
+  projectCandidateEvidenceForReviewer,
+} from "@/lib/member-gateway/reviewer-evidence-projection.service";
 
 const reviewActionSchema = z
   .object({
@@ -29,6 +33,12 @@ const promotionActionSchema = z
     artifactBundleId: z.string().trim().min(1).max(191),
     title: z.string().trim().min(1).max(175),
     description: z.string().trim().max(191).optional(),
+  })
+  .strict();
+const evidenceProjectionActionSchema = z
+  .object({
+    artifactBundleId: z.string().trim().min(1).max(191),
+    evidenceRef: z.string().trim().min(1).max(191),
   })
   .strict();
 
@@ -83,6 +93,40 @@ function candidateErrorMessage(
     candidate_promotion_state_conflict: [
       "Candidate promotion state is inconsistent and remains blocked.",
       "候选晋级状态不一致，当前保持阻断。",
+    ],
+  };
+  return messages[error.code][english ? 0 : 1];
+}
+
+function evidenceProjectionErrorMessage(
+  error: MemberEvidenceProjectionError,
+  english: boolean,
+) {
+  const messages: Record<
+    MemberEvidenceProjectionError["code"],
+    [string, string]
+  > = {
+    candidate_not_found: [
+      "Candidate artifact not found.",
+      "候选产物不存在。",
+    ],
+    // Never reachable through this action (registration happens only in
+    // deployment start-up code); present because the record is total.
+    duplicate_resolver_registration: [
+      "Evidence resolver configuration conflict.",
+      "证据解析器配置冲突。",
+    ],
+    candidate_artifact_corrupt: [
+      "Candidate artifact failed validation and remains blocked.",
+      "候选产物校验失败，当前保持阻断。",
+    ],
+    evidence_ref_not_in_candidate: [
+      "This evidence reference does not belong to the candidate.",
+      "该证据引用不属于此候选，已拒绝。",
+    ],
+    evidence_projection_unavailable: [
+      "Evidence authorization projection is unavailable right now.",
+      "证据授权投影当前不可用。",
     ],
   };
   return messages[error.code][english ? 0 : 1];
@@ -159,6 +203,49 @@ export async function promoteMemberSignalCandidateToTaskAction(
   } catch (error) {
     if (error instanceof MemberSignalCandidateReviewError) {
       return { ok: false as const, error: candidateErrorMessage(error, english) };
+    }
+    if (isWorkspaceServiceGovernanceError(error)) {
+      return { ok: false as const, error: error.message };
+    }
+    throw error;
+  }
+}
+
+// Read-only: runs one per-evidence-ref authorization projection for the
+// reviewer (spec §5.1 ruling 5). No approval/rejection/task state changes,
+// so unlike the two actions above this never revalidates a path — the
+// caller renders the returned envelope inline.
+export async function projectMemberSignalEvidenceAction(input: unknown) {
+  const { membership, user, workspace } = await getCurrentWorkspaceSession();
+  const english = workspace.defaultLocale === "en-US";
+  const parsed = evidenceProjectionActionSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      error: english
+        ? "Invalid evidence projection parameters."
+        : "证据投影参数无效。",
+    };
+  }
+  if (!canReviewWorkspaceGovernedActions(membership.role)) {
+    return {
+      ok: false as const,
+      error: getGovernedActionReviewDeniedMessage(english),
+    };
+  }
+  try {
+    const { envelope, deniedDimensions } = await projectCandidateEvidenceForReviewer({
+      workspaceId: workspace.id,
+      reviewerUserId: user.id,
+      ...parsed.data,
+    });
+    return { ok: true as const, envelope, deniedDimensions };
+  } catch (error) {
+    if (error instanceof MemberEvidenceProjectionError) {
+      return {
+        ok: false as const,
+        error: evidenceProjectionErrorMessage(error, english),
+      };
     }
     if (isWorkspaceServiceGovernanceError(error)) {
       return { ok: false as const, error: error.message };
