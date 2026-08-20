@@ -64,3 +64,7 @@ public_safety: Implementation plan for the member signal candidate review
    绿。owner 待办:修复四处或按预期更新守卫基线。
 5. 仍未实现(继承义务):审阅人逐 evidence-ref 按需投影;阶段二事实
    晋升;E2E 截图基线如需覆盖新面板由 owner 决定。
+6. 最终 review 补记:corrupt 行有意以 blocked 标记(ShieldAlert + 无命令)
+   替代 taint badge——被判定损坏的候选整行不可信,阻断标记是比 taint
+   更强的表达;裁定 2 的一等渲染义务适用于可审阅行。测试 fixture 的
+   taint 值修正为契约冻结的 "untrusted"。

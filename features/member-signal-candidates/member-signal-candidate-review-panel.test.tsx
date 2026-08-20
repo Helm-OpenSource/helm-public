@@ -23,7 +23,7 @@ function candidateItem(
     reviewStatus: "PENDING",
     bundleStatus: "DRAFT",
     kind: "opportunity_note",
-    taint: "member_upstream",
+    taint: "untrusted",
     projectedSummary: "跟进节奏可能需要调整 [link-evidence:1]",
     memberRef: "member:synthetic-1",
     submittedAt: "2026-07-12T08:00:00.000Z",
