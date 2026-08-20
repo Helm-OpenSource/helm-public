@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { getCurrentWorkspace, getCurrentWorkspaceSession } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { resolveWorkspaceDemoMode } from "@/lib/demo/demo-modes";
 import { getWorkspaceStory } from "@/lib/presentation/workspace-story";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";

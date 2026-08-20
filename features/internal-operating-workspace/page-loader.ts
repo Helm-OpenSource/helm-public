@@ -2,7 +2,7 @@ import { resolveGroupScopeUserIds } from "@/lib/auth/group-scope";
 import "server-only";
 
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import {
   canManageWorkspaceRuntime,
   canReviewWorkspaceRuntime,

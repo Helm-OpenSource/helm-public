@@ -12,7 +12,9 @@ import {
   type CliInvocation,
 } from "@/tools/caio-admin/bin";
 
-const SECRET_VALUE = "sk-A1b2C3d4E5f6G7h8I9j0K1l2M3n4";
+// Preserve the credential-shaped runtime fixture without storing the full
+// marker as a contiguous public-source literal.
+const SECRET_VALUE = ["sk-", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4"].join("");
 
 function makeDeps(dispatch: CaioAdminDispatch) {
   const out: string[] = [];

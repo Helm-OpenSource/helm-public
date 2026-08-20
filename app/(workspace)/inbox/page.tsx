@@ -1,7 +1,7 @@
 import { ConnectorProvider } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getWorkspaceBusinessLoopGapReadout } from "@/lib/helm-v2/runtime-upgrade";
 import { getInboxData } from "@/features/inbox/queries";
 import { InboxClient } from "@/features/inbox/inbox-client";

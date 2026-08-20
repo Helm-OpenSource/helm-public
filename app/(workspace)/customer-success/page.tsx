@@ -1,5 +1,5 @@
 import { ConnectorProvider } from "@prisma/client";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getWorkspaceBusinessLoopGapReadout } from "@/lib/helm-v2/runtime-upgrade";
