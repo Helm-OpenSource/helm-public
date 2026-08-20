@@ -7,6 +7,7 @@ describe("approvals page loader degraded mode contract", () => {
   it("keeps the critical approval queue outside optional read model fan-out", () => {
     expect(loaderSource).toContain("const tasks = await getApprovalTasksData");
     expect(loaderSource).toContain("resolveOptionalApprovalsReadModel");
+    expect(loaderSource).toContain("listMemberWorkSignalCandidateReviews");
     expect(loaderSource).toContain(
       "getWorkspaceBusinessLoopGapReadout(workspace.id).then",
     );

@@ -15,6 +15,7 @@ export default async function ApprovalsPage({
     evidenceOpen,
     tasks,
     governedCandidates,
+    memberSignalCandidates,
     learningPanels,
     businessLoopGapSummary,
     firstLoopModel,
@@ -31,6 +32,7 @@ export default async function ApprovalsPage({
         actionGovernance={actionGovernance}
         candidateGovernance={candidateGovernance}
         governedCandidates={governedCandidates}
+        memberSignalCandidates={memberSignalCandidates}
         tasks={tasks}
         learningPanels={learningPanels}
         businessLoopGapSummary={businessLoopGapSummary}
