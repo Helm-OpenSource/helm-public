@@ -65,11 +65,26 @@ const WRITE_RETRY_OPTIONS = {
   retryDelayMs: 50,
 } as const;
 
+// Promotion input bounds (Important 1). Both columns are plain Prisma
+// String -> MySQL VARCHAR(191), no @db.LongText/@db.Text — the same class
+// of bug the live isolated-MySQL run already caught once on aiReason
+// (see the materializer's aiReason comment). Title is the tighter
+// constraint: it is written both to ActionItem.title (191 cap) AND
+// embedded in the Notification.title literal `Pending review: ${title}`
+// (16 chars) -> 191 - 16 = 175. description (when present) is written to
+// ActionItem.description/draftContent and ApprovalTask.contextSnapshot/
+// editableContent, all four plain VARCHAR(191) columns, so its cap is 191.
+const MEMBER_SIGNAL_CANDIDATE_PROMOTION_TITLE_MAX_CHARS = 175;
+const MEMBER_SIGNAL_CANDIDATE_PROMOTION_DESCRIPTION_MAX_CHARS = 191;
+
 export type MemberSignalCandidateReviewErrorCode =
   | "invalid_input"
   | "candidate_not_found"
   | "candidate_artifact_corrupt"
   | "candidate_review_conflict"
+  | "signal_receipt_superseded"
+  | "promotion_title_too_long"
+  | "promotion_description_too_long"
   | "candidate_promotion_requires_confirmation"
   | "candidate_promotion_policy_forbidden"
   | "candidate_promotion_policy_suggest_only"
@@ -100,6 +115,33 @@ async function lockWorkspace(tx: Tx, workspaceId: string): Promise<void> {
     SELECT id FROM Workspace WHERE id = ${workspaceId} FOR UPDATE`;
   if (rows.length !== 1) {
     throw new MemberSignalCandidateReviewError("candidate_not_found");
+  }
+}
+
+// Re-checks supersession at review/promote time (Important 2). A signal
+// may be corrected AFTER its candidate was materialized (and even after
+// that candidate was reviewed/confirmed) — a superseded signal's candidate
+// is stale and must never be reviewed or promoted; the correction's own
+// candidate (a separate ArtifactBundle, materialized off the correction
+// receipt) is the reviewable/promotable head. Queried on `tx` inside the
+// Serializable transaction so a correction racing with this call cannot
+// slip past the check.
+async function assertCandidateSignalNotSuperseded(
+  tx: Tx,
+  workspaceId: string,
+  signalReceiptRef: string,
+): Promise<void> {
+  const supersededBy = await tx.memberWorkSignalReceipt.findUnique({
+    where: {
+      workspaceId_supersedesReceiptRef: {
+        workspaceId,
+        supersedesReceiptRef: signalReceiptRef,
+      },
+    },
+    select: { id: true },
+  });
+  if (supersededBy) {
+    throw new MemberSignalCandidateReviewError("signal_receipt_superseded");
   }
 }
 
@@ -185,7 +227,7 @@ export async function reviewMemberWorkSignalCandidate(
   }
   // Corrupt/taint-missing artifacts are rejected before any state change —
   // review/promote never act on a row that fails re-validation.
-  parseCandidateArtifact(bundle.artifactsJson);
+  const artifact = parseCandidateArtifact(bundle.artifactsJson);
   if (bundle.artifactReview?.status !== ArtifactReviewStatus.PENDING) {
     throw new MemberSignalCandidateReviewError("candidate_review_conflict");
   }
@@ -205,6 +247,11 @@ export async function reviewMemberWorkSignalCandidate(
     () =>
       db.$transaction(async (tx) => {
         await lockWorkspace(tx, workspaceId);
+        await assertCandidateSignalNotSuperseded(
+          tx,
+          workspaceId,
+          artifact.signalReceiptRef,
+        );
 
         // CAS bundle DRAFT -> CONFIRMED|REJECTED.
         const claimedBundle = await tx.artifactBundle.updateMany({
@@ -366,7 +413,18 @@ export async function promoteMemberWorkSignalCandidateToTask(
   const actorName = nonEmpty(input.actorName);
   const artifactBundleId = nonEmpty(input.artifactBundleId);
   const title = nonEmpty(input.title);
+  if (title.length > MEMBER_SIGNAL_CANDIDATE_PROMOTION_TITLE_MAX_CHARS) {
+    throw new MemberSignalCandidateReviewError("promotion_title_too_long");
+  }
   const description = input.description?.trim() || null;
+  if (
+    description !== null &&
+    description.length > MEMBER_SIGNAL_CANDIDATE_PROMOTION_DESCRIPTION_MAX_CHARS
+  ) {
+    throw new MemberSignalCandidateReviewError(
+      "promotion_description_too_long",
+    );
+  }
 
   await assertWorkspaceGovernedCandidatePromotionServiceAccess({
     workspaceId,
@@ -413,6 +471,13 @@ export async function promoteMemberWorkSignalCandidateToTask(
       const artifactReviewId = bundle.artifactReview.id;
       // Corrupt/tampered rows must never reach task promotion.
       const artifact = parseCandidateArtifact(bundle.artifactsJson);
+      // A correction may have landed after review confirmed this
+      // candidate — re-check at promote time too (Important 2).
+      await assertCandidateSignalNotSuperseded(
+        tx,
+        workspaceId,
+        artifact.signalReceiptRef,
+      );
 
       const policy = await tx.policyRule.findFirst({
         where: { workspaceId, actionType: ActionType.CREATE_TASK },

@@ -102,7 +102,9 @@ materializer、review/promote service、隔离 MySQL 测试、门禁与 CI 接�
    `relatedEvidenceRefs`/`objectAnchor`/五元溯源),因此不能靠共享一份
    拷贝或 re-export 合并——已在 mysql 测试中用两个独立用例分别证明两层
    各自能单独拦截(正文内的凭据样式文本在契约层校验阶段就先被拒
-   `candidate_body_link_bearing`,materializer 自身的全量扫描只在正文之
+   `candidate_body_unsafe_text`——该错误码后经 review 更名,原名
+   `candidate_body_link_bearing` 已弃用,因为该正则同时匹配链接、数据库
+   连接串与凭据标记,不止链接——materializer 自身的全量扫描只在正文之
    外的字段——例如 `relatedEvidenceRefs`——才是唯一可观察到
    `unsafe_candidate_text` 分支触发的路径)。
 3. **晋升幂等一致性检查零 zod**:`findExistingCandidatePromotion` 用
@@ -117,6 +119,25 @@ materializer、review/promote service、隔离 MySQL 测试、门禁与 CI 接�
    (`PrismaClientKnownRequestError`)。已修复为固定、简短、直接声明
    taint 的静态字符串;可变长度的溯源信息(kind/signalReceiptRef)只保留
    在 `metadata`(LongText)与晋升 `AuditLog.payload`(LongText)中。
+5. **最终 review 修复(同类列宽 + 时序 + 反伪造)**:
+   - `promoteMemberWorkSignalCandidateToTask` 的 `title`/`description` 现
+     在写入前做长度校验(`promotion_title_too_long`/
+     `promotion_description_too_long`),而不是让 Prisma 在真库上抛
+     `P2000`——与第 4 条是同一类"plain VARCHAR(191) 列宽"问题,这次在写入
+     前堵住,而不是事后从错误信息反推。
+   - `reviewMemberWorkSignalCandidate`/`promoteMemberWorkSignalCandidateToTask`
+     现在都在 Serializable 事务内重新查一次"该信号是否已被更正
+     (`supersedesReceiptRef` 指向它)",拒绝为 `signal_receipt_superseded`
+     ——材料化时的一次性检查不足以防止 review/promote 与"成员事后更正"之
+     间的竞争;两个检查点都补齐了。
+   - `validateMemberWorkSignalCandidateArtifact` 新增反伪造校验:正文中
+     字面量子串 `[link-evidence:` 的出现次数必须等于 `linkEvidence.length`
+     ——成员在自己文本里手写一个假的 `[link-evidence:9]` 不会被
+     projection 产生,但之前不会被拒绝;现在会被拒绝为
+     `candidate_link_evidence_invalid`。
+   - 错误码 `candidate_body_link_bearing` 更名为
+     `candidate_body_unsafe_text`——该正则同时匹配链接、数据库连接串与
+     凭据标记,旧名字过窄、有误导性。
 
 ### 留给 owner(仍是记录在案的义务,本切片不落地)
 
@@ -130,3 +151,20 @@ materializer、review/promote service、隔离 MySQL 测试、门禁与 CI 接�
 - **CI 首次真实运行**:本切片把 `MEMBER_SIGNAL_CANDIDATE_DATABASE_URL` 接
   进既有 `member-gateway-signal-mysql` job 与 `test:member-gateway:mysql`,
   但该 job 在 CI 环境的首次真实运行(而非本地实跑)仍待观察。
+- **`helm-v2` 的 `confirmRuntimeArtifact` 缺 artifactType 钉死**:
+  `runtime-upgrade.ts:14362` 一带按 `workspaceId + id` 选 bundle,不校验
+  `artifactType`;当前只是因为 member-signal bundle 没有
+  `runtimeEventId`/`meetingId` 而偶然与该路径隔离——这是结构性缺口,不是
+  本切片刻意设的边界,修复(补 `artifactType` 钉死)属于 owner 待办,不在
+  本切片修改范围内;另有五处 `helm-v2` sweep 同类模式,需一并排查。
+- **M2c-b 渲染器义务**:link-evidence token 的出现次数不可假定单射(一个
+  token 只对应一条真实链接)——展示层必须按 `linkEvidence` 数组本身渲染
+  证据列表,不得对正文做字符串匹配/计数来推断证据数量或存在性(正文本身
+  只是不可信的成员输入,详见本文件第 5 条反伪造校验)。
+- **governed 先例的 `Pending review:` 通知标题同样可能溢出**:
+  `governed-candidate-review.ts` 用 `z.string().max(191)` 校验 `title`,
+  但它同样会拼进 `Pending review: ${title}` 写入 191 列宽的
+  `Notification.title`——`title` 在 176-191 字符区间时 zod 校验通过但
+  仍会在 Prisma 写入时溢出。本切片已经在自己的路径上把上限收紧到 175;
+  governed 先例的 `.max(191)` 未改动(不在本切片范围内),owner 可顺手
+  收紧到 175 或改为拼接前置计算列宽。

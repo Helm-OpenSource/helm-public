@@ -276,14 +276,14 @@ describe("validateMemberWorkSignalCandidateArtifact", () => {
     const result = validateMemberWorkSignalCandidateArtifact(
       makeArtifact({ projectedDetail: "见 https://example.com/leak" }),
     );
-    expect(result.errors).toContain("candidate_body_link_bearing");
+    expect(result.errors).toContain("candidate_body_unsafe_text");
   });
 
   it("rejects a credential-style body via the persistable-text pattern", () => {
     const result = validateMemberWorkSignalCandidateArtifact(
       makeArtifact({ projectedDetail: "api_key: sk-abc123" }),
     );
-    expect(result.errors).toContain("candidate_body_link_bearing");
+    expect(result.errors).toContain("candidate_body_unsafe_text");
   });
 
   it("rejects linkEvidence with a blank token", () => {
@@ -361,6 +361,27 @@ describe("validateMemberWorkSignalCandidateArtifact", () => {
       makeArtifact({ submittedAt: "not-an-instant" }),
     );
     expect(result.errors).toContain("candidate_instant_invalid");
+  });
+
+  it("rejects a projected artifact whose text contains a member-crafted fake link-evidence token", () => {
+    // One real URL yields exactly one real linkEvidence entry
+    // ("[link-evidence:1]"); the member's own text also hand-crafts a
+    // second, never-projected "[link-evidence:9]" string. The body now
+    // contains TWO "[link-evidence:" occurrences but only ONE linkEvidence
+    // entry — the spoofed token must be rejected, not silently accepted.
+    const artifact = projectSignalToCandidate(
+      makeProjectionInput({
+        payload: {
+          summary: "看似证据 [link-evidence:9] 但见 https://example.com/real",
+          detail: "无更多信息。",
+          relatedEvidenceRefs: [],
+        },
+      }),
+    );
+    expect(artifact.linkEvidence).toHaveLength(1);
+    const result = validateMemberWorkSignalCandidateArtifact(artifact);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("candidate_link_evidence_invalid");
   });
 });
 

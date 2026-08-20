@@ -363,7 +363,7 @@ describeMysql(
 
       it("rejects credential-style text in the candidate body via the contract-layer scan", async () => {
         // A credential-style string inside summary/detail is caught by
-        // Task 1's contract validator (candidate_body_link_bearing) BEFORE
+        // Task 1's contract validator (candidate_body_unsafe_text) BEFORE
         // the materializer's own full-artifact safety scan ever runs —
         // both layers share the same private persistable-text pattern, and
         // the narrower body-only check fires first. This is the expected,
@@ -379,7 +379,7 @@ describeMysql(
           }),
         ).rejects.toMatchObject({
           message: expect.stringContaining("candidate_artifact_invalid"),
-          reasons: expect.arrayContaining(["candidate_body_link_bearing"]),
+          reasons: expect.arrayContaining(["candidate_body_unsafe_text"]),
         });
       });
 
@@ -511,6 +511,54 @@ describeMysql(
       });
     });
 
+    describe("supersession re-check at review time", () => {
+      it("rejects reviewing a candidate whose signal has since been superseded, but the correction's own candidate reviews fine", async () => {
+        const { receiptId: priorReceiptId, objectRef } = await createSignalReceipt();
+        const staleCandidate = await materializeMemberWorkSignalCandidate({
+          workspaceId,
+          signalReceiptId: priorReceiptId,
+          objectAnchor: unresolvedAnchor(objectRef),
+        });
+
+        // Supersede the prior signal via the signal store (a member
+        // correction), landing AFTER the stale candidate was already
+        // materialized.
+        const { receiptId: correctionReceiptId } = await createSignalReceipt({
+          objectRef,
+          payloadOverrides: { summary: "更正:客户已还清欠款" },
+          supersedesReceiptRef: priorReceiptId,
+        });
+
+        await expectReviewError(
+          reviewMemberWorkSignalCandidate({
+            workspaceId,
+            reviewerId: ownerUserId,
+            reviewerName: "Owner",
+            artifactBundleId: staleCandidate.artifactBundleId,
+            decision: "confirm",
+          }),
+          "signal_receipt_superseded",
+        );
+
+        // The correction's own candidate — a separate ArtifactBundle
+        // materialized off the correction receipt — is the reviewable
+        // head and must materialize and review normally.
+        const correctionCandidate = await materializeMemberWorkSignalCandidate({
+          workspaceId,
+          signalReceiptId: correctionReceiptId,
+          objectAnchor: unresolvedAnchor(objectRef),
+        });
+        const result = await reviewMemberWorkSignalCandidate({
+          workspaceId,
+          reviewerId: ownerUserId,
+          reviewerName: "Owner",
+          artifactBundleId: correctionCandidate.artifactBundleId,
+          decision: "confirm",
+        });
+        expect(result.reviewStatus).toBe(ArtifactReviewStatus.CONFIRMED);
+      });
+    });
+
     describe("promotion", () => {
       let confirmedBundleId = "";
       let promotedActionItemId = "";
@@ -592,6 +640,70 @@ describeMysql(
         expect(second.reused).toBe(true);
         expect(second.actionItemId).toBe(promotedActionItemId);
         expect(second.approvalTaskId).toBe(promotedApprovalTaskId);
+      });
+
+      it("rejects a too-long title with a typed error rather than a raw MySQL column-width failure", async () => {
+        const { artifactBundleId } = await materializeFreshCandidate();
+        await reviewMemberWorkSignalCandidate({
+          workspaceId,
+          reviewerId: ownerUserId,
+          reviewerName: "Owner",
+          artifactBundleId,
+          decision: "confirm",
+        });
+
+        // 176 chars: one over MEMBER_SIGNAL_CANDIDATE_PROMOTION_TITLE_MAX_CHARS
+        // (175) — the tightest consumer is the 191-char
+        // Notification.title literal `Pending review: ${title}` (16
+        // chars of fixed prefix). Un-bounded, this used to reach Prisma
+        // and fail as a raw P2000 "value too long" error; it must now be
+        // rejected by typed input validation before any write is
+        // attempted.
+        const tooLongTitle = "T".repeat(176);
+        await expectReviewError(
+          promoteMemberWorkSignalCandidateToTask({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            artifactBundleId,
+            title: tooLongTitle,
+          }),
+          "promotion_title_too_long",
+        );
+
+        // No partial write: the bundle must still be CONFIRMED, not
+        // CONSUMED — the length check runs before the CAS transaction.
+        const bundle = await db.artifactBundle.findUniqueOrThrow({
+          where: { id: artifactBundleId },
+        });
+        expect(bundle.status).toBe(ArtifactBundleStatus.CONFIRMED);
+      });
+
+      it("rejects a too-long description with a typed error", async () => {
+        const { artifactBundleId } = await materializeFreshCandidate();
+        await reviewMemberWorkSignalCandidate({
+          workspaceId,
+          reviewerId: ownerUserId,
+          reviewerName: "Owner",
+          artifactBundleId,
+          decision: "confirm",
+        });
+
+        // 192 chars: one over the 191-char VARCHAR cap shared by
+        // ActionItem.description/draftContent and ApprovalTask.
+        // contextSnapshot/editableContent.
+        const tooLongDescription = "D".repeat(192);
+        await expectReviewError(
+          promoteMemberWorkSignalCandidateToTask({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            artifactBundleId,
+            title: "Valid title",
+            description: tooLongDescription,
+          }),
+          "promotion_description_too_long",
+        );
       });
     });
 

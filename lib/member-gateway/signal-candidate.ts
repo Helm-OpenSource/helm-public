@@ -105,6 +105,14 @@ const LINK_PATTERN = /https?:\/\/\S+/gi;
 // per-field. No links means linkEvidence is empty and both fields pass
 // through unchanged. Each token is opaque; the only place the original URL
 // text survives is the signal receipt, which this function never sees.
+//
+// Spoofing note: this function does not (and cannot) detect a member
+// payload that already contains a hand-crafted literal "[link-evidence:N]"
+// string of its own — that is validateMemberWorkSignalCandidateArtifact's
+// job (it rejects any body whose "[link-evidence:" occurrence count does
+// not equal linkEvidence.length). Callers MUST treat that rejection as a
+// hard stop surfaced back to the member, not a silent strip-and-continue —
+// the member has to fix the text and resubmit a new signal.
 export function projectSignalToCandidate(
   input: ProjectSignalToCandidateInput,
 ): MemberWorkSignalCandidateArtifact {
@@ -196,9 +204,11 @@ export function validateMemberWorkSignalCandidateArtifact(
   }
   // title-free: unlike the closeout precedent this artifact carries no
   // title field, so the safety scan covers exactly summary + detail.
+  // Named "unsafe_text" (not "link_bearing"): the shared pattern matches
+  // links AND db connection schemes AND credential markers, not just links.
   const body = `${artifact.projectedSummary}\n${artifact.projectedDetail}`;
   if (UNSAFE_PERSISTED_TEXT_PATTERN.test(body)) {
-    errors.push("candidate_body_link_bearing");
+    errors.push("candidate_body_unsafe_text");
   }
   if (
     !artifact.linkEvidence.every(
@@ -208,6 +218,19 @@ export function validateMemberWorkSignalCandidateArtifact(
         body.includes(entry.token),
     )
   ) {
+    errors.push("candidate_link_evidence_invalid");
+  }
+  // Anti-spoofing (Minor 4): every real token is produced ONLY by
+  // projectSignalToCandidate, one per replaced link, so a well-formed body
+  // contains exactly linkEvidence.length occurrences of the token marker.
+  // A member payload that hand-crafts extra literal "[link-evidence:N]"
+  // text (never emitted by projection) inflates this count without a
+  // matching linkEvidence entry — reject it rather than let a member fake
+  // an evidence citation that was never produced by de-linking.
+  const linkEvidenceTokenOccurrences = (
+    body.match(/\[link-evidence:/g) ?? []
+  ).length;
+  if (linkEvidenceTokenOccurrences !== artifact.linkEvidence.length) {
     errors.push("candidate_link_evidence_invalid");
   }
   if (!artifact.relatedEvidenceRefs.every((ref) => hasRef(ref))) {

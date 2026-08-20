@@ -112,7 +112,9 @@ CEO 版 WorkBuddy 设计（`2026-07-23-workbuddy-caio-lan-collaboration-design.m
    `taint: "untrusted"`、`evaluationUseProhibited: true`、
    `promotionAllowed: false`；三者是 artifact 结构本身的一部分，不是可选
    metadata，也不因下游处理而丢失。任何审阅呈现面必须把 taint 作为一等
-   标记渲染，不得降级为次要说明文字或被裁剪。
+   标记渲染，不得降级为次要说明文字或被裁剪。`promotionAllowed: false`
+   表示 artifact 本身不构成任何授权或自动晋升依据；阶段一的"晋升为任务"
+   始终由具备能力的人经既有审批链发起，与该字面量不冲突。
 3. **脱链接化投影**：候选正文（投影后的 summary/detail）禁止携带链接；
    信号原文中的 URL 一律替换为 opaque 的 `linkEvidence` token，原始 URL
    只保留在信号回执（`MemberWorkSignalReceipt`）中，永不进入候选正文。
