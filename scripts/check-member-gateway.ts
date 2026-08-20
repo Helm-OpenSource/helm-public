@@ -161,6 +161,17 @@ for (const marker of memoryProjectionFrozenMarkers) {
   }
 }
 
+// The llm-candidate boundary gate never scans lib/member-gateway, so the
+// projection service's no-write prohibition (a projection yields a
+// PENDING_VERIFICATION candidate, never a promotion or canonical memory
+// write) is pinned statically here in addition to the mysql zero-write
+// proof.
+if (/\.memoryPromotion\.|\.memoryItem\./.test(memoryProjectionSource)) {
+  violations.push(
+    "lib/member-gateway/signal-candidate-memory-projection.service.ts must never write MemoryPromotion or MemoryItem",
+  );
+}
+
 const pkg = JSON.parse(
   readFileSync(path.join(root, "package.json"), "utf8"),
 ) as { scripts?: Record<string, string> };

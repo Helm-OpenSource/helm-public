@@ -172,3 +172,8 @@ FAIL,报出缺失的具体 marker → 还原 → 门禁重新 PASS);
 `check:conditional-update-cas` 零新增 finding;`npm run
 test:member-gateway:mysql`(四个 env var 全开)77/77 绿,同一命令重跑两
 次结果一致。
+8. 最终 review 加固:四个 mysql 套件的 fixture 后缀改 base36(纯数字
+   pid-时间戳串偶发通过 Luhn 校验被当银行卡形态误判——该 flake 会穿过
+   #375 的扫描面收窄经 relatedEvidenceRefs 存续,base36 根治);
+   member-gateway 门禁对投影 service 增加禁写静态正则
+   (`.memoryPromotion.` / `.memoryItem.`),把自律禁令钉成静态断言。

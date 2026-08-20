@@ -27,7 +27,9 @@ import type {
 
 const integrationDatabaseUrl = process.env.MEMBER_SIGNAL_STORE_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
-const suffix = `${process.pid}-${Date.now()}`;
+// base36 breaks pure-digit runs: pid-decimal-timestamp suffixes occasionally
+// Luhn-pass as bank-card shapes under the member-authored-text PII scan.
+const suffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 
 const ALLOWED_SURFACE: MemberReadSurfaceDecision = {
   allowed: true,
