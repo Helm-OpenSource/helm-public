@@ -61,6 +61,8 @@ for (const file of [
   "signal-candidate-review.service.ts",
   "signal-candidate.mysql.test.ts",
   "signal-candidate-materializer.test.ts",
+  "reviewer-evidence-projection.service.ts",
+  "reviewer-evidence-projection.test.ts",
 ]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
