@@ -1,5 +1,5 @@
 ---
-status: planning / ready-to-execute
+status: archived / executed-with-as-built-record
 owner: helm-core
 created: 2026-08-20
 review_after: 2026-09-20
@@ -36,3 +36,31 @@ public_safety: Implementation plan for the member signal candidate review
 - T4: as-built、最终整体 review、push、PR。
 
 **边界:** 审阅人逐 evidence-ref 按需投影(裁定 5 的运行时义务)仍不在本切片——面板只显示 opaque ref 计数;阶段二事实晋升不可表达;不改 lister 读模型(service 文件在门禁冻结集内,资格派生走面板)。
+
+---
+
+## As-built 记录(2026-08-20 执行完毕)
+
+分支 `feat/member-gateway-m2c-b`,6 个 commit(计划、防火墙重构、actions、
+面板+测试、接线、本记录)。
+
+1. **权限防火墙事件与裁决**:server actions 首次把权限面接入
+   member-gateway,触发 `check:caio-terminology` 的 authority firewall
+   (actions.ts → … → `parseInstant` from lib/caio-governance)。经 owner
+   显式授权,`parseInstant` 迁至中立模块 `lib/time/strict-instant.ts`,
+   治理契约原样 re-export,零行为变化;`prompt.ts` 对治理契约的桥接
+   import(refuse/pause/appeal 真值)保留。子代理两次拒绝仅凭转述授权
+   执行治理边界文件修改,由主会话在取得 owner 直接确认后亲自提交——
+   该谨慎行为是预期的正确姿态。
+2. taint 一等渲染落地为行首 danger Badge,不入折叠区;
+   `[link-evidence:N]` token 按纯文本渲染,组件内注释禁止文本匹配链接化。
+3. 资格派生在面板内(reviewStatus/bundleStatus),lister 读模型未动
+   (service 文件在 member-gateway 门禁冻结集内)。
+4. **既有问题记录(非本切片引入)**:
+   `lib/presentation/shared-surface-hierarchy-guards.test.ts` 在 main 上
+   即有 4 个失败(billing-settlement-batch-panels、dashboard home
+   work-entry、public login、integration template doc),本分支复现相同
+   4 项;该套件不在 `check:boundaries`/`quality:regression` 链内,故 CI
+   绿。owner 待办:修复四处或按预期更新守卫基线。
+5. 仍未实现(继承义务):审阅人逐 evidence-ref 按需投影;阶段二事实
+   晋升;E2E 截图基线如需覆盖新面板由 owner 决定。
