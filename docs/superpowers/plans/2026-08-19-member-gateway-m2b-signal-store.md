@@ -1,3 +1,14 @@
+---
+status: archived / executed-with-as-built-record
+owner: helm-core
+created: 2026-08-19
+review_after: 2026-09-19
+public_safety: Implementation plan for the member work-signal persistence
+  slice, with as-built deviation record and owner follow-up list. No
+  customer data, credential, private endpoint, or production-readiness
+  claim.
+---
+
 # Member Gateway M2b (信号入库) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans. Steps use checkbox syntax.

@@ -1,3 +1,13 @@
+---
+status: archived / executed-with-as-built-record
+owner: helm-core
+created: 2026-08-19
+review_after: 2026-09-19
+public_safety: Implementation plan for the member prompt-queue contract
+  slice, with as-built deviation record. No customer data, credential,
+  private endpoint, or production-readiness claim.
+---
+
 # Member Gateway M3a (成员 prompt 队列契约) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development 或 executing-plans。
