@@ -6993,6 +6993,21 @@ function buildEvidenceSourceClasses(input: {
     sourceClasses.add("deprecated_memory");
   }
 
+  // M2d (member-gateway stage-two fact promotion, Owner 裁定记录 #3): a
+  // member-gateway-anchored MemoryCandidate's sourceStatus is a JSON blob
+  // (lib/member-gateway/signal-candidate-memory-projection.service.ts),
+  // not one of the plain enum-like values matched above, and carries
+  // `"taint":"untrusted"` in its provenance. A raw substring check (rather
+  // than JSON.parse) matches this function's existing style of treating
+  // sourceStatus/sourceVerification as opaque strings and is immune to a
+  // parse failure on an unrelated sourceStatus shape. Taint is never
+  // stripped by verification (Owner 裁定记录 #3) — this class renders
+  // alongside whatever verification-derived classes a caller adds
+  // elsewhere, not instead of them.
+  if (input.sourceStatus.includes('"taint":"untrusted"')) {
+    sourceClasses.add("untrusted");
+  }
+
   for (const ref of input.evidenceRefs) {
     const prefix = ref.split(":")[0]?.trim();
     if (!prefix) continue;
