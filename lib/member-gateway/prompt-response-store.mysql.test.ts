@@ -375,8 +375,7 @@ describeMysql(
           userPresenceVerified: true,
           authorizedMemberRef: principal().memberRef,
           authorizedObjectRef: prompt.subjectObjectRef,
-          authorizedActionRef: "commitment_confirm",
-          actionRef: "commitment_confirm",
+          authorizedActionRef: "member_prompt_response:commitment_confirm",
         },
       });
 
@@ -389,7 +388,9 @@ describeMysql(
       );
       expect(result.receipt.authorizedMemberRef).toBe(principal().memberRef);
       expect(result.receipt.authorizedObjectRef).toBe(prompt.subjectObjectRef);
-      expect(result.receipt.authorizedActionRef).toBe("commitment_confirm");
+      expect(result.receipt.authorizedActionRef).toBe(
+        "member_prompt_response:commitment_confirm",
+      );
 
       const afterConfirm = await getMemberPrompt(workspaceId, prompt.promptRef);
       expect(afterConfirm?.state).toBe("responded");
@@ -421,8 +422,44 @@ describeMysql(
             userPresenceVerified: true,
             authorizedMemberRef: principal().memberRef,
             authorizedObjectRef: nextId("wrong-case"),
+            authorizedActionRef: "member_prompt_response:commitment_confirm",
+          },
+        }),
+        "authority_binding_mismatch",
+      );
+    });
+
+    it("rejects a commitment_confirm whose authorizedActionRef does not match the kind-derived action", async () => {
+      const { prompt, version } = await createAndDeliverPrompt();
+      const payload = responsePayload({ kind: "commit-action-mismatch" });
+      const challenge = await issueResponseChallenge(
+        prompt.promptRef,
+        version,
+        payload,
+      );
+
+      await expectResponseStoreError(
+        recordMemberPromptResponse({
+          principal: principal(),
+          promptRef: prompt.promptRef,
+          expectedVersion: version,
+          challengeRef: challenge.challengeRef,
+          responsePayload: payload,
+          kind: "commitment_confirm",
+          receiptId: nextId("receipt"),
+          transitionReceiptId: nextId("transition-receipt"),
+          now: new Date().toISOString(),
+          authorityInput: {
+            externalAuthorizationRef: nextId("authz"),
+            userPresenceVerified: true,
+            authorizedMemberRef: principal().memberRef,
+            authorizedObjectRef: prompt.subjectObjectRef,
+            // The store derives the true actionRef from `kind` internally
+            // (AUTHORITY_ACTION_REF_BY_KIND); a caller can never supply
+            // both sides of that comparison. Any authorizedActionRef other
+            // than the derived literal is a mismatch, including the bare
+            // kind name a caller might naively guess.
             authorizedActionRef: "commitment_confirm",
-            actionRef: "commitment_confirm",
           },
         }),
         "authority_binding_mismatch",
@@ -454,8 +491,7 @@ describeMysql(
             userPresenceVerified: true,
             authorizedMemberRef: principal().memberRef,
             authorizedObjectRef: prompt.subjectObjectRef,
-            authorizedActionRef: "commitment_confirm",
-            actionRef: "commitment_confirm",
+            authorizedActionRef: "member_prompt_response:commitment_confirm",
           },
         }),
         "authority_missing",
@@ -743,6 +779,244 @@ describeMysql(
       expect(row.state).toBe("responded");
       expect(row.version).toBe(version + 1);
       expect(row.responseRef).toBe(signalReceiptId);
+    });
+
+    it("rejects a challenge issued by, and a response recorded by, a member the prompt is not addressed to", async () => {
+      const { prompt, version } = await createAndDeliverPrompt();
+      const otherPrincipal = principal({
+        memberRef: `member-${suffix}-other`,
+        sessionRef: `session-${suffix}-other`,
+        deviceRegistrationRef: `device-${suffix}-other`,
+      });
+
+      await expectResponseStoreError(
+        issueMemberPromptResponseChallenge({
+          principal: otherPrincipal,
+          promptRef: prompt.promptRef,
+          promptVersion: version,
+          responsePayload: responsePayload(),
+          ttlMs: 60_000,
+        }),
+        "prompt_member_binding_mismatch",
+      );
+
+      // Record path: even a challenge minted for the real addressee must
+      // still be rejected if a different member attempts to record
+      // against it — the binding check runs against the prompt row
+      // itself, not only at issue time.
+      const payload = responsePayload({ kind: "ack-wrong-member" });
+      const challenge = await issueResponseChallenge(
+        prompt.promptRef,
+        version,
+        payload,
+      );
+      await expectResponseStoreError(
+        recordMemberPromptResponse({
+          principal: otherPrincipal,
+          promptRef: prompt.promptRef,
+          expectedVersion: version,
+          challengeRef: challenge.challengeRef,
+          responsePayload: payload,
+          kind: "acknowledge",
+          receiptId: nextId("receipt"),
+          transitionReceiptId: nextId("transition-receipt"),
+          now: new Date().toISOString(),
+        }),
+        "prompt_member_binding_mismatch",
+      );
+    });
+
+    it("rejects an acknowledge attempted against a prompt that is not delivered", async () => {
+      const prompt = buildPrompt();
+      await createMemberPrompt({ prompt });
+      const payload = responsePayload({ kind: "ack-not-delivered" });
+      const challenge = await issueResponseChallenge(
+        prompt.promptRef,
+        1,
+        payload,
+      );
+
+      await expectResponseStoreError(
+        recordMemberPromptResponse({
+          principal: principal(),
+          promptRef: prompt.promptRef,
+          expectedVersion: 1,
+          challengeRef: challenge.challengeRef,
+          responsePayload: payload,
+          kind: "acknowledge",
+          receiptId: nextId("receipt"),
+          transitionReceiptId: nextId("transition-receipt"),
+          now: new Date().toISOString(),
+        }),
+        "acknowledge_state_invalid",
+      );
+    });
+
+    it("rejects a response redeeming a challenge issued against a stale prompt version, and succeeds once re-issued at the current version", async () => {
+      const prompt = buildPrompt();
+      await createMemberPrompt({ prompt });
+      const payload = responsePayload({ kind: "ack-version-pin" });
+
+      // Issued at v1, before delivery bumps the prompt to v2.
+      const staleChallenge = await issueResponseChallenge(
+        prompt.promptRef,
+        1,
+        payload,
+      );
+
+      const deliver = await transitionMemberPrompt({
+        workspaceRef: workspaceId,
+        promptRef: prompt.promptRef,
+        cause: "deliver",
+        expectedVersion: 1,
+        receiptId: nextId("deliver-receipt"),
+        now: new Date().toISOString(),
+        deliveryContext: CLEAR_CONTEXT,
+      });
+      expect(deliver.outcome).toBe("transitioned");
+      const version = deliver.receipt.version;
+      expect(version).toBe(2);
+
+      await expectResponseStoreError(
+        recordMemberPromptResponse({
+          principal: principal(),
+          promptRef: prompt.promptRef,
+          expectedVersion: version,
+          challengeRef: staleChallenge.challengeRef,
+          responsePayload: payload,
+          kind: "acknowledge",
+          receiptId: nextId("receipt"),
+          transitionReceiptId: nextId("transition-receipt"),
+          now: new Date().toISOString(),
+        }),
+        "challenge_prompt_version_mismatch",
+      );
+
+      const freshChallenge = await issueResponseChallenge(
+        prompt.promptRef,
+        version,
+        payload,
+      );
+      const result = await recordMemberPromptResponse({
+        principal: principal(),
+        promptRef: prompt.promptRef,
+        expectedVersion: version,
+        challengeRef: freshChallenge.challengeRef,
+        responsePayload: payload,
+        kind: "acknowledge",
+        receiptId: nextId("receipt"),
+        transitionReceiptId: nextId("transition-receipt"),
+        now: new Date().toISOString(),
+      });
+      expect(result.outcome).toBe("recorded");
+    });
+
+    it("rejects a response whose payload has drifted from the challenge hash", async () => {
+      const { prompt, version } = await createAndDeliverPrompt();
+      const payload = responsePayload({ kind: "ack-drift" });
+      const challenge = await issueResponseChallenge(
+        prompt.promptRef,
+        version,
+        payload,
+      );
+
+      await expectResponseStoreError(
+        recordMemberPromptResponse({
+          principal: principal(),
+          promptRef: prompt.promptRef,
+          expectedVersion: version,
+          challengeRef: challenge.challengeRef,
+          responsePayload: responsePayload({
+            kind: "ack-drift",
+            drifted: true,
+          }),
+          kind: "acknowledge",
+          receiptId: nextId("receipt"),
+          transitionReceiptId: nextId("transition-receipt"),
+          now: new Date().toISOString(),
+        }),
+        "challenge_payload_hash_mismatch",
+      );
+    });
+
+    it("rejects a response against an expired challenge", async () => {
+      const { prompt, version } = await createAndDeliverPrompt();
+      const payload = responsePayload({ kind: "ack-expired-challenge" });
+      const challenge = await issueResponseChallenge(
+        prompt.promptRef,
+        version,
+        payload,
+      );
+
+      // MemberWorkSignalChallenge carries no append-only trigger; push
+      // expiresAt to just after issuedAt (still satisfying the
+      // MWSignalChallenge_window_check CHECK constraint) so it is already
+      // in the past by the time record runs (mirrors
+      // signal-store.mysql.test.ts).
+      await db.$executeRaw`
+        UPDATE MemberWorkSignalChallenge
+        SET expiresAt = DATE_ADD(issuedAt, INTERVAL 1000 MICROSECOND)
+        WHERE id = ${challenge.challengeRef} AND workspaceId = ${workspaceId}
+      `;
+
+      await expectResponseStoreError(
+        recordMemberPromptResponse({
+          principal: principal(),
+          promptRef: prompt.promptRef,
+          expectedVersion: version,
+          challengeRef: challenge.challengeRef,
+          responsePayload: payload,
+          kind: "acknowledge",
+          receiptId: nextId("receipt"),
+          transitionReceiptId: nextId("transition-receipt"),
+          now: new Date().toISOString(),
+        }),
+        "challenge_expired",
+      );
+    });
+
+    it("rejects respondWithWorkSignal when the signal's objectRef does not match the prompt's subject object", async () => {
+      const { prompt, version } = await createAndDeliverPrompt();
+      const signalPayload: MemberWorkSignalPayload = {
+        kind: "progress",
+        summary: "与本 prompt 主题对象无关的信号",
+        detail: "objectRef 指向另一个案例",
+        relatedEvidenceRefs: [],
+      };
+      const wrongObjectRef = nextId("case-unrelated");
+      const challenge = await issueMemberWorkSignalChallenge({
+        draft: {
+          principal: principal(),
+          objectRef: wrongObjectRef,
+          objectVersion: 1,
+          payload: signalPayload,
+        },
+        ttlMs: 60_000,
+      });
+
+      await expectResponseStoreError(
+        respondWithWorkSignal({
+          principal: principal(),
+          challengeRef: challenge.challengeRef,
+          payload: signalPayload,
+          surface: ALLOWED_SURFACE,
+          evidenceSurfaces: new Map(),
+          policyRef: POLICY_REF,
+          policyVersion: POLICY_VERSION,
+          receiptId: nextId("signal-receipt"),
+          promptRef: prompt.promptRef,
+          expectedVersion: version,
+          transitionReceiptId: nextId("transition-receipt"),
+          now: new Date().toISOString(),
+        }),
+        "signal_object_prompt_mismatch",
+      );
+
+      const row = await db.memberPrompt.findUniqueOrThrow({
+        where: { id_workspaceId: { id: prompt.promptRef, workspaceId } },
+      });
+      expect(row.state).toBe("delivered");
+      expect(row.version).toBe(version);
     });
   },
 );

@@ -196,3 +196,67 @@ Commit: `test(member-gateway): cover response classes, governance persistence, a
    二次 `create`(同 `challengeRef`,不同 `id`)的原始 DB 断言,证明就算
    未来某条代码路径跳过了 store 的重放判定,唯一索引仍然独立拦截——不
    只是断言 store 层报错,同时给出 DB 层证据。
+
+---
+
+## Review 修订记录(2026-08-20,最终整体 review 后)
+
+最终 review 发现三处未钉死的绑定 + 若干 minor 加固,单独一次提交补齐,
+不重开前五个任务的 commit。判断记录:
+
+7. **三处 review 驱动的绑定闭合**:
+   - **prompt 收件人绑定(Important 1)**:`issueMemberPromptResponseChallenge`
+     与 `recordMemberPromptResponse` 此前都只校验 `principal` 自身合法、
+     从不校验 principal 是否就是 prompt 实际指向的 `memberRef`——意味着
+     任意成员理论上能对别人的 prompt 发起 challenge/落响应。两处补上
+     `row.memberRef !== input.principal.memberRef → prompt_member_binding_mismatch`
+     (issue 侧顺带获得发行时存在性校验:先查行,不存在 → `prompt_not_found`)。
+   - **authority action 腿的推导而非采信(Important 2)**:`authorityInput`
+     此前携带调用方自报的 `actionRef`,与同样调用方自报的
+     `authorizedActionRef` 相互比较——调用方能同时提供比较式的两边,绑定
+     形同虚设。移除 `actionRef` 字段,新增冻结映射
+     `AUTHORITY_ACTION_REF_BY_KIND`(当前只有一项:
+     `commitment_confirm -> "member_prompt_response:commitment_confirm"`),
+     真值 `actionRef` 由 store 从 `kind` 派生后传入
+     `judgeAuthorityBearingAction`,调用方只能提供 `authorizedActionRef`
+     这一侧。
+   - **candidate 信号必须绑定 prompt 的主题对象(Important 3)**:
+     `respondWithWorkSignal` 此前把 `submitMemberWorkSignal` 的结果直接
+     喂给 `transitionMemberPrompt`,从不检查这条信号究竟是不是"关于这个
+     prompt"的——`submitMemberWorkSignal` 本身没有 prompt 概念,只知道
+     signal 自己的 `objectRef`(来自其自身 challenge)。补上:transition
+     之前加载 prompt 行,`signal.receipt.objectRef !== row.subjectObjectRef`
+     → 抛 `signal_object_prompt_mismatch`。信号回执本身**不回滚**——它在
+     `submitMemberWorkSignal` 自己的事务里已经落成独立、有效的证据,和
+     "transition 步骤失败,信号仍然是有效证据"是同一条不变量,只是这次
+     判定被移到了 transition 尝试之前而不是之后。
+8. **Minor 加固,同一提交**:acknowledge 现在要求 `fromState === 'delivered'`
+   (`acknowledge_state_invalid`,清扫路径优先于此检查,不受影响)；
+   challenge 的发行期 `objectVersion` 现在必须等于 `expectedVersion`
+   (`challenge_prompt_version_mismatch`)——由于 step 1 已经证明
+   `expectedVersion === row.version`,这条实质上是"challenge 必须是对
+   prompt 当前版本发行的,不能是在某次中间转移之前发的旧 challenge";
+   `prompt-response-store.mysql.test.ts` 补两条覆盖响应路径下的 challenge
+   镜像判定(载荷漂移 → `challenge_payload_hash_mismatch`;过期 challenge
+   → `challenge_expired`),此前只有 issue 侧和 signal 套件覆盖了这两条,
+   响应路径本身没有独立断言。
+9. **两处刻意接受的差异,明确记录不是缺陷**:
+   - `recordMemberPromptResponse` **没有** `submitMemberWorkSignal` 那种
+     幂等重放(同 `receiptId`+同 payload 重放直接回读既有回执)。提交后
+     的重试会拿到 `challenge_already_consumed` 而不是回读——这是刻意的:
+     响应记录不是"读回既证据"的信号候选写入,四类非候选响应各自触发治
+     理副作用(转移、governed response 落库、authority 三元记录),重放
+     语义需要额外设计(到底重放要不要重新跑一遍 route/authority 判定?)
+     不是本切片能顺手做的,留给需要它的调用方在更上层做去重。
+   - 共享的 `MemberWorkSignalChallenge` 表**没有** purpose 判别列——signal
+     和 prompt-response 两类 challenge 形状完全一致,彼此在结构上互相可
+     消费(没有字段能区分"这是给 signal 的 challenge"还是"这是给 prompt
+     响应的 challenge")。本次 review 把两条路径都补上了成员绑定后,两者
+     在"谁能消费"这件事上已经等价安全;真正需要判别列的时机是出现第三
+     个消费方且其绑定规则与前两者不同的时候——延续本文件第 1 条记录的
+     "未来共享判定原语"候选项,一并留给那次切片。
+
+Verified(review 修订后)：typecheck/lint 均绿;`check:conditional-update-cas`
+零新增 finding;隔离 MySQL 套件本地真库全绿(20/20,新增 7 条覆盖 Fix
+1/2/3 与两条 minor 加固),`npm run test:member-gateway:mysql`(三个 env
+var 全开)42/42 绿(12 signal + 10 prompt + 20 response)。

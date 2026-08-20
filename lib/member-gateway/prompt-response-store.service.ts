@@ -90,6 +90,33 @@ const TERMINAL_PROMPT_STATES: ReadonlySet<MemberPromptState> = new Set([
   "suppressed",
 ]);
 
+// The action leg of the authority triple is derived from the response
+// kind — the caller can never supply both sides of the comparison
+// judgeAuthorityBearingAction performs (review fix, M3c as-built #7): an
+// authorityInput.actionRef field would let a caller assert a match against
+// its own authorizedActionRef, which defeats the binding entirely. Frozen
+// here, not caller-suppliable.
+const AUTHORITY_ACTION_REF_BY_KIND = {
+  commitment_confirm: "member_prompt_response:commitment_confirm",
+} as const;
+
+function authorityActionRefForKind(kind: MemberPromptResponseKind): string {
+  const derived = (
+    AUTHORITY_ACTION_REF_BY_KIND as Partial<Record<MemberPromptResponseKind, string>>
+  )[kind];
+  if (!derived) {
+    // Unreachable while classifyMemberPromptResponse's authority_bearing_
+    // action mapping stays single-kind (commitment_confirm only); guards
+    // fail loud instead of silently comparing against undefined if a
+    // future kind is added to that class without updating this map.
+    throw new MemberPromptResponseStoreError(
+      "authority_action_ref_undefined_for_kind",
+      ["authority_action_ref_undefined_for_kind"],
+    );
+  }
+  return derived;
+}
+
 export class MemberPromptResponseStoreError extends Error {
   readonly reasons: readonly string[];
 
@@ -277,6 +304,25 @@ export async function issueMemberPromptResponseChallenge(
     () =>
       db.$transaction(async (tx) => {
         await lockWorkspace(tx, workspaceId);
+
+        // Addressee binding (review fix, M3c as-built #7): a prompt-
+        // response challenge may only ever be issued to the member the
+        // prompt is actually addressed to — never to whoever happens to
+        // ask. Loading the prompt row here also gives issue-time
+        // existence validation for free.
+        const promptRow = await tx.memberPrompt.findUnique({
+          where: { id_workspaceId: { id: promptRef, workspaceId } },
+        });
+        if (!promptRow) {
+          throw new MemberPromptResponseStoreError("prompt_not_found");
+        }
+        if (promptRow.memberRef !== input.principal.memberRef) {
+          throw new MemberPromptResponseStoreError(
+            "prompt_member_binding_mismatch",
+            ["prompt_member_binding_mismatch"],
+          );
+        }
+
         await tx.memberWorkSignalChallenge.create({
           data: {
             id: candidate.challengeRef,
@@ -331,7 +377,6 @@ export type RecordMemberPromptResponseInput = {
     authorizedMemberRef: string;
     authorizedObjectRef: string;
     authorizedActionRef: string;
-    actionRef: string;
   };
 };
 
@@ -406,6 +451,15 @@ export async function recordMemberPromptResponse(
         });
         if (!row) {
           throw new MemberPromptResponseStoreError("prompt_not_found");
+        }
+        // Addressee binding (review fix, M3c as-built #7): only the member
+        // a prompt is addressed to may ever respond to it, mirroring the
+        // same check at challenge-issue time.
+        if (row.memberRef !== input.principal.memberRef) {
+          throw new MemberPromptResponseStoreError(
+            "prompt_member_binding_mismatch",
+            ["prompt_member_binding_mismatch"],
+          );
         }
         if (row.version !== input.expectedVersion) {
           throw new MemberPromptResponseStoreError("prompt_version_conflict");
@@ -491,6 +545,18 @@ export async function recordMemberPromptResponse(
           return { outcome: "expired_swept" };
         }
 
+        // 2b. acknowledge is an interaction receipt against a live,
+        // delivered prompt only (review fix, minor hardening) — it is not
+        // a way to leave a receipt against a prompt still pending
+        // delivery or already terminal by some path other than the sweep
+        // above.
+        if (input.kind === "acknowledge" && fromState !== "delivered") {
+          throw new MemberPromptResponseStoreError(
+            "acknowledge_state_invalid",
+            ["acknowledge_state_invalid"],
+          );
+        }
+
         // 3. Load the challenge row and judge binding/window/replay.
         // judgeMemberWorkSignalChallenge (signal.ts) is reused verbatim for
         // the challenge's own shape/window/TTL-cap backstop. The
@@ -530,6 +596,18 @@ export async function recordMemberPromptResponse(
           challengeRow.objectRef !== promptRef
         ) {
           challengeReasons.push("challenge_binding_mismatch");
+        }
+        // Issue-time version pin (review fix, minor hardening): the
+        // challenge's objectVersion was captured at issueMemberPrompt
+        // ResponseChallenge time. Since step 1 already proved
+        // input.expectedVersion === row.version, this is really asserting
+        // "the challenge was issued against the prompt's CURRENT version,
+        // not a version the prompt has since moved past" — a challenge
+        // minted before an intervening transition (e.g. deliver bumping
+        // the version) must not be redeemable after that transition; the
+        // caller must re-issue against the new version.
+        if (challengeRow.objectVersion !== input.expectedVersion) {
+          challengeReasons.push("challenge_prompt_version_mismatch");
         }
         if (payloadHash !== challengeRow.payloadHash) {
           challengeReasons.push("challenge_payload_hash_mismatch");
@@ -633,7 +711,7 @@ export async function recordMemberPromptResponse(
             authorizedActionRef: authorityInput.authorizedActionRef,
             submittingMemberRef: input.principal.memberRef,
             subjectObjectRef: row.subjectObjectRef,
-            actionRef: authorityInput.actionRef,
+            actionRef: authorityActionRefForKind(input.kind),
           });
           if (!authorityJudgment.valid) {
             throw new MemberPromptResponseStoreError(
@@ -871,6 +949,32 @@ export async function respondWithWorkSignal(
     receiptId: input.receiptId,
     supersedesReceiptRef: input.supersedesReceiptRef ?? null,
   });
+
+  // Subject-object binding (review fix, M3c as-built #7):
+  // submitMemberWorkSignal has no notion of "which prompt is this meant to
+  // answer" — it only knows the signal's own objectRef (from the challenge
+  // it was issued against). That binding is checked here, AFTER the signal
+  // is already durable evidence and BEFORE the prompt is touched: a
+  // mismatch never unwinds the signal (it stays valid, independently
+  // recorded evidence, exactly like a downstream transition failure would
+  // leave it); only the prompt transition this call additionally asked for
+  // does not happen.
+  const promptRow = await db.memberPrompt.findUnique({
+    where: {
+      id_workspaceId: {
+        id: input.promptRef,
+        workspaceId: input.principal.workspaceRef,
+      },
+    },
+  });
+  if (!promptRow) {
+    throw new MemberPromptResponseStoreError("prompt_not_found");
+  }
+  if (signal.receipt.objectRef !== promptRow.subjectObjectRef) {
+    throw new MemberPromptResponseStoreError("signal_object_prompt_mismatch", [
+      "signal_object_prompt_mismatch",
+    ]);
+  }
 
   try {
     const transition = await transitionMemberPrompt({
