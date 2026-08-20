@@ -51,7 +51,8 @@ export type MemberEvidenceProjectionErrorCode =
   | "candidate_not_found"
   | "candidate_artifact_corrupt"
   | "evidence_ref_not_in_candidate"
-  | "evidence_projection_unavailable";
+  | "evidence_projection_unavailable"
+  | "duplicate_resolver_registration";
 
 export class MemberEvidenceProjectionError extends Error {
   readonly code: MemberEvidenceProjectionErrorCode;
@@ -164,6 +165,16 @@ let activeResolver: MemberEvidenceAuthorizationResolver =
 export function registerMemberEvidenceAuthorizationResolver(
   resolver: MemberEvidenceAuthorizationResolver,
 ): void {
+  // Duplicate registration throws (mirrors the governed model adapter
+  // registry): a late second registration must never silently replace a
+  // strict resolver with a permissive one. The test-only reset is the
+  // only way back to the fail-closed default.
+  if (activeResolver !== DEFAULT_MEMBER_EVIDENCE_AUTHORIZATION_RESOLVER) {
+    throw new MemberEvidenceProjectionError(
+      "duplicate_resolver_registration",
+      ["duplicate_resolver_registration"],
+    );
+  }
   activeResolver = resolver;
 }
 

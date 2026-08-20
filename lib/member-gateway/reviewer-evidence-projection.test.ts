@@ -46,6 +46,18 @@ describe("composeMemberEvidenceProjectionEnvelope", () => {
     resetMemberEvidenceAuthorizationResolverForTests();
   });
 
+  it("rejects a second resolver registration instead of silently swapping", () => {
+    const resolver = {
+      resolve: async () => {
+        throw new Error("unused");
+      },
+    };
+    registerMemberEvidenceAuthorizationResolver(resolver);
+    expect(() => registerMemberEvidenceAuthorizationResolver(resolver)).toThrow(
+      /duplicate_resolver_registration/,
+    );
+  });
+
   it("the default fail-closed resolver denies all seven dimensions with a valid envelope", async () => {
     const { envelope, deniedDimensions } =
       await composeMemberEvidenceProjectionEnvelope(BASE_INPUT);

@@ -110,6 +110,12 @@ function evidenceProjectionErrorMessage(
       "Candidate artifact not found.",
       "候选产物不存在。",
     ],
+    // Never reachable through this action (registration happens only in
+    // deployment start-up code); present because the record is total.
+    duplicate_resolver_registration: [
+      "Evidence resolver configuration conflict.",
+      "证据解析器配置冲突。",
+    ],
     candidate_artifact_corrupt: [
       "Candidate artifact failed validation and remains blocked.",
       "候选产物校验失败，当前保持阻断。",

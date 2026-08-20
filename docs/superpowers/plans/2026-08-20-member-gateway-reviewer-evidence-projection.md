@@ -131,3 +131,9 @@ PASS(扫描列表已加入 `reviewer-evidence-projection.service.ts`/
    (`whitelistedProjectionData` 内联注释记录);resolver 可以喂回更宽的
    字段(单测用 `customerName` 钉死这一点),但公共核心永远只透传白名单
    命中的键——更宽的字段面留给私有层另议,公共核心不表达。
+6. 最终 review 加固:重复注册 resolver 抛
+   `duplicate_resolver_registration`(镜像 governed model adapter registry
+   的重复拒绝语义),测试钉死;晚到的第二次注册永远不能静默替换严格
+   resolver。probe 类拒绝(ref 不在候选内等)发生在审计写入之前、不留
+   审计行——与姊妹 review service 姿态一致,如需 probe 可见性属后续
+   posture 决策。
