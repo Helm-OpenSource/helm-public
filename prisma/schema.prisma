@@ -1395,6 +1395,7 @@ model Workspace {
   memberWorkSignalReceipts             MemberWorkSignalReceipt[]
   memberPrompts                        MemberPrompt[]
   memberPromptTransitionReceipts       MemberPromptTransitionReceipt[]
+  memberPromptResponseReceipts         MemberPromptResponseReceipt[]
   caioAccessTokens                     CaioAccessToken[]
   caioPairingRequests                  CaioPairingRequest[]
   caioContextNegativeRules             CaioContextNegativeRule[]
@@ -6778,6 +6779,53 @@ model MemberPromptTransitionReceipt {
   @@unique([id, workspaceId], map: "MWPromptReceipt_id_workspace_key")
   @@unique([workspaceId, promptRef, version], map: "MWPromptReceipt_prompt_version_key")
   @@index([workspaceId, promptRef], map: "MWPromptReceipt_workspace_prompt_idx")
+}
+
+/// Member Gateway M3c: append-only response receipt for the four
+/// non-candidate write kinds (spec §5/§6.3/§7). candidate_write responses
+/// (progress_report/free_text_answer) reuse the M2 signal machine and never
+/// land here (M3c Architecture #1/#2). Column layout is class-partitioned:
+/// public columns on every row, `governed*`/`mandateRef`/`routePath` only on
+/// protected_human_response rows, `externalAuthorizationRef`/the
+/// `authorized*` triple only on authority_bearing_action rows. Nullability
+/// of the class-specific columns is intentionally loose at the DB layer —
+/// the store service is the sole authority on which columns a given
+/// responseKind/responseClass pair must populate.
+model MemberPromptResponseReceipt {
+  id                       String    @id
+  workspaceId              String
+  promptRef                String
+  memberRef                String
+  deviceRegistrationRef    String
+  clientId                 String
+  responseKind             String
+  responseClass            String
+  challengeRef             String
+  occurredAt               DateTime
+  evaluationUseProhibited  Boolean
+  // protected_human_response columns: the bridged CaioHumanResponse's full
+  // canonical JSON (lib/caio-governance/types.ts is the sole shape truth)
+  // plus its content hash, the governance-side response id, the mandate it
+  // was raised under, and which guaranteed route (spec §7) carried it.
+  governedResponseJson     String?   @db.LongText
+  governedResponseHash     String?
+  governanceResponseId     String?
+  mandateRef               String?
+  routePath                String?
+  // authority_bearing_action columns: the external authorization ref plus
+  // the triple binding it must name (M3a as-built #8; prompt.ts
+  // judgeAuthorityBearingAction is the sole judgment authority — these
+  // columns are storage only).
+  externalAuthorizationRef String?
+  authorizedMemberRef      String?
+  authorizedObjectRef      String?
+  authorizedActionRef      String?
+  createdAt                DateTime  @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPromptRespReceipt_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "MWPromptRespReceipt_id_workspace_key")
+  @@unique([workspaceId, challengeRef], map: "MWPromptRespReceipt_workspace_challenge_key")
+  @@index([workspaceId, promptRef], map: "MWPromptRespReceipt_workspace_prompt_idx")
 }
 
 
