@@ -44,7 +44,15 @@ for (const marker of frozenMarkers) {
   }
 }
 
-for (const file of ["types.ts", "contract.ts", "index.ts"]) {
+for (const file of [
+  "types.ts",
+  "contract.ts",
+  "index.ts",
+  "prompt.ts",
+  "signal.ts",
+  "signal-store.service.ts",
+  "signal-store.mysql.test.ts",
+]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
     "utf8",
@@ -52,6 +60,45 @@ for (const file of ["types.ts", "contract.ts", "index.ts"]) {
   if (/WorkPacket/.test(source)) {
     violations.push(
       `lib/member-gateway/${file}: WorkPacket identifier must stay inexpressible`,
+    );
+  }
+}
+
+const signalPath = path.join(root, "lib/member-gateway/signal.ts");
+const signalSource = readFileSync(signalPath, "utf8");
+
+const signalFrozenMarkers = [
+  '"progress"',
+  '"blocker"',
+  '"customer_signal"',
+  '"untrusted"',
+  "candidate: true",
+  "supersedesReceiptRef",
+];
+for (const marker of signalFrozenMarkers) {
+  if (!signalSource.includes(marker)) {
+    violations.push(
+      `lib/member-gateway/signal.ts missing frozen marker: ${marker}`,
+    );
+  }
+}
+
+const promptPath = path.join(root, "lib/member-gateway/prompt.ts");
+const promptSource = readFileSync(promptPath, "utf8");
+
+const promptFrozenMarkers = [
+  '"critical"',
+  '"protected_human_response"',
+  '"authority_bearing_action"',
+  '"refuse"',
+  '"pause"',
+  '"appeal"',
+  "retaliationProhibited",
+];
+for (const marker of promptFrozenMarkers) {
+  if (!promptSource.includes(marker)) {
+    violations.push(
+      `lib/member-gateway/prompt.ts missing frozen marker: ${marker}`,
     );
   }
 }
