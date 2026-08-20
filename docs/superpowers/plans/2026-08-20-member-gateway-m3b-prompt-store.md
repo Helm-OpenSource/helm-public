@@ -1,5 +1,5 @@
 ---
-status: planning / ready-to-execute
+status: archived / executed-with-as-built-record
 owner: helm-core
 created: 2026-08-20
 review_after: 2026-09-20
