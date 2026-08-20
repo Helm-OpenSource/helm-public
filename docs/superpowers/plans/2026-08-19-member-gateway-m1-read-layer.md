@@ -1,5 +1,5 @@
 ---
-status: executed / as-built-recorded
+status: archived / executed-with-as-built-record
 owner: helm-core
 created: 2026-08-19
 review_after: 2026-09-19
