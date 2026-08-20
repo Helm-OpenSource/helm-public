@@ -306,10 +306,24 @@ export function bridgeProtectedHumanResponse(input: {
 // this authority — externalAuthorizationRef must already exist, sourced
 // from the external authorization system. A missing ref blocks outright;
 // no escalation or upgrade path is offered by this module.
+//
+// Triple binding (spec §5; M3a as-built #8): the external authorization
+// must explicitly NAME this member, this object, and this action — nothing
+// else can substitute for it. A blank/missing element in the authorized
+// triple is authority_binding_missing; a complete triple that names a
+// different member/object/action than the one actually being submitted is
+// authority_binding_mismatch. The two never fire together: a missing
+// element is reported as missing, not compared.
 export function judgeAuthorityBearingAction(input: {
   externalAuthorizationRef: string | null;
   challengeRef: string | null;
   userPresenceVerified: boolean;
+  authorizedMemberRef: string | null;
+  authorizedObjectRef: string | null;
+  authorizedActionRef: string | null;
+  submittingMemberRef: string;
+  subjectObjectRef: string;
+  actionRef: string;
 }): ContractValidation {
   const errors: string[] = [];
   if (!hasRef(input.externalAuthorizationRef)) {
@@ -320,6 +334,19 @@ export function judgeAuthorityBearingAction(input: {
   }
   if (!input.userPresenceVerified) {
     errors.push("authority_user_presence_missing");
+  }
+  const tripleComplete =
+    hasRef(input.authorizedMemberRef) &&
+    hasRef(input.authorizedObjectRef) &&
+    hasRef(input.authorizedActionRef);
+  if (!tripleComplete) {
+    errors.push("authority_binding_missing");
+  } else if (
+    input.authorizedMemberRef !== input.submittingMemberRef ||
+    input.authorizedObjectRef !== input.subjectObjectRef ||
+    input.authorizedActionRef !== input.actionRef
+  ) {
+    errors.push("authority_binding_mismatch");
   }
   return { valid: errors.length === 0, errors };
 }
