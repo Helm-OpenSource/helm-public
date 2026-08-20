@@ -62,6 +62,9 @@ for (const file of [
   "signal-candidate.mysql.test.ts",
   "reviewer-evidence-projection.service.ts",
   "reviewer-evidence-projection.test.ts",
+  "gateway-session.ts",
+  "gateway-session.test.ts",
+  "signal-candidate-memory-projection.service.ts",
 ]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
@@ -129,6 +132,31 @@ for (const marker of candidateFrozenMarkers) {
   if (!candidateSource.includes(marker)) {
     violations.push(
       `lib/member-gateway/signal-candidate.ts missing frozen marker: ${marker}`,
+    );
+  }
+}
+
+// M2d Task 3: the stage-two fact-promotion projection service must never
+// silently lose its frozen falses (a projection is always
+// PENDING_VERIFICATION, never a MemoryPromotion/MemoryItem write) — this
+// is the closest a static scan comes to enforcing that prohibition, since
+// TARGET_ROOTS in check-llm-candidate-boundaries.ts never scans
+// lib/member-gateway (see that file's own header comment).
+const memoryProjectionPath = path.join(
+  root,
+  "lib/member-gateway/signal-candidate-memory-projection.service.ts",
+);
+const memoryProjectionSource = readFileSync(memoryProjectionPath, "utf8");
+
+const memoryProjectionFrozenMarkers = [
+  "memoryPromotionCreated: false",
+  "canonicalMemoryWritten: false",
+  '"pending_verification"',
+];
+for (const marker of memoryProjectionFrozenMarkers) {
+  if (!memoryProjectionSource.includes(marker)) {
+    violations.push(
+      `lib/member-gateway/signal-candidate-memory-projection.service.ts missing frozen marker: ${marker}`,
     );
   }
 }

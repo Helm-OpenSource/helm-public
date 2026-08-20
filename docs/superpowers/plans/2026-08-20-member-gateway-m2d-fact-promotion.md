@@ -1,5 +1,5 @@
 ---
-status: planning / ready-to-execute
+status: archived / executed-with-as-built-record
 owner: helm-core
 created: 2026-08-20
 review_after: 2026-09-20
@@ -45,3 +45,130 @@ public_safety: Implementation plan for stage-two fact promotion (member
 - T5 门禁扩展+as-built+最终整体 review+push+PR。
 
 **边界:** 不实现会话关闭、不实现 PENDING_VERIFICATION→VERIFIED 的验证动作(仓内本就无此转移,属记忆域后续)、不写 MemoryPromotion/MemoryItem;`officialMemoryPromotionAllowed:false` 与两冻结假值照 closeout 姿态。
+
+---
+
+## As-built 记录(2026-08-20 执行完毕)
+
+分支 `feat/member-gateway-m2d`。五个任务全部按计划落地,顺序执行,每个
+commit 过完整 pre-commit 门禁(`check:boundaries` 含
+`check:conditional-update-cas`、`check:member-gateway`)。隔离 MySQL 套件
+本地真库全绿;`npm run test:member-gateway:mysql`(四个 env var 全开)
+77/77。
+
+判断记录:
+
+1. **遗留 FK 的强制丢弃(PROMINENT)**:`MemoryCandidate.runtimeSessionId`
+   在 202604150001 baseline 迁移里带一个真实 MySQL 外键
+   `MemoryCandidate_runtimeSessionId_fkey`(`ON DELETE CASCADE`),早于
+   `relationMode = "prisma"` 切换,一直未被后续迁移动过。T1 迁移把该列
+   改可空 + 加 `MemoryCandidate_anchor_check`(恰一锚点)时,MySQL 报错
+   3823:"Column 'runtimeSessionId' cannot be used in a check constraint
+   ... needed in a foreign key constraint's referential action"——只要那
+   条 FK 的 CASCADE 语义还在,就不能在同一列上加 CHECK。这是在本地真库
+   上实测到的,不是文档推断。迁移因此显式 `DROP FOREIGN KEY` +
+   `DROP INDEX`(MySQL 为该 FK 自动建的同名单列索引),让
+   `MemoryCandidate` 与其余 member-gateway 时代的表一致——都不带手写数
+   据库 FK,匹配当前 `relationMode = "prisma"` 的真值。**行为后果**:
+   Prisma Client 走查询引擎的调用仍由 relationMode="prisma" 的模拟层保
+   证 `ON DELETE CASCADE` 语义;但一次绕过 Prisma Client 的原始 SQL
+   `DELETE FROM RuntimeSession` 不会再在数据库层级联删除
+   `MemoryCandidate` 行——仓内目前没有已知的这类原始删除路径,但这里明
+   确记录供 owner 知悉。**索引覆盖**:被丢弃的 FK 支撑索引
+   (`MemoryCandidate_runtimeSessionId_fkey`,MySQL 因当时没有以
+   `runtimeSessionId` 打头的索引而自动建的单列 key)是冗余的——既有复合
+   索引 `MemoryCandidate_workspaceId_runtimeSessionId_createdAt_idx`
+   (`workspaceId`, `runtimeSessionId`, `createdAt`,baseline 迁移 +
+   schema.prisma `@@index`)已覆盖本仓库每一处按 `runtimeSessionId` 的租
+   户范围查询(所有查询都先按 `workspaceId` 过滤),因此未补建替代索引。
+   T3 的 CHECK 证明用例(root-free,直接 `db.$executeRaw` INSERT)同时验
+   证了两件事:恰一锚点 CHECK 生效;丢弃 FK 后任意
+   `runtimeSessionId` 取值不再被外键校验(证明该丢弃确实生效,不是只
+   停在 schema.prisma 文本层面)。
+
+2. **`lib/helm-v2/runtime-upgrade.ts` 的三处可空收窄改动**:
+   `runtimeSessionId` 变可空迫使 `runtimeSession` 关系跟着变可空,
+   typecheck 在三处现网读取点报错——全部与 M2d 的新写路径无关,纯粹是既
+   有代码此前隐含假设"每条 MemoryCandidate 都锚定在 runtime session
+   上"从未被类型系统检验过。
+   - `dismissReflectionCandidate` / `acceptReflectionCandidate`:两处改
+     为显式防御性 guard(`if (!candidate.runtimeSession) throw ...`),
+     不是裸 `!` 断言——依据的不变量是"反思延续候选(reflection
+     carry-forward candidate)只能由 runtime-session 锚定的巩固链路创
+     建"(`isReflectionMemoryCandidate` 判据钉死),member-gateway 新路
+     径写的是 `memberGatewaySessionRef`,产生的候选永远不满足该判据,
+     两条链路在数据形状上互斥。guard 失败时抛错而不是静默继续,一旦这
+     个不变量未来被打破也会显式报错而不是产生一次空指针。
+   - 运营总览(workspace runtime operator overview)的 memoryCandidate
+     查询:加 `runtimeSessionId: { not: null }` 过滤 + 读侧
+     `.filter().map()` 收窄(Prisma 生成类型不会因 where 取值而自动收
+     窄,需要显式收窄配合)。这条查询本来就是 runtime-session 范围的视
+     图,过滤 member-gateway 锚定行是行为上正确的选择,不是权宜之计——见判
+     断 4。
+3. **`resolveGatewaySession` 共享而非复制,附 CAS 门禁推理**:`signal-
+   store.service.ts` 导出该函数(不是模块私有),`prompt-response-store.
+   service.ts` 直接 import 复用,而不是像该文件已有的 CAS 转移机械代码
+   那样手抄一份。原因记录在函数注释里:`resolveGatewaySession` 是一次
+   普通的 `findFirst` + `create`,不是条件 `updateMany`,不落在
+   `scripts/check-conditional-update-cas.ts` 的 "client-from-parameter"
+   词法限制范围内——那条限制只认"CAS `updateMany` 的接收者根标识符必须
+   就是当前 `$transaction` 回调自己的客户端形参"这一种可证明形状,普通
+   的 create/findFirst 不受它约束。执行后 `check:conditional-update-
+   cas` 零新增 finding(47 条既有 baseline 不变)。
+4. **运营总览排除 member 锚定候选 + 无读侧诚实记录 + 记忆域验证面是后
+   续**:T1 的查询过滤(判断 2)意味着 T3 投影产生的
+   `MemoryCandidate` 行在 `getWorkspaceRuntimeOperatorOverview` 里永远
+   不出现。T4 验证了 `/memory` 的另一条查询
+   (`features/memory/queries.ts` 的 reflection-candidate 查询)同样把
+   它们排除在外:该查询要求 `sourceVerification ===
+   "human_confirmed_reflection"` 或 `sourceStatus ===
+   "trusted_runtime_compaction"`(精确字符串相等)且
+   `status IN (VERIFIED, PROMOTED, REJECTED)`——member-gateway 锚定行的
+   `sourceVerification`/`sourceStatus` 是 JSON blob(两个字符串相等判
+   断都不成立),`status` 恒为 `PENDING_VERIFICATION`(三个条件同时不满
+   足)。**诚实结论**:member-gateway 锚定的 `MemoryCandidate` 行当前在
+   仓内**没有任何读侧界面**会渲染它们——T4 加的 taint 渲染分支
+   (`buildEvidenceSourceClasses` 的 `"untrusted"` class)是面向未来
+   的:一旦任何界面开始渲染这批行,taint 立即可见,不需要再补渲染代
+   码。真正把这批 `PENDING_VERIFICATION` 行接入一个验证/复核界面,是记
+   忆域的后续切片,不在 M2d 范围内——本 as-built 明确记录这个缺口,而不
+   是假装它已经被这次改动关闭。
+5. **历史回执永久不参与事实晋升(裁定 2),已钉死测试**:T3 的
+   `signal_receipt_without_session` 用例直接对 `MemberWorkSignalChallenge`
+   (无触发器的可变表)做 `UPDATE ... SET gatewaySessionRef = NULL`,在
+   `submitMemberWorkSignal` 之前把挑战行的会话锚点清空,模拟"M2d 迁移前
+   签发的历史挑战/回执"——回执因此天生无锚,投影被拒绝,且没有任何补锚
+   路径(裁定 2 明确排除人工补锚工具)。这是本切片里对"永久排除"最贴近
+   现实的可测试模拟,不是理论声明。
+6. **会话窗口语义(固定 30 分钟,开区间左闭右开)**:
+   `isMemberGatewaySessionOpenAt` 在 `openedAt` 那一刻本身算"开着"(闭
+   区间下界),在 `openedAt + MEMBER_GATEWAY_SESSION_WINDOW_MS` 那一刻
+   算"已关"(开区间上界)——`gateway-session.test.ts` 显式钉死这两个边
+   界(以及刚好在窗口结束前一毫秒仍被接受、超过窗口后被拒绝、
+   `closedAt` 非空时无论 `nowMs` 落在哪里都拒绝)。没有滚动续期:
+   `resolveGatewaySession` 复用一条行时只读它,从不写它,行在数据库里
+   除了后续(本切片未实现的)显式关闭外保持不可变。
+
+7. **运营笔记(非本切片缺陷,记录供未来排查参考)**:执行期间一次
+   `npm run test:member-gateway:mysql` 全量并行运行偶发 24 个失败,报
+   `MemberSignalCandidateError: unsafe_candidate_text`,来源是
+   `lib/llm/output-pii-scrubber.ts` 的 `detectPIIInOutput`——它对序列化
+   后的候选 artifact 全文做银行卡号 Luhn 校验扫描
+   (`\b\d{13,19}\b` + Luhn),而本文件(以及每一个 member-gateway mysql
+   套件)的测试夹具 id 前缀普遍用 `${process.pid}-${Date.now()}` 做唯一
+   后缀——`Date.now()` 在当前年代恰好是 13 位纯数字,被前后的连字符天然
+   构成单词边界,一旦这 13 位数字凑巧 Luhn 校验通过,就会被误判成银行
+   卡号触发拒绝。复测(标准套件单独跑、全量套件重跑两次)全部
+   77/77/30 绿,证明这是运行时刻的巧合,不是本次改动引入的缺陷——但这
+   是整个 member-gateway mysql 测试家族共享的既有脆弱点(每个用同一
+   `suffix` 生成 artifact 文本的用例都暴露在同样的小概率下),值得未来
+   某个切片把该探测器换成不依赖裸数字游程宽匹配的实现,或让测试夹具的
+   id 避免出现纯数字 13-19 位游程。本次不动手修——超出 M2d 范围,且
+   `detectPIIInOutput` 本身没有 bug(它是按设计扫描任意长数字游程)。
+
+Verified:typecheck/lint 均绿;`check:member-gateway` 负向验证通过(临时
+从投影 service 文件里删除 `memoryPromotionCreated: false` 字符串 → 门禁
+FAIL,报出缺失的具体 marker → 还原 → 门禁重新 PASS);
+`check:conditional-update-cas` 零新增 finding;`npm run
+test:member-gateway:mysql`(四个 env var 全开)77/77 绿,同一命令重跑两
+次结果一致。
