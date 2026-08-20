@@ -467,8 +467,16 @@ export async function promoteMemberWorkSignalCandidateToTask(
       // comment on ActionItem.contentAuthorship says human-authored
       // content flows must declare USER explicitly (AI is the default).
       // USER is therefore the correct literal for "human-authored, not
-      // AI-authored" here. aiReason states the member-signal provenance
-      // and its taint explicitly (Architecture 11).
+      // AI-authored" here.
+      //
+      // aiReason states the member-signal provenance and its taint
+      // (Architecture 11), but MUST stay a fixed, short string: the
+      // ActionItem.aiReason column has no @db.LongText/@db.Text
+      // annotation (plain Prisma String -> MySQL VARCHAR(191)), and an
+      // interpolated signalReceiptRef/kind blew past that limit under
+      // the isolated-MySQL suite (measured, not guessed). The variable-
+      // length provenance (kind, signalReceiptRef) lives in `metadata`
+      // and the promotion AuditLog payload instead, both LongText.
       const action = await tx.actionItem.create({
         data: {
           workspaceId,
@@ -476,7 +484,8 @@ export async function promoteMemberWorkSignalCandidateToTask(
           actionType: ActionType.CREATE_TASK,
           title,
           description,
-          aiReason: `Promoted from a human-confirmed member work-signal candidate (kind: ${artifact.kind}, signal receipt: ${artifact.signalReceiptRef}). The candidate is member-authored content carrying taint="${artifact.taint}"; it is not AI-authored output.`,
+          aiReason:
+            'A human promoted a confirmed member work-signal candidate into the internal task approval chain; the candidate carries taint="untrusted" and is member-authored, not AI-authored.',
           draftContent: description ?? title,
           metadata: jsonStringify({
             kind: "member_signal_candidate_promotion",
