@@ -14,7 +14,7 @@ import {
   SourceType,
   WorkspaceRole,
 } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { WorkspaceServiceGovernanceError } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
@@ -28,6 +28,11 @@ import {
   promoteMemberWorkSignalCandidateToTask,
   reviewMemberWorkSignalCandidate,
 } from "@/lib/member-gateway/signal-candidate-review.service";
+import {
+  MemberEvidenceProjectionError,
+  projectCandidateEvidenceForReviewer,
+  resetMemberEvidenceAuthorizationResolverForTests,
+} from "@/lib/member-gateway/reviewer-evidence-projection.service";
 import {
   MEMBER_SIGNAL_CANDIDATE_ARTIFACT_TYPE,
   MEMBER_SIGNAL_CANDIDATE_REVIEW_POSTURE,
@@ -236,6 +241,17 @@ describeMysql(
       await promise.catch((error: unknown) => {
         expect(error).toBeInstanceOf(MemberSignalCandidateReviewError);
         expect((error as MemberSignalCandidateReviewError).code).toBe(code);
+      });
+    }
+
+    async function expectEvidenceProjectionError(
+      promise: Promise<unknown>,
+      code: string,
+    ): Promise<void> {
+      await expect(promise).rejects.toBeInstanceOf(MemberEvidenceProjectionError);
+      await promise.catch((error: unknown) => {
+        expect(error).toBeInstanceOf(MemberEvidenceProjectionError);
+        expect((error as MemberEvidenceProjectionError).code).toBe(code);
       });
     }
 
@@ -741,6 +757,151 @@ describeMysql(
             title: "Member cannot promote their own signal",
           }),
         ).rejects.toBeInstanceOf(WorkspaceServiceGovernanceError);
+      });
+    });
+
+    // T3 (docs/superpowers/plans/2026-08-20-member-gateway-reviewer-evidence
+    // -projection.md): DB-bound coverage for projectCandidateEvidenceForReviewer
+    // — capability gate, candidate loading/membership checks, and the audit
+    // row. The judgment/whitelist/envelope-validation composition itself is
+    // already covered db-free in reviewer-evidence-projection.test.ts against
+    // synthetic resolvers; this suite only exercises the paths that need a
+    // real database.
+    describe("reviewer evidence projection", () => {
+      afterEach(() => {
+        resetMemberEvidenceAuthorizationResolverForTests();
+      });
+
+      it("default resolver: blocks with read_surface_denied, 7 deniedDimensions, and an audit row with no field values", async () => {
+        const evidenceRef = `evidence:case-${suffix}-1`;
+        const { artifactBundleId } = await materializeFreshCandidate({
+          payloadOverrides: { relatedEvidenceRefs: [evidenceRef] },
+          evidenceSurfaces: new Map([[evidenceRef, ALLOWED_SURFACE]]),
+        });
+
+        const { envelope, deniedDimensions } =
+          await projectCandidateEvidenceForReviewer({
+            workspaceId,
+            reviewerUserId: ownerUserId,
+            artifactBundleId,
+            evidenceRef,
+          });
+
+        expect(envelope.ok).toBe(true);
+        expect(envelope.data).toBeNull();
+        expect(envelope.boundary.decision.projection).toBeNull();
+        expect(envelope.boundary.decision.blockReason).toBe(
+          "read_surface_denied",
+        );
+        expect(deniedDimensions).toEqual([
+          "live_membership",
+          "tool_scope",
+          "object_relationship_authorization",
+          "field_purpose_policy",
+          "source_authorization",
+          "tenant_provider_egress_policy",
+          "current_classification",
+        ]);
+
+        const audit = await db.auditLog.findFirst({
+          where: {
+            workspaceId,
+            actionType: "MEMBER_SIGNAL_EVIDENCE_PROJECTION_REQUESTED",
+            targetType: "ArtifactBundle",
+            targetId: artifactBundleId,
+          },
+        });
+        expect(audit).not.toBeNull();
+        expect(audit?.userId).toBe(ownerUserId);
+        const payload = JSON.parse(audit?.payload ?? "null") as {
+          evidenceRef: string;
+          projection: string | null;
+          blockReason: string | null;
+          deniedDimensions: readonly string[];
+        };
+        expect(payload.evidenceRef).toBe(evidenceRef);
+        expect(payload.projection).toBeNull();
+        expect(payload.blockReason).toBe("read_surface_denied");
+        expect(payload.deniedDimensions).toHaveLength(7);
+        // No field VALUES are ever audited — only the identifier and the
+        // judgment outcome.
+        expect(Object.keys(payload).sort()).toEqual([
+          "blockReason",
+          "deniedDimensions",
+          "evidenceRef",
+          "projection",
+        ]);
+      });
+
+      it("rejects an evidenceRef that does not belong to the candidate", async () => {
+        const { artifactBundleId } = await materializeFreshCandidate();
+
+        await expectEvidenceProjectionError(
+          projectCandidateEvidenceForReviewer({
+            workspaceId,
+            reviewerUserId: ownerUserId,
+            artifactBundleId,
+            evidenceRef: `evidence:not-in-candidate-${suffix}`,
+          }),
+          "evidence_ref_not_in_candidate",
+        );
+      });
+
+      it("rejects a bogus artifactBundleId as candidate_not_found", async () => {
+        await expectEvidenceProjectionError(
+          projectCandidateEvidenceForReviewer({
+            workspaceId,
+            reviewerUserId: ownerUserId,
+            artifactBundleId: `member-signal-candidate:bogus-${suffix}`,
+            evidenceRef: `evidence:case-${suffix}-bogus`,
+          }),
+          "candidate_not_found",
+        );
+      });
+
+      it("rejects a MEMBER-role reviewer with a capability error, not a projection decision", async () => {
+        const evidenceRef = `evidence:case-${suffix}-member`;
+        const { artifactBundleId } = await materializeFreshCandidate({
+          payloadOverrides: { relatedEvidenceRefs: [evidenceRef] },
+          evidenceSurfaces: new Map([[evidenceRef, ALLOWED_SURFACE]]),
+        });
+
+        await expect(
+          projectCandidateEvidenceForReviewer({
+            workspaceId,
+            reviewerUserId: memberUserId,
+            artifactBundleId,
+            evidenceRef,
+          }),
+        ).rejects.toBeInstanceOf(WorkspaceServiceGovernanceError);
+      });
+
+      it("accepts a linkEvidence-derived evidenceRef (still default-denied)", async () => {
+        const { artifactBundleId } = await materializeFreshCandidate({
+          payloadOverrides: {
+            detail: "补充材料见 https://example.com/case/evidence-link",
+          },
+        });
+        const artifact = await loadStoredArtifact(artifactBundleId);
+        expect(artifact.linkEvidence).toHaveLength(1);
+        const linkEvidenceRef = artifact.linkEvidence[0]?.evidenceRef;
+        expect(linkEvidenceRef).toBeDefined();
+
+        const { envelope, deniedDimensions } =
+          await projectCandidateEvidenceForReviewer({
+            workspaceId,
+            reviewerUserId: ownerUserId,
+            artifactBundleId,
+            evidenceRef: linkEvidenceRef as string,
+          });
+
+        // Accepted for projection (no evidence_ref_not_in_candidate) —
+        // still denied by the default fail-closed resolver, not by the
+        // membership check.
+        expect(envelope.boundary.decision.blockReason).toBe(
+          "read_surface_denied",
+        );
+        expect(deniedDimensions).toHaveLength(7);
       });
     });
   },
