@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { resolveWorkspaceDemoMode } from "@/lib/demo/demo-modes";
 import { getEvolutionInsights } from "@/lib/evolution/evolution-insights.service";
 import { isEnglishLocale, resolveWorkspaceUiLocale } from "@/lib/i18n/config";

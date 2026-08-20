@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import {
   getCaptureSessionDetails,
   getRecentCaptureSessions,

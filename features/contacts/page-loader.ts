@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getContactDetailData } from "@/features/contacts/queries";
 import { generateRecommendationsForObject } from "@/lib/recommendations/recommendation.service";
 import { isWorkspaceServiceGovernanceError } from "@/lib/auth/service-governance";

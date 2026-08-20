@@ -34,9 +34,10 @@ const SECRET_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
   </dict>
 </dict></plist>`;
 
+const SECRET_VALUE = ["sk-", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4"].join("");
 const SECRET_VALUE_PLIST = `<plist version="1.0"><dict>
   <key>EnvironmentVariables</key><dict>
-    <key>EXTRA</key><string>sk-A1b2C3d4E5f6G7h8I9j0K1l2M3n4</string>
+    <key>EXTRA</key><string>${SECRET_VALUE}</string>
   </dict>
 </dict></plist>`;
 

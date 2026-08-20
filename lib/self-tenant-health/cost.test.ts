@@ -17,6 +17,40 @@ describe("self-tenant LLM cost estimates", () => {
     ).toBe(3200);
   });
 
+  it("estimates the qwen3.7 models rather than bucketing them as unknown", () => {
+    // 1M prompt + 1M completion == promptMinorUnit + completionMinorUnit.
+    expect(
+      estimateLLMCallCostMinorUnit({
+        provider: "qwen",
+        model: "qwen3.7-plus",
+        promptTokens: 1_000_000,
+        completionTokens: 1_000_000,
+      }),
+    ).toBe(992);
+    expect(
+      estimateLLMCallCostMinorUnit({
+        provider: "qwen",
+        model: "qwen3.7-max",
+        promptTokens: 1_000_000,
+        completionTokens: 1_000_000,
+      }),
+    ).toBe(4753);
+  });
+
+  it("keeps the unpriced qwen3.8-max on the honest unknown bucket", () => {
+    // The vendor had published no price as of 2026-08-18. Null here surfaces as
+    // an "unknown" bucket, which is the truth; a guessed profile would render
+    // as a confident number instead.
+    expect(
+      estimateLLMCallCostMinorUnit({
+        provider: "qwen",
+        model: "qwen3.8-max",
+        promptTokens: 1_000_000,
+        completionTokens: 1_000_000,
+      }),
+    ).toBeNull();
+  });
+
   it("fails closed for unknown models instead of treating them as free", () => {
     expect(
       estimateLLMCallCostMinorUnit({

@@ -1,7 +1,13 @@
 import { startOfDay } from "date-fns";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
-import { getCurrentUser, getCurrentWorkspaceSession, getSessionId } from "@/lib/auth/session";
+
+// This module must stay session-free. Domain services that log events are
+// composed outside the Next.js bundler too — the CAIO WorkBuddy gateway loads
+// the policy engine under `node --conditions=react-server` — and any static
+// edge from here to `@/lib/auth/session` drags in `next/navigation`, which
+// fails to evaluate in that context. The session-bound helpers that resolve the
+// caller's workspace live in `@/lib/analytics/session-events`.
 
 type SnapshotCounterKey =
   | "loginCount"
@@ -15,7 +21,7 @@ type SnapshotCounterKey =
   | "followupDraftsGenerated"
   | "policyChanges";
 
-type AnalyticsEventInput = {
+export type AnalyticsEventInput = {
   workspaceId: string;
   userId?: string | null;
   eventName: string;
@@ -124,40 +130,4 @@ export async function logEvent(input: AnalyticsEventInput) {
     }
     console.error("analytics.logEvent failed", error);
   }
-}
-
-export async function logCurrentWorkspaceEvent(
-  input: Omit<AnalyticsEventInput, "workspaceId" | "userId" | "sessionId">,
-) {
-  const user = await getCurrentUser();
-  const session = user ? await getCurrentWorkspaceSession().catch(() => null) : null;
-  const workspace = session?.workspace;
-
-  if (!user || !workspace) {
-    return;
-  }
-
-  await logEvent({
-    workspaceId: workspace.id,
-    userId: user.id,
-    sessionId: await getSessionId(),
-    ...input,
-  });
-}
-
-export async function logPageViewEvent(input: {
-  eventName: string;
-  sourcePage: string;
-  targetType?: string | null;
-  targetId?: string | null;
-  metadata?: Record<string, unknown>;
-}) {
-  await logCurrentWorkspaceEvent({
-    eventName: input.eventName,
-    eventCategory: "page_view",
-    targetType: input.targetType ?? "Page",
-    targetId: input.targetId ?? input.sourcePage,
-    metadata: input.metadata,
-    sourcePage: input.sourcePage,
-  });
 }

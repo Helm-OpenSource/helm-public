@@ -19,7 +19,7 @@ import "server-only";
 
 import type { ReactNode } from "react";
 
-import { logPageViewEvent } from "@/lib/analytics";
+import { logPageViewEvent } from "@/lib/analytics/session-events";
 import type { IndustryDemoPack } from "@/lib/demo/industry-fixtures/types";
 import {
   runSignalCollectionJobs,

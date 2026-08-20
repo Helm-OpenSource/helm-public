@@ -14,6 +14,17 @@ type CostProfile = {
 // Internal pilot estimates only. These values drive budget buckets and are not
 // a provider billing statement.
 const COST_PROFILES: CostProfile[] = [
+  // Qwen 3.7 series, derived from the cn-beijing USD list price read on
+  // 2026-08-18 (see lib/llm/token-cost-table.ts) at ~1 USD = 7.2 CNY, rounded
+  // to whole minor units. The double conversion carries a few percent of
+  // error; the buckets this feeds are decade-wide (0–100 / 100–1000 / 1000–
+  // 10000 CNY), so it cannot move a tenant across a bucket boundary.
+  // qwen3.8-max is absent on purpose — its price is unpublished, and here an
+  // unknown model yields a null cost and an honest "unknown" bucket rather
+  // than a made-up number.
+  { provider: "qwen", model: "qwen3.7-max", promptMinorUnitPerMillionTokens: 1188, completionMinorUnitPerMillionTokens: 3565 },
+  { provider: "qwen", model: "qwen3.7-plus", promptMinorUnitPerMillionTokens: 199, completionMinorUnitPerMillionTokens: 793 },
+  { provider: "qwen", model: "qwen3.7-flash", promptMinorUnitPerMillionTokens: 119, completionMinorUnitPerMillionTokens: 713 },
   { provider: "qwen", model: "qwen3.6-plus", promptMinorUnitPerMillionTokens: 800, completionMinorUnitPerMillionTokens: 2400 },
   { provider: "qwen", model: "qwen3.6-flash", promptMinorUnitPerMillionTokens: 120, completionMinorUnitPerMillionTokens: 360 },
   { provider: "qwen", model: "qwen-plus-latest", promptMinorUnitPerMillionTokens: 800, completionMinorUnitPerMillionTokens: 2400 },
