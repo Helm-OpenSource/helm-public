@@ -1407,6 +1407,10 @@ describe("shared surface hierarchy guards", () => {
 
   it("keeps dashboard home work-entry ahead of explanatory readouts and pushes secondary context behind disclosures", () => {
     const dashboardPage = read("app/(workspace)/dashboard/page.tsx");
+    const controlTowerView = read(
+      "features/dashboard/control-tower/control-tower-view.tsx",
+    );
+    const legacyHomeView = read("features/dashboard/legacy-home-view.tsx");
     const homeWorkEntry = read("features/dashboard/home-work-entry.ts");
     const surfaceRouting = read("features/dashboard/home-surface-routing.ts");
     const arrivalBanner = read(
@@ -1425,7 +1429,21 @@ describe("shared surface hierarchy guards", () => {
     const meetings = read("features/meetings/meeting-detail-client.tsx");
 
     expect(dashboardPage).not.toContain("briefing={headerBriefing}");
-    expect(dashboardPage).toContain("<DashboardHomeWorkEntrySurface");
+    // /dashboard now resolves a per-workspace default landing path (redirect)
+    // before falling through to the controlTowerHome-gated view; the
+    // work-entry surface itself lives one level down in whichever branch
+    // renders, so pin it there instead of on the page shell directly.
+    expect(dashboardPage).toContain("resolveWorkspaceDefaultLandingPath");
+    expect(dashboardPage).toContain("<ControlTowerView");
+    expect(dashboardPage).toContain("<LegacyHomeView");
+    expect(controlTowerView).toContain("<DashboardHomeWorkEntrySurface");
+    expect(legacyHomeView).toContain("<DashboardHomeWorkEntrySurface");
+    expect(controlTowerView.indexOf("<DashboardHomeWorkEntrySurface")).toBeLessThan(
+      controlTowerView.indexOf("<details"),
+    );
+    expect(legacyHomeView.indexOf("<DashboardHomeWorkEntrySurface")).toBeLessThan(
+      legacyHomeView.indexOf("<details"),
+    );
     expect(dashboardPage).not.toContain("<DashboardHomeSecondaryDisclosure");
     expect(dashboardPage).not.toContain("dashboardHomeSecondaryVisibility");
     expect(dashboardPage).not.toContain("<GoalDrivenHomeSurface");
@@ -1937,14 +1955,20 @@ describe("shared surface hierarchy guards", () => {
   it("keeps public login Chinese entry copy free of mixed Helm spacing", () => {
     const loginPage = read("app/(auth)/login/page.tsx");
 
+    // Deployment-aware entry (feat: add deployment-aware entry and
+    // authentication) replaced the hard-coded "Helm" trial/return copy with
+    // `${deploymentName}` / `${deploymentEntry.displayName}` templates so a
+    // white-labeled deployment can rename itself. The literal, still-static
+    // strings keep the original no-space convention; the templated strings
+    // are pinned in their new bracketed form, still glued with no space.
     expect(loginPage).toContain("你的Helm组织");
     expect(loginPage).toContain("Helm已经知道你是谁");
-    expect(loginPage).toContain("开通你的Helm试点工作区");
-    expect(loginPage).toContain("回到你的Helm工作区");
-    expect(loginPage).toContain("申请Helm Cloud试用");
+    expect(loginPage).toContain("开通「${deploymentName}」试点工作区");
+    expect(loginPage).toContain("回到「${deploymentName}」工作区");
+    expect(loginPage).toContain("申请「${deploymentEntry.displayName}」试用");
 
     expect(loginPage).not.toMatch(
-      /你的 Helm 组织|Helm 已经|开通你的 Helm 试点工作区|回到你的 Helm 工作区|申请 Helm Cloud 试用/,
+      /你的 Helm 组织|Helm 已经|开通\s+「|回到\s+「|申请\s+「|「\s+\$\{deploymentName\}|「\s+\$\{deploymentEntry\.displayName\}|\$\{deploymentName\}\s+」|\$\{deploymentEntry\.displayName\}\s+」|」\s+试点工作区|」\s+工作区|」\s+试用/,
     );
   });
 
