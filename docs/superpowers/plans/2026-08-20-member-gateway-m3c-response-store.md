@@ -1,5 +1,5 @@
 ---
-status: planning / ready-to-execute
+status: archived / executed-with-as-built-record
 owner: helm-core
 created: 2026-08-20
 review_after: 2026-09-20
@@ -127,3 +127,72 @@ Commit: `test(member-gateway): cover response classes, governance persistence, a
 - `CaioHumanResponse` 形状与校验唯一真值仍在 `caio-governance`;本切片只持久化 bridge 产物,任何形状变化都到那边改。
 - 落库不产生权限、不晋升事实;M2c 的候选材料化是独立切片。
 - 转移机械代码的内联复制是 CAS 门禁词法规则的既定代价,判定不复制。
+
+---
+
+## As-built 记录(2026-08-20 执行完毕)
+
+分支 `feat/member-gateway-m3c`(基于 `feat/member-gateway-m3b`)。五个任务
+全部按计划落地,顺序执行,each commit 过完整 pre-commit 门禁
+(`check:boundaries` 含 `check:conditional-update-cas`、
+`check:member-gateway`)。隔离 MySQL 套件本地真库全绿(13/13),无 env 时
+干净 skip。
+
+判断记录:
+
+1. **challenge 提交判定的"镜像而非调用"**:`recordMemberPromptResponse`
+   对 `MemberWorkSignalChallenge` 行的绑定/hash/窗口/重放判定,逐条镜像
+   `signal.ts` 的 `judgeMemberWorkSignalSubmission`(且复用其错误码原样:
+   `challenge_binding_mismatch`/`challenge_payload_hash_mismatch`/
+   `submission_before_issue`/`challenge_expired`/
+   `challenge_already_consumed`),但**不是**对该函数的字面调用——它内部
+   经 `validateMemberWorkSignalDraft` 校验 `payload` 必须是
+   `MemberWorkSignalPayload`(kind/summary/detail/relatedEvidenceRefs)形
+   状,而 prompt 响应载荷是按 kind 变化的任意 JSON(拒绝理由、承诺细
+   节……),没有信号形状。Task 3 范围又不允许改 `signal.ts` 抽出一个
+   payload-形状无关的导出。这条镜像判定因此手写在 store 内,逐条注释标
+   注对应关系。**留给未来切片的候选项**:如果再出现第三个"一次性
+   challenge 消费方"且同样不带信号形状的载荷,值得把这套绑定/窗口/重放
+   规则从 `judgeMemberWorkSignalSubmission` 中拆出一个不含
+   `validateMemberWorkSignalDraft` 调用的共享判定,交给两边复用——本切
+   片只记录这个候选,不动手做,因为它超出 M3c 范围且当前只有一个调用
+   方证明不了抽象的必要性。
+2. **`kind` 参数刻意放宽为完整 7 类联合类型**:计划伪代码把
+   `recordMemberPromptResponse` 的 `kind` 写成 5 项联合(排除
+   `progress_report`/`free_text_answer`),但 Task 3/4 都要求这两个候选
+   kind 打进本函数时能拿到干净的 `candidate_response_uses_signal_path`
+   拒绝——若类型层面就排除它们,这条运行时防御在良类型调用方手里永远
+   走不到,只在"未经类型检查的输入"(不可信 JSON body、坏造型)下才有
+   意义,等于把契约意图埋进死代码。执行时把 `kind` 的类型改成
+   `MemberPromptResponseKind`(prompt.ts 的完整 7 项),`classifyMemberPromptResponse`
+   在事务外立即拦截 candidate 类,类型系统与运行时防御因此一致而非互斥。
+3. **CAS 门禁强制的转移内联,按 Architecture #4 原样执行**:
+   `recordMemberPromptResponse` 内部对"过期清扫"与"respond 转移"各手抄
+   了一遍 `prompt-store.service.ts` 的 CAS `updateMany` + 转移回执写入机
+   械代码,而不是调用 `transitionMemberPrompt` 或抽公共 `(tx, ...) =>`
+   helper。原因是 `scripts/check-conditional-update-cas.ts` 只认"receiver
+   的根标识符就是当前 `$transaction` 回调自己的客户端形参"这一种词法形
+   状为可证明的 Serializable;调用 `transitionMemberPrompt` 会在内层再开
+   一个事务,抽 helper 则让 `tx` 变成"由外层参数传入",两者都会落到该
+   守卫的 `client-from-parameter`/`no-transaction` finding。执行后
+   `check:conditional-update-cas` 零新增 finding(47 条既有 baseline 条
+   目不变)。`TERMINAL_PROMPT_STATES` 常量也按同一理由在
+   `prompt-response-store.service.ts` 内复制了一份(`prompt-store.service.ts`
+   中是模块私有常量,无法导入)。判定本身(`judgeMemberPromptTransition`)
+   全程只来自 `prompt.ts`,没有复制。
+4. **M2c 仍是下一切片,未在本次范围内**:`progress_report`/
+   `free_text_answer` 候选响应把信号落库(`MemberWorkSignalReceipt`)当
+   作证据边界——这是 M3c Architecture #1 的既定复用,不产生任何提升到
+   记忆/事实的路径。信号 → 记忆提升链路的 owner 决策已经记录在
+   `docs/superpowers/plans/2026-08-20-member-gateway-m2c-design-questions.md`
+   (8 处硬失配、四条独立记忆谱系的探查结论),等 owner 就该备忘拍板后再
+   走 brainstorm → spec → plan;本切片没有,也不需要触碰那条链路。
+5. Task 1 契约测试补充了三元绑定"缺失优先于错配"的钉死用例(单元素缺
+   失时只报 `authority_binding_missing`,不会同时冒出
+   `authority_binding_mismatch`)——计划文本未展开这一细节,执行时按最
+   小惊讶原则钉死。
+6. Task 4 用例列表里"unique [workspaceId, challengeRef] backstop"额外做
+   了一次绕过 store 判定层、直接对 `MemberPromptResponseReceipt` 发起第
+   二次 `create`(同 `challengeRef`,不同 `id`)的原始 DB 断言,证明就算
+   未来某条代码路径跳过了 store 的重放判定,唯一索引仍然独立拦截——不
+   只是断言 store 层报错,同时给出 DB 层证据。

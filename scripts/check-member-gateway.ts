@@ -54,6 +54,8 @@ for (const file of [
   "signal-store.mysql.test.ts",
   "prompt-store.service.ts",
   "prompt-store.mysql.test.ts",
+  "prompt-response-store.service.ts",
+  "prompt-response-store.mysql.test.ts",
 ]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
@@ -95,6 +97,8 @@ const promptFrozenMarkers = [
   '"refuse"',
   '"pause"',
   '"appeal"',
+  '"acknowledge"',
+  '"commitment_confirm"',
   "retaliationProhibited",
 ];
 for (const marker of promptFrozenMarkers) {
