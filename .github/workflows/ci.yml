@@ -855,6 +855,7 @@ jobs:
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'MEMBER_SIGNAL_STORE_DATABASE_URL=%s\n' "${url}"
             printf 'MEMBER_PROMPT_STORE_DATABASE_URL=%s\n' "${url}"
+            printf 'MEMBER_PROMPT_RESPONSE_STORE_DATABASE_URL=%s\n' "${url}"
           } >>"${GITHUB_ENV}"
 
       - name: Setup Node.js

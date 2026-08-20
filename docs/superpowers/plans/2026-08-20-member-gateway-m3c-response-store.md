@@ -1,0 +1,262 @@
+---
+status: archived / executed-with-as-built-record
+owner: helm-core
+created: 2026-08-20
+review_after: 2026-09-20
+public_safety: Implementation plan for the member prompt response
+  persistence slice. No customer data, credential, private endpoint, or
+  production-readiness claim.
+---
+
+# Member Gateway M3c (响应内容落库) Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development 或 executing-plans。
+
+**Goal:** 落地 spec §5/§6.3/§7 的响应内容持久层,承接 M3a/M3b as-built 全部继承义务:四类写入按类落库、challenge 流、`bridgeProtectedHumanResponse` 产物落库(仓内首个 `CaioHumanResponse` 持久层)、authority 三元绑定钉死、非绩效化字面量延伸到响应回执。
+
+**Architecture(关键决定,执行者不得偏离):**
+
+1. **candidate_write 响应(progress_report / free_text_answer)复用 M2 信号机器**:候选类响应**就是**一条绑定 prompt 主题对象的工作信号——不建新表,组合函数走 `submitMemberWorkSignal` → `transitionMemberPrompt(cause:'respond', responseRef=信号 receiptId)`。两个事务的组合语义:信号先落库即为持久 candidate 证据(独立成立、无害);转移失败可用同 responseRef 重试;函数返回失败发生在哪一步。
+2. **非候选类响应(acknowledge / refuse / pause / appeal / commitment_confirm)落新表** `MemberPromptResponseReceipt`(append-only 触发器),按 `responseClass` CHECK 分列承载:
+   - 公共列:id、workspaceId、promptRef、memberRef、deviceRegistrationRef、clientId、responseKind、responseClass、challengeRef、occurredAt、`evaluationUseProhibited`(CHECK = TRUE)、createdAt;
+   - protected 列:`governedResponseJson`(bridge 产物完整 canonical JSON)+ `governedResponseHash` + `governanceResponseId` + `mandateRef` + `routePath`(CHECK IN ('user_presence','local_fallback'));
+   - authority 列:`externalAuthorizationRef` + 三元绑定列 `authorizedMemberRef` / `authorizedObjectRef` / `authorizedActionRef`。
+   - CHECK:`responseKind IN ('acknowledge','refuse','pause','appeal','commitment_confirm')`(候选类 kind 不允许入此表);`responseClass IN ('interaction_receipt','protected_human_response','authority_bearing_action')`;class 与 kind 的配对一致性由 store 层保证(M3a `classifyMemberPromptResponse` 为真值)。
+3. **challenge 复用 `MemberWorkSignalChallenge` 表**(其形状本就是通用的"一次性成员写入 challenge":objectRef/objectVersion/payloadHash/窗口):`objectRef = promptRef`、`payloadHash = sha256(canonicalJson(响应载荷))`。表名的 signal 前缀是历史命名,as-built 记录该复用决定。新增发放函数 `issueMemberPromptResponseChallenge`(镜像 issue 的判定与落库,payload 为响应载荷)。
+4. **CAS 门禁强制的机械内联**:`recordMemberPromptResponse` 必须在**一个**词法 serializable `$transaction` 内完成 challenge CAS 消费 + prompt 转移 CAS + 转移回执 + 响应回执(refuse/pause/appeal/commitment_confirm 触发 respond 转移;acknowledge 不转移)。不得调用 `transitionMemberPrompt` 复合两个事务,也不得抽共享 tx helper(`client-from-parameter` finding)——转移的 CAS/回执机械代码**有意内联复制**,判定仍全部来自 M3a 契约。as-built 必须记录这一条及其原因。
+5. **判定复用**:`classifyMemberPromptResponse`、`requiredTrustTier`、`judgeProtectedResponseRoute`、`bridgeProtectedHumanResponse`、`judgeAuthorityBearingAction`、`judgeMemberPromptTransition`、`decideMemberPromptDelivery`(不适用)、challenge 判定复用 signal 契约的 `judgeMemberWorkSignalChallenge`/提交窗口语义。store 零判定复制。
+6. **authority 三元绑定钉死(M3a as-built 8 继承义务)**:提交输入携带授权证据声明的 `(authorizedMemberRef, authorizedObjectRef, authorizedActionRef)`;store 校验 memberRef 与提交主体一致、objectRef 与 prompt 主题对象一致、actionRef 与响应 kind 对应动作一致,任一不匹配 → `authority_binding_mismatch`。契约层同步在 `prompt.ts` 的 `judgeAuthorityBearingAction` 输入上扩展三元字段(错误码 `authority_binding_missing` / `authority_binding_mismatch`),保持判定在契约层。
+7. **protected 路径**:输入携带 `{userPresenceAvailable, localFallbackAvailable, routePath}`;`judgeProtectedResponseRoute` 先判可用性;`routePath` 必须是可用路径之一(`protected_route_path_invalid`);bridge 产物必须 `validateHumanResponse` 通过才落库(`protected_response_invalid` 携带其 errors)——**注意:校验失败拒绝的是"这次落库调用"的完整性,不是响应本身**,错误信息必须引导修复输入后重提,响应权不受影响(注释成文)。
+
+**设计真值:** spec §5/§6.3/§7;M3a plan as-built 5-9;M3b plan as-built 6-7;`lib/caio-governance/types.ts`(`CaioHumanResponse` 唯一形状真值)。
+
+**分支:** `feat/member-gateway-m3c`(基于 m3b,PR 将 stacked 在 #370 上)。
+
+---
+
+### Task 1: 契约扩展(authority 三元绑定)
+
+**Files:** Modify `lib/member-gateway/prompt.ts` / `prompt.test.ts`
+
+`judgeAuthorityBearingAction` 输入扩展为:
+
+```ts
+export function judgeAuthorityBearingAction(input: {
+  externalAuthorizationRef: string | null;
+  challengeRef: string | null;
+  userPresenceVerified: boolean;
+  // Explicit triple binding (spec §5): the external authorization must
+  // name this member, this object, and this action; nothing else can
+  // substitute for it.
+  authorizedMemberRef: string | null;
+  authorizedObjectRef: string | null;
+  authorizedActionRef: string | null;
+  submittingMemberRef: string;
+  subjectObjectRef: string;
+  actionRef: string;
+}): ContractValidation
+```
+
+新错误码:三元任一缺失 → `authority_binding_missing`;与提交侧不一致 → `authority_binding_mismatch`。既有三错误码语义不变。TDD:缺失/错配/全匹配各钉死;更新既有测试的输入形状。
+
+Commit: `feat(member-gateway): pin authority triple binding in the contract`
+
+### Task 2: schema + 迁移
+
+**Files:** Modify `prisma/schema.prisma`;Create `prisma/migrations/20260820180000_member_prompt_response_store/migration.sql`
+
+`MemberPromptResponseReceipt` 按 Architecture #2 的列与 CHECK;`@@unique([id, workspaceId])`、`@@unique([workspaceId, challengeRef])`(一 challenge 一响应)、`@@index([workspaceId, promptRef])`;Workspace 反向关系;append-only 触发器 ×2。protected/authority 专属列均 nullable,配对完整性由 store 保证(DB 层只锁枚举与 evaluationUseProhibited)。
+
+Commit: `feat(member-gateway): add member prompt response persistence schema`
+
+### Task 3: store `lib/member-gateway/prompt-response-store.service.ts`
+
+模式同 M2b/M3b(server-only、Serializable 内联、lockWorkspace、错误类携带 reasons)。API:
+
+```ts
+issueMemberPromptResponseChallenge(input: {
+  principal: MemberPrincipal;
+  promptRef: string;
+  promptVersion: number;
+  responsePayload: unknown;   // canonicalJson+sha256 进 payloadHash
+  ttlMs: number;
+}): Promise<MemberWorkSignalChallenge>
+
+recordMemberPromptResponse(input: {
+  principal: MemberPrincipal;
+  promptRef: string;
+  expectedVersion: number;
+  challengeRef: string;
+  responsePayload: unknown;           // 与 challenge hash 绑定
+  kind: "acknowledge" | "refuse" | "pause" | "appeal" | "commitment_confirm";
+  receiptId: string;
+  transitionReceiptId: string;        // 触发转移的 kind 需要
+  now: string;
+  protectedInput?: { userPresenceAvailable: boolean; localFallbackAvailable: boolean;
+    routePath: "user_presence" | "local_fallback";
+    mandateRef: string; reason: string; auditRefs: readonly string[];
+    governanceResponseId: string };
+  authorityInput?: { externalAuthorizationRef: string; userPresenceVerified: boolean;
+    authorizedMemberRef: string; authorizedObjectRef: string;
+    authorizedActionRef: string; actionRef: string };
+}): Promise<{ outcome: "recorded"; receipt: <契约形状>; promptTransitioned: boolean }>
+
+respondWithWorkSignal(input: { ...signal submit 输入; promptRef; expectedVersion;
+  transitionReceiptId; now }): Promise<{ signalOutcome; transitioned: boolean;
+  receipt?: ... }>   // 组合函数:先 submitMemberWorkSignal,后 transitionMemberPrompt
+```
+
+`recordMemberPromptResponse` 事务体:load prompt(版本校验)→ 过期清扫语义与 M3b 一致(过期即 sweep 并拒绝本次响应落库,`prompt_expired_swept`)→ challenge 行加载 + 窗口/hash/绑定判定(复用 signal 契约判定语义;`payloadHash = sha256(canonicalJson(responsePayload))`)→ 按 kind 分类:class 为 candidate_write → `candidate_response_uses_signal_path` 拒绝;protected → route 判定 + bridge + `validateHumanResponse`(失败 → `protected_response_invalid`);authority → `judgeAuthorityBearingAction`(三元)→ challenge CAS 消费 → 非 acknowledge 时内联 prompt respond 转移(CAS + 转移回执,`responseRef = receiptId`)→ 插入响应回执(protected 存完整 bridge 产物 JSON + hash)。
+
+Commit: `feat(member-gateway): record prompt responses per write class with governance persistence`
+
+### Task 4: 隔离 MySQL 测试 `lib/member-gateway/prompt-response-store.mysql.test.ts`
+
+env:`MEMBER_PROMPT_RESPONSE_STORE_DATABASE_URL`。用例(≥12):acknowledge 全链(不转移、回执 class/challenge 消费);refuse 全链(转移 respond、`governedResponseJson` 过 `validateHumanResponse` 回读校验、`retaliationProhibited`、routePath);pause/appeal 同族抽一;commitment_confirm 全链(三元绑定匹配);三元错配 → `authority_binding_mismatch`;无外部授权 → `authority_missing`;双路径不可用 → `protected_response_path_unavailable`;routePath 不可用 → `protected_route_path_invalid`;candidate kind 走本函数 → `candidate_response_uses_signal_path`;challenge 重放 → 拒绝;过期 prompt → `prompt_expired_swept`(行被清扫);append-only 触发器;`respondWithWorkSignal` 组合(信号落库 + 转移,responseRef=信号回执)。本地真库全绿。
+
+Commit: `test(member-gateway): cover response classes, governance persistence, and authority binding against MySQL`
+
+### Task 5: 接线与收尾
+
+`test:member-gateway:mysql` 加新测试文件;CI job GITHUB_ENV 加 `MEMBER_PROMPT_RESPONSE_STORE_DATABASE_URL`;CPV1 白名单同步;`check-member-gateway.ts` 扫描列表 + 冻结 marker(`'"acknowledge"'`、`'"commitment_confirm"'`、`"evaluationUseProhibited"`);as-built;最终整体 review;push + PR(base: `feat/member-gateway-m3b`,stacked 在 #370)。
+
+---
+
+## 边界声明
+
+- `CaioHumanResponse` 形状与校验唯一真值仍在 `caio-governance`;本切片只持久化 bridge 产物,任何形状变化都到那边改。
+- 落库不产生权限、不晋升事实;M2c 的候选材料化是独立切片。
+- 转移机械代码的内联复制是 CAS 门禁词法规则的既定代价,判定不复制。
+
+---
+
+## As-built 记录(2026-08-20 执行完毕)
+
+分支 `feat/member-gateway-m3c`(基于 `feat/member-gateway-m3b`)。五个任务
+全部按计划落地,顺序执行,each commit 过完整 pre-commit 门禁
+(`check:boundaries` 含 `check:conditional-update-cas`、
+`check:member-gateway`)。隔离 MySQL 套件本地真库全绿(13/13),无 env 时
+干净 skip。
+
+判断记录:
+
+1. **challenge 提交判定的"镜像而非调用"**:`recordMemberPromptResponse`
+   对 `MemberWorkSignalChallenge` 行的绑定/hash/窗口/重放判定,逐条镜像
+   `signal.ts` 的 `judgeMemberWorkSignalSubmission`(且复用其错误码原样:
+   `challenge_binding_mismatch`/`challenge_payload_hash_mismatch`/
+   `submission_before_issue`/`challenge_expired`/
+   `challenge_already_consumed`),但**不是**对该函数的字面调用——它内部
+   经 `validateMemberWorkSignalDraft` 校验 `payload` 必须是
+   `MemberWorkSignalPayload`(kind/summary/detail/relatedEvidenceRefs)形
+   状,而 prompt 响应载荷是按 kind 变化的任意 JSON(拒绝理由、承诺细
+   节……),没有信号形状。Task 3 范围又不允许改 `signal.ts` 抽出一个
+   payload-形状无关的导出。这条镜像判定因此手写在 store 内,逐条注释标
+   注对应关系。**留给未来切片的候选项**:如果再出现第三个"一次性
+   challenge 消费方"且同样不带信号形状的载荷,值得把这套绑定/窗口/重放
+   规则从 `judgeMemberWorkSignalSubmission` 中拆出一个不含
+   `validateMemberWorkSignalDraft` 调用的共享判定,交给两边复用——本切
+   片只记录这个候选,不动手做,因为它超出 M3c 范围且当前只有一个调用
+   方证明不了抽象的必要性。
+2. **`kind` 参数刻意放宽为完整 7 类联合类型**:计划伪代码把
+   `recordMemberPromptResponse` 的 `kind` 写成 5 项联合(排除
+   `progress_report`/`free_text_answer`),但 Task 3/4 都要求这两个候选
+   kind 打进本函数时能拿到干净的 `candidate_response_uses_signal_path`
+   拒绝——若类型层面就排除它们,这条运行时防御在良类型调用方手里永远
+   走不到,只在"未经类型检查的输入"(不可信 JSON body、坏造型)下才有
+   意义,等于把契约意图埋进死代码。执行时把 `kind` 的类型改成
+   `MemberPromptResponseKind`(prompt.ts 的完整 7 项),`classifyMemberPromptResponse`
+   在事务外立即拦截 candidate 类,类型系统与运行时防御因此一致而非互斥。
+3. **CAS 门禁强制的转移内联,按 Architecture #4 原样执行**:
+   `recordMemberPromptResponse` 内部对"过期清扫"与"respond 转移"各手抄
+   了一遍 `prompt-store.service.ts` 的 CAS `updateMany` + 转移回执写入机
+   械代码,而不是调用 `transitionMemberPrompt` 或抽公共 `(tx, ...) =>`
+   helper。原因是 `scripts/check-conditional-update-cas.ts` 只认"receiver
+   的根标识符就是当前 `$transaction` 回调自己的客户端形参"这一种词法形
+   状为可证明的 Serializable;调用 `transitionMemberPrompt` 会在内层再开
+   一个事务,抽 helper 则让 `tx` 变成"由外层参数传入",两者都会落到该
+   守卫的 `client-from-parameter`/`no-transaction` finding。执行后
+   `check:conditional-update-cas` 零新增 finding(47 条既有 baseline 条
+   目不变)。`TERMINAL_PROMPT_STATES` 常量也按同一理由在
+   `prompt-response-store.service.ts` 内复制了一份(`prompt-store.service.ts`
+   中是模块私有常量,无法导入)。判定本身(`judgeMemberPromptTransition`)
+   全程只来自 `prompt.ts`,没有复制。
+4. **M2c 仍是下一切片,未在本次范围内**:`progress_report`/
+   `free_text_answer` 候选响应把信号落库(`MemberWorkSignalReceipt`)当
+   作证据边界——这是 M3c Architecture #1 的既定复用,不产生任何提升到
+   记忆/事实的路径。信号 → 记忆提升链路的 owner 决策已经记录在
+   `docs/superpowers/plans/2026-08-20-member-gateway-m2c-design-questions.md`
+   (8 处硬失配、四条独立记忆谱系的探查结论),等 owner 就该备忘拍板后再
+   走 brainstorm → spec → plan;本切片没有,也不需要触碰那条链路。
+5. Task 1 契约测试补充了三元绑定"缺失优先于错配"的钉死用例(单元素缺
+   失时只报 `authority_binding_missing`,不会同时冒出
+   `authority_binding_mismatch`)——计划文本未展开这一细节,执行时按最
+   小惊讶原则钉死。
+6. Task 4 用例列表里"unique [workspaceId, challengeRef] backstop"额外做
+   了一次绕过 store 判定层、直接对 `MemberPromptResponseReceipt` 发起第
+   二次 `create`(同 `challengeRef`,不同 `id`)的原始 DB 断言,证明就算
+   未来某条代码路径跳过了 store 的重放判定,唯一索引仍然独立拦截——不
+   只是断言 store 层报错,同时给出 DB 层证据。
+
+---
+
+## Review 修订记录(2026-08-20,最终整体 review 后)
+
+最终 review 发现三处未钉死的绑定 + 若干 minor 加固,单独一次提交补齐,
+不重开前五个任务的 commit。判断记录:
+
+7. **三处 review 驱动的绑定闭合**:
+   - **prompt 收件人绑定(Important 1)**:`issueMemberPromptResponseChallenge`
+     与 `recordMemberPromptResponse` 此前都只校验 `principal` 自身合法、
+     从不校验 principal 是否就是 prompt 实际指向的 `memberRef`——意味着
+     任意成员理论上能对别人的 prompt 发起 challenge/落响应。两处补上
+     `row.memberRef !== input.principal.memberRef → prompt_member_binding_mismatch`
+     (issue 侧顺带获得发行时存在性校验:先查行,不存在 → `prompt_not_found`)。
+   - **authority action 腿的推导而非采信(Important 2)**:`authorityInput`
+     此前携带调用方自报的 `actionRef`,与同样调用方自报的
+     `authorizedActionRef` 相互比较——调用方能同时提供比较式的两边,绑定
+     形同虚设。移除 `actionRef` 字段,新增冻结映射
+     `AUTHORITY_ACTION_REF_BY_KIND`(当前只有一项:
+     `commitment_confirm -> "member_prompt_response:commitment_confirm"`),
+     真值 `actionRef` 由 store 从 `kind` 派生后传入
+     `judgeAuthorityBearingAction`,调用方只能提供 `authorizedActionRef`
+     这一侧。
+   - **candidate 信号必须绑定 prompt 的主题对象(Important 3)**:
+     `respondWithWorkSignal` 此前把 `submitMemberWorkSignal` 的结果直接
+     喂给 `transitionMemberPrompt`,从不检查这条信号究竟是不是"关于这个
+     prompt"的——`submitMemberWorkSignal` 本身没有 prompt 概念,只知道
+     signal 自己的 `objectRef`(来自其自身 challenge)。补上:transition
+     之前加载 prompt 行,`signal.receipt.objectRef !== row.subjectObjectRef`
+     → 抛 `signal_object_prompt_mismatch`。信号回执本身**不回滚**——它在
+     `submitMemberWorkSignal` 自己的事务里已经落成独立、有效的证据,和
+     "transition 步骤失败,信号仍然是有效证据"是同一条不变量,只是这次
+     判定被移到了 transition 尝试之前而不是之后。
+8. **Minor 加固,同一提交**:acknowledge 现在要求 `fromState === 'delivered'`
+   (`acknowledge_state_invalid`,清扫路径优先于此检查,不受影响)；
+   challenge 的发行期 `objectVersion` 现在必须等于 `expectedVersion`
+   (`challenge_prompt_version_mismatch`)——由于 step 1 已经证明
+   `expectedVersion === row.version`,这条实质上是"challenge 必须是对
+   prompt 当前版本发行的,不能是在某次中间转移之前发的旧 challenge";
+   `prompt-response-store.mysql.test.ts` 补两条覆盖响应路径下的 challenge
+   镜像判定(载荷漂移 → `challenge_payload_hash_mismatch`;过期 challenge
+   → `challenge_expired`),此前只有 issue 侧和 signal 套件覆盖了这两条,
+   响应路径本身没有独立断言。
+9. **两处刻意接受的差异,明确记录不是缺陷**:
+   - `recordMemberPromptResponse` **没有** `submitMemberWorkSignal` 那种
+     幂等重放(同 `receiptId`+同 payload 重放直接回读既有回执)。提交后
+     的重试会拿到 `challenge_already_consumed` 而不是回读——这是刻意的:
+     响应记录不是"读回既证据"的信号候选写入,四类非候选响应各自触发治
+     理副作用(转移、governed response 落库、authority 三元记录),重放
+     语义需要额外设计(到底重放要不要重新跑一遍 route/authority 判定?)
+     不是本切片能顺手做的,留给需要它的调用方在更上层做去重。
+   - 共享的 `MemberWorkSignalChallenge` 表**没有** purpose 判别列——signal
+     和 prompt-response 两类 challenge 形状完全一致,彼此在结构上互相可
+     消费(没有字段能区分"这是给 signal 的 challenge"还是"这是给 prompt
+     响应的 challenge")。本次 review 把两条路径都补上了成员绑定后,两者
+     在"谁能消费"这件事上已经等价安全;真正需要判别列的时机是出现第三
+     个消费方且其绑定规则与前两者不同的时候——延续本文件第 1 条记录的
+     "未来共享判定原语"候选项,一并留给那次切片。
+
+Verified(review 修订后)：typecheck/lint 均绿;`check:conditional-update-cas`
+零新增 finding;隔离 MySQL 套件本地真库全绿(20/20,新增 7 条覆盖 Fix
+1/2/3 与两条 minor 加固),`npm run test:member-gateway:mysql`(三个 env
+var 全开)42/42 绿(12 signal + 10 prompt + 20 response)。

@@ -566,9 +566,17 @@ describe("judgeAuthorityBearingAction", () => {
     externalAuthorizationRef: "authz-1",
     challengeRef: "challenge-1",
     userPresenceVerified: true,
+    // Explicit triple binding (spec §5): the external authorization must
+    // name this member, this object, and this action.
+    authorizedMemberRef: "member-1",
+    authorizedObjectRef: "case-42",
+    authorizedActionRef: "commitment_confirm",
+    submittingMemberRef: "member-1",
+    subjectObjectRef: "case-42",
+    actionRef: "commitment_confirm",
   };
 
-  it("accepts when all three requirements hold", () => {
+  it("accepts when all three requirements and the triple binding hold", () => {
     expect(judgeAuthorityBearingAction(complete)).toEqual({
       valid: true,
       errors: [],
@@ -604,6 +612,74 @@ describe("judgeAuthorityBearingAction", () => {
       }).errors,
     ).toContain("authority_user_presence_missing");
   });
+
+  it("rejects when authorizedMemberRef is missing", () => {
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        authorizedMemberRef: null,
+      }).errors,
+    ).toContain("authority_binding_missing");
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        authorizedMemberRef: " ",
+      }).errors,
+    ).toContain("authority_binding_missing");
+  });
+
+  it("rejects when authorizedObjectRef is missing", () => {
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        authorizedObjectRef: null,
+      }).errors,
+    ).toContain("authority_binding_missing");
+  });
+
+  it("rejects when authorizedActionRef is missing", () => {
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        authorizedActionRef: null,
+      }).errors,
+    ).toContain("authority_binding_missing");
+  });
+
+  it("rejects a mismatched authorizedMemberRef", () => {
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        authorizedMemberRef: "member-2",
+      }).errors,
+    ).toContain("authority_binding_mismatch");
+  });
+
+  it("rejects a mismatched authorizedObjectRef", () => {
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        authorizedObjectRef: "case-99",
+      }).errors,
+    ).toContain("authority_binding_mismatch");
+  });
+
+  it("rejects a mismatched authorizedActionRef", () => {
+    expect(
+      judgeAuthorityBearingAction({
+        ...complete,
+        authorizedActionRef: "refuse",
+      }).errors,
+    ).toContain("authority_binding_mismatch");
+  });
+
+  it("never reports both binding_missing and binding_mismatch at once", () => {
+    const missing = judgeAuthorityBearingAction({
+      ...complete,
+      authorizedMemberRef: null,
+    }).errors;
+    expect(missing).not.toContain("authority_binding_mismatch");
+  });
 });
 
 describe("protected and authority error codes stay disjoint", () => {
@@ -619,6 +695,12 @@ describe("protected and authority error codes stay disjoint", () => {
         externalAuthorizationRef: null,
         challengeRef: null,
         userPresenceVerified: false,
+        authorizedMemberRef: null,
+        authorizedObjectRef: null,
+        authorizedActionRef: null,
+        submittingMemberRef: "member-1",
+        subjectObjectRef: "case-42",
+        actionRef: "commitment_confirm",
       }).errors,
     ]);
     const overlap = [...protectedErrors].filter((code) =>
