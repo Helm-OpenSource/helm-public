@@ -192,3 +192,9 @@ flag 已开),MySQL 套件本地真跑全绿。
    同库跑两套 store 测试;CPV1 白名单增加 MEMBER_PROMPT_STORE_DATABASE_URL。
 5. M3c 待做:四类响应内容落库(challenge 流、bridgeProtectedHumanResponse
    产物落库、authority 三元绑定钉死、非绩效化字面量延伸到响应回执)。
+6. 最终 review 加固:直接请求的 `expire` 在窗口未到时拒绝
+   (`prompt_expire_premature`)——store 不允许任何调用方缩短成员的存活
+   响应窗口;unsnooze 回执的投递判定内嵌补了断言。
+7. `deliverDecision IN ('deliver','held')` 中 'held' 目前不可达(hold 不是
+   转移);M3c 若把 held 落回执须同步调整读取侧类型收窄。M3a as-built 8 的
+   authority 三元绑定为 M3c 继承义务。

@@ -287,6 +287,11 @@ export async function transitionMemberPrompt(
           nowMs >= expiresAtMs &&
           !TERMINAL_PROMPT_STATES.has(fromState) &&
           input.cause !== "expire";
+        // A directly requested expire may not shorten a member's live
+        // response window: it is only legal once the window has closed.
+        if (input.cause === "expire" && nowMs < expiresAtMs) {
+          throw new MemberPromptStoreError("prompt_expire_premature");
+        }
         const effectiveCause: MemberPromptTransitionCause = sweeping
           ? "expire"
           : input.cause;

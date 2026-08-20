@@ -297,6 +297,25 @@ describeMysql(
       expect(receipts[0]?.cause).toBe("expire");
     });
 
+    it("rejects a directly requested expire before the window closes", async () => {
+      const prompt = buildPrompt();
+      await createMemberPrompt({ prompt });
+      await expectStoreError(
+        transitionMemberPrompt({
+          workspaceRef: workspaceId,
+          promptRef: prompt.promptRef,
+          cause: "expire",
+          expectedVersion: 1,
+          receiptId: nextId("receipt"),
+          now: new Date().toISOString(),
+        }),
+        "prompt_expire_premature",
+      );
+      const row = await getMemberPrompt(workspaceId, prompt.promptRef);
+      expect(row.state).toBe("pending");
+      expect(row.version).toBe(1);
+    });
+
     it("rejects a transition attempted from a terminal state", async () => {
       const prompt = buildPrompt();
       await createMemberPrompt({ prompt });
@@ -380,6 +399,10 @@ describeMysql(
       });
       expect(unsnoozeResult.outcome).toBe("transitioned");
       expect(unsnoozeResult.receipt.toState).toBe("delivered");
+      // Obligation #6 applies to unsnooze too: the re-delivery receipt
+      // embeds the delivery decision.
+      expect(unsnoozeResult.receipt.deliverDecision).toBe("deliver");
+      expect(unsnoozeResult.receipt.heldReason).toBeNull();
 
       const afterUnsnooze = await getMemberPrompt(workspaceId, prompt.promptRef);
       expect(afterUnsnooze?.state).toBe("delivered");
