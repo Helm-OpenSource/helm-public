@@ -387,7 +387,14 @@ export async function transitionMemberPrompt(
           ]);
         }
 
-        // 7. Append-only receipt insert.
+        // 7. Append-only receipt insert. gatewaySessionRef is deliberately
+        // left unset (null): every transition this function writes is
+        // system/operator-caused (deliver, snooze, unsnooze, withdraw,
+        // expire, suppress — see effectiveCause), never a direct member
+        // response, so it carries no member-gateway session anchor (M2d).
+        // Only the member-caused "respond" transition inlined in
+        // prompt-response-store.service.ts's recordMemberPromptResponse
+        // stamps a session ref.
         const occurredAt = new Date(input.now);
         try {
           await tx.memberPromptTransitionReceipt.create({

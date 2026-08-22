@@ -1396,6 +1396,7 @@ model Workspace {
   memberPrompts                        MemberPrompt[]
   memberPromptTransitionReceipts       MemberPromptTransitionReceipt[]
   memberPromptResponseReceipts         MemberPromptResponseReceipt[]
+  memberGatewaySessions                MemberGatewaySession[]
   caioAccessTokens                     CaioAccessToken[]
   caioPairingRequests                  CaioPairingRequest[]
   caioContextNegativeRules             CaioContextNegativeRule[]
@@ -2522,29 +2523,37 @@ model SessionCheckpoint {
   @@index([workspaceId, runtimeSessionId, createdAt])
 }
 
+// Member Gateway M2d dual-anchor (stage-two fact promotion design §2.1,
+// Owner 裁定记录 #1, alignment A): a memory candidate is anchored either on
+// a runtime session (existing governed path) OR a member-gateway session
+// (new stage-two path), never both/neither — enforced by the
+// MemoryCandidate_anchor_check CHECK added in the M2d migration (invisible
+// to Prisma; drift comparison only diffs column/index/relation shape).
 model MemoryCandidate {
-  id                 String                       @id @default(cuid())
-  workspaceId        String
-  runtimeSessionId   String
-  runtimeEventId     String?
-  meetingId          String?
-  memoryItemId       String?
-  artifactBundleId   String?
-  candidateKey       String                       @unique
-  summary            String                       @db.LongText
-  sourceVerification String                       @db.LongText
-  sourceStatus       String                       @db.LongText
-  status             RuntimeMemoryCandidateStatus @default(PENDING_VERIFICATION)
-  reviewerNote       String?                      @db.LongText
-  evidenceRefs       String?                      @db.LongText
-  confidence         Int?
-  createdAt          DateTime                     @default(now())
-  updatedAt          DateTime                     @updatedAt
-  workspace          Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  runtimeSession     RuntimeSession               @relation(fields: [runtimeSessionId], references: [id], onDelete: Cascade)
+  id                      String                       @id @default(cuid())
+  workspaceId             String
+  runtimeSessionId        String?
+  memberGatewaySessionRef String?
+  runtimeEventId          String?
+  meetingId               String?
+  memoryItemId            String?
+  artifactBundleId        String?
+  candidateKey            String                       @unique
+  summary                 String                       @db.LongText
+  sourceVerification      String                       @db.LongText
+  sourceStatus            String                       @db.LongText
+  status                  RuntimeMemoryCandidateStatus @default(PENDING_VERIFICATION)
+  reviewerNote            String?                      @db.LongText
+  evidenceRefs            String?                      @db.LongText
+  confidence              Int?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  workspace               Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  runtimeSession          RuntimeSession?              @relation(fields: [runtimeSessionId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, runtimeSessionId, createdAt])
   @@index([workspaceId, meetingId, createdAt])
+  @@index([workspaceId, memberGatewaySessionRef, createdAt], map: "MemoryCandidate_workspace_mgws_idx")
 }
 
 model MemoryPromotion {
@@ -6694,6 +6703,7 @@ model MemberWorkSignalChallenge {
   expiresAt             DateTime
   consumedAt            DateTime?
   consumptionReceiptRef String?
+  gatewaySessionRef     String?
   createdAt             DateTime  @default(now())
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWSignalChallenge_workspace_fkey")
 
@@ -6722,6 +6732,7 @@ model MemberWorkSignalReceipt {
   taint                 String
   challengeRef          String
   supersedesReceiptRef  String?
+  gatewaySessionRef     String?
   createdAt             DateTime @default(now())
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWSignalReceipt_workspace_fkey")
 
@@ -6773,6 +6784,7 @@ model MemberPromptTransitionReceipt {
   responseRef   String?
   occurredAt    DateTime
   evaluationUseProhibited Boolean
+  gatewaySessionRef String?
   createdAt     DateTime @default(now())
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPromptReceipt_workspace_fkey")
 
@@ -6820,12 +6832,37 @@ model MemberPromptResponseReceipt {
   authorizedMemberRef      String?
   authorizedObjectRef      String?
   authorizedActionRef      String?
+  gatewaySessionRef        String?
   createdAt                DateTime  @default(now())
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPromptRespReceipt_workspace_fkey")
 
   @@unique([id, workspaceId], map: "MWPromptRespReceipt_id_workspace_key")
   @@unique([workspaceId, challengeRef], map: "MWPromptRespReceipt_workspace_challenge_key")
   @@index([workspaceId, promptRef], map: "MWPromptRespReceipt_workspace_prompt_idx")
+}
+
+/// Member Gateway M2d: first-class member-gateway session anchor (stage-two
+/// fact promotion design §2.1, Owner 裁定记录 #1). Rows are append-only
+/// except for `closedAt` — opened once per (workspace, memberRef,
+/// deviceRegistrationRef, clientId) tuple on first challenge issuance within
+/// a fixed idle window (lib/member-gateway/gateway-session.ts), reused by
+/// subsequent challenges/submissions inside that window, never updated
+/// otherwise (no rolling "last activity" writes). Closure is schema-only in
+/// this slice: no closer ships yet. `id` is caller-supplied
+/// (mgws-<uuid>, see newMemberGatewaySessionId).
+model MemberGatewaySession {
+  id                    String    @id
+  workspaceId           String
+  memberRef             String
+  deviceRegistrationRef String
+  clientId              String
+  openedAt              DateTime
+  closedAt              DateTime?
+  createdAt             DateTime  @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWGatewaySession_workspace_fkey")
+
+  @@unique([id, workspaceId], map: "MWGatewaySession_id_workspace_key")
+  @@index([workspaceId, memberRef, deviceRegistrationRef, clientId, openedAt], map: "MWGatewaySession_tuple_opened_idx")
 }
 
 

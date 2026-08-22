@@ -27,7 +27,9 @@ import type {
 
 const integrationDatabaseUrl = process.env.MEMBER_SIGNAL_STORE_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
-const suffix = `${process.pid}-${Date.now()}`;
+// base36 breaks pure-digit runs: pid-decimal-timestamp suffixes occasionally
+// Luhn-pass as bank-card shapes under the member-authored-text PII scan.
+const suffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 
 const ALLOWED_SURFACE: MemberReadSurfaceDecision = {
   allowed: true,
@@ -468,6 +470,131 @@ describeMysql(
         issueMemberWorkSignalChallenge({ draft, ttlMs: 6 * 60_000 }),
         "challenge_ttl_exceeds_cap",
       );
+    });
+
+    // M2d: gateway session anchor (resolveGatewaySession, stamped by
+    // issueMemberWorkSignalChallenge and copied by submitMemberWorkSignal).
+    // These tests use their own dedicated memberRef/deviceRegistrationRef
+    // per case so they are not affected by the shared-tuple challenges
+    // issued by the tests above.
+
+    it("reuses the same gateway session across two challenges issued quickly for the same member/device/client tuple", async () => {
+      const sessionPrincipal = principal({
+        memberRef: `member-${suffix}-session-reuse`,
+        deviceRegistrationRef: `device-${suffix}-session-reuse`,
+      });
+      const challenge1 = await issueMemberWorkSignalChallenge({
+        draft: {
+          principal: sessionPrincipal,
+          objectRef: `case-${suffix}-session-reuse-1`,
+          objectVersion: 1,
+          payload: payload(),
+        },
+        ttlMs: 60_000,
+      });
+      const challenge2 = await issueMemberWorkSignalChallenge({
+        draft: {
+          principal: sessionPrincipal,
+          objectRef: `case-${suffix}-session-reuse-2`,
+          objectVersion: 1,
+          payload: payload(),
+        },
+        ttlMs: 60_000,
+      });
+
+      const row1 = await db.memberWorkSignalChallenge.findUniqueOrThrow({
+        where: { id: challenge1.challengeRef },
+      });
+      const row2 = await db.memberWorkSignalChallenge.findUniqueOrThrow({
+        where: { id: challenge2.challengeRef },
+      });
+      expect(row1.gatewaySessionRef).not.toBeNull();
+      expect(row2.gatewaySessionRef).toBe(row1.gatewaySessionRef);
+
+      const sessionCount = await db.memberGatewaySession.count({
+        where: {
+          workspaceId,
+          memberRef: sessionPrincipal.memberRef,
+          deviceRegistrationRef: sessionPrincipal.deviceRegistrationRef,
+          clientId: sessionPrincipal.clientId,
+        },
+      });
+      expect(sessionCount).toBe(1);
+    });
+
+    it("opens a new gateway session once the previous session's fixed window has elapsed", async () => {
+      const sessionPrincipal = principal({
+        memberRef: `member-${suffix}-session-window`,
+        deviceRegistrationRef: `device-${suffix}-session-window`,
+      });
+      const challenge1 = await issueMemberWorkSignalChallenge({
+        draft: {
+          principal: sessionPrincipal,
+          objectRef: `case-${suffix}-session-window-1`,
+          objectVersion: 1,
+          payload: payload(),
+        },
+        ttlMs: 60_000,
+      });
+      const row1 = await db.memberWorkSignalChallenge.findUniqueOrThrow({
+        where: { id: challenge1.challengeRef },
+      });
+      const priorSessionRef = row1.gatewaySessionRef;
+      if (!priorSessionRef) {
+        throw new Error("expected the first challenge to carry a gatewaySessionRef");
+      }
+
+      // MemberGatewaySession carries no append-only triggers (it is a
+      // mutable table by design — closedAt is its only intended future
+      // mutation); push the session's openedAt back far enough that
+      // MEMBER_GATEWAY_SESSION_WINDOW_MS (30 minutes) has fully elapsed by
+      // the time the next challenge is issued.
+      await db.$executeRaw`
+        UPDATE MemberGatewaySession
+        SET openedAt = DATE_SUB(openedAt, INTERVAL 31 MINUTE)
+        WHERE id = ${priorSessionRef}
+      `;
+
+      const challenge2 = await issueMemberWorkSignalChallenge({
+        draft: {
+          principal: sessionPrincipal,
+          objectRef: `case-${suffix}-session-window-2`,
+          objectVersion: 1,
+          payload: payload(),
+        },
+        ttlMs: 60_000,
+      });
+      const row2 = await db.memberWorkSignalChallenge.findUniqueOrThrow({
+        where: { id: challenge2.challengeRef },
+      });
+      expect(row2.gatewaySessionRef).not.toBeNull();
+      expect(row2.gatewaySessionRef).not.toBe(priorSessionRef);
+    });
+
+    it("copies the challenge's gatewaySessionRef onto the receipt on submit", async () => {
+      const objectRef = `case-${suffix}-session-receipt`;
+      const { draft, challenge } = await issueAndDraft(objectRef);
+      const receiptId = `receipt-${suffix}-session-receipt`;
+
+      await submitMemberWorkSignal({
+        principal: draft.principal,
+        challengeRef: challenge.challengeRef,
+        payload: draft.payload,
+        surface: ALLOWED_SURFACE,
+        evidenceSurfaces: new Map(),
+        policyRef: POLICY_REF,
+        policyVersion: POLICY_VERSION,
+        receiptId,
+      });
+
+      const challengeRow = await db.memberWorkSignalChallenge.findUniqueOrThrow({
+        where: { id: challenge.challengeRef },
+      });
+      const receiptRow = await db.memberWorkSignalReceipt.findUniqueOrThrow({
+        where: { id: receiptId },
+      });
+      expect(challengeRow.gatewaySessionRef).not.toBeNull();
+      expect(receiptRow.gatewaySessionRef).toBe(challengeRow.gatewaySessionRef);
     });
   },
 );

@@ -1239,6 +1239,51 @@ describe("Helm v2.1 runtime upgrade helpers", () => {
     expect(readout.href).toBe("/meetings/meeting_1");
   });
 
+  // M2d: buildEvidenceSourceClasses (module-private; exercised here via
+  // the exported buildReflectionCandidateReadout, same pattern as the test
+  // above — smallest honest option that does not widen this file's export
+  // surface for a single new assertion) must surface an "untrusted" class
+  // whenever sourceStatus carries the member-gateway taint fragment,
+  // regardless of what else is in that JSON blob.
+  it("surfaces an untrusted source class when sourceStatus carries member-gateway taint provenance", () => {
+    const readout = buildReflectionCandidateReadout({
+      id: "candidate_2",
+      status: "PENDING_VERIFICATION",
+      summary: "Member-reported progress signal awaiting verification.",
+      reviewerNote: null,
+      sourceVerification: JSON.stringify({
+        artifactReviewId: "review_1",
+        reviewedByUserId: "user_1",
+        reviewStatus: "CONFIRMED",
+      }),
+      sourceStatus: JSON.stringify({
+        artifactStatus: "CONFIRMED",
+        candidateStatus: "pending_verification",
+        officialMemoryPromotionAllowed: false,
+        taint: "untrusted",
+        evaluationUseProhibited: true,
+        provenance: {
+          memberRef: "member_1",
+          deviceRegistrationRef: "device_1",
+          clientId: "workbuddy-desktop",
+          policyRef: "policy_1",
+          policyVersion: 1,
+          signalReceiptRef: "receipt_1",
+          gatewaySessionRef: "mgws_1",
+        },
+      }),
+      evidenceRefs: null,
+      createdAt: new Date("2026-08-20T09:00:00.000Z"),
+      runtimeSession: {
+        id: "session_2",
+        label: "Member gateway session",
+        meetingId: null,
+      },
+    });
+
+    expect(readout.sourceClasses).toContain("untrusted");
+  });
+
   it("dismisses a verified reflection carry-forward candidate without promoting truth", async () => {
     dbMock.memoryCandidate.findFirst.mockResolvedValue({
       id: "candidate_1",

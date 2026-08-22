@@ -23,7 +23,9 @@ import {
 
 const integrationDatabaseUrl = process.env.MEMBER_PROMPT_STORE_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
-const suffix = `${process.pid}-${Date.now()}`;
+// base36 breaks pure-digit runs: pid-decimal-timestamp suffixes occasionally
+// Luhn-pass as bank-card shapes under the member-authored-text PII scan.
+const suffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 
 // Most MemberPromptStoreError throws carry `reason` in the structured
 // `reasons` array; a few guard-clause throws (e.g. prompt_version_conflict)

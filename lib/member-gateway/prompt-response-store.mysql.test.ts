@@ -37,7 +37,9 @@ import type {
 const integrationDatabaseUrl =
   process.env.MEMBER_PROMPT_RESPONSE_STORE_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
-const suffix = `${process.pid}-${Date.now()}`;
+// base36 breaks pure-digit runs: pid-decimal-timestamp suffixes occasionally
+// Luhn-pass as bank-card shapes under the member-authored-text PII scan.
+const suffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 
 const ALLOWED_SURFACE: MemberReadSurfaceDecision = {
   allowed: true,
@@ -1017,6 +1019,89 @@ describeMysql(
       });
       expect(row.state).toBe("delivered");
       expect(row.version).toBe(version);
+    });
+
+    // M2d: gateway session anchor. issueMemberPromptResponseChallenge
+    // resolves/stamps gatewaySessionRef (via signal-store.service.ts's
+    // resolveGatewaySession) after the addressee-binding check; a
+    // non-acknowledge recordMemberPromptResponse call copies that same
+    // ref onto both the response receipt and its inlined "respond"
+    // transition receipt (the refuse chain exercises both writes in one
+    // call).
+    it("stamps the challenge's gatewaySessionRef onto both the response receipt and its inlined transition receipt", async () => {
+      const { prompt, version } = await createAndDeliverPrompt();
+      const payload = responsePayload({ kind: "refuse-session-stamp" });
+      const challenge = await issueResponseChallenge(
+        prompt.promptRef,
+        version,
+        payload,
+      );
+
+      const challengeRow = await db.memberWorkSignalChallenge.findUniqueOrThrow(
+        { where: { id: challenge.challengeRef } },
+      );
+      expect(challengeRow.gatewaySessionRef).not.toBeNull();
+
+      const receiptId = nextId("receipt");
+      const transitionReceiptId = nextId("transition-receipt");
+      const result = await recordMemberPromptResponse({
+        principal: principal(),
+        promptRef: prompt.promptRef,
+        expectedVersion: version,
+        challengeRef: challenge.challengeRef,
+        responsePayload: payload,
+        kind: "refuse",
+        receiptId,
+        transitionReceiptId,
+        now: new Date().toISOString(),
+        protectedInput: {
+          userPresenceAvailable: false,
+          localFallbackAvailable: true,
+          routePath: "local_fallback",
+          mandateRef: nextId("mandate"),
+          reason: "会话锚点回归测试",
+          auditRefs: [nextId("audit")],
+          governanceResponseId: nextId("governance-response"),
+        },
+      });
+      expect(result.outcome).toBe("recorded");
+      expect(result.promptTransitioned).toBe(true);
+
+      const responseReceiptRow =
+        await db.memberPromptResponseReceipt.findUniqueOrThrow({
+          where: { id: receiptId },
+        });
+      const transitionReceiptRow =
+        await db.memberPromptTransitionReceipt.findUniqueOrThrow({
+          where: { id: transitionReceiptId },
+        });
+      expect(responseReceiptRow.gatewaySessionRef).toBe(
+        challengeRow.gatewaySessionRef,
+      );
+      expect(transitionReceiptRow.gatewaySessionRef).toBe(
+        challengeRow.gatewaySessionRef,
+      );
+    });
+
+    it("leaves gatewaySessionRef null on a system-caused transition receipt (deliver), unlike a member-caused respond transition", async () => {
+      const prompt = buildPrompt();
+      await createMemberPrompt({ prompt });
+      const deliver = await transitionMemberPrompt({
+        workspaceRef: workspaceId,
+        promptRef: prompt.promptRef,
+        cause: "deliver",
+        expectedVersion: 1,
+        receiptId: nextId("deliver-receipt"),
+        now: new Date().toISOString(),
+        deliveryContext: CLEAR_CONTEXT,
+      });
+      expect(deliver.outcome).toBe("transitioned");
+
+      const deliverReceiptRow =
+        await db.memberPromptTransitionReceipt.findUniqueOrThrow({
+          where: { id: deliver.receipt.receiptId },
+        });
+      expect(deliverReceiptRow.gatewaySessionRef).toBeNull();
     });
   },
 );

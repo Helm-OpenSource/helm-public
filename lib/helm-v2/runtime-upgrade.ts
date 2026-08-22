@@ -6994,6 +6994,21 @@ function buildEvidenceSourceClasses(input: {
     sourceClasses.add("deprecated_memory");
   }
 
+  // M2d (member-gateway stage-two fact promotion, Owner 裁定记录 #3): a
+  // member-gateway-anchored MemoryCandidate's sourceStatus is a JSON blob
+  // (lib/member-gateway/signal-candidate-memory-projection.service.ts),
+  // not one of the plain enum-like values matched above, and carries
+  // `"taint":"untrusted"` in its provenance. A raw substring check (rather
+  // than JSON.parse) matches this function's existing style of treating
+  // sourceStatus/sourceVerification as opaque strings and is immune to a
+  // parse failure on an unrelated sourceStatus shape. Taint is never
+  // stripped by verification (Owner 裁定记录 #3) — this class renders
+  // alongside whatever verification-derived classes a caller adds
+  // elsewhere, not instead of them.
+  if (input.sourceStatus.includes('"taint":"untrusted"')) {
+    sourceClasses.add("untrusted");
+  }
+
   for (const ref of input.evidenceRefs) {
     const prefix = ref.split(":")[0]?.trim();
     if (!prefix) continue;
@@ -14860,7 +14875,7 @@ export async function getWorkspaceRuntimeOperatorOverview(
     consolidationQueueCount,
     verificationReports,
     truthConflicts,
-    memoryCandidates,
+    memoryCandidateRows,
     memoryPromotions,
     problemSpaces,
     playerCoachBriefs,
@@ -15007,6 +15022,14 @@ export async function getWorkspaceRuntimeOperatorOverview(
         status: {
           in: ["PENDING_VERIFICATION", "DEFERRED", "REJECTED", "PROMOTED", "VERIFIED"],
         },
+        // This operator overview queue is runtime-session-scoped (spec
+        // predates the M2d member-gateway session anchor); a
+        // memberGatewaySessionRef-anchored candidate has no runtimeSession
+        // to render here, so it is excluded rather than shown with a
+        // missing session. Surfacing member-gateway-anchored memory
+        // candidates in this or another operator view is out of scope for
+        // this migration (M2d Task 1/2) — see the M2d plan's T3-T5 scope.
+        runtimeSessionId: { not: null },
       },
       select: {
         id: true,
@@ -15362,6 +15385,15 @@ export async function getWorkspaceRuntimeOperatorOverview(
       take: 6,
     }),
   ]);
+  // The findMany's `runtimeSessionId: { not: null }` where-clause above
+  // already guarantees every row here is runtime-session-anchored (M2d
+  // introduced the alternative memberGatewaySessionRef anchor, excluded by
+  // that filter), but Prisma's generated select type does not narrow
+  // `runtimeSession` from a where-clause value — so this filters+narrows
+  // defensively rather than asserting.
+  const memoryCandidates = memoryCandidateRows
+    .filter((item) => item.runtimeSession !== null)
+    .map((item) => ({ ...item, runtimeSession: item.runtimeSession! }));
   const workspaceFeatureFlags = parseWorkspaceFeatureFlags(workspace?.featureFlagsJson);
 
   const runtimeSessionLifecycleEvents = runtimeSessions.length
@@ -15861,8 +15893,19 @@ export async function dismissReflectionCandidate(input: {
     throw new Error("Only reflection carry-forward candidates can be dismissed here.");
   }
 
-  if (candidate.status !== "VERIFIED") {
-    return candidate;
+  // Reflection carry-forward candidates are exclusively created by the
+  // runtime-session-anchored consolidation path (never the member-gateway
+  // path introduced by the M2d migration, which anchors on
+  // memberGatewaySessionRef instead), so runtimeSession is always present
+  // here; this is a defensive guard, not a blind assertion, and it narrows
+  // `candidate` for every downstream read/return in this function.
+  if (!candidate.runtimeSession) {
+    throw new Error("Reflection carry-forward candidate is missing its runtime session anchor.");
+  }
+  const anchoredCandidate = { ...candidate, runtimeSession: candidate.runtimeSession };
+
+  if (anchoredCandidate.status !== "VERIFIED") {
+    return anchoredCandidate;
   }
 
   const dismissalNote = trimText(
@@ -15875,7 +15918,7 @@ export async function dismissReflectionCandidate(input: {
     280,
   );
 
-  const updated = await db.memoryCandidate.update({
+  const updatedRow = await db.memoryCandidate.update({
     where: { id: candidate.id },
     data: {
       status: "REJECTED",
@@ -15891,6 +15934,16 @@ export async function dismissReflectionCandidate(input: {
       },
     },
   });
+  // Guard, not a blind assertion: the row being updated is the same row
+  // just proven (via anchoredCandidate above) to be a runtime-session-
+  // anchored reflection candidate, and this update only touches
+  // status/reviewerNote — it cannot change the anchor. Narrows `updated`
+  // for every read below and for the returned value.
+  if (!updatedRow.runtimeSession) {
+    throw new Error("Reflection carry-forward candidate lost its runtime session anchor during update.");
+  }
+  const updated = { ...updatedRow, runtimeSession: updatedRow.runtimeSession };
+
   await db.memoryPromotion.upsert({
     where: {
       promotionKey: buildRuntimeMemoryPromotionKey({
@@ -15907,7 +15960,7 @@ export async function dismissReflectionCandidate(input: {
     },
     create: {
       workspaceId: input.workspaceId,
-      runtimeSessionId: updated.runtimeSessionId,
+      runtimeSessionId: updated.runtimeSession.id,
       memoryCandidateId: updated.id,
       memoryItemId: updated.memoryItemId ?? undefined,
       promotionKey: buildRuntimeMemoryPromotionKey({
@@ -15992,11 +16045,22 @@ export async function acceptReflectionCandidate(input: {
     throw new Error("Only reflection carry-forward candidates can be accepted here.");
   }
 
-  if (candidate.status === "PROMOTED") {
-    return candidate;
+  // Reflection carry-forward candidates are exclusively created by the
+  // runtime-session-anchored consolidation path (never the member-gateway
+  // path introduced by the M2d migration, which anchors on
+  // memberGatewaySessionRef instead), so runtimeSession is always present
+  // here; this is a defensive guard, not a blind assertion, and it narrows
+  // `candidate` for every downstream read/return in this function.
+  if (!candidate.runtimeSession) {
+    throw new Error("Reflection carry-forward candidate is missing its runtime session anchor.");
+  }
+  const anchoredCandidate = { ...candidate, runtimeSession: candidate.runtimeSession };
+
+  if (anchoredCandidate.status === "PROMOTED") {
+    return anchoredCandidate;
   }
 
-  if (candidate.status !== "VERIFIED") {
+  if (anchoredCandidate.status !== "VERIFIED") {
     throw new Error("Only active verified reflection carry-forward candidates can be accepted here.");
   }
 
@@ -16010,7 +16074,7 @@ export async function acceptReflectionCandidate(input: {
     280,
   );
 
-  const updated = await db.memoryCandidate.update({
+  const updatedRow = await db.memoryCandidate.update({
     where: { id: candidate.id },
     data: {
       status: "PROMOTED",
@@ -16026,6 +16090,15 @@ export async function acceptReflectionCandidate(input: {
       },
     },
   });
+  // Guard, not a blind assertion: same reasoning as anchoredCandidate above
+  // — this update only touches status/reviewerNote, so it cannot change the
+  // anchor. Narrows `updated` for every read below and for the returned
+  // value.
+  if (!updatedRow.runtimeSession) {
+    throw new Error("Reflection carry-forward candidate lost its runtime session anchor during update.");
+  }
+  const updated = { ...updatedRow, runtimeSession: updatedRow.runtimeSession };
+
   await db.memoryPromotion.upsert({
     where: {
       promotionKey: buildRuntimeMemoryPromotionKey({
@@ -16042,7 +16115,7 @@ export async function acceptReflectionCandidate(input: {
     },
     create: {
       workspaceId: input.workspaceId,
-      runtimeSessionId: updated.runtimeSessionId,
+      runtimeSessionId: updated.runtimeSession.id,
       memoryCandidateId: updated.id,
       memoryItemId: updated.memoryItemId ?? undefined,
       promotionKey: buildRuntimeMemoryPromotionKey({

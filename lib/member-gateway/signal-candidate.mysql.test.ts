@@ -11,6 +11,7 @@ import {
   ArtifactReviewStatus,
   ActorType,
   MembershipStatus,
+  RuntimeMemoryCandidateStatus,
   SourceType,
   WorkspaceRole,
 } from "@prisma/client";
@@ -23,6 +24,10 @@ import {
   MemberSignalCandidateError,
   materializeMemberWorkSignalCandidate,
 } from "@/lib/member-gateway/signal-candidate-materializer";
+import {
+  MemberSignalMemoryProjectionError,
+  projectConfirmedMemberSignalCandidateToMemoryCandidate,
+} from "@/lib/member-gateway/signal-candidate-memory-projection.service";
 import {
   MemberSignalCandidateReviewError,
   promoteMemberWorkSignalCandidateToTask,
@@ -53,7 +58,9 @@ import type {
 
 const integrationDatabaseUrl = process.env.MEMBER_SIGNAL_CANDIDATE_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
-const suffix = `${process.pid}-${Date.now()}`;
+// base36 breaks pure-digit runs: pid-decimal-timestamp suffixes occasionally
+// Luhn-pass as bank-card shapes under the member-authored-text PII scan.
+const suffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 
 const ALLOWED_SURFACE: MemberReadSurfaceDecision = {
   allowed: true,
@@ -253,6 +260,55 @@ describeMysql(
         expect(error).toBeInstanceOf(MemberEvidenceProjectionError);
         expect((error as MemberEvidenceProjectionError).code).toBe(code);
       });
+    }
+
+    async function expectProjectionError(
+      promise: Promise<unknown>,
+      code: string,
+    ): Promise<void> {
+      await expect(promise).rejects.toBeInstanceOf(
+        MemberSignalMemoryProjectionError,
+      );
+      await promise.catch((error: unknown) => {
+        expect(error).toBeInstanceOf(MemberSignalMemoryProjectionError);
+        expect((error as MemberSignalMemoryProjectionError).code).toBe(code);
+      });
+    }
+
+    // M2d Task 3: materializes, confirms, and returns the confirmed
+    // candidate's gatewaySessionRef (stamped at signal-issuance time by
+    // M2d Task 2) so projection tests can assert the anchor is copied
+    // through unchanged.
+    async function materializeAndConfirmCandidate(
+      input: {
+        payloadOverrides?: Partial<MemberWorkSignalPayload>;
+        evidenceSurfaces?: ReadonlyMap<string, MemberReadSurfaceDecision>;
+      } = {},
+    ) {
+      const { receiptId, objectRef, artifactBundleId, artifactReviewId } =
+        await materializeFreshCandidate(input);
+      await reviewMemberWorkSignalCandidate({
+        workspaceId,
+        reviewerId: ownerUserId,
+        reviewerName: "Owner",
+        artifactBundleId,
+        decision: "confirm",
+      });
+      const receiptRow = await db.memberWorkSignalReceipt.findUniqueOrThrow({
+        where: { id: receiptId },
+      });
+      if (!receiptRow.gatewaySessionRef) {
+        throw new Error(
+          "expected a freshly-issued signal receipt to carry a gatewaySessionRef",
+        );
+      }
+      return {
+        receiptId,
+        objectRef,
+        artifactBundleId,
+        artifactReviewId,
+        gatewaySessionRef: receiptRow.gatewaySessionRef,
+      };
     }
 
     describe("materialization", () => {
@@ -902,6 +958,265 @@ describeMysql(
           "read_surface_denied",
         );
         expect(deniedDimensions).toHaveLength(7);
+      });
+    });
+
+    // M2d Task 3 (docs/superpowers/plans/2026-08-20-member-gateway-m2d
+    // -fact-promotion.md): projectConfirmedMemberSignalCandidateToMemory
+    // Candidate — session-anchored stage-two fact promotion of a CONFIRMED
+    // member signal candidate into a PENDING_VERIFICATION MemoryCandidate.
+    describe("memory projection", () => {
+      it("projects a confirmed candidate into a session-anchored PENDING_VERIFICATION MemoryCandidate with taint/evaluationUseProhibited/provenance and an audit row", async () => {
+        const confirmed = await materializeAndConfirmCandidate();
+
+        const result =
+          await projectConfirmedMemberSignalCandidateToMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            artifactBundleId: confirmed.artifactBundleId,
+          });
+        expect(result.reused).toBe(false);
+        expect(result.receipt.candidateStatus).toBe("pending_verification");
+        expect(result.receipt.memoryPromotionCreated).toBe(false);
+        expect(result.receipt.canonicalMemoryWritten).toBe(false);
+        expect(result.receipt.memberGatewaySessionRef).toBe(
+          confirmed.gatewaySessionRef,
+        );
+        expect(result.receipt.sourceArtifactBundleId).toBe(
+          confirmed.artifactBundleId,
+        );
+        expect(result.receipt.sourceArtifactReviewId).toBe(
+          confirmed.artifactReviewId,
+        );
+
+        const row = await db.memoryCandidate.findUniqueOrThrow({
+          where: { id: result.receipt.memoryCandidateId },
+        });
+        expect(row.memberGatewaySessionRef).toBe(confirmed.gatewaySessionRef);
+        expect(row.runtimeSessionId).toBeNull();
+        expect(row.status).toBe(RuntimeMemoryCandidateStatus.PENDING_VERIFICATION);
+        expect(row.artifactBundleId).toBe(confirmed.artifactBundleId);
+        expect(row.candidateKey).toBe(result.receipt.memoryCandidateKey);
+
+        const sourceStatus = JSON.parse(row.sourceStatus) as {
+          taint: string;
+          evaluationUseProhibited: boolean;
+          candidateStatus: string;
+          officialMemoryPromotionAllowed: boolean;
+          provenance: {
+            memberRef: string;
+            deviceRegistrationRef: string;
+            clientId: string;
+            policyRef: string;
+            policyVersion: number;
+            signalReceiptRef: string;
+            gatewaySessionRef: string;
+          };
+        };
+        expect(sourceStatus.taint).toBe("untrusted");
+        expect(sourceStatus.evaluationUseProhibited).toBe(true);
+        expect(sourceStatus.candidateStatus).toBe("pending_verification");
+        expect(sourceStatus.officialMemoryPromotionAllowed).toBe(false);
+        expect(sourceStatus.provenance.signalReceiptRef).toBe(
+          confirmed.receiptId,
+        );
+        expect(sourceStatus.provenance.gatewaySessionRef).toBe(
+          confirmed.gatewaySessionRef,
+        );
+        expect(sourceStatus.provenance.memberRef).toBe(`member-${suffix}`);
+
+        const sourceVerification = JSON.parse(row.sourceVerification) as {
+          artifactReviewId: string;
+          reviewedByUserId: string;
+          reviewStatus: string;
+        };
+        expect(sourceVerification.artifactReviewId).toBe(
+          confirmed.artifactReviewId,
+        );
+        expect(sourceVerification.reviewedByUserId).toBe(ownerUserId);
+        expect(sourceVerification.reviewStatus).toBe("CONFIRMED");
+
+        const audit = await db.auditLog.findFirst({
+          where: {
+            workspaceId,
+            actionType: "MEMBER_SIGNAL_MEMORY_CANDIDATE_PROJECTED",
+            targetType: "MemoryCandidate",
+            targetId: row.id,
+          },
+        });
+        expect(audit).not.toBeNull();
+        const auditPayload = JSON.parse(audit?.payload ?? "null") as {
+          memoryPromotionCreated: boolean;
+          canonicalMemoryWritten: boolean;
+        };
+        expect(auditPayload.memoryPromotionCreated).toBe(false);
+        expect(auditPayload.canonicalMemoryWritten).toBe(false);
+      });
+
+      it("is idempotent: a second projection call reuses the same MemoryCandidate row", async () => {
+        const confirmed = await materializeAndConfirmCandidate();
+
+        const first =
+          await projectConfirmedMemberSignalCandidateToMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            artifactBundleId: confirmed.artifactBundleId,
+          });
+        expect(first.reused).toBe(false);
+
+        const second =
+          await projectConfirmedMemberSignalCandidateToMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            artifactBundleId: confirmed.artifactBundleId,
+          });
+        expect(second.reused).toBe(true);
+        expect(second.receipt.memoryCandidateId).toBe(
+          first.receipt.memoryCandidateId,
+        );
+        expect(second.receipt.memoryCandidateKey).toBe(
+          first.receipt.memoryCandidateKey,
+        );
+
+        const count = await db.memoryCandidate.count({
+          where: { artifactBundleId: confirmed.artifactBundleId },
+        });
+        expect(count).toBe(1);
+      });
+
+      it("rejects projection of a candidate whose signal receipt was born anchorless (signal_receipt_without_session)", async () => {
+        signalCounter += 1;
+        const objectRef = `candidate-case-${suffix}-anchorless-${signalCounter}`;
+        const draft: MemberWorkSignalDraft = {
+          principal: principal(),
+          objectRef,
+          objectVersion: 1,
+          payload: payload(),
+        };
+        const challenge = await issueMemberWorkSignalChallenge({
+          draft,
+          ttlMs: 60_000,
+        });
+        // Simulate a pre-M2d/historical receipt (Owner 裁定记录 #2:
+        // historical receipts permanently do not participate in stage-two
+        // fact promotion): MemberWorkSignalChallenge carries no
+        // append-only trigger, so null its gatewaySessionRef BEFORE
+        // submit. submitMemberWorkSignal copies the challenge's ref
+        // verbatim (never re-resolves), so the receipt is born anchorless.
+        await db.$executeRaw`
+          UPDATE MemberWorkSignalChallenge
+          SET gatewaySessionRef = NULL
+          WHERE id = ${challenge.challengeRef} AND workspaceId = ${workspaceId}
+        `;
+        const receiptId = `candidate-receipt-${suffix}-anchorless-${signalCounter}`;
+        const submitted = await submitMemberWorkSignal({
+          principal: draft.principal,
+          challengeRef: challenge.challengeRef,
+          payload: draft.payload,
+          surface: ALLOWED_SURFACE,
+          evidenceSurfaces: new Map(),
+          policyRef: POLICY_REF,
+          policyVersion: POLICY_VERSION,
+          receiptId,
+        });
+        expect(submitted.receipt.receiptId).toBe(receiptId);
+        const receiptRow = await db.memberWorkSignalReceipt.findUniqueOrThrow(
+          { where: { id: receiptId } },
+        );
+        expect(receiptRow.gatewaySessionRef).toBeNull();
+
+        const materialized = await materializeMemberWorkSignalCandidate({
+          workspaceId,
+          signalReceiptId: receiptId,
+          objectAnchor: unresolvedAnchor(objectRef),
+        });
+        await reviewMemberWorkSignalCandidate({
+          workspaceId,
+          reviewerId: ownerUserId,
+          reviewerName: "Owner",
+          artifactBundleId: materialized.artifactBundleId,
+          decision: "confirm",
+        });
+
+        await expectProjectionError(
+          projectConfirmedMemberSignalCandidateToMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            artifactBundleId: materialized.artifactBundleId,
+          }),
+          "signal_receipt_without_session",
+        );
+      });
+
+      it("rejects a MEMBER-role caller", async () => {
+        const confirmed = await materializeAndConfirmCandidate();
+
+        await expect(
+          projectConfirmedMemberSignalCandidateToMemoryCandidate({
+            workspaceId,
+            actorUserId: memberUserId,
+            actorName: "Member",
+            artifactBundleId: confirmed.artifactBundleId,
+          }),
+        ).rejects.toBeInstanceOf(WorkspaceServiceGovernanceError);
+      });
+
+      it("writes no MemoryPromotion or MemoryItem row anywhere in the projection path", async () => {
+        const promotionCountBefore = await db.memoryPromotion.count();
+        const itemCountBefore = await db.memoryItem.count();
+
+        const confirmed = await materializeAndConfirmCandidate();
+        await projectConfirmedMemberSignalCandidateToMemoryCandidate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          actorName: "Owner",
+          artifactBundleId: confirmed.artifactBundleId,
+        });
+
+        const promotionCountAfter = await db.memoryPromotion.count();
+        const itemCountAfter = await db.memoryItem.count();
+        expect(promotionCountAfter).toBe(promotionCountBefore);
+        expect(itemCountAfter).toBe(itemCountBefore);
+      });
+
+      it("enforces the exactly-one-anchor CHECK at the database layer for both under- and over-anchored rows", async () => {
+        // Root-free DB proof: attempt raw inserts that violate
+        // MemoryCandidate_anchor_check directly, bypassing the service
+        // layer entirely, using the same non-privileged app DB connection
+        // as every other query in this suite. The legacy
+        // MemoryCandidate_runtimeSessionId_fkey FK was dropped in the M2d
+        // T1 migration (required to add this CHECK — MySQL error 3823
+        // otherwise), so an arbitrary non-existent runtimeSessionId value
+        // is accepted by the schema; only the anchor CHECK is under test
+        // here.
+        const bothAnchorsId = `memcand-both-${suffix}`;
+        await expect(
+          db.$executeRaw`
+            INSERT INTO MemoryCandidate
+              (id, workspaceId, runtimeSessionId, memberGatewaySessionRef, candidateKey, summary, sourceVerification, sourceStatus, status, createdAt, updatedAt)
+            VALUES
+              (${bothAnchorsId}, ${workspaceId}, 'some-runtime-session', 'some-gateway-session', ${`candidateKey-both-${suffix}`}, 'summary', '{}', '{}', 'PENDING_VERIFICATION', NOW(3), NOW(3))
+          `,
+        ).rejects.toThrow(/check/iu);
+
+        const neitherAnchorId = `memcand-neither-${suffix}`;
+        await expect(
+          db.$executeRaw`
+            INSERT INTO MemoryCandidate
+              (id, workspaceId, runtimeSessionId, memberGatewaySessionRef, candidateKey, summary, sourceVerification, sourceStatus, status, createdAt, updatedAt)
+            VALUES
+              (${neitherAnchorId}, ${workspaceId}, NULL, NULL, ${`candidateKey-neither-${suffix}`}, 'summary', '{}', '{}', 'PENDING_VERIFICATION', NOW(3), NOW(3))
+          `,
+        ).rejects.toThrow(/check/iu);
+
+        const survivingRows = await db.memoryCandidate.findMany({
+          where: { id: { in: [bothAnchorsId, neitherAnchorId] } },
+        });
+        expect(survivingRows).toHaveLength(0);
       });
     });
   },
