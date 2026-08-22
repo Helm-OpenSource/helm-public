@@ -17,6 +17,7 @@ import {
 } from "@/lib/billing/foundation";
 import { db } from "@/lib/db";
 import { resolveApprovalRule } from "@/lib/helm-v2/approval-matrix";
+import { HELM_V2_ARTIFACT_TYPES } from "@/lib/helm-v2/contracts";
 import {
   type ActionPackBundleContent,
   buildMeetingRuntimeMemoryContext,
@@ -1488,6 +1489,11 @@ async function updateDraftCommsBundlesForReview(input: {
   const bundles = await db.artifactBundle.findMany({
     where: {
       runtimeEventId: input.runtimeEventId,
+      // runtimeEventId alone is not unique to helm-v2 bundles, and every
+      // bundle returned here gets an unconditional status/reviewPosture
+      // write below — pin the artifact family so this can never blind-write
+      // a foreign-family bundle.
+      artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -1927,6 +1933,9 @@ export async function reviewDraftCommsRuntime(input: {
   const bundles = await db.artifactBundle.findMany({
     where: {
       runtimeEventId: runtimeEvent.id,
+      // runtimeEventId alone is not unique to helm-v2 bundles; pin to the
+      // helm-v2 artifact family for structural isolation.
+      artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
     },
     include: {
       approvalRequest: true,
@@ -2232,6 +2241,9 @@ export async function getMeetingDraftCommsRuntimeSummary(
     db.artifactBundle.findMany({
       where: {
         runtimeEventId: latestEvent.id,
+        // runtimeEventId alone is not unique to helm-v2 bundles; pin to the
+        // helm-v2 artifact family for structural isolation.
+        artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
       },
       include: {
         approvalRequest: true,

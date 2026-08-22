@@ -55,6 +55,7 @@ import type {
   HelmV2AgentId,
   HelmV2ApprovalTier,
 } from "@/lib/helm-v2/contracts";
+import { HELM_V2_ARTIFACT_TYPES } from "@/lib/helm-v2/contracts";
 import { buildBenchmarkMatrixReadModel } from "@/lib/helm-v2/benchmark-matrix";
 import { buildConsolidationQueueAuditSummary } from "@/lib/helm-v2/consolidation-queue-audit-summary";
 import { buildRuntimeOperatorActionSummary } from "@/lib/helm-v2/runtime-operator-action-summary";
@@ -13569,6 +13570,10 @@ export async function getRuntimeSessionTrace(workspaceId: string, sessionId: str
         where: {
           workspaceId,
           meetingId: session.meetingId,
+          // meetingId alone is not unique to helm-v2 bundles; pin to the
+          // helm-v2 artifact family so this operator-debugger read can't
+          // surface a foreign-family bundle that happens to share meetingId.
+          artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
         },
         orderBy: { createdAt: "desc" },
         take: 12,
@@ -14386,6 +14391,11 @@ export async function confirmRuntimeArtifact(input: {
     where: {
       workspaceId: input.workspaceId,
       id: input.artifactBundleId,
+      // ArtifactBundle is shared with governed_intelligence, member-gateway,
+      // and capability-closeout candidates. Before, workspaceId+id alone
+      // could match a foreign-family bundle by id; this pin makes the
+      // isolation structural instead of incidental.
+      artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
     },
     include: {
       artifactReview: true,

@@ -17,6 +17,7 @@ import {
 } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { HELM_V2_ARTIFACT_TYPES } from "@/lib/helm-v2/contracts";
 import {
   type DraftCommsBundleArtifact,
   type EmailDraftArtifact,
@@ -455,6 +456,9 @@ async function loadApprovedDraftCommsSource(workspaceId: string, meetingId: stri
   const related = await db.artifactBundle.findMany({
     where: {
       runtimeEventId: masterBundle.runtimeEventId ?? undefined,
+      // runtimeEventId alone is not unique to helm-v2 bundles; pin to the
+      // helm-v2 artifact family for structural isolation.
+      artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -524,6 +528,9 @@ async function loadApprovedOpportunityJudgementSource(workspaceId: string, meeti
   const related = await db.artifactBundle.findMany({
     where: {
       runtimeEventId: masterBundle.runtimeEventId ?? undefined,
+      // runtimeEventId alone is not unique to helm-v2 bundles; pin to the
+      // helm-v2 artifact family for structural isolation.
+      artifactType: { in: [...HELM_V2_ARTIFACT_TYPES] },
     },
     orderBy: { createdAt: "asc" },
   });
