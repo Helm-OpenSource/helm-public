@@ -174,6 +174,10 @@ const MEMBER_SIGNAL_MEMORY_VERIFICATION_ERROR_MESSAGES: Record<
     en: "This candidate is not a member-anchored signal and cannot be verified here",
     zh: "这条候选不是成员锚定信号，无法在这里验证",
   },
+  memory_candidate_corrupt: {
+    en: "This candidate's provenance failed validation and it stays blocked",
+    zh: "这条候选的溯源校验失败，当前保持阻断",
+  },
   memory_candidate_state_conflict: {
     en: "This candidate has already been decided and the decision cannot be reversed",
     zh: "这条候选已经完成决策，不能再次改判",

@@ -1431,6 +1431,33 @@ describeMysql(
         expect(row.status).toBe(RuntimeMemoryCandidateStatus.VERIFIED);
       });
 
+      it("rejects a candidate whose provenance JSON fails validation", async () => {
+        const candidateId = await createMemberAnchoredMemoryCandidate();
+        // MemoryCandidate has no append-only triggers; corrupt the stored
+        // provenance directly to simulate a damaged row.
+        await db.$executeRaw`
+          UPDATE MemoryCandidate SET sourceStatus = 'not-json'
+          WHERE id = ${candidateId}`;
+
+        await expectVerificationError(
+          verifyMemberSignalMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            candidateId,
+            decision: "verify",
+          }),
+          "memory_candidate_corrupt",
+        );
+
+        const row = await db.memoryCandidate.findUniqueOrThrow({
+          where: { id: candidateId },
+        });
+        expect(row.status).toBe(
+          RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
+        );
+      });
+
       it("rejects a non-member-anchored (runtime-anchored) row without touching it", async () => {
         const candidateId = await createRuntimeAnchoredMemoryCandidate();
 

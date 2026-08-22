@@ -160,3 +160,9 @@ PASS(负向验证见判断 6);`npm run test:member-gateway:mysql`(`DATABASE_URL`
 全绿;`npx vitest run features/memory
 lib/presentation/shared-surface-hierarchy-guards.test.ts` 全绿,后者零新
 增失败。
+9. 最终 review 加固:corrupt 溯源(sourceStatus 非 JSON 或缺
+   taint/evaluationUseProhibited 字面量)在 **service 层**也拒绝
+   (`memory_candidate_corrupt`)——"行不可操作"贯穿 UI 与直接调用两层;
+   行本身保持原样(append-only 姿态,不做破坏性处理),mysql 用例钉死。
+   review 记录的其余 Minor(重放时不同 note 静默丢弃、sourceFilter 瞬时
+   不一致、take 50 共享窗口)为已知边界,晋升轮再议。

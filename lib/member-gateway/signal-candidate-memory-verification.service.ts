@@ -32,7 +32,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { assertWorkspaceMemoryServiceAccess } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
-import { trimText } from "@/lib/utils";
+import { safeParseJson, trimText } from "@/lib/utils";
 
 type Tx = Prisma.TransactionClient;
 
@@ -54,6 +54,7 @@ export type MemberSignalMemoryVerificationErrorCode =
   | "invalid_input"
   | "memory_candidate_not_found"
   | "memory_candidate_not_member_anchored"
+  | "memory_candidate_corrupt"
   | "memory_candidate_state_conflict";
 
 export class MemberSignalMemoryVerificationError extends Error {
@@ -186,6 +187,24 @@ export async function verifyMemberSignalMemoryCandidate(
       if (!candidate.memberGatewaySessionRef) {
         throw new MemberSignalMemoryVerificationError(
           "memory_candidate_not_member_anchored",
+        );
+      }
+
+      // Corrupt provenance blocks the decision at the service layer too —
+      // the UI already renders such rows commandless, but "行不可操作"
+      // must hold for direct callers as well. The row itself stays put
+      // (append-only posture; no destructive handling of corrupt data).
+      const parsedSourceStatus = safeParseJson<Record<string, unknown> | null>(
+        candidate.sourceStatus,
+        null,
+      );
+      if (
+        !parsedSourceStatus ||
+        parsedSourceStatus.taint !== "untrusted" ||
+        parsedSourceStatus.evaluationUseProhibited !== true
+      ) {
+        throw new MemberSignalMemoryVerificationError(
+          "memory_candidate_corrupt",
         );
       }
 
