@@ -1471,19 +1471,29 @@ export function MemoryClient({
         </CardContent>
       </Card>
     ) : null;
-  // Ruling 2 (2026-08-22 owner ruling): source-branched labels — a member-
+  // Ruling 2 (2026-08-22 owner ruling) source-branched labels, reworked for
+  // the 2026-08-22 second-round write-on-verify supersession: a member-
   // anchored decision reads differently from a reflection-family decision
-  // even though both can carry the raw status string "VERIFIED"/
-  // "REJECTED". This intentionally does NOT call memoryStatus()/
+  // even though PROMOTED/VERIFIED/REJECTED can also appear as raw status
+  // strings elsewhere. This intentionally does NOT call memoryStatus()/
   // formatMemoryVisibleStatus (display-copy.ts's CHINESE_STATUS_
-  // REPLACEMENTS maps VERIFIED/REJECTED to the reflection family's own
-  // "待复核"/"已忽略" wording) — that mapping stays untouched.
+  // REPLACEMENTS maps those strings to unrelated wording for other memory
+  // families) — that mapping stays untouched. PROMOTED is now the terminal
+  // state a "verify" decision produces (it both confirms the signal AND
+  // writes a tainted MemoryItem, memoryItemId backfilled). A bare VERIFIED
+  // row is legacy — it predates the second-round ruling and was never
+  // written to memory; it is labeled distinctly and never auto-upgraded.
   const memberSignalDecisionLabel = (status: string) => {
-    if (status === "VERIFIED") {
-      return english ? "Verified as a genuine signal" : "已验证为真实信号";
+    if (status === "PROMOTED") {
+      return english ? "Verified & written to memory" : "已验证并写入记忆";
     }
     if (status === "REJECTED") {
       return english ? "Rejected" : "已拒绝";
+    }
+    if (status === "VERIFIED") {
+      return english
+        ? "Verified (legacy, not written)"
+        : "已验证(旧流程,未写入)";
     }
     return memoryText(status);
   };
@@ -1500,16 +1510,19 @@ export function MemoryClient({
           </div>
           <CardTitle>
             {english
-              ? "Confirm member-reported signals before any later memory work"
-              : "在后续记忆工作之前，先确认成员上报的信号"}
+              ? "Verify writes runtime memory; reject writes nothing"
+              : "验证会写入运行时记忆；拒绝则不写入"}
           </CardTitle>
-          {/* Ruling 3 (honesty boundary): verification confirms the signal
-              only — it is not memory promotion. Stated in plain wording,
-              not systemspeak. */}
+          {/* Architecture 5 (2026-08-22 second-round ruling, superseding the
+              prior round's "验证≠写入" honesty-boundary copy): verifying now
+              confirms the signal AND writes a permanently-tainted MemoryItem
+              in the same action — stated in plain wording, not systemspeak,
+              with the taint tag named explicitly so a reader never mistakes
+              this for an ordinary confirmed fact. */}
           <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
             {english
-              ? "Verifying only confirms this is a genuine member signal. It does not write memory — memory promotion is a separate capability that has not shipped yet."
-              : "验证仅确认这是一条真实的成员信号，不构成记忆写入；记忆晋升是独立的后续能力。"}
+              ? 'Verifying confirms this is a genuine member signal and writes it into runtime memory — the entry permanently carries an "Untrusted · member upstream" provenance tag. Rejecting writes nothing.'
+              : "验证会确认这是一条真实的成员信号，并将其写入运行时记忆——该条目会永久携带“未信任 · 成员上行”来源标注。拒绝则不写入任何内容。"}
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1599,12 +1612,12 @@ export function MemoryClient({
                                     note: memberSignalNotes[item.id] || undefined,
                                   }),
                                 english
-                                  ? "Member signal verified"
-                                  : "成员信号已验证",
+                                  ? "Member signal verified & written to memory"
+                                  : "成员信号已验证并写入记忆",
                               )
                             }
                           >
-                            {english ? "Verify" : "验证"}
+                            {english ? "Verify & write" : "验证并写入"}
                           </Button>
                           <Button
                             size="sm"
@@ -1672,7 +1685,11 @@ export function MemoryClient({
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge
                         variant={
-                          item.status === "VERIFIED" ? "success" : "danger"
+                          item.status === "PROMOTED"
+                            ? "success"
+                            : item.status === "VERIFIED"
+                              ? "warning"
+                              : "danger"
                         }
                       >
                         {memberSignalDecisionLabel(item.status)}

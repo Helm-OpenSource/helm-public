@@ -338,15 +338,18 @@ export async function getMemoryData(
           take: 12,
         })
       : Promise.resolve([]);
-  // Member-anchored candidates (memory member-verification plan,
-  // Architecture 1/3): discriminated by the anchor column
-  // (memberGatewaySessionRef non-null), never by a sourceStatus/
-  // sourceVerification string match — the JSON blob those columns carry
-  // for this family would not reliably match the reflection query's exact-
-  // equality OR above anyway. Unlike the reflection query, member rows
-  // carry no object anchor at all (no meetingId/objectType), so there is
-  // no meaningful object-level scoping to apply here; this is gated on
-  // includeHelm only, matching the distillation candidate queries below.
+  // Member-anchored candidates (memory member-fact-write plan, Architecture
+  // 1/3/6): discriminated by the anchor column (memberGatewaySessionRef
+  // non-null), never by a sourceStatus/sourceVerification string match —
+  // the JSON blob those columns carry for this family would not reliably
+  // match the reflection query's exact-equality OR above anyway. Unlike the
+  // reflection query, member rows carry no object anchor at all (no
+  // meetingId/objectType), so there is no meaningful object-level scoping
+  // to apply here; this is gated on includeHelm only, matching the
+  // distillation candidate queries below. PROMOTED is included alongside
+  // the legacy VERIFIED status: a "verify" decision now lands on PROMOTED
+  // (write-on-verify, 2026-08-22 second-round ruling), while any row still
+  // sitting at VERIFIED predates that ruling and stays visible, un-migrated.
   const memberSignalMemoryCandidatePromise: Promise<MemberSignalMemoryCandidateRow[]> =
     includeHelm
       ? db.memoryCandidate.findMany({
@@ -357,6 +360,7 @@ export async function getMemoryData(
               in: [
                 RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
                 RuntimeMemoryCandidateStatus.VERIFIED,
+                RuntimeMemoryCandidateStatus.PROMOTED,
                 RuntimeMemoryCandidateStatus.REJECTED,
               ],
             },

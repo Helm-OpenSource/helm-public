@@ -184,10 +184,15 @@ const MEMBER_SIGNAL_MEMORY_VERIFICATION_ERROR_MESSAGES: Record<
   },
 };
 
-// Verification here is decision-only (memory member-verification plan,
-// ruling 3): it confirms a member-anchored MemoryCandidate as a genuine
-// signal or rejects it. It never writes canonical memory — fact promotion
-// (VERIFIED -> a memory write) is a separate, not-yet-built capability.
+// Write-on-verify (memory member-fact-write plan, 2026-08-22 second-round
+// ruling 3 — supersedes the prior round's decision-only ruling 3): a
+// "verify" decision now BOTH confirms a member-anchored MemoryCandidate as
+// a genuine signal AND writes it into runtime memory as a permanently
+// untrusted-tagged MemoryItem (candidate status PENDING_VERIFICATION ->
+// PROMOTED, memoryItemId backfilled in the service's own CAS write). A
+// "reject" decision is unchanged: REJECTED, no MemoryItem. The service
+// result's `status`/`memoryItemId` pass through unchanged here — no schema
+// change on this action's input/output was needed for the widened result.
 export async function verifyMemberSignalMemoryCandidateAction(input: unknown) {
   const session = await getCurrentWorkspaceSession();
   const { user, membership, workspace } = session;
