@@ -132,3 +132,49 @@ provenance 列,taint/溯源随 `sourceStatus` JSON 携带;投影函数必须放
 到文件尾)且**禁止写 MemoryPromotion/MemoryItem**;taint 渲染最小插点是
 `buildEvidenceSourceClasses`(lib/helm-v2/runtime-upgrade.ts:6969),零组
 件改动流入 /memory 与 operator 面板。
+
+---
+
+## Owner 裁定记录(2026-08-22 第二轮:事实晋升)
+
+第一轮(上方 2026-08-20 裁定)只批准了阶段一/阶段二的**投影**——把已确认
+的成员信号候选投影为 `MemoryCandidate(PENDING_VERIFICATION)`。基于该投影
+面落地后新暴露的验证面(`docs/superpowers/plans/2026-08-22-memory-member
+-verification.md`),owner 在 2026-08-22 就"验证之后是否/如何写入正式记
+忆"给出第二轮裁定,记录于此,并驱动
+`docs/superpowers/plans/2026-08-22-memory-member-fact-write.md` 的实现:
+
+1. **写入目标是 `MemoryItem`,不是 `MemoryFact`**:验证通过的候选直接写
+   一条运行时 `MemoryItem` 行(镜像既有 create 站点的必填列集合),
+   `MemoryFact` 的晋升留待后续、更高确信度的轮次。`sourceProvenance`
+   携带完整 member 溯源 JSON(`taint:"untrusted"`、
+   `evaluationUseProhibited`、memberRef/deviceRegistrationRef/clientId/
+   policyRef/policyVersion、signalReceiptRef、gatewaySessionRef、
+   artifactBundleId、candidateKey)——**永久标注,检索/展示可见**,验证
+   动作本身不抹除任何来源史实(与第一轮裁定 3"taint 保留"精神一致,只
+   是现在真的落到了一条可检索的记忆行上)。
+2. **锚点:能锚则锚,不能锚也照样写**:artifact 的 `objectAnchor.resolved`
+   且其 plain-string `objectType` 恰为 Prisma `ObjectType` 枚举的一个成
+   员时,写入的 `MemoryItem` 携带该 `objectType`/`objectId`;否则(未解
+   析、或字符串根本不在枚举白名单内)不因此拒绝写入——写一条无锚条
+   目,原始的 opaque `objectRef` 保留在 `sourceProvenance` 里,不静默丢
+   弃。枚举匹配走白名单比对(从枚举自身的值集合构造),不对未受信字符
+   串做 `as` 强制转换。
+3. **验证即自动写入,取代上一轮的"验证≠写入"裁定**:**本裁定 3"验证即
+   自动写入"正式取代第一轮验证面实现所依据的
+   `docs/superpowers/plans/2026-08-22-memory-member-verification.md`
+   的裁定 3("验证≠写入、文案诚实")**。该文档记录的"诚实边界文案"——
+   区头"验证仅确认这是一条真实的成员信号,不构成记忆写入;记忆晋升是
+   独立的后续能力"、决定标签"已验证为真实信号"——随之全部作废并返工:
+   verify 现在**同时**确认信号真实性**并**把它写入运行时记忆(带永久
+   untrusted 来源标注);候选终态由 `VERIFIED` 改为 `PROMOTED`(回填
+   `memoryItemId`);历史上已经停在 `VERIFIED` 的 member 行(如有)按原
+   样展示,不自动升级、不迁移——新流程不再产生 `VERIFIED` 终态。
+   `scripts/check-member-gateway.ts` 对验证 service 的禁写正则相应从
+   `/\.memoryPromotion\.|\.memoryItem\./` 收窄为 `/\.memoryPromotion\./`
+   ——`MemoryItem` 不再是该文件的禁写目标,`MemoryPromotion` 的禁写不变
+   (`runtimeSessionId` 必填外键,结构上仍不可达)。
+
+三项裁定的完整实现细节、列集选择的判断记录、验证结果记在
+`docs/superpowers/plans/2026-08-22-memory-member-fact-write.md` 的
+As-built 附录。

@@ -1,5 +1,5 @@
 ---
-status: planning / ready-to-execute
+status: archived / executed-with-as-built-record
 owner: helm-core
 created: 2026-08-22
 review_after: 2026-09-22
@@ -34,3 +34,127 @@ public_safety: Implementation plan for member candidate fact promotion
 - T3 spec 取代声明 + as-built + 最终整体 review + push + PR。
 
 **边界:** MemoryFact 不写(升级留后续);MemoryPromotion 结构不可写不变;reflection 家族零触碰;历史 VERIFIED 行不迁移。
+
+---
+
+## As-built 记录(2026-08-22 执行完毕)
+
+分支 `feat/memory-member-fact-write`(在已合并的
+`feat/memory-member-verification` 之上续接)。三个任务全部按计划落地,
+顺序执行,每个 commit 过完整 pre-commit 门禁(`npx lint-staged` →
+`npm run check:boundaries`,含 `check:conditional-update-cas`、
+`check:member-gateway`、`check:caio-terminology` → 独立
+terminology 直调),从未跳过钩子。
+
+Commits:
+
+1. `1516c2f1` T1 — `feat(member-gateway): verify now writes a tainted
+   runtime memory item`
+2. `95f60906` T2 — `feat(memory): rework verification surface for
+   write-on-verify semantics`
+3. T3(本次)— `docs(memory): record the write-on-verify supersession and
+   fact-write as-built`
+
+### 判断记录
+
+1. **裁定取代声明已落地三处**:本文件 §"裁定取代声明"、
+   `docs/superpowers/specs/2026-08-20-member-gateway-stage-two-fact
+   -promotion-design.md` 新增的"Owner 裁定记录(2026-08-22 第二轮:事
+   实晋升)"小节、以及代码内(`signal-candidate-memory-verification
+   .service.ts` 文件头注释 + `scripts/check-member-gateway.ts` 的门禁
+   注释)全部显式引用"本轮裁定 3 取代
+   `docs/superpowers/plans/2026-08-22-memory-member-verification.md`
+   的裁定 3(验证≠写入、文案诚实)"。三处措辞一致,任何一处单独阅读都
+   能定位到被取代的原始裁定与取代原因。
+
+2. **`MemoryItem` 列集选择与判断依据**(T1 原始判断,verbatim 保留):
+   - 必填列(`workspaceId, kind, scope, namespace, writer, summary,
+     payload`)全部按 schema 要求填齐;`objectType/objectId` 仅在锚点
+     解析且命中 `ObjectType` 白名单时写入,否则留空。
+   - **`meetingId`/`opportunityId`/`companyId` 三列刻意不写**——这三
+     列正是 `lib/helm-v2/opportunity-judge-runtime.ts`、
+     `draft-comms-handoff-runtime.ts`、
+     `connector-ingestion-retrieval-runtime.ts` 用来把 `MemoryItem`
+     行拉进 AI 评估/判断上下文的 OR 过滤键;不写它们能让这条永久带毒
+     的记忆行**结构性地**被排除在所有这些加载器之外,不论 status 取
+     什么值——这比挑"看起来安全"的枚举值更强的
+     `evaluationUseProhibited` 落地保证。
+   - 选择 `status: CONFIRMED`(不是 `PROMOTED`)、
+     `verification: DRAFT`(不是 `HUMAN_CONFIRMED`)的原因:
+     `connector-ingestion-retrieval-runtime.ts` 的
+     `toMemoryTrustStatus` 把 `status === PROMOTED` 直接读成
+     `"human_confirmed"`,**不管** `verification` 列的值——停在
+     `CONFIRMED` 能避开这条捷径,防止一条永久不受信的内容被误判为可
+     信。`verification: DRAFT` 的原因是:验证动作只确认了"这是一条真
+     实的成员信号"(来源真实性),从未确认"这条内容是事实"(内容真实
+     性)——`HUMAN_CONFIRMED` 会主张后者,正好与
+     `evaluationUseProhibited` 相反。
+   - **已知 schema 缺口(留给 owner 的后续跟进项)**:
+     `MemoryItemVerification` 枚举(`DRAFT | INFERRED |
+     HUMAN_CONFIRMED | SYSTEM_OF_RECORD | DEPRECATED`)里没有一个诚实
+     值能表达"来源(成员)已确认真实,但内容本身未受验证"这个中间态——
+     `DRAFT` 是当前能选的最不会误导的选项,但它本身的通常语义是"尚未
+     被任何人审阅",与"已经过一次人工审阅(验证动作本身)但内容仍未
+     受信"并不完全贴合。这是一个可选的、非必填列上的判断,不构成本
+     轮 T1 的 STOP 触发条件(STOP 条件是必填列上没有诚实值可选),但
+     记录为供 owner 决定是否需要新增枚举值(例如
+     `SOURCE_CONFIRMED_CONTENT_UNVERIFIED` 一类)的后续项。
+
+3. **历史 VERIFIED 行不迁移,新流程不再产生**:T1 mysql 套件新增专门
+   用例——手动把一条候选行的 `status` 置为 `VERIFIED`(模拟裁定生效
+   前遗留的行),再对其发起 `verify` 决策,断言返回
+   `memory_candidate_state_conflict` 且行状态原样保持
+   `VERIFIED`、`memoryItemId` 仍为 `null`——验证遗留行既不会被自动升
+   级为 `PROMOTED`,也绝不会在冲突路径上意外产生一条 `MemoryItem`。
+   `/memory` 页面对应渲染独立标签"已验证(旧流程,未写入)"/
+   "Verified (legacy, not written)",与 `PROMOTED` 的"已验证并写入记
+   忆"/"Verified & written to memory"视觉区分(badge variant
+   `warning` vs `success`)。
+
+4. **门禁正则收窄,双重钉死**:`scripts/check-member-gateway.ts` 对验
+   证 service 的禁写正则从 `/\.memoryPromotion\.|\.memoryItem\./` 收
+   窄为 `/\.memoryPromotion\./`,注释引用本轮裁定;同时新增
+   `"PROMOTED"` 与 `memoryItemCreated: true` 两个在场断言(字面量必
+   须出现在文件源码里,静态防止未来改动悄悄丢掉这两个契约标记)。投
+   影 service(`signal-candidate-memory-projection.service.ts`)的双
+   禁(`MemoryPromotion` + `MemoryItem`)**完全未动**——投影产生的仍
+   然只是 `PENDING_VERIFICATION` 候选,从不落地任何记忆写入,这条边
+   界本轮裁定没有触碰。
+
+5. **UI/文案返工范围克制在验证面**:`memory-client.tsx` 的改动只覆盖
+   成员信号验证卡片(标题、说明段落、按钮文案、决定标签、徽章配
+   色)、`queries.ts` 的 status IN 集合、以及 `actions.ts` 的过期注
+   释;蒸馏候选区、复盘延续区等相邻卡片的文案与结构逐字未动。
+
+### 验证(T3 收尾,全部本地真实执行,非猜测)
+
+- `npm run test:member-gateway:mysql`(`DATABASE_URL`、
+  `MEMBER_SIGNAL_STORE_DATABASE_URL`、
+  `MEMBER_PROMPT_STORE_DATABASE_URL`、
+  `MEMBER_PROMPT_RESPONSE_STORE_DATABASE_URL`、
+  `MEMBER_SIGNAL_CANDIDATE_DATABASE_URL` 五个 env var 全部指向同一隔
+  离本地 MySQL 库)本地真库全绿:4 files / 86 tests passed(其中
+  `signal-candidate.mysql.test.ts` 单独跑时 39/39,含 T1 新增的两个锚
+  点分支用例、幂等/reject/corrupt/legacy-VERIFIED-冲突五类断言)。
+- `npx vitest run features/memory`:6 files / 37 tests passed。
+- `npx vitest run features/memory lib/presentation/shared-surface
+  -hierarchy-guards.test.ts`(T2 收尾时跑的组合口径,含 presentation
+  守卫全量):7 files / 144 tests passed,零新增失败(高于原验证面轮
+  次的 107/107 基线,因为本轮在 `queries.test.ts`/
+  `memory-client-source-contract.test.ts` 里新增了 PROMOTED 相关的正
+  向用例)。
+- `npm run check:member-gateway`:PASS(含
+  `check-member-gateway.ts` 静态门禁 + `lib/member-gateway` 全套
+  vitest)。
+- `npm run typecheck`:PASS(`tsc --noEmit --project
+  tsconfig.public.json`,零错误)。
+- `npm run lint`:PASS(零 warning,`--max-warnings 0`)。
+- `npm run check:boundaries`(T1/T2 两个 commit 各自的 pre-commit 钩
+  子里都完整跑过一次)与 `npm run test`(全量 967 个测试文件,T2 收尾
+  时 944 files / 8294 tests passed、23 files / 278 tests skipped,跳
+  过的全部是需要额外隔离 MySQL env var 的套件)均全绿。
+
+**结论**:三项第二轮裁定(写入目标 `MemoryItem`、锚点白名单匹配带锚/
+无锚双写、验证即自动写入)已完整落地并通过隔离 MySQL 真库验证;`验证
+≠写入` 的旧裁定与其文案在 spec、代码注释、UI 三处均已显式记录为被取
+代,不留误导性残留。
