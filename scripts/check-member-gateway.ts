@@ -174,28 +174,39 @@ if (/\.memoryPromotion\.|\.memoryItem\./.test(memoryProjectionSource)) {
   );
 }
 
-// Memory member-verification slice (docs/superpowers/plans/2026-08-22
-// -memory-member-verification.md, Architecture 2/6): the sibling
-// verification service must never lose its PENDING_VERIFICATION source-
-// state anchor (the only status a CAS-guarded decision may transition
-// FROM), and — same reasoning as the projection service above — must
-// never write MemoryPromotion or MemoryItem, which is structurally
-// impossible for a member-anchored row but is pinned here in addition to
-// the isolated-MySQL suite's runtime proof.
+// Memory member-fact-write slice (docs/superpowers/plans/2026-08-22
+// -memory-member-fact-write.md, Architecture 3/4): the Owner's 2026-08-22
+// second-round ruling 3 ("验证即自动写入") SUPERSEDES the prior round's
+// ruling 3 ("验证≠写入") — a "verify" decision now DOES write a MemoryItem
+// (permanently untrusted-tagged) in the same CAS write that flips
+// PENDING_VERIFICATION -> PROMOTED. The verification service's forbidden-
+// write regex is therefore narrowed to MemoryPromotion only (still
+// structurally impossible: MemoryPromotion.runtimeSessionId is a required
+// FK a member-anchored row can never satisfy) — MemoryItem is no longer
+// forbidden here. The sibling projection service below is UNCHANGED: a
+// projection still only ever yields a PENDING_VERIFICATION candidate, so
+// its dual MemoryPromotion/MemoryItem prohibition stays exactly as-is.
 const memoryVerificationPath = path.join(
   root,
   "lib/member-gateway/signal-candidate-memory-verification.service.ts",
 );
 const memoryVerificationSource = readFileSync(memoryVerificationPath, "utf8");
 
-if (!memoryVerificationSource.includes("PENDING_VERIFICATION")) {
-  violations.push(
-    "lib/member-gateway/signal-candidate-memory-verification.service.ts missing frozen marker: PENDING_VERIFICATION",
-  );
+const memoryVerificationFrozenMarkers = [
+  "PENDING_VERIFICATION",
+  '"PROMOTED"',
+  "memoryItemCreated: true",
+];
+for (const marker of memoryVerificationFrozenMarkers) {
+  if (!memoryVerificationSource.includes(marker)) {
+    violations.push(
+      `lib/member-gateway/signal-candidate-memory-verification.service.ts missing frozen marker: ${marker}`,
+    );
+  }
 }
-if (/\.memoryPromotion\.|\.memoryItem\./.test(memoryVerificationSource)) {
+if (/\.memoryPromotion\./.test(memoryVerificationSource)) {
   violations.push(
-    "lib/member-gateway/signal-candidate-memory-verification.service.ts must never write MemoryPromotion or MemoryItem",
+    "lib/member-gateway/signal-candidate-memory-verification.service.ts must never write MemoryPromotion",
   );
 }
 
