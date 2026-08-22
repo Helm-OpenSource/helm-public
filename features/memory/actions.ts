@@ -6,6 +6,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { ensureWorkspaceProcessingAllowed, recordUsageLedgerEntry } from "@/lib/billing/foundation";
 import { getCurrentWorkspace, getCurrentWorkspaceSession, requireCurrentUser } from "@/lib/auth/session";
+import { isWorkspaceServiceGovernanceError } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
 import { resolveBlocker, updateBlockerStatus } from "@/lib/memory/blocker.service";
 import { deleteMemoryFact, correctMemoryFact, invalidateMemoryFact } from "@/lib/memory/correction.service";
@@ -27,6 +28,11 @@ import {
   generateOpportunityBriefingSnapshot,
 } from "@/lib/memory/briefing.service";
 import { generateRecommendationsForObject } from "@/lib/recommendations/recommendation.service";
+import {
+  MemberSignalMemoryVerificationError,
+  verifyMemberSignalMemoryCandidate,
+  type MemberSignalMemoryVerificationErrorCode,
+} from "@/lib/member-gateway/signal-candidate-memory-verification.service";
 
 function getRecommendationAffectedPaths(objectType: ObjectType, objectId: string) {
   if (objectType === ObjectType.CONTACT) {
@@ -139,6 +145,89 @@ export async function reviewMemoryDistillationCandidateAction(
 
   revalidatePath("/memory");
   return { ok: true };
+}
+
+const verifyMemberSignalMemoryCandidateSchema = z
+  .object({
+    candidateId: z.string().trim().min(1).max(191),
+    decision: z.enum(["verify", "reject"]),
+    note: z.string().trim().max(280).optional(),
+  })
+  .strict();
+
+// Total, compiler-enforced bilingual mapping (Record over every code in
+// MemberSignalMemoryVerificationErrorCode — a code added to the service
+// without an entry here fails typecheck, not silently falls through).
+const MEMBER_SIGNAL_MEMORY_VERIFICATION_ERROR_MESSAGES: Record<
+  MemberSignalMemoryVerificationErrorCode,
+  { en: string; zh: string }
+> = {
+  invalid_input: {
+    en: "Invalid verification decision",
+    zh: "验证决策无效",
+  },
+  memory_candidate_not_found: {
+    en: "This memory candidate was not found",
+    zh: "未找到这条记忆候选",
+  },
+  memory_candidate_not_member_anchored: {
+    en: "This candidate is not a member-anchored signal and cannot be verified here",
+    zh: "这条候选不是成员锚定信号，无法在这里验证",
+  },
+  memory_candidate_state_conflict: {
+    en: "This candidate has already been decided and the decision cannot be reversed",
+    zh: "这条候选已经完成决策，不能再次改判",
+  },
+};
+
+// Verification here is decision-only (memory member-verification plan,
+// ruling 3): it confirms a member-anchored MemoryCandidate as a genuine
+// signal or rejects it. It never writes canonical memory — fact promotion
+// (VERIFIED -> a memory write) is a separate, not-yet-built capability.
+export async function verifyMemberSignalMemoryCandidateAction(input: unknown) {
+  const session = await getCurrentWorkspaceSession();
+  const { user, membership, workspace } = session;
+  const english = workspace.defaultLocale === "en-US";
+  const parsed = verifyMemberSignalMemoryCandidateSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: english ? "Invalid verification decision" : "验证决策无效",
+    };
+  }
+
+  if (!canManageMemoryFacts(membership.role)) {
+    return {
+      ok: false,
+      error: getMemoryFactManagementDeniedMessage(english),
+    };
+  }
+
+  try {
+    const result = await verifyMemberSignalMemoryCandidate({
+      workspaceId: workspace.id,
+      actorUserId: user.id,
+      actorName: user.name,
+      candidateId: parsed.data.candidateId,
+      decision: parsed.data.decision,
+      note: parsed.data.note,
+    });
+    revalidatePath("/memory");
+    return { ok: true, outcome: result.outcome, status: result.status };
+  } catch (error) {
+    if (error instanceof MemberSignalMemoryVerificationError) {
+      const message = MEMBER_SIGNAL_MEMORY_VERIFICATION_ERROR_MESSAGES[error.code];
+      return {
+        ok: false,
+        error: english ? message.en : message.zh,
+      };
+    }
+    if (isWorkspaceServiceGovernanceError(error)) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
 }
 
 export async function correctMemoryAction(input: z.infer<typeof correctSchema>) {
