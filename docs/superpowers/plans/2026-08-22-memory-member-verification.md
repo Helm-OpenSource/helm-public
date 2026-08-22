@@ -10,6 +10,10 @@ public_safety: Implementation plan for the member-anchored memory candidate
 
 # 记忆域:成员锚定候选验证面 Implementation Plan
 
+> **裁定取代提示(2026-08-22 第二轮)**:本计划裁定 3("验证≠写入、文案
+> 诚实")已被同日第二轮裁定取代——验证现在直接写入运行时记忆,见
+> `2026-08-22-memory-member-fact-write.md`。本文其余记录仍为历史事实。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development 或 executing-plans。
 
 **Goal:** 按 owner 三项裁定(2026-08-22)落地:member 锚定的 `MemoryCandidate(PENDING_VERIFICATION)` 首个读取/验证面——`/memory` 最小切片、按源分支文案、本轮不做事实晋升且文案诚实("验证=确认为真实信号,不构成记忆写入")。

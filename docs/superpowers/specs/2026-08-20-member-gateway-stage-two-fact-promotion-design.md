@@ -150,9 +150,14 @@ provenance 列,taint/溯源随 `sourceStatus` JSON 携带;投影函数必须放
    携带完整 member 溯源 JSON(`taint:"untrusted"`、
    `evaluationUseProhibited`、memberRef/deviceRegistrationRef/clientId/
    policyRef/policyVersion、signalReceiptRef、gatewaySessionRef、
-   artifactBundleId、candidateKey)——**永久标注,检索/展示可见**,验证
-   动作本身不抹除任何来源史实(与第一轮裁定 3"taint 保留"精神一致,只
-   是现在真的落到了一条可检索的记忆行上)。
+   artifactBundleId、candidateKey)——**永久标注**,验证动作本身不抹除
+   任何来源史实(与第一轮裁定 3"taint 保留"精神一致)。**现状诚实说明
+   (2026-08-22 最终 review 核实)**:写入的 MemoryItem 目前在仓内没有
+   任何展示或检索面会渲染它(所有 MemoryItem 读方按 meeting/runtime/
+   关联键过滤,本条目刻意不设这些键以结构性排除 AI 评估链;
+   sourceProvenance 列当前无任何读方)——"不可见"正是本轮的保护机制,
+   而"检索/展示可见"是尚未兑现的后续:为这类条目建一个带 taint 一等
+   渲染的展示面时才成立,记录为 owner 后续项。
 2. **锚点:能锚则锚,不能锚也照样写**:artifact 的 `objectAnchor.resolved`
    且其 plain-string `objectType` 恰为 Prisma `ObjectType` 枚举的一个成
    员时,写入的 `MemoryItem` 携带该 `objectType`/`objectId`;否则(未解

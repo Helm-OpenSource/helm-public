@@ -1409,6 +1409,30 @@ describeMysql(
         expect(promotionCountAfter).toBe(promotionCountBefore);
       });
 
+      it("a spoofed resolved objectType outside the enum whitelist falls back to an anchor-less item", async () => {
+        // The artifact validator only requires a non-empty objectType
+        // string, so a member-controlled "resolved" anchor with a fake
+        // type is a reachable input; the enum whitelist must neutralize
+        // it into the anchor-less branch rather than cast it through.
+        const { candidateId } = await createMemberAnchoredMemoryCandidate({
+          objectAnchor: resolvedAnchor("NOT_A_REAL_TYPE"),
+        });
+
+        const result = await verifyMemberSignalMemoryCandidate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          actorName: "Owner",
+          candidateId,
+          decision: "verify",
+        });
+        expect(result.status).toBe("PROMOTED");
+        const item = await db.memoryItem.findUniqueOrThrow({
+          where: { id: result.memoryItemId as string },
+        });
+        expect(item.objectType).toBeNull();
+        expect(item.objectId).toBeNull();
+      });
+
       it("verifies a member-anchored candidate with the default unresolved anchor: an anchor-less MemoryItem with the opaque objectRef preserved in provenance", async () => {
         const { candidateId, objectRef } =
           await createMemberAnchoredMemoryCandidate();
