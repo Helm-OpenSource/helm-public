@@ -480,10 +480,66 @@ describe("member signal memory candidate query contract", () => {
         where: expect.objectContaining({
           workspaceId: "workspace-1",
           memberGatewaySessionRef: { not: null },
-          status: { in: ["PENDING_VERIFICATION", "VERIFIED", "REJECTED"] },
+          status: {
+            in: ["PENDING_VERIFICATION", "VERIFIED", "PROMOTED", "REJECTED"],
+          },
         }),
         orderBy: { createdAt: "desc" },
         take: 50,
+      }),
+    );
+  });
+
+  // Write-on-verify (2026-08-22 second-round ruling): a "verify" decision
+  // now lands the candidate on PROMOTED (memory written), not VERIFIED —
+  // PROMOTED must be included in the query's status IN set so newly
+  // decided rows still surface as a memberSignalDecisions entry.
+  it("includes a PROMOTED candidate in memberSignalDecisions", async () => {
+    const createdAt = new Date("2026-08-22T00:00:00.000Z");
+    dbMock.memoryCandidate.findMany
+      .mockResolvedValueOnce([]) // reflection candidates
+      .mockResolvedValueOnce([
+        {
+          id: "member-candidate-promoted",
+          candidateKey: "member-signal-memory:promoted",
+          summary: "Member reported a signed renewal.",
+          status: "PROMOTED",
+          reviewerNote: null,
+          sourceVerification: JSON.stringify({
+            artifactReviewId: "review-3",
+            reviewedByUserId: "user-1",
+            reviewStatus: "CONFIRMED",
+          }),
+          sourceStatus: JSON.stringify({
+            taint: "untrusted",
+            evaluationUseProhibited: true,
+            provenance: {
+              memberRef: "member-3",
+              signalReceiptRef: "receipt-3",
+              gatewaySessionRef: "mgws-3",
+            },
+          }),
+          evidenceRefs: null,
+          createdAt,
+        },
+      ]);
+
+    const data = await getMemoryData("workspace-1");
+
+    expect(data.memberSignalDecisions).toEqual([
+      expect.objectContaining({
+        id: "member-candidate-promoted",
+        status: "PROMOTED",
+      }),
+    ]);
+    expect(dbMock.memoryCandidate.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: {
+            in: ["PENDING_VERIFICATION", "VERIFIED", "PROMOTED", "REJECTED"],
+          },
+        }),
       }),
     );
   });
