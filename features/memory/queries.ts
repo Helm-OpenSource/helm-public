@@ -1,10 +1,14 @@
 import {
   ExternalSyncProvider,
   ObjectType,
+  RuntimeMemoryCandidateStatus,
 } from "@prisma/client";
 import type { MemoryDistillationCandidateStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { buildReflectionCandidateReadout } from "@/lib/helm-v2/runtime-upgrade";
+import {
+  buildEvidenceSourceClasses,
+  buildReflectionCandidateReadout,
+} from "@/lib/helm-v2/runtime-upgrade";
 import {
   buildMemoryEntrySourceWhere,
   type MemorySourceFilter,
@@ -114,6 +118,121 @@ export function buildMemoryDistillationCandidateReadout(
   };
 }
 
+type MemberSignalMemoryCandidateRow = {
+  id: string;
+  candidateKey: string;
+  summary: string;
+  status: string;
+  reviewerNote: string | null;
+  sourceVerification: string;
+  sourceStatus: string;
+  evidenceRefs: string | null;
+  createdAt: Date;
+};
+
+export type MemberSignalMemoryCandidateProvenance = Readonly<{
+  memberRef: string | null;
+  signalReceiptRef: string | null;
+  gatewaySessionRef: string | null;
+}>;
+
+// Member-anchored MemoryCandidate readout (memory member-verification
+// plan, Architecture 3). Deliberately separate from
+// buildReflectionCandidateReadout above, which this function must NEVER
+// touch or feed — that builder's input type requires a non-null
+// runtimeSession, which a member-anchored row structurally never has
+// (mutually exclusive anchors, MemoryCandidate_anchor_check). sourceClasses
+// still reuses buildEvidenceSourceClasses (now exported from
+// runtime-upgrade.ts for exactly this caller), the same class-derivation
+// logic reflection rows get.
+export type MemberSignalMemoryCandidateReadout = Readonly<{
+  id: string;
+  candidateKey: string;
+  summary: string;
+  status: string;
+  createdAt: Date;
+  reviewerNote: string | null;
+  sourceClasses: string[];
+  // A malformed/tampered sourceStatus blob is marked corrupt rather than
+  // guessed at — taint/evaluationUseProhibited/provenance are withheld
+  // entirely (null) so a corrupt row can never render as if it carried a
+  // verifiable taint/provenance judgment. sourceClasses is still computed:
+  // buildEvidenceSourceClasses treats sourceStatus as an opaque string (no
+  // JSON.parse of its own), so it degrades independently.
+  corrupt: boolean;
+  taint: string | null;
+  evaluationUseProhibited: boolean | null;
+  provenance: MemberSignalMemoryCandidateProvenance | null;
+}>;
+
+function buildMemberSignalMemoryCandidateReadout(
+  row: MemberSignalMemoryCandidateRow,
+): MemberSignalMemoryCandidateReadout {
+  const evidenceRefs = safeParseJson<string[]>(row.evidenceRefs, []);
+  const sourceClasses = buildEvidenceSourceClasses({
+    sourceVerification: row.sourceVerification,
+    sourceStatus: row.sourceStatus,
+    evidenceRefs,
+  });
+  const base = {
+    id: row.id,
+    candidateKey: row.candidateKey,
+    summary: row.summary,
+    status: row.status,
+    createdAt: row.createdAt,
+    reviewerNote: row.reviewerNote,
+    sourceClasses,
+  };
+
+  type ParsedMemberSourceStatus = {
+    taint?: unknown;
+    evaluationUseProhibited?: unknown;
+    provenance?: {
+      memberRef?: unknown;
+      signalReceiptRef?: unknown;
+      gatewaySessionRef?: unknown;
+    };
+  };
+
+  try {
+    const parsed = JSON.parse(row.sourceStatus) as ParsedMemberSourceStatus;
+    const provenanceSource = parsed.provenance;
+    return {
+      ...base,
+      corrupt: false,
+      taint: typeof parsed.taint === "string" ? parsed.taint : null,
+      evaluationUseProhibited:
+        typeof parsed.evaluationUseProhibited === "boolean"
+          ? parsed.evaluationUseProhibited
+          : null,
+      provenance: provenanceSource
+        ? {
+            memberRef:
+              typeof provenanceSource.memberRef === "string"
+                ? provenanceSource.memberRef
+                : null,
+            signalReceiptRef:
+              typeof provenanceSource.signalReceiptRef === "string"
+                ? provenanceSource.signalReceiptRef
+                : null,
+            gatewaySessionRef:
+              typeof provenanceSource.gatewaySessionRef === "string"
+                ? provenanceSource.gatewaySessionRef
+                : null,
+          }
+        : null,
+    };
+  } catch {
+    return {
+      ...base,
+      corrupt: true,
+      taint: null,
+      evaluationUseProhibited: null,
+      provenance: null,
+    };
+  }
+}
+
 export async function getMemoryData(
   workspaceId: string,
   options?: {
@@ -219,6 +338,44 @@ export async function getMemoryData(
           take: 12,
         })
       : Promise.resolve([]);
+  // Member-anchored candidates (memory member-verification plan,
+  // Architecture 1/3): discriminated by the anchor column
+  // (memberGatewaySessionRef non-null), never by a sourceStatus/
+  // sourceVerification string match — the JSON blob those columns carry
+  // for this family would not reliably match the reflection query's exact-
+  // equality OR above anyway. Unlike the reflection query, member rows
+  // carry no object anchor at all (no meetingId/objectType), so there is
+  // no meaningful object-level scoping to apply here; this is gated on
+  // includeHelm only, matching the distillation candidate queries below.
+  const memberSignalMemoryCandidatePromise: Promise<MemberSignalMemoryCandidateRow[]> =
+    includeHelm
+      ? db.memoryCandidate.findMany({
+          where: {
+            workspaceId,
+            memberGatewaySessionRef: { not: null },
+            status: {
+              in: [
+                RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
+                RuntimeMemoryCandidateStatus.VERIFIED,
+                RuntimeMemoryCandidateStatus.REJECTED,
+              ],
+            },
+          },
+          select: {
+            id: true,
+            candidateKey: true,
+            summary: true,
+            status: true,
+            reviewerNote: true,
+            sourceVerification: true,
+            sourceStatus: true,
+            evidenceRefs: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        })
+      : Promise.resolve([]);
   const distillationCandidateSelect = {
     id: true,
     objectType: true,
@@ -296,6 +453,7 @@ export async function getMemoryData(
     auditLogs,
     externalMemoryRecords,
     reflectionCandidates,
+    memberSignalMemoryCandidates,
     distillationCandidates,
     distillationDecisions,
   ] =
@@ -451,6 +609,7 @@ export async function getMemoryData(
           })
         : Promise.resolve([]),
       reflectionCandidatePromise,
+      memberSignalMemoryCandidatePromise,
       distillationCandidatesPromise,
       distillationDecisionsPromise,
     ]);
@@ -485,6 +644,16 @@ export async function getMemoryData(
           ]
         : [],
     ),
+    memberSignalPending: memberSignalMemoryCandidates
+      .filter(
+        (item) => item.status === RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
+      )
+      .map(buildMemberSignalMemoryCandidateReadout),
+    memberSignalDecisions: memberSignalMemoryCandidates
+      .filter(
+        (item) => item.status !== RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
+      )
+      .map(buildMemberSignalMemoryCandidateReadout),
     distillationCandidates: distillationCandidates.map(buildMemoryDistillationCandidateReadout),
     distillationDecisions: distillationDecisions.map(buildMemoryDistillationCandidateReadout),
   };

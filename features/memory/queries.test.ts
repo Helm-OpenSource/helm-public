@@ -22,6 +22,7 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/helm-v2/runtime-upgrade", () => ({
   buildReflectionCandidateReadout: vi.fn(),
+  buildEvidenceSourceClasses: vi.fn(),
 }));
 
 import {
@@ -382,5 +383,139 @@ describe("memory distillation candidate query contract", () => {
 
     await getMemoryData("workspace-1", { source: "OPENCLAW" });
     expect(dbMock.memoryDistillationCandidate.findMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("member signal memory candidate query contract", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetDbMocks();
+  });
+
+  // db.memoryCandidate.findMany now backs TWO different queries inside
+  // getMemoryData (reflection candidates, called first, then member-
+  // anchored candidates, called second) — a single mockResolvedValue would
+  // return the same rows to both, so this test sequences them explicitly
+  // with mockResolvedValueOnce rather than relying on the shared default.
+  it("splits member-anchored candidates into memberSignalPending and memberSignalDecisions by status", async () => {
+    const createdAt = new Date("2026-08-19T00:00:00.000Z");
+    dbMock.memoryCandidate.findMany
+      .mockResolvedValueOnce([]) // reflection candidates (runtimeSession-anchored) — not under test here
+      .mockResolvedValueOnce([
+        {
+          id: "member-candidate-pending",
+          candidateKey: "member-signal-memory:pending",
+          summary: "Member reported a blocked renewal.",
+          status: "PENDING_VERIFICATION",
+          reviewerNote: null,
+          sourceVerification: JSON.stringify({
+            artifactReviewId: "review-1",
+            reviewedByUserId: "user-1",
+            reviewStatus: "CONFIRMED",
+          }),
+          sourceStatus: JSON.stringify({
+            taint: "untrusted",
+            evaluationUseProhibited: true,
+            provenance: {
+              memberRef: "member-1",
+              signalReceiptRef: "receipt-1",
+              gatewaySessionRef: "mgws-1",
+            },
+          }),
+          evidenceRefs: null,
+          createdAt,
+        },
+        {
+          id: "member-candidate-verified",
+          candidateKey: "member-signal-memory:verified",
+          summary: "Member confirmed a follow-up call.",
+          status: "VERIFIED",
+          reviewerNote: "Confirmed with the account owner.",
+          sourceVerification: JSON.stringify({
+            artifactReviewId: "review-2",
+            reviewedByUserId: "user-1",
+            reviewStatus: "CONFIRMED",
+          }),
+          sourceStatus: JSON.stringify({
+            taint: "untrusted",
+            evaluationUseProhibited: true,
+            provenance: {
+              memberRef: "member-2",
+              signalReceiptRef: "receipt-2",
+              gatewaySessionRef: "mgws-2",
+            },
+          }),
+          evidenceRefs: null,
+          createdAt,
+        },
+      ]);
+
+    const data = await getMemoryData("workspace-1");
+
+    expect(data.memberSignalPending).toEqual([
+      expect.objectContaining({
+        id: "member-candidate-pending",
+        status: "PENDING_VERIFICATION",
+        corrupt: false,
+        taint: "untrusted",
+        evaluationUseProhibited: true,
+        provenance: {
+          memberRef: "member-1",
+          signalReceiptRef: "receipt-1",
+          gatewaySessionRef: "mgws-1",
+        },
+      }),
+    ]);
+    expect(data.memberSignalDecisions).toEqual([
+      expect.objectContaining({
+        id: "member-candidate-verified",
+        status: "VERIFIED",
+        reviewerNote: "Confirmed with the account owner.",
+      }),
+    ]);
+
+    expect(dbMock.memoryCandidate.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: "workspace-1",
+          memberGatewaySessionRef: { not: null },
+          status: { in: ["PENDING_VERIFICATION", "VERIFIED", "REJECTED"] },
+        }),
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+    );
+  });
+
+  it("marks a candidate corrupt when sourceStatus fails to parse, withholding taint/evaluationUseProhibited/provenance", async () => {
+    const createdAt = new Date("2026-08-19T00:00:00.000Z");
+    dbMock.memoryCandidate.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "member-candidate-corrupt",
+          candidateKey: "member-signal-memory:corrupt",
+          summary: "Tampered row.",
+          status: "PENDING_VERIFICATION",
+          reviewerNote: null,
+          sourceVerification: "{}",
+          sourceStatus: "not-json",
+          evidenceRefs: null,
+          createdAt,
+        },
+      ]);
+
+    const data = await getMemoryData("workspace-1");
+
+    expect(data.memberSignalPending).toEqual([
+      expect.objectContaining({
+        id: "member-candidate-corrupt",
+        corrupt: true,
+        taint: null,
+        evaluationUseProhibited: null,
+        provenance: null,
+      }),
+    ]);
   });
 });

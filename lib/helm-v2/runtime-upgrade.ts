@@ -6967,7 +6967,14 @@ async function getRuntimeContinuityTraceCohortMetadata(input: {
   };
 }
 
-function buildEvidenceSourceClasses(input: {
+// Exported (not module-private, unlike this function's original shape)
+// specifically so features/memory/queries.ts's member-signal readout
+// builder can compute the same sourceClasses set that reflection-family
+// rows get via buildReflectionCandidateReadout below — a member-anchored
+// MemoryCandidate has no runtimeSession, so it cannot go through that
+// builder (its input type requires one), but the class-derivation logic
+// itself is the same for both families.
+export function buildEvidenceSourceClasses(input: {
   sourceVerification: string;
   sourceStatus: string;
   evidenceRefs: string[];
@@ -6980,6 +6987,19 @@ function buildEvidenceSourceClasses(input: {
     sourceClasses.add("human_confirmed");
   } else if (input.sourceVerification === MemoryItemVerification.INFERRED) {
     sourceClasses.add("inferred");
+  } else if (input.sourceStatus.includes('"signalReceiptRef"')) {
+    // Member-gateway stage-two projection (signal-candidate-memory-
+    // projection.service.ts) writes a JSON sourceVerification blob that
+    // never matches any of the three literal checks above, so without
+    // this branch every member-anchored row silently fell into the
+    // misleading draft_fact bucket below — draft_fact implies an ordinary
+    // AI-drafted fact awaiting confirmation, not a member-authored,
+    // untrusted signal. Checked on sourceStatus (which always carries
+    // provenance.signalReceiptRef for this family) rather than
+    // sourceVerification, matching this function's existing "treat as an
+    // opaque string, no JSON.parse" style. Placed BEFORE the draft_fact
+    // fallthrough so member rows never reach it.
+    sourceClasses.add("member_signal_projection");
   } else {
     sourceClasses.add("draft_fact");
   }
