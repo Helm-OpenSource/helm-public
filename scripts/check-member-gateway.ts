@@ -66,6 +66,7 @@ for (const file of [
   "gateway-session.ts",
   "gateway-session.test.ts",
   "signal-candidate-memory-projection.service.ts",
+  "signal-candidate-memory-verification.service.ts",
 ]) {
   const source = readFileSync(
     path.join(root, "lib/member-gateway", file),
@@ -170,6 +171,31 @@ for (const marker of memoryProjectionFrozenMarkers) {
 if (/\.memoryPromotion\.|\.memoryItem\./.test(memoryProjectionSource)) {
   violations.push(
     "lib/member-gateway/signal-candidate-memory-projection.service.ts must never write MemoryPromotion or MemoryItem",
+  );
+}
+
+// Memory member-verification slice (docs/superpowers/plans/2026-08-22
+// -memory-member-verification.md, Architecture 2/6): the sibling
+// verification service must never lose its PENDING_VERIFICATION source-
+// state anchor (the only status a CAS-guarded decision may transition
+// FROM), and — same reasoning as the projection service above — must
+// never write MemoryPromotion or MemoryItem, which is structurally
+// impossible for a member-anchored row but is pinned here in addition to
+// the isolated-MySQL suite's runtime proof.
+const memoryVerificationPath = path.join(
+  root,
+  "lib/member-gateway/signal-candidate-memory-verification.service.ts",
+);
+const memoryVerificationSource = readFileSync(memoryVerificationPath, "utf8");
+
+if (!memoryVerificationSource.includes("PENDING_VERIFICATION")) {
+  violations.push(
+    "lib/member-gateway/signal-candidate-memory-verification.service.ts missing frozen marker: PENDING_VERIFICATION",
+  );
+}
+if (/\.memoryPromotion\.|\.memoryItem\./.test(memoryVerificationSource)) {
+  violations.push(
+    "lib/member-gateway/signal-candidate-memory-verification.service.ts must never write MemoryPromotion or MemoryItem",
   );
 }
 

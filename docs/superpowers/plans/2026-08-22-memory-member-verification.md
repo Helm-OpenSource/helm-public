@@ -1,5 +1,5 @@
 ---
-status: planning / ready-to-execute
+status: archived / executed-with-as-built-record
 owner: helm-core
 created: 2026-08-22
 review_after: 2026-09-22
@@ -45,3 +45,118 @@ public_safety: Implementation plan for the member-anchored memory candidate
 - T4 门禁 + as-built + 最终整体 review + push + PR。
 
 **边界:** 不写 MemoryPromotion/MemoryItem;不动 reflection 家族任何行为;事实晋升(VERIFIED→记忆写入)需 owner 另轮裁定(对象锚定、taint 写入政策、Item vs Fact 目标);operator 面板不动。
+
+---
+
+## As-built 记录(2026-08-22 执行完毕)
+
+分支 `feat/memory-member-verification`。四个任务全部按计划落地,顺序执行,
+每个 commit 过完整 pre-commit 门禁(`check:boundaries` 含
+`check:conditional-update-cas`、`check:member-gateway`、
+`check:caio-terminology`)。
+
+Commits:
+
+1. `8ab3a103` T1 — `feat(member-gateway): verify member-anchored memory
+   candidates with decision-only semantics`
+2. `d266b196` T2 — `feat(memory): read member-anchored candidates by anchor
+   with explicit source class`
+3. `02f68488` T3 — `feat(memory): surface member signal verification in the
+   memory landing`
+4. T4(本次)— `feat(member-gateway): wire memory verification into the gate
+   and record as-built`
+
+隔离 MySQL 套件本地真库全绿:`signal-candidate.mysql.test.ts`
+36/36(其中 T1 新增 6 例);T4 收尾时 `npm run test:member-gateway:mysql`
+(四个 env var 全开,同一 `helm_member_gw_local` 库)见下方"验证"小节。
+`npx vitest run features/memory lib/helm-v2/runtime-upgrade.test.ts`
+T2 81/81;T3 追加后 `npx vitest run features/memory` 35/35。
+`npx vitest run lib/presentation/shared-surface-hierarchy-guards.test.ts`
+(用 `vitest.config.ts`,不是 `vitest.public.config.ts`——该套件被
+public 配置排除)107/107,零新增失败。
+
+判断记录:
+
+1. **判别只认锚点列,不认字符串(Architecture 1 落地确认)**:T1 服务与
+   T2 查询全程只用 `memberGatewaySessionRef: { not: null }` 判别
+   member 家族,从不匹配 `sourceStatus`/`sourceVerification` 的 JSON
+   内容或字面量。T1 的"非 member 锚定行拒绝"用例直接证明了反向边
+   界——用 `db.runtimeSession.create` + `db.memoryCandidate.create({
+   runtimeSessionId })` 手造一条 reflection 家族形状的行,验证服务
+   read 到它后立刻拒绝(`memory_candidate_not_member_anchored`),不
+   触碰、不改写。`lib/helm-v2/runtime-upgrade.ts` 的
+   `acceptReflectionCandidate`/`dismissReflectionCandidate` 全程未改
+   一行——它们仍是 reflection 家族状态机的唯一所有者。
+
+2. **终态语义:同向幂等、反向冲突、绝不翻转**:CAS 谓词是
+   `{ id, workspaceId, status: PENDING_VERIFICATION,
+   memberGatewaySessionRef: { not: null } }`。行已经是目标终态 →
+   `already_decided`(零写入,零审计行);行是另一终态(相反判决,或
+   未来可能出现的 `DEFERRED`/`PROMOTED`)→
+   `memory_candidate_state_conflict`。这与 prompt 家族"终态不可翻转"
+   的既有语义一致,也是 T1 mysql 套件"重复同向"与"反向改判"两条用例
+   分别钉死的行为。
+
+3. **MemoryPromotion 结构性不可达 → AuditLog 是本切片账本**:
+   `MemoryPromotion.runtimeSessionId` 是 schema 里的必填(非空)外键,
+   member 锚定的 `MemoryCandidate` 结构上没有 `runtimeSessionId`(与
+   `memberGatewaySessionRef` 互斥,`MemoryCandidate_anchor_check`
+   CHECK 约束)——写一条 `MemoryPromotion` 需要伪造一个不存在的
+   runtime session,这不是"选择不写",而是"写不出来"。因此审计四件套
+   裁剪为二(`writeAuditLog` + `logEvent`,复用 `lib/audit`/
+   `lib/analytics` 的公共 helper,而不是投影 service 的裸
+   `tx.auditLog.create`),AuditLog 承担本切片的决策账本角色。T1 的
+   "zero MemoryPromotion increment" 断言与 `check-member-gateway.ts`
+   新增的禁写正则(`/\.memoryPromotion\.|\.memoryItem\./`)双重钉死。
+
+4. **`eventCategory` 判断**:`logEvent` 调用用了既有的 `"memory"`
+   分类(`lib/analytics` 已有先例),而不是新造一个
+   `"member_gateway"` 分类——当前仓内没有任何 member-gateway 服务调用
+   过 `logEvent`(纯 `lib/member-gateway/*.service.ts` 全部只写
+   AuditLog),这是本切片第一次从 member-gateway 服务层调用
+   `logEvent`,`"memory"` 更贴合"这是一次记忆域候选的状态决策"而不是
+   "这是一次成员网关会话事件"。记录为判断而非既定规范,后续如果
+   member-gateway 域需要统一事件分类,这里可能要跟着改。
+
+5. **`buildEvidenceSourceClasses` 导出 + `member_signal_projection`
+   分支位置**:该函数此前是 `lib/helm-v2/runtime-upgrade.ts` 的模块私
+   有函数(M2d 时只能通过 `buildReflectionCandidateReadout` 间接测
+   试)。T2 显式导出它,专供 `features/memory/queries.ts` 的新 member
+   readout builder 复用——member 行没有 `runtimeSession`,无法走
+   `buildReflectionCandidateReadout`(其输入类型要求非空
+   `runtimeSession`),所以必须直接拿到 `buildEvidenceSourceClasses`
+   本体。新分支(`sourceStatus` 含 `"signalReceiptRef"` 子串 →
+   `member_signal_projection`)插在第一条 if/else 链的 `draft_fact`
+   兜底**之前**,终结了 member 行此前落入 `draft_fact` 的误导性归类
+   (`draft_fact` 意味着"普通 AI 起草、待确认事实",而 member 行是
+   "成员上报、未受信的信号")。第二条 `taint` 链(`"untrusted"`
+   class)完全未动。
+
+6. **T4 门禁扩展 + 负向验证**:`scripts/check-member-gateway.ts` 的
+   `WorkPacket` 扫描列表加入
+   `signal-candidate-memory-verification.service.ts`;新增该文件专属
+   的 `PENDING_VERIFICATION` 冻结标记存在性检查,以及与投影 service
+   完全同构的禁写正则块(`/\.memoryPromotion\.|\.memoryItem\./`)。负
+   向验证:临时从服务文件里删掉全部 `PENDING_VERIFICATION` 子串后运行
+   `npm run check:member-gateway`,门禁按预期报
+   `FAIL — 1 violation(s)`;`git diff`/内容比对确认恢复后与改动前逐字
+   节相同,复跑门禁恢复 `PASS`。
+
+7. **事实晋升(VERIFIED → 记忆写入)仍是后续能力,未在本切片表达**:
+   `verifyMemberSignalMemoryCandidate` 与
+   `verifyMemberSignalMemoryCandidateAction` 的返回值/UI 文案都明确
+   "验证仅确认这是一条真实的成员信号,不构成记忆写入"——`VERIFIED` 状
+   态之后是否、如何写入正式记忆(对象锚定选择、taint 是否/如何随晋升
+   传递、目标是 `MemoryItem` 还是 `MemoryFact`)需要 owner 另一轮裁
+   定,本切片的 service/action/UI 三层都没有、也不会隐式表达这条路
+   径。`/memory` 页面的"诚实边界文案"(ruling 3)与 action 层注释都留
+   了这条记录。
+
+**验证(T4 收尾)**:`npm run check:member-gateway`
+PASS(负向验证见判断 6);`npm run test:member-gateway:mysql`(`DATABASE_URL`
+`MEMBER_SIGNAL_STORE_DATABASE_URL` `MEMBER_PROMPT_STORE_DATABASE_URL`
+`MEMBER_PROMPT_RESPONSE_STORE_DATABASE_URL` `MEMBER_SIGNAL_CANDIDATE_DATABASE_URL`
+全部指向同一隔离库)本地真库全绿;`npm run typecheck`、`npm run lint`
+全绿;`npx vitest run features/memory
+lib/presentation/shared-surface-hierarchy-guards.test.ts` 全绿,后者零新
+增失败。
