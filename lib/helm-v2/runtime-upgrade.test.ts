@@ -1239,13 +1239,19 @@ describe("Helm v2.1 runtime upgrade helpers", () => {
     expect(readout.href).toBe("/meetings/meeting_1");
   });
 
-  // M2d: buildEvidenceSourceClasses (module-private; exercised here via
-  // the exported buildReflectionCandidateReadout, same pattern as the test
-  // above — smallest honest option that does not widen this file's export
-  // surface for a single new assertion) must surface an "untrusted" class
-  // whenever sourceStatus carries the member-gateway taint fragment,
-  // regardless of what else is in that JSON blob.
-  it("surfaces an untrusted source class when sourceStatus carries member-gateway taint provenance", () => {
+  // M2d/memory member-verification: buildEvidenceSourceClasses is
+  // exercised here via the exported buildReflectionCandidateReadout, same
+  // pattern the file already uses for its other sourceClasses assertions
+  // (the function itself was later exported too, for
+  // features/memory/queries.ts's member-signal readout builder, but this
+  // test intentionally keeps going through the readout to also prove the
+  // wiring end-to-end). It must surface an "untrusted" class whenever
+  // sourceStatus carries the member-gateway taint fragment, regardless of
+  // what else is in that JSON blob, AND a "member_signal_projection" class
+  // (added so member rows stop falling into the misleading draft_fact
+  // fallthrough — see buildEvidenceSourceClasses's comment) whenever
+  // sourceStatus carries a signalReceiptRef.
+  it("surfaces untrusted and member_signal_projection source classes when sourceStatus carries member-gateway taint provenance", () => {
     const readout = buildReflectionCandidateReadout({
       id: "candidate_2",
       status: "PENDING_VERIFICATION",
@@ -1282,6 +1288,8 @@ describe("Helm v2.1 runtime upgrade helpers", () => {
     });
 
     expect(readout.sourceClasses).toContain("untrusted");
+    expect(readout.sourceClasses).toContain("member_signal_projection");
+    expect(readout.sourceClasses).not.toContain("draft_fact");
   });
 
   it("dismisses a verified reflection carry-forward candidate without promoting truth", async () => {

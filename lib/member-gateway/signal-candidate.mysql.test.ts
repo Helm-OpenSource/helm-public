@@ -29,6 +29,10 @@ import {
   projectConfirmedMemberSignalCandidateToMemoryCandidate,
 } from "@/lib/member-gateway/signal-candidate-memory-projection.service";
 import {
+  MemberSignalMemoryVerificationError,
+  verifyMemberSignalMemoryCandidate,
+} from "@/lib/member-gateway/signal-candidate-memory-verification.service";
+import {
   MemberSignalCandidateReviewError,
   promoteMemberWorkSignalCandidateToTask,
   reviewMemberWorkSignalCandidate,
@@ -77,6 +81,7 @@ describeMysql(
     let ownerUserId = "";
     let memberUserId = "";
     let signalCounter = 0;
+    let runtimeAnchoredFixtureCounter = 0;
 
     beforeAll(async () => {
       if (process.env.DATABASE_URL !== integrationDatabaseUrl) {
@@ -1217,6 +1222,281 @@ describeMysql(
           where: { id: { in: [bothAnchorsId, neitherAnchorId] } },
         });
         expect(survivingRows).toHaveLength(0);
+      });
+    });
+
+    // Memory member-verification slice (docs/superpowers/plans/2026-08-22
+    // -memory-member-verification.md, Architecture 2):
+    // verifyMemberSignalMemoryCandidate — decision-only VERIFIED/REJECTED
+    // transitions on a member-anchored (memberGatewaySessionRef non-null)
+    // MemoryCandidate. This service never touches a runtimeSession-anchored
+    // (reflection-family) row; acceptReflectionCandidate/
+    // dismissReflectionCandidate in lib/helm-v2/runtime-upgrade.ts own that
+    // state machine exclusively.
+    describe("memory verification", () => {
+      async function createMemberAnchoredMemoryCandidate(): Promise<string> {
+        const confirmed = await materializeAndConfirmCandidate();
+        const projected =
+          await projectConfirmedMemberSignalCandidateToMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            artifactBundleId: confirmed.artifactBundleId,
+          });
+        return projected.receipt.memoryCandidateId;
+      }
+
+      // A runtime-anchored (reflection-family-shaped) row, created directly
+      // via db rather than through the member-gateway path, to prove
+      // verifyMemberSignalMemoryCandidate refuses to touch it. Needs its
+      // own RuntimeSession fixture (workspace-scoped, unique sessionKey)
+      // since MemoryCandidate.runtimeSessionId has no FK enforcement under
+      // relationMode=prisma but the row must still be a plausible reflection
+      // candidate shape.
+      async function createRuntimeAnchoredMemoryCandidate(): Promise<string> {
+        runtimeAnchoredFixtureCounter += 1;
+        const session = await db.runtimeSession.create({
+          data: {
+            workspaceId,
+            sessionKey: `member-verification-runtime-session-${suffix}-${runtimeAnchoredFixtureCounter}`,
+            label: "Runtime session fixture for member-verification tests",
+            currentStage: "active",
+            boundaryNote:
+              "Fixture session backing a non-member-anchored MemoryCandidate rejection test.",
+          },
+        });
+        const candidate = await db.memoryCandidate.create({
+          data: {
+            workspaceId,
+            runtimeSessionId: session.id,
+            candidateKey: `runtime-anchored-candidate-${suffix}-${runtimeAnchoredFixtureCounter}`,
+            summary: "Runtime-anchored candidate fixture (not member-anchored).",
+            sourceVerification: "inferred",
+            sourceStatus: "draft_fact",
+            status: RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
+          },
+        });
+        return candidate.id;
+      }
+
+      async function expectVerificationError(
+        promise: Promise<unknown>,
+        code: string,
+      ): Promise<void> {
+        await expect(promise).rejects.toBeInstanceOf(
+          MemberSignalMemoryVerificationError,
+        );
+        await promise.catch((error: unknown) => {
+          expect(error).toBeInstanceOf(MemberSignalMemoryVerificationError);
+          expect((error as MemberSignalMemoryVerificationError).code).toBe(
+            code,
+          );
+        });
+      }
+
+      it("verifies a member-anchored candidate: status flips to VERIFIED with an audit row and no MemoryPromotion increment", async () => {
+        const promotionCountBefore = await db.memoryPromotion.count();
+        const candidateId = await createMemberAnchoredMemoryCandidate();
+
+        const result = await verifyMemberSignalMemoryCandidate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          actorName: "Owner",
+          candidateId,
+          decision: "verify",
+        });
+        expect(result).toEqual({ outcome: "decided", status: "VERIFIED" });
+
+        const row = await db.memoryCandidate.findUniqueOrThrow({
+          where: { id: candidateId },
+        });
+        expect(row.status).toBe(RuntimeMemoryCandidateStatus.VERIFIED);
+
+        const audit = await db.auditLog.findFirst({
+          where: {
+            workspaceId,
+            actionType: "MEMBER_SIGNAL_MEMORY_CANDIDATE_VERIFIED",
+            targetType: "MemoryCandidate",
+            targetId: candidateId,
+          },
+        });
+        expect(audit).not.toBeNull();
+        const payload = JSON.parse(audit?.payload ?? "null") as {
+          previousStatus: string;
+          nextStatus: string;
+          candidateKey: string;
+        };
+        expect(payload.previousStatus).toBe(
+          RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
+        );
+        expect(payload.nextStatus).toBe(RuntimeMemoryCandidateStatus.VERIFIED);
+        expect(payload.candidateKey).toBe(row.candidateKey);
+
+        const promotionCountAfter = await db.memoryPromotion.count();
+        expect(promotionCountAfter).toBe(promotionCountBefore);
+      });
+
+      it("rejects a member-anchored candidate: status flips to REJECTED with an audit row", async () => {
+        const candidateId = await createMemberAnchoredMemoryCandidate();
+
+        const result = await verifyMemberSignalMemoryCandidate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          actorName: "Owner",
+          candidateId,
+          decision: "reject",
+          note: "Does not match anything in the CRM.",
+        });
+        expect(result).toEqual({ outcome: "decided", status: "REJECTED" });
+
+        const row = await db.memoryCandidate.findUniqueOrThrow({
+          where: { id: candidateId },
+        });
+        expect(row.status).toBe(RuntimeMemoryCandidateStatus.REJECTED);
+        expect(row.reviewerNote).toContain(
+          "Does not match anything in the CRM.",
+        );
+
+        const audit = await db.auditLog.findFirst({
+          where: {
+            workspaceId,
+            actionType: "MEMBER_SIGNAL_MEMORY_CANDIDATE_REJECTED",
+            targetType: "MemoryCandidate",
+            targetId: candidateId,
+          },
+        });
+        expect(audit).not.toBeNull();
+      });
+
+      it("is idempotent: a repeat same-direction decision returns already_decided and writes no second audit row", async () => {
+        const candidateId = await createMemberAnchoredMemoryCandidate();
+
+        const first = await verifyMemberSignalMemoryCandidate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          actorName: "Owner",
+          candidateId,
+          decision: "verify",
+        });
+        expect(first).toEqual({ outcome: "decided", status: "VERIFIED" });
+
+        const second = await verifyMemberSignalMemoryCandidate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          actorName: "Owner",
+          candidateId,
+          decision: "verify",
+        });
+        expect(second).toEqual({
+          outcome: "already_decided",
+          status: "VERIFIED",
+        });
+
+        const auditCount = await db.auditLog.count({
+          where: {
+            workspaceId,
+            actionType: "MEMBER_SIGNAL_MEMORY_CANDIDATE_VERIFIED",
+            targetType: "MemoryCandidate",
+            targetId: candidateId,
+          },
+        });
+        expect(auditCount).toBe(1);
+      });
+
+      it("rejects an opposite-direction re-decision as a terminal state conflict", async () => {
+        const candidateId = await createMemberAnchoredMemoryCandidate();
+
+        await verifyMemberSignalMemoryCandidate({
+          workspaceId,
+          actorUserId: ownerUserId,
+          actorName: "Owner",
+          candidateId,
+          decision: "verify",
+        });
+
+        await expectVerificationError(
+          verifyMemberSignalMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            candidateId,
+            decision: "reject",
+          }),
+          "memory_candidate_state_conflict",
+        );
+
+        const row = await db.memoryCandidate.findUniqueOrThrow({
+          where: { id: candidateId },
+        });
+        expect(row.status).toBe(RuntimeMemoryCandidateStatus.VERIFIED);
+      });
+
+      it("rejects a candidate whose provenance JSON fails validation", async () => {
+        const candidateId = await createMemberAnchoredMemoryCandidate();
+        // MemoryCandidate has no append-only triggers; corrupt the stored
+        // provenance directly to simulate a damaged row.
+        await db.$executeRaw`
+          UPDATE MemoryCandidate SET sourceStatus = 'not-json'
+          WHERE id = ${candidateId}`;
+
+        await expectVerificationError(
+          verifyMemberSignalMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            candidateId,
+            decision: "verify",
+          }),
+          "memory_candidate_corrupt",
+        );
+
+        const row = await db.memoryCandidate.findUniqueOrThrow({
+          where: { id: candidateId },
+        });
+        expect(row.status).toBe(
+          RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
+        );
+      });
+
+      it("rejects a non-member-anchored (runtime-anchored) row without touching it", async () => {
+        const candidateId = await createRuntimeAnchoredMemoryCandidate();
+
+        await expectVerificationError(
+          verifyMemberSignalMemoryCandidate({
+            workspaceId,
+            actorUserId: ownerUserId,
+            actorName: "Owner",
+            candidateId,
+            decision: "verify",
+          }),
+          "memory_candidate_not_member_anchored",
+        );
+
+        const row = await db.memoryCandidate.findUniqueOrThrow({
+          where: { id: candidateId },
+        });
+        expect(row.status).toBe(RuntimeMemoryCandidateStatus.PENDING_VERIFICATION);
+      });
+
+      it("rejects a MEMBER-role caller", async () => {
+        const candidateId = await createMemberAnchoredMemoryCandidate();
+
+        await expect(
+          verifyMemberSignalMemoryCandidate({
+            workspaceId,
+            actorUserId: memberUserId,
+            actorName: "Member",
+            candidateId,
+            decision: "verify",
+          }),
+        ).rejects.toBeInstanceOf(WorkspaceServiceGovernanceError);
+
+        const row = await db.memoryCandidate.findUniqueOrThrow({
+          where: { id: candidateId },
+        });
+        expect(row.status).toBe(
+          RuntimeMemoryCandidateStatus.PENDING_VERIFICATION,
+        );
       });
     });
   },

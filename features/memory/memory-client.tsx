@@ -11,6 +11,7 @@ import {
   Eraser,
   PenSquare,
   Search,
+  ShieldAlert,
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -71,6 +72,7 @@ import {
   resolveBlockerAction,
   updateBlockerStatusAction,
   updateCommitmentStatusAction,
+  verifyMemberSignalMemoryCandidateAction,
 } from "@/features/memory/actions";
 import {
   formatMemoryVisibleStatus,
@@ -351,6 +353,40 @@ type MemoryClientProps = {
     createdAt: Date;
     updatedAt: Date;
   }>;
+  memberSignalPending: Array<{
+    id: string;
+    candidateKey: string;
+    summary: string;
+    status: string;
+    createdAt: Date;
+    reviewerNote: string | null;
+    sourceClasses: string[];
+    corrupt: boolean;
+    taint: string | null;
+    evaluationUseProhibited: boolean | null;
+    provenance: {
+      memberRef: string | null;
+      signalReceiptRef: string | null;
+      gatewaySessionRef: string | null;
+    } | null;
+  }>;
+  memberSignalDecisions: Array<{
+    id: string;
+    candidateKey: string;
+    summary: string;
+    status: string;
+    createdAt: Date;
+    reviewerNote: string | null;
+    sourceClasses: string[];
+    corrupt: boolean;
+    taint: string | null;
+    evaluationUseProhibited: boolean | null;
+    provenance: {
+      memberRef: string | null;
+      signalReceiptRef: string | null;
+      gatewaySessionRef: string | null;
+    } | null;
+  }>;
 };
 
 export function MemoryClient({
@@ -374,6 +410,8 @@ export function MemoryClient({
   reflectionDecisions,
   distillationCandidates,
   distillationDecisions,
+  memberSignalPending,
+  memberSignalDecisions,
 }: MemoryClientProps) {
   const memoryHomeArrival = useHomeSurfaceArrival("memory");
   const router = useRouter();
@@ -403,6 +441,9 @@ export function MemoryClient({
   const [meetingReviewHoldItemIds, setMeetingReviewHoldItemIds] = useState<
     string[]
   >([]);
+  const [memberSignalNotes, setMemberSignalNotes] = useState<
+    Record<string, string>
+  >({});
 
   const filteredFacts = useMemo(
     () =>
@@ -1430,12 +1471,241 @@ export function MemoryClient({
         </CardContent>
       </Card>
     ) : null;
+  // Ruling 2 (2026-08-22 owner ruling): source-branched labels — a member-
+  // anchored decision reads differently from a reflection-family decision
+  // even though both can carry the raw status string "VERIFIED"/
+  // "REJECTED". This intentionally does NOT call memoryStatus()/
+  // formatMemoryVisibleStatus (display-copy.ts's CHINESE_STATUS_
+  // REPLACEMENTS maps VERIFIED/REJECTED to the reflection family's own
+  // "待复核"/"已忽略" wording) — that mapping stays untouched.
+  const memberSignalDecisionLabel = (status: string) => {
+    if (status === "VERIFIED") {
+      return english ? "Verified as a genuine signal" : "已验证为真实信号";
+    }
+    if (status === "REJECTED") {
+      return english ? "Rejected" : "已拒绝";
+    }
+    return memoryText(status);
+  };
+  const memberSignalDeniedMessage = english
+    ? "Read-only. Verifying or rejecting a member signal needs owner / admin / operator / reviewer."
+    : "只读。验证或拒绝成员信号需要所有者、管理员、操作人或复核人权限。";
+  const memberSignalVerificationSection =
+    memberSignalPending.length > 0 || memberSignalDecisions.length > 0 ? (
+      <Card className="workspace-panel-muted">
+        <CardHeader>
+          <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--mode-link)]">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            {english ? "Member signal verification" : "成员信号验证"}
+          </div>
+          <CardTitle>
+            {english
+              ? "Confirm member-reported signals before any later memory work"
+              : "在后续记忆工作之前，先确认成员上报的信号"}
+          </CardTitle>
+          {/* Ruling 3 (honesty boundary): verification confirms the signal
+              only — it is not memory promotion. Stated in plain wording,
+              not systemspeak. */}
+          <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+            {english
+              ? "Verifying only confirms this is a genuine member signal. It does not write memory — memory promotion is a separate capability that has not shipped yet."
+              : "验证仅确认这是一条真实的成员信号，不构成记忆写入；记忆晋升是独立的后续能力。"}
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {memberSignalPending.length ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {memberSignalPending.map((item) =>
+                item.corrupt ? (
+                  <div
+                    key={item.id}
+                    className="theme-surface-panel flex items-start gap-3 rounded-2xl px-4 py-4"
+                    data-member-signal-memory-candidate-contract="corrupt"
+                  >
+                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--danger)]" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                        {english ? "Candidate blocked" : "候选已阻断"}
+                      </p>
+                      <p className="mt-1 text-sm text-[color:var(--muted)]">
+                        {english
+                          ? "This candidate's provenance failed validation, so no verify or reject command is available."
+                          : "该候选的来源信息校验失败，不提供验证或拒绝命令。"}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    key={item.id}
+                    className="theme-surface-panel rounded-2xl px-4 py-4"
+                    data-member-signal-memory-candidate-id={item.id}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Taint marker is first-class (spec ruling 2 for the
+                          sibling reviewer panel, carried forward here):
+                          rendered outside any collapsed disclosure,
+                          untruncated, ahead of other row content. */}
+                      {item.taint === "untrusted" ? (
+                        <Badge variant="danger">
+                          {english
+                            ? "Untrusted · member upstream"
+                            : "未信任 · 成员上行"}
+                        </Badge>
+                      ) : item.taint ? (
+                        <Badge variant="warning">{memoryText(item.taint)}</Badge>
+                      ) : null}
+                      {item.sourceClasses.includes("member_signal_projection") ? (
+                        <Badge variant="neutral">
+                          {english
+                            ? "Member signal projection"
+                            : "成员信号投影"}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm leading-7 text-[color:var(--foreground)]">
+                      {memoryText(item.summary)}
+                    </p>
+                    <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
+                      {item.provenance?.memberRef ??
+                        (english ? "Unknown member" : "成员未知")}
+                      {" · "}
+                      {dateLabel(item.createdAt)}
+                    </p>
+                    {permissions.canManageMemoryFacts ? (
+                      <div className="mt-3 space-y-2">
+                        <Textarea
+                          id={`member-signal-verification-note-${item.id}`}
+                          value={memberSignalNotes[item.id] ?? ""}
+                          maxLength={280}
+                          onChange={(event) =>
+                            setMemberSignalNotes((current) => ({
+                              ...current,
+                              [item.id]: event.target.value,
+                            }))
+                          }
+                          placeholder={english ? "Optional note" : "可选备注"}
+                          rows={2}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            disabled={pending}
+                            onClick={() =>
+                              runAction(
+                                () =>
+                                  verifyMemberSignalMemoryCandidateAction({
+                                    candidateId: item.id,
+                                    decision: "verify",
+                                    note: memberSignalNotes[item.id] || undefined,
+                                  }),
+                                english
+                                  ? "Member signal verified"
+                                  : "成员信号已验证",
+                              )
+                            }
+                          >
+                            {english ? "Verify" : "验证"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={pending}
+                            onClick={() =>
+                              runAction(
+                                () =>
+                                  verifyMemberSignalMemoryCandidateAction({
+                                    candidateId: item.id,
+                                    decision: "reject",
+                                    note: memberSignalNotes[item.id] || undefined,
+                                  }),
+                                english
+                                  ? "Member signal rejected"
+                                  : "成员信号已拒绝",
+                              )
+                            }
+                          >
+                            {english ? "Reject" : "拒绝"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-xs leading-6 text-[color:var(--muted-foreground)]">
+                        {memberSignalDeniedMessage}
+                      </p>
+                    )}
+                  </div>
+                ),
+              )}
+            </div>
+          ) : (
+            <EmptyState
+              title={
+                english
+                  ? "No pending member signal verification"
+                  : "暂无待验证的成员信号"
+              }
+              description={
+                english
+                  ? "Member-reported signals awaiting verification show up here."
+                  : "成员上报、等待验证的信号会出现在这里。"
+              }
+            />
+          )}
+          {memberSignalDecisions.length ? (
+            <div className="space-y-3 border-t border-[color:var(--border)] pt-4">
+              <div>
+                <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                  {english ? "Recent decisions" : "最近决策记录"}
+                </p>
+                <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Verified and rejected member signals stay visible as an audit trail."
+                    : "已验证和已拒绝的成员信号会作为审计轨迹继续可见。"}
+                </p>
+              </div>
+              <div className="grid gap-3 xl:grid-cols-2">
+                {memberSignalDecisions.map((item) => (
+                  <div
+                    key={`member-signal-decision-${item.id}`}
+                    className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={
+                          item.status === "VERIFIED" ? "success" : "danger"
+                        }
+                      >
+                        {memberSignalDecisionLabel(item.status)}
+                      </Badge>
+                      <Badge variant="neutral">{dateLabel(item.createdAt)}</Badge>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                      {item.corrupt
+                        ? english
+                          ? "This candidate's provenance failed validation."
+                          : "该候选的来源信息校验失败。"
+                        : memoryText(item.summary)}
+                    </p>
+                    {item.reviewerNote ? (
+                      <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
+                        {memoryText(item.reviewerNote)}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+    ) : null;
   const memoryLandingDeferredContext = (
     <>
       {memoryPermissionBoundaryNote}
       {distillationReviewSection}
       {reflectionCarryForwardSection}
       {reflectionDecisionsSection}
+      {memberSignalVerificationSection}
     </>
   );
   const memoryMeetingWorkspaceContext = meetingStateSnapshot ? (

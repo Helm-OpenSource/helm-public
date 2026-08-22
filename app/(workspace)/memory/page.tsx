@@ -52,6 +52,8 @@ export default async function MemoryPage({
         reflectionDecisions={data.reflectionDecisions}
         distillationCandidates={data.distillationCandidates}
         distillationDecisions={data.distillationDecisions}
+        memberSignalPending={data.memberSignalPending}
+        memberSignalDecisions={data.memberSignalDecisions}
       />
     </div>
   );
