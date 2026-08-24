@@ -6,6 +6,7 @@ import {
   markBiReportSignalNotificationSent,
 } from "@/lib/bi-report-skill/signal-notification";
 import type { BiReportBusinessSignalRecord } from "@/lib/bi-report-skill/types";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 type DispatchResult = {
   attempted: number;
@@ -17,6 +18,8 @@ export async function dispatchPendingBiReportSignalNotifications(input: {
   workspaceId: string;
   take?: number;
 }): Promise<DispatchResult> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
+  assertDeploymentCapabilityEnabled("customer_visible_send");
   const pending = await listPendingBiReportSignalNotifications({
     workspaceId: input.workspaceId,
     take: input.take ?? 100,

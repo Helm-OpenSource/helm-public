@@ -1,4 +1,5 @@
 import { ActorType } from "@prisma/client";
+import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { PAYMENT_WEBHOOK_CALLBACK_MODE } from "@/lib/auth/payment-webhook-callback-types";
 import {
@@ -21,10 +22,22 @@ import { syncWorkspacePaymentStatusFromCallbackEvent } from "@/lib/billing/integ
 import { verifyAlipayNotifyPayload } from "@/lib/billing/alipay";
 import { PAYMENT_PROVIDER } from "@/lib/billing/runtime-constants";
 import { serverErrorMessage } from "@/lib/http/server-error";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if (!isDeploymentCapabilityEnabled("financial_action")) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "deployment_capability_disabled",
+        capability: "financial_action",
+      },
+      { status: 503 },
+    );
+  }
+
   const rawBody = await request.text();
   const sourcePage = "/api/billing/alipay/notify";
 

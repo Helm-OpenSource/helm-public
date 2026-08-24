@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { dbMock } = vi.hoisted(() => ({
   dbMock: {
     biReportSignalNotification: {
       create: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
@@ -18,17 +19,71 @@ vi.mock("@/lib/db", () => ({
 import {
   claimBiReportSignalNotificationForDispatch,
   createBiReportSignalNotification,
+  createBiReportSignalNotificationDeduped,
   listPendingBiReportSignalNotificationDispatchCandidates,
   listPendingBiReportSignalNotifications,
   listRecentBiReportSignalNotifications,
   markBiReportSignalNotificationFailed,
   markBiReportSignalNotificationSent,
   mapBiReportSignalNotificationRow,
+  updateBiReportSignalNotificationStatus,
 } from "@/lib/bi-report-skill/signal-notification";
 
 describe("bi report signal notification storage", () => {
+  const originalRuntimeWritesEnabled =
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+  });
+
+  afterEach(() => {
+    if (originalRuntimeWritesEnabled === undefined) {
+      delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+    } else {
+      process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = originalRuntimeWritesEnabled;
+    }
+  });
+
+  it("blocks every direct notification write sink when signal runtime writes are closed", async () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+    const notification = {
+      workspaceId: "workspace-1",
+      signalId: "signal-1",
+      channel: "DINGTALK_APP_MESSAGE",
+      targetKey: "unionId:u-1",
+    };
+
+    await expect(createBiReportSignalNotification(notification)).rejects.toThrow(
+      "deployment_capability_disabled:signal_runtime_write",
+    );
+    await expect(
+      createBiReportSignalNotificationDeduped(notification),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+    await expect(
+      claimBiReportSignalNotificationForDispatch({ id: "notification-1" }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+    await expect(
+      markBiReportSignalNotificationSent({ id: "notification-1" }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+    await expect(
+      markBiReportSignalNotificationFailed({
+        id: "notification-1",
+        errorMessage: "provider_failed",
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+    await expect(
+      updateBiReportSignalNotificationStatus({
+        id: "notification-1",
+        status: "failed",
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+
+    expect(dbMock.biReportSignalNotification.create).not.toHaveBeenCalled();
+    expect(dbMock.biReportSignalNotification.findFirst).not.toHaveBeenCalled();
+    expect(dbMock.biReportSignalNotification.update).not.toHaveBeenCalled();
+    expect(dbMock.biReportSignalNotification.updateMany).not.toHaveBeenCalled();
   });
 
   it("creates a pending notification record", async () => {

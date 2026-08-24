@@ -9,6 +9,7 @@ import type {
 } from "@/lib/bi-report-skill/types";
 import { syncBiReportSignalToOperatingClosure } from "@/lib/bi-report-skill/operating-closure-kernel";
 import { dismissOpenBiReportBusinessHandoffDecisionsForSignal } from "@/lib/bi-report-skill/handoff-decision";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 type BiReportBusinessSignalRow = {
   id: string;
@@ -66,6 +67,7 @@ export async function createBiReportBusinessSignal(input: {
     // CLEAR means no anomaly; do not pollute the signal table.
     return null;
   }
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
 
   try {
     const row = await db.biReportBusinessSignal.upsert({
@@ -129,9 +131,9 @@ export async function createBiReportBusinessSignal(input: {
 }
 
 /**
- * Column set written by the batch upsert. `id`, `createdAt`, `updatedAt` are
- * managed by the statement itself (id via app-generated UUID on INSERT;
- * timestamps via table defaults / ON UPDATE), so they are NOT in this list.
+ * Column set written by the batch upsert. `id` is managed separately by the
+ * statement and `createdAt` uses its table default. Prisma's `@updatedAt`
+ * column has no database default, so the raw batch path must write it.
  *
  * Order here is the single source of truth for both the VALUES tuple and the
  * ON DUPLICATE KEY UPDATE clause below — keep them aligned.
@@ -154,6 +156,7 @@ const BATCH_UPSERT_COLUMNS = [
   "ownerUserId",
   "ownerUserName",
   "ownerUserEmail",
+  "updatedAt",
 ] as const;
 
 /**
@@ -181,6 +184,7 @@ const BATCH_UPSERT_UPDATE_COLUMNS = [
   "ownerUserId",
   "ownerUserName",
   "ownerUserEmail",
+  "updatedAt",
 ] as const;
 
 const DEFAULT_BATCH_UPSERT_CHUNK_SIZE = 500;
@@ -244,6 +248,7 @@ export async function createBiReportBusinessSignalsBatch(
   if (writable.length === 0) {
     return result;
   }
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
 
   const chunkSize = normalizeChunkSize(options?.chunkSize);
 
@@ -335,6 +340,7 @@ async function executeBatchUpsertChunk(chunk: CreateBiReportBusinessSignalInput[
     values.push(input.ownerUserId ?? null);
     values.push(input.ownerUserName ?? null);
     values.push(input.ownerUserEmail ?? null);
+    values.push(new Date());
   }
 
   const insertColumns = ["id", ...columns].map((column) => `\`${column}\``).join(", ");
@@ -347,7 +353,7 @@ async function executeBatchUpsertChunk(chunk: CreateBiReportBusinessSignalInput[
   }).join(", ");
 
   const sql =
-    `INSERT INTO \`bireportbusinesssignal\` (${insertColumns}) ` +
+    `INSERT INTO \`BiReportBusinessSignal\` (${insertColumns}) ` +
     `VALUES ${rowPlaceholders} ` +
     `ON DUPLICATE KEY UPDATE ${updateClause}`;
 
@@ -455,6 +461,7 @@ export async function advanceBiReportBusinessSignalStatus(input: {
   workspaceId: string;
   status: BiReportBusinessSignalStatus;
 }): Promise<BiReportBusinessSignalRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const existing = await db.biReportBusinessSignal.findFirst({
       where: {
@@ -586,7 +593,10 @@ function isMissingBiReportBusinessSignalTableError(error: unknown) {
   return (
     message.includes(`relation "BiReportBusinessSignal" does not exist`) ||
     message.includes("no such table: BiReportBusinessSignal") ||
+    message.includes("The table `BiReportBusinessSignal` does not exist") ||
     message.includes("The table `bireportbusinesssignal` does not exist") ||
-    (message.includes("Table '") && message.includes("bireportbusinesssignal' doesn't exist"))
+    (message.includes("Table '") &&
+      (message.includes("BiReportBusinessSignal' doesn't exist") ||
+        message.includes("bireportbusinesssignal' doesn't exist")))
   );
 }

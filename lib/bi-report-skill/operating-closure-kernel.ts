@@ -8,6 +8,7 @@ import { materializeAcceptedBiReportHandoff } from "@/lib/bi-report-skill/handof
 import { createBiReportBusinessHandoffDecision } from "@/lib/bi-report-skill/handoff-decision";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 import type {
   BiReportBusinessSignalRecord,
   BiReportSignalRoutingApproverMapping,
@@ -210,6 +211,7 @@ async function ensureKernelRuntimeSession(input: {
   workspaceId: string;
   extensionKey?: string | null;
 }) {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   const scope = input.extensionKey?.trim() || "default";
   const sessionKey = `${input.workspaceId}:bi-operating-closure:${scope}`;
   return db.runtimeSession.upsert({

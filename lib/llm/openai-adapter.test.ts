@@ -7,12 +7,14 @@ const configMocks = vi.hoisted(() => ({
   getApiKey: vi.fn(),
   getBaseUrl: vi.fn(),
   isConfigured: vi.fn(),
+  isEnabled: vi.fn(),
 }));
 
 vi.mock("@/lib/llm/config", () => ({
   getOpenAICompatibleApiKey: configMocks.getApiKey,
   getOpenAICompatibleBaseUrl: configMocks.getBaseUrl,
   isLLMProviderConfigured: configMocks.isConfigured,
+  isLLMEnabledByEnv: configMocks.isEnabled,
 }));
 
 function createTask(
@@ -66,6 +68,8 @@ describe("OpenAI-compatible adapter provider options", () => {
     configMocks.getApiKey.mockReturnValue("test-api-key");
     configMocks.getBaseUrl.mockReturnValue("https://provider.invalid/v1");
     configMocks.isConfigured.mockReturnValue(true);
+    configMocks.isEnabled.mockReturnValue(true);
+    delete process.env.LLM_ENABLED;
     vi.spyOn(console, "info").mockImplementation(() => {});
     vi.stubGlobal(
       "fetch",
@@ -103,5 +107,25 @@ describe("OpenAI-compatible adapter provider options", () => {
     vi.mocked(global.fetch).mockClear();
     await createAdapter("openai").run(createTask("openai", "json"));
     expect(requestBody()).not.toHaveProperty("enable_thinking");
+  });
+
+  it("does not call the provider when the LLM capability is closed", async () => {
+    process.env.LLM_ENABLED = "false";
+
+    await expect(createAdapter("openai").run(createTask("openai", "json"))).rejects.toThrow(
+      "deployment_capability_disabled:llm_provider",
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not call the provider when the local LLM control is false", async () => {
+    configMocks.isEnabled.mockReturnValue(false);
+
+    await expect(createAdapter("openai").run(createTask("openai", "json"))).rejects.toThrow(
+      "llm_disabled",
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

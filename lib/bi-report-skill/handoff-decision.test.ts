@@ -26,6 +26,36 @@ import {
 describe("bi report handoff decision storage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+  });
+
+  it("blocks every direct decision write path when runtime writes are closed", async () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+
+    await expect(
+      createBiReportBusinessHandoffDecision({
+        workspaceId: "workspace-1",
+        signalId: "signal-1",
+        targetType: "action_item",
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+    await expect(
+      updateBiReportBusinessHandoffDecision({
+        id: "decision-1",
+        status: "accepted",
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+    await expect(
+      dismissOpenBiReportBusinessHandoffDecisionsForSignal({
+        workspaceId: "workspace-1",
+        signalId: "signal-1",
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+
+    expect(dbMock.biReportBusinessHandoffDecision.findMany).not.toHaveBeenCalled();
+    expect(dbMock.biReportBusinessHandoffDecision.create).not.toHaveBeenCalled();
+    expect(dbMock.biReportBusinessHandoffDecision.update).not.toHaveBeenCalled();
+    expect(dbMock.biReportBusinessHandoffDecision.updateMany).not.toHaveBeenCalled();
   });
 
   it("creates an open handoff decision", async () => {

@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
 
@@ -138,6 +139,7 @@ export async function createStripeCustomer(input: {
   email: string;
   locale: string;
 }) {
+  assertDeploymentCapabilityEnabled("financial_action");
   const params = new URLSearchParams();
   params.set("name", input.organizationName);
   params.set("email", input.email);
@@ -160,6 +162,7 @@ export async function createStripeCheckoutSession(input: {
   activeSeatCount: number;
   includedAdminSeats: number;
 }) {
+  assertDeploymentCapabilityEnabled("financial_action");
   const config = getStripeConfig();
 
   if (!config.helmTeamPriceId || !config.activeSeatPriceId) {
@@ -205,6 +208,7 @@ export async function createStripeCheckoutSession(input: {
 export async function createStripeBillingPortalSession(input: {
   customerId: string;
 }) {
+  assertDeploymentCapabilityEnabled("financial_action");
   const config = getStripeConfig();
   const params = new URLSearchParams();
   params.set("customer", input.customerId);
@@ -218,12 +222,14 @@ export async function createStripeBillingPortalSession(input: {
 }
 
 export async function retrieveStripeSubscription(subscriptionId: string) {
+  assertDeploymentCapabilityEnabled("financial_action");
   return stripeRequest<StripeSubscriptionResponse>(`/subscriptions/${subscriptionId}`, {
     method: "GET",
   });
 }
 
 export async function listStripeSubscriptionsByCustomer(customerId: string) {
+  assertDeploymentCapabilityEnabled("financial_action");
   return stripeRequest<StripeListResponse<StripeSubscriptionResponse>>(
     `/subscriptions?customer=${encodeURIComponent(customerId)}&status=all&limit=5`,
     { method: "GET" },

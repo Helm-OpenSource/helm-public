@@ -8,6 +8,7 @@ import { syncDingTalkReadonlyConnector } from "@/lib/connectors/dingtalk-ingesti
 import { db } from "@/lib/db";
 import { isEnglishWorkspaceDefaultLocale } from "@/lib/i18n/api-message-locale";
 import { serverErrorMessage } from "@/lib/http/server-error";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 function isEnglishRequest(request: Request) {
   return request.headers.get("accept-language")?.toLowerCase().startsWith("en") ?? false;
@@ -61,6 +62,17 @@ function safeTokenEqual(actual: string, expected: string) {
 }
 
 export async function GET(request: Request) {
+  if (!isDeploymentCapabilityEnabled("dingtalk_sync")) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "deployment_capability_disabled",
+        capability: "dingtalk_sync",
+      },
+      { status: 503 },
+    );
+  }
+
   const auth = isAuthorized(request);
   if (!auth.ok) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });

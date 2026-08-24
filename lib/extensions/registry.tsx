@@ -29,6 +29,7 @@ import type {
   SignalCollectionJob,
   SignalCollectionRunContext,
 } from "@/lib/signal-collection/types";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 import {
   getRegisteredAccountBindings,
@@ -476,6 +477,7 @@ export async function runRegisteredSignalCollectionJobs(input: {
   jobKeys?: readonly string[];
   source?: SignalCollectionRunContext["source"];
 } = {}) {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   return runSignalCollectionJobs({
     jobs: listRegisteredSignalCollectionJobs(),
     jobKeys: input.jobKeys,
@@ -484,6 +486,7 @@ export async function runRegisteredSignalCollectionJobs(input: {
 }
 
 export function startRegisteredSignalCollectionScheduler() {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   startSignalCollectionScheduler({
     jobs: listRegisteredSignalCollectionJobs(),
     stateKey: "registered-signal-collection",

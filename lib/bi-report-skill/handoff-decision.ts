@@ -3,6 +3,7 @@ import type {
   BiReportBusinessHandoffDecisionRecord,
   BiReportBusinessHandoffDecisionStatus,
 } from "@/lib/bi-report-skill/types";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 type BiReportBusinessHandoffDecisionRow = {
   id: string;
@@ -26,6 +27,7 @@ export async function createBiReportBusinessHandoffDecision(input: {
   reviewComment?: string | null;
   reviewedAt?: Date | null;
 }): Promise<BiReportBusinessHandoffDecisionRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     // Idempotency: avoid creating multiple parallel decisions for the same signal+targetType.
     // If a decision is already open/accepted, reuse it; if it is open and we are now accepting,
@@ -124,6 +126,7 @@ export async function updateBiReportBusinessHandoffDecision(input: {
   reviewedByUserId?: string | null;
   reviewComment?: string | null;
 }): Promise<BiReportBusinessHandoffDecisionRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const row = await db.biReportBusinessHandoffDecision.update({
       where: {
@@ -152,6 +155,7 @@ export async function dismissOpenBiReportBusinessHandoffDecisionsForSignal(input
   reviewedByUserId?: string | null;
   reviewComment?: string | null;
 }): Promise<number> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const result = await db.biReportBusinessHandoffDecision.updateMany({
       where: {

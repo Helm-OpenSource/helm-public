@@ -88,6 +88,19 @@ ASR_DASHSCOPE_MODEL="qwen3-asr-flash"
 ASR_DASHSCOPE_BASE_URL=""
 ASR_LANGUAGE="zh"
 
+# Independent deployment capability gates. Each key controls only its named
+# capability. Setting one key to true never bypasses feature-specific auth,
+# consent, scheduler, provider configuration, or another required capability.
+ENGINEERING_REVIEW_CRON_ENABLED="false"
+HELM_SIGNAL_RUNTIME_WRITES_ENABLED="false"
+DINGTALK_RUNTIME_SYNC_ENABLED="false"
+DINGTALK_WORKFLOW_BRIDGE_ENABLED="false"
+HELM_CUSTOMER_VISIBLE_SENDS_ENABLED="false"
+HELM_OUTBOUND_VOICE_ASR_ENABLED="false"
+HELM_AUTOMATED_CUSTOMER_CALLS_ENABLED="false"
+HELM_SMS_SENDS_ENABLED="false"
+HELM_FINANCIAL_ACTIONS_ENABLED="false"
+
 SIGNAL_COLLECTION_SCHEDULER_ENABLED="false"
 LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED="false"
 

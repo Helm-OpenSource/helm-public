@@ -25,6 +25,7 @@ import {
   verifyWeChatPayNotifySignature,
 } from "@/lib/billing/wechat-pay";
 import { serverErrorMessage } from "@/lib/http/server-error";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,17 @@ function failureResponse(message: string, status = 400) {
 }
 
 export async function POST(request: Request) {
+  if (!isDeploymentCapabilityEnabled("financial_action")) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "deployment_capability_disabled",
+        capability: "financial_action",
+      },
+      { status: 503 },
+    );
+  }
+
   const rawBody = await request.text();
   const sourcePage = "/api/billing/wechat-pay/notify";
 

@@ -32,6 +32,7 @@ import {
   resolveReportsExtensions,
   resolveWorkspaceNavExtensions,
   runRegisteredSignalCollectionJobs,
+  startRegisteredSignalCollectionScheduler,
 } from "./registry";
 
 const workspace = {
@@ -41,8 +42,14 @@ const workspace = {
   workspaceClass: null,
 };
 
-beforeEach(() => __resetPackRegistryForTest());
-afterEach(() => __resetPackRegistryForTest());
+beforeEach(() => {
+  __resetPackRegistryForTest();
+  delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+});
+afterEach(() => {
+  __resetPackRegistryForTest();
+  delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+});
 
 describe("real registry.tsx degrades to Core-only with an empty store (mirror parity)", () => {
   it("catalog / demo packs / signal jobs are empty", () => {
@@ -76,5 +83,16 @@ describe("real registry.tsx degrades to Core-only with an empty store (mirror pa
     expect(result.successCount).toBe(0);
     expect(result.failureCount).toBe(0);
     expect(result.jobs).toEqual([]);
+  });
+
+  it("blocks direct runner and scheduler calls when runtime writes are closed", async () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+
+    await expect(runRegisteredSignalCollectionJobs()).rejects.toThrow(
+      "deployment_capability_disabled:signal_runtime_write",
+    );
+    expect(() => startRegisteredSignalCollectionScheduler()).toThrow(
+      "deployment_capability_disabled:signal_runtime_write",
+    );
   });
 });

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { BiReportSignalNotificationRecord, BiReportSignalNotificationStatus } from "@/lib/bi-report-skill/types";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 import { safeParseJson } from "@/lib/utils";
 
 type BiReportSignalNotificationRow = {
@@ -60,6 +61,7 @@ export async function createBiReportSignalNotification(input: {
   targetKey: string;
   status?: BiReportSignalNotificationStatus;
 }): Promise<BiReportSignalNotificationRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const row = await db.biReportSignalNotification.create({
       data: {
@@ -90,6 +92,7 @@ export async function createBiReportSignalNotificationDeduped(input: {
   targetKey: string;
   status?: BiReportSignalNotificationStatus;
 }): Promise<BiReportSignalNotificationRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const existing = await db.biReportSignalNotification.findFirst({
       where: {
@@ -230,6 +233,7 @@ export async function listPendingBiReportSignalNotifications(input: {
 export async function claimBiReportSignalNotificationForDispatch(input: {
   id: string;
 }): Promise<boolean> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   const result = await db.biReportSignalNotification.updateMany({
     where: {
       id: input.id,
@@ -249,6 +253,7 @@ export async function markBiReportSignalNotificationSent(input: {
   providerMessageId?: string | null;
   sentAt?: Date;
 }): Promise<BiReportSignalNotificationRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const row = await db.biReportSignalNotification.update({
       where: {
@@ -275,6 +280,7 @@ export async function markBiReportSignalNotificationFailed(input: {
   id: string;
   errorMessage: string;
 }): Promise<BiReportSignalNotificationRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const row = await db.biReportSignalNotification.update({
       where: {
@@ -304,6 +310,7 @@ export async function updateBiReportSignalNotificationStatus(input: {
   providerMessageId?: string | null;
   sentAt?: Date | null;
 }): Promise<BiReportSignalNotificationRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const row = await db.biReportSignalNotification.update({
       where: {

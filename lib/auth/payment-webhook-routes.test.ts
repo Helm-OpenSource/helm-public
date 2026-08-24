@@ -91,6 +91,7 @@ import { POST as wechatNotifyRoute } from "@/app/api/billing/wechat-pay/notify/r
 describe("payment webhook routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.HELM_FINANCIAL_ACTIONS_ENABLED;
     stripeMock.verifyStripeWebhookSignature.mockImplementation(() => undefined);
     alipayMock.verifyAlipayNotifyPayload.mockReturnValue({
       out_trade_no: "order-1",
@@ -130,6 +131,52 @@ describe("payment webhook routes", () => {
     callbackStoreMock.recordPaymentWebhookVerificationFailure.mockResolvedValue(undefined);
     integrationMock.syncWorkspacePaymentStatusFromCallbackEvent.mockResolvedValue(undefined);
     auditMock.writeAuditLog.mockResolvedValue(undefined);
+  });
+
+  it("rejects every payment webhook before verification or database writes when financial actions are closed", async () => {
+    process.env.HELM_FINANCIAL_ACTIONS_ENABLED = "false";
+    const routes = [
+      () =>
+        stripeWebhookRoute(
+          new Request("http://localhost/api/billing/stripe/webhook", {
+            method: "POST",
+            body: "{}",
+          }),
+        ),
+      () =>
+        alipayNotifyRoute(
+          new Request("http://localhost/api/billing/alipay/notify", {
+            method: "POST",
+            body: "out_trade_no=order-1",
+          }),
+        ),
+      () =>
+        wechatNotifyRoute(
+          new Request("http://localhost/api/billing/wechat-pay/notify", {
+            method: "POST",
+            body: "{}",
+          }),
+        ),
+    ];
+
+    for (const callRoute of routes) {
+      const response = await callRoute();
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: "deployment_capability_disabled",
+        capability: "financial_action",
+      });
+    }
+
+    expect(stripeMock.verifyStripeWebhookSignature).not.toHaveBeenCalled();
+    expect(alipayMock.verifyAlipayNotifyPayload).not.toHaveBeenCalled();
+    expect(wechatMock.verifyWeChatPayNotifySignature).not.toHaveBeenCalled();
+    expect(callbackStoreMock.beginPaymentWebhookCallbackEvent).not.toHaveBeenCalled();
+    expect(callbackStoreMock.finalizePaymentWebhookCallbackEvent).not.toHaveBeenCalled();
+    expect(callbackStoreMock.recordPaymentWebhookVerificationFailure).not.toHaveBeenCalled();
+    expect(integrationMock.syncWorkspacePaymentStatusFromCallbackEvent).not.toHaveBeenCalled();
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
   });
 
   it("keeps Stripe unresolved callbacks outside workspace audit when tenant mapping fails", async () => {

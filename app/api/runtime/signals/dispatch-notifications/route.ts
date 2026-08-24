@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { dispatchPendingBiReportSignalNotifications } from "@/lib/bi-report-skill/signal-notification-dispatcher";
+import {
+  getDeploymentCapabilityDecision,
+} from "@/lib/runtime/deployment-capabilities";
 
 function isEnglishRequest(request: Request) {
   return request.headers.get("accept-language")?.toLowerCase().startsWith("en") ?? false;
@@ -42,6 +45,16 @@ function authorize(request: Request) {
 }
 
 export async function POST(request: Request) {
+  for (const capability of ["signal_runtime_write", "customer_visible_send"] as const) {
+    const decision = getDeploymentCapabilityDecision(capability);
+    if (!decision.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "deployment_capability_disabled", capability },
+        { status: 503 },
+      );
+    }
+  }
+
   const auth = authorize(request);
   if (!auth.ok) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });

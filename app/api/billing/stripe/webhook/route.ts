@@ -22,6 +22,7 @@ import { syncWorkspacePaymentStatusFromCallbackEvent } from "@/lib/billing/integ
 import { PAYMENT_PROVIDER } from "@/lib/billing/runtime-constants";
 import { verifyStripeWebhookSignature } from "@/lib/billing/stripe";
 import { serverErrorMessage } from "@/lib/http/server-error";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 export const runtime = "nodejs";
 
@@ -38,6 +39,17 @@ function getStringValue(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  if (!isDeploymentCapabilityEnabled("financial_action")) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "deployment_capability_disabled",
+        capability: "financial_action",
+      },
+      { status: 503 },
+    );
+  }
+
   const payload = await request.text();
   const signature = request.headers.get("stripe-signature");
   const sourcePage = "/api/billing/stripe/webhook";

@@ -56,6 +56,9 @@ describe("runtime cron route copy", () => {
     vi.clearAllMocks();
     process.env.DINGTALK_SYNC_CRON_TOKEN = "dingtalk-cron-token";
     process.env.SIGNAL_COLLECTION_CRON_TOKEN = "signal-cron-token";
+    delete process.env.HELM_CUSTOMER_VISIBLE_SENDS_ENABLED;
+    delete process.env.DINGTALK_RUNTIME_SYNC_ENABLED;
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
     mocks.db.connector.findMany.mockResolvedValue([]);
     mocks.signalNotifications.dispatchPendingBiReportSignalNotifications.mockResolvedValue({
       attemptedCount: 0,
@@ -83,6 +86,25 @@ describe("runtime cron route copy", () => {
       error: "DINGTALK_SYNC_CRON_TOKEN 尚未配置。",
     });
     expect(mocks.db.connector.findMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects DingTalk hourly sync before database access when runtime writes are closed", async () => {
+    process.env.DINGTALK_RUNTIME_SYNC_ENABLED = "false";
+
+    const response = await getDingTalkHourlySyncRoute(
+      new Request("http://localhost/api/runtime/dingtalk/hourly-sync"),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "deployment_capability_disabled",
+      capability: "dingtalk_sync",
+    });
+    expect(mocks.db.connector.findMany).not.toHaveBeenCalled();
+    expect(mocks.dingtalkIngestion.syncDingTalkReadonlyConnector).not.toHaveBeenCalled();
+    expect(mocks.audit.writeAuditLog).not.toHaveBeenCalled();
+    expect(mocks.analytics.logEvent).not.toHaveBeenCalled();
   });
 
   it("preserves DingTalk hourly-sync English token errors for English callers", async () => {
@@ -144,6 +166,24 @@ describe("runtime cron route copy", () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: "SIGNAL_COLLECTION_CRON_TOKEN 尚未配置。",
+    });
+    expect(
+      mocks.signalNotifications.dispatchPendingBiReportSignalNotifications,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("rejects signal notification dispatch before its dispatcher when customer sends are closed", async () => {
+    process.env.HELM_CUSTOMER_VISIBLE_SENDS_ENABLED = "false";
+
+    const response = await postSignalNotificationDispatchRoute(
+      new Request("http://localhost/api/runtime/signals/dispatch-notifications"),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "deployment_capability_disabled",
+      capability: "customer_visible_send",
     });
     expect(
       mocks.signalNotifications.dispatchPendingBiReportSignalNotifications,

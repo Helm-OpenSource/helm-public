@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { readEnvVarFromRootFiles } from "@/lib/root-env";
 import type { LLMProvider, WorkspaceLLMConfig } from "@/lib/llm/types";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const DEFAULT_QWEN_MODEL = "qwen3.6-plus";
 
@@ -32,7 +33,9 @@ function normalizeProvider(provider?: string | null): WorkspaceLLMConfig["provid
 }
 
 export function isLLMEnabledByEnv() {
-  return readLLMEnv("LLM_ENABLED") !== "false";
+  return isDeploymentCapabilityEnabled("llm_provider", {
+    LLM_ENABLED: readLLMEnv("LLM_ENABLED"),
+  });
 }
 
 export function getOpenAIBaseUrl() {

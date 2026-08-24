@@ -65,6 +65,7 @@ function makeSignal(overrides: Partial<Parameters<typeof syncBiReportSignalToOpe
 describe("syncBiReportSignalToOperatingClosure", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
     dbMock.runtimeSession.upsert.mockResolvedValue({ id: "runtime-session-1" });
     dbMock.signalEvent.upsert.mockResolvedValue({ id: "signal-event-1" });
     dbMock.biReportBusinessHandoffDecision.findFirst.mockResolvedValue(null);
@@ -81,6 +82,22 @@ describe("syncBiReportSignalToOperatingClosure", () => {
     dbMock.recommendationLog.findFirst.mockResolvedValue(null);
     dbMock.recommendationLog.create.mockResolvedValue({ id: "rec-1" });
     dbMock.approvalTask.upsert.mockResolvedValue({ id: "approval-1" });
+  });
+
+  it("blocks direct closure writes before database access", async () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+
+    await expect(
+      syncBiReportSignalToOperatingClosure({
+        signal: makeSignal(),
+        extensionKey: testBiReportExtensionKey,
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+
+    expect(dbMock.runtimeSession.upsert).not.toHaveBeenCalled();
+    expect(dbMock.signalEvent.upsert).not.toHaveBeenCalled();
+    expect(dbMock.biReportBusinessSignal.update).not.toHaveBeenCalled();
+    expect(writeAuditLogMock).not.toHaveBeenCalled();
   });
 
   it("blocks critical signal when owner/approver/notification mapping is missing", async () => {

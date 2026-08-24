@@ -1,8 +1,13 @@
 import {
   getOpenAICompatibleApiKey,
   getOpenAICompatibleBaseUrl,
+  isLLMEnabledByEnv,
   isLLMProviderConfigured,
 } from "@/lib/llm/config";
+import {
+  assertDeploymentCapabilityEnabled,
+  isDeploymentCapabilityEnabled,
+} from "@/lib/runtime/deployment-capabilities";
 import { sanitizeLlmTracePayload } from "@/lib/llm/trace-sanitizer";
 import type { LLMProvider, LLMProviderAdapter, LLMResolvedTask, LLMTaskType } from "@/lib/llm/types";
 import { Agent, ProxyAgent, Socks5ProxyAgent, type Dispatcher } from "undici";
@@ -240,8 +245,16 @@ export function createOpenAICompatibleAdapter(input: {
       configurableBaseUrl: true,
       audioTranscription: input.audioTranscription,
     },
-    isConfigured: () => isLLMProviderConfigured(input.provider),
+    isConfigured: () =>
+      isDeploymentCapabilityEnabled("llm_provider") &&
+      isLLMEnabledByEnv() &&
+      isLLMProviderConfigured(input.provider),
     async run<TOutput>(taskInput: LLMResolvedTask<TOutput>) {
+      assertDeploymentCapabilityEnabled("llm_provider");
+      if (!isLLMEnabledByEnv()) {
+        throw new Error("llm_disabled");
+      }
+
       const baseUrl = getOpenAICompatibleBaseUrl(input.provider);
       const apiKey = getOpenAICompatibleApiKey(input.provider);
       const requestBody = {

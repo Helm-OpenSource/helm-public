@@ -91,6 +91,8 @@ describe("dingtalk readonly ingestion seam", () => {
     process.env.DINGTALK_ROBOT_CODE = "robot-code";
     process.env.DINGTALK_AGENT_ID = "agent-id";
     process.env.DINGTALK_CORP_ID = "corp-id";
+    delete process.env.DINGTALK_RUNTIME_SYNC_ENABLED;
+    delete process.env.DINGTALK_WORKFLOW_BRIDGE_ENABLED;
     delete process.env.DINGTALK_EXCLUDED_DEPT_NAMES;
     delete process.env.DINGTALK_EXCLUDED_DEPT_IDS;
     dbMock.connector.findUnique.mockResolvedValue({
@@ -183,6 +185,49 @@ describe("dingtalk readonly ingestion seam", () => {
       id: "connector-1",
       status: ConnectorStatus.CONNECTED,
     });
+  });
+
+  it("stops before provider or database access when deployment runtime writes are closed", async () => {
+    process.env.DINGTALK_RUNTIME_SYNC_ENABLED = "false";
+
+    await expect(
+      syncDingTalkReadonlyConnector({
+        workspaceId: "workspace-1",
+        userId: "user-1",
+        english: true,
+        sourcePage: "/settings",
+        triggeredBy: "Owner",
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:dingtalk_sync");
+
+    expect(fetchDingTalkMcpScopeDataMock).not.toHaveBeenCalled();
+    expect(discoverDingTalkMcpSubjectsMock).not.toHaveBeenCalled();
+    for (const model of Object.values(dbMock)) {
+      for (const operation of Object.values(model)) {
+        expect(operation).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("keeps sync enabled while independently skipping a disabled workflow bridge", async () => {
+    process.env.DINGTALK_RUNTIME_SYNC_ENABLED = "true";
+    process.env.DINGTALK_WORKFLOW_BRIDGE_ENABLED = "false";
+    fetchDingTalkMcpScopeDataMock.mockResolvedValue({
+      scopeResults: [],
+      activeProfiles: [],
+      toolCount: 0,
+    });
+
+    await syncDingTalkReadonlyConnector({
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      english: true,
+      sourcePage: "/settings",
+      triggeredBy: "Owner",
+    });
+
+    expect(fetchDingTalkMcpScopeDataMock).toHaveBeenCalledTimes(1);
+    expect(bridgeDingTalkSignalsToWorkflowMock).not.toHaveBeenCalled();
   });
 
   it("persists multi-scope MCP payloads with derived meetings and management scopes", async () => {

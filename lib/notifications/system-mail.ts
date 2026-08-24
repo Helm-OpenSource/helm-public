@@ -1,5 +1,9 @@
 import nodemailer from "nodemailer";
 import { getAliyunMailServerConfig } from "@/lib/connectors/google";
+import {
+  assertDeploymentCapabilityEnabled,
+  isDeploymentCapabilityEnabled,
+} from "@/lib/runtime/deployment-capabilities";
 
 // Neutral placeholder shown only when neither ALIYUN_MAIL_SYSTEM_EMAIL nor
 // ALIYUN_MAIL_FOUNDER_EMAIL is configured. Production deployments must set
@@ -61,6 +65,7 @@ type SystemMailInput = {
 
 async function sendSystemMail(input: SystemMailInput) {
   assertSystemMailPurpose(input.purpose);
+  assertDeploymentCapabilityEnabled("customer_visible_send");
 
   const password = getSystemMailSenderPassword();
   if (!password) {
@@ -95,6 +100,14 @@ async function sendSystemMail(input: SystemMailInput) {
 
 export async function sendSystemMailIfConfigured(input: SystemMailInput) {
   assertSystemMailPurpose(input.purpose);
+
+  if (!isDeploymentCapabilityEnabled("customer_visible_send")) {
+    return {
+      sent: false as const,
+      reason: "deployment_disabled" as const,
+      sender: getSystemMailSenderEmail(),
+    };
+  }
 
   if (!isSystemMailConfigured()) {
     return {

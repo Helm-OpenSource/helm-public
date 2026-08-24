@@ -6,6 +6,7 @@ import type {
   SignalCollectionTarget,
   SignalCollectionTargetRunSummary,
 } from "@/lib/signal-collection/types";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 export type DailySchedule = {
   hour: number;
@@ -180,6 +181,7 @@ export async function runSignalCollectionJobs(input: {
   now?: Date;
   source?: SignalCollectionRunContext["source"];
 }): Promise<SignalCollectionRunSummary> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   const requestedAt = input.now ?? new Date();
   const windowDate = requestedAt.toISOString().slice(0, 10);
   const selectedKeys = input.jobKeys ? new Set(input.jobKeys) : null;
@@ -222,6 +224,7 @@ export function startSignalCollectionScheduler(input: {
   stateKey: string;
   source?: SignalCollectionRunContext["source"];
 }) {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   if (process.env.NODE_ENV === "test") {
     logSchedulerInfo("skipped in test env", {
       stateKey: input.stateKey,

@@ -17,6 +17,7 @@ import {
   getWorkspaceOrderDescription,
 } from "@/lib/billing/china-payment";
 import { PAYMENT_PROVIDER } from "@/lib/billing/runtime-constants";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const WECHAT_API_BASE = "https://api.mch.weixin.qq.com";
 
@@ -202,6 +203,7 @@ function getWeChatCheckoutNotConfiguredMessage(locale?: string | null) {
 export async function createWeChatPayCheckoutSession(
   input: ChinaPaymentCheckoutInput & { provider: PaymentProvider },
 ): Promise<ChinaPaymentCheckoutResult> {
+  assertDeploymentCapabilityEnabled("financial_action");
   const config = getWeChatPayConfig();
   if (!config.appId || !config.merchantId) {
     throw new Error(getWeChatCheckoutNotConfiguredMessage(input.locale));
@@ -279,6 +281,7 @@ export async function createWeChatPayCheckoutSession(
 }
 
 export async function queryWeChatPayOrderStatus(outTradeNo: string): Promise<ChinaPaymentStatusSnapshot> {
+  assertDeploymentCapabilityEnabled("financial_action");
   const config = getWeChatPayConfig();
   if (!config.merchantId) {
     throw new Error("WeChat Pay merchant id is not configured");

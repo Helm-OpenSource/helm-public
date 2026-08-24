@@ -37,6 +37,7 @@ import { bridgeDingTalkSignalsToWorkflow } from "@/lib/connectors/dingtalk-workf
 describe("dingtalk workflow bridge", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.DINGTALK_WORKFLOW_BRIDGE_ENABLED;
     dbMock.actionItem.findFirst.mockResolvedValue(null);
     createGovernedActionMock.mockResolvedValue({
       actionItemId: "action-1",
@@ -46,6 +47,27 @@ describe("dingtalk workflow bridge", () => {
     });
     writeAuditLogMock.mockResolvedValue(undefined);
     logEventMock.mockResolvedValue(undefined);
+  });
+
+  it("stops before audit, database, or action creation when runtime writes are closed", async () => {
+    process.env.DINGTALK_WORKFLOW_BRIDGE_ENABLED = "false";
+
+    await expect(
+      bridgeDingTalkSignalsToWorkflow({
+        workspaceId: "workspace-1",
+        actorName: "Helm",
+        actorUserId: "user-1",
+        english: true,
+        sourcePage: "/settings",
+        autoCreateActions: true,
+        signals: [],
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:dingtalk_bridge");
+
+    expect(dbMock.actionItem.findFirst).not.toHaveBeenCalled();
+    expect(createGovernedActionMock).not.toHaveBeenCalled();
+    expect(writeAuditLogMock).not.toHaveBeenCalled();
+    expect(logEventMock).not.toHaveBeenCalled();
   });
 
   it("creates governed action for matched signal when auto create is enabled", async () => {

@@ -6,6 +6,7 @@ import { discoverDingTalkMcpSubjects } from "@/lib/connectors/dingtalk-mcp-clien
 import { fetchDingTalkAppAccessToken, getDingTalkAppMessageConfig } from "@/lib/connectors/dingtalk";
 import { normalizePhoneNumber } from "@/lib/auth/formal-auth";
 import { writeAuditLog } from "@/lib/audit";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const DINGTALK_USER_DETAIL_URL = "https://oapi.dingtalk.com/topapi/v2/user/get";
 const DINGTALK_APP_MESSAGE_SEND_URL =
@@ -276,6 +277,7 @@ export async function sendDingTalkInviteMessage(input: {
   title: string | null;
   inviteNonce?: string;
 }): Promise<DingTalkInviteSendReceipt> {
+  assertDeploymentCapabilityEnabled("customer_visible_send");
   const url = new URL(DINGTALK_APP_MESSAGE_SEND_URL);
   url.searchParams.set("access_token", input.accessToken);
   const inviteNonce =

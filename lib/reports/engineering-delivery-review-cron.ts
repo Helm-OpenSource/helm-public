@@ -3,6 +3,7 @@ import {
   ENGINEERING_REVIEW_GIT_REVISION_FALLBACK,
   runEngineeringDeliveryDailyRefresh,
 } from "@/lib/reports/engineering-delivery-review-refresh";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const DEFAULT_CRON_TIME = "0 6 * * *";
 
@@ -25,7 +26,10 @@ export function startEngineeringDeliveryReviewCron() {
     return;
   }
 
-  if (!isCronEnabled(process.env.ENGINEERING_REVIEW_CRON_ENABLED)) {
+  if (
+    !isCronEnabled(process.env.ENGINEERING_REVIEW_CRON_ENABLED) ||
+    !isDeploymentCapabilityEnabled("engineering_review_cron")
+  ) {
     return;
   }
 
@@ -77,8 +81,7 @@ function isCronEnabled(value: string | undefined) {
   if (!normalized) {
     return true;
   }
-
-  return !["0", "false", "off", "no"].includes(normalized);
+  return normalized === "true";
 }
 
 function parseDailySchedule(value: string): DailySchedule | null {
