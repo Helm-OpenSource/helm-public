@@ -7,7 +7,7 @@ const MIGRATION_PATH =
 const RUNTIME_TABLES_MIGRATION_PATH =
   "prisma/migrations/20260824123000_bi_report_business_signal_runtime_tables/migration.sql";
 const RUNTIME_TABLES_ROLLBACK_PATH =
-  "prisma/manual/20260824_rollback_bi_report_business_signal_runtime_tables.sql";
+  "prisma/rollback/20260824_rollback_bi_report_business_signal_runtime_tables.sql";
 
 const RUNTIME_TABLES = [
   "BiReportBusinessSignal",
@@ -83,5 +83,9 @@ describe("BI report business signal runtime-table migration", () => {
       expect(rollback).toContain(`SELECT COUNT(*) INTO`);
       expect(rollback).toContain(`FROM \`${table}\``);
     }
+  });
+
+  it("keeps rollback SQL outside the auto-applied manual initialization directory", () => {
+    expect(RUNTIME_TABLES_ROLLBACK_PATH.startsWith("prisma/manual/")).toBe(false);
   });
 });
