@@ -4,6 +4,17 @@ import { describe, expect, it } from "vitest";
 
 const MIGRATION_PATH =
   "prisma/migrations/20260713010000_bireport_signalkey_unique/migration.sql";
+const RUNTIME_TABLES_MIGRATION_PATH =
+  "prisma/migrations/20260824123000_bi_report_business_signal_runtime_tables/migration.sql";
+const RUNTIME_TABLES_ROLLBACK_PATH =
+  "prisma/manual/20260824_rollback_bi_report_business_signal_runtime_tables.sql";
+
+const RUNTIME_TABLES = [
+  "BiReportBusinessSignal",
+  "BiReportSignalNotification",
+  "BiReportBusinessHandoffDecision",
+  "BiReportHandoffExecutionLog",
+] as const;
 
 describe("BI report business signal unique-key migration", () => {
   it("creates the replacement unique key before dropping the recoverability index", () => {
@@ -44,6 +55,33 @@ describe("BI report business signal unique-key migration", () => {
 
     for (const { path, source } of contracts) {
       expect(source, path).not.toMatch(/prod-measured|public[- ]?rds|公网\s*rds|#\d+/i);
+    }
+  });
+});
+
+describe("BI report business signal runtime-table migration", () => {
+  it("creates every Prisma runtime table with its exact case-sensitive name", () => {
+    const migration = readFileSync(RUNTIME_TABLES_MIGRATION_PATH, "utf8");
+
+    for (const table of RUNTIME_TABLES) {
+      expect(migration).toContain(`CREATE TABLE \`${table}\``);
+      expect(migration).not.toContain(`CREATE TABLE \`${table.toLowerCase()}\``);
+    }
+
+    expect(migration).not.toMatch(/\bREFERENCES\s+`/i);
+  });
+
+  it("ships an empty-only rollback that checks all tables before dropping any", () => {
+    const rollback = readFileSync(RUNTIME_TABLES_ROLLBACK_PATH, "utf8");
+    const refusal = rollback.indexOf("SIGNAL SQLSTATE '45000'");
+    const firstDrop = rollback.indexOf("DROP TABLE `BiReportHandoffExecutionLog`");
+
+    expect(refusal).toBeGreaterThan(-1);
+    expect(firstDrop).toBeGreaterThan(refusal);
+
+    for (const table of RUNTIME_TABLES) {
+      expect(rollback).toContain(`SELECT COUNT(*) INTO`);
+      expect(rollback).toContain(`FROM \`${table}\``);
     }
   });
 });

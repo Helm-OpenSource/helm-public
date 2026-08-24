@@ -45,6 +45,7 @@ import type { PreparedBiReportDryRun } from "@/lib/bi-report-skill/types";
 describe("bi report business signal storage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
     dbMock.biReportBusinessSignal.findFirst.mockResolvedValue(null);
     dbMock.biReportBusinessHandoffDecision.updateMany.mockResolvedValue({ count: 0 });
     operatingClosureKernelMock.syncBiReportSignalToOperatingClosure.mockResolvedValue({
@@ -55,6 +56,39 @@ describe("bi report business signal storage", () => {
       guardBlocked: false,
       guardReasons: [],
     });
+  });
+
+  it("blocks direct signal write paths before database access when runtime writes are closed", async () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+    const input = {
+      workspaceId: "workspace-1",
+      sourceRunId: "run-1",
+      skillKey: "bi_repay_daily",
+      signalType: "repay_drop_signal",
+      signalKey: "repay_drop_signal:closed",
+      title: "closed",
+      summary: "closed",
+      severity: "WARN" as const,
+    };
+
+    await expect(createBiReportBusinessSignal(input)).rejects.toThrow(
+      "deployment_capability_disabled:signal_runtime_write",
+    );
+    await expect(createBiReportBusinessSignalsBatch([input])).rejects.toThrow(
+      "deployment_capability_disabled:signal_runtime_write",
+    );
+    await expect(
+      advanceBiReportBusinessSignalStatus({
+        id: "signal-1",
+        workspaceId: "workspace-1",
+        status: "triaged",
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+
+    expect(dbMock.biReportBusinessSignal.findFirst).not.toHaveBeenCalled();
+    expect(dbMock.biReportBusinessSignal.upsert).not.toHaveBeenCalled();
+    expect(dbMock.biReportBusinessSignal.update).not.toHaveBeenCalled();
+    expect(dbMock.$executeRawUnsafe).not.toHaveBeenCalled();
   });
 
   it("creates a business signal and maps structured fields", async () => {
@@ -736,7 +770,7 @@ describe("bi report business signal storage", () => {
       expect(result).toEqual({ persisted: 2, skippedClear: 0, tableMissing: false });
       expect(dbMock.$executeRawUnsafe).toHaveBeenCalledTimes(1);
       const [sql, ...params] = dbMock.$executeRawUnsafe.mock.calls[0]!;
-      expect(sql).toContain("INSERT INTO `bireportbusinesssignal`");
+      expect(sql).toContain("INSERT INTO `BiReportBusinessSignal`");
       expect(sql).toContain("ON DUPLICATE KEY UPDATE");
       // refresh columns present, identity columns (workspaceId/signalKey/status) absent from the UPDATE set
       expect(sql).toContain("`severity` = VALUES(`severity`)");
@@ -745,11 +779,14 @@ describe("bi report business signal storage", () => {
         "`continuityStatus` = COALESCE(VALUES(`continuityStatus`), `continuityStatus`)",
       );
       expect(sql).toContain("`ownerUserId` = COALESCE(VALUES(`ownerUserId`), `ownerUserId`)");
+      expect(sql).toContain("`updatedAt` = VALUES(`updatedAt`)");
       expect(sql).not.toContain("`workspaceId` = VALUES(`workspaceId`)");
       expect(sql).not.toContain("`signalKey` = VALUES(`signalKey`)");
       expect(sql).not.toContain("`status` = VALUES(`status`)");
-      // 2 rows * (1 id + 17 columns) = 36 positional params
-      expect(params).toHaveLength(36);
+      // 2 rows * (1 id + 18 columns) = 38 positional params
+      expect(params).toHaveLength(38);
+      expect(params[18]).toBeInstanceOf(Date);
+      expect(params[37]).toBeInstanceOf(Date);
       // closure sync runs once per persisted signal AFTER the write
       expect(operatingClosureKernelMock.syncBiReportSignalToOperatingClosure).toHaveBeenCalledTimes(2);
     });
@@ -783,7 +820,7 @@ describe("bi report business signal storage", () => {
 
       expect(result).toEqual({ persisted: 1, skippedClear: 1, tableMissing: false });
       const [, ...params] = dbMock.$executeRawUnsafe.mock.calls[0]!;
-      expect(params).toHaveLength(18); // one row only
+      expect(params).toHaveLength(19); // one row only
     });
 
     it("chunks by the configured size (multiple statements)", async () => {
@@ -845,7 +882,7 @@ describe("bi report business signal storage", () => {
       expect(result).toEqual({ persisted: 1, skippedClear: 0, tableMissing: false });
       expect(dbMock.$executeRawUnsafe).toHaveBeenCalledTimes(1);
       const [, ...params] = dbMock.$executeRawUnsafe.mock.calls[0]!;
-      expect(params).toHaveLength(18);
+      expect(params).toHaveLength(19);
       expect(params[2]).toBe("run-new");
       expect(params[6]).toBe("new title");
       expect(params[12]).toBe(JSON.stringify({ version: 2 }));
