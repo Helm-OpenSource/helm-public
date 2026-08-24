@@ -126,6 +126,7 @@ connector 授权、写回、外发或审批证明。
 - [开源增长 7 日运营计划 / Open source growth 7-day operating plan](operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md)
 - [OPC 周报包模板 / OPC weekly packet template](operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md)
 - [发布就绪回执清单 / Release readiness receipt checklist](operations/RELEASE_READINESS_RECEIPT_CHECKLIST.md)
+- [部署能力独立开关 / Deployment capability gates](operations/HELM_DEPLOYMENT_CAPABILITY_GATES.md) — LLM、outbound voice ASR、工程 cron、signal runtime、DingTalk sync/bridge、外发、自动客户外呼、短信与财务各自独立；`true` 不替代授权、同意、provider 配置或其他必要 gate。
 - [中国访问性与证据路由包 / China accessibility and evidence routing packet](operations/HELM_CHINA_ACCESSIBILITY_AND_EVIDENCE_ROUTING_2026-06-02.md)
 - [Agent 工作入口 / Agent working entry](codex/README.md)
 - [状态真值表 / Status truth table](STATUS.md)
