@@ -3,7 +3,27 @@ import { sendDingTalkInviteMessage } from "@/lib/connectors/dingtalk-directory-i
 
 describe("sendDingTalkInviteMessage", () => {
   afterEach(() => {
+    delete process.env.HELM_CUSTOMER_VISIBLE_SENDS_ENABLED;
     vi.restoreAllMocks();
+  });
+
+  it("does not call DingTalk when customer-visible sends are closed", async () => {
+    process.env.HELM_CUSTOMER_VISIBLE_SENDS_ENABLED = "false";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+
+    await expect(
+      sendDingTalkInviteMessage({
+        accessToken: "token",
+        agentId: "100001",
+        dingtalkUserId: "member-1",
+        workspaceName: "Helm",
+        inviteUrl: "https://example.com/invite",
+        roleLabel: "MEMBER",
+        title: null,
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:customer_visible_send");
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("treats DingTalk invalid recipient hints as a send failure", async () => {

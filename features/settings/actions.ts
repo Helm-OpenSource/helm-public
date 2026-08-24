@@ -128,6 +128,7 @@ import {
   getHelmReservedWorkspaceDeniedMessage,
   type HelmReservedWorkspaceSurface,
 } from "@/lib/workspace-reserved";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const policySchema = z.object({
   id: z.string(),
@@ -1239,6 +1240,7 @@ export async function addOrganizationMemberAction(input: z.infer<typeof membersh
         reason?:
           | "not_configured"
           | "target_unresolved"
+          | "deployment_disabled"
           | "send_failed";
         dingtalkUserId?: string | null;
         inviteUrl?: string | null;
@@ -1263,7 +1265,16 @@ export async function addOrganizationMemberAction(input: z.infer<typeof membersh
     });
     const appConfig = getDingTalkAppMessageConfig();
 
-    if (!appConfig.agentId) {
+    if (!isDeploymentCapabilityEnabled("customer_visible_send")) {
+      inviteDispatch = {
+        attempted: false,
+        sent: false,
+        channel: "DINGTALK",
+        reason: "deployment_disabled",
+        inviteUrl,
+        dingtalkUserId,
+      };
+    } else if (!appConfig.agentId) {
       inviteDispatch = {
         attempted: false,
         sent: false,
@@ -3103,6 +3114,13 @@ export async function closeSettlementBatchAction(input: z.infer<typeof settlemen
 }
 
 export async function createBillingCheckoutAction(input?: z.infer<typeof billingCheckoutSchema>) {
+  if (!isDeploymentCapabilityEnabled("financial_action")) {
+    return {
+      ok: false,
+      error: "deployment_capability_disabled:financial_action",
+    };
+  }
+
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
   const membership = await getCurrentMembership();
@@ -3154,6 +3172,13 @@ export async function createBillingCheckoutAction(input?: z.infer<typeof billing
 }
 
 export async function createBillingPortalAction() {
+  if (!isDeploymentCapabilityEnabled("financial_action")) {
+    return {
+      ok: false,
+      error: "deployment_capability_disabled:financial_action",
+    };
+  }
+
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
   const membership = await getCurrentMembership();
@@ -3189,6 +3214,13 @@ export async function createBillingPortalAction() {
 }
 
 export async function refreshBillingStatusAction() {
+  if (!isDeploymentCapabilityEnabled("financial_action")) {
+    return {
+      ok: false,
+      error: "deployment_capability_disabled:financial_action",
+    };
+  }
+
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
   const membership = await getCurrentMembership();

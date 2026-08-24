@@ -12,6 +12,7 @@ import {
   getWorkspaceOrderDescription,
 } from "@/lib/billing/china-payment";
 import { PAYMENT_PROVIDER } from "@/lib/billing/runtime-constants";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const ALIPAY_GATEWAY_DEFAULT = "https://openapi.alipay.com/gateway.do";
 
@@ -161,6 +162,7 @@ function getAlipayCheckoutNotConfiguredMessage(locale?: string | null) {
 export async function createAlipayCheckoutSession(
   input: ChinaPaymentCheckoutInput & { provider: PaymentProvider },
 ): Promise<ChinaPaymentCheckoutResult> {
+  assertDeploymentCapabilityEnabled("financial_action");
   const config = getAlipayConfig();
   const privateKey = normalizePem(config.merchantPrivateKey, "PRIVATE KEY");
 
@@ -207,6 +209,7 @@ export async function createAlipayCheckoutSession(
 }
 
 export async function queryAlipayTradeStatus(outTradeNo: string): Promise<ChinaPaymentStatusSnapshot> {
+  assertDeploymentCapabilityEnabled("financial_action");
   const payload = await alipayRequest({
     method: "alipay.trade.query",
     bizContent: {

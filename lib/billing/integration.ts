@@ -48,6 +48,7 @@ import {
 import { assertWorkspaceBillingServiceAccess } from "@/lib/auth/service-governance";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 async function getWorkspaceBillingContext(workspaceId: string) {
   await ensureWorkspaceCommercialFoundation(workspaceId);
@@ -464,6 +465,7 @@ export async function createWorkspaceCheckoutSession(input: {
   clientIp?: string | null;
   userAgent?: string | null;
 }) {
+  assertDeploymentCapabilityEnabled("financial_action");
   await assertWorkspaceBillingServiceAccess({
     workspaceId: input.workspaceId,
     userId: input.userId,
@@ -641,6 +643,7 @@ export async function createWorkspaceBillingPortalSession(input: {
   actorName: string;
   english?: boolean;
 }) {
+  assertDeploymentCapabilityEnabled("financial_action");
   await assertWorkspaceBillingServiceAccess({
     workspaceId: input.workspaceId,
     userId: input.userId,
@@ -703,6 +706,7 @@ export async function syncWorkspacePaymentStatus(input: {
   fromCheckout?: boolean;
   english?: boolean;
 }) {
+  assertDeploymentCapabilityEnabled("financial_action");
   await assertWorkspaceBillingServiceAccess({
     workspaceId: input.workspaceId,
     userId: input.userId,
@@ -804,6 +808,8 @@ export async function syncWorkspacePaymentStatusFromCallbackEvent(input: {
   workspaceId: string;
   event: PaymentCallbackEvent;
 }) {
+  assertDeploymentCapabilityEnabled("financial_action");
+
   if (input.event.provider === PAYMENT_PROVIDER.STRIPE) {
     return syncWorkspacePaymentStatus({
       workspaceId: input.workspaceId,

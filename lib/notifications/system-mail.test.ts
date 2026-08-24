@@ -31,6 +31,7 @@ describe("system-mail", () => {
     delete process.env.ALIYUN_MAIL_SYSTEM_PASSWORD;
     delete process.env.ALIYUN_MAIL_FOUNDER_EMAIL;
     delete process.env.ALIYUN_MAIL_FOUNDER_PASSWORD;
+    delete process.env.HELM_CUSTOMER_VISIBLE_SENDS_ENABLED;
     process.env.ALIYUN_MAIL_SMTP_HOST = "smtp.qiye.aliyun.com";
     process.env.ALIYUN_MAIL_SMTP_PORT = "465";
     process.env.ALIYUN_MAIL_SMTP_SECURE = "1";
@@ -96,6 +97,26 @@ describe("system-mail", () => {
         text: "hello",
       }),
     );
+  });
+
+  it("does not construct a transporter when customer-visible sends are closed", async () => {
+    process.env.ALIYUN_MAIL_SYSTEM_PASSWORD = "system-app-password";
+    process.env.HELM_CUSTOMER_VISIBLE_SENDS_ENABLED = "false";
+
+    const result = await sendSystemMailIfConfigured({
+      purpose: SYSTEM_MAIL_PURPOSES.AUTH_CODE,
+      to: "member@example.com",
+      subject: "Test",
+      text: "hello",
+    });
+
+    expect(result).toEqual({
+      sent: false,
+      reason: "deployment_disabled",
+      sender: "system@example.com",
+    });
+    expect(createTransportMock).not.toHaveBeenCalled();
+    expect(sendMailMock).not.toHaveBeenCalled();
   });
 
   it("rejects unknown purposes", async () => {
