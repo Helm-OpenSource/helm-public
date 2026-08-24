@@ -39,6 +39,10 @@ import {
 import { bridgeDingTalkSignalsToWorkflow } from "@/lib/connectors/dingtalk-workflow-bridge";
 import { classifyDingTalkSignal } from "@/lib/connectors/signal-classification";
 import { jsonStringify, trimText } from "@/lib/utils";
+import {
+  assertDeploymentCapabilityEnabled,
+  isDeploymentCapabilityEnabled,
+} from "@/lib/runtime/deployment-capabilities";
 
 const DINGTALK_READONLY_INGEST_SOURCE_PAGE = "/settings";
 const DINGTALK_READONLY_INGEST_BOUNDARY_NOTE =
@@ -1590,6 +1594,7 @@ export async function syncDingTalkReadonlyConnector(input: {
   sourcePage?: string;
   triggeredBy: string;
 }) {
+  assertDeploymentCapabilityEnabled("dingtalk_sync");
   const connector = await db.connector.findUnique({
     where: {
       workspaceId_userId_provider: {
@@ -2116,7 +2121,7 @@ export async function syncDingTalkReadonlyConnector(input: {
       });
     }
 
-    const bridgeEnabled = process.env.DINGTALK_WORKFLOW_BRIDGE_ENABLED !== "0";
+    const bridgeEnabled = isDeploymentCapabilityEnabled("dingtalk_bridge");
     const autoCreateActions =
       process.env.DINGTALK_WORKFLOW_AUTOCREATE_ACTIONS === "1";
     const bridgeResult = bridgeEnabled

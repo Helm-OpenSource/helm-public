@@ -1,3 +1,5 @@
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
+
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") {
     logInstrumentationInfo("skip server cron registration", {
@@ -65,7 +67,10 @@ export async function register() {
     });
   }
 
-  if (process.env.SIGNAL_COLLECTION_SCHEDULER_ENABLED?.trim().toLowerCase() === "true") {
+  if (
+    process.env.SIGNAL_COLLECTION_SCHEDULER_ENABLED?.trim().toLowerCase() === "true" &&
+    isDeploymentCapabilityEnabled("signal_runtime_write")
+  ) {
     logInstrumentationInfo("starting signal collection scheduler");
     const { startRegisteredSignalCollectionScheduler } = await import(
       "@/lib/extensions/registry"

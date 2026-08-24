@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { createGovernedAction } from "@/lib/policies/engine";
 import { classifyDingTalkSignal } from "@/lib/connectors/signal-classification";
 import { trimText } from "@/lib/utils";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 type DingTalkBridgeScope =
   | "CALENDAR"
@@ -128,6 +129,7 @@ export async function bridgeDingTalkSignalsToWorkflow(input: {
   autoCreateActions: boolean;
   signals: Omit<DingTalkWorkflowBridgeSignal, "workflowCandidate">[];
 }) {
+  assertDeploymentCapabilityEnabled("dingtalk_bridge");
   const result: DingTalkWorkflowBridgeResult = {
     totalSignals: input.signals.length,
     matchedObjectCount: 0,

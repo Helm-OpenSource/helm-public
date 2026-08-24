@@ -21,6 +21,7 @@ describe("signal collection cron route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.SIGNAL_COLLECTION_CRON_TOKEN = "cron-token";
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
     mocks.registry.listRegisteredSignalCollectionJobs.mockReturnValue([
       { key: "tenant-alpha.signal.daily" },
       { key: "tenant-alpha.operation.daily" },
@@ -61,6 +62,23 @@ describe("signal collection cron route", () => {
       jobKeys: ["tenant-alpha.signal.daily", "tenant-alpha.operation.daily"],
       source: "api",
     });
+  });
+
+  it("rejects before registry access when deployment runtime writes are closed", async () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+
+    const response = await postSignalCollectionRoute(
+      new Request("http://localhost:3000/api/runtime/signals/collect"),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "deployment_capability_disabled",
+      capability: "signal_runtime_write",
+    });
+    expect(mocks.registry.listRegisteredSignalCollectionJobs).not.toHaveBeenCalled();
+    expect(mocks.registry.runRegisteredSignalCollectionJobs).not.toHaveBeenCalled();
   });
 
   it("runs all jobs when no jobKey is provided", async () => {

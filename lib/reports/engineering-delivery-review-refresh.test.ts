@@ -41,6 +41,7 @@ import {
 describe("engineering delivery snapshot refresh", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.ENGINEERING_REVIEW_CRON_ENABLED;
 
     reservedWorkspaceMock.resolveHelmReservedWorkspace.mockResolvedValue({
       id: "workspace-1",
@@ -60,6 +61,38 @@ describe("engineering delivery snapshot refresh", () => {
     reviewServiceMock.getEngineeringDeliveryReview.mockImplementation(async ({ english }: { english?: boolean }) =>
       buildReview(Boolean(english)),
     );
+  });
+
+  it("skips before any database access when the engineering control is invalid", async () => {
+    process.env.ENGINEERING_REVIEW_CRON_ENABLED = "yes";
+
+    const result = await runEngineeringDeliveryDailyRefresh({ trigger: "cron" });
+
+    expect(result).toEqual({
+      ok: true,
+      status: "SKIPPED",
+      reason: "engineering_review_disabled",
+    });
+    expect(reservedWorkspaceMock.resolveHelmReservedWorkspace).not.toHaveBeenCalled();
+    expect(dbMock.engineeringDeliveryReviewRefreshRun.findFirst).not.toHaveBeenCalled();
+    expect(dbMock.engineeringDeliveryReviewRefreshRun.create).not.toHaveBeenCalled();
+    expect(dbMock.engineeringDeliveryReviewRefreshRun.update).not.toHaveBeenCalled();
+    expect(dbMock.engineeringDeliveryReviewSnapshot.upsert).not.toHaveBeenCalled();
+  });
+
+  it("skips direct execution when the local engineering review control is false", async () => {
+    process.env.ENGINEERING_REVIEW_CRON_ENABLED = "false";
+
+    const result = await runEngineeringDeliveryDailyRefresh({ trigger: "manual" });
+
+    expect(result).toEqual({
+      ok: true,
+      status: "SKIPPED",
+      reason: "engineering_review_disabled",
+    });
+    expect(reservedWorkspaceMock.resolveHelmReservedWorkspace).not.toHaveBeenCalled();
+    expect(dbMock.engineeringDeliveryReviewRefreshRun.create).not.toHaveBeenCalled();
+    expect(dbMock.engineeringDeliveryReviewSnapshot.upsert).not.toHaveBeenCalled();
   });
 
   it("keeps daily refresh idempotent by upserting the same daily snapshot key", async () => {

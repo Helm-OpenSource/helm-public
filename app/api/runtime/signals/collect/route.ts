@@ -4,6 +4,7 @@ import {
   listRegisteredSignalCollectionJobs,
   runRegisteredSignalCollectionJobs,
 } from "@/lib/extensions/registry";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const SIGNAL_COLLECTION_CRON_ENTRYPOINT = {
   class: "registered_signal_collection",
@@ -69,6 +70,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isDeploymentCapabilityEnabled("signal_runtime_write")) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "deployment_capability_disabled",
+        capability: "signal_runtime_write",
+      },
+      { status: 503 },
+    );
+  }
+
   const auth = authorizeSignalCollectionCron(request);
   if (!auth.ok) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });

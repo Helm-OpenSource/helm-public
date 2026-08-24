@@ -35,6 +35,8 @@ function buildJob(overrides: Partial<SignalCollectionJob> = {}): SignalCollectio
 
 describe("signal collection scheduler", () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalRuntimeWritesEnabled =
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
 
   function setNodeEnv(value: string | undefined) {
     Object.defineProperty(process.env, "NODE_ENV", {
@@ -51,12 +53,18 @@ describe("signal collection scheduler", () => {
     global.__helmSignalCollectionSchedulerStates = undefined;
     delete process.env.TENANT_ALPHA_SIGNAL_TIME;
     delete process.env.TENANT_ALPHA_SIGNAL_TZ;
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
     setNodeEnv("development");
   });
 
   afterEach(() => {
     vi.useRealTimers();
     global.__helmSignalCollectionSchedulerStates = undefined;
+    if (originalRuntimeWritesEnabled === undefined) {
+      delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+    } else {
+      process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = originalRuntimeWritesEnabled;
+    }
     setNodeEnv(originalNodeEnv);
   });
 
@@ -172,6 +180,35 @@ describe("signal collection scheduler", () => {
       targetCount: 0,
     });
     expect(resolveTargets).not.toHaveBeenCalled();
+  });
+
+  it("blocks the direct runner before resolving targets when runtime writes are closed", async () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+    const resolveTargets = vi.fn<SignalCollectionJob["resolveTargets"]>();
+
+    await expect(
+      runSignalCollectionJobs({
+        jobs: [buildJob({ resolveTargets })],
+        source: "test",
+      }),
+    ).rejects.toThrow(
+      "deployment_capability_disabled:signal_runtime_write",
+    );
+
+    expect(resolveTargets).not.toHaveBeenCalled();
+  });
+
+  it("blocks direct scheduler registration when runtime writes are closed", () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+
+    expect(() =>
+      startSignalCollectionScheduler({
+        jobs: [buildJob()],
+        stateKey: "closed-scheduler",
+      }),
+    ).toThrow("deployment_capability_disabled:signal_runtime_write");
+
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("starts one timer per enabled job and runs through the shared runner", async () => {

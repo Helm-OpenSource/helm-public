@@ -3,6 +3,7 @@ import type {
   BiReportHandoffExecutionLogRecord,
   BiReportHandoffExecutionLogStage,
 } from "@/lib/bi-report-skill/types";
+import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 type BiReportHandoffExecutionLogRow = {
   id: string;
@@ -34,6 +35,7 @@ export async function createBiReportHandoffExecutionLog(input: {
   isEffective?: boolean | null;
   followUpNeeded?: boolean | null;
 }): Promise<BiReportHandoffExecutionLogRecord | null> {
+  assertDeploymentCapabilityEnabled("signal_runtime_write");
   try {
     const delegate = getBiReportHandoffExecutionLogDelegate();
     if (!delegate) {

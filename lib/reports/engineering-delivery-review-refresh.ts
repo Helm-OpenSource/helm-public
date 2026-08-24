@@ -7,6 +7,7 @@ import {
   type EngineeringDeliveryReviewFreshness,
 } from "@/lib/reports/engineering-delivery-review";
 import { resolveHelmReservedWorkspace } from "@/lib/workspace-reserved";
+import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 const execFileAsync = promisify(execFile);
 
@@ -56,6 +57,14 @@ export async function runEngineeringDeliveryDailyRefresh(input?: {
   timezone?: string;
   trigger?: EngineeringDeliveryRefreshTrigger;
 }): Promise<EngineeringDeliveryRefreshResult> {
+  if (!isDeploymentCapabilityEnabled("engineering_review_cron")) {
+    return {
+      ok: true,
+      status: "SKIPPED",
+      reason: "engineering_review_disabled",
+    };
+  }
+
   if (refreshInProcess) {
     return {
       ok: true,

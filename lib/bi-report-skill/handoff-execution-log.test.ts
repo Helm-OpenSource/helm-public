@@ -18,6 +18,25 @@ vi.mock("@/lib/db", () => ({
 describe("handoff-execution-log", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+  });
+
+  it("blocks direct execution-log writes before delegate access", async () => {
+    process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+
+    await expect(
+      createBiReportHandoffExecutionLog({
+        workspaceId: "workspace-1",
+        signalId: "signal-1",
+        decisionId: "decision-1",
+        stage: "plan",
+        authorUserId: "user-1",
+        summary: "closed",
+      }),
+    ).rejects.toThrow("deployment_capability_disabled:signal_runtime_write");
+
+    expect(db.biReportHandoffExecutionLog.findMany).not.toHaveBeenCalled();
+    expect(db.biReportHandoffExecutionLog.create).not.toHaveBeenCalled();
   });
 
   it("creates an execution log", async () => {

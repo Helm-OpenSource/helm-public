@@ -38,6 +38,25 @@ import { dispatchPendingBiReportSignalNotifications } from "@/lib/bi-report-skil
 describe("signal notification dispatcher", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.HELM_CUSTOMER_VISIBLE_SENDS_ENABLED;
+    delete process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED;
+  });
+
+  it.each([
+    ["HELM_CUSTOMER_VISIBLE_SENDS_ENABLED", "customer_visible_send"],
+    ["HELM_SIGNAL_RUNTIME_WRITES_ENABLED", "signal_runtime_write"],
+  ])("stops before reading or writing notification state when %s is false", async (key, capability) => {
+    process.env[key] = "false";
+
+    await expect(
+      dispatchPendingBiReportSignalNotifications({ workspaceId: "workspace-1" }),
+    ).rejects.toThrow(`deployment_capability_disabled:${capability}`);
+
+    expect(mocks.notificationStore.listPendingBiReportSignalNotifications).not.toHaveBeenCalled();
+    expect(mocks.businessSignal.getBiReportBusinessSignalById).not.toHaveBeenCalled();
+    expect(mocks.delivery.sendBiReportToDingTalkDeliveryTarget).not.toHaveBeenCalled();
+    expect(mocks.notificationStore.markBiReportSignalNotificationSent).not.toHaveBeenCalled();
+    expect(mocks.notificationStore.markBiReportSignalNotificationFailed).not.toHaveBeenCalled();
   });
 
   it("dispatches pending app-message notifications and marks success", async () => {
