@@ -15,6 +15,7 @@ const releaseBuildId = resolveReleaseBuildId(process.env.HELM_RELEASE_BUILD_ID);
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR?.trim() || ".next",
   outputFileTracingRoot: projectRoot,
+  serverExternalPackages: ["ali-oss"],
   allowedDevOrigins: configuredAllowedDevOrigins,
   generateBuildId: releaseBuildId ? async () => releaseBuildId : undefined,
 };
