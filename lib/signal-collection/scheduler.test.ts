@@ -102,6 +102,177 @@ describe("signal collection scheduler", () => {
     expect(parseCommaSeparatedList(" a, b, a ,, ")).toEqual(["a", "b"]);
   });
 
+  describe.each([
+    ["UTC", "+00:00"],
+    ["Asia/Shanghai", "+08:00"],
+    ["America/New_York", "-04:00"],
+  ])("midnight scheduling in %s", (timezone, offset) => {
+    it.each([
+      ["2026-05-09T23:59:00", "2026-05-10T00:00:00"],
+      ["2026-05-10T00:05:15", "2026-05-10T00:10:00"],
+      ["2026-05-10T00:59:00", "2026-05-10T01:00:00"],
+    ])("finds the next cron run from %s at %s", (from, expected) => {
+      expect(findNextRun(
+        new Date(`${from}${offset}`),
+        parseMinuteHourCronSchedule("*/10 * * * *")!,
+        timezone,
+      )).toEqual(new Date(`${expected}${offset}`));
+    });
+
+    it("finds a daily midnight run on the next local date", () => {
+      expect(findNextRun(
+        new Date(`2026-05-09T23:59:00${offset}`),
+        { hour: 0, minute: 0 },
+        timezone,
+      )).toEqual(new Date(`2026-05-10T00:00:00${offset}`));
+    });
+
+    it("triggers at midnight and schedules the next midnight-hour run once", async () => {
+      vi.setSystemTime(new Date(`2026-05-09T23:59:00${offset}`));
+      process.env.TENANT_ALPHA_SIGNAL_TIME = "*/10 * * * *";
+      process.env.TENANT_ALPHA_SIGNAL_TZ = timezone;
+      const runTarget = vi.fn<SignalCollectionJob["runTarget"]>()
+        .mockResolvedValue({ status: "success", signalCount: 1 });
+      const input = {
+        jobs: [buildJob({ runTarget })],
+        stateKey: "midnight-scheduler",
+      };
+
+      startSignalCollectionScheduler(input);
+      startSignalCollectionScheduler(input);
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(runTarget).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(runTarget).toHaveBeenCalledTimes(1);
+      expect(runTarget.mock.calls[0]?.[1]).toMatchObject({
+        requestedAt: new Date(`2026-05-10T00:00:00${offset}`),
+        source: "scheduler",
+      });
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(599_999);
+      expect(runTarget).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(runTarget).toHaveBeenCalledTimes(2);
+      expect(runTarget.mock.calls[1]?.[1].requestedAt)
+        .toEqual(new Date(`2026-05-10T00:10:00${offset}`));
+      expect(vi.getTimerCount()).toBe(1);
+    });
+  });
+
+  it.each([
+    ["2026-03-08T01:59:00-05:00", "0 * * * *", "2026-03-08T03:00:00-04:00"],
+    ["2026-03-08T01:59:00-05:00", "30 2 * * *", "2026-03-09T02:30:00-04:00"],
+    ["2026-11-01T00:59:00-04:00", "30 1 * * *", "2026-11-01T01:30:00-04:00"],
+    ["2026-11-01T01:30:00-04:00", "30 1 * * *", "2026-11-01T01:30:00-05:00"],
+  ])("preserves DST cron behavior from %s for %s", (from, cron, expected) => {
+    expect(findNextRun(
+      new Date(from),
+      parseMinuteHourCronSchedule(cron)!,
+      "America/New_York",
+    )).toEqual(new Date(expected));
+  });
+
+  describe("midnight execution boundaries", () => {
+    beforeEach(() => {
+      vi.setSystemTime(new Date("2026-05-09T23:59:00+08:00"));
+      process.env.TENANT_ALPHA_SIGNAL_TIME = "*/10 * * * *";
+      process.env.TENANT_ALPHA_SIGNAL_TZ = "Asia/Shanghai";
+    });
+
+    it.each(["disabled", "cannot start", "capability closed", "test environment"])(
+      "does not register a midnight timer when %s",
+      (gate) => {
+        const resolveTargets = vi.fn<SignalCollectionJob["resolveTargets"]>();
+        const job = buildJob({
+          enabled: () => gate !== "disabled",
+          canStart: () => ({ ok: gate !== "cannot start", reason: "not_ready" }),
+          resolveTargets,
+        });
+        if (gate === "capability closed") {
+          process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+        }
+        if (gate === "test environment") setNodeEnv("test");
+        const start = () => startSignalCollectionScheduler({
+          jobs: [job], stateKey: "midnight-registration-gate",
+        });
+
+        if (gate === "capability closed") {
+          expect(start).toThrow("deployment_capability_disabled:signal_runtime_write");
+        } else {
+          start();
+        }
+        expect(vi.getTimerCount()).toBe(0);
+        expect(resolveTargets).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["disabled", "cannot start", "capability closed"])(
+      "rechecks %s at midnight before resolving targets and resumes when reopened",
+      async (gate) => {
+        let open = true;
+        const resolveTargets = vi.fn<SignalCollectionJob["resolveTargets"]>()
+          .mockResolvedValue([{ key: "target-a" }]);
+        const runTarget = vi.fn<SignalCollectionJob["runTarget"]>()
+          .mockResolvedValue({ status: "success", signalCount: 1 });
+        startSignalCollectionScheduler({
+          jobs: [buildJob({
+            enabled: () => gate !== "disabled" || open,
+            canStart: () => ({ ok: gate !== "cannot start" || open, reason: "not_ready" }),
+            resolveTargets,
+            runTarget,
+          })],
+          stateKey: "midnight-execution-gate",
+        });
+        expect(vi.getTimerCount()).toBe(1);
+
+        open = false;
+        if (gate === "capability closed") {
+          process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+        }
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(resolveTargets).not.toHaveBeenCalled();
+        expect(runTarget).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(1);
+
+        open = true;
+        process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "true";
+        await vi.advanceTimersByTimeAsync(600_000);
+        expect(resolveTargets).toHaveBeenCalledTimes(1);
+        expect(runTarget).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("does not overlap a pending midnight run and resumes at the next future slot", async () => {
+      let finish!: () => void;
+      const pending = new Promise<void>((resolve) => { finish = resolve; });
+      const runTarget = vi.fn<SignalCollectionJob["runTarget"]>()
+        .mockImplementationOnce(async () => {
+          await pending;
+          return { status: "success", signalCount: 1 };
+        })
+        .mockResolvedValue({ status: "success", signalCount: 1 });
+      startSignalCollectionScheduler({
+        jobs: [buildJob({ runTarget })], stateKey: "midnight-no-overlap",
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(runTarget).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(runTarget).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(599_999);
+      expect(runTarget).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(runTarget).toHaveBeenCalledTimes(2);
+      expect(runTarget.mock.calls[1]?.[1].requestedAt)
+        .toEqual(new Date("2026-05-10T00:20:00+08:00"));
+    });
+  });
+
   it("runs enabled jobs across all resolved targets", async () => {
     const runTarget = vi
       .fn<SignalCollectionJob["runTarget"]>()
