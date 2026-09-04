@@ -11,30 +11,27 @@ import {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Fix for Aliyun CCC Workbench SDK URL concatenation bug.
-  // The SDK v3.6.1 sometimes generates malformed URLs like:
+  // Fix for Aliyun CCC Workbench SDK v3.6.1 URL concatenation bug.
+  // The SDK incorrectly appends regionId into the path for certain API calls
+  // (SignInGroup, ReadyForService, MakeCall), generating malformed URLs like:
   //   /api/extensions/anso_egion=cn-shanghai:1
   //   /api/extensions/anson_egion=cn-shanghai:1
-  // instead of the correct /api/extensions/anson/aliyun-ccc/proxy?action=...
-  // Intercept these malformed URLs and rewrite them to the correct proxy endpoint.
-  if (pathname.startsWith("/api/extensions/")) {
-    const isValidExtensionRoute =
-      pathname.startsWith("/api/extensions/anson/") ||
-      pathname === "/api/extensions/anson";
-
-    const isMalformed =
-      !isValidExtensionRoute ||
-      pathname.includes("_egion=") ||
+  // Only intercept URLs that clearly match this bug pattern.
+  // Do NOT touch other extension APIs, health checks, webhooks, or login APIs.
+  if (
+    pathname.startsWith("/api/extensions/") &&
+    (pathname.includes("_egion=") ||
       pathname.includes("=cn-shanghai:") ||
-      pathname.includes("_region=");
+      pathname.includes("_region="))
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/api/extensions/anson/aliyun-ccc/proxy";
+    return NextResponse.rewrite(url);
+  }
 
-    if (isMalformed) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/api/extensions/anson/aliyun-ccc/proxy";
-      return NextResponse.rewrite(url);
-    }
-
-    // Valid extension API routes pass through
+  // All other /api/ routes (health checks, webhooks, login APIs, other
+  // tenants' extension APIs) pass through without auth redirects.
+  if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
@@ -73,7 +70,9 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    // Original: all non-API routes go through auth redirect logic
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    // Additional: only /api/extensions/ paths reach proxy for SDK bug fix
     "/api/extensions/:path*",
   ],
 };
