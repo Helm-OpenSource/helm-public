@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { isWriteConflictError, runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import {
   beginObservationSourceRun,
   completeObservationSourceRun,
@@ -35,6 +36,13 @@ export const CAIO_QUICK_CHECK_BUCKET_MINUTES = 10;
 const BUCKET_MS = CAIO_QUICK_CHECK_BUCKET_MINUTES * 60_000;
 const DEFAULT_TEMPLATE_TIMEOUT_MS = 20_000;
 const ACTOR_NAME = "caio-quick-check";
+// Candidate reads and writes run serializable so the open set read at the start holds until commit:
+// an overlapping slow bucket cannot clear or refresh a row this transaction has already decided on.
+const CANDIDATE_TRANSACTION_OPTIONS = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  maxWait: 10_000,
+  timeout: 30_000,
+} as const;
 
 export type CaioQuickCheckResult =
   | { status: "claimed_elsewhere" }
@@ -222,14 +230,14 @@ async function applyCandidateTransitions(input: {
       cleared += result.count;
     }
     return { opened, refreshed, cleared };
+  }, CANDIDATE_TRANSACTION_OPTIONS);
+  // Serializable conflicts retry with bounded backoff; a unique violation means an overlapping bucket
+  // opened the same merge key first, and the retry then refreshes that row instead.
+  return runWithWriteConflictRetry(attempt, {
+    maxAttempts: 4,
+    retryDelayMs: 50,
+    isConflict: (error) => isUniqueViolation(error) || isWriteConflictError(error),
   });
-  try {
-    return await attempt();
-  } catch (error) {
-    // A slow earlier bucket may have opened the same merge key concurrently; the retry refreshes it.
-    if (!isUniqueViolation(error)) throw error;
-    return attempt();
-  }
 }
 
 export async function runCaioQuickCheck(input: {
