@@ -27,6 +27,8 @@ const ACTIONS: Readonly<Record<string, OperatorAction>> = {
   recordInitializationAssessment: actions.recordInitializationAssessmentAction,
   acceptInitializationGate: actions.acceptInitializationGateAction,
   revokeInitializationGate: actions.revokeInitializationGateAction,
+  selectOperatingQuestions: actions.selectOperatingQuestionsAction,
+  bindQuestionSelection: actions.bindQuestionSelectionAction,
 };
 
 const ACTOR_LABEL = {

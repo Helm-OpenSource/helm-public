@@ -9,6 +9,7 @@ export const CAIO_OPERATOR_GROUPS = [
   { key: "catalog", title: { zh: "数据资产目录", en: "Data asset catalog" } },
   { key: "observation", title: { zh: "观察来源", en: "Observation sources" } },
   { key: "initialization", title: { zh: "G0 初始化", en: "G0 initialization" } },
+  { key: "selection", title: { zh: "经营问题选题（CEO）", en: "Operating question selection (CEO)" } },
 ] as const;
 
 export type CaioOperatorGroupKey = (typeof CAIO_OPERATOR_GROUPS)[number]["key"];
@@ -70,4 +71,14 @@ export const CAIO_OPERATOR_OPERATIONS: readonly CaioOperatorOperation[] = [
   { key: "revokeInitializationGate", group: "initialization", schemaName: "revokeInitializationGateSchema", actor: "ceo",
     title: { zh: "撤销 G0 验收门（CEO）", en: "Revoke the G0 gate (CEO)" },
     template: { ceoPrincipalRef: "ceo-primary", idempotencyKey: "idempotency-key", reasonCodes: ["replace-me"], evidenceRefs: ["evidence:replace-me"] } },
+  { key: "selectOperatingQuestions", group: "selection", schemaName: "selectOperatingQuestionsSchema", actor: "ceo",
+    title: { zh: "选择经营问题（0–3 题，需已受理 G0）", en: "Select operating questions (0-3, accepted G0 required)" },
+    template: { expectedPortfolioId: "portfolio-id", ceoPrincipalRef: "ceo-primary", idempotencyKey: "idempotency-key",
+      selections: [{ questionId: "question-id", questionOverride: null, goal: "Replace with the goal", successMetrics: [{ metricKey: "metric-key", target: "Replace with the target" }],
+        priority: 1, implementationScopeRefs: ["scope:replace-me"], ownerRef: null, reviewerRef: null, startsAt: null, endsAt: null,
+        prohibitedActions: ["external_side_effect"] }],
+      reasonCodes: ["replace-me"], evidenceRefs: ["evidence:replace-me"] } },
+  { key: "bindQuestionSelection", group: "selection", schemaName: "bindQuestionSelectionSchema", actor: "ceo",
+    title: { zh: "把当前选题绑定到决策记录", en: "Bind the current selection to decision records" },
+    template: { expectedSelectionReceiptId: "selection-receipt-id", ceoPrincipalRef: "ceo-primary" } },
 ];

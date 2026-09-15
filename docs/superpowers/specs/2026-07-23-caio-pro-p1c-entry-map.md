@@ -100,7 +100,7 @@ tool 或 UI 控件调用它们。
 | `getWorkspaceStage1OwnerLoopReadout` | `features/dashboard/stage1-owner-loop-query.ts` | OWNER-only、单一 repeatable-read 事务聚合；实时 G0 漂移时隐藏旧 Portfolio；P1C 缺表沿现有 additive-schema 路径降级 | extend | 不增加 mutation |
 | `Stage1OwnerLoopConsole` | `features/dashboard/stage1-owner-loop-console.tsx` | 展示 10 题、选择状态和 canonical DecisionRecord binding；无写控件 | extend | CEO 选择交互必须等 mutation 门全绿并走 prepare/submit |
 | `OwnerQuestionPacket` / `EvidenceAnswerPacket` | `lib/stage1-owner-loop/types.ts` | CEO 问答和证据回答公共契约 | reuse | P1C 候选不能复制成问答真值；WorkBuddy 只做投影 |
-| `ActionItem` / `ApprovalTask` / `ExecutionReceipt` | 现有治理执行链 | 派工、审批、执行回执和独立验收 | reuse | P1C 当前不自动创建；receipt 并发降级缺陷修复前不得开放远程 mutation |
+| `ActionItem` / `ApprovalTask` / `ExecutionReceipt` | 现有治理执行链 | 派工、审批、执行回执和独立验收 | reuse | P1C 当前不自动创建；receipt 并发降级缺陷已由 `f7c13a0c` 修复（2026-09-16 隔离 MySQL 复证），远程 mutation 仍按各自开关与 prepare/submit 门放行 |
 
 ## 4. Canonical object chain
 

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { canonicalJson } from "@/lib/expert-capability/hashing";
+import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import {
   projectTemporalOperatingContext,
   validateTemporalOperatingContextSnapshotBinding,
 } from "@/lib/operating-harness/context-projector";
 
 import {
+  buildCaioG0BaselineProjectionInput,
   buildCaioTenantContextProjectionInput,
   lettersFromDigest,
   type CaioContextHitRow,
@@ -88,6 +89,39 @@ describe("buildCaioTenantContextProjectionInput", () => {
 
   it("encodes digests as letters only", () => {
     expect(lettersFromDigest(hash(1))).toMatch(/^[a-p]{24}$/u);
+  });
+});
+
+describe("quick-check builder regression freeze", () => {
+  it("keeps the quick-check projection input byte-identical", () => {
+    // Frozen before the G0 baseline builder was added; a difference means quick-check output moved.
+    expect(sha256(canonicalJson(build()))).toBe("sha256:e9b8955f11a8bc153af18fecb19091f930a710000286c9baa3249fdfc3b8d756");
+  });
+});
+
+describe("buildCaioG0BaselineProjectionInput", () => {
+  const baselineObservations = [
+    { ...observations[0], domain: "operations" },
+    { ...observations[1], domain: "reach" },
+    { ...observations[1], templateId: "sip-attempts", contentHash: hash(4), domain: "reach" },
+  ];
+
+  it("emits one baseline signal per known reading, grouped by domain objects, and projects replayably", () => {
+    const built = buildCaioG0BaselineProjectionInput({ workspaceId: "cmworkspace123", asOf, windowStart, observations: baselineObservations, runs });
+    if (!built.ok) throw new Error(built.reason);
+    expect(built.input.signalEvents).toHaveLength(3);
+    expect(built.input.businessObjectAliases.map((alias) => alias.sourceObjectAliasRefs[0]).sort()).toEqual(["domain:operations", "domain:reach"]);
+    expect(new Set(built.input.signalEvents.map((signal) => signal.signalFamily))).toEqual(new Set(["caio.observation_baseline"]));
+    const projection = projectTemporalOperatingContext(built.input);
+    expect(projection.errors).toEqual([]);
+    expect(validateTemporalOperatingContextSnapshotBinding({ input: built.input, snapshot: projection.snapshot }).ok).toBe(true);
+    for (const raw of ["cmworkspace123", "run_a1", "catalog_a"]) expect(JSON.stringify(built)).not.toContain(raw);
+  });
+
+  it("reports no_signals without readings and evidence_run_missing without their runs", () => {
+    expect(buildCaioG0BaselineProjectionInput({ workspaceId: "w", asOf, windowStart, observations: [], runs })).toEqual({ ok: false, reason: "no_signals" });
+    expect(buildCaioG0BaselineProjectionInput({ workspaceId: "w", asOf, windowStart, observations: baselineObservations, runs: [runs[0]] }))
+      .toEqual({ ok: false, reason: "evidence_run_missing" });
   });
 });
 

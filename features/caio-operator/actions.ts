@@ -11,11 +11,17 @@
  * controlled CLI `npm run caio:governance-operator`. These actions grant no runtime permission and
  * trigger no execution or outbound effect.
  */
+import { CaioOperatorPreconditionError } from "@/lib/caio-operator/operator-error-codes";
 import {
   acceptCaioInitializationGate,
+  getCaioInitializationGateStatus,
   recordCaioInitializationAssessment,
   revokeCaioInitializationGate,
 } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
+import {
+  bindCurrentCaioQuestionSelectionToDecisionRecords,
+  selectCaioOperatingQuestions,
+} from "@/lib/stage1-owner-loop/caio-operating-question-store.service";
 import {
   createDataAssetCatalogEntry,
   recordDataAssetAuthorizationReceipt,
@@ -31,6 +37,7 @@ import {
 import { runOwnerOperation, type CaioOperatorContext } from "./run-owner-operation";
 import {
   acceptInitializationGateSchema,
+  bindQuestionSelectionSchema,
   catalogAuthorizationSchema,
   catalogClassificationSchema,
   catalogConnectionSchema,
@@ -40,6 +47,7 @@ import {
   recordInitializationAssessmentSchema,
   registerObservationSourceSchema,
   revokeInitializationGateSchema,
+  selectOperatingQuestionsSchema,
 } from "./schemas";
 
 const actor = (ctx: CaioOperatorContext) => ({
@@ -151,3 +159,45 @@ export async function revokeInitializationGateAction(rawInput: unknown) {
   });
 }
 
+// CEO question selection (spec §8). Hard precondition: the current G0 gate is accepted. The entry checks it
+// first so the refusal is explicit; the service re-verifies the accepted G0 context, the live CEO binding and
+// the portfolio head inside its own transaction.
+
+async function assertAcceptedG0(ctx: CaioOperatorContext) {
+  const gate = await getCaioInitializationGateStatus({
+    workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
+  });
+  if (gate.status !== "accepted") throw new CaioOperatorPreconditionError("g0_not_accepted");
+}
+
+export async function selectOperatingQuestionsAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "principal_bound",
+    schema: selectOperatingQuestionsSchema,
+    rawInput,
+    invoke: async (ctx, input) => {
+      await assertAcceptedG0(ctx);
+      return selectCaioOperatingQuestions({
+        ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
+      });
+    },
+  });
+}
+
+export async function bindQuestionSelectionAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "principal_bound",
+    schema: bindQuestionSelectionSchema,
+    rawInput,
+    invoke: async (ctx, input) => {
+      await assertAcceptedG0(ctx);
+      const result = await bindCurrentCaioQuestionSelectionToDecisionRecords({
+        ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
+      });
+      return {
+        receipt: result.selectionReceipt,
+        replayed: result.bindings.length > 0 && result.bindings.every((binding) => binding.replayed),
+      };
+    },
+  });
+}
