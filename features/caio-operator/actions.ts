@@ -20,6 +20,11 @@ import {
 } from "@/lib/caio-governance/mandate-store.service";
 
 import {
+  acceptCaioInitializationGate,
+  recordCaioInitializationAssessment,
+  revokeCaioInitializationGate,
+} from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
+import {
   createDataAssetCatalogEntry,
   recordDataAssetAuthorizationReceipt,
   recordDataAssetClassificationReceipt,
@@ -33,6 +38,7 @@ import {
 
 import { runOwnerOperation, type CaioOperatorContext } from "./run-owner-operation";
 import {
+  acceptInitializationGateSchema,
   catalogAuthorizationSchema,
   catalogClassificationSchema,
   catalogConnectionSchema,
@@ -40,11 +46,13 @@ import {
   createCatalogEntrySchema,
   createMandateDraftSchema,
   createObservationProgramSchema,
+  recordInitializationAssessmentSchema,
   registerObservationSourceSchema,
   guardianStopSchema,
   mandateTransitionSchema,
   registerPrincipalBindingSchema,
   resumeGuardianStopSchema,
+  revokeInitializationGateSchema,
   revokePrincipalBindingSchema,
 } from "./schemas";
 
@@ -206,6 +214,42 @@ export async function registerObservationSourceAction(rawInput: unknown) {
     schema: registerObservationSourceSchema,
     rawInput,
     invoke: (ctx, input) => registerObservationSource({ ...input, ...actor(ctx) }),
+  });
+}
+
+// G0 initialization. Recording an assessment is registration (OWNER); accepting or revoking the
+// gate is a CEO act authorized by the service through the live CEO binding.
+
+export async function recordInitializationAssessmentAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "owner",
+    schema: recordInitializationAssessmentSchema,
+    rawInput,
+    invoke: (ctx, input) => recordCaioInitializationAssessment({
+      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
+    }),
+  });
+}
+
+export async function acceptInitializationGateAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "principal_bound",
+    schema: acceptInitializationGateSchema,
+    rawInput,
+    invoke: (ctx, input) => acceptCaioInitializationGate({
+      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
+    }),
+  });
+}
+
+export async function revokeInitializationGateAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "principal_bound",
+    schema: revokeInitializationGateSchema,
+    rawInput,
+    invoke: (ctx, input) => revokeCaioInitializationGate({
+      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
+    }),
   });
 }
 

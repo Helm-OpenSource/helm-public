@@ -1,7 +1,12 @@
 import { WorkspaceRole } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { cacheMock, sessionMock, governanceMock, catalogMock, observationMock } = vi.hoisted(() => ({
+const { cacheMock, sessionMock, governanceMock, catalogMock, observationMock, gateMock } = vi.hoisted(() => ({
+  gateMock: {
+    recordCaioInitializationAssessment: vi.fn(),
+    acceptCaioInitializationGate: vi.fn(),
+    revokeCaioInitializationGate: vi.fn(),
+  },
   catalogMock: {
     createDataAssetCatalogEntry: vi.fn(),
     recordDataAssetClassificationReceipt: vi.fn(),
@@ -43,12 +48,21 @@ vi.mock("@/lib/stage1-owner-loop/observation.service", async (importOriginal) =>
   ...observationMock,
 }));
 
+vi.mock("@/lib/stage1-owner-loop/caio-initialization-gate-store.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/stage1-owner-loop/caio-initialization-gate-store.service")>()),
+  ...gateMock,
+}));
+
 import { CaioMandateStoreError } from "@/lib/caio-governance/mandate-store.service";
+import { CaioInitializationGateStoreError } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
 import { DataAssetCatalogConflictError } from "@/lib/stage1-owner-loop/data-asset-catalog.service";
 import { ObservationAuthorizationDeniedError } from "@/lib/stage1-owner-loop/observation.service";
 
 import {
+  acceptInitializationGateAction,
   activateMandateAction,
+  recordInitializationAssessmentAction,
+  revokeInitializationGateAction,
   createCatalogEntryAction,
   createObservationProgramAction,
   recordCatalogAuthorizationAction,
@@ -149,7 +163,23 @@ const governanceCases: readonly Case[] = [
     input: { actorCeoRef: "ceo-primary", stopRecordId: "stop_1" } },
 ];
 
-const allCases: readonly Case[] = [...governanceCases, ...catalogCases];
+const gateRejection = [new CaioInitializationGateStoreError("private gate detail"), "initialization_rejected"] as const;
+
+const gateCases: readonly Case[] = [
+  { name: "recordInitializationAssessment", access: "owner", action: recordInitializationAssessmentAction,
+    service: gateMock.recordCaioInitializationAssessment, rejection: gateRejection,
+    input: { mandateRecordId: "mandate_1", evaluationKey: "g0-2026-09-15" } },
+  { name: "acceptInitializationGate", access: "principal_bound", action: acceptInitializationGateAction,
+    service: gateMock.acceptCaioInitializationGate, rejection: gateRejection,
+    input: { assessmentId: "assessment_1", ceoPrincipalRef: "ceo-primary", idempotencyKey: "accept_1",
+      inventoryConfirmationRef: "inventory:1", customerAcceptanceRef: "acceptance:1", acceptedExceptionRefs: [],
+      reasonCodes: ["ready"], evidenceRefs: ["evidence:g0-1"] } },
+  { name: "revokeInitializationGate", access: "principal_bound", action: revokeInitializationGateAction,
+    service: gateMock.revokeCaioInitializationGate, rejection: gateRejection,
+    input: { ceoPrincipalRef: "ceo-primary", idempotencyKey: "revoke_1", reasonCodes: ["withdrawn"], evidenceRefs: ["evidence:r-1"] } },
+];
+
+const allCases: readonly Case[] = [...governanceCases, ...catalogCases, ...gateCases];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -234,9 +264,22 @@ describe("session-derived actor name", () => {
 });
 
 describe("access classification", () => {
-  it("keeps registration OWNER-only and leaves binding-authorized transitions to the service", () => {
-    expect(governanceCases.filter((c) => c.access === "owner").map((c) => c.name).sort())
-      .toEqual(["createMandateDraft", "registerPrincipalBinding", "revokePrincipalBinding"]);
+  it("keeps registration OWNER-only and leaves CEO/guardian acts to the service's binding check", () => {
+    expect(allCases.filter((c) => c.access === "principal_bound").map((c) => c.name).sort()).toEqual([
+      "acceptInitializationGate", "activateMandate", "recordGuardianStop", "resumeGuardianStop",
+      "revokeInitializationGate", "revokeMandate", "suspendMandate",
+    ]);
+  });
+});
+
+describe("G0 acceptance idempotency", () => {
+  it("passes the client idempotency key through and returns the service's replay result unchanged", async () => {
+    gateMock.acceptCaioInitializationGate.mockResolvedValue({ receiptId: "receipt_g0", status: "accepted", outcome: "replayed" });
+    const first = await acceptInitializationGateAction(gateCases[1].input);
+    const second = await acceptInitializationGateAction(gateCases[1].input);
+    expect(first).toEqual(second);
+    expect(first).toEqual({ ok: true, value: { receiptId: "receipt_g0", status: "accepted", outcome: "replayed" } });
+    for (const call of gateMock.acceptCaioInitializationGate.mock.calls) expect(call[0].idempotencyKey).toBe("accept_1");
   });
 });
 
