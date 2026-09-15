@@ -287,6 +287,37 @@ describe("CAIO initialization assessment projector", () => {
     ]);
   });
 
+  it("keeps the assessment basis when a newer healthy run replaces the latest run (evaluator v2)", () => {
+    const basisOf = (snapshot: CaioInitializationProjectionSnapshot) =>
+      computeCaioInitializationAssessment(
+        projectCaioInitializationAssessmentInput(snapshot).input,
+      );
+    const baseline = basisOf(readySnapshot());
+
+    // A recurring observation job creates a new run every cycle; a healthy one must not stale G0.
+    const newerHealthy = readySnapshot();
+    const latest = newerHealthy.sources[0].latestRun!;
+    newerHealthy.sources[0].latestRun = {
+      ...latest,
+      id: "run-2",
+      evidenceRefs: ["evidence:run:2"],
+    };
+    const healthy = basisOf(newerHealthy);
+    expect(healthy.decision).toBe("ready_for_owner_acceptance");
+    expect(healthy.basisHash).toBe(baseline.basisHash);
+
+    const newerFailed = readySnapshot();
+    newerFailed.sources[0].latestRun = {
+      ...latest,
+      id: "run-3",
+      status: "FAILED",
+      outcome: "FAILURE",
+      evidenceRefs: [],
+      errorCodes: ["metric_unknown"],
+    };
+    expect(basisOf(newerFailed).basisHash).not.toBe(baseline.basisHash);
+  });
+
   it("fails closed when a referenced mapping artifact is missing", () => {
     const snapshot = readySnapshot();
     snapshot.artifacts = snapshot.artifacts.filter(
