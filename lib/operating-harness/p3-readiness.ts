@@ -667,10 +667,14 @@ export function evaluateHarnessP3Readiness(input: unknown): HarnessP3ReadinessRe
     successfulRollbackDrillEvidence.length,
     new Set(successfulRollbackDrillEvidence.map((item) => item.candidateRevisionId)).size,
   );
+  // Tenant self-observation is customer data observed in the customer's own deployment; it never
+  // counts toward improvement readiness, same as fleet and OSS sources.
   const customerOrOssSourceRunCount = runs.filter((run) =>
     run.sourceClasses.some(
       (sourceClass) =>
-        sourceClass === "fleet_customer_health" || sourceClass === "oss_governance",
+        sourceClass === "fleet_customer_health" ||
+        sourceClass === "oss_governance" ||
+        sourceClass === "tenant_self_observation",
     ),
   ).length;
   const objectKindRunOccurrences = new Map<string, number>();

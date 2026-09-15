@@ -282,7 +282,11 @@ export function validateHarnessWeaknessSignal(input: unknown): ValidationResult 
       : weakness.observedValue > threshold.value;
   if (!crossed) errors.push("weakness_threshold_not_crossed");
   for (const sourceClass of weakness.sourceClasses) {
-    if (sourceClass === "fleet_customer_health" || sourceClass === "oss_governance") {
+    if (
+      sourceClass === "fleet_customer_health" ||
+      sourceClass === "oss_governance" ||
+      sourceClass === "tenant_self_observation"
+    ) {
       errors.push(`forbidden_weakness_source_class:${sourceClass}`);
     }
   }

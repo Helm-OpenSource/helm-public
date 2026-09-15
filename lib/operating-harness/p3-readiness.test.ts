@@ -200,6 +200,16 @@ describe("operating harness P3 data readiness", () => {
     );
   });
 
+  it("rejects tenant self-observation evidence from the improvement corpus", () => {
+    const evidence = mutateEvidence(matureEvidence(), (draft) => {
+      draft.evaluationWindow.runs[0].sourceClasses = ["tenant_self_observation"];
+    });
+
+    expect(evaluateHarnessP3Readiness(evidence).failures).toContain(
+      "customer_or_oss_source_in_improvement",
+    );
+  });
+
   it("keeps boundary incidents and protected mutations as hard vetoes", () => {
     const evidence = mutateEvidence(matureEvidence(), (draft) => {
       draft.evaluationWindow.runs[2].boundaryIncidentCount = 1;

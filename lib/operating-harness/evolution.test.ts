@@ -254,6 +254,17 @@ describe("operating harness P2 weakness mining", () => {
     );
   });
 
+  it("rejects a weakness that names tenant self-observation as a source class", () => {
+    const mined = mineHarnessWeaknesses(weaknessShadowInput());
+    const tenantWeakness = { ...mined.weaknesses[0], sourceClasses: ["tenant_self_observation" as const] };
+    const { contentHash: _oldHash, ...tenantContent } = tenantWeakness;
+    tenantWeakness.contentHash = computeHarnessWeaknessContentHash(tenantContent);
+
+    expect(validateHarnessWeaknessSignal(tenantWeakness).errors).toContain(
+      "forbidden_weakness_source_class:tenant_self_observation",
+    );
+  });
+
   it("does not turn structural or incomplete evaluation failures into learnable weaknesses", () => {
     const input = weaknessShadowInput();
     input.expertEvaluation.bSet.cases = [];

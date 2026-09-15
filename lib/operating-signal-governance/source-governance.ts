@@ -15,7 +15,12 @@ export const OPERATING_SIGNAL_SOURCE_CLASSES = [
   "synthetic_public",
   "deidentified_promoted_case",
   "oss_governance",
+  // A tenant observing its own operations inside its own deployment. Triage and advice only;
+  // never improvement, evaluation, training, memory promotion or fleet aggregation.
+  "tenant_self_observation",
 ] as const;
+
+export const TENANT_SELF_OBSERVATION_ALLOWED_USES = ["operator_triage", "advice_only_risk_review"] as const;
 
 export type OperatingSignalSourceClass = (typeof OPERATING_SIGNAL_SOURCE_CLASSES)[number];
 
@@ -140,6 +145,7 @@ const SOURCE_CLASS_ALLOWED_USES: Record<
   synthetic_public: new Set(["public_eval", "heldout_eval", "fixture_validation"]),
   deidentified_promoted_case: new Set(["public_eval", "heldout_eval"]),
   oss_governance: OSS_ALLOWED_USES,
+  tenant_self_observation: new Set(TENANT_SELF_OBSERVATION_ALLOWED_USES),
 };
 
 const FORBIDDEN_KEYS = [
@@ -398,6 +404,21 @@ export function validateOperatingSignalSourceEnvelope(input: unknown): Validatio
     }
   }
 
+  if (source.sourceClass === "tenant_self_observation") {
+    if (source.improvementLoopEligible) {
+      errors.push("tenant_self_observation_never_improvement_eligible");
+    }
+    if (source.promotionState !== "blocked") {
+      errors.push("tenant_self_observation_requires_blocked_state");
+    }
+    if (source.aliasMode !== "none") {
+      errors.push("tenant_self_observation_requires_no_alias");
+    }
+    if (source.personAttributionMode !== "none") {
+      errors.push("tenant_self_observation_cannot_carry_person_attribution");
+    }
+  }
+
   if (source.improvementLoopEligible && source.promotionState === "blocked") {
     errors.push("improvement_eligible_source_cannot_be_blocked");
   }
@@ -421,7 +442,8 @@ export function validateOperatingSignalImprovementGate(input: {
   const source = input.source as OperatingSignalSourceEnvelope;
   if (
     source.sourceClass === "fleet_customer_health" ||
-    source.sourceClass === "oss_governance"
+    source.sourceClass === "oss_governance" ||
+    source.sourceClass === "tenant_self_observation"
   ) {
     errors.push(`source_class_forbidden_from_improvement_loop:${source.sourceClass}`);
     return result([...new Set(errors)]);
@@ -448,4 +470,31 @@ export function validateOperatingSignalImprovementGate(input: {
   }
 
   return result([...new Set(errors)]);
+}
+
+/**
+ * Canonical envelope for a tenant self-observation signal. Every high-risk and improvement use,
+ * plus tenant ingestion, is declared forbidden so the boundary is explicit on the record itself.
+ */
+export function buildTenantSelfObservationEnvelope(input: {
+  signalId: string;
+  allowedUses: readonly (typeof TENANT_SELF_OBSERVATION_ALLOWED_USES)[number][];
+  auditRefs: string[];
+  boundaryNote: string;
+}): OperatingSignalSourceEnvelope {
+  const forbiddenUses = [...new Set<OperatingSignalUse>([...HIGH_RISK_USES, ...IMPROVEMENT_USES, "tenant_ingestion"])].sort();
+  return {
+    schemaVersion: "helm.operating-signal-source-governance.v1",
+    signalId: input.signalId,
+    sourceClass: "tenant_self_observation",
+    allowedUses: [...input.allowedUses],
+    forbiddenUses,
+    improvementLoopEligible: false,
+    promotionState: "blocked",
+    aliasMode: "none",
+    personAttributionMode: "none",
+    customerConsentScopeRef: null,
+    auditRefs: [...input.auditRefs],
+    boundaryNote: input.boundaryNote,
+  };
 }
