@@ -799,4 +799,4 @@ export type CaioOperatingAttentionReadout =
 4. **隔离库守卫抽为 `lib/caio-operating-context/mysql-test-guard.ts`**，两套 MySQL 测试共用。
 5. **MySQL 测试的 ref 后缀只用字母**：公开安全 ref 校验会拒绝形似数字标识的片段（与 stage1 套件的偶发失败同源）。
 6. **读出任何读失败（含 P2021）都返回 `available:false`**，不单独区分缺表。
-7. Task 8 合同扩展草案已写入规格 §5.1（待 owner 批准）。
+7. Task 8 合同扩展已写入规格 §5.1，owner 2026-09-15 批准；P0-2b 计划据此编写。

@@ -114,12 +114,12 @@ P3a `TemporalOperatingContextSnapshot` 是由 canonical 记录派生的证据图
 - 节奏：快检（不用模型，默认 10 分钟）、小时诊断与日终复盘（入 §4 队列）由调度器触发。
 - 数据域读失败或过期时，依赖该域的检测器与规则停止触发。
 
-### 5.1 P3a 合同扩展（草案，待 owner 批准；未实现）
+### 5.1 P3a 合同扩展（owner 2026-09-15 批准；未实现）
 
 2026-09-15 核对：现行 P3a 投影输入门只接受 `HarnessManifest.scope="public_offline_shadow"`、来源类
 `synthetic_public / self_dogfood_health / deidentified_promoted_case` 与用途 `fixture_validation / public_eval /
 heldout_eval`，客户来源 fail closed，因此上表的"复用 context-projector"按现合同不能成立。owner 已裁定扩展合同、
-分两段实施（P0-2a 不依赖本节；P0-2b 在本节获批合入后编写）。拟冻结的扩展：
+分两段实施（P0-2a 不依赖本节；P0-2b 按本节实现）。owner 2026-09-15 批准下列扩展：
 
 1. **新来源类 `tenant_self_observation`**：租户在自身部署内观察自身经营，单租户。允许用途只有
    `operator_triage` 与 `advice_only_risk_review`；其余用途一律拒绝，特别是 `public_eval`、`heldout_eval`、
