@@ -3876,6 +3876,29 @@ model CaioOperatingContextSnapshot {
   @@index([workspaceId, createdAt])
 }
 
+// Operational run ledger for signal-collection jobs (default off). Closed-set outcomes and counts
+// only: job and target messages may carry tenant data and are never stored.
+model SignalCollectionJobRun {
+  id           String   @id @default(cuid())
+  jobKey       String
+  tenantKey    String   @db.VarChar(64)
+  extensionKey String
+  source       String   @db.VarChar(32)
+  outcome      String   @db.VarChar(16) // succeeded | failed | crashed | skipped
+  errorCode    String?  @db.VarChar(64)
+  startedAt    DateTime
+  finishedAt   DateTime
+  durationMs   Int
+  targetCount  Int
+  successCount Int
+  failureCount Int
+  skippedCount Int
+  createdAt    DateTime @default(now())
+
+  @@index([tenantKey, jobKey, finishedAt])
+  @@index([finishedAt])
+}
+
 // Workspace-level runtime record for the public DecisionObject contract. JSON
 // columns retain the public-safe structured arrays without creating a second
 // business-object schema; ActionItem remains the execution state machine.

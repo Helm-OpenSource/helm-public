@@ -6,6 +6,12 @@ import type {
   SignalCollectionTarget,
   SignalCollectionTargetRunSummary,
 } from "@/lib/signal-collection/types";
+import {
+  buildCrashedSignalCollectionJobRunEntry,
+  buildSignalCollectionJobRunEntry,
+  type SignalCollectionJobRunEntry,
+  type SignalCollectionRunRecorder,
+} from "@/lib/signal-collection/run-ledger";
 import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 
 export type DailySchedule = {
@@ -180,6 +186,7 @@ export async function runSignalCollectionJobs(input: {
   jobKeys?: readonly string[];
   now?: Date;
   source?: SignalCollectionRunContext["source"];
+  recordRun?: SignalCollectionRunRecorder;
 }): Promise<SignalCollectionRunSummary> {
   assertDeploymentCapabilityEnabled("signal_runtime_write");
   const requestedAt = input.now ?? new Date();
@@ -189,16 +196,29 @@ export async function runSignalCollectionJobs(input: {
     ? input.jobs.filter((job) => selectedKeys.has(job.key))
     : [...input.jobs];
 
+  const source = input.source ?? "api";
   const jobSummaries: SignalCollectionJobRunSummary[] = [];
   for (const job of jobs) {
-    jobSummaries.push(
-      await runSingleJob({
-        job,
-        requestedAt,
-        windowDate,
-        source: input.source ?? "api",
-      }),
-    );
+    const startedAt = new Date();
+    const jobSummary = await runSingleJob({
+      job,
+      requestedAt,
+      windowDate,
+      source,
+    });
+    jobSummaries.push(jobSummary);
+    if (input.recordRun) {
+      await safeRecordRun(
+        input.recordRun,
+        buildSignalCollectionJobRunEntry({
+          job,
+          source,
+          startedAt,
+          finishedAt: new Date(),
+          summary: jobSummary,
+        }),
+      );
+    }
   }
 
   const successCount = jobSummaries.reduce((sum, job) => sum + job.successCount, 0);
@@ -223,6 +243,7 @@ export function startSignalCollectionScheduler(input: {
   jobs: readonly SignalCollectionJob[];
   stateKey: string;
   source?: SignalCollectionRunContext["source"];
+  recordRun?: SignalCollectionRunRecorder;
 }) {
   assertDeploymentCapabilityEnabled("signal_runtime_write");
   if (process.env.NODE_ENV === "test") {
@@ -272,6 +293,7 @@ export function startSignalCollectionScheduler(input: {
       job,
       state,
       source: input.source ?? "scheduler",
+      recordRun: input.recordRun,
     });
   }
 }
@@ -293,6 +315,7 @@ async function runSingleJob(input: {
       skippedCount: 1,
       runs: [],
       message: "job_disabled",
+      errorCode: "job_disabled",
     };
   }
 
@@ -307,6 +330,7 @@ async function runSingleJob(input: {
       skippedCount: 0,
       runs: [],
       message: startCheck.reason,
+      errorCode: "start_check_failed",
     };
   }
 
@@ -323,6 +347,7 @@ async function runSingleJob(input: {
       skippedCount: 0,
       runs: [],
       message: errorMessage(error),
+      errorCode: "resolve_targets_failed",
     };
   }
 
@@ -336,6 +361,7 @@ async function runSingleJob(input: {
       skippedCount: 1,
       runs: [],
       message: "no_targets",
+      errorCode: "no_targets",
     };
   }
 
@@ -386,6 +412,7 @@ async function runSingleJob(input: {
     failureCount,
     skippedCount,
     runs,
+    ...(failureCount > 0 ? { errorCode: "target_failed" as const } : {}),
   };
 }
 
@@ -393,8 +420,9 @@ function scheduleJob(input: {
   job: SignalCollectionJob;
   state: SchedulerState;
   source: SignalCollectionRunContext["source"];
+  recordRun?: SignalCollectionRunRecorder;
 }) {
-  const { job, state, source } = input;
+  const { job, state, source, recordRun } = input;
   const configuredCron =
     process.env[job.schedule.timeEnvKey]?.trim() || job.schedule.defaultCron;
   const schedule =
@@ -426,6 +454,7 @@ function scheduleJob(input: {
       delayMs,
     });
     const timer = setTimeout(async () => {
+      const triggeredAt = new Date();
       try {
         logSchedulerInfo("job triggered", {
           jobKey: job.key,
@@ -434,6 +463,7 @@ function scheduleJob(input: {
         const summary = await runSignalCollectionJobs({
           jobs: [job],
           source,
+          recordRun,
         });
         logSchedulerInfo("job completed", {
           jobKey: job.key,
@@ -454,6 +484,17 @@ function scheduleJob(input: {
           jobKey: job.key,
           errorCode: "scheduler_job_crashed",
         });
+        if (recordRun) {
+          await safeRecordRun(
+            recordRun,
+            buildCrashedSignalCollectionJobRunEntry({
+              job,
+              source,
+              startedAt: triggeredAt,
+              finishedAt: new Date(),
+            }),
+          );
+        }
       } finally {
         scheduleNext();
       }
@@ -503,6 +544,22 @@ function buildTraceId(jobKey: string, targetKey: string, requestedAt: Date) {
   const normalizedJob = jobKey.replace(/[^a-zA-Z0-9_-]/g, "_");
   const normalizedTarget = targetKey.replace(/[^a-zA-Z0-9_-]/g, "_");
   return `${normalizedJob}:${normalizedTarget}:${requestedAt.getTime()}`;
+}
+
+async function safeRecordRun(
+  recordRun: SignalCollectionRunRecorder,
+  entry: SignalCollectionJobRunEntry,
+) {
+  try {
+    await recordRun(entry);
+  } catch {
+    // The ledger is observational: a failed write must never change the job outcome, and the raw
+    // error may carry connection details, so only the closed code is logged.
+    logSchedulerWarn("run ledger write failed", {
+      jobKey: entry.jobKey,
+      errorCode: "run_ledger_write_failed",
+    });
+  }
 }
 
 function errorMessage(error: unknown) {

@@ -71,6 +71,14 @@ export type SignalCollectionTargetRunSummary = {
   details?: unknown;
 };
 
+export type SignalCollectionRunErrorCode =
+  | "job_disabled"
+  | "no_targets"
+  | "start_check_failed"
+  | "resolve_targets_failed"
+  | "target_failed"
+  | "scheduler_job_crashed";
+
 export type SignalCollectionJobRunSummary = {
   jobKey: string;
   status: "success" | "failed" | "skipped";
@@ -80,6 +88,7 @@ export type SignalCollectionJobRunSummary = {
   skippedCount: number;
   runs: SignalCollectionTargetRunSummary[];
   message?: string;
+  errorCode?: SignalCollectionRunErrorCode;
 };
 
 export type SignalCollectionRunSummary = {

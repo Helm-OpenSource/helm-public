@@ -30,6 +30,7 @@ import type {
   SignalCollectionRunContext,
 } from "@/lib/signal-collection/types";
 import { assertDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
+import { recordSignalCollectionJobRun } from "@/lib/signal-collection/run-ledger.service";
 
 import {
   getRegisteredAccountBindings,
@@ -482,6 +483,7 @@ export async function runRegisteredSignalCollectionJobs(input: {
     jobs: listRegisteredSignalCollectionJobs(),
     jobKeys: input.jobKeys,
     source: input.source ?? "api",
+    recordRun: recordSignalCollectionJobRun,
   });
 }
 
@@ -491,6 +493,7 @@ export function startRegisteredSignalCollectionScheduler() {
     jobs: listRegisteredSignalCollectionJobs(),
     stateKey: "registered-signal-collection",
     source: "scheduler",
+    recordRun: recordSignalCollectionJobRun,
   });
 }
 
