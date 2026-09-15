@@ -1358,6 +1358,7 @@ model Workspace {
   observationSources                   ObservationSource[]
   observationSourceRuns                ObservationSourceRun[]
   caioQuickCheckTicks                  CaioQuickCheckTick[]
+  caioInferenceJobs                    CaioInferenceJob[]
   caioMetricObservations               CaioMetricObservation[]
   caioAnomalyCandidates                CaioAnomalyCandidate[]
   caioOperatingContextSnapshots        CaioOperatingContextSnapshot[]
@@ -3874,6 +3875,39 @@ model CaioOperatingContextSnapshot {
   tick                CaioQuickCheckTick @relation(fields: [tickId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
+}
+
+// Pull inference job (CAIO P1, default off: nothing enqueues without the review jobs). The frozen input
+// holds snapshot references and aggregate counts only; the layered judgement body stays private here and the
+// public JudgementPacket is stored beside it. Every egress step goes through the governed deferred dispatch.
+model CaioInferenceJob {
+  id                    String    @id @default(cuid())
+  workspaceId           String
+  taskClass             String    @db.VarChar(32) // hourly_diagnosis | daily_review
+  windowStart           DateTime
+  windowEnd             DateTime
+  status                String    @db.VarChar(16) // queued | claimed | completed | rejected | expired | dead_letter
+  attempt               Int       @default(0)
+  inputJson             String    @db.LongText
+  inputHash             String    @db.VarChar(80)
+  claimToken            String?   @db.VarChar(64)
+  claimedAt             DateTime?
+  leaseExpiresAt        DateTime?
+  decisionRef           String?
+  gatewayRef            String?
+  dispatchClaimHash     String?   @db.VarChar(80)
+  judgementPacketJson   String?   @db.LongText
+  layeredJudgementJson  String?   @db.LongText
+  layeredJudgementHash  String?   @db.VarChar(80)
+  rejectionCode         String?   @db.VarChar(64)
+  completedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, taskClass, windowStart])
+  @@index([status, leaseExpiresAt])
+  @@index([workspaceId, status, createdAt])
 }
 
 // Operational run ledger for signal-collection jobs (default off). Closed-set outcomes and counts
