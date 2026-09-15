@@ -54,6 +54,20 @@ SignalEvent -> EvidenceRef -> BusinessObjectAlias -> JudgementPacket
 revision、fleet customer source 或 OSS governance source 都 fail closed。self-dogfood 和 de-identified
 operational source 仍必须先通过既有 promotion gate；P3a 不创建第二套脱敏或晋升机制。
 
+### 3.1 租户自观察（tenant live shadow，2026-09-16）
+
+在上述公开离线合同之外，并列增加一个窄口径：租户在**自身部署内**观察自身经营。
+
+- 来源类 `tenant_self_observation`，只允许 `operator_triage` 与 `advice_only_risk_review`；
+  `improvementLoopEligible=false`、`promotionState=blocked`、无别名、无人员归属；改进门、weakness
+  挖掘与 P3 readiness 对其一律 fail closed，永不进入评测、训练、记忆晋升或跨租户汇总。
+- 只能出现在 `scope=tenant_live_shadow` 的 manifest 下；`allowedSourceClasses` 恰为该类，两种 scope 的
+  记录不得出现在同一投影输入，快照的来源回执也不得混用。
+- 不使用 `EvalCasePromotion`：每个来源绑定必须携带终态观察运行回执（`SUCCEEDED`/`PARTIAL`），回执绑定
+  数据资产目录的授权与连接回执，并覆盖该信号的全部 evidence ref。
+- 公开离线输入的形状校验、拒绝码与快照哈希不变；快照仍是可丢弃 read model，不获得写、发、执行、
+  批准或记忆晋升权限。
+
 ## 4. 输出合同
 
 Snapshot 固定包含：
@@ -146,9 +160,16 @@ canonical state, calls a model, writes back, or grants action authority. Its syn
 proves replay and boundary invariants only; empirical held-out lift, model advantage, customer
 generalization, production runtime, and an enterprise world model remain unproven.
 
+Section 3.1 adds a narrow, parallel tenant live shadow scope: a tenant observing its own operations
+inside its own deployment through the `tenant_self_observation` source class, allowed only for triage
+and advice, bound to terminal observation-run and data-catalog receipts instead of an EvalCasePromotion,
+and excluded from every improvement, evaluation, training, memory-promotion, and cross-tenant path.
+The public offline contract, its rejection codes, and its snapshot hashes are unchanged.
+
 ## 变更记录 / Change Log
 
 | Date       | Change                                                                                                                        |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-16 | Added the tenant live shadow scope and `tenant_self_observation` source class (owner-approved 2026-09-15); public offline contract unchanged |
 | 2026-07-12 | Hardened binding totality, derived self-consistency, exact relation evidence, timezone ordering, and metadata receipt binding |
 | 2026-07-12 | Recorded the limited owner override and implemented the P3a public deterministic context-model contract                       |
