@@ -276,7 +276,20 @@ rollback 和生产权限语义不得因此降级。P3a 当前合同见
 详细阈值、derived operating-context 架构、跨仓职责、实施切片和 abort 条件见
 [P3 数据门控升级计划](HELM_OPERATING_HARNESS_P3_DATA_GATED_PLAN.md)。
 
-## English Reference
+## 12. 租户自观察来源（2026-09-16）
+
+来源治理新增 `tenant_self_observation`：租户在自身部署内观察自身经营，只用于分诊与建议。
+
+- 信封规则：允许用途仅 `operator_triage`、`advice_only_risk_review`；`improvementLoopEligible=false`；
+  `promotionState=blocked`；`aliasMode=none`；`personAttributionMode=none`；全部高风险用途与改进用途
+  必须声明为禁止。
+- `validateOperatingSignalImprovementGate`、weakness 校验与 P3 readiness 对该类 fail closed，与
+  fleet customer、OSS governance 同等对待。
+- Harness 层并列提供 `tenant_live_shadow` manifest（`validateTenantLiveHarnessManifest`），
+  `harnessManifestSchema` 不变，因此租户 manifest 不能进入 shadow receipt、evolution 或 readiness。
+- 隐私守卫对完整匹配 `sha256:<64 位小写十六进制>` 的内容摘要不再跑号码/地址正则（摘要尾部可偶然形似
+  手机号）；禁用键检查不变。
+
 
 P0 establishes one public-safe canonical operating-signal chain and makes lifecycle state a
 deterministic projection rather than a second source of truth. P1 composes existing Core components
@@ -284,12 +297,16 @@ through content-bound manifests and revisions, then reuses the existing pre-regi
 evaluator to issue shadow-only receipts. P2 deterministically mines replay-proven weaknesses, limits
 proposals to mutable components, requires a fresh held-out set, and stops at an unapproved owner-review
 packet. None of these phases adds production runtime authority, model training, automatic learning,
-customer data, writeback, external send, approval, commitment, or memory promotion.
+customer data, writeback, external send, approval, commitment, or memory promotion. Section 12 adds the
+`tenant_self_observation` source class for a tenant's own triage and advice only; it fails closed at the
+improvement gate, weakness validation, and P3 readiness, and uses a parallel `tenant_live_shadow` manifest
+so the public manifest schema is unchanged.
 
 ## 变更记录 / Change Log
 
 | Date | Change |
 | --- | --- |
+| 2026-09-16 | Added the `tenant_self_observation` source class, the parallel `tenant_live_shadow` manifest, and the sha256-digest exemption in the contact-pattern guard |
 | 2026-07-12 | Recorded the scoped P3a/P3b/P3d/P3e owner implementation override without changing evidence readiness or production authority |
 | 2026-07-12 | Added the machine-checkable P3 data-readiness gate and linked deferred implementation plan |
 | 2026-07-12 | Added the P2 replay-proven weakness, additive proposal, fresh-heldout, and owner-review-only evolution loop |

@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  */
 
 import { db } from "@/lib/db";
+import { projectTemporalOperatingContext } from "@/lib/operating-harness/context-projector";
 import {
   createDataAssetCatalogEntry,
   recordDataAssetAuthorizationReceipt,
@@ -21,6 +22,7 @@ import {
   revokeEnterpriseObservationProgram,
 } from "@/lib/stage1-owner-loop/observation.service";
 
+import { CAIO_CONTEXT_PROJECTION_ENABLED_ENV } from "./context-projection.service";
 import type { CaioDetector, CaioMetricQueryTemplate } from "./contracts";
 import { assertDisposableCaioOperatingContextDatabase } from "./mysql-test-guard";
 import { caioQuickCheckBucketStart, runCaioQuickCheck } from "./quick-check.service";
@@ -115,6 +117,7 @@ describeMysql("CAIO quick check with an isolated MySQL database", () => {
   });
 
   afterAll(async () => {
+    delete process.env[CAIO_CONTEXT_PROJECTION_ENABLED_ENV];
     // Same retention rule as the other CAIO isolated suites: rows are kept.
     await db.$disconnect();
   });
@@ -138,13 +141,23 @@ describeMysql("CAIO quick check with an isolated MySQL database", () => {
   });
 
   it("refreshes on a repeat hit, clears on a known miss, and holds state while the gate refuses", async () => {
-    await expect(runCaioQuickCheck({ workspaceId, now: new Date(base.getTime() + BUCKET_MS), templates: templates(), detectors }))
-      .resolves.toMatchObject({ refreshed: 1, opened: 0 });
+    process.env[CAIO_CONTEXT_PROJECTION_ENABLED_ENV] = "true";
+    const refreshed = await runCaioQuickCheck({ workspaceId, now: new Date(base.getTime() + BUCKET_MS), templates: templates(), detectors });
+    expect(refreshed).toMatchObject({ refreshed: 1, opened: 0, contextProjection: "projected" });
     expect(await db.caioAnomalyCandidate.findFirst({ where: { workspaceId, status: "OPEN" } })).toMatchObject({ hitCount: 2 });
+
+    // The stored input replays to the stored snapshot and carries no raw internal identifiers.
+    if (refreshed.status !== "completed") throw new Error("expected a completed tick");
+    const snapshot = await db.caioOperatingContextSnapshot.findUniqueOrThrow({ where: { tickId: refreshed.tickId } });
+    expect(snapshot).toMatchObject({ status: "PROJECTED", objectCount: 1, signalCount: 1 });
+    expect(projectTemporalOperatingContext(JSON.parse(snapshot.projectionInputJson ?? "{}")).snapshot?.contentHash).toBe(snapshot.snapshotHash);
+    const run = await db.observationSourceRun.findFirstOrThrow({ where: { workspaceId, executionKey: `caio-quick-check:${new Date(base.getTime() + BUCKET_MS).toISOString()}` } });
+    const stored = `${snapshot.projectionInputJson}${snapshot.snapshotJson}`;
+    for (const raw of [workspaceId, run.id, ownerId, sourceKey]) expect(stored).not.toContain(raw);
 
     deadLetterCount = 0;
     await expect(runCaioQuickCheck({ workspaceId, now: new Date(base.getTime() + 2 * BUCKET_MS), templates: templates(), detectors }))
-      .resolves.toMatchObject({ cleared: 1 });
+      .resolves.toMatchObject({ cleared: 1, contextProjection: "no_signals" });
     expect(await db.caioAnomalyCandidate.count({ where: { workspaceId, status: "OPEN" } })).toBe(0);
 
     deadLetterCount = 12;
@@ -152,7 +165,7 @@ describeMysql("CAIO quick check with an isolated MySQL database", () => {
       .resolves.toMatchObject({ opened: 1 });
     await revokeEnterpriseObservationProgram({ workspaceId, programId, reason: "integration test revocation", actorName: ACTOR, actorUserId: ownerId });
     const refused = await runCaioQuickCheck({ workspaceId, now: new Date(base.getTime() + 4 * BUCKET_MS), templates: templates(), detectors });
-    expect(refused).toMatchObject({ status: "completed", known: 0, unknown: 2, cleared: 0 });
+    expect(refused).toMatchObject({ status: "completed", known: 0, unknown: 2, cleared: 0, contextProjection: "no_signals" });
     // Unknown is not "resolved": the open candidate stays open while the source cannot be read.
     expect(await db.caioAnomalyCandidate.count({ where: { workspaceId, status: "OPEN" } })).toBe(1);
     expect(await db.caioAnomalyCandidate.count({ where: { workspaceId, status: "CLEARED" } })).toBe(1);

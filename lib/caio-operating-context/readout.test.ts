@@ -6,6 +6,7 @@ const { dbMock } = vi.hoisted(() => ({
     caioQuickCheckTick: { findFirst: vi.fn() },
     caioAnomalyCandidate: { findMany: vi.fn() },
     caioMetricObservation: { findMany: vi.fn() },
+    caioOperatingContextSnapshot: { findFirst: vi.fn() },
   },
 }));
 vi.mock("@/lib/db", () => ({ db: dbMock }));
@@ -29,6 +30,7 @@ beforeEach(() => {
     candidate("critical-late", "critical", "2026-09-16T02:00:00Z"),
   ]);
   dbMock.caioMetricObservation.findMany.mockResolvedValue([{ templateId: "queue", domain: "operations", errorCode: "observation_gate_rejected" }]);
+  dbMock.caioOperatingContextSnapshot.findFirst.mockResolvedValue({ status: "PROJECTED", createdAt: new Date("2026-09-16T02:10:31Z"), objectCount: 2, signalCount: 3 });
 });
 
 describe("getCaioOperatingAttentionReadout", () => {
@@ -48,6 +50,12 @@ describe("getCaioOperatingAttentionReadout", () => {
     expect(readout.openCandidates.map((c) => c.detectorId)).toEqual(["critical-late", "critical-early", "info-late"]);
     expect(dbMock.caioMetricObservation.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { tickId: "tick_1", status: "unknown" } }));
     expect(JSON.stringify(readout)).not.toContain("caio-metric:");
+  });
+
+  it("reads only the latest snapshot status and counts, never its bodies", async () => {
+    const readout = await getCaioOperatingAttentionReadout({ workspaceId: "ws", membershipRole: WorkspaceRole.OWNER, now });
+    expect(readout).toMatchObject({ lastSnapshot: { status: "PROJECTED", objectCount: 2, signalCount: 3 } });
+    expect(dbMock.caioOperatingContextSnapshot.findFirst.mock.calls[0][0].select).toEqual({ status: true, createdAt: true, objectCount: true, signalCount: true });
   });
 
   it("marks a tick older than 30 minutes as stale", async () => {

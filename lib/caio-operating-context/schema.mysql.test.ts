@@ -63,6 +63,15 @@ describeMysql("CAIO operating-context runtime tables", () => {
     await expect(db.caioMetricObservation.create({ data: observation })).rejects.toSatisfy(isUniqueViolation);
   });
 
+  it("keeps one context snapshot per tick and cascades it with the tick", async () => {
+    const tick = await db.caioQuickCheckTick.create({ data: { workspaceId, bucketStart: new Date("2026-09-16T03:00:00Z") } });
+    await db.caioOperatingContextSnapshot.create({ data: { workspaceId, tickId: tick.id, status: "NO_SIGNALS", reasonCode: "no_signals" } });
+    await expect(db.caioOperatingContextSnapshot.create({ data: { workspaceId, tickId: tick.id, status: "NO_SIGNALS" } }))
+      .rejects.toSatisfy(isUniqueViolation);
+    await db.caioQuickCheckTick.delete({ where: { id: tick.id } });
+    expect(await db.caioOperatingContextSnapshot.count({ where: { tickId: tick.id } })).toBe(0);
+  });
+
   it("cascades all three tables with the workspace", async () => {
     const other = await db.workspace.create({ data: { name: `CAIO context cascade ${suffix}`, slug: `caio-context-cascade-${suffix}` } });
     const tick = await db.caioQuickCheckTick.create({ data: { workspaceId: other.id, bucketStart: new Date("2026-09-16T02:00:00Z") } });

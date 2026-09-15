@@ -32,7 +32,12 @@ export type CaioOperatingAttentionReadout =
         lastSeenAt: string;
       }>;
       unknownTemplates: Array<{ templateId: string; domain: string; errorCode: string | null }>;
+      lastSnapshot: { status: "PROJECTED" | "REJECTED" | "NO_SIGNALS"; createdAt: string; objectCount: number; signalCount: number } | null;
     };
+
+function snapshotStatus(value: string): "PROJECTED" | "REJECTED" | "NO_SIGNALS" {
+  return value === "PROJECTED" || value === "NO_SIGNALS" ? value : "REJECTED";
+}
 
 function tickStatus(value: string): "RUNNING" | "COMPLETED" | "FAILED" {
   return value === "COMPLETED" || value === "RUNNING" ? value : "FAILED";
@@ -50,7 +55,7 @@ export async function getCaioOperatingAttentionReadout(input: {
   if (input.membershipRole !== WorkspaceRole.OWNER) return null;
   const now = input.now ?? new Date();
   try {
-    const [lastTick, lastFinishedTick, candidates] = await Promise.all([
+    const [lastTick, lastFinishedTick, candidates, lastSnapshot] = await Promise.all([
       db.caioQuickCheckTick.findFirst({ where: { workspaceId: input.workspaceId }, orderBy: { bucketStart: "desc" } }),
       db.caioQuickCheckTick.findFirst({
         where: { workspaceId: input.workspaceId, status: { in: ["COMPLETED", "FAILED"] } },
@@ -61,6 +66,12 @@ export async function getCaioOperatingAttentionReadout(input: {
         where: { workspaceId: input.workspaceId, status: "OPEN" },
         orderBy: { lastSeenAt: "desc" },
         take: 200,
+      }),
+      // Snapshot bodies and projection inputs are never read here.
+      db.caioOperatingContextSnapshot.findFirst({
+        where: { workspaceId: input.workspaceId },
+        orderBy: { createdAt: "desc" },
+        select: { status: true, createdAt: true, objectCount: true, signalCount: true },
       }),
     ]);
     const unknown = lastFinishedTick
@@ -93,6 +104,14 @@ export async function getCaioOperatingAttentionReadout(input: {
         .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.lastSeenAt.localeCompare(a.lastSeenAt))
         .slice(0, MAX_CANDIDATES),
       unknownTemplates: unknown,
+      lastSnapshot: lastSnapshot
+        ? {
+            status: snapshotStatus(lastSnapshot.status),
+            createdAt: lastSnapshot.createdAt.toISOString(),
+            objectCount: lastSnapshot.objectCount,
+            signalCount: lastSnapshot.signalCount,
+          }
+        : null,
     };
   } catch {
     return { available: false };

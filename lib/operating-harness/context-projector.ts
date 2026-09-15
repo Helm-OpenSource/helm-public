@@ -33,6 +33,12 @@ import {
   type SignalEvent,
 } from "./contracts";
 import { validateTemporalOperatingContextSnapshot } from "./context-validators";
+import { TENANT_LIVE_HARNESS_SCOPE } from "./tenant-live-contracts";
+import {
+  tenantLiveHarnessManifestSchema,
+  validateTenantLiveHarnessManifest,
+  validateTenantSelfObservationBinding,
+} from "./tenant-live-validators";
 import {
   computeHarnessRevisionContentHash,
   type HarnessComponentBinding,
@@ -99,6 +105,9 @@ const projectionInputShapeSchema = z
           .object({
             source: sourceEnvelopeShapeSchema,
             promotion: z.unknown().nullable(),
+            // Present only on tenant self-observation bindings; the per-binding dispatch below rejects
+            // it on public bindings and requires it on tenant bindings.
+            observationReceipts: z.array(z.unknown()).min(1).max(100).optional(),
           })
           .strict(),
       )
@@ -106,6 +115,12 @@ const projectionInputShapeSchema = z
       .max(MAX_CONTEXT_SIGNALS),
   })
   .strict();
+
+// The tenant live shadow input differs from the public input only in its manifest; public inputs keep
+// the original schema so their shape errors are unchanged.
+const tenantProjectionInputShapeSchema = projectionInputShapeSchema.extend({
+  manifest: tenantLiveHarnessManifestSchema,
+});
 
 export type TemporalOperatingContextProjectionResult = {
   ok: boolean;
@@ -191,7 +206,8 @@ export function validateTemporalOperatingContextProjectionInput(
   if (!isRecord(input))
     return result([...errors, "invalid_context_projection_input"]);
 
-  const parsedShape = projectionInputShapeSchema.safeParse(input);
+  const isTenantLive = isRecord(input.manifest) && input.manifest.scope === TENANT_LIVE_HARNESS_SCOPE;
+  const parsedShape = (isTenantLive ? tenantProjectionInputShapeSchema : projectionInputShapeSchema).safeParse(input);
   errors.push(...parseErrors(parsedShape, "invalid_context_projection_input"));
   if (!parsedShape.success) return result(errors);
   const typed = input as unknown as TemporalOperatingContextProjectionInput;
@@ -203,7 +219,11 @@ export function validateTemporalOperatingContextProjectionInput(
     errors.push("context_as_of_before_window_end");
   }
 
-  errors.push(...validateHarnessManifest(typed.manifest).errors);
+  errors.push(
+    ...(typed.manifest.scope === TENANT_LIVE_HARNESS_SCOPE
+      ? validateTenantLiveHarnessManifest(typed.manifest).errors
+      : validateHarnessManifest(typed.manifest).errors),
+  );
   const revisionParsed = harnessRevisionSchema.safeParse(typed.revision);
   errors.push(
     ...parseErrors(revisionParsed, "invalid_context_harness_revision"),
@@ -402,10 +422,29 @@ export function validateTemporalOperatingContextProjectionInput(
         `orphan_context_source_binding:${sourceBinding.source.signalId}`,
       );
     }
-    for (const gateError of validateOperatingSignalImprovementGate(
-      sourceBinding,
-    ).errors) {
-      errors.push(`source_gate:${gateError}`);
+    if (sourceBinding.source.sourceClass === "tenant_self_observation") {
+      // Tenant self-observation never takes the improvement gate: it is bound to terminal observation
+      // runs and catalog receipts instead of an EvalCasePromotion.
+      const signal = signalById.get(sourceBinding.source.signalId);
+      if (!("observationReceipts" in sourceBinding) || sourceBinding.promotion !== null) {
+        errors.push(`tenant_source_gate:observation_receipts_required:${sourceBinding.source.signalId}`);
+      } else if (signal) {
+        for (const gateError of validateTenantSelfObservationBinding({
+          source: sourceBinding.source,
+          observationReceipts: sourceBinding.observationReceipts,
+          signal,
+        }).errors) {
+          errors.push(`tenant_source_gate:${gateError}`);
+        }
+      }
+    } else if ("observationReceipts" in sourceBinding) {
+      errors.push(`unexpected_observation_receipts:${sourceBinding.source.signalId}`);
+    } else {
+      for (const gateError of validateOperatingSignalImprovementGate(
+        sourceBinding,
+      ).errors) {
+        errors.push(`source_gate:${gateError}`);
+      }
     }
     if (
       sourceBinding.source.sourceClass === "synthetic_public" &&

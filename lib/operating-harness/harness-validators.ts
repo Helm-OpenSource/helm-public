@@ -26,7 +26,7 @@ const safeRefSchema = z.string().min(1).max(256).regex(SAFE_REF_PATTERN);
 const sha256Schema = z.string().regex(SHA256_PATTERN);
 const timestampSchema = z.string().datetime({ offset: true });
 
-const componentBindingSchema = z
+export const componentBindingSchema = z
   .object({
     componentKind: z.enum(HARNESS_COMPONENT_KINDS),
     componentRef: safeRefSchema,
