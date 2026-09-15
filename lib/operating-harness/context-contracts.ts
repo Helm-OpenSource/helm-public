@@ -12,6 +12,7 @@ import type {
   HarnessManifest,
   HarnessRevision,
 } from "./harness-contracts";
+import type { TenantLiveHarnessManifest, TenantObservationReceipt } from "./tenant-live-contracts";
 
 export const TEMPORAL_OPERATING_CONTEXT_INPUT_SCHEMA_VERSION =
   "helm.operating-harness.context-input.v1" as const;
@@ -39,10 +40,19 @@ export const OPERATING_CONTEXT_JUDGEMENT_STATES = [
 export type OperatingContextJudgementState =
   (typeof OPERATING_CONTEXT_JUDGEMENT_STATES)[number];
 
-export type TemporalOperatingContextSourceBinding = {
-  source: OperatingSignalSourceEnvelope;
-  promotion: EvalCasePromotion | null;
-};
+// Public offline sources bind an optional EvalCasePromotion. Tenant self-observation sources carry
+// observation receipts instead; the observationReceipts key exists only on tenant bindings, so the
+// canonical binding hash of every public binding is unchanged.
+export type TemporalOperatingContextSourceBinding =
+  | {
+      source: OperatingSignalSourceEnvelope;
+      promotion: EvalCasePromotion | null;
+    }
+  | {
+      source: OperatingSignalSourceEnvelope;
+      promotion: null;
+      observationReceipts: TenantObservationReceipt[];
+    };
 
 export type TemporalOperatingContextProjectionInput = {
   schemaVersion: typeof TEMPORAL_OPERATING_CONTEXT_INPUT_SCHEMA_VERSION;
@@ -51,7 +61,7 @@ export type TemporalOperatingContextProjectionInput = {
   windowStart: string;
   windowEnd: string;
   asOf: string;
-  manifest: HarnessManifest;
+  manifest: HarnessManifest | TenantLiveHarnessManifest;
   revision: HarnessRevision;
   signalEvents: SignalEvent[];
   evidenceRefs: EvidenceRef[];

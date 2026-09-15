@@ -130,7 +130,7 @@ export const temporalOperatingContextSnapshotSchema = z
         z
           .object({
             signalId: safeRefSchema,
-            sourceClass: z.enum(HARNESS_MANIFEST_ALLOWED_SOURCE_CLASSES),
+            sourceClass: z.enum([...HARNESS_MANIFEST_ALLOWED_SOURCE_CLASSES, "tenant_self_observation"]),
             sourceBindingHash: sha256Schema,
             promotionId: safeRefSchema.nullable(),
           })
@@ -221,6 +221,11 @@ export function validateTemporalOperatingContextSnapshot(
   }
   if (Date.parse(snapshot.windowStart) > Date.parse(snapshot.windowEnd)) {
     errors.push("context_snapshot_invalid_window");
+  }
+  // A tenant live shadow snapshot and a public offline snapshot never share source receipts.
+  const tenantReceipts = snapshot.sourceReceipts.filter((receipt) => receipt.sourceClass === "tenant_self_observation").length;
+  if (tenantReceipts > 0 && tenantReceipts !== snapshot.sourceReceipts.length) {
+    errors.push("context_snapshot_mixes_tenant_and_public_sources");
   }
   if (Date.parse(snapshot.asOf) < Date.parse(snapshot.windowEnd)) {
     errors.push("context_snapshot_as_of_before_window_end");
