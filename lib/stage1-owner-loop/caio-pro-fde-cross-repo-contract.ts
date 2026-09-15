@@ -233,7 +233,7 @@ const DELIMITED_DIGIT_LIKE_PATTERN =
   /(?:^|[:._-])[0-9][0-9 -]{5,22}[0-9Xx](?=$|[:._-])/u;
 const EMBEDDED_DIGIT_PII_PATTERN = /(?:[0-9]{7,22}|[0-9]{6,21}[Xx])/u;
 const CORE_GENERATED_CUID_REF_PATTERN =
-  /^(?:workspace|opportunity|observation-run):c(?=[a-z0-9]*[a-z])[a-z0-9]{24}$/u;
+  /^(?:workspace|opportunity|observation-run|decision-record|action-item|approval-task):c(?=[a-z0-9]*[a-z])[a-z0-9]{24}$/u;
 const EMBEDDED_IPV4_SHAPE_PATTERN =
   /(?:^|[^0-9])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?:$|[^0-9])/u;
 const EMBEDDED_IPV4_PATTERN = /(?:^|[^0-9])((?:[0-9]{1,3}\.){3}[0-9]{1,3})(?=$|[^0-9])/gu;
@@ -486,7 +486,7 @@ const caioProFdeCrossRepoInterfaceContractBasis = {
     semanticVerifierRevision:
       CAIO_PRO_FDE_PORTABLE_SEMANTIC_VERIFIER_REVISION,
     publicSafeRefPolicyRevision:
-      "helm.caio-pro-fde.public-safe-ref-policy.v7" as const,
+      "helm.caio-pro-fde.public-safe-ref-policy.v8" as const,
     trustedEvidenceResolver:
       "workspace-scoped-active-observation-source-run" as const,
     packConsumer:
