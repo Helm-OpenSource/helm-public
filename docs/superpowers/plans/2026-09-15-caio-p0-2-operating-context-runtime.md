@@ -783,3 +783,20 @@ export type CaioOperatingAttentionReadout =
 - 规格 §5 覆盖：指标查询注册接缝（Task 1、3）、读失败标未知（Task 1、5、7）、检测器确定性与合并（Task 2、5）、依赖域未知停止触发（Task 2、5）、快检 10 分钟节奏（Task 6）、不含个人级原始数据（Task 1 数值型约束 + 守卫、Task 7 不渲染值）；P3a 映射与快照投影→ Task 8 草案 + P0-2b；小时/日终入队 → P1（规格 §4），不在本计划。
 - 规格 §11 P0 放行门"合成数据端到端、影子运行零写入"：Task 5 MySQL 用例含零写入抽样核对。
 - 类型一致：`CaioMetricObservationView`、`CaioDetectorHit`、`CaioDetectorRunResult`、`runCaioQuickCheck`、`CaioQuickCheckResult` 在 Task 1/2/5 定义，Task 5/6/7 消费，名称一致。
+
+## 实施记录（as-built，2026-09-15，helm-public PR #389）
+
+与上文计划的偏差，以代码为准：
+
+1. **候选异常事务改为 Serializable。** `check:conditional-update-cas` 拒绝把带前置状态的 `updateMany` 计数当 CAS 结果读取；
+   候选读写改在 `Prisma.TransactionIsolationLevel.Serializable` 事务内，外包 `runWithWriteConflictRetry`（4 次、50ms），
+   唯一键冲突（重叠的慢桶先开了同一合并键）与写冲突都走重试。
+2. **零业务写入清单补一项。** `beginObservationSourceRun` 的目录占位会递增 `DataAssetCatalogEntry.observationClaimSequence`；
+   与程序 `runSequence` 同属既有观察回执链，不是业务表。
+3. **迁移生成方式。** 数据库对 schema 的 diff 带出仓库既有漂移，改用"旧 schema 文件 → 新 schema 文件"diff；
+   该方式不输出外键，四条外键按既有 CAIO 迁移格式手写（`ON DELETE CASCADE`，与 `ObservationSourceRun` 的工作区关系一致）。
+   不要运行 `prisma format`：它会重排整个 schema 文件。
+4. **隔离库守卫抽为 `lib/caio-operating-context/mysql-test-guard.ts`**，两套 MySQL 测试共用。
+5. **MySQL 测试的 ref 后缀只用字母**：公开安全 ref 校验会拒绝形似数字标识的片段（与 stage1 套件的偶发失败同源）。
+6. **读出任何读失败（含 P2021）都返回 `available:false`**，不单独区分缺表。
+7. Task 8 合同扩展草案已写入规格 §5.1（待 owner 批准）。
