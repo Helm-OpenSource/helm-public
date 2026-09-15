@@ -15,7 +15,7 @@ const base = { workspaceId: "workspace_1", actorUserId: "user_owner", english: f
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gateMock.getCaioInitializationGateStatus.mockResolvedValue({ state: "not_started" });
+  gateMock.getCaioInitializationGateStatus.mockResolvedValue({ status: "not_accepted", receipt: null, staleReasons: [] });
   ownerLoopMock.getWorkspaceStage1OwnerLoopReadout.mockResolvedValue({ summary: "ok" });
 });
 
@@ -28,7 +28,7 @@ describe("getCaioOperatorReadout", () => {
 
   it("combines the gate status and the owner-loop readout for the owner", async () => {
     await expect(getCaioOperatorReadout({ ...base, membershipRole: WorkspaceRole.OWNER })).resolves.toEqual({
-      gate: { available: true, status: { state: "not_started" } },
+      gate: { available: true, status: { status: "not_accepted", receipt: null, staleReasons: [] } },
       ownerLoop: { available: true, readout: { summary: "ok" } },
     });
     expect(gateMock.getCaioInitializationGateStatus).toHaveBeenCalledWith(base);
