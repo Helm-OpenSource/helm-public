@@ -2455,5 +2455,52 @@ describeMysql(
       expect(await db.actionItem.count({ where: { workspaceId } })).toBe(0);
       expect(await db.approvalTask.count({ where: { workspaceId } })).toBe(0);
     });
+
+    // Kept last: it appends observation runs to the shared source and restores a healthy latest run.
+    it("keeps an accepted G0 current across healthy recurring runs and stales it on a failed run (evaluator v2)", async () => {
+      await acceptCurrentG0ForP1c("recurring-runs", 60_000);
+      const source = await db.observationSource.findUniqueOrThrow({
+        where: { workspaceId_sourceKey: { workspaceId, sourceKey: `source-g0-${suffix}` } },
+        select: { sourceKey: true },
+      });
+      const appendRun = async (label: string, offsetMs: number, outcome: "success" | "failure") => {
+        const at = new Date(evaluatedAt.getTime() + offsetMs);
+        const run = await beginObservationSourceRun({
+          workspaceId,
+          sourceKey: source.sourceKey,
+          executionKey: `g0-recurring-${label}-${suffix}`,
+          windowStart: new Date(at.getTime() - 60_000),
+          windowEnd: at,
+          now: new Date(at.getTime() + 500),
+        });
+        await completeObservationSourceRun({
+          workspaceId,
+          runId: run.id,
+          observedAt: new Date(at.getTime() + 500),
+          summaryHash: outcome === "success" ? sha256(`recurring:${label}:${suffix}`) : null,
+          completenessPercent: outcome === "success" ? 100 : 0,
+          freshness: outcome === "success" ? "fresh" : "unknown",
+          outcome,
+          evidenceRefs: outcome === "success" ? [`evidence:recurring:${label}`] : [],
+          errorCodes: outcome === "success" ? [] : ["metric_unknown"],
+        });
+      };
+      const statusAt = (offsetMs: number) =>
+        getCaioInitializationGateStatus({
+          workspaceId,
+          actorUserId: ownerUserId,
+          now: new Date(evaluatedAt.getTime() + offsetMs),
+        });
+
+      await appendRun("healthy-1", 61_000, "success");
+      await expect(statusAt(62_000)).resolves.toMatchObject({ status: "accepted" });
+
+      await appendRun("failed", 63_000, "failure");
+      const stale = await statusAt(64_000);
+      expect(stale.status).toBe("stale");
+
+      await appendRun("healthy-2", 65_000, "success");
+      await expect(statusAt(66_000)).resolves.toMatchObject({ status: "accepted" });
+    });
   },
 );

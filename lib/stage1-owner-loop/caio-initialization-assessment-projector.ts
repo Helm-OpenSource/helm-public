@@ -156,11 +156,14 @@ function artifactBundleRef(id: string): string {
   return `artifact-bundle:${id}`;
 }
 
-function memoryFactHash(
+// Exported so G0 preparation binds exactly the hash the projector recomputes.
+export function computeCaioInitializationMemoryFactHash(
   fact: CaioInitializationProjectionMemoryFact,
 ): string {
   return sha256(canonicalJson(fact));
 }
+
+const memoryFactHash = computeCaioInitializationMemoryFactHash;
 
 function exceptionRef(
   kind: "asset" | "source",
@@ -612,10 +615,9 @@ export function projectCaioInitializationAssessmentInput(
         ],
         riskOwnerRef: asset?.riskOwnerRef ?? null,
         nextReviewAt: asset?.nextReviewAt ?? null,
-        evidenceRefs: [
-          ...(asset?.evidenceRefs ?? []),
-          ...(latestRun?.evidenceRefs ?? []),
-        ],
+        // Evaluator v2: the latest run's evidence refs rotate every observation cycle and are not
+        // part of the basis; failed runs still surface through their closed error codes above.
+        evidenceRefs: [...(asset?.evidenceRefs ?? [])],
       });
       return {
         sourceRef: source.id,
@@ -624,7 +626,6 @@ export function projectCaioInitializationAssessmentInput(
         sourceStatus:
           source.status.toLowerCase() as ObservationSourceStatus,
         accessMode: source.accessMode.toLowerCase() as ObservationAccessMode,
-        latestRunRef: latestRun?.id ?? null,
         latestRunStatus:
           (latestRun?.status.toLowerCase() ??
             "unknown") as CaioInitializationAssessmentInput["sources"][number]["latestRunStatus"],

@@ -19,7 +19,7 @@ import type {
 export const CAIO_INITIALIZATION_ASSESSMENT_SCHEMA_VERSION =
   "helm.caio.initialization-assessment.v1" as const;
 export const CAIO_INITIALIZATION_EVALUATOR_REVISION =
-  "caio-g0-evaluator.v1" as const;
+  "caio-g0-evaluator.v2" as const;
 
 export const CAIO_INITIALIZATION_EVIDENCE_OUTPUT_TYPES = [
   "owner_answer",
@@ -97,7 +97,12 @@ export type CaioInitializationSourceSnapshot = {
   compatibilityMode: boolean;
   sourceStatus: ObservationSourceStatus;
   accessMode: ObservationAccessMode;
-  latestRunRef: string | null;
+  /**
+   * Accepted but ignored since evaluator v2: a recurring observation job creates a new run every
+   * cycle, so the run identity is not part of the assessment basis. Only the run health class
+   * (status, outcome, freshness) is.
+   */
+  latestRunRef?: string | null;
   latestRunStatus:
     | "running"
     | "succeeded"
@@ -289,11 +294,10 @@ function normalizedInput(
       exception: normalizedException(asset.exception),
     })),
     sources: byRef(input.sources, (source) => source.sourceRef).map(
-      (source) => ({
+      ({ latestRunRef: _ignoredRunIdentity, ...source }) => ({
         ...source,
         sourceRef: source.sourceRef.trim(),
         assetRef: source.assetRef.trim(),
-        latestRunRef: source.latestRunRef?.trim() || null,
         exception: normalizedException(source.exception),
       }),
     ),

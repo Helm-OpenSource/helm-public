@@ -419,7 +419,6 @@ function initializationEvidenceUniverse(input: {
     ...assessmentInput.sources.flatMap((source) => [
       source.sourceRef,
       source.assetRef,
-      source.latestRunRef ?? "",
       ...exceptionRefs(source.exception),
     ]),
     ...assessmentInput.evidenceTraces.flatMap((trace) => [
