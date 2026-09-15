@@ -22,16 +22,34 @@ export type CaioOperatorResult<T> =
 
 export type CaioOperationSummary = Readonly<Record<string, string | number | boolean | null>>;
 
-const SUMMARY_FIELDS = ["id", "status", "state", "version", "receiptId", "assessmentId", "outcome"] as const;
+const SUMMARY_FIELDS = [
+  "id", "mandateId", "stopId", "assetId", "programId", "sourceId", "receiptId", "assessmentId",
+  "status", "state", "version", "outcome", "replayed",
+] as const;
+// Service results wrap their records one level deep; only these wrappers are expanded.
+const SUMMARY_WRAPPERS = ["mandate", "stop", "receipt", "assessment", "entry", "program", "source"] as const;
 
-/** Only whitelisted scalar identity/state fields leave the server; full rows never do. */
+type Scalar = string | number | boolean | null;
+
+function pickScalars(record: Record<string, unknown>, prefix: string, into: Record<string, Scalar>): void {
+  for (const field of SUMMARY_FIELDS) {
+    const value = record[field];
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
+      into[`${prefix}${field}`] = value;
+    }
+  }
+}
+
+/** Only whitelisted scalar identity/state fields leave the server; full rows, reasons and payloads never do. */
 export function summarizeOperationResult(result: unknown): CaioOperationSummary {
   if (result === null || typeof result !== "object") return {};
-  const summary: Record<string, string | number | boolean | null> = {};
-  for (const field of SUMMARY_FIELDS) {
-    const value = (result as Record<string, unknown>)[field];
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
-      summary[field] = value;
+  const record = result as Record<string, unknown>;
+  const summary: Record<string, Scalar> = {};
+  pickScalars(record, "", summary);
+  for (const wrapper of SUMMARY_WRAPPERS) {
+    const nested = record[wrapper];
+    if (nested !== null && typeof nested === "object" && !Array.isArray(nested)) {
+      pickScalars(nested as Record<string, unknown>, `${wrapper}.`, summary);
     }
   }
   return summary;

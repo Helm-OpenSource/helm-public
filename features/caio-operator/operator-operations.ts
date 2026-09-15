@@ -38,7 +38,7 @@ export const CAIO_OPERATOR_OPERATIONS: readonly CaioOperatorOperation[] = [
   { key: "createMandateDraft", group: "mandate", schemaName: "createMandateDraftSchema", actor: "owner",
     title: { zh: "创建授权任命草稿", en: "Create a mandate draft" },
     template: { caioRef: "caio-primary", ceoRef: "ceo-primary", stage: "observe", stageDecisionRef: "decision:replace-me",
-      objectiveRefs: ["objective:replace-me"], scopeRefs: ["scope:workspace"], grantBasisRefs: ["grant:replace-me"],
+      objectiveRefs: ["objective:replace-me"], scopeRefs: ["scope:workspace"], grantBasisRefs: ["caio-mandate-grant:ceo-primary:issuance-replace-me"],
       reservedMatterRefs: [], humanResponsePolicyRef: "policy:replace-me", accountabilityAnchorRefs: ["anchor:replace-me"],
       guardianStopRefs: ["guardian-primary"], validFrom: NOW, validUntil: LATER, inFlightDisposition: "freeze", auditRefs: ["audit:replace-me"] } },
   { key: "activateMandate", group: "mandate", schemaName: "mandateTransitionSchema", actor: "ceo",

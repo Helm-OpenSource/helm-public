@@ -194,6 +194,19 @@ describe("summarizeOperationResult", () => {
     expect(summarizeOperationResult(undefined)).toEqual({});
     expect(summarizeOperationResult("text")).toEqual({});
   });
+
+  it("surfaces the identifiers operators need from the real service result shapes", () => {
+    expect(summarizeOperationResult({ mandateId: "m1", status: "draft", grantBasisRefs: ["x"], authorityEffect: "none" }))
+      .toEqual({ mandateId: "m1", status: "draft" });
+    expect(summarizeOperationResult({ stop: { stopId: "s1", reason: "private reason" }, mandate: { mandateId: "m1", status: "suspended" } }))
+      .toEqual({ "stop.stopId": "s1", "mandate.mandateId": "m1", "mandate.status": "suspended" });
+    expect(summarizeOperationResult({ assessment: { assessmentId: "a1", basisHash: "h" }, diagnostics: ["private"], replayed: false }))
+      .toEqual({ "assessment.assessmentId": "a1", replayed: false });
+    expect(summarizeOperationResult({ entry: { assetId: "as1", version: 2, purpose: "private" }, receipt: { receiptId: "r1" }, replayed: true }))
+      .toEqual({ "entry.assetId": "as1", "entry.version": 2, "receipt.receiptId": "r1", replayed: true });
+    expect(summarizeOperationResult({ programId: "p1", sourceId: "src1", status: "active" }))
+      .toEqual({ programId: "p1", sourceId: "src1", status: "active" });
+  });
 });
 
 describe.each(allCases)("$name action", ({ action, service, input, access, rejection, dateFields }) => {
