@@ -1,9 +1,11 @@
 import { WorkspaceRole } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
+import { OperatingAttentionSection } from "@/features/caio/operating-attention-section";
 import { Stage1OwnerLoopConsole } from "@/features/dashboard/stage1-owner-loop-console";
 import { getWorkspaceStage1OwnerLoopReadout } from "@/features/dashboard/stage1-owner-loop-query";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { getCaioOperatingAttentionReadout } from "@/lib/caio-operating-context/readout";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
 
@@ -20,10 +22,16 @@ export default async function CaioPage() {
     workspaceDefaultLocale: session.workspace.defaultLocale,
   });
   const english = isEnglishLocale(locale);
-  const readout = await getWorkspaceStage1OwnerLoopReadout({
-    workspaceId: session.workspace.id,
-    membershipRole: session.membership.role,
-  });
+  const [readout, attention] = await Promise.all([
+    getWorkspaceStage1OwnerLoopReadout({
+      workspaceId: session.workspace.id,
+      membershipRole: session.membership.role,
+    }),
+    getCaioOperatingAttentionReadout({
+      workspaceId: session.workspace.id,
+      membershipRole: session.membership.role,
+    }),
+  ]);
 
   return (
     <div
@@ -45,6 +53,10 @@ export default async function CaioPage() {
             : "由一把手负责的独立 AI 经营监督面。当前只读、复核优先，不执行、不外发、不产生承诺。"
         }
       />
+
+      {attention ? (
+        <OperatingAttentionSection readout={attention} english={english} />
+      ) : null}
 
       {readout ? (
         <Stage1OwnerLoopConsole readout={readout} english={english} />
