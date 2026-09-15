@@ -1,4 +1,5 @@
 import { CaioInitializationGateStoreError } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
+import { CaioOperatingQuestionStoreError } from "@/lib/stage1-owner-loop/caio-operating-question-store.service";
 import {
   DataAssetCatalogConflictError,
   DataAssetCatalogContractError,
@@ -24,10 +25,27 @@ export const CAIO_OPERATOR_ERROR_CODES = [
   "catalog_conflict",
   "observation_rejected",
   "observation_denied",
+  "g0_not_accepted",
+  "selection_rejected",
+  "selection_conflict",
   "unavailable",
 ] as const;
 
 export type CaioOperatorErrorCode = (typeof CAIO_OPERATOR_ERROR_CODES)[number];
+
+/** A precondition the entry point checks before calling the service; carries only a closed code. */
+export class CaioOperatorPreconditionError extends Error {
+  constructor(readonly code: "g0_not_accepted") {
+    super(code);
+    this.name = "CaioOperatorPreconditionError";
+  }
+}
+
+// Retryable selection states: another CEO act moved the head or reused the key concurrently.
+const SELECTION_CONFLICT_REASONS = new Set([
+  "question_selection_concurrent_conflict",
+  "selection_receipt_no_longer_current",
+]);
 
 export function mapCaioOperatorError(error: unknown): CaioOperatorErrorCode {
   if (error instanceof CaioInitializationGateStoreError) return "initialization_rejected";
@@ -38,6 +56,10 @@ export function mapCaioOperatorError(error: unknown): CaioOperatorErrorCode {
   }
   if (error instanceof ObservationAuthorizationDeniedError) return "observation_denied";
   if (error instanceof ObservationContractError) return "observation_rejected";
+  if (error instanceof CaioOperatorPreconditionError) return error.code;
+  if (error instanceof CaioOperatingQuestionStoreError) {
+    return error.reasons.some((reason) => SELECTION_CONFLICT_REASONS.has(reason)) ? "selection_conflict" : "selection_rejected";
+  }
   return "unavailable";
 }
 
@@ -73,6 +95,18 @@ const MESSAGES: Readonly<Record<CaioOperatorErrorCode, { zh: string; en: string 
   observation_denied: {
     zh: "观察授权不足，未登记。",
     en: "Observation authorization is insufficient; nothing was registered.",
+  },
+  g0_not_accepted: {
+    zh: "当前没有已受理的 G0 初始化验收，选题入口保持关闭。请先完成 G0 评估与 CEO 受理。",
+    en: "There is no currently accepted G0 initialization gate, so question selection stays closed. Complete the G0 assessment and CEO acceptance first.",
+  },
+  selection_rejected: {
+    zh: "经营问题选题被拒绝（问题组合、CEO 身份绑定或证据引用不满足）。",
+    en: "The question selection was rejected (portfolio, CEO binding, or evidence references not satisfied).",
+  },
+  selection_conflict: {
+    zh: "选题状态已被其它操作更新，请刷新后重试。",
+    en: "The selection state changed concurrently. Refresh and try again.",
   },
   unavailable: {
     zh: "暂时无法完成，请稍后重试。",

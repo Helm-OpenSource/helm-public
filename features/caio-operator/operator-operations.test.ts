@@ -17,9 +17,9 @@ describe("CAIO operator operation catalog", () => {
     expect(Object.keys(actionModule).map((name) => name.replace(/Action$/u, "")).sort())
       .toEqual(CAIO_OPERATOR_OPERATIONS.map((operation) => operation.key).sort());
     expect(CAIO_OPERATOR_OPERATIONS.map((operation) => operation.key).sort()).toEqual([
-      "acceptInitializationGate", "createCatalogEntry", "createObservationProgram",
+      "acceptInitializationGate", "bindQuestionSelection", "createCatalogEntry", "createObservationProgram",
       "recordCatalogAuthorization", "recordCatalogClassification", "recordCatalogConnection", "recordCatalogInitialization",
-      "recordInitializationAssessment", "registerObservationSource", "revokeInitializationGate",
+      "recordInitializationAssessment", "registerObservationSource", "revokeInitializationGate", "selectOperatingQuestions",
     ]);
   });
 
@@ -38,6 +38,6 @@ describe("CAIO operator operation catalog", () => {
       expect(operation.title.en).toMatch(/\S/);
     }
     expect(CAIO_OPERATOR_OPERATIONS.filter((operation) => operation.actor !== "owner").map((operation) => operation.key).sort())
-      .toEqual(["acceptInitializationGate", "revokeInitializationGate"]);
+      .toEqual(["acceptInitializationGate", "bindQuestionSelection", "revokeInitializationGate", "selectOperatingQuestions"]);
   });
 });

@@ -86,6 +86,11 @@ export default async function CaioOperatorPage() {
             ? "Principal bindings, mandates, guardian stops and CEO resumes are not registered on this page: governance records have no web entry and go through the controlled governance CLI (validation only unless --apply)."
             : "身份绑定、授权任命、guardian 急停与 CEO 恢复不在本页登记：治理记录不设网页入口，经受控治理命令行登记（默认只校验，带 --apply 才写入）。"}
         </p>
+        <p className="mt-2 text-xs text-[color:var(--muted-foreground)]" data-caio-operator-selection-gate="true">
+          {english
+            ? "Operating question selection opens only while the current G0 gate is accepted; the ten-question portfolio and the current selection are shown on /caio. Selecting and binding questions to decision records dispatches no work and triggers no execution or outbound effect."
+            : "经营问题选题只在当前 G0 验收门已受理时开放；10 题组合与当前选题可在 /caio 查看。选题及绑定决策记录不派工、不执行、不外发。"}
+        </p>
       </section>
 
       <OperatorConsole english={english} />

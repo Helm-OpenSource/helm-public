@@ -11,9 +11,17 @@ import {
   recordInitializationAssessmentSchema,
   registerObservationSourceSchema,
   revokeInitializationGateSchema,
+  bindQuestionSelectionSchema,
+  selectOperatingQuestionsSchema,
 } from "./schemas";
 
 const ISO = "2026-09-15T08:00:00.000Z";
+const selectionItem = {
+  questionId: "question-1", questionOverride: null, goal: "Validate one evidence-bound operating priority",
+  successMetrics: [{ metricKey: "metric-1", target: "Improve the governed baseline" }], priority: 1,
+  implementationScopeRefs: ["scope:review-only"], ownerRef: null, reviewerRef: null, startsAt: null, endsAt: null,
+  prohibitedActions: ["external_side_effect"],
+};
 const LATER = "2026-09-22T08:00:00.000Z";
 
 const stageBase = {
@@ -65,6 +73,11 @@ const validInputs = {
   revokeInitializationGate: [revokeInitializationGateSchema, {
     ceoPrincipalRef: "ceo-primary", idempotencyKey: "revoke_1", reasonCodes: ["data_source_withdrawn"], evidenceRefs: ["evidence:revoke-1"],
   }],
+  selectOperatingQuestions: [selectOperatingQuestionsSchema, {
+    expectedPortfolioId: "portfolio_1", ceoPrincipalRef: "ceo-primary", idempotencyKey: "select_1",
+    selections: [selectionItem], reasonCodes: ["highest_leverage"], evidenceRefs: ["evidence:portfolio-1"],
+  }],
+  bindQuestionSelection: [bindQuestionSelectionSchema, { expectedSelectionReceiptId: "selection_receipt_1", ceoPrincipalRef: "ceo-primary" }],
 } as const;
 
 describe("CAIO operator schemas", () => {
@@ -83,6 +96,16 @@ describe("CAIO operator schemas", () => {
   it("rejects colon-bearing CEO principal refs on the G0 fields", () => {
     expect(acceptInitializationGateSchema.safeParse({ ...validInputs.acceptInitializationGate[1], ceoPrincipalRef: "c:1" }).success).toBe(false);
     expect(revokeInitializationGateSchema.safeParse({ ...validInputs.revokeInitializationGate[1], ceoPrincipalRef: "c:1" }).success).toBe(false);
+  });
+
+  it("bounds the CEO question selection the same way as the governed selection command", () => {
+    const valid = validInputs.selectOperatingQuestions[1];
+    expect(selectOperatingQuestionsSchema.safeParse({ ...valid, selections: [] }).success).toBe(true);
+    expect(selectOperatingQuestionsSchema.safeParse({ ...valid, selections: Array(4).fill(selectionItem) }).success).toBe(false);
+    expect(selectOperatingQuestionsSchema.safeParse({ ...valid, evidenceRefs: [] }).success).toBe(false);
+    expect(selectOperatingQuestionsSchema.safeParse({ ...valid, selections: [{ ...selectionItem, injected: true }] }).success).toBe(false);
+    expect(selectOperatingQuestionsSchema.safeParse({ ...valid, ceoPrincipalRef: "c:1" }).success).toBe(false);
+    expect(bindQuestionSelectionSchema.safeParse({ ...validInputs.bindQuestionSelection[1], ceoPrincipalRef: "c:1" }).success).toBe(false);
   });
 
   it("rejects out-of-set enums and empty array elements", () => {

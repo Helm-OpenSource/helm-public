@@ -1,11 +1,16 @@
 import { WorkspaceRole } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { cacheMock, sessionMock, catalogMock, observationMock, gateMock } = vi.hoisted(() => ({
+const { cacheMock, sessionMock, catalogMock, observationMock, gateMock, questionMock } = vi.hoisted(() => ({
   gateMock: {
     recordCaioInitializationAssessment: vi.fn(),
     acceptCaioInitializationGate: vi.fn(),
     revokeCaioInitializationGate: vi.fn(),
+    getCaioInitializationGateStatus: vi.fn(),
+  },
+  questionMock: {
+    selectCaioOperatingQuestions: vi.fn(),
+    bindCurrentCaioQuestionSelectionToDecisionRecords: vi.fn(),
   },
   catalogMock: {
     createDataAssetCatalogEntry: vi.fn(),
@@ -39,13 +44,21 @@ vi.mock("@/lib/stage1-owner-loop/caio-initialization-gate-store.service", async 
   ...gateMock,
 }));
 
+vi.mock("@/lib/stage1-owner-loop/caio-operating-question-store.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/stage1-owner-loop/caio-operating-question-store.service")>()),
+  ...questionMock,
+}));
+
 import { CaioInitializationGateStoreError } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
+import { CaioOperatingQuestionStoreError } from "@/lib/stage1-owner-loop/caio-operating-question-store.service";
 import { DataAssetCatalogConflictError } from "@/lib/stage1-owner-loop/data-asset-catalog.service";
 import { ObservationAuthorizationDeniedError } from "@/lib/stage1-owner-loop/observation.service";
 
 import {
   acceptInitializationGateAction,
+  bindQuestionSelectionAction,
   recordInitializationAssessmentAction,
+  selectOperatingQuestionsAction,
   revokeInitializationGateAction,
   createCatalogEntryAction,
   createObservationProgramAction,
@@ -78,6 +91,8 @@ type Case = Readonly<{
   rejection: readonly [Error, string];
   /** Input fields the schema converts before the service (ISO string → Date). */
   dateFields?: readonly string[];
+  /** Summary the action returns for the default service result, when the action reshapes it. */
+  summary?: Record<string, unknown>;
 }>;
 
 const stageBase = { assetId: "asset_1", receiptId: "receipt_1", idempotencyKey: "idem_1", expectedVersion: 1, evidenceRefs: ["evidence:1"] };
@@ -134,12 +149,35 @@ const gateCases: readonly Case[] = [
     input: { ceoPrincipalRef: "ceo-primary", idempotencyKey: "revoke_1", reasonCodes: ["withdrawn"], evidenceRefs: ["evidence:r-1"] } },
 ];
 
-const allCases: readonly Case[] = [...catalogCases, ...gateCases];
+const selectionRejection = [new CaioOperatingQuestionStoreError("private selection detail", ["private_reason"]), "selection_rejected"] as const;
+const selectionItem = {
+  questionId: "question-1", questionOverride: null, goal: "Validate one operating priority",
+  successMetrics: [{ metricKey: "metric-1", target: "Improve the governed baseline" }], priority: 1,
+  implementationScopeRefs: ["scope:review-only"], ownerRef: null, reviewerRef: null, startsAt: null, endsAt: null,
+  prohibitedActions: ["external_side_effect"],
+};
+
+const selectionCases: readonly Case[] = [
+  { name: "selectOperatingQuestions", access: "principal_bound", action: selectOperatingQuestionsAction,
+    service: questionMock.selectCaioOperatingQuestions, rejection: selectionRejection,
+    input: { expectedPortfolioId: "portfolio_1", ceoPrincipalRef: "ceo-primary", idempotencyKey: "select_1",
+      selections: [selectionItem], reasonCodes: ["highest_leverage"], evidenceRefs: ["evidence:portfolio-1"] } },
+  { name: "bindQuestionSelection", access: "principal_bound", action: bindQuestionSelectionAction,
+    service: questionMock.bindCurrentCaioQuestionSelectionToDecisionRecords, rejection: selectionRejection,
+    summary: { "receipt.receiptId": "record_1", replayed: false },
+    input: { expectedSelectionReceiptId: "selection_receipt_1", ceoPrincipalRef: "ceo-primary" } },
+];
+
+const allCases: readonly Case[] = [...catalogCases, ...gateCases, ...selectionCases];
 
 beforeEach(() => {
   vi.clearAllMocks();
   sessionMock.getCurrentWorkspaceSession.mockResolvedValue(session());
+  gateMock.getCaioInitializationGateStatus.mockResolvedValue({ status: "accepted", receipt: null, staleReasons: [] });
   for (const { service } of allCases) service.mockResolvedValue({ id: "record_1", status: "draft", secretField: "x" });
+  questionMock.bindCurrentCaioQuestionSelectionToDecisionRecords.mockResolvedValue({
+    selectionReceipt: { receiptId: "record_1", selectionsJson: "private" }, bindings: [{ bindingId: "b1", replayed: false }],
+  });
 });
 
 describe("summarizeOperationResult", () => {
@@ -164,7 +202,7 @@ describe("summarizeOperationResult", () => {
   });
 });
 
-describe.each(allCases)("$name action", ({ action, service, input, access, rejection, dateFields }) => {
+describe.each(allCases)("$name action", ({ action, service, input, access, rejection, dateFields, summary }) => {
   it.each([WorkspaceRole.ADMIN, WorkspaceRole.MEMBER])("applies the declared access rule for %s", async (role) => {
     sessionMock.getCurrentWorkspaceSession.mockResolvedValue(session(role));
     if (access === "owner") {
@@ -187,7 +225,7 @@ describe.each(allCases)("$name action", ({ action, service, input, access, rejec
 
   it("injects session identity, never trusts the client for it, and returns a summary", async () => {
     const result = await action(input);
-    expect(result).toEqual({ ok: true, value: { id: "record_1", status: "draft" } });
+    expect(result).toEqual({ ok: true, value: summary ?? { id: "record_1", status: "draft" } });
     expect(service).toHaveBeenCalledTimes(1);
     const args = service.mock.calls[0][0];
     expect(args).toMatchObject({ workspaceId: "workspace_1", actorUserId: "user_owner", english: false });
@@ -234,8 +272,41 @@ describe("session-derived actor name", () => {
 describe("access classification", () => {
   it("keeps registration OWNER-only and leaves CEO acts to the service's binding check", () => {
     expect(allCases.filter((c) => c.access === "principal_bound").map((c) => c.name).sort()).toEqual([
-      "acceptInitializationGate", "revokeInitializationGate",
+      "acceptInitializationGate", "bindQuestionSelection", "revokeInitializationGate", "selectOperatingQuestions",
     ]);
+  });
+});
+
+describe("CEO question selection", () => {
+  it.each(["not_accepted", "stale", "revoked"] as const)("fails closed when the current G0 is %s", async (status) => {
+    gateMock.getCaioInitializationGateStatus.mockResolvedValue({ status, receipt: null, staleReasons: ["private_stale_reason"] });
+    for (const { action, service, input } of selectionCases) {
+      const result = await action(input);
+      expect(result).toMatchObject({ ok: false, code: "g0_not_accepted" });
+      expect(JSON.stringify(result)).not.toContain("private");
+      expect(service).not.toHaveBeenCalled();
+    }
+    expect(gateMock.getCaioInitializationGateStatus).toHaveBeenCalledWith({
+      workspaceId: "workspace_1", actorUserId: "user_owner", english: false,
+    });
+    expect(cacheMock.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("maps a concurrent selection conflict to a retryable code", async () => {
+    questionMock.selectCaioOperatingQuestions.mockRejectedValue(
+      new CaioOperatingQuestionStoreError("private", ["question_selection_concurrent_conflict"]),
+    );
+    await expect(selectOperatingQuestionsAction(selectionCases[0].input)).resolves.toMatchObject({ ok: false, code: "selection_conflict" });
+  });
+
+  it("returns only the selection receipt id and replay flag from the binding", async () => {
+    questionMock.bindCurrentCaioQuestionSelectionToDecisionRecords.mockResolvedValue({
+      selectionReceipt: { receiptId: "selection_receipt_1", selections: ["private"] },
+      bindings: [{ bindingId: "b1", decisionRecordId: "private-decision", replayed: true }, { bindingId: "b2", replayed: true }],
+    });
+    await expect(bindQuestionSelectionAction(selectionCases[1].input)).resolves.toEqual({
+      ok: true, value: { "receipt.receiptId": "selection_receipt_1", replayed: true },
+    });
   });
 });
 
