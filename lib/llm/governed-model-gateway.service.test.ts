@@ -6,7 +6,9 @@ import {
 } from "@/lib/expert-capability/hashing";
 import {
   GovernedModelGatewayError,
+  createGovernedDeferredModelDispatch,
   createGovernedModelGateway,
+  type GovernedDeferredModelAdapter,
   type GovernedModelAdapterResult,
   type GovernedModelGatewayDependencies,
   type GovernedModelGatewayInput,
@@ -1391,5 +1393,247 @@ describe("governed model gateway", () => {
     expect(
       harness.dependencies.prepareDecision,
     ).not.toHaveBeenCalled();
+  });
+});
+
+function deferredAdapter(
+  selectedRoute: TenantModelRoute,
+  estimatedInputTokens = 100,
+): GovernedDeferredModelAdapter<Payload, Output> {
+  const { registration, probeReadiness, preflight } = adapter({
+    selectedRoute,
+    result: successResult,
+    estimatedInputTokens,
+  });
+  return { registration, probeReadiness, preflight };
+}
+
+function deferredHarness(input: { blocked?: boolean } = {}) {
+  const harness = createHarness(input);
+  let clock = BASE_TIME;
+  const dependencies = {
+    ...harness.dependencies,
+    now: () => new Date(clock),
+  };
+  return {
+    ...harness,
+    dependencies,
+    advance: (ms: number) => {
+      clock += ms;
+    },
+  };
+}
+
+const localSuccess: GovernedModelAdapterResult<Output> = {
+  ...successResult,
+  actualCostUsdMicros: 0,
+  costBand: "zero",
+};
+
+describe("governed deferred model dispatch", () => {
+  it("claims a pull dispatch without invoking anything and hands out the claim identity", async () => {
+    const harness = deferredHarness();
+    const selectedAdapter = deferredAdapter(harness.primary);
+    const deferred = createGovernedDeferredModelDispatch({
+      adapters: [selectedAdapter],
+      dependencies: harness.dependencies,
+    });
+
+    const claimed = await deferred.claim(request());
+
+    expect(claimed).toMatchObject({
+      status: "claimed",
+      decisionRef: "decision-primary",
+      gatewayRef: "gateway:caio",
+      claimHash: HASH_C,
+      leaseExpiresAt: new Date(BASE_TIME + 60_000).toISOString(),
+    });
+    if (claimed.status !== "claimed") return;
+    expect(claimed.providerIdempotencyKey).toBe(
+      computeModelProviderIdempotencyKey({
+        decisionRef: "decision-primary",
+        dispatchClaimHash: HASH_C,
+      }),
+    );
+    expect(selectedAdapter.preflight).toHaveBeenCalledTimes(1);
+    expect(harness.dependencies.claimDispatch).toHaveBeenCalledTimes(1);
+    expect(harness.dependencies.recordTerminal).not.toHaveBeenCalled();
+    expect(vi.mocked(harness.dependencies.prepareDecision).mock.calls[0]![0].allowFallback).toBe(false);
+  });
+
+  it("stops before the claim for a blocked decision or an over-budget preflight", async () => {
+    const blocked = deferredHarness({ blocked: true });
+    const blockedAdapter = deferredAdapter(blocked.primary);
+    const blockedResult = await createGovernedDeferredModelDispatch({
+      adapters: [blockedAdapter],
+      dependencies: blocked.dependencies,
+    }).claim(request());
+    expect(blockedResult).toMatchObject({ status: "blocked" });
+    expect(blockedAdapter.preflight).not.toHaveBeenCalled();
+    expect(blocked.dependencies.claimDispatch).not.toHaveBeenCalled();
+
+    const overBudget = deferredHarness();
+    const overBudgetResult = await createGovernedDeferredModelDispatch({
+      adapters: [deferredAdapter(overBudget.primary, 999_999)],
+      dependencies: overBudget.dependencies,
+    }).claim(request());
+    expect(overBudgetResult).toMatchObject({
+      status: "not_dispatched",
+      attempt: { reasonCode: "route_input_token_budget_exceeded" },
+    });
+    expect(overBudget.dependencies.claimDispatch).not.toHaveBeenCalled();
+  });
+
+  it("records the terminal receipt before returning a worker result within the lease", async () => {
+    const harness = deferredHarness();
+    const deferred = createGovernedDeferredModelDispatch({
+      adapters: [deferredAdapter(harness.primary)],
+      dependencies: harness.dependencies,
+    });
+    const claimed = await deferred.claim(request());
+    if (claimed.status !== "claimed") throw new Error("claim expected");
+    harness.advance(5_000);
+
+    const completed = await deferred.complete({
+      workspaceId: "workspace-test",
+      decisionRef: claimed.decisionRef,
+      gatewayRef: claimed.gatewayRef,
+      claimHash: claimed.claimHash,
+      result: localSuccess,
+    });
+
+    expect(completed.status).toBe("success");
+    expect(completed.output).toEqual(localSuccess.output);
+    expect(completed.rawContentPersisted).toBe(false);
+    const terminalInput = vi.mocked(harness.dependencies.recordTerminal).mock.calls[0]![0];
+    expect(terminalInput).toMatchObject({
+      resolutionSource: "invoke",
+      outcome: "success",
+      latencyMs: 5_000,
+      providerRequestRefHash: sha256("provider-request-sensitive-123"),
+      fallbackTargetRouteRef: null,
+    });
+    expect(JSON.stringify(terminalInput)).not.toContain("Synthetic answer");
+
+    const replay = await deferred.complete({
+      workspaceId: "workspace-test",
+      decisionRef: claimed.decisionRef,
+      gatewayRef: claimed.gatewayRef,
+      claimHash: claimed.claimHash,
+      result: localSuccess,
+    });
+    expect(replay).toMatchObject({ status: "success", output: null });
+    expect(replay.attempts[0]).toMatchObject({ replayed: true, reasonCode: "terminal_receipt_replayed_without_output" });
+    expect(harness.dependencies.recordTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it("never hands out a claim that another worker already holds", async () => {
+    const harness = deferredHarness();
+    const selectedAdapter = deferredAdapter(harness.primary);
+    const deferred = createGovernedDeferredModelDispatch({
+      adapters: [selectedAdapter],
+      dependencies: harness.dependencies,
+    });
+    const claimDispatch = vi.mocked(harness.dependencies.claimDispatch);
+    const original = claimDispatch.getMockImplementation()!;
+    claimDispatch.mockImplementationOnce(async (claimInput) => ({
+      ...(await original(claimInput)),
+      replayed: true,
+    }));
+
+    const claimed = await deferred.claim(request());
+
+    expect(claimed).toMatchObject({
+      status: "in_doubt",
+      attempt: { reasonCode: "dispatch_lease_active_terminal_missing", replayed: true },
+    });
+    expect(JSON.stringify(claimed)).not.toContain("providerIdempotencyKey");
+  });
+
+  it("refuses a submission for another claim without writing anything", async () => {
+    const harness = deferredHarness();
+    const deferred = createGovernedDeferredModelDispatch({
+      adapters: [deferredAdapter(harness.primary)],
+      dependencies: harness.dependencies,
+    });
+    const claimed = await deferred.claim(request());
+    if (claimed.status !== "claimed") throw new Error("claim expected");
+
+    for (const mismatch of [{ claimHash: HASH_A }, { gatewayRef: "gateway:other" }, { decisionRef: "decision-missing" }]) {
+      await expect(
+        deferred.complete({
+          workspaceId: "workspace-test",
+          decisionRef: claimed.decisionRef,
+          gatewayRef: claimed.gatewayRef,
+          claimHash: claimed.claimHash,
+          result: localSuccess,
+          ...mismatch,
+        }),
+      ).rejects.toEqual(expect.objectContaining<Partial<GovernedModelGatewayError>>({ code: "deferred_dispatch_claim_mismatch" }));
+    }
+    expect(harness.dependencies.recordTerminal).not.toHaveBeenCalled();
+  });
+
+  it("keeps late or malformed submissions in doubt instead of recording them", async () => {
+    const harness = deferredHarness();
+    const deferred = createGovernedDeferredModelDispatch({
+      adapters: [deferredAdapter(harness.primary)],
+      dependencies: harness.dependencies,
+    });
+    const claimed = await deferred.claim(request());
+    if (claimed.status !== "claimed") throw new Error("claim expected");
+    const submission = {
+      workspaceId: "workspace-test",
+      decisionRef: claimed.decisionRef,
+      gatewayRef: claimed.gatewayRef,
+      claimHash: claimed.claimHash,
+    };
+
+    const { output: _omitted, ...withoutOutput } = localSuccess;
+    const malformed = await deferred.complete({ ...submission, result: withoutOutput });
+    expect(malformed).toMatchObject({ status: "in_doubt", output: null });
+
+    harness.advance(60_000);
+    const late = await deferred.complete({ ...submission, result: localSuccess });
+    expect(late).toMatchObject({ status: "in_doubt", output: null });
+    expect(late.attempts[0]!.reasonCode).toBe("deferred_dispatch_lease_expired");
+    expect(harness.dependencies.recordTerminal).not.toHaveBeenCalled();
+  });
+
+  it("records a lease-expired dispatch as a reconciled failure only after the lease ends", async () => {
+    const harness = deferredHarness();
+    const deferred = createGovernedDeferredModelDispatch({
+      adapters: [deferredAdapter(harness.primary)],
+      dependencies: harness.dependencies,
+    });
+    const claimed = await deferred.claim(request());
+    if (claimed.status !== "claimed") throw new Error("claim expected");
+    const claimRef = {
+      workspaceId: "workspace-test",
+      decisionRef: claimed.decisionRef,
+      gatewayRef: claimed.gatewayRef,
+      claimHash: claimed.claimHash,
+    };
+
+    const early = await deferred.expire(claimRef);
+    expect(early).toMatchObject({ status: "in_doubt" });
+    expect(early.attempts[0]!.reasonCode).toBe("dispatch_lease_active_terminal_missing");
+    expect(harness.dependencies.recordTerminal).not.toHaveBeenCalled();
+
+    harness.advance(60_000);
+    const expired = await deferred.expire(claimRef);
+    expect(expired).toMatchObject({ status: "failure", output: null });
+    expect(vi.mocked(harness.dependencies.recordTerminal).mock.calls[0]![0]).toMatchObject({
+      outcome: "failure",
+      resolutionSource: "reconcile",
+      requestDisposition: "accepted",
+      providerRequestRefHash: sha256(claimed.providerIdempotencyKey),
+      actualCostUsdMicros: 0,
+      costCurrency: "USD",
+      pricingVersion: harness.primary.pricingVersion,
+      costBand: "zero",
+      errorCode: "deferred_dispatch_lease_expired",
+      latencyMs: null,
+    });
   });
 });
