@@ -169,3 +169,22 @@ binding，Public Core 不得仅凭该导航或 OWNER 角色声称用户是法定
 - 不激活自动派工、自动外发、CRM 写入、资金或法律动作；
 - 不构成生产激活、客户承诺或 owner approval；
 - 不改变任何既有 `aicoo` 机器标识、pin、哈希或历史证据。
+
+## 10. 规则授权执行治理决定（2026-09-15，设计已批准，未实现）
+
+owner 已批准《Helm CAIO 实时经营运行 Core 规格》（`docs/superpowers/specs/2026-09-15-caio-live-operating-core-spec.md`）
+的设计方向。本节只冻结该设计的治理决定，**不改变 §4 的当前口径**：在 Core 规格 §6 实现并形成证据之前，
+`Authorized Execute` 的证据状态保持 `roadmap_disabled`。
+
+1. **限额规则是授权证据，不是权限令牌**。CEO 签发的限额规则只是执行的授权证据之一，不直接授予任何运行时
+   权限；每次执行仍须依次通过既有权限链（active membership、角色与 capability、对象归属、entitlement）、
+   政策与合规门、动作适配器的执行前实时复核，并由既有 ingress 写唯一 canonical 执行回执。本条与 §3
+   “CAIO 角色/授权对象不是权限令牌”不变式一致。
+2. **签发只能由 CEO 显式完成**，经已登记的 principal binding；不从既有 owner approval 或 mandate 继承、
+   复制或推导；CAIO 不能签发。
+3. **监护角色只停不启**：CEO 或 CEO 指定的监护角色可对全局、动作类或单条规则急停；恢复权仅属于 CEO。
+4. **发布互斥暂停不覆盖其它暂停**：租户发布切换期间的暂停在切换完成后只解除其自身；同时存在监护急停、规则
+   到期或健康暂停时不得自动恢复。
+5. **干跑门槛归 Pack 合同**：各动作类的干跑证据门槛由其 Pack 合同声明；Core 只执行 Pack 合同返回的判定，
+   不放宽任何既有 Pack 合同。
+6. 成熟度阶段仍不是权限轴；本节不构成任何执行许可、生产激活或 owner approval。
