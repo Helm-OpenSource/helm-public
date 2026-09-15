@@ -156,11 +156,14 @@ function artifactBundleRef(id: string): string {
   return `artifact-bundle:${id}`;
 }
 
-function memoryFactHash(
+// Exported so G0 preparation binds exactly the hash the projector recomputes.
+export function computeCaioInitializationMemoryFactHash(
   fact: CaioInitializationProjectionMemoryFact,
 ): string {
   return sha256(canonicalJson(fact));
 }
+
+const memoryFactHash = computeCaioInitializationMemoryFactHash;
 
 function exceptionRef(
   kind: "asset" | "source",
