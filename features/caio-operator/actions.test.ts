@@ -1,7 +1,18 @@
 import { WorkspaceRole } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { cacheMock, sessionMock, governanceMock } = vi.hoisted(() => ({
+const { cacheMock, sessionMock, governanceMock, catalogMock, observationMock } = vi.hoisted(() => ({
+  catalogMock: {
+    createDataAssetCatalogEntry: vi.fn(),
+    recordDataAssetClassificationReceipt: vi.fn(),
+    recordDataAssetAuthorizationReceipt: vi.fn(),
+    recordDataAssetConnectionReceipt: vi.fn(),
+    recordDataAssetInitializationReceipt: vi.fn(),
+  },
+  observationMock: {
+    createEnterpriseObservationProgram: vi.fn(),
+    registerObservationSource: vi.fn(),
+  },
   cacheMock: { revalidatePath: vi.fn() },
   sessionMock: { getCurrentWorkspaceSession: vi.fn() },
   governanceMock: {
@@ -23,10 +34,28 @@ vi.mock("@/lib/caio-governance/mandate-store.service", async (importOriginal) =>
   ...governanceMock,
 }));
 
+vi.mock("@/lib/stage1-owner-loop/data-asset-catalog.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/stage1-owner-loop/data-asset-catalog.service")>()),
+  ...catalogMock,
+}));
+vi.mock("@/lib/stage1-owner-loop/observation.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/stage1-owner-loop/observation.service")>()),
+  ...observationMock,
+}));
+
 import { CaioMandateStoreError } from "@/lib/caio-governance/mandate-store.service";
+import { DataAssetCatalogConflictError } from "@/lib/stage1-owner-loop/data-asset-catalog.service";
+import { ObservationAuthorizationDeniedError } from "@/lib/stage1-owner-loop/observation.service";
 
 import {
   activateMandateAction,
+  createCatalogEntryAction,
+  createObservationProgramAction,
+  recordCatalogAuthorizationAction,
+  recordCatalogClassificationAction,
+  recordCatalogConnectionAction,
+  recordCatalogInitializationAction,
+  registerObservationSourceAction,
   createMandateDraftAction,
   recordGuardianStopAction,
   registerPrincipalBindingAction,
@@ -55,7 +84,48 @@ type Case = Readonly<{
   input: Record<string, unknown>;
   /** owner: OWNER pre-check; principal_bound: the service authorizes by CEO/guardian binding. */
   access: "owner" | "principal_bound";
+  rejection?: readonly [Error, string];
+  /** Input fields the schema converts before the service (ISO string → Date). */
+  dateFields?: readonly string[];
 }>;
+
+const stageBase = { assetId: "asset_1", receiptId: "receipt_1", idempotencyKey: "idem_1", expectedVersion: 1, evidenceRefs: ["evidence:1"] };
+const catalogConflict = [new DataAssetCatalogConflictError(["private_conflict"]), "catalog_conflict"] as const;
+
+const catalogCases: readonly Case[] = [
+  { name: "createCatalogEntry", access: "owner", action: createCatalogEntryAction, service: catalogMock.createDataAssetCatalogEntry,
+    rejection: catalogConflict, dateFields: ["nextReviewAt"],
+    input: { assetKey: "activity", sourceSystemRef: "system:core-db", displayName: "Activity", sourceKind: "relational_database",
+      businessDomain: "operations", businessOwnerRef: "owner:operations", purpose: "Observe aggregates", scopeRefs: ["scope:workspace"],
+      recommendedAccessMode: "read_only_replica", retentionDays: 90, freshnessSlaMinutes: 10, residencyRequirements: ["domestic"],
+      blindSpots: [], blockerCodes: [], riskOwnerRef: null, nextReviewAt: LATER, evidenceRefs: ["evidence:1"] } },
+  { name: "recordCatalogClassification", access: "owner", action: recordCatalogClassificationAction,
+    service: catalogMock.recordDataAssetClassificationReceipt, rejection: catalogConflict,
+    input: { ...stageBase, dataShape: "structured", sensitivity: "confidential", processingDisposition: "local_only", technicalFeasibility: "feasible" } },
+  { name: "recordCatalogAuthorization", access: "owner", action: recordCatalogAuthorizationAction,
+    service: catalogMock.recordDataAssetAuthorizationReceipt, rejection: catalogConflict, dateFields: ["validFrom", "validUntil"],
+    input: { ...stageBase, authorizationStatus: "authorized", authorizationRef: "authorization:1", scopeRefs: ["scope:workspace"],
+      consentRefs: [], validFrom: ISO, validUntil: LATER, reasonCodes: ["owner_approved"] } },
+  { name: "recordCatalogConnection", access: "owner", action: recordCatalogConnectionAction,
+    service: catalogMock.recordDataAssetConnectionReceipt, rejection: catalogConflict,
+    input: { ...stageBase, connectionStatus: "connected", accessMode: "read_only_replica", connectorRef: "connector:1", secretRef: null,
+      authorizationReceiptRef: "receipt:auth-1", observationSourceRef: null, reasonCodes: [] } },
+  { name: "recordCatalogInitialization", access: "owner", action: recordCatalogInitializationAction,
+    service: catalogMock.recordDataAssetInitializationReceipt, rejection: catalogConflict,
+    input: { ...stageBase, initializationStatus: "initialized", connectionReceiptRef: "receipt:conn-1", observationRunRefs: ["run:1"],
+      schemaMappingRefs: [], companyMemoryRefs: [], temporalContextSnapshotRef: null, reasonCodes: [] } },
+  { name: "createObservationProgram", access: "owner", action: createObservationProgramAction,
+    service: observationMock.createEnterpriseObservationProgram, dateFields: ["startsAt", "expiresAt"],
+    rejection: [new ObservationAuthorizationDeniedError(["private_denied"]), "observation_denied"],
+    input: { purpose: "Observe operations", scopeRefs: ["scope:workspace"], dataCategories: ["operations_aggregate"],
+      startsAt: ISO, expiresAt: LATER, retentionDays: 90, authorizationRef: "authorization:1" } },
+  { name: "registerObservationSource", access: "owner", action: registerObservationSourceAction,
+    service: observationMock.registerObservationSource,
+    rejection: [new ObservationAuthorizationDeniedError(["private_denied"]), "observation_denied"],
+    input: { programId: "program_1", catalogEntryId: "asset_1", sourceKey: "activity", sourceKind: "relational_database",
+      accessMode: "read_only_replica", ownerRef: "owner:operations", freshnessSlaMinutes: 10, sensitivity: "confidential",
+      authorizationRef: "authorization:1", secretRef: "managed-ref:activity", retentionDays: 90 } },
+];
 
 const governanceCases: readonly Case[] = [
   { name: "registerPrincipalBinding", access: "owner", action: registerPrincipalBindingAction, service: governanceMock.registerCaioPrincipalBinding,
@@ -79,10 +149,12 @@ const governanceCases: readonly Case[] = [
     input: { actorCeoRef: "ceo-primary", stopRecordId: "stop_1" } },
 ];
 
+const allCases: readonly Case[] = [...governanceCases, ...catalogCases];
+
 beforeEach(() => {
   vi.clearAllMocks();
   sessionMock.getCurrentWorkspaceSession.mockResolvedValue(session());
-  for (const { service } of governanceCases) service.mockResolvedValue({ id: "record_1", status: "draft", secretField: "x" });
+  for (const { service } of allCases) service.mockResolvedValue({ id: "record_1", status: "draft", secretField: "x" });
 });
 
 describe("summarizeOperationResult", () => {
@@ -94,7 +166,7 @@ describe("summarizeOperationResult", () => {
   });
 });
 
-describe.each(governanceCases)("$name action", ({ action, service, input, access }) => {
+describe.each(allCases)("$name action", ({ action, service, input, access, rejection, dateFields }) => {
   it.each([WorkspaceRole.ADMIN, WorkspaceRole.MEMBER])("applies the declared access rule for %s", async (role) => {
     sessionMock.getCurrentWorkspaceSession.mockResolvedValue(session(role));
     if (access === "owner") {
@@ -122,18 +194,23 @@ describe.each(governanceCases)("$name action", ({ action, service, input, access
     const args = service.mock.calls[0][0];
     expect(args).toMatchObject({ workspaceId: "workspace_1", actorUserId: "user_owner", english: false });
     for (const [key, value] of Object.entries(input)) {
-      if (key === "validFrom" || key === "validUntil") expect(args[key]).toBe(value);
-      else expect(args[key]).toEqual(value);
+      if (dateFields?.includes(key)) {
+        expect(args[key]).toBeInstanceOf(Date);
+        expect((args[key] as Date).toISOString()).toBe(value);
+      } else {
+        expect(args[key]).toEqual(value);
+      }
     }
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/caio");
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/caio/operator");
   });
 
-  it("maps governance rejections to a closed code without leaking the service message", async () => {
-    service.mockRejectedValue(new CaioMandateStoreError("private reason detail"));
+  it("maps service rejections to a closed code without leaking the service message", async () => {
+    const [error, code] = rejection ?? [new CaioMandateStoreError("private reason detail"), "governance_rejected"];
+    service.mockRejectedValue(error);
     const result = await action(input);
-    expect(result).toMatchObject({ ok: false, code: "governance_rejected" });
-    expect(JSON.stringify(result)).not.toContain("private reason detail");
+    expect(result).toMatchObject({ ok: false, code });
+    expect(JSON.stringify(result)).not.toMatch(/private/);
     expect(cacheMock.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -142,6 +219,17 @@ describe.each(governanceCases)("$name action", ({ action, service, input, access
     const result = await action(input);
     expect(result).toMatchObject({ ok: false, code: "unavailable" });
     expect(JSON.stringify(result)).not.toContain("private host");
+  });
+});
+
+describe("session-derived actor name", () => {
+  it.each([
+    [createObservationProgramAction, observationMock.createEnterpriseObservationProgram, 5],
+    [registerObservationSourceAction, observationMock.registerObservationSource, 6],
+    [createCatalogEntryAction, catalogMock.createDataAssetCatalogEntry, 0],
+  ] as const)("passes actorName from the session (%#)", async (action, service, index) => {
+    await action(catalogCases[index].input);
+    expect(service.mock.calls[0][0]).toMatchObject({ actorName: "Owner Name" });
   });
 });
 

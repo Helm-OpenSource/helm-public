@@ -19,9 +19,28 @@ import {
   suspendCaioMandate,
 } from "@/lib/caio-governance/mandate-store.service";
 
-import { runOwnerOperation } from "./run-owner-operation";
 import {
+  createDataAssetCatalogEntry,
+  recordDataAssetAuthorizationReceipt,
+  recordDataAssetClassificationReceipt,
+  recordDataAssetConnectionReceipt,
+  recordDataAssetInitializationReceipt,
+} from "@/lib/stage1-owner-loop/data-asset-catalog.service";
+import {
+  createEnterpriseObservationProgram,
+  registerObservationSource,
+} from "@/lib/stage1-owner-loop/observation.service";
+
+import { runOwnerOperation, type CaioOperatorContext } from "./run-owner-operation";
+import {
+  catalogAuthorizationSchema,
+  catalogClassificationSchema,
+  catalogConnectionSchema,
+  catalogInitializationSchema,
+  createCatalogEntrySchema,
   createMandateDraftSchema,
+  createObservationProgramSchema,
+  registerObservationSourceSchema,
   guardianStopSchema,
   mandateTransitionSchema,
   registerPrincipalBindingSchema,
@@ -116,3 +135,77 @@ export async function resumeGuardianStopAction(rawInput: unknown) {
     }),
   });
 }
+
+const actor = (ctx: CaioOperatorContext) => ({
+  workspaceId: ctx.workspaceId,
+  actorUserId: ctx.actorUserId,
+  actorName: ctx.actorName,
+  english: ctx.english,
+});
+
+// Data asset catalog and observation registration. Observation runs are not exposed here:
+// the operating-context snapshot runtime starts and completes them.
+
+export async function createCatalogEntryAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "owner",
+    schema: createCatalogEntrySchema,
+    rawInput,
+    invoke: (ctx, input) => createDataAssetCatalogEntry({ ...input, ...actor(ctx) }),
+  });
+}
+
+export async function recordCatalogClassificationAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "owner",
+    schema: catalogClassificationSchema,
+    rawInput,
+    invoke: (ctx, input) => recordDataAssetClassificationReceipt({ ...input, ...actor(ctx) }),
+  });
+}
+
+export async function recordCatalogAuthorizationAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "owner",
+    schema: catalogAuthorizationSchema,
+    rawInput,
+    invoke: (ctx, input) => recordDataAssetAuthorizationReceipt({ ...input, ...actor(ctx) }),
+  });
+}
+
+export async function recordCatalogConnectionAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "owner",
+    schema: catalogConnectionSchema,
+    rawInput,
+    invoke: (ctx, input) => recordDataAssetConnectionReceipt({ ...input, ...actor(ctx) }),
+  });
+}
+
+export async function recordCatalogInitializationAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "owner",
+    schema: catalogInitializationSchema,
+    rawInput,
+    invoke: (ctx, input) => recordDataAssetInitializationReceipt({ ...input, ...actor(ctx) }),
+  });
+}
+
+export async function createObservationProgramAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "owner",
+    schema: createObservationProgramSchema,
+    rawInput,
+    invoke: (ctx, input) => createEnterpriseObservationProgram({ ...input, ...actor(ctx) }),
+  });
+}
+
+export async function registerObservationSourceAction(rawInput: unknown) {
+  return runOwnerOperation({
+    access: "owner",
+    schema: registerObservationSourceSchema,
+    rawInput,
+    invoke: (ctx, input) => registerObservationSource({ ...input, ...actor(ctx) }),
+  });
+}
+
