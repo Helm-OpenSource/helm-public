@@ -5,8 +5,8 @@
   "description": "Portable public-safe validation artifact for Pack operating inputs and private execution result projections. Validation grants no authority; Core still resolves every workspace, Portfolio, evidence snapshot, work object and permission at ingestion time.",
   "interfaceIdentity": {
     "interfaceVersion": "helm.caio-pro-fde.cross-repo-interface.v1",
-    "contractRef": "caio-pro-fde-cross-repo-interface:39378a3d5fa43a99",
-    "contractHash": "sha256:39378a3d5fa43a99d6fc65edb25bd6ab82259e6b7e94759a13a9e5b61b690c46",
+    "contractRef": "caio-pro-fde-cross-repo-interface:839611719d5ce76e",
+    "contractHash": "sha256:839611719d5ce76e109c8847e302d9b9a52abca2dc315b813d978d6821bb7cc5",
     "evaluatorRevision": "caio-pro-v1-completion-evaluator.v1",
     "evaluatorContractRef": "caio-pro-v1-completion-evaluator:5cabb5c7a5994f3a",
     "evaluatorContractHash": "sha256:5cabb5c7a5994f3a98c7f68b0f921e5b991bded42b44a89e02be28edd4befc01"
@@ -39,7 +39,7 @@
     "publicSafeRefRules": [
       "opaque_ref_pattern_and_prefix_must_match",
       "url_locator_ip_email_secret_token_connection_string_and_pii_shapes_are_rejected",
-      "workspace_opportunity_and_observation_run_cuid_shapes_with_alphabetic_entropy_bypass_only_digit_shape_rejection"
+      "workspace_opportunity_observation_run_decision_record_action_item_and_approval_task_cuid_shapes_with_alphabetic_entropy_bypass_only_digit_shape_rejection"
     ],
     "packOperatingInputRules": [
       "shortText_and_longText_fields_must_contain_non_whitespace_content",
@@ -71,12 +71,12 @@
     },
     "contractRef": {
       "type": "string",
-      "const": "caio-pro-fde-cross-repo-interface:39378a3d5fa43a99",
+      "const": "caio-pro-fde-cross-repo-interface:839611719d5ce76e",
       "maxLength": 256
     },
     "contractHash": {
       "type": "string",
-      "const": "sha256:39378a3d5fa43a99d6fc65edb25bd6ab82259e6b7e94759a13a9e5b61b690c46",
+      "const": "sha256:839611719d5ce76e109c8847e302d9b9a52abca2dc315b813d978d6821bb7cc5",
       "maxLength": 71
     },
     "evaluatorRevision": {
@@ -172,7 +172,7 @@
         {
           "anyOf": [
             {
-              "pattern": "^(?:workspace|opportunity|observation-run):c(?=[a-z0-9]*[a-z])[a-z0-9]{24}$"
+              "pattern": "^(?:workspace|opportunity|observation-run|decision-record|action-item|approval-task):c(?=[a-z0-9]*[a-z])[a-z0-9]{24}$"
             },
             {
               "not": {
@@ -182,7 +182,7 @@
           ]
         }
       ],
-      "description": "Syntactic public-safe opaque ref only. Workspace, opportunity and observation-run CUID-shaped refs must contain alphabetic entropy before they may bypass digit-shape rejection; all-digit and other digit-shaped PII remain rejected. Core resolution against the authenticated workspace and current evidence snapshot is mandatory."
+      "description": "Syntactic public-safe opaque ref only. Workspace, opportunity, observation-run, decision-record, action-item and approval-task CUID-shaped refs must contain alphabetic entropy before they may bypass digit-shape rejection; all-digit and other digit-shaped PII remain rejected. Core resolution against the authenticated workspace and current evidence snapshot is mandatory."
     },
     "workspaceRef": {
       "allOf": [
