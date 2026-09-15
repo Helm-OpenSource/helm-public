@@ -1,3 +1,15 @@
+---
+status: planning / implemented-in-pr-pending-merge
+owner: helm-core
+created: 2026-09-15
+review_after: 2026-10-15
+public_safety: Public-safe implementation plan for the owner-approved tenant
+  live shadow extension of the P3a context contract (tenant_self_observation
+  source class, tenant_live_shadow manifest, observation-receipt gate) and the
+  CAIO quick-check snapshot projection. No customer data, private endpoint,
+  credential, production receipt, activation, or production-readiness claim.
+---
+
 # CAIO P0-2b 租户自观察 P3a 快照投影 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans（本仓默认内联执行）. Steps use checkbox (`- [ ]`) syntax for tracking.

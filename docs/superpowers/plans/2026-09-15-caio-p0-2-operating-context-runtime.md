@@ -1,3 +1,15 @@
+---
+status: planning / implemented-in-pr-pending-merge
+owner: helm-core
+created: 2026-09-15
+review_after: 2026-10-15
+public_safety: Public-safe implementation plan for the CAIO operating
+  observation runtime (tenant-registered metric templates and deterministic
+  detectors, catalog-gated quick check, candidate anomalies, read-only /caio
+  attention readout). No customer data, private endpoint, credential,
+  production receipt, activation, or production-readiness claim.
+---
+
 # CAIO P0-2 经营观察运行时与检测器框架 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans（本仓默认内联执行）. Steps use checkbox (`- [ ]`) syntax for tracking.
