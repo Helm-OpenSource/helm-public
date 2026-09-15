@@ -329,3 +329,24 @@ export async function registerPrincipalBindingAction(rawInput: unknown) {
 - 规格 §3 覆盖：身份绑定登记与吊销（Task 3）、mandate 草稿/激活/暂停/撤销（Task 3）、guardian 指定（CEO 以 `principalKind=guardian` 登记绑定，Task 3）、目录与各阶段回执（Task 4）、观察程序与来源（Task 4；运行留给 P0-2）、G0 评估/受理/撤销（Task 5）。
 - guardian 只停不启由服务既有合同保证，Task 7 端到端验证。
 - 类型一致：`CaioOperatorResult`、`CaioOperatorErrorCode`、`runOwnerOperation` 在 Task 1/3 定义，Task 4/5/6 消费。
+
+## 实施记录（as-built，2026-09-15，helm-public PR #388）
+
+与上文计划的偏差，以代码为准：
+
+1. **治理记录不走网页，改为受控命令行。** 冻结 ADR §7 规定 mandate/绑定/急停账本"无 API、无 server action"，
+   `check:caio-terminology` 的权限防火墙拒绝任何带 `"use server"` 的模块依赖 `lib/caio-governance`。按规格 §3
+   "服务端动作与受控 CLI 二选一"：身份绑定、mandate 草稿/激活/暂停/撤销、guardian 急停、CEO 恢复在
+   `lib/caio-operator/governance-operator.ts`，入口 `npm run caio:governance-operator`（默认只校验，`--apply` 才写入，
+   `--template=<operation>` 输出样例）。网页 `/caio/operator` 只保留目录、观察来源与 G0，并在页面上说明治理记录走命令行。
+2. **两类访问。** `owner`（登记类，预检 OWNER）与 `principal_bound`（CEO/guardian 行为，不做角色预检，由服务按绑定判定）。
+   guardian 与 CEO 不必是 OWNER，若全部预检 OWNER 会挡住非 OWNER guardian 急停；隔离 MySQL 用变异测试证明这一点。
+3. **共享核心。** `lib/caio-operator/operation-core.ts`（访问预检 → schema → 服务 → 闭集码 → 白名单摘要）供网页与命令行共用，
+   不引入治理模块；治理侧自带错误映射（`CaioMandateStoreError` → `governance_rejected`）。
+4. **摘要白名单扩展。** 服务结果把记录包在一层（`mandate`/`stop`/`receipt`/`assessment`/`entry`/`program`/`source`），
+   摘要按 `mandate.status`、`stop.stopId` 形式展开；另补 `mandateId`。
+5. **操作面板形态。** 每个操作一张卡片，JSON 文本框预填经 schema 校验过的样例（样例测试防漂移），不做逐字段表单。
+6. **隔离 MySQL 约束。** 要求 `CAIO_OPERATOR_DATABASE_URL === DATABASE_URL` 且库名以 `helm_caio_operator_` 开头；
+   与其它 CAIO 隔离套件一致不删行（外键与留痕）。`npm run test:caio-operator:mysql` 同时跑网页与命令行两套。
+7. **授权依据样例格式。** mandate 模板 `grantBasisRefs` 使用 `caio-mandate-grant:<ceoRef>:issuance-<id>`，与存储层签发人格式一致。
+8. **公开包脚本白名单。** 新增的两个 npm 脚本登记到 `scripts/public-release-guard.ts` 白名单，否则公开镜像预检失败。
