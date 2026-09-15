@@ -196,6 +196,7 @@ import {
   type CaioGatewayHandlerDependencies,
   type CaioGatewayResponse,
   type CaioMcpDispatchPort,
+  type CaioInferenceJobPort,
   type CaioReadinessProbePort,
   type CaioTokenAuthenticatorPort,
 } from "@/lib/caio-access-gateway/gateway-http-core";
@@ -299,6 +300,18 @@ export const CAIO_ACCESS_GATEWAY_ROUTE_TABLE: readonly CaioAccessGatewayRoute[] 
     Object.freeze({
       path: "/v1/models",
       methods: Object.freeze(["GET"]),
+      owner: "access_gateway_api" as const,
+      servedByThisSurface: true,
+    }),
+    Object.freeze({
+      path: "/v1/inference-jobs/claim",
+      methods: Object.freeze(["POST"]),
+      owner: "access_gateway_api" as const,
+      servedByThisSurface: true,
+    }),
+    Object.freeze({
+      path: "/v1/inference-jobs/submit",
+      methods: Object.freeze(["POST"]),
       owner: "access_gateway_api" as const,
       servedByThisSurface: true,
     }),
@@ -440,6 +453,12 @@ export type CaioAccessGatewayServerPorts = Readonly<{
    * between a facade and no gateway at all.
    */
   mcpDispatch?: CaioMcpDispatchPort;
+  /**
+   * OPTIONAL capability for the pull inference surface. Absent means the two inference-job paths are NOT
+   * OWNED by this mount: they drop out of `apiPaths` and are refused on ownership before authentication, so a
+   * deployment without an on-premises worker serves no worker surface at all.
+   */
+  inferenceJobs?: CaioInferenceJobPort;
   /**
    * Optional deployment-owned Pack implementation. Public Core rejects zero at
    * request ownership and rejects more than one during construction; it never
@@ -677,8 +696,12 @@ export function createCaioAccessGatewayMount(
   const servesModelDispatch = modelDispatch !== null;
   const servesOperatingQuestionGeneration =
     operatingQuestionPackProviderRegistry.mountedProviderCount() === 1;
+  const servesInferenceJobs = typeof input.ports.inferenceJobs?.claim === "function"
+    && typeof input.ports.inferenceJobs?.submit === "function";
   const UNOWNED_WITHOUT_PORT: Readonly<Record<string, boolean>> = Object.freeze({
     "/mcp": servesMcp,
+    "/v1/inference-jobs/claim": servesInferenceJobs,
+    "/v1/inference-jobs/submit": servesInferenceJobs,
     [CAIO_OPERATING_QUESTION_GENERATION_PATH]:
       servesOperatingQuestionGeneration,
     "/v1/responses": servesModelDispatch,
@@ -770,6 +793,15 @@ export function createCaioAccessGatewayMount(
         }),
       listModels: modelList.listModels,
     },
+    inferenceJobs:
+      input.ports.inferenceJobs ?? {
+        claim: async () => {
+          throw new CaioAccessGatewayError("route_not_governed");
+        },
+        submit: async () => {
+          throw new CaioAccessGatewayError("route_not_governed");
+        },
+      },
     auditGate: input.ports.auditGate,
     readinessProbe: input.ports.readinessProbe,
     featureFlags: input.config.featureFlags,
