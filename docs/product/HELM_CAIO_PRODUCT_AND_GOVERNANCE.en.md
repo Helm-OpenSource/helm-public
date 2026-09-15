@@ -125,3 +125,28 @@ execution entry; activate no auto-dispatch, outbound
 send, CRM write, or financial / legal action; constitute no production
 activation, customer commitment, or owner approval; and alter no existing
 `aicoo` machine identifier, pin, hash, or historical evidence.
+
+## 6. Rule-authorized execution governance decision (2026-09-15, design approved, not implemented)
+
+The owner approved the design direction of the Core specification for running Helm CAIO on live tenant data
+(`docs/superpowers/specs/2026-09-15-caio-live-operating-core-spec.md`). This section freezes only that
+design's governance decisions and **does not change the current wording of §3**: until spec §6 is
+implemented with evidence, the evidence status of `Authorized Execute` stays `roadmap_disabled`.
+
+1. **A standing rule is authorization evidence, not a permission token.** A CEO-signed standing rule is one
+   piece of authorization evidence and grants no runtime permission; every execution must still pass the
+   existing permission chain (active membership, role and capability, object ownership, entitlement), policy
+   and compliance gates, and the action adapter's real-time pre-execution check, with the existing ingress
+   writing the sole canonical execution receipt. This is consistent with the invariant that CAIO role and
+   authorization objects are not permission tokens.
+2. **Only the CEO signs explicitly**, through a registered principal binding; nothing is inherited, copied, or
+   derived from an existing owner approval or mandate; CAIO cannot sign.
+3. **Guardians stop but never resume**: the CEO or a CEO-designated guardian may stop globally, per action
+   class, or per rule; only the CEO resumes.
+4. **A release-mutex pause never overrides other pauses**: a pause during a tenant release cutover lifts only
+   itself afterwards; it never resumes automatically while a guardian stop, rule expiry, or health pause
+   also holds.
+5. **Dry-run thresholds belong to Pack contracts**: each action class's dry-run evidence threshold is declared
+   by its Pack contract; Core only enforces the Pack verdict and never relaxes an existing Pack contract.
+6. The maturity axis is still not a permission axis; this section grants no execution permit, production
+   activation, or owner approval.
