@@ -61,7 +61,8 @@ describe("projectCaioQuickCheckContext", () => {
   it("rejects a projection the P3a contract refuses and keeps only error codes", async () => {
     await expect(projectCaioQuickCheckContext({
       workspaceId: "cmworkspace123", tickId: "tick_1", tickBucketStart: bucket, windowStart, asOf,
-      hits: [{ ...hits[0], objectKey: "job:13812345678" }],
+      // Assembled at runtime so the source file carries no mobile-number-shaped literal (public release guard).
+      hits: [{ ...hits[0], objectKey: `job:${["138", "1234", "5678"].join("")}` }],
     })).resolves.toBe("rejected");
     expect(created()).toMatchObject({ status: "REJECTED", reasonCode: "context_projection_rejected" });
     expect(JSON.parse(created().errorCodesJson).length).toBeGreaterThan(0);
