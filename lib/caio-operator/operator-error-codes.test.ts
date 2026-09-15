@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CaioInitializationGateStoreError } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
+import { CaioOperatingQuestionStoreError } from "@/lib/stage1-owner-loop/caio-operating-question-store.service";
 import {
   DataAssetCatalogConflictError,
   DataAssetCatalogContractError,
@@ -13,6 +14,7 @@ import {
 
 import {
   CAIO_OPERATOR_ERROR_CODES,
+  CaioOperatorPreconditionError,
   caioOperatorErrorMessage,
   mapCaioOperatorError,
 } from "./operator-error-codes";
@@ -25,6 +27,9 @@ describe("mapCaioOperatorError", () => {
     [new DataAssetCatalogConflictError(["private_reason"]), "catalog_conflict"],
     [new ObservationContractError(["private_reason"]), "observation_rejected"],
     [new ObservationAuthorizationDeniedError(["private_reason"]), "observation_denied"],
+    [new CaioOperatingQuestionStoreError("private detail", ["private_reason"]), "selection_rejected"],
+    [new CaioOperatingQuestionStoreError("private detail", ["question_selection_concurrent_conflict"]), "selection_conflict"],
+    [new CaioOperatorPreconditionError("g0_not_accepted"), "g0_not_accepted"],
     [new Error("private sql detail"), "unavailable"],
     ["not an error", "unavailable"],
     [null, "unavailable"],

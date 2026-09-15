@@ -9,6 +9,7 @@ import {
   DATA_ASSET_SHAPES,
   DATA_ASSET_TECHNICAL_FEASIBILITY_STATES,
 } from "@/lib/stage1-owner-loop/data-asset-catalog.types";
+import { caioQuestionSelectionItemSchema } from "@/lib/stage1-owner-loop/caio-question-selection";
 import { OBSERVATION_ACCESS_MODES, OBSERVATION_SENSITIVITY_LEVELS } from "@/lib/stage1-owner-loop/types";
 
 /**
@@ -135,4 +136,20 @@ export const revokeInitializationGateSchema = z.object({
   idempotencyKey: ref,
   reasonCodes: refs,
   evidenceRefs: refs,
+}).strict();
+
+// CEO question selection. Bounds mirror the governed selection command (0-3 selections, evidence required);
+// the service re-validates the portfolio, the current accepted G0 and the live CEO binding in its transaction.
+export const selectOperatingQuestionsSchema = z.object({
+  expectedPortfolioId: ref,
+  ceoPrincipalRef: principalRef,
+  idempotencyKey: ref,
+  selections: z.array(caioQuestionSelectionItemSchema).max(3),
+  reasonCodes: z.array(ref).max(20),
+  evidenceRefs: z.array(ref).min(1).max(100),
+}).strict();
+
+export const bindQuestionSelectionSchema = z.object({
+  expectedSelectionReceiptId: ref,
+  ceoPrincipalRef: principalRef,
 }).strict();
