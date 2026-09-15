@@ -29,7 +29,10 @@ describe("validateCaioLayeredJudgement", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.contentHash).toBe(sha256(canonicalJson(result.value)));
-    expect(toCaioLayeredJudgementDisposition(result.contentHash)).toBe(`caio.layered-judgement.v1:${result.contentHash}`);
+    // The public JudgementPacket disposition is a closed token (no colon, no digest); the body hash is
+    // bound by the queue row instead.
+    expect(toCaioLayeredJudgementDisposition()).toBe("caio.layered-judgement.v1");
+    expect(toCaioLayeredJudgementDisposition()).not.toContain(":");
   });
 
   it("accepts empty layers and a null confidence score without inventing one", () => {

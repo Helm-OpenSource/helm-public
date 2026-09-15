@@ -92,9 +92,12 @@ export function validateCaioLayeredJudgement(
   return { ok: true, value, contentHash: sha256(canonicalJson(value)) };
 }
 
-/** The public disposition for a JudgementPacket: schema version plus the private body's content hash. */
-export function toCaioLayeredJudgementDisposition(contentHash: string): string {
-  return `caio.layered-judgement.v1:${contentHash}`;
+/**
+ * The public JudgementPacket disposition for a layered judgement. The public contract only admits a closed
+ * token, so the private body is bound by its own content hash on the queue row, not by this string.
+ */
+export function toCaioLayeredJudgementDisposition(): string {
+  return "caio.layered-judgement.v1";
 }
 
 function hasDisallowedSuggestionKind(input: unknown): boolean {
