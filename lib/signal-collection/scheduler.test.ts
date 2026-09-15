@@ -10,6 +10,7 @@ import {
   runSignalCollectionJobs,
   startSignalCollectionScheduler,
 } from "@/lib/signal-collection/scheduler";
+import type { SignalCollectionRunRecorder } from "@/lib/signal-collection/run-ledger";
 import type { SignalCollectionJob } from "@/lib/signal-collection/types";
 
 function buildJob(overrides: Partial<SignalCollectionJob> = {}): SignalCollectionJob {
@@ -434,6 +435,107 @@ describe("signal collection scheduler", () => {
     expect(logs).not.toContain("customer-reference");
     expect(logs).not.toContain("workspace-sensitive");
     expect(logs).not.toContain("raw SQL and customer detail");
+  });
+
+  describe("run ledger port", () => {
+    it("records one closed-set entry per job without target text", async () => {
+      const recordRun = vi.fn<SignalCollectionRunRecorder>().mockResolvedValue();
+      await runSignalCollectionJobs({
+        jobs: [
+          buildJob({
+            resolveTargets: async () => [{ key: "customer-reference" }, { key: "target-b" }],
+            runTarget: async (target) =>
+              target.key === "target-b"
+                ? { status: "failed", failureCount: 1, message: "raw customer detail" }
+                : { status: "success", signalCount: 1 },
+          }),
+          buildJob({ key: "tenant-alpha.signal.hourly", resolveTargets: async () => [] }),
+        ],
+        now: new Date("2026-05-09T00:00:00.000Z"),
+        source: "test",
+        recordRun,
+      });
+
+      expect(recordRun).toHaveBeenCalledTimes(2);
+      expect(recordRun.mock.calls[0]?.[0]).toMatchObject({
+        jobKey: "tenant-alpha.signal.daily",
+        tenantKey: "tenant-alpha",
+        source: "test",
+        outcome: "failed",
+        errorCode: "target_failed",
+        targetCount: 2,
+        successCount: 1,
+        failureCount: 1,
+      });
+      expect(recordRun.mock.calls[1]?.[0]).toMatchObject({
+        jobKey: "tenant-alpha.signal.hourly",
+        outcome: "skipped",
+        errorCode: "no_targets",
+      });
+      const recorded = JSON.stringify(recordRun.mock.calls);
+      expect(recorded).not.toContain("customer-reference");
+      expect(recorded).not.toContain("raw customer detail");
+    });
+
+    it("keeps the run summary when the ledger write fails", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const summary = await runSignalCollectionJobs({
+        jobs: [buildJob()],
+        now: new Date("2026-05-09T00:00:00.000Z"),
+        source: "test",
+        recordRun: async () => {
+          throw new Error("ledger database unavailable");
+        },
+      });
+
+      expect(summary).toMatchObject({ ok: true, successCount: 1 });
+      const warnings = JSON.stringify(warnSpy.mock.calls);
+      expect(warnings).toContain("run_ledger_write_failed");
+      expect(warnings).not.toContain("ledger database unavailable");
+    });
+
+    it.each([
+      ["start_check_failed", { canStart: () => ({ ok: false as const, reason: "missing_env" }) }],
+      ["resolve_targets_failed", { resolveTargets: async () => { throw new Error("lookup failed"); } }],
+      ["target_failed", { runTarget: async () => { throw new Error("target failed"); } }],
+      ["job_disabled", { enabled: () => false }],
+      ["no_targets", { resolveTargets: async () => [] }],
+    ] as const)("sets errorCode %s on the job summary", async (errorCode, overrides) => {
+      const summary = await runSignalCollectionJobs({
+        jobs: [buildJob(overrides as Partial<SignalCollectionJob>)],
+        now: new Date("2026-05-09T00:00:00.000Z"),
+        source: "test",
+      });
+      expect(summary.jobs[0]?.errorCode).toBe(errorCode);
+    });
+
+    it("leaves errorCode unset on a successful job", async () => {
+      const summary = await runSignalCollectionJobs({ jobs: [buildJob()], source: "test" });
+      expect(summary.jobs[0]?.errorCode).toBeUndefined();
+    });
+
+    it("records a crashed scheduled run", async () => {
+      process.env.TENANT_ALPHA_SIGNAL_TIME = "0 8 * * *";
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const recordRun = vi.fn<SignalCollectionRunRecorder>().mockResolvedValue();
+
+      startSignalCollectionScheduler({
+        jobs: [buildJob()],
+        stateKey: "test-scheduler-crash-ledger",
+        source: "test",
+        recordRun,
+      });
+      process.env.HELM_SIGNAL_RUNTIME_WRITES_ENABLED = "false";
+      await vi.advanceTimersByTimeAsync(61_000);
+
+      expect(recordRun).toHaveBeenCalledTimes(1);
+      expect(recordRun.mock.calls[0]?.[0]).toMatchObject({
+        jobKey: "tenant-alpha.signal.daily",
+        outcome: "crashed",
+        errorCode: "scheduler_job_crashed",
+        targetCount: 0,
+      });
+    });
   });
 
   it("keeps core signal collection free of tenant extension imports", () => {
