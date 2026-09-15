@@ -15,6 +15,8 @@ import {
   type CaioMetricObservationView,
   type CaioMetricQueryTemplate,
 } from "./contracts";
+import { projectCaioQuickCheckContext, isCaioContextProjectionEnabled } from "./context-projection.service";
+import type { CaioContextHitRow } from "./context-builder";
 import { planCaioCandidateTransitions, runCaioDetectors, type CaioDetectorRunResult } from "./detector-runner";
 import { buildCaioMetricObservationContent, summarizeCaioSourceRun } from "./metric-evidence";
 import { getRegisteredCaioOperatingContext } from "./registry";
@@ -56,7 +58,10 @@ export type CaioQuickCheckResult =
       cleared: number;
       skippedDetectors: number;
       failedDetectors: number;
+      contextProjection: CaioQuickCheckContextProjection;
     };
+
+export type CaioQuickCheckContextProjection = "disabled" | "projected" | "rejected" | "no_signals" | "failed";
 
 type MetricErrorCode =
   | "observation_gate_rejected"
@@ -229,7 +234,10 @@ async function applyCandidateTransitions(input: {
       });
       cleared += result.count;
     }
-    return { opened, refreshed, cleared };
+    const hits: CaioContextHitRow[] = plan.upserts.map(({ detectorId, hit }) => ({
+      detectorId, mergeKey: hit.mergeKey, objectKey: hit.objectKey, evidenceTemplateIds: [...hit.evidenceTemplateIds],
+    }));
+    return { opened, refreshed, cleared, hits };
   }, CANDIDATE_TRANSACTION_OPTIONS);
   // Serializable conflicts retry with bounded backoff; a unique violation means an overlapping bucket
   // opened the same merge key first, and the retry then refreshes that row instead.
@@ -270,11 +278,18 @@ export async function runCaioQuickCheck(input: {
       templateTimeoutMs: input.templateTimeoutMs ?? DEFAULT_TEMPLATE_TIMEOUT_MS,
     }, templates);
     const run = runCaioDetectors({ detectors, observations: views, now });
-    const counts = await applyCandidateTransitions({ workspaceId: input.workspaceId, tickId, now, run, detectors, views });
+    const { hits, ...counts } = await applyCandidateTransitions({ workspaceId: input.workspaceId, tickId, now, run, detectors, views });
     const known = [...views.values()].filter((view) => view.status === "ok").length;
+    let contextProjection: CaioQuickCheckContextProjection = "disabled";
+    if (isCaioContextProjectionEnabled()) {
+      // A projection failure never changes the quick-check outcome; it is reported on its own.
+      contextProjection = await projectCaioQuickCheckContext({
+        workspaceId: input.workspaceId, tickId, tickBucketStart: bucketStart, windowStart, asOf: now, hits,
+      }).catch(() => "failed" as const);
+    }
     const result = {
       status: "completed" as const, tickId, known, unknown: views.size - known, ...counts,
-      skippedDetectors: run.skipped.length, failedDetectors: run.failed.length,
+      skippedDetectors: run.skipped.length, failedDetectors: run.failed.length, contextProjection,
     };
     await db.caioQuickCheckTick.update({
       where: { id: tickId },
@@ -289,6 +304,9 @@ export async function runCaioQuickCheck(input: {
       where: { id: tickId },
       data: { status: "FAILED", completedAt: new Date(), summaryJson: JSON.stringify({ errorCode: "quick_check_failed" }) },
     }).catch(() => undefined);
-    return { status: "failed", tickId, known: 0, unknown: 0, opened: 0, refreshed: 0, cleared: 0, skippedDetectors: 0, failedDetectors: 0 };
+    return {
+      status: "failed", tickId, known: 0, unknown: 0, opened: 0, refreshed: 0, cleared: 0, skippedDetectors: 0, failedDetectors: 0,
+      contextProjection: "disabled",
+    };
   }
 }

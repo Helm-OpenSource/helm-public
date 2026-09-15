@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dbMock, observationMock } = vi.hoisted(() => {
+const { dbMock, observationMock, projectionMock } = vi.hoisted(() => {
   const dbMock = {
     caioQuickCheckTick: { create: vi.fn(), update: vi.fn() },
     caioMetricObservation: { create: vi.fn() },
@@ -11,11 +11,13 @@ const { dbMock, observationMock } = vi.hoisted(() => {
   return {
     dbMock,
     observationMock: { beginObservationSourceRun: vi.fn(), completeObservationSourceRun: vi.fn() },
+    projectionMock: { projectCaioQuickCheckContext: vi.fn(), isCaioContextProjectionEnabled: vi.fn() },
   };
 });
 
 vi.mock("@/lib/db", () => ({ db: dbMock }));
 vi.mock("@/lib/stage1-owner-loop/observation.service", () => observationMock);
+vi.mock("./context-projection.service", () => projectionMock);
 
 import type { CaioDetector, CaioMetricQueryTemplate } from "./contracts";
 import { caioQuickCheckBucketStart, runCaioQuickCheck } from "./quick-check.service";
@@ -55,6 +57,8 @@ beforeEach(() => {
   dbMock.$transaction.mockImplementation(async (fn: (tx: typeof dbMock) => unknown) => fn(dbMock));
   observationMock.beginObservationSourceRun.mockResolvedValue({ id: "run_1", status: "RUNNING" });
   observationMock.completeObservationSourceRun.mockResolvedValue({});
+  projectionMock.isCaioContextProjectionEnabled.mockReturnValue(false);
+  projectionMock.projectCaioQuickCheckContext.mockResolvedValue("projected");
 });
 
 describe("caioQuickCheckBucketStart", () => {
@@ -180,5 +184,31 @@ describe("runCaioQuickCheck", () => {
       data: { status: "FAILED", completedAt: expect.any(Date), summaryJson: JSON.stringify({ errorCode: "quick_check_failed" }) },
     });
     expect(JSON.stringify(result)).not.toMatch(/private/u);
+  });
+
+  it("does not project context while the projection switch is off", async () => {
+    const result = await runCaioQuickCheck({
+      workspaceId: "ws", now,
+      templates: [template("dead-letters", "source-a", async () => ({ values: { count: 12 }, denominator: null }))],
+      detectors: [deadLetterDetector],
+    });
+    expect(result).toMatchObject({ status: "completed", contextProjection: "disabled" });
+    expect(projectionMock.projectCaioQuickCheckContext).not.toHaveBeenCalled();
+  });
+
+  it("passes this tick's hits to the projection and keeps the tick completed when projection throws", async () => {
+    projectionMock.isCaioContextProjectionEnabled.mockReturnValue(true);
+    const templates = [template("dead-letters", "source-a", async () => ({ values: { count: 12 }, denominator: null }))];
+    await expect(runCaioQuickCheck({ workspaceId: "ws", now, templates, detectors: [deadLetterDetector] }))
+      .resolves.toMatchObject({ status: "completed", contextProjection: "projected" });
+    expect(projectionMock.projectCaioQuickCheckContext).toHaveBeenCalledWith(expect.objectContaining({
+      tickId: "tick_1", asOf: now,
+      hits: [{ detectorId: "dead-letter-surge", mergeKey: "closure", objectKey: "job:closure", evidenceTemplateIds: ["dead-letters"] }],
+    }));
+
+    projectionMock.projectCaioQuickCheckContext.mockRejectedValue(new Error("private projection detail"));
+    const failed = await runCaioQuickCheck({ workspaceId: "ws", now: new Date(now.getTime() + 600_000), templates, detectors: [deadLetterDetector] });
+    expect(failed).toMatchObject({ status: "completed", contextProjection: "failed" });
+    expect(JSON.stringify(failed)).not.toMatch(/private/u);
   });
 });
