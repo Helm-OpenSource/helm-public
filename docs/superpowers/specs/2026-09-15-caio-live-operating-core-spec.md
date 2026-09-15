@@ -114,6 +114,33 @@ P3a `TemporalOperatingContextSnapshot` 是由 canonical 记录派生的证据图
 - 节奏：快检（不用模型，默认 10 分钟）、小时诊断与日终复盘（入 §4 队列）由调度器触发。
 - 数据域读失败或过期时，依赖该域的检测器与规则停止触发。
 
+### 5.1 P3a 合同扩展（草案，待 owner 批准；未实现）
+
+2026-09-15 核对：现行 P3a 投影输入门只接受 `HarnessManifest.scope="public_offline_shadow"`、来源类
+`synthetic_public / self_dogfood_health / deidentified_promoted_case` 与用途 `fixture_validation / public_eval /
+heldout_eval`，客户来源 fail closed，因此上表的"复用 context-projector"按现合同不能成立。owner 已裁定扩展合同、
+分两段实施（P0-2a 不依赖本节；P0-2b 在本节获批合入后编写）。拟冻结的扩展：
+
+1. **新来源类 `tenant_self_observation`**：租户在自身部署内观察自身经营，单租户。允许用途只有
+   `operator_triage` 与 `advice_only_risk_review`；其余用途一律拒绝，特别是 `public_eval`、`heldout_eval`、
+   `model_improvement`、`training`、`memory_promotion`、`automatic_customer_action`、`external_send`、`writeback`；
+   不得进入任何 fleet 聚合。
+2. **新 manifest 范围 `tenant_live_shadow`**：与 `public_offline_shadow` 并列；`allowedSourceClasses` 仅
+   `tenant_self_observation`，`intendedUses` 仅上条两种；两种范围的记录不得出现在同一投影输入；
+   `commitmentClass=advice`、`actionAuthority=none`、`writebackAllowed=false` 等既有不变式原样保留。
+3. **晋升门替代**：`tenant_self_observation` 不走 `EvalCasePromotion`；每个 source binding 必须引用终态
+   `ObservationSourceRun`（`SUCCEEDED` 或 `PARTIAL`）及其数据资产目录条目的授权与连接回执，且观察窗口覆盖
+   信号时间。门逻辑作为 `validateOperatingSignalImprovementGate` 之外的独立函数新增，不修改既有分支。
+4. **记录映射**（沿用 §5 表）：`CaioMetricObservation(status=ok)` → `EvidenceRef`（`contentIncluded=false`、
+   `contentHash` 取观察内容哈希、`sourceSnapshotHash` 绑定模板编号与窗口、`redactionStatus=alias_only`）；
+   候选的 `objectKey` → `BusinessObjectAlias`（`resolutionMethod=deterministic_key`、`personAttributionMode=none`）；
+   每轮新命中或刷新的候选 → `SignalEvent`（`signalFamily=detectorId`）。`status=unknown` 的观察不产生任何记录。
+5. **需同步修订的公开文档**：`HELM_ENTERPRISE_OPERATING_CONTEXT_MODEL.md` §3 与
+   `HELM_OPERATING_HARNESS_REQUIREMENTS.md` 来源治理段。快照仍是可丢弃的 read model，不获得写、发、执行、
+   批准或记忆晋升权限。
+6. `fleet_customer_health` 与 `oss_governance` 的 fail closed 不变；既有三种来源类与 `public_offline_shadow`
+   的行为不变。
+
 ## 6. 授权执行（Authorized Execute）
 
 ### 6.1 规则账本
