@@ -80,6 +80,18 @@ export function OperatingAttentionSection({
         </p>
       ) : null}
 
+      {readout.available && readout.lastSnapshot ? (
+        <p className="mt-3 text-xs text-[color:var(--muted-foreground)]" data-caio-attention-snapshot={readout.lastSnapshot.status}>
+          {readout.lastSnapshot.status === "PROJECTED"
+            ? t(`经营上下文快照已生成（对象 ${readout.lastSnapshot.objectCount}、信号 ${readout.lastSnapshot.signalCount}）`,
+              `Operating context snapshot generated (${readout.lastSnapshot.objectCount} object(s), ${readout.lastSnapshot.signalCount} signal(s))`)
+            : readout.lastSnapshot.status === "NO_SIGNALS"
+              ? t("本轮无命中，未生成快照", "No hits this round; no snapshot generated")
+              : t("快照未通过合同校验", "The snapshot did not pass contract validation")}
+          {t(`（${formatTime(readout.lastSnapshot.createdAt, english)}）`, ` (${formatTime(readout.lastSnapshot.createdAt, english)})`)}
+        </p>
+      ) : null}
+
       <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
         {t("快检只读、不调用模型，不执行、不外发。", "The quick check is read-only and uses no model; it does not execute or send.")}
       </p>
