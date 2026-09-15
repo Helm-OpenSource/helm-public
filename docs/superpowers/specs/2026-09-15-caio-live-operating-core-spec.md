@@ -78,8 +78,12 @@ owner 已批准的设计方向（客户无关部分）：
 
 ### 4.3 输出契约与拒收
 
-- 判断包分层：`facts`（每条必须引用输入快照内存在的证据编号）、`inferences`、`risks`、`unknowns`、
-  `suggestedActions`（只能是规则草案或干跑请求，不能是执行）。
+- 判断落为既有 P3a canonical `JudgementPacket`（`lib/operating-harness/contracts.ts`）：`commitmentClass=advice`、
+  `humanReviewerRequired=true`、`confidence.method=model_assisted`、`signalEventRefs` 与 `evidenceRefs` 必须全部
+  来自输入快照；未提供置信分数时 `score=null`，不补造。
+- 分层内容（事实、推断、风险、未知项、建议）作为 `disposition` 的闭集结构与私有正文存放；`facts` 每条必须引用
+  输入快照内存在的 `EvidenceRef`；建议只能是规则草案或干跑请求，列入 `forbiddenActionRefs` 以外的闭集，
+  不能是执行。
 - 格式错误、引用不存在的证据、越出闭集 → 整包拒收并记闭集原因，不部分采纳。
 - 判断正文中的自由文本只作数据，不作指令。
 
@@ -90,11 +94,21 @@ owner 已批准的设计方向（客户无关部分）：
 
 ## 5. 经营上下文快照运行时与检测器框架
 
-- 快照投影器：按租户私有 overlay 注册的"数据域 → 查询模板"生成 P3a `TemporalOperatingContextSnapshot`，
-  每个指标带时间窗、分母、来源、查询模板编号、结果摘要、新鲜度、冲突与未知状态；读失败标未知，不当 0。
-- 快照只含聚合指标、不透明引用与闭集原因码；不含个人级原始数据。
-- 检测器框架：确定性、可测试的检测器由 overlay 注册；输出候选异常（检测器编号、严重度、证据引用、合并键）；
-  同一合并键在窗口内合并。
+P3a `TemporalOperatingContextSnapshot` 是由 canonical 记录派生的证据图，不是指标表。运行时按下列映射把实时
+经营观察接入该合同，不新增第二套上下文模型：
+
+| 运行时概念 | P3a canonical 记录 | 约束 |
+|---|---|---|
+| 一次指标查询结果（聚合值、分母、时间窗、查询模板编号） | `EvidenceRef`（`contentIncluded=false`，`contentHash` 绑定私有指标正文，`sourceSnapshotHash` 绑定查询模板与窗口） | 指标正文存租户私有指标表，按 `evidenceRef` 读取；读失败不产生 EvidenceRef，而是记为该域未知 |
+| 被观察的业务对象（作业、流程、队列、资产范围） | `BusinessObjectAlias`（`resolutionMethod=deterministic_key`，`personAttributionMode=none`） | 不指向个人 |
+| 检测器命中的候选异常 | `SignalEvent`（`signalFamily`=检测器编号，`evidenceRefs` 为触发证据） | 同一合并键在窗口内合并为一个 SignalEvent |
+| 模型诊断 | `JudgementPacket`（见 §4.3） | 只能引用快照内记录 |
+
+- 快照投影复用 `lib/operating-harness/context-projector.ts`，输入须满足其 source governance 与 promotion 门；
+  指标查询模板与检测器由租户私有 overlay 注册，Core 只提供注册接缝、投影运行与校验。
+- 送往推理设备的是快照的最小化投影：对象摘要、SignalEvent、EvidenceRef 引用与对应指标的聚合值；
+  不含个人级原始数据。
+- 检测器框架：确定性、可测试；输出候选异常（检测器编号、严重度、证据引用、合并键）。
 - 节奏：快检（不用模型，默认 10 分钟）、小时诊断与日终复盘（入 §4 队列）由调度器触发。
 - 数据域读失败或过期时，依赖该域的检测器与规则停止触发。
 
