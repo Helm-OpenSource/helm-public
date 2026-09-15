@@ -131,10 +131,11 @@ heldout_eval`，客户来源 fail closed，因此上表的"复用 context-projec
 3. **晋升门替代**：`tenant_self_observation` 不走 `EvalCasePromotion`；每个 source binding 必须引用终态
    `ObservationSourceRun`（`SUCCEEDED` 或 `PARTIAL`）及其数据资产目录条目的授权与连接回执，且观察窗口覆盖
    信号时间。门逻辑作为 `validateOperatingSignalImprovementGate` 之外的独立函数新增，不修改既有分支。
-4. **记录映射**（沿用 §5 表）：`CaioMetricObservation(status=ok)` → `EvidenceRef`（`contentIncluded=false`、
-   `contentHash` 取观察内容哈希、`sourceSnapshotHash` 绑定模板编号与窗口、`redactionStatus=alias_only`）；
-   候选的 `objectKey` → `BusinessObjectAlias`（`resolutionMethod=deterministic_key`、`personAttributionMode=none`）；
-   每轮新命中或刷新的候选 → `SignalEvent`（`signalFamily=detectorId`）。`status=unknown` 的观察不产生任何记录。
+4. **记录映射**（沿用 §5 表；实施时按合同修正）：`CaioMetricObservation(status=ok)` → `EvidenceRef`
+   （`contentIncluded=false`；`sourceSnapshotHash` 取观察内容哈希，覆盖模板、窗口与数值；`contentHash` 为
+   记录自身哈希，由合同强制；`redactionStatus=alias_only`）；候选的 `objectKey` → `BusinessObjectAlias`
+   （`resolutionMethod=deterministic_key`、`personAttributionMode=none`）；每轮新命中或刷新的候选 →
+   `SignalEvent`（`signalFamily=caio.<detectorId>`）。`status=unknown` 的观察不产生任何记录。
 5. **需同步修订的公开文档**：`HELM_ENTERPRISE_OPERATING_CONTEXT_MODEL.md` §3 与
    `HELM_OPERATING_HARNESS_REQUIREMENTS.md` 来源治理段。快照仍是可丢弃的 read model，不获得写、发、执行、
    批准或记忆晋升权限。
