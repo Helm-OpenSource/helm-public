@@ -1357,6 +1357,9 @@ model Workspace {
   enterpriseObservationPrograms        EnterpriseObservationProgram[]
   observationSources                   ObservationSource[]
   observationSourceRuns                ObservationSourceRun[]
+  caioQuickCheckTicks                  CaioQuickCheckTick[]
+  caioMetricObservations               CaioMetricObservation[]
+  caioAnomalyCandidates                CaioAnomalyCandidate[]
   decisionRecords                      DecisionRecord[]
   supervisionSignalRecords             SupervisionSignalRecord[]
   decisionWorkPacketClaims             DecisionWorkPacketClaim[]
@@ -3777,6 +3780,75 @@ model ObservationSourceRun {
   @@unique([sourceId, executionKey])
   @@index([workspaceId, status, createdAt])
   @@index([programId, status])
+}
+
+// CAIO quick-check tick. One row per workspace per 10-minute bucket: the unique key is the
+// cross-instance claim, because the signal-collection scheduler has no database lock.
+model CaioQuickCheckTick {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  bucketStart  DateTime
+  status       String    @default("RUNNING") // RUNNING | COMPLETED | FAILED
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  summaryJson  String?   @db.LongText
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  observations CaioMetricObservation[]
+
+  @@unique([workspaceId, bucketStart])
+  @@index([workspaceId, startedAt])
+}
+
+// Tenant-private aggregate metric body. valuesJson holds finite numbers or null only; a failed
+// read is stored as status=unknown with valuesJson=null and never as zero.
+model CaioMetricObservation {
+  id                 String             @id @default(cuid())
+  workspaceId        String
+  tickId             String
+  observationRunId   String?
+  sourceKey          String
+  templateId         String
+  domain             String
+  windowStart        DateTime
+  windowEnd          DateTime
+  observedAt         DateTime
+  status             String             // ok | unknown
+  valuesJson         String?            @db.LongText
+  denominator        Float?
+  errorCode          String?
+  contentHash        String?
+  evidenceRef        String?
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tick               CaioQuickCheckTick @relation(fields: [tickId], references: [id], onDelete: Cascade)
+
+  @@unique([tickId, templateId])
+  @@index([workspaceId, templateId, observedAt])
+}
+
+// Candidate anomaly merged by (detectorId, mergeKey). openKey is set while OPEN and null once
+// CLEARED, so the unique index allows one open candidate per merge key and any number of cleared ones.
+model CaioAnomalyCandidate {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  detectorId       String
+  mergeKey         String
+  openKey          String?
+  objectKey        String
+  severity         String
+  reasonCode       String
+  titleZh          String
+  titleEn          String
+  status           String    @default("OPEN") // OPEN | CLEARED
+  hitCount         Int       @default(1)
+  firstSeenAt      DateTime
+  lastSeenAt       DateTime
+  clearedAt        DateTime?
+  lastTickId       String
+  evidenceRefsJson String    @db.LongText
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, openKey])
+  @@index([workspaceId, status, lastSeenAt])
 }
 
 // Workspace-level runtime record for the public DecisionObject contract. JSON
