@@ -304,8 +304,8 @@ Owner 已批准本切片。Wave 1A 实现候选完成以下 repo-level 输出：
     并以 AST 调用图固定 S3 唯一 production caller 与 provider registration。
 
 S1 当前接口身份为
-`caio-pro-fde-cross-repo-interface:39378a3d5fa43a99` /
-`sha256:39378a3d5fa43a99d6fc65edb25bd6ab82259e6b7e94759a13a9e5b61b690c46`。
+`caio-pro-fde-cross-repo-interface:839611719d5ce76e` /
+`sha256:839611719d5ce76e109c8847e302d9b9a52abca2dc315b813d978d6821bb7cc5`。
 该身份只证明本仓 portable contract 的规范化内容；不证明 Pack 已挂载、问题已生成、组合包已
 固定或现场已部署。
 

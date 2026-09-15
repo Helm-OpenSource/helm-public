@@ -265,6 +265,17 @@ describe("CAIO Pro FDE public cross-repo contract", () => {
     }
   });
 
+  it("accepts CUID-shaped decision, action-item and approval-task refs while rejecting digit refs", () => {
+    // Core-generated work object ids can carry a run of seven or more digits; they are CUIDs, not PII.
+    const canonicalCuid = "cabcdef1234567ghijklmnopq";
+    for (const prefix of ["decision-record", "action-item", "approval-task"]) {
+      expect(caioProPublicSafeRefSchema.safeParse(`${prefix}:${canonicalCuid}`).success, prefix).toBe(true);
+      expect(caioProPublicSafeRefSchema.safeParse(`${prefix}:1234567`).success, prefix).toBe(false);
+      expect(caioProPublicSafeRefSchema.safeParse(`${prefix}:c${"1".repeat(24)}`).success, prefix).toBe(false);
+    }
+    expect(caioProPublicSafeRefSchema.safeParse(`taxonomy:${canonicalCuid}`).success).toBe(false);
+  });
+
   it("fails closed for duplicate, dangling, uncovered and evidence-kind-incompatible Pack graphs", () => {
     const base = packInput();
     const invalidGraphs = [
