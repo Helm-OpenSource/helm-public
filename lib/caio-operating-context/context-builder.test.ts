@@ -60,6 +60,8 @@ describe("buildCaioTenantContextProjectionInput", () => {
     if (!base.ok || !changed.ok) throw new Error("expected inputs");
     expect(projectTemporalOperatingContext(changed.input).snapshot?.contentHash)
       .not.toBe(projectTemporalOperatingContext(base.input).snapshot?.contentHash);
+    // The metric body hash itself is the EvidenceRef source snapshot binding, not only an id seed.
+    expect(base.input.evidenceRefs.map((item) => item.sourceSnapshotHash).sort()).toEqual([hash(1), hash(2)]);
   });
 
   it("reports no_signals without hits or when every hit cites an unknown reading", () => {
