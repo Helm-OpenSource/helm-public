@@ -1,7 +1,7 @@
 import { WorkspaceRole } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { cacheMock, sessionMock, governanceMock, catalogMock, observationMock, gateMock } = vi.hoisted(() => ({
+const { cacheMock, sessionMock, catalogMock, observationMock, gateMock } = vi.hoisted(() => ({
   gateMock: {
     recordCaioInitializationAssessment: vi.fn(),
     acceptCaioInitializationGate: vi.fn(),
@@ -20,24 +20,10 @@ const { cacheMock, sessionMock, governanceMock, catalogMock, observationMock, ga
   },
   cacheMock: { revalidatePath: vi.fn() },
   sessionMock: { getCurrentWorkspaceSession: vi.fn() },
-  governanceMock: {
-    registerCaioPrincipalBinding: vi.fn(),
-    revokeCaioPrincipalBinding: vi.fn(),
-    createCaioMandateDraft: vi.fn(),
-    activateCaioMandate: vi.fn(),
-    suspendCaioMandate: vi.fn(),
-    revokeCaioMandate: vi.fn(),
-    recordCaioGuardianStop: vi.fn(),
-    resumeCaioGuardianStop: vi.fn(),
-  },
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: cacheMock.revalidatePath }));
 vi.mock("@/lib/auth/session", () => ({ getCurrentWorkspaceSession: sessionMock.getCurrentWorkspaceSession }));
-vi.mock("@/lib/caio-governance/mandate-store.service", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/caio-governance/mandate-store.service")>()),
-  ...governanceMock,
-}));
 
 vi.mock("@/lib/stage1-owner-loop/data-asset-catalog.service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/stage1-owner-loop/data-asset-catalog.service")>()),
@@ -53,14 +39,12 @@ vi.mock("@/lib/stage1-owner-loop/caio-initialization-gate-store.service", async 
   ...gateMock,
 }));
 
-import { CaioMandateStoreError } from "@/lib/caio-governance/mandate-store.service";
 import { CaioInitializationGateStoreError } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
 import { DataAssetCatalogConflictError } from "@/lib/stage1-owner-loop/data-asset-catalog.service";
 import { ObservationAuthorizationDeniedError } from "@/lib/stage1-owner-loop/observation.service";
 
 import {
   acceptInitializationGateAction,
-  activateMandateAction,
   recordInitializationAssessmentAction,
   revokeInitializationGateAction,
   createCatalogEntryAction,
@@ -70,13 +54,6 @@ import {
   recordCatalogConnectionAction,
   recordCatalogInitializationAction,
   registerObservationSourceAction,
-  createMandateDraftAction,
-  recordGuardianStopAction,
-  registerPrincipalBindingAction,
-  resumeGuardianStopAction,
-  revokeMandateAction,
-  revokePrincipalBindingAction,
-  suspendMandateAction,
 } from "./actions";
 import { summarizeOperationResult } from "./run-owner-operation";
 
@@ -96,9 +73,9 @@ type Case = Readonly<{
   action: (input: unknown) => Promise<unknown>;
   service: ReturnType<typeof vi.fn>;
   input: Record<string, unknown>;
-  /** owner: OWNER pre-check; principal_bound: the service authorizes by CEO/guardian binding. */
+  /** owner: OWNER pre-check; principal_bound: the service authorizes by the CEO binding. */
   access: "owner" | "principal_bound";
-  rejection?: readonly [Error, string];
+  rejection: readonly [Error, string];
   /** Input fields the schema converts before the service (ISO string → Date). */
   dateFields?: readonly string[];
 }>;
@@ -141,28 +118,6 @@ const catalogCases: readonly Case[] = [
       authorizationRef: "authorization:1", secretRef: "managed-ref:activity", retentionDays: 90 } },
 ];
 
-const governanceCases: readonly Case[] = [
-  { name: "registerPrincipalBinding", access: "owner", action: registerPrincipalBindingAction, service: governanceMock.registerCaioPrincipalBinding,
-    input: { userId: "user_ceo", principalRef: "ceo-primary", principalKind: "ceo", evidenceRef: "evidence:board-1" } },
-  { name: "revokePrincipalBinding", access: "owner", action: revokePrincipalBindingAction, service: governanceMock.revokeCaioPrincipalBinding,
-    input: { bindingId: "binding_1" } },
-  { name: "createMandateDraft", access: "owner", action: createMandateDraftAction, service: governanceMock.createCaioMandateDraft,
-    input: { caioRef: "caio-primary", ceoRef: "ceo-primary", stage: "observe", stageDecisionRef: "decision:1",
-      objectiveRefs: ["objective:1"], scopeRefs: ["scope:workspace"], grantBasisRefs: ["grant:1"], reservedMatterRefs: [],
-      humanResponsePolicyRef: "policy:1", accountabilityAnchorRefs: ["anchor:1"], guardianStopRefs: [],
-      validFrom: ISO, validUntil: LATER, inFlightDisposition: "freeze", auditRefs: ["audit:1"] } },
-  { name: "activateMandate", access: "principal_bound", action: activateMandateAction, service: governanceMock.activateCaioMandate,
-    input: { actorCeoRef: "ceo-primary", mandateRecordId: "mandate_1" } },
-  { name: "suspendMandate", access: "principal_bound", action: suspendMandateAction, service: governanceMock.suspendCaioMandate,
-    input: { actorCeoRef: "ceo-primary", mandateRecordId: "mandate_1" } },
-  { name: "revokeMandate", access: "principal_bound", action: revokeMandateAction, service: governanceMock.revokeCaioMandate,
-    input: { actorCeoRef: "ceo-primary", mandateRecordId: "mandate_1" } },
-  { name: "recordGuardianStop", access: "principal_bound", action: recordGuardianStopAction, service: governanceMock.recordCaioGuardianStop,
-    input: { guardianRef: "guardian-primary", mandateRecordId: "mandate_1", reason: "unexpected volume", auditRefs: ["audit:2"] } },
-  { name: "resumeGuardianStop", access: "principal_bound", action: resumeGuardianStopAction, service: governanceMock.resumeCaioGuardianStop,
-    input: { actorCeoRef: "ceo-primary", stopRecordId: "stop_1" } },
-];
-
 const gateRejection = [new CaioInitializationGateStoreError("private gate detail"), "initialization_rejected"] as const;
 
 const gateCases: readonly Case[] = [
@@ -179,7 +134,7 @@ const gateCases: readonly Case[] = [
     input: { ceoPrincipalRef: "ceo-primary", idempotencyKey: "revoke_1", reasonCodes: ["withdrawn"], evidenceRefs: ["evidence:r-1"] } },
 ];
 
-const allCases: readonly Case[] = [...governanceCases, ...catalogCases, ...gateCases];
+const allCases: readonly Case[] = [...catalogCases, ...gateCases];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -217,7 +172,7 @@ describe.each(allCases)("$name action", ({ action, service, input, access, rejec
       expect(service).not.toHaveBeenCalled();
       expect(cacheMock.revalidatePath).not.toHaveBeenCalled();
     } else {
-      // A designated guardian or bound CEO need not be the workspace OWNER; the service decides.
+      // A bound CEO need not be the workspace OWNER; the service decides.
       await expect(action(input)).resolves.toMatchObject({ ok: true });
       expect(service).toHaveBeenCalledTimes(1);
       expect(service.mock.calls[0][0]).toMatchObject({ actorUserId: "user_owner" });
@@ -249,7 +204,7 @@ describe.each(allCases)("$name action", ({ action, service, input, access, rejec
   });
 
   it("maps service rejections to a closed code without leaking the service message", async () => {
-    const [error, code] = rejection ?? [new CaioMandateStoreError("private reason detail"), "governance_rejected"];
+    const [error, code] = rejection;
     service.mockRejectedValue(error);
     const result = await action(input);
     expect(result).toMatchObject({ ok: false, code });
@@ -277,10 +232,9 @@ describe("session-derived actor name", () => {
 });
 
 describe("access classification", () => {
-  it("keeps registration OWNER-only and leaves CEO/guardian acts to the service's binding check", () => {
+  it("keeps registration OWNER-only and leaves CEO acts to the service's binding check", () => {
     expect(allCases.filter((c) => c.access === "principal_bound").map((c) => c.name).sort()).toEqual([
-      "acceptInitializationGate", "activateMandate", "recordGuardianStop", "resumeGuardianStop",
-      "revokeInitializationGate", "revokeMandate", "suspendMandate",
+      "acceptInitializationGate", "revokeInitializationGate",
     ]);
   });
 });
@@ -299,7 +253,7 @@ describe("G0 acceptance idempotency", () => {
 describe("locale", () => {
   it("returns English copy for an en-US workspace", async () => {
     sessionMock.getCurrentWorkspaceSession.mockResolvedValue(session(WorkspaceRole.MEMBER, "en-US"));
-    const result = await registerPrincipalBindingAction(governanceCases[0].input);
+    const result = await createCatalogEntryAction(catalogCases[0].input);
     expect(result).toMatchObject({ ok: false, message: "Only the workspace owner can perform this operation." });
   });
 });

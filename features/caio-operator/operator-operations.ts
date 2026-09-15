@@ -1,12 +1,11 @@
 /**
  * Operator panel catalog: one entry per server action, with a schema-valid example template.
+ * Governance records (bindings, mandate, stops) are not web operations; see the governance CLI.
  * Pure data so the client bundle carries no service imports. Placeholder refs in templates must be
  * replaced by the operator with real references before submitting.
  */
 
 export const CAIO_OPERATOR_GROUPS = [
-  { key: "bindings", title: { zh: "身份绑定", en: "Principal bindings" } },
-  { key: "mandate", title: { zh: "授权任命与急停", en: "Mandate and stops" } },
   { key: "catalog", title: { zh: "数据资产目录", en: "Data asset catalog" } },
   { key: "observation", title: { zh: "观察来源", en: "Observation sources" } },
   { key: "initialization", title: { zh: "G0 初始化", en: "G0 initialization" } },
@@ -18,8 +17,8 @@ export type CaioOperatorOperation = Readonly<{
   key: string;
   group: CaioOperatorGroupKey;
   schemaName: string;
-  /** owner: workspace OWNER registers; ceo / guardian: authorized by the registered principal binding. */
-  actor: "owner" | "ceo" | "guardian";
+  /** owner: workspace OWNER registers; ceo: authorized by the registered principal binding. */
+  actor: "owner" | "ceo";
   title: { zh: string; en: string };
   template: Readonly<Record<string, unknown>>;
 }>;
@@ -29,33 +28,6 @@ const LATER = "2026-01-08T00:00:00.000Z";
 const stage = { assetId: "asset-id", receiptId: "receipt-id", idempotencyKey: "idempotency-key", expectedVersion: 0, evidenceRefs: ["evidence:replace-me"] };
 
 export const CAIO_OPERATOR_OPERATIONS: readonly CaioOperatorOperation[] = [
-  { key: "registerPrincipalBinding", group: "bindings", schemaName: "registerPrincipalBindingSchema", actor: "owner",
-    title: { zh: "登记 CEO / guardian / FDE 身份绑定", en: "Register a CEO / guardian / FDE binding" },
-    template: { userId: "user-id", principalRef: "ceo-primary", principalKind: "ceo", evidenceRef: "evidence:replace-me" } },
-  { key: "revokePrincipalBinding", group: "bindings", schemaName: "revokePrincipalBindingSchema", actor: "owner",
-    title: { zh: "吊销身份绑定", en: "Revoke a binding" },
-    template: { bindingId: "binding-id" } },
-  { key: "createMandateDraft", group: "mandate", schemaName: "createMandateDraftSchema", actor: "owner",
-    title: { zh: "创建授权任命草稿", en: "Create a mandate draft" },
-    template: { caioRef: "caio-primary", ceoRef: "ceo-primary", stage: "observe", stageDecisionRef: "decision:replace-me",
-      objectiveRefs: ["objective:replace-me"], scopeRefs: ["scope:workspace"], grantBasisRefs: ["caio-mandate-grant:ceo-primary:issuance-replace-me"],
-      reservedMatterRefs: [], humanResponsePolicyRef: "policy:replace-me", accountabilityAnchorRefs: ["anchor:replace-me"],
-      guardianStopRefs: ["guardian-primary"], validFrom: NOW, validUntil: LATER, inFlightDisposition: "freeze", auditRefs: ["audit:replace-me"] } },
-  { key: "activateMandate", group: "mandate", schemaName: "mandateTransitionSchema", actor: "ceo",
-    title: { zh: "激活授权任命（CEO）", en: "Activate a mandate (CEO)" },
-    template: { actorCeoRef: "ceo-primary", mandateRecordId: "mandate-record-id" } },
-  { key: "suspendMandate", group: "mandate", schemaName: "mandateTransitionSchema", actor: "ceo",
-    title: { zh: "暂停授权任命（CEO）", en: "Suspend a mandate (CEO)" },
-    template: { actorCeoRef: "ceo-primary", mandateRecordId: "mandate-record-id" } },
-  { key: "revokeMandate", group: "mandate", schemaName: "mandateTransitionSchema", actor: "ceo",
-    title: { zh: "撤销授权任命（CEO）", en: "Revoke a mandate (CEO)" },
-    template: { actorCeoRef: "ceo-primary", mandateRecordId: "mandate-record-id" } },
-  { key: "recordGuardianStop", group: "mandate", schemaName: "guardianStopSchema", actor: "guardian",
-    title: { zh: "急停（guardian，只停不启）", en: "Stop (guardian; cannot resume)" },
-    template: { guardianRef: "guardian-primary", mandateRecordId: "mandate-record-id", reason: "replace with the stop reason", auditRefs: ["audit:replace-me"] } },
-  { key: "resumeGuardianStop", group: "mandate", schemaName: "resumeGuardianStopSchema", actor: "ceo",
-    title: { zh: "恢复急停（仅 CEO）", en: "Resume a stop (CEO only)" },
-    template: { actorCeoRef: "ceo-primary", stopRecordId: "stop-record-id" } },
   { key: "createCatalogEntry", group: "catalog", schemaName: "createCatalogEntrySchema", actor: "owner",
     title: { zh: "登记数据资产", en: "Register a data asset" },
     template: { assetKey: "asset-key", sourceSystemRef: "system:replace-me", displayName: "Replace with a display name",

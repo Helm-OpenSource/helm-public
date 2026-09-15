@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { CaioMandateStoreError } from "@/lib/caio-governance/mandate-store.service";
 import { CaioInitializationGateStoreError } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
 import {
   DataAssetCatalogConflictError,
@@ -20,7 +19,6 @@ import {
 
 describe("mapCaioOperatorError", () => {
   it.each([
-    [new CaioMandateStoreError("private governance detail"), "governance_rejected"],
     [new CaioInitializationGateStoreError("private gate detail"), "initialization_rejected"],
     [new DataAssetCatalogContractError(["private_reason"]), "catalog_rejected"],
     [new DataAssetCatalogTransitionError(["private_reason"]), "catalog_rejected"],

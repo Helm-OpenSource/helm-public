@@ -12,12 +12,14 @@ describe("CAIO operator operation catalog", () => {
     }
   });
 
-  it("covers every server action exactly once", () => {
+  it("covers every server action exactly once", async () => {
+    const actionModule = await import("./actions");
+    expect(Object.keys(actionModule).map((name) => name.replace(/Action$/u, "")).sort())
+      .toEqual(CAIO_OPERATOR_OPERATIONS.map((operation) => operation.key).sort());
     expect(CAIO_OPERATOR_OPERATIONS.map((operation) => operation.key).sort()).toEqual([
-      "acceptInitializationGate", "activateMandate", "createCatalogEntry", "createMandateDraft", "createObservationProgram",
+      "acceptInitializationGate", "createCatalogEntry", "createObservationProgram",
       "recordCatalogAuthorization", "recordCatalogClassification", "recordCatalogConnection", "recordCatalogInitialization",
-      "recordGuardianStop", "recordInitializationAssessment", "registerObservationSource", "registerPrincipalBinding",
-      "resumeGuardianStop", "revokeInitializationGate", "revokeMandate", "revokePrincipalBinding", "suspendMandate",
+      "recordInitializationAssessment", "registerObservationSource", "revokeInitializationGate",
     ]);
   });
 
@@ -30,13 +32,12 @@ describe("CAIO operator operation catalog", () => {
     },
   );
 
-  it("labels every operation in both languages and marks CEO/guardian acts", () => {
+  it("labels every operation in both languages and marks CEO acts", () => {
     for (const operation of CAIO_OPERATOR_OPERATIONS) {
       expect(operation.title.zh).toMatch(/\S/);
       expect(operation.title.en).toMatch(/\S/);
     }
     expect(CAIO_OPERATOR_OPERATIONS.filter((operation) => operation.actor !== "owner").map((operation) => operation.key).sort())
-      .toEqual(["acceptInitializationGate", "activateMandate", "recordGuardianStop", "resumeGuardianStop",
-        "revokeInitializationGate", "revokeMandate", "suspendMandate"]);
+      .toEqual(["acceptInitializationGate", "revokeInitializationGate"]);
   });
 });

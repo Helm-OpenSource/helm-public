@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CAIO_IN_FLIGHT_DISPOSITIONS, CAIO_MANDATE_STAGES } from "@/lib/caio-governance/types";
+import { instantDate, positiveInt, principalRef, ref, refs, text } from "@/lib/caio-operator/schema-primitives";
 import {
   DATA_ASSET_AUTHORIZATION_STATUSES,
   DATA_ASSET_CONNECTION_STATUSES,
@@ -12,66 +12,14 @@ import {
 import { OBSERVATION_ACCESS_MODES, OBSERVATION_SENSITIVITY_LEVELS } from "@/lib/stage1-owner-loop/types";
 
 /**
- * Input schemas for the CAIO OWNER operator entry points. Fields mirror the existing
- * service signatures one-to-one; workspaceId, actorUserId, actorName and english are
- * injected from the session by the runner and are never accepted from the client.
+ * Input schemas for the CAIO OWNER operator web entry points (catalog, observation, G0). Fields mirror
+ * the existing service signatures one-to-one; workspaceId, actorUserId, actorName and english are
+ * injected from the session by the runner and are never accepted from the client. Governance record
+ * schemas (bindings, mandate, stops) live with the controlled CLI in lib/caio-operator/governance-operator.ts.
  */
 
-const ref = z.string().trim().min(1).max(191);
-const text = (max: number) => z.string().trim().min(1).max(max);
-const refs = z.array(ref).max(100);
-// Principal refs must stay colon-free (grant-basis issuer format enforced by the store).
-const principalRef = ref.refine((value) => !value.includes(":"), { message: "principal_ref_colon" });
-const instant = z.string().datetime({ offset: true });
-const instantDate = instant.transform((value) => new Date(value));
-const positiveInt = (max: number) => z.number().int().min(1).max(max);
 const without = <T extends readonly string[], E extends T[number]>(values: T, excluded: E) =>
   values.filter((value): value is Exclude<T[number], E> => value !== excluded) as [Exclude<T[number], E>, ...Exclude<T[number], E>[]];
-
-export const registerPrincipalBindingSchema = z.object({
-  userId: ref,
-  principalRef,
-  principalKind: z.enum(["ceo", "guardian", "fde"]),
-  evidenceRef: ref,
-}).strict();
-
-export const revokePrincipalBindingSchema = z.object({ bindingId: ref }).strict();
-
-export const createMandateDraftSchema = z.object({
-  caioRef: principalRef,
-  ceoRef: principalRef,
-  stage: z.enum(CAIO_MANDATE_STAGES),
-  stageDecisionRef: ref,
-  objectiveRefs: refs,
-  scopeRefs: refs,
-  grantBasisRefs: refs,
-  reservedMatterRefs: refs,
-  humanResponsePolicyRef: ref,
-  accountabilityAnchorRefs: refs,
-  guardianStopRefs: refs,
-  validFrom: instant,
-  validUntil: instant,
-  inFlightDisposition: z.enum(CAIO_IN_FLIGHT_DISPOSITIONS),
-  auditRefs: refs,
-}).strict();
-
-export const mandateTransitionSchema = z.object({
-  actorCeoRef: principalRef,
-  mandateRecordId: ref,
-  supersedesRecordId: ref.nullable().optional(),
-}).strict();
-
-export const guardianStopSchema = z.object({
-  guardianRef: principalRef,
-  mandateRecordId: ref,
-  reason: text(500),
-  auditRefs: refs,
-}).strict();
-
-export const resumeGuardianStopSchema = z.object({
-  actorCeoRef: principalRef,
-  stopRecordId: ref,
-}).strict();
 
 export const createCatalogEntrySchema = z.object({
   assetKey: ref,

@@ -25,8 +25,8 @@ function gateStatusLabel(status: string, english: boolean): string {
 export default async function CaioOperatorPage() {
   const session = await getCurrentWorkspaceSession();
 
-  // Same boundary as /caio: the operator surface is OWNER-only. CEO and guardian acts submitted from
-  // here are still authorized by the services against the registered principal bindings.
+  // Same boundary as /caio: the operator surface is OWNER-only. CEO acts submitted from here (G0
+  // acceptance) are still authorized by the services against the registered principal binding.
   if (session.membership.role !== WorkspaceRole.OWNER) {
     notFound();
   }
@@ -81,6 +81,11 @@ export default async function CaioOperatorPage() {
             </dd>
           </div>
         </dl>
+        <p className="mt-3 text-xs text-[color:var(--muted-foreground)]" data-caio-operator-governance-cli="true">
+          {english
+            ? "Principal bindings, mandates, guardian stops and CEO resumes are not registered on this page: governance records have no web entry and go through the controlled governance CLI (validation only unless --apply)."
+            : "身份绑定、授权任命、guardian 急停与 CEO 恢复不在本页登记：治理记录不设网页入口，经受控治理命令行登记（默认只校验，带 --apply 才写入）。"}
+        </p>
       </section>
 
       <OperatorConsole english={english} />

@@ -1,4 +1,3 @@
-import { CaioMandateStoreError } from "@/lib/caio-governance/mandate-store.service";
 import { CaioInitializationGateStoreError } from "@/lib/stage1-owner-loop/caio-initialization-gate-store.service";
 import {
   DataAssetCatalogConflictError,
@@ -13,6 +12,8 @@ import {
 /**
  * Closed error codes for the CAIO OWNER operator entry points. Service messages and
  * reasons can carry internal detail, so callers only ever see a code and its fixed copy.
+ * This module must not import lib/caio-governance (authority firewall): governance_rejected
+ * is mapped by the controlled governance CLI (lib/caio-operator/governance-operator.ts).
  */
 export const CAIO_OPERATOR_ERROR_CODES = [
   "not_owner",
@@ -29,7 +30,6 @@ export const CAIO_OPERATOR_ERROR_CODES = [
 export type CaioOperatorErrorCode = (typeof CAIO_OPERATOR_ERROR_CODES)[number];
 
 export function mapCaioOperatorError(error: unknown): CaioOperatorErrorCode {
-  if (error instanceof CaioMandateStoreError) return "governance_rejected";
   if (error instanceof CaioInitializationGateStoreError) return "initialization_rejected";
   // Conflict before contract/transition: a conflict is retryable state, not an invalid request.
   if (error instanceof DataAssetCatalogConflictError) return "catalog_conflict";

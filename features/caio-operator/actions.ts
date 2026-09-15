@@ -1,24 +1,16 @@
 "use server";
 
 /**
- * CAIO operator entry points. Each action is a thin wrapper: session → access pre-check → schema →
- * existing service (which re-checks access, verifies CEO/guardian bindings where required, and
- * writes the audit log in its transaction). Registration is OWNER-only; CEO/guardian acts are
+ * CAIO operator web entry points for the data asset catalog, observation registration and G0
+ * initialization. Each action is a thin wrapper: session → access pre-check → schema → existing
+ * service (which re-checks access, verifies the CEO binding where required, and writes the audit log
+ * in its transaction). Registration is OWNER-only; G0 acceptance and revocation are CEO acts
  * authorized by the service through the registered principal binding.
- * These actions register governance records and initialization evidence only; they grant no
- * runtime permission and trigger no execution or outbound effect.
+ * Governance records (bindings, mandate, guardian stop, CEO resume) are deliberately absent: the
+ * frozen CAIO ADR keeps them free of server actions (authority firewall), so they go through the
+ * controlled CLI `npm run caio:governance-operator`. These actions grant no runtime permission and
+ * trigger no execution or outbound effect.
  */
-import {
-  activateCaioMandate,
-  createCaioMandateDraft,
-  recordCaioGuardianStop,
-  registerCaioPrincipalBinding,
-  resumeCaioGuardianStop,
-  revokeCaioMandate,
-  revokeCaioPrincipalBinding,
-  suspendCaioMandate,
-} from "@/lib/caio-governance/mandate-store.service";
-
 import {
   acceptCaioInitializationGate,
   recordCaioInitializationAssessment,
@@ -44,105 +36,11 @@ import {
   catalogConnectionSchema,
   catalogInitializationSchema,
   createCatalogEntrySchema,
-  createMandateDraftSchema,
   createObservationProgramSchema,
   recordInitializationAssessmentSchema,
   registerObservationSourceSchema,
-  guardianStopSchema,
-  mandateTransitionSchema,
-  registerPrincipalBindingSchema,
-  resumeGuardianStopSchema,
   revokeInitializationGateSchema,
-  revokePrincipalBindingSchema,
 } from "./schemas";
-
-export async function registerPrincipalBindingAction(rawInput: unknown) {
-  return runOwnerOperation({
-    access: "owner",
-    schema: registerPrincipalBindingSchema,
-    rawInput,
-    invoke: (ctx, input) => registerCaioPrincipalBinding({
-      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
-    }),
-  });
-}
-
-export async function revokePrincipalBindingAction(rawInput: unknown) {
-  return runOwnerOperation({
-    access: "owner",
-    schema: revokePrincipalBindingSchema,
-    rawInput,
-    invoke: (ctx, input) => revokeCaioPrincipalBinding({
-      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
-    }),
-  });
-}
-
-export async function createMandateDraftAction(rawInput: unknown) {
-  return runOwnerOperation({
-    access: "owner",
-    schema: createMandateDraftSchema,
-    rawInput,
-    invoke: (ctx, input) => createCaioMandateDraft({
-      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
-    }),
-  });
-}
-
-export async function activateMandateAction(rawInput: unknown) {
-  return runOwnerOperation({
-    access: "principal_bound",
-    schema: mandateTransitionSchema,
-    rawInput,
-    invoke: (ctx, input) => activateCaioMandate({
-      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
-    }),
-  });
-}
-
-export async function suspendMandateAction(rawInput: unknown) {
-  return runOwnerOperation({
-    access: "principal_bound",
-    schema: mandateTransitionSchema.omit({ supersedesRecordId: true }),
-    rawInput,
-    invoke: (ctx, input) => suspendCaioMandate({
-      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
-    }),
-  });
-}
-
-export async function revokeMandateAction(rawInput: unknown) {
-  return runOwnerOperation({
-    access: "principal_bound",
-    schema: mandateTransitionSchema.omit({ supersedesRecordId: true }),
-    rawInput,
-    invoke: (ctx, input) => revokeCaioMandate({
-      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
-    }),
-  });
-}
-
-export async function recordGuardianStopAction(rawInput: unknown) {
-  return runOwnerOperation({
-    access: "principal_bound",
-    schema: guardianStopSchema,
-    rawInput,
-    invoke: (ctx, input) => recordCaioGuardianStop({
-      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
-    }),
-  });
-}
-
-export async function resumeGuardianStopAction(rawInput: unknown) {
-  return runOwnerOperation({
-    access: "principal_bound",
-    schema: resumeGuardianStopSchema,
-    rawInput,
-    invoke: (ctx, input) => resumeCaioGuardianStop({
-      ...input, workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, english: ctx.english,
-    }),
-  });
-}
 
 const actor = (ctx: CaioOperatorContext) => ({
   workspaceId: ctx.workspaceId,

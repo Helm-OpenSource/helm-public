@@ -17,14 +17,6 @@ import type { CaioOperatorResult, CaioOperationSummary } from "./run-owner-opera
 type OperatorAction = (rawInput: unknown) => Promise<CaioOperatorResult<CaioOperationSummary>>;
 
 const ACTIONS: Readonly<Record<string, OperatorAction>> = {
-  registerPrincipalBinding: actions.registerPrincipalBindingAction,
-  revokePrincipalBinding: actions.revokePrincipalBindingAction,
-  createMandateDraft: actions.createMandateDraftAction,
-  activateMandate: actions.activateMandateAction,
-  suspendMandate: actions.suspendMandateAction,
-  revokeMandate: actions.revokeMandateAction,
-  recordGuardianStop: actions.recordGuardianStopAction,
-  resumeGuardianStop: actions.resumeGuardianStopAction,
   createCatalogEntry: actions.createCatalogEntryAction,
   recordCatalogClassification: actions.recordCatalogClassificationAction,
   recordCatalogAuthorization: actions.recordCatalogAuthorizationAction,
@@ -40,7 +32,6 @@ const ACTIONS: Readonly<Record<string, OperatorAction>> = {
 const ACTOR_LABEL = {
   owner: { zh: "所有者登记", en: "Owner registration" },
   ceo: { zh: "CEO 行为（按身份绑定校验）", en: "CEO act (checked against the binding)" },
-  guardian: { zh: "guardian 行为（按身份绑定校验）", en: "Guardian act (checked against the binding)" },
 } as const;
 
 function OperationCard({ operation, english }: { operation: CaioOperatorOperation; english: boolean }) {

@@ -7,16 +7,10 @@ import {
   catalogConnectionSchema,
   catalogInitializationSchema,
   createCatalogEntrySchema,
-  createMandateDraftSchema,
   createObservationProgramSchema,
-  guardianStopSchema,
-  mandateTransitionSchema,
   recordInitializationAssessmentSchema,
   registerObservationSourceSchema,
-  registerPrincipalBindingSchema,
-  resumeGuardianStopSchema,
   revokeInitializationGateSchema,
-  revokePrincipalBindingSchema,
 } from "./schemas";
 
 const ISO = "2026-09-15T08:00:00.000Z";
@@ -31,21 +25,6 @@ const stageBase = {
 };
 
 const validInputs = {
-  registerPrincipalBinding: [registerPrincipalBindingSchema, {
-    userId: "user_1", principalRef: "ceo-primary", principalKind: "ceo", evidenceRef: "evidence:board-minute-1",
-  }],
-  revokePrincipalBinding: [revokePrincipalBindingSchema, { bindingId: "binding_1" }],
-  createMandateDraft: [createMandateDraftSchema, {
-    caioRef: "caio-primary", ceoRef: "ceo-primary", stage: "observe", stageDecisionRef: "decision:stage-1",
-    objectiveRefs: ["objective:1"], scopeRefs: ["scope:workspace"], grantBasisRefs: ["grant:ceo-signed-1"],
-    reservedMatterRefs: [], humanResponsePolicyRef: "policy:human-response-1", accountabilityAnchorRefs: ["anchor:1"],
-    guardianStopRefs: [], validFrom: ISO, validUntil: LATER, inFlightDisposition: "freeze", auditRefs: ["audit:1"],
-  }],
-  mandateTransition: [mandateTransitionSchema, { actorCeoRef: "ceo-primary", mandateRecordId: "mandate_1" }],
-  guardianStop: [guardianStopSchema, {
-    guardianRef: "guardian-primary", mandateRecordId: "mandate_1", reason: "unexpected dispatch volume", auditRefs: ["audit:2"],
-  }],
-  resumeGuardianStop: [resumeGuardianStopSchema, { actorCeoRef: "ceo-primary", stopRecordId: "stop_1" }],
   createCatalogEntry: [createCatalogEntrySchema, {
     assetKey: "collection-activity", sourceSystemRef: "system:core-db", displayName: "Collection activity",
     sourceKind: "relational_database", businessDomain: "collections", businessOwnerRef: "owner:operations",
@@ -101,25 +80,12 @@ describe("CAIO operator schemas", () => {
     expect(schema.safeParse({}).success).toBe(false);
   });
 
-  it.each([
-    ["principalRef", { principalRef: "ceo:primary" }],
-    ["principalKind", { principalKind: "owner" }],
-    ["evidenceRef", { evidenceRef: "" }],
-    ["userId", { userId: "   " }],
-  ])("binding rejects a bad %s", (_field, patch) => {
-    expect(registerPrincipalBindingSchema.safeParse({ ...validInputs.registerPrincipalBinding[1], ...patch }).success).toBe(false);
-  });
-
-  it("rejects colon-bearing principal refs on every CEO/guardian field", () => {
-    expect(mandateTransitionSchema.safeParse({ ...validInputs.mandateTransition[1], actorCeoRef: "ceo:primary" }).success).toBe(false);
-    expect(guardianStopSchema.safeParse({ ...validInputs.guardianStop[1], guardianRef: "g:1" }).success).toBe(false);
-    expect(resumeGuardianStopSchema.safeParse({ ...validInputs.resumeGuardianStop[1], actorCeoRef: "c:1" }).success).toBe(false);
+  it("rejects colon-bearing CEO principal refs on the G0 fields", () => {
     expect(acceptInitializationGateSchema.safeParse({ ...validInputs.acceptInitializationGate[1], ceoPrincipalRef: "c:1" }).success).toBe(false);
     expect(revokeInitializationGateSchema.safeParse({ ...validInputs.revokeInitializationGate[1], ceoPrincipalRef: "c:1" }).success).toBe(false);
   });
 
   it("rejects out-of-set enums and empty array elements", () => {
-    expect(createMandateDraftSchema.safeParse({ ...validInputs.createMandateDraft[1], stage: "authorized_execute" }).success).toBe(false);
     expect(catalogConnectionSchema.safeParse({ ...validInputs.catalogConnection[1], connectionStatus: "not_started" }).success).toBe(false);
     expect(catalogAuthorizationSchema.safeParse({ ...validInputs.catalogAuthorization[1], authorizationStatus: "not_requested" }).success).toBe(false);
     expect(catalogInitializationSchema.safeParse({ ...validInputs.catalogInitialization[1], initializationStatus: "not_started" }).success).toBe(false);
@@ -128,19 +94,17 @@ describe("CAIO operator schemas", () => {
   });
 
   it("rejects malformed instants and non-positive counters", () => {
-    expect(createMandateDraftSchema.safeParse({ ...validInputs.createMandateDraft[1], validFrom: "yesterday" }).success).toBe(false);
+    expect(createObservationProgramSchema.safeParse({ ...validInputs.createObservationProgram[1], startsAt: "yesterday" }).success).toBe(false);
     expect(createObservationProgramSchema.safeParse({ ...validInputs.createObservationProgram[1], retentionDays: 0 }).success).toBe(false);
     expect(catalogClassificationSchema.safeParse({ ...validInputs.catalogClassification[1], expectedVersion: -1 }).success).toBe(false);
   });
 
-  it("converts service Date fields and keeps mandate instants as ISO strings", () => {
+  it("converts service Date fields", () => {
     const program = createObservationProgramSchema.parse(validInputs.createObservationProgram[1]);
     expect(program.startsAt).toBeInstanceOf(Date);
     const entry = createCatalogEntrySchema.parse({ ...validInputs.createCatalogEntry[1], nextReviewAt: LATER });
     expect(entry.nextReviewAt).toBeInstanceOf(Date);
     const authorization = catalogAuthorizationSchema.parse(validInputs.catalogAuthorization[1]);
     expect(authorization.validFrom).toBeInstanceOf(Date);
-    const draft = createMandateDraftSchema.parse(validInputs.createMandateDraft[1]);
-    expect(draft.validFrom).toBe(ISO);
   });
 });
