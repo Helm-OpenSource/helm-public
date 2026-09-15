@@ -13,6 +13,7 @@ import {
   type GovernedModelAdapterRegistry,
   type GovernedModelAdapterResult,
   type GovernedModelProviderAdapter,
+  type RegisteredGovernedModelAdapter,
 } from "@/lib/llm/governed-model-adapter-registry.service";
 import {
   validateGovernedModelProjectionReceipt,
@@ -770,7 +771,25 @@ async function reconcileClaimedAttempt<
   }
 }
 
-async function executeAttempt<
+type GovernedModelClaimStage<
+  TPayload extends GovernedJsonValue,
+  TOutput extends GovernedJsonValue,
+> =
+  | { kind: "result"; result: GovernedModelGatewayResult<TOutput> }
+  | {
+      kind: "claimed";
+      decision: ModelRouteDecision;
+      route: TenantModelRoute;
+      claim: Awaited<ReturnType<GovernedModelGatewayDependencies["claimDispatch"]>>;
+      adapter: RegisteredGovernedModelAdapter<TPayload, TOutput>;
+    };
+
+/**
+ * Shared pre-dispatch stage of the governed gateway: projection binding, route decision, adapter
+ * preflight and the dispatch claim (the egress authorization cutoff). The synchronous gateway invokes the
+ * adapter after it; the deferred dispatch hands the claim to a pull worker instead.
+ */
+async function claimAttempt<
   TPayload extends GovernedJsonValue,
   TOutput extends GovernedJsonValue,
 >(input: {
@@ -783,7 +802,7 @@ async function executeAttempt<
   requestedFallbackRouteRef: string | null;
   fallbackReason: string | null;
   allowFallback: boolean;
-}): Promise<GovernedModelGatewayResult<TOutput>> {
+}): Promise<GovernedModelClaimStage<TPayload, TOutput>> {
   const now = input.dependencies.now();
   const projectionReceipt =
     await input.dependencies.readProjectionReceipt({
@@ -862,7 +881,7 @@ async function executeAttempt<
     decision.decision !== "allowed" ||
     !decision.routeSnapshot
   ) {
-    return resultWithoutOutput({
+    return { kind: "result", result: resultWithoutOutput({
       attempt: {
         decision,
         startedReceipt: prepared.startedReceipt,
@@ -872,7 +891,7 @@ async function executeAttempt<
         replayed: prepared.replayed,
       },
       fallbackAttempted: input.parentDecisionRef !== null,
-    });
+    }) };
   }
 
   const storedBeforeClaim =
@@ -890,7 +909,7 @@ async function executeAttempt<
     storedBeforeClaim.receipts,
   );
   if (existingTerminal) {
-    return resultWithoutOutput({
+    return { kind: "result", result: resultWithoutOutput({
       attempt: attemptFromStored({
         decision,
         receipts: storedBeforeClaim.receipts,
@@ -900,23 +919,23 @@ async function executeAttempt<
         replayed: true,
       }),
       fallbackAttempted: input.parentDecisionRef !== null,
-    });
+    }) };
   }
   const adapter = input.registry.resolve(
     decision.routeSnapshot,
   );
   if (storedBeforeClaim.dispatch) {
-    return reconcileClaimedAttempt({
+    return { kind: "result", result: await reconcileClaimedAttempt({
       request: input.request,
       decision,
       stored: storedBeforeClaim,
       dispatch: storedBeforeClaim.dispatch,
       adapter,
       dependencies: input.dependencies,
-    });
+    }) };
   }
   if (!adapter) {
-    return resultWithoutOutput({
+    return { kind: "result", result: resultWithoutOutput({
       attempt: {
         decision,
         startedReceipt: prepared.startedReceipt,
@@ -926,7 +945,7 @@ async function executeAttempt<
         replayed: false,
       },
       fallbackAttempted: input.parentDecisionRef !== null,
-    });
+    }) };
   }
 
   let preflight: GovernedModelAdapterPreflight;
@@ -952,7 +971,7 @@ async function executeAttempt<
         observation.estimatedMaxCostUsdMicros,
     };
   } catch {
-    return resultWithoutOutput({
+    return { kind: "result", result: resultWithoutOutput({
       attempt: {
         decision,
         startedReceipt: prepared.startedReceipt,
@@ -962,7 +981,7 @@ async function executeAttempt<
         replayed: false,
       },
       fallbackAttempted: input.parentDecisionRef !== null,
-    });
+    }) };
   }
   const preflightError = validatePreflight({
     preflight,
@@ -971,7 +990,7 @@ async function executeAttempt<
       input.request.requestedMaxOutputTokens,
   });
   if (preflightError) {
-    return resultWithoutOutput({
+    return { kind: "result", result: resultWithoutOutput({
       attempt: {
         decision,
         startedReceipt: prepared.startedReceipt,
@@ -981,7 +1000,7 @@ async function executeAttempt<
         replayed: false,
       },
       fallbackAttempted: input.parentDecisionRef !== null,
-    });
+    }) };
   }
 
   const claim = await input.dependencies.claimDispatch({
@@ -1005,16 +1024,16 @@ async function executeAttempt<
       storedAfterClaim?.dispatch &&
       !replayedTerminal
     ) {
-      return reconcileClaimedAttempt({
+      return { kind: "result", result: await reconcileClaimedAttempt({
         request: input.request,
         decision,
         stored: storedAfterClaim,
         dispatch: storedAfterClaim.dispatch,
         adapter,
         dependencies: input.dependencies,
-      });
+      }) };
     }
-    return resultWithoutOutput({
+    return { kind: "result", result: resultWithoutOutput({
       attempt: {
         decision,
         startedReceipt: claim.startedReceipt,
@@ -1026,9 +1045,35 @@ async function executeAttempt<
         replayed: true,
       },
       fallbackAttempted: input.parentDecisionRef !== null,
-    });
+    }) };
   }
 
+  return {
+    kind: "claimed",
+    decision,
+    route: decision.routeSnapshot,
+    claim,
+    adapter,
+  };
+}
+
+async function executeAttempt<
+  TPayload extends GovernedJsonValue,
+  TOutput extends GovernedJsonValue,
+>(input: {
+  request: GovernedModelGatewayInput<TPayload>;
+  projectedPayloadHash: string;
+  projectedPayloadBytes: number;
+  dependencies: GovernedModelGatewayDependencies;
+  registry: GovernedModelAdapterRegistry<TPayload, TOutput>;
+  parentDecisionRef: string | null;
+  requestedFallbackRouteRef: string | null;
+  fallbackReason: string | null;
+  allowFallback: boolean;
+}): Promise<GovernedModelGatewayResult<TOutput>> {
+  const stage = await claimAttempt(input);
+  if (stage.kind === "result") return stage.result;
+  const { decision, route, claim, adapter } = stage;
   const providerIdempotencyKey =
     claim.providerIdempotencyKey;
   const invocationStartedAt = input.dependencies.now();
@@ -1038,9 +1083,9 @@ async function executeAttempt<
   try {
     const adapterResult = await invokeWithTimeout(
       (signal) =>
-        adapter!.invoke({
+        adapter.invoke({
           workspaceId: input.request.workspaceId,
-          route: decision.routeSnapshot!,
+          route: route,
           taskClass: input.request.taskClass,
           taskRef: input.request.taskRef,
           projectedPayload: input.request.projectedPayload,
@@ -1052,13 +1097,13 @@ async function executeAttempt<
           dispatchRuntimeHash: claim.runtimeHash,
           signal,
         }),
-      decision.routeSnapshot.maxLatencyMs,
+      route.maxLatencyMs,
     );
     normalized = normalizeAdapterResult({
       result: adapterResult,
       requestedMaxOutputTokens:
         input.request.requestedMaxOutputTokens,
-      route: decision.routeSnapshot,
+      route: route,
     });
   } catch (error) {
     normalized = {
@@ -1105,7 +1150,7 @@ async function executeAttempt<
     decision.allowFallback &&
     normalized.outcome === "failure" &&
     normalized.retrySafe
-      ? decision.routeSnapshot.fallbackRouteIds[0] ?? null
+      ? route.fallbackRouteIds[0] ?? null
       : null;
   const fallbackReason = fallbackTargetRouteRef
     ? normalized.errorCode
