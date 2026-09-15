@@ -735,7 +735,6 @@ export async function provisionAcceptedCaioFdeG0(input: {
       trace.assetRef !== item.assetId ||
       trace.evidenceKind !== item.evidenceKind ||
       !source ||
-      source.latestRunRef !== item.runId ||
       source.latestRunStatus !== "succeeded" ||
       source.latestRunOutcome !== "success" ||
       !Number.isFinite(Date.parse(trace.capturedAt))

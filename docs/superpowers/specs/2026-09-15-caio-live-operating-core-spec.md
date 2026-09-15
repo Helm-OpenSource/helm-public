@@ -200,6 +200,15 @@ heldout_eval`，客户来源 fail closed，因此上表的"复用 context-projec
 - `/caio` 增加 CEO 选题入口（复用 `selectCaioOperatingQuestions`），硬前置为当前 accepted G0 assessment 与
   CEO acceptance receipt；缺失时入口 fail closed 并说明原因。
 
+### 8.1 G0 实时生产路径（owner 2026-09-16 裁定，已实现未部署）
+
+- G0 用实时观察初始化：`npm run caio:g0-prepare`（受控命令行，默认只校验，`--apply` 才写）按资产取最近一次成功快检运行，
+  生成证据追踪、schema 映射、每资产 1 条由目录与模板元数据生成的公司记忆事实（D-2，不含客户记录）、记忆重建回执，
+  以及 `caio.observation_baseline` 基线快照包装的时间上下文（D-3），并登记初始化回执；评估与 CEO 受理走既有入口。
+- G0 评估器 v2（D-1）：来源基础只记录最新运行的健康分类（状态、结果、新鲜度），不记录运行 id 与其证据引用；
+  健康的周期性观察不再使已受理的 G0 失效，失败、过期、授权到期、目录或记忆变更仍立即失效。
+- 重新准备会把此前的 G0 产物置为 `REJECTED`，已受理的 G0 随之失效并需重评。
+
 ## 9. 治理 ADR 修订要点（O-6）
 
 在 `docs/product/HELM_CAIO_PRODUCT_AND_GOVERNANCE.md` 增加"规则授权执行治理决定"一节，冻结：
