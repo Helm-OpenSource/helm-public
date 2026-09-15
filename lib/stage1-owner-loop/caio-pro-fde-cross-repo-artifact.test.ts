@@ -739,4 +739,15 @@ describe("portable CAIO Pro FDE cross-repo schema", () => {
     expect(caioProPackOperatingInputSchema.safeParse(payload).success).toBe(true);
     expect(portablePublicSafeRefAccepts("observation-run:1234567")).toBe(false);
   });
+
+  it("accepts CUID-shaped decision, action-item and approval-task refs with numeric entropy", () => {
+    // Core-generated work object ids can carry a run of seven or more digits; they are CUIDs, not PII.
+    const canonicalCuid = "cabcdef1234567ghijklmnopq";
+    for (const prefix of ["decision-record", "action-item", "approval-task"]) {
+      expect(portablePublicSafeRefAccepts(`${prefix}:${canonicalCuid}`), prefix).toBe(true);
+      expect(portablePublicSafeRefAccepts(`${prefix}:1234567`), prefix).toBe(false);
+      expect(portablePublicSafeRefAccepts(`${prefix}:c${"1".repeat(24)}`), prefix).toBe(false);
+    }
+    expect(portablePublicSafeRefAccepts(`taxonomy:${canonicalCuid}`)).toBe(false);
+  });
 });
