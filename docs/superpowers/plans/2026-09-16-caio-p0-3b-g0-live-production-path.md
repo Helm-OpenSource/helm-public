@@ -126,3 +126,13 @@ export function buildCaioG0MemoryRebuildReceiptArtifact(input: { artifactId: str
 - 核对结论 2 的失效问题：Task 1 + Task 4 Step 2 的"再跑一轮仍 accepted"。
 - G0 失败码覆盖：`initialized_asset_missing_*` 由 Task 4 回执字段覆盖；`evidence_*_coverage_incomplete` 由追踪覆盖全部来源与敏感度（每运行至少 1 条）；`company_memory_not_rebuildable` 由 D-2；`temporal_context_not_rebuildable` 由 Task 3。
 - 类型一致：`buildCaioG0BaselineProjectionInput`、`buildCaioG0*Artifact`、`prepareCaioG0FromLiveObservation` 在定义与消费任务中一致。
+
+## 实施记录（as-built，2026-09-16，helm-public PR #393）
+
+1. **`latestRunRef` 保留为可选且忽略**，而不是删除字段：helm-packs 跨仓测试仍构造该字段；归一化时解构丢弃，不进基础。十题生成的证据宇宙同步去掉该项（运行 id 仍经回执与追踪进入）。
+2. **v1 评估自动失效无需额外代码**：`validateCaioInitializationAssessment` 已按评估器修订号拒绝旧记录。
+3. **初始化回执不带原因码**：回执 `reasonCodes` 会并入资产阻塞码并生成"来源例外"，使 CEO 受理报 `caio_initialization_exception_acknowledgement_mismatch`；准备服务写 `reasonCodes: []`。
+4. **重新准备会把旧 G0 产物置为 `REJECTED`**：否则旧追踪绑定的运行不在新回执中，评估判不可追溯。
+5. **记忆事实哈希函数从投影器导出**（`computeCaioInitializationMemoryFactHash`），准备服务与投影器共用，避免算法漂移。
+6. 证据追踪预算为每资产 `floor(50 / 资产数)`（至少 1），总数不超过 50。
+7. 端到端 MySQL 用例在 `lib/caio-operating-context/g0-preparation.mysql.test.ts`，纳入 `test:caio-operating-context:mysql`。
