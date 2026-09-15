@@ -350,3 +350,15 @@ model CaioOperatingContextSnapshot {
 - 规格 §5"读失败不产生 EvidenceRef"：构建器只取 `status=ok` 观察，命中引用未知模板即丢弃（Task 5）。
 - 类型一致：`TenantLiveHarnessManifest`、`TenantObservationReceipt`、`validateTenantSelfObservationBinding`、`buildCaioTenantContextProjectionInput`、`CaioContextHitRow`、`projectCaioQuickCheckContext` 在定义任务与消费任务中名称一致。
 - 待 owner 确认：Task 1 修改受保护的来源治理守卫（窄豁免完整 sha256 摘要）。
+
+## 实施记录（as-built，2026-09-16，helm-public PR #391，基于 #389）
+
+与上文计划的偏差，以代码为准：
+
+1. **形状 schema 不用 `z.union`。** 初版用 union 分派，改变了既有公开拒绝码（`sourceBindings.0.source:invalid_type` 变成 `sourceBindings.0:invalid_union`），被既有测试拦下。改为：公开输入沿用原 schema；租户输入由 `manifest.scope` 选择 `projectionInputShapeSchema.extend({ manifest: tenantLiveHarnessManifestSchema })`；`observationReceipts` 以可选键接入，逐绑定分派处在公开绑定上拒绝、在租户绑定上要求。
+2. **快照校验器同步扩展。** `context-validators.ts` 的 `sourceReceipts.sourceClass` 原只接受公开三类，租户快照会被自检拒绝；加入 `tenant_self_observation` 并新增 `context_snapshot_mixes_tenant_and_public_sources`。
+3. **evolution weakness 与 P3 readiness 需显式 fail closed。** 两处都用 `z.enum(OPERATING_SIGNAL_SOURCE_CLASSES)`，扩展后会接受新类；已并入 fleet/OSS 的拒绝条件并各补一条测试（`eval:operating-harness-p2` 用例数 77 → 78）。
+4. **公开发布守卫扫描源码字面量。** 形似手机号的测试值（包括触发误报的摘要样例）必须运行时拼接，否则 `public-mirror-smoke`（`cn-mobile` 规则）失败；计划文档同样适用。
+5. **变异补强。** "指标值改变 → 快照哈希改变"不足以证明 `sourceSnapshotHash` 绑定指标内容（证据 id 也随之变化）；补了直接断言。
+6. **投影服务取目录回执的条件**：`receiptType` 为大写 `AUTHORIZATION`/`CONNECTION`，状态 `AUTHORIZED`/`CONNECTED`，`recordedAt <= run.observedAt`；无目录绑定（兼容回执来源）的运行不能支撑证据，整轮 `evidence_run_missing`。
+7. 构建器的 `getCaioQuickCheckHarness()` 每次返回深拷贝，防止调用方修改投影输入时污染缓存。
