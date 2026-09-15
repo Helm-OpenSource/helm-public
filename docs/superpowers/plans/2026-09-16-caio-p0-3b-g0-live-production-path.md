@@ -1,5 +1,5 @@
 ---
-status: planning / pending-owner-decisions
+status: planning / owner-decided-2026-09-16
 owner: helm-core
 created: 2026-09-16
 review_after: 2026-10-16
@@ -30,11 +30,11 @@ public_safety: Public-safe implementation plan for a production path to the
 4. **证据追踪可由快检运行直接生成。** 追踪要求所绑运行在初始化回执的 `observationRunRefs` 中、运行 `succeeded`、运行 `evidenceRefs` 含追踪的 `evidenceRef`、`windowStart ≤ capturedAt ≤ observedAt`；快检运行的 `evidenceRefs` 就是 `caio-metric:*`，`capturedAt` 取观察 `observedAt`，全部满足。抽样上限 50 条，覆盖来源、敏感度与输出类型。
 5. 初始化回执的 `resultingVersion` 必须等于资产当前版本；任何后续目录变更都会让 G0 失效（既有行为，保留）。
 
-## 需要 owner 决定（执行前确认）
+## owner 决定（2026-09-16 已裁定：D-1 同意、D-2 自动生成、D-3 同意）
 
-- **D-1 G0 评估器 v2 基础口径（推荐：同意）。** `sources[]` 去掉 `latestRunRef`，来源例外不再并入最新运行 `evidenceRefs`；保留 `latestRunStatus`、`latestRunOutcome`、`freshness`。效果：来源持续健康时受理不失效；失败、过期、授权到期、目录变更、记忆变更仍立即失效。评估器修订号 `v1 → v2`，既有 v1 评估记录按"评估器已变更"判失效需重评（一次性）。
-- **D-2 公司记忆事实的来源（推荐：目录元数据生成的系统事实）。** G0 要求每个已初始化资产绑定公司记忆并可重建。拟由准备服务按资产写 1 条 `MemoryFact`（公司级、系统推断），内容只来自数据资产目录与模板注册元数据（域、用途、模板编号、指标键、负责人角色、新鲜度 SLA），不含任何客户记录；随后写记忆重建回执。备选：由 OWNER 在 `/caio/operator` 手工确认后写入（更慢，但事实"经人确认"）。
-- **D-3 G0 基线快照的信号口径（推荐：同意）。** 为 G0 构建的快照使用 `signalFamily=caio.observation_baseline`，每个已知模板读数一条信号（对象为 `domain:<域>`），与快检异常信号分开；不写入 `CaioOperatingContextSnapshot` 表，直接包装为 G0 时间上下文产物。
+- **D-1 G0 评估器 v2 基础口径（已同意）。** `sources[]` 去掉 `latestRunRef`，来源例外不再并入最新运行 `evidenceRefs`；保留 `latestRunStatus`、`latestRunOutcome`、`freshness`。效果：来源持续健康时受理不失效；失败、过期、授权到期、目录变更、记忆变更仍立即失效。评估器修订号 `v1 → v2`，既有 v1 评估记录按"评估器已变更"判失效需重评（一次性）。
+- **D-2 公司记忆事实的来源（已裁定：自动生成）。** G0 要求每个已初始化资产绑定公司记忆并可重建。拟由准备服务按资产写 1 条 `MemoryFact`（公司级、系统推断），内容只来自数据资产目录与模板注册元数据（域、用途、模板编号、指标键、负责人角色、新鲜度 SLA），不含任何客户记录；随后写记忆重建回执。备选：由 OWNER 在 `/caio/operator` 手工确认后写入（更慢，但事实"经人确认"）。
+- **D-3 G0 基线快照的信号口径（已同意）。** 为 G0 构建的快照使用 `signalFamily=caio.observation_baseline`，每个已知模板读数一条信号（对象为 `domain:<域>`），与快检异常信号分开；不写入 `CaioOperatingContextSnapshot` 表，直接包装为 G0 时间上下文产物。
 
 ## Global Constraints
 
