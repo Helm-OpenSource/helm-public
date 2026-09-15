@@ -228,6 +228,22 @@ owner 批准的精确版本。实际费用超限、证据缺失或版本不匹�
 不追加 sequence 2，也不释放输出。provider 明确 `not_accepted` 时，实际费用必须为
 零，否则不能作为安全 fallback 依据。
 
+### 7.1 延迟派发（拉取式现场推理，owner 2026-09-16 同意）
+
+客户现场的推理设备只主动拉取工作，生产应用不会主动去调用它，所以同步的“调用 adapter”这一步放不进去。延迟派发仍然在
+`governed-model-gateway.service.ts` 内完成，出域权威依旧只有网关一个组合者，`check:model-egress-governance`
+的允许文件清单不变：
+
+1. `claim`：与同步路径共用同一个派发前阶段，依次做投影绑定、路由决定、adapter preflight、dispatch claim。
+   claim 就是授权截止点，从不尝试 fallback。延迟 adapter 只声明 registration、readiness 探测和
+   preflight，不能在进程内被调用。claim 被重放时一律返回 `in_doubt`，同一个 claim 不会交给第二个 worker。
+2. `complete`：worker 在 lease 内提交结果，结果经与同步路径相同的规范化和预算校验后，先追加终态回执，
+   再释放输出。claim 身份（decision、gatewayRef、claimHash）不一致时拒绝。以下两种情况保持 `in_doubt`、
+   不写回执：lease 到期后才提交的结果、规范化后仍为 unknown 的结果。
+3. `expire`：lease 到期仍没有终态回执时，以 `resolutionSource=reconcile` 追加一条 `failure`：
+   请求已交付，结果没有在 lease 内被接受；费用记为零并带上 owner 批准的定价版本。这样该 claim 不再占用
+   路由并发。它不是重发许可。
+
 ## 8. OWNER-only 治理读模型
 
 `getWorkspaceModelEgressOwnerReadout` 只接受服务端查询得到的 active
@@ -293,5 +309,9 @@ cutoff: revocation blocks unclaimed dispatches but cannot unsend a claimed
 request, which remains in flight until reconciled. A lease expiry permits
 reconciliation only; it never permits a blind resend. Unknown classification
 defaults to restricted and local-only. Fallback is explicit and must be no
-broader in every governed dimension. Public Core ships no production adapter,
+broader in every governed dimension. A deferred (pull) dispatch for on-premises workers
+stays inside the governed gateway: it shares the same pre-dispatch stage and
+claim, releases a worker result only after the terminal receipt, keeps late or
+unnormalizable results in doubt, and records a lease-expired claim as a
+reconciled failure so it stops holding route concurrency. Public Core ships no production adapter,
 credential, tenant policy, or runtime activation.

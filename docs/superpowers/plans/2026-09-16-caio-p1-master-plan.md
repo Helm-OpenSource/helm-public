@@ -64,7 +64,7 @@ public_safety: Public-safe master implementation plan for CAIO live operating
 | P1-A12 | CEO 选题入口放在 `/caio/operator`（OWNER 服务端动作），复用 `selectCaioOperatingQuestions` 和 `bindCurrentCaioQuestionSelectionToDecisionRecords`。硬前置是 `getCaioInitializationGateStatus` 返回 `accepted`，否则 fail closed 并显示原因。`Stage1OwnerLoopConsole` 保持只读，它的可访问性守卫不改 |
 | P1-A13 | 小时和日终入队由 Core 的通用作业工厂 `createCaioInferenceEnqueueJob` 提供，开关 `HELM_CAIO_HOURLY_REVIEW_ENABLED` 和 `HELM_CAIO_DAILY_REVIEW_ENABLED`。汇总补充项由 overlay 注入一个只返回计数的端口 |
 | P1-A14 | `/caio` 读出增加复盘区块：显示最近的判断（分层内容）、拒收原因和推理离线状态。没有判断时直说“无判断”，不用空白代替 |
-| P1-A15 | **出域权威只有一个组合者（2026-09-16 实现核查后补充）。** `check:model-egress-governance` 规定，`GOVERNED_GATEWAY_AUTHORITY`、`prepareModelRouteDecision`、`claimModelRouteDispatch`、`recordModelEgressTerminalReceipt` 只允许出域存储和 `governed-model-gateway.service.ts` 引用；投影权威只允许投影服务引用。现有网关是同步的“准备 → 领取 → 调用 → 终态”，放不下拉取式推理。**默认做法（owner 可以否决）：** 在 `lib/llm/governed-model-gateway.service.ts` 内新增延迟派发三步：`prepareDeferredGovernedModelRequest`（投影回执加调用前决策）、`claimDeferredGovernedModelDispatch`（由设备 worker 已登记的适配器运行描述符和 readiness 回执完成 dispatch claim）、`completeDeferredGovernedModelDispatch`（终态回执，可以是 success、failure 或 unknown 对账）。守卫的允许文件清单不变，出域权威仍然只有网关一个组合者。这一项是对 P1D 出域治理的扩展，列为 P1-3a，需要 owner 复核后才能合并 |
+| P1-A15 | **出域权威只有一个组合者（2026-09-16 实现核查后补充）。** `check:model-egress-governance` 规定，`GOVERNED_GATEWAY_AUTHORITY`、`prepareModelRouteDecision`、`claimModelRouteDispatch`、`recordModelEgressTerminalReceipt` 只允许出域存储和 `governed-model-gateway.service.ts` 引用；投影权威只允许投影服务引用。现有网关是同步的“准备 → 领取 → 调用 → 终态”，放不下拉取式推理。**默认做法（owner 可以否决）：** 在 `lib/llm/governed-model-gateway.service.ts` 内新增延迟派发三步：`prepareDeferredGovernedModelRequest`（投影回执加调用前决策）、`claimDeferredGovernedModelDispatch`（由设备 worker 已登记的适配器运行描述符和 readiness 回执完成 dispatch claim）、`completeDeferredGovernedModelDispatch`（终态回执，可以是 success、failure 或 unknown 对账）。守卫的允许文件清单不变，出域权威仍然只有网关一个组合者。这一项是对 P1D 出域治理的扩展，列为 P1-3a。**owner 2026-09-16 同意。** 实现细节：设计与投影回执的 TTL 都只有 5 分钟，所以投影与决策放在 worker 领取时才做，不在入队时做；lease 到期后以 reconcile 追加 failure 终态，释放路由并发 |
 
 ## 切片与顺序
 
@@ -75,7 +75,7 @@ public_safety: Public-safe master implementation plan for CAIO live operating
 | P1-0 | 执行回执缺陷闭合取证与文档（A11） | — | `docs/STATUS.md`、`docs/superpowers/specs/2026-07-23-caio-pro-p1c-entry-map.md` | 无 |
 | P1-1 | 调度作业运行账本（A10） | — | `lib/signal-collection/run-ledger.service.ts`、`scheduler.ts`、`registry.tsx` 接线、迁移 | `HELM_SIGNAL_COLLECTION_RUN_LEDGER_ENABLED`，1 个迁移 |
 | P1-2 | CEO 选题入口（A12） | ← P1-0 | `features/caio-operator/{schemas,actions,queries}.ts`、`operator-console.client.tsx` | 无（OWNER 手动操作） |
-| P1-3a | 受治理网关延迟派发接口（A15），出域治理扩展，需要 owner 复核 | — | `lib/llm/governed-model-gateway.service.ts`(+test、+mysql test)、`docs/product/` 出域治理说明 | 无开关（只有队列调用它）；无迁移 |
+| P1-3a | 受治理网关延迟派发接口（A15），出域治理扩展，owner 已同意 | — | `lib/llm/governed-model-gateway.service.ts`(+test、+mysql test)、`docs/product/` 出域治理说明 | 无开关（只有队列调用它）；无迁移 |
 | P1-3 | 推理任务队列与输出契约（A1–A6） | ← P1-3a | `lib/caio-inference/{contracts,layered-judgement,job-store.service,job-reclaim.service}.ts`、迁移 | 队列本身不跑，由 P1-6 的开关驱动；1 个迁移 |
 | P1-4 | 推理 audience、路由与令牌 CLI（A7、A8） | ← P1-3 | `lib/caio-access-gateway/{token-contracts,gateway-http-core}.ts`、`lib/caio-operator/inference-token-operator.ts`、`scripts/caio-inference-token.ts`、`tools/caio-access-gateway/server.ts` | 网关 feature flag `inferenceJobsEnabled`（默认 false） |
 | P1-5 | 设备侧 worker（A9） | ← P1-4 | `tools/caio-inference-worker/{bin,contracts,local-model-port,gateway-client,loop}.ts` | 设备侧配置 |

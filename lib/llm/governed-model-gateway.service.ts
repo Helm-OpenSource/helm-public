@@ -1308,5 +1308,287 @@ export function createGovernedModelGateway<
   };
 }
 
+/**
+ * A pull-dispatched model adapter (for example an on-premises worker that fetches claimed work). It is only
+ * preflighted by the gateway; it is never invoked in-process, so it declares no invoke or reconcile.
+ */
+export type GovernedDeferredModelAdapter<
+  TPayload extends GovernedJsonValue,
+  TOutput extends GovernedJsonValue,
+> = Pick<
+  GovernedModelProviderAdapter<TPayload, TOutput>,
+  "registration" | "probeReadiness" | "preflight"
+>;
+
+export type GovernedDeferredDispatchClaim =
+  | {
+      status: "claimed";
+      decisionRef: string;
+      gatewayRef: string;
+      claimHash: string;
+      runtimeHash: string;
+      providerIdempotencyKey: string;
+      leaseExpiresAt: string;
+    }
+  | {
+      status: GovernedModelGatewayResult<GovernedJsonValue>["status"];
+      attempt: GovernedModelGatewayAttempt;
+    };
+
+export type GovernedDeferredDispatchRef = {
+  workspaceId: string;
+  decisionRef: string;
+  gatewayRef: string;
+  claimHash: string;
+};
+
+const DEFERRED_LEASE_EXPIRED = "deferred_dispatch_lease_expired";
+
+/**
+ * Deferred (pull) dispatch through the governed gateway, so the egress authority keeps a single composer.
+ *
+ * - claim: the same projection binding, route decision, adapter preflight and dispatch claim as the
+ *   synchronous gateway; the claim is the egress authorization cutoff. Fallback is never attempted.
+ * - complete: records the worker's result as the terminal receipt before any output is returned. A result
+ *   for another claim is refused; a result after the lease, or one that does not normalize to a known
+ *   outcome, stays in doubt and is not recorded.
+ * - expire: after the lease ends without a terminal receipt, records a reconciled failure (the payload was
+ *   handed over, no result was accepted in time) so the claim stops counting against route concurrency.
+ */
+export function createGovernedDeferredModelDispatch<
+  TPayload extends GovernedJsonValue = GovernedJsonValue,
+  TOutput extends GovernedJsonValue = GovernedJsonValue,
+>(
+  options: {
+    adapters?: readonly GovernedDeferredModelAdapter<TPayload, TOutput>[];
+    dependencies?: Partial<GovernedModelGatewayDependencies>;
+  } = {},
+) {
+  const dependencies: GovernedModelGatewayDependencies = {
+    ...DEFAULT_DEPENDENCIES,
+    ...options.dependencies,
+  };
+  const registry = createGovernedModelAdapterRegistry<TPayload, TOutput>(
+    (options.adapters ?? []).map((adapter) => ({
+      registration: adapter.registration,
+      probeReadiness: adapter.probeReadiness.bind(adapter),
+      preflight: adapter.preflight.bind(adapter),
+      invoke: async () => {
+        throw new GovernedModelGatewayError("deferred_dispatch_adapter_not_invokable");
+      },
+    })),
+  );
+
+  async function claim(
+    request: GovernedModelGatewayInput<TPayload>,
+  ): Promise<GovernedDeferredDispatchClaim> {
+    if (
+      !isSafeModelGovernanceRef(request.gatewayRef) ||
+      !Number.isSafeInteger(request.requestedMaxOutputTokens) ||
+      request.requestedMaxOutputTokens <= 0 ||
+      request.requestedMaxOutputTokens > MODEL_GOVERNANCE_PERSISTED_INT_MAX
+    ) {
+      throw new GovernedModelGatewayError("governed_model_request_invalid");
+    }
+    assertGovernedJson(request.projectedPayload);
+    const canonicalPayload = canonicalJson(request.projectedPayload);
+    const stage = await claimAttempt({
+      request: { ...request, allowFallback: false },
+      projectedPayloadHash: sha256(canonicalPayload),
+      projectedPayloadBytes: Buffer.byteLength(canonicalPayload, "utf8"),
+      dependencies,
+      registry,
+      parentDecisionRef: null,
+      requestedFallbackRouteRef: null,
+      fallbackReason: null,
+      allowFallback: false,
+    });
+    if (stage.kind === "result") {
+      return { status: stage.result.status, attempt: stage.result.attempts[0]! };
+    }
+    // claimAttempt already turns a replayed claim into an in-doubt result, so a claim is never handed out twice.
+    return {
+      status: "claimed",
+      decisionRef: stage.decision.decisionId,
+      gatewayRef: request.gatewayRef,
+      claimHash: stage.claim.claimHash,
+      runtimeHash: stage.claim.runtimeHash,
+      providerIdempotencyKey: stage.claim.providerIdempotencyKey,
+      leaseExpiresAt: stage.claim.leaseExpiresAt,
+    };
+  }
+
+  async function loadClaim(ref: GovernedDeferredDispatchRef) {
+    const stored = await dependencies.readDecision({
+      workspaceId: ref.workspaceId,
+      decisionId: ref.decisionRef,
+    });
+    const dispatch = stored?.dispatch ?? null;
+    const route = stored?.decision.routeSnapshot ?? null;
+    if (
+      !stored ||
+      !dispatch ||
+      !route ||
+      dispatch.gatewayRef !== ref.gatewayRef ||
+      dispatch.claimHash !== ref.claimHash
+    ) {
+      throw new GovernedModelGatewayError("deferred_dispatch_claim_mismatch", ref.decisionRef);
+    }
+    const startedReceipt = stored.receipts.find((receipt) => receipt.sequence === 1) ?? null;
+    const existingTerminal = terminalReceipt(stored.receipts);
+    const inDoubt = (reasonCode: string) =>
+      resultWithoutOutput<TOutput>({
+        attempt: {
+          decision: stored.decision,
+          startedReceipt,
+          terminalReceipt: null,
+          status: "in_doubt",
+          reasonCode,
+          replayed: false,
+        },
+      });
+    const replayed = existingTerminal
+      ? resultWithoutOutput<TOutput>({
+          attempt: attemptFromStored({
+            decision: stored.decision,
+            receipts: stored.receipts,
+            status: existingTerminal.outcome,
+            reasonCode: "terminal_receipt_replayed_without_output",
+            replayed: true,
+          }),
+        })
+      : null;
+    return { stored, dispatch, route, startedReceipt, inDoubt, replayed };
+  }
+
+  async function complete(
+    input: GovernedDeferredDispatchRef & { result: GovernedModelAdapterResult<TOutput> },
+  ): Promise<GovernedModelGatewayResult<TOutput>> {
+    const { stored, dispatch, route, startedReceipt, inDoubt, replayed } = await loadClaim(input);
+    if (replayed) return replayed;
+    const now = dependencies.now();
+    const leaseExpiresAt = Date.parse(dispatch.leaseExpiresAt);
+    if (!Number.isFinite(leaseExpiresAt) || now.getTime() >= leaseExpiresAt) {
+      return inDoubt(DEFERRED_LEASE_EXPIRED);
+    }
+    const normalized = normalizeAdapterResult({
+      result: input.result,
+      requestedMaxOutputTokens: stored.decision.requestedMaxOutputTokens,
+      route,
+    });
+    if (normalized.outcome === "unknown") {
+      return inDoubt(normalized.errorCode);
+    }
+    const claimedAtMs = Date.parse(dispatch.claimedAt);
+    const latencyMs = Number.isFinite(claimedAtMs) ? Math.max(0, now.getTime() - claimedAtMs) : null;
+    let terminal: Awaited<ReturnType<GovernedModelGatewayDependencies["recordTerminal"]>>;
+    try {
+      terminal = await dependencies.recordTerminal({
+        authority: GOVERNED_GATEWAY_AUTHORITY,
+        workspaceId: input.workspaceId,
+        decisionId: stored.decision.decisionId,
+        gatewayRef: dispatch.gatewayRef,
+        dispatchClaimHash: dispatch.claimHash,
+        idempotencyKey: stableIdentifier("model-terminal", { decisionRef: stored.decision.decisionId }),
+        outcome: normalized.outcome,
+        resolutionSource: "invoke",
+        requestDisposition: normalized.requestDisposition,
+        providerRequestRefHash: normalized.providerRequestRefHash,
+        finishedAt: now,
+        latencyMs,
+        promptTokens: normalized.promptTokens,
+        completionTokens: normalized.completionTokens,
+        actualCostUsdMicros: normalized.actualCostUsdMicros,
+        costCurrency: normalized.costCurrency,
+        pricingVersion: normalized.pricingVersion,
+        costBand: normalized.costBand,
+        errorCode: normalized.errorCode,
+        fallbackTargetRouteRef: null,
+        fallbackReason: null,
+        recordedAt: now,
+      });
+    } catch {
+      throw new GovernedModelGatewayError(
+        "terminal_receipt_persistence_failed_output_withheld",
+        stored.decision.decisionId,
+      );
+    }
+    return {
+      status: normalized.outcome,
+      output:
+        normalized.outcome === "success" || normalized.outcome === "partial"
+          ? normalized.output
+          : null,
+      attempts: [
+        {
+          decision: stored.decision,
+          startedReceipt,
+          terminalReceipt: terminal.receipt,
+          status: normalized.outcome,
+          reasonCode: normalized.errorCode,
+          replayed: terminal.replayed,
+        },
+      ],
+      selectedDecisionRef: stored.decision.decisionId,
+      fallbackAttempted: false,
+      fallbackSucceeded: false,
+      rawContentPersisted: false,
+    };
+  }
+
+  async function expire(
+    input: GovernedDeferredDispatchRef,
+  ): Promise<GovernedModelGatewayResult<TOutput>> {
+    const { stored, dispatch, route, startedReceipt, inDoubt, replayed } = await loadClaim(input);
+    if (replayed) return replayed;
+    const now = dependencies.now();
+    const leaseExpiresAt = Date.parse(dispatch.leaseExpiresAt);
+    if (!Number.isFinite(leaseExpiresAt) || now.getTime() < leaseExpiresAt) {
+      return inDoubt("dispatch_lease_active_terminal_missing");
+    }
+    let terminal: Awaited<ReturnType<GovernedModelGatewayDependencies["recordTerminal"]>>;
+    try {
+      terminal = await dependencies.recordTerminal({
+        authority: GOVERNED_GATEWAY_AUTHORITY,
+        workspaceId: input.workspaceId,
+        decisionId: stored.decision.decisionId,
+        gatewayRef: dispatch.gatewayRef,
+        dispatchClaimHash: dispatch.claimHash,
+        idempotencyKey: stableIdentifier("model-terminal", { decisionRef: stored.decision.decisionId }),
+        outcome: "failure",
+        resolutionSource: "reconcile",
+        requestDisposition: "accepted",
+        providerRequestRefHash: sha256(dispatch.providerIdempotencyKey),
+        finishedAt: now,
+        latencyMs: null,
+        promptTokens: null,
+        completionTokens: null,
+        actualCostUsdMicros: 0,
+        costCurrency: "USD",
+        pricingVersion: route.pricingVersion,
+        costBand: "zero",
+        errorCode: DEFERRED_LEASE_EXPIRED,
+        fallbackTargetRouteRef: null,
+        fallbackReason: null,
+        recordedAt: now,
+      });
+    } catch {
+      return inDoubt("dispatch_reconciliation_receipt_persistence_failed");
+    }
+    return resultWithoutOutput({
+      attempt: {
+        decision: stored.decision,
+        startedReceipt,
+        terminalReceipt: terminal.receipt,
+        status: terminal.receipt.outcome,
+        reasonCode: DEFERRED_LEASE_EXPIRED,
+        replayed: terminal.replayed,
+      },
+    });
+  }
+
+  return Object.freeze({ claim, complete, expire });
+}
+
 export const executeGovernedModelRequest =
   createGovernedModelGateway();
