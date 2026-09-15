@@ -1360,6 +1360,7 @@ model Workspace {
   caioQuickCheckTicks                  CaioQuickCheckTick[]
   caioMetricObservations               CaioMetricObservation[]
   caioAnomalyCandidates                CaioAnomalyCandidate[]
+  caioOperatingContextSnapshots        CaioOperatingContextSnapshot[]
   decisionRecords                      DecisionRecord[]
   supervisionSignalRecords             SupervisionSignalRecord[]
   decisionWorkPacketClaims             DecisionWorkPacketClaim[]
@@ -3794,6 +3795,7 @@ model CaioQuickCheckTick {
   summaryJson  String?   @db.LongText
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   observations CaioMetricObservation[]
+  contextSnapshot CaioOperatingContextSnapshot?
 
   @@unique([workspaceId, bucketStart])
   @@index([workspaceId, startedAt])
@@ -3849,6 +3851,29 @@ model CaioAnomalyCandidate {
 
   @@unique([workspaceId, openKey])
   @@index([workspaceId, status, lastSeenAt])
+}
+
+// Replayable P3a snapshot of one quick-check tick. projectionInputJson is kept so the snapshot can be
+// re-derived and verified; rejected projections keep only closed error codes.
+model CaioOperatingContextSnapshot {
+  id                  String             @id @default(cuid())
+  workspaceId         String
+  tickId              String             @unique
+  status              String             // PROJECTED | REJECTED | NO_SIGNALS
+  reasonCode          String?
+  errorCodesJson      String?            @db.LongText
+  snapshotId          String?
+  snapshotHash        String?
+  replayRootHash      String?
+  objectCount         Int                @default(0)
+  signalCount         Int                @default(0)
+  projectionInputJson String?            @db.LongText
+  snapshotJson        String?            @db.LongText
+  createdAt           DateTime           @default(now())
+  workspace           Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tick                CaioQuickCheckTick @relation(fields: [tickId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
 }
 
 // Workspace-level runtime record for the public DecisionObject contract. JSON
