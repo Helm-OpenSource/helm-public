@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { EvalCasePromotion } from "../expert-capability/validators";
 import {
+  collectUnsafeInputErrors,
   validateOperatingSignalImprovementGate,
   validateOperatingSignalSourceEnvelope,
   type OperatingSignalSourceEnvelope,
@@ -402,5 +403,24 @@ describe("operating signal source governance", () => {
         source: byId.get("sig.oss.governance"),
       }).errors,
     ).toContain("source_class_forbidden_from_improvement_loop:oss_governance");
+  });
+});
+
+describe("collectUnsafeInputErrors on content digests", () => {
+  const trippingDigest = "sha256:dab2e78c8b5b1d04c09908172faba7f5433f4ab79c95bc73dca3d18695532476";
+
+  it("does not treat a complete sha256 digest as a phone number", () => {
+    expect(collectUnsafeInputErrors({ contentHash: trippingDigest })).toEqual([]);
+  });
+
+  it("still flags a phone number inside any other string, including near-digest strings", () => {
+    expect(collectUnsafeInputErrors({ note: "call 13812345678" })).toEqual(["private_or_contact_pattern_present"]);
+    expect(collectUnsafeInputErrors({ ref: `${trippingDigest} ` })).toEqual(["private_or_contact_pattern_present"]);
+    expect(collectUnsafeInputErrors({ ref: trippingDigest.replace("sha256:", "sha1:") })).toEqual(["private_or_contact_pattern_present"]);
+    expect(collectUnsafeInputErrors({ ref: trippingDigest.toUpperCase() })).toEqual(["private_or_contact_pattern_present"]);
+  });
+
+  it("keeps forbidden-key detection for digests", () => {
+    expect(collectUnsafeInputErrors({ phone: trippingDigest })).toEqual(["forbidden_key_present:phone"]);
   });
 });

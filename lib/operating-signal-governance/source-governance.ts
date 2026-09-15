@@ -201,6 +201,10 @@ const PRIVATE_OR_CONTACT_PATTERNS: readonly RegExp[] = [
   /\b[a-z0-9.-]+\.internal(?:\.[a-z0-9.-]+)?\b/i,
 ];
 
+// A complete lowercase sha256 digest is a content binding, not contact data; its hex tail can
+// otherwise match the mobile-number pattern (about 1 in 5000 digests).
+const SHA256_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/u;
+
 function result(errors: string[]): ValidationResult {
   return { ok: errors.length === 0, errors };
 }
@@ -224,6 +228,7 @@ export function collectUnsafeInputErrors(value: unknown): string[] {
 
   function visit(node: unknown): void {
     if (typeof node === "string") {
+      if (SHA256_DIGEST_PATTERN.test(node)) return;
       if (PRIVATE_OR_CONTACT_PATTERNS.some((pattern) => pattern.test(node))) {
         sawPrivatePattern = true;
       }
