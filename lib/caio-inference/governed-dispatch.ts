@@ -2,6 +2,11 @@ import "server-only";
 
 import { sha256 } from "@/lib/expert-capability/hashing";
 import type {
+  GovernedJsonValue,
+  GovernedModelAdapterResult,
+} from "@/lib/llm/governed-model-adapter-registry.service";
+import type { ModelRouteTaskClass } from "@/lib/llm/model-route-contracts";
+import type {
   GovernedProjectionEngine,
   GovernedProjectionEngineRegistration,
 } from "@/lib/llm/governed-model-projection.service";
@@ -9,7 +14,6 @@ import type {
 import {
   CAIO_INFERENCE_ROUTE_TASK_CLASS,
   type CaioInferenceInput,
-  type CaioInferenceTaskClass,
 } from "./contracts";
 import type { CaioInferenceDispatchPort } from "./job-store.service";
 
@@ -73,7 +77,16 @@ export type CaioInferenceDeferredDispatchPort = {
     gatewayRef: string;
     policyKey: string;
     requestKey: string;
-    taskClass: string;
+    /**
+     * 路由任务类，不是 CAIO 的任务类——两者在 `CAIO_INFERENCE_ROUTE_TASK_CLASS` 处完成映射，
+     * 到这个端口时已经是路由侧的取值。
+     *
+     * 声明成 `string` 会让受治理网关**无法**充当这个端口：网关的 claim 只接受
+     * `ModelRouteTaskClass` 联合，而一个「接受任意字符串」的端口类型比它更宽，
+     * 赋值方向上不成立（逆变）。租户装配把网关直接塞进来时第一个撞上——
+     * core 自己不会撞，因为 core 只按映射后的值调用它。
+     */
+    taskClass: ModelRouteTaskClass;
     taskRef: string;
     projectionReceiptRef: string;
     projectedPayload: CaioInferenceInput;
@@ -96,7 +109,12 @@ export type CaioInferenceDeferredDispatchPort = {
     decisionRef: string;
     gatewayRef: string;
     claimHash: string;
-    result: unknown;
+    /**
+     * 终态结果。与 `taskClass` 同一个病：声明成 `unknown` 会让受治理网关无法充当这个端口——
+     * 网关的 complete 只接受 `GovernedModelAdapterResult`，而「接受任何东西」的端口更宽。
+     * core 自己一直按这个形状调用它，收窄不改行为。
+     */
+    result: GovernedModelAdapterResult<GovernedJsonValue>;
   }) => Promise<{ status: string }>;
   expire: (input: {
     workspaceId: string;
@@ -136,7 +154,7 @@ export function createCaioInferenceGovernedDispatch(input: {
         gatewayRef: input.gatewayRef,
         policyKey: input.policyKey,
         requestKey: `caio-inference:${attemptRef}`,
-        taskClass: CAIO_INFERENCE_ROUTE_TASK_CLASS[taskClass as CaioInferenceTaskClass],
+        taskClass: CAIO_INFERENCE_ROUTE_TASK_CLASS[taskClass],
         taskRef: `caio-inference-job:${jobId}`,
         projectionReceiptRef: projected.receipt.receiptId,
         projectedPayload: inferenceInput,
