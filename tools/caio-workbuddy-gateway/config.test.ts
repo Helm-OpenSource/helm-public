@@ -38,6 +38,7 @@ describe("loadWorkBuddyGatewayConfig", () => {
         promptResponsesEnabled: false,
         questionSelectionsEnabled: false,
         adviceDecisionsEnabled: false,
+        inferenceJobsEnabled: false,
       },
     });
   });
@@ -63,6 +64,7 @@ describe("loadWorkBuddyGatewayConfig", () => {
         promptResponsesEnabled: false,
         questionSelectionsEnabled: false,
         adviceDecisionsEnabled: false,
+        inferenceJobsEnabled: false,
       },
       publicFallbackAllowed: false,
       httpFallbackAllowed: false,

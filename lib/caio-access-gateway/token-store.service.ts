@@ -16,7 +16,7 @@ import { randomUUID, randomBytes } from "node:crypto";
 
 import { CaioAccessGatewayError } from "@/lib/caio-access-gateway/gateway-error-contract";
 import {
-  CAIO_TOKEN_AUDIENCES,
+  CAIO_TOKEN_PAIR_AUDIENCES,
   caioTokenIssuanceInputSchema,
   caioTokenRevocationInputSchema,
   caioTokenRotationInputSchema,
@@ -27,6 +27,7 @@ import {
   sanitizeCaioAliasGrant,
   type CaioClientType,
   type CaioTokenAudience,
+  type CaioTokenPairAudience,
   type CaioTokenStatus,
 } from "@/lib/caio-access-gateway/token-contracts";
 
@@ -175,6 +176,17 @@ export type CaioAccessTokenService = Readonly<{
     grantedAliases?: readonly string[];
     now: Date;
   }): Promise<CaioIssuedTokenPair>;
+  /**
+   * Issues one single-audience inference token for a pull worker. The worker holds no MCP or model token, so
+   * this never issues a pair and never stores an alias grant.
+   */
+  issueCaioInferenceToken(input: {
+    workspaceId: string;
+    userRef: string;
+    deviceRef: string;
+    approvedSourceIp: string;
+    now: Date;
+  }): Promise<CaioIssuedToken>;
   authenticateCaioToken(input: {
     rawToken: string;
     expectedAudience: CaioTokenAudience;
@@ -287,8 +299,8 @@ export function createCaioAccessTokenService(
       if (!parsed.success) {
         throw new CaioAccessGatewayError("bad_request");
       }
-      const issued = {} as Record<CaioTokenAudience, CaioIssuedToken>;
-      for (const audience of CAIO_TOKEN_AUDIENCES) {
+      const issued = {} as Record<CaioTokenPairAudience, CaioIssuedToken>;
+      for (const audience of CAIO_TOKEN_PAIR_AUDIENCES) {
         issued[audience] = buildRecord({
           // Both rows of the pair carry the binding's grant, including the mcp
           // row: the pair describes ONE operator-configured binding, and a
@@ -311,6 +323,29 @@ export function createCaioAccessTokenService(
         throw new CaioAccessGatewayError("active_token_exists");
       }
       return Object.freeze({ mcp: issued.mcp, model: issued.model });
+    },
+
+    async issueCaioInferenceToken(input): Promise<CaioIssuedToken> {
+      const parsed = caioTokenIssuanceInputSchema.safeParse({
+        workspaceId: input.workspaceId,
+        userRef: input.userRef,
+        clientType: "inference_worker",
+        deviceRef: input.deviceRef,
+        approvedSourceIp: input.approvedSourceIp,
+      });
+      if (!parsed.success) {
+        throw new CaioAccessGatewayError("bad_request");
+      }
+      const issued = buildRecord({
+        binding: parsed.data,
+        audience: "inference",
+        now: input.now,
+      });
+      const result = await persistence.insertIfNoActiveBinding([issued.record]);
+      if (!result.ok) {
+        throw new CaioAccessGatewayError("active_token_exists");
+      }
+      return issued;
     },
 
     async authenticateCaioToken(input): Promise<CaioAccessPrincipal> {

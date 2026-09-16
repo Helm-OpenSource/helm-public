@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAIO_CLIENT_TYPES,
   CAIO_TOKEN_AUDIENCES,
+  CAIO_TOKEN_PAIR_AUDIENCES,
   CAIO_TOKEN_PREFIX_BY_AUDIENCE,
   CAIO_TOKEN_STATUSES,
   CAIO_TOKEN_TTL_MS,
@@ -26,8 +27,9 @@ const TEST_PRIVATE_IPV4 = [192, 168, 1, 10].join(".");
 
 describe("caio token contracts", () => {
   it("pins the closed audience/client/status vocabularies", () => {
-    expect(CAIO_TOKEN_AUDIENCES).toEqual(["mcp", "model"]);
-    expect(CAIO_CLIENT_TYPES).toEqual(["codex", "workbuddy"]);
+    expect(CAIO_TOKEN_AUDIENCES).toEqual(["mcp", "model", "inference"]);
+    expect(CAIO_TOKEN_PAIR_AUDIENCES).toEqual(["mcp", "model"]);
+    expect(CAIO_CLIENT_TYPES).toEqual(["codex", "workbuddy", "inference_worker"]);
     expect(CAIO_TOKEN_STATUSES).toEqual([
       "active",
       "rotated",
@@ -46,6 +48,12 @@ describe("caio token contracts", () => {
     expect(mcp.rawToken).not.toBe(model.rawToken);
     expect(CAIO_TOKEN_PREFIX_BY_AUDIENCE.mcp).toBe("hcaio_mcp_");
     expect(CAIO_TOKEN_PREFIX_BY_AUDIENCE.model).toBe("hcaio_mdl_");
+    const inference = createCaioAccessTokenMaterial("inference");
+    expect(inference.rawToken.startsWith("hcaio_inf_")).toBe(true);
+    expect(inference.rawToken).toHaveLength("hcaio_inf_".length + 43);
+    expect(CAIO_TOKEN_PREFIX_BY_AUDIENCE.inference).toBe("hcaio_inf_");
+    // Prefixes stay audience-distinct, so a worker token can never authenticate an MCP or model route.
+    expect(new Set(Object.values(CAIO_TOKEN_PREFIX_BY_AUDIENCE)).size).toBe(CAIO_TOKEN_AUDIENCES.length);
   });
 
   it("derives sha256:<hex> hashes and 12-char visible prefixes", () => {
