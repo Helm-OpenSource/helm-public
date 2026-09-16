@@ -1,10 +1,12 @@
 import { WorkspaceRole } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
+import { InferenceReviewSection } from "@/features/caio/inference-review-section";
 import { OperatingAttentionSection } from "@/features/caio/operating-attention-section";
 import { Stage1OwnerLoopConsole } from "@/features/dashboard/stage1-owner-loop-console";
 import { getWorkspaceStage1OwnerLoopReadout } from "@/features/dashboard/stage1-owner-loop-query";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { getCaioInferenceReviewReadout } from "@/lib/caio-inference/readout";
 import { getCaioOperatingAttentionReadout } from "@/lib/caio-operating-context/readout";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
@@ -22,12 +24,16 @@ export default async function CaioPage() {
     workspaceDefaultLocale: session.workspace.defaultLocale,
   });
   const english = isEnglishLocale(locale);
-  const [readout, attention] = await Promise.all([
+  const [readout, attention, review] = await Promise.all([
     getWorkspaceStage1OwnerLoopReadout({
       workspaceId: session.workspace.id,
       membershipRole: session.membership.role,
     }),
     getCaioOperatingAttentionReadout({
+      workspaceId: session.workspace.id,
+      membershipRole: session.membership.role,
+    }),
+    getCaioInferenceReviewReadout({
       workspaceId: session.workspace.id,
       membershipRole: session.membership.role,
     }),
@@ -57,6 +63,8 @@ export default async function CaioPage() {
       {attention ? (
         <OperatingAttentionSection readout={attention} english={english} />
       ) : null}
+
+      {review ? <InferenceReviewSection readout={review} english={english} /> : null}
 
       {readout ? (
         <Stage1OwnerLoopConsole readout={readout} english={english} />
